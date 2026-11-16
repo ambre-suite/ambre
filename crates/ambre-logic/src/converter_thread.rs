@@ -1075,7 +1075,7 @@ mod tests {
 /// The reset of an instance in the browser, on a module written by hand
 /// (`ARCH-099`).
 #[cfg(all(test, target_arch = "wasm32"))]
-mod wasm_tests {
+pub(crate) mod wasm_tests {
     use wasm_bindgen_test::wasm_bindgen_test;
 
     use super::*;
@@ -1085,7 +1085,7 @@ mod wasm_tests {
     /// A module of one page of memory whose `run` grows it by 1 100 pages,
     /// past 64 MiB. Its other exports answer 0, so a conversion reads no
     /// answer and fails as malformed.
-    const GROWS: &[u8] = &[
+    pub(crate) const GROWS: &[u8] = &[
         0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, // magic, version
         // types: (i32) -> (i32), () -> (), () -> (i32)
         0x01, 0x0d, 0x03, 0x60, 0x01, 0x7f, 0x01, 0x7f, 0x60, 0x00, 0x00, 0x60, 0x00, 0x01, 0x7f,

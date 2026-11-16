@@ -1294,6 +1294,9 @@ impl LogicState {
         for document_id in exporting {
             self.resume_deck_export(document_id);
         }
+        // Every conversion of the pass ran: a module that grew gives its
+        // memory back now (`ARCH-125`).
+        self.converters.give_back();
         self.answer_pass();
     }
 }

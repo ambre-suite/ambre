@@ -228,6 +228,45 @@ impl Conversion {
     }
 }
 
+/// A read of a text the caller holds: the borrowed twin of the three text
+/// reads of [`Conversion`]. It encodes to the same postcard bytes as the
+/// owned variant, so the module reads it as that variant. The caller thus
+/// copies no text to build its request (`ARCH-126`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TextRead<'a> {
+    /// As [`Conversion::ReadMarkdown`].
+    Markdown(&'a str),
+    /// As [`Conversion::ReadHtml`].
+    HtmlPaste(&'a str),
+    /// As [`Conversion::ReadHtmlDocument`].
+    HtmlDocument(&'a str),
+}
+
+impl TextRead<'_> {
+    /// The family whose module serves this read: the markup module.
+    #[must_use]
+    pub const fn family(&self) -> ConverterFamily {
+        ConverterFamily::Markup
+    }
+}
+
+/// The variant index and the names of each owned twin, as the derive of
+/// [`Conversion`] writes them. A test holds the bytes of both equal, so an
+/// edit of the order of [`Conversion`] fails it.
+impl Serialize for TextRead<'_> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStructVariant;
+        let (index, variant, field, text) = match *self {
+            Self::Markdown(text) => (3, "ReadMarkdown", "text", text),
+            Self::HtmlPaste(text) => (5, "ReadHtml", "html", text),
+            Self::HtmlDocument(text) => (6, "ReadHtmlDocument", "html", text),
+        };
+        let mut state = serializer.serialize_struct_variant("Conversion", index, variant, 1)?;
+        state.serialize_field(field, text)?;
+        state.end()
+    }
+}
+
 /// What a conversion produced.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Converted {
@@ -469,6 +508,18 @@ pub fn encode_request(conversion: &Conversion) -> Result<Payload<EncodedRequest>
         .map_err(|_| ConvertError::Refused(ambre_core::FileRefusal::Request))
 }
 
+/// The request of a borrowed text read, as the module reads it: the bytes
+/// of its owned twin in [`Conversion`].
+///
+/// # Errors
+///
+/// As [`encode_request`].
+pub fn encode_text_read(read: &TextRead<'_>) -> Result<Payload<EncodedRequest>, ConvertError> {
+    postcard::to_allocvec(read)
+        .map(Payload::new)
+        .map_err(|_| ConvertError::Refused(ambre_core::FileRefusal::Request))
+}
+
 /// The answer the module wrote, read back.
 ///
 /// # Errors
@@ -555,6 +606,45 @@ mod tests {
             postcard::from_bytes::<CsvDelimiter>(&bytes).ok(),
             Some(CsvDelimiter::SEMICOLON)
         );
+    }
+
+    #[test]
+    fn a_borrowed_text_read_encodes_as_its_owned_twin() {
+        let text = "# Title\n\nA paragraph with <b>markup</b>.";
+        let pairs = [
+            (
+                TextRead::Markdown(text),
+                Conversion::ReadMarkdown {
+                    text: text.to_owned(),
+                },
+            ),
+            (
+                TextRead::HtmlPaste(text),
+                Conversion::ReadHtml {
+                    html: text.to_owned(),
+                },
+            ),
+            (
+                TextRead::HtmlDocument(text),
+                Conversion::ReadHtmlDocument {
+                    html: text.to_owned(),
+                },
+            ),
+        ];
+        for (read, owned) in pairs {
+            let borrowed = encode_text_read(&read).expect("a text read encodes");
+            assert_eq!(
+                borrowed.as_bytes(),
+                encode_request(&owned)
+                    .expect("a conversion encodes")
+                    .as_bytes()
+            );
+            assert_eq!(read.family(), owned.family());
+            assert_eq!(
+                postcard::from_bytes::<Conversion>(borrowed.as_bytes()).ok(),
+                Some(owned)
+            );
+        }
     }
 
     #[test]

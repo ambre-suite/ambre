@@ -34,6 +34,20 @@ impl ambre_core::NarrowCount for WaitingConversions {
         ambre_core::StaticKey::new("WaitingConversionCount");
 }
 
+/// The memory a module instance of the Logic thread may span after a pass
+/// before the thread renews it (`ARCH-125`, `ambre-spec-budgets.md section
+/// 6`). A WebAssembly memory never shrinks, so the instance that read a large
+/// file would hold its peak for the session. A module starts at about
+/// 1 MiB, so a small paste or a CSV keeps its instance and its memory.
+pub(crate) const LOGIC_RESET_FOOTPRINT: Count<ambre_core::Octets> = Count::new(16 * 1024 * 1024);
+
+/// Whether a Logic-thread instance whose memory spans `footprint` is renewed
+/// (`ARCH-125`). The host runs the engine in its own heap, and reports no
+/// footprint.
+pub(crate) fn renews(footprint: Option<Count<ambre_core::Octets>>) -> bool {
+    footprint.is_some_and(|bytes| bytes > LOGIC_RESET_FOOTPRINT)
+}
+
 /// Where each family's module stands for this session. A family absent from
 /// the map is not loaded and not asked for.
 #[derive(Default)]
@@ -48,6 +62,38 @@ impl Converters {
             Some(ConverterSlot::Ready { converter, .. }) => Some(converter),
             _ => None,
         }
+    }
+
+    /// Renew each loaded instance whose memory grew past
+    /// [`LOGIC_RESET_FOOTPRINT`] (`ARCH-125`). Called once a pass, after
+    /// every conversion of the pass. A module keeps no state between two
+    /// calls, so a slice of a running export loses nothing. An instance
+    /// the browser refuses to renew is compiled again from its bytes. One
+    /// that still fails keeps its old instance, which works.
+    pub(crate) fn give_back(&mut self) {
+        for (family, slot) in &mut self.slots {
+            let ConverterSlot::Ready { converter, module } = slot else {
+                continue;
+            };
+            if !renews(converter.footprint()) {
+                continue;
+            }
+            match converter
+                .renew()
+                .or_else(|_| Converter::load(*family, module))
+            {
+                Ok(fresh) => *converter = fresh,
+                Err(error) => {
+                    tracing::warn!("Logic: the {family} converter kept its memory: {error}");
+                }
+            }
+        }
+    }
+
+    /// The span of `family`'s loaded instance now. The browser's tests alone.
+    #[cfg(all(test, target_arch = "wasm32"))]
+    fn footprint(&self, family: ConverterFamily) -> Option<Count<ambre_core::Octets>> {
+        self.ready(family).and_then(Converter::footprint)
     }
 }
 
@@ -543,5 +589,80 @@ impl LogicState {
         };
         let (display, update, ephemeral) = events;
         self.dispatch_outcome(document_id, display, update, ephemeral, Vec::new());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `ARCH-125`: the decision. An instance past the bound is renewed, one
+    /// at the bound keeps its memory, and the host, which reports no
+    /// footprint, never renews.
+    #[test]
+    fn a_logic_instance_past_the_bound_is_renewed_and_the_host_never_is() {
+        assert!(!renews(None));
+        assert!(!renews(Some(LOGIC_RESET_FOOTPRINT)));
+        assert!(renews(Some(LOGIC_RESET_FOOTPRINT.plus(Count::new(1)))));
+    }
+
+    /// `ARCH-125`: on the host the pass renews nothing, and every loaded
+    /// module stays ready for the next conversion.
+    #[test]
+    fn a_pass_on_the_host_keeps_every_loaded_module() {
+        let mut converters = Converters::default();
+        for family in [ConverterFamily::Markup, ConverterFamily::Pdf] {
+            let module = ambre_core::Payload::new(Vec::new());
+            let converter = Converter::load(family, &module).expect("the host links the engine");
+            converters
+                .slots
+                .insert(family, ConverterSlot::Ready { converter, module });
+        }
+        converters.give_back();
+        assert!(converters.ready(ConverterFamily::Markup).is_some());
+        assert!(converters.ready(ConverterFamily::Pdf).is_some());
+    }
+}
+
+#[cfg(all(test, target_arch = "wasm32"))]
+mod wasm_tests {
+    use wasm_bindgen_test::wasm_bindgen_test;
+
+    use super::*;
+    use crate::converter_thread::wasm_tests::GROWS;
+
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
+    /// `ARCH-125`: a Logic-thread instance that grew past the bound in a
+    /// conversion comes back at its first span after the pass, and still
+    /// converts. An instance under the bound keeps its memory.
+    #[wasm_bindgen_test]
+    fn a_logic_instance_grown_past_the_bound_comes_back_at_its_first_span() {
+        let module = ambre_core::Payload::new(GROWS.to_vec());
+        let converter =
+            Converter::load(ConverterFamily::Tables, &module).expect("the module loads");
+        let mut converters = Converters::default();
+        converters.slots.insert(
+            ConverterFamily::Tables,
+            ConverterSlot::Ready { converter, module },
+        );
+        let page = Count::<ambre_core::Octets>::new(64 * 1024);
+        converters.give_back();
+        assert_eq!(converters.footprint(ConverterFamily::Tables), Some(page));
+        let csv = ambre_convert::Conversion::WriteCsv {
+            records: Vec::new(),
+            delimiter: ambre_convert::CsvDelimiter::COMMA,
+        };
+        for _ in 0..2 {
+            let converter = converters
+                .ready(ConverterFamily::Tables)
+                .expect("the module stays loaded");
+            // The module answers no bytes, so the conversion is malformed:
+            // what counts is that its `run` grew the memory.
+            let _ = converter.convert(&csv);
+            assert!(renews(converter.footprint()), "the run grew the memory");
+            converters.give_back();
+            assert_eq!(converters.footprint(ConverterFamily::Tables), Some(page));
+        }
     }
 }

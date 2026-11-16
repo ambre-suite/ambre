@@ -21,7 +21,7 @@ use std::collections::HashMap;
 use ambre_bus::Request;
 use ambre_bus::interop::InteropRequest;
 use ambre_client_core::ExportFilename;
-use ambre_convert::{Conversion, ConvertError, Converted, Converter, FileWork};
+use ambre_convert::{Conversion, ConvertError, Converted, Converter, FileWork, TextRead};
 use ambre_core::{ConverterFamily, Seq, StopCause};
 use ambre_prose_form::clip::ClipBlock;
 
@@ -288,7 +288,7 @@ impl ProseState {
             ProseCommand::Paste {
                 html: Some(html), ..
             } => Some(ConvertedInput::Html(converter.ok().and_then(|converter| {
-                match converter.convert(&Conversion::ReadHtml { html: html.clone() }) {
+                match converter.read_text(&TextRead::HtmlPaste(html)) {
                     Ok(Converted::Pasted(blocks)) => Some(blocks),
                     _ => None,
                 }

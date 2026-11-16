@@ -91,6 +91,30 @@ impl Converter {
         }
     }
 
+    /// A fresh instance of the same module, at the span of its first load:
+    /// the one way to give back a memory that grew. The browser compiled
+    /// the bytes once, at [`Converter::load`]: this call instantiates the
+    /// compiled module again, and compiles nothing (`ARCH-125`).
+    ///
+    /// # Errors
+    ///
+    /// [`ConvertError::Stopped`] when the browser refuses the instance, a
+    /// memory it cannot allocate above all.
+    pub fn renew(&self) -> Result<Self, ConvertError> {
+        match self.inner {
+            #[cfg(all(not(target_arch = "wasm32"), feature = "engine"))]
+            Inner::Linked => Ok(Self {
+                family: self.family,
+                inner: Inner::Linked,
+            }),
+            #[cfg(all(target_arch = "wasm32", feature = "loader"))]
+            Inner::Fetched(ref instance) => instance.again().map(|instance| Self {
+                family: self.family,
+                inner: Inner::Fetched(instance),
+            }),
+        }
+    }
+
     /// Run one conversion and read its answer.
     ///
     /// # Errors
@@ -109,6 +133,24 @@ impl Converter {
             });
         }
         let request = crate::encode_request(conversion)?;
+        crate::decode_answer(&self.answer(&request)?)
+    }
+
+    /// Run one read of a text the caller holds, and read its answer. The
+    /// request is encoded from the borrowed text, so the text is never
+    /// copied into an owned [`Conversion`] first.
+    ///
+    /// # Errors
+    ///
+    /// The errors of [`Converter::convert`].
+    pub fn read_text(&self, read: &crate::TextRead<'_>) -> Result<Converted, ConvertError> {
+        if read.family() != self.family {
+            return Err(ConvertError::OtherFamily {
+                held: self.family,
+                asked: read.family(),
+            });
+        }
+        let request = crate::encode_text_read(read)?;
         crate::decode_answer(&self.answer(&request)?)
     }
 
@@ -141,7 +183,9 @@ mod wasm {
     //! queues and runs no browser event loop. A worker may compile a module of
     //! any size synchronously.
 
-    use js_sys::{Array, Function, Object, Reflect, Uint8Array, WebAssembly};
+    use std::rc::Rc;
+
+    use js_sys::{Array, ArrayBuffer, Function, Object, Reflect, Uint8Array, WebAssembly};
     use wasm_bindgen::closure::Closure;
     use wasm_bindgen::{JsCast, JsValue};
 
@@ -149,12 +193,16 @@ mod wasm {
 
     use crate::{ConvertError, EncodedAnswer, EncodedRequest};
 
-    /// The instance, its memory, and the trap its imports call.
+    /// The instance, its memory, and the trap its imports call. The compiled
+    /// module and its imports stay, so a fresh instance compiles nothing.
     pub(super) struct Instance {
+        module: WebAssembly::Module,
+        imports: Object,
         exports: Object,
         memory: WebAssembly::Memory,
-        /// Held so the trap outlives every call into the module.
-        _trap: Closure<dyn Fn() -> Result<(), JsValue>>,
+        /// Held so the trap outlives every call into the module, and shared
+        /// with each fresh instance of it.
+        trap: Rc<Closure<dyn Fn() -> Result<(), JsValue>>>,
     }
 
     /// The words of a JavaScript error, or a fixed text for a value that
@@ -199,6 +247,23 @@ mod wasm {
                 };
                 Reflect::set(&table, &name, trap.as_ref()).map_err(stopped)?;
             }
+            Self::instantiate(module, imports, Rc::new(trap))
+        }
+
+        /// A fresh instance of the compiled module, under the same imports.
+        pub(super) fn again(&self) -> Result<Self, ConvertError> {
+            Self::instantiate(
+                self.module.clone(),
+                self.imports.clone(),
+                Rc::clone(&self.trap),
+            )
+        }
+
+        fn instantiate(
+            module: WebAssembly::Module,
+            imports: Object,
+            trap: Rc<Closure<dyn Fn() -> Result<(), JsValue>>>,
+        ) -> Result<Self, ConvertError> {
             let instance = WebAssembly::Instance::new(&module, &imports).map_err(stopped)?;
             let exports = instance.exports();
             let memory = Reflect::get(&exports, &JsValue::from_str("memory"))
@@ -206,9 +271,11 @@ mod wasm {
                 .dyn_into::<WebAssembly::Memory>()
                 .map_err(|_| ConvertError::Stopped("the module exports no memory".to_owned()))?;
             Ok(Self {
+                module,
+                imports,
                 exports,
                 memory,
-                _trap: trap,
+                trap,
             })
         }
 
@@ -227,7 +294,13 @@ mod wasm {
 
         /// The bytes the module's memory spans now.
         pub(super) fn footprint(&self) -> ambre_core::Count<ambre_core::Octets> {
-            ambre_core::Count::of(Uint8Array::new(&self.memory.buffer()).length() as usize)
+            // The length of the buffer alone: no view over it is built.
+            ambre_core::Count::of(
+                self.memory
+                    .buffer()
+                    .unchecked_into::<ArrayBuffer>()
+                    .byte_length() as usize,
+            )
         }
 
         /// Write `request` into the module, run it, and copy the answer out.
