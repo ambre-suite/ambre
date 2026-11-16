@@ -275,6 +275,13 @@ test-db-cluster:
 sim-paths:
     AMBRE_SIM_PROCESSES=20 cargo test -p ambre-sfu --release sim::paths -- --nocapture
 
+# No caller of `print!` or `eprint!` in the debug Main wasm outside
+# `specs/1-Foundations/ambre-stdio.tsv`: two threads that print at once
+# contend for the lock of the stream, and the main thread may not wait
+# (`ARCH-119`). Reads the `dist/` of a `trunk build` without `--release`.
+stdio:
+    python3 scripts/wasm_stdio.py
+
 # browser tier: the Trunk build of the whole application, served in front of a
 # relay and driven through WebDriver (`crates/ambre-belt`). It needs the db-tier
 # services, a Chrome and its chromedriver (`CHROMEDRIVER`, `BELT_CHROME`). One
@@ -282,9 +289,11 @@ sim-paths:
 # starts the SFU binary instead, and two browsers on fake capture devices. The
 # TURN test also starts coturn (`BELT_TURNSERVER`) behind a TCP front on port
 # 443 (`BELT_TURN_PORT`). `filter` goes to libtest as written: CI runs the
-# belt in two parts, `murmure::` and `--skip murmure::`.
+# belt in two parts, `murmure::` and `--skip murmure::`. The print gate reads
+# the debug Main wasm the build just wrote, so it costs no build of its own.
 test-browser *filter:
     trunk build
+    just stdio
     cargo build -p ambre-server
     cargo build -p ambre-sfu
     S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}" cargo test -p ambre-belt --features browser -- --test-threads=1 {{filter}}

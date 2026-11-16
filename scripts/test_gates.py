@@ -50,6 +50,8 @@ import spec_refs  # noqa: E402
 import spec_shape  # noqa: E402
 import toolchain_pin  # noqa: E402
 import wasm_size  # noqa: E402
+import wasm_stdio  # noqa: E402
+from test_wasm_stdio import PRINT, body, module  # noqa: E402
 import write_cost  # noqa: E402
 
 GATE = "gate"
@@ -96,6 +98,7 @@ SCRIPTS = {
     "trunk_post_build": TOOL,
     "wasm_driver": TOOL,
     "wasm_size": GATE,
+    "wasm_stdio": GATE,
     "write_cost": GATE,
 }
 
@@ -188,6 +191,18 @@ class GatesFailWithNoFlag(unittest.TestCase):
             mock.patch.object(spec_refs, "documents", lambda: {}),
             mock.patch.object(spec_refs, "short_names", lambda known: {}),
             mock.patch.object(spec_refs, "sources", lambda: []),
+        ])
+
+    def test_wasm_stdio(self) -> None:
+        dist = self.dir / "dist"
+        dist.mkdir()
+        wasm = module([body(b""), body(b"\x10\x01")], {1: PRINT, 2: "lyon::log"})
+        (dist / "ambre-app-0_bg.wasm").write_bytes(wasm)
+        allowlist = self.dir / "stdio.tsv"
+        allowlist.write_text("caller\treason\n")
+        self.fails("wasm_stdio", [
+            mock.patch.object(wasm_stdio, "DIST", dist),
+            mock.patch.object(wasm_stdio, "ALLOWLIST", allowlist),
         ])
 
     def test_crate_boundaries(self) -> None:

@@ -12,9 +12,9 @@ use ambre_draw::{
     Stroke,
 };
 use kurbo::{BezPath, PathEl, Shape};
-use lyon::math::point as lpoint;
-use lyon::path::{LineCap, LineJoin, Path as LyonPath};
-use lyon::tessellation::{
+use lyon_path::math::point as lpoint;
+use lyon_path::{LineCap, LineJoin, Path as LyonPath};
+use lyon_tessellation::{
     BuffersBuilder, FillOptions, FillRule, FillTessellator, FillVertex, StrokeOptions,
     StrokeTessellator, StrokeVertex, VertexBuffers,
 };
@@ -671,7 +671,7 @@ fn build_lyon_path(path: &BezPath) -> LyonPath {
 
 /// Map a lyon model-space vertex through the active transform to a screen-space
 /// `[f32; 2]` position for the quad batch.
-fn screen_vertex(p: lyon::math::Point, t: Affine) -> [f32; 2] {
+fn screen_vertex(p: lyon_path::math::Point, t: Affine) -> [f32; 2] {
     let sp = t * Point::new(p.x as f64, p.y as f64);
     [sp.x as f32, sp.y as f32]
 }

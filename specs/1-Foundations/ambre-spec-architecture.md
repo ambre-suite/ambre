@@ -99,6 +99,7 @@ prefix is `ARCH`.
 | `ARCH-111` | `INV` | The certificate authority of the dev container MUST NOT sign a name outside the private IPv4 ranges of RFC 1918, loopback, `localhost` and the `.local` names. | `ambre-spec-testing.md section 4` | ci-gate -- `scripts/dev_stack.py`, whose tests in `scripts/test_dev_stack.py` run under `just test-scripts` in the CI `lint` job. The authority carries critical name constraints, and `openssl verify` refuses a server certificate it signed for a public address. The script also refuses to write one | none | verified |
 | `ARCH-113` | `INV` | Each step of a workflow or an action under `.github/` that uses `actions/checkout` MUST set `persist-credentials: false`. A step that pushes MAY set `true` when its `name` reads `Checkout to push:` and then the reason. | `ambre-spec-testing.md section 7` | ci-gate -- `scripts/checkout_credentials.py`, run by `just checkout-credentials` in the CI `lint` job, reads each workflow of `.github/workflows/` and each action of `.github/actions/`. It refuses a checkout with no `persist-credentials`, a value other than `false` or `true`, a flow mapping, and `true` on a step not named for a push with a reason. It also fails when it reads no checkout. Whether the reason is true is read in review. The tests of `scripts/test_checkout_credentials.py` plant each case | none | verified |
 | `ARCH-114` | `INV` | The dev container MUST serve object storage under the HTTPS origin of the page. An object MUST go up and come back through the links the relay presigns there. | `ambre-spec-testing.md section 4`; `ambre-spec-object-store.md`, `SRV-265` | ci-gate -- `scripts/dev_stack.py probe`, run by `just devcontainer-check` in the CI workflow `devcontainer.yml`, not in the `lint` job. From the runner, it signs in through the login of development mode, makes a document, puts random bytes through the upload link and reads them back through the download link. Both links must lead under `/s3/` of the origin. The tests of `scripts/test_dev_stack.py` run the probe against a fake relay that signs off the origin, a store that refuses the signature and a store that gives back other bytes, and check the `/s3/` proxy of `Trunk.toml` against the store address of `.devcontainer/compose.yml` | none | verified |
+| `ARCH-119` | `INV` | The debug Main wasm MUST hold no direct call to `std::io::stdio::_print` or `std::io::stdio::_eprint` outside a function that a line of `ambre-stdio.tsv` names with its reason. | this spec section 2, no standard stream; `ARCH-020` | ci-gate -- `scripts/wasm_stdio.py`, run by `just stdio` in the CI `test-browser` job on Chrome, right after its `trunk build`, not in the `lint` job. It decodes each function body of the Main wasm of `dist/` and names each function with a `call` or a `return_call` to one of the two through the `name` section. It refuses a caller no line names and a line that names no caller. It fails on a missing or mangled `name` section and on an instruction it cannot decode. The tests of `scripts/test_wasm_stdio.py` plant each case | none | verified |
 | `ARCH-089` | `INV` | A build other than the bench build of `scripts/instructions.py` MUST NOT turn on the `fixed-hash-key` feature of `ambre-core`. | this spec section 2, the hash key; `ambre-spec-testing.md section 2` | type-level -- the feature is a `compile_error!` on wasm32 in `ambre_core::hash`; `ambre_core::fixed_hash_key_feature::the_fixed_hash_key_is_named_by_the_instruction_benches_alone` -- no workspace manifest turns it on, and of the recipes, the CI, the shell wrappers and the scripts, only `scripts/instructions.py` names it; `::a_manifest_that_turns_the_feature_on_is_refused`; `ambre_core::hash::tests::the_key_of_the_process_is_not_the_fixed_key` | none | verified |
 | `ARCH-013` | `CONC` | Two tabs on one document MUST converge as two users do. | this spec section 2 | `ambre_logic::authorship_tests::two_tabs_of_one_user_converge_as_two_users_do` -- two sessions of one user, one cell edited at once; `ambre_sync::updates::tests::each_open_draws_a_new_peer_and_a_repeated_open_keeps_it` -- each session its own PeerID; `ambre_server::ws::pubsub_hub::tests::a_frame_from_one_instance_reaches_a_subscriber_of_the_other` -- the relay fans out per connection, never per user | none | verified |
 
@@ -196,7 +197,7 @@ Logic thread. The two threads share one instance, so they share one subscriber.
   measures. Its own two rows, the queue hop and the worker hop of `section 1`, are not measured.
 * **Boundary.** none of its own: `ARCH-004` and `ARCH-005` are this document's side of `ZK-002` and
   `ZK-001`.
-* **Verification.** 109 `verified`, 8 `human-review`. The build refuses a cycle, a misplaced
+* **Verification.** 111 `verified`, 8 `human-review`. The build refuses a cycle, a misplaced
   cryptographic dependency, a missing atomics flag and a lock on a client queue. It refuses
   application logic in the launcher, a failure path that waits on a queue, and a write on a failing
   thread's way out. Host tests hold the Logic pass, its unfinished work, the wake, the full queue,
@@ -386,6 +387,17 @@ bounded queue that takes no lock (`ARCH-020`), `crossbeam-queue`'s `ArrayQueue`.
 with no dependency but its own utilities. The ends the Main thread holds only try, to push or to pop
 (`ARCH-021`). A push that finds a slot still being written by the other thread spins for the few
 instructions that write takes, and never sleeps.
+
+**No standard stream.** The print macros of std take the reentrant lock of the stream, and on
+the browser target std then drops the bytes. Two threads of the Main instance that print at once
+contend for that lock, and the main thread's wait is a trap. So the debug Main wasm calls neither
+print function, except where `ambre-stdio.tsv` names the caller with its reason (`ARCH-119`).
+
+A dependency that prints is cut by a feature first. The `lyon` facade turned on the printing `std`
+feature of its tessellator, so `ambre-canvas` takes the tessellator alone. ICU prints its warnings
+unless `icu_provider` routes them to the `log` facade, which drops them while no logger is set.
+Each line that remains names a caller that prints just before a panic, or on a document that
+fails to decode.
 
 **The Logic thread parks on a doorbell.** Every queue into it rings the bell on a push, and on
 the drop of its last sender (`ARCH-022`, `ARCH-024`). Ringing unparks the thread, which is an

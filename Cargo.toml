@@ -154,8 +154,17 @@ parley  = "0.10"
 kurbo   = { version = "0.13", features = ["serde"] }
 peniko  = "0.6"
 bytemuck = { version = "1", features = ["derive"] }
-# Path tessellation (phase 1: fill_path / stroke_path)
-lyon = "1"
+# Path tessellation (phase 1: fill_path / stroke_path). The path crate and the
+# tessellator, without the `lyon` facade: the facade turns on the `std` feature
+# of the tessellator, and that feature links `println!` calls a debug build
+# reaches on the Main thread (`ARCH-119`). The path crate keeps `std`, which the
+# geometry needs, and with it the float math of `num-traits/std`.
+lyon_path = "1.0.19"
+lyon_tessellation = { version = "1.0.20", default-features = false }
+# Not a dependency of its own: `logging` routes the warnings of ICU through the
+# `log` facade, which drops them while no logger is set. Without it, a debug
+# build of ICU calls `eprintln!` on the Main thread (`ARCH-119`).
+icu_provider = { version = "2.3", default-features = false, features = ["logging"] }
 # 2D polygon boolean ops (union / subtract / intersect / exclude) for the
 # Toile vector boolean feature (`toile-vector-paths`). Pure Rust, WASM-friendly;
 # kurbo has no path-vs-path booleans, so shapes are flattened to polygons here.

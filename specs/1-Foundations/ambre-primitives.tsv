@@ -3496,7 +3496,7 @@ ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphAtlas::get_or_r
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | glyph_slot(normalized_coords) | param | &[swash::NormalizedCoord]	foreign-api	the normalized variation coordinate of swash, an alias of i16 the scaler takes
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | rasterize(normalized_coords) | param | &[swash::NormalizedCoord]	foreign-api	the normalized variation coordinate of swash, an alias of i16 the scaler takes
 ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | sampler() | ret | wgpu::SamplerDescriptor<'static>	foreign-api	the sampler descriptor of wgpu, whose label is the Option<&str> wgpu takes
-ambre-canvas | src/render/surface.rs | crate::render::surface | screen_vertex(p) | param | lyon::math::Point	foreign-api	the point of lyon, an alias of Point2D<f32> the tessellator hands out
+ambre-canvas | src/render/surface.rs | crate::render::surface | screen_vertex(p) | param | lyon_path::math::Point	foreign-api	the point of lyon, an alias of Point2D<f32> the tessellator hands out
 ambre-canvas | src/theme.rs | crate::theme | ThemeControl.v | field | Arc<AtomicU8>	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock
 ambre-chrome | src/dialog.rs | crate::dialog | OwnedHold.held | field | Arc<AtomicBool>	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock
 ambre-core | src/crdt.rs | crate::crdt | <FoundationRoot as crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling

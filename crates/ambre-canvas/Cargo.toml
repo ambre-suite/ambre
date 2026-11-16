@@ -32,7 +32,8 @@ parley     = { workspace = true }
 rustc-hash = { workspace = true }
 kurbo      = { workspace = true }
 peniko     = { workspace = true }
-lyon       = { workspace = true }
+lyon_path  = { workspace = true }
+lyon_tessellation = { workspace = true }
 
 # DOM glue for the transparent <textarea> pipe (text_input.rs). Pure web_sys
 # bindings: they compile on every target, so app crates can name `TextInput`
@@ -51,6 +52,10 @@ wasm-bindgen = { workspace = true }
 js-sys               = { workspace = true }
 wasm-bindgen-futures = { workspace = true }
 tracing              = { workspace = true }
+# Only for its `logging` feature: parley's ICU segmenter then sends a warning
+# to the `log` facade, never to the standard error of the Main instance
+# (`ARCH-119`). No code names the crate.
+icu_provider         = { workspace = true }
 
 # `required-features` keeps the generator out of every other build, the wasm
 # one included.

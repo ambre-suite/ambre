@@ -1,0 +1,10 @@
+# The callers of a print function of std that the debug Main wasm may link (ARCH-119, ambre-spec-architecture.md section 2).
+# `scripts/wasm_stdio.py` reads the wasm `trunk build` writes and refuses a caller of `std::io::stdio::_print` or `_eprint` that no line names.
+# A caller is the function name of the `name` section without its hash suffix. A line that names no caller fails the gate.
+# Add a line by hand only, with the reason no feature or cfg cuts the call; a reviewer reads it.
+caller	reason
+<<serde_columnar::column::GenericColumn as serde_core::de::Deserialize>::deserialize::ColumnVisitor as serde_core::de::Visitor>::visit_bytes	loro decodes a document through serde_columnar 0.3, which calls `eprintln!` on a column that fails to decode, then returns the error. The crate has no feature that cuts the call
+<<serde_columnar::column::delta_rle::DeltaRleColumn as serde_core::de::Deserialize>::deserialize::ColumnVisitor as serde_core::de::Visitor>::visit_borrowed_bytes	the same decode error path of serde_columnar 0.3, for a delta-RLE column. No feature cuts it
+<<serde_columnar::column::rle::RleColumn as serde_core::de::Deserialize>::deserialize::ColumnVisitor as serde_core::de::Visitor>::visit_bytes	the same decode error path of serde_columnar 0.3, for an RLE column. No feature cuts it
+<generic_btree::BTree>::check	the invariant check of generic-btree 0.10, which loro calls in a debug build. It calls `dbg!` only on a broken tree, then fails an `assert_eq!` that panics the thread. No feature cuts it
+<loro_internal::lock::LoroMutexGuardInner as core::ops::drop::Drop>::drop	the lock-order check of loro 1.13, which calls `eprintln!` only on a release out of order, then panics the thread. No feature cuts it
