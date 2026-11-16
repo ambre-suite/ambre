@@ -529,6 +529,18 @@ impl FixedRole for ParticipantPseudonym {
     type Array = [u8; PSEUDONYM_LEN];
 }
 
+/// The role of the pseudonym of one member in one call on the SFU:
+/// `FixedBytes<MemberPseudonym>`. The relay derives it from the room and the member's public
+/// key under its admission key. So every join of one member to one call names the same one.
+/// The SFU then seats one connection per member (audit `N25`). Two calls share none, and the
+/// SFU cannot derive it from a public key.
+pub enum MemberPseudonym {}
+
+impl FixedRole for MemberPseudonym {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("MemberPseudonym");
+    type Array = [u8; PSEUDONYM_LEN];
+}
+
 #[cfg(test)]
 mod tests {
     use super::{KeyGeneration, Seq, Track};

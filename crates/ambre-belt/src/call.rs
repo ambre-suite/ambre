@@ -279,14 +279,18 @@ impl Sfu {
         let admission = ambre_protocol::signaling::Admission {
             room: ambre_core::FixedBytes::from_array(room),
             participant: ambre_core::FixedBytes::from_array(drawn()),
+            // Each admission seats a member of its own, so no join ends another seat.
+            member: ambre_core::FixedBytes::from_array(drawn()),
             // The page sends media it never seals, so no chunk header names a sender.
             sender: ambre_core::Seq::new(0),
+            // No relay renews it, so it outlives the longest run of the belt: the SFU ends
+            // a seat whose admission expired (audit `N25`).
             expires: ambre_core::Instant::new(
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .expect("a clock after 1970")
                     .as_secs()
-                    + 60,
+                    + 3600,
             ),
         };
         let signed = admission.signed_bytes().expect("an admission encodes");

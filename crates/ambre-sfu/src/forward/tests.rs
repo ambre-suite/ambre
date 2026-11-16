@@ -60,8 +60,27 @@ impl Client {
         self.send_on(now, 2, payload, true)
     }
 
+    /// Writes one audio packet at the RFC 6464 `level`, in -dBov, and answers what a receiver
+    /// must read.
+    fn speak(&mut self, now: Instant, payload: &[u8], level: i8) -> Got {
+        self.write(now, 0, payload, true, Some(level))
+    }
+
     /// Writes one packet on the track at `track` of the offer: audio, camera or screen.
     fn send_on(&mut self, now: Instant, track: usize, payload: &[u8], marker: bool) -> Got {
+        self.write(now, track, payload, marker, None)
+    }
+
+    /// Writes one packet on the track at `track`, with the audio level `level` when one is
+    /// given.
+    fn write(
+        &mut self,
+        now: Instant,
+        track: usize,
+        payload: &[u8],
+        marker: bool,
+        level: Option<i8>,
+    ) -> Got {
         let (kind, mid) = *self.sending.get(track).expect("a track");
         let codec = if kind == MediaKind::Audio {
             Codec::Opus
@@ -80,8 +99,16 @@ impl Client {
         let time = u32::try_from(seq * 960).expect("a small time");
         let mut api = self.rtc.direct_api();
         let stream = api.stream_tx_by_mid(mid, None).expect("a send stream");
+        let ext = str0m::rtp::ExtensionValues {
+            audio_level: level,
+            // str0m writes the level of RFC 6464 only beside its voice activity bit.
+            voice_activity: level.map(|_| true),
+            ..str0m::rtp::ExtensionValues::default()
+        };
         stream.write_rtp(
-            RtpWrite::new(pt, SeqNo::from(seq), time, now, payload.to_vec()).marker(marker),
+            RtpWrite::new(pt, SeqNo::from(seq), time, now, payload.to_vec())
+                .marker(marker)
+                .ext_vals(ext),
         );
         Got {
             kind,
@@ -741,4 +768,43 @@ fn a_chunk_under_the_identifier_of_another_sender_never_leaves_the_sfu() {
     let own = mallory.send(now, MediaKind::Audio, &chunk_naming(Track::Audio, 0), true);
     net.run(Duration::from_millis(200));
     assert_eq!(client(&net, 2).got(MediaKind::Audio), vec![own]);
+}
+
+/// Audit `N25`: Mallory, sender 0, sends loud audio packets that hold no chunk header, after
+/// Bob, Carol and Dan spoke under their own headers. A packet that names no seat counts as no
+/// speech. So the three audio slots of Eve carry the three speakers, and Mallory's latest
+/// packet reaches nobody.
+#[test]
+fn a_loud_packet_that_names_no_seat_takes_no_speaker_slot() {
+    use ambre_core::Track;
+    let mut net = connected(&["r", "r", "r", "r", "r"]);
+    let speak_all = |net: &mut Net, round: u8| {
+        for speaker in 1..=3u64 {
+            let now = net.now;
+            let index = usize::try_from(speaker).expect("a small index");
+            let client = net.clients.get_mut(index).expect("a client");
+            client.speak(now, &chunk_naming(Track::Audio, speaker), -20);
+        }
+        let now = net.now;
+        let mallory = net.clients.get_mut(0).expect("a client");
+        mallory.speak(now, &[0xA0, round, 1, 2, 3], -10)
+    };
+    for round in 0..5 {
+        speak_all(&mut net, round);
+        net.run(Duration::from_millis(150));
+    }
+    let latest = speak_all(&mut net, 9);
+    net.run(Duration::from_millis(300));
+    let eve = client(&net, 4).got(MediaKind::Audio);
+    assert!(
+        !eve.iter().any(|g| g.payload == latest.payload),
+        "a packet that names no seat took a speaker slot"
+    );
+    for speaker in 1..=3u64 {
+        let named = chunk_naming(Track::Audio, speaker);
+        assert!(
+            eve.iter().any(|g| g.payload == named),
+            "speaker {speaker} reached no slot"
+        );
+    }
 }

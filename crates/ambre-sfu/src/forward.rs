@@ -1084,11 +1084,15 @@ impl Member {
                 }
                 let layer = Layer::new(rid);
                 let now = self.now;
+                // Only a chunk that names its own seat counts as speech. A packet with no
+                // chunk header opens for no receiver, so it takes no speaker slot
+                // (audit `N25`).
                 if packet
                     .header
                     .ext_vals
                     .audio_level
                     .is_some_and(|l| l > SPEECH_LEVEL)
+                    && names_its_seat(&*packet.payload, params.spec().codec, self.sender)
                 {
                     self.spoke = Some(now);
                 }
@@ -1239,6 +1243,18 @@ fn names_another_sender<B: AsRef<[u8]> + ?Sized>(
     start
         .and_then(|start| KeyIdentifier::at(chunk, start))
         .is_some_and(|kid| kid.sender != seat)
+}
+
+/// Whether the packet `chunk` of a track in `codec` opens with a chunk header that names
+/// `seat`, as the receiver reads it. An Opus packet holds the header at its start. No other
+/// packet speaks, so a header the SFU cannot read never counts as speech (audit `N25`).
+fn names_its_seat<B: AsRef<[u8]> + ?Sized>(
+    chunk: &B,
+    codec: Codec,
+    seat: Seq<SenderIndex>,
+) -> bool {
+    codec == Codec::Opus
+        && KeyIdentifier::at(chunk, Count::new(0)).is_some_and(|kid| kid.sender == seat)
 }
 
 /// Where the sealed chunk starts in a VP8 packet that starts a frame. It starts past the

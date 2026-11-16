@@ -15,8 +15,9 @@ use std::fmt;
 use ambre_core::id::{Channel, Id};
 use ambre_core::{
     AccessToken, ByteArray, CallAdmission, Count, Credential, FixedBytes, FixedRole, Instant,
-    Octets, ParticipantPseudonym, Payload, PayloadKind, RoomPseudonym, Rule, Sec, SenderIndex,
-    SenderKeyWraps, Seq, Signature, SignedJoins, TimeSpan, TurnPassword, UnixSec, Validated,
+    MemberPseudonym, Octets, ParticipantPseudonym, Payload, PayloadKind, RoomPseudonym, Rule, Sec,
+    SenderIndex, SenderKeyWraps, Seq, Signature, SignedJoins, TimeSpan, TurnPassword, UnixSec,
+    Validated,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -36,7 +37,9 @@ impl NarrowCount for CallParticipants {
 pub const PARTICIPANT_CAP: Count<CallParticipants> = Count::new(50);
 
 /// How long an admission admits, from the instant the relay issues it. The client opens the
-/// socket of the SFU at once, so a stolen admission is worth little for long.
+/// socket of the SFU at once, so a stolen admission is worth little for long. A heartbeat
+/// renews it while the member is in the channel. The SFU ends a seat whose admission expired
+/// with no renewal (audit `N25`).
 pub const ADMISSION_LIFETIME: TimeSpan<Sec> = TimeSpan::new(60);
 
 /// The largest wrap the relay forwards. A wrap holds one sender key sealed to one ephemeral
@@ -45,7 +48,7 @@ pub const WRAP_MAX: Count<Octets> = Count::new(1024);
 
 /// The domain an admission signature covers first, so no signature of the relay over other
 /// bytes, such as an access token, verifies as an admission.
-const ADMISSION_DOMAIN: &[u8] = b"ambre-call-admission-v2";
+const ADMISSION_DOMAIN: &[u8] = b"ambre-call-admission-v3";
 
 /// The decoded bytes of an admission token: the encoded admission, then the relay's signature.
 /// The SFU reads them from the text of the token, and nothing else builds them.
@@ -56,14 +59,17 @@ impl PayloadKind for AdmissionTokens {
         ambre_core::StaticKey::new("AdmissionToken");
 }
 
-/// What the SFU learns of one participant at its join (`ZK-023`). It names the call and the
-/// participant, each by a pseudonym, and the instant the admission expires.
+/// What the SFU learns of one participant at its join (`ZK-023`). It names the call, the
+/// participant and its member, each by a pseudonym, and the instant the admission expires.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Admission {
     /// The call, as the SFU knows it.
     pub room: FixedBytes<RoomPseudonym>,
     /// The participant session, as the SFU knows it.
     pub participant: FixedBytes<ParticipantPseudonym>,
+    /// The member of the call the session belongs to, as the SFU knows it. Every join of one
+    /// member to one call names the same one, so the SFU seats one connection per member.
+    pub member: FixedBytes<MemberPseudonym>,
     /// The sender index the relay gave the seat. The SFU forwards no chunk of this
     /// participant whose key identifier names another sender (`CALL-116`). Every key
     /// identifier the SFU forwards shows it the index already (`ZK-021`).
@@ -232,6 +238,11 @@ pub enum CallServerMsg {
     /// The answer to [`CallClientMsg::Leave`]: whether the seat was the last of the call. The
     /// socket closes after it (`CALL-069`).
     Departed(Departure),
+    /// A fresh admission of this seat, which a heartbeat issues while the member is in the
+    /// channel. It names the room, the participant, the member and the sender index of the
+    /// first one, under a later expiry. The client hands it to the SFU, which keeps the seat
+    /// while one arrives before the last one expires (audit `N25`).
+    Renewed(Credential<CallAdmission>),
 }
 
 /// What the relay answers an ask of who is in a call (`CALL-070`), as the JSON of
@@ -369,6 +380,9 @@ pub const SESSION_DESCRIPTION_MAX: Count<Octets> = Count::new(64 * 1024);
 /// client sends `"share"` when its screen sender takes a track, which starts a share
 /// (`CALL-106`). The SFU sends `"unshared"` to a sharer once a later share took the screen
 /// (`CALL-107`). These are all the SFU reads of a participant (`ZK-023`, `ZK-033`).
+///
+/// A later `{"admission": "<token>"}` renews the seat. The SFU keeps the seat while a renewal
+/// of it arrives before the last admission expires (audit `N25`).
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SfuMsg {

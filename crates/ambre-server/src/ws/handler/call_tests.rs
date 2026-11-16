@@ -139,15 +139,17 @@ fn verified(
 
 /// `ZK-023`: a member joins under a room pseudonym the relay drew for the call and a
 /// participant pseudonym it drew for this join. A second join of the same member draws another
-/// one, and neither token holds the user identifier or the key. The relay signs the admission,
-/// and a stranger to the channel and a forged token are refused.
+/// one, and neither token holds the user identifier or the key. Both name one member
+/// pseudonym, and another member of the call names another (audit `N25`). The relay signs the
+/// admission, and a stranger to the channel and a forged token are refused.
 #[sqlx::test]
 #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
 async fn a_member_joins_under_pseudonyms_the_relay_draws_per_join(pool: sqlx::PgPool) {
     let state = test_app_state(pool.clone()).await;
     let alice = Member::new(&pool, "alice", 1).await;
     let eve = Member::new(&pool, "eve", 2).await;
-    let channel = channel_of(&pool, &alice, &[]).await;
+    let bob = Member::new(&pool, "bob", 3).await;
+    let channel = channel_of(&pool, &alice, &[&bob]).await;
     let call = Id::<Call>::mint();
     let (first, _) = admitted(
         answer_join(&state, &call, alice.join(&state, channel))
@@ -164,6 +166,20 @@ async fn a_member_joins_under_pseudonyms_the_relay_draws_per_join(pool: sqlx::Pg
     assert_ne!(
         first.participant, second.participant,
         "each join is a fresh participant"
+    );
+    assert_eq!(
+        first.member, second.member,
+        "one member is one member pseudonym"
+    );
+    let (third, _) = admitted(
+        answer_join(&state, &call, bob.join(&state, channel))
+            .await
+            .expect("a join"),
+    );
+    assert_ne!(
+        verified(&state, &third).member,
+        first.member,
+        "two members are two member pseudonyms"
     );
     for admission in [&first, &second] {
         let bytes = postcard::to_allocvec(admission).expect("an admission encodes");
@@ -1193,4 +1209,75 @@ async fn a_call_socket_silent_for_the_time_to_live_leaves_its_seat(pool: sqlx::P
     ));
     reader.abort();
     drop(a);
+}
+
+/// Audit `N25`: each heartbeat of a seat whose member is in the channel sends a fresh
+/// admission of that seat, under a later expiry. A member removed from the channel gets no
+/// renewal: the relay ends the seat, so the SFU ends its connection when the last admission
+/// expires.
+#[sqlx::test]
+#[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+async fn a_heartbeat_renews_the_admission_of_a_member_in_the_channel_alone(pool: sqlx::PgPool) {
+    use rustis::commands::HashCommands;
+    let state = with_call_clock(&test_app_state(pool.clone()).await, 3, 1);
+    let alice = Member::new(&pool, "alice", 1).await;
+    let bob = Member::new(&pool, "bob", 2).await;
+    let channel = channel_of(&pool, &alice, &[&bob]).await;
+    let call = Id::<Call>::mint();
+    let root = served(state.clone()).await;
+    let mut socket = call_socket(&root, call, &bob.join(&state, channel)).await;
+    let (first, sender) = match next_signal(&mut socket).await {
+        Some(CallServerMsg::Admitted {
+            admission, sender, ..
+        }) => (verified(&state, &admission), sender),
+        other => panic!("no admission: {other:?}"),
+    };
+    let renewed = loop {
+        match next_signal(&mut socket).await {
+            Some(CallServerMsg::Renewed(admission)) => break verified(&state, &admission),
+            Some(_) => {}
+            None => panic!("no renewal of a member's seat"),
+        }
+    };
+    assert_eq!(
+        Admission {
+            expires: first.expires,
+            ..renewed.clone()
+        },
+        first,
+        "a renewal names the seat of the first admission"
+    );
+    assert!(renewed.expires >= first.expires);
+
+    sqlx::query("DELETE FROM document_members WHERE user_id = $1")
+        .bind(db::id_to_uuid(bob.user))
+        .execute(&pool)
+        .await
+        .expect("a removal");
+    let after = tokio::time::timeout(Duration::from_secs(5), async {
+        let mut renewals = 0;
+        loop {
+            match socket.next().await {
+                Some(Ok(WsMessage::Binary(bytes))) => {
+                    if let Ok(CallServerMsg::Renewed(_)) = StoredPayload::new(bytes.to_vec()).open()
+                    {
+                        renewals += 1;
+                    }
+                }
+                Some(Ok(WsMessage::Close(_)) | Err(_)) | None => return renewals,
+                Some(Ok(_)) => {}
+            }
+        }
+    })
+    .await
+    .expect("the seat of a removed member ends");
+    assert!(after <= 1, "{after} renewals reached a removed member");
+    let keys = crate::redis_keys::CallStateKeys::of(&call);
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let held: bool = state
+        .redis
+        .hexists(keys.seats.as_str(), sender.get().to_string())
+        .await
+        .expect("a read");
+    assert!(!held, "the seat of a removed member stays in the roster");
 }

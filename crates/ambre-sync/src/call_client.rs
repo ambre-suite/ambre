@@ -196,6 +196,15 @@ impl CallClient {
             }
             // The transport reads the answer to a leave: the client left before it came.
             CallServerMsg::Departed(_) => Steps::default(),
+            // A seated session hands each renewal to the SFU, which ends a seat whose
+            // admission expires with none (audit `N25`).
+            CallServerMsg::Renewed(admission) => {
+                let mut steps = Steps::default();
+                if self.is_seated() {
+                    steps.sfu.push(SfuMsg::Admission(admission));
+                }
+                steps
+            }
             CallServerMsg::Joined(seated) => self.meet(&seated, log, Arrival::New),
             CallServerMsg::Left(sender) => self.part(sender, now),
             CallServerMsg::Wrap { from, to, wrap } => {

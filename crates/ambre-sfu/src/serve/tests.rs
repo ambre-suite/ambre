@@ -96,6 +96,7 @@ async fn the_metrics_answer_on_their_own_port_under_closed_labels_alone() {
     let admission = Admission {
         room: FixedBytes::from_array([7; 16]),
         participant: FixedBytes::from_array([8; 16]),
+        member: FixedBytes::from_array([8; 16]),
         sender: ambre_core::Seq::new(8),
         expires: unix_now().plus(ambre_core::TimeSpan::new(60)),
     };
@@ -224,6 +225,7 @@ async fn a_socket_is_served_on_a_signed_admission_alone() {
     let admission = |participant: u8, expires: At<UnixSec>| Admission {
         room: FixedBytes::from_array([1; 16]),
         participant: FixedBytes::from_array([participant; 16]),
+        member: FixedBytes::from_array([participant; 16]),
         sender: ambre_core::Seq::new(u64::from(participant)),
         expires,
     };
@@ -278,6 +280,7 @@ async fn an_admission_seats_no_connection_after_its_own_left() {
     let admission = Admission {
         room: FixedBytes::from_array([1; 16]),
         participant: FixedBytes::from_array([5; 16]),
+        member: FixedBytes::from_array([5; 16]),
         sender: ambre_core::Seq::new(5),
         expires: unix_now().plus(ambre_core::TimeSpan::new(60)),
     };
@@ -302,4 +305,145 @@ async fn an_admission_seats_no_connection_after_its_own_left() {
         None,
         "a spent admission seats a second connection"
     );
+}
+
+/// Whether `socket` closes within `span`. A frame read on the way is skipped.
+async fn closes_within(socket: &mut Socket, span: Duration) -> bool {
+    let deadline = tokio::time::Instant::now() + span;
+    loop {
+        match tokio::time::timeout_at(deadline, socket.next()).await {
+            Err(_) => return false,
+            Ok(None | Some(Err(_) | Ok(Message::Close(_)))) => return true,
+            Ok(Some(Ok(_))) => {}
+        }
+    }
+}
+
+/// Sends `admission`, signed by the relay's key, on a socket already seated.
+async fn renew(socket: &mut Socket, admission: &Admission) {
+    let token = signed(&relay_key(), admission);
+    let text = serde_json::to_string(&Wire::Admission(token)).expect("a frame");
+    socket
+        .send(Message::Text(text.into()))
+        .await
+        .expect("the renewal");
+}
+
+/// A socket seated under `admission`: it read the TURN servers and the answer to its offer.
+async fn seated(url: &str, admission: &Admission) -> Socket {
+    let mut socket = admitted(url, admission, &relay_key()).await;
+    assert!(next(&mut socket).await.is_some_and(|v| v["ice"].is_array()));
+    offer(&mut socket).await;
+    assert!(
+        next(&mut socket)
+            .await
+            .is_some_and(|v| v["answer"].is_string()),
+        "the seat is refused"
+    );
+    socket
+}
+
+/// Audit `N25`: a member who closed its relay socket gets no renewal. The SFU ends its seat
+/// once the last admission expires, so the seat leaves the room and the cap.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_seat_whose_admission_expires_with_no_renewal_ends() {
+    let url = sfu().await;
+    let admission = Admission {
+        room: FixedBytes::from_array([1; 16]),
+        participant: FixedBytes::from_array([20; 16]),
+        member: FixedBytes::from_array([20; 16]),
+        sender: ambre_core::Seq::new(20),
+        expires: unix_now().plus(ambre_core::TimeSpan::new(2)),
+    };
+    let mut socket = seated(&url, &admission).await;
+    assert!(
+        closes_within(&mut socket, Duration::from_secs(8)).await,
+        "a seat outlived its admission"
+    );
+}
+
+/// Audit `N25`, `CALL-120`: a renewal of the same seat keeps it past its first expiry. A
+/// renewal that names another participant, member or sender index keeps nothing. The token
+/// of a renewal seats no second connection while it is valid.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_renewal_keeps_its_own_seat_alone() {
+    let url = sfu().await;
+    let first = |participant: u8| Admission {
+        room: FixedBytes::from_array([1; 16]),
+        participant: FixedBytes::from_array([participant; 16]),
+        member: FixedBytes::from_array([participant; 16]),
+        sender: ambre_core::Seq::new(u64::from(participant)),
+        expires: unix_now().plus(ambre_core::TimeSpan::new(2)),
+    };
+    let later = unix_now().plus(ambre_core::TimeSpan::new(60));
+    let kept = first(21);
+    let mut socket = seated(&url, &kept).await;
+    let renewal = Admission {
+        expires: later,
+        ..kept.clone()
+    };
+    renew(&mut socket, &renewal).await;
+
+    let mut others = Vec::new();
+    for (index, mutate) in [
+        |a: &mut Admission| a.participant = FixedBytes::from_array([99; 16]),
+        |a: &mut Admission| a.member = FixedBytes::from_array([99; 16]),
+        |a: &mut Admission| a.sender = ambre_core::Seq::new(99),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let own = first(22 + u8::try_from(index).expect("a small index"));
+        let mut other = seated(&url, &own).await;
+        let mut wrong = Admission {
+            expires: later,
+            ..own
+        };
+        mutate(&mut wrong);
+        renew(&mut other, &wrong).await;
+        others.push(other);
+    }
+    for mut other in others {
+        assert!(
+            closes_within(&mut other, Duration::from_secs(8)).await,
+            "a renewal of another seat kept this one"
+        );
+    }
+    assert!(
+        !closes_within(&mut socket, Duration::from_secs(1)).await,
+        "a renewal of the seat did not keep it"
+    );
+
+    let mut again = admitted(&url, &renewal, &relay_key()).await;
+    assert!(next(&mut again).await.is_some_and(|v| v["ice"].is_array()));
+    offer(&mut again).await;
+    assert_eq!(
+        next(&mut again).await,
+        None,
+        "the token of a renewal seats a second connection"
+    );
+}
+
+/// Audit `N25`: a member holds one seat of a room. A join under another admission of the
+/// same member ends the older seat, so seats a member stopped renewing never fill the room.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_join_of_a_member_ends_its_older_seat() {
+    let url = sfu().await;
+    let later = unix_now().plus(ambre_core::TimeSpan::new(60));
+    let admission = |participant: u8, member: u8| Admission {
+        room: FixedBytes::from_array([1; 16]),
+        participant: FixedBytes::from_array([participant; 16]),
+        member: FixedBytes::from_array([member; 16]),
+        sender: ambre_core::Seq::new(u64::from(participant)),
+        expires: later,
+    };
+    let mut older = seated(&url, &admission(30, 40)).await;
+    let mut stranger = seated(&url, &admission(31, 41)).await;
+    let mut newer = seated(&url, &admission(32, 40)).await;
+    assert!(
+        closes_within(&mut older, Duration::from_secs(3)).await,
+        "a member holds two seats"
+    );
+    assert!(!closes_within(&mut stranger, Duration::from_secs(1)).await);
+    assert!(!closes_within(&mut newer, Duration::from_secs(1)).await);
 }

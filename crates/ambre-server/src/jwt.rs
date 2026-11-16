@@ -169,6 +169,10 @@ impl JwtSeed {
     }
 }
 
+/// The domain the signature behind a member pseudonym covers first. So that signature never
+/// verifies as an admission, and no admission signature reads as a member pseudonym.
+const MEMBER_DOMAIN: &[u8] = b"ambre-call-member-v1";
+
 /// Server signing/verifying material, derived once from the seed at startup.
 pub struct JwtKeys {
     encoding: EncodingKey,
@@ -243,6 +247,31 @@ impl JwtKeys {
         let signature = key.sign(signed.as_bytes()).to_bytes();
         admission
             .token(&ambre_core::FixedBytes::from_array(signature))
+            .map_err(|_| AdmissionUnsigned::Encode)
+    }
+
+    /// The pseudonym of the member of `key` in the call the SFU knows as `room` (audit `N25`).
+    ///
+    /// It is the hash of the admission key's signature over a domain, the room and the key.
+    /// An Ed25519 signature is deterministic. So every join of one member to one call names
+    /// the same pseudonym, and every relay that shares the seed derives it. The SFU holds no
+    /// key that signs, so it cannot derive the pseudonym of a public key it knows (`ZK-023`).
+    ///
+    /// # Errors
+    ///
+    /// [`AdmissionUnsigned::NoKey`] when no admission key is set.
+    pub fn member_pseudonym(
+        &self,
+        room: &ambre_core::FixedBytes<ambre_core::RoomPseudonym>,
+        key: &ambre_core::FixedBytes<ambre_core::PublicKey>,
+    ) -> Result<ambre_core::FixedBytes<ambre_core::MemberPseudonym>, AdmissionUnsigned> {
+        use sha2::Digest;
+        let signer = self.admission.as_ref().ok_or(AdmissionUnsigned::NoKey)?;
+        let mut signed = MEMBER_DOMAIN.to_vec();
+        signed.extend_from_slice(room.as_slice());
+        signed.extend_from_slice(key.as_slice());
+        let digest = sha2::Sha512::digest(signer.sign(&signed).to_bytes());
+        ambre_core::FixedBytes::from_slice(digest.get(..ambre_core::PSEUDONYM_LEN).unwrap_or(&[]))
             .map_err(|_| AdmissionUnsigned::Encode)
     }
 
@@ -341,6 +370,7 @@ mod tests {
         let admission = Admission {
             room: FixedBytes::from_array([1; 16]),
             participant: FixedBytes::from_array([2; 16]),
+            member: FixedBytes::from_array([3; 16]),
             sender: ambre_core::Seq::new(0),
             expires: At::<UnixSec>::new(60),
         };

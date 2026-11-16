@@ -85,6 +85,10 @@ this document alone.
 | `CALL-065` | `POST` | A command of the bus that joins a call MUST seat the session in the call and the channel it names, and hand the keys of that call on the port it carries. | this spec section 3, the client of a call; `CALL-062` | `ambre_sync::call_link::tests::a_join_command_seats_the_call_it_names_and_hands_the_keys_on_its_port`; `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier: each page joins by the command, with no gesture | none | verified |
 | `CALL-021` | `FAIL` | Given a call at the participant cap of `ambre-spec-budgets.md section 1`, a join MUST be refused with a notice. | this spec section 3 | `ambre_server::ws::handler::call::tests::a_join_at_the_participant_cap_is_refused_with_a_notice` -- database tier: the last seat is admitted, the next join reads the notice, then the socket closes | none | verified |
 | `CALL-117` | `FAIL` | Given an admission that seated a connection already, the SFU MUST seat no other connection under it, after that connection leaves too. | audit `N12`; this spec section 3, the SFU seats | `ambre_sfu::serve::tests::an_admission_seats_no_connection_after_its_own_left` -- an admission whose connection closed reads its TURN servers again, and its offer gets no answer | none | verified |
+| `CALL-119` | `FAIL` | Given a seat whose last admission expired with no renewal, the SFU MUST end the seat and close its signalling socket. | audit `N25`; this spec section 3, the SFU seats; `CALL-117` | `ambre_sfu::serve::tests::a_seat_whose_admission_expires_with_no_renewal_ends` -- a seat under an admission of two seconds, never renewed, closes | none | verified |
+| `CALL-120` | `FAIL` | Given a renewal that names another room, participant, member or sender index than its seat, the SFU MUST NOT keep the seat past its last admission. The token of a renewal MUST seat no second connection while it is valid. | audit `N25`; this spec section 3, the SFU seats; `CALL-117` | `ambre_sfu::serve::tests::a_renewal_keeps_its_own_seat_alone` -- a renewal of the same seat keeps it past its first expiry, a renewal that changes the participant, the member or the sender index ends the seat at its first expiry, and the token of a renewal seats nothing | none | verified |
+| `CALL-121` | `POST` | A join under an admission whose member holds a seat in the room MUST end that older seat, so a member holds one seat of a room. | audit `N25`; this spec section 3, the SFU seats | `ambre_sfu::serve::tests::a_join_of_a_member_ends_its_older_seat` -- the older seat of a member closes at its second join, and the seat of another member stays | none | verified |
+| `CALL-122` | `POST` | Each heartbeat of a seat whose member is in the channel MUST send the client a renewed admission that names the room, the participant, the member and the sender index of the first. A heartbeat that finds the member out of the channel MUST send no renewal and end the seat. The client MUST hand each renewal to the SFU. | audit `N25`; this spec section 3, signalling; `SRV-248` | `ambre_server::ws::handler::call::tests::a_heartbeat_renews_the_admission_of_a_member_in_the_channel_alone` -- database tier: a renewal names the seat of the first admission, and once the member leaves the channel, the socket closes and the seat leaves the roster; `ambre_sync::call_link::tests::a_renewal_from_the_relay_reaches_the_sfu_as_an_admission` -- a seated client hands each renewal to the SFU, and a renewal before the seat reaches nothing | none | verified |
 | `CALL-068` | `FAIL` | Given a join that starts no call, for a call whose state the relay holds none of, the relay MUST refuse the join with a notice that the call ended. | this spec section 3, signalling; `SRV-249` | `ambre_server::ws::handler::call::tests::a_join_of_a_call_the_relay_holds_no_state_of_is_refused_as_ended` -- database tier; `ambre_server::ws::handler::call::tests::a_call_whose_state_is_lost_ends` -- database tier: a rejoin of a lost call is refused | none | verified |
 | `CALL-076` | `FAIL` | Given a microphone that the browser refuses or does not have, a client MUST send no start and no join of a call. | this spec section 3, a join from the page; `5-Murmure/features/ambre-spec-murmure-calls.md section 3` (`MURMURE-601`) | `ambre_belt::murmure::tests::a_refused_microphone_starts_no_call_and_says_why` -- browser tier, under Chrome and under Firefox: no call worker, no peer connection and no call socket follow a refusal | none | verified |
 
@@ -126,6 +130,7 @@ A participant sends a packet to the SFU, and the SFU forwards it within the room
 |---|---|---|---|---|---|---|
 | `CALL-033` | `FRAME` | The SFU MUST NOT send a packet to its own sender, or to a participant of another room. | this spec section 3, the SFU; `CALL-009` | `ambre_sfu::forward::tests::no_packet_goes_back_to_its_sender_or_into_another_room` | none | verified |
 | `CALL-116` | `FAIL` | Given a chunk whose key identifier names a sender other than the index the relay signed into the admission of its connection, the SFU MUST NOT forward it. | audit `N11`; this spec section 3, the SFU seats; `CALL-025` | `ambre_sfu::forward::tests::a_chunk_under_the_identifier_of_another_sender_never_leaves_the_sfu` -- an audio chunk and the first packet of a camera frame that Mallory sends under Bob's index reach nobody, and her own chunk passes | none | verified |
+| `CALL-123` | `FAIL` | Given an audio packet whose chunk header does not name the sender index of its seat, the SFU MUST NOT count it as speech for the choice of the audio slots. | audit `N25`; this spec section 3, the playout; `CALL-045` | `ambre_sfu::forward::tests::a_loud_packet_that_names_no_seat_takes_no_speaker_slot` -- loud packets of Mallory with no chunk header take no slot from three speakers, and her latest one reaches nobody | none | verified |
 | `CALL-034` | `POST` | A participant who joins a room MUST receive each track the room already carries. | this spec section 3, the SFU | `ambre_sfu::forward::tests::a_late_joiner_receives_the_tracks_already_in_the_room` | none | verified |
 | `CALL-035` | `POST` | A keyframe request from a receiver MUST reach the sender of its track. | this spec section 3, the SFU | `ambre_sfu::forward::tests::a_keyframe_request_reaches_the_sender_of_the_track` | none | verified |
 | `CALL-046` | `FRAME` | A change of speaker MUST NOT renegotiate the session of any participant. | this spec section 3, the SFU | `ambre_sfu::sim::tests::a_change_of_speaker_renegotiates_nothing` -- a call of twelve | none | verified |
@@ -235,7 +240,7 @@ A participant sends a screen or a window into the call, and stops it.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 118 `verified`. The relay admits under the cap, and the SFU mints the TURN
+* **Verification.** 123 `verified`. The relay admits under the cap, and the SFU mints the TURN
   credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography, forwards RTP and reaches a
   browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`, `CALL-050` to `CALL-052`). Each
   receiver holds fixed slots, and a seed gives one path (`CALL-045` to `CALL-053`). The seal and the
@@ -595,8 +600,10 @@ tier counts chunks: the payload bytes over the fixed size (`CALL-075`).
 
 **The playout.** The SFU forwards three audio slots to each receiver (`CALL-045`), and a slot
 moves to another sender at the next packet. So a participant has no track of its own on the
-receiver: a slot carries it while it is among the three most recent speakers. Each slot plays
-through a detached audio element of its own (`CALL-077`). The element plays the stream of the
+receiver: a slot carries it while it is among the three most recent speakers. Only a packet
+whose chunk header names the sender index of its seat counts as speech (`CALL-123`).
+
+Each slot plays through a detached audio element of its own (`CALL-077`). The element plays the stream of the
 slot, so the browser cancels its echo. The element has a volume and an output of its own, and
 no other path offers both on Chrome and Firefox.
 
@@ -719,6 +726,17 @@ cannot name it.
 
 **The SFU seats.** One admission seats one connection, and the SFU holds the cap too. A token
 whose connection left seats nobody again before it expires (`CALL-117`).
+
+A seat lives while the relay renews its admission (audit `N25`). A heartbeat renews the
+admission of a seat whose member is in the channel. The client hands each renewal to the SFU
+on its socket (`CALL-122`). The SFU ends a seat whose last admission expired (`CALL-119`).
+So a member who closes the call socket, or leaves the channel, loses its SFU seat within one
+admission lifetime. A renewal keeps the seat it names alone (`CALL-120`).
+
+The admission also names the member by a pseudonym of the call. The relay derives it from the
+room and the member's key under the admission key, so the SFU cannot derive it from a key. A
+join of a member ends its older seat in the room (`CALL-121`). So a member who rejoins many
+times holds one seat, and stale seats never fill the cap.
 
 **The SFU binds a seat to its sender.** Every member holds the key of every sender. A key alone
 then names no author: Mallory holds Bob's key and seals a chunk that opens as Bob's. The relay

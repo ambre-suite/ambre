@@ -4813,3 +4813,7 @@ ambre-pptx | src/read/odp.rs | crate::read::odp | svg_path(map) | param | impl F
 ambre-pptx | src/read/odp.rs | crate::read::odp | svg_path(spelled) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
 ambre-toile | src/ui/interop.rs | crate::ui::interop | ODP_TYPE | const | &str	foreign-api	the media type a browser gives an OpenDocument presentation, which the drop gate matches
 ambre-logic | src/converting.rs | crate::converting | renews() | ret | bool	generic	whether a Logic-thread converter instance is renewed after a pass, a predicate no caller writes as a literal
+ambre-core | src/call.rs | crate::call | <MemberPseudonym as FixedRole>::Array | assoc | [u8;PSEUDONYM_LEN]	newtype-inner	the storage of FixedBytes<MemberPseudonym>, which states its width
+ambre-server | src/jwt.rs | crate::jwt | MEMBER_DOMAIN | const | &[u8]	generic	domain-separation tag or length constant
+ambre-sfu | src/forward.rs | crate::forward | names_its_seat() | ret | bool	generic	predicate
+ambre-sfu | src/serve.rs | crate::serve | Session::renewed_by() | ret | bool	generic	predicate

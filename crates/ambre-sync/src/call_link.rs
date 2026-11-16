@@ -858,6 +858,41 @@ mod tests {
         assert!(state.call.is_none(), "a lost call ends");
     }
 
+    /// Audit `N25`: each renewal the relay sends a seated session reaches the socket of the
+    /// SFU as an admission, after the first one. So the SFU keeps the seat. A renewal before
+    /// the seat reaches nothing.
+    #[test]
+    fn a_renewal_from_the_relay_reaches_the_sfu_as_an_admission() {
+        let alice = Person::new(1);
+        let (mut state, _, port) = worker(&alice);
+        state.join_call(TARGET, META, port, Opening::Join);
+        state.call_log(META, log_of(&alice));
+        state.call_relay(CallServerMsg::Renewed(ambre_core::Credential::new(
+            "early".to_owned(),
+        )));
+        let link = state.call.as_ref().expect("a call");
+        assert!(link.sent.sfu.is_empty(), "no seat, so no renewal leaves");
+        state.call_relay(CallServerMsg::Admitted {
+            admission: ambre_core::Credential::new("admission".to_owned()),
+            sfu: Some(Validated::parse("wss://sfu.example/call").expect("an address")),
+            sender: ambre_core::Seq::new(3),
+            roster: Vec::new(),
+        });
+        state.call_sfu(SfuMsg::Ice(Vec::new()));
+        state.call_relay(CallServerMsg::Renewed(ambre_core::Credential::new(
+            "renewed".to_owned(),
+        )));
+        let link = state.call.as_ref().expect("a call");
+        assert!(
+            matches!(
+                link.sent.sfu.as_slice(),
+                [SfuMsg::Admission(_), SfuMsg::Admission(_)]
+            ),
+            "the SFU socket carried {:?}",
+            link.sent.sfu
+        );
+    }
+
     /// `CALL-060`: a change of the members of the channel of the call, or a rotation of its
     /// key, reads the log again. A change of another document reads nothing.
     #[test]

@@ -15,6 +15,10 @@
 //! its join and leave. Per wrap, the size. The pseudonyms it draws for the SFU are kept nowhere
 //! but the room of the call. All of it lives in the ephemeral store, under a time to live each
 //! open socket refreshes, and no table holds a call (`SRV-248`, `SRV-250`).
+//!
+//! A heartbeat sends a fresh admission of its seat while the member is in the channel. The
+//! client hands it to the SFU. The SFU ends a seat no renewal reaches, so a
+//! seat of the SFU lives while its relay seat does (audit `N25`).
 
 use super::*;
 
@@ -49,6 +53,19 @@ struct Seat {
     /// The room of the call state the seat joined. A heartbeat that finds another room finds
     /// a fresh call, and this seat lost its own (`SRV-249`).
     room: FixedBytes<RoomPseudonym>,
+    /// Whose session the seat is, and in which channel: a heartbeat renews the admission of a
+    /// member of that channel alone (audit `N25`).
+    holder: Holder,
+    /// The admission of the seat, which each renewal signs again under a later expiry. The
+    /// socket keeps it, and no store does.
+    admission: Admission,
+}
+
+/// The member a seat belongs to, and the channel of its call.
+#[derive(Clone, Copy)]
+pub(crate) struct Holder {
+    pub(crate) user: Id<User>,
+    pub(crate) channel: Id<Channel>,
 }
 
 /// What the first frame earns: a seat and the admission to the SFU, or the notice of a
@@ -58,6 +75,9 @@ pub(crate) enum CallAnswer {
         sender: Seq<SenderIndex>,
         room: FixedBytes<RoomPseudonym>,
         admission: ambre_core::Credential<ambre_core::CallAdmission>,
+        /// What the token signs, which each renewal signs again.
+        claims: Admission,
+        holder: Holder,
     },
     Refused(CallRefusal),
 }
@@ -100,15 +120,19 @@ pub(crate) async fn answer_join(
         redis_ops::CallJoin::Admitted { room, sender } => (room, sender),
         redis_ops::CallJoin::Refused(refusal) => return Ok(CallAnswer::Refused(refusal)),
     };
-    let admission_room = room;
-    let admission = Admission {
-        room,
-        participant: pseudonym::<ParticipantPseudonym>()?,
-        sender,
-        expires: crate::s3::unix_now().plus(ADMISSION_LIFETIME),
-    };
-    let admission = match state.jwt.sign_admission(&admission) {
-        Ok(admission) => admission,
+    let participant = pseudonym::<ParticipantPseudonym>()?;
+    let signed = state.jwt.member_pseudonym(&room, &key).and_then(|member| {
+        let claims = Admission {
+            room,
+            participant,
+            member,
+            sender,
+            expires: crate::s3::unix_now().plus(ADMISSION_LIFETIME),
+        };
+        Ok((state.jwt.sign_admission(&claims)?, claims))
+    });
+    let (admission, claims) = match signed {
+        Ok(signed) => signed,
         Err(e) => {
             // The seat is taken: give it back before the error ends the socket.
             redis_ops::leave_call(&state.redis, call, sender).await?;
@@ -117,9 +141,38 @@ pub(crate) async fn answer_join(
     };
     Ok(CallAnswer::Admitted {
         sender,
-        room: admission_room,
+        room,
         admission,
+        claims,
+        holder: Holder {
+            user: session.user_id,
+            channel,
+        },
     })
+}
+
+/// A fresh admission of `seat` while its member is in the channel (audit `N25`). It holds
+/// the claims of the first one under a later expiry. `None` once the member left the channel,
+/// so the seat ends and the SFU drops its connection when the last admission expires.
+///
+/// # Errors
+/// A database error.
+async fn renewal(
+    state: &AppState,
+    seat: &Seat,
+) -> Result<Option<ambre_core::Credential<ambre_core::CallAdmission>>, AppError> {
+    if !db::is_channel_member(&state.db, &seat.holder.channel, &seat.holder.user).await? {
+        return Ok(None);
+    }
+    let claims = Admission {
+        expires: crate::s3::unix_now().plus(ADMISSION_LIFETIME),
+        ..seat.admission.clone()
+    };
+    state
+        .jwt
+        .sign_admission(&claims)
+        .map(Some)
+        .map_err(|e| AppError::Internal(format!("no admission: {e}")))
 }
 
 /// A frame of the call socket, encoded.
@@ -144,12 +197,14 @@ async fn handle_call(mut socket: WebSocket, state: Arc<AppState>, call: Id<Call>
         Some(first) => answer_join(&state, &call, first).await,
         None => Ok(CallAnswer::Refused(CallRefusal::Unauthorized)),
     };
-    let (sender, room, admission) = match answer {
+    let (sender, room, admission, claims, holder) = match answer {
         Ok(CallAnswer::Admitted {
             sender,
             room,
             admission,
-        }) => (sender, room, admission),
+            claims,
+            holder,
+        }) => (sender, room, admission, claims, holder),
         Ok(CallAnswer::Refused(refusal)) => {
             // The notice of `CALL-021` and of each other refusal, then the close.
             if let Some(frame) = call_frame(&CallServerMsg::Refused(refusal)) {
@@ -164,7 +219,13 @@ async fn handle_call(mut socket: WebSocket, state: Arc<AppState>, call: Id<Call>
             return;
         }
     };
-    let seat = Seat { call, sender, room };
+    let seat = Seat {
+        call,
+        sender,
+        room,
+        holder,
+        admission: claims,
+    };
     let _open = crate::metrics::OpenSocket::of(crate::metrics::Socket::Call);
     let exit = serve_seat(socket, &state, &seat, admission).await;
     // A leave frame took the seat out already and told the client whether it was the last.
@@ -294,6 +355,24 @@ async fn serve_seat(
                         Ok(redis_ops::CallHold::Held { gone }) => {
                             for sender in gone {
                                 publish(state, &seat.call, &CallServerMsg::Left(sender)).await;
+                            }
+                            // A member removed from the channel gets no renewal, and its seat
+                            // ends: the SFU drops its connection once its admission expires
+                            // (audit `N25`).
+                            match renewal(state, seat).await {
+                                Ok(Some(admission)) => {
+                                    let renewed = call_frame(&CallServerMsg::Renewed(admission));
+                                    if let Some(frame) = renewed
+                                        && sink.send(frame.into_message()).await.is_err()
+                                    {
+                                        return SeatExit::Closed;
+                                    }
+                                }
+                                Ok(None) => {
+                                    let _ = sink.send(Message::Close(None)).await;
+                                    return SeatExit::Closed;
+                                }
+                                Err(e) => tracing::warn!("a call admission was not renewed: {e}"),
                             }
                         }
                         // The store lost the call: it ended for this seat, with a notice

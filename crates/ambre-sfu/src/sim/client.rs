@@ -45,6 +45,9 @@ const AUDIO_SIZE: usize = 100;
 
 /// A tag in the opaque part, to tell a synthetic payload from anything else.
 const AUDIO_TAG: u8 = 0xA0;
+/// The chunk header that opens each audio payload: the configuration byte, then the key
+/// identifier. The SFU counts a packet as speech only when the header names its seat.
+const AUDIO_HEADER: usize = 9;
 const VIDEO_TAG: u8 = 0xB0;
 
 /// The size of the VP8 payload descriptor the client writes: X, I, a 15-bit picture id.
@@ -388,7 +391,14 @@ impl Synth {
         self.audio_seq += 1;
         let mut payload = vec![0u8; AUDIO_SIZE];
         let speech = u8::from(self.speaking);
-        let mut meta = vec![AUDIO_TAG, speech];
+        let kid = ambre_core::KeyIdentifier {
+            track: ambre_core::Track::Audio,
+            sender: ambre_core::Seq::new(u64::from(self.index)),
+            generation: ambre_core::Seq::new(1),
+        };
+        let mut meta = vec![ambre_core::CHUNK_CONFIG_BYTE];
+        meta.extend_from_slice(kid.to_bytes().expect("a small identifier").as_slice());
+        meta.extend_from_slice(&[AUDIO_TAG, speech]);
         meta.extend_from_slice(&self.index.to_le_bytes());
         meta.extend_from_slice(&self.micros(at).to_le_bytes());
         payload
@@ -590,8 +600,10 @@ impl Synth {
                     return;
                 };
                 let payload = &packet.payload[..];
-                match payload.first() {
-                    Some(&AUDIO_TAG) => {
+                let audio = payload.first() == Some(&ambre_core::CHUNK_CONFIG_BYTE);
+                match payload.get(AUDIO_HEADER) {
+                    Some(&AUDIO_TAG) if audio => {
+                        let payload = payload.get(AUDIO_HEADER..).unwrap_or(&[]);
                         let speech = payload.get(1) == Some(&1);
                         if let Some(sender) = payload
                             .get(2..4)

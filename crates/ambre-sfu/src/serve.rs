@@ -6,17 +6,21 @@
 //! minted for the participant's pseudonym, then reads the offer. It answers it, then sends
 //! every offer the room needs when it gains a track. One task owns the [`Sfu`]: the sockets
 //! hand it datagrams and commands, so no lock guards a connection.
+//!
+//! A seat lives while the relay renews its admission (audit `N25`). The client hands each
+//! renewal on the same socket, and the SFU ends a seat whose last admission expired. It
+//! seats one connection per member of a room: a join of a member ends the older seat.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use ambre_core::{
-    Count, FixedBytes, ParticipantPseudonym, Payload, RoomPseudonym, SenderIndex, Seq, TimeSpan,
-    UnixSec, Validated,
+    Count, FixedBytes, MemberPseudonym, ParticipantPseudonym, Payload, RoomPseudonym, SenderIndex,
+    Seq, TimeSpan, UnixSec, Validated,
 };
 use ambre_protocol::signaling::{
-    CallParticipants, PARTICIPANT_CAP, SessionDescription, SfuMsg as Wire,
+    Admission as Claims, CallParticipants, PARTICIPANT_CAP, SessionDescription, SfuMsg as Wire,
 };
 use axum::Router;
 use axum::extract::State;
@@ -61,6 +65,7 @@ enum Command {
     Join {
         room: Validated<Room>,
         participant: FixedBytes<ParticipantPseudonym>,
+        member: FixedBytes<MemberPseudonym>,
         sender: Seq<SenderIndex>,
         expires: ambre_core::Instant<UnixSec>,
         offer: SdpOffer,
@@ -72,6 +77,9 @@ enum Command {
     Share(Seq<Participant>),
     /// A later offer of the participant, which adds its screen section (`CALL-112`).
     Offer(Seq<Participant>, SdpOffer),
+    /// A renewal of the participant's admission, verified: it keeps the seat while it names
+    /// the seat (audit `N25`).
+    Renew(Seq<Participant>, Claims),
     Leave(Seq<Participant>),
 }
 
@@ -106,6 +114,10 @@ impl NarrowCount for Datagrams {
 /// The most datagrams one turn of the media loop reads before it polls the SFU.
 const BATCH: Count<Datagrams> = Count::new(64);
 
+/// How often the media loop ends the seats whose admission expired with no renewal. An
+/// admission expires on a whole Unix second, so a finer sweep ends no seat sooner.
+const EXPIRY_SWEEP: Duration = Duration::from_secs(1);
+
 /// Owns the SFU: reads the socket and the commands, and sends what the SFU answers.
 async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver<Command>) {
     let mut sfu = Sfu::new(media);
@@ -117,7 +129,12 @@ async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver
         ambre_core::Instant<UnixSec>,
     )> = Vec::new();
     let mut buf = vec![0; 2000];
+    let mut sweep = Instant::now();
     loop {
+        if Instant::now() >= sweep {
+            sweep = Instant::now() + EXPIRY_SWEEP;
+            expire(&mut sfu, &mut sessions, unix_now());
+        }
         let wake = sfu.poll(Instant::now(), |t| {
             // UDP may drop a datagram anyway: a full socket buffer drops it here instead.
             let sent = udp.try_send_to(&t.contents, t.destination);
@@ -164,15 +181,25 @@ async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver
                 }
             }
             command = inbox.recv() => match command {
-                Some(Command::Join { room, participant, sender, expires, offer, signals, joined }) => {
+                Some(Command::Join { room, participant, member, sender, expires, offer, signals, joined }) => {
                     // The cap holds here too, and one admission seats one connection. A
                     // refusal drops `joined`, which closes the socket.
-                    let in_room = Count::<CallParticipants>::of(
-                        sessions.iter().filter(|s| s.room == room).count(),
-                    );
                     let now = unix_now();
                     spent.retain(|(_, until)| *until >= now);
                     let seated = spent.iter().any(|(p, _)| *p == participant);
+                    // One seat per member: a later join of the member ends the older seat,
+                    // so a member who rejoins holds no stale seat (audit `N25`).
+                    if !seated {
+                        let older: Vec<Seq<Participant>> = sessions
+                            .iter()
+                            .filter(|s| s.room == room && s.member == member)
+                            .map(|s| s.id)
+                            .collect();
+                        end(&mut sfu, &mut sessions, &older);
+                    }
+                    let in_room = Count::<CallParticipants>::of(
+                        sessions.iter().filter(|s| s.room == room).count(),
+                    );
                     if in_room < PARTICIPANT_CAP
                         && !seated
                         && let Ok((id, answer)) = sfu.join(Instant::now(), room.clone(), sender, offer)
@@ -182,12 +209,26 @@ async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver
                             let _ = signals.send(Wire::Answer(answer));
                         }
                         let _ = joined.send(id);
-                        sessions.push(Session { id, room, signals });
+                        sessions.push(Session { id, room, participant, member, sender, expires, signals });
                         SFU.admissions.inc(Admission::Seated);
                     } else {
                         SFU.admissions.inc(Admission::Full);
                     }
                     occupancy(&sessions);
+                }
+                Some(Command::Renew(id, claims)) => {
+                    // A renewal keeps the seat it names alone. One for another room,
+                    // participant, member or sender index keeps nothing (audit `N25`).
+                    if let Some(session) = sessions.iter_mut().find(|s| s.id == id && s.renewed_by(&claims)) {
+                        session.expires = session.expires.max(claims.expires);
+                        // The token of a renewal admits the participant too: it stays spent
+                        // while it is valid, so it seats no second connection (`CALL-117`).
+                        for (p, until) in &mut spent {
+                            if *p == claims.participant {
+                                *until = (*until).max(claims.expires);
+                            }
+                        }
+                    }
                 }
                 Some(Command::Answer(id, answer)) => sfu.accept_answer(id, answer),
                 Some(Command::Share(id)) => sfu.share_started(Instant::now(), id),
@@ -208,10 +249,33 @@ async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver
                 }
                 None => return,
             },
-            () = tokio::time::sleep_until(wake.into()) => {}
+            () = tokio::time::sleep_until(wake.min(sweep).into()) => {}
         }
         sfu.tick(Instant::now());
     }
+}
+
+/// Ends the seats whose admission expired before `now` with no renewal (audit `N25`).
+fn expire(sfu: &mut Sfu, sessions: &mut Vec<Session>, now: ambre_core::Instant<UnixSec>) {
+    let expired: Vec<Seq<Participant>> = sessions
+        .iter()
+        .filter(|s| s.expires < now)
+        .map(|s| s.id)
+        .collect();
+    end(sfu, sessions, &expired);
+}
+
+/// Ends the seats `ids`. The connection drops, and so does the way to the signalling of
+/// each, which closes its socket.
+fn end(sfu: &mut Sfu, sessions: &mut Vec<Session>, ids: &[Seq<Participant>]) {
+    if ids.is_empty() {
+        return;
+    }
+    for id in ids {
+        sfu.leave(*id);
+    }
+    sessions.retain(|s| !ids.contains(&s.id));
+    occupancy(sessions);
 }
 
 /// Sets the two gauges of occupancy from the sessions the media loop serves.
@@ -228,7 +292,22 @@ fn occupancy(sessions: &[Session]) {
 struct Session {
     id: Seq<Participant>,
     room: Validated<Room>,
+    participant: FixedBytes<ParticipantPseudonym>,
+    member: FixedBytes<MemberPseudonym>,
+    sender: Seq<SenderIndex>,
+    /// When the last admission of the seat expires. The media loop ends the seat past it.
+    expires: ambre_core::Instant<UnixSec>,
     signals: mpsc::UnboundedSender<Wire>,
+}
+
+impl Session {
+    /// Whether `claims` renew this seat: the same room, participant, member and sender.
+    fn renewed_by(&self, claims: &Claims) -> bool {
+        room_of(&claims.room).is_some_and(|room| room == self.room)
+            && claims.participant == self.participant
+            && claims.member == self.member
+            && claims.sender == self.sender
+    }
 }
 
 /// What the signalling sessions share: the way to the media loop, and the admission.
@@ -305,11 +384,13 @@ async fn session(mut socket: WebSocket, gate: Gate) {
         return;
     };
     let commands = gate.commands;
+    let admitting = gate.admitting;
     let (signals, mut outbox) = mpsc::unbounded_channel();
     let (joined, id) = oneshot::channel();
     let join = Command::Join {
         room,
         participant: admission.participant,
+        member: admission.member,
         sender: admission.sender,
         expires: admission.expires,
         offer,
@@ -338,6 +419,16 @@ async fn session(mut socket: WebSocket, gate: Gate) {
                         continue;
                     };
                     if commands.send(Command::Answer(id, answer)).await.is_err() {
+                        break;
+                    }
+                }
+                // A renewal verifies as the first admission did. A forged or expired one
+                // keeps nothing, and the seat ends when its last admission expires.
+                Some(Some(Wire::Admission(token))) => {
+                    let Ok(claims) = admitting.key.admit(&token, unix_now()) else {
+                        continue;
+                    };
+                    if commands.send(Command::Renew(id, claims)).await.is_err() {
                         break;
                     }
                 }
