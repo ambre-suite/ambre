@@ -9,6 +9,7 @@
 //! | Check | Rows |
 //! | :--- | :--- |
 //! | the client turns on no fixture feature, and no crate makes it a default | `FIXTURE-007` |
+//! | the client that links the ICU data provider turns on its `logging` feature | `ARCH-120` |
 //! | the shared chrome reaches no application crate | `SCHEMA-002` |
 //! | the Sync worker builds an artefact of its own, and no crate depends on it | `ARCH-001`, `SYNC-056` |
 //! | the Logic runtime declares no render runtime and no toolkit | `ARCH-003` |
@@ -41,6 +42,11 @@ const FIXTURES: &str = "fixtures";
 
 /// The crate built into the wasm artefact of the launcher.
 const CLIENT: &str = "ambre-app";
+
+/// The data provider of ICU, which parley's word segmenter links, and the
+/// feature that sends its warnings to the `log` facade (`ARCH-120`).
+const ICU_PROVIDER: &str = "icu_provider";
+const ICU_LOGGING: &str = "logging";
 
 /// The crates whose type a shared control could emit (`SCHEMA-002`).
 const APP_CRATES: &[&str] = &[
@@ -430,6 +436,31 @@ pub(crate) fn manifests(graph: &Graph, read: &dyn Fn(&str) -> Option<String>) ->
                     }
                 }
             }
+        }
+    }
+
+    // ARCH-120: a client that links the ICU data provider turns its `logging`
+    // feature on itself, on an edge it always links. Without the feature a
+    // debug build warns through `eprintln!`, which locks the standard error.
+    if let Some(client) = &client {
+        let links_icu = graph
+            .closure(&[client], Edges::Linked)
+            .iter()
+            .any(|id| graph.name(id) == ICU_PROVIDER);
+        let logs = graph.packages.get(client).is_some_and(|p| {
+            p.declared.iter().any(|d| {
+                d.name == ICU_PROVIDER
+                    && d.kind.is_none()
+                    && d.activation == Activation::Always
+                    && d.features.iter().any(|f| f == ICU_LOGGING)
+            })
+        });
+        if links_icu && !logs {
+            refusals.push(format!(
+                "{CLIENT} links {ICU_PROVIDER} without turning on `{ICU_LOGGING}` on a normal \
+                 dependency of its own, so a debug build writes ICU warnings to the standard \
+                 error under a lock the main thread may not wait on (ARCH-120)"
+            ));
         }
     }
 

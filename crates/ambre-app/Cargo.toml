@@ -38,6 +38,13 @@ ambre-logic  = { path = "../ambre-logic", features = ["toile-pdf"] }
 # previously reachable only transitively through ambre-canvas.
 wgpu         = { workspace = true }
 parley       = { workspace = true }
+# Named only for a feature. Without `logging`, a debug build of ICU warns
+# through `eprintln!`, and parley's word segmenter warns on each Chinese or
+# Japanese run. The standard error takes a lock, and on the main thread a
+# contended lock calls `Atomics.wait`, which the browser refuses. With
+# `logging` the warning goes to the `log` facade, which holds no logger here
+# and takes no lock (`ARCH-120`).
+icu_provider = { workspace = true, features = ["logging"] }
 
 leptos       = { workspace = true }
 leptos_icons = { workspace = true }

@@ -3567,6 +3567,8 @@ ambre-primitives | src/boundaries.rs | crate::boundaries | Graph::parse(text) | 
 ambre-primitives | src/boundaries.rs | crate::boundaries | Graph::reached() | ret | Vec<(&'a str,&'a str)>	generic	the package names of each edge into a refused package, printed in a refusal
 ambre-primitives | src/boundaries.rs | crate::boundaries | Graph::reached(closure) | param | &'a BTreeSet<String>	generic	the package ids a walk of the graph reached
 ambre-primitives | src/boundaries.rs | crate::boundaries | Graph::reached(names) | param | &[&str]	generic	the package names a walk must not reach
+ambre-primitives | src/boundaries.rs | crate::boundaries | ICU_LOGGING | const | &str	generic	the feature name that sends ICU warnings to the log facade, matched against the features cargo metadata lists
+ambre-primitives | src/boundaries.rs | crate::boundaries | ICU_PROVIDER | const | &str	generic	the package name of the ICU data provider, matched against the graph cargo metadata resolves
 ambre-primitives | src/boundaries.rs | crate::boundaries | LAUNCHER_LIB | const | &str	generic	the path of the launcher's relay file, matched against the position a fact record carries
 ambre-primitives | src/boundaries.rs | crate::boundaries | NETWORK_CRATES | const | &[&str]	generic	the package names a network call may leave from, matched against the graph cargo metadata resolves
 ambre-primitives | src/boundaries.rs | crate::boundaries | RELAY_SIDE | const | &[&str]	generic	the package names of the relay, the wire and the SFU, matched against the graph cargo metadata resolves; the gate links no ambre-core, so no family holds it

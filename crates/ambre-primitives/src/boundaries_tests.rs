@@ -149,6 +149,46 @@ fn the_fixture_feature_reached_through_a_linked_crate_or_a_client_feature_is_ref
     assert_eq!(citing(&found, "FIXTURE-007").len(), 1, "{found:#?}");
 }
 
+// The client reaches the ICU data provider through parley. It passes once it
+// turns `logging` on through a normal dependency of its own. A dev dependency
+// or a crate it links does not count (`ARCH-120`).
+#[test]
+fn a_client_linking_icu_without_its_logging_feature_is_refused() {
+    let found = refusals(&[
+        pkg("ambre-app", &[("parley", None, &[])]),
+        pkg("parley", &[("icu_provider", None, &[])]),
+        pkg("icu_provider", &[]),
+    ]);
+    assert_eq!(citing(&found, "ARCH-120").len(), 1, "{found:#?}");
+    let found = refusals(&[
+        pkg(
+            "ambre-app",
+            &[
+                ("parley", None, &[]),
+                ("icu_provider", Some("dev"), &["logging"]),
+            ],
+        ),
+        pkg("parley", &[("icu_provider", None, &[])]),
+        pkg("icu_provider", &[]),
+    ]);
+    assert_eq!(citing(&found, "ARCH-120").len(), 1, "{found:#?}");
+    let found = refusals(&[
+        pkg("ambre-app", &[("parley", None, &[])]),
+        pkg("parley", &[("icu_provider", None, &["logging"])]),
+        pkg("icu_provider", &[]),
+    ]);
+    assert_eq!(citing(&found, "ARCH-120").len(), 1, "{found:#?}");
+    let found = refusals(&[
+        pkg(
+            "ambre-app",
+            &[("parley", None, &[]), ("icu_provider", None, &["logging"])],
+        ),
+        pkg("parley", &[("icu_provider", None, &[])]),
+        pkg("icu_provider", &[]),
+    ]);
+    assert_eq!(found, Vec::<String>::new());
+}
+
 // The chrome reaches an application crate through a crate of its own
 // (`SCHEMA-002`).
 #[test]

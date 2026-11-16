@@ -31,15 +31,31 @@ const COMMITTED: &str = "\u{65e5}\u{672c}\u{8a9e}";
 /// Records each composition event the page raises, with its data, in
 /// `window.beltComposition`. A capture listener on the document sees the
 /// events before the pipe does, and changes nothing.
+///
+/// Also records each uncaught error in `window.beltErrors`, with its stack. A
+/// trap of the wasm module in a listener is one, and it stops the listener
+/// half way. A contended lock on the main thread ends in such a trap: it calls
+/// `Atomics.wait`, which the browser refuses (`ARCH-120`).
 async fn record_composition(page: &Page) {
     page.browser
         .script(
-            "window.beltComposition = []; \
+            "window.beltComposition = []; window.beltErrors = []; \
              for (const t of ['compositionstart', 'compositionupdate', 'compositionend']) \
-               document.addEventListener(t, e => beltComposition.push([t, e.data]), true);",
+               document.addEventListener(t, e => beltComposition.push([t, e.data]), true); \
+             window.addEventListener('error', \
+               e => beltErrors.push(String((e.error && e.error.stack) || e.message)));",
             json!([]),
         )
         .await;
+}
+
+/// Asserts that no error escaped to the page since [`record_composition`].
+async fn assert_no_page_error(page: &Page) {
+    let errors = page
+        .browser
+        .script("return window.beltErrors || [];", json!([]))
+        .await;
+    assert_eq!(errors, json!([]), "the page raised an uncaught error");
 }
 
 /// Composes [`COMMITTED`] through every pre-edit of [`PREEDITS`] into the
@@ -102,18 +118,22 @@ async fn focus_pipe(page: &Page) {
 }
 
 /// Waits until the Prose status bar counts `figure`, such as "6 with spaces".
+/// An uncaught error of the page ends the wait at once and fails with its
+/// stack, so a count that never comes names its cause.
 async fn wait_counted(page: &Page, figure: &str) {
     let figure = Value::String(figure.to_owned());
     page.browser
         .wait_for(
             &format!("the count {figure}"),
             &format!(
-                "return [...document.querySelectorAll('.ambre-statusbar .stat')] \
+                "if (window.beltErrors && beltErrors.length) return beltErrors; \
+                 return [...document.querySelectorAll('.ambre-statusbar .stat')] \
                    .some(s => s.textContent === {figure});"
             ),
             STEP,
         )
         .await;
+    assert_no_page_error(page).await;
 }
 
 /// The text of the one file the page downloads next.
@@ -131,6 +151,10 @@ mod tests {
     /// final text once. The count holds the typed prefix and the three kanji
     /// alone, so no pre-edit reached the document, and the export reads the
     /// committed run back.
+    ///
+    /// `ARCH-120`: the UI thread and the Logic thread segment the kanji at the
+    /// same time, and no uncaught error reaches the page. A warning of ICU on
+    /// the standard error once trapped the commit in about one run in fifty.
     #[tokio::test(flavor = "multi_thread")]
     #[cfg_attr(
         not(feature = "browser"),
@@ -167,6 +191,7 @@ mod tests {
         let text = downloaded_text(&page).await;
         assert!(text.contains(&format!("Hi {COMMITTED}")), "{text}");
         assert_committed_once(&text);
+        assert_no_page_error(&page).await;
     }
 
     /// `CHROME-019`, `CHROME-018`: a composition in a Trame cell commits its
@@ -213,5 +238,6 @@ mod tests {
         let text = downloaded_text(&page).await;
         assert!(text.starts_with(COMMITTED), "{text}");
         assert_committed_once(&text);
+        assert_no_page_error(&page).await;
     }
 }

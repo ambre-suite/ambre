@@ -41,6 +41,7 @@ prefix is `ARCH`.
 | `ARCH-031` | `INV` | The Logic thread MUST finish a document's unfinished work before it merges a remote delta into that document or closes it. | this spec section 2; `TOILE-IO-028` | `ambre_logic::pass_tests::a_board_closed_mid_import_saves_it_whole`; `ambre_logic::pass_tests::a_remote_delta_mid_import_lands_the_import_first` | none | verified |
 | `ARCH-020` | `INV` | The Main thread MUST NOT take a lock on a queue it shares with the Logic thread. | this spec section 2 | cargo-deny -- `deny.toml` bans the queue crate that locks from every client crate; lint-wall -- `crates/ambre-bus/clippy.toml` refuses a mutex, a read-write lock, a condition variable and a barrier in the crate that holds the queues | none | verified |
 | `ARCH-021` | `INV` | A queue end the Main thread holds MUST NOT wait. | this spec section 2 | type-level -- `ambre_bus::conduit::Sender` and `ambre_bus::conduit::Receiver`, the two ends the launcher keeps, declare only operations that try, and the one end that parks goes to the Logic thread at spawn | none | verified |
+| `ARCH-120` | `INV` | A warning of ICU MUST NOT reach the standard error of the Main instance. | this spec section 2 | ci-gate -- `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads the graph `cargo metadata` resolves and refuses a launcher that links `icu_provider` without turning on its `logging` feature on a normal dependency of its own (`ambre_primitives::boundaries::tests::a_client_linking_icu_without_its_logging_feature_is_refused`); `ambre_belt::ime::tests::a_composition_in_a_prose_page_commits_its_text_once` -- the browser tier: the debug build segments a Chinese or Japanese run on two threads at once, and no uncaught error reaches the page | none | verified |
 | `ARCH-032` | `INV` | Every crate of the workspace MUST inherit the workspace lint table. | this spec section 2 | ci-gate -- `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads the graph `cargo metadata` resolves and refuses a root manifest without `[workspace.lints]` and a member, a member a glob lists included, whose manifest does not set `lints.workspace = true` as TOML reads it (`ambre_primitives::boundaries::tests::a_member_that_does_not_inherit_the_lint_table_is_refused`) | none | verified |
 | `ARCH-028` | `INV` | Code outside a test MUST NOT hold a path that panics: no unwrap, expect, panic, unreachable, todo, unimplemented, index or slice that can fail. | this spec section 2 | lint-wall -- the workspace lint table denies `unwrap_used`, `expect_used`, `panic`, `unreachable`, `todo`, `unimplemented` and `indexing_slicing`, and every crate inherits it (`ARCH-032`). `just lint` reads the host with every feature on, and `just lint-wasm` the wasm-only code, in the CI `lint` and `test-wasm` jobs. A boot site that cannot recover carries an `expect` attribute with its reason | none | verified |
 | `ARCH-068` | `INV` | Code of the workspace MUST NOT silence a lint without the reason it is kept, and a silence whose reason is gone MUST fail the build. | this spec section 2 | lint-wall -- the workspace lint table denies the clippy lint `allow_attributes` and `unfulfilled_lint_expectations`, and every crate inherits it (`ARCH-032`). A kept site is an `expect` attribute with its `reason`. `just lint` reads the host with every feature on, and `just lint-wasm` the wasm-only code, both under `-D warnings`, in the CI `lint` and `test-wasm` jobs. The fuzz workspace inherits no table and runs no clippy | none | verified |
@@ -197,7 +198,7 @@ Logic thread. The two threads share one instance, so they share one subscriber.
   measures. Its own two rows, the queue hop and the worker hop of `section 1`, are not measured.
 * **Boundary.** none of its own: `ARCH-004` and `ARCH-005` are this document's side of `ZK-002` and
   `ZK-001`.
-* **Verification.** 111 `verified`, 8 `human-review`. The build refuses a cycle, a misplaced
+* **Verification.** 112 `verified`, 8 `human-review`. The build refuses a cycle, a misplaced
   cryptographic dependency, a missing atomics flag and a lock on a client queue. It refuses
   application logic in the launcher, a failure path that waits on a queue, and a write on a failing
   thread's way out. Host tests hold the Logic pass, its unfinished work, the wake, the full queue,
@@ -398,6 +399,10 @@ feature of its tessellator, so `ambre-canvas` takes the tessellator alone. ICU p
 unless `icu_provider` routes them to the `log` facade, which drops them while no logger is set.
 Each line that remains names a caller that prints just before a panic, or on a document that
 fails to decode.
+
+The launcher turns the `logging` feature of `icu_provider` on itself too, and a gate refuses a
+launcher that links ICU without it (`ARCH-120`). On 2026-11-15, over `df6196a`, a warning of ICU
+on the standard error trapped the Prose IME test of the browser tier in about one run in fifty.
 
 **The Logic thread parks on a doorbell.** Every queue into it rings the bell on a push, and on
 the drop of its last sender (`ARCH-022`, `ARCH-024`). Ringing unparks the thread, which is an
