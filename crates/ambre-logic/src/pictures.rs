@@ -14,7 +14,6 @@ use ambre_core::{Image, Px, Size};
 use super::*;
 use ambre_bus::{ContentHash, Ms, RestCommand, RestEvent, TimeSpan};
 use ambre_core::{Count, MediaBytes, Octets, Payload};
-use ambre_murmure::message::{MurmureEvent, Picture, PictureFrame};
 
 /// The largest preview, in pixels: twice the box the list draws it in, so a
 /// dense screen shows it sharp.
@@ -30,6 +29,32 @@ pub(crate) const PICTURE_MAX_SIZE: Count<Octets> = Count::<Octets>::new(8 * 1024
 /// a file that asks for none would otherwise spin.
 const FAST_DELAY: TimeSpan<Ms> = TimeSpan::<Ms>::new(10);
 const SLOW_DELAY: TimeSpan<Ms> = TimeSpan::<Ms>::new(100);
+
+/// A decoded preview: the frames at the size the view paints. The dispatch
+/// hands it to the view as Murmure's picture (`ARCH-121`).
+#[derive(Debug)]
+pub(crate) struct Preview {
+    /// The size of every frame.
+    pub(crate) size: Size<Px<Image>>,
+    /// Each frame in play order, never empty.
+    pub(crate) frames: Vec<PreviewFrame>,
+}
+
+/// One frame of a [`Preview`]: non-premultiplied RGBA8, row-major, shown for
+/// `delay`.
+#[derive(Debug)]
+pub(crate) struct PreviewFrame {
+    pub(crate) pixels: Payload<ambre_core::RgbaPixels>,
+    pub(crate) delay: TimeSpan<Ms>,
+}
+
+impl Preview {
+    /// The bytes its frames hold.
+    #[cfg(test)]
+    fn bytes(&self) -> Count<Octets> {
+        self.frames.iter().map(|f| f.pixels.len()).sum()
+    }
+}
 
 impl LogicState {
     /// Fetch the image `media_ref`, stored under `document_id`, for the view
@@ -106,18 +131,6 @@ impl LogicState {
         self.send_picture(channel_id, media_ref, None);
         true
     }
-
-    fn send_picture(
-        &self,
-        channel_id: Id<Channel>,
-        media_ref: Validated<ContentHash>,
-        picture: Option<Picture>,
-    ) {
-        self.send_to_ui(UiEvent::Channel {
-            channel_id,
-            event: MurmureEvent::Picture { media_ref, picture },
-        });
-    }
 }
 
 /// The decode the images module runs for the preview of `media`: the header
@@ -157,25 +170,25 @@ fn preview_decode(media: Payload<MediaBytes>) -> Option<ambre_convert::Conversio
 /// The preview the images module answered: one frame for a still picture,
 /// each frame of an animation with its delay. A delay of none plays slow.
 /// `None` for an answer of another kind.
-fn picture_of(converted: ambre_convert::Converted) -> Option<Picture> {
+fn picture_of(converted: ambre_convert::Converted) -> Option<Preview> {
     match converted {
-        ambre_convert::Converted::Pixels(pixels) => Some(Picture {
+        ambre_convert::Converted::Pixels(pixels) => Some(Preview {
             size: pixels.size,
-            frames: vec![PictureFrame {
+            frames: vec![PreviewFrame {
                 pixels: pixels.rgba,
                 delay: TimeSpan::<Ms>::new(0),
             }],
         }),
         ambre_convert::Converted::Frames(animation) => {
-            let frames: Vec<PictureFrame> = animation
+            let frames: Vec<PreviewFrame> = animation
                 .frames
                 .into_iter()
-                .map(|frame| PictureFrame {
+                .map(|frame| PreviewFrame {
                     pixels: frame.rgba,
                     delay: delay(frame.delay),
                 })
                 .collect();
-            (!frames.is_empty()).then_some(Picture {
+            (!frames.is_empty()).then_some(Preview {
                 size: animation.size,
                 frames,
             })
@@ -238,7 +251,7 @@ mod tests {
     /// The preview of `file`, its decode run through the images engine the
     /// host links, as the converter thread runs it. `None` where no job
     /// leaves or the module refuses the file.
-    fn preview(file: Vec<u8>) -> Option<Picture> {
+    fn preview(file: Vec<u8>) -> Option<Preview> {
         let conversion = preview_decode(Payload::new(file))?;
         let converter = ambre_convert::Converter::load(
             ambre_core::ConverterFamily::Images,

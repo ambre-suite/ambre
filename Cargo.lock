@@ -365,6 +365,7 @@ dependencies = [
  "ambre-client-core",
  "ambre-convert",
  "ambre-core",
+ "ambre-crdt",
  "ambre-crypto",
  "ambre-draw",
  "ambre-murmure",

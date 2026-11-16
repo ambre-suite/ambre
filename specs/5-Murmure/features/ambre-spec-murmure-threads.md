@@ -138,7 +138,7 @@ mentions stop counting (`MURMURE-293`).
 
 **Code.** `ChannelState::reply_target`, `thread_linked`, `thread_failed`, `threads_to_open`,
 `thread_view` and `reply` are in `crates/ambre-murmure/src/logic/channel/threading.rs`. The Logic side
-is `crates/ambre-logic/src/threads.rs`, and the Sync side is `thread_task` in
+is `crates/ambre-murmure/src/logic/runtime/threads.rs`, and the Sync side is `thread_task` in
 `crates/ambre-sync/src/sharing.rs`. The thread pane draws through `crates/ambre-murmure/src/ui/view.rs`.
 
 ---

@@ -155,10 +155,12 @@ wrappers = [
 ]
 
 # The typed handles over the CRDT engine. They link Loro, so the four crates
-# that may hold a document alone depend on them.
+# that may hold a document alone depend on them, and the Logic thread, which
+# links Loro already and keeps the relay's numbers of each delta in the
+# ledger of this crate (`AUTHOR-016`).
 [[bans.deny]]
 name = "ambre-crdt"
-wrappers = ["ambre-trame", "ambre-toile", "ambre-prose", "ambre-murmure"]
+wrappers = ["ambre-trame", "ambre-toile", "ambre-prose", "ambre-murmure", "ambre-logic"]
 
 # The CSV reader and writer. A conversion runs on the user's machine, in the
 # tables module the Logic thread loads (`TRAME-IO-001`, `ARCH-078`). The

@@ -9,13 +9,13 @@
 
 use std::collections::HashSet;
 
+use crate::message::{MurmureCommand, MurmureEvent};
 use ambre_bus::UiEvent;
 use ambre_bus::{CallMembers, SyncCommand};
 use ambre_core::id::{Call, Channel, Id};
 use ambre_core::{Authored, Instant};
-use ambre_murmure::message::{MurmureCommand, MurmureEvent};
 
-use crate::LogicState;
+use super::Runtime;
 
 /// The asks of who is in the calls of one channel.
 #[derive(Debug, Default)]
@@ -26,41 +26,26 @@ pub(crate) struct CallAsks {
     gone: HashSet<Id<Call>>,
 }
 
-impl LogicState {
+impl<D> Runtime<D> {
     /// The relay seated the starter of `call` at `at`: the call message goes into `channel`
     /// (the Murmure calls spec).
-    pub(crate) fn call_started(
-        &mut self,
-        call: Id<Call>,
-        channel: Id<Channel>,
-        at: Instant<Authored>,
-    ) {
+    pub fn call_started(&mut self, call: Id<Call>, channel: Id<Channel>, at: Instant<Authored>) {
         self.handle_channel_command(channel, MurmureCommand::PostCall { call, now: at });
     }
 
     /// The relay counted this session's leave as the last of `call`: its end goes into the
     /// call message (the Murmure calls spec).
-    pub(crate) fn call_ended(
-        &mut self,
-        call: Id<Call>,
-        channel: Id<Channel>,
-        at: Instant<Authored>,
-    ) {
+    pub fn call_ended(&mut self, call: Id<Call>, channel: Id<Channel>, at: Instant<Authored>) {
         self.handle_channel_command(channel, MurmureCommand::EndCall { call, now: at });
     }
 
     /// The relay answered who is in `call`. The view shows it, and a call the relay holds no
     /// state of is asked about no more (the Murmure calls spec).
-    pub(crate) fn call_roster(
-        &mut self,
-        call: Id<Call>,
-        channel: Id<Channel>,
-        members: CallMembers,
-    ) {
+    pub fn call_roster(&mut self, call: Id<Call>, channel: Id<Channel>, members: CallMembers) {
         if members == CallMembers::Gone {
             self.call_asks.entry(channel).or_default().gone.insert(call);
         }
-        self.send_to_ui(UiEvent::Channel {
+        self.emit(UiEvent::Channel {
             channel_id: channel,
             event: MurmureEvent::CallMembers { call, members },
         });
@@ -77,7 +62,7 @@ impl LogicState {
             now.since_epoch()
                 .get()
                 .saturating_sub(last.since_epoch().get())
-                >= ambre_murmure::logic::call::ROSTER_INTERVAL.get()
+                >= crate::logic::call::ROSTER_INTERVAL.get()
         });
         if !due {
             return;
@@ -93,7 +78,7 @@ impl LogicState {
         asks.last = Some(now);
         let meta = state.meta_id().document_id();
         for call in calls {
-            self.send_to_sync(SyncCommand::AskCallRoster {
+            self.ask(SyncCommand::AskCallRoster {
                 call,
                 channel,
                 meta,

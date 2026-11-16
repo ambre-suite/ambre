@@ -135,7 +135,7 @@ truncated frame never imports.
 | the number of each delivery | `crates/ambre-sync/src/updates.rs`, `crates/ambre-sync/src/websocket.rs` |
 | the number per message, the snapshot frame | `crates/ambre-murmure/src/logic/sequence.rs` |
 | the count, the first unread message and the segments after one | `crates/ambre-murmure/src/logic/channel.rs` |
-| the cursors, the count per channel, mark read and mark unread | `crates/ambre-logic/src/channels.rs` |
+| the cursors, the count per channel, mark read and mark unread | `crates/ambre-murmure/src/logic/runtime/channels.rs` |
 | the mark read of a latest message drawn | `crates/ambre-murmure/src/ui/list.rs`, `crates/ambre-murmure/src/ui/view.rs` |
 
 **Mark read.** A live segment still grows. Its cursor moves to the last number the Sync worker

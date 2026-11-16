@@ -206,9 +206,9 @@ in `crates/ambre-murmure/src/logic/channel/closing.rs`. `ChannelState::lease_to_
 
 `change_target` and `amendments_linked` are in `crates/ambre-murmure/src/logic/channel/amending.rs`, and
 `ChannelState::check_snapshot` in `crates/ambre-murmure/src/logic/channel/confirming.rs`. The Logic side
-is `crates/ambre-logic/src/segments.rs`, and the verdict `check_channel_snapshot` in
-`crates/ambre-logic/src/channels.rs`. The requests are `close_segment_task` and `amendments_task` in
-`crates/ambre-sync/src/sharing.rs`, and `take_lease` and `commit_final` in
+is `crates/ambre-murmure/src/logic/runtime/segments.rs`, and the verdict `check_channel_snapshot` in
+`crates/ambre-murmure/src/logic/runtime/channels.rs`. The requests are `close_segment_task` and
+`amendments_task` in `crates/ambre-sync/src/sharing.rs`, and `take_lease` and `commit_final` in
 `crates/ambre-sync/src/finalize.rs`.
 
 The fold is `fold_snapshot` and `settle_folds` in `crates/ambre-murmure/src/logic/channel/folding.rs`, and

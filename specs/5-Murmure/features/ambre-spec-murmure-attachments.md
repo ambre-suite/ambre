@@ -111,8 +111,8 @@ instance, stays queued until it completes (`MURMURE-241`). A file the author's o
 carries stays until that copy goes too.
 
 **Code.** `ambre-murmure/src/logic/attachment.rs`, `ambre-murmure/src/ui/uploads.rs`,
-`ambre-murmure/src/ui/pictures.rs`, `ambre-logic/src/erasing.rs`, `ambre-logic/src/pictures.rs`, and
-the page in `ambre-app/src/host/murmure.rs`.
+`ambre-murmure/src/ui/pictures.rs`, `ambre-murmure/src/logic/runtime/erasing.rs`,
+`ambre-logic/src/pictures.rs`, and the page in `ambre-app/src/host/murmure.rs`.
 
 ---
 

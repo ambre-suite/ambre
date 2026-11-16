@@ -867,7 +867,7 @@ impl LogicState {
     ) {
         let Some(doc) = self.docs.get(&document_id) else {
             // A channel or a space document is no entry of `docs`.
-            return self.adopt_murmure_session(document_id, peer, entry);
+            return self.murmure_session(document_id, peer, entry);
         };
         if doc.identity == Some(peer) {
             return;
@@ -978,7 +978,7 @@ impl LogicState {
         // A channel document runs the engine's own check, which reads what
         // each operation writes (the Murmure engine spec).
         if !self.docs.contains_key(&document_id)
-            && self.apply_channel_signed(document_id, std::slice::from_ref(delta))
+            && self.murmure_signed(document_id, std::slice::from_ref(delta))
         {
             return;
         }
@@ -994,7 +994,7 @@ impl LogicState {
         }
         self.apply_remote(
             document_id,
-            Order::Update(delta.seq),
+            delta.seq,
             LoroPayloadRef::Delta(&delta.payload),
         );
         self.track_waiting(document_id, &[(delta.seq, &delta.payload)]);
@@ -1052,7 +1052,7 @@ impl LogicState {
                 doc.relay_saw(LoroPayloadRef::Delta(payload));
             }
         } else {
-            self.record_channel_seq(document_id, seq, payload);
+            self.murmure_seq(document_id, seq, payload);
         }
     }
 
@@ -1063,8 +1063,7 @@ impl LogicState {
         document_id: Id<Document>,
         deltas: Vec<SignedDelta>,
     ) {
-        if !self.docs.contains_key(&document_id) && self.apply_channel_signed(document_id, &deltas)
-        {
+        if !self.docs.contains_key(&document_id) && self.murmure_signed(document_id, &deltas) {
             return;
         }
         let accepted: Vec<(Seq<Relay>, ambre_core::Payload<ambre_core::DeltaBytes>)> = deltas
@@ -1094,7 +1093,7 @@ impl LogicState {
                 .iter()
                 .map(|(_, p)| LoroPayloadRef::Delta(p))
                 .collect();
-            if !self.apply_space_remote(document_id, &borrowed) {
+            if !self.murmure_replay(document_id, &borrowed) {
                 tracing::warn!(
                     "Logic: replay for unopened doc {document_id} ({} delta(s)), dropping",
                     accepted.len()
@@ -1107,20 +1106,18 @@ impl LogicState {
     }
 
     /// Apply a remote CRDT delta, or a snapshot whose contents are trusted,
-    /// to a document and forward viewport events. `order` is where the relay
-    /// placed it, which only a channel reads.
+    /// to a document and forward viewport events. `seq` is where the relay
+    /// placed it: the update's number, or the last one the snapshot folds in.
+    /// Only a channel reads it.
     pub(crate) fn apply_remote(
         &mut self,
         document_id: Id<Document>,
-        order: Order,
+        seq: Seq<Relay>,
         payload: LoroPayloadRef<'_>,
     ) {
         self.settle_import(document_id);
         // A document no entry of `docs` names may belong to an open channel.
-        if !self.docs.contains_key(&document_id)
-            && (self.apply_channel_remote(document_id, &[(Some(order), payload)])
-                || self.apply_space_remote(document_id, &[payload]))
-        {
+        if !self.docs.contains_key(&document_id) && self.murmure_remote(document_id, seq, payload) {
             return;
         }
         let Some(doc) = self.docs.get_mut(&document_id).map(|d| &mut d.state) else {
@@ -1362,17 +1359,13 @@ impl LogicState {
         payload: &ambre_core::Payload<ambre_core::SnapshotBytes>,
         covered: Seq<Relay>,
     ) {
-        self.apply_remote(
-            document_id,
-            Order::Snapshot(covered),
-            LoroPayloadRef::Snapshot(payload),
-        );
+        self.apply_remote(document_id, covered, LoroPayloadRef::Snapshot(payload));
         if let Some(doc) = self.docs.get_mut(&document_id) {
             let base = doc.state.crdt().oplog_vv();
             doc.ledger.reset(covered, base);
             doc.relay_saw(LoroPayloadRef::Snapshot(payload));
         } else {
-            self.note_murmure_snapshot(document_id, covered);
+            self.murmure_snapshot_served(document_id, covered);
         }
         self.track_waiting(document_id, &[]);
     }
@@ -1390,7 +1383,7 @@ impl LogicState {
         purpose: SnapshotPurpose,
     ) {
         let Some(doc) = self.docs.get_mut(&document_id) else {
-            self.check_channel_snapshot(document_id, snapshot_id, covered, payload, purpose);
+            self.murmure_check_snapshot(document_id, snapshot_id, covered, payload, purpose);
             return;
         };
         let verdict = snapshot_check::check_snapshot(

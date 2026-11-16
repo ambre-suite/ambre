@@ -1312,25 +1312,28 @@ ambre-draw | src/peer.rs | crate::peer | <Hue as Bounds>::MIN | const | u16	gene
 ambre-draw | src/peer.rs | crate::peer | <Hue as Bounds>::Repr | assoc | u16	newtype-inner	the number a value of this quantity holds
 ambre-logic | src/bin/ambre-fixtures.rs | crate | baseline(machine) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/bin/ambre-fixtures.rs | crate | display() | ret | String	generic	generic byte/text API or codec
-ambre-logic | src/channels.rs | crate::channels | ClosedChannel::holds() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/channels.rs | crate::channels | ClosedChannel::watch() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/channels.rs | crate::channels | LogicState::apply_channel_remote() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/channels.rs | crate::channels | LogicState::apply_channel_signed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/channels.rs | crate::channels | LogicState::channel_document_failed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/channels.rs | crate::channels | LogicState::channel_document_ready() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/channels.rs | crate::channels | LogicState::channel_peer_left() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/channels.rs | crate::channels | LogicState::channel_sample_heard() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/channels.rs | crate::channels | LogicState::count_closed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/channels.rs | crate::channels | LogicState::holds_murmure() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/channels.rs | crate::channels | LogicState::murmure_writable() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/channels.rs | crate::channels | LogicState::murmure_writable(identified) | param | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/channels.rs | crate::channels | LogicState::reads_channel_copy() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-murmure | src/logic/runtime/channels.rs | crate::logic::runtime::channels | ClosedChannel::holds() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-murmure | src/logic/runtime/channels.rs | crate::logic::runtime::channels | ClosedChannel::watch() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-murmure | src/logic/runtime/channels.rs | crate::logic::runtime::channels | Runtime<D>::apply_channel_remote() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-murmure | src/logic/runtime/channels.rs | crate::logic::runtime::channels | Runtime<D>::apply_channel_signed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-murmure | src/logic/runtime/channels.rs | crate::logic::runtime::channels | Runtime<D>::channel_document_failed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-murmure | src/logic/runtime/channels.rs | crate::logic::runtime::channels | Runtime<D>::channel_document_ready() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-murmure | src/logic/runtime/channels.rs | crate::logic::runtime::channels | Runtime<D>::channel_peer_left() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-murmure | src/logic/runtime/channels.rs | crate::logic::runtime::channels | Runtime<D>::channel_sample_heard() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-murmure | src/logic/runtime/channels.rs | crate::logic::runtime::channels | Runtime<D>::count_closed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-murmure | src/logic/runtime/channels.rs | crate::logic::runtime::channels | Runtime<D>::holds_murmure() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-murmure | src/logic/runtime/channels.rs | crate::logic::runtime::channels | Runtime<D>::murmure_writable() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-murmure | src/logic/runtime/channels.rs | crate::logic::runtime::channels | Runtime<D>::murmure_writable(identified) | param | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-murmure | src/logic/runtime/channels.rs | crate::logic::runtime::channels | Runtime<D>::reads_channel_copy() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-logic | src/dispatch.rs | crate::dispatch | LogicState::murmure_remote() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-logic | src/dispatch.rs | crate::dispatch | LogicState::murmure_replay() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-logic | src/dispatch.rs | crate::dispatch | LogicState::murmure_signed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/data.rs | crate::data | LogicState::has_pending_work() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/data.rs | crate::data | LogicState::resolve_pending_seal() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/data.rs | crate::data | LogicState::restore_local() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/direct.rs | crate::direct | LogicState::announce_before_invite() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/erasing.rs | crate::erasing | LogicState::erase_failed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/erasing.rs | crate::erasing | LogicState::erased() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-murmure | src/logic/runtime/direct.rs | crate::logic::runtime::direct | Runtime<D>::announce_before_invite() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-murmure | src/logic/runtime/erasing.rs | crate::logic::runtime::erasing | Runtime<D>::erase_failed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-murmure | src/logic/runtime/erasing.rs | crate::logic::runtime::erasing | Runtime<D>::erased() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/fixtures.rs | crate::fixtures | ARTIFACT_EXT | const | &str	generic	generic byte/text API or codec
 ambre-logic | src/fixtures.rs | crate::fixtures | BASELINE_DIR | const | &str	generic	generic byte/text API or codec
 ambre-logic | src/fixtures.rs | crate::fixtures | BENCH_DIR | const | &str	generic	generic byte/text API or codec
@@ -1351,6 +1354,7 @@ ambre-logic | src/fixtures.rs | crate::fixtures | MANIFEST_EXT | const | &str	ge
 ambre-logic | src/fixtures.rs | crate::fixtures | REGISTRY_LEN | const | usize	local	the length of a constant array, which stays a usize: the fixture registry built at compile time, private to fixtures.rs
 ambre-logic | src/fixtures.rs | crate::fixtures | canonical_dump() | ret | String	generic	generic byte/text API or codec
 ambre-logic | src/lib.rs | crate | DocState::adopt_session() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-murmure | src/logic/runtime/mod.rs | crate::logic::runtime | HELD_EDITS_LIMIT | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/lib.rs | crate | LiveDoc.ready | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/lib.rs | crate | LiveDoc.ready_held | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/lib.rs | crate | Owed.layout | field | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -1373,22 +1377,22 @@ ambre-logic | src/snapshot_check.rs | crate::snapshot_check | Piece.container | 
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | Piece.deps | field | Vec<String>	generic	generic byte/text API or codec
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | registry_entry() | ret | Option<Vec<u8>>	generic	generic byte/text API or codec
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | same_operations() | ret | Option<bool>	generic	generic byte/text API or codec
-ambre-logic | src/spaces.rs | crate::spaces | LogicState::apply_space_remote() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/spaces.rs | crate::spaces | LogicState::hand_off_before_leave() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/spaces.rs | crate::spaces | LogicState::handed_off() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_document_failed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_document_ready() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_members_changed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_peer_left() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_presence_heard() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-murmure | src/logic/runtime/spaces.rs | crate::logic::runtime::spaces | Runtime<D>::apply_space_remote() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-murmure | src/logic/runtime/spaces.rs | crate::logic::runtime::spaces | Runtime<D>::hand_off_before_leave() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-murmure | src/logic/runtime/spaces.rs | crate::logic::runtime::spaces | Runtime<D>::handed_off() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-murmure | src/logic/runtime/spaces.rs | crate::logic::runtime::spaces | Runtime<D>::space_document_failed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-murmure | src/logic/runtime/spaces.rs | crate::logic::runtime::spaces | Runtime<D>::space_document_ready() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-murmure | src/logic/runtime/spaces.rs | crate::logic::runtime::spaces | Runtime<D>::space_members_changed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-murmure | src/logic/runtime/spaces.rs | crate::logic::runtime::spaces | Runtime<D>::space_peer_left() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-murmure | src/logic/runtime/spaces.rs | crate::logic::runtime::spaces | Runtime<D>::space_presence_heard() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/store_ledger.rs | crate::store_ledger | Meta::LEN | const | usize	generic	generic byte/text API or codec
 ambre-logic | src/store_ledger.rs | crate::store_ledger | Meta::decode(row) | param | &[u8]	generic	generic byte/text API or codec
 ambre-logic | src/store_ledger.rs | crate::store_ledger | Meta::encode() | ret | [u8;Self::LEN]	generic	generic byte/text API or codec
 ambre-logic | src/store_ledger.rs | crate::store_ledger | StoreLedger::unsent() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/threads.rs | crate::threads | LogicState::count_thread() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/threads.rs | crate::threads | LogicState::follows_thread() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/threads.rs | crate::threads | same_answer() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/unopened.rs | crate::unopened | ListedChannels.listed | field | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-murmure | src/logic/runtime/threads.rs | crate::logic::runtime::threads | Runtime<D>::count_thread() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-murmure | src/logic/runtime/threads.rs | crate::logic::runtime::threads | Runtime<D>::follows_thread() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-murmure | src/logic/runtime/threads.rs | crate::logic::runtime::threads | same_answer() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-murmure | src/logic/runtime/unopened.rs | crate::logic::runtime::unopened | ListedChannels.listed | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/waiting.rs | crate::waiting | Waiting.reported | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/waiting.rs | crate::waiting | Waiting::stalled() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-murmure | src/logic/attachment.rs | crate::logic::attachment | fits() | ret | bool	generic	state flag/predicate
@@ -3515,7 +3519,8 @@ ambre-crypto | src/aead.rs | crate::aead | RowLayout::from_byte(byte) | param | 
 ambre-logic | src/persistence.rs | crate::persistence | IdbKey::fresh_delta::NEXT | static | AtomicU64	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | Piece.lamport | field | Lamport	foreign-api	the integer alias of Loro for a peer, a counter or a lamport clock, as the oplog hands it out
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | Piece.start | field | Counter	foreign-api	the integer alias of Loro for a peer, a counter or a lamport clock, as the oplog hands it out
-ambre-logic | src/snapshot_check.rs | crate::snapshot_check | SeqLedger.ends | field | BTreeMap<Seq<Relay>,Option<(PeerID,Counter)>>	foreign-api	the integer alias of Loro for a peer, a counter or a lamport clock, as the oplog hands it out
+ambre-crdt | src/ledger.rs | crate::ledger | SeqLedger.ends | field | BTreeMap<Seq<Relay>,Option<(PeerID,Counter)>>	foreign-api	the integer alias of Loro for a peer, a counter or a lamport clock, as the oplog hands it out
+ambre-crdt | src/ledger.rs | crate::ledger | SeqLedger::ends_through() | ret | impl Iterator<Item=(PeerID,Counter)>	foreign-api	the integer alias of Loro for a peer and a counter, which the snapshot check compares against the version vector of Loro
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | piece(start) | param | Counter	foreign-api	the integer alias of Loro for a peer, a counter or a lamport clock, as the oplog hands it out
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | pieces(cuts) | param | &BTreeSet<Counter>	foreign-api	the integer alias of Loro for a peer, a counter or a lamport clock, as the oplog hands it out
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | pieces(peer) | param | PeerID	foreign-api	the integer alias of Loro for a peer, a counter or a lamport clock, as the oplog hands it out

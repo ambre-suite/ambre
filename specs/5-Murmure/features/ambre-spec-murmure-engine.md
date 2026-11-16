@@ -17,7 +17,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-021` | `INV` | A channel MUST be held on the Logic thread as the set of its documents, never merged into one document. | this spec section 3; `ambre-spec-murmure-schema.md section 2` | `ambre_murmure::logic::channel_tests::a_channel_is_held_as_its_documents_apart` -- the `meta` document and the segment carry distinct identifiers and disjoint roots; structural -- `ChannelState` holds one `LoroDoc` per document, and `LogicState` keeps channels in a registry apart from `docs` | none | verified |
+| `MURMURE-021` | `INV` | A channel MUST be held on the Logic thread as the set of its documents, never merged into one document. | this spec section 3; `ambre-spec-murmure-schema.md section 2` | `ambre_murmure::logic::channel_tests::a_channel_is_held_as_its_documents_apart` -- the `meta` document and the segment carry distinct identifiers and disjoint roots; structural -- `ChannelState` holds one `LoroDoc` per document, and the Murmure runtime (`ambre_murmure::logic::runtime::Runtime`) keeps channels in a registry apart from the `docs` of the Logic runtime | none | verified |
 | `MURMURE-022` | `INV` | An open channel MUST hold its `meta` document, its active segment and its closing segment, save a closing one it opened without (`MURMURE-502`). | this spec section 3 | `ambre_murmure::logic::channel_tests::an_open_channel_holds_meta_the_active_and_the_closing_segment`; `ambre_murmure::logic::channel_tests::a_live_segment_with_no_bytes_refuses_the_open` -- a live segment the caller cannot supply refuses the open rather than opening short | none | verified |
 | `MURMURE-023` | `INV` | An older segment MUST be loaded only when the view asks for a message it holds. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_murmure::logic::channel_tests::an_older_segment_loads_only_when_the_view_asks`; `::a_live_segment_is_not_an_older_one`; `::an_older_segment_asked_for_arrives_then_loads`; `::an_older_segment_nobody_asked_for_is_not_ready`; `ambre_logic::channels::tests::asking_for_the_segment_before_the_oldest_asks_nothing` | none | verified |
 | `MURMURE-024` | `INV` | A remote delta MUST reach the document its `document_id` names, and no other. | this spec section 3 | `ambre_murmure::logic::channel_tests::a_remote_delta_reaches_the_document_it_names_and_no_other` -- the other held documents compare equal before and after; `ambre_murmure::logic::channel_tests::a_delta_for_a_document_the_channel_does_not_hold_is_refused`; `ambre_logic::channels::tests::a_remote_delta_reaches_the_channel_that_holds_its_document` -- through the Logic dispatcher | none | verified |
@@ -140,7 +140,7 @@ A segment still opening holds each delta as it arrived, and checks it when the s
 **Code.** `crates/ambre-murmure/src/logic/channel.rs`, `crates/ambre-murmure/src/logic/delta.rs`,
 `crates/ambre-murmure/src/logic/schema.rs`,
 `crates/ambre-murmure/src/logic/opening.rs`, `crates/ambre-bus/src/app/murmure.rs`,
-`crates/ambre-logic/src/channels.rs`.
+`crates/ambre-murmure/src/logic/runtime/channels.rs`.
 
 ---
 

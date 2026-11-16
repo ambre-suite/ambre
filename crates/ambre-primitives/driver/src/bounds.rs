@@ -16,6 +16,7 @@
 //! | the PDF back end named outside a `src/logic/` directory and the converter module | `CANVAS-028` |
 //! | the display density read outside `density.rs` | `CANVAS-031`, `CANVAS-043` |
 //! | an application's command, event or command id named by the launcher | `ARCH-018` |
+//! | Murmure named by the Logic runtime outside its content sums and its dispatch | `ARCH-121` |
 //! | an application message named by the Sync worker | `BUS-021` |
 //! | a command or event enum of `ambre-bus` other than the envelopes | `BUS-032`, `ARCH-070` |
 //! | a type declared by the worker, the relay or the protocol | `ARCH-006` |
@@ -73,6 +74,11 @@ pub struct Reached {
     /// holds the document: an engine state (`UI-THREAD-020`). The boundary
     /// read sets it ([`Gate::bound_check`]); [`reached`] leaves it unset.
     pub document: bool,
+    /// The file, from the workspace root, of the alias of the same crate
+    /// through which the line reaches the item. Empty when the line names the
+    /// item itself, or reaches it through an alias of another crate. Each
+    /// spelling of the path is kept, as a refusal reads it.
+    pub via: Vec<String>,
 }
 
 impl Reached {
@@ -178,6 +184,13 @@ pub const BUS_ENVELOPES: &[&str] = &[
 
 /// The applications whose messages and command ids stay in their crate.
 const APPLICATIONS: &[&str] = &["Trame", "Toile", "Prose", "Murmure"];
+
+/// The two files of the Logic runtime that may name Murmure: the content
+/// sums, and the dispatch that routes to Murmure's runtime (`ARCH-121`).
+const LOGIC_ROUTES: &[&str] = &[
+    "crates/ambre-logic/src/app.rs",
+    "crates/ambre-logic/src/dispatch.rs",
+];
 
 /// The file that may read the display density.
 const DENSITY: &str = "crates/ambre-canvas/src/density.rs";
@@ -680,6 +693,22 @@ const BOUNDS: &[Bound] = &[
         },
     },
     Bound {
+        rows: "ARCH-121",
+        what: "the Logic runtime names Murmure outside its content sums and its dispatch",
+        // A channel spans several documents, so Murmure keeps its runtime in
+        // its crate. The Logic runtime declares the sums and routes to it,
+        // and holds none of its logic. Its tests drive Murmure through the
+        // dispatch, so they read Murmure's events.
+        reads: Reads::ShippedCode,
+        closed: |f| f.starts_with("crates/ambre-logic/src/") && !LOGIC_ROUTES.contains(&f),
+        // The content sums declare the two envelopes of the Logic runtime as
+        // aliases over Murmure's plane. A line that names one reaches Murmure
+        // through `app.rs`, which is open.
+        reaches: |r| {
+            r.krate == "ambre_murmure" && !r.via.iter().any(|f| LOGIC_ROUTES.contains(&f.as_str()))
+        },
+    },
+    Bound {
         rows: "BUS-021",
         what: "the worker names an application message",
         reads: Reads::ShippedCode,
@@ -789,6 +818,7 @@ pub fn reached(tcx: TyCtxt<'_>, def: DefId) -> Reached {
         modules,
         kind,
         document: false,
+        via: Vec::new(),
     }
 }
 
@@ -924,19 +954,29 @@ impl Gate {
                     _ => None,
                 })
                 .collect();
+            // An alias of this crate names the file it is declared in, so a
+            // boundary may open it to the files that use it (`ARCH-121`).
+            let via = if def.is_local() {
+                let at = place::position(tcx, &self.unit, tcx.def_span(def));
+                shown_paths(&self.unit.cwd, &at.path)
+            } else {
+                Vec::new()
+            };
             for target in named {
-                self.reached_check(tcx, target, span);
+                self.reached_check(tcx, target, span, &via);
             }
         }
-        self.reached_check(tcx, def, span);
+        self.reached_check(tcx, def, span, &[]);
     }
 
     /// Refuses the item `def` named at `span` when a boundary closes it to
-    /// the file.
-    fn reached_check(&mut self, tcx: TyCtxt<'_>, def: DefId, span: Span) {
+    /// the file. `via` is the file of the alias of this crate the line
+    /// reaches it through, if any.
+    fn reached_check(&mut self, tcx: TyCtxt<'_>, def: DefId, span: Span, via: &[String]) {
         self.logic_view_reach(tcx, def, span);
         let mut reached = reached(tcx, def);
         reached.document = self.document(tcx, def);
+        reached.via = via.to_vec();
         let open: Vec<&Bound> = BOUNDS
             .iter()
             .chain(crate::chrome::BOUNDS)

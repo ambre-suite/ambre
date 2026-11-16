@@ -1,7 +1,7 @@
 //! The crate boundaries, read with types. Each test plants a breach that a
 //! scan of the text lets through: an alias, a re-export or an item a macro
 //! writes. The driver refuses it (`ARCH-001`, `ARCH-005`, `ARCH-006`,
-//! `ARCH-011`, `ARCH-018`, `BUS-021`, `BUS-032`, `CANVAS-028`, `CANVAS-031`,
+//! `ARCH-011`, `ARCH-018`, `ARCH-121`, `BUS-021`, `BUS-032`, `CANVAS-028`, `CANVAS-031`,
 //! `CANVAS-090`, `SYNC-054`, `UI-THREAD-064`).
 
 use crate::harness::{Build, Workspace, of};
@@ -234,6 +234,78 @@ fn an_application_variant_or_command_id_under_an_alias_is_refused_in_the_launche
     assert!(
         app[1].starts_with("crates/ambre-app/src/lib.rs:4: the launcher names application logic"),
         "{app:#?}"
+    );
+}
+
+// The Logic runtime names Murmure in its content sums and its dispatch alone
+// (`ARCH-121`). A module beside them reaches it through an alias, a glob and
+// a method call, and each one is refused. An envelope the content sums
+// declare as an alias over Murmure's plane stays open to every module.
+#[test]
+fn murmure_named_by_the_logic_runtime_outside_its_sums_and_its_dispatch_is_refused() {
+    let ws = Workspace::new("logic_murmure");
+    ws.file(
+        "crates/ambre-murmure/src/lib.rs",
+        "pub enum MurmureCommand { Send }\n\
+         pub struct Plane;\n\
+         pub struct Runtime;\n\
+         impl Runtime { pub fn open(&mut self) {} }\n",
+    );
+    ws.compile("ambre_murmure", "ambre-murmure", &[], Build::Shipped);
+    ws.file(
+        "crates/ambre-logic/src/lib.rs",
+        "pub mod app;\nmod dispatch;\nmod channels;\n",
+    );
+    ws.file(
+        "crates/ambre-logic/src/app.rs",
+        "pub enum AppCommand { Murmure(ambre_murmure::MurmureCommand) }\n\
+         pub type UiEvent = Option<ambre_murmure::Plane>;\n",
+    );
+    ws.file(
+        "crates/ambre-logic/src/dispatch.rs",
+        "pub struct Murmure { pub runtime: ambre_murmure::Runtime }\n\
+         pub fn route(m: &mut Murmure) { m.runtime.open() }\n",
+    );
+    ws.file(
+        "crates/ambre-logic/src/channels.rs",
+        "use ambre_murmure as chat;\n\
+         use ambre_murmure::*;\n\
+         pub fn send() -> chat::MurmureCommand { MurmureCommand::Send }\n\
+         pub fn open(m: &mut crate::dispatch::Murmure) { m.runtime.open() }\n\
+         pub fn emit(_: crate::app::UiEvent) {}\n\
+         pub type Local = Option<Plane>;\n\
+         pub fn local(_: Local) {}\n",
+    );
+    let logic = ws.compile(
+        "ambre_logic",
+        "ambre-logic",
+        &["ambre_murmure"],
+        Build::Shipped,
+    );
+    let logic = refused(&logic);
+    let lines: Vec<&str> = logic
+        .iter()
+        .map(|r| r.split(": the").next().unwrap_or_default())
+        .collect();
+    assert!(
+        logic
+            .iter()
+            .all(|r| r.contains("the Logic runtime names Murmure outside its content sums")),
+        "{logic:#?}"
+    );
+    for line in [3, 4, 7] {
+        let at = format!("crates/ambre-logic/src/channels.rs:{line}");
+        assert!(lines.contains(&at.as_str()), "{at} is refused: {logic:#?}");
+    }
+    assert!(
+        !lines.contains(&"crates/ambre-logic/src/channels.rs:5"),
+        "an envelope of the content sums is open: {logic:#?}"
+    );
+    assert!(
+        lines
+            .iter()
+            .all(|l| l.starts_with("crates/ambre-logic/src/channels.rs")),
+        "the sums and the dispatch may name Murmure: {logic:#?}"
     );
 }
 

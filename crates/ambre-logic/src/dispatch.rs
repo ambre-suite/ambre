@@ -9,8 +9,172 @@
 // ============================================================================
 
 use super::*;
+use ambre_murmure::logic::runtime::{Effect, Runtime, StoreWrite};
+
+/// Murmure's runtime, as the Logic runtime holds it. A channel spans several
+/// documents, so Murmure keeps its own state in its crate, and this dispatch
+/// alone routes to it (`ARCH-121`).
+#[derive(Default)]
+pub(crate) struct Murmure {
+    runtime: Runtime<AppEvent>,
+}
 
 impl LogicState {
+    /// Run one handler of the Murmure runtime, then fan out what it owes the
+    /// other threads, in the order it owes it (`BUS-010`).
+    pub(crate) fn route<T>(&mut self, handler: impl FnOnce(&mut Runtime<AppEvent>) -> T) -> T {
+        let answer = handler(&mut self.murmure.runtime);
+        self.fan_out();
+        answer
+    }
+
+    /// Hand each effect the Murmure runtime owes to its thread. Kept out of
+    /// line: every call site of [`Self::route`] shares one copy, so the
+    /// routing adds no code per handler to the Main instance.
+    #[inline(never)]
+    fn fan_out(&mut self) {
+        for effect in self.murmure.runtime.take_outcome() {
+            match effect {
+                Effect::Ui(event) => self.send_to_ui(event),
+                Effect::Sync(command) => self.send_to_sync(command),
+                Effect::Store(document_id, write) => {
+                    let write = match write {
+                        StoreWrite::Snapshot(copy) => PersistWrite::Snapshot(copy),
+                        StoreWrite::Hidden => PersistWrite::Hidden,
+                        StoreWrite::ReadBack => PersistWrite::ReadBack {
+                            doc_type: DocType::Murmure,
+                        },
+                    };
+                    self.send_to_persist(document_id, write);
+                }
+                Effect::Preview {
+                    channel_id,
+                    document_id,
+                    media_ref,
+                } => self.show_picture(channel_id, document_id, media_ref),
+            }
+        }
+    }
+
+    /// The Murmure runtime, for a test that reads its state.
+    #[cfg(test)]
+    pub(crate) fn rt(&self) -> &Runtime<AppEvent> {
+        &self.murmure.runtime
+    }
+
+    /// The Murmure runtime, for a test that plants a state.
+    #[cfg(test)]
+    pub(crate) fn rt_mut(&mut self) -> &mut Runtime<AppEvent> {
+        &mut self.murmure.runtime
+    }
+
+    /// Show the view of `channel_id` the preview of `media_ref`, or none.
+    pub(crate) fn send_picture(
+        &self,
+        channel_id: Id<Channel>,
+        media_ref: ambre_core::Validated<ambre_bus::ContentHash>,
+        preview: Option<pictures::Preview>,
+    ) {
+        let picture = preview.map(|preview| ambre_murmure::message::Picture {
+            size: preview.size,
+            frames: preview
+                .frames
+                .into_iter()
+                .map(|frame| ambre_murmure::message::PictureFrame {
+                    pixels: frame.pixels,
+                    delay: frame.delay,
+                })
+                .collect(),
+        });
+        self.send_to_ui(UiEvent::Channel {
+            channel_id,
+            event: ambre_murmure::message::MurmureEvent::Picture { media_ref, picture },
+        });
+    }
+
+    /// Note the session identity Sync issued for a document no entry of
+    /// `docs` holds: a channel or a space document (`AUTHOR-002`).
+    pub(crate) fn murmure_session(
+        &mut self,
+        document_id: Id<Document>,
+        peer: ambre_core::PeerId,
+        entry: ambre_core::PeerEntry,
+    ) {
+        self.route(|m| m.adopt_murmure_session(document_id, peer, entry));
+    }
+
+    /// Apply signed deltas to the channel that holds `document_id`. Returns
+    /// `false` when no open or opening channel holds it.
+    pub(crate) fn murmure_signed(
+        &mut self,
+        document_id: Id<Document>,
+        deltas: &[SignedDelta],
+    ) -> bool {
+        self.route(|m| m.apply_channel_signed(document_id, deltas))
+    }
+
+    /// Apply a trusted payload the relay placed at `seq` to the channel or
+    /// the space that holds `document_id`. Returns `false` when neither does.
+    pub(crate) fn murmure_remote(
+        &mut self,
+        document_id: Id<Document>,
+        seq: Seq<Relay>,
+        payload: ambre_core::LoroPayloadRef<'_>,
+    ) -> bool {
+        let order = match payload {
+            ambre_core::LoroPayloadRef::Delta(_) => ambre_murmure::Order::Update(seq),
+            ambre_core::LoroPayloadRef::Snapshot(_) => ambre_murmure::Order::Snapshot(seq),
+        };
+        self.route(|m| {
+            m.apply_channel_remote(document_id, &[(Some(order), payload)])
+                || m.apply_space_remote(document_id, &[payload])
+        })
+    }
+
+    /// Apply a replay of deltas to the space that holds `document_id`.
+    /// Returns `false` when no open space holds it.
+    pub(crate) fn murmure_replay(
+        &mut self,
+        document_id: Id<Document>,
+        payloads: &[ambre_core::LoroPayloadRef<'_>],
+    ) -> bool {
+        self.route(|m| m.apply_space_remote(document_id, payloads))
+    }
+
+    /// Check a snapshot of a channel document, and answer the verdict to
+    /// Sync. A document no open channel holds is not answered.
+    pub(crate) fn murmure_check_snapshot(
+        &mut self,
+        document_id: Id<Document>,
+        snapshot_id: Id<Snapshot>,
+        covered: Seq<Relay>,
+        payload: &ambre_core::Payload<ambre_core::SnapshotBytes>,
+        purpose: SnapshotPurpose,
+    ) {
+        self.route(|m| {
+            m.check_channel_snapshot(document_id, snapshot_id, covered, payload, purpose)
+        });
+    }
+
+    /// Note a snapshot the relay served for a channel or a space document.
+    pub(crate) fn murmure_snapshot_served(
+        &mut self,
+        document_id: Id<Document>,
+        covered: Seq<Relay>,
+    ) {
+        self.route(|m| m.note_murmure_snapshot(document_id, covered));
+    }
+
+    /// Note the relay's number of a delta for a channel or a space document.
+    pub(crate) fn murmure_seq(
+        &mut self,
+        document_id: Id<Document>,
+        seq: Seq<Relay>,
+        payload: Option<&ambre_core::Payload<ambre_core::DeltaBytes>>,
+    ) {
+        self.route(|m| m.record_channel_seq(document_id, seq, payload));
+    }
+
     // -- Inbound: UI Thread -> Logic --------------------------------------------
 
     pub(crate) fn handle_logic_command(&mut self, command: LogicCommand) {
@@ -38,8 +202,9 @@ impl LogicState {
                 sessions,
             } => {
                 // The local copy a reopening channel asked for.
-                if doc_type == DocType::Murmure && self.reads_channel_copy(document_id) {
-                    self.channel_copy_landed(document_id, snapshot, &deltas);
+                if doc_type == DocType::Murmure && self.route(|m| m.reads_channel_copy(document_id))
+                {
+                    self.route(|m| m.channel_copy_landed(document_id, snapshot, &deltas));
                     return;
                 }
                 // The local copy a reopen asked for (`RESID-010`).
@@ -107,31 +272,8 @@ impl LogicState {
                         self.docs.clear();
                         self.evicted.clear();
                         self.store_full.clear();
-                        self.channels.clear();
-                        self.channel_ledgers.clear();
-                        self.opening.clear();
-                        self.read_cursors.clear();
-                        self.closed_channels.clear();
-                        self.document_channels.clear();
-                        self.watched_threads.clear();
-                        self.unplaced_threads.clear();
-                        self.listed_channels = Default::default();
-                        self.closing_segments.clear();
-                        self.close_successors.clear();
-                        self.owed_replays.clear();
-                        self.channel_watchers.clear();
-                        self.channel_members.clear();
-                        self.spaces.clear();
-                        self.space_opening.clear();
-                        self.creating.clear();
+                        self.route(|m| m.logout());
                         self.locale_seeds.clear();
-                        self.joining.clear();
-                        self.handing_off.clear();
-                        self.direct.clear();
-                        self.unsent.clear();
-                        self.murmure_identities.clear();
-                        self.murmure_waiting.clear();
-                        self.unnamed_roots.clear();
                         self.owed.clear();
                         self.rest_routes.clear();
                         self.forget_pending_seals(None);
@@ -144,12 +286,12 @@ impl LogicState {
                         self.forget_pending_seals(Some(*document_id));
                     }
                     RestCommand::LeaveDocument { document_id }
-                        if self.hand_off_before_leave(id, *document_id) =>
+                        if self.route(|m| m.hand_off_before_leave(id, *document_id)) =>
                     {
                         return;
                     }
                     RestCommand::InviteToDocument { .. }
-                        if self.announce_before_invite(id, &cmd) =>
+                        if self.route(|m| m.announce_before_invite(id, &cmd)) =>
                     {
                         return;
                     }
@@ -216,36 +358,40 @@ impl LogicState {
                     self.send_to_ui(UiEvent::Viewport { document_id, event });
                 }
             }
-            LogicCommand::OpenChannel { channel_id } => self.open_channel(channel_id),
-            LogicCommand::CloseChannel { channel_id } => self.close_channel(channel_id),
-            LogicCommand::OpenDirectMessage { draft, now } => self.open_direct_message(draft, now),
+            LogicCommand::OpenChannel { channel_id } => self.route(|m| m.open_channel(channel_id)),
+            LogicCommand::CloseChannel { channel_id } => {
+                self.route(|m| m.close_channel(channel_id))
+            }
+            LogicCommand::OpenDirectMessage { draft, now } => {
+                self.route(|m| m.open_direct_message(draft, now))
+            }
             LogicCommand::InviteToChannel {
                 id,
                 channel_id,
                 invitee,
                 now,
-            } => self.invite_to_channel(id, channel_id, invitee, now),
+            } => self.route(|m| m.invite_to_channel(id, channel_id, invitee, now)),
             LogicCommand::FetchActivity => self.send_to_sync(SyncCommand::FetchActivity),
             LogicCommand::ListMemberChannels => {
                 self.send_to_sync(SyncCommand::ListMemberChannels);
             }
             LogicCommand::MarkAllRead => self.send_to_sync(SyncCommand::MarkAllRead),
-            LogicCommand::SearchMessages { query } => self.search_messages(query),
+            LogicCommand::SearchMessages { query } => self.route(|m| m.search_messages(query)),
             LogicCommand::CreateSpace {
                 space_id,
                 name,
                 now,
-            } => self.create_space(space_id, &name, now),
-            LogicCommand::OpenSpace { space_id } => self.open_space(space_id),
-            LogicCommand::CloseSpace { space_id } => self.close_space(space_id),
+            } => self.route(|m| m.create_space(space_id, &name, now)),
+            LogicCommand::OpenSpace { space_id } => self.route(|m| m.open_space(space_id)),
+            LogicCommand::CloseSpace { space_id } => self.route(|m| m.close_space(space_id)),
             LogicCommand::Space { space_id, command } => {
-                self.handle_space_command(space_id, command);
+                self.route(|m| m.handle_space_command(space_id, command));
             }
             // -- Content plane: a Murmure command, addressed to its channel ---
             LogicCommand::Channel {
                 channel_id,
                 command,
-            } => self.handle_channel_command(channel_id, command),
+            } => self.route(|m| m.handle_channel_command(channel_id, command)),
             LogicCommand::SetReaderLocale { reader } => self.set_reader_locale(reader),
             LogicCommand::LoadFonts { faces } => {
                 // The Logic thread cannot fetch, so this is the only way a face
@@ -306,11 +452,11 @@ impl LogicState {
                         return;
                     }
                     // The owner role passed on: the leave it held goes now.
-                    if self.handed_off(id, &evt) {
+                    if self.route(|m| m.handed_off(id, &evt)) {
                         return;
                     }
                     // The erase of a deleted message's file, which no view awaits.
-                    if self.erased(id, &evt) {
+                    if self.route(|m| m.erased(id, &evt)) {
                         return;
                     }
                     // The image of a preview, which the view awaits decoded.
@@ -350,8 +496,7 @@ impl LogicState {
                         doc.state.set_user_id(*user_id);
                         doc.state.set_display_name(display_name);
                     }
-                    self.spaces_know_me(*user_id);
-                    self.retry_erases();
+                    self.route(|m| m.session_ready(*user_id));
                 }
                 self.send_to_ui(UiEvent::Rest { id, evt });
             }
@@ -393,9 +538,11 @@ impl LogicState {
                 reporter,
                 after,
             } => {
-                self.snapshot_dropped(document_id, author, reporter, after);
+                self.route(|m| m.snapshot_dropped(document_id, author, reporter, after));
             }
-            LogicEvent::ThreadActivity { document_id } => self.thread_activity(document_id),
+            LogicEvent::ThreadActivity { document_id } => {
+                self.route(|m| m.thread_activity(document_id))
+            }
 
             // Sync derived the PeerID from the signer; Logic compares it with
             // every operation the delta carries (`AUTHOR-012`).
@@ -424,8 +571,8 @@ impl LogicState {
                 from_user_id,
                 payload,
             } => {
-                if !self.space_presence_heard(document_id, from_user_id, &payload)
-                    && !self.channel_sample_heard(document_id, from_user_id, &payload)
+                if !self.route(|m| m.space_presence_heard(document_id, from_user_id, &payload))
+                    && !self.route(|m| m.channel_sample_heard(document_id, from_user_id, &payload))
                 {
                     self.apply_ephemeral(document_id, from_user_id, &payload);
                 }
@@ -435,8 +582,8 @@ impl LogicState {
                 document_id,
                 user_id,
             } => {
-                if !self.space_peer_left(document_id, user_id)
-                    && !self.channel_peer_left(document_id, user_id)
+                if !self.route(|m| m.space_peer_left(document_id, user_id))
+                    && !self.route(|m| m.channel_peer_left(document_id, user_id))
                 {
                     self.peer_left(document_id, user_id);
                 }
@@ -448,16 +595,18 @@ impl LogicState {
             } => {
                 // A channel and a space show their members live; any other
                 // document reads them when its view asks.
-                if let Some(members) = self.channel_members_changed(document_id, members) {
-                    self.space_members_changed(document_id, members);
+                if let Some(members) =
+                    self.route(|m| m.channel_members_changed(document_id, members))
+                {
+                    self.route(|m| m.space_members_changed(document_id, members));
                 }
             }
 
             LogicEvent::SnapshotNeeded { document_id } => {
                 let covered = self
                     .export_covered_snapshot(document_id)
-                    .or_else(|| self.channel_snapshot(document_id))
-                    .or_else(|| self.space_snapshot(document_id));
+                    .or_else(|| self.route(|m| m.channel_snapshot(document_id)))
+                    .or_else(|| self.route(|m| m.space_snapshot(document_id)));
                 if let Some((payload, covered_seq)) = covered {
                     self.send_to_sync(SyncCommand::SendSnapshot {
                         document_id,
@@ -476,7 +625,7 @@ impl LogicState {
                 connected,
             } => {
                 if connected.is_connected() {
-                    self.retry_erases();
+                    self.route(|m| m.retry_erases());
                 }
                 self.send_to_ui(UiEvent::ConnectionStatus {
                     document_id,
@@ -491,15 +640,15 @@ impl LogicState {
                 counters,
             } => {
                 // A channel's document counts for its channel, not alone.
-                if !self.count_thread(document_id, counters)
-                    && !self.count_closed(document_id, counters)
+                if !self.route(|m| m.count_thread(document_id, counters))
+                    && !self.route(|m| m.count_closed(document_id, counters))
                 {
                     self.send_to_ui(UiEvent::Activity {
                         document_id,
                         counters,
                     });
                 }
-                self.closed_meta_moved(document_id);
+                self.route(|m| m.closed_meta_moved(document_id));
             }
             LogicEvent::Released { document_id } => {
                 self.store_sent(document_id);
@@ -518,9 +667,9 @@ impl LogicState {
                     doc.ready = true;
                 } else {
                     // A document this client created goes up whole first.
-                    self.flush_unsent(document_id);
-                    if self.channel_document_ready(document_id)
-                        || self.space_document_ready(document_id, role)
+                    self.route(|m| m.flush_unsent(document_id));
+                    if self.route(|m| m.channel_document_ready(document_id))
+                        || self.route(|m| m.space_document_ready(document_id, role))
                     {
                         // A channel or a space document is no document of
                         // the view: its channel or space answers for it.
@@ -546,8 +695,8 @@ impl LogicState {
                 revoked_user_id,
             } => {
                 if Some(revoked_user_id) == self.my_user_id {
-                    self.channel_revoked(document_id);
-                    self.space_revoked(document_id);
+                    self.route(|m| m.channel_revoked(document_id));
+                    self.route(|m| m.space_revoked(document_id));
                 }
                 self.send_to_ui(UiEvent::MemberRevoked {
                     document_id,
@@ -572,101 +721,101 @@ impl LogicState {
             LogicEvent::ChannelDocuments {
                 channel_id,
                 documents,
-            } => self.channel_listed(channel_id, &documents),
+            } => self.route(|m| m.channel_listed(channel_id, &documents)),
             LogicEvent::ChannelOpenFailed {
                 channel_id,
                 failure,
             } => {
-                if self.opening.remove(&channel_id).is_some() {
-                    self.end_light_channel(channel_id);
-                    self.channel_open_failed(channel_id, &failure);
-                }
+                self.route(|m| m.opening_failed(channel_id, &failure));
             }
-            LogicEvent::ChannelRefused { channel_id } => self.channel_refused(channel_id),
-            LogicEvent::ChannelActivity { documents } => self.channel_activity(&documents),
+            LogicEvent::ChannelRefused { channel_id } => {
+                self.route(|m| m.channel_refused(channel_id))
+            }
+            LogicEvent::ChannelActivity { documents } => {
+                self.route(|m| m.channel_activity(&documents))
+            }
             LogicEvent::ChannelCreated { channel_id, key } => {
-                self.channel_created(channel_id, key);
+                self.route(|m| m.channel_created(channel_id, key));
             }
             LogicEvent::ChannelKeyResealed {
                 space_id,
                 channel_id,
                 key,
             } => {
-                self.channel_resealed(space_id, channel_id, &key);
-                if let Some(channel) = self.channels.get_mut(&channel_id) {
-                    channel.key_rotated();
-                }
+                self.route(|m| m.key_resealed(space_id, channel_id, &key));
             }
             LogicEvent::SegmentClosed {
                 channel_id,
                 closing,
                 active,
                 successor,
-            } => self.segment_closed(channel_id, closing, active, successor),
+            } => self.route(|m| m.segment_closed(channel_id, closing, active, successor)),
             LogicEvent::SegmentCloseFailed {
                 channel_id,
                 closing,
                 failure,
-            } => self.segment_close_failed(channel_id, closing, failure),
+            } => self.route(|m| m.segment_close_failed(channel_id, closing, failure)),
             LogicEvent::AmendmentsLinked {
                 channel_id,
                 segment,
                 amendments,
-            } => self.amendments_linked(channel_id, segment, amendments),
+            } => self.route(|m| m.amendments_linked(channel_id, segment, amendments)),
             LogicEvent::AmendmentsLinkFailed {
                 channel_id,
                 segment,
                 amendments,
                 failure,
-            } => self.amendments_link_failed(channel_id, segment, amendments, failure),
+            } => self.route(|m| m.amendments_link_failed(channel_id, segment, amendments, failure)),
             LogicEvent::ThreadLinked {
                 channel_id,
                 segment,
                 root,
                 thread,
-            } => self.thread_linked(channel_id, segment, root, thread),
+            } => self.route(|m| m.thread_linked(channel_id, segment, root, thread)),
             LogicEvent::ThreadLinkFailed {
                 channel_id,
                 segment: _,
                 root,
                 thread,
                 failure,
-            } => self.thread_link_failed(channel_id, root, thread, failure),
+            } => self.route(|m| m.thread_link_failed(channel_id, root, thread, failure)),
             LogicEvent::FinalizeLeaseAnswered {
                 channel_id,
                 segment,
                 answer,
-            } => self.finalize_lease_answered(channel_id, segment, answer),
+            } => self.route(|m| m.finalize_lease_answered(channel_id, segment, answer)),
             LogicEvent::SegmentFinalized {
                 channel_id,
                 segment,
-            } => self.segment_finalized(channel_id, segment),
+            } => self.route(|m| m.segment_finalized(channel_id, segment)),
             LogicEvent::SegmentFinalizeFailed {
                 channel_id,
                 segment,
                 end,
                 failure,
-            } => self.segment_finalize_failed(channel_id, segment, end, failure),
+            } => self.route(|m| m.segment_finalize_failed(channel_id, segment, end, failure)),
             LogicEvent::FoldLeaseAnswered {
                 channel_id,
                 segment,
                 answer,
-            } => self.fold_lease_answered(channel_id, segment, answer),
+            } => self.route(|m| m.fold_lease_answered(channel_id, segment, answer)),
             LogicEvent::SegmentFolded {
                 channel_id,
                 segment,
-            } => self.segment_folded(channel_id, segment),
+            } => self.route(|m| m.segment_folded(channel_id, segment)),
             LogicEvent::SegmentFoldFailed {
                 channel_id,
                 segment,
                 failure,
-            } => self.segment_fold_failed(channel_id, segment, failure),
+            } => self.route(|m| m.segment_fold_failed(channel_id, segment, failure)),
             LogicEvent::AmendmentsFolded {
                 document_id,
                 amendments,
-            } => self.amendments_folded(document_id, amendments),
-            LogicEvent::DocumentGone { document_id } => self.document_gone(document_id),
-            LogicEvent::KeyRotated { document_id } => self.key_rotated(document_id),
+            } => self.route(|m| m.amendments_folded(document_id, amendments)),
+            LogicEvent::DocumentGone { document_id } => {
+                self.route(|m| m.document_gone(document_id))
+            }
+            LogicEvent::KeyRotated { document_id } => self.route(|m| m.key_rotated(document_id)),
             LogicEvent::ConverterFetched { family, module } => {
                 self.converter_fetched(family, module);
             }
@@ -676,20 +825,24 @@ impl LogicState {
             LogicEvent::DeltasLocked {
                 document_id,
                 deltas,
-            } => self.deltas_locked(document_id, &deltas),
-            LogicEvent::ChannelJoined { channel_id } => self.channel_joined(channel_id),
-            LogicEvent::ChannelDeleted { channel_id } => self.channel_deleted(channel_id),
-            LogicEvent::ChannelLeft { channel_id } => self.channel_left(channel_id),
+            } => self.route(|m| m.deltas_locked(document_id, &deltas)),
+            LogicEvent::ChannelJoined { channel_id } => {
+                self.route(|m| m.channel_joined(channel_id))
+            }
+            LogicEvent::ChannelDeleted { channel_id } => {
+                self.route(|m| m.channel_deleted(channel_id))
+            }
+            LogicEvent::ChannelLeft { channel_id } => self.route(|m| m.channel_left(channel_id)),
             LogicEvent::DirectMessageOpened {
                 requested,
                 channel_id,
-            } => self.direct_message_opened(requested, channel_id),
+            } => self.route(|m| m.direct_message_opened(requested, channel_id)),
             LogicEvent::ChannelRequestFailed {
                 channel_id,
                 failure,
-            } => self.channel_request_failed(channel_id, failure),
+            } => self.route(|m| m.channel_request_failed(channel_id, failure)),
             LogicEvent::SpaceChannels { space_id, channels } => {
-                self.space_channels(space_id, &channels);
+                self.route(|m| m.space_channels(space_id, &channels));
             }
             // The sidebar learns of the channels, and none of them opens
             // (the Murmure channels spec). Each is watched unopened.
@@ -706,7 +859,7 @@ impl LogicState {
                     names,
                     peers,
                 });
-                self.channels_listed(&metas);
+                self.route(|m| m.channels_listed(&metas));
             }
 
             // -- Meetings (participant push) -----------------------------------
@@ -731,8 +884,8 @@ impl LogicState {
 
             // -- Errors --------------------------------------------------------
             LogicEvent::DocumentOpenFailed { document_id, cause } => {
-                if !self.channel_document_failed(document_id, cause)
-                    && !self.space_document_failed(document_id, &cause)
+                if !self.route(|m| m.channel_document_failed(document_id, cause))
+                    && !self.route(|m| m.space_document_failed(document_id, &cause))
                 {
                     self.send_to_ui(UiEvent::DocumentOpenFailed { document_id, cause });
                 }
@@ -753,13 +906,17 @@ impl LogicState {
             LogicEvent::UpdateRequired => self.send_to_ui(UiEvent::UpdateRequired),
             // The UI thread reads a call signal on arrival, and none reaches this thread.
             LogicEvent::Call(_) => {}
-            LogicEvent::CallStarted { call, channel, at } => self.call_started(call, channel, at),
-            LogicEvent::CallEnded { call, channel, at } => self.call_ended(call, channel, at),
+            LogicEvent::CallStarted { call, channel, at } => {
+                self.route(|m| m.call_started(call, channel, at))
+            }
+            LogicEvent::CallEnded { call, channel, at } => {
+                self.route(|m| m.call_ended(call, channel, at))
+            }
             LogicEvent::CallRoster {
                 call,
                 channel,
                 members,
-            } => self.call_roster(call, channel, members),
+            } => self.route(|m| m.call_roster(call, channel, members)),
             LogicEvent::ApiError {
                 id,
                 request,
@@ -775,13 +932,15 @@ impl LogicState {
                     self.route_service_error(document_id, id, failure);
                     return;
                 }
-                if id.is_some_and(|id| self.erase_failed(id) || self.picture_failed(id)) {
+                if id
+                    .is_some_and(|id| self.route(|m| m.erase_failed(id)) || self.picture_failed(id))
+                {
                     return;
                 }
                 // A hand-off the relay refused fails the leave it held, which
                 // never left (the Murmure spaces spec).
-                let id = match id.map(|id| self.handing_off.remove(&id)) {
-                    Some(Some((leave, _))) => Some(leave),
+                let id = match id.map(|id| self.route(|m| m.hand_off_refused(id))) {
+                    Some(Some(leave)) => Some(leave),
                     _ => id,
                 };
                 self.send_to_ui(UiEvent::ApiError {

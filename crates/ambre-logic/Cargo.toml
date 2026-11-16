@@ -43,6 +43,10 @@ ambre-prose     = { path = "../ambre-prose" }
 # The Murmure engine: channels, held apart from `docs`
 # (`features/ambre-spec-murmure-engine.md`).
 ambre-murmure   = { path = "../ambre-murmure" }
+# The relay's numbers of each document's deltas (`SeqLedger`), which the
+# snapshot check here and the Murmure runtime both keep. Already in the graph
+# through every application crate, so the edge adds no code to the worker.
+ambre-crdt      = { path = "../ambre-crdt" }
 # The converter modules (`ambre-spec-architecture.md section 2`): the request
 # types everywhere, and on wasm the loader that instantiates a fetched module.
 # The host links every engine in place, below, so the host tier converts
@@ -113,6 +117,9 @@ web-sys             = { workspace = true, features = [
 [dev-dependencies]
 # The probe that the content sums implement no `Serialize` (`BUS-001`).
 serde = { workspace = true }
+# The Murmure runtime's state, which the dispatch tests read and plant.
+# Test builds alone.
+ambre-murmure = { path = "../ambre-murmure", features = ["testing"] }
 # `Seq::nth` for a test that names a count. Test builds alone, held by
 # `ambre-core/tests/testing_feature.rs` (`ARCH-055`).
 ambre-core = { path = "../ambre-core", features = ["testing"] }

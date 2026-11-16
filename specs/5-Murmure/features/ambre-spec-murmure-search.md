@@ -99,8 +99,8 @@ The confirming client rebuilds the index, which removes the false negatives (`MU
 The stack is `unicode-segmentation`, `fst` and `roaring`.
 
 **Code.** `Query` and the fold, in `crates/ambre-murmure/src/logic/search.rs`. `ChannelState::search`, in
-`crates/ambre-murmure/src/logic/channel.rs`. `LogicState::search_messages`, in
-`crates/ambre-logic/src/channels.rs`. The box is `MessageSearch`, and `MurmureRelay` keeps
+`crates/ambre-murmure/src/logic/channel.rs`. `Runtime::search_messages`, in
+`crates/ambre-murmure/src/logic/runtime/channels.rs`. The box is `MessageSearch`, and `MurmureRelay` keeps
 its state, in `crates/ambre-murmure/src/chrome/mod.rs`.
 
 ---

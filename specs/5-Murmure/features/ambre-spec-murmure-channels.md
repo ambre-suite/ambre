@@ -275,10 +275,10 @@ who writes its key into the catalogue.
   finding or creating a direct message under its lock.
 * `ambre-server/src/db/members.rs` -- a leave: the owed rotation, and the delete of an emptied
   private channel.
-* `ambre-logic/src/spaces.rs` -- creating a private channel, with no catalogue write; the owner's
-  delete, which drops the channel and its catalogue entry once the relay answers.
-* `ambre-logic/src/direct.rs` -- a direct message request, and the created or existing channel it
-  opens.
+* `ambre-murmure/src/logic/runtime/spaces.rs` -- creating a private channel, with no catalogue
+  write; the owner's delete, which drops the channel and its catalogue entry once the relay answers.
+* `ambre-murmure/src/logic/runtime/direct.rs` -- a direct message request, and the created or
+  existing channel it opens.
 * `ambre-murmure/src/logic/channel.rs` -- the name a member sets on a direct message.
 * `ambre-sync/src/channels.rs` -- registering a channel, with a sealed key for a public one only.
   It also holds the log, the wraps and the key check of a direct message.

@@ -1,4 +1,4 @@
-// ambre-logic/src/threads.rs
+// ambre-murmure/src/logic/runtime/threads.rs
 // ============================================================================
 // The threads of a channel (the Murmure threads spec). A first reply creates
 // the thread document, and the Sync worker registers it with the relay, one
@@ -7,11 +7,11 @@
 // ============================================================================
 
 use super::*;
+use crate::message::MurmureEvent;
+use crate::{ChannelState, Replied};
 use ambre_bus::{Authored, Instant, Mentions, Relay, Seq};
-use ambre_murmure::message::MurmureEvent;
-use ambre_murmure::{ChannelState, Replied};
 
-impl LogicState {
+impl<D> Runtime<D> {
     /// Hand the Sync worker what a reply wrote, and the view what it shows.
     /// That is the thread, the copy in the channel, and the root's new head.
     pub(crate) fn send_reply(
@@ -21,27 +21,27 @@ impl LogicState {
         now: Instant<Authored>,
     ) {
         let Replied { reply, copy, head } = replied;
-        self.send_to_sync(SyncCommand::SendUpdate {
+        self.ask(SyncCommand::SendUpdate {
             document_id: reply.document,
             payload: reply.delta,
             summary: Some(reply.summary),
         });
-        self.send_to_ui(UiEvent::Channel {
+        self.emit(UiEvent::Channel {
             channel_id,
             event: reply.event,
         });
         if let Some(copy) = copy {
-            self.send_to_sync(SyncCommand::SendUpdate {
+            self.ask(SyncCommand::SendUpdate {
                 document_id: copy.document,
                 payload: copy.delta,
                 summary: Some(copy.summary),
             });
-            self.send_to_ui(UiEvent::Channel {
+            self.emit(UiEvent::Channel {
                 channel_id,
                 event: copy.event,
             });
         }
-        self.send_to_ui(UiEvent::Channel {
+        self.emit(UiEvent::Channel {
             channel_id,
             event: head,
         });
@@ -51,7 +51,7 @@ impl LogicState {
     /// The relay linked `thread` to `root` (`SRV-213`). The root names it,
     /// and it opens: this client's own for its session, or the winner's for
     /// its bytes. What waited on a lost one waits on the winner (`SRV-214`).
-    pub(crate) fn thread_linked(
+    pub fn thread_linked(
         &mut self,
         channel_id: Id<Channel>,
         segment: Id<Segment>,
@@ -73,7 +73,7 @@ impl LogicState {
                     root,
                 },
             );
-            return self.send_to_sync(SyncCommand::OpenDocument {
+            return self.ask(SyncCommand::OpenDocument {
                 document_id: thread,
                 doc_type: DocType::Murmure,
             });
@@ -97,8 +97,8 @@ impl LogicState {
                 .extend(waiting);
             self.forget_murmure_session(lost);
         }
-        if linked.open == ambre_murmure::LinkedOpening::Open {
-            self.send_to_sync(SyncCommand::OpenDocument {
+        if linked.open == crate::LinkedOpening::Open {
+            self.ask(SyncCommand::OpenDocument {
                 document_id: thread,
                 doc_type: DocType::Murmure,
             });
@@ -108,7 +108,7 @@ impl LogicState {
     /// This client's own `thread` went up whole, its waiting replies after
     /// it: its root now names it (the Murmure threads spec). A link on the open thread
     /// only writes the root, so its answer to open is dropped.
-    pub(crate) fn name_root(&mut self, thread: Id<Document>) {
+    pub fn name_root(&mut self, thread: Id<Document>) {
         let Some(UnnamedRoot {
             channel_id,
             segment,
@@ -131,13 +131,13 @@ impl LogicState {
     }
 
     /// Send the delta that names a thread in its root, and show the root.
-    fn send_named(&self, channel_id: Id<Channel>, named: ambre_murmure::Sent) {
-        self.send_to_sync(SyncCommand::SendUpdate {
+    fn send_named(&self, channel_id: Id<Channel>, named: crate::Sent) {
+        self.ask(SyncCommand::SendUpdate {
             document_id: named.document,
             payload: named.delta,
             summary: None,
         });
-        self.send_to_ui(UiEvent::Channel {
+        self.emit(UiEvent::Channel {
             channel_id,
             event: named.event,
         });
@@ -146,7 +146,7 @@ impl LogicState {
     /// The creation or the registration of this client's own `thread`
     /// failed. The replies that waited on it are dropped, and the next one
     /// creates a thread again.
-    pub(crate) fn thread_link_failed(
+    pub fn thread_link_failed(
         &mut self,
         channel_id: Id<Channel>,
         root: Id<Message>,
@@ -169,7 +169,7 @@ impl LogicState {
         };
         for document_id in channel.threads_to_open() {
             self.watched_threads.remove(&document_id);
-            self.send_to_sync(SyncCommand::OpenDocument {
+            self.ask(SyncCommand::OpenDocument {
                 document_id,
                 doc_type: DocType::Murmure,
             });
@@ -181,7 +181,7 @@ impl LogicState {
     /// channel holds or loads hears the delta on its own topic. Any other is
     /// watched from its summaries, once the activity answer names its
     /// channel. Nothing loads it: its root is not on screen.
-    pub(crate) fn thread_activity(&mut self, thread: Id<Document>) {
+    pub fn thread_activity(&mut self, thread: Id<Document>) {
         if self.follows_thread(thread) {
             return;
         }
@@ -190,7 +190,7 @@ impl LogicState {
         }
         // One answer places every thread signalled while it is asked.
         if self.unplaced_threads.is_empty() {
-            self.send_to_sync(SyncCommand::FetchActivity);
+            self.ask(SyncCommand::FetchActivity);
         }
         self.unplaced_threads.insert(thread);
     }
@@ -236,7 +236,7 @@ impl LogicState {
                 mentions: ambre_core::Count::<Mentions>::ZERO,
             },
         );
-        self.send_to_sync(SyncCommand::WatchThread {
+        self.ask(SyncCommand::WatchThread {
             thread,
             meta,
             after,
@@ -246,7 +246,7 @@ impl LogicState {
     /// Count the activity of a watched thread for its channel: its
     /// mentions, never its replies, which no unread count holds yet.
     /// Returns whether `thread` is watched.
-    pub(crate) fn count_thread(
+    pub fn count_thread(
         &mut self,
         thread: Id<Document>,
         counters: ambre_core::activity::ActivityCounters,
@@ -262,13 +262,13 @@ impl LogicState {
             None => self.counted(channel_id),
         };
         if let Some(mark) = mark {
-            self.send_to_ui(UiEvent::ChannelActivity {
+            self.emit(UiEvent::ChannelActivity {
                 channels: vec![mark],
             });
         }
         // A reply that names the user is a mention on its channel.
         if named {
-            self.send_to_ui(UiEvent::NewMessage {
+            self.emit(UiEvent::NewMessage {
                 channel_id,
                 mention: ambre_bus::MentionState::Mentioned,
                 message: None,
@@ -292,7 +292,7 @@ impl LogicState {
             .collect();
         for document_id in ended {
             self.watched_threads.remove(&document_id);
-            self.send_to_sync(SyncCommand::CloseDocument { document_id });
+            self.ask(SyncCommand::CloseDocument { document_id });
         }
     }
 
@@ -305,7 +305,7 @@ impl LogicState {
         else {
             return;
         };
-        self.send_to_ui(UiEvent::Channel { channel_id, event });
+        self.emit(UiEvent::Channel { channel_id, event });
     }
 }
 
@@ -367,5 +367,44 @@ fn same_answer(a: &MurmureEvent, b: &MurmureEvent) -> bool {
             false
         }
         _ => true,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ambre_core::id::{Document, Message, Segment};
+
+    /// One batch answers once per list: the last answer of the segment, and
+    /// the last of each thread, in their order.
+    #[test]
+    fn a_batch_keeps_the_last_answer_of_each_list() {
+        let segment = Id::<Segment>::mint();
+        let (first, second) = (Id::<Document>::mint(), Id::<Document>::mint());
+        let root = Id::<Message>::mint();
+        let list = || MurmureEvent::Messages {
+            segment,
+            messages: Vec::new(),
+        };
+        let replies = |thread: Id<Document>| MurmureEvent::ThreadMessages {
+            root,
+            thread,
+            messages: Vec::new(),
+        };
+        let kept = latest_answers(vec![
+            list(),
+            replies(first),
+            replies(second),
+            list(),
+            replies(first),
+        ]);
+        assert_eq!(kept.len(), 3, "{kept:?}");
+        assert!(
+            matches!(&kept[0], MurmureEvent::ThreadMessages { thread, .. } if *thread == second)
+        );
+        assert!(matches!(&kept[1], MurmureEvent::Messages { .. }));
+        assert!(
+            matches!(&kept[2], MurmureEvent::ThreadMessages { thread, .. } if *thread == first)
+        );
     }
 }
