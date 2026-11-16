@@ -10,8 +10,9 @@
 //! and sees no document (`PROSE-IO-009`).
 
 use ambre_bus::interop::{Direction, FileFormat};
+use ambre_client_core::FileBytes;
 use ambre_convert::{Conversion, ConvertError, Converted, Converter};
-use ambre_core::{Count, FileBytes, Octets, Payload};
+use ambre_core::{Count, Octets, Payload};
 use ambre_prose_form::FormReport;
 
 use super::{ProseIr, Warnings};
@@ -35,7 +36,7 @@ pub fn read(
     file: &Payload<FileBytes>,
     converter: &Converter,
 ) -> Result<(ProseIr, ConversionReport), InteropError> {
-    let size = file.size();
+    let size = file.len();
     if size > MAX_SIZE {
         return Err(InteropError::TooLarge(size));
     }

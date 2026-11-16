@@ -20,7 +20,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use ambre_core::docfile::{AMBRE_VERSION, Container, DocFileError, read_ambre_plaintext};
+use ambre_client_core::docfile::{AMBRE_VERSION, Container, DocFileError, read_ambre_plaintext};
 use ambre_core::id::{Document, Id};
 use ambre_core::{
     DocType, FIXTURE_IMPORT_PEER, FixtureGen, FixtureManifest, FixtureName, FixtureShape, Schema,
@@ -289,7 +289,7 @@ pub fn baselines_in(dir: &Path) -> Result<Vec<(PathBuf, BenchBaseline)>, Fixture
 ///
 /// The driver takes its registry as a parameter ([`generate_into`]) rather than
 /// reading this constant directly. The belt then drives the same code path with
-/// a synthetic registry, the pattern `ambre_core::docfile`'s migration walk
+/// a synthetic registry, the pattern `ambre_client_core::docfile`'s migration walk
 /// already uses.
 pub const REGISTRY: &[&dyn FixtureGen] = &merged_registry();
 

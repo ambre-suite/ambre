@@ -2,7 +2,7 @@
 //!
 //! Toile's half of the pair: the payload is this board's `LoroDoc` snapshot. The
 //! header is not built here. Layout, version registry and both normative read
-//! rules live once in `ambre_core::docfile`, and are called from here. That is
+//! rules live once in `ambre_client_core::docfile`, and are called from here. That is
 //! I5: one container, every app, with no per-app header variant.
 //!
 //! Unlike the SVG / raster converters next door, this path is **lossless**. It
@@ -11,11 +11,11 @@
 
 use loro::{ExportMode, LoroDoc};
 
-use ambre_core::id::{Document, Id};
-use ambre_core::{
-    DocType,
-    docfile::{AmbreHeader, DocFileError, read_ambre_plaintext_as, write_ambre_plaintext},
+use ambre_client_core::docfile::{
+    AmbreHeader, DocFileError, read_ambre_plaintext_as, write_ambre_plaintext,
 };
+use ambre_core::DocType;
+use ambre_core::id::{Document, Id};
 
 /// Plaintext `.ambre` bytes for a Toile document: the current-version header
 /// followed by an uncompressed, unencrypted Loro snapshot.

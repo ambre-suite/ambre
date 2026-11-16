@@ -4,6 +4,7 @@ resolver = "2"
 exclude = ["vendor"]
 members = [
     "crates/ambre-core",
+    "crates/ambre-client-core",
     "crates/ambre-commands",
     "crates/ambre-chrome",
     "crates/ambre-canvas",
@@ -41,6 +42,7 @@ members = [
 #   cargo check --target x86_64-unknown-linux-gnu
 default-members = [
     "crates/ambre-core",
+    "crates/ambre-client-core",
     "crates/ambre-commands",
     "crates/ambre-chrome",
     "crates/ambre-canvas",

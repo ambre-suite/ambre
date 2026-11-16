@@ -42,7 +42,7 @@ use ambre_core::crdt::CrdtName as _;
 /// its drop point wait here, and nothing is applied until the answer lands
 /// (`TOILE-IO-131`).
 pub(super) struct PendingPicture {
-    data: ambre_core::Payload<ambre_core::FileBytes>,
+    data: ambre_core::Payload<ambre_client_core::FileBytes>,
     size: ambre_core::Size<ambre_core::Px<ambre_core::Image>>,
     at: Point,
 }
@@ -351,7 +351,7 @@ impl ToileState {
     /// applied (`TOILE-IO-131`).
     pub(super) fn import_image_bytes(
         &mut self,
-        bytes: &ambre_core::Payload<ambre_core::FileBytes>,
+        bytes: &ambre_core::Payload<ambre_client_core::FileBytes>,
         at: Point,
     ) -> ToileOutcome {
         if !ambre_convert::jpeg::is_jpeg(bytes) {
@@ -889,7 +889,7 @@ mod tests {
     /// An import of `data` read as `format`, landing at `at`.
     fn import_cmd(
         format: ToileImportFormat,
-        data: ambre_core::Payload<ambre_core::FileBytes>,
+        data: ambre_core::Payload<ambre_client_core::FileBytes>,
         at: Point,
     ) -> ToileCommand {
         ToileCommand::Interop(InteropRequest::Import(ToileImport { format, data, at }))
@@ -1104,7 +1104,7 @@ mod tests {
     fn a_placeholder_token_never_becomes_a_key() {
         let mut st = ToileState::new();
         let decoded = crate::logic::interop::import_raster(
-            &ambre_core::Payload::<ambre_core::FileBytes>::new(solid_png(4, 4)),
+            &ambre_core::Payload::<ambre_client_core::FileBytes>::new(solid_png(4, 4)),
             &crate::logic::interop::Limits::default(),
         )
         .expect("a picture");
@@ -1166,7 +1166,7 @@ mod tests {
         let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect x="0" y="0" width="5" height="5" fill="#ff0000"/></svg>"##;
         let out = st.handle_converted(import_cmd(
             ToileImportFormat::Svg,
-            ambre_core::Payload::<ambre_core::FileBytes>::new(svg.to_vec()),
+            ambre_core::Payload::<ambre_client_core::FileBytes>::new(svg.to_vec()),
             Point::ZERO,
         ));
         // No media -> applied synchronously, one CRDT delta, no service request.
@@ -1187,7 +1187,7 @@ mod tests {
         let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect x="40" y="40" width="5" height="5"/></svg>"##;
         st.handle_converted(import_cmd(
             ToileImportFormat::Svg,
-            ambre_core::Payload::<ambre_core::FileBytes>::new(svg.to_vec()),
+            ambre_core::Payload::<ambre_client_core::FileBytes>::new(svg.to_vec()),
             Point::new(300.0, 200.0),
         ));
         let id = st
@@ -1207,7 +1207,7 @@ mod tests {
         let mut st = ToileState::new();
         let out = st.handle_converted(import_cmd(
             ToileImportFormat::Svg,
-            ambre_core::Payload::<ambre_core::FileBytes>::new(b"this is not svg".to_vec()),
+            ambre_core::Payload::<ambre_client_core::FileBytes>::new(b"this is not svg".to_vec()),
             Point::ZERO,
         ));
         assert!(
@@ -1248,7 +1248,7 @@ mod tests {
         let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><g><rect x="0" y="0" width="5" height="5" fill="#ff0000"/><rect x="10" y="0" width="5" height="5"/></g></svg>"##;
         st.handle_converted(import_cmd(
             ToileImportFormat::Svg,
-            ambre_core::Payload::<ambre_core::FileBytes>::new(svg.to_vec()),
+            ambre_core::Payload::<ambre_client_core::FileBytes>::new(svg.to_vec()),
             Point::ZERO,
         ));
         assert!(
@@ -1270,7 +1270,7 @@ mod tests {
             (
                 import_cmd(
                     ToileImportFormat::Figma,
-                    ambre_core::Payload::<ambre_core::FileBytes>::new(b"{}".to_vec()),
+                    ambre_core::Payload::<ambre_client_core::FileBytes>::new(b"{}".to_vec()),
                     Point::ZERO,
                 ),
                 "Figma",
@@ -1278,7 +1278,7 @@ mod tests {
             (
                 import_cmd(
                     ToileImportFormat::Miro,
-                    ambre_core::Payload::<ambre_core::FileBytes>::new(b"{}".to_vec()),
+                    ambre_core::Payload::<ambre_client_core::FileBytes>::new(b"{}".to_vec()),
                     Point::ZERO,
                 ),
                 "Miro",
@@ -1322,7 +1322,7 @@ mod tests {
         let webp = || {
             import_cmd(
                 ToileImportFormat::Image(ambre_core::MediaType::from("image/webp")),
-                ambre_core::Payload::<ambre_core::FileBytes>::new(small_webp()),
+                ambre_core::Payload::<ambre_client_core::FileBytes>::new(small_webp()),
                 Point::ZERO,
             )
         };
@@ -1332,7 +1332,7 @@ mod tests {
         );
         let png = import_cmd(
             ToileImportFormat::Image(ambre_core::MediaType::from("image/png")),
-            ambre_core::Payload::<ambre_core::FileBytes>::new(solid_png(2, 2)),
+            ambre_core::Payload::<ambre_client_core::FileBytes>::new(solid_png(2, 2)),
             Point::ZERO,
         );
         assert_eq!(ToileState::conversion_family(&png), None);
@@ -1372,7 +1372,7 @@ mod tests {
         let jpeg = small_jpeg(600, 300);
         let cmd = import_cmd(
             ToileImportFormat::Image(ambre_core::MediaType::from("image/jpeg")),
-            ambre_core::Payload::<ambre_core::FileBytes>::new(jpeg.clone()),
+            ambre_core::Payload::<ambre_client_core::FileBytes>::new(jpeg.clone()),
             Point::new(40.0, 50.0),
         );
         assert_eq!(ToileState::conversion_family(&cmd), None);
@@ -1434,7 +1434,7 @@ mod tests {
         let mut st = ToileState::new();
         let out = st.handle_command(import_cmd(
             ToileImportFormat::Image(ambre_core::MediaType::from("image/jpeg")),
-            ambre_core::Payload::<ambre_core::FileBytes>::new(small_jpeg(8, 8)),
+            ambre_core::Payload::<ambre_client_core::FileBytes>::new(small_jpeg(8, 8)),
             Point::ZERO,
         ));
         let [ToileRequest::DecodePicture { id, .. }] = &out.requests[..] else {
@@ -1464,7 +1464,7 @@ mod tests {
         let out = st.handle_conversion(
             import_cmd(
                 ToileImportFormat::Image(ambre_core::MediaType::from("image/webp")),
-                ambre_core::Payload::<ambre_core::FileBytes>::new(small_webp()),
+                ambre_core::Payload::<ambre_client_core::FileBytes>::new(small_webp()),
                 Point::ZERO,
             ),
             Err(ambre_core::StopCause::ConverterRefused(
@@ -1480,7 +1480,7 @@ mod tests {
         let mut st = ToileState::new();
         let out = st.handle_command(import_cmd(
             ToileImportFormat::Image(ambre_core::MediaType::from("image/png")),
-            ambre_core::Payload::<ambre_core::FileBytes>::new(solid_png(8, 8)),
+            ambre_core::Payload::<ambre_client_core::FileBytes>::new(solid_png(8, 8)),
             Point::ZERO,
         ));
         // Async: one upload issued, nothing applied yet.
@@ -1525,7 +1525,7 @@ mod tests {
         let mut st = ToileState::new();
         let out = st.handle_command(import_cmd(
             ToileImportFormat::Image(ambre_core::MediaType::from("image/png")),
-            ambre_core::Payload::<ambre_core::FileBytes>::new(solid_png(8, 8)),
+            ambre_core::Payload::<ambre_client_core::FileBytes>::new(solid_png(8, 8)),
             Point::ZERO,
         ));
         st.handle_service_event(
@@ -1570,7 +1570,7 @@ mod tests {
         let mut st = ToileState::new();
         let out = st.handle_command(import_cmd(
             ToileImportFormat::Image(ambre_core::MediaType::from("image/png")),
-            ambre_core::Payload::<ambre_core::FileBytes>::new(solid_png(8, 8)),
+            ambre_core::Payload::<ambre_client_core::FileBytes>::new(solid_png(8, 8)),
             Point::ZERO,
         ));
         st.handle_service_event(
@@ -1601,7 +1601,7 @@ mod tests {
         let mut st = ToileState::new();
         let out = st.handle_command(import_cmd(
             ToileImportFormat::Image(ambre_core::MediaType::from("image/png")),
-            ambre_core::Payload::<ambre_core::FileBytes>::new(solid_png(8, 8)),
+            ambre_core::Payload::<ambre_client_core::FileBytes>::new(solid_png(8, 8)),
             Point::ZERO,
         ));
         st.handle_service_event(
@@ -1633,7 +1633,7 @@ mod tests {
         let mut st = ToileState::new();
         let out = st.handle_command(import_cmd(
             ToileImportFormat::Image(ambre_core::MediaType::from("image/png")),
-            ambre_core::Payload::<ambre_core::FileBytes>::new(solid_png(8, 8)),
+            ambre_core::Payload::<ambre_client_core::FileBytes>::new(solid_png(8, 8)),
             Point::ZERO,
         ));
         let id = first_upload_id(&out);
@@ -1695,7 +1695,7 @@ mod tests {
         svg.push_str("</svg>");
         import_cmd(
             ToileImportFormat::Svg,
-            ambre_core::Payload::<ambre_core::FileBytes>::new(svg.into_bytes()),
+            ambre_core::Payload::<ambre_client_core::FileBytes>::new(svg.into_bytes()),
             Point::ZERO,
         )
     }

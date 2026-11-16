@@ -1236,7 +1236,7 @@ pub type ToileInterop = ambre_bus::interop::InteropRequest<ToileImport, ToileExp
 #[derive(Clone, Debug, PartialEq)]
 pub struct ToileImport {
     pub format: ToileImportFormat,
-    pub data: ambre_core::Payload<ambre_core::FileBytes>,
+    pub data: ambre_core::Payload<ambre_client_core::FileBytes>,
     /// The world point the file lands on: the drop point, or the centre of the
     /// viewport when the picker started the import. The whole batch moves so
     /// its top-left corner sits there. A file lands where the user put it,
@@ -1988,7 +1988,7 @@ pub enum ToileCommand {
     /// element moves with it (`LOCALE-009`). An edit, so a viewer's is
     /// dropped (`LOCALE-007`).
     SetDocumentLocale {
-        locale: ambre_core::DocumentLocale,
+        locale: ambre_client_core::DocumentLocale,
     },
 
     // -- Presentation (`toile-presentation`) --
@@ -2475,7 +2475,7 @@ impl ToileCommand {
     #[must_use]
     pub const fn import(
         format: ToileImportFormat,
-        data: ambre_core::Payload<ambre_core::FileBytes>,
+        data: ambre_core::Payload<ambre_client_core::FileBytes>,
         at: Point,
     ) -> Self {
         Self::Interop(ambre_bus::interop::InteropRequest::Import(ToileImport {

@@ -941,9 +941,12 @@ fn a_finished_export_names_its_file() {
     owner.set();
     let root = mount_notified(ToileEvent::Interop(InteropAnswer::ExportReady {
         file: ExportedFile {
-            filename: ambre_core::ExportFilename::named("board", ambre_core::ExportExtension::Svg),
+            filename: ambre_client_core::ExportFilename::named(
+                "board",
+                ambre_client_core::ExportExtension::Svg,
+            ),
             media_type: ambre_core::MediaType::from("image/svg+xml"),
-            data: ambre_core::Payload::<ambre_core::FileBytes>::default(),
+            data: ambre_core::Payload::<ambre_client_core::FileBytes>::default(),
         },
         report: ToileReport::new(Direction::Export, FileFormat::Svg),
     }));

@@ -117,7 +117,7 @@ marked: it is a note about the text, and not part of it.
 
 **The language is a parameter, then the document, then nothing** (`PROSE-IO-032`,
 `PROSE-IO-035`). A fixed locale in a writer is wrong for most readers and silent for all of them.
-The resolution is `ambre_core::locale::resolve`, which every consumer of a locale calls
+The resolution is `ambre_client_core::locale::resolve`, which every consumer of a locale calls
 (`LOCALE-011`).
 
 **What the format carries:**

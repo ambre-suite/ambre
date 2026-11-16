@@ -15,6 +15,7 @@ testing = []
 # is seeded on the canonical `Id<User>` so the newtype is preserved end-to-end
 # through every presence path. Types only -- no GPU, no crypto.
 ambre-core = { path = "../ambre-core" }
+ambre-client-core = { path = "../ambre-client-core" }
 kurbo = { workspace = true }
 peniko = { workspace = true }
 parley = { workspace = true }

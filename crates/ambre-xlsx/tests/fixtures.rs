@@ -13,9 +13,10 @@
     reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
 )]
 
+use ambre_client_core::FileBytes;
 use ambre_core::index::Pos;
 use ambre_core::{
-    FileBytes, FontFamily, FontSize, Payload, Rgb, Slant, Underline, Validated, Weight, WordBreak,
+    FontFamily, FontSize, Payload, Rgb, Slant, Underline, Validated, Weight, WordBreak,
 };
 use ambre_xlsx::cellref::{CellRange, CellRef};
 use ambre_xlsx::formula::Formula;

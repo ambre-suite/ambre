@@ -7,6 +7,7 @@ description = "IPC message types for inter-thread communication in Ambre"
 
 [dependencies]
 ambre-core = { path = "../ambre-core" }
+ambre-client-core = { path = "../ambre-client-core" }
 # The session descriptions and the TURN servers of a call, which the call
 # envelopes carry between the UI thread and the Sync worker (`src/call.rs`).
 ambre-protocol = { path = "../ambre-protocol" }

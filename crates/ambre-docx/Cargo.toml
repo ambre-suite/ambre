@@ -13,6 +13,8 @@ default = ["codec"]
 codec = ["dep:ambre-opc", "dep:quick-xml"]
 
 [dependencies]
+# The day of a month that a Word date carries is a locale bound.
+ambre-client-core = { path = "../ambre-client-core" }
 ambre-core = { path = "../ambre-core" }
 # The model crosses into and out of the converter module as postcard bytes.
 serde      = { workspace = true }

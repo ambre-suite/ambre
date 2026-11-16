@@ -110,6 +110,7 @@ AMBRE is organized as a Cargo workspace with the following crates:
 | Crate | Purpose |
 |-------|---------|
 | `ambre-core` | Core types, UUID, versioning, errors |
+| `ambre-client-core` | The core types the client alone uses: the `.ambre` file, the export file, the locale. The relay links none of it |
 | `ambre-crypto` | Cryptographic primitives (AEAD, signatures, KDF) |
 | `ambre-protocol` | Wire format, WebSocket messages, signaling |
 | `ambre-bus` | Inter-worker communication |

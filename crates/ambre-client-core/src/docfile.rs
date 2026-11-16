@@ -53,13 +53,17 @@
 
 use thiserror::Error;
 
-use crate::fixed_bytes::{DebugForm, FixedBytes, FixedRole};
-use crate::id::{Document, Id};
-use crate::version::{Current, OpenRange, Version, VersionKind};
-use crate::{
-    Ciphertext, DocType, Nonce, Payload, PickedContainer, PlaintextContainer, SealedContainer,
-    SnapshotBytes, Uuid,
+use ambre_core::fixed_bytes::FixedBytes;
+use ambre_core::id::{Document, Id};
+use ambre_core::version::Version;
+use ambre_core::{
+    Ciphertext, DocType, Nonce, Payload, PickedContainer, PickedFile, PlaintextContainer,
+    SealedContainer, SnapshotBytes, Uuid,
 };
+
+// The markers the core keeps (`ambre_core::container`), named here too so a
+// reader of the container finds every part of it in one module.
+pub use ambre_core::container::{Container, FileDigest, FileSalt, SALT_LEN, SEALED_BIT};
 
 /// Magic bytes `"AMBR"` (`0x414D4252`), offset 0.
 pub const AMBRE_MAGIC: [u8; 4] = *b"AMBR";
@@ -72,32 +76,9 @@ pub const AMBRE_VERSION: Version<Container> = Version::CURRENT;
 /// Fixed header size; the payload starts at this offset.
 pub const HEADER_LEN: usize = 22;
 
-/// The bit of the version byte that partitions the two lineages: clear for a
-/// plaintext container, set for a passphrase-sealed one.
-///
-/// The version byte changes, not a field beside it. A build that predates the
-/// sealed lineage reads `0x80` as a container version it does not know, and
-/// refuses the file. That is the whole of `DOCFILE-010`.
-pub const SEALED_BIT: u8 = 0x80;
-
 /// The sealed container version this build writes, and the only sealed layout it
 /// parses. There is no sealed migration registry: see [`parse_sealed_header`].
 pub const AMBRE_SEALED_VERSION: Version<Container> = Version::new(0x80);
-
-/// Argon2id salt width in a sealed header.
-pub const SALT_LEN: usize = 16;
-
-/// The role of the Argon2id salt of one sealed `.ambre`, fresh per file:
-/// `FixedBytes<FileSalt>`. Public in the file, so not a secret; distinct from
-/// the account's [`MasterKeySalt`](crate::MasterKeySalt), which no file ever
-/// carries.
-pub enum FileSalt {}
-
-impl FixedRole for FileSalt {
-    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("FileSalt");
-    const DEBUG: DebugForm = DebugForm::Length;
-    type Array = [u8; SALT_LEN];
-}
 
 /// XChaCha20 nonce width in a sealed header. Mirrors `ambre_crypto::aead::NONCE_LEN`,
 /// which this crate cannot name (`DOCFILE-006`). One crate up, where both sides
@@ -129,36 +110,6 @@ const DOCUMENT_ID_AT: usize = 6;
 // it names what follows.
 const SALT_AT: usize = 5;
 const SEAL_NONCE_AT: usize = SALT_AT + SALT_LEN;
-
-/// The space of the version byte of an `.ambre` container, offset 4.
-///
-/// Any byte reads as one: what the file carries is a fact about the file, and
-/// the readers decide what to do with it. Its [`SEALED_BIT`] names the
-/// lineage, so one value says both which lineage and which version
-/// (`DOCFILE-010`). The order compares two versions of one lineage; the walk
-/// of [`migrate_ambre`] reaches it only for a plaintext one.
-pub enum Container {}
-
-impl VersionKind for Container {
-    type Repr = u8;
-    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ContainerVersion");
-}
-
-impl OpenRange for Container {}
-
-/// The container version this build writes, and the only one it parses
-/// without migrating first: [`AMBRE_VERSION`].
-impl Current for Container {
-    const CURRENT: Version<Self> = Version::new(0x01);
-}
-
-impl Version<Container> {
-    /// Whether it names the sealed lineage: [`SEALED_BIT`] is set.
-    #[must_use]
-    pub const fn is_sealed(self) -> bool {
-        self.get() & SEALED_BIT != 0
-    }
-}
 
 /// A parsed `.ambre` container: the header fields plus the payload that followed
 /// them.
@@ -245,7 +196,7 @@ pub enum DocFileError {
     /// caller that reports "unsupported version" without saying which one sends
     /// the user looking in the wrong place.
     #[error("{0}")]
-    PayloadSchema(#[from] crate::schema::SchemaError),
+    PayloadSchema(#[from] ambre_core::schema::SchemaError),
 }
 
 // -----------------------------------------------------------------------------
@@ -267,18 +218,6 @@ pub enum ContainerKind {
     Sealed(Version<Container>),
 }
 
-/// The keyless digest of a whole `.ambre` file, header included, so a flipped
-/// `document_id` byte changes it. The fixture sidecar records it to catch a
-/// flipped byte. It is never a link of the snapshot chain. A readable format
-/// sees it as hex text, the shape the sidecar always held. The role of
-/// `FixedBytes<FileDigest>`.
-pub enum FileDigest {}
-
-impl FixedRole for FileDigest {
-    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("FileDigest");
-    type Array = [u8; 32];
-}
-
 /// A whole `.ambre` file in one of its roles: picked, plaintext or sealed.
 /// [`classify`] reads any of them. The trait is sealed to these three types:
 /// the type names the role the bytes claim, not their content. Any bytes can
@@ -288,14 +227,27 @@ pub trait ContainerFile: AsRef<[u8]> + container_file::Sealed {}
 mod container_file {
     /// Closes [`super::ContainerFile`] to the three container roles.
     pub trait Sealed {}
-    impl Sealed for crate::Payload<crate::PickedContainer> {}
-    impl Sealed for crate::Payload<crate::PlaintextContainer> {}
-    impl Sealed for crate::Payload<crate::SealedContainer> {}
+    impl Sealed for ambre_core::Payload<ambre_core::PickedContainer> {}
+    impl Sealed for ambre_core::Payload<ambre_core::PlaintextContainer> {}
+    impl Sealed for ambre_core::Payload<ambre_core::SealedContainer> {}
 }
 
 impl ContainerFile for Payload<PickedContainer> {}
 impl ContainerFile for Payload<PlaintextContainer> {}
 impl ContainerFile for Payload<SealedContainer> {}
+
+/// The picked file under the role [`classify`] names (`DOCFILE-010`). Bytes
+/// it refuses go on as plaintext, and the plaintext reader names the refusal.
+/// Each reader validates the bytes again.
+#[must_use]
+pub fn into_lineage(picked: Payload<PickedContainer>) -> PickedFile {
+    match classify(&picked) {
+        Ok(ContainerKind::Sealed(_)) => PickedFile::Sealed(Payload::new(picked.into_bytes())),
+        Ok(ContainerKind::Plaintext(_)) | Err(_) => {
+            PickedFile::Plaintext(Payload::new(picked.into_bytes()))
+        }
+    }
+}
 
 /// Read the magic and the version byte, and say which lineage the file belongs
 /// to -- nothing more.
@@ -398,7 +350,7 @@ pub fn parse_header(file: &Payload<PlaintextContainer>) -> Result<AmbreHeader, D
         version,
         doc_type,
         document_id,
-        payload: crate::Payload::new(payload.to_vec()),
+        payload: ambre_core::Payload::new(payload.to_vec()),
     })
 }
 
@@ -487,7 +439,7 @@ impl SealedAmbre {
     ///
     /// A prefix of the header by construction, not by convention: the writer
     /// and this method assemble from the same code, and cannot drift apart.
-    pub fn aad(&self) -> crate::Aad {
+    pub fn aad(&self) -> ambre_core::Aad {
         sealed_aad_at(self.version, &self.salt)
     }
 }
@@ -495,12 +447,12 @@ impl SealedAmbre {
 /// Assemble the authenticated prefix of a sealed header. The one place that
 /// writes the sealed layout down, called by [`sealed_aad`] and by
 /// [`SealedAmbre::aad`].
-fn sealed_aad_at(version: Version<Container>, salt: &FixedBytes<FileSalt>) -> crate::Aad {
+fn sealed_aad_at(version: Version<Container>, salt: &FixedBytes<FileSalt>) -> ambre_core::Aad {
     let mut out = [0u8; SEALED_AAD_LEN];
     out[..MAGIC_LEN].copy_from_slice(&AMBRE_MAGIC);
     out[VERSION_AT] = version.get();
     out[SALT_AT..].copy_from_slice(salt.as_array());
-    crate::Aad::of(&out)
+    ambre_core::Aad::of(&out)
 }
 
 /// The associated data a seal covers, for a file about to go out under `salt`.
@@ -509,7 +461,7 @@ fn sealed_aad_at(version: Version<Container>, salt: &FixedBytes<FileSalt>) -> cr
 /// associated data *before* it has a ciphertext to put in a [`SealedAmbre`], so
 /// it asks here. It hands the same salt to [`write_ambre_sealed`] afterwards,
 /// along with the nonce the cipher drew.
-pub fn sealed_aad(salt: &FixedBytes<FileSalt>) -> crate::Aad {
+pub fn sealed_aad(salt: &FixedBytes<FileSalt>) -> ambre_core::Aad {
     sealed_aad_at(AMBRE_SEALED_VERSION, salt)
 }
 
@@ -1077,19 +1029,19 @@ mod tests {
     fn a_picked_file_takes_the_role_its_version_byte_names() {
         let plaintext = sample(DocType::Trame);
         assert_eq!(
-            picked(&plaintext).into_lineage(),
-            crate::PickedFile::Plaintext(plain(&plaintext))
+            into_lineage(picked(&plaintext)),
+            PickedFile::Plaintext(plain(&plaintext))
         );
         let sealed_bytes = sealed_sample();
         assert_eq!(
-            picked(&sealed_bytes).into_lineage(),
-            crate::PickedFile::Sealed(sealed(&sealed_bytes))
+            into_lineage(picked(&sealed_bytes)),
+            PickedFile::Sealed(sealed(&sealed_bytes))
         );
         // Bytes classify refuses go on as plaintext, whose reader names the
         // refusal.
         assert_eq!(
-            picked(b"AMB").into_lineage(),
-            crate::PickedFile::Plaintext(plain(b"AMB"))
+            into_lineage(picked(b"AMB")),
+            PickedFile::Plaintext(plain(b"AMB"))
         );
     }
 

@@ -818,9 +818,9 @@ fn the_status_bar_says_when_it_shows_another_locale() {
             let perf = RwSignal::new(PerfSnapshot::default());
             let zoom = RwSignal::new(ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::ONE);
             let locale = RwSignal::new(Some(ambre_trame::ui::locale::LocaleView {
-                document: ambre_core::DocumentLocale::parse("en").unwrap(),
-                reader: ambre_core::ReaderLocale {
-                    own: ambre_core::DocumentLocale::parse("fr").unwrap(),
+                document: ambre_client_core::DocumentLocale::parse("en").unwrap(),
+                reader: ambre_client_core::ReaderLocale {
+                    own: ambre_client_core::DocumentLocale::parse("fr").unwrap(),
                     convention,
                 },
             }));
@@ -834,10 +834,10 @@ fn the_status_bar_says_when_it_shows_another_locale() {
         text
     };
     assert_eq!(
-        notice(ambre_core::NumberConvention::AllMine).as_deref(),
+        notice(ambre_client_core::NumberConvention::AllMine).as_deref(),
         Some("Numbers shown in fr; the document is in en")
     );
-    assert_eq!(notice(ambre_core::NumberConvention::TypeMine), None);
+    assert_eq!(notice(ambre_client_core::NumberConvention::TypeMine), None);
 }
 
 /// Mount the status band over `stats` and return its text.

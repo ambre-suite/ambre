@@ -7,6 +7,7 @@ description = "Cryptographic primitives for Ambre (AEAD, signatures, hashing, KD
 
 [dependencies]
 ambre-core = { path = "../ambre-core" }
+ambre-client-core = { path = "../ambre-client-core" }
 thiserror = { workspace = true }
 
 # Crypto

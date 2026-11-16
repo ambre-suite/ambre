@@ -10,9 +10,9 @@ use crate::CellPos;
 use crate::message::{
     CellFormat, CellText, DateParts, DayOfMonth, DisplayForm, SourceForm, TrameEvent,
 };
+use ambre_client_core::{DocumentLocale, Grouping, NumberForms, ReaderLocale};
 use ambre_core::crdt::CrdtName as _;
 use ambre_core::schema::MetaKey;
-use ambre_core::{DocumentLocale, Grouping, NumberForms, ReaderLocale};
 use loro::LoroValue;
 
 impl TrameState {
@@ -51,7 +51,7 @@ impl TrameState {
     /// (`LOCALE-020`). No export of this build names a locale of its own, so
     /// the request half of the order is none (`LOCALE-011`).
     pub(super) fn export_forms(&self) -> NumberForms {
-        ambre_core::resolve(None, &self.document_locale()).forms()
+        ambre_client_core::resolve(None, &self.document_locale()).forms()
     }
 
     /// The event that tells the view the workbook's locale and the reader's
@@ -182,7 +182,9 @@ pub(super) enum TypedKind {
 
 /// The day serial of a typed date. A day past the end of its month gives
 /// `None`: `31/02/2026` is no date, rather than the 3rd of March.
-fn day_serial(date: ambre_core::TypedDate) -> Option<ambre_core::Instant<ambre_core::SheetDay>> {
+fn day_serial(
+    date: ambre_client_core::TypedDate,
+) -> Option<ambre_core::Instant<ambre_core::SheetDay>> {
     let parts = DateParts {
         year: date.year,
         month: date.month,

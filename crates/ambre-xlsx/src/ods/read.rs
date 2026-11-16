@@ -7,8 +7,9 @@
 
 use std::collections::{HashMap, HashSet};
 
+use ambre_client_core::FileBytes;
 use ambre_core::index::Pos;
-use ambre_core::{Count, Doc, FileBytes, Payload, Px, Validated};
+use ambre_core::{Count, Doc, Payload, Px, Validated};
 use quick_xml::Reader;
 use quick_xml::events::{BytesStart, Event};
 

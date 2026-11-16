@@ -18,7 +18,7 @@ use super::svg_export::SvgExport;
 /// thing the head declares after the encoding. It refuses every fetch, every
 /// script and every frame, so a writer bug that adds an address still loads
 /// nothing (`TOILE-IO-095`).
-pub fn showcase_page(svg: &SvgExport) -> ambre_core::Payload<ambre_core::FileBytes> {
+pub fn showcase_page(svg: &SvgExport) -> ambre_core::Payload<ambre_client_core::FileBytes> {
     let mut page = String::with_capacity(svg.document.len() + 1024);
     page.push_str("<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n");
     // `default-src 'none'` refuses every fetch the page could make. Only an
@@ -39,5 +39,5 @@ pub fn showcase_page(svg: &SvgExport) -> ambre_core::Payload<ambre_core::FileByt
     page.push_str("</head>\n<body>\n");
     page.push_str(&svg.document);
     page.push_str("</body>\n</html>\n");
-    ambre_core::Payload::<ambre_core::FileBytes>::new(page.into_bytes())
+    ambre_core::Payload::<ambre_client_core::FileBytes>::new(page.into_bytes())
 }

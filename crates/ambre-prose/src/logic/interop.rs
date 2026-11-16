@@ -1397,7 +1397,9 @@ mod tests {
     fn import(state: &mut ProseState, markdown: &str) -> ProseOutcome {
         state.handle_converted(ProseCommand::Interop(InteropRequest::Import(ProseImport {
             format: ImportFormat::Markdown,
-            data: ambre_core::Payload::<ambre_core::FileBytes>::new(markdown.as_bytes().to_vec()),
+            data: ambre_core::Payload::<ambre_client_core::FileBytes>::new(
+                markdown.as_bytes().to_vec(),
+            ),
             now: IMPORTED_AT,
             zone: crate::message::TimeZone::UTC,
         })))
@@ -1514,7 +1516,9 @@ mod tests {
         let outcome =
             state.handle_converted(ProseCommand::Interop(InteropRequest::Import(ProseImport {
                 format: ImportFormat::Markdown,
-                data: ambre_core::Payload::<ambre_core::FileBytes>::new(vec![0xff, 0xfe, 0xfd]),
+                data: ambre_core::Payload::<ambre_client_core::FileBytes>::new(vec![
+                    0xff, 0xfe, 0xfd,
+                ]),
                 now: IMPORTED_AT,
                 zone: crate::message::TimeZone::UTC,
             })));
@@ -1726,7 +1730,7 @@ mod tests {
             let outcome = state.handle_converted_in_family(ProseCommand::Interop(
                 InteropRequest::Import(ProseImport {
                     format: ImportFormat::Word,
-                    data: ambre_core::Payload::<ambre_core::FileBytes>::new(bytes),
+                    data: ambre_core::Payload::<ambre_client_core::FileBytes>::new(bytes),
                     now: IMPORTED_AT,
                     zone: crate::message::TimeZone::UTC,
                 }),
@@ -1856,7 +1860,7 @@ mod tests {
             let before = author.shape();
             let command = ProseCommand::Interop(InteropRequest::Import(ProseImport {
                 format: ImportFormat::Word,
-                data: ambre_core::Payload::<ambre_core::FileBytes>::new(reviewed_after(100)),
+                data: ambre_core::Payload::<ambre_client_core::FileBytes>::new(reviewed_after(100)),
                 now: IMPORTED_AT,
                 zone: crate::message::TimeZone::UTC,
             }));
@@ -2168,7 +2172,7 @@ mod tests {
             let outcome = state.handle_converted_in_family(ProseCommand::Interop(
                 InteropRequest::Import(ProseImport {
                     format,
-                    data: ambre_core::Payload::<ambre_core::FileBytes>::new(bytes),
+                    data: ambre_core::Payload::<ambre_client_core::FileBytes>::new(bytes),
                     now: IMPORTED_AT,
                     zone: crate::message::TimeZone::UTC,
                 }),
@@ -2311,7 +2315,7 @@ mod tests {
             let outcome = state.handle_converted(ProseCommand::Interop(InteropRequest::Import(
                 ProseImport {
                     format: ImportFormat::Html,
-                    data: ambre_core::Payload::<ambre_core::FileBytes>::new(
+                    data: ambre_core::Payload::<ambre_client_core::FileBytes>::new(
                         html.as_bytes().to_vec(),
                     ),
                     now: IMPORTED_AT,
@@ -2451,7 +2455,7 @@ mod tests {
                 let outcome = state.handle_converted(ProseCommand::Interop(
                     InteropRequest::Import(ProseImport {
                         format: ImportFormat::Html,
-                        data: ambre_core::Payload::<ambre_core::FileBytes>::new(bytes),
+                        data: ambre_core::Payload::<ambre_client_core::FileBytes>::new(bytes),
                         now: IMPORTED_AT,
                         zone: crate::message::TimeZone::UTC,
                     }),

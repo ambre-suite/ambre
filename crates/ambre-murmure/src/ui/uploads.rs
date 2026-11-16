@@ -12,9 +12,10 @@ use std::collections::HashMap;
 
 use crate::message::Attachment;
 use ambre_bus::{ContentHash, MediaType, Octets, Request};
+use ambre_client_core::ExportFilename;
 use ambre_core::Count;
 use ambre_core::Seq;
-use ambre_core::{Byte, ExportFilename, KnownMediaType};
+use ambre_core::{Byte, KnownMediaType};
 
 use crate::ui::composer::DraftOf;
 
@@ -367,10 +368,10 @@ mod tests {
         for (sent, saved) in cases {
             let name = download_name(&received(sent));
             assert_eq!(name.as_str(), saved, "sent as {sent:?}");
-            assert!(ambre_core::ExportFilename::new(name.as_str()).is_ok());
+            assert!(ambre_client_core::ExportFilename::new(name.as_str()).is_ok());
         }
         let name = download_name(&received(&long));
-        assert!(ambre_core::ExportFilename::new(name.as_str()).is_ok());
+        assert!(ambre_client_core::ExportFilename::new(name.as_str()).is_ok());
         assert!(name.as_str().ends_with(".pdf"), "{}", name.as_str());
     }
 

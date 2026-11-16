@@ -16,6 +16,7 @@ fixtures = ["ambre-core/fixtures"]
 
 [dependencies]
 ambre-core = { path = "../ambre-core" }
+ambre-client-core = { path = "../ambre-client-core" }
 ambre-bus = { path = "../ambre-bus" }
 ambre-draw = { path = "../ambre-draw" }
 # Command registry (`CommandId`): the context-menu command surface

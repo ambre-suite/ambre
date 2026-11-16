@@ -10,11 +10,11 @@
 //! table lacks formats in the neutral forms, as a document with no tag does
 //! (`LOCALE-013`). No fixed language stands in for it.
 
-use crate::bounded::{Bounded, Bounds, Refusal};
-use crate::calendar::{Month, Year};
-use crate::lang::{LangTag, NotALangTag, primary_subtag};
-use crate::span::{Instant, SheetDay};
-use crate::validated::Validated;
+use ambre_core::bounded::{Bounded, Bounds, Refusal};
+use ambre_core::calendar::{Month, Year};
+use ambre_core::lang::{LangTag, NotALangTag, primary_subtag};
+use ambre_core::span::{Instant, SheetDay};
+use ambre_core::validated::Validated;
 
 /// The locale a document or a reader names: one well-formed tag, or none.
 ///
@@ -175,7 +175,8 @@ impl Bounds for MonthDay {
     type Repr = u8;
     const MIN: u8 = 1;
     const MAX: u8 = 31;
-    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("MonthDay");
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("MonthDay");
     const REFUSAL: Refusal = Refusal::new("a day of a month lies in 1..=31, not ", "");
 }
 

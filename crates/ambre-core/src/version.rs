@@ -4,8 +4,9 @@
 //! names its space. A container version never compares to a schema version,
 //! and a protocol byte never stands in for either:
 //!
-//! ```compile_fail
-//! use ambre_core::version::{Container, Protocol, Version};
+//! ```compile_fail,E0308
+//! use ambre_core::Container;
+//! use ambre_core::version::{Current, Protocol, Version};
 //! let _: Version<Container> = Version::<Protocol>::CURRENT;
 //! ```
 //!

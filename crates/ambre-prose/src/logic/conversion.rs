@@ -193,7 +193,7 @@ impl ProseState {
         // The title is user text, so the name is cleaned of what a host
         // refuses and bounded (`DOCFILE-019`, `DOCFILE-020`).
         let named = |extension| {
-            ambre_core::ExportFilename::from_title(
+            ambre_client_core::ExportFilename::from_title(
                 ir.meta.title.as_deref().unwrap_or_default(),
                 "document",
                 extension,
@@ -201,13 +201,13 @@ impl ProseState {
         };
         let written = match &format {
             ExportFormat::Markdown(flavor) => {
-                let filename = named(ambre_core::ExportExtension::Markdown);
+                let filename = named(ambre_client_core::ExportExtension::Markdown);
                 markdown::write(&ir, *flavor, converter).map(|w| (filename, w))
             }
             // Without the review, an HTML export drops every thread and every
             // suggestion first, as a Word export does (`PROSE-IO-022`).
             ExportFormat::Html(review) => {
-                let filename = named(ambre_core::ExportExtension::Html);
+                let filename = named(ambre_client_core::ExportExtension::Html);
                 let ir = match review {
                     ReviewExport::Included => ir,
                     ReviewExport::Omitted => ir.without_review(),
@@ -216,10 +216,11 @@ impl ProseState {
             }
             ExportFormat::Word(export) | ExportFormat::OpenDocument(export) => {
                 let (extension, package) = match &format {
-                    ExportFormat::OpenDocument(_) => {
-                        (ambre_core::ExportExtension::Odt, TextPackage::OpenDocument)
-                    }
-                    _ => (ambre_core::ExportExtension::Docx, TextPackage::Word),
+                    ExportFormat::OpenDocument(_) => (
+                        ambre_client_core::ExportExtension::Odt,
+                        TextPackage::OpenDocument,
+                    ),
+                    _ => (ambre_client_core::ExportExtension::Docx, TextPackage::Word),
                 };
                 let filename = named(extension);
                 let ir = match export.review {

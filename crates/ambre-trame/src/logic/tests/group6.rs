@@ -482,7 +482,7 @@ fn csv_import_creates_sheet_and_cells() {
     let mut state = TrameState::new();
     let csv = b"a,b,c\n1,2,3\n".to_vec();
     let out = state.convert(TrameCommand::import_csv(crate::message::CsvImport {
-        data: ambre_core::Payload::<ambre_core::FileBytes>::new(csv),
+        data: ambre_core::Payload::<ambre_client_core::FileBytes>::new(csv),
         delimiter: None,
         header: HeaderRow::Absent,
         target_sheet_id: None,
@@ -502,7 +502,9 @@ fn csv_import_creates_sheet_and_cells() {
 fn csv_import_skips_header() {
     let mut state = TrameState::new();
     let out = state.convert(TrameCommand::import_csv(crate::message::CsvImport {
-        data: ambre_core::Payload::<ambre_core::FileBytes>::new(b"name,age\nalice,30\n".to_vec()),
+        data: ambre_core::Payload::<ambre_client_core::FileBytes>::new(
+            b"name,age\nalice,30\n".to_vec(),
+        ),
         delimiter: None,
         header: HeaderRow::Present,
         target_sheet_id: None,
@@ -519,7 +521,7 @@ fn csv_import_skips_header() {
 fn csv_delimiter_autodetect() {
     let mut state = TrameState::new();
     state.convert(TrameCommand::import_csv(crate::message::CsvImport {
-        data: ambre_core::Payload::<ambre_core::FileBytes>::new(b"x;y;z\n1;2;3\n".to_vec()),
+        data: ambre_core::Payload::<ambre_client_core::FileBytes>::new(b"x;y;z\n1;2;3\n".to_vec()),
         delimiter: None,
         header: HeaderRow::Absent,
         target_sheet_id: None,
@@ -535,7 +537,7 @@ fn csv_delimiter_autodetect() {
 fn csv_import_export_roundtrip() {
     let mut state = TrameState::new();
     let out = state.convert(TrameCommand::import_csv(crate::message::CsvImport {
-        data: ambre_core::Payload::<ambre_core::FileBytes>::new(b"a,b\nc,d\n".to_vec()),
+        data: ambre_core::Payload::<ambre_client_core::FileBytes>::new(b"a,b\nc,d\n".to_vec()),
         delimiter: None,
         header: HeaderRow::Absent,
         target_sheet_id: None,
@@ -582,7 +584,7 @@ fn csv_import_malformed_never_panics() {
                 // Must return without panicking; the result is unspecified but
                 // well-formed (a finished import or a failure).
                 let _ = state.convert(TrameCommand::import_csv(crate::message::CsvImport {
-                    data: ambre_core::Payload::<ambre_core::FileBytes>::new(data.to_vec()),
+                    data: ambre_core::Payload::<ambre_client_core::FileBytes>::new(data.to_vec()),
                     delimiter,
                     header,
                     target_sheet_id: None,
@@ -620,7 +622,7 @@ fn csv_import_random_bytes_never_panics() {
             .collect();
         let mut state = TrameState::new();
         let _ = state.convert(TrameCommand::import_csv(crate::message::CsvImport {
-            data: ambre_core::Payload::<ambre_core::FileBytes>::new(data),
+            data: ambre_core::Payload::<ambre_client_core::FileBytes>::new(data),
             delimiter: None,
             header: if next() % 2 == 0 {
                 HeaderRow::Present
@@ -685,7 +687,7 @@ fn csv_import_then_export_drops_trailing_empties() {
     let mut state = TrameState::new();
     let csv = b"12,13,14,15,16,17,,,,,,,,,,,,\n12,13,14,15,16,17,,,,,,,,,,,,\n".to_vec();
     let out = state.convert(TrameCommand::import_csv(crate::message::CsvImport {
-        data: ambre_core::Payload::<ambre_core::FileBytes>::new(csv),
+        data: ambre_core::Payload::<ambre_client_core::FileBytes>::new(csv),
         delimiter: None,
         header: HeaderRow::Absent,
         target_sheet_id: None,

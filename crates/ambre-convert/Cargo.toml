@@ -32,6 +32,7 @@ loader = ["dep:js-sys"]
 
 [dependencies]
 ambre-core = { path = "../ambre-core" }
+ambre-client-core = { path = "../ambre-client-core" }
 # The recorded draw list a PDF request carries (`ambre_draw::list`).
 ambre-draw = { path = "../ambre-draw" }
 # The role of Prose's intermediate form, which a DOCX request and its answer

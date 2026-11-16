@@ -276,7 +276,7 @@ fn trame_import() -> Reading {
     let csv: String = (0..1_000).map(|i| format!("{i},a,b\n")).collect();
     bench.command(AppCommand::Trame(TrameCommand::import_csv(
         ambre_trame::message::CsvImport {
-            data: ambre_core::Payload::<ambre_core::FileBytes>::new(csv.into_bytes()),
+            data: ambre_core::Payload::<ambre_client_core::FileBytes>::new(csv.into_bytes()),
             delimiter: None,
             header: ambre_trame::message::HeaderRow::Absent,
             target_sheet_id: None,
@@ -302,7 +302,7 @@ fn toile_import() -> Reading {
     svg.push_str("</svg>");
     bench.command(AppCommand::Toile(ToileCommand::import(
         ambre_toile::message::ToileImportFormat::Svg,
-        ambre_core::Payload::<ambre_core::FileBytes>::new(svg.into_bytes()),
+        ambre_core::Payload::<ambre_client_core::FileBytes>::new(svg.into_bytes()),
         kurbo::Point::ZERO,
     )));
     let (events, passes) = bench.passes();

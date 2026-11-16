@@ -1,7 +1,7 @@
 // The workbook locale and the reader's convention (`ambre-spec-locale.md`).
 
 use super::*;
-use ambre_core::{DocumentLocale, NumberConvention, ReaderLocale};
+use ambre_client_core::{DocumentLocale, NumberConvention, ReaderLocale};
 
 fn locale(tag: &str) -> DocumentLocale {
     DocumentLocale::parse(tag).unwrap()

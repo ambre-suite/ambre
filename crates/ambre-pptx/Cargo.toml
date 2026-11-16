@@ -9,10 +9,11 @@ description = "The PowerPoint codec: a deck model, and its writer to a Presentat
 # The writer and the package layer. Without it the crate is the deck model
 # alone: the shape the Logic thread fills and the converter module reads, so
 # the Main instance links no zip and no XML writer.
-codec = ["dep:ambre-opc", "dep:quick-xml"]
+codec = ["dep:ambre-client-core", "dep:ambre-opc", "dep:quick-xml"]
 
 [dependencies]
 ambre-core = { path = "../ambre-core" }
+ambre-client-core = { path = "../ambre-client-core", optional = true }
 serde      = { workspace = true }
 thiserror  = { workspace = true }
 

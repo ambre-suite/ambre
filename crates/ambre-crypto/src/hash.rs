@@ -161,6 +161,8 @@ pub fn dev_seed(
 /// A keyless 32-byte digest of a whole container file, for the fixture
 /// sidecar that catches a flipped byte. Not a link of the snapshot chain: its head is
 /// empty, which keeps the digests of the committed corpus.
-pub fn file_digest<F: ambre_core::ContainerFile>(file: &F) -> FixedBytes<ambre_core::FileDigest> {
+pub fn file_digest<F: ambre_client_core::ContainerFile>(
+    file: &F,
+) -> FixedBytes<ambre_core::FileDigest> {
     FixedBytes::from_array(length_prefixed(Head(&[]), Tail(file.as_ref())))
 }

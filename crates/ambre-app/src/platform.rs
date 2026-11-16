@@ -22,7 +22,7 @@ pub(crate) fn open_file_picker(
     accept: ambre_chrome::FileAccept,
     unreadable: &'static str,
     toasts: Toasts,
-    on_bytes: impl Fn(ambre_core::Payload<ambre_core::FileBytes>) + Clone + 'static,
+    on_bytes: impl Fn(ambre_core::Payload<ambre_client_core::FileBytes>) + Clone + 'static,
 ) {
     let Some(document) = web_sys::window().and_then(|w| w.document()) else {
         return;
@@ -45,7 +45,7 @@ pub(crate) fn open_file_picker(
         let on_bytes = on_bytes.clone();
         wasm_bindgen_futures::spawn_local(async move {
             match wasm_bindgen_futures::JsFuture::from(file.array_buffer()).await {
-                Ok(buf) => on_bytes(ambre_core::Payload::<ambre_core::FileBytes>::new(
+                Ok(buf) => on_bytes(ambre_core::Payload::<ambre_client_core::FileBytes>::new(
                     js_sys::Uint8Array::new(&buf).to_vec(),
                 )),
                 Err(_) => toasts.warning(unreadable),
@@ -222,24 +222,26 @@ const READER_LOCALE_KEY: ambre_core::StaticKey<ambre_core::StorageKeys> =
 /// language once and stores it, so a later boot reads the device's setting
 /// and never the machine again (`LOCALE-012`). A store that cannot be read
 /// gives the first-run reading, unstored.
-pub(crate) fn reader_locale() -> ambre_core::ReaderLocale {
+pub(crate) fn reader_locale() -> ambre_client_core::ReaderLocale {
     let Some(window) = web_sys::window() else {
-        return ambre_core::ReaderLocale::default();
+        return ambre_client_core::ReaderLocale::default();
     };
     let storage = window.local_storage().ok().flatten();
     let stored = storage
         .as_ref()
         .and_then(|s| s.get_item(READER_LOCALE_KEY.as_str()).ok().flatten());
     if let Some(tag) = stored {
-        return ambre_core::ReaderLocale {
-            own: ambre_core::DocumentLocale::from_register(Some(tag.as_str())),
-            convention: ambre_core::NumberConvention::default(),
+        return ambre_client_core::ReaderLocale {
+            own: ambre_client_core::DocumentLocale::from_register(Some(tag.as_str())),
+            convention: ambre_client_core::NumberConvention::default(),
         };
     }
     // The browser's language, read once; a malformed one is no locale.
-    let reader = ambre_core::ReaderLocale {
-        own: ambre_core::DocumentLocale::from_register(window.navigator().language().as_deref()),
-        convention: ambre_core::NumberConvention::default(),
+    let reader = ambre_client_core::ReaderLocale {
+        own: ambre_client_core::DocumentLocale::from_register(
+            window.navigator().language().as_deref(),
+        ),
+        convention: ambre_client_core::NumberConvention::default(),
     };
     if let Some(storage) = storage {
         let _ = storage.set_item(
@@ -866,7 +868,7 @@ fn read_ambre_file(
         // needs a passphrase this thread must ask for, and a key the Sync
         // worker derives. So the bytes go to the caller's prompt, and the
         // plaintext path below resumes on what comes back (`DOCFILE-015`).
-        match picked.into_lineage() {
+        match ambre_client_core::into_lineage(picked) {
             ambre_core::PickedFile::Sealed(file) => on_sealed.run(file),
             // The switchboard holds the store's seal, and resumes from
             // here (`RESID-025`).
@@ -929,7 +931,7 @@ fn read_container(
     ambre_bus::DocType,
     ambre_core::Payload<ambre_core::SnapshotBytes>,
 )> {
-    let header = match ambre_core::docfile::read_ambre_plaintext(container) {
+    let header = match ambre_client_core::docfile::read_ambre_plaintext(container) {
         Ok(header) => header,
         Err(e) => {
             toasts.error(format!("Ambre cannot open that file: {e}"));

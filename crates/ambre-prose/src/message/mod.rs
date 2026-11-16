@@ -1365,7 +1365,7 @@ pub enum ProseCommand {
     InsertImageFile {
         parent_id: Option<BlockId>,
         after_id: Option<BlockId>,
-        data: ambre_core::Payload<ambre_core::FileBytes>,
+        data: ambre_core::Payload<ambre_client_core::FileBytes>,
         alt: ambre_core::Validated<ambre_core::AltText>,
     },
     /// Validates, clamps, then writes the display size (`PROSE-FEAT-058`,
@@ -1495,7 +1495,7 @@ pub enum ProseCommand {
     /// (`LOCALE-001`). No block moves with it (`LOCALE-009`). An edit, so a
     /// viewer's is dropped (`LOCALE-007`).
     SetDocumentLocale {
-        locale: ambre_core::DocumentLocale,
+        locale: ambre_client_core::DocumentLocale,
     },
 
     // -- Find and replace (`features/ambre-spec-prose-find-replace.md`) --
@@ -1642,7 +1642,7 @@ pub type ProseInterop = ambre_bus::interop::InteropRequest<ProseImport, ExportFo
 #[derive(Clone, Debug, PartialEq)]
 pub struct ProseImport {
     pub format: ImportFormat,
-    pub data: ambre_core::Payload<ambre_core::FileBytes>,
+    pub data: ambre_core::Payload<ambre_client_core::FileBytes>,
     /// When the user chose the file: the date a reply the file leaves
     /// undated lands at.
     pub now: Instant<Authored>,
@@ -1940,7 +1940,7 @@ pub struct PdfExport {
     /// The language the file declares. A request that names none takes the
     /// document's own, and a document with none gives a file with none
     /// (`PROSE-IO-032`, `PROSE-IO-035`, `LOCALE-011`).
-    pub language: ambre_core::DocumentLocale,
+    pub language: ambre_client_core::DocumentLocale,
 }
 
 /// What a Word export reads beside the document. It says whether the file

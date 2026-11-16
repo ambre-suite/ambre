@@ -540,7 +540,7 @@ impl PayloadKind for PackageBytes {
 }
 
 /// A written package is the file a codec hands back.
-impl ambre_core::Becomes<ambre_core::FileBytes> for PackageBytes {}
+impl ambre_core::Becomes<ambre_client_core::FileBytes> for PackageBytes {}
 
 /// A package being written: its parts, their content types and their
 /// relationships. The archive it writes is the same for the same parts:

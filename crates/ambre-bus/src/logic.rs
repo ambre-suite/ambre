@@ -252,7 +252,9 @@ pub enum LogicCommand<A = Infallible, P: ChannelPlane = NoChannels> {
     /// document takes it, and a document this reader creates is seeded with
     /// the locale (`LOCALE-019`). Local-only: no document stores it
     /// (`LOCALE-017`).
-    SetReaderLocale { reader: ambre_core::ReaderLocale },
+    SetReaderLocale {
+        reader: ambre_client_core::ReaderLocale,
+    },
 }
 
 // -----------------------------------------------------------------------------

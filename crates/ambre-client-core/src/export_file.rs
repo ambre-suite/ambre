@@ -5,12 +5,10 @@
 //! that honours it, a separator or a `..` names a place outside the download
 //! folder. So the name is a validated type (`DOCFILE-019`, `DOCFILE-020`).
 
-use crate::Redacted;
-use crate::count::Count;
-use crate::index::Len;
-use crate::media::Octets;
-use crate::payload::{Payload, PayloadKind};
-use crate::text_offset::Byte;
+use ambre_core::Redacted;
+use ambre_core::index::Len;
+use ambre_core::payload::{Becomes, MediaBytes, PayloadKind, ThumbnailPng};
+use ambre_core::text_offset::Byte;
 
 /// The extension an export file carries, one per format the suite writes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -272,34 +270,35 @@ fn is_kept_extension(extension: &str) -> bool {
 pub enum FileBytes {}
 
 impl PayloadKind for FileBytes {
-    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("FileBytes");
-}
-
-impl Payload<FileBytes> {
-    /// The size of the file.
-    #[must_use]
-    pub fn size(&self) -> Count<Octets> {
-        self.len()
-    }
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("FileBytes");
 }
 
 /// A plaintext `.ambre` export saves the whole container, header included.
-impl From<Payload<crate::PlaintextContainer>> for Payload<FileBytes> {
-    fn from(container: Payload<crate::PlaintextContainer>) -> Self {
-        Self::new(container.into_bytes())
-    }
-}
+impl Becomes<FileBytes> for ambre_core::PlaintextContainer {}
 
 /// A sealed `.ambre` export saves the whole sealed container.
-impl From<Payload<crate::SealedContainer>> for Payload<FileBytes> {
-    fn from(container: Payload<crate::SealedContainer>) -> Self {
-        Self::new(container.into_bytes())
-    }
-}
+impl Becomes<FileBytes> for ambre_core::SealedContainer {}
+
+/// A file a reader chose is the plaintext the media flow stores, when it is
+/// a picture (`4-Prose/features/ambre-spec-prose-images.md section 3`).
+impl Becomes<MediaBytes> for FileBytes {}
+
+/// A stored picture is the file the images module decodes, when Main cannot
+/// decode it (`1-Foundations/ambre-spec-architecture.md section 2`, the
+/// converter thread).
+impl Becomes<FileBytes> for MediaBytes {}
+
+/// A PNG file the Main instance writes from decoded samples is the thumbnail
+/// a board stores, when the samples are those of a thumbnail.
+impl Becomes<ThumbnailPng> for FileBytes {}
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ambre_core::count::Count;
+    use ambre_core::media::Octets;
+    use ambre_core::payload::Payload;
 
     /// `DOCFILE-019`: a plain name is taken as written.
     #[test]
@@ -527,7 +526,7 @@ mod tests {
     fn file_bytes_print_their_length_alone() {
         let bytes = Payload::<FileBytes>::new(b"secret".to_vec());
         assert_eq!(format!("{bytes:?}"), "FileBytes(6 bytes)");
-        assert_eq!(bytes.size(), Count::<Octets>::new(6));
+        assert_eq!(bytes.len(), Count::<Octets>::new(6));
     }
 
     /// A name holds the document's title: its `Debug` form prints the length

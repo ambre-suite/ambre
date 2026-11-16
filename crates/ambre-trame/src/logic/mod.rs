@@ -328,7 +328,7 @@ pub struct TrameState {
     served_version: ambre_core::Seq<ambre_bus::ViewportVersion>,
     /// The reader's own locale and convention, which the device holds and no
     /// document carries (`LOCALE-017`).
-    reader: ambre_core::ReaderLocale,
+    reader: ambre_client_core::ReaderLocale,
     /// What the imports since the last remote batch wrote, noted by a
     /// subscription to [`Self::doc`] (`TRAME-282`).
     imported: remote::ImportSink,
@@ -519,7 +519,7 @@ impl TrameState {
             undecodable: std::cell::Cell::new(false),
             entry_end: None,
             served_version: ambre_core::Seq::ZERO,
-            reader: ambre_core::ReaderLocale::default(),
+            reader: ambre_client_core::ReaderLocale::default(),
             imported,
             lines,
             _notes: notes,

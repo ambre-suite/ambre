@@ -283,10 +283,8 @@ impl DocState {
     /// and lives on the Sync thread, which this one cannot read (`ZK-001`).
     fn ambre_file_event(&self, document_id: Id<Document>) -> AppEvent {
         match self.ambre_file_bytes(document_id) {
-            Some((filename, data)) => self.export_complete_event(
-                filename,
-                ambre_core::Payload::<ambre_core::FileBytes>::from(data),
-            ),
+            Some((filename, data)) => self
+                .export_complete_event(filename, data.into_role::<ambre_client_core::FileBytes>()),
             // A document the engine could not read becomes no file
             // (`TOILE-IO-069`). The user is told instead.
             None => self.export_failed_event(ambre_core::StopCause::DocumentUnreadable),
@@ -305,7 +303,7 @@ impl DocState {
         &self,
         document_id: Id<Document>,
     ) -> Option<(
-        ambre_core::ExportFilename,
+        ambre_client_core::ExportFilename,
         ambre_core::Payload<ambre_core::PlaintextContainer>,
     )> {
         let (stem, plaintext) = match self {
@@ -313,7 +311,10 @@ impl DocState {
             DocState::Toile(state) => ("board", state.export_ambre_plaintext(document_id)?),
             DocState::Prose(state) => ("document", state.export_ambre_plaintext(document_id)?),
         };
-        let filename = ambre_core::ExportFilename::named(stem, ambre_core::ExportExtension::Ambre);
+        let filename = ambre_client_core::ExportFilename::named(
+            stem,
+            ambre_client_core::ExportExtension::Ambre,
+        );
         Some((filename, plaintext))
     }
 
@@ -323,8 +324,8 @@ impl DocState {
     /// The surface downloads either the same way, and never tells them apart.
     fn export_complete_event(
         &self,
-        filename: ambre_core::ExportFilename,
-        data: ambre_core::Payload<ambre_core::FileBytes>,
+        filename: ambre_client_core::ExportFilename,
+        data: ambre_core::Payload<ambre_client_core::FileBytes>,
     ) -> AppEvent {
         let file = ambre_bus::interop::ExportedFile {
             filename,
@@ -419,7 +420,7 @@ impl DocState {
 
     /// Hand the document the reader's own locale and convention. Only Trame
     /// formats and parses numbers on the reader's behalf (`LOCALE-015`).
-    fn set_reader_locale(&mut self, reader: &ambre_core::ReaderLocale) {
+    fn set_reader_locale(&mut self, reader: &ambre_client_core::ReaderLocale) {
         match self {
             DocState::Trame(state) => state.adopt_reader_locale(reader.clone()),
             DocState::Toile(_) | DocState::Prose(_) => {}
@@ -427,7 +428,7 @@ impl DocState {
     }
 
     /// The command that writes `locale` into this document's register.
-    fn locale_command(&self, locale: ambre_core::DocumentLocale) -> AppCommand {
+    fn locale_command(&self, locale: ambre_client_core::DocumentLocale) -> AppCommand {
         match self {
             DocState::Trame(_) => {
                 AppCommand::Trame(ambre_trame::TrameCommand::SetDocumentLocale { locale })
@@ -1014,10 +1015,10 @@ struct LogicState {
     faces: ambre_draw::FaceRegistry,
     /// The reader's own locale and convention (`LogicCommand::SetReaderLocale`),
     /// so a document opened later reads under the same convention.
-    reader_locale: ambre_core::ReaderLocale,
+    reader_locale: ambre_client_core::ReaderLocale,
     /// The locale each document this reader created waits to be seeded with,
     /// until it opens (`LOCALE-019`).
-    locale_seeds: HashMap<Id<Document>, ambre_core::DocumentLocale>,
+    locale_seeds: HashMap<Id<Document>, ambre_client_core::DocumentLocale>,
     /// Base fonts for PDF export (`toile-pdf-export`), seeded once by
     /// [`LogicCommand::LoadFonts`]. `None` until the Main thread's boot-time
     /// fetch lands; a fresh `FontContext` here would have zero faces and emit no
@@ -1053,7 +1054,7 @@ struct LogicState {
 /// belongs to, and the name of the file the download will carry.
 struct PendingSeal {
     document_id: Id<Document>,
-    filename: ambre_core::ExportFilename,
+    filename: ambre_client_core::ExportFilename,
 }
 
 /// The answers a document is owed at the end of a pass (`ARCH-017`).
@@ -1157,7 +1158,7 @@ impl LogicState {
             rest_routes: HashMap::new(),
             pending_seals: HashMap::new(),
             faces: ambre_draw::FaceRegistry::new(),
-            reader_locale: ambre_core::ReaderLocale::default(),
+            reader_locale: ambre_client_core::ReaderLocale::default(),
             locale_seeds: HashMap::new(),
             export_cx: None,
             converters: converting::Converters::default(),
@@ -1926,7 +1927,7 @@ mod pass_tests {
             document_id,
             command: AppCommand::Toile(ambre_toile::message::ToileCommand::import(
                 ambre_toile::message::ToileImportFormat::Svg,
-                ambre_core::Payload::<ambre_core::FileBytes>::new(drawing(n)),
+                ambre_core::Payload::<ambre_client_core::FileBytes>::new(drawing(n)),
                 kurbo::Point::ZERO,
             )),
         }
@@ -1981,7 +1982,7 @@ mod pass_tests {
     /// The bytes of an Excel workbook of `rows` numbers in column A. Host
     /// only: the codec that writes it is a dev-dependency of the host tier.
     #[cfg(not(target_arch = "wasm32"))]
-    fn workbook(rows: u32) -> ambre_core::Payload<ambre_core::FileBytes> {
+    fn workbook(rows: u32) -> ambre_core::Payload<ambre_client_core::FileBytes> {
         use ambre_xlsx::model::{Cell, Content, Sheet, StyleId, Value, Workbook};
         let mut sheet = Sheet::named(ambre_core::Validated::parse("Big".to_owned()).unwrap());
         sheet.cells = (0..rows)
@@ -2044,11 +2045,11 @@ mod pass_tests {
     }
 
     /// A Markdown file of `paragraphs` paragraphs of one sentence each.
-    fn prose_file(paragraphs: usize) -> ambre_core::Payload<ambre_core::FileBytes> {
+    fn prose_file(paragraphs: usize) -> ambre_core::Payload<ambre_client_core::FileBytes> {
         let text: String = (0..paragraphs)
             .map(|i| format!("Paragraph {i} of a long **imported** file.\n\n"))
             .collect();
-        ambre_core::Payload::<ambre_core::FileBytes>::new(text.into_bytes())
+        ambre_core::Payload::<ambre_client_core::FileBytes>::new(text.into_bytes())
     }
 
     /// A state with the markup module loaded and `n` Prose documents open,
@@ -2325,7 +2326,7 @@ mod pass_tests {
             .handle_conversion(
                 ambre_toile::message::ToileCommand::import(
                     ambre_toile::message::ToileImportFormat::Svg,
-                    ambre_core::Payload::<ambre_core::FileBytes>::new(drawing(1)),
+                    ambre_core::Payload::<ambre_client_core::FileBytes>::new(drawing(1)),
                     kurbo::Point::new(-50.0, 0.0),
                 ),
                 Ok(&images),

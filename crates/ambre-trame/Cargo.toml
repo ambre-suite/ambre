@@ -20,6 +20,7 @@ ambre-bus = { path = "../ambre-bus" }
 # `DocType` / `Uuid` and the shared `.ambre` container header (`DOCFILE-007`):
 # Trame supplies the payload, never its own header variant.
 ambre-core = { path = "../ambre-core" }
+ambre-client-core = { path = "../ambre-client-core" }
 # The command registry (`ambre-spec-commands.md`, UI-THREAD-019). Named directly
 # rather than through `ambre-chrome`, which is wasm-only: the descriptions and
 # the context-menu layouts are pure data, so they compile and test on the host

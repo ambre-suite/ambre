@@ -929,9 +929,11 @@ mod tests {
         });
         let _ = ui.window_request();
         let before = paint(&mut ui);
-        let filename =
-            ambre_core::ExportFilename::named("document", ambre_core::ExportExtension::Pdf);
-        let bytes = ambre_core::Payload::<ambre_core::FileBytes>::new(b"%PDF-1.7".to_vec());
+        let filename = ambre_client_core::ExportFilename::named(
+            "document",
+            ambre_client_core::ExportExtension::Pdf,
+        );
+        let bytes = ambre_core::Payload::<ambre_client_core::FileBytes>::new(b"%PDF-1.7".to_vec());
         ui.apply_event(&crate::events::ProseEvent::Interop(
             InteropAnswer::ExportReady {
                 file: ExportedFile {

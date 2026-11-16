@@ -315,8 +315,8 @@ fn formula_input_focused() -> bool {
 /// (the export bytes are already computed, only the download is lost).
 #[cfg(target_arch = "wasm32")]
 fn trigger_download(
-    filename: &ambre_core::ExportFilename,
-    data: &ambre_core::Payload<ambre_core::FileBytes>,
+    filename: &ambre_client_core::ExportFilename,
+    data: &ambre_core::Payload<ambre_client_core::FileBytes>,
 ) {
     use wasm_bindgen::JsCast;
     let array = js_sys::Uint8Array::from(data.as_bytes());
@@ -352,8 +352,8 @@ fn trigger_download(
 /// so the exhaustive `dispatch_trame` compiles in headless tests.
 #[cfg(not(target_arch = "wasm32"))]
 fn trigger_download(
-    filename: &ambre_core::ExportFilename,
-    data: &ambre_core::Payload<ambre_core::FileBytes>,
+    filename: &ambre_client_core::ExportFilename,
+    data: &ambre_core::Payload<ambre_client_core::FileBytes>,
 ) {
     #[cfg(test)]
     DOWNLOADS.with(|d| {

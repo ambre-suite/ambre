@@ -441,9 +441,9 @@ impl ToileState {
     /// The board's locale, [`DocumentLocale::NONE`] when the register is
     /// absent or holds no well-formed tag.
     ///
-    /// [`DocumentLocale::NONE`]: ambre_core::DocumentLocale::NONE
+    /// [`DocumentLocale::NONE`]: ambre_client_core::DocumentLocale::NONE
     #[must_use]
-    pub fn document_locale(&self) -> ambre_core::DocumentLocale {
+    pub fn document_locale(&self) -> ambre_client_core::DocumentLocale {
         let value = self
             .doc
             .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
@@ -451,9 +451,9 @@ impl ToileState {
             .and_then(|value| value.into_value().ok());
         match value {
             Some(loro::LoroValue::String(text)) => {
-                ambre_core::DocumentLocale::from_register(Some(text.as_str()))
+                ambre_client_core::DocumentLocale::from_register(Some(text.as_str()))
             }
-            _ => ambre_core::DocumentLocale::NONE,
+            _ => ambre_client_core::DocumentLocale::NONE,
         }
     }
 
@@ -461,7 +461,7 @@ impl ToileState {
     /// moves (`LOCALE-009`). The same locale writes nothing.
     pub(super) fn set_document_locale(
         &mut self,
-        locale: &ambre_core::DocumentLocale,
+        locale: &ambre_client_core::DocumentLocale,
     ) -> ToileOutcome {
         if *locale == self.document_locale() {
             return ToileOutcome::display_only(Vec::new());
@@ -785,10 +785,13 @@ mod tests {
     /// two peers setting it at once converge, and a save and an open keep it.
     #[test]
     fn the_board_locale_converges_and_survives_a_reopen() {
-        let tag = |t: &str| ambre_core::DocumentLocale::parse(t).unwrap();
+        let tag = |t: &str| ambre_client_core::DocumentLocale::parse(t).unwrap();
         let mut alice = ToileState::new();
         let mut bob = ToileState::new();
-        assert_eq!(alice.document_locale(), ambre_core::DocumentLocale::NONE);
+        assert_eq!(
+            alice.document_locale(),
+            ambre_client_core::DocumentLocale::NONE
+        );
         let from_alice =
             alice.handle_command(ToileCommand::SetDocumentLocale { locale: tag("fr") });
         let from_bob = bob.handle_command(ToileCommand::SetDocumentLocale { locale: tag("de") });

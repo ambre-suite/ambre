@@ -5,8 +5,9 @@
 //! two methods bind them to a live board: the snapshot on the way out, the cache
 //! rebuild on the way in.
 
+use ambre_client_core::docfile::DocFileError;
 use ambre_core::id::{Document, Id};
-use ambre_core::{docfile::DocFileError, schema::SchemaError};
+use ambre_core::schema::SchemaError;
 
 use crate::logic::interop::docfile::{export_ambre_plaintext, import_ambre_plaintext};
 
@@ -68,10 +69,10 @@ impl ToileState {
 
 #[cfg(test)]
 mod tests {
-    use ambre_core::DocType;
-    use ambre_core::docfile::{
+    use ambre_client_core::docfile::{
         AMBRE_VERSION, HEADER_LEN, read_ambre_plaintext_as, write_ambre_plaintext,
     };
+    use ambre_core::DocType;
 
     use kurbo::{Point, Size};
 

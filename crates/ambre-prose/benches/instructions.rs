@@ -267,7 +267,7 @@ fn import_command(data: Vec<u8>) -> ambre_prose::message::ProseCommand {
     use ambre_prose::message::{ImportFormat, ProseCommand, ProseImport, TimeZone};
     ProseCommand::Interop(ambre_bus::interop::InteropRequest::Import(ProseImport {
         format: ImportFormat::Markdown,
-        data: ambre_core::Payload::<ambre_core::FileBytes>::new(data),
+        data: ambre_core::Payload::<ambre_client_core::FileBytes>::new(data),
         now: ambre_core::Instant::<ambre_core::Authored>::new(1_800_000_000_000),
         zone: TimeZone::UTC,
     }))

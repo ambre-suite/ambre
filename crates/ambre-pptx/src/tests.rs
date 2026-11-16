@@ -1,9 +1,10 @@
 //! The writer, held by opening its file back: the package layer reads the
 //! zip, and an XML parser reads each part the deck produced.
 
+use ambre_client_core::FileBytes;
 use ambre_core::index::Pos;
 use ambre_core::{
-    FileBytes, Payload, PrintLength, Pt, Radians, Rgba, Slant, Strikethrough, Underline, Weight,
+    Payload, PrintLength, Pt, Radians, Rgba, Slant, Strikethrough, Underline, Weight,
 };
 
 use crate::model::{

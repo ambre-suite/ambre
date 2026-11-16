@@ -21,7 +21,7 @@
 //!   `LoroDoc` is. [`migrate_schema`] is generic over the document it walks,
 //!   and the applications instantiate it at their own engine type.
 //!
-//! Shaped like [`crate::docfile`] on purpose: two versions guard a stored
+//! Shaped like `ambre_client_core::docfile` on purpose: two versions guard a stored
 //! document. The container header guards the bytes around the payload, and
 //! this one guards what is inside. A reader who has learnt one carries the
 //! other for free.

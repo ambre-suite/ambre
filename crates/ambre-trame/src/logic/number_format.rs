@@ -13,9 +13,8 @@
 
 use crate::formula::text::LiteralText;
 use crate::message::DateParts;
-use ambre_core::{
-    Bounded, Bounds, Grouping, Instant, MonthDay, NumberForms, Refusal, SheetDateTime,
-};
+use ambre_client_core::{Grouping, MonthDay, NumberForms};
+use ambre_core::{Bounded, Bounds, Instant, Refusal, SheetDateTime};
 
 /// Month names, for `mmm` (the first three letters) and `mmmm`.
 const MONTHS: [&str; 12] = [
@@ -687,8 +686,12 @@ mod tests {
     /// the workbook's locale, and its month names its language.
     #[test]
     fn a_pattern_prints_the_marks_and_names_of_its_locale() {
-        let fr = ambre_core::DocumentLocale::parse("fr").unwrap().forms();
-        let de = ambre_core::DocumentLocale::parse("de").unwrap().forms();
+        let fr = ambre_client_core::DocumentLocale::parse("fr")
+            .unwrap()
+            .forms();
+        let de = ambre_client_core::DocumentLocale::parse("de")
+            .unwrap()
+            .forms();
         assert_eq!(format_custom(1234.5, "#,##0.00", &fr), "1\u{202f}234,50");
         assert_eq!(format_custom(1234.5, "#,##0.00", &de), "1.234,50");
         assert_eq!(format_custom(0.25, "#.00", &de), ",25");

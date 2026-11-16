@@ -175,7 +175,7 @@ impl ProseState {
     /// The same locale writes nothing.
     pub(super) fn set_document_locale(
         &mut self,
-        locale: &ambre_core::DocumentLocale,
+        locale: &ambre_client_core::DocumentLocale,
     ) -> ProseOutcome {
         if doc::read_locale(&self.doc).as_ref() == locale.tag() {
             return ProseOutcome::nothing();
@@ -747,7 +747,7 @@ pub(crate) mod tests {
         let header = crate::events::tree_id(header);
         let before = crate::doc::read_bands(state.document());
         let out = state.handle_command(ProseCommand::SetDocumentLocale {
-            locale: ambre_core::DocumentLocale::parse("fr").unwrap(),
+            locale: ambre_client_core::DocumentLocale::parse("fr").unwrap(),
         });
         assert!(out.update.is_some(), "a set is one delta");
         assert!(
@@ -765,7 +765,7 @@ pub(crate) mod tests {
         assert_eq!(drawn, "5 mars 2026");
         assert_eq!(crate::doc::read_bands(state.document()), before);
         let again = state.handle_command(ProseCommand::SetDocumentLocale {
-            locale: ambre_core::DocumentLocale::parse("fr").unwrap(),
+            locale: ambre_client_core::DocumentLocale::parse("fr").unwrap(),
         });
         assert!(again.update.is_none(), "the same locale writes nothing");
     }

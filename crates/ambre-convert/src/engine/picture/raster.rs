@@ -274,7 +274,7 @@ fn alloc_bound(bound: Size<Px<Image>>) -> Count<Octets> {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use ambre_core::FileBytes;
+    use ambre_client_core::FileBytes;
     use image::codecs::gif::{GifEncoder, Repeat};
 
     /// A PNG of `width` by `height`, which the `image` encoder writes at

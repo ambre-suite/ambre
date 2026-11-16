@@ -16,10 +16,10 @@
 //! The model is the whole of what the writer carries, so it reports nothing
 //! of its own.
 
+use ambre_client_core::FileBytes;
 use ambre_core::index::Pos;
 use ambre_core::{
-    Becomes, FileBytes, Payload, PrintLength, Pt, Radians, Rgba, Slant, Strikethrough, Underline,
-    Weight,
+    Becomes, Payload, PrintLength, Pt, Radians, Rgba, Slant, Strikethrough, Underline, Weight,
 };
 
 use crate::PptxError;

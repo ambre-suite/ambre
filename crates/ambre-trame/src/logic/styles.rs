@@ -6,9 +6,9 @@
 // module through the `use super::*` glob.
 
 use super::*;
+use ambre_client_core::{Grouping, NumberForms};
 use ambre_core::Flag as _;
 use ambre_core::id::{Id, Sheet};
-use ambre_core::{Grouping, NumberForms};
 use serde::{Deserialize, Serialize};
 
 /// A cell's whole visual style as one CRDT record. Bold/italic are not part of

@@ -9,7 +9,8 @@
 
 use std::io::Cursor;
 
-use ambre_core::{FileBytes, Image, Payload, Px, Size};
+use ambre_client_core::FileBytes;
+use ambre_core::{Image, Payload, Px, Size};
 use image_webp::WebPDecoder;
 
 use crate::images::Pixels;

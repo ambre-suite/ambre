@@ -672,7 +672,7 @@ pub(super) fn board_of_every_key() -> ToileState {
     }]);
     st.doc.commit();
     st.handle_command(ToileCommand::SetDocumentLocale {
-        locale: ambre_core::DocumentLocale::parse("fr").expect("a well-formed tag"),
+        locale: ambre_client_core::DocumentLocale::parse("fr").expect("a well-formed tag"),
     });
     st
 }

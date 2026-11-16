@@ -12,8 +12,9 @@
 //! children by position, so postcard never recurses on the Logic thread. A
 //! tree nested past the module's depth bound stops there and says so.
 
+use ambre_client_core::FileBytes;
 use ambre_core::index::{Axis, IdxVec, Pos};
-use ambre_core::{FileBytes, Image, Ms, Payload, Px, Rgb, RgbaPixels, Size, TimeSpan};
+use ambre_core::{Image, Ms, Payload, Px, Rgb, RgbaPixels, Size, TimeSpan};
 use serde::{Deserialize, Serialize};
 
 /// The places of a drawing: a [`Pos<SvgNode>`] names a node. Only the images

@@ -31,9 +31,11 @@ mod write;
 #[cfg(feature = "codec")]
 mod xml;
 
-use ambre_core::{Cells, Count};
 #[cfg(feature = "codec")]
-use ambre_core::{FileBytes, Payload};
+use ambre_client_core::FileBytes;
+#[cfg(feature = "codec")]
+use ambre_core::Payload;
+use ambre_core::{Cells, Count};
 
 pub use model::Workbook;
 pub use report::Report;

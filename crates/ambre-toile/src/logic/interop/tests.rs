@@ -34,7 +34,7 @@ fn import_svg(svg: impl AsRef<[u8]>, limits: &Limits) -> Result<ImportBatch, Imp
         &ambre_core::Payload::new(Vec::new()),
     )
     .expect("the host links the images engine");
-    let data = ambre_core::Payload::<ambre_core::FileBytes>::new(svg.as_ref().to_vec());
+    let data = ambre_core::Payload::<ambre_client_core::FileBytes>::new(svg.as_ref().to_vec());
     match converter.convert(&ambre_convert::Conversion::ReadSvg { data }) {
         Ok(ambre_convert::Converted::Svg(tree)) => super::import_svg(&tree, limits),
         Ok(other) => panic!("the images engine answers a drawing: {other:?}"),

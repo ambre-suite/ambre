@@ -10,7 +10,7 @@
 //!
 //! Both handlers are synchronous: the Argon2id pass is pure computation, and it
 //! holds this worker's event loop for a few hundred milliseconds.
-use ambre_core::{parse_sealed_header, sealed_aad, write_ambre_sealed};
+use ambre_client_core::{parse_sealed_header, sealed_aad, write_ambre_sealed};
 use ambre_crypto::keys::FileKey;
 
 use super::*;

@@ -30,7 +30,7 @@ fn drawing(n: usize) -> Vec<u8> {
 fn command(bytes: &[u8]) -> ToileCommand {
     ToileCommand::import(
         ambre_toile::message::ToileImportFormat::Svg,
-        ambre_core::Payload::<ambre_core::FileBytes>::new(bytes.to_vec()),
+        ambre_core::Payload::<ambre_client_core::FileBytes>::new(bytes.to_vec()),
         Point::ZERO,
     )
 }

@@ -1,7 +1,8 @@
 //! The date of a comment or a tracked change, `ST_DateTime`: an ISO 8601
 //! instant such as `2009-07-24T15:05:00Z`.
 
-use ambre_core::{Authored, Bounded, Day, Instant, Month, MonthDay, TimeSpan, Year};
+use ambre_client_core::MonthDay;
+use ambre_core::{Authored, Bounded, Day, Instant, Month, TimeSpan, Year};
 
 use crate::model::WordDate;
 

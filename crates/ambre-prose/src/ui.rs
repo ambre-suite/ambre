@@ -374,11 +374,11 @@ impl DraftBuffer {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExportFile {
     /// The name the download carries.
-    pub filename: ambre_core::ExportFilename,
+    pub filename: ambre_client_core::ExportFilename,
     /// The media type the Logic thread named for the bytes.
     pub media_type: ambre_core::MediaType,
     /// The file itself.
-    pub bytes: ambre_core::Payload<ambre_core::FileBytes>,
+    pub bytes: ambre_core::Payload<ambre_client_core::FileBytes>,
 }
 
 ambre_core::define_flag! {
@@ -1091,13 +1091,15 @@ mod tests {
     #[test]
     fn a_written_file_is_handed_to_the_host_once() {
         let mut state = ProseUiState::default();
-        let filename =
-            ambre_core::ExportFilename::named("document", ambre_core::ExportExtension::Ambre);
+        let filename = ambre_client_core::ExportFilename::named(
+            "document",
+            ambre_client_core::ExportExtension::Ambre,
+        );
         state.apply_event(&ProseEvent::Interop(InteropAnswer::ExportReady {
             file: ambre_bus::interop::ExportedFile {
                 filename: filename.clone(),
                 media_type: ambre_core::MediaType::from("application/octet-stream"),
-                data: ambre_core::Payload::<ambre_core::FileBytes>::new(vec![1, 2, 3]),
+                data: ambre_core::Payload::<ambre_client_core::FileBytes>::new(vec![1, 2, 3]),
             },
             report: crate::message::ConversionReport::new(
                 ambre_bus::interop::Direction::Export,
@@ -1109,7 +1111,7 @@ mod tests {
             Some(ExportFile {
                 filename,
                 media_type: ambre_core::MediaType::from("application/octet-stream"),
-                bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(vec![1, 2, 3]),
+                bytes: ambre_core::Payload::<ambre_client_core::FileBytes>::new(vec![1, 2, 3]),
             })
         );
         assert_eq!(state.take_export(), None);

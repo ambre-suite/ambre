@@ -233,8 +233,8 @@ pub enum TrameEvent {
     /// A view says so when the locale it shows is not the workbook's
     /// (`LOCALE-021`).
     LocaleState {
-        document: ambre_core::DocumentLocale,
-        reader: ambre_core::ReaderLocale,
+        document: ambre_client_core::DocumentLocale,
+        reader: ambre_client_core::ReaderLocale,
     },
 
     /// A command was rejected for a reason the user should see (for example deleting the

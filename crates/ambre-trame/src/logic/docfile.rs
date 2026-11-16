@@ -3,16 +3,18 @@
 //
 // Trame's half of the pair: the payload is this workbook's `LoroDoc` snapshot.
 // The header is not built here. Layout, version registry and both normative read
-// rules live once in `ambre_core::docfile` and are called from here. That is I5:
+// rules live once in `ambre_client_core::docfile` and are called from here. That is I5:
 // one container, every app, and no per-app header variant.
 //
 // Part of the `TrameState` impl, split out by concern like `sync` and `interop`.
 // Submodule of `logic`, so it reaches the private fields of the parent module
 // through the `use super::*` glob.
 
+use ambre_client_core::docfile::{
+    AmbreHeader, DocFileError, read_ambre_plaintext_as, write_ambre_plaintext,
+};
 use ambre_core::{
     DocType,
-    docfile::{AmbreHeader, DocFileError, read_ambre_plaintext_as, write_ambre_plaintext},
     id::{Document, Id},
     schema::SchemaError,
 };
@@ -120,7 +122,7 @@ impl TrameState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_core::docfile::{AMBRE_VERSION, HEADER_LEN};
+    use ambre_client_core::docfile::{AMBRE_VERSION, HEADER_LEN};
 
     fn doc_id() -> Id<Document> {
         Id::<Document>::from_bytes([

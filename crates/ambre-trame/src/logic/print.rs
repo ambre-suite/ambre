@@ -323,7 +323,7 @@ pub(super) struct PrintJob {
     /// The shaped text of the cells, kept from page to page.
     text_cache: TextCache,
     /// The name the file is handed to the browser under.
-    filename: ambre_core::ExportFilename,
+    filename: ambre_client_core::ExportFilename,
     /// The pages drawn so far, as the progress counts them.
     printed: Count<Steps>,
     /// Every page of the export.
@@ -380,10 +380,10 @@ impl TrameState {
         let paper = setup.sheet();
         let Pagination { zoom, pages } = paginate(range, &axes, PrintArea::of(setup), options);
         let total = Count::<Steps>::of(pages.len());
-        let filename = ambre_core::ExportFilename::from_title(
+        let filename = ambre_client_core::ExportFilename::from_title(
             self.sheet_title(&self.active_sheet).as_str(),
             "sheet",
-            ambre_core::ExportExtension::Pdf,
+            ambre_client_core::ExportExtension::Pdf,
         );
         self.print_job = Some(Box::new(PrintJob {
             pages: pages.into(),

@@ -7,8 +7,9 @@
 //! function writes them. A page drawn live on a [`KrillaSurface`] and the same
 //! page recorded then replayed reach krilla through the same calls.
 
+use ambre_client_core::FileBytes;
+use ambre_core::Payload;
 use ambre_core::index::{Len, Pos};
-use ambre_core::{FileBytes, Payload};
 use ambre_draw::list::{
     DrawOp, PrintDocument, PrintLink, PrintMeta, PrintTarget, PrintedPages, color_of,
 };
@@ -408,7 +409,7 @@ mod tests {
             bare.trailer.get(b"Info").is_err(),
             "an empty meta wrote an Info"
         );
-        doc.meta.language = ambre_core::DocumentLocale::parse("fr-CA").expect("a tag");
+        doc.meta.language = ambre_client_core::DocumentLocale::parse("fr-CA").expect("a tag");
         doc.meta.title = Some("Notes".to_owned());
         let named = parsed(&write_document(&doc).expect("a page writes"));
         assert_eq!(catalog_text(&named, b"Lang").as_deref(), Some("fr-CA"));

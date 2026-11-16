@@ -147,7 +147,7 @@ fn step(recording: &mut Recording, _font_cx: &mut parley::FontContext) -> Step {
 fn write(
     recording: Recording,
     converter: Option<&ambre_convert::Converter>,
-) -> Result<ambre_core::Payload<ambre_core::FileBytes>, StopCause> {
+) -> Result<ambre_core::Payload<ambre_client_core::FileBytes>, StopCause> {
     let Some(converter) = converter else {
         return Err(StopCause::ConverterUnavailable);
     };
@@ -161,6 +161,6 @@ fn write(
 fn write(
     recording: Recording,
     _converter: Option<&ambre_convert::Converter>,
-) -> Result<ambre_core::Payload<ambre_core::FileBytes>, StopCause> {
+) -> Result<ambre_core::Payload<ambre_client_core::FileBytes>, StopCause> {
     match recording {}
 }

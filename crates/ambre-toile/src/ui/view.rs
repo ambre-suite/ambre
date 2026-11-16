@@ -240,8 +240,8 @@ const LIVE_STROKE_TAIL: usize = 64;
 /// other. Best effort -- the view logs a blob the browser refuses, never fails.
 #[cfg(target_arch = "wasm32")]
 fn trigger_download(
-    filename: &ambre_core::ExportFilename,
-    data: &ambre_core::Payload<ambre_core::FileBytes>,
+    filename: &ambre_client_core::ExportFilename,
+    data: &ambre_core::Payload<ambre_client_core::FileBytes>,
 ) {
     use wasm_bindgen::JsCast;
     let array = js_sys::Uint8Array::from(data.as_bytes());
@@ -278,8 +278,8 @@ fn trigger_download(
 /// back each file the view handed over (`PDF-014`).
 #[cfg(not(target_arch = "wasm32"))]
 fn trigger_download(
-    filename: &ambre_core::ExportFilename,
-    data: &ambre_core::Payload<ambre_core::FileBytes>,
+    filename: &ambre_client_core::ExportFilename,
+    data: &ambre_core::Payload<ambre_client_core::FileBytes>,
 ) {
     #[cfg(test)]
     DOWNLOADS.with(|d| {

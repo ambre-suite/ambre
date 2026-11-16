@@ -1,0 +1,22 @@
+[package]
+name = "ambre-client-core"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+description = "The core types only the client uses: the document file, the export file, the locale"
+
+# The relay, the wire and the SFU link none of this crate (`ARCH-117`). A type
+# lands here when only the client reads it, so the relay compiles none of its
+# code and no review of the relay reads it.
+
+[dependencies]
+ambre-core = { path = "../ambre-core" }
+serde = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# The locale tag keeps its wire form: the tests read it back as JSON.
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

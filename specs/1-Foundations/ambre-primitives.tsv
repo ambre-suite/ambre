@@ -86,6 +86,89 @@ ambre-app | src/signin.rs | crate::signin | parse_return(path) | param | &str	ge
 ambre-app | src/signin.rs | crate::signin | parse_return(query) | param | &str	generic	query parser
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Emoji as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of Emoji copies into its text
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Emoji as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of Emoji wraps
+ambre-client-core | src/docfile.rs | crate::docfile | AMBRE_MAGIC | const | [u8;4]	generic	container byte-layout constant
+ambre-client-core | src/docfile.rs | crate::docfile | DOCUMENT_ID_AT | const | usize	generic	container byte-layout constant
+ambre-client-core | src/docfile.rs | crate::docfile | DOC_TYPE_AT | const | usize	generic	container byte-layout constant
+ambre-client-core | src/docfile.rs | crate::docfile | DocFileError::UnknownDocType.found | field | u8	generic	raw unknown doc_type byte, by definition not a DocType
+ambre-client-core | src/docfile.rs | crate::docfile | HEADER_LEN | const | usize	generic	container byte-layout constant
+ambre-client-core | src/docfile.rs | crate::docfile | MAGIC_LEN | const | usize	generic	container byte-layout constant
+ambre-client-core | src/docfile.rs | crate::docfile | SALT_AT | const | usize	generic	container byte-layout constant
+ambre-client-core | src/docfile.rs | crate::docfile | SEALED_AAD_LEN | const | usize	generic	container byte-layout constant
+ambre-client-core | src/docfile.rs | crate::docfile | SEALED_HEADER_LEN | const | usize	generic	container byte-layout constant
+ambre-client-core | src/docfile.rs | crate::docfile | SEAL_NONCE_AT | const | usize	generic	container byte-layout constant
+ambre-client-core | src/docfile.rs | crate::docfile | SEAL_NONCE_LEN | const | usize	generic	container byte-layout constant
+ambre-client-core | src/docfile.rs | crate::docfile | VERSION_AT | const | usize	generic	container byte-layout constant
+ambre-client-core | src/export_file.rs | crate::export_file | ExportExtension::as_str() | ret | &'static str	newtype-inner	closed-set enum word codec
+ambre-client-core | src/export_file.rs | crate::export_file | ExportFilename::as_str() | ret | &str	newtype-inner	the validated name the newtype wraps
+ambre-client-core | src/export_file.rs | crate::export_file | ExportFilename::new(text) | param | &str	newtype-inner	the text the constructor validates
+ambre-client-core | src/export_file.rs | crate::export_file | ExportFilename::named(stem) | param | &'static str	free-text	a stem the suite names itself
+ambre-client-core | src/export_file.rs | crate::export_file | ExportFilename::from_title(title) | param | &str	free-text	the user title the name is cleaned from
+ambre-client-core | src/export_file.rs | crate::export_file | ExportFilename::from_title(fallback) | param | &'static str	free-text	a stem the suite names itself
+ambre-client-core | src/export_file.rs | crate::export_file | ExportFilename::FALLBACK_STEM | const | &'static str	free-text	a stem the suite names itself
+ambre-client-core | src/export_file.rs | crate::export_file | ExportFilename::from_received(name) | param | &str	free-text	the name another user sent, which the name is cleaned from
+ambre-client-core | src/export_file.rs | crate::export_file | ExportFilename::from_received(fallback) | param | &'static str	free-text	a stem the suite names itself
+ambre-client-core | src/export_file.rs | crate::export_file | is_kept_extension(extension) | param | &str	local	the extension a received name ends with, which this private function tests against the kept list alone
+ambre-client-core | src/export_file.rs | crate::export_file | is_kept_extension() | ret | bool	generic	predicate
+ambre-client-core | src/export_file.rs | crate::export_file | is_deceptive_character(c) | param | char	free-text	a character of the title or the received name the stem is cleaned from
+ambre-client-core | src/export_file.rs | crate::export_file | is_deceptive_character() | ret | bool	generic	predicate
+ambre-client-core | src/export_file.rs | crate::export_file | clean_stem() | ret | String	free-text	the user title the name is cleaned from
+ambre-client-core | src/export_file.rs | crate::export_file | clean_stem(text) | param | &str	free-text	the user title the name is cleaned from
+ambre-client-core | src/export_file.rs | crate::export_file | ExportFilename.0 | field | Redacted<String>	newtype-inner	the newtype's own text, held redacted so Debug prints its length alone
+ambre-client-core | src/locale.rs | crate::locale | <MonthDay as Bounds>::MAX | const | u8	generic	a bound of the quantity, which Bounded compares each value against
+ambre-client-core | src/locale.rs | crate::locale | <MonthDay as Bounds>::MIN | const | u8	generic	a bound of the quantity, which Bounded compares each value against
+ambre-client-core | src/locale.rs | crate::locale | <MonthDay as Bounds>::Repr | assoc | u8	newtype-inner	the number a value of this quantity holds
+ambre-client-core | src/locale.rs | crate::locale | Affix.prefix | field | &'static str	local	the text CLDR writes before the digits of an amount, read by currency() alone
+ambre-client-core | src/locale.rs | crate::locale | Affix.suffix | field | &'static str	local	the text CLDR writes after the digits of an amount, read by currency() alone
+ambre-client-core | src/locale.rs | crate::locale | CalendarNames.days | field | [&'static str;7]	free-text	the day names of one language, as CLDR spells them for a reader
+ambre-client-core | src/locale.rs | crate::locale | CalendarNames.months | field | [&'static str;12]	free-text	the month names of one language, as CLDR spells them for a reader
+ambre-client-core | src/locale.rs | crate::locale | CalendarNames::month() | ret | &'static str	free-text	a month name a reader reads, as CLDR spells it
+ambre-client-core | src/locale.rs | crate::locale | CalendarNames::weekday() | ret | &'static str	free-text	a day name a reader reads, as CLDR spells it
+ambre-client-core | src/locale.rs | crate::locale | Digits.exponent | field | &'a str	local	the exponent of one number text as written, joined back by join()
+ambre-client-core | src/locale.rs | crate::locale | Digits.fraction | field | Option<&'a str>	local	the fraction digits of one number text, joined back by join()
+ambre-client-core | src/locale.rs | crate::locale | Digits.sign | field | &'a str	local	the sign of one number text as written, joined back by join()
+ambre-client-core | src/locale.rs | crate::locale | Digits.whole | field | String	local	the whole digits of one number text, group marks dropped, joined back by join()
+ambre-client-core | src/locale.rs | crate::locale | Digits<'_>::join() | ret | String	local	the canonical number text the parts spell, read by canonical() and in_forms()
+ambre-client-core | src/locale.rs | crate::locale | DocumentLocale::as_str() | ret | Option<&str>	newtype-inner	the tag as written, the representation the meta register stores
+ambre-client-core | src/locale.rs | crate::locale | DocumentLocale::from_register(text) | param | Option<&str>	newtype-inner	the text the meta register holds, parsed into Self at once; malformed reads as none
+ambre-client-core | src/locale.rs | crate::locale | DocumentLocale::is_none() | ret | bool	generic	predicate
+ambre-client-core | src/locale.rs | crate::locale | DocumentLocale::parse(text) | param | &str	newtype-inner	the text a picker or a register spells, parsed into Self at once
+ambre-client-core | src/locale.rs | crate::locale | LocaleData.decimal | field | char	local	CLDR's decimal mark of one locale, read through NumberForms alone
+ambre-client-core | src/locale.rs | crate::locale | LocaleData.group | field | char	local	CLDR's group mark of one locale, read through NumberForms alone
+ambre-client-core | src/locale.rs | crate::locale | LocaleData.tag | field | &'static str	local	the lowercased tag a record answers to, compared by NumberForms::of alone
+ambre-client-core | src/locale.rs | crate::locale | LongPart::Text.0 | field | &'static str	newtype-inner	the literal text of a CLDR long date pattern, written as it stands
+ambre-client-core | src/locale.rs | crate::locale | NO_BREAK_SPACES | const | [char;2]	generic	the two no-break spaces a CLDR group mark may be, which a typed space stands for
+ambre-client-core | src/locale.rs | crate::locale | NumberForms::canonical() | ret | Option<String>	free-text	the canonical number text a cell stores, or none for a text that is no number
+ambre-client-core | src/locale.rs | crate::locale | NumberForms::canonical(typed) | param | &str	free-text	what a reader typed in a cell
+ambre-client-core | src/locale.rs | crate::locale | NumberForms::currency() | ret | String	free-text	an amount as a reader reads it, with its symbol
+ambre-client-core | src/locale.rs | crate::locale | NumberForms::currency(amount) | param | &str	free-text	an amount already in the locale's marks, as a reader reads it
+ambre-client-core | src/locale.rs | crate::locale | NumberForms::currency(symbol) | param | &str	free-text	the currency symbol a format prints
+ambre-client-core | src/locale.rs | crate::locale | NumberForms::in_forms() | ret | Option<String>	local	the canonical number text, read by canonical() alone
+ambre-client-core | src/locale.rs | crate::locale | NumberForms::in_forms(typed) | param | &str	local	what a reader typed, already trimmed by canonical(), its one caller
+ambre-client-core | src/locale.rs | crate::locale | NumberForms::is_neutral() | ret | bool	generic	predicate
+ambre-client-core | src/locale.rs | crate::locale | NumberForms::localize() | ret | String	free-text	a number as a reader reads it, in the locale's marks
+ambre-client-core | src/locale.rs | crate::locale | NumberForms::localize(canonical) | param | &str	free-text	the text a cell shows before its marks; a word passes through unchanged
+ambre-client-core | src/locale.rs | crate::locale | NumberForms::long_date() | ret | String	free-text	a date in words, as a reader reads it
+ambre-client-core | src/locale.rs | crate::locale | NumberForms::numeric_date() | ret | String	free-text	a date in digits, as a reader reads it
+ambre-client-core | src/locale.rs | crate::locale | NumberForms::typed_date(typed) | param | &str	free-text	what a reader typed in a cell
+ambre-client-core | src/locale.rs | crate::locale | Parts.exponent | field | &'a str	local	the exponent of one number text as written, checked by its caller
+ambre-client-core | src/locale.rs | crate::locale | Parts.fraction | field | Option<&'a str>	local	the fraction of one number text as written, checked by its caller
+ambre-client-core | src/locale.rs | crate::locale | Parts.sign | field | &'a str	local	the sign of one number text as written
+ambre-client-core | src/locale.rs | crate::locale | Parts.whole | field | &'a str	local	the whole part of one number text as written, checked by its caller
+ambre-client-core | src/locale.rs | crate::locale | Parts<'a>::of(decimal) | param | char	local	the decimal mark the text is cut at: the point, or the locale's
+ambre-client-core | src/locale.rs | crate::locale | Parts<'a>::of(text) | param | &'a str	local	the number text cut into its parts
+ambre-client-core | src/locale.rs | crate::locale | ReaderLocale::shows_another() | ret | bool	generic	predicate
+ambre-client-core | src/locale.rs | crate::locale | SYMBOL | const | &str	generic	the CLDR currency placeholder an affix carries, replaced by the format's symbol
+ambre-client-core | src/locale.rs | crate::locale | ShortDate.mark | field | char	local	CLDR's mark between the parts of a numeric date, read by numeric_date() alone
+ambre-client-core | src/locale.rs | crate::locale | TYPOGRAPHIC_APOSTROPHE | const | char	generic	the apostrophe a reader may type where CLDR groups with the ASCII one
+ambre-client-core | src/locale.rs | crate::locale | group_digits() | ret | String	local	the digits with their group marks, read by localize() alone
+ambre-client-core | src/locale.rs | crate::locale | group_digits(digits) | param | &str	local	the whole digits of one canonical number
+ambre-client-core | src/locale.rs | crate::locale | group_digits(mark) | param | char	local	the group mark of the locale
+ambre-client-core | src/locale.rs | crate::locale | is_group_mark() | ret | bool	generic	predicate
+ambre-client-core | src/locale.rs | crate::locale | is_group_mark(c) | param | char	local	one character a reader typed
+ambre-client-core | src/locale.rs | crate::locale | region_subtag() | ret | Option<String>	local	the lowercased region of a tag, compared with a record by NumberForms::of alone
+ambre-client-core | src/locale.rs | crate::locale | split_canonical(text) | param | &str	local	a number text, cut and checked here
+ambre-client-core | src/locale.rs | crate::locale | ungroup() | ret | Option<String>	local	the whole digits with the group marks dropped, read by in_forms() alone
+ambre-client-core | src/locale.rs | crate::locale | ungroup(whole) | param | &str	local	the whole part of a typed number
 ambre-docx | src/lib.rs | crate | DocxError::MissingPart.0 | field | &'static str	free-text	the name of the missing part in words the user reads, never a name from the file
 ambre-docx | src/model.rs | crate::model | <GridSpan as Bounds>::MAX | const | u8	generic	a bound of the quantity, which Bounded compares each value against
 ambre-docx | src/model.rs | crate::model | <GridSpan as Bounds>::MIN | const | u8	generic	a bound of the quantity, which Bounded compares each value against
@@ -918,21 +1001,9 @@ ambre-core | src/doc_type.rs | crate::doc_type | DocType::from_u8(value) | param
 ambre-core | src/doc_type.rs | crate::doc_type | DocType::generic_label() | ret | &'static str	free-text	static UI label of a DocType
 ambre-core | src/doc_type.rs | crate::doc_type | DocType::icon() | ret | &'static str	free-text	static UI label of a DocType
 ambre-core | src/doc_type.rs | crate::doc_type | DocType::name() | ret | &'static str	free-text	static UI label of a DocType
-ambre-core | src/docfile.rs | crate::docfile | <Container as VersionKind>::Repr | assoc | u8	newtype-inner	the number a version of this space holds
-ambre-core | src/docfile.rs | crate::docfile | AMBRE_MAGIC | const | [u8;4]	generic	container byte-layout constant
-ambre-core | src/docfile.rs | crate::docfile | DOCUMENT_ID_AT | const | usize	generic	container byte-layout constant
-ambre-core | src/docfile.rs | crate::docfile | DOC_TYPE_AT | const | usize	generic	container byte-layout constant
-ambre-core | src/docfile.rs | crate::docfile | DocFileError::UnknownDocType.found | field | u8	generic	raw unknown doc_type byte, by definition not a DocType
-ambre-core | src/docfile.rs | crate::docfile | HEADER_LEN | const | usize	generic	container byte-layout constant
-ambre-core | src/docfile.rs | crate::docfile | MAGIC_LEN | const | usize	generic	container byte-layout constant
-ambre-core | src/docfile.rs | crate::docfile | SALT_AT | const | usize	generic	container byte-layout constant
-ambre-core | src/docfile.rs | crate::docfile | SALT_LEN | const | usize	generic	container byte-layout constant
-ambre-core | src/docfile.rs | crate::docfile | SEALED_AAD_LEN | const | usize	generic	container byte-layout constant
-ambre-core | src/docfile.rs | crate::docfile | SEALED_BIT | const | u8	generic	container byte-layout constant
-ambre-core | src/docfile.rs | crate::docfile | SEALED_HEADER_LEN | const | usize	generic	container byte-layout constant
-ambre-core | src/docfile.rs | crate::docfile | SEAL_NONCE_AT | const | usize	generic	container byte-layout constant
-ambre-core | src/docfile.rs | crate::docfile | SEAL_NONCE_LEN | const | usize	generic	container byte-layout constant
-ambre-core | src/docfile.rs | crate::docfile | VERSION_AT | const | usize	generic	container byte-layout constant
+ambre-core | src/container.rs | crate::container | <Container as VersionKind>::Repr | assoc | u8	newtype-inner	the number a version of this space holds
+ambre-core | src/container.rs | crate::container | SALT_LEN | const | usize	generic	container byte-layout constant
+ambre-core | src/container.rs | crate::container | SEALED_BIT | const | u8	generic	container byte-layout constant
 ambre-core | src/email.rs | crate::email | <Email as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of Email copies into its text
 ambre-core | src/email.rs | crate::email | <Email as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of Email wraps
 ambre-core | src/email.rs | crate::email | Email.0 | field | Redacted<String>	newtype-inner	the newtype's own text, held redacted so Debug prints its length alone
@@ -963,8 +1034,8 @@ ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytes<R>::split_from
 ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytes<R>::to_hex() | ret | String	newtype-inner	FixedBytes's own hex spelling
 ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytesError::InvalidLength.0 | field | usize	generic	the length of the refused input, which the error echoes
 ambre-core | src/authorship.rs | crate::authorship | <SessionNonce as FixedRole>::Array | assoc | [u8;SESSION_NONCE_LEN]	newtype-inner	the storage of FixedBytes<SessionNonce>, which states its width
-ambre-core | src/docfile.rs | crate::docfile | <FileDigest as FixedRole>::Array | assoc | [u8;32]	newtype-inner	the storage of FixedBytes<FileDigest>, which states its width
-ambre-core | src/docfile.rs | crate::docfile | <FileSalt as FixedRole>::Array | assoc | [u8;SALT_LEN]	newtype-inner	the storage of FixedBytes<FileSalt>, which states its width
+ambre-core | src/container.rs | crate::container | <FileDigest as FixedRole>::Array | assoc | [u8;32]	newtype-inner	the storage of FixedBytes<FileDigest>, which states its width
+ambre-core | src/container.rs | crate::container | <FileSalt as FixedRole>::Array | assoc | [u8;SALT_LEN]	newtype-inner	the storage of FixedBytes<FileSalt>, which states its width
 ambre-core | src/encoded.rs | crate::encoded | <MasterKeySalt as FixedRole>::Array | assoc | [u8;MASTER_KEY_SALT_LEN]	newtype-inner	the storage of FixedBytes<MasterKeySalt>, which states its width
 ambre-core | src/envelope.rs | crate::envelope | <ChainHash as FixedRole>::Array | assoc | [u8;32]	newtype-inner	the storage of FixedBytes<ChainHash>, which states its width
 ambre-core | src/envelope.rs | crate::envelope | <CommitmentTag as FixedRole>::Array | assoc | [u8;32]	newtype-inner	the storage of FixedBytes<CommitmentTag>, which states its width
@@ -989,7 +1060,7 @@ ambre-core | src/bounded.rs | crate::bounded | Refusal.after | field | &'static 
 ambre-core | src/bounded.rs | crate::bounded | Refusal.before | field | &'static str	free-text	words of a refusal message, for a person
 ambre-core | src/bounded.rs | crate::bounded | Refusal::new(after) | param | &'static str	free-text	words of a refusal message, for a person
 ambre-core | src/bounded.rs | crate::bounded | Refusal::new(before) | param | &'static str	free-text	words of a refusal message, for a person
-ambre-core | src/docfile.rs | crate::docfile | Version<Container>::is_sealed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-core | src/container.rs | crate::container | Version<Container>::is_sealed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-core | src/encoded.rs | crate::encoded | MASTER_KEY_SALT_LEN | const | usize	generic	length of the [u8;N] master-key salt array, read only as an array length; a crate that frames a salt uses FixedBytes::<MasterKeySalt>::SIZE
 ambre-core | src/serde_id.rs | crate::serde_id | <FixedBytes<KeyId> as TextId>::from_text() | ret | Result<Self,String>	free-text	the message of a refused key identifier, which read hands serde's de::Error::custom
 ambre-core | src/serde_id.rs | crate::serde_id | <FixedBytes<KeyId> as TextId>::from_text(text) | param | &str	newtype-inner	FixedBytes<KeyId>'s own hex spelling, read back
@@ -2903,21 +2974,6 @@ ambre-logic | src/fixtures.rs | crate::fixtures | <CommitHash as Refuses>::Raw |
 ambre-logic | src/fixtures.rs | crate::fixtures::unknown_commit | UNKNOWN | const | &str	generic	the manifest's wire word for a build with no commit id, which the serde codec writes and matches back
 ambre-prose | src/layout/place.rs | crate::layout::place | place_tail_until(stop) | param | impl Fn(Pos<Block>,&Cursor)->bool	generic	the stop predicate over a block and the cursor
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenuState.items | field | IdxVec<SlashChoice,&'static str>	free-text	the labels of the slash menu entries
-ambre-core | src/export_file.rs | crate::export_file | ExportExtension::as_str() | ret | &'static str	newtype-inner	closed-set enum word codec
-ambre-core | src/export_file.rs | crate::export_file | ExportFilename::as_str() | ret | &str	newtype-inner	the validated name the newtype wraps
-ambre-core | src/export_file.rs | crate::export_file | ExportFilename::new(text) | param | &str	newtype-inner	the text the constructor validates
-ambre-core | src/export_file.rs | crate::export_file | ExportFilename::named(stem) | param | &'static str	free-text	a stem the suite names itself
-ambre-core | src/export_file.rs | crate::export_file | ExportFilename::from_title(title) | param | &str	free-text	the user title the name is cleaned from
-ambre-core | src/export_file.rs | crate::export_file | ExportFilename::from_title(fallback) | param | &'static str	free-text	a stem the suite names itself
-ambre-core | src/export_file.rs | crate::export_file | ExportFilename::FALLBACK_STEM | const | &'static str	free-text	a stem the suite names itself
-ambre-core | src/export_file.rs | crate::export_file | ExportFilename::from_received(name) | param | &str	free-text	the name another user sent, which the name is cleaned from
-ambre-core | src/export_file.rs | crate::export_file | ExportFilename::from_received(fallback) | param | &'static str	free-text	a stem the suite names itself
-ambre-core | src/export_file.rs | crate::export_file | is_kept_extension(extension) | param | &str	local	the extension a received name ends with, which this private function tests against the kept list alone
-ambre-core | src/export_file.rs | crate::export_file | is_kept_extension() | ret | bool	generic	predicate
-ambre-core | src/export_file.rs | crate::export_file | is_deceptive_character(c) | param | char	free-text	a character of the title or the received name the stem is cleaned from
-ambre-core | src/export_file.rs | crate::export_file | is_deceptive_character() | ret | bool	generic	predicate
-ambre-core | src/export_file.rs | crate::export_file | clean_stem() | ret | String	free-text	the user title the name is cleaned from
-ambre-core | src/export_file.rs | crate::export_file | clean_stem(text) | param | &str	free-text	the user title the name is cleaned from
 ambre-logic | src/data.rs | crate::data | PDF_STEM | const | &str	free-text	a stem the suite names itself
 ambre-toile | src/logic/state/export.rs | crate::logic::state::export | BOARD_STEM | const | &str	free-text	a stem the suite names itself
 ambre-core | src/secret.rs | crate::secret | <Confidential<K> as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of a text role of Confidential wraps
@@ -3006,7 +3062,6 @@ ambre-sync | src/pipeline.rs | crate::pipeline | <SealedBlob as StoredObject>::o
 ambre-sync | src/pipeline.rs | crate::pipeline | <ambre_core::Encoded<ambre_core::SealedName> as StoredObject>::object() | ret | &[u8]	newtype-inner	the sealed name's own bytes, through the object trait
 ambre-sync | src/pipeline.rs | crate::pipeline | <Payload<ambre_core::SealedPreviousKey> as StoredObject>::object() | ret | &[u8]	newtype-inner	the sealed previous key's own bytes, through the object trait
 ambre-sync | src/pipeline.rs | crate::pipeline | <Payload<FetchedBlob> as StoredObject>::object() | ret | &[u8]	newtype-inner	the fetched blob's own bytes, through the object trait
-ambre-core | src/export_file.rs | crate::export_file | ExportFilename.0 | field | Redacted<String>	newtype-inner	the newtype's own text, held redacted so Debug prints its length alone
 ambre-core | src/payload.rs | crate::payload | Payload.bytes | field | Vec<u8>	newtype-inner	the bytes of the generic payload, a PhantomData marker apart
 ambre-core | src/payload.rs | crate::payload | Payload<K>::new(bytes) | param | Vec<u8>	newtype-inner	Payload newtype
 ambre-core | src/payload.rs | crate::payload | Payload<K>::as_bytes() | ret | &[u8]	newtype-inner	Payload newtype
@@ -3397,61 +3452,6 @@ ambre-sfu | src/forward.rs | crate::forward | <Room as Rule>::admit() | ret | Re
 ambre-sfu | src/forward.rs | crate::forward | <Room as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-sfu | src/main.rs | crate | Setting::read() | ret | Result<SocketAddr,String>	free-text	the words of the error the binary prints when a variable holds no socket address
 ambre-sfu | src/main.rs | crate | Setting::variable() | ret | &'static str	newtype-inner	the fieldless enum's own spelling, the name of the environment variable std::env::var takes
-ambre-core | src/locale.rs | crate::locale | <MonthDay as Bounds>::MAX | const | u8	generic	a bound of the quantity, which Bounded compares each value against
-ambre-core | src/locale.rs | crate::locale | <MonthDay as Bounds>::MIN | const | u8	generic	a bound of the quantity, which Bounded compares each value against
-ambre-core | src/locale.rs | crate::locale | <MonthDay as Bounds>::Repr | assoc | u8	newtype-inner	the number a value of this quantity holds
-ambre-core | src/locale.rs | crate::locale | Affix.prefix | field | &'static str	local	the text CLDR writes before the digits of an amount, read by currency() alone
-ambre-core | src/locale.rs | crate::locale | Affix.suffix | field | &'static str	local	the text CLDR writes after the digits of an amount, read by currency() alone
-ambre-core | src/locale.rs | crate::locale | CalendarNames.days | field | [&'static str;7]	free-text	the day names of one language, as CLDR spells them for a reader
-ambre-core | src/locale.rs | crate::locale | CalendarNames.months | field | [&'static str;12]	free-text	the month names of one language, as CLDR spells them for a reader
-ambre-core | src/locale.rs | crate::locale | CalendarNames::month() | ret | &'static str	free-text	a month name a reader reads, as CLDR spells it
-ambre-core | src/locale.rs | crate::locale | CalendarNames::weekday() | ret | &'static str	free-text	a day name a reader reads, as CLDR spells it
-ambre-core | src/locale.rs | crate::locale | Digits.exponent | field | &'a str	local	the exponent of one number text as written, joined back by join()
-ambre-core | src/locale.rs | crate::locale | Digits.fraction | field | Option<&'a str>	local	the fraction digits of one number text, joined back by join()
-ambre-core | src/locale.rs | crate::locale | Digits.sign | field | &'a str	local	the sign of one number text as written, joined back by join()
-ambre-core | src/locale.rs | crate::locale | Digits.whole | field | String	local	the whole digits of one number text, group marks dropped, joined back by join()
-ambre-core | src/locale.rs | crate::locale | Digits<'_>::join() | ret | String	local	the canonical number text the parts spell, read by canonical() and in_forms()
-ambre-core | src/locale.rs | crate::locale | DocumentLocale::as_str() | ret | Option<&str>	newtype-inner	the tag as written, the representation the meta register stores
-ambre-core | src/locale.rs | crate::locale | DocumentLocale::from_register(text) | param | Option<&str>	newtype-inner	the text the meta register holds, parsed into Self at once; malformed reads as none
-ambre-core | src/locale.rs | crate::locale | DocumentLocale::is_none() | ret | bool	generic	predicate
-ambre-core | src/locale.rs | crate::locale | DocumentLocale::parse(text) | param | &str	newtype-inner	the text a picker or a register spells, parsed into Self at once
-ambre-core | src/locale.rs | crate::locale | LocaleData.decimal | field | char	local	CLDR's decimal mark of one locale, read through NumberForms alone
-ambre-core | src/locale.rs | crate::locale | LocaleData.group | field | char	local	CLDR's group mark of one locale, read through NumberForms alone
-ambre-core | src/locale.rs | crate::locale | LocaleData.tag | field | &'static str	local	the lowercased tag a record answers to, compared by NumberForms::of alone
-ambre-core | src/locale.rs | crate::locale | LongPart::Text.0 | field | &'static str	newtype-inner	the literal text of a CLDR long date pattern, written as it stands
-ambre-core | src/locale.rs | crate::locale | NO_BREAK_SPACES | const | [char;2]	generic	the two no-break spaces a CLDR group mark may be, which a typed space stands for
-ambre-core | src/locale.rs | crate::locale | NumberForms::canonical() | ret | Option<String>	free-text	the canonical number text a cell stores, or none for a text that is no number
-ambre-core | src/locale.rs | crate::locale | NumberForms::canonical(typed) | param | &str	free-text	what a reader typed in a cell
-ambre-core | src/locale.rs | crate::locale | NumberForms::currency() | ret | String	free-text	an amount as a reader reads it, with its symbol
-ambre-core | src/locale.rs | crate::locale | NumberForms::currency(amount) | param | &str	free-text	an amount already in the locale's marks, as a reader reads it
-ambre-core | src/locale.rs | crate::locale | NumberForms::currency(symbol) | param | &str	free-text	the currency symbol a format prints
-ambre-core | src/locale.rs | crate::locale | NumberForms::in_forms() | ret | Option<String>	local	the canonical number text, read by canonical() alone
-ambre-core | src/locale.rs | crate::locale | NumberForms::in_forms(typed) | param | &str	local	what a reader typed, already trimmed by canonical(), its one caller
-ambre-core | src/locale.rs | crate::locale | NumberForms::is_neutral() | ret | bool	generic	predicate
-ambre-core | src/locale.rs | crate::locale | NumberForms::localize() | ret | String	free-text	a number as a reader reads it, in the locale's marks
-ambre-core | src/locale.rs | crate::locale | NumberForms::localize(canonical) | param | &str	free-text	the text a cell shows before its marks; a word passes through unchanged
-ambre-core | src/locale.rs | crate::locale | NumberForms::long_date() | ret | String	free-text	a date in words, as a reader reads it
-ambre-core | src/locale.rs | crate::locale | NumberForms::numeric_date() | ret | String	free-text	a date in digits, as a reader reads it
-ambre-core | src/locale.rs | crate::locale | NumberForms::typed_date(typed) | param | &str	free-text	what a reader typed in a cell
-ambre-core | src/locale.rs | crate::locale | Parts.exponent | field | &'a str	local	the exponent of one number text as written, checked by its caller
-ambre-core | src/locale.rs | crate::locale | Parts.fraction | field | Option<&'a str>	local	the fraction of one number text as written, checked by its caller
-ambre-core | src/locale.rs | crate::locale | Parts.sign | field | &'a str	local	the sign of one number text as written
-ambre-core | src/locale.rs | crate::locale | Parts.whole | field | &'a str	local	the whole part of one number text as written, checked by its caller
-ambre-core | src/locale.rs | crate::locale | Parts<'a>::of(decimal) | param | char	local	the decimal mark the text is cut at: the point, or the locale's
-ambre-core | src/locale.rs | crate::locale | Parts<'a>::of(text) | param | &'a str	local	the number text cut into its parts
-ambre-core | src/locale.rs | crate::locale | ReaderLocale::shows_another() | ret | bool	generic	predicate
-ambre-core | src/locale.rs | crate::locale | SYMBOL | const | &str	generic	the CLDR currency placeholder an affix carries, replaced by the format's symbol
-ambre-core | src/locale.rs | crate::locale | ShortDate.mark | field | char	local	CLDR's mark between the parts of a numeric date, read by numeric_date() alone
-ambre-core | src/locale.rs | crate::locale | TYPOGRAPHIC_APOSTROPHE | const | char	generic	the apostrophe a reader may type where CLDR groups with the ASCII one
-ambre-core | src/locale.rs | crate::locale | group_digits() | ret | String	local	the digits with their group marks, read by localize() alone
-ambre-core | src/locale.rs | crate::locale | group_digits(digits) | param | &str	local	the whole digits of one canonical number
-ambre-core | src/locale.rs | crate::locale | group_digits(mark) | param | char	local	the group mark of the locale
-ambre-core | src/locale.rs | crate::locale | is_group_mark() | ret | bool	generic	predicate
-ambre-core | src/locale.rs | crate::locale | is_group_mark(c) | param | char	local	one character a reader typed
-ambre-core | src/locale.rs | crate::locale | region_subtag() | ret | Option<String>	local	the lowercased region of a tag, compared with a record by NumberForms::of alone
-ambre-core | src/locale.rs | crate::locale | split_canonical(text) | param | &str	local	a number text, cut and checked here
-ambre-core | src/locale.rs | crate::locale | ungroup() | ret | Option<String>	local	the whole digits with the group marks dropped, read by in_forms() alone
-ambre-core | src/locale.rs | crate::locale | ungroup(whole) | param | &str	local	the whole part of a typed number
 ambre-trame | src/logic/locale.rs | crate::logic::locale | canonical_formula() | ret | String	local	the formula text in the canonical separators, which typed_source() stores
 ambre-trame | src/logic/locale.rs | crate::logic::locale | canonical_formula(typed) | param | &str	local	a formula text a reader typed in their own separators
 ambre-trame | src/logic/locale.rs | crate::logic::locale | localized_formula() | ret | String	local	the formula text in the reader's separators, which edit_bar_text() shows
@@ -3544,6 +3544,7 @@ ambre-primitives | src/allowlist.rs | crate::allowlist | claim() | ret | Result<
 ambre-primitives | src/boundaries.rs | crate::boundaries | ANCHORS | const | &[(&str,&str)]	generic	each file a boundary of the driver closes, matched against the files the compiles read, and the rows it holds, printed in a refusal
 ambre-primitives | src/boundaries.rs | crate::boundaries | APP_CRATES | const | &[&str]	generic	the package names a shared control's style type could come from, matched against the graph cargo metadata resolves
 ambre-primitives | src/boundaries.rs | crate::boundaries | CLIENT | const | &str	generic	the package name of the launcher, matched against the graph cargo metadata resolves
+ambre-primitives | src/boundaries.rs | crate::boundaries | CLIENT_CORE | const | &str	generic	the package name of the client-only core crate, matched against the graph cargo metadata resolves; the gate links no ambre-core, so no family holds it
 ambre-primitives | src/boundaries.rs | crate::boundaries | C_CRYPTO | const | &[&str]	generic	the package names of the C cryptography libraries, matched against the graph cargo metadata resolves
 ambre-primitives | src/boundaries.rs | crate::boundaries | Declared.features | field | Vec<String>	generic	the feature names a dependency entry turns on, as cargo metadata writes them
 ambre-primitives | src/boundaries.rs | crate::boundaries | Declared.kind | field | Option<String>	generic	the dependency kind as cargo metadata writes it: none, dev or build, compared once
@@ -3568,6 +3569,7 @@ ambre-primitives | src/boundaries.rs | crate::boundaries | Graph::reached(closur
 ambre-primitives | src/boundaries.rs | crate::boundaries | Graph::reached(names) | param | &[&str]	generic	the package names a walk must not reach
 ambre-primitives | src/boundaries.rs | crate::boundaries | LAUNCHER_LIB | const | &str	generic	the path of the launcher's relay file, matched against the position a fact record carries
 ambre-primitives | src/boundaries.rs | crate::boundaries | NETWORK_CRATES | const | &[&str]	generic	the package names a network call may leave from, matched against the graph cargo metadata resolves
+ambre-primitives | src/boundaries.rs | crate::boundaries | RELAY_SIDE | const | &[&str]	generic	the package names of the relay, the wire and the SFU, matched against the graph cargo metadata resolves; the gate links no ambre-core, so no family holds it
 ambre-primitives | src/boundaries.rs | crate::boundaries | Package.crate_types | field | Vec<String>	generic	the crate types of each target, as cargo metadata writes them
 ambre-primitives | src/boundaries.rs | crate::boundaries | Package.features | field | BTreeMap<String,Vec<String>>	generic	the feature table of a package, as cargo metadata writes it
 ambre-primitives | src/boundaries.rs | crate::boundaries | Package.manifest | field | String	generic	the path of the manifest, printed in a refusal and read back as TOML

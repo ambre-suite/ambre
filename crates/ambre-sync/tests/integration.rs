@@ -567,7 +567,7 @@ fn full_session_flow_unlock_create_open_close_logout() {
 fn a_sealed_file_round_trips_through_the_service_plane() {
     let (mut state, rx, _mock) = setup(false);
     let doc_id = Id::<Document>::mint();
-    let plaintext = ambre_core::write_ambre_plaintext(
+    let plaintext = ambre_client_core::write_ambre_plaintext(
         DocType::Prose,
         doc_id,
         &ambre_core::Payload::new(b"body".to_vec()),
@@ -592,15 +592,15 @@ fn a_sealed_file_round_trips_through_the_service_plane() {
     // The sealed bytes are a container of the other lineage, and they do not
     // carry the plaintext header the plaintext reader would otherwise find.
     assert!(matches!(
-        ambre_core::classify(&ambre_core::Payload::<ambre_core::PickedContainer>::new(
+        ambre_client_core::classify(&ambre_core::Payload::<ambre_core::PickedContainer>::new(
             sealed.clone()
         )),
-        Ok(ambre_core::ContainerKind::Sealed(version))
-            if version == ambre_core::AMBRE_SEALED_VERSION
+        Ok(ambre_client_core::ContainerKind::Sealed(version))
+            if version == ambre_client_core::AMBRE_SEALED_VERSION
     ));
     // Read as a plaintext container, the same bytes are refused.
     let misread = ambre_core::Payload::<ambre_core::PlaintextContainer>::new(sealed.clone());
-    assert!(ambre_core::read_ambre_plaintext(&misread).is_err());
+    assert!(ambre_client_core::read_ambre_plaintext(&misread).is_err());
 
     let open_id = next_request();
     send_rest(
@@ -620,7 +620,8 @@ fn a_sealed_file_round_trips_through_the_service_plane() {
             let opened = opened.into_plaintext();
             assert_eq!(opened, plaintext.as_bytes());
             let opened = ambre_core::Payload::<ambre_core::PlaintextContainer>::new(opened);
-            let header = ambre_core::read_ambre_plaintext(&opened).expect("plaintext header");
+            let header =
+                ambre_client_core::read_ambre_plaintext(&opened).expect("plaintext header");
             assert_eq!(header.doc_type, DocType::Prose);
             assert_eq!(header.document_id, doc_id);
         }
@@ -631,7 +632,7 @@ fn a_sealed_file_round_trips_through_the_service_plane() {
 #[test]
 fn a_wrong_passphrase_and_a_tampered_file_fail_the_same_way() {
     let (mut state, rx, _mock) = setup(false);
-    let plaintext = ambre_core::write_ambre_plaintext(
+    let plaintext = ambre_client_core::write_ambre_plaintext(
         DocType::Prose,
         Id::<Document>::mint(),
         &ambre_core::Payload::new(b"body".to_vec()),
@@ -696,7 +697,7 @@ fn a_wrong_passphrase_and_a_tampered_file_fail_the_same_way() {
 #[test]
 fn opening_a_plaintext_file_fails_without_deriving_a_key() {
     let (mut state, rx, _mock) = setup(false);
-    let plaintext = ambre_core::write_ambre_plaintext(
+    let plaintext = ambre_client_core::write_ambre_plaintext(
         DocType::Prose,
         Id::<Document>::mint(),
         &ambre_core::Payload::new(b"body".to_vec()),

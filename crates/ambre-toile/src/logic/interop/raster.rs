@@ -35,7 +35,7 @@ const THUMB_MAX_EDGE: Px<Image> = ambre_convert::images::THUMB_EDGE;
 /// [`ImportError::Decode`] when the decoder refuses `bytes`, and
 /// [`ImportError::ImageTooLarge`] when the decoded image exceeds `limits`.
 pub fn import_raster(
-    bytes: &ambre_core::Payload<ambre_core::FileBytes>,
+    bytes: &ambre_core::Payload<ambre_client_core::FileBytes>,
     limits: &Limits,
 ) -> Result<ImportBatch, ImportError> {
     let media = MediaRef::Pending(Pos::<ImportSlot>::ZERO);
@@ -73,7 +73,7 @@ pub fn raster_batch(blob: MediaBlob) -> ImportBatch {
 /// [`ImportError::ImageTooLarge`] when the header exceeds `limits`, and
 /// [`ImportError::Decode`] when the thumbnail samples do not encode.
 pub fn jpeg_blob(
-    bytes: ambre_core::Payload<ambre_core::FileBytes>,
+    bytes: ambre_core::Payload<ambre_client_core::FileBytes>,
     size: ambre_core::Size<Px<Image>>,
     thumb: &ambre_convert::images::Pixels,
     limits: &Limits,
@@ -93,7 +93,7 @@ pub fn jpeg_blob(
 /// Decode raster bytes into a [`MediaBlob`] named `media`, enforcing the image
 /// dimension bound. Shared by [`import_raster`] and the SVG `<image>` path.
 pub(super) fn decode_media(
-    file: &ambre_core::Payload<ambre_core::FileBytes>,
+    file: &ambre_core::Payload<ambre_client_core::FileBytes>,
     limits: &Limits,
     media: MediaRef,
 ) -> Result<MediaBlob, ImportError> {
@@ -174,7 +174,7 @@ pub(super) fn decode_media(
 /// gave, or when the encoder refuses them.
 pub fn png_of(
     pixels: &ambre_convert::images::Pixels,
-) -> Result<ambre_core::Payload<ambre_core::FileBytes>, ImportError> {
+) -> Result<ambre_core::Payload<ambre_client_core::FileBytes>, ImportError> {
     let picture = image::RgbaImage::from_raw(
         pixels.size.width.get(),
         pixels.size.height.get(),

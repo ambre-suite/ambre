@@ -7,6 +7,7 @@ description = "KrillaSurface: DrawSurface implementation for PDF export (the con
 
 [dependencies]
 ambre-core = { path = "../ambre-core" }
+ambre-client-core = { path = "../ambre-client-core" }
 ambre-draw = { path = "../ambre-draw" }
 thiserror = { workspace = true }
 kurbo = { workspace = true }

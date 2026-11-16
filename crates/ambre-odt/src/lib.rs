@@ -22,7 +22,9 @@ pub mod write;
 pub mod xml;
 
 #[cfg(feature = "codec")]
-use ambre_core::{FileBytes, Payload};
+use ambre_client_core::FileBytes;
+#[cfg(feature = "codec")]
+use ambre_core::Payload;
 #[cfg(feature = "codec")]
 pub use ambre_docx::model::WordDocument;
 #[cfg(feature = "codec")]

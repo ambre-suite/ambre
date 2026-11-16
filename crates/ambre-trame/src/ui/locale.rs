@@ -3,7 +3,7 @@
 // (`ambre-spec-locale.md`). Pure functions, so the host tests read them; the
 // chrome only mounts their text.
 
-use ambre_core::{DateAmbiguity, DocumentLocale, ReaderLocale};
+use ambre_client_core::{DateAmbiguity, DocumentLocale, ReaderLocale};
 
 /// The workbook's locale and the reader's half, as the last
 /// [`TrameEvent::LocaleState`](crate::TrameEvent::LocaleState) named them.
@@ -54,7 +54,7 @@ pub fn date_preview(typed: &str, view: &LocaleView) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_core::NumberConvention;
+    use ambre_client_core::NumberConvention;
 
     fn view(document: &str, own: &str, convention: NumberConvention) -> LocaleView {
         LocaleView {

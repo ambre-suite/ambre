@@ -23,9 +23,10 @@ use std::collections::HashMap;
 use ambre_bus::interop::{
     Direction, ExportedFile, FileFormat, InteropAnswer, InteropError, Outcome, Steps,
 };
+use ambre_client_core::DocumentLocale;
 use ambre_convert::{Conversion, Converted, Converter};
 use ambre_core::index::{Len, Pos, Span};
-use ambre_core::{Count, Doc, DocumentLocale, PrintUnit, Pt, Px};
+use ambre_core::{Count, Doc, PrintUnit, Pt, Px};
 use ambre_draw::list::{
     ListRecorder, PrintDocument, PrintLink, PrintMeta, PrintPage, PrintTarget, PrintedPages,
     RecorderTables,
@@ -204,7 +205,7 @@ impl ProseState {
         });
         document.meta = PrintMeta {
             title: (!title.is_empty()).then_some(title),
-            language: ambre_core::locale::resolve(Some(&options.language), &document_locale),
+            language: ambre_client_core::locale::resolve(Some(&options.language), &document_locale),
         };
         Ok(PrintJob {
             view: Box::new(ProseUiState::printing(&self.suggestions_event())),
@@ -365,10 +366,10 @@ impl ProseState {
         report: ConversionReport,
         converter: &Converter,
     ) -> ProseOutcome {
-        let filename = ambre_core::ExportFilename::from_title(
+        let filename = ambre_client_core::ExportFilename::from_title(
             document.meta.title.as_deref().unwrap_or_default(),
             "document",
-            ambre_core::ExportExtension::Pdf,
+            ambre_client_core::ExportExtension::Pdf,
         );
         let answer = match converter.convert(&Conversion::WritePdf { document }) {
             Ok(Converted::File(data)) => InteropAnswer::ExportReady {
@@ -476,7 +477,8 @@ mod tests {
     use crate::message::{ExportFormat, TocNumbering};
     use crate::view::tests::append;
     use ambre_bus::interop::InteropRequest;
-    use ambre_core::{FileBytes, Payload};
+    use ambre_client_core::FileBytes;
+    use ambre_core::Payload;
 
     /// A document on the faces the application ships.
     fn state() -> ProseState {

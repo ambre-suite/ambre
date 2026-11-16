@@ -18,10 +18,10 @@
     reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
 )]
 
+use ambre_client_core::docfile::{DocFileError, read_ambre_plaintext};
 use ambre_core::index::Pos;
 use ambre_core::{
     DocType,
-    docfile::{DocFileError, read_ambre_plaintext},
     id::{Document, Id},
 };
 use ambre_toile::ToileState;

@@ -118,9 +118,9 @@ impl ToileState {
             Ok(data) => {
                 ToileOutcome::display_only(vec![ToileEvent::Interop(InteropAnswer::ExportReady {
                     file: ExportedFile {
-                        filename: ambre_core::ExportFilename::named(
+                        filename: ambre_client_core::ExportFilename::named(
                             PPTX_STEM,
-                            ambre_core::ExportExtension::Pptx,
+                            ambre_client_core::ExportExtension::Pptx,
                         ),
                         media_type: ambre_core::MediaType::from(PPTX_MEDIA_TYPE),
                         data,
@@ -207,9 +207,10 @@ fn meets(a: Rect, b: Rect) -> bool {
 #[cfg(test)]
 mod tests {
     use ambre_bus::interop::Outcome;
+    use ambre_client_core::FileBytes;
     use ambre_core::id::{Element, Frame, Id};
     use ambre_core::index::{Len, Pos};
-    use ambre_core::{Char, FileBytes, Payload, Px, StoredBoard};
+    use ambre_core::{Char, Payload, Px, StoredBoard};
     use ambre_pptx::model::Item;
     use ambre_pptx::opc::{Package, PartName};
     use kurbo::{Point, Size};

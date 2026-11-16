@@ -235,7 +235,7 @@ impl ProseState {
         &mut self,
         parent_id: Option<TreeID>,
         after_id: Option<TreeID>,
-        data: &Payload<ambre_core::FileBytes>,
+        data: &Payload<ambre_client_core::FileBytes>,
         alt: Validated<AltText>,
     ) -> ProseOutcome {
         let tree = doc::blocks(&self.doc);

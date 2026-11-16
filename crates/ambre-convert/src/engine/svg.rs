@@ -11,8 +11,9 @@
 //! usvg child consumes the next source child that is not a `<text>`, and every
 //! `<text>` passed on the way lands at that point.
 
+use ambre_client_core::FileBytes;
 use ambre_core::index::{IdxVec, Pos};
-use ambre_core::{FileBytes, Payload, Rgb, Size};
+use ambre_core::{Payload, Rgb, Size};
 use usvg::tiny_skia_path::PathSegment;
 
 use crate::images::{

@@ -128,9 +128,9 @@ impl LogicState {
     /// Nothing remains to download into, and the bytes go out of scope sealed.
     pub(crate) fn resolve_pending_seal(&mut self, id: Seq<Request>, evt: &RestEvent) -> bool {
         let answer = match evt {
-            RestEvent::DocFileSealed { data } => Ok(
-                ambre_core::Payload::<ambre_core::FileBytes>::from(data.clone()),
-            ),
+            RestEvent::DocFileSealed { data } => {
+                Ok(data.clone().into_role::<ambre_client_core::FileBytes>())
+            }
             RestEvent::DocFileSealFailed => Err(ambre_core::StopCause::SealFailed),
             _ => return false,
         };
@@ -792,7 +792,7 @@ impl LogicState {
     /// Hold the reader's own locale and convention, and hand them to every
     /// open document, which repaints under them (`LOCALE-015`). Nothing is
     /// sent to Sync (`LOCALE-017`).
-    pub(crate) fn set_reader_locale(&mut self, reader: ambre_core::ReaderLocale) {
+    pub(crate) fn set_reader_locale(&mut self, reader: ambre_client_core::ReaderLocale) {
         self.reader_locale = reader;
         let open: Vec<Id<Document>> = self
             .docs
@@ -1418,14 +1418,14 @@ const PDF_STEM: &str = "deck";
 
 /// The answer a deck export ends on: the file, or the reason there is none.
 pub(crate) fn deck_file_answer(
-    file: Result<ambre_core::Payload<ambre_core::FileBytes>, ambre_core::StopCause>,
+    file: Result<ambre_core::Payload<ambre_client_core::FileBytes>, ambre_core::StopCause>,
 ) -> ToileEvent {
     match file {
         Ok(data) => ToileEvent::Interop(InteropAnswer::ExportReady {
             file: ExportedFile {
-                filename: ambre_core::ExportFilename::named(
+                filename: ambre_client_core::ExportFilename::named(
                     PDF_STEM,
-                    ambre_core::ExportExtension::Pdf,
+                    ambre_client_core::ExportExtension::Pdf,
                 ),
                 media_type: ambre_core::MediaType::from("application/pdf"),
                 data,

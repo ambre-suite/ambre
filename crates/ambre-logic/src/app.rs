@@ -249,7 +249,7 @@ mod tests {
     /// the role gate as a write, and an export as a read.
     #[test]
     fn an_import_writes_and_an_export_reads_in_every_application() {
-        let file = || ambre_core::Payload::<ambre_core::FileBytes>::new(b"a,b\n".to_vec());
+        let file = || ambre_core::Payload::<ambre_client_core::FileBytes>::new(b"a,b\n".to_vec());
         let imports = [
             AppCommand::Trame(TrameCommand::import_csv(ambre_trame::message::CsvImport {
                 data: file(),

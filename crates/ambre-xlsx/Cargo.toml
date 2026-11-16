@@ -10,10 +10,11 @@ description = "The spreadsheet codecs: an Excel workbook or an OpenDocument spre
 # crate is the model and the report alone, so the Main instance, which maps
 # the model onto a workbook, links no ZIP and no XML code.
 default = ["codec"]
-codec = ["dep:ambre-opc", "dep:quick-xml", "dep:postcard"]
+codec = ["dep:ambre-client-core", "dep:ambre-opc", "dep:quick-xml", "dep:postcard"]
 
 [dependencies]
 ambre-core = { path = "../ambre-core" }
+ambre-client-core = { path = "../ambre-client-core", optional = true }
 # The model and the report cross into and out of the converter module as
 # postcard bytes.
 serde      = { workspace = true }

@@ -218,15 +218,6 @@ impl PayloadKind for MediaBytes {
     const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("MediaBytes");
 }
 
-/// A file a reader chose is the plaintext the media flow stores, when it is
-/// a picture (`4-Prose/features/ambre-spec-prose-images.md section 3`).
-impl Becomes<MediaBytes> for crate::FileBytes {}
-
-/// A stored picture is the file the images module decodes, when Main cannot
-/// decode it (`1-Foundations/ambre-spec-architecture.md section 2`, the
-/// converter thread).
-impl Becomes<crate::FileBytes> for MediaBytes {}
-
 impl Payload<MediaBytes> {
     /// Wipes the bytes now: a media file its reader refuses and drops
     /// (`ARCH-046`).
@@ -264,7 +255,7 @@ impl PayloadKind for PlaintextContainer {
     const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("PlaintextContainer");
 }
 
-/// The role of a whole file the picker read, before [`crate::classify`] names
+/// The role of a whole file the picker read, before `ambre_client_core::classify` names
 /// its lineage. Its version byte says whether it goes on as a
 /// [`PlaintextContainer`] or as a [`SealedContainer`].
 /// `Payload<PickedContainer>`.
@@ -274,28 +265,14 @@ impl PayloadKind for PickedContainer {
     const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("PickedContainer");
 }
 
-/// A picked file under the role its version byte names.
+/// A picked file under the role its version byte names, as
+/// `ambre_client_core::into_lineage` reads it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PickedFile {
-    /// A plaintext container, or bytes [`crate::classify`] refuses.
+    /// A plaintext container, or bytes `ambre_client_core::classify` refuses.
     Plaintext(Payload<PlaintextContainer>),
     /// A passphrase-sealed container.
     Sealed(Payload<SealedContainer>),
-}
-
-impl Payload<PickedContainer> {
-    /// The file under the role [`crate::classify`] names (`DOCFILE-010`).
-    /// Bytes it refuses go on as plaintext, and the plaintext reader names
-    /// the refusal. Each reader validates the bytes again.
-    #[must_use]
-    pub fn into_lineage(self) -> PickedFile {
-        match crate::classify(&self) {
-            Ok(crate::ContainerKind::Sealed(_)) => PickedFile::Sealed(Payload::new(self.bytes)),
-            Ok(crate::ContainerKind::Plaintext(_)) | Err(_) => {
-                PickedFile::Plaintext(Payload::new(self.bytes))
-            }
-        }
-    }
 }
 
 /// The role of a whole passphrase-sealed `.ambre` container, header included,
@@ -417,10 +394,6 @@ pub enum ThumbnailPng {}
 impl PayloadKind for ThumbnailPng {
     const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ThumbnailPng");
 }
-
-/// A PNG file the Main instance writes from decoded samples is the thumbnail
-/// a board stores, when the samples are those of a thumbnail.
-impl Becomes<ThumbnailPng> for crate::FileBytes {}
 
 /// The role of the four bytes that open an encoding of Ambre's own:
 /// `FixedBytes<FormatMagic>`. Bytes another encoding wrote under the same

@@ -17,6 +17,7 @@ fuzz = []
 
 [dependencies]
 ambre-core = { path = "../ambre-core" }
+ambre-client-core = { path = "../ambre-client-core" }
 ambre-bus = { path = "../ambre-bus" }
 # The request types and the loader of the converter modules: the markup
 # module parses Markdown and HTML, and Prose maps the trees it answers

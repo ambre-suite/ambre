@@ -326,7 +326,7 @@ pub struct FixtureManifest {
 
     pub doc_type: DocType,
 
-    /// Container version (`docfile`) at write time -- current for a
+    /// Container version (`ambre_client_core::docfile`) at write time -- current for a
     /// generated artifact, superseded for a frozen one.
     pub ambre_version: crate::Version<crate::Container>,
 
@@ -391,7 +391,7 @@ mod tests {
             generator_version: Version::<Generator>::new(3),
             seed: FixtureSeed::new(0x0123_4567_89AB_CDEF),
             doc_type: DocType::Trame,
-            ambre_version: crate::AMBRE_VERSION,
+            ambre_version: <crate::Container as crate::version::Current>::CURRENT,
             schema_version: crate::SCHEMA_VERSION_ABSENT,
             digest: crate::FixedBytes::from_array([0xAB; 32]),
             shape: FixtureShape {

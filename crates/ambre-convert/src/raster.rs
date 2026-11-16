@@ -8,7 +8,8 @@
 //! scales and, for a PNG, turns. So the Logic thread never decodes a PNG or a
 //! GIF picture of Prose or a Murmure preview (`ARCH-097`).
 
-use ambre_core::{Count, FileBytes, Image, Octets, Payload, PayloadKind, Px, Size};
+use ambre_client_core::FileBytes;
+use ambre_core::{Count, Image, Octets, Payload, PayloadKind, Px, Size};
 use serde::{Deserialize, Serialize};
 
 use crate::jpeg::JpegTurn;

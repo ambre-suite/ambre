@@ -687,7 +687,9 @@ pub enum TrameCommand {
     /// stored value moves with it (`LOCALE-009`), and every peer's view
     /// reformats (`LOCALE-008`). An edit, so a viewer's is dropped
     /// (`LOCALE-007`).
-    SetDocumentLocale { locale: ambre_core::DocumentLocale },
+    SetDocumentLocale {
+        locale: ambre_client_core::DocumentLocale,
+    },
 
     /// Change the page setup of a sheet, the active one when `sheet_id` is
     /// `None` (`TRAME-IO-022`). One undo item. A patch that leaves no
@@ -700,7 +702,9 @@ pub enum TrameCommand {
 
     /// The reader's own locale and convention, which the device holds
     /// (`LOCALE-015`). Local view state: nothing is written (`LOCALE-017`).
-    SetReaderLocale { reader: ambre_core::ReaderLocale },
+    SetReaderLocale {
+        reader: ambre_client_core::ReaderLocale,
+    },
 
     /// Move `sheet_id` to position `to_index` in the tab strip (one
     /// `LoroMovableList` move op). Pure presentation: never touches a reference
@@ -1319,7 +1323,7 @@ pub enum TrameImport {
 /// variant that carries it (`trame-import-export`).
 #[derive(Clone, Debug)]
 pub struct WorkbookImport {
-    pub data: ambre_core::Payload<ambre_core::FileBytes>,
+    pub data: ambre_core::Payload<ambre_client_core::FileBytes>,
 }
 
 /// A CSV file to bring into the workbook (`trame-import-export`).
@@ -1329,7 +1333,7 @@ pub struct WorkbookImport {
 /// extending the used range as needed, or into a fresh sheet.
 #[derive(Clone, Debug)]
 pub struct CsvImport {
-    pub data: ambre_core::Payload<ambre_core::FileBytes>,
+    pub data: ambre_core::Payload<ambre_client_core::FileBytes>,
     /// Field separator; `None` auto-detects it: comma, semicolon or tab.
     pub delimiter: Option<CsvDelimiter>,
     /// A first record that is a header row is skipped.

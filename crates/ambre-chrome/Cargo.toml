@@ -9,6 +9,7 @@ description = "Shared, app-agnostic Leptos chrome toolkit: AppShell, command pal
 ambre-commands = { path = "../ambre-commands" }
 # The colour packings the colour picker edits (`Rgb`, `Rgba`).
 ambre-core     = { path = "../ambre-core" }
+ambre-client-core = { path = "../ambre-client-core" }
 leptos         = { workspace = true }
 # Tree-shaken SVG icons for the context-menu entries (grouped/iconed menu,
 # `trame-context-menu`). Same crates the app chrome already uses.

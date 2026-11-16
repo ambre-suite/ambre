@@ -32,6 +32,9 @@ const MEMBERS: &[&str] = &[
     "ambre-canvas",
     "ambre-sfu",
     "ambre-call",
+    "ambre-server",
+    "ambre-protocol",
+    "ambre-client-core",
 ];
 
 /// The metadata cargo would print for the members of [`MEMBERS`] and the
@@ -229,6 +232,33 @@ fn the_renderer_reaching_the_bus_is_refused() {
         pkg("ambre-bus", &[]),
     ]);
     assert_eq!(citing(&found, "ARCH-071").len(), 2, "{found:#?}");
+}
+
+// Three paths to the client core (`ARCH-117`). The relay takes a test table,
+// the wire a crate it links, and the SFU a normal edge.
+#[test]
+fn the_relay_side_reaching_the_client_core_is_refused() {
+    let found = refusals(&[
+        pkg("ambre-server", &[("ambre-client-core", Some("dev"), &[])]),
+        pkg("ambre-protocol", &[("ambre-draw", None, &[])]),
+        pkg("ambre-draw", &[("ambre-client-core", None, &[])]),
+        pkg("ambre-sfu", &[("ambre-client-core", None, &[])]),
+    ]);
+    let refused = citing(&found, "ARCH-117");
+    assert_eq!(refused.len(), 3, "{found:#?}");
+    assert!(refused[0].contains("ambre-server declares ambre-client-core"));
+    assert!(refused[1].contains("ambre-protocol reaches ambre-client-core through ambre-draw"));
+    assert!(refused[2].contains("ambre-sfu declares ambre-client-core"));
+}
+
+// The client core linked by a client crate alone passes (`ARCH-117`).
+#[test]
+fn the_client_core_under_the_client_alone_passes() {
+    let found = refusals(&[
+        pkg("ambre-app", &[("ambre-client-core", None, &[])]),
+        pkg("ambre-server", &[("ambre-core", None, &[])]),
+    ]);
+    assert!(citing(&found, "ARCH-117").is_empty(), "{found:#?}");
 }
 
 // A transport crate declared by a client crate, a build table included, and

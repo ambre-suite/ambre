@@ -586,7 +586,7 @@ mod tests {
     fn import(data: Vec<u8>) -> ProseCommand {
         ProseCommand::Interop(InteropRequest::Import(ProseImport {
             format: ImportFormat::Markdown,
-            data: ambre_core::Payload::<ambre_core::FileBytes>::new(data),
+            data: ambre_core::Payload::<ambre_client_core::FileBytes>::new(data),
             now: ambre_core::Instant::<ambre_core::Authored>::new(1_800_000_000_000),
             zone: crate::message::TimeZone::UTC,
         }))

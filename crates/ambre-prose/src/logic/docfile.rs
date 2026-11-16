@@ -2,13 +2,13 @@
 //!
 //! Prose's half of the pair: the payload is this document's `LoroDoc`
 //! snapshot, and nothing else. The header is not built here. The layout, the
-//! version registry and both read rules live once in `ambre_core::docfile`
+//! version registry and both read rules live once in `ambre_client_core::docfile`
 //! (`PROSE-IO-049`).
 
-use ambre_core::DocType;
-use ambre_core::docfile::{
+use ambre_client_core::docfile::{
     AmbreHeader, DocFileError, read_ambre_plaintext_as, write_ambre_plaintext,
 };
+use ambre_core::DocType;
 use ambre_core::id::{Document, Id};
 use ambre_core::schema::SchemaError;
 use loro::{ExportMode, LoroDoc};
@@ -97,7 +97,7 @@ impl ProseState {
 #[cfg(test)]
 mod tests {
     use crate::message::DocChar;
-    use ambre_core::docfile::{AMBRE_VERSION, HEADER_LEN};
+    use ambre_client_core::docfile::{AMBRE_VERSION, HEADER_LEN};
     use ambre_core::index::{Pos, Span};
 
     use super::*;

@@ -45,8 +45,8 @@ A reader types a number into a cell. The reader convention picks the separators 
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-237` | `POST` | Typed input MUST be parsed under the reader's convention: a French reader typing `3,5`, under the default convention, stores 3.5. | `1-Foundations/ambre-spec-locale.md` section 3, `LOCALE-016` | `ambre_trame::logic::tests::group15::a_number_typed_in_the_readers_locale_is_stored_in_none`; `ambre_core::locale::tests::a_typed_number_reads_back_canonical` | none | verified |
-| `TRAME-238` | `FRAME` | A typed number MUST be stored without the locale it was typed in. | `1-Foundations/ambre-spec-locale.md` section 3, `LOCALE-014` | `ambre_trame::logic::tests::group15::a_number_typed_in_the_readers_locale_is_stored_in_none`; `ambre_core::locale::tests::a_localized_number_reads_back_as_the_canonical_one` | none | verified |
+| `TRAME-237` | `POST` | Typed input MUST be parsed under the reader's convention: a French reader typing `3,5`, under the default convention, stores 3.5. | `1-Foundations/ambre-spec-locale.md` section 3, `LOCALE-016` | `ambre_trame::logic::tests::group15::a_number_typed_in_the_readers_locale_is_stored_in_none`; `ambre_client_core::locale::tests::a_typed_number_reads_back_canonical` | none | verified |
+| `TRAME-238` | `FRAME` | A typed number MUST be stored without the locale it was typed in. | `1-Foundations/ambre-spec-locale.md` section 3, `LOCALE-014` | `ambre_trame::logic::tests::group15::a_number_typed_in_the_readers_locale_is_stored_in_none`; `ambre_client_core::locale::tests::a_localized_number_reads_back_as_the_canonical_one` | none | verified |
 
 * **Budget.** none of its own. A format is a pure function of a value and a pattern, applied per
   displayed cell inside the frame phases of `ambre-spec-budgets.md section 2`.

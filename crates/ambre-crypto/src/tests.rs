@@ -925,9 +925,9 @@ fn the_sealed_header_widths_match_the_primitives() {
     // (`DOCFILE-006`), so it declares its two widths independently of the
     // cipher and the KDF. This is the seam where a mismatch
     // would surface, and it is the only place both sides are nameable at once.
-    assert_eq!(ambre_core::docfile::SEAL_NONCE_LEN, aead::NONCE_LEN);
+    assert_eq!(ambre_client_core::docfile::SEAL_NONCE_LEN, aead::NONCE_LEN);
     assert_eq!(
-        ambre_core::docfile::SALT_LEN,
+        ambre_client_core::docfile::SALT_LEN,
         16,
         "Argon2id requires at least 8 bytes of salt; the header carries 16"
     );
@@ -1142,7 +1142,7 @@ fn a_row_the_old_code_sealed_still_opens() {
 #[test]
 fn the_module_digest_is_blake2b_256() {
     assert_eq!(
-        crate::hash::module_digest(&ambre_core::Payload::<ambre_core::FileBytes>::new(
+        crate::hash::module_digest(&ambre_core::Payload::<ambre_client_core::FileBytes>::new(
             b"abc".to_vec()
         ))
         .to_hex(),

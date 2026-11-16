@@ -65,14 +65,17 @@ fn workbook(sheets: Vec<xl::Sheet>) -> xl::Workbook {
     }
 }
 
-fn file(workbook: &xl::Workbook) -> ambre_core::Payload<ambre_core::FileBytes> {
+fn file(workbook: &xl::Workbook) -> ambre_core::Payload<ambre_client_core::FileBytes> {
     ambre_xlsx::write(workbook)
         .expect("the workbook writes")
         .bytes
 }
 
 /// Import `data` whole: the first slice in the command, the rest by resume.
-fn import(state: &mut TrameState, data: ambre_core::Payload<ambre_core::FileBytes>) -> TrameReport {
+fn import(
+    state: &mut TrameState,
+    data: ambre_core::Payload<ambre_client_core::FileBytes>,
+) -> TrameReport {
     let mut out = state.handle_conversion(
         TrameCommand::Interop(InteropRequest::Import(TrameImport::Xlsx(WorkbookImport {
             data,
@@ -641,7 +644,7 @@ fn the_style_twin_writes_the_bytes_trame_stores() {
 /// Import `data` whole as an OpenDocument spreadsheet.
 fn import_ods(
     state: &mut TrameState,
-    data: ambre_core::Payload<ambre_core::FileBytes>,
+    data: ambre_core::Payload<ambre_client_core::FileBytes>,
 ) -> TrameReport {
     let mut out = state.handle_conversion(
         TrameCommand::Interop(InteropRequest::Import(TrameImport::Ods(WorkbookImport {
@@ -939,7 +942,7 @@ const SHEET_FIXTURES: [(TrameExport, &str); 23] = [
 ];
 
 /// The bytes of the input fixture `name` of `ambre-xlsx`.
-fn sheet_fixture(name: &str) -> ambre_core::Payload<ambre_core::FileBytes> {
+fn sheet_fixture(name: &str) -> ambre_core::Payload<ambre_client_core::FileBytes> {
     let path = format!(
         "{}/../ambre-xlsx/tests/fixtures/{name}",
         env!("CARGO_MANIFEST_DIR")
@@ -950,7 +953,7 @@ fn sheet_fixture(name: &str) -> ambre_core::Payload<ambre_core::FileBytes> {
 /// Import `data` into a fresh document, as the format `format` exports.
 fn import_in(
     format: &TrameExport,
-    data: ambre_core::Payload<ambre_core::FileBytes>,
+    data: ambre_core::Payload<ambre_client_core::FileBytes>,
 ) -> (TrameState, TrameReport) {
     let mut state = TrameState::new();
     let report = match format {
@@ -961,7 +964,12 @@ fn import_in(
 }
 
 /// The file an export answered, and its report.
-fn exported_file(out: &TrameOutcome) -> (ambre_core::Payload<ambre_core::FileBytes>, TrameReport) {
+fn exported_file(
+    out: &TrameOutcome,
+) -> (
+    ambre_core::Payload<ambre_client_core::FileBytes>,
+    TrameReport,
+) {
     let file = out
         .display
         .iter()

@@ -2041,12 +2041,14 @@ fn a_finished_pdf_is_handed_to_the_browser_and_nothing_else() {
     rig.answer(TrameEvent::Interop(
         ambre_bus::interop::InteropAnswer::ExportReady {
             file: ambre_bus::interop::ExportedFile {
-                filename: ambre_core::ExportFilename::named(
+                filename: ambre_client_core::ExportFilename::named(
                     "Sheet1",
-                    ambre_core::ExportExtension::Pdf,
+                    ambre_client_core::ExportExtension::Pdf,
                 ),
                 media_type: ambre_core::MediaType::from("application/pdf"),
-                data: ambre_core::Payload::<ambre_core::FileBytes>::new(b"%PDF-1.7".to_vec()),
+                data: ambre_core::Payload::<ambre_client_core::FileBytes>::new(
+                    b"%PDF-1.7".to_vec(),
+                ),
             },
             report: crate::message::TrameReport::new(
                 ambre_bus::interop::Direction::Export,

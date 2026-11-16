@@ -211,7 +211,7 @@ pub struct PrintMeta {
     /// The title, user text.
     pub title: Option<String>,
     /// The language the text is written in, or none.
-    pub language: ambre_core::DocumentLocale,
+    pub language: ambre_client_core::DocumentLocale,
 }
 
 // The title is user content: a log carries its length alone.

@@ -779,9 +779,9 @@ impl ProseView {
 /// its media type (`PROSE-IO-056`). A browser that refuses is logged: the
 /// document itself is untouched either way.
 fn download(
-    filename: &ambre_core::ExportFilename,
+    filename: &ambre_client_core::ExportFilename,
     media_type: &ambre_bus::MediaType,
-    data: &ambre_core::Payload<ambre_core::FileBytes>,
+    data: &ambre_core::Payload<ambre_client_core::FileBytes>,
 ) {
     use wasm_bindgen::JsCast;
     let parts = js_sys::Array::new();

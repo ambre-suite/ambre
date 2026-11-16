@@ -418,7 +418,7 @@ pub(super) fn workbook_of_every_key() -> TrameState {
         state.doc.commit();
     }
     state.handle_command(TrameCommand::SetDocumentLocale {
-        locale: ambre_core::DocumentLocale::parse("fr").expect("a well-formed tag"),
+        locale: ambre_client_core::DocumentLocale::parse("fr").expect("a well-formed tag"),
     });
     // A block delete hides its two rows under one register (`TRAME-302`).
     state.handle_command(TrameCommand::SetCellText {

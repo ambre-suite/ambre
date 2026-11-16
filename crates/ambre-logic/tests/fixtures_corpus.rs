@@ -20,7 +20,7 @@ use ambre_core::index::Pos;
 use std::path::{Path, PathBuf};
 
 use ambre_bus::{Col, Row};
-use ambre_core::docfile::{AMBRE_VERSION, DocFileError, HEADER_LEN, write_ambre_plaintext};
+use ambre_client_core::docfile::{AMBRE_VERSION, DocFileError, HEADER_LEN, write_ambre_plaintext};
 use ambre_core::id::{Document, Id};
 use ambre_core::{DocType, FixtureGen, FixtureName, ShapeBody, Validated, seeded_document_id};
 use ambre_logic::DocState;
@@ -41,7 +41,7 @@ use kurbo::{Point, Size};
 //
 // `FIXTURES P0` ships the mechanism, not the corpus, so the shipping `REGISTRY`
 // is empty until `P1` writes the correctness generators. These two drive the
-// same driver code path meanwhile -- the pattern `ambre_core::docfile` already
+// same driver code path meanwhile -- the pattern `ambre_client_core::docfile` already
 // uses for its (equally empty) migration registry.
 
 /// The name `generator` gives itself. Every generator of this belt spells
@@ -479,7 +479,7 @@ fn the_corpus_root_is_resolved_from_the_manifest_dir_not_the_cwd() {
 /// Every `.ambre` header failure, plus byte soup, through the fixture loader.
 ///
 /// Asserted here rather than through `load_fixture`, which takes a corpus *name*
-/// and has no way to be handed byte soup. `ambre_core::docfile` has its own belt
+/// and has no way to be handed byte soup. `ambre_client_core::docfile` has its own belt
 /// on the same conditions. This one proves the fixture path reports them without
 /// panicking and without inventing a variant of its own.
 #[test]

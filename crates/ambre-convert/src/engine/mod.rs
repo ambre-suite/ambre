@@ -7,10 +7,12 @@
 //! from the bytes in to the bytes out. A conversion of a family this build
 //! does not carry answers a refusal that names the family.
 
+#[cfg(feature = "tables")]
+use ambre_client_core::FileBytes;
 #[cfg(not(feature = "tables"))]
 use ambre_core::Payload;
 #[cfg(feature = "tables")]
-use ambre_core::{Count, FileBytes, Payload};
+use ambre_core::{Count, Payload};
 
 #[cfg(any(
     feature = "tables",
@@ -234,7 +236,7 @@ fn write_text(
     zone: &ambre_prose_form::TimeZone,
     encode: impl FnOnce(
         &ambre_docx::WordDocument,
-    ) -> Result<Payload<ambre_core::FileBytes>, FileRefusal>,
+    ) -> Result<Payload<ambre_client_core::FileBytes>, FileRefusal>,
 ) -> Answer {
     let zone = ambre_prose_form::zone::Zone::resolve(zone).map_err(|_| FileRefusal::UnknownZone)?;
     let ir: ambre_prose_form::ProseIr =

@@ -34,6 +34,7 @@ ambre-bus       = { path = "../ambre-bus" }
 # (`ambre-spec-docfile.md`) and, under `fixtures`, the manifest types
 # (`ambre-spec-fixtures.md`).
 ambre-core      = { path = "../ambre-core" }
+ambre-client-core = { path = "../ambre-client-core" }
 ambre-trame     = { path = "../ambre-trame" }
 ambre-toile     = { path = "../ambre-toile" }
 # The Prose engine: one `DocState` arm, like Trame and Toile

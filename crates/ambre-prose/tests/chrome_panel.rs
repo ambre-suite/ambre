@@ -237,12 +237,12 @@ fn an_interop_report_reaches_the_user() {
             document_id: Id::<Document>::mint(),
             event: ProseEvent::Interop(InteropAnswer::ExportReady {
                 file: ExportedFile {
-                    filename: ambre_core::ExportFilename::named(
+                    filename: ambre_client_core::ExportFilename::named(
                         "notes",
-                        ambre_core::ExportExtension::Markdown,
+                        ambre_client_core::ExportExtension::Markdown,
                     ),
                     media_type: ambre_core::MediaType::from("text/markdown"),
-                    data: ambre_core::Payload::<ambre_core::FileBytes>::default(),
+                    data: ambre_core::Payload::<ambre_client_core::FileBytes>::default(),
                 },
                 report,
             }),

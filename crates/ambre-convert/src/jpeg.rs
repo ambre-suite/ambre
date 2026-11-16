@@ -7,7 +7,8 @@
 //! request crosses. The images module decodes, scales and turns the picture,
 //! and answers the samples at that size.
 
-use ambre_core::{FileBytes, Image, Payload, PayloadKind, Px, Size};
+use ambre_client_core::FileBytes;
+use ambre_core::{Image, Payload, PayloadKind, Px, Size};
 use serde::{Deserialize, Serialize};
 
 /// One JPEG decode asked of the images module. Answered by

@@ -277,7 +277,10 @@ pub(super) enum SheetFile {
 }
 
 impl SheetFile {
-    fn read(self, data: ambre_core::Payload<ambre_core::FileBytes>) -> ambre_convert::Conversion {
+    fn read(
+        self,
+        data: ambre_core::Payload<ambre_client_core::FileBytes>,
+    ) -> ambre_convert::Conversion {
         match self {
             Self::Xlsx => ambre_convert::Conversion::ReadXlsx { data },
             Self::Ods => ambre_convert::Conversion::ReadOds { data },
@@ -301,10 +304,10 @@ impl SheetFile {
         }
     }
 
-    const fn extension(self) -> ambre_core::ExportExtension {
+    const fn extension(self) -> ambre_client_core::ExportExtension {
         match self {
-            Self::Xlsx => ambre_core::ExportExtension::Xlsx,
-            Self::Ods => ambre_core::ExportExtension::Ods,
+            Self::Xlsx => ambre_client_core::ExportExtension::Xlsx,
+            Self::Ods => ambre_client_core::ExportExtension::Ods,
         }
     }
 
@@ -325,7 +328,7 @@ impl TrameState {
         &mut self,
         converter: &ambre_convert::Converter,
         file: SheetFile,
-        data: ambre_core::Payload<ambre_core::FileBytes>,
+        data: ambre_core::Payload<ambre_client_core::FileBytes>,
         pace: ImportPace,
     ) -> TrameOutcome {
         let (workbook, codec_report): (Book, XlReport) = match converter
@@ -794,7 +797,7 @@ impl TrameState {
         carry_report(&codec_report, &mut report, FormulaCounts::Kept);
         TrameOutcome::display_only(vec![TrameEvent::Interop(InteropAnswer::ExportReady {
             file: ExportedFile {
-                filename: ambre_core::ExportFilename::from_title(
+                filename: ambre_client_core::ExportFilename::from_title(
                     title.as_ref().map_or("", SheetName::as_str),
                     "workbook",
                     file.extension(),

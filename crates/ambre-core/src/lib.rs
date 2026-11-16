@@ -12,8 +12,8 @@
 //! - [`authorship`]: the session nonce and the peer registry entry
 //! - [`crdt`]: the typed root names and map keys of a CRDT document
 //! - [`Error`]: core error types
-//! - [`docfile`]: the `.ambre` container header in its two lineages -- plaintext
-//!   and passphrase-sealed -- shared by every app
+//! - [`container`]: the version space, the salt role and the digest role of
+//!   the `.ambre` container. Its reader and writer live in `ambre-client-core`
 //! - [`fixtures`] (feature `fixtures`, host-only): the document-fixture
 //!   generator contract and its sidecar manifest
 
@@ -38,18 +38,17 @@ pub mod call;
 pub mod channel_kind;
 /// Colours typed by their packing: [`Rgba`], [`Rgb`].
 pub mod color;
+/// The markers of the `.ambre` container this crate names (`ARCH-117`).
+pub mod container;
 pub mod conversion;
 pub mod count;
 pub mod crdt;
 pub mod credential;
 pub mod doc_type;
-pub mod docfile;
 pub mod email;
 pub mod encoded;
 pub mod envelope;
 pub mod error;
-/// The name and the bytes of a file an import reads or an export writes.
-pub mod export_file;
 pub mod fingerprint;
 /// Fixed-width byte values, one generic type over a role marker.
 pub mod fixed_bytes;
@@ -75,7 +74,6 @@ pub mod lang;
 pub mod layout;
 /// The target of a link: [`LinkUrl`].
 pub mod link;
-pub mod locale;
 pub mod media;
 pub mod member_count;
 /// Two-way choices shared across crates: [`StepDirection`], [`HistoryStep`].
@@ -136,6 +134,7 @@ pub use call::{
 };
 pub use channel_kind::{ChannelDocumentKind, SegmentState};
 pub use color::{Alpha, Opacity, Rgb, Rgba};
+pub use container::{Container, FileDigest, FileSalt, SALT_LEN, SEALED_BIT};
 pub use conversion::{ConverterRefusal, FileRefusal, StopCause};
 pub use count::{
     Cells, Count, CountColumn, CountKind, CountRepr, Divisor, Elements, IndexedAs, NarrowCount,
@@ -143,13 +142,6 @@ pub use count::{
 };
 pub use credential::ProviderUrls;
 pub use doc_type::DocType;
-pub use docfile::{
-    AMBRE_MAGIC, AMBRE_SEALED_VERSION, AMBRE_VERSION, AmbreHeader, Container, ContainerFile,
-    ContainerKind, DocFileError, FileDigest, FileSalt, HEADER_LEN, SALT_LEN, SEAL_NONCE_LEN,
-    SEALED_AAD_LEN, SEALED_HEADER_LEN, SealedAmbre, classify, migrate_ambre, parse_sealed_header,
-    read_ambre_plaintext, read_ambre_plaintext_as, sealed_aad, write_ambre_plaintext,
-    write_ambre_sealed,
-};
 pub use email::Email;
 pub use encoded::{
     Encoded, EncodedKeyLink, EncodedKind, EncodedLogEntry, EscrowedKey, MASTER_KEY_SALT_LEN,
@@ -159,7 +151,6 @@ pub use envelope::{
     Aad, ChainHash, Ciphertext, CommitmentTag, EntryDigest, Nonce, Signature, Transcript,
 };
 pub use error::{DocTypeError, Error, UuidError, VersionError};
-pub use export_file::{ExportExtension, ExportFilename, ExportFilenameError, FileBytes};
 pub use fingerprint::{InviterPin, KeyFingerprints};
 pub use fixed_bytes::{ByteArray, DebugForm, FixedBytes, FixedBytesError, FixedRole};
 #[cfg(feature = "fixtures")]
@@ -178,10 +169,6 @@ pub use id::{DocumentScoped, Entity, Id, IdRepr, TextKeyed, UuidEntity};
 pub use key_id::{KEY_ID_LEN, KeyId};
 pub use lang::{LangTag, NotALangTag, primary_subtag};
 pub use link::LinkUrl;
-pub use locale::{
-    CalendarNames, DateAmbiguity, DateOrder, DocumentLocale, Grouping, LocaleError, MonthDay,
-    NumberConvention, NumberForms, ReaderLocale, TypedDate, resolve,
-};
 pub use media::{
     AltText, Caption, ContentHash, ContentHashError, KnownMediaType, MEDIA_ADDRESS_LEN,
     MediaAddress, MediaType, Octets,

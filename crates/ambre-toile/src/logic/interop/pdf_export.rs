@@ -110,7 +110,7 @@ pub fn export_pdf(
     text_cache: &mut TextCache,
     images: &HashMap<ambre_core::Validated<ambre_core::ContentHash>, DecodedImage>,
     converter: &Converter,
-) -> Result<ambre_core::Payload<ambre_core::FileBytes>, PdfExportError> {
+) -> Result<ambre_core::Payload<ambre_client_core::FileBytes>, PdfExportError> {
     let document = record_pdf(pages, page, palette, font_cx, text_cache, images)?;
     write_pdf(document, converter)
 }
@@ -124,7 +124,7 @@ pub fn export_pdf(
 pub fn write_pdf(
     document: PrintDocument,
     converter: &Converter,
-) -> Result<ambre_core::Payload<ambre_core::FileBytes>, PdfExportError> {
+) -> Result<ambre_core::Payload<ambre_client_core::FileBytes>, PdfExportError> {
     match converter.convert(&Conversion::WritePdf { document })? {
         Converted::File(bytes) => Ok(bytes),
         _ => Err(ConvertError::Malformed.into()),
@@ -403,7 +403,7 @@ mod tests {
         font_cx: &mut FontContext,
         text_cache: &mut TextCache,
         images: &HashMap<ambre_core::Validated<ambre_core::ContentHash>, DecodedImage>,
-    ) -> Result<ambre_core::Payload<ambre_core::FileBytes>, PdfExportError> {
+    ) -> Result<ambre_core::Payload<ambre_client_core::FileBytes>, PdfExportError> {
         super::export_pdf(
             pages,
             page,
@@ -469,7 +469,7 @@ mod tests {
             "output must be a PDF"
         );
         assert!(
-            bytes.size().get() > 400,
+            bytes.len().get() > 400,
             "content stream should be non-trivial"
         );
     }

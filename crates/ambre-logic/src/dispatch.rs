@@ -1214,11 +1214,12 @@ mod tests {
         for doc_type in [DocType::Trame, DocType::Toile, DocType::Prose] {
             let document_id = Id::<Document>::mint();
             let bytes = exported_file(doc_type, document_id);
-            let header =
-                ambre_core::docfile::read_ambre_plaintext(&ambre_core::Payload::<
-                    ambre_core::PlaintextContainer,
-                >::new(bytes.to_vec()))
-                .expect("the command wrote a valid container");
+            let header = ambre_client_core::docfile::read_ambre_plaintext(&ambre_core::Payload::<
+                ambre_core::PlaintextContainer,
+            >::new(
+                bytes.to_vec()
+            ))
+            .expect("the command wrote a valid container");
             assert_eq!(header.doc_type, doc_type, "the header names the wrong app");
             assert_eq!(
                 header.document_id, document_id,
@@ -1250,10 +1251,11 @@ mod tests {
             }),
         });
         let saved = exported_file_from(&state, document_id);
-        let header = ambre_core::docfile::read_ambre_plaintext(&ambre_core::Payload::<
-            ambre_core::PlaintextContainer,
-        >::new(saved.to_vec()))
-        .expect("valid container");
+        let header =
+            ambre_client_core::docfile::read_ambre_plaintext(&ambre_core::Payload::<
+                ambre_core::PlaintextContainer,
+            >::new(saved.to_vec()))
+            .expect("valid container");
 
         // A second session, as a page load after the open gesture. Nothing is
         // live, and the file's payload arrives the way the store hands it over.
@@ -1344,7 +1346,7 @@ mod tests {
     fn a_sealed_export_hands_the_plaintext_to_sync_and_nothing_to_the_ui() {
         for doc_type in [DocType::Trame, DocType::Toile] {
             let (_state, ui, _id, plaintext) = sealing(doc_type);
-            let header = ambre_core::docfile::read_ambre_plaintext(&ambre_core::Payload::<
+            let header = ambre_client_core::docfile::read_ambre_plaintext(&ambre_core::Payload::<
                 ambre_core::PlaintextContainer,
             >::new(
                 plaintext.to_vec()
@@ -1727,10 +1729,10 @@ mod tests {
         }
     }
 
-    fn reader(own: &str) -> ambre_core::ReaderLocale {
-        ambre_core::ReaderLocale {
-            own: ambre_core::DocumentLocale::parse(own).unwrap(),
-            convention: ambre_core::NumberConvention::default(),
+    fn reader(own: &str) -> ambre_client_core::ReaderLocale {
+        ambre_client_core::ReaderLocale {
+            own: ambre_client_core::DocumentLocale::parse(own).unwrap(),
+            convention: ambre_client_core::NumberConvention::default(),
         }
     }
 
@@ -1783,13 +1785,13 @@ mod tests {
         state.handle_logic_command(LogicCommand::App {
             document_id: doc_id,
             command: AppCommand::Trame(TrameCommand::SetDocumentLocale {
-                locale: ambre_core::DocumentLocale::parse("fr").unwrap(),
+                locale: ambre_client_core::DocumentLocale::parse("fr").unwrap(),
             }),
         });
         assert!(sync_rx.try_recv().is_err(), "no delta leaves");
         assert_eq!(
             trame_of(&state, doc_id).document_locale(),
-            ambre_core::DocumentLocale::NONE
+            ambre_client_core::DocumentLocale::NONE
         );
     }
 
@@ -1803,7 +1805,7 @@ mod tests {
         state.handle_logic_command(LogicCommand::App {
             document_id: doc_id,
             command: AppCommand::Trame(TrameCommand::SetDocumentLocale {
-                locale: ambre_core::DocumentLocale::parse("fr").unwrap(),
+                locale: ambre_client_core::DocumentLocale::parse("fr").unwrap(),
             }),
         });
         state.answer_pass();
@@ -1838,11 +1840,11 @@ mod tests {
         }
         assert_eq!(
             trame_of(&state, created).document_locale(),
-            ambre_core::DocumentLocale::parse("fr-CA").unwrap()
+            ambre_client_core::DocumentLocale::parse("fr-CA").unwrap()
         );
         assert_eq!(
             trame_of(&state, opened).document_locale(),
-            ambre_core::DocumentLocale::NONE
+            ambre_client_core::DocumentLocale::NONE
         );
         // A second open of the created document seeds nothing again.
         assert!(state.locale_seeds.is_empty());
@@ -1931,7 +1933,7 @@ mod tests {
         state.handle_logic_command(LogicCommand::App {
             document_id: doc_id,
             command: AppCommand::Trame(TrameCommand::import_csv(ambre_trame::message::CsvImport {
-                data: ambre_core::Payload::<ambre_core::FileBytes>::new(file.clone()),
+                data: ambre_core::Payload::<ambre_client_core::FileBytes>::new(file.clone()),
                 delimiter: None,
                 header: ambre_trame::message::HeaderRow::Absent,
                 target_sheet_id: None,
@@ -2120,7 +2122,9 @@ mod tests {
             panic!("a snapshot is sent");
         };
         assert!(
-            !payload.as_bytes().starts_with(&ambre_core::AMBRE_MAGIC),
+            !payload
+                .as_bytes()
+                .starts_with(&ambre_client_core::AMBRE_MAGIC),
             "the wire payload must be a bare snapshot, not a container"
         );
     }
@@ -2178,7 +2182,7 @@ mod tests {
             document_id: doc_id,
             command: AppCommand::Toile(ToileCommand::import(
                 ambre_toile::message::ToileImportFormat::Image("image/png".into()),
-                ambre_core::Payload::<ambre_core::FileBytes>::new(solid_png(8, 8)),
+                ambre_core::Payload::<ambre_client_core::FileBytes>::new(solid_png(8, 8)),
                 kurbo::Point::ZERO,
             )),
         });
@@ -3511,7 +3515,7 @@ mod tests {
                     ambre_toile::message::ToileImportFormat::Image(ambre_core::MediaType::from(
                         mime,
                     )),
-                    ambre_core::Payload::<ambre_core::FileBytes>::new(bytes),
+                    ambre_core::Payload::<ambre_client_core::FileBytes>::new(bytes),
                     kurbo::Point::ZERO,
                 )),
             }
@@ -3567,7 +3571,7 @@ mod tests {
                 ambre_toile::message::ToileImportFormat::Image(ambre_core::MediaType::from(
                     "image/jpeg",
                 )),
-                ambre_core::Payload::<ambre_core::FileBytes>::new(jpeg_bytes(40, 20)),
+                ambre_core::Payload::<ambre_client_core::FileBytes>::new(jpeg_bytes(40, 20)),
                 kurbo::Point::ZERO,
             )),
         }
@@ -3858,7 +3862,7 @@ mod tests {
             document_id: doc_id,
             command: AppCommand::Toile(ToileCommand::import(
                 ambre_toile::message::ToileImportFormat::Svg,
-                ambre_core::Payload::<ambre_core::FileBytes>::new(svg.to_vec()),
+                ambre_core::Payload::<ambre_client_core::FileBytes>::new(svg.to_vec()),
                 kurbo::Point::ZERO,
             )),
         });

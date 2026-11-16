@@ -6,7 +6,8 @@
 // `styles.rs`), so `CellStyle` is stored serde-encoded verbatim.
 
 use super::*;
-use ambre_core::{Grouping, Instant, NumberForms, SheetDateTime};
+use ambre_client_core::{Grouping, NumberForms};
+use ambre_core::{Instant, SheetDateTime};
 
 /// Merge a [`StylePatch`] into a [`CellStyle`] in place: each `Some` field of the
 /// patch overwrites the style; `None` leaves it. Bold/italic are not part of

@@ -21,6 +21,7 @@ fuzz = []
 ambre-bus      = { path = "../ambre-bus" }
 ambre-protocol = { path = "../ambre-protocol" }
 ambre-core     = { path = "../ambre-core" }
+ambre-client-core = { path = "../ambre-client-core" }
 # Crypto primitives + envelope. The wasm getrandom "js" backend is wired by
 # ambre-crypto's own target-specific dependency, so nothing extra is needed here.
 ambre-crypto   = { path = "../ambre-crypto" }

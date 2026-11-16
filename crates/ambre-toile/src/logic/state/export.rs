@@ -95,12 +95,12 @@ impl ToileState {
         let export = self.svg_of_board();
         ToileOutcome::display_only(vec![ToileEvent::Interop(InteropAnswer::ExportReady {
             file: ExportedFile {
-                filename: ambre_core::ExportFilename::named(
+                filename: ambre_client_core::ExportFilename::named(
                     BOARD_STEM,
-                    ambre_core::ExportExtension::Svg,
+                    ambre_client_core::ExportExtension::Svg,
                 ),
                 media_type: ambre_core::MediaType::from("image/svg+xml"),
-                data: ambre_core::Payload::<ambre_core::FileBytes>::new(
+                data: ambre_core::Payload::<ambre_client_core::FileBytes>::new(
                     export.document.into_bytes(),
                 ),
             },
@@ -125,9 +125,9 @@ impl ToileState {
         report.absorb(svg.report);
         ToileOutcome::display_only(vec![ToileEvent::Interop(InteropAnswer::ExportReady {
             file: ExportedFile {
-                filename: ambre_core::ExportFilename::named(
+                filename: ambre_client_core::ExportFilename::named(
                     BOARD_STEM,
-                    ambre_core::ExportExtension::Html,
+                    ambre_client_core::ExportExtension::Html,
                 ),
                 media_type: ambre_core::MediaType::from("text/html"),
                 data,
@@ -240,8 +240,10 @@ impl ToileState {
         page: crate::logic::interop::PageSize,
         font_cx: &mut ambre_draw::FontContext,
         converter: &ambre_convert::Converter,
-    ) -> Result<ambre_core::Payload<ambre_core::FileBytes>, crate::logic::interop::PdfExportError>
-    {
+    ) -> Result<
+        ambre_core::Payload<ambre_client_core::FileBytes>,
+        crate::logic::interop::PdfExportError,
+    > {
         let mut recording = self.record_deck(page)?;
         while !recording.is_recorded() {
             recording.record_next(font_cx);

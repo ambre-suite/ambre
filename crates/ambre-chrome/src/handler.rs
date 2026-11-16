@@ -75,7 +75,7 @@ pub struct FilePick<C> {
     /// What the user reads when the browser could not read the file.
     pub unreadable: &'static str,
     /// The command the file's bytes become.
-    pub read: Box<dyn Fn(ambre_core::Payload<ambre_core::FileBytes>) -> C>,
+    pub read: Box<dyn Fn(ambre_core::Payload<ambre_client_core::FileBytes>) -> C>,
 }
 
 impl<C: 'static> FilePick<C> {

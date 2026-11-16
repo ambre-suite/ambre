@@ -14,6 +14,7 @@
 //! | the Logic runtime declares no render runtime and no toolkit | `ARCH-003` |
 //! | the Sync worker reaches no rendering and no application | `SYNC-096`, `ARCH-070` |
 //! | the renderer reaches no protocol between the threads | `ARCH-071` |
+//! | the relay, the wire and the SFU reach no client-only module of the core | `ARCH-117` |
 //! | a transport crate is declared by the network crates alone | `ARCH-005` |
 //! | every member inherits the workspace lint table | `ARCH-032` |
 //! | the SFU links no C cryptography library | `CALL-013` |
@@ -78,6 +79,13 @@ const SYNC_UNREACHABLE: &[&str] = &[
     "ambre-murmure",
     "ambre-logic",
 ];
+
+/// The crate of the core types that the client alone uses (`ARCH-117`).
+const CLIENT_CORE: &str = "ambre-client-core";
+
+/// The crates the relay builds from: the relay, the wire and the SFU
+/// (`ARCH-117`). None of them reaches [`CLIENT_CORE`].
+const RELAY_SIDE: &[&str] = &["ambre-server", "ambre-protocol", "ambre-sfu"];
 
 /// The crates a network call may leave from (`ARCH-005`).
 const NETWORK_CRATES: &[&str] = &["ambre-sync", "ambre-server", "ambre-sfu", "ambre-belt"];
@@ -372,6 +380,8 @@ pub(crate) fn manifests(graph: &Graph, read: &dyn Fn(&str) -> Option<String>) ->
     let logic = need("ambre-logic");
     let canvas = need("ambre-canvas");
     let sfu = need("ambre-sfu");
+    let relay_side: Vec<Option<String>> = RELAY_SIDE.iter().map(|name| need(name)).collect();
+    let client_core = need(CLIENT_CORE);
 
     // FIXTURE-007: no default holds the fixture feature, and no edge the
     // client links, nor a test table of the client, turns it on.
@@ -506,6 +516,27 @@ pub(crate) fn manifests(graph: &Graph, read: &dyn Fn(&str) -> Option<String>) ->
             refusals.push(format!(
                 "the renderer reaches {to} through {from} (ARCH-071)"
             ));
+        }
+    }
+
+    // ARCH-117: no crate of the relay side reaches the client core, by a test
+    // table of its own or by a linked edge.
+    if client_core.is_some() {
+        for id in relay_side.iter().flatten() {
+            let name = graph.name(id);
+            for to in graph.direct(id) {
+                if graph.name(to) == CLIENT_CORE {
+                    refusals.push(format!(
+                        "{name} declares {CLIENT_CORE}, which the client alone uses (ARCH-117)"
+                    ));
+                }
+            }
+            let closure = graph.closure(&graph.direct(id), Edges::Linked);
+            for (from, to) in graph.reached(&closure, &[CLIENT_CORE]) {
+                refusals.push(format!(
+                    "{name} reaches {to} through {from}, which the client alone uses (ARCH-117)"
+                ));
+            }
         }
     }
 

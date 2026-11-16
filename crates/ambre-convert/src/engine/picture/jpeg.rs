@@ -85,7 +85,8 @@ pub(in crate::engine) fn decode(request: &JpegDecode) -> Result<Pixels, JpegRefu
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use ambre_core::{FileBytes, Size};
+    use ambre_client_core::FileBytes;
+    use ambre_core::Size;
 
     /// A JPEG of `width` by `height`, which the `image` encoder writes at
     /// test time. Its left half is red and its right half blue, so a turn

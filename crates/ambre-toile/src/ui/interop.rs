@@ -25,7 +25,7 @@ pub fn accepts(mime: &ambre_core::MediaType) -> bool {
 /// no point to speak of.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DroppedFile {
-    pub bytes: ambre_core::Payload<ambre_core::FileBytes>,
+    pub bytes: ambre_core::Payload<ambre_client_core::FileBytes>,
     pub mime: ambre_core::MediaType,
     pub at: Option<Point>,
 }
