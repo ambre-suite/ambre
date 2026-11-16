@@ -97,7 +97,7 @@ pub struct PdfExport {
 5. add the links of the page: each address a reader may open, each cross reference, and each line
    of a table of contents (`PROSE-IO-031`). Each is cut to the part of its block the page shows;
 6. hand the recorded pages, the title and the language to the PDF module, which writes the file
-   (`PROSE-IO-032`).
+   on the converter thread (`PROSE-IO-032`, `ARCH-124`).
 
 **The pagination is not recomputed.** Step 2 reads the layout the engine already holds, which is
 what makes the file match the screen page for page (`PROSE-IO-037`).

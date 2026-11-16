@@ -136,7 +136,8 @@ page format and the pagination, steps 0 to 3):
 5. the page draws the screen's sheet walk over the region of the repeated row, then over its own
    region (`PDF-001`). A camera places each region on the paper, inside a clip to the printable
    area;
-6. the slice that draws the last page hands the recorded file to the PDF module (`PDF-003`).
+6. the slice that draws the last page hands the recorded file to the PDF module, on the converter
+   thread (`ARCH-124`). The answer hands the file over (`PDF-003`).
 
 The export reads the light palette, whatever theme the user shows: a page is printed on white. A
 merged block that straddles a break prints its part on each page, clipped there (`TRAME-IO-083`).

@@ -99,7 +99,7 @@ pub fn import_form(bytes: &Payload<FormBytes>) -> Result<Landing, Breach> {
             return Err(Breach::NoAnswer);
         }
         resumes = resumes.plus(Count::new(1));
-        let out = author.resume_conversion(None);
+        let out = author.resume_conversion();
         answer = answer.read(&out, &mut peer);
     }
     match answer {

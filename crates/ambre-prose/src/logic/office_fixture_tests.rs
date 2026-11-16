@@ -151,13 +151,11 @@ impl Store {
     /// Run `command` to its end: each media request answered, each slice
     /// resumed. Hand back every event it answered.
     fn run(&mut self, state: &mut ProseState, command: ProseCommand) -> Vec<ProseEvent> {
-        let office = ambre_convert::Converter::load(ConverterFamily::Office, &Payload::new(vec![]))
-            .expect("the host links the Office engine");
         let mut events = state.handle_converted_in_family(command).display;
         loop {
             let asked = self.answer(state, &mut events);
             if state.has_pending_work() {
-                events.extend(state.resume_in_place(Some(&office)).display);
+                events.extend(state.resume_in_place().display);
             } else if !asked {
                 return events;
             }

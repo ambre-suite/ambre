@@ -3,9 +3,11 @@
 //!
 //! The export cuts the printed range into pages at row and column edges. It
 //! draws each page with the screen's own sheet walk onto a recorded page
-//! (`PDF-001`). The PDF converter module writes the recorded pages. The walk
-//! runs one page per slice, so the Logic thread serves the view between two
-//! pages (`TRAME-IO-076`, `ARCH-030`).
+//! (`PDF-001`). The walk runs one page per slice, so the Logic thread serves
+//! the view between two pages (`TRAME-IO-076`, `ARCH-030`). The PDF converter
+//! module writes the recorded pages on the converter thread, never on the
+//! Logic thread (`ARCH-124`). The sheet owes the request under a ticket, and
+//! the answer hands over the file.
 //!
 //! The export reads the document and writes nothing to it (`PDF-002`). Each
 //! slice packs the cells of its own page through the viewport's packer, so a
@@ -19,8 +21,9 @@ use ambre_bus::interop::{
     ConversionProgress, Direction, ExportedFile, FileFormat, InteropAnswer, InteropError, Steps,
 };
 use ambre_canvas::{TextCache, Theme};
-use ambre_convert::{Conversion, Converted, Converter};
+use ambre_convert::{Conversion, ConvertError, Converted};
 use ambre_core::index::{Pos, Span};
+use ambre_client_core::ExportFilename;
 use ambre_core::{Count, PrintUnit, Pt, Scale, StopCause, Surface, View};
 use ambre_draw::list::{ListRecorder, PrintDocument, PrintPage, RecorderTables};
 use ambre_draw::{Affine, DocumentWalk, DrawSurface, FontContext, Rect};
@@ -420,15 +423,10 @@ impl TrameState {
     }
 
     /// Walk `pace` of the running export: one page, or every page left. The
-    /// slice that draws the last page hands the recorded file to `converter`
-    /// and answers with the bytes (`PDF-003`). A slice short of the end
-    /// answers its progress. No slice answers a delta (`PDF-002`).
-    pub fn print_slice(
-        &mut self,
-        font_cx: &mut FontContext,
-        converter: &Converter,
-        pace: PrintPace,
-    ) -> TrameOutcome {
+    /// slice that draws the last page owes the converter thread the write of
+    /// the recorded file, and answers nothing yet (`ARCH-124`). A slice short
+    /// of the end answers its progress. No slice answers a delta (`PDF-002`).
+    pub fn print_slice(&mut self, font_cx: &mut FontContext, pace: PrintPace) -> TrameOutcome {
         let Some(mut job) = self.print_job.take() else {
             return TrameOutcome::display_only(Vec::new());
         };
@@ -472,26 +470,11 @@ impl TrameState {
         let PrintJob {
             document, filename, ..
         } = *job;
-        let answer = match converter.convert(&Conversion::WritePdf { document }) {
-            Ok(Converted::File(data)) => InteropAnswer::ExportReady {
-                file: ExportedFile {
-                    filename,
-                    media_type: ambre_core::MediaType::from("application/pdf"),
-                    data,
-                },
-                // The page holds what the screen's walk draws, so the file
-                // loses nothing the grid shows.
-                report: TrameReport::new(Direction::Export, FileFormat::Pdf),
-            },
-            Ok(_) => InteropAnswer::failed(
-                Direction::Export,
-                InteropError::Stopped(StopCause::ConverterAnswered),
-            ),
-            Err(error) => {
-                InteropAnswer::failed(Direction::Export, InteropError::Stopped(error.stop_cause()))
-            }
-        };
-        TrameOutcome::display_only(vec![TrameEvent::Interop(answer)])
+        self.file_jobs.ask(
+            Conversion::WritePdf { document },
+            super::interop::FileJob::WritePdf { filename },
+        );
+        TrameOutcome::display_only(Vec::new())
     }
 
     /// Stop the running export with `cause`, and answer it: the converter
@@ -546,10 +529,39 @@ impl TrameState {
 }
 
 // The converter engine, the extractor and proptest are host dev-dependencies.
+/// The file the PDF module wrote for a sheet's export, handed over under
+/// `filename`, or why there is none (`PDF-003`, `ARCH-124`).
+pub(super) fn pdf_written(
+    answer: Result<Converted, ConvertError>,
+    filename: ExportFilename,
+) -> TrameOutcome {
+    let answer = match answer {
+        Ok(Converted::File(data)) => InteropAnswer::ExportReady {
+            file: ExportedFile {
+                filename,
+                media_type: ambre_core::MediaType::from("application/pdf"),
+                data,
+            },
+            // The page holds what the screen's walk draws, so the file
+            // loses nothing the grid shows.
+            report: TrameReport::new(Direction::Export, FileFormat::Pdf),
+        },
+        Ok(_) => InteropAnswer::failed(
+            Direction::Export,
+            InteropError::Stopped(StopCause::ConverterAnswered),
+        ),
+        Err(error) => {
+            InteropAnswer::failed(Direction::Export, InteropError::Stopped(error.stop_cause()))
+        }
+    };
+    TrameOutcome::display_only(vec![TrameEvent::Interop(answer)])
+}
+
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]
 mod tests {
     use super::*;
+    use ambre_convert::Converter;
     use ambre_core::index::Len;
     use ambre_draw::list::DrawOp as Op;
     use ambre_draw::testing::{RecordingSurface, shipped_font_context};
@@ -769,8 +781,9 @@ mod tests {
         })
     }
 
-    /// Run a whole export of `state` a slice at a time. Answers every
-    /// outcome, and the file the last one carries.
+    /// Run a whole export of `state` a slice at a time, then the write it
+    /// owes, as the converter thread runs it. Answers the outcome of each
+    /// slice, and the file the write answers.
     fn export(
         state: &mut TrameState,
         font_cx: &mut FontContext,
@@ -780,9 +793,16 @@ mod tests {
         let converter = converter();
         let mut outcomes = Vec::new();
         while state.is_printing() {
-            outcomes.push(state.print_slice(font_cx, &converter, PrintPace::Slice));
+            outcomes.push(state.print_slice(font_cx, PrintPace::Slice));
         }
-        let file = outcomes
+        let written: Vec<TrameOutcome> = state
+            .take_file_requests()
+            .into_iter()
+            .filter_map(|(ticket, conversion)| {
+                state.handle_file_converted(ticket, converter.convert(&conversion))
+            })
+            .collect();
+        let file = written
             .iter()
             .flat_map(|o| &o.display)
             .find_map(|event| match event {
@@ -791,7 +811,7 @@ mod tests {
                 }
                 _ => None,
             })
-            .expect("the last slice answers the file");
+            .expect("the write answers the file");
         (outcomes, file)
     }
 
@@ -803,6 +823,66 @@ mod tests {
             .iter()
             .map(|page| page.split_whitespace().map(str::to_owned).collect())
             .collect()
+    }
+
+    /// `ARCH-124`: the slice that draws the last page answers no file. It
+    /// owes the converter thread the write, whose answer hands the file
+    /// over once, and a module that did not run fails the export.
+    #[test]
+    fn the_last_page_owes_its_write_to_the_converter_thread() {
+        let mut state = sheet(120, 1, |r, _| format!("r{r}"));
+        let mut font_cx = shipped_font_context();
+        let converter = converter();
+        state
+            .print_start(options(PrintFit::ActualSize, TitleRow::Off))
+            .expect("the range holds cells");
+        let mut outcomes = Vec::new();
+        while state.is_printing() {
+            outcomes.push(state.print_slice(&mut font_cx, PrintPace::Slice));
+        }
+        assert!(
+            !outcomes
+                .iter()
+                .flat_map(|o| &o.display)
+                .any(|event| matches!(
+                    event,
+                    TrameEvent::Interop(InteropAnswer::ExportReady { .. })
+                )),
+            "no slice answers the file"
+        );
+        let requests = state.take_file_requests();
+        let [(ticket, conversion)] = requests.as_slice() else {
+            panic!("one write is owed: {}", requests.len());
+        };
+        assert!(matches!(conversion, Conversion::WritePdf { .. }));
+        let written = state
+            .handle_file_converted(*ticket, converter.convert(conversion))
+            .expect("the ticket is the sheet's own");
+        assert!(matches!(
+            written.display.as_slice(),
+            [TrameEvent::Interop(InteropAnswer::ExportReady { file, .. })]
+                if file.data.as_bytes().starts_with(b"%PDF-")
+        ));
+        assert!(
+            state
+                .handle_file_converted(*ticket, converter.convert(conversion))
+                .is_none(),
+            "a ticket answers once"
+        );
+        state
+            .print_start(options(PrintFit::ActualSize, TitleRow::Off))
+            .expect("the range holds cells");
+        let _ = state.print_slice(&mut font_cx, PrintPace::Whole);
+        let [(lost, _)] = state.take_file_requests()[..] else {
+            panic!("one write is owed");
+        };
+        let failed = state
+            .handle_file_converted(lost, Err(ConvertError::Absent))
+            .expect("the ticket is the sheet's own");
+        assert!(matches!(
+            failed.display.as_slice(),
+            [TrameEvent::Interop(InteropAnswer::Failed(_))]
+        ));
     }
 
     /// `TRAME-IO-074`, `TRAME-IO-076`: a column of 120 labels prints on three
@@ -979,10 +1059,9 @@ mod tests {
         state
             .print_start(options(PrintFit::Width, TitleRow::Off))
             .expect("the range holds cells");
-        let converter = converter();
         let mut font_cx = shipped_font_context();
-        // Every page but the last, whose slice writes the file.
-        let _ = state.print_slice(&mut font_cx, &converter, PrintPace::Slice);
+        // Every page but the last, whose slice owes the file.
+        let _ = state.print_slice(&mut font_cx, PrintPace::Slice);
         let job = state.print_job.as_ref().expect("a page is left");
         let ops: Vec<&Op> = job.document.pages.iter().flatten().collect();
         assert!(ops.iter().any(|op| matches!(op, Op::Glyphs { .. })));

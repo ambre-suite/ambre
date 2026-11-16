@@ -307,16 +307,19 @@ fn progress_of(
 fn ambre_budget_prose_import_slice(
     state: &mut ambre_prose::logic::ProseState,
 ) -> ambre_prose::ProseOutcome {
-    state.resume_conversion(None)
+    state.resume_conversion()
 }
 
 /// One slice of a running export, counted alone by `callgrind`.
 #[inline(never)]
 fn ambre_budget_prose_export_slice(
     state: &mut ambre_prose::logic::ProseState,
-    converter: &ambre_convert::Converter,
 ) -> ambre_prose::ProseOutcome {
-    state.resume_conversion(Some(converter))
+    // A body unlike the import slice's: two identical functions are merged
+    // into one symbol, and `callgrind` then counts nothing in one of them.
+    let out = state.resume_conversion();
+    black_box(out.update.is_some());
+    out
 }
 
 /// A slice of the write into the document, the dearer half of an import.
@@ -338,7 +341,7 @@ fn import_slice() {
         panic!("a large import runs in slices");
     };
     let middle = started.total().get() / 2;
-    while progress_of(&state.resume_conversion(None)).is_some_and(|p| p.done().get() < middle) {}
+    while progress_of(&state.resume_conversion()).is_some_and(|p| p.done().get() < middle) {}
     let out = ambre_budget_prose_import_slice(black_box(&mut state));
     assert!(out.update.is_some(), "a slice of the write sends its delta");
     assert!(
@@ -361,7 +364,7 @@ fn export_slice() {
         import_command(novel(IMPORTED_PARAGRAPHS)),
         &converter,
     );
-    let _ = state.settle_conversion(None);
+    let _ = state.settle_conversion();
     let export = ProseCommand::Interop(ambre_bus::interop::InteropRequest::Export(
         ExportFormat::Markdown(MarkdownFlavor::Gfm),
     ));
@@ -370,10 +373,8 @@ fn export_slice() {
         panic!("a large export runs in slices");
     };
     let middle = started.total().get() / 2;
-    while progress_of(&state.resume_conversion(Some(&converter)))
-        .is_some_and(|p| p.done().get() < middle)
-    {}
-    let out = ambre_budget_prose_export_slice(black_box(&mut state), &converter);
+    while progress_of(&state.resume_conversion()).is_some_and(|p| p.done().get() < middle) {}
+    let out = ambre_budget_prose_export_slice(black_box(&mut state));
     assert!(
         progress_of(&out).is_some(),
         "the slice counted is not the last"
@@ -386,11 +387,11 @@ fn export_slice() {
 #[inline(never)]
 fn ambre_budget_prose_print_slice(
     state: &mut ambre_prose::logic::ProseState,
-    converter: &ambre_convert::Converter,
 ) -> ambre_prose::ProseOutcome {
-    // A body unlike the export slice's: two identical functions are merged
-    // into one symbol, and `callgrind` then counts nothing in one of them.
-    let out = state.resume_conversion(Some(converter));
+    // A body unlike the import and export slices': two identical functions
+    // are merged into one symbol, and `callgrind` then counts nothing in one
+    // of them.
+    let out = state.resume_conversion();
     black_box(state.has_pending_work());
     out
 }
@@ -410,10 +411,9 @@ fn ambre_pass_end_prose_print(
 #[inline(never)]
 fn ambre_budget_prose_picture_print(
     state: &mut ambre_prose::logic::ProseState,
-    converter: &ambre_convert::Converter,
 ) -> ambre_prose::ProseOutcome {
     black_box(Printed::PicturedFirstPages);
-    let out = state.resume_conversion(Some(converter));
+    let out = state.resume_conversion();
     black_box(state.has_pending_work());
     out
 }
@@ -431,10 +431,9 @@ fn ambre_pass_end_prose_picture(
 #[inline(never)]
 fn ambre_budget_prose_dense_print(
     state: &mut ambre_prose::logic::ProseState,
-    converter: &ambre_convert::Converter,
 ) -> ambre_prose::ProseOutcome {
     black_box(Printed::Dense);
-    let out = state.resume_conversion(Some(converter));
+    let out = state.resume_conversion();
     black_box(state.has_pending_work());
     out
 }
@@ -452,22 +451,18 @@ fn ambre_pass_end_prose_dense(
 /// the end called right after it.
 #[derive(Clone, Copy)]
 struct Counted {
-    slice: fn(
-        &mut ambre_prose::logic::ProseState,
-        &ambre_convert::Converter,
-    ) -> ambre_prose::ProseOutcome,
+    slice: fn(&mut ambre_prose::logic::ProseState) -> ambre_prose::ProseOutcome,
     end: fn(&ambre_prose::ProseOutcome) -> Option<ambre_bus::interop::ConversionProgress>,
 }
 
 /// Count each slice of a running PDF export until `pages` pages are drawn.
 fn print_slices_until(
     state: &mut ambre_prose::logic::ProseState,
-    converter: &ambre_convert::Converter,
     counted: Counted,
     pages: u32,
 ) {
     loop {
-        let out = (counted.slice)(black_box(state), converter);
+        let out = (counted.slice)(black_box(state));
         let Some(progress) = (counted.end)(&out) else {
             panic!("the export ended before page {pages}");
         };
@@ -594,7 +589,7 @@ fn print_slice_of(printed: Printed) {
         .collect();
     state.load_faces(&faces);
     let _ = converted(&mut state, import_command(printed.file()), &markup);
-    let _ = state.settle_conversion(None);
+    let _ = state.settle_conversion();
     let _ = state.layout_event();
     let pictured = printed.pictured(&state.root_blocks());
     for after in &pictured {
@@ -632,18 +627,16 @@ fn print_slice_of(printed: Printed) {
                 );
             }
         }
-        first = state.resume_conversion(Some(&pdf));
+        first = state.resume_conversion();
     }
     let Some(started) = progress_of(&first) else {
         panic!("a large export runs in slices");
     };
     assert_eq!(started.done().get(), 1, "the first slice draws page 0");
-    print_slices_until(&mut state, &pdf, printed.counted(), 2);
+    print_slices_until(&mut state, printed.counted(), 2);
     let middle = started.total().get() / 2;
-    while progress_of(&state.resume_conversion(Some(&pdf))).is_some_and(|p| p.done().get() < middle)
-    {
-    }
-    print_slices_until(&mut state, &pdf, printed.counted(), middle + 1);
+    while progress_of(&state.resume_conversion()).is_some_and(|p| p.done().get() < middle) {}
+    print_slices_until(&mut state, printed.counted(), middle + 1);
 }
 
 /// The address the pictures of the picture slice hold.

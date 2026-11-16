@@ -1905,7 +1905,7 @@ mod tests {
                 if !author.has_pending_work() {
                     break;
                 }
-                outcomes.push(author.resume_in_place(Some(&converter)));
+                outcomes.push(author.resume_in_place());
             }
             assert!(most.get() > 20, "earlier slices reached the peer");
             assert!(outcomes.iter().flat_map(|o| &o.display).any(|e| matches!(

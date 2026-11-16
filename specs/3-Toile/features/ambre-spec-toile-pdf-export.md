@@ -122,7 +122,8 @@ first.
    pages (`TOILE-IO-099`). A page decodes each thumbnail it is the first to draw;
 4. after each page short of the end, report how many pages are recorded against the total
    (`TOILE-IO-134`);
-5. with the last page, hand the recorded pages to the PDF module and answer the file;
+5. with the last page, hand the recorded pages to the PDF module on the converter thread, and
+   answer the file once it is written (`ARCH-124`);
 6. a second request on the same board gives up the downloads still owed, records the rest of the
    first export at once, then starts (`TOILE-IO-135`). A board that closes takes its export along (`TOILE-IO-136`).
 
@@ -200,9 +201,10 @@ The shared gaps are in `ambre-spec-pdf-export.md section 6`. Toile's own:
   0.93 ms for 50 slides on the session's x86_64 host, about 6.5 ms on the target phone. It grows with
   the deck, and no CI job holds it. Deriving a page at its own step would mix two states of the deck
   in one file, section 5.
-* **The write of the file runs in one pass** (`ambre-spec-budgets.md section 1`). The PDF module
-  writes every recorded page in the pass of the last one: 7.8 ms for 50 slides on the same host
-  and day. It moves to the converter thread with the other conversions.
+* **The write of the file runs in one job** (`ambre-spec-budgets.md section 1`). The PDF module
+  writes every recorded page in one call: 7.8 ms for 50 slides on the same host and day. The call
+  runs on the converter thread (`ARCH-124`), so the Logic thread never waits for it, and no row
+  bounds its own length.
 * **The feature gate no longer shrinks the client** (`ambre-spec-budgets.md section 5`). The launcher enables
   it, so every user downloads the writer whether or not they ever export. The lazy-loading the budget
   prescribes for Prose's interop wants the same treatment here. It is not a Cargo feature that delivers it:

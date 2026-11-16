@@ -441,22 +441,19 @@ impl LogicState {
         }
     }
 
-    /// Take `pace` of a Prose document's running conversion, through the
-    /// module its export still needs, and fan it out.
+    /// Take `pace` of a Prose document's running conversion, and fan it
+    /// out. The module call it ends on leaves for the converter thread.
     fn run_prose_conversion(&mut self, document_id: Id<Document>, pace: Pace) {
-        let Self {
-            docs, converters, ..
-        } = self;
-        let Some(DocState::Prose(state)) = docs.get_mut(&document_id).map(|d| &mut d.state) else {
+        let Some(DocState::Prose(state)) = self.docs.get_mut(&document_id).map(|d| &mut d.state)
+        else {
             return;
         };
         if !state.has_pending_work() {
             return;
         }
-        let converter = state.pending_family().and_then(|f| converters.ready(f));
         let outcome = match pace {
-            Pace::Slice => state.resume_conversion(converter),
-            Pace::Whole => state.settle_conversion(converter),
+            Pace::Slice => state.resume_conversion(),
+            Pace::Whole => state.settle_conversion(),
         };
         // A layout measures the whole document, so one per slice would cost
         // the import the square of its length. The view is owed one when the
@@ -469,8 +466,8 @@ impl LogicState {
             outcome.ephemeral,
             Vec::new(),
         );
-        // The walk of a text export that ended owes the converter thread
-        // its write.
+        // The walk of a text export or the pages of a PDF that ended owe the
+        // converter thread their write.
         self.offload_prose_files(document_id);
         if ended {
             self.owe_layout(document_id);
@@ -547,18 +544,17 @@ impl LogicState {
     }
 
     /// Walk `pace` of a sheet's running PDF export, through the export
-    /// context and the PDF module, and fan out what it answers. The export
-    /// writes nothing, so no slice carries a delta (`PDF-002`).
+    /// context, and fan out what it answers. The write of the file leaves for
+    /// the converter thread, and the Logic thread never waits for it
+    /// (`ARCH-124`). The export writes nothing, so no slice carries a delta
+    /// (`PDF-002`).
     pub(crate) fn run_trame_print(
         &mut self,
         document_id: Id<Document>,
         pace: ambre_trame::PrintPace,
     ) {
         let Self {
-            docs,
-            export_cx,
-            converters,
-            ..
+            docs, export_cx, ..
         } = self;
         let Some(DocState::Trame(state)) = docs.get_mut(&document_id).map(|d| &mut d.state) else {
             return;
@@ -566,17 +562,13 @@ impl LogicState {
         if !state.is_printing() {
             return;
         }
-        let outcome = match (
-            export_cx.as_mut(),
-            converters.ready(ambre_core::ConverterFamily::Pdf),
-        ) {
-            (Some(font_cx), Some(converter)) => state.print_slice(font_cx, converter, pace),
-            (None, _) => state.print_stop(ambre_core::StopCause::FontsLoading),
-            (_, None) => state.print_stop(ambre_core::StopCause::ConverterRefused(
-                ambre_core::ConverterRefusal::NotLoaded,
-            )),
+        let outcome = match export_cx.as_mut() {
+            Some(font_cx) => state.print_slice(font_cx, pace),
+            None => state.print_stop(ambre_core::StopCause::FontsLoading),
         };
         self.dispatch_trame_outcome(document_id, outcome);
+        // The last page owes the write of the file (`ARCH-124`).
+        self.offload_trame_files(document_id);
     }
 
     /// Land a sheet's running PDF export whole, now: before a command that

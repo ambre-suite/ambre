@@ -20,11 +20,8 @@
 
 use std::collections::HashMap;
 
-use ambre_bus::interop::{
-    Direction, ExportedFile, FileFormat, InteropAnswer, InteropError, Outcome, Steps,
-};
+use ambre_bus::interop::{Direction, FileFormat, InteropError, Outcome, Steps};
 use ambre_client_core::DocumentLocale;
-use ambre_convert::{Conversion, Converted, Converter};
 use ambre_core::index::{Len, Pos, Span};
 use ambre_core::{Count, Doc, PrintUnit, Pt, Px};
 use ambre_draw::list::{
@@ -36,7 +33,7 @@ use loro::TreeID;
 
 use super::ProseState;
 use crate::doc;
-use crate::events::{Page, ProseEvent, ProseOutcome};
+use crate::events::Page;
 use crate::layout::run::{RunChar, ShapedRun};
 use crate::message::{BlockType, ConversionReport, DocChar, PdfExport, ProseConstruct};
 use crate::ui::ProseUiState;
@@ -358,36 +355,6 @@ impl ProseState {
             .retain(|(id, _)| carried.iter().any(|(next, _)| next == id));
         Step::Drew
     }
-
-    /// Hand the recorded file to the PDF module, and answer it with its
-    /// report (`PDF-015`). The export wrote nothing to the document.
-    pub(super) fn write_pdf(
-        document: PrintDocument,
-        report: ConversionReport,
-        converter: &Converter,
-    ) -> ProseOutcome {
-        let filename = ambre_client_core::ExportFilename::from_title(
-            document.meta.title.as_deref().unwrap_or_default(),
-            "document",
-            ambre_client_core::ExportExtension::Pdf,
-        );
-        let answer = match converter.convert(&Conversion::WritePdf { document }) {
-            Ok(Converted::File(data)) => InteropAnswer::ExportReady {
-                file: ExportedFile {
-                    filename,
-                    media_type: ambre_core::MediaType::from("application/pdf"),
-                    data,
-                },
-                report,
-            },
-            Ok(_) => InteropAnswer::failed(
-                Direction::Export,
-                InteropError::Stopped(ambre_core::StopCause::ConverterAnswered),
-            ),
-            Err(e) => InteropAnswer::failed(Direction::Export, crate::interop::stopped(&e)),
-        };
-        ProseOutcome::display_only(vec![ProseEvent::Interop(answer)])
-    }
 }
 
 /// The first blocks of `wanted` whose characters fit in `limit`, and at
@@ -474,9 +441,12 @@ fn print_link(
 mod tests {
     use super::*;
     use crate::events::{BlockId, BlockInit, CrossRefKind, HeadingLevel, ProseCommand};
+    use crate::events::{ProseEvent, ProseOutcome};
     use crate::message::{ExportFormat, TocNumbering};
     use crate::view::tests::append;
+    use ambre_bus::interop::InteropAnswer;
     use ambre_bus::interop::InteropRequest;
+    use ambre_convert::Converter;
     use ambre_client_core::FileBytes;
     use ambre_core::Payload;
 
@@ -543,6 +513,58 @@ mod tests {
             .find(|placed| placed.block_id == id)
             .map(|placed| placed.page_start)
             .expect("the block is placed")
+    }
+
+    /// `ARCH-124`: the pages are drawn in slices, then the export owes the
+    /// converter thread the write of the file. No slice answers the file:
+    /// the answer of the thread hands it over, and a module that did not
+    /// run fails it.
+    #[test]
+    fn the_last_page_owes_its_write_to_the_converter_thread() {
+        use crate::logic::FileWork;
+        use ambre_convert::{Conversion, ConvertError};
+        let mut state = state();
+        let _ = paragraphs(&mut state, 40);
+        let _ = state.paginate(&[]);
+        let converter = Converter::load(
+            ambre_core::ConverterFamily::Pdf,
+            &ambre_core::Payload::new(Vec::new()),
+        )
+        .expect("the host links the engine");
+        let mut outcomes =
+            vec![state.handle_conversion(pdf_command(DocumentLocale::NONE), Ok(&converter))];
+        while state.has_pending_work() {
+            outcomes.push(state.resume_conversion());
+        }
+        assert!(
+            outcomes.iter().all(|outcome| file_of(outcome).is_none()),
+            "no slice answers the file"
+        );
+        let requests = state.take_file_requests();
+        let [(ticket, conversion)] = requests.as_slice() else {
+            panic!("one write is owed: {}", requests.len());
+        };
+        assert!(matches!(conversion, Conversion::WritePdf { .. }));
+        assert_eq!(state.file_work(*ticket), Some(FileWork::Write));
+        let written = state
+            .handle_file_converted(*ticket, converter.convert(conversion))
+            .expect("the ticket is the document's own");
+        let file = file_of(&written).expect("the answer is the file");
+        assert!(file.as_bytes().starts_with(b"%PDF-"), "a PDF header");
+        let _ = state.handle_conversion(pdf_command(DocumentLocale::NONE), Ok(&converter));
+        while state.has_pending_work() {
+            let _ = state.resume_conversion();
+        }
+        let [(lost, _)] = state.take_file_requests()[..] else {
+            panic!("one write is owed");
+        };
+        let failed = state
+            .handle_file_converted(lost, Err(ConvertError::Absent))
+            .expect("the ticket is the document's own");
+        assert!(matches!(
+            failed.display.as_slice(),
+            [ProseEvent::Interop(InteropAnswer::Failed(_))]
+        ));
     }
 
     /// `PROSE-IO-029`, `PDF-009`: the file holds the pages the layout holds,
@@ -856,7 +878,7 @@ mod tests {
             pos: Pos::<DocChar>::ZERO,
             text: "typedwhilewriting ".to_owned(),
         });
-        let mut outcome = state.drained(first, &converter);
+        let mut outcome = state.drained(first);
         outcome.display.extend(typed.display);
         let bytes = file_of(&outcome).expect("the export finished");
         let read: String = page_texts(&bytes).concat();
@@ -941,12 +963,12 @@ mod tests {
                 .iter()
                 .all(|e| e.outcome != Outcome::Approximated)
         );
-        let converter = ambre_convert::Converter::load(
-            ambre_core::ConverterFamily::Pdf,
-            &ambre_core::Payload::new(Vec::new()),
-        )
-        .expect("the host links the engine");
-        let outcome = ProseState::write_pdf(document, report, &converter);
+        let mut outcome = state.ask_print(
+            crate::message::ExportFormat::Pdf(PdfExport::default()),
+            document,
+            report,
+        );
+        state.serve_files(&mut outcome);
         let file = file_of(&outcome).expect("a file");
         let pdf = parsed(&file);
         let images = pdf
@@ -1079,7 +1101,7 @@ mod tests {
         .expect("the host links the engine");
         let sliced = export(&mut state, DocumentLocale::NONE);
         let first = state.convert_in_place(pdf_command(DocumentLocale::NONE), Ok(&converter));
-        let mut whole = state.settle_in_place(Some(&converter));
+        let mut whole = state.settle_in_place();
         whole.display.extend(first.display);
         assert_eq!(file_of(&whole), Some(sliced.clone()));
         let _ = state.convert_in_place(pdf_command(DocumentLocale::NONE), Ok(&converter));
@@ -1090,12 +1112,10 @@ mod tests {
             })
         };
         // Up to a far page, then one slice into it: some of its runs shaped.
-        while progress(&state.resume_in_place(Some(&converter)))
-            .is_some_and(|p| p.done().get() < 20)
-        {}
-        let mid = state.resume_in_place(Some(&converter));
+        while progress(&state.resume_in_place()).is_some_and(|p| p.done().get() < 20) {}
+        let mid = state.resume_in_place();
         assert_eq!(progress(&mid).map(|p| p.done().get()), Some(20));
-        let landed = state.settle_in_place(Some(&converter));
+        let landed = state.settle_in_place();
         assert_eq!(file_of(&landed), Some(sliced));
     }
 }

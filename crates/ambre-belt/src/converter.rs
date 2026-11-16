@@ -9,7 +9,8 @@ mod tests {
     /// through the converter modules. Neither instance links a CSV reader or a
     /// PDF writer (`ARCH-078`). So each file can only come from a module the
     /// Sync worker fetched and checked. The import loads the tables module,
-    /// and the export loads the PDF module beside it.
+    /// and the export loads the PDF module beside it. The converter thread
+    /// writes the deck (`ARCH-124`).
     #[tokio::test(flavor = "multi_thread")]
     #[cfg_attr(
         not(feature = "browser"),

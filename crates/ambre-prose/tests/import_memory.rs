@@ -87,7 +87,7 @@ fn an_import_holds_less_than_the_ceiling_times_its_file() {
         }
     }
     while state.has_pending_work() {
-        last = state.resume_conversion(Some(&converter));
+        last = state.resume_conversion();
     }
     let (peak, _) = resident().expect("Linux reports the peak");
     assert!(

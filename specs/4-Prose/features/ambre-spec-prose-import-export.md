@@ -572,7 +572,7 @@ time, as the measure of the `Prose import or export, one slice` row shows
 |---|---|---|
 | import | one operation written | the decode of the form, the build of the list, and the threads and suggestions the last slice writes. The module read runs before, on the converter thread (`ARCH-122`) |
 | export | one top-level block walked, with what it nests | the annotations and the footnotes at the start, and the encode of the form at the end. The module write runs after, on the converter thread (`ARCH-122`) |
-| PDF export | one page drawn, over one slice or more | the layout at the start, and the module write at the end (`features/ambre-spec-prose-pdf-export.md`) |
+| PDF export | one page drawn, over one slice or more | the layout at the start. The module write runs after, on the converter thread (`ARCH-124`, `features/ambre-spec-prose-pdf-export.md`) |
 
 `IMPORT_SLICE` and `EXPORT_SLICE` in `crates/ambre-prose/src/logic/sliced.rs` set the steps of one
 slice, and the `Prose import or export, one slice` row holds its cost (`PROSE-IO-099`). `PRINT_SHAPE_ROOM`
@@ -590,18 +590,19 @@ answers in the pass of its command, and reports no progress.
 
 **The module call.** A module reads or writes a file whole, so its call holds a thread for the
 length of the file. That call runs on the converter thread, never on the Logic thread
-(`ARCH-122`, `ambre-spec-architecture.md section 2`):
+(`ARCH-122`, `ARCH-124`, `ambre-spec-architecture.md section 2`):
 
 | Conversion | On the Logic thread | On the converter thread |
 |---|---|---|
 | import | the bounds of the file, then, on the answer, the import in slices | the read into the form |
 | export | the walk in slices, then, on the answer, the file handed over | the write of the form |
+| PDF export | the pages drawn in slices, then, on the answer, the file handed over | the write of the recorded pages |
 
 The document owes the request under a ticket, and the Logic dispatcher sends it and never waits.
 A read in flight changes nothing (`ARCH-104`). Its answer lands the import as a command would: the
 running conversion lands first (`PROSE-IO-100`). A write in flight holds the document free, since
 its walk already ended. A module that does not run answers as a module that did not load. A paste
-and a PDF export still call their module on the Logic thread.
+still calls its module on the Logic thread.
 
 **The bound of a file.** The module read holds the file and its form. The build turns the form
 into the list, and the form gives up its blocks before the first write. Each operation gives up

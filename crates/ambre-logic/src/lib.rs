@@ -2354,6 +2354,15 @@ mod pass_tests {
         }
     }
 
+    /// A converter thread linked to `state`, served by hand: the PDF module
+    /// writes a deck there, never on the Logic thread (`ARCH-124`).
+    #[cfg(all(feature = "toile-pdf", not(target_arch = "wasm32")))]
+    fn converter_thread(state: &mut LogicState) -> crate::converter_thread::ConverterThread {
+        let (link, ends) = crate::converter_thread::converter_channels(&Doorbell::new());
+        state.offload = crate::converter_thread::Offload::over(link);
+        crate::converter_thread::ConverterThread::new(ends).0
+    }
+
     /// The menu's own deck export command.
     #[cfg(feature = "toile-pdf")]
     fn export_deck(document_id: Id<Document>) -> LogicCommand {
@@ -2384,8 +2393,11 @@ mod pass_tests {
     /// A deck export records one page per pass, and the loop
     /// comes back for the next one unasked. A local edit and a peer's delta
     /// of the same board each land between two pages, while the export runs.
-    /// The export then answers each page short of the end, and its file once.
-    #[cfg(feature = "toile-pdf")]
+    /// The export then answers each page short of the end. The last page
+    /// leaves the write to the converter thread, and the Logic thread never
+    /// waits for it (`ARCH-124`). The file lands once, on the pass after the
+    /// thread served it.
+    #[cfg(all(feature = "toile-pdf", not(target_arch = "wasm32")))]
     #[test]
     fn an_edit_and_a_remote_delta_land_mid_deck_export() {
         use ambre_bus::interop::InteropAnswer;
@@ -2398,6 +2410,7 @@ mod pass_tests {
             ui,
             ..
         } = deck(4);
+        let mut thread = converter_thread(&mut state);
         let before = elements(&state, document_id);
         to_logic.try_send(export_deck(document_id)).expect("queued");
         state.drain_pass(&from_ui, &from_sync);
@@ -2437,7 +2450,17 @@ mod pass_tests {
         while state.has_pending_work() {
             state.drain_pass(&from_ui, &from_sync);
         }
-        let answers = interop_answers(&ui);
+        let mut answers = interop_answers(&ui);
+        assert!(
+            !answers
+                .iter()
+                .any(|a| matches!(a, InteropAnswer::ExportReady { .. })),
+            "the write is in flight"
+        );
+        assert!(!state.offload.is_idle(), "the pages left for the thread");
+        thread.serve();
+        state.drain_pass(&from_ui, &from_sync);
+        answers.extend(interop_answers(&ui));
         let progress: Vec<u32> = answers
             .iter()
             .filter_map(|a| match a {
@@ -2659,7 +2682,7 @@ mod pass_tests {
 
     /// A second export asked while the first runs ends the first one, so each
     /// request answers its own file.
-    #[cfg(feature = "toile-pdf")]
+    #[cfg(all(feature = "toile-pdf", not(target_arch = "wasm32")))]
     #[test]
     fn a_second_deck_export_answers_both_files() {
         let Board {
@@ -2671,12 +2694,14 @@ mod pass_tests {
             ui,
             ..
         } = deck(3);
+        let mut thread = converter_thread(&mut state);
         to_logic.try_send(export_deck(document_id)).expect("queued");
         state.drain_pass(&from_ui, &from_sync);
         to_logic.try_send(export_deck(document_id)).expect("queued");
         while {
             state.drain_pass(&from_ui, &from_sync);
-            state.has_pending_work()
+            thread.serve();
+            state.has_pending_work() || !state.offload.is_idle()
         } {}
         let files = interop_answers(&ui)
             .iter()

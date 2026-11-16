@@ -85,6 +85,11 @@ pub(super) enum FileJob {
         filename: ambre_client_core::ExportFilename,
         report: Box<TrameReport>,
     },
+    /// The PDF module writes the pages a PDF export recorded, which leave
+    /// under `filename` (`ARCH-124`).
+    WritePdf {
+        filename: ambre_client_core::ExportFilename,
+    },
 }
 
 /// The file conversions of one workbook on the converter thread: those in
@@ -97,7 +102,7 @@ pub(super) struct FileJobs {
 
 impl FileJobs {
     /// Owe the converter thread `conversion`, whose answer `job` lands.
-    fn ask(&mut self, conversion: Conversion, job: FileJob) {
+    pub(super) fn ask(&mut self, conversion: Conversion, job: FileJob) {
         let ticket = ambre_bus::next_request();
         self.in_flight.insert(ticket, job);
         self.outbox.push((ticket, conversion));
@@ -197,7 +202,9 @@ impl TrameState {
     pub fn file_work(&self, ticket: Seq<Request>) -> Option<FileWork> {
         self.file_jobs.in_flight.get(&ticket).map(|job| match job {
             FileJob::ReadCsv { .. } | FileJob::ReadWorkbook(_) => FileWork::Read,
-            FileJob::WriteCsv { .. } | FileJob::WriteWorkbook { .. } => FileWork::Write,
+            FileJob::WriteCsv { .. }
+            | FileJob::WriteWorkbook { .. }
+            | FileJob::WritePdf { .. } => FileWork::Write,
         })
     }
 
@@ -237,6 +244,7 @@ impl TrameState {
                 filename,
                 report,
             } => super::xlsx::workbook_written(answer, file, filename, *report),
+            FileJob::WritePdf { filename } => super::print::pdf_written(answer, filename),
         })
     }
 

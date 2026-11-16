@@ -739,7 +739,7 @@ impl ProseState {
     /// nothing is served between two slices (`PROSE-IO-101`).
     fn dispatch(&mut self, command: ProseCommand) -> ProseOutcome {
         let landed = if command.is_mutating() {
-            self.land_conversion(None)
+            self.land_conversion()
         } else {
             None
         };

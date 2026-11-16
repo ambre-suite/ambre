@@ -15,8 +15,10 @@
 // thread only routes the request and the plaintext answer. The messages
 // between are served as usual, and the loop does not spin on the wait.
 //
-// The PDF module writes the recorded pages in the pass that records the last
-// one.
+// The pass that records the last page hands the recorded pages to the
+// converter thread, and never waits (`ARCH-124`). The PDF module writes them
+// there, and the answer hands over the file. The recorded pages name no source
+// of the picture bytes they hold.
 // ============================================================================
 
 use super::*;
@@ -141,14 +143,12 @@ impl LogicState {
     }
 
     /// Record the next page of a board's running deck export. A page short of
-    /// the end answers the progress. The last page writes the
-    /// file and answers it. A board with no export running answers nothing.
+    /// the end answers the progress. The last page owes the converter thread
+    /// the write of the file, which answers it (`ARCH-124`). A board with no
+    /// export running answers nothing.
     pub(crate) fn resume_deck_export(&mut self, document_id: Id<Document>) {
         let Self {
-            docs,
-            export_cx,
-            converters,
-            ..
+            docs, export_cx, ..
         } = self;
         let Some(doc) = docs.get_mut(&document_id) else {
             return;
@@ -167,14 +167,20 @@ impl LogicState {
         };
         let event = match answer {
             Step::Progress(progress) => ToileEvent::Interop(InteropAnswer::Progress(progress)),
-            Step::Recorded => match doc.deck_export.take() {
-                Some(recording) => {
-                    let converter = converters.ready(ambre_core::ConverterFamily::Pdf);
-                    let report = report(&recording);
-                    data::deck_file_answer(write(*recording, converter), report)
+            Step::Recorded => {
+                if let Some(recording) = doc.deck_export.take() {
+                    let report = Box::new(report(&recording));
+                    self.offload(crate::converter_thread::Job {
+                        ticket: ambre_bus::next_request(),
+                        owner: crate::converter_thread::JobOwner::DeckPdf {
+                            document_id,
+                            report,
+                        },
+                        conversion: write_request(*recording),
+                    });
                 }
-                None => return,
-            },
+                return;
+            }
             Step::Stopped(cause) => {
                 doc.deck_export = None;
                 ToileEvent::Interop(InteropAnswer::failed(
@@ -299,26 +305,15 @@ fn step(recording: &mut Recording, _font_cx: &mut parley::FontContext) -> Step {
     match *recording {}
 }
 
-/// Write the recorded pages through the PDF module, or say why there is no
-/// file.
+/// The request that writes the recorded pages through the PDF module.
 #[cfg(feature = "toile-pdf")]
-fn write(
-    recording: Recording,
-    converter: Option<&ambre_convert::Converter>,
-) -> Result<ambre_core::Payload<ambre_client_core::FileBytes>, StopCause> {
-    let Some(converter) = converter else {
-        return Err(StopCause::ConverterUnavailable);
-    };
-    ambre_toile::logic::interop::write_pdf(recording.into_document(), converter).map_err(|e| {
-        tracing::warn!("Logic: the PDF export stopped: {e}");
-        data::pdf_stop_cause(e)
-    })
+fn write_request(recording: Recording) -> ambre_convert::Conversion {
+    ambre_convert::Conversion::WritePdf {
+        document: recording.into_document(),
+    }
 }
 
 #[cfg(not(feature = "toile-pdf"))]
-fn write(
-    recording: Recording,
-    _converter: Option<&ambre_convert::Converter>,
-) -> Result<ambre_core::Payload<ambre_client_core::FileBytes>, StopCause> {
+fn write_request(recording: Recording) -> ambre_convert::Conversion {
     match recording {}
 }

@@ -2912,13 +2912,17 @@ mod tests {
             .collect()
     }
 
-    /// Ask a live board for its deck, and report the Toile event that came back.
+    /// Ask a live board for its deck, and report the Toile event that came
+    /// back. The converter thread serves the write of the file, then the
+    /// next pass lands its answer (`ARCH-124`).
     fn export_pdf_answer(
         state: &mut LogicState,
         ui_rx: &Receiver<UiEvent>,
         doc_id: Id<Document>,
     ) -> ambre_toile::message::ToileEvent {
         load_converter(state, ambre_core::ConverterFamily::Pdf);
+        #[cfg(not(target_arch = "wasm32"))]
+        let mut thread = converter_thread(state);
         // Whatever seeded the board has already spoken; the export's own answer
         // is the only event this reads.
         ui_rx.try_iter().for_each(drop);
@@ -2928,6 +2932,11 @@ mod tests {
                 ambre_toile::message::ToileExport::Pdf,
             )),
         });
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            thread.serve();
+            state.take_converted();
+        }
         ui_rx
             .try_iter()
             .find_map(|e| match e {
@@ -3052,13 +3061,17 @@ mod tests {
     }
 
     /// The Prose PDF export, routed. The command waits on the PDF module, and
-    /// the pages are walked one slice a pass. The file comes back to the UI
-    /// thread, and nothing reaches Sync but the module fetch (`PDF-017`).
+    /// the pages are walked one slice a pass. The last page leaves the write
+    /// to the converter thread, and the Logic thread never waits for it
+    /// (`ARCH-124`). The file comes back to the UI thread, and nothing
+    /// reaches Sync but the module fetch (`PDF-017`).
+    #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn a_prose_pdf_export_answers_with_the_file_and_sends_no_delta() {
-        use ambre_bus::interop::InteropRequest;
+        use ambre_bus::interop::{InteropAnswer, InteropRequest};
         use ambre_prose::message::{ExportFormat, PdfExport, ProseCommand, ProseEvent};
         let (mut state, ui, sync) = harness();
+        let mut thread = converter_thread(&mut state);
         state.handle_logic_command(LogicCommand::LoadFonts {
             faces: shipped_faces(),
         });
@@ -3076,6 +3089,8 @@ mod tests {
                 text: "printed".to_owned(),
             }),
         });
+        // The edit's delta leaves on its own pass, before the export.
+        state.answer_pass();
         sync.try_iter().for_each(drop);
         ui.try_iter().for_each(drop);
         state.handle_logic_command(LogicCommand::App {
@@ -3094,6 +3109,17 @@ mod tests {
         while state.has_pending_work() {
             state.resume_import(document_id);
         }
+        // The pass answers the document: its requests leave then.
+        state.answer_pass();
+        assert!(
+            !prose_answers(&ui)
+                .iter()
+                .any(|e| matches!(e, ProseEvent::Interop(InteropAnswer::ExportReady { .. }))),
+            "the write is in flight"
+        );
+        assert!(!state.offload.is_idle(), "the pages left for the thread");
+        thread.serve();
+        state.take_converted();
         let file = ui.try_iter().find_map(|e| match e {
             UiEvent::Viewport {
                 event:
@@ -3208,11 +3234,12 @@ mod tests {
 
     /// The first command that needs the converter asks the Sync worker once,
     /// and every such command waits. When the module lands, each runs in
-    /// order and answers.
-    #[cfg(feature = "toile-pdf")]
+    /// order, and its write answers once the converter thread served it.
+    #[cfg(all(feature = "toile-pdf", not(target_arch = "wasm32")))]
     #[test]
     fn the_first_conversion_asks_for_the_converter_once_and_the_rest_wait() {
         let (mut state, ui_rx, sync_rx) = harness();
+        let mut thread = converter_thread(&mut state);
         state.handle_logic_command(LogicCommand::LoadFonts { faces: Vec::new() });
         let doc_id = board_with_content(&mut state);
         sync_rx.try_iter().for_each(drop);
@@ -3240,6 +3267,8 @@ mod tests {
             "the exports wait for the module"
         );
         load_converter(&mut state, ambre_core::ConverterFamily::Pdf);
+        thread.serve();
+        state.take_converted();
         let answers = toile_answers(&ui_rx);
         assert_eq!(answers.len(), 2);
         assert!(answers.iter().all(|a| matches!(
@@ -3256,6 +3285,8 @@ mod tests {
             )),
         });
         assert!(sync_rx.try_recv().is_err(), "no second fetch");
+        thread.serve();
+        state.take_converted();
         assert_eq!(toile_answers(&ui_rx).len(), 1);
     }
 
@@ -3385,6 +3416,7 @@ mod tests {
 
     /// A workbook of 150 labels down column A, with the shipped faces
     /// delivered, so a PDF export of it walks three pages.
+    #[cfg(not(target_arch = "wasm32"))]
     fn printable_trame(state: &mut LogicState) -> Id<Document> {
         state.handle_logic_command(LogicCommand::LoadFonts {
             faces: shipped_faces(),
@@ -3406,6 +3438,7 @@ mod tests {
     }
 
     /// The sheet export the File menu asks for.
+    #[cfg(not(target_arch = "wasm32"))]
     fn sheet_pdf() -> AppCommand {
         AppCommand::Trame(TrameCommand::export(
             ambre_trame::message::TrameExport::Pdf(ambre_trame::message::PdfExport::default()),
@@ -3413,6 +3446,7 @@ mod tests {
     }
 
     /// The file of each `ExportReady` the UI received, draining the queue.
+    #[cfg(not(target_arch = "wasm32"))]
     fn trame_files(ui_rx: &Receiver<UiEvent>) -> Vec<ambre_bus::interop::ExportedFile> {
         ui_rx
             .try_iter()
@@ -3429,13 +3463,16 @@ mod tests {
             .collect()
     }
 
-    /// `PDF-002`: the sheet export, routed. The command waits
-    /// on the PDF module, then each pass of the loop draws one page. The file
-    /// comes back to the UI thread, and nothing reaches Sync but the module
-    /// fetch.
+    /// `PDF-002`, `ARCH-124`: the sheet export, routed. The command waits
+    /// on the PDF module, then each pass of the loop draws one page. The last
+    /// page leaves the write to the converter thread, and the Logic thread
+    /// never waits for it. The file comes back to the UI thread, and nothing
+    /// reaches Sync but the module fetch.
+    #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn a_sheet_pdf_export_answers_with_the_file_and_sends_no_delta() {
         let (mut state, ui_rx, sync_rx) = harness();
+        let mut thread = converter_thread(&mut state);
         let doc_id = printable_trame(&mut state);
         sync_rx.try_iter().for_each(drop);
         state.handle_logic_command(LogicCommand::App {
@@ -3457,6 +3494,10 @@ mod tests {
             passes += 1;
         }
         assert_eq!(passes, 3, "one pass per page");
+        assert!(trame_files(&ui_rx).is_empty(), "the write is in flight");
+        assert!(!state.offload.is_idle(), "the pages left for the thread");
+        thread.serve();
+        state.take_converted();
         let files = trame_files(&ui_rx);
         let [file] = files.as_slice() else {
             panic!("one file, got {}", files.len());
@@ -3467,11 +3508,13 @@ mod tests {
     }
 
     /// A scroll is served between two pages and leaves the export
-    /// running. An edit lands the export whole first, so the file
-    /// reaches the UI as the edit is applied.
+    /// running. An edit lands the export whole first, so the write of the
+    /// file leaves for the converter thread as the edit is applied.
+    #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn an_edit_lands_a_running_sheet_export_first() {
         let (mut state, ui_rx, sync_rx) = harness();
+        let mut thread = converter_thread(&mut state);
         let doc_id = printable_trame(&mut state);
         load_converter(&mut state, ambre_core::ConverterFamily::Pdf);
         sync_rx.try_iter().for_each(drop);
@@ -3502,7 +3545,10 @@ mod tests {
             other => panic!("the registry holds {other:?}"),
         };
         assert!(!printing, "the edit landed the export");
-        assert_eq!(trame_files(&ui_rx).len(), 1, "the file came first");
+        assert!(!state.offload.is_idle(), "the write left first");
+        thread.serve();
+        state.take_converted();
+        assert_eq!(trame_files(&ui_rx).len(), 1);
     }
 
     /// Each family loads its own module and holds its own queue. A CSV export

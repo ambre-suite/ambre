@@ -10,8 +10,9 @@
 //! An import first checks its whole list against the nesting rule, so a
 //! refusal writes nothing (`PROSE-IO-011`). It then writes the list into the
 //! document, one commit per slice, in one step of the history
-//! (`PROSE-IO-051`). An export walks the top-level blocks, then hands the form
-//! to the module. Each slice short of the end reports its progress
+//! (`PROSE-IO-051`). An export walks the top-level blocks, or draws the
+//! pages of a PDF, then owes the module call to the converter thread
+//! (`ARCH-122`, `ARCH-124`). Each slice short of the end reports its progress
 //! (`PROSE-IO-021`, `PROSE-IO-057`).
 //!
 //! A command that writes the document lands the running conversion first
@@ -21,15 +22,13 @@
 use std::collections::HashMap;
 
 use ambre_bus::interop::{ConversionProgress, Direction, InteropAnswer, InteropError, Steps};
-use ambre_convert::Converter;
-use ambre_core::{ConverterFamily, Count};
+use ambre_core::Count;
 
 use super::ProseState;
 use super::interop::{ImportAnnotations, ImportOp, ImportWriter, Walk};
 use super::print::PrintJob;
 use crate::events::{ProseEvent, ProseOutcome};
 use crate::message::{ConversionReport, ExportFormat};
-use ambre_draw::list::PrintDocument;
 
 /// The steps one pass of a running import takes: one operation written into
 /// the document is one step. The `import_slice` operation of
@@ -102,19 +101,6 @@ enum ExportStage {
     Walking(Box<Walk>),
     /// Pages of a PDF are left to draw.
     Printing(Box<PrintJob>),
-    /// Every page is drawn: the PDF module writes them on the next call
-    /// that holds it.
-    Printed(Box<(PrintDocument, ConversionReport)>),
-}
-
-/// The family whose module writes `format`, if a module does.
-pub(crate) const fn export_family(format: &ExportFormat) -> Option<ConverterFamily> {
-    match format {
-        ExportFormat::Markdown(_) | ExportFormat::Html(_) => Some(ConverterFamily::Markup),
-        ExportFormat::Word(_) | ExportFormat::OpenDocument(_) => Some(ConverterFamily::Office),
-        ExportFormat::Pdf(_) => Some(ConverterFamily::Pdf),
-        ExportFormat::Ambre => None,
-    }
 }
 
 impl ProseState {
@@ -126,57 +112,31 @@ impl ProseState {
         self.conversion.is_some() || !self.queued.is_empty()
     }
 
-    /// The family whose module the running conversion still calls on this
-    /// thread. A PDF export hands its pages to it once the last one is
-    /// drawn. A text export hands its form to the converter thread
-    /// (`ARCH-122`), and an import needs none.
-    #[must_use]
-    pub fn pending_family(&self) -> Option<ConverterFamily> {
-        let format = match &self.conversion {
-            Some(Job::Export(job)) => &job.format,
-            Some(Job::Import(_)) => return None,
-            None => match self.queued.front() {
-                Some(super::pictures::Queued::Export { format, .. }) => format,
-                _ => return None,
-            },
-        };
-        match format {
-            ExportFormat::Pdf(_) => export_family(format),
-            _ => None,
-        }
-    }
-
     /// Take the next slice of the running conversion, and answer its delta.
-    /// `converter` is the module of [`Self::pending_family`], which the last
-    /// slice of an export writes through. With nothing running it answers
+    /// The last slice of an export owes its module call to the converter
+    /// thread (`ARCH-122`, `ARCH-124`). With nothing running it answers
     /// nothing.
-    pub fn resume_conversion(&mut self, converter: Option<&Converter>) -> ProseOutcome {
-        let mut outcome = self.run_conversion(Pace::Slice, Flush::Now, converter);
+    pub fn resume_conversion(&mut self) -> ProseOutcome {
+        let mut outcome = self.run_conversion(Pace::Slice, Flush::Now);
         self.report_history(&mut outcome);
         outcome
     }
 
     /// Land the rest of the running conversion now, and answer its delta:
     /// before a remote delta merges or the document closes (`ARCH-031`).
-    pub fn settle_conversion(&mut self, converter: Option<&Converter>) -> ProseOutcome {
-        let mut outcome = self.run_conversion(Pace::Whole, Flush::Now, converter);
+    pub fn settle_conversion(&mut self) -> ProseOutcome {
+        let mut outcome = self.run_conversion(Pace::Whole, Flush::Now);
         self.report_history(&mut outcome);
         outcome
     }
 
     /// Land the rest of the running conversion before a command, without
     /// exporting its delta: the command's own commit carries it. An export
-    /// walks to its end and waits for its module. Answers the events of the
+    /// walks to its end and owes its module call. Answers the events of the
     /// landing, or `None` when nothing ran.
-    pub(super) fn land_conversion(
-        &mut self,
-        converter: Option<&Converter>,
-    ) -> Option<Vec<ProseEvent>> {
+    pub(super) fn land_conversion(&mut self) -> Option<Vec<ProseEvent>> {
         self.conversion.as_ref()?;
-        Some(
-            self.run_conversion(Pace::Whole, Flush::ByCaller, converter)
-                .display,
-        )
+        Some(self.run_conversion(Pace::Whole, Flush::ByCaller).display)
     }
 
     /// Carry what [`Self::land_conversion`] answered into the outcome of the
@@ -230,23 +190,19 @@ impl ProseState {
             annotations,
             writer,
         })));
-        self.run_conversion(Pace::Slice, Flush::Now, None)
+        self.run_conversion(Pace::Slice, Flush::Now)
     }
 
     /// Start an export to `format`, and take its first slice. It writes
     /// nothing to the document (`PROSE-IO-017`).
-    pub(super) fn start_export(
-        &mut self,
-        format: ExportFormat,
-        converter: &Converter,
-    ) -> ProseOutcome {
+    pub(super) fn start_export(&mut self, format: ExportFormat) -> ProseOutcome {
         // The pictures come first, through the media flow; a document with
         // none starts at once (`PROSE-IO-007`).
         let waited = self.fetch_pictures(format);
         if self.conversion.is_none() {
             return waited;
         }
-        let mut outcome = self.run_conversion(Pace::Slice, Flush::Now, Some(converter));
+        let mut outcome = self.run_conversion(Pace::Slice, Flush::Now);
         let mut display = waited.display;
         display.append(&mut outcome.display);
         outcome.display = display;
@@ -282,12 +238,7 @@ impl ProseState {
         ProseOutcome::nothing()
     }
 
-    fn run_conversion(
-        &mut self,
-        pace: Pace,
-        flush: Flush,
-        converter: Option<&Converter>,
-    ) -> ProseOutcome {
+    fn run_conversion(&mut self, pace: Pace, flush: Flush) -> ProseOutcome {
         if self.conversion.is_none()
             && let Some(next) = self.queued.pop_front()
         {
@@ -303,7 +254,7 @@ impl ProseState {
         };
         match job {
             Job::Import(job) => self.run_import(*job, pace, flush),
-            Job::Export(job) => self.run_export(*job, pace, flush, converter),
+            Job::Export(job) => self.run_export(*job, pace),
         }
     }
 
@@ -364,17 +315,11 @@ impl ProseState {
     }
 
     /// Take `pace` of a running export. A slice short of the end of the walk
-    /// reports its progress. Once the walk ended, the form leaves for the
-    /// converter thread (`ARCH-122`). The pages of a PDF are written
-    /// once a call holds the PDF module. An export writes nothing to the
-    /// document, so it flushes nothing.
-    fn run_export(
-        &mut self,
-        mut job: ExportJob,
-        pace: Pace,
-        flush: Flush,
-        converter: Option<&Converter>,
-    ) -> ProseOutcome {
+    /// or of the pages reports its progress. Once the walk ended, the form
+    /// leaves for the converter thread (`ARCH-122`). Once the last page is
+    /// drawn, the pages leave for it (`ARCH-124`). An export writes nothing
+    /// to the document, so it flushes nothing.
+    fn run_export(&mut self, mut job: ExportJob, pace: Pace) -> ProseOutcome {
         match &mut job.stage {
             ExportStage::Walking(walk) => {
                 let room = match pace {
@@ -395,7 +340,7 @@ impl ProseState {
                 };
                 // The form leaves for the converter thread, so the walk ends
                 // the conversion of this document (`ARCH-122`).
-                return self.ask_write(job.format, walk.ir);
+                self.ask_write(job.format, walk.ir)
             }
             ExportStage::Printing(print) => {
                 match pace {
@@ -416,29 +361,11 @@ impl ProseState {
                 let ExportStage::Printing(print) = job.stage else {
                     return ProseOutcome::nothing();
                 };
-                job.stage = ExportStage::Printed(Box::new(print.finish()));
+                // The pages leave for the converter thread, so the last page
+                // ends the conversion of this document (`ARCH-124`).
+                let (document, report) = print.finish();
+                self.ask_print(job.format, document, report)
             }
-            ExportStage::Printed(_) => {}
-        }
-        let family = export_family(&job.format);
-        match converter.filter(|c| Some(c.family()) == family) {
-            Some(converter) => match job.stage {
-                ExportStage::Printed(printed) => {
-                    let (document, report) = *printed;
-                    Self::write_pdf(document, report, converter)
-                }
-                ExportStage::Walking(_) | ExportStage::Printing(_) => ProseOutcome::nothing(),
-            },
-            // A landing before a command holds no module: the file waits
-            // for the next pass, which holds it.
-            None if flush == Flush::ByCaller => {
-                self.conversion = Some(Job::Export(Box::new(job)));
-                ProseOutcome::nothing()
-            }
-            None => ProseOutcome::display_only(vec![ProseEvent::Interop(InteropAnswer::failed(
-                Direction::Export,
-                InteropError::Stopped(ambre_core::StopCause::ConverterUnavailable),
-            ))]),
         }
     }
 }
@@ -653,7 +580,7 @@ mod tests {
         let mut state = document();
         let converter = host_converter();
         let _ = state.convert_in_place(import(file(paragraphs)), Ok(&converter));
-        let _ = state.settle_in_place(None);
+        let _ = state.settle_in_place();
         state
     }
 
@@ -685,7 +612,7 @@ mod tests {
                 .handle_file_converted(*ticket, Err(ConvertError::Absent))
                 .is_none()
         );
-        let _ = state.settle_in_place(None);
+        let _ = state.settle_in_place();
         assert_eq!(state.root_blocks().len(), 100);
     }
 
@@ -739,7 +666,7 @@ mod tests {
         let (mut reached, total) = (started.done(), started.total());
         let mut slices = 1;
         let last = loop {
-            let out = state.resume_in_place(None);
+            let out = state.resume_in_place();
             slices += 1;
             match progress_of(&out) {
                 Some(progress) => {
@@ -772,7 +699,7 @@ mod tests {
         let _ = state.convert_in_place(import(file(100)), Ok(&converter));
         let mut deltas = 0;
         while state.has_pending_work() {
-            deltas += usize::from(state.resume_in_place(None).update.is_some());
+            deltas += usize::from(state.resume_in_place().update.is_some());
         }
         assert!(deltas > 2, "{deltas} deltas");
     }
@@ -784,7 +711,7 @@ mod tests {
         let mut state = document();
         let converter = host_converter();
         let _ = state.convert_in_place(import(file(100)), Ok(&converter));
-        while progress_of(&state.resume_in_place(None))
+        while progress_of(&state.resume_in_place())
             .is_some_and(|p| p.done() < p.total().minus(Count::new(60)))
         {}
         let blocks = state.root_blocks().len();
@@ -817,7 +744,7 @@ mod tests {
         let _ = state.convert_in_place(import(file(100)), Ok(&converter));
         // Into the write: some blocks of the file already landed.
         while state.root_blocks().len() < 20 {
-            let _ = state.resume_in_place(None);
+            let _ = state.resume_in_place();
         }
         let edit = state.handle_view_command(ProseCommand::InsertText {
             block_id: block,
@@ -861,7 +788,7 @@ mod tests {
         assert_eq!(started.total(), Count::new(200));
         let mut reached = started.done();
         let last = loop {
-            let out = state.resume_in_place(Some(&converter));
+            let out = state.resume_in_place();
             match progress_of(&out) {
                 Some(progress) => {
                     assert_eq!(progress.total(), started.total(), "one total");
@@ -910,7 +837,7 @@ mod tests {
         let mut state = document();
         let converter = host_converter();
         let _ = state.convert_in_place(import(file(100)), Ok(&converter));
-        let settled = state.settle_in_place(None);
+        let settled = state.settle_in_place();
         assert!(completed(&settled));
         assert!(settled.update.is_some());
         assert!(
@@ -978,7 +905,7 @@ mod tests {
         forward(&outcomes[0], &mut peer);
         let mut most = peer.shape().blocks();
         while author.has_pending_work() {
-            let out = author.resume_in_place(None);
+            let out = author.resume_in_place();
             forward(&out, &mut peer);
             most = most.max(peer.shape().blocks());
             outcomes.push(out);
@@ -1020,7 +947,7 @@ mod tests {
         let mut most = peer.shape().blocks();
         let mut outcomes = vec![first];
         while author.has_pending_work() {
-            let out = author.resume_in_place(None);
+            let out = author.resume_in_place();
             forward(&out, peer);
             most = most.max(peer.shape().blocks());
             outcomes.push(out);

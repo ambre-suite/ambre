@@ -248,11 +248,21 @@ impl LogicState {
         owner: JobOwner,
         answer: Result<ambre_convert::Converted, ConvertError>,
     ) {
-        if let JobOwner::ToilePng(document_id) = owner {
-            return self.answer_toile_png(document_id, answer.map_err(|error| failure_of(&error)));
-        }
-        if let JobOwner::ProseFile(document_id) = owner {
-            return self.answer_prose_file(document_id, ticket, answer);
+        match owner {
+            JobOwner::ToilePng(document_id) => {
+                return self
+                    .answer_toile_png(document_id, answer.map_err(|error| failure_of(&error)));
+            }
+            JobOwner::ProseFile(document_id) => {
+                return self.answer_prose_file(document_id, ticket, answer);
+            }
+            JobOwner::DeckPdf {
+                document_id,
+                report,
+            } => {
+                return self.answer_deck_pdf(document_id, *report, answer);
+            }
+            _ => {}
         }
         if let JobOwner::TrameFile(document_id) = owner {
             return self.answer_trame_file(document_id, ticket, answer);
@@ -289,7 +299,7 @@ impl LogicState {
                 }
             }
             // Served above, before the answer is read as pixels.
-            JobOwner::ProseFile(_) | JobOwner::TrameFile(_) => {}
+            JobOwner::ProseFile(_) | JobOwner::TrameFile(_) | JobOwner::DeckPdf { .. } => {}
             JobOwner::Toile(document_id) => {
                 let Some(DocState::Toile(state)) =
                     self.docs.get_mut(&document_id).map(|d| &mut d.state)
@@ -380,6 +390,37 @@ impl LogicState {
             outcome.display.into_iter().map(AppEvent::Trame).collect(),
             outcome.update,
             outcome.ephemeral,
+            Vec::new(),
+        );
+    }
+
+    /// Hand over the file the PDF module wrote for a deck's export, or why
+    /// there is none (`ARCH-124`). A board closed meanwhile drops it.
+    fn answer_deck_pdf(
+        &mut self,
+        document_id: Id<Document>,
+        report: ambre_toile::message::ToileReport,
+        answer: Result<ambre_convert::Converted, ConvertError>,
+    ) {
+        if !matches!(
+            self.docs.get(&document_id).map(|d| &d.state),
+            Some(DocState::Toile(_))
+        ) {
+            return;
+        }
+        let file = match answer {
+            Ok(ambre_convert::Converted::File(data)) => Ok(data),
+            Ok(_) => Err(StopCause::ConverterAnswered),
+            Err(error) => {
+                tracing::warn!("Logic: the PDF export stopped: {error}");
+                Err(error.stop_cause())
+            }
+        };
+        self.dispatch_outcome(
+            document_id,
+            vec![AppEvent::Toile(data::deck_file_answer(file, report))],
+            None,
+            None,
             Vec::new(),
         );
     }

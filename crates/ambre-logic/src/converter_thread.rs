@@ -7,9 +7,9 @@
 //
 // Today it runs the JPEG decode of the images module (`ARCH-097`) and the
 // raster of a Toile PNG export (`toile-import-export`). It also reads and
-// writes a Prose file (`ARCH-122`), and a Trame file in CSV, Excel or
-// OpenDocument (`ARCH-123`). The other conversions still run on the
-// Logic thread, and the
+// writes a Prose file (`ARCH-122`) and a Trame file in CSV, Excel or
+// OpenDocument (`ARCH-123`), and writes every PDF export (`ARCH-124`). The
+// other conversions still run on the Logic thread, and the
 // `Every conversion runs off the Logic thread` Story moves them. So the two
 // envelopes carry any `Conversion`, never a format of their own.
 //
@@ -367,6 +367,12 @@ pub(crate) enum JobOwner {
     /// The PNG export of a Toile board, answered as its file
     /// (`toile-import-export`).
     ToilePng(Id<Document>),
+    /// The write of a Toile deck's PDF export, by the ticket this thread
+    /// minted, and the report the file answers with (`ARCH-124`).
+    DeckPdf {
+        document_id: Id<Document>,
+        report: Box<ambre_toile::message::ToileReport>,
+    },
     /// The preview of a Murmure message.
     Murmure {
         channel_id: Id<Channel>,

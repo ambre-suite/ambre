@@ -92,8 +92,8 @@ Each application adds the scenarios its own page format turns on, in its own pdf
 `ambre-spec-render-assets.md`. They are the `Surface` trait, the krilla back end and the `ambre-pdf`
 crate, in the PDF converter module. They also hold the font database the shaping needs
 (`CANVAS-025`, `CANVAS-028`).
-The Logic thread records each page as a draw list and the PDF converter module writes the file
-(`ambre-spec-architecture.md section 2`, the converter modules). This document adds no primitive of
+The Logic thread records each page as a draw list. The PDF converter module writes the file on
+the converter thread (`ARCH-124`, `ambre-spec-architecture.md section 2`, the converter thread). This document adds no primitive of
 its own.
 
 **The export context is sealed** (`PDF-007`). A default context discovers the faces of the machine,

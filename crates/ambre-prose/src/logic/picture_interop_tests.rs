@@ -83,14 +83,10 @@ fn uploads(state: &mut ProseState) -> Vec<(ambre_core::Seq<ambre_bus::rest::Requ
 
 /// Run the conversion the answers started to its end, and hand back every
 /// event it answered.
-fn drain(state: &mut ProseState, family: Option<ambre_core::ConverterFamily>) -> Vec<ProseEvent> {
-    let converter = family.map(|family| {
-        ambre_convert::Converter::load(family, &Payload::new(Vec::new()))
-            .unwrap_or_else(|e| panic!("the host links the {family} engine: {e}"))
-    });
+fn drain(state: &mut ProseState) -> Vec<ProseEvent> {
     let mut events = Vec::new();
     while state.has_pending_work() {
-        events.extend(state.resume_in_place(converter.as_ref()).display);
+        events.extend(state.resume_in_place().display);
     }
     events
 }
@@ -168,7 +164,7 @@ fn an_import_lands_once_every_picture_is_stored() {
     for upload in rest {
         events.extend(answer(&mut state, upload).expect("this document's").display);
     }
-    events.extend(drain(&mut state, None));
+    events.extend(drain(&mut state));
     let report = report_of(&events);
     let held: Vec<_> = pictures_of(&state)
         .into_iter()
@@ -222,7 +218,7 @@ fn a_picture_whose_upload_failed_is_left_out_and_named() {
         };
         events.extend(outcome.expect("this document's").display);
     }
-    events.extend(drain(&mut state, None));
+    events.extend(drain(&mut state));
     let report = report_of(&events);
     let alts: Vec<_> = pictures_of(&state)
         .into_iter()
@@ -277,7 +273,7 @@ fn a_picture_in_a_cell_lands_beside_the_table_and_is_named() {
                 .display,
         );
     }
-    events.extend(drain(&mut state, None));
+    events.extend(drain(&mut state));
     let report = report_of(&events);
     let types: Vec<_> = state
         .root_blocks()
@@ -357,7 +353,6 @@ fn export(
     format: ExportFormat,
     bytes: Option<Vec<u8>>,
 ) -> (ambre_bus::interop::ExportedFile, ConversionReport) {
-    let family = super::sliced::export_family(&format);
     let started =
         state.handle_converted_in_family(ProseCommand::Interop(InteropRequest::Export(format)));
     let mut events = started.display;
@@ -375,7 +370,7 @@ fn export(
         };
         events.extend(outcome.expect("this document's").display);
     }
-    events.extend(drain(state, family));
+    events.extend(drain(state));
     events
         .into_iter()
         .find_map(|event| match event {
@@ -622,7 +617,7 @@ fn a_picture_added_during_the_wait_is_a_placeholder() {
                 .display,
         );
     }
-    events.extend(drain(&mut state, Some(ambre_core::ConverterFamily::Office)));
+    events.extend(drain(&mut state));
     let (file, report) = events
         .into_iter()
         .find_map(|event| match event {

@@ -139,8 +139,9 @@ mod tests {
         assert!(text.contains("Hello from the belt"), "{text}");
     }
 
-    /// `PROSE-IO-033`, `PDF-015`: the File menu's PDF entry hands the browser
-    /// a PDF file, built in the Logic thread through the PDF module.
+    /// `PROSE-IO-033`, `PDF-015`, `ARCH-124`: the File menu's PDF entry hands
+    /// the browser a PDF file. The Logic thread draws the pages, and the PDF
+    /// module writes them on the converter thread.
     #[tokio::test(flavor = "multi_thread")]
     #[cfg_attr(
         not(feature = "browser"),

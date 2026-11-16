@@ -7,14 +7,14 @@
 //! [`ProseState::conversion_family`] which module a command waits on, loads
 //! it, then hands the command back through [`ProseState::handle_conversion`].
 //!
-//! The module call of a file import or of a text export runs on the
-//! converter thread, never on the Logic thread (`ARCH-122`). The document
+//! A file import, a text export and a PDF export each call their module on
+//! the converter thread, never on the Logic thread (`ARCH-122`,
+//! `ARCH-124`). The document
 //! owes the request, the Logic dispatcher drains it through
 //! [`ProseState::take_file_requests`], and the answer comes back through
 //! [`ProseState::handle_file_converted`]. A read lands then, on the path a
 //! view command runs: caught up, refused while suggesting where it must be,
-//! and named on a refusal. A paste and a PDF export still call their module
-//! in place.
+//! and named on a refusal. A paste still calls its module in place.
 
 use std::collections::HashMap;
 
@@ -72,6 +72,13 @@ pub(super) enum FileJob {
     Write {
         format: ExportFormat,
         filename: ExportFilename,
+    },
+    /// The PDF module writes the recorded pages of an export to `format`,
+    /// which leaves under `filename` with `report` (`ARCH-124`).
+    Print {
+        format: ExportFormat,
+        filename: ExportFilename,
+        report: ConversionReport,
     },
 }
 
@@ -184,7 +191,7 @@ impl ProseState {
         }
         // A conversion that still runs lands before the next one starts, so
         // two never interleave on one document (`PROSE-IO-100`).
-        let landed = self.land_conversion(converter.ok());
+        let landed = self.land_conversion();
         let outcome = self.convert_command(command, converter);
         self.carry_landed(landed, outcome)
     }
@@ -196,7 +203,7 @@ impl ProseState {
         command: ProseCommand,
         read: Result<(ProseIr, ConversionReport), InteropError>,
     ) -> ProseOutcome {
-        let landed = self.land_conversion(None);
+        let landed = self.land_conversion();
         self.converted = Some(ConvertedInput::Document(read));
         let outcome = self.handle_view_command(command);
         self.converted = None;
@@ -217,7 +224,7 @@ impl ProseState {
     pub fn file_work(&self, ticket: Seq<Request>) -> Option<FileWork> {
         self.file_jobs.in_flight.get(&ticket).map(|job| match job {
             FileJob::Read(_) => FileWork::Read,
-            FileJob::Write { .. } => FileWork::Write,
+            FileJob::Write { .. } | FileJob::Print { .. } => FileWork::Write,
         })
     }
 
@@ -256,6 +263,18 @@ impl ProseState {
                     &format,
                     written.map(|(data, report)| (filename, data, report)),
                 )
+            }
+            FileJob::Print {
+                format,
+                filename,
+                report,
+            } => {
+                let written = match answer {
+                    Ok(Converted::File(data)) => Ok((filename, data, report)),
+                    Ok(_) => Err(InteropError::Stopped(StopCause::ConverterAnswered)),
+                    Err(e) => Err(crate::interop::stopped(&e)),
+                };
+                Self::exported(&format, written)
             }
         })
     }
@@ -303,7 +322,7 @@ impl ProseState {
         converter: Result<&Converter, StopCause>,
     ) -> ProseOutcome {
         match converter {
-            Ok(converter) => self.start_export(format, converter),
+            Ok(_) => self.start_export(format),
             Err(cause) => ProseOutcome::display_only(vec![ProseEvent::Interop(
                 InteropAnswer::failed(Direction::Export, InteropError::Stopped(cause)),
             )]),
@@ -357,7 +376,7 @@ impl ProseState {
                 };
                 word::write_request(&ir, &export.zone, package).map(|r| (filename, r))
             }
-            // The pages of a PDF are written by `Self::write_pdf`, from the
+            // The pages of a PDF are written by `Self::ask_print`, from the
             // pages recorded, and never from the form.
             ExportFormat::Pdf(_) => Err(InteropError::Stopped(StopCause::Misrouted)),
             // The native file is the Logic dispatcher's (`PROSE-IO-028`), and
@@ -372,6 +391,32 @@ impl ProseState {
             }
             Err(e) => Self::exported(&format, Err(e)),
         }
+    }
+
+    /// Owe the converter thread the write of the recorded pages of an export
+    /// to `format`, a PDF (`ARCH-124`). The file answers once the PDF module
+    /// wrote it, with `report` (`PDF-015`). The export wrote nothing to the
+    /// document.
+    pub(super) fn ask_print(
+        &mut self,
+        format: ExportFormat,
+        document: ambre_draw::list::PrintDocument,
+        report: ConversionReport,
+    ) -> ProseOutcome {
+        let filename = ExportFilename::from_title(
+            document.meta.title.as_deref().unwrap_or_default(),
+            "document",
+            ambre_client_core::ExportExtension::Pdf,
+        );
+        self.file_jobs.ask(
+            Conversion::WritePdf { document },
+            FileJob::Print {
+                format,
+                filename,
+                report,
+            },
+        );
+        ProseOutcome::nothing()
     }
 
     /// The answer of an export to `format`: the file under its name with its
@@ -413,19 +458,16 @@ impl ProseState {
     pub(crate) fn handle_converted(&mut self, command: ProseCommand) -> ProseOutcome {
         let converter = host_converter();
         let first = self.handle_conversion(command, Ok(&converter));
-        self.drained(first, &converter)
+        self.drained(first)
     }
 
-    /// `first`, then every slice left of the conversion it started, through
-    /// `converter`. The update is the last delta a slice answered.
-    pub(crate) fn drained(
-        &mut self,
-        mut first: ProseOutcome,
-        converter: &Converter,
-    ) -> ProseOutcome {
+    /// `first`, then every slice left of the conversion it started, and the
+    /// file conversions each owes, run in place. The update is the last
+    /// delta a slice answered.
+    pub(crate) fn drained(&mut self, mut first: ProseOutcome) -> ProseOutcome {
         self.serve_files(&mut first);
         while self.has_pending_work() {
-            let next = self.resume_in_place(Some(converter));
+            let next = self.resume_in_place();
             first.display.extend(next.display);
             if next.update.is_some() {
                 first.update = next.update;
@@ -448,16 +490,16 @@ impl ProseState {
 
     /// [`Self::settle_conversion`], then the file conversions it owes the
     /// converter thread, run in place.
-    pub(crate) fn settle_in_place(&mut self, converter: Option<&Converter>) -> ProseOutcome {
-        let mut outcome = self.settle_conversion(converter);
+    pub(crate) fn settle_in_place(&mut self) -> ProseOutcome {
+        let mut outcome = self.settle_conversion();
         self.serve_files(&mut outcome);
         outcome
     }
 
     /// [`Self::resume_conversion`], then the file conversions it owes the
     /// converter thread, run in place as the thread runs them.
-    pub(crate) fn resume_in_place(&mut self, converter: Option<&Converter>) -> ProseOutcome {
-        let mut outcome = self.resume_conversion(converter);
+    pub(crate) fn resume_in_place(&mut self) -> ProseOutcome {
+        let mut outcome = self.resume_conversion();
         self.serve_files(&mut outcome);
         outcome
     }
@@ -494,7 +536,7 @@ impl ProseState {
         match Converter::load(family, &ambre_core::Payload::new(Vec::new())) {
             Ok(converter) => {
                 let first = self.handle_conversion(command, Ok(&converter));
-                self.drained(first, &converter)
+                self.drained(first)
             }
             Err(e) => panic!("the host links the {family} engine: {e}"),
         }
