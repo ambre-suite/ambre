@@ -99,6 +99,11 @@ class FreeMoves(unittest.TestCase):
         row = "| `[ ]` The Fonts module | MVP | a new artefact, the Fonts module, under 60,000 |\n"
         self.assertEqual(raised({**BASE, "Fonts module": 60_000}, row), [])
 
+    def test_a_ceiling_that_became_a_report_passes_with_no_row(self) -> None:
+        # The ceilings of Sync and of the modules left `CEILINGS` (`ARCH-096`):
+        # a figure the head no longer holds fails nothing, whatever it was.
+        self.assertEqual(raised({"Main": BASE["Main"]}), [])
+
     def test_a_base_with_no_table_raises_nothing(self) -> None:
         self.assertEqual(ceiling_raise.raise_breaches(None, {"Main": 9_999_999}, [""]), [])
 

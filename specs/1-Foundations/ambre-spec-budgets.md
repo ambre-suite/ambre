@@ -248,17 +248,54 @@
 * **Cached for good after the first visit.** Every built file is named by a hash of its content
   (`filehash` in `Trunk.toml`), so a deployment caches it as immutable. Only the page is asked
   again, and a release downloads only the instance it changed.
-* **The first download holds the budget, and the ceilings stay tight.** On 2026-10-20 a release
-  build weighed 3.07 MB brotli for Main and 0.34 MB for Sync. On 2026-11-07, `just size` read
-  3 128 174 bytes for Main and 352 134 for Sync. The `wasm-release` profile builds every crate for
-  size and strips the name section, which took Main from 6.9 MB to 4.27 MB gzip. The `size` CI job
-  holds a raw ceiling per artefact (`scripts/wasm_size.py`) and fails past the budget. A ceiling
-  sits close above today's figure: it catches any growth long before the budget does.
-* **A ceiling rises only through a story of its own (`ARCH-095`).** The ceiling of Main rose twice
-  in a row, to 2.73 MB and then 2.74 MB, each time inside the merge of a feature story. A raise
-  needs a story row of the roadmap or of the journal that names the new figure and the cut tried
-  first. The `lint` CI job runs `scripts/ceiling_raise.py`, which compares each ceiling and each
-  budget with its value on `origin/main`. Lowering stays free.
+* **The first download holds the budget.** On 2026-10-20 a release build weighed 3.07 MB brotli
+  for Main and 0.34 MB for Sync. On 2026-11-07, `just size` read 3 128 174 bytes for Main and
+  352 134 for Sync. The `wasm-release` profile builds every crate for size and strips the name
+  section, which took Main from 6.9 MB to 4.27 MB gzip.
+* **The build fails on the product budgets alone since 2026-11-15 (`ARCH-096`).** Until that day,
+  each artefact held a raw ceiling a few hundred bytes above its measure. A feature that grew a
+  module or a worker failed `just size`, and needed a raise story. So the ceilings rose one after
+  another, on growth no user sees. The owner set the rule that day. `just size` fails on three
+  figures alone:
+  1. the first download, Main plus Sync, under 4 MB brotli;
+  2. each lazy artefact, a converter module or the call worker, under its own brotli budget;
+  3. the raw wasm of Main under a ceiling set at least 2 % above its measure.
+* **The brotli budgets are wide, so the brotli noise cannot move them.** Brotli moves Main by
+  about 850 bytes between two builds of one source, and the first download holds about 856 KB of
+  room. A tight brotli figure would pass or fail on that noise, which is why `ARCH-096` once moved
+  the ceilings to raw bytes.
+* **The Main ceiling is the net against growth on the first download.** It holds raw bytes, which
+  move by about 63 bytes between two builds. It sits 2 % above the measure of `main`, rounded up to
+  10 000. That is room for about 200 KB of raw growth, about 58 KB of brotli. A story that takes
+  Main past it raises it through a row, which names the new figure and the cut tried first. The
+  new ceiling sits 2 % above the new measure again (`ARCH-095`).
+* **Every push prints the change of each artefact against `main` (`ARCH-115`).** The `size` CI job
+  runs in the fast lane. A run of `main` saves its measure in the CI cache. A branch reads the
+  measure of its merge base, or else the newest one, and the report names it by its commit. The
+  report prints the raw and brotli bytes of each artefact and their change. The log and the run
+  summary carry it, and no figure of it fails.
+* **The figures of 2026-11-15.** `trunk build --release` then `scripts/wasm_size.py`, on the
+  session container, over `main` at `6fe7e50`. The download time is the figure at 20 Mbit/s, the
+  4G rate of the bullet above.
+
+| Artefact | Raw | Brotli | Fails on | Room | 4G at 20 Mbit/s |
+|---|---|---|---|---|---|
+| Main | 10 442 998 | 2 773 165 | raw ceiling 10 660 000 | 217 002 raw, 2.1 % | -- |
+| Sync | 1 269 817 | 370 575 | -- | -- | -- |
+| First download | -- | 3 143 740 | brotli budget 4 000 000 | 856 260, 21 % | 1.26 s |
+| Tables module | 122 422 | 43 595 | brotli budget 100 000 | 56 405, 56 % | 0.02 s |
+| PDF module | 1 822 699 | 425 324 | brotli budget 600 000 | 174 676, 29 % | 0.17 s |
+| Markup module | 868 158 | 246 446 | brotli budget 300 000 | 53 554, 18 % | 0.10 s |
+| Images module | 813 828 | 253 750 | brotli budget 300 000 | 46 250, 15 % | 0.10 s |
+| Office module | 1 457 724 | 394 037 | brotli budget 900 000 | 505 963, 56 % | 0.16 s |
+| Call worker | 107 452 | 37 181 | brotli budget 100 000 | 62 819, 63 % | 0.01 s |
+
+* **A budget or the Main ceiling rises only through a story of its own (`ARCH-095`).** The ceiling
+  of Main rose twice in a row, to 2.73 MB and then 2.74 MB, each time inside the merge of a feature
+  story. A raise needs a story row of the roadmap or of the journal that names the new figure and
+  the cut tried first. The `lint` CI job runs `scripts/ceiling_raise.py`, which compares the Main
+  ceiling and each budget with its value on `origin/main`. Lowering stays free, and a figure the
+  report alone prints needs no row.
 * **A rename and a new artefact are read too (`ARCH-095`).** A renamed artefact meets the figure
   of its old name, and a new artefact needs a story row that names it and its figure. The bullets
   below that name a raise still state the crate that grew and why.
@@ -445,17 +482,17 @@
 
 * **One budget per converter module.** A row below is the budget of one module: what its family
   may weigh with the formats the roadmap announces in it, never today's figure. `wasm_size.py`
-  holds each module to its brotli budget and to a tight raw ceiling at today's figure, and adds
-  none to the first download. A ceiling or a budget rises through a story row (`ARCH-095`), with
-  the crate named here. On 4G at 20 Mbit/s, the largest budget, 900 KB, takes 0.36 s once.
+  holds each module to its brotli budget alone, and adds none to the first download. A budget
+  rises through a story row (`ARCH-095`), with the crate named here. On 4G at 20 Mbit/s, the
+  largest budget, 900 KB, takes 0.36 s once.
 
-| Module | Budget, brotli | Ceiling, since 2026-11-11 | Measured 2026-11-09 | Formats today | Formats the roadmap announces | Method |
+| Module | Budget, brotli | Budget on 4G at 20 Mbit/s | Measured 2026-11-15 | Formats today | Formats the roadmap announces | Method |
 |---|---|---|---|---|---|---|
-| Tables | < 100 KB | 140 000 raw | 43 318 | CSV, read and write | TSV; xlsx and ODS live in the Office family | `scripts/wasm_size.py`, run by `just size` |
-| PDF | < 600 KB | 1 830 000 raw | 425 886, on 2026-11-13 | PDF, write | a selectable text layer, the Prose and Trame exports through the same writer | `scripts/wasm_size.py`, run by `just size` |
-| Markup | < 300 KB | 870 000 raw | 246 835, on 2026-11-13 | Markdown and HTML, read and write; HTML, read for a paste | -- | `scripts/wasm_size.py`, run by `just size` |
-| Images | < 300 KB | 830 000 raw | 255 886, on 2026-11-13 | SVG, WebP and JPEG, read | the PNG decoder, which links into Main today for the encoder the picture paths share | `scripts/wasm_size.py`, run by `just size` |
-| Office | < 900 KB | 1 480 000 raw | 392 417, on 2026-11-11 | DOCX, xlsx, ODS and ODT, read and write; PPTX, write | PPTX, read; then ODP, which joins this module: one ZIP reader and one XML parser for every office codec | `scripts/wasm_size.py`, run by `just size` |
+| Tables | < 100 KB | 0.04 s | 43 595 | CSV, read and write | TSV; xlsx and ODS live in the Office family | `scripts/wasm_size.py`, run by `just size` |
+| PDF | < 600 KB | 0.24 s | 425 324 | PDF, write | a selectable text layer, the Prose and Trame exports through the same writer | `scripts/wasm_size.py`, run by `just size` |
+| Markup | < 300 KB | 0.12 s | 246 446 | Markdown and HTML, read and write; HTML, read for a paste | -- | `scripts/wasm_size.py`, run by `just size` |
+| Images | < 300 KB | 0.12 s | 253 750 | SVG, WebP and JPEG, read | the PNG decoder, which links into Main today for the encoder the picture paths share | `scripts/wasm_size.py`, run by `just size` |
+| Office | < 900 KB | 0.36 s | 394 037 | DOCX, xlsx, ODS and ODT, read and write; PPTX, write | PPTX, read; then ODP, which joins this module: one ZIP reader and one XML parser for every office codec | `scripts/wasm_size.py`, run by `just size` |
 
 * **The call worker joined on 2026-11-10, as a third artefact outside the first download.** The
   page spawns it on a join, and the browser fetches it then, once. It seals and opens the chunks of
@@ -472,9 +509,9 @@
 | Sync | 368 455 | 370 383 | +1 928 | the join command, the `meta` read of the channel and the port of the call worker |
 | Call worker | -- | 35 300 | new | the chunk seal and open of `ambre-crypto`, ChaCha20-Poly1305 and HKDF-SHA256 |
 
-| Artefact | Budget, brotli | Ceiling, since 2026-11-11 | Measured 2026-11-10 | Carries today | Method |
+| Artefact | Budget, brotli | Budget on 4G at 20 Mbit/s | Measured 2026-11-15 | Carries today | Method |
 |---|---|---|---|---|---|
-| Call worker | < 100 KB | 110 000 raw | 35 300 | the audio of a call | `scripts/wasm_size.py`, run by `just size` |
+| Call worker | < 100 KB | 0.04 s | 37 181 | the audio of a call | `scripts/wasm_size.py`, run by `just size` |
 
 * **The call controls joined Main on 2026-11-11, and its ceiling rose to 2.74 MB.** The call
   button, mute and hang up live in the header (`ambre-app/src/shell/call_bar.rs`), with three

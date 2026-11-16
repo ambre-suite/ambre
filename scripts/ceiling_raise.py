@@ -5,16 +5,19 @@
 the Main ceiling rose twice in the merge of a feature story, so the growth
 reached `main` with no cut tried and no row to read it in.
 
-The gate reads three literals of `scripts/wasm_size.py`: `CEILINGS`, the raw
-bytes per artefact, `MODULE_BUDGETS`, the brotli budget per module, and
-`BUDGET`, the brotli budget of the first download. It reads them at the base
-revision, `origin/main` by default, or its parent on a push of `main` itself,
-as `schema_freeze.py` does, and in the work tree. For each figure that went
-up, a story row of `specs/ambre-roadmap.md` or of the journal must name the
-new figure and the cut tried first, that is the word `cut`. The figure may be
-written `2,750,000`, `2 750 000`, `2_750_000` or `2750000`.
+The gate reads the three literals of `scripts/wasm_size.py` that fail a
+build (`ARCH-096`): `CEILINGS`, the raw bytes of Main, `MODULE_BUDGETS`, the
+brotli budget per lazy artefact, and `BUDGET`, the brotli budget of the first
+download. Every other figure of an artefact is a report that fails nothing,
+so it needs no row. The gate reads them at the base revision, `origin/main`
+by default, or its parent on a push of `main` itself, as `schema_freeze.py`
+does, and in the work tree. For each figure that went up, a story row of
+`specs/ambre-roadmap.md` or of the journal must name the new figure and the
+cut tried first, that is the word `cut`. The figure may be written
+`2,750,000`, `2 750 000`, `2_750_000` or `2750000`.
 
 * A figure that went down or held passes: lowering is always free.
+* A name the head no longer holds passes: its figure fails no build.
 * A name absent at the base that `ALIASES` maps from an old name is a rename:
   its figure is compared with the base figure of the old name.
 * A name absent at the base and in no alias is a new artefact. It passes when

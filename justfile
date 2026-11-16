@@ -199,12 +199,14 @@ fixtures-bench: fixtures-bench-corpus
 instructions shard="0/1":
     python3 scripts/instructions.py --shard {{shard}}
 
-# The raw bytes of each wasm artefact against its ceiling, and their brotli
-# against the budgets (`ambre-spec-budgets.md` section 5). Builds the release
-# Trunk ships.
-size:
+# The brotli of the first download and of each lazy module against its budget,
+# and the raw bytes of Main against its ceiling (`ambre-spec-budgets.md`
+# section 5). Builds the release Trunk ships. `--baseline` names a measure of
+# `main` to print each change against, and `--record` writes this one: the CI
+# `size` job passes both.
+size *flags:
     trunk build --release
-    python3 scripts/wasm_size.py
+    python3 scripts/wasm_size.py {{flags}}
 
 # The `db` feature flips the `cfg_attr(not(feature = "db"), ignore = ...)` gate
 # off so the otherwise ignored tests run. Bring services up first with

@@ -10,11 +10,10 @@ name: CI
 # Three lanes (`ambre-spec-testing.md section 7`), each with its duration
 # budget (`ambre-spec-budgets.md section 7`):
 #
-# * the fast lane, every event: `lint`, `test-native`, `test-wasm`, `test-db`
-#   and `deny`. A push of a branch other than `main` runs it alone, plus
-#   `size` on a landing branch (a name ending in `-land`, or `claude/batch-*`).
+# * the fast lane, every event: `lint`, `test-native`, `test-wasm`, `test-db`,
+#   `deny` and `size`. A push of a branch other than `main` runs it alone.
 # * the full lane: the fast lane plus `fuzz`, `instructions`,
-#   `test-db-cluster`, `test-browser` and `size`. A push of `main`, a pull
+#   `test-db-cluster` and `test-browser`. A push of `main`, a pull
 #   request, the nightly schedule and a manual dispatch run it.
 # * the nightly lane: the full lane plus `coverage` and `mutants`. The
 #   schedule and a manual dispatch run it. `mutants-diff` runs on a pull
@@ -622,22 +621,23 @@ jobs:
         run: just ci-cache prune
 
   # ---------------------------------------------------------------------------
-  # size -- the release build Trunk ships: the raw bytes of each wasm artefact
-  # against its ceiling, and the brotli of the first download and of each
-  # module against its budget (`scripts/wasm_size.py`, budgets spec section 5,
-  # `ARCH-096`). The post-build hook writes the brotli copies. A push of a
-  # landing branch runs it too, so a ceiling breaks before `main` takes it.
+  # size -- the release build Trunk ships: the brotli of the first download
+  # and of each lazy module against its budget, and the raw bytes of Main
+  # against its ceiling (`scripts/wasm_size.py`, budgets spec section 5,
+  # `ARCH-096`). The post-build hook writes the brotli copies. Every push runs
+  # it, so every push prints the change of each artefact against the last
+  # measure of `main` (`ARCH-115`): the gate fails on the product budgets
+  # alone, so a branch breaks on what a user downloads and on nothing else.
   # ---------------------------------------------------------------------------
   size:
-    if: >-
-      github.event_name != 'push' || github.ref == 'refs/heads/main'
-      || endsWith(github.ref, '-land') || startsWith(github.ref, 'refs/heads/claude/batch-')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # The merge base with `main` names the measure the change reads.
+          fetch-depth: 0
       - name: System deps
         run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev brotli
       - name: Install just and trunk
@@ -654,7 +654,26 @@ jobs:
           save-if: ${{ env.CACHE_WRITE == 'true' }}
       - name: Date the std sources
         run: just ci-cache pin-std
-      - run: just size
+      # The measure of `main` the change reads: the one of the merge base when
+      # a run of `main` left it, else the newest one. A run of `main` saves
+      # its own; a branch reads it and saves none.
+      - name: Name the merge base
+        id: base
+        run: echo "sha=$(git merge-base HEAD origin/main)" >> "$GITHUB_OUTPUT"
+      - name: Restore the measure of main
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/wasm-size/main.json
+          key: wasm-size-${{ steps.base.outputs.sha }}
+          restore-keys: wasm-size-
+      - run: just size --baseline "$RUNNER_TEMP/wasm-size/main.json" --record "$RUNNER_TEMP/wasm-size/main.json"
+      - name: Save the measure of main
+        # A build that wrote no measure leaves nothing to save: the action warns.
+        if: always() && env.CACHE_WRITE == 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/wasm-size/main.json
+          key: wasm-size-${{ github.sha }}
       - name: Prune the cache
         if: env.CACHE_WRITE == 'true'
         run: just ci-cache prune
