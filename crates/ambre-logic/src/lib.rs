@@ -2565,7 +2565,7 @@ mod pass_tests {
     /// worker for the stored file of its picture, records no page and does
     /// not spin while it waits, and writes the PDF once the opened bytes
     /// came back. The file reports no approximated picture.
-    #[cfg(feature = "toile-pdf")]
+    #[cfg(all(feature = "toile-pdf", not(target_arch = "wasm32")))]
     #[test]
     fn a_deck_export_awaits_the_stored_file_of_its_picture() {
         use ambre_bus::interop::InteropAnswer;
@@ -2582,6 +2582,7 @@ mod pass_tests {
             file,
             sync,
         ) = deck_with_picture();
+        let mut thread = converter_thread(&mut state);
         to_logic.try_send(export_deck(document_id)).expect("queued");
         state.drain_pass(&from_ui, &from_sync);
         let [id] = downloads(&sync)[..] else {
@@ -2600,9 +2601,11 @@ mod pass_tests {
                 data: file,
             },
         });
-        while state.has_pending_work() {
+        while {
             state.drain_pass(&from_ui, &from_sync);
-        }
+            thread.serve();
+            state.has_pending_work() || !state.offload.is_idle()
+        } {}
         match interop_answers(&ui).last() {
             Some(InteropAnswer::ExportReady { file, report }) => {
                 assert!(file.data.as_bytes().starts_with(b"%PDF-"), "a PDF header");
@@ -2616,7 +2619,7 @@ mod pass_tests {
     /// answers an error, as it does for an altered blob or a key that does
     /// not open it. The export still writes its file, from the thumbnail, and
     /// its report names the picture as approximated: no silent fallback.
-    #[cfg(feature = "toile-pdf")]
+    #[cfg(all(feature = "toile-pdf", not(target_arch = "wasm32")))]
     #[test]
     fn a_deck_export_whose_stored_file_did_not_open_reports_the_fallback() {
         use ambre_bus::interop::InteropAnswer;
@@ -2633,6 +2636,7 @@ mod pass_tests {
             _,
             sync,
         ) = deck_with_picture();
+        let mut thread = converter_thread(&mut state);
         to_logic.try_send(export_deck(document_id)).expect("queued");
         state.drain_pass(&from_ui, &from_sync);
         let [id] = downloads(&sync)[..] else {
@@ -2643,9 +2647,11 @@ mod pass_tests {
             request: ambre_bus::ApiRequest::DownloadMedia,
             failure: ambre_bus::ApiFailure::Local(ambre_core::LocalFailure::Crypto),
         });
-        while state.has_pending_work() {
+        while {
             state.drain_pass(&from_ui, &from_sync);
-        }
+            thread.serve();
+            state.has_pending_work() || !state.offload.is_idle()
+        } {}
         match interop_answers(&ui).last() {
             Some(InteropAnswer::ExportReady { file, report }) => {
                 assert!(file.data.as_bytes().starts_with(b"%PDF-"), "a PDF header");
