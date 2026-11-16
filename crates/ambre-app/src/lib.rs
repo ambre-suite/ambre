@@ -788,24 +788,9 @@ pub fn main() {
     // Every spawn, the first and the respawns of `ARCH-108` alike, loads
     // the shipped thread script, never a `blob:` address (`SRV-260`).
     platform::name_thread_script();
-    let converter_spawner = {
-        let logic_bell = logic_bell.clone();
-        ambre_logic::converter_thread::ConverterSpawner::new(move || {
-            let (link, ends) = ambre_logic::converter_thread::converter_channels(&logic_bell);
-            match wasm_thread::Builder::new()
-                .name("converter".to_owned())
-                .spawn(move || ambre_logic::converter_thread::run_converter_thread(ends))
-            {
-                Ok(_) => Some(link),
-                Err(error) => {
-                    tracing::error!("the converter thread did not start: {error}");
-                    None
-                }
-            }
-        })
-    };
-    let converter_threads =
-        ambre_logic::converter_thread::ConverterThreads::on_demand(converter_spawner);
+    let converter_threads = ambre_logic::converter_thread::ConverterThreads::on_demand(
+        ambre_logic::converter_thread::ConverterSpawner::over_threads(logic_bell.clone()),
+    );
     wasm_thread::Builder::new()
         .name("logic".to_owned())
         .spawn(move || {

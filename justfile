@@ -60,6 +60,11 @@ lint-wasm:
     # wasm line compiles them, so these three lines lint them. A broken wasm
     # test build, or a warning in one, fails here.
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-logic --tests
+    # `test-wasm` runs the Logic tests on the threaded build, which compiles
+    # the tests that spawn workers (`ARCH-108`). No line above reads them. The
+    # threading flags of `.cargo/config.toml` hold, so `-D warnings` goes to
+    # clippy after their `-A warnings`.
+    CARGO_PROFILE_DEV_DEBUG=0 cargo clippy --target wasm32-unknown-unknown -p ambre-logic --tests -- -D warnings
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-app --tests
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-chrome --tests
 
@@ -328,16 +333,22 @@ call-stall-proof host:
 # skips a test module not configured for the browser, so no test runs under Node.
 wasm_test_env := 'RUSTFLAGS="-Awarnings -C debuginfo=0" CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=wasm-bindgen-test-runner WASM_BINDGEN_TEST_ONLY_WEB=1 python3 scripts/wasm_driver.py'
 
+# The same runner on the threaded build: no RUSTFLAGS, so the threading flags of
+# `.cargo/config.toml` hold, and the profile drops the debug info instead. The
+# runner of the pinned `wasm-bindgen` serves its page cross-origin isolated
+# unless `WASM_BINDGEN_TEST_NO_ORIGIN_ISOLATION` is set, so a test that spawns
+# `wasm_thread` workers gets its shared memory.
+wasm_threaded_test_env := 'CARGO_PROFILE_DEV_DEBUG=0 CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=wasm-bindgen-test-runner WASM_BINDGEN_TEST_ONLY_WEB=1 python3 scripts/wasm_driver.py'
+
 # wasm tier: cfg(wasm32) surfaces under headless Chrome.
 #
 # RUSTFLAGS is overridden here to drop the threading flags that
 # `.cargo/config.toml` applies to every wasm32 build (+atomics, --shared-memory,
 # --import-memory, ...). A shared-memory module needs a SharedArrayBuffer, which
-# the browser only exposes on a cross-origin-isolated page (COOP/COEP). The
-# `wasm-bindgen-test-runner` server emits no such headers and multi-threaded wasm
-# is unsupported by the harness (wasm-bindgen issue #2892), so a threaded test
-# module never instantiates: "Loading Wasm module..." hangs, the runner times out
-# and kills chromedriver (SIGKILL).
+# the browser only exposes on a cross-origin-isolated page (COOP/COEP). Older
+# runners served no such headers (wasm-bindgen issue #2892), so a threaded test
+# module never instantiated. The pinned runner serves them, and the Logic line
+# below runs threaded; the other lines keep the single-threaded build.
 #
 # Setting RUSTFLAGS makes cargo ignore the `[target.wasm32-unknown-unknown]`
 # rustflags entirely, so the test module is built single-threaded and loads as a
@@ -360,7 +371,10 @@ test-wasm:
     {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-prose --test chrome_panel --test chrome_ui
     # The Murmure unit tests are host-only too: the chrome relay test alone.
     {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-murmure --test chrome_relay
-    {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-logic
+    # Threaded: the converter respawn test spawns real workers from a Logic
+    # worker (`ARCH-108`). The Logic thread runs on a shared memory in the
+    # product too.
+    {{wasm_threaded_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-logic
     {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-app
     # The converter loader, on modules written by hand (`ARCH-079`).
     {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-convert --features loader --lib

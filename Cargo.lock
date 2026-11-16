@@ -385,6 +385,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "wasm-bindgen-test",
+ "wasm_thread",
  "web-sys",
 ]
 

@@ -129,6 +129,28 @@ impl ConverterSpawner {
     pub fn spawn(&self) -> Option<ConverterLink> {
         (self.0)()
     }
+
+    /// The spawner the page builds over `wasm_thread`: each thread is a
+    /// worker of the Main instance, and its answers ring `logic_bell`. A spawn
+    /// from the Logic worker posts to the page's thread, which creates the
+    /// worker, so the page's thread must run its event loop.
+    #[cfg(target_arch = "wasm32")]
+    #[must_use]
+    pub fn over_threads(logic_bell: Doorbell) -> Self {
+        Self::new(move || {
+            let (link, ends) = converter_channels(&logic_bell);
+            match wasm_thread::Builder::new()
+                .name("converter".to_owned())
+                .spawn(move || run_converter_thread(ends))
+            {
+                Ok(_) => Some(link),
+                Err(error) => {
+                    tracing::error!("the converter thread did not start: {error}");
+                    None
+                }
+            }
+        })
+    }
 }
 
 /// The spawner of the converter threads, handed to the Logic thread at boot.
@@ -449,8 +471,9 @@ impl Offload {
         }
     }
 
-    /// The same view, under another answer deadline.
-    #[cfg(all(test, not(target_arch = "wasm32")))]
+    /// The same view, under another answer deadline. The browser's tests
+    /// reach it on the threaded build alone.
+    #[cfg(all(test, any(not(target_arch = "wasm32"), target_feature = "atomics")))]
     pub(crate) fn with_deadline(self, deadline: TimeSpan<FracMs>) -> Self {
         Self { deadline, ..self }
     }
@@ -1095,6 +1118,168 @@ mod wasm_tests {
             thread.footprint(ConverterFamily::Tables),
             Some(page),
             "the grown instance was dropped and loaded again"
+        );
+    }
+}
+
+/// The respawn of a converter thread in the browser, through the spawner the
+/// page builds (`ARCH-108`). It spawns real workers, so it needs a shared
+/// memory: the threaded build of `just test-wasm` alone compiles it.
+#[cfg(all(test, target_arch = "wasm32", target_feature = "atomics"))]
+mod respawn_tests {
+    use wasm_bindgen_test::wasm_bindgen_test;
+
+    use super::*;
+
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
+    /// The sections of a module of one page of memory, up to its code: the
+    /// four exports of a converter module (`ARCH-079`).
+    const HEAD: &[u8] = &[
+        0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, // magic, version
+        // types: (i32) -> (i32), () -> (), () -> (i32)
+        0x01, 0x0d, 0x03, 0x60, 0x01, 0x7f, 0x01, 0x7f, 0x60, 0x00, 0x00, 0x60, 0x00, 0x01, 0x7f,
+        // four functions
+        0x03, 0x05, 0x04, 0x00, 0x01, 0x02, 0x02, // one page of memory
+        0x05, 0x03, 0x01, 0x00, 0x01, // exports
+        0x07, 0x3a, 0x05, 0x06, b'm', b'e', b'm', b'o', b'r', b'y', 0x02, 0x00, 0x0d, b'i', b'n',
+        b'p', b'u', b't', b'_', b'r', b'e', b's', b'e', b'r', b'v', b'e', 0x00, 0x00, 0x03, b'r',
+        b'u', b'n', 0x00, 0x01, 0x0a, b'o', b'u', b't', b'p', b'u', b't', b'_', b'p', b't', b'r',
+        0x00, 0x02, 0x0a, b'o', b'u', b't', b'p', b'u', b't', b'_', b'l', b'e', b'n', 0x00, 0x03,
+    ];
+
+    /// A `run` that does nothing. The answer is four zero bytes at 1 KiB,
+    /// past the request: an empty table, so each job answers `Ok`.
+    const ANSWERS: &[u8] = &[
+        0x0a, 0x14, 0x04, 0x04, 0x00, 0x41, 0x00, 0x0b, 0x02, 0x00, 0x0b, 0x05, 0x00, 0x41, 0x80,
+        0x08, 0x0b, 0x04, 0x00, 0x41, 0x04, 0x0b,
+    ];
+
+    /// A `run` that loops for ever: a job that never ends, so its thread
+    /// stops answering with its queues open.
+    const SPINS: &[u8] = &[
+        0x0a, 0x18, 0x04, 0x04, 0x00, 0x41, 0x00, 0x0b, 0x07, 0x00, 0x03, 0x40, 0x0c, 0x00, 0x0b,
+        0x0b, 0x04, 0x00, 0x41, 0x00, 0x0b, 0x04, 0x00, 0x41, 0x00, 0x0b,
+    ];
+
+    /// The module of [`HEAD`] with the code section `code`.
+    fn module(code: &[u8]) -> Payload<ConverterModule> {
+        Payload::new([HEAD, code].concat())
+    }
+
+    /// How one job ended, as the Logic worker saw it.
+    #[derive(Debug, PartialEq)]
+    enum Outcome {
+        Answered,
+        Failed(JobFailure),
+    }
+
+    fn job(ticket: u64, conversion: Conversion) -> Job {
+        Job {
+            ticket: Seq::new(ticket),
+            owner: JobOwner::Prose(Id::from_bytes([1; 16])),
+            conversion,
+        }
+    }
+
+    fn table_job(ticket: u64) -> Job {
+        job(
+            ticket,
+            Conversion::WriteCsv {
+                records: Vec::new(),
+                delimiter: ambre_convert::CsvDelimiter::COMMA,
+            },
+        )
+    }
+
+    /// Send `job`, then park on the Logic bell until a pass takes answers,
+    /// as the Logic thread's loop does.
+    fn run(
+        offload: &mut Offload,
+        waiter: &ambre_bus::conduit::Waiter,
+        job: Job,
+    ) -> Vec<(u64, Outcome)> {
+        if let Err((ticket, _, failure)) = offload.send(job) {
+            return vec![(ticket.get(), Outcome::Failed(failure))];
+        }
+        loop {
+            let at = now();
+            let answers = offload.take_answers(at);
+            if !answers.is_empty() {
+                return answers
+                    .into_iter()
+                    .map(|(ticket, _, answer)| {
+                        let outcome = answer.map_or_else(Outcome::Failed, |_| Outcome::Answered);
+                        (ticket.get(), outcome)
+                    })
+                    .collect();
+            }
+            let Some(left) = offload.wake_in(at) else {
+                return Vec::new();
+            };
+            waiter.wait_at_most(left);
+        }
+    }
+
+    /// The Logic worker's side. The first thread answers a job, then spins
+    /// in the next one past a short deadline. The worker then spawns the
+    /// next thread, loads the module again, and the next job lands there.
+    fn logic_worker(bell: &Doorbell, threads: ConverterThreads) -> (Vec<(u64, Outcome)>, bool) {
+        let Some(waiter) = bell.bind() else {
+            return (Vec::new(), false);
+        };
+        let mut offload = Offload::started(threads);
+        let loaded = offload
+            .load(ConverterFamily::Tables, module(ANSWERS))
+            .is_ok()
+            && offload.load(ConverterFamily::Markup, module(SPINS)).is_ok();
+        let mut seen = run(&mut offload, &waiter, table_job(1));
+        // The first thread is up: a short deadline holds it lost quickly.
+        let mut offload = offload.with_deadline(TimeSpan::new(500.0));
+        let html = Conversion::ReadHtml {
+            html: String::new(),
+        };
+        seen.extend(run(&mut offload, &waiter, job(2, html)));
+        // The next thread starts as the first did, under the production
+        // deadline.
+        let mut offload = offload.with_deadline(ANSWER_DEADLINE);
+        let reloaded = !offload.holds(ConverterFamily::Tables)
+            && offload
+                .load(ConverterFamily::Tables, module(ANSWERS))
+                .is_ok();
+        seen.extend(run(&mut offload, &waiter, table_job(3)));
+        (seen, loaded && reloaded)
+    }
+
+    /// Boot the first thread as the page does, run [`logic_worker`] on a
+    /// Logic worker, and wait for what it saw. `None` when the Logic worker
+    /// did not spawn or did not end.
+    async fn boot_and_run() -> Option<(Vec<(u64, Outcome)>, bool)> {
+        let logic_bell = Doorbell::new();
+        let threads = ConverterThreads::boot(ConverterSpawner::over_threads(logic_bell.clone()));
+        let logic = wasm_thread::Builder::new()
+            .name("logic".to_owned())
+            .spawn(move || logic_worker(&logic_bell, threads))
+            .ok()?;
+        logic.join_async().await.ok()
+    }
+
+    /// `ARCH-108`: a converter thread that spins in a job is held lost past
+    /// the deadline, and that job fails as unavailable. The Logic worker
+    /// spawns the next thread through the spawner the page builds. The page's
+    /// thread creates that worker, and the next job lands on it, once the
+    /// module loads again.
+    #[wasm_bindgen_test]
+    async fn a_lost_thread_is_spawned_again_from_the_logic_worker_and_lands_the_next_job() {
+        let seen = vec![
+            (1, Outcome::Answered),
+            (2, Outcome::Failed(JobFailure::Unavailable)),
+            (3, Outcome::Answered),
+        ];
+        assert_eq!(
+            boot_and_run().await,
+            Some((seen, true)),
+            "the first thread answers, then is held lost, and the next one answers"
         );
     }
 }

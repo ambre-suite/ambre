@@ -130,6 +130,9 @@ ambre-convert   = { path = "../ambre-convert", features = ["loader", "all-famili
 # The persistence grant awaits a browser promise, on wasm alone.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen-futures = { workspace = true }
+# The spawner of the converter threads, which the page builds and the Logic
+# worker calls again once a thread stops answering (`ARCH-108`).
+wasm_thread = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 criterion = { workspace = true }
