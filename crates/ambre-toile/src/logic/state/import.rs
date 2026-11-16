@@ -32,7 +32,7 @@ use crate::logic::interop::{
     ImportFrameRank, ImportGroup, ImportGroupRank, ImportRef, ImportReport, Limits, MediaBlob,
     import_board, import_raster, import_svg, place_batch_at,
 };
-use crate::logic::model::ElementStyle;
+use crate::message::ElementStyle;
 use ambre_core::id::{Element, Id};
 
 use super::ToileState;
@@ -2111,8 +2111,15 @@ mod pptx_tests {
 
     /// The board after the import of `name`, whole, and its report.
     fn imported(name: &str) -> (ToileState, ToileReport) {
+        imported_bytes(fixture(name))
+    }
+
+    /// The board after the import of `data`, whole, and its report.
+    fn imported_bytes(
+        data: ambre_core::Payload<ambre_core::FileBytes>,
+    ) -> (ToileState, ToileReport) {
         let mut st = ToileState::new();
-        let out = st.handle_converted(import(Point::new(100.0, 50.0), fixture(name)));
+        let out = st.handle_converted(import(Point::new(100.0, 50.0), data));
         let mut done = upload_all(&mut st, out);
         while st.has_pending_work() {
             done = st.resume();
@@ -2270,5 +2277,165 @@ mod pptx_tests {
         );
         assert_eq!(st.element_count(), Count::<Elements>::ZERO);
         assert!(st.slide_order().is_empty());
+    }
+
+    /// Every PowerPoint input fixture (`fixtures/AUTHORED.md`).
+    const DECK_FIXTURES: [&str; 2] = ["features.pptx", "libreoffice.pptx"];
+
+    /// One item of a frame as the board stores it, its box from the
+    /// frame's corner. The media address is left out: the upload answers it.
+    #[derive(Debug, PartialEq)]
+    struct StoredItem {
+        kind: crate::logic::model::ElementKind,
+        rect: kurbo::Rect,
+        rotation: ambre_core::Radians,
+        style: crate::message::ElementStyle,
+        path: Option<String>,
+        text: Option<String>,
+        thumbnail: Option<Vec<u8>>,
+    }
+
+    /// One connector of a frame as the board stores it, each end by the
+    /// turn of its element among the items of the frame.
+    #[derive(Debug, PartialEq)]
+    struct StoredConnector {
+        from: Option<usize>,
+        from_anchor: crate::message::Anchor,
+        to: Option<usize>,
+        to_anchor: crate::message::Anchor,
+        path: crate::message::PathType,
+        caps: crate::message::EndCaps,
+        style: crate::message::ElementStyle,
+    }
+
+    /// One slide of the deck as the board stores it.
+    #[derive(Debug, PartialEq)]
+    struct StoredSlide {
+        name: Option<String>,
+        notes: Option<String>,
+        size: kurbo::Size,
+        items: Vec<StoredItem>,
+        connectors: Vec<StoredConnector>,
+    }
+
+    /// The deck `st` holds, read from the board and never from the export
+    /// map: each frame in deck order, its items in paint order.
+    fn stored_deck(st: &ToileState) -> Vec<StoredSlide> {
+        use crate::logic::model::NodeId;
+        st.slide_order()
+            .iter()
+            .map(|frame| {
+                let id = Id::<Element>::from(frame.clone());
+                let origin = st.element_rect(&id).expect("the frame has a box");
+                let children = st.children_of(&id);
+                let members: Vec<Id<Element>> = st
+                    .layer_order()
+                    .iter()
+                    .filter_map(|node| match node {
+                        NodeId::Element(e) if children.contains(e) => Some(e.clone()),
+                        _ => None,
+                    })
+                    .collect();
+                let items = members
+                    .iter()
+                    .map(|e| {
+                        let el = st.export_element(e).expect("a child is stored");
+                        StoredItem {
+                            kind: el.kind,
+                            rect: el.rect - origin.origin().to_vec2(),
+                            rotation: el.rotation,
+                            style: el.style,
+                            path: el.path.map(|p| p.to_svg()),
+                            text: el.text,
+                            thumbnail: el.image_png.map(|png| png.as_ref().to_vec()),
+                        }
+                    })
+                    .collect();
+                let turn = |e: &Id<Element>| members.iter().position(|m| m == e);
+                let wires = st.wires();
+                let connectors = st
+                    .layer_order()
+                    .iter()
+                    .filter_map(|node| match node {
+                        NodeId::Connector(c) => wires.get(c).map(|w| (c, &w.conn)),
+                        NodeId::Element(_) => None,
+                    })
+                    .filter(|(_, conn)| turn(&conn.from).is_some() || turn(&conn.to).is_some())
+                    .map(|(c, conn)| StoredConnector {
+                        from: turn(&conn.from),
+                        from_anchor: conn.from_anch,
+                        to: turn(&conn.to),
+                        to_anchor: conn.to_anch,
+                        path: conn.path_type,
+                        caps: conn.arrows,
+                        style: st.style_read(
+                            st.connector_map(c)
+                                .and_then(|cm| {
+                                    super::super::codec::bin_of(
+                                        &cm,
+                                        super::super::names::ConnectorKey::Style,
+                                    )
+                                })
+                                .as_deref(),
+                        ),
+                    })
+                    .collect();
+                StoredSlide {
+                    name: st.frame_name(&id),
+                    notes: st.notes(frame),
+                    size: origin.size(),
+                    items,
+                    connectors,
+                }
+            })
+            .collect()
+    }
+
+    /// The PowerPoint file an export of `st` writes, and its report.
+    fn exported_pptx(
+        st: &mut ToileState,
+    ) -> (ambre_core::Payload<ambre_core::FileBytes>, ToileReport) {
+        let out = st.handle_converted(ToileCommand::Interop(InteropRequest::Export(
+            crate::message::ToileExport::Pptx,
+        )));
+        out.display
+            .into_iter()
+            .find_map(|e| match e {
+                ToileEvent::Interop(InteropAnswer::ExportReady { file, report }) => {
+                    Some((file.data, report))
+                }
+                _ => None,
+            })
+            .expect("the export answers a file")
+    }
+
+    /// `TOILE-IO-172`: each PowerPoint input fixture, imported, exported and
+    /// imported again, lands as the same deck the board stored the first
+    /// time, compared as stored data.
+    #[test]
+    fn every_deck_fixture_lands_the_same_deck_after_an_export_and_an_import() {
+        for name in DECK_FIXTURES {
+            let (mut first, _) = imported(name);
+            let (file, exported) = exported_pptx(&mut first);
+            let (second, _) = imported_bytes(file);
+            let before = stored_deck(&first);
+            assert_eq!(before.len(), 3, "{name}: the fixture lands its slides");
+            assert!(
+                before.iter().any(|s| !s.connectors.is_empty()),
+                "{name}: the fixture lands a bound connector"
+            );
+            assert!(
+                before
+                    .iter()
+                    .flat_map(|s| &s.items)
+                    .any(|i| i.thumbnail.is_some()),
+                "{name}: the fixture lands a picture"
+            );
+            let after = stored_deck(&second);
+            for (n, (a, b)) in before.iter().zip(&after).enumerate() {
+                assert_eq!(b, a, "{name}: slide {n}, the export reported {exported:?}");
+            }
+            assert_eq!(after.len(), before.len(), "{name}");
+        }
     }
 }

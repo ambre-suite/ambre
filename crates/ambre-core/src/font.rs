@@ -75,6 +75,13 @@ impl FontSize {
         Px::<Doc>::new(self.0 * PX_PER_PT)
     }
 
+    /// The size drawn at `px` document pixels, the inverse of
+    /// [`FontSize::to_px`]. `None` as [`FontSize::new`] answers it.
+    #[must_use]
+    pub fn from_px(px: Px<Doc>) -> Option<Self> {
+        Self::new(px.get() / PX_PER_PT)
+    }
+
     /// The size rounded to whole points, as a picker of whole points lists it.
     #[must_use]
     pub fn whole_points(self) -> u16 {

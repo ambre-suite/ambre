@@ -125,18 +125,23 @@ pub struct PptxExport {
 
 /// The deck of `slides`, in their order, and its report.
 ///
-/// The first slide sets the slide size: 960 pt wide, at the ratio of its
-/// frame. Every frame then fits into that slide, centred.
+/// The first slide sets the slide size: one point per world unit, as the
+/// import reads a slide, so a deck read and written keeps its geometry. A
+/// frame past the edges a presentation accepts takes 960 pt wide, at its
+/// ratio. Every frame then fits into that slide, centred.
 #[must_use]
 pub fn export_pptx(slides: &[PptxSlideSource]) -> PptxExport {
     let size = slides.first().map_or(SlideSize::WIDESCREEN, |first| {
-        SlideSize::with_aspect_of(
-            SLIDE_WIDTH,
-            SlideSize {
-                width: PrintLength::<Pt>::narrowed(first.frame.width()),
-                height: PrintLength::<Pt>::narrowed(first.frame.height()),
-            },
-        )
+        let own = SlideSize {
+            width: PrintLength::<Pt>::narrowed(first.frame.width()),
+            height: PrintLength::<Pt>::narrowed(first.frame.height()),
+        };
+        let edges = SlideSize::MIN_EDGE..=SlideSize::MAX_EDGE;
+        if edges.contains(&own.width) && edges.contains(&own.height) {
+            own
+        } else {
+            SlideSize::with_aspect_of(SLIDE_WIDTH, own)
+        }
     });
     let mut report = ToileReport::new(Direction::Export, FileFormat::Pptx);
     let slides = slides
@@ -604,10 +609,27 @@ mod tests {
         assert_eq!(at.height, pt(50.0));
     }
 
+    /// `TOILE-IO-173`: a frame within the edges a presentation accepts
+    /// gives its own size, one point per world unit, as the import reads
+    /// a slide. A deck of 4:3 slides then leaves at 720 by 540 pt.
+    #[test]
+    fn the_slide_takes_the_size_of_the_first_frame() {
+        let frame = Rect::new(50.0, 50.0, 770.0, 590.0);
+        let export = export_pptx(&[source(frame, Vec::new())]);
+        assert_eq!(
+            export.deck.size,
+            SlideSize {
+                width: pt(720.0),
+                height: pt(540.0),
+            }
+        );
+    }
+
     #[test]
     fn a_frame_of_another_ratio_lands_centred() {
-        let first = Rect::new(0.0, 0.0, 1600.0, 900.0);
-        let square = Rect::new(0.0, 0.0, 900.0, 900.0);
+        // Past the largest edge, so the slide takes 960 pt at its ratio.
+        let first = Rect::new(0.0, 0.0, 8000.0, 4500.0);
+        let square = Rect::new(0.0, 0.0, 4500.0, 4500.0);
         let export = export_pptx(&[
             source(first, Vec::new()),
             source(
@@ -621,6 +643,7 @@ mod tests {
             .get(1)
             .and_then(|s| s.items.first())
             .expect("one item");
+        assert_eq!(export.deck.size, SlideSize::WIDESCREEN);
         let at = shape_at(item);
         assert_eq!(at.height, pt(540.0));
         assert_eq!(at.origin.x, pt(210.0), "the square sits in the middle");
@@ -642,7 +665,7 @@ mod tests {
             "a bare text box"
         );
         let board = f64::from(ElementStyle::default().font.size.or_default().to_px().get());
-        assert_eq!(body.size, pt(board / 2.0), "the slide is half the frame");
+        assert_eq!(body.size, pt(board), "one point per world unit");
         assert_eq!(
             body.typeface, "",
             "the default family takes the face of the theme"

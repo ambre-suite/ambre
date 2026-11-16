@@ -261,7 +261,9 @@ impl<'a> DeckMap<'a> {
         if !text.typeface.is_empty() {
             font.family = Some(ambre_core::FontFamily::from_label(&text.typeface));
         }
-        font.size = FontSize::new(text.size.get())
+        // One slide point is one world unit, and the board draws a size at
+        // its document pixels: the text keeps its share of the slide.
+        font.size = FontSize::from_px(ambre_core::Px::<ambre_core::Doc>::new(text.size.get()))
             .and_then(FontSizeChoice::fixed)
             .unwrap_or(FontSizeChoice::DEFAULT);
         font.weight = match text.weight {
@@ -620,6 +622,25 @@ mod tests {
                 .get(),
             1
         );
+    }
+
+    /// One slide point is one world unit, so a text of 18 pt is drawn 18
+    /// world units tall and keeps its share of the slide. Found by the
+    /// fixture round trip: the size landed as 18 board points, drawn a third
+    /// larger, and each export and import grew it again.
+    #[test]
+    fn a_text_is_drawn_at_its_slide_size_in_world_units() {
+        let read = deck(vec![slide(vec![square("A", 10.0, Some("Hello"))])]);
+        let batch =
+            import_deck(&read, &[], FileFormat::Pptx, &Limits::default()).expect("the deck maps");
+        let drawn: Vec<f32> = batch
+            .styles
+            .iter()
+            .flatten()
+            .filter(|style| style.text_color.is_some())
+            .map(|style| style.font.size.or_default().to_px().get())
+            .collect();
+        assert_eq!(drawn, [18.0]);
     }
 
     /// A connector with a free end has no shape to hold. It lands as a line

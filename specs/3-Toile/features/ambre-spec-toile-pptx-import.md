@@ -22,8 +22,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `TOILE-IO
 | `TOILE-IO-151` | `IO` | A placeholder of a slide MUST take the box and the text style its layout and its master give it. | this spec section 3 | `ambre_pptx::fixtures::a_placeholder_takes_the_box_and_the_style_its_layout_and_master_give_it` | none | verified |
 | `TOILE-IO-152` | `IO` | A shape the master or the layout draws MUST land on every slide that shows it. | this spec section 3 | `ambre_pptx::fixtures::a_shape_of_the_master_lands_on_every_slide` | none | verified |
 | `TOILE-IO-153` | `IO` | A slide MUST keep the background its chain gives it. | this spec section 3 | `ambre_pptx::fixtures::a_slide_background_reaches_the_slide`; `ambre_toile::logic::interop::deck_import::tests::each_slide_is_a_frame_side_by_side_with_its_background_as_its_fill` | none | verified |
-| `TOILE-IO-154` | `IO` | A text MUST land as text a user edits, with its size, its ink and its emphasis. | this spec section 3 | `ambre_pptx::fixtures::a_text_box_keeps_its_own_size_ink_and_emphasis`; `ambre_toile::logic::interop::deck_import::tests::a_painted_shape_keeps_its_text_as_a_text_element_above_it` | none | verified |
+| `TOILE-IO-154` | `IO` | A text MUST land as text a user edits, with its size, its ink and its emphasis. | this spec section 3 | `ambre_pptx::fixtures::a_text_box_keeps_its_own_size_ink_and_emphasis`; `ambre_toile::logic::interop::deck_import::tests::a_painted_shape_keeps_its_text_as_a_text_element_above_it`; `::a_text_is_drawn_at_its_slide_size_in_world_units` | none | verified |
 | `TOILE-IO-166` | `IO` | A deck the writer of `ambre-pptx` writes MUST read back item by item as it left. | this spec section 3 | `ambre_pptx::read::tests::a_written_deck_reads_back_as_it_left` | none | verified |
+| `TOILE-IO-172` | `IO` | Each PowerPoint input fixture, imported, exported and imported again, MUST land as the same deck: frames, titles, notes, sizes, items and bound connectors. | this spec section 3; `TOILE-IO-166`, `TOILE-IO-173` | `ambre_toile::logic::state::import::pptx_tests::every_deck_fixture_lands_the_same_deck_after_an_export_and_an_import` -- the 2 fixtures of the codec, each frame read from the board in paint order, never from the export map | none | verified |
 
 ### 1.2 Open the deck on the board
 
@@ -55,7 +56,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `TOILE-IO
   joins the Office module, held to its row of `ambre-spec-budgets.md section 5`.
 * **Boundary.** none of its own. The reader runs in the Office module, which imports no
   capability (`ARCH-079`), and each picture leaves as ciphertext (`TOILE-IO-068`).
-* **Verification.** 26 `verified`. Two real writers hold the reader, and the board holds the deck
+* **Verification.** 27 `verified`. Two real writers hold the reader, and the board holds the deck
   through the Office engine the host links in place.
 
 ---
@@ -160,7 +161,8 @@ pub fn import_deck(read: &ImportedDeck, thumbs: &[Option<Pixels>], format: FileF
 | The reader answers the deck model the writer reads | a reader model of its own | the OpenDocument reader would need a third model, and the map onto the board could not be shared |
 | A background becomes the fill of the frame | a rectangle under every item | a rectangle that fills the frame takes every click on the slide, and the frame already paints a fill |
 | The Office module decodes the JPEG thumbnails | a decode on the converter thread per picture | each picture would cost a round trip of its own, and the import would hold until every answer came back |
-| One point is one world unit | the slide fitted to a fixed frame width | a widescreen slide exports back at 960 pt, so the round trip keeps its geometry |
+| One point is one world unit | the slide fitted to a fixed frame width | the export writes a frame at one point per world unit (`TOILE-IO-173`), so the round trip keeps its geometry |
+| Each input fixture is imported, exported and imported again, and the two decks are compared as stored data (`TOILE-IO-172`) | comparing the bytes of the file read with the bytes of the file written | the zip order, the part names, the ids and the namespace prefixes differ with no defect. A byte comparison fails on each of them and holds nothing a user reads |
 
 ---
 

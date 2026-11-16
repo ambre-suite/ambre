@@ -34,6 +34,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `TOILE-IO
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-IO-117` | `POST` | An export MUST produce one slide per slide the deck still resolves. | this spec section 3 | `ambre_toile::logic::state::pptx_export::tests::one_slide_per_frame_in_play_order`; `ambre_pptx::tests::one_slide_per_slide_in_deck_order` -- the slide list of the file, read back | none | verified |
+| `TOILE-IO-173` | `POST` | The slide size MUST be the size of the first frame, one point per world unit, unless an edge passes the bounds a presentation accepts. | this spec section 3; `TOILE-IO-172` | `ambre_toile::logic::interop::pptx_export::tests::the_slide_takes_the_size_of_the_first_frame`; `::a_frame_of_another_ratio_lands_centred` -- a frame past the largest edge takes 960 pt at its ratio | none | verified |
 | `TOILE-IO-118` | `POST` | The slides MUST follow the play order of the deck. | this spec section 3 | `ambre_toile::logic::state::pptx_export::tests::one_slide_per_frame_in_play_order` -- one deck in both orders, so a sort by creation fails one | none | verified |
 | `TOILE-IO-119` | `POST` | A slide whose frame is gone MUST produce no slide. | this spec section 3 | `ambre_toile::logic::state::pptx_export::tests::one_slide_per_frame_in_play_order` -- its last assertion, after the frame is deleted | none | verified |
 | `TOILE-IO-120` | `POST` | A slide MUST carry what its frame shows, at the place the frame shows it. | this spec section 3 | `ambre_toile::logic::interop::pptx_export::tests::a_frame_fills_the_slide_and_its_content_lands_in_place`; `::a_frame_of_another_ratio_lands_centred`; `ambre_toile::logic::state::pptx_export::tests::each_slide_holds_what_its_frame_shows` | none | verified |
@@ -51,7 +52,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `TOILE-IO
   No benchmark runs in CI, and the 18 ms of the writer alone is a single host reading.
 * **Boundary.** none of its own: the writer is a pure function, and the file leaves on the shared
   export path (`TOILE-IO-068`). The file carries no author and no date (`TOILE-IO-113`).
-* **Verification.** 24 `verified`. The File menu reaches the export, and the Office converter
+* **Verification.** 25 `verified`. The File menu reaches the export, and the Office converter
   module runs the writer.
 
 ---
@@ -114,7 +115,8 @@ kind: the theme sans, Times New Roman, Courier New.
    empty deck gives one region framing the whole board, and an empty board gives nothing;
 2. per region, it lists every element that meets the frame in paint order, and every connector
    whose line meets it. A frame of the deck is a slide of its own, never an item of another;
-3. the map sets the slide size from the first frame: 960 pt wide, at its ratio. Each frame then
+3. the map sets the slide size from the first frame, one point per world unit (`TOILE-IO-173`).
+   A frame past the edges a presentation accepts takes 960 pt wide, at its ratio. Each frame then
    fits that slide with one scale, centred;
 4. the map turns each element into an item and records each approximation and drop;
 5. the writer adds the static parts, then each slide with its pictures and its notes page. It
