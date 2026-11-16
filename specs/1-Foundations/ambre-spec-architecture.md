@@ -220,7 +220,7 @@ Logic thread. The two threads share one instance, so they share one subscriber.
 | Logic thread | a worker sharing the Main instance's heap | the documents, the engines, the dispatch |
 | Sync worker | a second instance, with its own memory | the socket, the requests, the cryptography, the compression |
 | Call worker | a third instance during a call, with its own memory | the sender keys and the chunk seal of one call (`ambre-spec-call-media.md`) |
-| Converter thread | a worker sharing the Main instance's heap, from the first job (`ARCH-112`) | the conversions the Logic thread hands it and never waits on: today a picture decode (this section, the converter thread) |
+| Converter thread | a worker sharing the Main instance's heap, from the first job (`ARCH-112`) | the conversions the Logic thread hands it and never waits on: today a picture decode and the raster of a Toile PNG export (this section, the converter thread) |
 | Converter module | an instance inside the Logic worker per format family, from the first conversion of that family, each with its own memory. The converter thread holds an instance of its own of each module it runs | the file formats of its family: no key, no document, no import (this section, the converter modules) |
 
 A document with macros adds a fourth context: a sandboxed frame on a domain of its own, outside both
@@ -257,7 +257,7 @@ never downloads the PDF writer (`ARCH-085`).
 | Family | Module | Reads | Writes | Today |
 |---|---|---|---|---|
 | Tables | `ambre-convert-tables` | CSV | CSV | built |
-| PDF | `ambre-convert-pdf` | -- | PDF | built |
+| PDF | `ambre-convert-pdf` | -- | PDF; PNG, rasterized from the same recorded draw list | built |
 | Markup | `ambre-convert-markup` | Markdown, HTML | -- | built |
 | Images | `ambre-convert-images` | SVG, WebP, JPEG | -- | built |
 | Office | `ambre-convert-office` | DOCX, xlsx, ODS, ODT, PPTX; then ODP | DOCX, xlsx, PPTX, ODS, ODT | built, over the package layer `ambre-opc`. Its `Archive` holds the zip and the bounds of a hostile package, which every office codec shares. Each format reads its own index over it: `Package` the OPC content types and relationships, `odf::OdfPackage` the `mimetype` entry and the manifest |
@@ -265,7 +265,7 @@ never downloads the PDF writer (`ARCH-085`).
 
 | Question | Answer |
 |---|---|
-| Where a module runs | inside the Logic worker, as an instance with its own memory. The Logic thread runs the conversions, so they stay client-side and off the UI thread: the worker blocks on the conversion, as it blocks on any command. A picture decode alone runs on the converter thread, in an instance of its own (the converter thread, below). |
+| Where a module runs | inside the Logic worker, as an instance with its own memory. The Logic thread runs the conversions, so they stay client-side and off the UI thread: the worker blocks on the conversion, as it blocks on any command. A picture decode and the raster of a PNG export run on the converter thread, in an instance of their own (the converter thread, below). |
 | How it is built | `scripts/converter_build.py`, the `pre_build` hook of Trunk, builds the crate once per family, with that family's feature alone, single-threaded, into `target/converter/`. It writes each module's BLAKE2b-256 digest beside it. |
 | How it is named | the post-build hook serves it as `ambre-convert-<family>-<16 hex digits>.wasm`, the head of its digest. A release thus caches for good, like every hashed file. |
 | How it is fetched | the Logic thread cannot fetch, so on the first command of a family, it asks the Sync worker once for that family (`ARCH-081`). The worker fetches the module from the page's origin, as it makes every network call (`ARCH-005`). Each family loads and waits on its own: a slow PDF module never holds a CSV import. |
@@ -283,7 +283,7 @@ thread hands it. An instance is never shared between two threads.
 
 | Question | Answer |
 |---|---|
-| What it runs | a `Conversion`, through the loader the Logic thread uses. Today the picture decodes alone: a JPEG, a PNG or a GIF of Prose and of Murmure, and a JPEG of Toile. The envelope names no format, so the `Every conversion runs off the Logic thread` Story (`ambre-roadmap.md` E5) moves the others with no new message |
+| What it runs | a `Conversion`, through the loader the Logic thread uses. Today the picture decodes: a JPEG, a PNG or a GIF of Prose and of Murmure, and a JPEG of Toile; and the raster of a Toile PNG export in the PDF module (`TOILE-IO-017`). The envelope names no format, so the `Every conversion runs off the Logic thread` Story (`ambre-roadmap.md` E5) moves the others with no new message |
 | How a job reaches it | the Logic thread sends the module's bytes once, then each job under a ticket, on a queue that rings the thread's own bell. It never waits for the answer (`ARCH-098`), and the thread answers each job once (`ARCH-102`) |
 | How the answer comes back | on a queue that rings the Logic thread's bell, so a parked Logic thread wakes (`ARCH-101`). The next pass hands the answer to the document or the channel that asked |
 | What crosses | the file in, and the samples out at the size the caller asked, as a `Vec` on the shared heap. The hop between the two threads copies no byte; the copy out of the module's memory runs on the converter thread |

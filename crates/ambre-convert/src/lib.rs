@@ -178,7 +178,22 @@ pub enum Conversion {
         /// apart: the bound of the board's import.
         bound: ambre_core::Size<ambre_core::Px<ambre_core::Image>>,
     },
+    /// Rasterize the one page of a recorded document, scaled to fill `size`,
+    /// and write it as a PNG file (`toile-import-export`). The converter
+    /// thread runs it, never the Logic thread (`toile-import-export`). Answered by
+    /// [`Converted::File`]. An edge past [`RASTER_EDGE`] or a document of
+    /// other than one page is refused.
+    WritePng {
+        document: PrintDocument,
+        size: ambre_core::Size<ambre_core::Px<ambre_core::Image>>,
+    },
 }
+
+/// The longest edge a PNG export rasterizes. Past it, the caller scales the
+/// page down, and the module refuses the request. At this edge the module
+/// holds 64 MiB of pixels, the bound past which the converter thread loads
+/// it again (`ambre-spec-budgets.md section 6`).
+pub const RASTER_EDGE: ambre_core::Px<ambre_core::Image> = ambre_core::Px::new(4096);
 
 impl Conversion {
     /// The family whose module serves this conversion.
@@ -186,7 +201,7 @@ impl Conversion {
     pub const fn family(&self) -> ConverterFamily {
         match self {
             Self::ReadCsv { .. } | Self::WriteCsv { .. } => ConverterFamily::Tables,
-            Self::WritePdf { .. } => ConverterFamily::Pdf,
+            Self::WritePdf { .. } | Self::WritePng { .. } => ConverterFamily::Pdf,
             Self::ReadMarkdown { .. }
             | Self::WriteMarkdown { .. }
             | Self::ReadHtml { .. }

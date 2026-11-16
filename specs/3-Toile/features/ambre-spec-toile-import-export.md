@@ -25,6 +25,13 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-IO-010` | `IO` | An `.ambre` export and import round trip MUST preserve the document state and its whole history. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_toile::logic::state::docfile::tests::a_round_trip_keeps_the_history_whole`; `ambre_toile::logic::state::docfile::tests::round_trip_preserves_the_document_state`; `ambre_toile::logic::state::docfile::tests::the_header_names_toile_and_the_document` | none | verified |
 | `TOILE-IO-069` | `IO` | A board the export could not read MUST NOT become a file: a valid header over an empty payload MUST NOT be written. | this spec section 3 | type-level -- the container writer answers `Option<Vec<u8>>` and the header is written inside the branch a read snapshot reaches, so no payload-less file can be constructed. The registry turns the empty answer into the export-failure event, on the plain path and the sealed one alike | none | verified |
 | `TOILE-IO-104` | `INV` | A reader MUST keep the SVG and PDF exports: they write nothing, so the role gate MUST NOT withhold them. | this spec section 3; `ambre-spec-architecture.md section 4`; `TRAME-IO-034`; `INTEROP-006` | `ambre_toile::ui::menu_bar::tests::exports_are_not_mutating` -- it pins both commands as non-mutating, the flag the role gate reads | none | verified |
+| `TOILE-IO-181` | `IO` | The bytes a PNG export hands back MUST be a PNG image of the size asked, which the page fills edge to edge. | this spec section 3 | `ambre_convert::engine::png::tests::a_page_rasterizes_at_the_size_asked_and_fills_it` -- the PNG signature, the size, and a rect over half the page inking half the raster at twice the scale | none | verified |
+| `TOILE-IO-182` | `IO` | A clip in the recorded page MUST keep what it holds, and nothing outside it MUST reach the image. | this spec section 3 | `ambre_convert::engine::png::tests::a_clip_keeps_its_rect_alone_until_it_pops` | none | verified |
+| `TOILE-IO-183` | `IO` | Text MUST reach the image as its glyphs, placed where the screen places them: at the pen position, above the baseline. | this spec section 3 | `ambre_convert::engine::png::tests::a_glyph_run_inks_above_its_baseline` -- a glyph of a shipped face, and no ink below its baseline or past its run | none | verified |
+| `TOILE-IO-184` | `IO` | A picture MUST reach the image as its pixels, over its destination rect. | this spec section 3 | `ambre_convert::engine::png::tests::a_picture_fills_its_rect_with_its_pixels` | none | verified |
+| `TOILE-IO-188` | `IO` | The image of a frame MUST carry that frame alone: it is clipped to the frame's rect. | this spec section 3; `TOILE-IO-030` | `ambre_toile::logic::state::presentation::pdf_tests::a_frame_exports_at_twice_its_size_clipped_to_itself` -- the size and the clip | none | verified |
+| `TOILE-IO-190` | `IO` | The image of the board MUST hold its content inside a margin of background. | this spec section 3 | `ambre_toile::logic::state::presentation::pdf_tests::a_board_png_holds_its_shape_inside_its_margin` -- the page recorded by the screen's walk, rasterized by the PDF module, inks the shape's colour in the middle and the background in the margin | none | verified |
+| `TOILE-IO-191` | `INV` | A reader MUST keep the PNG export: it writes nothing, so the role gate MUST NOT withhold it. | this spec section 3; `TOILE-IO-104` | `ambre_toile::ui::menu_bar::tests::exports_are_not_mutating` -- it pins the PNG command as non-mutating | none | verified |
 
 ### 1.2 Bring a file onto the board
 
@@ -72,9 +79,14 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-IO-086` | `POST` | An export MUST hold every element the board holds: one placed left of or above the origin MUST NOT fall outside the frame. | this spec section 3 | `ambre_toile::logic::interop::svg_export::tests::the_frame_holds_an_element_placed_before_the_origin` -- the frame a board reaching before the origin writes, and the `0 0` one a board in the positive quadrant keeps | none | verified |
 | `TOILE-IO-087` | `POST` | An exported picture MUST leave with its pixels, never with an address no reader can resolve. | this spec section 3 | `ambre_toile::logic::interop::svg_export::tests::a_picture_leaves_with_its_pixels` -- the inline data the file carries, and the address it no longer names; `::a_picture_without_pixels_is_reported` -- the picture whose pixels never arrived | none | verified |
 | `TOILE-IO-088` | `POST` | Exported text MUST carry the size and the colour it was drawn with. | this spec section 3 | `ambre_toile::logic::interop::svg_export::tests::text_carries_its_size_and_its_ink`; `ambre_toile::logic::interop::svg_export::tests::auto_sized_text_leaves_at_the_size_it_was_drawn_with` -- an automatic size leaves at the default the board draws | none | verified |
-| `TOILE-IO-017` | `POST` | The PNG render-back MUST run offscreen, on the UI thread's own surface. | this spec section 3 | not built | unbuilt -- lands with the `PNG export` Story (`ambre-roadmap.md` E6). It needs a real GPU adapter, so its belt is wasm-tier | unimplemented |
-| `TOILE-IO-024` | `FRAME` | An export MUST NOT change the board: it MUST emit no CRDT delta. | this spec section 3 | `ambre_toile::logic::state::export::tests::exporting_twice_yields_the_same_bytes_and_changes_nothing` -- every export in that module reads the empty update on its way through; `::a_media_request_writes_nothing`; `ambre_toile::logic::state::export::showcase_tests::a_showcase_page_reaches_the_download_path_alone` -- the showcase page | none | verified |
-| `TOILE-IO-097` | `FRAME` | A PNG export MUST NOT block the visible frame. | this spec section 3 | not built | unbuilt -- lands with the `PNG export` Story (`ambre-roadmap.md` E6). It needs a real GPU adapter, so its belt is wasm-tier | unimplemented |
+| `TOILE-IO-017` | `POST` | The PNG raster and its encoding MUST run on the converter thread, never on the UI thread or the Logic thread. | this spec section 3; `ambre-spec-architecture.md section 2`, the converter thread | `ambre_logic::dispatch::tests::a_png_export_rasterizes_on_the_converter_thread_and_the_logic_thread_never_waits` -- the command returns with the job in flight and nothing answered, and the file comes back once the converter thread serves the job; ci-gate -- `scripts/converter_boundary.py`, run by `just converter-boundary` in the CI `lint` job, refuses `ambre-pdf` in either instance, and the raster compiles behind the same `pdf` feature of `ambre-convert`, so no thread of Main can rasterize (`ARCH-078`) | none | verified |
+| `TOILE-IO-024` | `FRAME` | An export MUST NOT change the board: it MUST emit no CRDT delta. | this spec section 3 | `ambre_toile::logic::state::export::tests::exporting_twice_yields_the_same_bytes_and_changes_nothing` -- every export in that module reads the empty update on its way through; `::a_media_request_writes_nothing`; `ambre_logic::dispatch::tests::a_png_export_rasterizes_on_the_converter_thread_and_the_logic_thread_never_waits` -- the PNG export sends nothing to Sync | none | verified |
+| `TOILE-IO-097` | `FRAME` | A PNG export MUST NOT block the visible frame. | this spec section 3; `ambre-spec-budgets.md section 2` | structural -- the UI thread sends the command and hands the answered bytes to the download path, as for the SVG export (`TOILE-IO-085`), and draws no pixel of the image; `ambre_logic::dispatch::tests::a_png_export_rasterizes_on_the_converter_thread_and_the_logic_thread_never_waits` -- the raster runs on the converter thread, and the UI thread receives the file alone | none | verified |
+| `TOILE-IO-192` | `POST` | A user MUST be able to take the whole board, or one frame, out as a PNG image. | this spec section 4 | `ambre_toile::ui::menu_bar::tests::the_file_menu_offers_the_board_as_png` -- the File menu entry and the board command it sends; `ambre_toile::ui::menu::tests::a_lone_frame_offers_its_png_and_nothing_else_does` -- the frame's own entry; `ambre_logic::dispatch::tests::a_png_export_rasterizes_on_the_converter_thread_and_the_logic_thread_never_waits` -- the command routed to a live board answers `board.png` | none | verified |
+| `TOILE-IO-185` | `FAIL` | A raster request past the edge bound, with an empty edge, or of other than one page MUST be refused before any pixel is allocated. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_convert::engine::png::tests::a_size_past_the_bound_or_a_document_not_of_one_page_is_refused` | none | verified |
+| `TOILE-IO-186` | `POST` | An image MUST show its region at two pixels per board unit, the region's corners on the image's corners. | this spec section 3 | `ambre_toile::logic::interop::png_export::tests::a_region_rasterizes_at_twice_its_size_corner_to_corner` | none | verified |
+| `TOILE-IO-187` | `POST` | A region whose image would pass the edge bound MUST be scaled down until its longest edge meets the bound, keeping its aspect. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_toile::logic::interop::png_export::tests::a_large_region_is_scaled_down_to_the_bound` | none | verified |
+| `TOILE-IO-189` | `FAIL` | A PNG export of a board with no element, or of an element that is no frame, MUST refuse and say so, and hand the converter thread no job. | this spec section 3 | `ambre_toile::logic::state::presentation::pdf_tests::an_empty_board_or_a_shape_has_no_png`; `ambre_logic::dispatch::tests::a_png_export_of_an_empty_board_answers_with_a_reason_and_no_job`; `ambre_toile::ui::menu::tests::a_lone_frame_offers_its_png_and_nothing_else_does` -- a shape selected sends nothing | none | verified |
 
 ### 1.5 Open an `.ambre` file
 
@@ -122,7 +134,7 @@ status values are normative in `ambre-spec-template.md`.
   the pixels an import produces reach the relay as ciphertext alone
   (`features/ambre-spec-toile-media.md section 1`, `TOILE-IO-013`). The showcase bundle is the one
   deliberate exit from the zero-knowledge boundary (`ZK-037`), and `TOILE-IO-096` makes it say so.
-* **Verification.** 61 `verified`, 2 `unimplemented`. What holds carries a test of its own: the
+* **Verification.** 75 `verified`. What holds carries a test of its own: the
   drop point, the reader's structure, the writer's own and the report. So do the sliced apply on a
   populated board and the two foreign boards, each read from an authored fixture. The browser tier
   drives the glue underneath: a drop, a picked file and a download. No browser opens a showcase
@@ -297,6 +309,24 @@ board walk never offers one to the serializer and names it in the report itself.
 no address beyond the `data:` address of each picture. It embeds no board state: a reader learns
 what the picture shows, and nothing the picture leaves out.
 
+**What a PNG export draws.** The image of the board or of one frame is the page the screen's walk
+draws, the walk the PDF export records (`features/ambre-spec-toile-pdf-export.md section 3`). The
+board grid is dropped, and pictures come at the resolution the board holds (`TOILE-IO-100`).
+
+1. on the Logic thread, read the region. It is the board's content with a margin of 16 board units
+   (`TOILE-IO-190`), or one frame's rect, which also clips the page (`TOILE-IO-188`). A board with no
+   element or an element that is no frame refuses at once (`TOILE-IO-189`);
+2. set the page camera at two raster pixels per board unit (`TOILE-IO-186`). Scale it down when the
+   longest edge would pass the bound of `ambre-spec-budgets.md section 6` (`TOILE-IO-187`);
+3. record the page through the walk in one step. Hand it to the converter thread as one job, and
+   never wait for it (`TOILE-IO-017`, `ARCH-098`);
+4. on the converter thread, the PDF module replays the ops onto premultiplied samples and writes
+   the PNG file (`TOILE-IO-181` to `TOILE-IO-185`). It flattens each path and accumulates the
+   area each line covers, as a font rasterizer does. krilla links the stroker, the face parser
+   and the zlib stream already. The raster adds its own small code and the glyph outlines;
+5. the answer reaches the board's view as `board.png`, on the path every export takes
+   (`TOILE-IO-192`, `TOILE-IO-085`).
+
 **The crates each path uses:**
 
 | Crate | Role | Declared |
@@ -306,7 +336,9 @@ what the picture shows, and nothing the picture leaves out.
 | `image` | decodes and encodes raster | yes |
 | `base64` | the pictures an SVG export writes inline | yes |
 | `serde_json` | was the plan for a Figma or a Miro export. The boards module reads the JSON with a reader of its own, smaller than a general JSON crate in a module that holds a size ceiling | no |
-| `lyon` | would rasterize the vector export | no |
+| `tiny-skia-path` | widens a stroke of the PNG export into its outline, the copy krilla links | in `ambre-convert` |
+| `skrifa` | reads the glyph outlines the PNG raster fills, the copy krilla links | in `ambre-convert` |
+| `flate2` | writes the zlib stream of the PNG file, the copy krilla links | in `ambre-convert` |
 
 **Code:**
 
@@ -320,6 +352,9 @@ what the picture shows, and nothing the picture leaves out.
   and connectors;
 * `logic/interop/svg_export.rs` -- the serializer and its float formatter;
 * `logic/interop/showcase.rs` -- the showcase page around the SVG export;
+* `logic/interop/png_export.rs` -- the region, the page camera and the bound of a PNG export;
+* `crates/ambre-convert/src/engine/png.rs` -- the replay, the coverage rasterizer and the PNG
+  writer, in the PDF converter module;
 * `logic/interop/raster.rs` -- the decode, the bound and the thumbnail;
 * `logic/interop/limits.rs` -- the four safety bounds;
 * `logic/interop/docfile.rs` and `logic/state/docfile.rs` -- the native pair, over the container
@@ -338,6 +373,8 @@ what the picture shows, and nothing the picture leaves out.
 | the File menu's save entry | the whole board leaves as a native `.ambre` file, on the same answer path, and the entry's own label says the file is not encrypted (`ambre-spec-docfile.md`, `DOCFILE-001`, `DOCFILE-009`) |
 | the File menu's SVG export entry | the Logic thread serializes the board and answers with the bytes (`TOILE-IO-021`) |
 | the File menu's showcase entry | the Logic thread writes the page and answers with the bytes. The entry sits in a group of its own, and its label says the page is not encrypted and readable by anyone (`TOILE-IO-018`, `TOILE-IO-096`) |
+| the File menu's PNG export entry | the Logic thread records the whole board as one page, and the converter thread answers the image (`TOILE-IO-192`, `TOILE-IO-017`) |
+| the context menu of a frame selected alone | its PNG export entry takes the frame out as an image of itself (`TOILE-IO-192`, `TOILE-IO-188`) |
 | the File menu's PDF export entry | the deck leaves as a page per slide, on the same answer path (`features/ambre-spec-toile-pdf-export.md`, `TOILE-IO-029`) |
 | the answer | the UI thread hands the bytes to the browser, and no board state changes (`TOILE-IO-085`, `TOILE-IO-024`) |
 | an import that landed | a notice says how many elements arrived, and what was dropped (`TOILE-IO-022`) |
@@ -376,6 +413,10 @@ view past its own gate.
 | A showcase page is the picture alone | embedding the board state beside the picture | nothing reads it back, and it hands every reader what the picture leaves out: the sticky notes, the frames, the speaker notes. The page leaves the boundary for good, so it carries what the user shows and nothing more |
 | A Figma or Miro import reads the REST JSON a user saved | reading the `.fig` file or the Miro `.rtb` backup | both are private binary formats with no published schema. A reader of either follows the tool's changes by trial, and a board the tool rewrites breaks it without a word |
 | A Figma or Miro import reads a file | calling the tool's REST interface from Ambre with the user's token | it hands a third party's token to the client and opens a socket from a conversion. The pillar is that a conversion runs on the device and reaches nothing (`TOILE-IO-068`) |
+| The PNG raster runs in the PDF module, on the converter thread | rendering the page offscreen on the UI thread's GPU surface, then reading it back | the read back stalls the frame it must not block (`TOILE-IO-097`): WebGL2, the default backend, reads a buffer back synchronously. The UI thread would then also encode the PNG, which costs tens of milliseconds for a large board. A GPU raster is testable only with a real adapter, where the CPU raster is a host test over pixels |
+| The PNG raster runs in the PDF module, on the converter thread | a rasterizer of its own module, or of the images module | the PDF module already links the face parser, the stroker and the zlib stream the raster needs. A new family adds a fetch, a digest and a size budget for one export |
+| The PDF module rasterizes the paths itself | `tiny-skia`, a full 2D renderer, or `zeno`, a path rasterizer | they cost the module about 250 KB and 125 KB of raw wasm more than its own raster, measured on 2026-11-15 (`ambre-spec-budgets.md section 5`). The page needs a solid fill, a rect clip and a picture alone, which a coverage rasterizer and a bilinear sample hold in a few hundred lines |
+| A PNG export records its page in one step | recording it in bands over several passes | one page is the step a deck export takes, and the slice row holds it for a slide (`TOILE-IO-099`). A whole board can be denser than a slide, section 6 |
 | A showcase bundle is an explicit act | publishing automatically on export | it declassifies without asking. The bundle produces plaintext outside the encryption boundary, so it may never happen as a side effect of another action |
 
 ---
@@ -434,3 +475,14 @@ view past its own gate.
 * **No property test drives an import.** An import creates as many elements as a paste, and the two-peer
   convergence property drives neither it nor the serializers. That is why every row of section 2 that names a
   concurrent case says `none`.
+* **No CI ceiling holds the PNG page step** (`TOILE-IO-097`). The Logic thread records a PNG export's
+  page in one step, as it records a page of the deck. The instruction ceiling of
+  `scripts/instructions.py` holds a slide of the deck, and a whole board can be denser. No bench
+  measures the raster either: it runs on the converter thread, under the answer deadline of
+  `ARCH-108`.
+* **An encoded picture draws nothing on the PNG page.** A page of Toile carries decoded thumbnails
+  alone, so the PDF module links no JPEG decoder for the raster. A page that recorded an encoded
+  picture, as a Prose page does, would leave its box empty. No Prose or Trame PNG export exists.
+* **The PNG export has no browser test.** The routing, the raster and the pixels are host tests, and
+  the download path is the SVG export's (`TOILE-IO-085`). No belt test drives the entry in the served
+  build.

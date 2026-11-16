@@ -3811,6 +3811,82 @@ mod tests {
         assert_eq!(uploaded, 2, "each picture lands once its thumbnail does");
     }
 
+    /// The PNG export of `scope`, sent to `doc_id` as the File menu sends it.
+    #[cfg(all(feature = "toile-pdf", not(target_arch = "wasm32")))]
+    fn png_export(doc_id: Id<Document>, scope: ambre_toile::message::PngScope) -> LogicCommand {
+        LogicCommand::App {
+            document_id: doc_id,
+            command: AppCommand::Toile(ToileCommand::export(
+                ambre_toile::message::ToileExport::Png(scope),
+            )),
+        }
+    }
+
+    /// The PNG export records
+    /// its page on this thread and hands the raster to the converter thread.
+    /// The command returns with the job in flight and nothing answered. The
+    /// Logic thread never waits for a pixel. The UI thread receives the file
+    /// alone, once the thread answers. No delta leaves for a peer.
+    #[cfg(all(feature = "toile-pdf", not(target_arch = "wasm32")))]
+    #[test]
+    fn a_png_export_rasterizes_on_the_converter_thread_and_the_logic_thread_never_waits() {
+        let (mut state, ui_rx, sync_rx) = harness();
+        let mut thread = converter_thread(&mut state);
+        state.handle_logic_command(LogicCommand::LoadFonts { faces: Vec::new() });
+        let doc_id = board_with_content(&mut state);
+        load_converter(&mut state, ambre_core::ConverterFamily::Pdf);
+        ui_rx.try_iter().for_each(drop);
+        sync_rx.try_iter().for_each(drop);
+        state.handle_logic_command(png_export(doc_id, ambre_toile::message::PngScope::Board));
+        state.take_converted();
+        assert!(
+            toile_answers(&ui_rx).is_empty(),
+            "nothing answers before the converter thread runs the job"
+        );
+        thread.serve();
+        assert!(
+            state.offload.has_answers(),
+            "the answer rings the Logic thread"
+        );
+        state.take_converted();
+        match toile_answers(&ui_rx).as_slice() {
+            [
+                ambre_toile::message::ToileEvent::Interop(
+                    ambre_bus::interop::InteropAnswer::ExportReady { file, .. },
+                ),
+            ] => {
+                assert_eq!(file.filename.as_str(), "board.png");
+                assert!(file.data.as_bytes().starts_with(b"\x89PNG"), "a PNG header");
+            }
+            other => panic!("expected the file alone, got {other:?}"),
+        }
+        assert!(
+            sync_rx.try_recv().is_err(),
+            "the export sent something to Sync"
+        );
+    }
+
+    /// A PNG export with nothing to draw answers at once with
+    /// the reason, and hands the converter thread no job.
+    #[cfg(all(feature = "toile-pdf", not(target_arch = "wasm32")))]
+    #[test]
+    fn a_png_export_of_an_empty_board_answers_with_a_reason_and_no_job() {
+        let (mut state, ui_rx, _sync_rx) = harness();
+        let _thread = converter_thread(&mut state);
+        state.handle_logic_command(LogicCommand::LoadFonts { faces: Vec::new() });
+        let doc_id = live_toile(&mut state, Role::Owner);
+        ui_rx.try_iter().for_each(drop);
+        state.handle_logic_command(png_export(doc_id, ambre_toile::message::PngScope::Board));
+        assert!(matches!(
+            toile_answers(&ui_rx).as_slice(),
+            [ambre_toile::message::ToileEvent::Interop(
+                ambre_bus::interop::InteropAnswer::Failed(_)
+            )]
+        ));
+        assert!(!state.offload.has_answers());
+        assert!(state.offload.release().is_empty());
+    }
+
     /// `ARCH-100`: a converter thread that is gone fails each job as a module
     /// that did not load. Nothing is fatal: the board is told, and the UI
     /// hears no fatal event.

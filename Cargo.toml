@@ -205,6 +205,16 @@ zune-jpeg = { version = "0.5", default-features = false, features = ["std"] }
 # never encodes.
 png = "0.18"
 gif = { version = "0.14", default-features = false, features = ["std"] }
+# The stroker of the PNG export, in the PDF converter module
+# (`3-Toile/features/ambre-spec-toile-import-export.md section 3`): the
+# version krilla links, so the module adds no copy. The module rasterizes
+# the outline itself. A full renderer, tiny-skia, or a path rasterizer,
+# zeno, cost the module 100 KB to 200 KB more (`ambre-spec-budgets.md
+# section 5`).
+tiny-skia-path = { version = "0.12", default-features = false, features = ["std"] }
+# The glyph outlines the rasterizer fills: the skrifa krilla links, so the
+# module carries one copy.
+skrifa = { version = "0.42", default-features = false, features = ["std"] }
 
 # WASM
 gloo-net = { version = "0.7", features = ["http", "websocket"] }

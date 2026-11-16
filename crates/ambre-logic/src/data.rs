@@ -48,6 +48,73 @@ impl LogicState {
         }
     }
 
+    /// Start the PNG export of a Toile board or frame (`toile-import-export`).
+    /// The page is recorded now, in one step, and the converter thread
+    /// rasterizes it: this thread never waits for the image (`ARCH-098`).
+    /// A refusal answers at once, by name.
+    pub(crate) fn export_toile_png(
+        &mut self,
+        document_id: Id<Document>,
+        scope: &ambre_toile::message::PngScope,
+    ) {
+        self.settle_import(document_id);
+        let Self {
+            docs, export_cx, ..
+        } = self;
+        let Some(DocState::Toile(state)) = docs.get(&document_id).map(|d| &d.state) else {
+            tracing::warn!("Logic: PNG export asked of a document that is not a board");
+            return;
+        };
+        match record_png_of(state, scope, export_cx.as_mut()) {
+            Ok(conversion) => self.offload(crate::converter_thread::Job {
+                ticket: ambre_bus::next_request(),
+                owner: crate::converter_thread::JobOwner::ToilePng(document_id),
+                conversion,
+            }),
+            Err(cause) => {
+                let answer = png_file_answer(Err(cause));
+                self.dispatch_outcome(
+                    document_id,
+                    vec![AppEvent::Toile(answer)],
+                    None,
+                    None,
+                    Vec::new(),
+                );
+            }
+        }
+    }
+
+    /// Hand the converter thread's answer to a PNG export to its board, as
+    /// the file or as the reason there is none. A board closed meanwhile
+    /// drops it.
+    pub(crate) fn answer_toile_png(
+        &mut self,
+        document_id: Id<Document>,
+        answer: Result<ambre_convert::Converted, ambre_convert::JobFailure>,
+    ) {
+        if !self.docs.contains_key(&document_id) {
+            return;
+        }
+        let file = match answer {
+            Ok(ambre_convert::Converted::File(bytes)) => Ok(bytes),
+            Ok(_) => Err(ambre_core::StopCause::ConverterAnswered),
+            Err(ambre_convert::JobFailure::Unavailable) => {
+                Err(ambre_core::StopCause::ConverterUnavailable)
+            }
+            Err(ambre_convert::JobFailure::Refused) => Err(ambre_core::StopCause::FileRefused(
+                ambre_core::FileRefusal::Unwritable,
+            )),
+        };
+        let answer = png_file_answer(file);
+        self.dispatch_outcome(
+            document_id,
+            vec![AppEvent::Toile(answer)],
+            None,
+            None,
+            Vec::new(),
+        );
+    }
+
     /// Write a document to a native `.ambre` file and answer with the bytes
     /// (`ambre-spec-docfile.md`). The second app command this thread serves
     /// itself, and for a reason of its own. The container's header carries the
@@ -226,6 +293,16 @@ impl LogicState {
         // (`toile-pdf-export`).
         if let Some(family) = converting::needs_converter(&command) {
             self.convert_for(family, document_id, command);
+            return;
+        }
+        // The PNG export records its page here, beside the base font faces,
+        // and the converter thread rasterizes it (`toile-import-export`). Its job
+        // asks for the module itself, so no command waits on it.
+        if let AppCommand::Toile(ToileCommand::Interop(InteropRequest::Export(ToileExport::Png(
+            scope,
+        )))) = command
+        {
+            self.export_toile_png(document_id, &scope);
             return;
         }
         // The native file is the same operation whichever engine owns the
@@ -1432,6 +1509,62 @@ pub(crate) fn deck_file_answer(
             InteropError::Stopped(cause),
         )),
     }
+}
+
+/// The answer a PNG export ends on: the file, or the reason there is none.
+pub(crate) fn png_file_answer(
+    file: Result<ambre_core::Payload<ambre_client_core::FileBytes>, ambre_core::StopCause>,
+) -> ToileEvent {
+    match file {
+        Ok(data) => ToileEvent::Interop(InteropAnswer::ExportReady {
+            file: ExportedFile {
+                // Named for what it holds, as the SVG export of the board is.
+                filename: ambre_client_core::ExportFilename::named(
+                    "board",
+                    ambre_client_core::ExportExtension::Png,
+                ),
+                media_type: ambre_core::MediaType::from("image/png"),
+                data,
+            },
+            // The page walk draws every element through the shared surface,
+            // so the image holds what the board shows.
+            report: ToileReport::new(Direction::Export, FileFormat::Image),
+        }),
+        Err(cause) => ToileEvent::Interop(InteropAnswer::failed(
+            Direction::Export,
+            InteropError::Stopped(cause),
+        )),
+    }
+}
+
+/// The PNG job of `scope`, its page recorded off the board now, or the
+/// reason there is none.
+#[cfg(feature = "toile-pdf")]
+fn record_png_of(
+    state: &ToileState,
+    scope: &ambre_toile::message::PngScope,
+    fonts: Option<&mut parley::FontContext>,
+) -> Result<ambre_convert::Conversion, ambre_core::StopCause> {
+    use ambre_toile::logic::interop::PngExportError;
+    // A race with startup, as for the deck: the next attempt succeeds.
+    let fonts = fonts.ok_or(ambre_core::StopCause::FontsLoading)?;
+    let request = state.record_png(scope, fonts).map_err(|e| match e {
+        PngExportError::Empty => ambre_core::StopCause::NothingToConvert,
+        PngExportError::NoFrame => ambre_core::StopCause::SourceGone,
+    })?;
+    Ok(ambre_convert::Conversion::WritePng {
+        document: request.document,
+        size: request.size,
+    })
+}
+
+#[cfg(not(feature = "toile-pdf"))]
+fn record_png_of(
+    _state: &ToileState,
+    _scope: &ambre_toile::message::PngScope,
+    _fonts: Option<&mut parley::FontContext>,
+) -> Result<ambre_convert::Conversion, ambre_core::StopCause> {
+    Err(ambre_core::StopCause::NotInBuild)
 }
 
 /// The recording of the deck, read off the board now, or the reason there is

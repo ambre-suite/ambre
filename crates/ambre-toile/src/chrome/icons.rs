@@ -66,6 +66,7 @@ pub fn resolve(id: StaticKey<Icons>) -> Option<icondata::Icon> {
         "file-import-outline" => icondata::MdiFileImportOutline,
         "file-export-outline" => icondata::MdiFileExportOutline,
         "file-pdf-box" => icondata::MdiFilePdfBox,
+        "file-image-outline" => icondata::MdiFileImageOutline,
         _ => return None,
     };
     Some(icon)

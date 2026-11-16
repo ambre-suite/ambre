@@ -5,7 +5,8 @@
 // never wait on (`ambre-spec-architecture.md section 2`, the converter
 // thread).
 //
-// Today it runs the JPEG decode of the images module alone (`ARCH-097`). The
+// Today it runs the JPEG decode of the images module (`ARCH-097`) and the
+// raster of a Toile PNG export (`toile-import-export`). The
 // other conversions still run on the Logic thread, and the
 // `Every conversion runs off the Logic thread` Story moves them. So the two
 // envelopes carry any `Conversion`, never a JPEG of their own.
@@ -355,6 +356,9 @@ pub(crate) enum JobOwner {
     Prose(Id<Document>),
     /// A picture a Toile board inserts, by the ticket Toile minted.
     Toile(Id<Document>),
+    /// The PNG export of a Toile board, answered as its file
+    /// (`toile-import-export`).
+    ToilePng(Id<Document>),
     /// The preview of a Murmure message.
     Murmure {
         channel_id: Id<Channel>,

@@ -853,6 +853,26 @@
   ceiling rounds it up to 1 270 000, with 9 313 bytes of room once the pin lands. Main and the
   converter modules hold their figures, and the call worker reads 77 bytes less. The first
   download reads 3 138 616 bytes of brotli.
+* **The PNG raster raised the PDF module ceiling on 2026-11-15.** The PNG export rasterizes a
+  recorded page in the PDF module, on the converter thread
+  (`3-Toile/features/ambre-spec-toile-import-export.md section 3`). Three cuts came before the
+  raise. Each figure is the module built alone by the command of `scripts/converter_build.py`, on
+  the session container. The figure before is the same command on `origin/main` at `1d26e12`.
+
+| Build of the PDF module | Raw | Change | Brotli | Verdict |
+|---|---|---|---|---|
+| `origin/main` | 1 822 699 | -- | 425 324 | before the story |
+| `tiny-skia` rasterizes and encodes | 2 204 715 | +382 016 | 485 000 | refused: its fill pipeline is about 250 KB |
+| the cut: `tiny-skia` without `png-format`, the `png` encoder krilla links | 2 203 910 | +381 211 | 484 553 | refused: the encoder was not the weight |
+| the cut: `zeno` rasterizes a coverage mask | 2 077 341 | +254 642 | 458 617 | refused: its stroker, dasher and mask paths are about 110 KB |
+| the cut: a coverage rasterizer of the module's own, with the `png` encoder | 1 980 011 | +157 312 | 448 036 | refused: the encoder adds about 20 KB |
+| the cut: the module writes the PNG chunks over the zlib stream krilla links | 1 953 691 | +130 992 | 440 771 | kept |
+| the samples typed as peniko's premultiplied colour, not bare bytes | 1 953 835 | +131 136 | 440 804 | kept; the ceiling rounds it up to 1 960 000, with 6 165 bytes of room |
+
+  The glyph outlines hold 91 655 bytes of the growth kept. skrifa draws them through a pen type of
+  its own, and krilla's pen is private, so the module instantiates skrifa's outline code twice. A
+  third cut, dead code elsewhere in the module, was not found: `twiggy diff` against
+  `origin/main` names no other crate past 7 KB.
 
 **The Main instance, per contribution.** Estimates, and why the lazy-loading rule above exists.
 
@@ -914,6 +934,7 @@
 | Prose decoded pictures, per document | < 64 MiB | `CACHE_CAP` in `ambre-prose`, a cache in the Logic thread counted in decoded bytes, evicted least recently painted, never a transfer in flight (`PROSE-FEAT-054`). One picture is at most 2048 px a side, 16 MiB, so it holds about three such pictures, or the pictures of a few pages, inside the < 100 MB total (`features/ambre-spec-prose-images.md`) |
 | Prose picture source edge | 8192 px, each side | `MAX_SOURCE_EDGE` in `ambre-prose`, read off the header before any decode (`PROSE-FEAT-314`). A JPEG at the bound decodes to about 192 MiB of RGB samples before its scale, in the memory of the converter thread's images module: a transient peak past the < 100 MB total on the device that opens such a file. The row below gives that memory back. A PNG at the bound decodes to 256 MiB of RGBA samples in the same module, before its scale |
 | Converter thread module memory, after a job | 64 MiB per instance | `RESET_FOOTPRINT` in `ambre-logic`. A WebAssembly memory never shrinks, so an instance past it after a job is dropped and loaded again from its bytes, and the peak of one decode does not stay for the session (`ARCH-099`). A decode under it keeps its instance, and the next decode reuses that memory |
+| Toile PNG export raster edge | 4096 px, each side | `RASTER_EDGE` in `ambre-convert`. The Logic thread scales a page down until its longest edge meets it, and the PDF module refuses a request past it (`TOILE-IO-185`, `TOILE-IO-187`). At the bound the pixmap holds 64 MiB in the converter thread's instance of the module, so the instance is loaded again after the job (`ARCH-099`) |
 | Converter thread jobs in flight | 8 | `IN_FLIGHT` in `ambre-logic`. The rest wait in the Logic thread, oldest first, so each of the two queues of the thread, 16 slots, never fills (`ARCH-103`). Each job holds its file until its answer, a JPEG of a few megabytes |
 | Converter threads spawned again, per session | 3 | `RESPAWN_LIMIT` in `ambre-logic`. A thread that missed its answer deadline is never ended: its worker and its stack stay in the shared heap for the session. A spawn that failed and is tried again by the next job counts too (`ARCH-118`). Past the third, no thread is spawned, and every job fails as a module that did not load (`ARCH-108`) |
 | Converter threads spawned at boot | 0 | The first job spawns the first thread, while its module downloads, and that spawn counts against no respawn limit (`ARCH-112`). A session that converts nothing holds no converter worker and no stack for one |

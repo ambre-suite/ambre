@@ -31,6 +31,8 @@ pub mod limits;
 pub mod media;
 #[cfg(feature = "pdf")]
 mod pdf_export;
+#[cfg(feature = "pdf")]
+mod png_export;
 mod pptx_export;
 mod raster;
 mod showcase;
@@ -52,6 +54,10 @@ pub use pdf_export::{
 };
 #[cfg(all(test, feature = "pdf"))]
 pub(crate) use pdf_export::{decode_thumbnail, paint_page};
+#[cfg(feature = "pdf")]
+pub use png_export::{PNG_ZOOM, PngExportError, PngPage, PngRequest};
+#[cfg(feature = "pdf")]
+pub(crate) use png_export::{board_region, png_page};
 pub use pptx_export::{PptxConnector, PptxElement, PptxExport, PptxSlideSource, export_pptx};
 pub use raster::{import_raster, jpeg_blob, png_of, raster_batch};
 pub use showcase::showcase_page;

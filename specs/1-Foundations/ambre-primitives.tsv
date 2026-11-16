@@ -4642,6 +4642,7 @@ ambre-convert | src/engine/picture.rs | crate::engine::picture | turn(rgba) | pa
 ambre-convert | src/engine/picture.rs | crate::engine::picture | weights() | ret | (Vec<usize>,Vec<f32>)	local	the first source index of each output position of the private scale, and the normalised weights of each, a fixed count per position in one buffer
 ambre-convert | src/engine/picture.rs | crate::engine::picture | weights(dst) | param | usize	local	the output side of the private scale, in pixels
 ambre-convert | src/engine/picture.rs | crate::engine::picture | weights(src) | param | usize	local	the source side of the private scale, in pixels
+ambre-convert | src/engine/png.rs | crate::engine::png | Coverage.alpha | field | Vec<u8>	local	the coverage of one shape over its private area, one byte a pixel, which only the private blend of the PNG raster reads
 ambre-convert | src/jpeg.rs | crate::jpeg | SOI | const | [u8;2]	foreign-api	the start-of-image marker the JPEG format fixes
 ambre-convert | src/jpeg.rs | crate::jpeg | SOS | const | u8	foreign-api	the start-of-scan marker byte the JPEG format fixes
 ambre-convert | src/jpeg.rs | crate::jpeg | is_frame() | ret | bool	generic	predicate: whether a marker opens a frame header

@@ -17,7 +17,7 @@ crate-type = ["cdylib", "rlib"]
 # build turns one on, the host turns every one on, and the Main instance none:
 # it links the request types and the loader alone (`ARCH-078`).
 tables = ["engine", "dep:csv"]
-pdf = ["engine", "dep:ambre-pdf"]
+pdf = ["engine", "dep:ambre-pdf", "dep:tiny-skia-path", "dep:skrifa", "dep:flate2", "dep:kurbo", "dep:peniko"]
 markup = ["engine", "dep:pulldown-cmark", "dep:html5ever"]
 images = ["engine", "dep:usvg", "dep:roxmltree", "dep:image-webp", "dep:zune-jpeg", "dep:png", "dep:gif"]
 office = ["engine", "dep:ambre-docx", "ambre-docx/codec", "dep:ambre-odt", "ambre-prose-form/word", "ambre-xlsx/codec", "ambre-pptx/codec", "dep:zune-jpeg"]
@@ -67,6 +67,18 @@ thiserror  = { workspace = true }
 csv        = { workspace = true, optional = true }
 # pdf: the PDF writer.
 ambre-pdf  = { path = "../ambre-pdf", optional = true }
+# pdf: the PNG writer of the same recorded draw list, which the converter
+# thread runs: the stroker, the glyph outlines, the zlib stream and the
+# geometry of the list, each the copy krilla links. The module rasterizes
+# the paths and writes the PNG chunks itself (`3-Toile/features/ambre-spec-toile-import-
+# export.md section 3`).
+tiny-skia-path = { workspace = true, optional = true }
+skrifa     = { workspace = true, optional = true }
+flate2     = { workspace = true, optional = true }
+kurbo      = { workspace = true, optional = true }
+# pdf: the premultiplied sample the PNG raster blends, the type peniko,
+# which `ambre-draw` links, names.
+peniko     = { workspace = true, optional = true }
 # markup: the Markdown parser, and the WHATWG tree builder of an HTML paste
 # (`features/ambre-spec-prose-clipboard.md`).
 pulldown-cmark = { workspace = true, optional = true }

@@ -40,6 +40,8 @@ mod json;
 mod markdown;
 #[cfg(any(feature = "images", feature = "office"))]
 mod picture;
+#[cfg(feature = "pdf")]
+mod png;
 #[cfg(feature = "markup")]
 mod prose;
 #[cfg(any(feature = "office", feature = "pdf", feature = "images"))]
@@ -78,6 +80,8 @@ pub fn convert(conversion: Conversion) -> Answer {
         Conversion::WritePdf { document } => ambre_pdf::write_document(&document)
             .map(Converted::File)
             .map_err(|e| refusal::pdf(&e)),
+        #[cfg(feature = "pdf")]
+        Conversion::WritePng { document, size } => png::write(&document, size).map(Converted::File),
         #[cfg(feature = "markup")]
         Conversion::ReadMarkdown { text } => ambre_prose_form::encode(&prose::md_read::read(&text))
             .map(Converted::Form)

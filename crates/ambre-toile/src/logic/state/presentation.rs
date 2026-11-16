@@ -519,6 +519,48 @@ impl ToileState {
             .collect()
     }
 
+    /// The page a PNG export of `scope` rasterizes (`toile-import-export`).
+    /// It shows the whole board with a margin, unclipped. Or it shows one
+    /// frame clipped to its rect, as a page of the deck is (`TOILE-IO-030`).
+    /// Read-only, like
+    /// [`pdf_pages`](Self::pdf_pages).
+    ///
+    /// # Errors
+    ///
+    /// [`PngExportError::Empty`] for a board with no element, and
+    /// [`PngExportError::NoFrame`] for an id that names no frame.
+    ///
+    /// [`PngExportError::Empty`]: crate::logic::interop::PngExportError::Empty
+    /// [`PngExportError::NoFrame`]: crate::logic::interop::PngExportError::NoFrame
+    #[cfg(feature = "pdf")]
+    pub fn png_page(
+        &self,
+        scope: &crate::message::PngScope,
+    ) -> Result<crate::logic::interop::PngPage, crate::logic::interop::PngExportError> {
+        use crate::logic::interop::{PngExportError, board_region, png_page};
+        let (region, clip) = match scope {
+            crate::message::PngScope::Board => {
+                let content = self.content_bounds().ok_or(PngExportError::Empty)?;
+                (board_region(content), None)
+            }
+            crate::message::PngScope::Frame(id) => {
+                if !self.is_frame(id) {
+                    return Err(PngExportError::NoFrame);
+                }
+                let rect = self.element_rect(id).ok_or(PngExportError::NoFrame)?;
+                (rect, Some(rect))
+            }
+        };
+        let empty = match scope {
+            crate::message::PngScope::Board => PngExportError::Empty,
+            crate::message::PngScope::Frame(_) => PngExportError::NoFrame,
+        };
+        png_page(region, clip, |camera| {
+            self.derive_viewport_at(camera.to_bus_viewport())
+        })
+        .ok_or(empty)
+    }
+
     /// The union AABB of every element's world bounds, or `None` if the board
     /// holds no element. Frames the empty-deck PDF fallback page.
     #[cfg(feature = "pdf")]
@@ -924,5 +966,97 @@ mod pdf_tests {
         let lines = |s: &RecordingSurface| s.count(|op| matches!(op, DrawOp::StrokeLine { .. }));
         assert!(lines(&board).get() > 0, "the editing walk draws the grid");
         assert_eq!(lines(&page).get(), 0, "the page drew a grid line");
+    }
+
+    // -- PNG export (`toile-import-export`) ----------------------------------
+
+    /// `TOILE-IO-188`: a frame exports at twice its board size, clipped to its
+    /// own rect, so a neighbour in view stays off the image.
+    #[test]
+    fn a_frame_exports_at_twice_its_size_clipped_to_itself() {
+        use crate::message::PngScope;
+        let mut st = ToileState::new();
+        let a = frame_at(&mut st, 0.0, 0.0, 200.0, 50.0);
+        shape_at(&mut st, 0.0, 60.0, 200.0, 20.0);
+        let id: Id<Element> = a.into();
+        let frame = st.bounds_of(&id).expect("frame bounds");
+        let png = st
+            .png_page(&PngScope::Frame(id))
+            .expect("the frame exports");
+        assert_eq!(
+            png.size,
+            ambre_core::Size::new(ambre_core::Px::new(400), ambre_core::Px::new(100))
+        );
+        assert_eq!(
+            png.page.clip,
+            Some(frame),
+            "the page is clipped to the frame"
+        );
+    }
+
+    /// `TOILE-IO-189`: a board with no element has no image, and an element
+    /// that is no frame is refused as a frame.
+    #[test]
+    fn an_empty_board_or_a_shape_has_no_png() {
+        use crate::logic::interop::PngExportError;
+        use crate::message::PngScope;
+        let mut st = ToileState::new();
+        assert_eq!(
+            st.png_page(&PngScope::Board).err(),
+            Some(PngExportError::Empty)
+        );
+        let shape = shape_at(&mut st, 0.0, 0.0, 10.0, 10.0);
+        assert_eq!(
+            st.png_page(&PngScope::Frame(shape)).err(),
+            Some(PngExportError::NoFrame)
+        );
+    }
+
+    /// `TOILE-IO-190`: the board's image holds its content. This thread
+    /// records the page, and the PDF module the converter thread runs
+    /// rasterizes it. The shape inks the middle, and the margin stays
+    /// background.
+    #[test]
+    fn a_board_png_holds_its_shape_inside_its_margin() {
+        use crate::message::PngScope;
+        let mut st = ToileState::new();
+        st.handle_command(ToileCommand::CreateElement {
+            kind: ElementKind::Shape(crate::logic::model::ShapeKind::Rect),
+            at: Point::new(0.0, 0.0),
+            size: Size::new(100.0, 100.0),
+            content: InitContent::None,
+            fill: Some(ambre_core::Rgba::from_channels(200, 0, 0, 255)),
+            correlate: None,
+        });
+        let request = st
+            .record_png(&PngScope::Board, &mut ambre_draw::FontContext::default())
+            .expect("the board records");
+        // 100 board units, 16 of margin each side, at twice the scale.
+        assert_eq!(
+            request.size,
+            ambre_core::Size::new(ambre_core::Px::new(264), ambre_core::Px::new(264))
+        );
+        let converter = ambre_convert::Converter::load(
+            ambre_core::ConverterFamily::Pdf,
+            &ambre_core::Payload::new(Vec::new()),
+        )
+        .expect("the host links the engine");
+        let Ok(ambre_convert::Converted::File(file)) =
+            converter.convert(&ambre_convert::Conversion::WritePng {
+                document: request.document,
+                size: request.size,
+            })
+        else {
+            panic!("the module writes the image");
+        };
+        let image = image::load_from_memory(file.as_bytes())
+            .expect("the file is a PNG")
+            .to_rgba8();
+        assert_eq!(image.dimensions(), (264, 264));
+        let corner = *image.get_pixel(4, 4);
+        let centre = *image.get_pixel(132, 132);
+        assert_eq!(corner.0[3], 255, "the background is painted");
+        assert_ne!(corner.0, [200, 0, 0, 255], "the margin is background");
+        assert_eq!(centre.0, [200, 0, 0, 255], "the shape inks the middle");
     }
 }

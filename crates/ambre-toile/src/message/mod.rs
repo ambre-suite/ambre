@@ -1280,6 +1280,10 @@ pub enum ToileExport {
     /// (`TOILE-IO-018`). It is plaintext for anyone who holds it, which the
     /// gesture that offers it must say (`TOILE-IO-096`, `ZK-037`).
     Showcase,
+    /// A PNG image of the whole board or of one frame (`toile-import-export`).
+    /// The Logic thread records the page, and the converter thread
+    /// rasterizes it (`TOILE-IO-017`).
+    Png(PngScope),
     /// The native `.ambre` file (`ambre-spec-docfile.md`). It drops nothing:
     /// the payload **is** the document (`DOCFILE-001`). It is also plaintext,
     /// which the surface that offers it must say (`DOCFILE-009`). The Logic
@@ -1295,6 +1299,15 @@ pub enum ToileExport {
         /// nothing on this path can reach a session (`DOCFILE-014`).
         passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
     },
+}
+
+/// What a PNG export rasterizes (`toile-import-export`).
+#[derive(Clone, Debug, PartialEq)]
+pub enum PngScope {
+    /// Every element of the board, with a margin around them.
+    Board,
+    /// One frame, clipped to its rect: its neighbours stay out.
+    Frame(Id<Element>),
 }
 
 /// A construct a board conversion carries or loses, as its report names it

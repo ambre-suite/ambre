@@ -109,6 +109,11 @@ pub const ADD_TO_FRAME: StaticKey<Commands> = StaticKey::<Commands>::new("toile.
 pub const REMOVE_FROM_FRAME: StaticKey<Commands> = StaticKey::<Commands>::new("toile.frame.remove");
 /// Select every element on the board (local, never synced).
 pub const SELECT_ALL: StaticKey<Commands> = StaticKey::<Commands>::new("toile.selection.all");
+/// Take the one selected frame out as a PNG image, clipped to its rect
+/// (`toile-import-export`). Resolves to a board command the Logic thread
+/// serves, and the converter thread rasterizes (`TOILE-IO-017`).
+pub const EXPORT_FRAME_PNG: StaticKey<Commands> =
+    StaticKey::<Commands>::new("toile.frame.export_png");
 
 // -- Reactions ----------------------------------------------------------
 // A minimal, fixed emoji set for the reaction affordance: each id sets the local
@@ -158,6 +163,7 @@ pub const COMMANDS: &[StaticKey<Commands>] = &[
     DISTRIBUTE_V,
     ADD_TO_FRAME,
     REMOVE_FROM_FRAME,
+    EXPORT_FRAME_PNG,
     SELECT_ALL,
     REACT_THUMBSUP,
     REACT_HEART,
@@ -193,6 +199,8 @@ pub struct CtxScope {
     /// pointer, whose own event names its point (`TOILE-UI-422`). The shell
     /// opens the menu there, and clears it once the menu closes.
     pub keyed: Option<ambre_core::Point<Px<ambre_core::View>>>,
+    /// The selection is one frame alone -> Export frame as PNG applies.
+    pub frame: Option<Id<Element>>,
 }
 
 impl CtxScope {
@@ -313,6 +321,12 @@ pub fn ctx_scope_for(
     }
 
     let containing_frame = union.and_then(|u| containing_frame(display, selection, u));
+    let frame = match selection {
+        [id] => find_element(selected, id)
+            .filter(|e| e.kind == ElementKind::Frame)
+            .map(|e| e.id.clone()),
+        _ => None,
+    };
 
     CtxScope {
         site: ClickSite::Selection,
@@ -322,6 +336,7 @@ pub fn ctx_scope_for(
         containing_frame,
         framed: FrameHeld::from_bool(selection.iter().any(|id| framed.contains(id))),
         keyed: None,
+        frame,
     }
 }
 
@@ -450,6 +465,12 @@ pub fn context_menu_ids(scope: &CtxScope) -> Vec<Option<StaticKey<Commands>>> {
         }
     }
 
+    // A frame alone leaves as an image of itself.
+    if scope.frame.is_some() {
+        ids.push(None);
+        ids.push(Some(EXPORT_FRAME_PNG));
+    }
+
     ids
 }
 
@@ -543,6 +564,16 @@ pub fn resolve_menu_command(
         REMOVE_FROM_FRAME => vec![ToileCommand::RemoveFromFrames {
             ids: selection.to_vec(),
         }],
+        // One frame alone: anything else sends nothing, and Logic checks the
+        // kind again (`TOILE-IO-189`).
+        EXPORT_FRAME_PNG => match selection {
+            [id] if find_element(selected, id).is_some_and(|e| e.kind == ElementKind::Frame) => {
+                vec![ToileCommand::export(crate::message::ToileExport::Png(
+                    crate::message::PngScope::Frame(id.clone()),
+                ))]
+            }
+            _ => Vec::new(),
+        },
         // Reactions: set / clear the local user's reaction on each
         // selected target. One `React` per element; the emoji glyph is looked up
         // from the fixed picker set.
@@ -683,6 +714,41 @@ mod tests {
 
     fn r(x0: f64, y0: f64, x1: f64, y1: f64) -> Rect {
         Rect::new(x0, y0, x1, y1)
+    }
+
+    /// `TOILE-IO-192`, `TOILE-IO-189`: a frame selected alone offers its image, which
+    /// resolves to the PNG export of that frame. A sticky, or the frame with
+    /// another element, offers none and sends nothing.
+    #[test]
+    fn a_lone_frame_offers_its_png_and_nothing_else_does() {
+        let unlocked = crate::message::LockState::Unlocked;
+        let dv = viewport(vec![
+            elem("f", ElementKind::Frame, r(0.0, 0.0, 100.0, 50.0), unlocked),
+            elem(
+                "s",
+                ElementKind::Sticky,
+                r(200.0, 0.0, 210.0, 10.0),
+                unlocked,
+            ),
+        ]);
+        let offers = |selection: &[Id<Element>]| {
+            let scope = ctx_scope_for(selection, None, &els(&dv), &[], &dv);
+            context_menu_ids(&scope).contains(&Some(EXPORT_FRAME_PNG))
+        };
+        assert!(offers(&[eid("f")]));
+        assert!(!offers(&[eid("s")]));
+        assert!(!offers(&[eid("f"), eid("s")]));
+        let sent = resolve_menu_command(EXPORT_FRAME_PNG, &[eid("f")], None, &els(&dv), &dv)
+            .expect("the resolver knows the entry");
+        assert!(matches!(
+            sent.as_slice(),
+            [ToileCommand::Interop(ambre_bus::interop::InteropRequest::Export(
+                crate::message::ToileExport::Png(crate::message::PngScope::Frame(id))
+            ))] if *id == eid("f")
+        ));
+        let none = resolve_menu_command(EXPORT_FRAME_PNG, &[eid("s")], None, &els(&dv), &dv)
+            .expect("the resolver knows the entry");
+        assert!(none.is_empty());
     }
 
     /// `TOILE-UI-047`: an entry that does not apply is left out. One unlocked

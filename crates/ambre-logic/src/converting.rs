@@ -248,6 +248,9 @@ impl LogicState {
         owner: JobOwner,
         answer: Result<ambre_convert::Converted, JobFailure>,
     ) {
+        if let JobOwner::ToilePng(document_id) = owner {
+            return self.answer_toile_png(document_id, answer);
+        }
         // A still answer for the owner that reads pixels alone; Prose and
         // Murmure read the frames of an animation too.
         let pixels = |answer: Result<ambre_convert::Converted, JobFailure>| {
@@ -293,6 +296,8 @@ impl LogicState {
                     outcome.requests,
                 );
             }
+            // Answered above, as a file.
+            JobOwner::ToilePng(_) => {}
         }
     }
 

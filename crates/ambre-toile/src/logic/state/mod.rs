@@ -766,6 +766,13 @@ impl ToileState {
                 // container's header carries the document's identity, which a
                 // board does not know (`ambre-spec-docfile.md`). A silent arm
                 // is indistinguishable from a gesture that never arrived.
+                // Served by the Logic thread too: the page walk needs the
+                // base font faces, and the converter thread rasterizes it
+                // (`TOILE-IO-017`).
+                ToileExport::Png(_) => Self::interop_failed(
+                    Direction::Export,
+                    InteropError::Stopped(ambre_core::StopCause::Misrouted),
+                ),
                 ToileExport::Ambre | ToileExport::AmbreSealed { .. } => Self::interop_failed(
                     Direction::Export,
                     InteropError::Stopped(ambre_core::StopCause::Misrouted),

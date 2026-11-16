@@ -279,6 +279,37 @@ impl ToileState {
         )
     }
 
+    /// Record the PNG export of `scope`: its one page, through the screen's
+    /// walk, in one step (`toile-import-export`). The converter thread
+    /// rasterizes the request, so this call draws no pixel (`TOILE-IO-017`).
+    /// `font_cx` carries the base faces, as for the deck's PDF export.
+    ///
+    /// # Errors
+    ///
+    /// The [`PngExportError`] of [`png_page`](Self::png_page).
+    ///
+    /// [`PngExportError`]: crate::logic::interop::PngExportError
+    #[cfg(feature = "pdf")]
+    pub fn record_png(
+        &self,
+        scope: &crate::message::PngScope,
+        font_cx: &mut ambre_draw::FontContext,
+    ) -> Result<crate::logic::interop::PngRequest, crate::logic::interop::PngExportError> {
+        let png = self.png_page(scope)?;
+        let mut recording = crate::logic::interop::DeckRecording::new(
+            vec![png.page],
+            png.points,
+            ambre_canvas::Theme::Light.palette(),
+            self.media_thumbnails(),
+        )
+        .map_err(|_| crate::logic::interop::PngExportError::Empty)?;
+        recording.record_next(font_cx);
+        Ok(crate::logic::interop::PngRequest {
+            document: recording.into_document(),
+            size: png.size,
+        })
+    }
+
     /// Every picture the board can draw, keyed by content hash: each media
     /// entry's inline thumbnail, decoded to pixels. An entry whose bytes do not
     /// decode is left out, so its element paints the placeholder box rather than

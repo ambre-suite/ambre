@@ -35,6 +35,8 @@ pub enum ExportExtension {
     Pptx,
     /// A text document as a standalone HTML page.
     Html,
+    /// A board or a frame as a PNG image.
+    Png,
 }
 
 impl ExportExtension {
@@ -53,6 +55,7 @@ impl ExportExtension {
             Self::Odt => "odt",
             Self::Pptx => "pptx",
             Self::Html => "html",
+            Self::Png => "png",
         }
     }
 }

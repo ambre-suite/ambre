@@ -19,7 +19,7 @@
 // here.
 // ============================================================================
 
-use crate::message::{PresentFocus, ToileCommand, ToileExport};
+use crate::message::{PngScope, PresentFocus, ToileCommand, ToileExport};
 use ambre_core::{Commands, StaticKey};
 
 use super::menu;
@@ -84,6 +84,10 @@ pub const LINK_CLEAR: StaticKey<Commands> = StaticKey::<Commands>::new("toile.ob
 /// Take the board out as an SVG document (`TOILE-IO-021`). Resolves to a board
 /// command: the Logic thread holds the board and serializes it.
 pub const EXPORT_SVG: StaticKey<Commands> = StaticKey::<Commands>::new("toile.file.export_svg");
+/// Take the whole board out as a PNG image (`toile-import-export`). Resolves
+/// to a board command: the Logic thread records the page, and the converter
+/// thread rasterizes it (`TOILE-IO-017`).
+pub const EXPORT_PNG: StaticKey<Commands> = StaticKey::<Commands>::new("toile.file.export_png");
 /// Take the deck out as a PDF, one page per slide (`TOILE-IO-029`). Resolves to
 /// a board command, like [`EXPORT_SVG`], but the render walk runs on the Logic
 /// thread rather than in the board's own state. The pages are drawn, not
@@ -135,6 +139,7 @@ pub const MENU_BAR_COMMANDS: &[StaticKey<Commands>] = &[
     LINK_SET,
     LINK_CLEAR,
     EXPORT_SVG,
+    EXPORT_PNG,
     EXPORT_PDF,
     EXPORT_PPTX,
     EXPORT_SHOWCASE,
@@ -197,6 +202,7 @@ pub fn menu_layout(id: MenuId) -> Vec<MenuRow> {
             row(SAVE_SEALED_FILE),
             MenuRow::Separator,
             row(EXPORT_SVG),
+            row(EXPORT_PNG),
             row(EXPORT_PDF),
             row(EXPORT_PPTX),
             // The one entry that hands the board to readers outside Ambre in
@@ -279,6 +285,7 @@ pub fn menu_bar_edit(id: StaticKey<Commands>) -> Option<ToileCommand> {
         // bytes come back as an event the view hands to the browser
         // (`TOILE-IO-085`).
         EXPORT_SVG => Some(ToileCommand::export(ToileExport::Svg)),
+        EXPORT_PNG => Some(ToileCommand::export(ToileExport::Png(PngScope::Board))),
         EXPORT_PDF => Some(ToileCommand::export(ToileExport::Pdf)),
         EXPORT_PPTX => Some(ToileCommand::export(ToileExport::Pptx)),
         EXPORT_SHOWCASE => Some(ToileCommand::export(ToileExport::Showcase)),
@@ -436,14 +443,15 @@ mod tests {
         ));
     }
 
-    /// `TOILE-IO-104`: an export reads the board and writes nothing, so the
-    /// role gate must let a read-only viewer take a copy out.
+    /// `TOILE-IO-104`, `TOILE-IO-191`: an export reads the board and writes
+    /// nothing, so the role gate must let a read-only viewer take a copy out.
     #[test]
     fn exports_are_not_mutating() {
         assert!(!ToileCommand::export(ToileExport::Svg).is_mutating());
         assert!(!ToileCommand::export(ToileExport::Pdf).is_mutating());
         assert!(!ToileCommand::export(ToileExport::Pptx).is_mutating());
         assert!(!ToileCommand::export(ToileExport::Showcase).is_mutating());
+        assert!(!ToileCommand::export(ToileExport::Png(PngScope::Board)).is_mutating());
     }
 
     /// `TOILE-IO-096`: the File menu offers the showcase page, and the entry
@@ -456,6 +464,23 @@ mod tests {
             menu_bar_edit(EXPORT_SHOWCASE),
             Some(ToileCommand::Interop(InteropRequest::Export(
                 ToileExport::Showcase
+            )))
+        ));
+    }
+
+    /// `TOILE-IO-192`: the File menu offers the board's image, and the entry
+    /// resolves to the board command the Logic thread serves.
+    #[test]
+    fn the_file_menu_offers_the_board_as_png() {
+        let cmds = item_commands(&menu_layout(MenuId::File));
+        assert!(
+            cmds.contains(&EXPORT_PNG),
+            "File must offer the PNG: {cmds:?}"
+        );
+        assert!(matches!(
+            menu_bar_edit(EXPORT_PNG),
+            Some(ToileCommand::Interop(InteropRequest::Export(
+                ToileExport::Png(PngScope::Board)
             )))
         ));
     }
