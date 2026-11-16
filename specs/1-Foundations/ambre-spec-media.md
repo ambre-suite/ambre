@@ -35,7 +35,8 @@ the put are the Sync worker's.
 | `SYNC-075` | `POST` | An upload MUST answer the requesting application with the blob's address. | this spec section 3, the upload steps | `ambre_sync::media::tests::a_failed_upload_step_confirms_nothing` -- an upload driven through a fake transport answers once, after the confirmation, with the request and the keyed address | none | verified |
 | `SYNC-049` | `FRAME` | An upload MUST NOT emit a byte of the picture that is not sealed under the document key. | `ZK-001`; this spec section 3 | type-level -- the worker's only upload takes a `SealedBlob`, whose bytes only the seal builds; `ambre_sync::pipeline::tests::a_blob_bound_for_storage_is_sealed` -- such a blob opens back under the document key alone; `ambre_sync::http::tests::an_upload_carries_the_sealed_blob_as_its_body` -- the upload carries the sealed bytes whole as its body, with no credential | none | verified |
 | `SYNC-053` | `FRAME` | An upload MUST NOT tell the relay anything about a blob beyond its size. | `ZK-007`; this spec section 3 | `ambre_sync::http::tests::an_upload_names_only_the_address_and_the_size` -- both requests serialize to the keyed address and the sealed size, and to no other field | none | verified |
-| `SYNC-076` | `FAIL` | An upload that fails at any step MUST be reported, and MUST confirm nothing to the relay. | this spec section 2, row 3 | `ambre_sync::media::tests::a_failed_upload_step_confirms_nothing` -- a failing link, put or confirmation each reaches the application as an error for the request, with no address answered, and no failure before the confirmation reaches it | none | verified |
+| `SYNC-076` | `FAIL` | An upload that fails at any step MUST be reported, and MUST confirm nothing to the relay. | this spec section 2, row 3 | `ambre_sync::media::tests::a_failed_upload_step_confirms_nothing` -- a failing link, put or confirmation each reaches the application as an error for the request, with no address answered, and no failure before the confirmation reaches it; `ambre_sync::media::tests::an_upload_of_a_held_address_confirms_without_a_put` -- a link refused for want of access confirms nothing | none | verified |
+| `SYNC-228` | `POST` | Given a link refused because the document already holds the address, an upload MUST confirm its claim without a put. | this spec section 3, the upload steps; `ambre-spec-object-store.md`, `SRV-271` | `ambre_sync::media::tests::an_upload_of_a_held_address_confirms_without_a_put` -- a conflict on the link skips the put, confirms and answers with the address, while a refusal for want of access confirms nothing | none | verified |
 | `SYNC-145` | `POST` | An upload for a document the relay does not hold yet MUST wait for its creation. | this spec section 3, the upload steps | `ambre_sync::media::tests::an_upload_waits_for_its_document_on_the_relay` -- an upload on a local-only document answers nothing, then answers with the address once the document is created | none | verified |
 | `SYNC-146` | `FAIL` | An upload that waits for a creation that fails MUST be reported. | this spec section 3, the upload steps | `ambre_sync::media::tests::an_upload_waits_for_its_document_on_the_relay` -- an upload on a local-only document answers nothing, then answers with an error once its creation fails | none | verified |
 
@@ -69,7 +70,7 @@ to erase it (`ambre-spec-object-store.md`, `SRV-139`).
 * **Boundary.** this is the one path on which a whole file leaves the client. The bytes are sealed
   (`SYNC-049`). Beside them travel the size and an address keyed by the document key, which the
   relay cannot compute from a file it holds (`SYNC-050`, `SYNC-053`).
-* **Verification.** 18 `verified`. The address, the two requests and each leg through a fake
+* **Verification.** 19 `verified`. The address, the two requests and each leg through a fake
   transport are held on the host. The database tier round-trips a blob through a real store
   (`SYNC-139`). The browser tier carries a picture from one user's board to another's screen
   (`SYNC-140`).
@@ -109,7 +110,8 @@ its creation, which it starts (`SYNC-145`).
 1. compute the address from the bytes, under the document key;
 2. seal the bytes under the document key, signed and committed (`ambre-spec-sealed-envelope.md`,
    `SYNC-018`);
-3. ask the relay for a presigned link to put the object;
+3. ask the relay for a presigned link to put the object. A conflict means that the document already
+   holds a blob at this address: the upload skips step 4 (`SYNC-228`);
 4. put the sealed bytes straight to object storage, with no session and no header of ours;
 5. confirm to the relay: the address and the sealed size, and nothing else (`SYNC-053`);
 6. answer the requesting application with the address.

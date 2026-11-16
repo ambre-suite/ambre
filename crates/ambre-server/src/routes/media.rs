@@ -57,6 +57,15 @@ pub async fn media_upload_url(
             state.config.media_max_size.get()
         )));
     }
+    // A held address already names a blob other members read. A second link
+    // would let this writer replace it, and each reader would then fail the
+    // address check (`SRV-271`, audit `P16`). The client confirms its claim
+    // without a put on this refusal (`SYNC-228`).
+    if db::document_holds_media(&state.db, &doc_id, &req.content_hash).await? {
+        return Err(AppError::Conflict {
+            detail: "the document already holds this media".to_owned(),
+        });
+    }
     let key = s3::format_s3_media_key(&state.config.s3_env_prefix, &doc_id, &req.content_hash);
     let url = s3::generate_presigned_upload_url(
         &state.s3,

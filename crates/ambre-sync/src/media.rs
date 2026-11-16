@@ -436,20 +436,27 @@ async fn upload_leg(
     blob: &pipeline::SealedBlob,
 ) -> Result<(), http::Failed> {
     let size = blob.len() as u64;
-    let link: http::UploadUrlResponse = http
-        .post_json(
+    let link = http
+        .post_json::<_, http::UploadUrlResponse>(
             &base.join("/media/upload-url"),
             &http::UploadUrlRequest {
                 content_hash: content_hash.clone(),
                 size: ambre_core::Count::<ambre_core::Octets>::new(size),
             },
         )
-        .await
-        .map_err(|e| e.at("upload-url"))?;
-    // The presigned PUT goes straight to object storage, not to the relay.
-    http.put_sealed(&link.upload_url, blob)
-        .await
-        .map_err(|e| e.at("S3 PUT"))?;
+        .await;
+    match link {
+        // The presigned PUT goes straight to object storage, not to the relay.
+        Ok(link) => http
+            .put_sealed(&link.upload_url, blob)
+            .await
+            .map_err(|e| e.at("S3 PUT"))?,
+        // The document already holds a blob at this address, and the relay
+        // signs no second put over it (`SRV-271`). The confirmation alone
+        // records this user's claim (`SYNC-228`).
+        Err(e) if e.is_conflict() => {}
+        Err(e) => return Err(e.at("upload-url")),
+    }
     http.post_json::<_, http::WriteAnswer>(
         &base.join("/media"),
         &http::ConfirmUploadRequest {
@@ -634,6 +641,8 @@ mod tests {
         served: Vec<u8>,
         /// The status a `DELETE` answers, when it is not the failing step.
         erase_status: ambre_core::HttpStatus,
+        /// The status the relay refuses an upload link with, when it does.
+        link_refusal: Option<ambre_core::HttpStatus>,
         steps: std::cell::RefCell<Vec<&'static str>>,
     }
 
@@ -643,6 +652,7 @@ mod tests {
                 fail,
                 served,
                 erase_status: ambre_core::HttpStatus::new(200),
+                link_refusal: None,
                 steps: Default::default(),
             }
         }
@@ -676,6 +686,18 @@ mod tests {
                 _ => "confirm",
             };
             self.step(name)?;
+            if let Some(status) = self
+                .link_refusal
+                .filter(|_| url.as_str().ends_with("upload-url"))
+            {
+                let target = crate::http::Target::relay(url.as_str());
+                return Err(http::HttpError::refused(
+                    crate::http::Method::Post,
+                    &target,
+                    status,
+                    None,
+                ));
+            }
             let answer = serde_json::json!({
                 "upload_url": "put", "download_url": "get", "s3_key": "k", "status": "confirmed",
             });
@@ -809,6 +831,48 @@ mod tests {
             [SyncEvent::MediaUploaded { id: answered, content_hash, .. }]
                 if *answered == id && *content_hash == address.content_hash()
         ));
+    }
+
+    /// Holds `SYNC-228`: a link refused because the document holds the
+    /// address skips the put and confirms the claim. Any other refusal of the
+    /// link still confirms nothing (`SYNC-076`).
+    #[tokio::test]
+    async fn an_upload_of_a_held_address_confirms_without_a_put() {
+        let key = DocumentKey::from_array([0x31; 32]);
+        let document_id = Id::<Document>::mint();
+        let address = ambre_crypto::commitment::media_address(&key, &b"a picture".to_vec().into());
+        let (logic, logic_rx) = LogicSink::channel();
+        let (tx, events) = ambre_bus::conduit::unbounded::<SyncEvent>();
+        for (status, ran, confirmed) in [
+            (409, &["link", "confirm"][..], true),
+            (403, &["link"][..], false),
+        ] {
+            let mut http = FakeMedia::new("", Vec::new());
+            http.link_refusal = Some(ambre_core::HttpStatus::new(status));
+            let id = ambre_bus::next_request();
+            let upload = Upload {
+                id,
+                document_id,
+                data: b"a picture".to_vec().into(),
+                address,
+                doc_key: key.clone(),
+                signing_key: SigningKey::from_bytes(&[0x07; 32]),
+            };
+            upload_media(&http, &base(), upload, &tx, &logic).await;
+            assert_eq!(*http.steps.borrow(), ran, "{status}");
+            let (errors, sent) = answers(&logic_rx, &events);
+            if confirmed {
+                assert!(errors.is_empty(), "{status}");
+                assert!(matches!(
+                    &sent[..],
+                    [SyncEvent::MediaUploaded { id: answered, content_hash, .. }]
+                        if *answered == id && *content_hash == address.content_hash()
+                ));
+            } else {
+                assert_eq!(errors, [(Some(id), "UploadMedia".to_owned())], "{status}");
+                assert!(sent.is_empty(), "{status}");
+            }
+        }
     }
 
     /// Holds `SYNC-055`: a download that fails to fetch, or serves a short,

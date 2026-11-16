@@ -2805,6 +2805,59 @@ mod handler_tests {
         );
     }
 
+    // `SRV-271`, audit `P16`: once a member confirms an address, no writer of
+    // the document gets an upload link for it, the uploader included. The
+    // same address stays open in another document, and the confirmation of a
+    // second claim still answers.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn an_upload_link_is_refused_for_an_address_the_document_holds(pool: sqlx::PgPool) {
+        let state = test_app_state_presigning(pool).await;
+        let setup = build_test_router(state.clone());
+        let app = shipped_router(state);
+        let owner = setup_and_get_auth(&setup).await;
+        let doc = create_test_doc(&setup, &owner).await;
+        let other_doc = create_test_doc(&setup, &owner).await;
+        let editor = setup_named(&setup, "editor@ambre.app", 5).await;
+        invite(&setup, &owner, &doc, "editor@ambre.app", "editor").await;
+        let held = "c".repeat(64);
+        let fresh = "d".repeat(64);
+        let body = |hash: &str| serde_json::json!({ "content_hash": hash, "size_bytes": 7 });
+        let link = |doc: &str| format!("/api/documents/{doc}/media/upload-url");
+        let confirm = format!("/api/documents/{doc}/media");
+
+        assert_eq!(
+            post_json(&app, &owner, link(&doc), body(&held)).await,
+            StatusCode::OK,
+            "an address no row names gets a link"
+        );
+        assert_eq!(
+            post_json(&app, &owner, confirm.clone(), body(&held)).await,
+            StatusCode::OK
+        );
+        for member in [&editor, &owner] {
+            assert_eq!(
+                post_json(&app, member, link(&doc), body(&held)).await,
+                StatusCode::CONFLICT,
+                "a held address gets no second link"
+            );
+        }
+        assert_eq!(
+            post_json(&app, &editor, link(&doc), body(&fresh)).await,
+            StatusCode::OK
+        );
+        assert_eq!(
+            post_json(&app, &owner, link(&other_doc), body(&held)).await,
+            StatusCode::OK,
+            "another document holds its own copy"
+        );
+        assert_eq!(
+            post_json(&app, &editor, confirm, body(&held)).await,
+            StatusCode::OK,
+            "a second member still records a claim without a put"
+        );
+    }
+
     /// Sends `DELETE` on `uri` as `auth`, and answers the status.
     async fn delete_status(app: &Router, auth: &str, uri: String) -> StatusCode {
         app.clone()
@@ -3036,9 +3089,10 @@ mod handler_tests {
         assert_eq!(post_json(&app, &owner, uri, confirm).await, StatusCode::OK);
         let snapshot_id = upload_snapshot(&app, &owner, &doc_id, 0).await;
         let links = [
+            // A fresh address: the held one gets no upload link (`SRV-271`).
             (
                 "media/upload-url",
-                serde_json::json!({ "content_hash": hash, "size_bytes": 7 }),
+                serde_json::json!({ "content_hash": "f".repeat(64), "size_bytes": 7 }),
             ),
             (
                 "media/download-url",
@@ -3076,6 +3130,10 @@ mod handler_tests {
         let doc_id = create_test_doc(&setup, &owner).await;
         let hash = "f".repeat(64);
         let media = |size: u64| serde_json::json!({ "content_hash": hash, "size_bytes": size });
+        // The confirmation below makes the document hold `hash`, and a held
+        // address gets no second link (`SRV-271`). The signed-header check
+        // asks for a fresh one.
+        let fresh = serde_json::json!({ "content_hash": "a".repeat(64), "size_bytes": 7 });
         let snapshot = |size: u64| serde_json::json!({ "size_bytes": size });
         let cases = [
             ("media/upload-url", media(media_cap), StatusCode::OK),
@@ -3116,7 +3174,7 @@ mod handler_tests {
                     Request::post(format!("/api/documents/{doc_id}/{path}"))
                         .header("content-type", "application/json")
                         .header("authorization", &owner)
-                        .body(Body::from(media(7).to_string()))
+                        .body(Body::from(fresh.to_string()))
                         .unwrap(),
                 )
                 .await
