@@ -123,6 +123,20 @@ impl Writers {
             .map_or(Self::Unchecked, |keys| Self::Granted(keys.clone()))
     }
 
+    /// What the walked `log` grants under `rule`. A log a space lists, and
+    /// whose creation no writer of that space signed, grants no writer
+    /// (audit `N16`, `SYNC-230`). An empty word is a space this client has
+    /// not walked yet, and decides nothing.
+    pub(crate) fn under(log: &Log, rule: &LogRule) -> Self {
+        let stranger = rule.space.as_ref().is_some_and(|word| {
+            !word.writers.is_empty() && !log.creator().is_some_and(|key| word.writers.contains(key))
+        });
+        match Self::of(log) {
+            Self::Granted(_) if stranger => Self::Granted(HashSet::new()),
+            writers => writers,
+        }
+    }
+
     /// Whether a delta or a snapshot `signer` signed may reach the document.
     pub(crate) fn admits(&self, signer: &FixedBytes<PublicKey>) -> bool {
         match self {

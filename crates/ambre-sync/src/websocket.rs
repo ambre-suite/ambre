@@ -933,8 +933,12 @@ impl SyncState {
                 heads,
             } => {
                 if let Some(doc_state) = self.documents.get_mut(&document_id) {
+                    let changed = doc_state.word != word;
                     doc_state.word = word;
                     doc_state.head_watch.read(heads);
+                    if changed {
+                        self.space_word_changed(document_id);
+                    }
                 }
             }
             SyncEvent::ChannelRotated {
@@ -1285,6 +1289,7 @@ impl SyncState {
                 // is not open locally has no session to refresh -- the next open
                 // rebuilds the directory from scratch. An answer older than the
                 // directory held changes nothing (`SYNC-037`).
+                let mut word_changed = false;
                 let fresh = match self.documents.get_mut(&document_id) {
                     Some(doc_state) if asked > doc_state.directory_held => {
                         doc_state.directory_held = asked;
@@ -1294,6 +1299,7 @@ impl SyncState {
                         // (`SYNC-214`).
                         if doc_state.writers.grows_into(&writers) {
                             doc_state.set_writers(writers);
+                            word_changed = doc_state.word != word;
                             doc_state.word = word;
                         } else {
                             tracing::warn!(
@@ -1341,6 +1347,9 @@ impl SyncState {
                     // this answer walked (`SYNC-211`).
                     self.settle_unvouched(document_id, asked);
                     self.drive_space_rotation(document_id);
+                }
+                if word_changed {
+                    self.space_word_changed(document_id);
                 }
                 match id {
                     Some(id) => self.reply(

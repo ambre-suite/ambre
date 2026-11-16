@@ -208,6 +208,7 @@ The test of section 1: a team that lacks one of these stories keeps its old suit
 | Story | Milestone | Touches |
 | :--- | :--- | :--- |
 | `[ ]` Murmure measured on a phone | MVP | the Murmure budgets measured in WASM on a mid-range phone, in place of the desktop figures and the ratio they assume: segment replay and snapshot import, the JSON authorship check, the envelope open, the rotation of a space leave, the color emoji font size, and the two residency memory budgets. The `segment` bench of `ambre-murmure` is the starting point. It also measures a cold open end to end, relay read included, against the cold start row |
+| `[x]` A public channel opened before its space walks its self-joins | MVP | an open with no catalogue walks the meta's log under the document rule, so it stops at the first self-join: every later member's delta is refused as no writer's, and the space-root check of the key does not run. Done when a channel whose space opens after it walks its log again under the space's rule, and a row proves a self-joiner's delta lands |
 
 ### Import and export
 

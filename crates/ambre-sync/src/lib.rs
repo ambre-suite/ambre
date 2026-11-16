@@ -880,6 +880,12 @@ struct SyncDocumentState {
     /// until a listing asked after each arrived answers (`SYNC-211`).
     /// Bounded by [`QUARANTINE_LIMIT`], as the quarantine is.
     unvouched: Vec<Unvouched>,
+    /// Deltas of a channel document that a listing refused as no writer's,
+    /// kept sealed. A space that lists the channel can open later, or change
+    /// its word. The next walk of the log decides them again (`SYNC-230`).
+    /// The refusal stands until that walk. Bounded by
+    /// [`QUARANTINE_LIMIT`], as the quarantine is.
+    refused: Vec<Unvouched>,
     /// How many member listings of this document were asked, and which one
     /// the directory holds. Two listings can cross on the way, and the answer
     /// to the older one changes nothing. It cannot bring back the key of a
@@ -997,6 +1003,7 @@ impl SyncDocumentState {
             writers: membership_log::Writers::Unchecked,
             departed: None,
             unvouched: Vec::new(),
+            refused: Vec::new(),
             directory_asked: ambre_core::Issuer::default(),
             directory_held: ambre_core::Seq::ZERO,
             word: membership_log::SpaceWord::default(),
@@ -1257,6 +1264,12 @@ pub struct SyncState {
     /// read it from the sealed state of the channel. That `meta`'s log and
     /// links vouch for the key and the writers of the document (`SYNC-229`).
     channel_metas: HashMap<Id<Document>, Id<Meta>>,
+    /// The space whose catalogue lists each channel, as the Logic thread
+    /// last said it at an open or a later mark (`SYNC-106`, `SYNC-230`).
+    listed_channels: HashMap<Id<Channel>, Id<Space>>,
+    /// The `meta` of each channel a listing answered, so a later mark finds
+    /// the log it applies to (`SYNC-230`).
+    listing_metas: HashMap<Id<Channel>, Id<Document>>,
     /// The `meta` and the space of each public channel this client is
     /// creating, until the relay answers. A created one's log admits a
     /// self-join at once, as its catalogue lists it (`SYNC-190`).
@@ -1417,6 +1430,8 @@ impl SyncState {
             exchange_key: None,
             self_join_logs: HashMap::new(),
             channel_metas: HashMap::new(),
+            listed_channels: HashMap::new(),
+            listing_metas: HashMap::new(),
             creating_public: HashMap::new(),
             space_rotations: HashMap::new(),
             ws: None,
@@ -1719,7 +1734,17 @@ impl SyncState {
             SyncCommand::OpenChannel {
                 channel_id,
                 listed_in,
-            } => self.handle_open_channel(channel_id, listed_in),
+            } => {
+                match listed_in {
+                    Some(space_id) => self.listed_channels.insert(channel_id, space_id),
+                    None => self.listed_channels.remove(&channel_id),
+                };
+                self.handle_open_channel(channel_id, listed_in);
+            }
+            SyncCommand::MarkChannelListed {
+                channel_id,
+                space_id,
+            } => self.mark_channel_listed(channel_id, space_id),
             SyncCommand::RotateSpace { space_id, channels } => {
                 self.handle_rotate_space(space_id, channels);
             }

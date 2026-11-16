@@ -181,6 +181,7 @@ fn sync_variant(cmd: &SyncCommand) -> &'static str {
         SyncCommand::SendEphemeral { .. } => "SendEphemeral",
         SyncCommand::Reconnect { .. } => "Reconnect",
         SyncCommand::OpenChannel { .. } => "OpenChannel",
+        SyncCommand::MarkChannelListed { .. } => "MarkChannelListed",
         SyncCommand::CreateChannel { .. } => "CreateChannel",
         SyncCommand::RotateSpace { .. } => "RotateSpace",
         SyncCommand::CloseSegment { .. } => "CloseSegment",
@@ -288,7 +289,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 }
 
 /// The number of arms of `sync_variant` and of `event_variant`.
-const SYNC_VARIANTS: usize = 47;
+const SYNC_VARIANTS: usize = 48;
 const EVENT_VARIANTS: usize = 62;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
@@ -380,6 +381,10 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         SyncCommand::OpenChannel {
             channel_id: chan,
             listed_in: None,
+        },
+        SyncCommand::MarkChannelListed {
+            channel_id: chan,
+            space_id: space,
         },
         SyncCommand::RotateSpace {
             space_id: space,

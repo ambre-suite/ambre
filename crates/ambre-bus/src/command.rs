@@ -147,6 +147,14 @@ pub enum SyncCommand {
         /// the catalogues; the Sync worker does not.
         listed_in: Option<Id<Space>>,
     },
+    /// The catalogue of `space_id` lists `channel_id`, which this client
+    /// opened before that space, or while its listing was in flight. Its log
+    /// then admits a self-join (`SYNC-106`), and the Sync worker walks it
+    /// again under the rule of the space (`SYNC-230`). Answered by nothing.
+    MarkChannelListed {
+        channel_id: Id<Channel>,
+        space_id: Id<Space>,
+    },
     /// Rotate what a leave left owed in an open space. The space key goes
     /// first, when the relay says the space owes it. Then each public
     /// channel whose sealed key predates the current space key gets a new

@@ -602,6 +602,64 @@ mod tests {
         (bob, space_id, listed.channel_id(), sync)
     }
 
+    /// Holds `SYNC-230` on the Logic side. Bob opens a public channel before
+    /// the space that lists it, so its listing names no space. Once the
+    /// space opens, Sync learns the catalogue lists that channel. A channel
+    /// Bob never opened is not marked.
+    #[test]
+    fn a_space_opened_after_its_channel_marks_that_channel_listed() {
+        let space_id = Id::<Space>::mint();
+        let mut alice =
+            identified_space(SpaceState::create(space_id, &fit_name("Acme"), NOW).expect("create"));
+        let [opened, unopened] = ["general", "random"].map(|name| {
+            ChannelState::create(
+                Id::<Channel>::mint(),
+                ChannelType::Public,
+                Some(&fit_name(name)),
+                NOW,
+            )
+            .expect("channel")
+        });
+        for channel in [&opened, &unopened] {
+            let listing = Listing {
+                topic: None,
+                category: None,
+                position: ambre_bus::Rank::FIRST,
+                key: sealed(9),
+            };
+            alice.list_channel(channel, &listing).expect("list");
+        }
+        let (mut bob, _ui, sync) = harness();
+        bob.handle_logic_command(LogicCommand::OpenChannel {
+            channel_id: opened.channel_id(),
+        });
+        assert!(matches!(
+            drain(&sync).as_slice(),
+            [SyncCommand::OpenChannel {
+                listed_in: None,
+                ..
+            }]
+        ));
+        bob.handle_logic_command(LogicCommand::OpenSpace { space_id });
+        bob.handle_logic_event(LogicEvent::RemoteSnapshot {
+            document_id: space_id.document_id(),
+            covered_seq: ambre_core::Seq::<ambre_core::Relay>::new(1),
+            payload: (alice.snapshot().expect("snapshot")),
+        });
+        ready(&mut bob, space_id.document_id(), Role::Editor);
+        let marked: Vec<(Id<Channel>, Id<Space>)> = drain(&sync)
+            .iter()
+            .filter_map(|c| match c {
+                SyncCommand::MarkChannelListed {
+                    channel_id,
+                    space_id,
+                } => Some((*channel_id, *space_id)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(marked, vec![(opened.channel_id(), space_id)]);
+    }
+
     /// Whether `sent` hands Sync the catalogue of `space_id` as `channels`.
     fn hands(
         sent: &[SyncCommand],

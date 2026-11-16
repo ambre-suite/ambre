@@ -1572,7 +1572,7 @@ pub(crate) async fn list_members_task<H: ShareHttp>(
             );
             let word = membership_log::SpaceWord::of(&log);
             let heads = log.heads();
-            let writers = membership_log::Writers::of(&log);
+            let writers = membership_log::Writers::under(&log, &p.rule);
             let departed = log.departed_at();
             let revoked = log.revoked_at();
             let rotation_owed = resp.rotation_owed;

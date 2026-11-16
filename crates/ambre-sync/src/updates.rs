@@ -556,22 +556,37 @@ impl SyncState {
     /// Settles each delta held before the listing `asked` was sent, once its
     /// answer replaced the writers (`SYNC-211`). A delta its signer now passes
     /// reaches Logic, and any other is refused (`SYNC-211`).
+    ///
+    /// A document of a channel keeps each delta it refuses as no writer's,
+    /// sealed. A later walk of its log under the rule of a space decides it
+    /// again (`SYNC-230`).
     pub(crate) fn settle_unvouched(
         &mut self,
         document_id: Id<Document>,
         asked: ambre_core::Seq<crate::generation::Listing>,
     ) {
+        let of_channel = self.channel_metas.contains_key(&document_id);
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             return;
         };
-        let (due, kept) = std::mem::take(&mut doc_state.unvouched)
-            .into_iter()
-            .partition(|held| held.seen < asked);
+        let (due, kept): (Vec<crate::Unvouched>, Vec<crate::Unvouched>) =
+            std::mem::take(&mut doc_state.unvouched)
+                .into_iter()
+                .partition(|held| held.seen < asked);
         doc_state.unvouched = kept;
-        let results: Vec<_> = due
-            .iter()
-            .map(|held: &crate::Unvouched| doc_state.open_signed_update(&held.update, held.seq))
-            .collect();
+        let mut results = Vec::with_capacity(due.len());
+        for held in due {
+            let opened = doc_state.open_signed_update(&held.update, held.seq);
+            if of_channel && matches!(opened, Err(pipeline::PipelineError::NotAWriter)) {
+                doc_state.refused.push(held);
+            }
+            results.push(opened);
+        }
+        let overflow = doc_state
+            .refused
+            .len()
+            .saturating_sub(usize::try_from(QUARANTINE_LIMIT.get()).unwrap_or(usize::MAX));
+        doc_state.refused.drain(..overflow);
         for opened in results {
             self.deliver_remote(document_id, Some(opened), |delta| {
                 LogicEvent::RemoteUpdate { document_id, delta }
@@ -6258,5 +6273,147 @@ mod tests {
             "listing 2 names Erin, and her second delta lands"
         );
         assert!(state.documents[&doc].unvouched.is_empty());
+    }
+
+    /// Holds `SYNC-230`. A channel opens before the space whose catalogue
+    /// lists it. Its log walks under the rule of a document, so Erin, who
+    /// joined alone, is no writer and her delta is refused. The space opens
+    /// and the Logic thread marks the channel. The log walks again under the
+    /// space's rule, and the refused delta lands. A word of the space that
+    /// names no writer of the channel's creation grants nobody.
+    #[test]
+    fn a_channel_opened_before_its_space_walks_its_log_again_under_the_spaces_rule() {
+        use crate::membership_log::tests::{DOC, Person, append};
+        use crate::membership_log::{Log, SpaceWord, Writers, digest};
+        use ambre_protocol::MembershipAct;
+        let (mut state, rx, doc, key, _sk, snap) = setup();
+        let (alice, erin, mallory) = (Person::new(1), Person::new(5), Person::new(9));
+        let mut log = Vec::new();
+        append(&mut log, &alice, &alice, MembershipAct::Create, Role::Owner);
+        append(
+            &mut log,
+            &erin,
+            &erin,
+            MembershipAct::SelfJoin,
+            Role::Editor,
+        );
+        let walk = |state: &SyncState| {
+            let rule = state.log_rule(doc);
+            let walked = Log::walk_under(DOC, log.first().and_then(digest), &log, &rule);
+            Writers::under(&walked, &rule)
+        };
+        // The segment opens naming its meta, and the channel lists with no
+        // space: the space is not open yet.
+        let (channel_id, space_id) = (Id::<Channel>::mint(), Id::<Space>::mint());
+        let meta = Id::<Meta>::mint();
+        state.channel_metas.insert(doc, meta);
+        let documents = vec![ambre_bus::ChannelDocument {
+            document_id: meta.document_id(),
+            kind: ambre_bus::ChannelDocumentKind::Meta,
+        }];
+        state.handle_command(ambre_bus::SyncCommand::OpenChannel {
+            channel_id,
+            listed_in: None,
+        });
+        state.channel_listed(channel_id, None, Ok(documents));
+        drain(&rx);
+        let before = walk(&state);
+        assert!(
+            !before.admits(&erin.public()),
+            "the self-join counts nowhere"
+        );
+        state.documents.get_mut(&doc).unwrap().writers = before.clone();
+
+        let erins = make_update(
+            doc,
+            snap,
+            Seq::<DeltaAuthor>::new(1),
+            b"erin's message",
+            &key,
+            &erin.key,
+        );
+        state.receive_update(Seq::<Relay>::new(1), erins);
+        state.handle_sync_event(listing(doc, 1, before));
+        assert_eq!(
+            applied_and_warned(&drain(&rx)),
+            (Vec::new(), vec![SyncWarningCode::WriterRefused])
+        );
+
+        // The space opens: Logic marks the channel, and the log walks again.
+        // Erin is a present member of the space, under the keys her
+        // self-join names (`SYNC-227`).
+        let word = SpaceWord {
+            writers: HashSet::from([alice.public()]),
+            present: std::collections::HashMap::from([(
+                erin.id,
+                crate::membership_log::MemberKeys {
+                    key: erin.public(),
+                    exchange: erin.exchange(),
+                },
+            )]),
+            ..SpaceWord::default()
+        };
+        state.documents.insert(
+            space_id.document_id(),
+            SyncDocumentState::new(
+                space_id.document_id(),
+                DocumentKey::generate(),
+                DocType::Murmure,
+                crate::Existence::OnRelay,
+            ),
+        );
+        state.handle_sync_event(SyncEvent::LogWalked {
+            document_id: space_id.document_id(),
+            word: word.clone(),
+            heads: Default::default(),
+        });
+        assert_eq!(
+            state.documents[&doc].directory_asked.latest(),
+            ambre_core::Seq::nth(1),
+            "no catalogue lists the channel yet: its log heeds no space"
+        );
+        state.handle_command(ambre_bus::SyncCommand::MarkChannelListed {
+            channel_id,
+            space_id,
+        });
+        assert_eq!(
+            state.documents[&doc].directory_asked.latest(),
+            ambre_core::Seq::nth(2),
+            "the mark lists the members again"
+        );
+        let after = walk(&state);
+        assert!(after.admits(&erin.public()) && after.admits(&alice.public()));
+        state.handle_sync_event(listing(doc, 2, after));
+        assert_eq!(
+            applied_and_warned(&drain(&rx)),
+            (vec![b"erin's message".to_vec()], Vec::new()),
+            "the second walk lands the refused delta"
+        );
+        assert!(state.documents[&doc].refused.is_empty());
+
+        // The same mark again walks nothing. A new word of the space walks
+        // the channel again, and one no creator of the channel wrote in
+        // grants nobody.
+        state.handle_command(ambre_bus::SyncCommand::MarkChannelListed {
+            channel_id,
+            space_id,
+        });
+        assert_eq!(
+            state.documents[&doc].directory_asked.latest(),
+            ambre_core::Seq::nth(2)
+        );
+        state.handle_sync_event(SyncEvent::LogWalked {
+            document_id: space_id.document_id(),
+            word: SpaceWord {
+                writers: HashSet::from([mallory.public()]),
+                ..SpaceWord::default()
+            },
+            heads: Default::default(),
+        });
+        assert_eq!(
+            state.documents[&doc].directory_asked.latest(),
+            ambre_core::Seq::nth(3)
+        );
+        assert_eq!(walk(&state), Writers::Granted(HashSet::new()));
     }
 }

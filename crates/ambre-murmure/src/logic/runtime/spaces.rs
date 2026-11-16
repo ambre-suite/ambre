@@ -184,6 +184,7 @@ impl<D> Runtime<D> {
                 // The identity landed while the space was opening.
                 self.settle_murmure_session(document_id);
                 self.show_catalogue(space_id);
+                self.mark_listed_channels(space_id);
                 self.space_live(space_id);
                 if let Some(members) = opening.members {
                     self.set_space_rows(space_id, members);
@@ -245,7 +246,32 @@ impl<D> Runtime<D> {
             }
         }
         self.show_catalogue(space_id);
+        self.mark_listed_channels(space_id);
         true
+    }
+
+    /// Tell Sync which open or opening channels the catalogue of `space_id`
+    /// lists. A channel opened before its space walked its log under the
+    /// rule of a document, so Sync walks it again under the space's
+    /// (`SYNC-230`). Sync ignores a mark it already holds.
+    fn mark_listed_channels(&self, space_id: Id<Space>) {
+        let Some(space) = self.spaces.get(&space_id) else {
+            return;
+        };
+        space
+            .state
+            .catalogue()
+            .iter()
+            .map(|entry| entry.channel_id)
+            .filter(|channel_id| {
+                self.channels.contains_key(channel_id) || self.opening.contains_key(channel_id)
+            })
+            .for_each(|channel_id| {
+                self.ask(SyncCommand::MarkChannelListed {
+                    channel_id,
+                    space_id,
+                });
+            });
     }
 
     /// The snapshot of a space document, for the relay's compaction, with the

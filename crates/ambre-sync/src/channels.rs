@@ -67,14 +67,19 @@ impl SyncState {
     ) {
         match result {
             Ok(documents) => {
+                // A mark the Logic thread sent while the listing was in
+                // flight outlives the open that asked it (`SYNC-230`).
+                let listed_in = self.listed_channels.get(&channel_id).copied().or(listed_in);
                 // The channel's members live in meta's log. Mark it as one
                 // that admits a self-join exactly when a catalogue lists the
                 // channel, and forget the mark when it no longer does.
-                let metas = documents
+                let metas: Vec<Id<Document>> = documents
                     .iter()
                     .filter(|d| d.kind == ChannelDocumentKind::Meta)
-                    .map(|d| d.document_id);
+                    .map(|d| d.document_id)
+                    .collect();
                 for meta in metas {
+                    self.listing_metas.insert(channel_id, meta);
                     match listed_in {
                         Some(space_id) => self.self_join_logs.insert(meta, space_id),
                         None => self.self_join_logs.remove(&meta),
@@ -98,6 +103,65 @@ impl SyncState {
                     failure: error.failure(),
                 });
             }
+        }
+    }
+
+    /// The catalogue of `space_id` lists `channel_id`, which opened with no
+    /// space or under another. The log of its `meta` admits a self-join from
+    /// now on, and each open document of the channel walks it again
+    /// (`SYNC-230`). A listing still in flight marks the log at its answer.
+    pub(crate) fn mark_channel_listed(&mut self, channel_id: Id<Channel>, space_id: Id<Space>) {
+        if self.listed_channels.insert(channel_id, space_id) == Some(space_id) {
+            return;
+        }
+        let Some(meta) = self.listing_metas.get(&channel_id).copied() else {
+            return;
+        };
+        self.self_join_logs.insert(meta, space_id);
+        self.walk_log_again(meta);
+    }
+
+    /// The walk of the log of `document_id` set a new word. When that
+    /// document is a space, each channel log it lists heeds the word, so
+    /// each walks again (`SYNC-230`).
+    pub(crate) fn space_word_changed(&mut self, document_id: Id<Document>) {
+        let metas: Vec<Id<Document>> = self
+            .self_join_logs
+            .iter()
+            .filter(|(_, space_id)| space_id.document_id() == document_id)
+            .map(|(meta, _)| *meta)
+            .collect();
+        for meta in metas {
+            self.walk_log_again(meta);
+        }
+    }
+
+    /// Lists the members of each open document whose log is that of `meta`,
+    /// so the walk runs again under the rule `log_rule` now gives. Each delta
+    /// a walk refused as no writer's waits for that answer, which decides it
+    /// again (`SYNC-211`, `SYNC-230`).
+    fn walk_log_again(&mut self, meta: Id<Document>) {
+        let documents: Vec<Id<Document>> = self
+            .documents
+            .keys()
+            .copied()
+            .filter(|document_id| self.log_document(*document_id) == meta)
+            .collect();
+        for document_id in documents {
+            if let Some(doc_state) = self.documents.get_mut(&document_id) {
+                let seen = doc_state.directory_asked.latest();
+                let refused = std::mem::take(&mut doc_state.refused);
+                doc_state.unvouched.extend(
+                    refused
+                        .into_iter()
+                        .map(|held| crate::Unvouched { seen, ..held }),
+                );
+                let overflow = doc_state.unvouched.len().saturating_sub(
+                    usize::try_from(crate::QUARANTINE_LIMIT.get()).unwrap_or(usize::MAX),
+                );
+                doc_state.unvouched.drain(..overflow);
+            }
+            self.handle_list_document_members(None, document_id);
         }
     }
 
