@@ -360,19 +360,56 @@ fn deck_page() {
     assert!(!document.faces.is_empty(), "the pages shape their text");
 }
 
+/// The whole pass of the request of a deck export: what an edit typed at the
+/// request waits behind. It derives every page and reads every picture off
+/// the board, then records the first page
+/// (`ambre-spec-toile-pdf-export.md section 3`, step 1). The font context is seeded outside the count.
+#[cfg(feature = "pdf")]
+#[inline(never)]
+fn ambre_budget_toile_deck_request(
+    st: &ToileState,
+    fonts: &mut FontContext,
+) -> ambre_toile::logic::interop::DeckRecording {
+    let mut recording = st
+        .record_deck(Default::default())
+        .expect("the deck has pages");
+    recording.record_next(fonts);
+    black_box(recording)
+}
+
+/// The request of the export of the 50-slide deck, on the shipped faces. The
+/// "Toile PDF export, 50 slides" row of `ambre-spec-budgets.md section 1`
+/// measures this pass. No ceiling holds it yet: the
+/// count exceeds the slice row.
+#[cfg(feature = "pdf")]
+fn deck_request() {
+    let st = common::deck(common::SLIDES);
+    let mut fonts = common::shipped_fonts();
+    let recording = ambre_budget_toile_deck_request(&st, &mut fonts);
+    assert!(
+        !recording.is_recorded(),
+        "the request records the first page of fifty, not the last"
+    );
+}
+
 /// Without the export compiled in there is no page to count: the script then
 /// reads a count of zero, which fails like an overrun.
 #[cfg(not(feature = "pdf"))]
 fn deck_page() {}
 
+/// Without the export compiled in there is no request to count: zero again.
+#[cfg(not(feature = "pdf"))]
+fn deck_request() {}
+
 /// Each operation, by the name `scripts/instructions.py` passes.
-const OPERATIONS: [(&str, fn()); 6] = [
+const OPERATIONS: [(&str, fn()); 7] = [
     ("body_commit", body_commit),
     ("body_commit_at_cap", body_commit_at_cap),
     ("board_paint", board_paint),
     ("move_undo", move_undo),
     ("move_redo", move_redo),
     ("deck_page", deck_page),
+    ("deck_request", deck_request),
 ];
 
 fn main() {
