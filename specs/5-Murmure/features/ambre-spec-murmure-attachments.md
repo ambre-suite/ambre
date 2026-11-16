@@ -57,7 +57,7 @@ A deleted message takes its files with it, so the erasure a delete promises cove
 |---|---|---|---|---|---|---|
 | `MURMURE-240` | `POST` | Deleting a message MUST ask the relay to erase every attachment no other live message of its author carries. | this spec section 3; `SRV-139` | `ambre_murmure::logic::attachment_tests::a_delete_names_the_files_no_other_own_message_carries` -- each file once, none another own message keeps; `ambre_logic::channels::tests::a_delete_erases_its_file_and_retries_on_the_next_connection` -- the delete sends the erase; `ambre_murmure::logic::attachment_tests::a_message_of_another_author_names_no_file_to_erase` -- another author's message names no file | none | verified |
 | `MURMURE-577` | `POST` | Deleting a message MUST ask the relay to erase the image of its preview. | this spec section 3; `SRV-139` | not built | unbuilt -- lands with the `Link previews` Story (`ambre-roadmap.md` post-V1) | unimplemented |
-| `MURMURE-241` | `FAIL` | Given an erase the relay did not complete, the client MUST keep it queued and retry until it completes. | this spec section 3 | `ambre_logic::channels::tests::a_delete_erases_its_file_and_retries_on_the_next_connection` -- a failed erase is asked again on the next connection | none | verified |
+| `MURMURE-241` | `FAIL` | Given an erase the relay did not complete, the client MUST keep it queued and retry until it completes or the user logs out. | this spec section 3; `MURMURE-638` | `ambre_logic::channels::tests::a_delete_erases_its_file_and_retries_on_the_next_connection` -- a failed erase is asked again on the next connection | none | verified |
 | `MURMURE-242` | `FRAME` | Deleting a message MUST NOT erase a file another member uploaded. | this spec section 3; `SRV-140` | `ambre_server::routes::tests::handler_tests::an_erase_removes_a_blob_once_its_last_uploader_asks` -- the relay drops only the asker's claim, database tier; `ambre_murmure::logic::attachment_tests::a_delete_names_the_files_no_other_own_message_carries` -- another author's message names nothing | none | verified |
 
 * **Budget.** the frame budget of `ambre-spec-budgets.md section 2` bounds the animation, and the
@@ -107,7 +107,8 @@ section 6`.
 
 **A delete takes the files with it** (`MURMURE-240`). The text leaves the ciphertext at the next
 re-finalization; the files leave object storage at once. An erase that fails, offline for
-instance, stays queued until it completes (`MURMURE-241`). A file the author's other copy still
+instance, stays queued until it completes (`MURMURE-241`). A logout drops the queue: the next
+session erases nothing of the previous user (`MURMURE-638`). A file the author's other copy still
 carries stays until that copy goes too.
 
 **Code.** `ambre-murmure/src/logic/attachment.rs`, `ambre-murmure/src/ui/uploads.rs`,

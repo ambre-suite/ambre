@@ -1097,6 +1097,48 @@ mod tests {
         assert!(state.rt().channels().contains_key(&channel_id));
     }
 
+    /// A delete and a leave still unanswered at the logout
+    /// belong to the user who asked them. Their late answers reach no view
+    /// and write nothing in the next session.
+    #[test]
+    fn a_logout_forgets_the_deletes_and_leaves_the_relay_has_not_answered() {
+        let (mut state, ui, sync) = harness();
+        let space_id = created_space(&mut state, &ui, &sync);
+        let (deleted, ..) = public_channel(&mut state, space_id, "budget", &ui, &sync);
+        let (left, ..) = public_channel(&mut state, space_id, "general", &ui, &sync);
+        state.handle_logic_command(LogicCommand::Space {
+            space_id,
+            command: SpaceCommand::DeleteChannel {
+                channel_id: deleted,
+            },
+        });
+        state.handle_logic_command(LogicCommand::Space {
+            space_id,
+            command: SpaceCommand::LeaveChannel { channel_id: left },
+        });
+        state.handle_logic_command(LogicCommand::Rest {
+            id: ambre_bus::next_request(),
+            cmd: ambre_bus::RestCommand::Logout,
+        });
+        state.handle_logic_event(LogicEvent::Rest {
+            id: None,
+            evt: ambre_bus::RestEvent::SessionReady {
+                user_id: Id::<ambre_core::id::User>::mint(),
+                display_name: Validated::<ambre_core::DisplayName>::parse("bob").unwrap(),
+                email: ambre_core::Email::from("bob@example.com"),
+            },
+        });
+        let _ = (drain(&ui), drain(&sync));
+
+        state.handle_logic_event(LogicEvent::ChannelDeleted {
+            channel_id: deleted,
+        });
+        state.handle_logic_event(LogicEvent::ChannelLeft { channel_id: left });
+        let shown = drain(&ui);
+        assert!(shown.is_empty(), "a late answer reaches no view: {shown:?}");
+        assert!(drain(&sync).is_empty(), "a late answer writes nothing");
+    }
+
     #[test]
     fn joining_a_channel_the_catalogue_does_not_list_asks_nothing() {
         let (mut state, ui, sync) = harness();

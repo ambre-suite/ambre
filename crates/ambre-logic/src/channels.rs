@@ -1889,6 +1889,156 @@ mod tests {
         );
     }
 
+    fn log_out(state: &mut LogicState) {
+        state.handle_logic_command(LogicCommand::Rest {
+            id: ambre_bus::next_request(),
+            cmd: RestCommand::Logout,
+        });
+    }
+
+    /// An erase on its way and an erase owed at the logout
+    /// belong to the user who deleted the message. The next session, its
+    /// connection and the late answer of the first ask none of them again.
+    #[test]
+    fn a_logout_forgets_the_erases_the_relay_has_not_answered() {
+        let (mut state, _ui, sync) = harness();
+        signed_in(&mut state, Id::<User>::mint());
+        let (channel_id, segment) = open_channel(&mut state);
+        let meta = state.rt().channels()[&channel_id].meta_id().document_id();
+        let attachments = ["ab", "cd"]
+            .into_iter()
+            .map(|byte| Attachment {
+                media_ref: Validated::<ContentHash>::parse(byte.repeat(32)).expect("a hash"),
+                name: "plan.pdf".to_owned(),
+                media_type: MediaType::new("application/pdf".to_owned()),
+                size: Count::<Octets>::new(2048),
+            })
+            .collect();
+        let MurmureCommand::SendMessage {
+            draft,
+            now,
+            confirmed,
+            ..
+        } = send("", Vec::new())
+        else {
+            panic!("a send is a SendMessage");
+        };
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::SendMessage {
+                draft,
+                attachments,
+                now,
+                confirmed,
+            },
+        );
+        let message = state.rt().channels()[&channel_id].messages(segment).expect("held")[0].id;
+        drain(&sync);
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::DeleteMessage {
+                at: segment.into(),
+                message,
+                now: Instant::<Authored>::new(2),
+            },
+        );
+        let asked = erases(&drain(&sync));
+        let [(owed, ..), (on_its_way, ..)] = asked.as_slice() else {
+            panic!("two erases, got {asked:?}");
+        };
+        let on_its_way = *on_its_way;
+        state.handle_logic_event(LogicEvent::ApiError {
+            id: Some(*owed),
+            request: ambre_bus::ApiRequest::EraseMedia,
+            failure: ambre_bus::ApiFailure::NoAnswer,
+        });
+        assert!(drain(&sync).is_empty(), "the failed erase waits");
+
+        log_out(&mut state);
+        signed_in(&mut state, Id::<User>::mint());
+        state.handle_logic_event(LogicEvent::ConnectionStatus {
+            document_id: meta,
+            connected: ambre_core::LinkState::Connected,
+        });
+        state.handle_logic_event(LogicEvent::ApiError {
+            id: Some(on_its_way),
+            request: ambre_bus::ApiRequest::EraseMedia,
+            failure: ambre_bus::ApiFailure::NoAnswer,
+        });
+        state.handle_logic_event(LogicEvent::ConnectionStatus {
+            document_id: meta,
+            connected: ambre_core::LinkState::Connected,
+        });
+        let sent = erases(&drain(&sync));
+        assert!(sent.is_empty(), "no later session erases: {sent:?}");
+    }
+
+    /// A preview fetch on its way at the logout is forgotten.
+    /// The next session that paints the same image fetches it under its own
+    /// session, and the late answer of the first reaches no view.
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn a_logout_forgets_the_preview_fetches_the_relay_has_not_answered() {
+        let (mut state, ui, sync) = harness();
+        signed_in(&mut state, Id::<User>::mint());
+        let (channel_id, _) = open_channel(&mut state);
+        let file = Validated::<ContentHash>::parse("cd".repeat(32)).expect("a content hash");
+        drain(&sync);
+        let media_ref = file.clone();
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::ShowPicture { media_ref },
+        );
+        let [(first, meta, _)] = downloads(&drain(&sync))[..] else {
+            panic!("one fetch");
+        };
+
+        log_out(&mut state);
+        signed_in(&mut state, Id::<User>::mint());
+        state.hold_channel(
+            ChannelState::create(channel_id, ChannelType::Public, None, NOW).expect("create"),
+        );
+        drain(&sync);
+        let media_ref = file.clone();
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::ShowPicture { media_ref },
+        );
+        let fetched = downloads(&drain(&sync));
+        assert!(
+            matches!(fetched.as_slice(), [(id, ..)] if *id != first),
+            "the next session fetches anew, got {fetched:?}"
+        );
+
+        let mut png = Vec::new();
+        image::RgbaImage::from_pixel(1, 1, image::Rgba([1, 2, 3, 255]))
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .expect("png");
+        drain(&ui);
+        state.handle_logic_event(LogicEvent::Rest {
+            id: Some(first),
+            evt: RestEvent::MediaDownloaded {
+                document_id: meta,
+                content_hash: file,
+                data: png.into(),
+            },
+        });
+        assert!(
+            !drain(&ui).iter().any(|e| matches!(
+                e,
+                UiEvent::Channel {
+                    event: MurmureEvent::Picture { .. },
+                    ..
+                }
+            )),
+            "the late answer reaches no view"
+        );
+    }
+
     /// The image of a preview, as `(request, document, file)`.
     #[cfg(not(target_arch = "wasm32"))]
     fn downloads(
@@ -4841,6 +4991,42 @@ mod tests {
             },
         );
         assert_eq!(asked(&sync), [second], "a gone call is asked no more");
+    }
+
+    /// The last ask of who is in a call is the session's.
+    /// After a logout, the next session that shows the same channel asks at
+    /// its first tick, within the interval of the previous ask.
+    #[test]
+    fn a_logout_forgets_when_each_channel_last_asked_who_is_in_its_calls() {
+        let (mut state, _ui, sync) = harness();
+        signed_in(&mut state, Id::<User>::mint());
+        let (channel_id, _) = open_channel(&mut state);
+        let call = Id::<ambre_core::id::Call>::mint();
+        state.handle_logic_event(LogicEvent::CallStarted {
+            call,
+            channel: channel_id,
+            at: NOW,
+        });
+        command(&mut state, channel_id, MurmureCommand::Tick { now: at(1) });
+        assert_eq!(asked(&sync), [call]);
+
+        log_out(&mut state);
+        signed_in(&mut state, Id::<User>::mint());
+        state.hold_channel(
+            ChannelState::create(channel_id, ChannelType::Public, None, NOW).expect("create"),
+        );
+        state.handle_logic_event(LogicEvent::CallStarted {
+            call,
+            channel: channel_id,
+            at: NOW,
+        });
+        drain(&sync);
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::Tick { now: at(1_000) },
+        );
+        assert_eq!(asked(&sync), [call], "the next session asks at once");
     }
 
     /// Who is in a call reaches the view, and no document of

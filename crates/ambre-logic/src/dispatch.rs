@@ -274,6 +274,9 @@ impl LogicState {
                         self.store_full.clear();
                         self.route(|m| m.logout());
                         self.locale_seeds.clear();
+                        // A preview fetch the relay has not answered belongs
+                        // to this user (the Murmure engine spec).
+                        self.picturing.clear();
                         self.owed.clear();
                         self.rest_routes.clear();
                         self.forget_pending_seals(None);

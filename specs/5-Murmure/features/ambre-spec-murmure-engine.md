@@ -42,15 +42,23 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-029` | `POST` | A remote delta MUST pass the authorship check of the messages feature before it is imported. | this spec section 3; `features/ambre-spec-murmure-messages.md` | `ambre_murmure::logic::authorship_tests::a_message_carries_the_author_who_signed_it_and_no_other`; `ambre_murmure::logic::authorship_tests::a_delta_refused_while_the_channel_opens_is_left_out`; `ambre_logic::channels::tests::a_delta_the_authorship_check_refuses_reaches_no_view` -- an open channel and an opening one both check before import | none | verified |
 | `MURMURE-030` | `FRAME` | A refused delta MUST NOT change any document of the channel. | this spec section 3; `AUTHOR-014` | `ambre_murmure::logic::authorship_tests::an_edit_of_another_authors_message_is_refused_and_changes_nothing` -- every document of the channel compares equal across the refusal | none | verified |
 
+### 1.4 Log out
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-638` | `POST` | A logout MUST forget every channel delete, channel leave and file erase the relay has not answered. | this spec section 3; `MURMURE-241` | `ambre_logic::spaces::tests::a_logout_forgets_the_deletes_and_leaves_the_relay_has_not_answered`; `ambre_logic::channels::tests::a_logout_forgets_the_erases_the_relay_has_not_answered` -- an erase on its way and an erase owed, past a new sign-in and two connections | none | verified |
+| `MURMURE-639` | `POST` | A logout MUST forget every preview fetch and every ask of who is in a call, so the next session asks its own. | this spec section 3 | `ambre_logic::channels::tests::a_logout_forgets_the_preview_fetches_the_relay_has_not_answered` -- the same image fetched anew; `ambre_logic::channels::tests::a_logout_forgets_when_each_channel_last_asked_who_is_in_its_calls` -- asked within the interval of the last ask | none | verified |
+| `MURMURE-640` | `FRAME` | A late answer to a request of an earlier session MUST NOT reach a view or write a document. | this spec section 3; `MURMURE-638`; `MURMURE-639` | `ambre_logic::spaces::tests::a_logout_forgets_the_deletes_and_leaves_the_relay_has_not_answered` -- a late delete and a late leave show and send nothing; `ambre_logic::channels::tests::a_logout_forgets_the_preview_fetches_the_relay_has_not_answered` -- a late image reaches no view | none | verified |
+
 * **Budget.** the first display of a channel loads its `meta` document and its active segment, about
   2 MB, inside the memory rows of `ambre-spec-budgets.md section 6`. The authorship check costs the
   JSON check row of `ambre-spec-budgets.md section 1`.
 * **Boundary.** every document here travels sealed through the document pipeline (`ZK-001`). What
   the relay learns of the grouping is `ZK-015`.
-* **Verification.** 14 `verified`, 0 `unimplemented`. The open is held on both sides of the Logic
-  thread: the engine's staged open, and the dispatcher that drives it over the relay. A close
-  hands each document's copy to the local store and releases it to a light subscription. A
-  reopen starts each document from its copy.
+* **Verification.** 17 `verified`. The open is held on both sides of the Logic thread: the engine's
+  staged open, and the dispatcher that drives it over the relay. A close hands each document's copy
+  to the local store and releases it to a light subscription. A reopen starts each document from its
+  copy.
 
 ---
 
@@ -136,6 +144,11 @@ delta and its activity summary, and the view a `MurmureEvent::Messages`.
 4. The delta is imported, and the view is told which messages changed.
 
 A segment still opening holds each delta as it arrived, and checks it when the segment is built.
+
+**A logout ends what the user asked.** A request the relay has not answered belongs to the user who
+asked it. The logout drops each one, with the erases still owed (`MURMURE-638`). A later session
+asks its own previews and call rosters anew (`MURMURE-639`). A late answer finds no request and
+does nothing (`MURMURE-640`).
 
 **Code.** `crates/ambre-murmure/src/logic/channel.rs`, `crates/ambre-murmure/src/logic/delta.rs`,
 `crates/ambre-murmure/src/logic/schema.rs`,

@@ -266,6 +266,14 @@ impl<D> Runtime<D> {
         self.space_opening.clear();
         self.creating.clear();
         self.joining.clear();
+        // A request the relay has not answered belongs to this user. No
+        // later session asks it again or acts on its answer (the Murmure
+        // engine spec).
+        self.deleting.clear();
+        self.leaving.clear();
+        self.erasing.clear();
+        self.erase_owed.clear();
+        self.call_asks.clear();
         self.handing_off.clear();
         self.direct.clear();
         self.unsent.clear();
