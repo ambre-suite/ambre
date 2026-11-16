@@ -54,6 +54,14 @@ impl RouteBinding {
         let cur_route = route::current();
         let cur_doc = cur_route.doc();
         if let Some(step) = route::step(self.prev.as_ref(), &cur_route) {
+            // A Murmure link pins its inviter for every Murmure open of the
+            // session, ahead of the spaces the page asks for (`SYNC-236`).
+            if let Some(inviter) = route::current_fragment()
+                .and_then(|fragment| route::murmure_inviter(&cur_route, &fragment))
+            {
+                self.to_logic
+                    .send(LogicCommand::PinMurmureInviter { inviter });
+            }
             if let Some(document_id) = step.close {
                 self.to_logic
                     .send(LogicCommand::CloseDocument { document_id });

@@ -66,6 +66,13 @@ pub enum SyncCommand {
         inviter: ambre_core::FixedBytes<ambre_core::InviterPin>,
     },
 
+    /// Pin the inviter that a Murmure invite link names (`SYNC-236`). A
+    /// Murmure page binds no document, so the pin roots every Murmure open
+    /// of the session (`SYNC-235`).
+    PinMurmureInviter {
+        inviter: ambre_core::FixedBytes<ambre_core::InviterPin>,
+    },
+
     /// Close the sync session. Unsubscribe, zeroize the DocumentKey.
     CloseDocument {
         document_id: Id<Document>,

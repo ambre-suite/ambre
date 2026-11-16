@@ -40,11 +40,11 @@
 //! (`SYNC-229`). The log of a channel a space lists must start at a writer of
 //! that space (audit `N16`). So a viewer's catalogue entry roots no log.
 //!
-//! Murmure carries no invite link, so no Murmure open names a pinned
-//! inviter. The inviter check skips a Murmure document, and its log stands
-//! on the relay's word.
+//! A Murmure page binds no document, so no Murmure open names a pinned
+//! inviter of its own. A Murmure open checks its log against the roots of
+//! the session instead (`SYNC-235`). The roots hold the inviter a Murmure
+//! link pins, and the members of each Murmure log an open accepted.
 
-use ambre_bus::DocType;
 use ambre_core::id::{Document, Id};
 use ambre_core::{ExchangePublicKey, FixedBytes, InviterPin, PublicKey, RotationDebt, Seq};
 use ambre_crypto::DocumentKey;
@@ -65,8 +65,8 @@ pub(crate) enum KeyRefusal {
     /// signed by the key the pin names.
     NotFromInviter,
     /// The open names no pinned inviter, and this client did not wrap its own
-    /// copy. Nor did its own signing key sign a valid entry of the log, so
-    /// nothing roots the log but the relay's word.
+    /// copy. No valid entry of the log is signed by its own signing key or by
+    /// a root of the session. Nothing roots the log but the relay's word.
     Unpinned,
     /// The copy was wrapped under an exchange key that neither this client
     /// nor a member the log verifies holds.
@@ -138,16 +138,33 @@ enum Wrapper {
 /// What the log says of the inviter the open pinned out of band.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Inviter {
-    /// The open names no pin, and this client's own signing key signed no
-    /// valid entry of the log.
+    /// The open names no pin, and neither this client's own signing key nor
+    /// a root of the session signed a valid entry of the log.
     Unpinned,
     /// The open names no pin, and this client's own signing key signed a
     /// valid entry of the log. The relay cannot sign such an entry either.
     Own,
+    /// The open names no pin, and a root of the session signed a valid
+    /// entry of the log (`SYNC-235`).
+    Rooted,
     /// The key the pin names signed a valid entry of the log.
     Signed,
     /// No valid entry of the log is signed by the key the pin names.
     Absent,
+}
+
+/// What this client holds out of band to root the log of one open on. The
+/// relay can forge none of it.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct Roots {
+    /// The inviter the invite link of the document pinned (`SYNC-205`).
+    pub(crate) pin: Option<FixedBytes<InviterPin>>,
+    /// The roots of the session, for a Murmure open alone (`SYNC-235`). They
+    /// hold the inviter a Murmure link pins, and each member of a Murmure log
+    /// an earlier open accepted.
+    pub(crate) session: Vec<FixedBytes<InviterPin>>,
+    /// This client's own signing key (`SYNC-210`).
+    pub(crate) signer: Option<FixedBytes<PublicKey>>,
 }
 
 /// What one members answer and its log say about the key it hands over.
@@ -169,17 +186,15 @@ pub(crate) struct KeyVouch {
 
 impl KeyVouch {
     /// Reads `log`, walked under `rule`, and the rows of `members`, for the
-    /// copy carried by the row of `own`, this client's exchange key. `pin`
-    /// is the inviter this client holds out of band for the document, and
-    /// `signer` this client's own signing key. `debt` is what the same
-    /// answer says of the rotation a departure owes.
+    /// copy carried by the row of `own`, this client's exchange key. `roots`
+    /// is what this client holds out of band for the open. `debt` is what
+    /// the same answer says of the rotation a departure owes.
     pub(crate) fn of(
         log: &Log,
         rule: &LogRule,
         own: &FixedBytes<ExchangePublicKey>,
         members: &[http::MemberEntry],
-        pin: Option<&FixedBytes<InviterPin>>,
-        signer: Option<&FixedBytes<PublicKey>>,
+        roots: &Roots,
         debt: RotationDebt,
     ) -> Self {
         // The same wrapper the unwrap runs against (`SYNC-034`).
@@ -205,13 +220,18 @@ impl KeyVouch {
                 }
             }
         };
-        let inviter = match pin {
-            None if signer.is_some_and(|key| log.signed_under(&ambre_crypto::inviter_pin(key))) => {
-                Inviter::Own
-            }
-            None => Inviter::Unpinned,
+        let inviter = match &roots.pin {
             Some(pin) if log.signed_under(pin) => Inviter::Signed,
             Some(_) => Inviter::Absent,
+            None if roots
+                .signer
+                .as_ref()
+                .is_some_and(|key| log.signed_under(&ambre_crypto::inviter_pin(key))) =>
+            {
+                Inviter::Own
+            }
+            None if roots.session.iter().any(|root| log.signed_under(root)) => Inviter::Rooted,
+            None => Inviter::Unpinned,
         };
         let root = rule.root_of(log);
         Self {
@@ -238,9 +258,8 @@ impl KeyVouch {
         self.departed
     }
 
-    /// Whether `key` may become the current key of a document of `doc_type`
-    /// whose log and links are those of `log_document` (`SYNC-229`). A
-    /// Murmure document skips the inviter check alone.
+    /// Whether `key` may become the current key of a document whose log and
+    /// links are those of `log_document` (`SYNC-229`).
     ///
     /// `links` are the links of `log_document` that a writer the log verifies
     /// signed (`SYNC-121`). A link that names `key` counts only when it opens
@@ -252,21 +271,18 @@ impl KeyVouch {
     /// declared.
     pub(crate) fn check(
         &self,
-        doc_type: DocType,
         log_document: Id<Document>,
         key: &DocumentKey,
         links: &[KeyLink],
     ) -> Result<(), KeyRefusal> {
         let named = self.named.as_ref().ok_or(KeyRefusal::Unanchored)?;
-        // Murmure carries no invite link to pin an inviter with.
-        if doc_type != DocType::Murmure {
-            if self.inviter == Inviter::Absent {
-                return Err(KeyRefusal::NotFromInviter);
-            }
-            // An open with no link fails closed (`SYNC-210`).
-            if self.inviter == Inviter::Unpinned && self.wrapper != Wrapper::Holder {
-                return Err(KeyRefusal::Unpinned);
-            }
+        if self.inviter == Inviter::Absent {
+            return Err(KeyRefusal::NotFromInviter);
+        }
+        // An open with no link and no root fails closed (`SYNC-210`,
+        // `SYNC-235`).
+        if self.inviter == Inviter::Unpinned && self.wrapper != Wrapper::Holder {
+            return Err(KeyRefusal::Unpinned);
         }
         if self.wrapper == Wrapper::Unverified {
             return Err(KeyRefusal::WrapperUnverified);
@@ -346,6 +362,22 @@ mod tests {
     use ambre_core::id::User;
     use ambre_protocol::{MembershipAct, MembershipEntry};
     use x25519_dalek::StaticSecret;
+
+    /// The roots of an open that the link pinned to `pin` drives.
+    fn pinned(pin: &FixedBytes<InviterPin>) -> Roots {
+        Roots {
+            pin: Some(*pin),
+            ..Roots::default()
+        }
+    }
+
+    /// The roots of an open with no link, that `signer` signs for.
+    fn signed(signer: Option<FixedBytes<PublicKey>>) -> Roots {
+        Roots {
+            signer,
+            ..Roots::default()
+        }
+    }
 
     /// One member of a test document: a signing identity and an exchange key.
     struct Member {
@@ -471,11 +503,10 @@ mod tests {
                 &LogRule::document(),
                 &own,
                 members,
-                Some(pin),
-                None,
+                &pinned(pin),
                 RotationDebt::Settled,
             )
-            .check(DocType::Prose, self.document_id, key, &[])
+            .check(self.document_id, key, &[])
         }
 
         /// The pin of Alice's signing key, which her invite link carries.
@@ -497,11 +528,10 @@ mod tests {
                 &LogRule::document(),
                 &self.bob.exchange(),
                 members,
-                Some(&self.alice_pin()),
-                None,
+                &pinned(&self.alice_pin()),
                 RotationDebt::Settled,
             )
-            .check(DocType::Prose, self.document_id, key, links)
+            .check(self.document_id, key, links)
         }
 
         /// What Bob's client decides of `key`, opened from Alice's link, in
@@ -520,11 +550,10 @@ mod tests {
                 &rule,
                 &self.bob.exchange(),
                 members,
-                Some(&self.alice_pin()),
-                None,
+                &pinned(&self.alice_pin()),
                 RotationDebt::Settled,
             )
-            .check(DocType::Prose, self.document_id, key, links)
+            .check(self.document_id, key, links)
         }
     }
 
@@ -688,25 +717,20 @@ mod tests {
             &rule,
             &doc.bob.exchange(),
             &stranger,
-            Some(&pin),
-            None,
+            &pinned(&pin),
             RotationDebt::Settled,
         );
-        assert_eq!(
-            vouch.check(DocType::Prose, doc.document_id, &doc.k0, &[]),
-            Ok(())
-        );
+        assert_eq!(vouch.check(doc.document_id, &doc.k0, &[]), Ok(()));
         let vouch = KeyVouch::of(
             &log,
             &rule,
             &doc.bob.exchange(),
             &with_carol,
-            Some(&pin),
-            None,
+            &pinned(&pin),
             RotationDebt::Settled,
         );
         assert_eq!(
-            vouch.check(DocType::Prose, doc.document_id, &doc.k0, &[]),
+            vouch.check(doc.document_id, &doc.k0, &[]),
             Err(KeyRefusal::WrapperUnverified)
         );
     }
@@ -740,11 +764,14 @@ mod tests {
                 &LogRule::document(),
                 &carol.exchange(),
                 &rows,
-                Some(&pin),
-                None,
+                &crate::key_vouch::Roots {
+                    pin: Some(pin.clone()),
+                    signer: None,
+                    ..Default::default()
+                },
                 RotationDebt::Settled,
             )
-            .check(DocType::Prose, doc.document_id, key, &kept)
+            .check(doc.document_id, key, &kept)
         };
         let seal = |previous: &DocumentKey, next: &DocumentKey, head, by: &Member| {
             pipeline::seal_link(doc.document_id, previous, next, head, &by.person.key).unwrap()
@@ -845,11 +872,14 @@ mod tests {
                 &LogRule::document(),
                 &carol.exchange(),
                 &rows,
-                Some(&pin),
-                None,
+                &crate::key_vouch::Roots {
+                    pin: Some(pin.clone()),
+                    signer: None,
+                    ..Default::default()
+                },
                 debt,
             )
-            .check(DocType::Prose, doc.document_id, key, &kept)
+            .check(doc.document_id, key, &kept)
         };
         let seal = |previous: &DocumentKey, next: &DocumentKey, head, by: &Member| {
             pipeline::seal_link(doc.document_id, previous, next, head, &by.person.key).unwrap()
@@ -937,12 +967,15 @@ mod tests {
                 &LogRule::document(),
                 &carol.exchange(),
                 &rows,
-                Some(&pin),
-                None,
+                &crate::key_vouch::Roots {
+                    pin: Some(pin.clone()),
+                    signer: None,
+                    ..Default::default()
+                },
                 RotationDebt::Settled,
             )
             .knowing(known);
-            vouch.check(DocType::Prose, doc.document_id, key, &kept)
+            vouch.check(doc.document_id, key, &kept)
         };
         let alone = std::slice::from_ref(&rotation);
         assert_eq!(
@@ -986,12 +1019,15 @@ mod tests {
                 &LogRule::document(),
                 &doc.alice.exchange(),
                 &rows,
-                Some(&pin),
-                None,
+                &crate::key_vouch::Roots {
+                    pin: Some(pin.clone()),
+                    signer: None,
+                    ..Default::default()
+                },
                 debt,
             );
             assert_eq!(
-                vouch.check(DocType::Prose, doc.document_id, &chosen, &[]),
+                vouch.check(doc.document_id, &chosen, &[]),
                 Err(KeyRefusal::Unvouched)
             );
         }
@@ -1019,50 +1055,115 @@ mod tests {
         );
     }
 
-    /// Holds `SYNC-229`. A Murmure document runs every check but the
-    /// inviter's: Murmure carries no invite link to pin one with.
+    /// Holds `SYNC-235`. A Murmure open names no pin of its own. The relay
+    /// roots a whole log at a creator of its own, and wraps a key of its own
+    /// for Bob. Every other check passes on its word.
+    ///
+    /// With no root, Bob refuses both that log and Alice's. A root of the
+    /// session that signed Alice's log admits hers and refuses the relay's.
+    /// The wrapper and the naming checks still run under a root.
     #[test]
-    fn a_murmure_document_skips_the_inviter_check_alone() {
+    fn a_murmure_log_no_root_of_the_session_signed_is_refused() {
         let doc = Shared::new();
-        let log = doc.log();
-        let unpinned = |members: &[http::MemberEntry], doc_type| {
+        let forged = Shared::created_by(doc.document_id, Member::new(0x66));
+        let rooted = |shared: &Shared, members: &[http::MemberEntry], key, session| {
             KeyVouch::of(
-                &log,
+                &shared.log(),
                 &LogRule::document(),
                 &doc.bob.exchange(),
                 members,
-                None,
-                None,
+                &Roots {
+                    session,
+                    ..Roots::default()
+                },
                 RotationDebt::Settled,
             )
-            .check(doc_type, doc.document_id, &doc.k0, &[])
+            .check(shared.document_id, key, &[])
         };
         let honest = doc.rows(&doc.k0, &doc.alice.xk);
-        assert_eq!(unpinned(&honest, DocType::Murmure), Ok(()));
-        for doc_type in [DocType::Prose, DocType::Trame, DocType::Toile] {
-            assert_eq!(unpinned(&honest, doc_type), Err(KeyRefusal::Unpinned));
-        }
+        let relayed = forged.rows(&forged.k0, &forged.alice.xk);
+        assert_eq!(
+            rooted(&doc, &honest, &doc.k0, Vec::new()),
+            Err(KeyRefusal::Unpinned)
+        );
+        assert_eq!(
+            rooted(&forged, &relayed, &forged.k0, Vec::new()),
+            Err(KeyRefusal::Unpinned)
+        );
+        let roots = vec![doc.alice_pin()];
+        assert_eq!(rooted(&doc, &honest, &doc.k0, roots.clone()), Ok(()));
+        assert_eq!(
+            rooted(&forged, &relayed, &forged.k0, roots.clone()),
+            Err(KeyRefusal::Unpinned)
+        );
+        // A root of Bob himself, who signed no entry, admits nothing.
+        let bob_root = vec![ambre_crypto::inviter_pin(&doc.bob.person.public())];
+        assert_eq!(
+            rooted(&doc, &honest, &doc.k0, bob_root),
+            Err(KeyRefusal::Unpinned)
+        );
         let relay_xk = ambre_crypto::MasterSeed::from_array([0x66; 32]).derive_exchange_key();
         let stranger = doc.rows(&doc.k0, &relay_xk);
         assert_eq!(
-            unpinned(&stranger, DocType::Murmure),
+            rooted(&doc, &stranger, &doc.k0, roots.clone()),
             Err(KeyRefusal::WrapperUnverified)
         );
         let chosen = DocumentKey::generate();
         let own = doc.rows(&chosen, &doc.bob.xk);
         assert_eq!(
-            KeyVouch::of(
-                &log,
-                &LogRule::document(),
-                &doc.bob.exchange(),
-                &own,
-                None,
-                None,
-                RotationDebt::Settled,
-            )
-            .check(DocType::Murmure, doc.document_id, &chosen, &[]),
+            rooted(&doc, &own, &chosen, roots),
             Err(KeyRefusal::Unvouched)
         );
+    }
+
+    /// Holds `SYNC-237`. Bob accepted the space log of Alice from her link.
+    /// Its members root his next Murmure opens: a direct message Carol
+    /// created opens on them, and not on Alice's pin alone. A log the relay
+    /// created stays refused. Once Alice revokes Carol, the log keeps her no
+    /// more, so her pin roots nothing.
+    #[test]
+    fn a_member_of_an_accepted_murmure_log_roots_the_next_open() {
+        let mut space = Shared::new();
+        let carol = Member::new(0x23);
+        let invite = space.entry(&carol, MembershipAct::Invite, Role::Editor);
+        space.entries.push(invite);
+        let opens = |shared: &Shared, session: Vec<FixedBytes<InviterPin>>| {
+            let rows = shared.rows(&shared.k0, &shared.alice.xk);
+            KeyVouch::of(
+                &shared.log(),
+                &LogRule::document(),
+                &shared.bob.exchange(),
+                &rows,
+                &Roots {
+                    session,
+                    ..Roots::default()
+                },
+                RotationDebt::Settled,
+            )
+            .check(shared.document_id, &shared.k0, &[])
+        };
+        assert_eq!(opens(&space, vec![space.alice_pin()]), Ok(()));
+        let members = space.log().member_pins();
+        let carol_pin = ambre_crypto::inviter_pin(&carol.person.public());
+        assert!(members.contains(&carol_pin), "{members:?}");
+
+        let direct = Shared::created_by(Id::<Document>::mint(), Member::new(0x23));
+        assert_eq!(
+            opens(&direct, vec![space.alice_pin()]),
+            Err(KeyRefusal::Unpinned)
+        );
+        assert_eq!(opens(&direct, members.clone()), Ok(()));
+        let forged = Shared::created_by(Id::<Document>::mint(), Member::new(0x66));
+        assert_eq!(opens(&forged, members), Err(KeyRefusal::Unpinned));
+
+        let revoke = space.entry(&carol, MembershipAct::Revoke, Role::Editor);
+        space.entries.push(revoke);
+        let kept = space.log().member_pins();
+        assert!(!kept.contains(&carol_pin), "{kept:?}");
+        assert_eq!(opens(&direct, kept), Err(KeyRefusal::Unpinned));
+        // A log with no anchor verifies nobody, so it roots nobody.
+        let unanchored = Log::walk(space.document_id, None, &space.entries, no_self_join);
+        assert!(unanchored.member_pins().is_empty());
     }
 
     /// Audit `N16`, at the open. A viewer of a space puts a key and an anchor
@@ -1089,11 +1190,10 @@ mod tests {
                 rule,
                 &shared.bob.exchange(),
                 &own,
-                None,
-                None,
+                &Roots::default(),
                 RotationDebt::Settled,
             )
-            .check(DocType::Murmure, shared.document_id, &shared.k0, &[])
+            .check(shared.document_id, &shared.k0, &[])
         };
         assert_eq!(joins(&doc, &rule), Ok(()));
         assert_eq!(joins(&forged, &rule), Err(KeyRefusal::RootOutsideSpace));
@@ -1185,11 +1285,10 @@ mod tests {
                 &LogRule::document(),
                 &own.exchange(),
                 members,
-                None,
-                signer.as_ref(),
+                &signed(signer),
                 RotationDebt::Settled,
             )
-            .check(DocType::Prose, doc.document_id, &doc.k0, &[])
+            .check(doc.document_id, &doc.k0, &[])
         };
         let honest = doc.rows(&doc.k0, &doc.alice.xk);
         assert_eq!(
@@ -1205,11 +1304,10 @@ mod tests {
                 &LogRule::document(),
                 &doc.bob.exchange(),
                 &rows,
-                None,
-                Some(&bob_key),
-                RotationDebt::Settled,
+                &signed(Some(bob_key)),
+                RotationDebt::Settled
             )
-            .check(DocType::Prose, doc.document_id, &forged.k0, &[]),
+            .check(doc.document_id, &forged.k0, &[]),
             Err(KeyRefusal::Unpinned)
         );
 

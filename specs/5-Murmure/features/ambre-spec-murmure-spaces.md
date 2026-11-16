@@ -189,7 +189,7 @@ and accepts a self-join.
 |---|---|
 | create a space, from the sidebar | a new space, with its creator as owner, listed in the sidebar |
 | create a public channel, from the space in the sidebar | an owner or an editor lists a new channel, which opens at once |
-| invite a user into a space, from the space in the sidebar | the owner names an email, and the user joins the space document once the key check passes |
+| invite a user into a space, from the space in the sidebar | the owner names an email, and the user joins the space document once the key check passes. The owner sends the invitee the link the invite copies, and the invitee opens Murmure from it (`ambre-spec-membership.md`, `SYNC-235`) |
 | the catalogue of a space | the public channels, grouped by category, joined ones marked |
 | join on a public channel | the channel opens, and joins the sidebar |
 | invite a guest into a channel | the guest reaches that channel alone |

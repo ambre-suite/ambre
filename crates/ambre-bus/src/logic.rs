@@ -160,6 +160,12 @@ pub enum LogicCommand<A = Infallible, P: ChannelPlane = NoChannels> {
         inviter: ambre_core::FixedBytes<ambre_core::InviterPin>,
     },
 
+    /// Pin the inviter that a Murmure invite link names (`SYNC-236`). The
+    /// Logic thread forwards it and reads nothing of it.
+    PinMurmureInviter {
+        inviter: ambre_core::FixedBytes<ambre_core::InviterPin>,
+    },
+
     /// Close the real-time sync session for a document. The Logic thread drops
     /// the in-memory state; the Sync thread unsubscribes and zeroizes the key.
     CloseDocument { document_id: Id<Document> },
@@ -322,6 +328,7 @@ impl<A, P: ChannelPlane> LogicCommand<A, P> {
                 document_id,
                 inviter,
             },
+            Self::PinMurmureInviter { inviter } => LogicCommand::PinMurmureInviter { inviter },
             Self::CloseDocument { document_id } => LogicCommand::CloseDocument { document_id },
             Self::ResendState { document_id } => LogicCommand::ResendState { document_id },
             Self::OpenChannel { channel_id } => LogicCommand::OpenChannel { channel_id },

@@ -247,6 +247,25 @@ impl SyncState {
         }
     }
 
+    /// What this client holds out of band to root the log of an open of
+    /// `document_id`, a document of `doc_type`, on. The roots of the session
+    /// count for a Murmure open alone (`SYNC-235`): a Prose, Trame or Toile
+    /// open stands on its own link (`SYNC-205`, `SYNC-210`).
+    pub(crate) fn roots(
+        &self,
+        document_id: Id<Document>,
+        doc_type: DocType,
+    ) -> crate::key_vouch::Roots {
+        crate::key_vouch::Roots {
+            pin: self.pinned_inviters.get(&document_id).copied(),
+            session: match doc_type {
+                DocType::Murmure => self.murmure_roots.iter().copied().collect(),
+                DocType::Trame | DocType::Toile | DocType::Prose => Vec::new(),
+            },
+            signer: self.author_pub_key(),
+        }
+    }
+
     /// The answer to a channel creation or a self-join, on the Sync loop.
     pub(crate) fn channel_answered(
         &self,

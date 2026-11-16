@@ -11,7 +11,7 @@ use super::{
     paint_figures, seal_figures, table, threshold, video_figures,
 };
 use crate::murmure::tests as murmure;
-use crate::page::{BOOT, Page};
+use crate::page::Page;
 use crate::relay::Relay;
 
 /// The space and the channel the senders and the receiver share.
@@ -155,19 +155,6 @@ async fn desktop_receiver(relay: Arc<Relay>, origin: &str) -> Page {
     Page::over(browser, origin.to_owned(), downloads, relay)
 }
 
-/// Invites `name` into the space from `page`, and confirms the first sight of their key.
-async fn invite(page: &Page, name: &str) {
-    murmure::prompt(
-        page,
-        ".murmure-space",
-        "murmure-space-invite",
-        &format!("{name}@dev.local"),
-    )
-    .await;
-    murmure::confirm_key(page).await;
-    page.wait_toast(&format!("Invited {name}")).await;
-}
-
 /// One line per sender: the widths it sends and what limits its encoder. A sender that lacks
 /// the top size starves the receiver, and the figures then understate its load.
 async fn senders_line(senders: &[Page]) -> Vec<String> {
@@ -307,18 +294,22 @@ async fn run(plan: &Plan) -> Outcome {
     .await;
     let first = senders.first().expect("one sender at least");
     let others = names.get(1..).unwrap_or_default();
-    match others.first() {
-        Some(second) => murmure::space_with_channel(first, SPACE, CHANNEL, second).await,
-        None => {
+    match (others.first(), senders.get(1)) {
+        (Some(second), Some(second_page)) => {
+            murmure::space_with_channel(first, SPACE, CHANNEL, second, second_page).await
+        }
+        _ => {
             murmure::prompt(first, ".murmure-spaces", "murmure-new-space", SPACE).await;
             murmure::prompt(first, ".murmure-space", "murmure-new-channel", CHANNEL).await;
             murmure::open(first, CHANNEL).await;
         }
     }
-    for name in others.iter().skip(1) {
-        invite(first, name).await;
+    for (name, page) in others.iter().zip(senders.iter().skip(1)).skip(1) {
+        let link = murmure::invite_into_space(first, name).await;
+        murmure::follow(page, &link).await;
     }
-    invite(first, &receiver_name).await;
+    // The receiver opens Murmure from its own invite link (`SYNC-236`).
+    let receiver_link = murmure::invite_into_space(first, &receiver_name).await;
     for page in &senders {
         murmure::open(page, CHANNEL).await;
         page.browser.script(murmure::RECORD, json!([])).await;
@@ -357,20 +348,12 @@ async fn run(plan: &Plan) -> Outcome {
 
     match &receiver {
         None => say(&format!(
-            "on the phone: open Murmure, open the channel `{CHANNEL}` of the space `{SPACE}`, \
-             press Join on its call message, then the camera button. Keep the screen on."
+            "on the phone: open {origin}{receiver_link}, open the channel `{CHANNEL}` of the \
+             space `{SPACE}`, press Join on its call message, then the camera button. Keep \
+             the screen on."
         )),
         Some(page) => {
-            page.browser
-                .goto(&format!("{origin}/murmure/{}", uuid::Uuid::now_v7()))
-                .await;
-            page.browser
-                .wait_for(
-                    "the Murmure sidebar",
-                    "return !!document.querySelector('.murmure-new-space-toggle');",
-                    BOOT,
-                )
-                .await;
+            murmure::follow(page, &receiver_link).await;
             murmure::open(page, CHANNEL).await;
             page.browser
                 .script(

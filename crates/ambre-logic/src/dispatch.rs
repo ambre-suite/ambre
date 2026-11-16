@@ -313,6 +313,9 @@ impl LogicState {
                 document_id,
                 inviter,
             }),
+            LogicCommand::PinMurmureInviter { inviter } => {
+                self.send_to_sync(SyncCommand::PinMurmureInviter { inviter })
+            }
             LogicCommand::OpenDocument {
                 document_id,
                 doc_type,
@@ -1649,6 +1652,28 @@ mod tests {
             }
             other => panic!("unexpected SyncCommand: {other:?}"),
         }
+    }
+
+    /// Holds `SYNC-236` on the Logic side: the pin of a Murmure link reaches
+    /// the Sync worker before the opens the Murmure page asks after it.
+    #[test]
+    fn a_murmure_inviter_reaches_sync_before_the_spaces_it_roots() {
+        let (mut state, _ui, sync_rx) = harness();
+        let pin = ambre_core::FixedBytes::<ambre_core::InviterPin>::from_array([8; 32]);
+        let space_id = Id::<ambre_core::id::Space>::mint();
+        state.handle_logic_command(LogicCommand::PinMurmureInviter { inviter: pin });
+        state.handle_logic_command(LogicCommand::OpenSpace { space_id });
+        let sent: Vec<SyncCommand> = std::iter::from_fn(|| sync_rx.try_recv().ok()).collect();
+        let pinned = sent.iter().position(
+            |cmd| matches!(cmd, SyncCommand::PinMurmureInviter { inviter } if *inviter == pin),
+        );
+        let opened = sent.iter().position(|cmd| {
+            matches!(cmd, SyncCommand::OpenDocument { document_id, .. } if *document_id == space_id.document_id())
+        });
+        assert!(
+            pinned.is_some_and(|p| opened.is_some_and(|o| p < o)),
+            "{sent:?}"
+        );
     }
 
     /// Holds `SYNC-209` on the Logic side: a pin reaches the Sync worker

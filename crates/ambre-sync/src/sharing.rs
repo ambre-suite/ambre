@@ -581,6 +581,7 @@ pub(crate) async fn invite_task<H: ShareHttp>(
                 // The invitee's link pins the key that signed the entry
                 // (`SYNC-208`).
                 inviter: ambre_crypto::inviter_pin(&p.author.public()),
+                invitee: ambre_crypto::inviter_pin(&invitee_key),
             });
         }
         // A rotation landed first: the copy wraps a key the relay refuses.
@@ -2221,10 +2222,17 @@ mod tests {
             SyncEvent::InviteSent {
                 display_name,
                 inviter,
+                invitee,
                 ..
             } => {
                 assert_eq!(display_name.as_str(), "Invitee");
                 assert_eq!(inviter, ambre_crypto::inviter_pin(&author().public()));
+                // The pin of the signing key the entry names for the invitee
+                // (`SYNC-237`).
+                assert_eq!(
+                    invitee,
+                    ambre_crypto::inviter_pin(&FixedBytes::from_array([0; 32]))
+                );
             }
             _ => panic!("unexpected event (want InviteSent)"),
         }

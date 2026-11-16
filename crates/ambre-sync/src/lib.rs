@@ -455,6 +455,11 @@ enum SyncEvent {
         /// the key was checked against (`SYNC-222`, `SYNC-223`).
         departed: Option<Seq<ambre_protocol::LogPlaces>>,
     },
+    /// An open accepted the log of a Murmure document. Its members become
+    /// roots of every later Murmure open of the session (`SYNC-237`).
+    RootsVouched {
+        roots: Vec<FixedBytes<ambre_core::InviterPin>>,
+    },
     /// The answer to a channel listing (`SyncCommand::OpenChannel`): its
     /// documents, or why the relay refused it.
     ChannelListed {
@@ -639,6 +644,9 @@ enum SyncEvent {
         /// The pin of the inviter's signing key, for the invite link
         /// (`SYNC-208`).
         inviter: FixedBytes<ambre_core::InviterPin>,
+        /// The pin of the signing key the entry names for the invitee. This
+        /// client signed it, so it roots the later Murmure opens (`SYNC-237`).
+        invitee: FixedBytes<ambre_core::InviterPin>,
     },
     /// Key rotation initiated by this client is finished: the server has the new
     /// `doc_key_enc` entries and the new key must be swapped locally.
@@ -1410,6 +1418,10 @@ pub struct SyncState {
     /// (`SYNC-205`). A pin outlives a close, so a later open of the document
     /// in the session checks the same log against it.
     pinned_inviters: HashMap<Id<Document>, FixedBytes<ambre_core::InviterPin>>,
+    /// The roots of every Murmure open of the session (`SYNC-235`). They hold
+    /// the inviter a Murmure link pinned (`SYNC-236`), and the members of
+    /// each Murmure log an open accepted (`SYNC-237`). The set only grows.
+    murmure_roots: HashSet<FixedBytes<ambre_core::InviterPin>>,
 
     /// Outbound updates produced before the session keys / document were ready.
     /// The user edits a restored cell in the milliseconds after F5, while
@@ -1497,6 +1509,7 @@ impl SyncState {
             doc_metadata: HashMap::new(),
             pending_opens: Vec::new(),
             pinned_inviters: HashMap::new(),
+            murmure_roots: HashSet::new(),
             pending_pre_session_updates: Vec::new(),
             session_nonces: HashMap::new(),
             light: HashMap::new(),
@@ -1702,6 +1715,9 @@ impl SyncState {
                 inviter,
             } => {
                 self.pinned_inviters.insert(document_id, inviter);
+            }
+            SyncCommand::PinMurmureInviter { inviter } => {
+                self.murmure_roots.insert(inviter);
             }
             SyncCommand::CloseDocument { document_id } => {
                 // A space closed before the relay held it creates no channel.

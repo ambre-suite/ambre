@@ -671,7 +671,7 @@ impl SyncState {
             // A snapshot this user confirmed alone is this user's own work, and
             // opens as it is (`AUTHOR-022` reads another user's).
             let own_key = self.author_pub_key();
-            let pin = self.pinned_inviters.get(&document_id).copied();
+            let roots = self.roots(document_id, doc_type);
             wasm_bindgen_futures::spawn_local(Self::open_from_relay(
                 RelayOpen {
                     api_base,
@@ -685,7 +685,7 @@ impl SyncState {
                     log_document,
                     own_key,
                     resume,
-                    pin,
+                    roots,
                 },
                 tx,
             ));
@@ -722,7 +722,7 @@ impl SyncState {
             log_document,
             own_key,
             resume,
-            pin,
+            roots,
         } = open;
         let members_url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
             .route(format!("/documents/{doc_id}/members"));
@@ -734,6 +734,7 @@ impl SyncState {
         let mut named_key = None;
         let mut vouch = None;
         let mut word = None;
+        let mut members = Vec::new();
         let answer = MembersAnswer::classify(
             http::get_json_opt_auth::<http::MembersResponse>(&members_url, auth.clone()).await,
         );
@@ -745,13 +746,13 @@ impl SyncState {
                     ek,
                     my_user_id,
                     &rule,
-                    pin.as_ref(),
-                    own_key.as_ref(),
+                    &roots,
                 ) {
                     Ok(o) => {
                         writers = o.writers;
                         departed = o.departed;
                         link_signers = o.link_signers;
+                        members = o.members;
                         named_key = o.named_key;
                         vouch = Some(o.vouch);
                         word = Some((o.word, o.heads));
@@ -834,15 +835,24 @@ impl SyncState {
             });
             return;
         }
-        if let Some(Err(refusal)) = vouch.map(|v| v.check(doc_type, log_document, &doc_key, &links))
-        {
-            tracing::warn!("Sync: open of {doc_id:?}: key refused: {refusal:?}");
-            let cause = refusal.open_failure();
-            let _ = tx.send(SyncEvent::OpenDocumentFailed {
-                document_id: doc_id,
-                cause,
-            });
-            return;
+        match vouch.map(|v| v.check(log_document, &doc_key, &links)) {
+            Some(Err(refusal)) => {
+                tracing::warn!("Sync: open of {doc_id:?}: key refused: {refusal:?}");
+                let cause = refusal.open_failure();
+                let _ = tx.send(SyncEvent::OpenDocumentFailed {
+                    document_id: doc_id,
+                    cause,
+                });
+                return;
+            }
+            // The members of an accepted log land before the open does, so
+            // no open the Logic thread asks after it misses them.
+            Some(Ok(())) => {
+                if let Some(vouched) = roots_vouched(doc_type, members) {
+                    let _ = tx.send(vouched);
+                }
+            }
+            None => {}
         }
         // Download the latest snapshot (when one exists) so the open
         // seeds from compacted state instead of replaying every delta
@@ -1001,9 +1011,11 @@ impl SyncState {
     /// The log walks from the anchor sealed with our copy (`SYNC-104`). A log
     /// that does not verify leaves the open as it is (`SYNC-111`). It walks
     /// under `rule`, the rule of the document's log (`SYNC-106`), as the log
-    /// of `document_id`: the `meta` of a document of a channel (`SYNC-229`). `pin` is the
-    /// inviter the document's invite link pinned (`SYNC-205`). An open with no
-    /// link reads the log against `signer`, this client's own key (`SYNC-210`).
+    /// of `document_id`: the `meta` of a document of a channel (`SYNC-229`).
+    /// `roots` is what this client holds out of band for the open. It holds
+    /// the inviter the invite link pinned (`SYNC-205`), the roots of the
+    /// session for a Murmure open (`SYNC-235`), and this client's own key
+    /// (`SYNC-210`).
     ///
     /// # Errors
     ///
@@ -1015,8 +1027,7 @@ impl SyncState {
         exchange_key: &x25519_dalek::StaticSecret,
         my_user_id: Option<Id<User>>,
         rule: &membership_log::LogRule,
-        pin: Option<&FixedBytes<ambre_core::InviterPin>>,
-        signer: Option<&FixedBytes<PublicKey>>,
+        roots: &crate::key_vouch::Roots,
     ) -> Result<OpenedMembers, (OpenFailure, String)> {
         let (doc_key, anchor) = Self::unwrap_anchored(exchange_key, &resp.members)
             .map_err(|error| (OpenFailure::KeyNotReceived, error.to_string()))?;
@@ -1043,12 +1054,12 @@ impl SyncState {
                 rule,
                 &crate::sharing::own_exchange_key(exchange_key),
                 &resp.members,
-                pin,
-                signer,
+                roots,
                 resp.rotation_owed,
             ),
             word: membership_log::SpaceWord::of(&log),
             heads: log.heads(),
+            members: log.member_pins(),
         })
     }
 
@@ -2013,6 +2024,19 @@ pub(crate) async fn upload_snapshot(
     Ok(snapshot_id)
 }
 
+/// What an open whose log passed adds to the roots of the session: the
+/// members the log keeps, for a Murmure open alone (`SYNC-237`). A Prose,
+/// Trame or Toile open stands on its own link, and roots nothing.
+fn roots_vouched(
+    doc_type: DocType,
+    members: Vec<FixedBytes<ambre_core::InviterPin>>,
+) -> Option<SyncEvent> {
+    match doc_type {
+        DocType::Murmure => Some(SyncEvent::RootsVouched { roots: members }),
+        DocType::Prose | DocType::Trame | DocType::Toile => None,
+    }
+}
+
 /// What the open of a document from the relay carries off the select loop.
 struct RelayOpen {
     api_base: crate::http::Url<crate::http::RelayHost>,
@@ -2032,8 +2056,9 @@ struct RelayOpen {
     own_key: Option<FixedBytes<PublicKey>>,
     /// The horizon of the local copy, when one exists (`RESID-010`).
     resume: Option<Seq<Relay>>,
-    /// The inviter the document's invite link pinned (`SYNC-205`).
-    pin: Option<FixedBytes<ambre_core::InviterPin>>,
+    /// What this client holds out of band to root the log on (`SYNC-205`,
+    /// `SYNC-210`, `SYNC-235`).
+    roots: crate::key_vouch::Roots,
 }
 
 /// What an open reads out of one members answer (`SYNC-092`).
@@ -2059,6 +2084,8 @@ pub(crate) struct OpenedMembers {
     pub word: membership_log::SpaceWord,
     /// The heads of the log the answer served (`SYNC-207`).
     pub heads: membership_log::ServedHeads,
+    /// The pins of the members the log keeps (`SYNC-237`).
+    pub members: Vec<FixedBytes<ambre_core::InviterPin>>,
 }
 
 /// What the members request says about a document being opened (`SYNC-040`).
@@ -2247,8 +2274,7 @@ mod tests {
             &my_xk,
             Some(me),
             &membership_log::LogRule::document(),
-            None,
-            None,
+            &crate::key_vouch::Roots::default(),
         )
         .unwrap();
         assert!(opened.doc_key.id() == doc_key.id());
@@ -2287,8 +2313,7 @@ mod tests {
             &my_xk,
             Some(me),
             &membership_log::LogRule::document(),
-            None,
-            None,
+            &crate::key_vouch::Roots::default(),
         );
         // The open fails as a key that has not reached this device
         // (`SYNC-173`).
@@ -2398,15 +2423,17 @@ mod tests {
                 &bob_xk,
                 Some(bob.id),
                 &membership_log::LogRule::document(),
-                Some(&alice_pin),
-                None,
+                &crate::key_vouch::Roots {
+                    pin: Some(alice_pin),
+                    ..Default::default()
+                },
             )
             .unwrap();
             SyncState::named_key_holds(document_id, &opened.doc_key, opened.named_key, &[])
                 .map_err(|(cause, _)| cause)?;
             opened
                 .vouch
-                .check(DocType::Prose, document_id, &opened.doc_key, &[])
+                .check(document_id, &opened.doc_key, &[])
                 .map_err(crate::key_vouch::KeyRefusal::open_failure)
         };
         let encoded = |entries: &[&ambre_protocol::MembershipEntry]| {
@@ -2541,15 +2568,18 @@ mod tests {
                 bob_xk,
                 Some(bob.id),
                 &membership_log::LogRule::document(),
-                Some(&alice_pin),
-                None,
+                &crate::key_vouch::Roots {
+                    pin: Some(alice_pin.clone()),
+                    signer: None,
+                    ..Default::default()
+                },
             )
             .unwrap();
             SyncState::named_key_holds(document_id, &opened.doc_key, opened.named_key, links)
                 .map_err(|(cause, _)| cause)?;
             opened
                 .vouch
-                .check(DocType::Prose, document_id, &opened.doc_key, links)
+                .check(document_id, &opened.doc_key, links)
                 .map_err(|_| OpenFailure::KeyNotReceived)
         };
         assert_eq!(opens(&k0, &[]), Err(OpenFailure::KeyNotReceived));
@@ -2653,6 +2683,11 @@ mod tests {
             row(&alice, &alice_xk, &alice_xk, &k1),
             row(&bob, &bob_xk, &alice_xk, &k1),
         ]);
+        // Bob opened the Murmure link Alice sent him (`SYNC-235`).
+        state.handle_command(ambre_bus::SyncCommand::PinMurmureInviter {
+            inviter: ambre_crypto::inviter_pin(&alice.public()),
+        });
+        let roots = state.roots(segment, DocType::Murmure);
         let opens = |resp: &http::MembersResponse, log_document: Id<Document>| {
             let opened = SyncState::opened_from_members(
                 resp,
@@ -2660,8 +2695,7 @@ mod tests {
                 &bob_xk,
                 Some(bob.id),
                 &membership_log::LogRule::document(),
-                None,
-                None,
+                &roots,
             )
             .unwrap();
             let links = crate::chain::signed_by_writers(vec![link.clone()], &opened.link_signers);
@@ -2669,7 +2703,7 @@ mod tests {
                 .map_err(|(cause, _)| cause)?;
             opened
                 .vouch
-                .check(DocType::Murmure, log_document, &opened.doc_key, &links)
+                .check(log_document, &opened.doc_key, &links)
                 .map_err(|_| OpenFailure::KeyNotReceived)?;
             Ok::<_, OpenFailure>(opened.writers)
         };
@@ -2728,6 +2762,71 @@ mod tests {
             document_id: segment,
         });
         assert_eq!(state.log_document(segment), segment);
+    }
+
+    /// Holds `SYNC-236` and `SYNC-237` on the Sync loop. The pin of a Murmure
+    /// link roots every Murmure open of the session, and no Prose open. The
+    /// members of an accepted Murmure log join the roots, while an accepted
+    /// Prose log adds none.
+    #[test]
+    fn a_murmure_link_and_an_accepted_murmure_log_root_the_murmure_opens_alone() {
+        let (sink, _rx) = LogicSink::channel();
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
+        let document_id = Id::<Document>::mint();
+        let pin = FixedBytes::<ambre_core::InviterPin>::from_array([4; 32]);
+        state.handle_command(ambre_bus::SyncCommand::PinMurmureInviter { inviter: pin });
+        assert_eq!(
+            state.roots(document_id, DocType::Murmure).session,
+            vec![pin]
+        );
+        for doc_type in [DocType::Prose, DocType::Trame, DocType::Toile] {
+            let roots = state.roots(document_id, doc_type);
+            assert!(roots.session.is_empty() && roots.pin.is_none());
+        }
+        let member = FixedBytes::<ambre_core::InviterPin>::from_array([5; 32]);
+        assert!(roots_vouched(DocType::Prose, vec![member]).is_none());
+        let Some(vouched) = roots_vouched(DocType::Murmure, vec![member]) else {
+            panic!("a Murmure log roots its members");
+        };
+        state.handle_sync_event(vouched);
+        let mut session = state.roots(document_id, DocType::Murmure).session;
+        session.sort();
+        let mut expected = vec![pin, member];
+        expected.sort();
+        assert_eq!(session, expected);
+
+        // An invite this client signed into a Murmure document roots its
+        // invitee. One into a Prose document roots nobody.
+        let invited = |state: &mut SyncState, doc_type, seed| {
+            let document_id = Id::<Document>::mint();
+            state.documents.insert(
+                document_id,
+                SyncDocumentState::new(
+                    document_id,
+                    DocumentKey::generate(),
+                    doc_type,
+                    crate::Existence::OnRelay,
+                ),
+            );
+            let invitee = FixedBytes::<ambre_core::InviterPin>::from_array([seed; 32]);
+            state.handle_sync_event(SyncEvent::InviteSent {
+                id: ambre_bus::next_request(),
+                document_id,
+                user_id: Id::<User>::mint(),
+                display_name: ambre_core::display_handle(&Id::<User>::mint()),
+                inviter: pin,
+                invitee,
+            });
+            state
+                .roots(document_id, DocType::Murmure)
+                .session
+                .contains(&invitee)
+        };
+        assert!(invited(&mut state, DocType::Murmure, 6));
+        assert!(!invited(&mut state, DocType::Prose, 7));
     }
 
     /// Holds `SYNC-205` at the open. The relay builds a whole log of its own.
@@ -2818,15 +2917,18 @@ mod tests {
                 &bob_xk,
                 Some(bob.id),
                 &membership_log::LogRule::document(),
-                pin,
-                Some(&bob.public()),
+                &crate::key_vouch::Roots {
+                    pin: pin.copied(),
+                    session: Vec::new(),
+                    signer: Some(bob.public()),
+                },
             )
             .unwrap();
             SyncState::named_key_holds(document_id, &opened.doc_key, opened.named_key, &[])
                 .map_err(|(cause, _)| cause)?;
             opened
                 .vouch
-                .check(DocType::Prose, document_id, &opened.doc_key, &[])
+                .check(document_id, &opened.doc_key, &[])
                 .map_err(crate::key_vouch::KeyRefusal::open_failure)
         };
         let (honest, alice_pin) = served_by(0x31);

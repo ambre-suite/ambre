@@ -920,6 +920,7 @@ impl SyncState {
                 tracing::error!("Sync: open document {document_id:?} failed: {cause}");
                 self.send_to_logic(LogicEvent::DocumentOpenFailed { document_id, cause });
             }
+            SyncEvent::RootsVouched { roots } => self.murmure_roots.extend(roots),
             SyncEvent::ChannelListed {
                 channel_id,
                 listed_in,
@@ -1217,7 +1218,17 @@ impl SyncState {
                 user_id,
                 display_name,
                 inviter,
+                invitee,
             } => {
+                // This client signed the invitee into a Murmure log, as an
+                // open would have verified them there (`SYNC-237`).
+                if self
+                    .documents
+                    .get(&document_id)
+                    .is_some_and(|doc| doc.doc_type == DocType::Murmure)
+                {
+                    self.murmure_roots.insert(invitee);
+                }
                 self.reply(
                     id,
                     RestEvent::InviteSent {
@@ -1840,8 +1851,7 @@ impl SyncState {
             .documents
             .get(&document_id)
             .and_then(|doc| doc.departed);
-        let pin = self.pinned_inviters.get(&document_id).copied();
-        let signer = self.author_pub_key();
+        let roots = doc_type.map(|doc_type| self.roots(document_id, doc_type));
         wasm_bindgen_futures::spawn_local(async move {
             let members_url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route(format!("/documents/{document_id}/members"));
@@ -1888,19 +1898,18 @@ impl SyncState {
             // The new key passes the checks of an open before it becomes
             // current (`SYNC-200`, `SYNC-201`, `SYNC-202`).
             let own = crate::sharing::own_exchange_key(&ek);
+            // A document no longer open checks nothing, as before.
+            let checked = roots.is_some();
             let vouch = crate::key_vouch::KeyVouch::of(
                 &log,
                 &rule,
                 &own,
                 &resp.members,
-                pin.as_ref(),
-                signer.as_ref(),
+                &roots.unwrap_or_default(),
                 resp.rotation_owed,
             )
             .knowing(departed);
-            if let Some(doc_type) = doc_type
-                && let Err(refusal) = vouch.check(doc_type, log_document, &new_doc_key, &links)
-            {
+            if checked && let Err(refusal) = vouch.check(log_document, &new_doc_key, &links) {
                 tracing::error!("Sync: KeyRotationRequired key refused: {refusal:?}");
                 // A payment the relay answered settled stays owed: the next
                 // edit tries again, and none seals meanwhile (`SYNC-223`).

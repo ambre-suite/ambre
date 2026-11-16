@@ -737,6 +737,20 @@ impl Log {
         !self.anchored || self.bound.get(key) == Some(&member)
     }
 
+    /// The pins of the signing keys of every member the log keeps: the roots
+    /// an accepted Murmure log adds to the session (`SYNC-237`). An
+    /// unanchored log verifies nobody, so it adds none.
+    pub(crate) fn member_pins(&self) -> Vec<FixedBytes<ambre_core::InviterPin>> {
+        if !self.anchored {
+            return Vec::new();
+        }
+        self.held
+            .values()
+            .filter(|held| held.present)
+            .map(|held| ambre_crypto::inviter_pin(&held.key))
+            .collect()
+    }
+
     /// The signing key of `member` while the log keeps them a member: the key a call
     /// checks a join against (`CALL-019`).
     pub(crate) fn present_key(&self, member: Id<User>) -> Option<FixedBytes<PublicKey>> {

@@ -154,10 +154,25 @@ pub fn inviter_in(fragment: &str) -> Option<FixedBytes<InviterPin>> {
         .and_then(|hex| FixedBytes::from_hex(hex).ok())
 }
 
+/// The inviter a Murmure page pins for the session: the pin its fragment
+/// carries (`SYNC-236`). A Murmure page binds no document, so the pin roots
+/// every Murmure open of the session (`SYNC-235`). Any other route pins the
+/// open it drives instead (`SYNC-209`), and answers `None` here.
+pub fn murmure_inviter(route: &Route, fragment: &str) -> Option<FixedBytes<InviterPin>> {
+    match route.doc() {
+        Some((DocType::Murmure, _)) => inviter_in(fragment),
+        Some((DocType::Prose | DocType::Trame | DocType::Toile, _)) | None => None,
+    }
+}
+
+/// The fragment of `window.location`, or `None` outside a browser.
+pub fn current_fragment() -> Option<String> {
+    web_sys::window()?.location().hash().ok()
+}
+
 /// The inviter's pin the fragment of `window.location` carries.
 pub fn current_inviter() -> Option<FixedBytes<InviterPin>> {
-    let hash = web_sys::window()?.location().hash().ok()?;
-    inviter_in(&hash)
+    inviter_in(&current_fragment()?)
 }
 
 /// The canonical path for a document route (for example `/trame/<uuid>`).
@@ -367,5 +382,27 @@ mod tests {
         assert_eq!(inviter_in(""), None);
         assert_eq!(inviter_in("#inviter=zz"), None);
         assert_eq!(inviter_in("#inviter=a5a5"), None);
+    }
+
+    /// Holds `SYNC-236` on the route: the link of a Murmure page pins its
+    /// inviter for the session. A document route, the landing route and a
+    /// fragment with no pin pin nothing here.
+    #[wasm_bindgen_test]
+    fn a_murmure_link_pins_its_inviter_for_the_session() {
+        let pin = FixedBytes::<InviterPin>::from_array([0x5A; 32]);
+        let fragment = invite_fragment(&pin);
+        let page = |doc_type| Route::Doc {
+            doc_type,
+            document_id: Id::<Document>::mint(),
+        };
+        assert_eq!(
+            murmure_inviter(&page(DocType::Murmure), &fragment),
+            Some(pin)
+        );
+        assert_eq!(murmure_inviter(&page(DocType::Murmure), ""), None);
+        for doc_type in [DocType::Prose, DocType::Trame, DocType::Toile] {
+            assert_eq!(murmure_inviter(&page(doc_type), &fragment), None);
+        }
+        assert_eq!(murmure_inviter(&Route::Landing, &fragment), None);
     }
 }

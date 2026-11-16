@@ -77,12 +77,35 @@ pub(crate) mod tests {
 
     /// Creates the space `space` with the public channel `channel`, which
     /// opens, then invites `invitee` into the space and confirms their key.
-    pub(crate) async fn space_with_channel(page: &Page, space: &str, channel: &str, invitee: &str) {
+    /// `invitee_page` then follows the invite link (`SYNC-236`).
+    pub(crate) async fn space_with_channel(
+        page: &Page,
+        space: &str,
+        channel: &str,
+        invitee: &str,
+        invitee_page: &Page,
+    ) {
         prompt(page, ".murmure-spaces", "murmure-new-space", space).await;
         // A channel asked for at once waits for its space to reach the relay
         // (`SYNC-189`), so one request opens it.
         prompt(page, ".murmure-space", "murmure-new-channel", channel).await;
         open(page, channel).await;
+        let link = invite_into_space(page, invitee).await;
+        follow(invitee_page, &link).await;
+    }
+
+    /// Invites `invitee` into the open space from `page`, and confirms their
+    /// key. Answers the path and the fragment of the invite link the page
+    /// copies: a Murmure page pinned to the inviter (`SYNC-236`).
+    pub(crate) async fn invite_into_space(page: &Page, invitee: &str) -> String {
+        page.browser
+            .script(
+                "navigator.clipboard.writeText = t => { \
+                   window.__beltInviteLink = t; return Promise.resolve(); }; \
+                 window.__beltInviteLink = null; return true;",
+                json!([]),
+            )
+            .await;
         prompt(
             page,
             ".murmure-space",
@@ -92,6 +115,21 @@ pub(crate) mod tests {
         .await;
         confirm_key(page).await;
         page.wait_toast(&format!("Invited {invitee}")).await;
+        page.invite_link().await
+    }
+
+    /// Opens Murmure on `page` from the invite `link`, as the invitee does
+    /// with the link the inviter sent. Its inviter roots every Murmure open
+    /// of the session (`SYNC-235`). Waits for the sidebar.
+    pub(crate) async fn follow(page: &Page, link: &str) {
+        page.browser.goto(&format!("{}{link}", page.origin)).await;
+        page.browser
+            .wait_for(
+                "the Murmure sidebar",
+                "return !!document.querySelector('.murmure-new-space-toggle');",
+                BOOT,
+            )
+            .await;
     }
 
     /// Clicks the sidebar entry `name` until the content shows its channel.
@@ -244,7 +282,7 @@ pub(crate) mod tests {
         let (ada, bob) = (user(), user());
         let ada_page = murmure(Arc::clone(&relay), &ada).await;
         let bob_page = murmure(Arc::clone(&relay), &bob).await;
-        space_with_channel(&ada_page, "Belt", "general", &bob).await;
+        space_with_channel(&ada_page, "Belt", "general", &bob, &bob_page).await;
         // The first list a channel shows is not news (`MURMURE-208`), so a
         // message waits in it before Bob opens it.
         send(&ada_page, CHANNEL, "First words").await;
@@ -305,7 +343,7 @@ pub(crate) mod tests {
         let (ada, bob) = (user(), user());
         let ada_page = murmure(Arc::clone(&relay), &ada).await;
         let bob_page = murmure(Arc::clone(&relay), &bob).await;
-        space_with_channel(&ada_page, "Belt", "general", &bob).await;
+        space_with_channel(&ada_page, "Belt", "general", &bob, &bob_page).await;
         open(&bob_page, "general").await;
         leave_pane(&bob_page).await;
 
@@ -365,7 +403,7 @@ pub(crate) mod tests {
         let (ada, bob) = (user(), user());
         let ada_page = murmure(Arc::clone(&relay), &ada).await;
         let bob_page = murmure(Arc::clone(&relay), &bob).await;
-        space_with_channel(&ada_page, "Belt", "general", &bob).await;
+        space_with_channel(&ada_page, "Belt", "general", &bob, &bob_page).await;
         send(&ada_page, CHANNEL, "A root to answer").await;
         open(&bob_page, "general").await;
 
@@ -442,7 +480,7 @@ pub(crate) mod tests {
         let (ada, bob) = (user(), user());
         let ada_page = murmure(Arc::clone(&relay), &ada).await;
         let bob_page = murmure(Arc::clone(&relay), &bob).await;
-        space_with_channel(&ada_page, "Belt", "general", &bob).await;
+        space_with_channel(&ada_page, "Belt", "general", &bob, &bob_page).await;
         open(&bob_page, "general").await;
         leave_pane(&ada_page).await;
 
@@ -577,16 +615,9 @@ pub(crate) mod tests {
         let ada_page = murmure(Arc::clone(&relay), &ada).await;
         let bob_page = murmure(Arc::clone(&relay), &bob).await;
         let carol_page = murmure(Arc::clone(&relay), &carol).await;
-        space_with_channel(&ada_page, "Belt", "general", &bob).await;
-        prompt(
-            &ada_page,
-            ".murmure-space",
-            "murmure-space-invite",
-            &format!("{carol}@dev.local"),
-        )
-        .await;
-        confirm_key(&ada_page).await;
-        ada_page.wait_toast(&format!("Invited {carol}")).await;
+        space_with_channel(&ada_page, "Belt", "general", &bob, &bob_page).await;
+        let link = invite_into_space(&ada_page, &carol).await;
+        follow(&carol_page, &link).await;
         open(&bob_page, "general").await;
         open(&carol_page, "general").await;
         // The pages of earlier tests of this process listed channels of their own, so the
@@ -914,16 +945,9 @@ pub(crate) mod tests {
         let ada_page = murmure(Arc::clone(&relay), &ada).await;
         let bob_page = murmure(Arc::clone(&relay), &bob).await;
         let carol_page = murmure(Arc::clone(&relay), &carol).await;
-        space_with_channel(&ada_page, "Belt", "general", &bob).await;
-        prompt(
-            &ada_page,
-            ".murmure-space",
-            "murmure-space-invite",
-            &format!("{carol}@dev.local"),
-        )
-        .await;
-        confirm_key(&ada_page).await;
-        ada_page.wait_toast(&format!("Invited {carol}")).await;
+        space_with_channel(&ada_page, "Belt", "general", &bob, &bob_page).await;
+        let link = invite_into_space(&ada_page, &carol).await;
+        follow(&carol_page, &link).await;
         open(&bob_page, "general").await;
         open(&carol_page, "general").await;
         let channel = last_channel();
@@ -989,7 +1013,7 @@ pub(crate) mod tests {
         let (ada, carol) = (user(), user());
         let ada_page = murmure(Arc::clone(&relay), &ada).await;
         let carol_page = murmure(Arc::clone(&relay), &carol).await;
-        space_with_channel(&ada_page, "Belt", "general", &carol).await;
+        space_with_channel(&ada_page, "Belt", "general", &carol, &carol_page).await;
         open(&carol_page, "general").await;
         let channel = last_channel();
         start_call(&ada_page, &channel).await;
@@ -1393,7 +1417,7 @@ pub(crate) mod tests {
         let (ada, bob) = (user(), user());
         let ada_page = murmure(Arc::clone(&relay), &ada).await;
         let bob_page = murmure(Arc::clone(&relay), &bob).await;
-        space_with_channel(&ada_page, "Belt", "general", &bob).await;
+        space_with_channel(&ada_page, "Belt", "general", &bob, &bob_page).await;
         open(&bob_page, "general").await;
         leave_pane(&ada_page).await;
         message_member(&bob_page, &ada).await;
@@ -1687,7 +1711,7 @@ pub(crate) mod tests {
         let (ada, bob) = (user(), user());
         let ada_page = murmure(Arc::clone(&relay), &ada).await;
         let bob_page = murmure(Arc::clone(&relay), &bob).await;
-        space_with_channel(&ada_page, "Belt", "general", &bob).await;
+        space_with_channel(&ada_page, "Belt", "general", &bob, &bob_page).await;
         open(&bob_page, "general").await;
         leave_pane(&ada_page).await;
         message_member(&bob_page, &ada).await;
@@ -1961,7 +1985,7 @@ pub(crate) mod tests {
         let (ada, bob) = (user(), user());
         let ada_page = murmure(Arc::clone(&relay), &ada).await;
         let bob_page = murmure(Arc::clone(&relay), &bob).await;
-        space_with_channel(&ada_page, "Belt", "general", &bob).await;
+        space_with_channel(&ada_page, "Belt", "general", &bob, &bob_page).await;
         open(&bob_page, "general").await;
         leave_pane(&ada_page).await;
         message_member(&bob_page, &ada).await;
@@ -2387,16 +2411,9 @@ pub(crate) mod tests {
         let ada_page = murmure(Arc::clone(&relay), &ada).await;
         let bob_page = murmure(Arc::clone(&relay), &bob).await;
         let carol_page = murmure(Arc::clone(&relay), &carol).await;
-        space_with_channel(&ada_page, "Belt", "general", &bob).await;
-        prompt(
-            &ada_page,
-            ".murmure-space",
-            "murmure-space-invite",
-            &format!("{carol}@dev.local"),
-        )
-        .await;
-        confirm_key(&ada_page).await;
-        ada_page.wait_toast(&format!("Invited {carol}")).await;
+        space_with_channel(&ada_page, "Belt", "general", &bob, &bob_page).await;
+        let link = invite_into_space(&ada_page, &carol).await;
+        follow(&carol_page, &link).await;
         open(&bob_page, "general").await;
         open(&carol_page, "general").await;
         open(&ada_page, "general").await;
@@ -2624,7 +2641,7 @@ pub(crate) mod tests {
         let (ada, bob) = (user(), user());
         let ada_page = murmure(Arc::clone(&relay), &ada).await;
         let bob_page = murmure(Arc::clone(&relay), &bob).await;
-        space_with_channel(&ada_page, "Belt", "general", &bob).await;
+        space_with_channel(&ada_page, "Belt", "general", &bob, &bob_page).await;
         open(&bob_page, "general").await;
         leave_pane(&ada_page).await;
         message_member(&bob_page, &ada).await;
@@ -2917,16 +2934,9 @@ pub(crate) mod tests {
         let ada_page = murmure(Arc::clone(&relay), &ada).await;
         let bob_page = murmure(Arc::clone(&relay), &bob).await;
         let carol_page = murmure(Arc::clone(&relay), &carol).await;
-        space_with_channel(&ada_page, "Belt", "general", &bob).await;
-        prompt(
-            &ada_page,
-            ".murmure-space",
-            "murmure-space-invite",
-            &format!("{carol}@dev.local"),
-        )
-        .await;
-        confirm_key(&ada_page).await;
-        ada_page.wait_toast(&format!("Invited {carol}")).await;
+        space_with_channel(&ada_page, "Belt", "general", &bob, &bob_page).await;
+        let link = invite_into_space(&ada_page, &carol).await;
+        follow(&carol_page, &link).await;
         open(&bob_page, "general").await;
         open(&carol_page, "general").await;
         open(&ada_page, "general").await;
@@ -3186,7 +3196,7 @@ pub(crate) mod tests {
         let (ada, bob) = (user(), user());
         let ada_page = murmure(Arc::clone(&relay), &ada).await;
         let bob_page = murmure(Arc::clone(&relay), &bob).await;
-        space_with_channel(&ada_page, "Belt", "general", &bob).await;
+        space_with_channel(&ada_page, "Belt", "general", &bob, &bob_page).await;
         open(&bob_page, "general").await;
         open(&ada_page, "general").await;
         for page in [&ada_page, &bob_page] {
@@ -3716,7 +3726,7 @@ pub(crate) mod tests {
         let ada_page = murmure(Arc::clone(&relay), &ada).await;
         let bob_page = murmure(Arc::clone(&relay), &bob).await;
         let mut screen = MovingScreen::start(ada_page.browser.engine());
-        space_with_channel(&ada_page, "Belt", "general", &bob).await;
+        space_with_channel(&ada_page, "Belt", "general", &bob, &bob_page).await;
         open(&bob_page, "general").await;
         open(&ada_page, "general").await;
         for page in [&ada_page, &bob_page] {
