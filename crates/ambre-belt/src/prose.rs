@@ -6,7 +6,7 @@ mod tests {
 
     use serde_json::{Value, json};
 
-    use crate::page::{Page, STEP, drag};
+    use crate::page::{BOOT, Page, STEP, drag};
     use crate::relay::Relay;
 
     /// The WebDriver codes of the keys these tests press.
@@ -528,6 +528,61 @@ mod tests {
         wait_counted(&bob, "8 characters").await;
         let text = wait_markdown(&bob, &["Hello Bob"]).await;
         assert_eq!(text.trim(), "Hello Bob", "{text}");
+    }
+
+    /// `SYNC-238`: an invitee opens the document from its link, then reloads
+    /// the page. The invitee opens it again from the document list, with no
+    /// link, and the open passes on the pin the first open kept. The same
+    /// user in a second browser kept no pin, and is refused (`SYNC-210`).
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build, chromedriver and the services; run just test-browser"
+    )]
+    async fn an_invitee_reopens_from_the_list_on_the_pin_its_link_proved() {
+        let alice = Page::new_document("prose").await;
+        write(&alice, "Hello").await;
+        wait_counted(&alice, "5 characters").await;
+        let name = format!("belt-{}", uuid::Uuid::new_v4());
+        let bob = Page::home(alice.relay()).await;
+        bob.sign_in(&name).await;
+        alice.share_with(&name).await;
+        open_document_of(&bob, &alice).await;
+        wait_counted(&bob, "5 characters").await;
+        let path = alice.invite_link().await;
+        let path = path.split('#').next().expect("a path").to_owned();
+
+        // The reload starts a new Sync worker, which holds no pin of its own.
+        bob.browser.goto(&format!("{}/", bob.origin)).await;
+        bob.browser
+            .wait_for(
+                "the document in the list",
+                "const d = document.querySelector('.ambre-doc-list .ambre-doc-main');                  if (!d) return false; d.click(); return true;",
+                BOOT,
+            )
+            .await;
+        bob.wait_canvas().await;
+        wait_counted(&bob, "5 characters").await;
+        let route = bob
+            .browser
+            .script("return location.pathname + location.hash;", json!([]))
+            .await;
+        assert_eq!(route, Value::String(path.clone()), "the open named a link");
+
+        let elsewhere = Page::home(alice.relay()).await;
+        elsewhere.sign_in(&name).await;
+        elsewhere
+            .browser
+            .goto(&format!("{}{path}", elsewhere.origin))
+            .await;
+        elsewhere
+            .browser
+            .wait_for(
+                "the refused open",
+                "return [...document.querySelectorAll('[role=status]')]                    .some(e => e.textContent.includes('The document could not open.'));",
+                BOOT,
+            )
+            .await;
     }
 
     /// `PROSE-132`: two users type at once, each in a paragraph of their own.

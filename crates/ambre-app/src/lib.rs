@@ -110,6 +110,9 @@ mod console_trace;
 mod doc_list;
 #[cfg(target_arch = "wasm32")]
 mod host;
+/// The inviters earlier opens proved, which the route sends ahead of an open.
+#[cfg(any(target_arch = "wasm32", test))]
+mod kept;
 #[cfg(target_arch = "wasm32")]
 mod landing;
 /// The local store the Main thread drives, within its budget (`RESID-002`).
@@ -1010,9 +1013,11 @@ pub fn main() {
     // Local persistence: open the IndexedDB store on this (Main) thread, where
     // the event loop is live. The store is shared with the switchboard below,
     // which saves snapshots Logic emits.
+    let kept_inviters = kept::KeptInviters::default();
     let mut persist = persist::PersistLink::open(
         draft_keeper.clone(),
         shell_outbox.clone(),
+        kept_inviters.clone(),
         vault.clone(),
         boot_doc_typed,
         logic_to_persist_rx,
@@ -1065,6 +1070,7 @@ pub fn main() {
         raf.clone(),
         current_doc,
         chrome_status,
+        kept_inviters,
     );
     let mut tab_title = tab_title::TabTitle::new(docs);
 

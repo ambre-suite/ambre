@@ -74,6 +74,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-235` | `FAIL` | Given a Murmure open, the client MUST refuse the key unless this client wrapped its own copy, or a valid entry of the log is signed by this client's own signing key or by a root of the session. | this spec section 3; `SYNC-205`, `SYNC-210`; audit `N15` | `ambre_sync::key_vouch::tests::a_murmure_log_no_root_of_the_session_signed_is_refused` -- a whole log the relay rooted at a creator of its own is refused with no root and with the root of the true inviter, the true log opens on that root alone, and a root that signed no entry admits nothing; `ambre_sync::updates::tests::a_channel_document_opens_under_the_log_and_links_of_its_meta` -- a segment opens under the root its Murmure link pinned | none | verified |
 | `SYNC-236` | `POST` | The pin a Murmure link carries MUST reach the Sync worker as a root of the session, before the spaces the page opens. | this spec section 3; `SYNC-235` | `ambre_app::route::tests::a_murmure_link_pins_its_inviter_for_the_session` -- a Murmure page reads the pin off its fragment, and a document route or the landing route pins nothing there; `ambre_logic::dispatch::tests::a_murmure_inviter_reaches_sync_before_the_spaces_it_roots` -- the Logic thread forwards the pin ahead of the open of a space; `ambre_sync::updates::tests::a_murmure_link_and_an_accepted_murmure_log_root_the_murmure_opens_alone` -- the pin roots every Murmure open, and no Prose, Trame or Toile open | none | verified |
 | `SYNC-237` | `POST` | A Murmure log that an open accepts, or that this client signs an invitee into, MUST make each member it keeps a root of the session. | this spec section 3; `SYNC-235` | `ambre_sync::key_vouch::tests::a_member_of_an_accepted_murmure_log_roots_the_next_open` -- the members of an accepted space log root a direct message one of them created, a member the log revoked roots nothing, and a log with no anchor roots nobody; `ambre_sync::updates::tests::a_murmure_link_and_an_accepted_murmure_log_root_the_murmure_opens_alone` -- an accepted Murmure log adds its members on the Sync loop, a Prose log adds none, and an invite into a Murmure document roots its invitee while one into a Prose document does not; `ambre_sync::sharing::tests::invite_success_posts_wrapped_key_and_emits_invitesent` -- the landed invite carries the pin of the key its entry names | none | verified |
+| `SYNC-238` | `FAIL` | Given an open of a document whose earlier open, in this session or an earlier one, proved the pin of its link, the client MUST refuse the key unless a valid entry of the log is signed by the key that pin names. | this spec section 3; `SYNC-205`, `SYNC-210`; `ambre-spec-residency.md` | `ambre_logic::dispatch::tests::a_proven_inviter_goes_to_the_local_store` -- the pin the Sync worker reports proved goes to the local store as a row of its document; `ambre_logic::persistence::wasm_tests::a_kept_inviter_outlives_the_page_and_is_never_replaced` -- wasm tier: the pin reads back on a later open of the browser's store, a user's trust pin beside it is no inviter, and the copy leaving leaves it; `ambre_app::kept::tests::an_open_waits_for_the_kept_pins` -- the kept pin goes ahead of the open; `ambre_sync::updates::tests::an_open_pinned_to_its_inviter_refuses_a_log_the_relay_rooted` -- the pin the open names refuses the log the relay rooted and admits the true one; `ambre_belt::prose::tests::an_invitee_reopens_from_the_list_on_the_pin_its_link_proved` -- browser tier: the invitee reloads and opens from the document list with no link, and the same user in a browser that kept no pin is refused | none | verified |
+| `SYNC-239` | `FAIL` | Given a link that pins another inviter than the one kept for its document, the client MUST keep the kept pin and check the open against it. | this spec section 3; `SYNC-238` | `ambre_app::kept::tests::a_kept_pin_wins_over_a_link_and_is_never_replaced` -- the kept pin goes ahead of the open in place of the link's, and a later proof replaces nothing; `ambre_logic::persistence::wasm_tests::a_kept_inviter_outlives_the_page_and_is_never_replaced` -- wasm tier: the store refuses a second row for the document | none | verified |
+| `SYNC-240` | `POST` | The Main thread MUST route no open of a document before the local store has answered with its kept pins. | this spec section 3; `SYNC-238` | `ambre_app::kept::tests::an_open_waits_for_the_kept_pins` -- an open waits until the store answers, and a store that never opens answers with none; `ambre_belt::prose::tests::an_invitee_reopens_from_the_list_on_the_pin_its_link_proved` -- browser tier: the first open after a reload passes on the kept pin | none | verified |
 
 ### 1.4 An ephemeral is attributed
 
@@ -127,7 +130,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 68 `verified`. Every pure transform holds, out of the browser: the wrap, the
+* **Verification.** 71 `verified`. Every pure transform holds, out of the browser: the wrap, the
   weak key, the pin, the invitee, the role and the log walk. What is loose is the branches that only
   run against a live relay.
 ---
@@ -321,10 +324,29 @@ link closes that for the open it drives:
 
 The worker keeps the pin for the session, so a reopen and a rotation check the same log.
 
-An open with no link fails closed (`SYNC-210`). It passes only on a copy this client wrapped
-itself, or on a log with a valid entry its own signing key signed. A creator signed the
-creation. The relay can forge neither. Any other open, from the document list or a share notice,
-is refused until the user opens the invite link.
+**The pin outlives the session.** The first open whose log proves the pin of a link keeps it
+(`SYNC-238`):
+
+1. the Sync worker reports the pin to the Logic thread, which hands it to the local store;
+2. the store keeps it among the trust pins, in a row keyed by the document. The row stays in the
+   clear like the other bookkeeping rows (`ambre-spec-residency.md` section 3);
+3. at the next page, the Main thread reads every kept pin back, and routes no open until the
+   store answers (`SYNC-240`). A store that never opens answers with none;
+4. the Main thread hands the kept pin to the Sync worker ahead of each open of its document, as
+   it hands a link's. The open then checks the log against it.
+
+The row never leaves the device, and it names a document the relay already knows. A pin the
+relay could choose is worth nothing, so the store keeps only a pin the log proved.
+
+**A link that names another inviter.** A kept pin is never replaced (`SYNC-239`). On a document
+that keeps a pin, the Main thread hands the kept pin to the open in place of the link's. The kept
+pin already proves the anchor, so the link of a second inviter adds no proof. A link the relay or
+a stranger crafted thus costs nothing, and never moves the anchor the open checks.
+
+An open with no link and no kept pin fails closed (`SYNC-210`). It passes only on a copy this
+client wrapped itself, or on a log with a valid entry its own signing key signed. A creator signed
+the creation. The relay can forge neither. Any other open, from the document list or a share
+notice, is refused until the user opens the invite link once on this device.
 
 **A document of a channel.** A segment, an amendments document and a thread serve the rows, the
 links and the log of the channel's `meta` (`SRV-272`). The links name the `meta`, and so do the
@@ -472,6 +494,9 @@ authority: the role here hides what the relay would refuse anyway.
 | A revoke is a signed entry | signing the invites alone | the relay could serve an old invite again after a revoke, and the member would reappear verified |
 | The first entry travels with the wrapped key | fetching the first entry from the relay | the relay could root a whole log at a creator of its own making, and every entry would check |
 | The invite link pins the inviter's signing key | keeping the anchor of the first open, trust on first use | the first open is the one the relay attacks: a relay that wraps the first copy chooses the anchor the client then keeps, and the attack stays invisible for the life of the document |
+| The proved pin is kept in the local store, per document | a sealed copy of the pin kept on the relay | the relay could withhold it or serve an older one, and a new route would carry an object the relay stores for each member. The local store already holds the trust pins, and a lost row fails closed (`SYNC-210`) |
+| The kept pin wins over the link of a second inviter | replacing the kept pin with the newest link's | a link the relay or a stranger crafted would erase the one proof the relay cannot forge, and the next open would trust the log the new pin anchors |
+| The kept pin wins over the link of a second inviter | checking the log against both pins | it costs code in the Sync worker, which holds no room under its ceiling, and adds no proof: the kept pin already fixes the anchor |
 | The pin rides in the fragment of the link | a query parameter, or a field the share notice carries | the browser sends a query to the relay, and the relay writes the notice: either way the relay could swap the pin it is meant to be checked against |
 | Membership is the relay's table | membership as a CRDT container inside the document | adding a member would take a delta, so the relay could not answer "who may read this" without opening the document, and no invite could reach someone who cannot yet decrypt |
 | An entry signs the member's exchange key | a certificate each user signs over their own exchange key, served by the relay | it adds a second signed object, a column and a route, for the binding the entry already carries. The entry that adds a member already names the signing key, and an invite already holds the confirmed exchange key |
@@ -496,10 +521,15 @@ authority: the role here hides what the relay would refuse anyway.
   unwrap, the directory and the role. The host tier reaches its pure transforms alone.
 * **A document created before the log has no first entry.** Its rows stay unverified for ever, and
   no rule states how such a document gains a log.
-* **An invitee needs the link at every session.** An open with no link is refused (`SYNC-210`),
-  and the pin lives for one session alone. An invitee who signed no entry and holds no copy of
-  its own wrapping opens from the document list, or from a share notice, nowhere. No rule yet
-  keeps the pin, or the anchor it proved, across sessions.
+* **The kept pin lives on one device.** The local store keeps it (`SYNC-238`), so a second
+  device, or a cleared browser, needs the link again. Nothing carries the pin from one device to
+  another.
+* **The kept pin is shared by the accounts of one browser.** The row is keyed by the document
+  alone. A second account that opens the document checks the log against the first account's
+  pin. That pin is true of the log, so the check stays sound. It also admits that account where
+  `SYNC-210` alone would refuse it.
+* **A tab opened before the kept pin was written does not read it.** The store is read once per
+  page (`SYNC-240`), so another tab's first open of the document stays on its own link.
 * **A member's exchange key stands on the relay's word.** The log signs a member's signing key,
   never the exchange key, so the wrapper check reads the exchange key off the relay's row.
 * **A writer removed from the log still names keys.** A link counts when its signer held a writing

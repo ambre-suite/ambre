@@ -16,6 +16,7 @@ use ambre_logic::PersistWrite;
 use ambre_logic::app::LogicCommand;
 
 use crate::host::DraftKeeper;
+use crate::kept::KeptInviters;
 use crate::local_store::LocalStore;
 use crate::outbox::ShellOutbox;
 use crate::vault::Vault;
@@ -52,6 +53,9 @@ pub(crate) struct PersistLink {
     /// The writes the store has not taken yet.
     waiting: Vec<(Id<Document>, PersistWrite)>,
     to_logic: ShellOutbox,
+    /// The inviters earlier opens proved, which the store reads back and an
+    /// open's proof adds to (`SYNC-238`).
+    kept: KeptInviters,
 }
 
 impl PersistLink {
@@ -59,6 +63,7 @@ impl PersistLink {
     pub(crate) fn open(
         keeper: DraftKeeper,
         to_logic: ShellOutbox,
+        kept: KeptInviters,
         vault: Vault,
         boot_doc: Option<(DocType, Id<Document>)>,
         writes: Receiver<(Id<Document>, PersistWrite)>,
@@ -70,7 +75,9 @@ impl PersistLink {
             writes,
             waiting: Vec::new(),
             to_logic,
+            kept: kept.clone(),
         };
+        let kept_read = kept;
         let store_slot = Rc::clone(&link.store);
         let gone = Rc::clone(&link.gone);
         let full_tx = link.to_logic.clone();
@@ -81,14 +88,19 @@ impl PersistLink {
                 Ok(Err(e)) => {
                     tracing::warn!("Persistence: store unavailable ({e})");
                     gone.set(Opening::Never);
+                    kept_read.read(Vec::new());
                     return;
                 }
                 Err(_) => {
                     tracing::warn!("Persistence: open channel dropped");
                     gone.set(Opening::Never);
+                    kept_read.read(Vec::new());
                     return;
                 }
             };
+            // The opens wait for the pins earlier sessions proved, so they
+            // are read before anything else (`SYNC-240`).
+            kept_read.read(store.load_inviters().await.unwrap_or_default());
             keeper.store_opened(store.clone());
             let local = LocalStore::open(store, full_tx, vault, boot_doc).await;
             // The page's document comes back from its copy once a session
@@ -111,6 +123,13 @@ impl PersistLink {
     /// next snapshot. Best-effort; the put() commits as the event loop idles.
     pub(crate) fn drain(&mut self) {
         self.waiting.extend(self.writes.try_iter());
+        // A pin an open proved is the kept one from now on, before the store
+        // takes it (`SYNC-238`).
+        for (document_id, write) in &self.waiting {
+            if let PersistWrite::KeepInviter(pin) = write {
+                self.kept.keep(*document_id, *pin);
+            }
+        }
         if self.gone.get() == Opening::Never {
             // A store that never opens holds no copy: each reopen waiting on
             // one is answered empty, and fetches from the relay (`RESID-012`).

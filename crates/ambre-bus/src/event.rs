@@ -173,6 +173,13 @@ pub enum LogicEvent {
         members: Vec<MemberInfo>,
     },
 
+    /// The log of an open proved the pin of the document's invite link: the
+    /// local store keeps it for the sessions after (`SYNC-238`).
+    InviterProven {
+        document_id: Id<Document>,
+        inviter: ambre_core::FixedBytes<ambre_core::InviterPin>,
+    },
+
     /// Initial hydration of a freshly opened document is complete. The Sync thread has
     /// fetched members and the latest snapshot (if any), and emitted it ahead of this
     /// event. Fires exactly once per open, for both the snapshot and the empty/brand-new

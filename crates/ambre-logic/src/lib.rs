@@ -861,6 +861,9 @@ pub enum PersistWrite<
     /// counting it. A channel whose log roots outside its space left it, so
     /// no later open finds it (`SYNC-233`).
     Erase,
+    /// The inviter an open of the document proved, kept for the sessions
+    /// after (`SYNC-238`). A row outside the copy: no eviction reaches it.
+    KeepInviter(FixedBytes<ambre_core::InviterPin>),
 }
 
 /// A [`PersistWrite`] as the store receives it: its snapshot or delta is a
@@ -1633,7 +1636,8 @@ mod pass_tests {
                 | PersistWrite::Shown
                 | PersistWrite::Hidden
                 | PersistWrite::Sent
-                | PersistWrite::Erase => {}
+                | PersistWrite::Erase
+                | PersistWrite::KeepInviter(_) => {}
             }
         }
         let (to_persist, _persist) = test_link();

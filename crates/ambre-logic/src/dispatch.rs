@@ -662,6 +662,12 @@ impl LogicState {
                 self.store_sent(document_id);
             }
 
+            // The local store keeps the pin the open proved (`SYNC-238`).
+            LogicEvent::InviterProven {
+                document_id,
+                inviter,
+            } => self.send_to_persist(document_id, PersistWrite::KeepInviter(inviter)),
+
             // Initial hydration complete: any snapshot was applied by the
             // preceding RemoteSnapshot arm (queue order is preserved), so the
             // UI can dismiss its loading overlay.
@@ -1673,6 +1679,26 @@ mod tests {
         assert!(
             pinned.is_some_and(|p| opened.is_some_and(|o| p < o)),
             "{sent:?}"
+        );
+    }
+
+    /// Holds `SYNC-238` on the Logic side: a pin an open proved goes to the
+    /// local store as a row of its document.
+    #[test]
+    fn a_proven_inviter_goes_to_the_local_store() {
+        let (to_ui, _ui) = test_link();
+        let (to_sync, _sync) = test_link();
+        let (to_persist, persist_rx) = test_link();
+        let mut state = LogicState::new(to_ui, to_sync, to_persist);
+        let document_id = Id::<Document>::mint();
+        let pin = ambre_core::FixedBytes::<ambre_core::InviterPin>::from_array([7; 32]);
+        state.handle_logic_event(LogicEvent::InviterProven {
+            document_id,
+            inviter: pin,
+        });
+        assert_eq!(
+            persist_rx.try_iter().collect::<Vec<_>>(),
+            [(document_id, PersistWrite::KeepInviter(pin))]
         );
     }
 

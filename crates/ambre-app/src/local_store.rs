@@ -177,6 +177,7 @@ impl LocalStore {
             PersistWrite::ReadBack { doc_type } => {
                 self.read_back(id, doc_type, ReadBack::Requested);
             }
+            PersistWrite::KeepInviter(inviter) => self.inner.store.save_inviter(id, &inviter),
             PersistWrite::Shown | PersistWrite::Hidden => {}
             // The copy leaves whole, with what the quota held back of it
             // (`SYNC-233`).

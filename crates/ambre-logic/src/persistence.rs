@@ -98,9 +98,11 @@ enum IdbStore {
     /// bytes and then the nonce, so what a session left unsent travels at the
     /// next open (`AUTHOR-028`).
     Sessions,
-    /// TOFU pinned exchange keys, keyed by [`IdbKey::user`]: the 32 raw bytes
-    /// of the X25519 key confirmed on first invitation
-    /// (`ambre-spec-key-verification.md`).
+    /// The trust pins. A TOFU pinned exchange key is keyed by
+    /// [`IdbKey::user`]: the 32 raw bytes of the X25519 key confirmed on
+    /// first invitation (`ambre-spec-key-verification.md`). The inviter an
+    /// open proved is keyed by [`IdbKey::inviter`]: the 32 bytes of its pin
+    /// (`SYNC-238`). No eviction of a copy reaches either.
     TrustedKeys,
     /// What the store's ledger knows of each document it holds, keyed by
     /// [`IdbKey::document`]: one [`Meta`] row, read back at boot
@@ -151,6 +153,29 @@ impl IdbKey {
     /// A user's row: its id as 32 lowercase hex digits.
     fn user(id: Id<User>) -> Self {
         Self(id.to_simple())
+    }
+
+    /// The row of the inviter kept for `document`: the prefix `inviter:`,
+    /// which no user's 32 hex digits start with, then the document's key
+    /// (`SYNC-238`). [`IdbKey::inviters`] and [`IdbKey::inviter_of`] read
+    /// the same prefix.
+    fn inviter(document: Id<Document>) -> Self {
+        Self(format!("inviter:{}", Self::document(document)))
+    }
+
+    /// Every key [`IdbKey::inviter`] writes, and no other: from the prefix
+    /// up to the character after its colon.
+    fn inviters() -> Result<web_sys::IdbKeyRange, JsValue> {
+        web_sys::IdbKeyRange::bound(
+            &JsValue::from_str("inviter:"),
+            &JsValue::from_str("inviter;"),
+        )
+    }
+
+    /// The document whose kept inviter IndexedDB keyed `key`, as
+    /// [`IdbKey::inviter`] wrote it. `None` for any other key.
+    fn inviter_of(key: &JsValue) -> Option<Id<Document>> {
+        Self::document_of(key.as_string()?.strip_prefix("inviter:")?)
     }
 
     /// A key no other delta of `document` holds. It is the document's key,
@@ -413,6 +438,87 @@ impl PersistenceStore {
                     })
                     .collect();
                 tx_ok.send(metas);
+            });
+        txn.set_oncomplete(Some(on_complete.as_ref().unchecked_ref()));
+        on_complete.forget();
+        let on_abort = Closure::<dyn FnMut(web_sys::Event)>::new(move |_event: web_sys::Event| {
+            tx.send(Vec::new());
+        });
+        txn.set_onabort(Some(on_abort.as_ref().unchecked_ref()));
+        on_abort.forget();
+        rx
+    }
+
+    /// Keep `inviter` as the inviter an open proved for `document_id`
+    /// (`SYNC-238`, fire-and-forget). A row already there stays: the add
+    /// fails on it, and no later pin replaces the kept one (`SYNC-239`).
+    pub fn save_inviter(
+        &self,
+        document_id: Id<Document>,
+        inviter: &FixedBytes<ambre_core::InviterPin>,
+    ) {
+        let key = IdbKey::inviter(document_id);
+        if let Err(e) = self
+            .db
+            .transaction_with_str_and_mode(
+                IdbStore::TrustedKeys.name(),
+                IdbTransactionMode::Readwrite,
+            )
+            .and_then(|txn| txn.object_store(IdbStore::TrustedKeys.name()))
+            .and_then(|store| {
+                store.add_with_key(Uint8Array::from(inviter.as_slice()).as_ref(), &key.to_js())
+            })
+        {
+            tracing::warn!("Persistence: inviter add failed for {key}: {e:?}");
+        }
+    }
+
+    /// Load every kept inviter, keyed by its document (`SYNC-238`). Resolves
+    /// to an empty list when the read failed; a row that is not a pin is
+    /// skipped.
+    pub fn load_inviters(
+        &self,
+    ) -> oneshot::Receiver<Vec<(Id<Document>, FixedBytes<ambre_core::InviterPin>)>> {
+        let (tx, rx) = answer();
+        let Ok(txn) = self.db.transaction_with_str(IdbStore::TrustedKeys.name()) else {
+            tx.send(Vec::new());
+            return rx;
+        };
+        let requests = IdbKey::inviters().and_then(|range| {
+            let store = txn.object_store(IdbStore::TrustedKeys.name())?;
+            Ok((
+                store.get_all_keys_with_key(&range)?,
+                store.get_all_with_key(&range)?,
+            ))
+        });
+        let Ok((keys, rows)) = requests else {
+            tx.send(Vec::new());
+            return rx;
+        };
+        // Both requests list the rows in key order, so the transaction's
+        // `complete` pairs them.
+        let tx_ok = tx.clone();
+        let on_complete =
+            Closure::<dyn FnMut(web_sys::Event)>::new(move |_event: web_sys::Event| {
+                let as_array = |r: &web_sys::IdbRequest| {
+                    r.result()
+                        .ok()
+                        .and_then(|v| v.dyn_into::<js_sys::Array>().ok())
+                };
+                let (Some(keys), Some(rows)) = (as_array(&keys), as_array(&rows)) else {
+                    tx_ok.send(Vec::new());
+                    return;
+                };
+                let inviters = keys
+                    .iter()
+                    .zip(rows.iter())
+                    .filter_map(|(key, row)| {
+                        let id = IdbKey::inviter_of(&key)?;
+                        let row = row.dyn_into::<Uint8Array>().ok()?.to_vec();
+                        Some((id, FixedBytes::from_slice(&row).ok()?))
+                    })
+                    .collect();
+                tx_ok.send(inviters);
             });
         txn.set_oncomplete(Some(on_complete.as_ref().unchecked_ref()));
         on_complete.forget();
@@ -1224,6 +1330,43 @@ mod wasm_tests {
             store.load_trusted_key(bob).await.unwrap(),
             Some(pin([0xB1; 32]))
         );
+    }
+
+    /// Holds `SYNC-238` and `SYNC-239` at rest. A kept inviter reads back
+    /// on a later open of the store. A second pin for the same document
+    /// leaves the first, and the copy leaving the store leaves the pin.
+    #[wasm_bindgen_test]
+    async fn a_kept_inviter_outlives_the_page_and_is_never_replaced() {
+        let name = "ambre-test-inviters";
+        delete_db(name).await;
+        let open = || async {
+            PersistenceStore::open_named(DbName(name))
+                .await
+                .expect("channel")
+                .expect("store opens")
+        };
+        let store = open().await;
+        assert_eq!(store.load_inviters().await.unwrap(), Vec::new());
+        let (doc, other) = (
+            Id::<Document>::from_bytes([0x11; 16]),
+            Id::<Document>::from_bytes([0x22; 16]),
+        );
+        let pin = FixedBytes::<ambre_core::InviterPin>::from_array;
+        store.save_inviter(doc, &pin([0xA1; 32]));
+        store.save_inviter(other, &pin([0xB1; 32]));
+        store.save_inviter(doc, &pin([0xA2; 32]));
+        store.delete_snapshot(doc);
+        // A user's pin beside them is no inviter.
+        let user = Id::<User>::from_bytes([0x33; 16]);
+        store.save_trusted_key(
+            user,
+            &FixedBytes::<ambre_core::ExchangePublicKey>::from_array([0xC1; 32]),
+        );
+        // A later page opens the store afresh.
+        let later = open().await;
+        let mut kept = later.load_inviters().await.unwrap();
+        kept.sort_by_key(|(id, _)| *id.as_bytes());
+        assert_eq!(kept, vec![(doc, pin([0xA1; 32])), (other, pin([0xB1; 32]))]);
     }
 
     #[wasm_bindgen_test]

@@ -14,6 +14,7 @@ use ambre_logic::app::LogicCommand;
 use leptos::prelude::*;
 
 use crate::host::DocSwitcher;
+use crate::kept::{KeptInviters, OpenPin};
 use crate::outbox::ShellOutbox;
 use crate::route::{self, Route};
 use crate::{ChromeStatus, Slot};
@@ -25,6 +26,9 @@ pub(crate) struct RouteBinding {
     to_logic: ShellOutbox,
     raf: ambre_canvas::RafControl,
     current_doc: RwSignal<Option<Id<Document>>>,
+    /// The inviters earlier opens proved, read back from the local store
+    /// (`SYNC-238`).
+    kept: KeptInviters,
     chrome_status: RwSignal<ChromeStatus>,
     prev: Option<Route>,
 }
@@ -37,12 +41,14 @@ impl RouteBinding {
         raf: ambre_canvas::RafControl,
         current_doc: RwSignal<Option<Id<Document>>>,
         chrome_status: RwSignal<ChromeStatus>,
+        kept: KeptInviters,
     ) -> Self {
         Self {
             switcher,
             to_logic,
             raf,
             current_doc,
+            kept,
             chrome_status,
             prev: None,
         }
@@ -54,6 +60,17 @@ impl RouteBinding {
         let cur_route = route::current();
         let cur_doc = cur_route.doc();
         if let Some(step) = route::step(self.prev.as_ref(), &cur_route) {
+            // The open waits for the pins the local store kept, so it checks
+            // the kept one (`SYNC-240`). The step runs again next frame.
+            let pin = match step.open {
+                Some((_, document_id)) => {
+                    match self.kept.pin(document_id, route::current_inviter()) {
+                        OpenPin::Waiting => return cur_doc,
+                        OpenPin::Ready(pin) => pin,
+                    }
+                }
+                None => None,
+            };
             // A Murmure link pins its inviter for every Murmure open of the
             // session, ahead of the spaces the page asks for (`SYNC-236`).
             if let Some(inviter) = route::current_fragment()
@@ -69,7 +86,8 @@ impl RouteBinding {
             if let Some((doc_type, document_id)) = step.open {
                 // An invite link pins its inviter before the open it drives,
                 // so the Sync worker checks that open against it (`SYNC-209`).
-                if let Some(inviter) = route::current_inviter() {
+                // A pin the local store kept wins over it (`SYNC-239`).
+                if let Some(inviter) = pin {
                     self.to_logic.send(LogicCommand::PinInviter {
                         document_id,
                         inviter,

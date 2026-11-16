@@ -175,7 +175,8 @@ request over the service plane, so the Main thread moves sealed bytes it cannot 
 (`RESID-026`). A row that fails to open deletes its copy, which then counts as missing
 (`RESID-027`).
 
-The bookkeeping rows stay in the clear: sessions, ledger entries and trust pins. They carry no
+The bookkeeping rows stay in the clear: sessions, ledger entries and trust pins. The
+inviter pins an open proved are trust pins too (`SYNC-238`). They carry no
 content, and their keys are document and user ids the relay already sees. Before sign-in no key
 exists, so a cold boot offline opens no local copy. That is the accepted cost of a key never
 stored.

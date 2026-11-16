@@ -239,6 +239,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
         LogicEvent::RemoteEphemeral { .. } => "RemoteEphemeral",
         LogicEvent::PeerLeft { .. } => "PeerLeft",
         LogicEvent::MembersChanged { .. } => "MembersChanged",
+        LogicEvent::InviterProven { .. } => "InviterProven",
         LogicEvent::DocumentReady { .. } => "DocumentReady",
         LogicEvent::ConnectionStatus { .. } => "ConnectionStatus",
         LogicEvent::Activity { .. } => "Activity",
@@ -291,7 +292,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 
 /// The number of arms of `sync_variant` and of `event_variant`.
 const SYNC_VARIANTS: usize = 49;
-const EVENT_VARIANTS: usize = 62;
+const EVENT_VARIANTS: usize = 63;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
 /// field. Each arm of the two name functions needs a sample here, and the
@@ -589,6 +590,10 @@ fn every_envelope_variant_roundtrips_through_postcard() {
                 role: Role::Editor,
                 standing: MemberStanding::Verified,
             }],
+        },
+        LogicEvent::InviterProven {
+            document_id: doc,
+            inviter: FixedBytes::from_array([8; 32]),
         },
         LogicEvent::DocumentReady {
             document_id: doc,

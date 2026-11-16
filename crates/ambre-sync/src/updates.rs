@@ -234,9 +234,7 @@ impl SyncState {
             return;
         }
         let Some(tx) = self.event_tx.clone() else {
-            tracing::info!(
-                "Sync: snapshot {snapshot_id:?} announced, no object storage (test path)"
-            );
+            tracing::info!("Sync: snapshot {snapshot_id:?} announced, no storage");
             return;
         };
         let api_base = self.api_base.clone();
@@ -380,8 +378,8 @@ impl SyncState {
             }
             SnapshotPurpose::Open => {
                 tracing::warn!(
-                    "Sync: snapshot {snapshot_id:?} of doc {document_id:?} refused on open \
-                     (mismatch: {mismatch}), staying on its reference"
+                    "Sync: snapshot {snapshot_id:?} of {document_id:?} refused \
+                     (mismatch: {mismatch})"
                 );
                 self.send_to_logic(LogicEvent::DocumentReady { document_id, role });
                 None
@@ -397,8 +395,7 @@ impl SyncState {
                 let signature =
                     ed25519_dalek::Signer::sign(signing_key, transcript.as_bytes()).to_bytes();
                 tracing::warn!(
-                    "Sync: snapshot {snapshot_id:?} of doc {document_id:?} contradicts its \
-                     deltas, reporting it"
+                    "Sync: snapshot {snapshot_id:?} of {document_id:?} contradicts its deltas"
                 );
                 Some(Vouch::Report(FixedBytes::from_array(signature)))
             }
@@ -418,7 +415,7 @@ impl SyncState {
         vouch: Vouch,
     ) {
         let Some(tx) = self.event_tx.clone() else {
-            tracing::info!("Sync: snapshot {snapshot_id:?} vouch, no relay (test path)");
+            tracing::info!("Sync: snapshot {snapshot_id:?} vouch, no relay");
             return;
         };
         let base = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base);
@@ -473,10 +470,7 @@ impl SyncState {
                 true
             }
             Err(e) => {
-                tracing::warn!(
-                    "Sync: the latest snapshot of doc {document_id:?} does not open ({e}), \
-                     staying on its reference"
-                );
+                tracing::warn!("Sync: latest snapshot of {document_id:?} does not open ({e})");
                 false
             }
         }
@@ -686,6 +680,7 @@ impl SyncState {
                     own_key,
                     resume,
                     roots,
+                    logic_tx: self.logic_tx.clone(),
                 },
                 tx,
             ));
@@ -723,6 +718,7 @@ impl SyncState {
             own_key,
             resume,
             roots,
+            logic_tx,
         } = open;
         let members_url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
             .route(format!("/documents/{doc_id}/members"));
@@ -846,10 +842,20 @@ impl SyncState {
                 return;
             }
             // The members of an accepted log land before the open does, so
-            // no open the Logic thread asks after it misses them.
+            // no open the Logic thread asks after it misses them. The log
+            // proved the pin, which then outlives the session (`SYNC-238`).
+            // A Murmure open roots on the session instead.
             Some(Ok(())) => {
                 if let Some(vouched) = roots_vouched(doc_type, members) {
                     let _ = tx.send(vouched);
+                }
+                if doc_type != DocType::Murmure
+                    && let Some(inviter) = roots.pin
+                {
+                    let _ = logic_tx.send(LogicEvent::InviterProven {
+                        document_id: doc_id,
+                        inviter,
+                    });
                 }
             }
             None => {}
@@ -1811,7 +1817,7 @@ impl SyncState {
         // and no real S3: sealing is the observable behavior, stop here.
         let Some(tx) = self.event_tx.clone() else {
             tracing::info!(
-                "Sync: SendSnapshot {document_id:?} sealed ({} bytes), no event channel (test path)",
+                "Sync: SendSnapshot {document_id:?} sealed ({} bytes), no channel",
                 upload.blob.len()
             );
             return;
@@ -2059,6 +2065,9 @@ struct RelayOpen {
     /// What this client holds out of band to root the log on (`SYNC-205`,
     /// `SYNC-210`, `SYNC-235`).
     roots: crate::key_vouch::Roots,
+    /// The Logic thread, which takes the pin the log proved to the local
+    /// store (`SYNC-238`).
+    logic_tx: LogicSink,
 }
 
 /// What an open reads out of one members answer (`SYNC-092`).
