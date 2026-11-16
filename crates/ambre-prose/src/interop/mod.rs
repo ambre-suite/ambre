@@ -72,7 +72,10 @@ pub(crate) fn written_file(
     answer: Result<ambre_convert::Converted, ambre_convert::ConvertError>,
     format: FileFormat,
 ) -> Result<
-    (ambre_core::Payload<ambre_client_core::FileBytes>, ConversionReport),
+    (
+        ambre_core::Payload<ambre_client_core::FileBytes>,
+        ConversionReport,
+    ),
     crate::message::InteropError,
 > {
     match answer {

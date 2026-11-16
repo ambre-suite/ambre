@@ -1547,7 +1547,9 @@ mod tests {
         let refused =
             state.handle_converted(ProseCommand::Interop(InteropRequest::Import(ProseImport {
                 format: ImportFormat::Markdown,
-                data: ambre_core::Payload::<ambre_client_core::FileBytes>::new(vec![0xff, 0xfe, 0xfd]),
+                data: ambre_core::Payload::<ambre_client_core::FileBytes>::new(vec![
+                    0xff, 0xfe, 0xfd,
+                ]),
                 now: IMPORTED_AT,
                 zone: crate::message::TimeZone::UTC,
             })));

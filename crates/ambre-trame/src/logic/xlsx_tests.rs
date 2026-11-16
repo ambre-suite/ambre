@@ -72,7 +72,10 @@ fn file(workbook: &xl::Workbook) -> ambre_core::Payload<ambre_client_core::FileB
 }
 
 /// Import `data` whole: the first slice in the command, the rest by resume.
-fn import(state: &mut TrameState, data: ambre_core::Payload<ambre_client_core::FileBytes>) -> TrameReport {
+fn import(
+    state: &mut TrameState,
+    data: ambre_core::Payload<ambre_client_core::FileBytes>,
+) -> TrameReport {
     let mut out = state.convert_in_place(
         TrameCommand::Interop(InteropRequest::Import(TrameImport::Xlsx(WorkbookImport {
             data,

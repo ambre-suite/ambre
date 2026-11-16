@@ -456,11 +456,7 @@ struct Counted {
 }
 
 /// Count each slice of a running PDF export until `pages` pages are drawn.
-fn print_slices_until(
-    state: &mut ambre_prose::logic::ProseState,
-    counted: Counted,
-    pages: u32,
-) {
+fn print_slices_until(state: &mut ambre_prose::logic::ProseState, counted: Counted, pages: u32) {
     loop {
         let out = (counted.slice)(black_box(state));
         let Some(progress) = (counted.end)(&out) else {
@@ -713,7 +709,11 @@ fn pdf_write_of(pictures: ExportPictures) {
         .map(ambre_draw::FontFace::new)
         .collect();
     state.load_faces(&faces);
-    let _ = converted(&mut state, import_command(novel(IMPORTED_PARAGRAPHS)), &markup);
+    let _ = converted(
+        &mut state,
+        import_command(novel(IMPORTED_PARAGRAPHS)),
+        &markup,
+    );
     let _ = state.settle_conversion();
     let _ = state.layout_event();
     let count = match pictures {
@@ -953,7 +953,8 @@ fn picture_arrive_gif() {
 }
 
 /// Each operation, by the name `scripts/instructions.py` passes.
-const OPERATIONS: [(&str, fn()); 13] = [    ("paragraph_shape", paragraph_shape),
+const OPERATIONS: [(&str, fn()); 13] = [
+    ("paragraph_shape", paragraph_shape),
     ("key_undo", key_undo),
     ("key_redo", key_redo),
     ("import_slice", import_slice),

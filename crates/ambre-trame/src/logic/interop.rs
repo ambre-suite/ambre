@@ -202,9 +202,9 @@ impl TrameState {
     pub fn file_work(&self, ticket: Seq<Request>) -> Option<FileWork> {
         self.file_jobs.in_flight.get(&ticket).map(|job| match job {
             FileJob::ReadCsv { .. } | FileJob::ReadWorkbook(_) => FileWork::Read,
-            FileJob::WriteCsv { .. }
-            | FileJob::WriteWorkbook { .. }
-            | FileJob::WritePdf { .. } => FileWork::Write,
+            FileJob::WriteCsv { .. } | FileJob::WriteWorkbook { .. } | FileJob::WritePdf { .. } => {
+                FileWork::Write
+            }
         })
     }
 

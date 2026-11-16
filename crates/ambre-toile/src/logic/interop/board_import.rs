@@ -526,7 +526,8 @@ mod tests {
             &ambre_core::Payload::new(Vec::new()),
         )
         .expect("the host links the boards engine");
-        let data = ambre_core::Payload::<ambre_client_core::FileBytes>::new(json.as_bytes().to_vec());
+        let data =
+            ambre_core::Payload::<ambre_client_core::FileBytes>::new(json.as_bytes().to_vec());
         match converter.convert(&ambre_convert::Conversion::ReadBoard { data }) {
             Ok(ambre_convert::Converted::Board(bytes)) => {
                 ambre_convert::boards::decode_board(&bytes).expect("a board decodes")

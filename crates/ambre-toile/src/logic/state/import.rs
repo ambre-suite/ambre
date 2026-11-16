@@ -2632,7 +2632,10 @@ mod pptx_tests {
     /// The PowerPoint file an export of `st` writes, and its report.
     fn exported_pptx(
         st: &mut ToileState,
-    ) -> (ambre_core::Payload<ambre_client_core::FileBytes>, ToileReport) {
+    ) -> (
+        ambre_core::Payload<ambre_client_core::FileBytes>,
+        ToileReport,
+    ) {
         let out = st.handle_converted(ToileCommand::Interop(InteropRequest::Export(
             crate::message::ToileExport::Pptx,
         )));

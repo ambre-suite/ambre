@@ -446,8 +446,8 @@ mod tests {
     use crate::view::tests::append;
     use ambre_bus::interop::InteropAnswer;
     use ambre_bus::interop::InteropRequest;
-    use ambre_convert::Converter;
     use ambre_client_core::FileBytes;
+    use ambre_convert::Converter;
     use ambre_core::Payload;
 
     /// A document on the faces the application ships.
