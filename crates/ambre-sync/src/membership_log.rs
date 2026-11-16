@@ -362,6 +362,8 @@ pub(crate) struct Log {
     /// The member each signing key a valid entry named was bound to, the
     /// latest binding kept (`SYNC-215`).
     bound: HashMap<FixedBytes<PublicKey>, Id<User>>,
+    /// The key that signed the valid first entry, the creation.
+    creator: Option<FixedBytes<PublicKey>>,
     /// Whether the wrapped key carried an anchor at all.
     anchored: bool,
     /// The place and the previous digest the next entry takes.
@@ -391,6 +393,7 @@ impl Log {
             revoked: None,
             authors: HashSet::new(),
             bound: HashMap::new(),
+            creator: None,
             anchored: anchor.is_some(),
             next: LogHead {
                 position: place_after(entries.len()),
@@ -426,6 +429,9 @@ impl Log {
                 }
             }
             if let Some(key) = log.signer_of(entry) {
+                if previous.is_none() {
+                    log.creator = Some(key);
+                }
                 log.authors.insert(key);
             }
             // A revoke its member signed is a departure (`SYNC-127`).
@@ -628,6 +634,11 @@ impl Log {
     /// anchor, which predates the log.
     pub(crate) fn signers(&self) -> Option<&HashSet<FixedBytes<PublicKey>>> {
         self.anchored.then_some(&self.signers)
+    }
+
+    /// The key that signed the creation, when the walk reached it.
+    pub(crate) fn creator(&self) -> Option<&FixedBytes<PublicKey>> {
+        self.creator.as_ref()
     }
 
     /// Who may sign a key link, head by head (`SYNC-204`). Unchecked for a

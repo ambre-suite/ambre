@@ -61,6 +61,7 @@ impl<D> Runtime<D> {
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             return;
         };
+        let meta_id = channel.meta_id();
         // This client's own thread holds no update on the relay yet. A
         // member who read the link now would open an empty thread. So the
         // root names the thread once the thread went up.
@@ -73,10 +74,7 @@ impl<D> Runtime<D> {
                     root,
                 },
             );
-            return self.ask(SyncCommand::OpenDocument {
-                document_id: thread,
-                doc_type: DocType::Murmure,
-            });
+            return self.ask(super::channels::open_in_channel(meta_id, thread));
         }
         let linked = match channel.thread_linked(segment, root, thread) {
             Ok(linked) => linked,
@@ -98,10 +96,7 @@ impl<D> Runtime<D> {
             self.forget_murmure_session(lost);
         }
         if linked.open == crate::LinkedOpening::Open {
-            self.ask(SyncCommand::OpenDocument {
-                document_id: thread,
-                doc_type: DocType::Murmure,
-            });
+            self.ask(super::channels::open_in_channel(meta_id, thread));
         }
     }
 
@@ -167,12 +162,10 @@ impl<D> Runtime<D> {
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             return;
         };
+        let meta = channel.meta_id();
         for document_id in channel.threads_to_open() {
             self.watched_threads.remove(&document_id);
-            self.ask(SyncCommand::OpenDocument {
-                document_id,
-                doc_type: DocType::Murmure,
-            });
+            self.ask(super::channels::open_in_channel(meta, document_id));
         }
     }
 

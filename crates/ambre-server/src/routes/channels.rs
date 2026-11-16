@@ -1916,6 +1916,59 @@ mod tests {
         );
     }
 
+    /// `SRV-272`: a segment serves the log of its `meta`, and a document
+    /// outside a channel serves its own.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_segment_serves_the_log_of_its_meta(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let space = space(&state, alice, &[]).await;
+        let channel = public_channel(&state, alice, space).await;
+        let mut meta_log = db::membership_log(&state.db, &channel.meta.document_id())
+            .await
+            .expect("log");
+        let entry = |document: Id<Document>, place: usize, entry: &'static [u8]| {
+            sqlx::query(
+                "INSERT INTO document_membership_log (document_id, position, entry) \
+                 VALUES ($1, $2, $3)",
+            )
+            .bind(uuid_of_doc(document))
+            .bind(i64::try_from(place).expect("a place"))
+            .bind(entry)
+            .execute(&state.db)
+        };
+        entry(
+            channel.meta.document_id(),
+            meta_log.len(),
+            b"the meta's entry",
+        )
+        .await
+        .expect("insert an entry");
+        meta_log.push(ambre_core::Encoded::new(b"the meta's entry".to_vec()));
+        entry(
+            channel.segment.document_id(),
+            1000,
+            b"the segment's own entry",
+        )
+        .await
+        .expect("insert an entry");
+        let served = db::membership_log(&state.db, &channel.segment.document_id())
+            .await
+            .expect("log");
+        assert_eq!(served, meta_log);
+        let alone = document(&state, alice).await;
+        let mut own = db::membership_log(&state.db, &alone).await.expect("log");
+        entry(alone, own.len(), b"its own entry")
+            .await
+            .expect("insert an entry");
+        own.push(ambre_core::Encoded::new(b"its own entry".to_vec()));
+        assert_eq!(
+            db::membership_log(&state.db, &alone).await.expect("log"),
+            own
+        );
+    }
+
     // --- The Murmure channels spec: private channels, leaves and deletes ---
 
     /// A private channel of `space`, registered by `creator`.

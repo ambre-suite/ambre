@@ -101,12 +101,23 @@ impl SyncState {
         }
     }
 
-    /// The rule a walk of `document_id`'s log applies. A self-join is valid
-    /// in the log of a channel a catalogue lists, and nowhere else
-    /// (`SYNC-106`). That log also heeds the word of its space, as the walk
-    /// of the open space's log last said it.
+    /// The document whose log and links vouch for the key of `document_id`:
+    /// the `meta` of the channel that groups it, or the document itself
+    /// (`SYNC-229`). The relay serves a document of a channel the rows and
+    /// the links of its `meta`, so no other log names its key.
+    pub(crate) fn log_document(&self, document_id: Id<Document>) -> Id<Document> {
+        self.channel_metas
+            .get(&document_id)
+            .map_or(document_id, |meta| meta.document_id())
+    }
+
+    /// The rule a walk of `document_id`'s log applies, the log of its `meta`
+    /// for a document of a channel. A self-join is valid in the log of a
+    /// channel a catalogue lists, and nowhere else (`SYNC-106`). That log
+    /// also heeds the word of its space, as the walk of the open space's log
+    /// last said it.
     pub(crate) fn log_rule(&self, document_id: Id<Document>) -> membership_log::LogRule {
-        match self.self_join_logs.get(&document_id) {
+        match self.self_join_logs.get(&self.log_document(document_id)) {
             Some(space_id) => membership_log::LogRule {
                 self_join: membership_log::public_channel_self_join,
                 space: self
@@ -1406,11 +1417,12 @@ pub(crate) mod tests {
     /// The keys of a space whose current key is `current`, after rotations
     /// that replaced each of `previous`.
     pub(crate) fn ring(current: &DocumentKey, previous: &[&DocumentKey]) -> crate::chain::Keyring {
+        let document_id = Id::<Document>::mint();
         crate::chain::Keyring {
-            document_id: Id::<Document>::mint(),
+            document_id,
             current: current.clone(),
             previous: previous.iter().map(|&key| key.clone()).collect(),
-            chain: crate::chain::Chain::default(),
+            chain: crate::chain::Chain::new(document_id, Vec::new()),
         }
     }
 
@@ -2023,6 +2035,7 @@ pub(crate) mod tests {
         state.handle_command(SyncCommand::OpenDocument {
             document_id: other,
             doc_type: DocType::Murmure,
+            meta: None,
         });
         state.handle_command(SyncCommand::CloseDocument {
             document_id: gone.document_id(),

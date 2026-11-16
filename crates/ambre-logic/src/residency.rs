@@ -125,6 +125,7 @@ impl LogicState {
         self.send_to_sync(SyncCommand::OpenDocument {
             document_id,
             doc_type,
+            meta: None,
         });
         self.send_to_ui(UiEvent::Activity {
             document_id,

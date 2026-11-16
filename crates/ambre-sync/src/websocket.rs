@@ -799,6 +799,7 @@ impl SyncState {
                 writers,
                 departed,
             } => {
+                let log_document = self.log_document(document_id);
                 let doc_state = self
                     .documents
                     .entry(document_id)
@@ -809,7 +810,7 @@ impl SyncState {
                         existence,
                     ))
                     .into_mut();
-                doc_state.chain = crate::chain::Chain::new(document_id, links);
+                doc_state.chain = crate::chain::Chain::new(log_document, links);
                 doc_state.set_signing_keys(signing_keys);
                 doc_state.set_writers(writers);
                 doc_state.role = role;
@@ -1813,6 +1814,7 @@ impl SyncState {
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
         let rule = self.log_rule(document_id);
+        let log_document = self.log_document(document_id);
         let doc_type = self.documents.get(&document_id).map(|doc| doc.doc_type);
         // A departure this client already walked stands, even when the log
         // served now omits it (`SYNC-223`).
@@ -1863,7 +1865,7 @@ impl SyncState {
                         return;
                     }
                 };
-            let log = crate::sharing::walk_served_under(document_id, anchor, &resp.log, &rule);
+            let log = crate::sharing::walk_served_under(log_document, anchor, &resp.log, &rule);
             let links = crate::chain::signed_by_writers(links, &log.link_signers());
             // The new key passes the checks of an open before it becomes
             // current (`SYNC-200`, `SYNC-201`, `SYNC-202`).
@@ -1879,7 +1881,7 @@ impl SyncState {
             )
             .knowing(departed);
             if let Some(doc_type) = doc_type
-                && let Err(refusal) = vouch.check(doc_type, document_id, &new_doc_key, &links)
+                && let Err(refusal) = vouch.check(doc_type, log_document, &new_doc_key, &links)
             {
                 tracing::error!("Sync: KeyRotationRequired key refused: {refusal:?}");
                 // A payment the relay answered settled stays owed: the next

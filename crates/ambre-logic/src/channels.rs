@@ -779,9 +779,12 @@ mod tests {
             .into_iter()
             .map(|c| match c {
                 SyncCommand::OpenChannel { channel_id, .. } => Sent::List(channel_id),
+                // A document of a channel opens naming its `meta`
+                // (`SYNC-229`).
                 SyncCommand::OpenDocument {
                     document_id,
                     doc_type: DocType::Murmure,
+                    meta: Some(_),
                 } => Sent::Open(document_id),
                 SyncCommand::CloseDocument { document_id } => Sent::Close(document_id),
                 SyncCommand::ReleaseDocument { document_id, .. } => Sent::Release(document_id),
@@ -833,6 +836,39 @@ mod tests {
         assert_eq!(messages[0].text, "stored");
         assert!(state.rt().channels().contains_key(&channel_id));
         assert!(state.rt().opening().is_empty());
+    }
+
+    /// Holds `SYNC-229` on the Logic side. The meta opens naming itself, and
+    /// each live segment it names opens naming that meta, read from the
+    /// sealed state of the channel.
+    #[test]
+    fn each_document_of_an_opening_channel_names_its_meta() {
+        let (mut state, _ui, sync) = harness();
+        let (channel_id, stored) = stored_channel();
+        let meta = stored.meta_id();
+        let opened = |sync: &Receiver<SyncCommand>| -> Vec<(Id<Document>, Option<Id<Meta>>)> {
+            drain(sync)
+                .into_iter()
+                .filter_map(|c| match c {
+                    SyncCommand::OpenDocument {
+                        document_id, meta, ..
+                    } => Some((document_id, meta)),
+                    _ => None,
+                })
+                .collect()
+        };
+        state.handle_logic_command(LogicCommand::OpenChannel { channel_id });
+        drain(&sync);
+        state.handle_logic_event(LogicEvent::ChannelDocuments {
+            channel_id,
+            documents: listing(&stored),
+        });
+        assert_eq!(opened(&sync), [(meta.document_id(), Some(meta))]);
+        serve(&mut state, &stored, meta.document_id());
+        assert_eq!(
+            opened(&sync),
+            [(stored.active_id().document_id(), Some(meta))]
+        );
     }
 
     /// A channel no catalogue of this client lists admits invites alone, so

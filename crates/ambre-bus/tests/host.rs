@@ -86,6 +86,12 @@ fn sync_command_roundtrips_through_postcard() {
     roundtrip_sync(&SyncCommand::OpenDocument {
         document_id: doc,
         doc_type: DocType::Trame,
+        meta: None,
+    });
+    roundtrip_sync(&SyncCommand::OpenDocument {
+        document_id: doc,
+        doc_type: DocType::Murmure,
+        meta: Some(Id::<ambre_core::id::Meta>::mint()),
     });
     // A genuine network-byte payload survives verbatim.
     roundtrip_sync(&SyncCommand::SendUpdate {
@@ -324,6 +330,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         SyncCommand::OpenDocument {
             document_id: doc,
             doc_type: DocType::Prose,
+            meta: None,
         },
         SyncCommand::PinInviter {
             document_id: doc,

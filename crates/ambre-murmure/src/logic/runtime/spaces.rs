@@ -98,6 +98,7 @@ impl<D> Runtime<D> {
         self.ask(SyncCommand::OpenDocument {
             document_id: space_id.document_id(),
             doc_type: DocType::Murmure,
+            meta: None,
         });
     }
 

@@ -192,13 +192,19 @@ pub(super) async fn record_change(
 }
 
 /// Every entry of a document's log, in order (`SRV-104`).
+///
+/// For a document of a channel, the entries are those of the channel's
+/// `meta`, whose rows and links the document serves too (`SRV-272`). The
+/// client walks them under the `meta` its open names (`SYNC-229`).
 pub async fn membership_log(
     pool: &PgPool,
     document_id: &Id<Document>,
 ) -> Result<Vec<ambre_core::Encoded<ambre_core::EncodedLogEntry>>, AppError> {
-    let rows: Vec<Vec<u8>> = sqlx::query_scalar(
-        "SELECT entry FROM document_membership_log WHERE document_id = $1 ORDER BY position",
-    )
+    let rows: Vec<Vec<u8>> = sqlx::query_scalar(concat!(
+        "SELECT entry FROM document_membership_log WHERE document_id = ",
+        access_document!(),
+        " ORDER BY position"
+    ))
     .bind(id_to_uuid(*document_id))
     .fetch_all(pool)
     .await?;

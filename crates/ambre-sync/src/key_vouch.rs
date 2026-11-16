@@ -34,10 +34,15 @@
 //! An open with no link fails closed (`SYNC-210`). It passes only on a copy
 //! this client wrapped, or on a log it signed an entry of itself.
 //!
-//! A document of a Murmure channel is out of reach of the seven checks. Its
-//! rows and its links are those of the channel's `meta`, and its log is its
-//! own. So no log the open walks names its key. The open does not yet name
-//! the `meta` whose log would.
+//! A document of a Murmure channel takes its rows and its links from the
+//! channel's `meta`. Its open names that `meta`, read from the sealed state
+//! of the channel, and the checks read the `meta`'s log and links
+//! (`SYNC-229`). The log of a channel a space lists must start at a writer of
+//! that space (audit `N16`). So a viewer's catalogue entry roots no log.
+//!
+//! Murmure carries no invite link, so no Murmure open names a pinned
+//! inviter. The inviter check skips a Murmure document, and its log stands
+//! on the relay's word.
 
 use ambre_bus::DocType;
 use ambre_core::id::{Document, Id};
@@ -83,6 +88,9 @@ pub(crate) enum KeyRefusal {
     /// The links a writer signed do not walk back from the key to the latest
     /// key the log names. The key is older than that one, or off its chain.
     Behind,
+    /// The log heeds a space, and no writer of that space signed its
+    /// creation (audit `N16`).
+    RootOutsideSpace,
 }
 
 impl KeyRefusal {
@@ -104,9 +112,21 @@ impl KeyRefusal {
             | Self::Backdated
             | Self::Departed
             | Self::Unfollowed
-            | Self::Behind => ambre_bus::OpenFailure::KeyNotReceived,
+            | Self::Behind
+            | Self::RootOutsideSpace => ambre_bus::OpenFailure::KeyNotReceived,
         }
     }
+}
+
+/// Where the log starts, against the space a catalogue lists it in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Root {
+    /// No space governs the log, or the open holds no word of it yet.
+    Free,
+    /// A writer of the space signed the creation.
+    SpaceWriter,
+    /// No writer of the space signed the creation.
+    Stranger,
 }
 
 /// Who wrapped the copy of this client, as the log sees it.
@@ -154,6 +174,7 @@ pub(crate) struct KeyVouch {
     revoked: Option<NamedKey>,
     /// Whether the members answer says a rotation is owed.
     debt: RotationDebt,
+    root: Root,
 }
 
 impl KeyVouch {
@@ -202,6 +223,18 @@ impl KeyVouch {
             Some(pin) if log.signed_under(pin) => Inviter::Signed,
             Some(_) => Inviter::Absent,
         };
+        // An empty word is a space whose own log the open has not walked:
+        // a genuine space log grants its creator at the least.
+        let root = match &rule.space {
+            Some(space) if !space.writers.is_empty() => {
+                if log.creator().is_some_and(|key| space.writers.contains(key)) {
+                    Root::SpaceWriter
+                } else {
+                    Root::Stranger
+                }
+            }
+            _ => Root::Free,
+        };
         Self {
             named: log.named_at().map(<[NamedKey]>::to_vec),
             wrapper,
@@ -209,6 +242,7 @@ impl KeyVouch {
             departed: log.departed_at(),
             revoked: log.revoked_at(),
             debt,
+            root,
         }
     }
 
@@ -225,10 +259,11 @@ impl KeyVouch {
         self.departed
     }
 
-    /// Whether `key` may become the current key of `document_id`, a document
-    /// of `doc_type`. A Murmure document passes unchecked.
+    /// Whether `key` may become the current key of a document of `doc_type`
+    /// whose log and links are those of `log_document` (`SYNC-229`). A
+    /// Murmure document skips the inviter check alone.
     ///
-    /// `links` are the links of the document that a writer the log verifies
+    /// `links` are the links of `log_document` that a writer the log verifies
     /// signed (`SYNC-121`). A link that names `key` counts only when it opens
     /// under `key`, so its signature and its key commitment hold.
     ///
@@ -239,22 +274,20 @@ impl KeyVouch {
     pub(crate) fn check(
         &self,
         doc_type: DocType,
-        document_id: Id<Document>,
+        log_document: Id<Document>,
         key: &DocumentKey,
         links: &[KeyLink],
     ) -> Result<(), KeyRefusal> {
-        // A Murmure document is a channel's, which no log the open walks
-        // describes.
-        if doc_type == DocType::Murmure {
-            return Ok(());
-        }
         let named = self.named.as_ref().ok_or(KeyRefusal::Unanchored)?;
-        if self.inviter == Inviter::Absent {
-            return Err(KeyRefusal::NotFromInviter);
-        }
-        // An open with no link fails closed (`SYNC-210`).
-        if self.inviter == Inviter::Unpinned && self.wrapper != Wrapper::Holder {
-            return Err(KeyRefusal::Unpinned);
+        // Murmure carries no invite link to pin an inviter with.
+        if doc_type != DocType::Murmure {
+            if self.inviter == Inviter::Absent {
+                return Err(KeyRefusal::NotFromInviter);
+            }
+            // An open with no link fails closed (`SYNC-210`).
+            if self.inviter == Inviter::Unpinned && self.wrapper != Wrapper::Holder {
+                return Err(KeyRefusal::Unpinned);
+            }
         }
         if self.wrapper == Wrapper::Unverified {
             return Err(KeyRefusal::WrapperUnverified);
@@ -262,7 +295,7 @@ impl KeyVouch {
         let id = key.id();
         let vouching = || {
             links.iter().filter(move |link| {
-                link.key == id && pipeline::open_link(link, document_id, key).is_ok()
+                link.key == id && pipeline::open_link(link, log_document, key).is_ok()
             })
         };
         if !named.iter().any(|n| n.key == id) {
@@ -302,8 +335,8 @@ impl KeyVouch {
         // so every key past it chains back to it. A key that does not is one
         // the revoked member may hold (`SYNC-225`).
         if let Some(revoke) = self.revoked
-            && Chain::new(document_id, links.iter().cloned())
-                .recover(document_id, key, revoke.key)
+            && Chain::new(log_document, links.iter().cloned())
+                .recover(key, revoke.key)
                 .is_none()
         {
             return Err(KeyRefusal::Unfollowed);
@@ -312,11 +345,14 @@ impl KeyVouch {
         // cannot fake the walk. A key older than the latest one a writer
         // named reaches it by no link (`SYNC-226`).
         if let Some(latest) = named.last()
-            && Chain::new(document_id, links.iter().cloned())
-                .recover(document_id, key, latest.key)
+            && Chain::new(log_document, links.iter().cloned())
+                .recover(key, latest.key)
                 .is_none()
         {
             return Err(KeyRefusal::Behind);
+        }
+        if self.root == Root::Stranger {
+            return Err(KeyRefusal::RootOutsideSpace);
         }
         Ok(())
     }
@@ -1004,27 +1040,86 @@ mod tests {
         );
     }
 
-    /// A Murmure document skips the checks, and every other kind runs them.
+    /// Holds `SYNC-229`. A Murmure document runs every check but the
+    /// inviter's: Murmure carries no invite link to pin one with.
     #[test]
-    fn a_channel_document_skips_the_checks() {
+    fn a_murmure_document_skips_the_inviter_check_alone() {
         let doc = Shared::new();
         let log = doc.log();
+        let unpinned = |members: &[http::MemberEntry], doc_type| {
+            KeyVouch::of(
+                &log,
+                &LogRule::document(),
+                &doc.bob.exchange(),
+                members,
+                None,
+                None,
+                RotationDebt::Settled,
+            )
+            .check(doc_type, doc.document_id, &doc.k0, &[])
+        };
+        let honest = doc.rows(&doc.k0, &doc.alice.xk);
+        assert_eq!(unpinned(&honest, DocType::Murmure), Ok(()));
+        for doc_type in [DocType::Prose, DocType::Trame, DocType::Toile] {
+            assert_eq!(unpinned(&honest, doc_type), Err(KeyRefusal::Unpinned));
+        }
         let relay_xk = ambre_crypto::MasterSeed::from_array([0x66; 32]).derive_exchange_key();
         let stranger = doc.rows(&doc.k0, &relay_xk);
-        let vouch = KeyVouch::of(
-            &log,
-            &LogRule::document(),
-            &doc.bob.exchange(),
-            &stranger,
-            Some(&doc.alice_pin()),
-            None,
-            RotationDebt::Settled,
+        assert_eq!(
+            unpinned(&stranger, DocType::Murmure),
+            Err(KeyRefusal::WrapperUnverified)
         );
-        let checked = |doc_type| vouch.check(doc_type, doc.document_id, &doc.k0, &[]);
-        assert_eq!(checked(DocType::Murmure), Ok(()));
-        for doc_type in [DocType::Prose, DocType::Trame, DocType::Toile] {
-            assert_eq!(checked(doc_type), Err(KeyRefusal::WrapperUnverified));
-        }
+        let chosen = DocumentKey::generate();
+        let own = doc.rows(&chosen, &doc.bob.xk);
+        assert_eq!(
+            KeyVouch::of(
+                &log,
+                &LogRule::document(),
+                &doc.bob.exchange(),
+                &own,
+                None,
+                None,
+                RotationDebt::Settled,
+            )
+            .check(DocType::Murmure, doc.document_id, &chosen, &[]),
+            Err(KeyRefusal::Unvouched)
+        );
+    }
+
+    /// Audit `N16`, at the open. A viewer of a space puts a key and an anchor
+    /// of its own in the catalogue. The relay serves a log the viewer
+    /// created. Bob joins alone, so he wraps his own copy, and every other
+    /// check passes. No writer of the space created that log, so the key is
+    /// refused.
+    ///
+    /// The genuine log, created by a space writer, opens. A space whose word
+    /// the open does not hold yet decides nothing.
+    #[test]
+    fn a_channel_log_no_space_writer_created_is_refused() {
+        let doc = Shared::new();
+        let viewer = Member::new(0x6a);
+        let forged = Shared::created_by(doc.document_id, viewer);
+        let mut rule = LogRule::document();
+        let mut word = crate::membership_log::SpaceWord::default();
+        word.writers.insert(doc.alice.person.public());
+        rule.space = Some(word);
+        let joins = |shared: &Shared, rule: &LogRule| {
+            let own = shared.rows(&shared.k0, &shared.bob.xk);
+            KeyVouch::of(
+                &shared.log(),
+                rule,
+                &shared.bob.exchange(),
+                &own,
+                None,
+                None,
+                RotationDebt::Settled,
+            )
+            .check(DocType::Murmure, shared.document_id, &shared.k0, &[])
+        };
+        assert_eq!(joins(&doc, &rule), Ok(()));
+        assert_eq!(joins(&forged, &rule), Err(KeyRefusal::RootOutsideSpace));
+        rule.space = Some(crate::membership_log::SpaceWord::default());
+        assert_eq!(joins(&forged, &rule), Ok(()));
     }
 
     /// Holds `SYNC-200` for a log with no anchor: no entry is checked, so no

@@ -417,7 +417,7 @@ pub(crate) fn open_name(
 ) -> Option<ambre_core::Validated<ambre_core::Name>> {
     let chain = crate::chain::Chain::new(document_id, links);
     let wanted = pipeline::object_key(sealed).ok()?;
-    let key = crate::chain::find_key(document_id, current, &[], &chain, wanted)?;
+    let key = crate::chain::find_key(current, &[], &chain, wanted)?;
     let plaintext = pipeline::open_object(sealed, &pipeline::name_aad(document_id), &key).ok()?;
     // The name is read in place and copied once it is taken, so a refused
     // name leaves no copy behind. The wrapper wipes the opened bytes.

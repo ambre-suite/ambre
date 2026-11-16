@@ -70,6 +70,7 @@ impl<D> Runtime<D> {
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             return;
         };
+        let meta_id = channel.meta_id();
         let closed = match channel.close_into(closing, active, successor, now) {
             Ok(closed) => closed,
             Err(error) => {
@@ -88,10 +89,10 @@ impl<D> Runtime<D> {
         // as its first update once its identity lands. A fetched one is
         // pending until its bytes are in.
         if successor == crate::Successor::Created || closed.fetch.is_some() {
-            self.ask(SyncCommand::OpenDocument {
-                document_id: active.document_id(),
-                doc_type: DocType::Murmure,
-            });
+            self.ask(super::channels::open_in_channel(
+                meta_id,
+                active.document_id(),
+            ));
         }
     }
 
@@ -486,6 +487,7 @@ impl<D> Runtime<D> {
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             return;
         };
+        let meta_id = channel.meta_id();
         let linked = match channel.amendments_linked(segment, amendments) {
             Ok(linked) => linked,
             Err(error) => {
@@ -508,10 +510,7 @@ impl<D> Runtime<D> {
                 .extend(waiting);
         }
         if linked.open == crate::LinkedOpening::Open {
-            self.ask(SyncCommand::OpenDocument {
-                document_id: amendments,
-                doc_type: DocType::Murmure,
-            });
+            self.ask(super::channels::open_in_channel(meta_id, amendments));
         }
     }
 
@@ -539,11 +538,9 @@ impl<D> Runtime<D> {
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             return;
         };
+        let meta = channel.meta_id();
         for document_id in channel.amendments_to_open() {
-            self.ask(SyncCommand::OpenDocument {
-                document_id,
-                doc_type: DocType::Murmure,
-            });
+            self.ask(super::channels::open_in_channel(meta, document_id));
         }
     }
 
@@ -554,13 +551,14 @@ impl<D> Runtime<D> {
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             return;
         };
+        let meta_id = channel.meta_id();
         channel.settle_final();
         let successor = channel.successor_to_open();
         if let Some(successor) = successor {
-            self.ask(SyncCommand::OpenDocument {
-                document_id: successor.document_id(),
-                doc_type: DocType::Murmure,
-            });
+            self.ask(super::channels::open_in_channel(
+                meta_id,
+                successor.document_id(),
+            ));
         }
         // The delta may name the amendments another member linked, or mark
         // some folded.

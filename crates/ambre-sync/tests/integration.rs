@@ -351,6 +351,7 @@ fn open_document_subscribes_via_mock_ws() {
     state.handle_command(SyncCommand::OpenDocument {
         document_id: doc_id,
         doc_type: DocType::Trame,
+        meta: None,
     });
 
     // No Rest event is expected (OpenDocument is fire-and-forget). The one
@@ -393,6 +394,7 @@ fn close_document_unsubscribes_via_mock_ws() {
     state.handle_command(SyncCommand::OpenDocument {
         document_id: doc_id,
         doc_type: DocType::Trame,
+        meta: None,
     });
     mock.drain_client_msgs(); // drain Subscribe
 
@@ -430,6 +432,7 @@ fn send_update_after_open_document_encrypts_and_sends() {
     state.handle_command(SyncCommand::OpenDocument {
         document_id: doc_id,
         doc_type: DocType::Trame,
+        meta: None,
     });
     mock.drain_client_msgs(); // drain Subscribe
 
@@ -509,6 +512,7 @@ fn full_session_flow_unlock_create_open_close_logout() {
     state.handle_command(SyncCommand::OpenDocument {
         document_id: doc_id,
         doc_type: DocType::Trame,
+        meta: None,
     });
     let open_msgs = mock.drain_client_msgs();
     assert!(

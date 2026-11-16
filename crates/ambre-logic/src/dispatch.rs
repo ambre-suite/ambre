@@ -337,6 +337,7 @@ impl LogicState {
                 self.send_to_sync(SyncCommand::OpenDocument {
                     document_id,
                     doc_type,
+                    meta: None,
                 });
                 // An empty Prose document is one blank page, and the view
                 // shows it before anything arrives (the Prose pagination spec).

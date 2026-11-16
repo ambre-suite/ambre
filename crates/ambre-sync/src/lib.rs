@@ -991,7 +991,7 @@ impl SyncDocumentState {
             quarantine: HashMap::new(),
             gap_requested: false,
             old_keys: Vec::new(),
-            chain: chain::Chain::default(),
+            chain: chain::Chain::new(document_id, Vec::new()),
             ephemeral_remote_counters: HashMap::new(),
             signing_keys: HashMap::new(),
             writers: membership_log::Writers::Unchecked,
@@ -1032,13 +1032,7 @@ impl SyncDocumentState {
     /// or one the chain reaches from the active key. `None` when this client
     /// reaches no such key (`SYNC-045`, `SYNC-119`).
     fn key_named(&self, id: FixedBytes<KeyId>) -> Option<DocumentKey> {
-        chain::find_key(
-            self.document_id,
-            &self.doc_key,
-            &self.old_keys,
-            &self.chain,
-            id,
-        )
+        chain::find_key(&self.doc_key, &self.old_keys, &self.chain, id)
     }
 
     /// The keys of this document, for a task that opens a blob later.
@@ -1117,18 +1111,11 @@ impl SyncDocumentState {
         self.signing_keys = entries.into_iter().collect();
     }
 
-    /// Takes the writers a walk of the log granted (`SYNC-211`). A Murmure
-    /// document checks no signer, as it skips the key checks. The members of
-    /// a channel live in the log of its `meta`, which the open does not name.
-    /// A segment's own log names its creator alone. The copy of a member who
-    /// joined carries the anchor of `meta`'s log. So no walk of a segment's
-    /// log names the channel's writers.
+    /// Takes the writers a walk of the log granted (`SYNC-211`). A document
+    /// of a channel walks the log of the `meta` its open names, so the
+    /// writers it takes are the channel's (`SYNC-229`).
     fn set_writers(&mut self, writers: membership_log::Writers) {
-        self.writers = if self.doc_type == DocType::Murmure {
-            membership_log::Writers::Unchecked
-        } else {
-            writers
-        };
+        self.writers = writers;
     }
 
     /// Resolve the canonical `Id<User>` behind an ephemeral's authoring Ed25519
@@ -1266,6 +1253,10 @@ pub struct SyncState {
     /// admit a self-join (`SYNC-106`) and heed their space; no other log
     /// does either.
     self_join_logs: HashMap<Id<Document>, Id<Space>>,
+    /// The `meta` of each open document of a channel, as the Logic thread
+    /// read it from the sealed state of the channel. That `meta`'s log and
+    /// links vouch for the key and the writers of the document (`SYNC-229`).
+    channel_metas: HashMap<Id<Document>, Id<Meta>>,
     /// The `meta` and the space of each public channel this client is
     /// creating, until the relay answers. A created one's log admits a
     /// self-join at once, as its catalogue lists it (`SYNC-190`).
@@ -1425,6 +1416,7 @@ impl SyncState {
             signing_key: None,
             exchange_key: None,
             self_join_logs: HashMap::new(),
+            channel_metas: HashMap::new(),
             creating_public: HashMap::new(),
             space_rotations: HashMap::new(),
             ws: None,
@@ -1657,7 +1649,14 @@ impl SyncState {
             SyncCommand::OpenDocument {
                 document_id,
                 doc_type,
-            } => self.handle_open_document(document_id, doc_type),
+                meta,
+            } => {
+                match meta {
+                    Some(meta) => self.channel_metas.insert(document_id, meta),
+                    None => self.channel_metas.remove(&document_id),
+                };
+                self.handle_open_document(document_id, doc_type);
+            }
             SyncCommand::PinInviter {
                 document_id,
                 inviter,

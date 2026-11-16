@@ -620,6 +620,7 @@ impl SyncState {
             // above already excluded on the wasm path.
             let my_user_id = self.user_id;
             let rule = self.log_rule(document_id);
+            let log_document = self.log_document(document_id);
             // A snapshot this user confirmed alone is this user's own work, and
             // opens as it is (`AUTHOR-022` reads another user's).
             let own_key = self.author_pub_key();
@@ -634,6 +635,7 @@ impl SyncState {
                     auth,
                     my_user_id,
                     rule,
+                    log_document,
                     own_key,
                     resume,
                     pin,
@@ -670,6 +672,7 @@ impl SyncState {
             auth,
             my_user_id,
             rule,
+            log_document,
             own_key,
             resume,
             pin,
@@ -691,7 +694,7 @@ impl SyncState {
             MembersAnswer::Exists(resp) => match &exchange_key {
                 Some(ek) => match Self::opened_from_members(
                     &resp,
-                    doc_id,
+                    log_document,
                     ek,
                     my_user_id,
                     &rule,
@@ -774,7 +777,9 @@ impl SyncState {
         } else {
             Vec::new()
         };
-        if let Err((cause, message)) = Self::named_key_holds(doc_id, &doc_key, named_key, &links) {
+        if let Err((cause, message)) =
+            Self::named_key_holds(log_document, &doc_key, named_key, &links)
+        {
             tracing::warn!("Sync: open of {doc_id:?}: {message}");
             let _ = tx.send(SyncEvent::OpenDocumentFailed {
                 document_id: doc_id,
@@ -782,7 +787,8 @@ impl SyncState {
             });
             return;
         }
-        if let Some(Err(refusal)) = vouch.map(|v| v.check(doc_type, doc_id, &doc_key, &links)) {
+        if let Some(Err(refusal)) = vouch.map(|v| v.check(doc_type, log_document, &doc_key, &links))
+        {
             tracing::warn!("Sync: open of {doc_id:?}: key refused: {refusal:?}");
             let _ = tx.send(SyncEvent::OpenDocumentFailed {
                 document_id: doc_id,
@@ -946,7 +952,8 @@ impl SyncState {
     ///
     /// The log walks from the anchor sealed with our copy (`SYNC-104`). A log
     /// that does not verify leaves the open as it is (`SYNC-111`). It walks
-    /// under `rule`, the rule of the document's log (`SYNC-106`). `pin` is the
+    /// under `rule`, the rule of the document's log (`SYNC-106`), as the log
+    /// of `document_id`: the `meta` of a document of a channel (`SYNC-229`). `pin` is the
     /// inviter the document's invite link pinned (`SYNC-205`). An open with no
     /// link reads the log against `signer`, this client's own key (`SYNC-210`).
     ///
@@ -1017,7 +1024,7 @@ impl SyncState {
             return Ok(());
         };
         let chain = crate::chain::Chain::new(document_id, links.iter().cloned());
-        match chain.recover(document_id, doc_key, named) {
+        match chain.recover(doc_key, named) {
             Some(_) => Ok(()),
             None => Err((
                 OpenFailure::KeyNotReceived,
@@ -1062,6 +1069,7 @@ impl SyncState {
 
     pub(crate) fn handle_close_document(&mut self, document_id: Id<Document>) {
         self.new_spaces.remove(&document_id);
+        self.channel_metas.remove(&document_id);
         if self.ws_connected() {
             self.ws_send(&WsClientMsg::Unsubscribe { document_id });
         }
@@ -1554,9 +1562,9 @@ impl SyncState {
         if let Some(awaited) = doc_state.rekey.awaited() {
             let mut chain = doc_state.chain.clone();
             for link in &links {
-                chain.push(document_id, link.clone());
+                chain.push(link.clone());
             }
-            if chain.recover(document_id, &new_key, awaited).is_none() {
+            if chain.recover(&new_key, awaited).is_none() {
                 tracing::warn!(
                     "[Sync] doc={document_id}: a rotation names a key that does not follow the latest revoke; edits stay held"
                 );
@@ -1573,7 +1581,7 @@ impl SyncState {
         }
         doc_state.departed = doc_state.departed.max(departed);
         for link in links {
-            doc_state.chain.push(document_id, link);
+            doc_state.chain.push(link);
         }
         if doc_state.doc_key.id() != new_key.id() {
             doc_state.rotate_key(new_key);
@@ -1933,6 +1941,9 @@ struct RelayOpen {
     /// session is ready, which the open waits for on the wasm path.
     my_user_id: Option<Id<User>>,
     rule: membership_log::LogRule,
+    /// The document whose log and links vouch for the key: the `meta` of the
+    /// channel that groups the document, or the document itself (`SYNC-229`).
+    log_document: Id<Document>,
     /// The key of a snapshot this user confirmed alone (`AUTHOR-022`).
     own_key: Option<FixedBytes<PublicKey>>,
     /// The horizon of the local copy, when one exists (`RESID-010`).
@@ -2463,6 +2474,176 @@ mod tests {
             .fold(LogHead::EMPTY, |head, e| head.after(digest(e).unwrap()));
         let link = crate::pipeline::seal_link(document_id, &k0, &k1, head, &alice.key).unwrap();
         assert_eq!(opens(&k1, &[link]), Ok(()));
+    }
+
+    /// Holds `SYNC-229`. A segment serves the rows, the links and the log of
+    /// its `meta`. Its open names that `meta`. So the walk grants the meta's
+    /// writers, and the chain keeps the meta's link back to the key the
+    /// invite named. The key checks pass.
+    ///
+    /// A key the relay wraps itself is refused. An open that names no `meta`
+    /// walks nothing and reaches no key.
+    #[test]
+    fn a_channel_document_opens_under_the_log_and_links_of_its_meta() {
+        use crate::membership_log::tests::Person;
+        use crate::membership_log::{Draft, LogHead, digest, sign};
+        let (sink, _rx) = LogicSink::channel();
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
+        let meta = Id::<Meta>::mint();
+        let segment = Id::<Document>::mint();
+        let (alice, bob) = (Person::new(0x41), Person::new(0x42));
+        let alice_xk = ambre_crypto::MasterSeed::from_array([0x41; 32]).derive_exchange_key();
+        let bob_xk = ambre_crypto::MasterSeed::from_array([0x42; 32]).derive_exchange_key();
+        let (k0, k1) = (DocumentKey::generate(), DocumentKey::generate());
+        let draft = |member: &Person, xk: &x25519_dalek::StaticSecret, act, role| Draft {
+            document: meta.document_id(),
+            member: member.id,
+            member_key: member.public(),
+            member_exchange_key: crate::sharing::own_exchange_key(xk),
+            act,
+            role,
+            key: Some(k0.id()),
+        };
+        let create = sign(
+            draft(
+                &alice,
+                &alice_xk,
+                ambre_protocol::MembershipAct::Create,
+                Role::Owner,
+            ),
+            LogHead::EMPTY,
+            alice.id,
+            &alice.key,
+        )
+        .unwrap();
+        let anchor = digest(&create).unwrap();
+        let invite = sign(
+            draft(
+                &bob,
+                &bob_xk,
+                ambre_protocol::MembershipAct::Invite,
+                Role::Editor,
+            ),
+            LogHead::EMPTY.after(anchor),
+            alice.id,
+            &alice.key,
+        )
+        .unwrap();
+        // Alice rotated the channel: the link lives under the meta.
+        let head = LogHead::EMPTY
+            .after(anchor)
+            .after(membership_log::digest(&invite).unwrap());
+        let link = pipeline::seal_link(meta.document_id(), &k0, &k1, head, &alice.key).unwrap();
+        let row = |who: &Person, holder: &x25519_dalek::StaticSecret, wrapper, key| {
+            let holder_pub = crate::sharing::own_exchange_key(holder);
+            http::MemberEntry {
+                user_id: who.id,
+                signing_pub_key: http::ServedKey::of(who.public()),
+                exchange_pub_key: http::ServedKey::of(holder_pub),
+                doc_key_enc: crate::sharing::wrap_anchored_b64(
+                    wrapper,
+                    &holder_pub,
+                    key,
+                    Some(anchor),
+                )
+                .unwrap(),
+                role: Role::Editor,
+                wrapper_exchange_pub_key: http::ServedKey::of(crate::sharing::own_exchange_key(
+                    wrapper,
+                )),
+            }
+        };
+        let log = vec![
+            membership_log::encode(&create).unwrap(),
+            membership_log::encode(&invite).unwrap(),
+        ];
+        let served = |members| http::MembersResponse {
+            members,
+            rotation_owed: ambre_core::RotationDebt::Settled,
+            log: log.clone(),
+        };
+        let honest = served(vec![
+            row(&alice, &alice_xk, &alice_xk, &k1),
+            row(&bob, &bob_xk, &alice_xk, &k1),
+        ]);
+        let opens = |resp: &http::MembersResponse, log_document: Id<Document>| {
+            let opened = SyncState::opened_from_members(
+                resp,
+                log_document,
+                &bob_xk,
+                Some(bob.id),
+                &membership_log::LogRule::document(),
+                None,
+                None,
+            )
+            .unwrap();
+            let links = crate::chain::signed_by_writers(vec![link.clone()], &opened.link_signers);
+            SyncState::named_key_holds(log_document, &opened.doc_key, opened.named_key, &links)
+                .map_err(|(cause, _)| cause)?;
+            opened
+                .vouch
+                .check(DocType::Murmure, log_document, &opened.doc_key, &links)
+                .map_err(|_| OpenFailure::KeyNotReceived)?;
+            Ok::<_, OpenFailure>(opened.writers)
+        };
+
+        // The open names the meta, as the Logic thread read it.
+        state.handle_command(ambre_bus::SyncCommand::OpenDocument {
+            document_id: segment,
+            doc_type: DocType::Murmure,
+            meta: Some(meta),
+        });
+        assert_eq!(state.log_document(segment), meta.document_id());
+        let writers = opens(&honest, state.log_document(segment)).unwrap();
+        assert!(writers.admits(&alice.public()) && writers.admits(&bob.public()));
+        assert!(!writers.admits(&Person::new(0x43).public()));
+
+        // The relay re-wraps a key of its own for Bob, on Alice's row.
+        let relay_xk = ambre_crypto::MasterSeed::from_array([0x66; 32]).derive_exchange_key();
+        let chosen = DocumentKey::generate();
+        let mut alice_row = row(&alice, &alice_xk, &alice_xk, &chosen);
+        alice_row.exchange_pub_key =
+            http::ServedKey::of(crate::sharing::own_exchange_key(&relay_xk));
+        let substituted = served(vec![alice_row, row(&bob, &bob_xk, &relay_xk, &chosen)]);
+        assert_eq!(
+            opens(&substituted, meta.document_id()).err(),
+            Some(OpenFailure::KeyNotReceived)
+        );
+
+        // Walked under the segment itself, the log grants nobody and no
+        // link opens: no log names the key.
+        assert_eq!(
+            opens(&honest, segment).err(),
+            Some(OpenFailure::KeyNotReceived)
+        );
+
+        // The session the open makes keeps the meta's link in its chain.
+        state.handle_sync_event(SyncEvent::OpenDocumentReady {
+            document_id: segment,
+            doc_key: k1.clone(),
+            snapshot_payload: None,
+            snapshot_id: Id::<Snapshot>::genesis(segment),
+            covered_seq: Seq::<Relay>::ZERO,
+            held_snapshot: None,
+            doc_type: DocType::Murmure,
+            existence: crate::Existence::OnRelay,
+            signing_keys: Vec::new(),
+            role: Role::Editor,
+            rotation_owed: ambre_core::RotationDebt::Settled,
+            links: vec![link.clone()],
+            writers,
+            departed: None,
+        });
+        let opened = state.documents[&segment].key_named(k0.id());
+        assert_eq!(opened.map(|key| key.id()), Some(k0.id()));
+        // A close forgets the meta: a later open names it again.
+        state.handle_command(ambre_bus::SyncCommand::CloseDocument {
+            document_id: segment,
+        });
+        assert_eq!(state.log_document(segment), segment);
     }
 
     /// Holds `SYNC-205` at the open. The relay builds a whole log of its own.
@@ -4825,7 +5006,7 @@ mod tests {
         let link =
             crate::pipeline::seal_link(doc, &k1, &k2, ambre_protocol::LogHead::EMPTY, &signing)
                 .unwrap();
-        doc_state.chain.push(doc, link);
+        doc_state.chain.push(link);
         state.handle_sync_event(SyncEvent::KeyRotated {
             document_id: doc,
             new_doc_key: k1.clone(),
@@ -5901,6 +6082,65 @@ mod tests {
         }
     }
 
+    /// Audit `N16`, at the delta. A space document checks its writers
+    /// against its own log, as any document does. A viewer of the space who
+    /// writes a catalogue entry, forwarded by the relay, reaches no document;
+    /// the owner's entry lands.
+    #[test]
+    fn a_viewers_catalogue_entry_reaches_no_space_document() {
+        let (mut state, rx, _doc, _key, _sk, _snap) = setup();
+        let (writers, [alice, _bob, carol, _dave]) = writers_of_a_shared_log();
+        let space = Id::<Space>::mint().document_id();
+        let key = DocumentKey::generate();
+        let snapshot_id = Id::<Snapshot>::genesis(space);
+        state.handle_command(ambre_bus::SyncCommand::OpenDocument {
+            document_id: space,
+            doc_type: DocType::Murmure,
+            meta: None,
+        });
+        state.handle_sync_event(SyncEvent::OpenDocumentReady {
+            document_id: space,
+            doc_key: key.clone(),
+            snapshot_payload: None,
+            snapshot_id,
+            covered_seq: Seq::<Relay>::ZERO,
+            held_snapshot: None,
+            doc_type: DocType::Murmure,
+            existence: crate::Existence::OnRelay,
+            signing_keys: Vec::new(),
+            role: Role::Owner,
+            rotation_owed: ambre_core::RotationDebt::Settled,
+            links: Vec::new(),
+            writers: writers.clone(),
+            departed: None,
+        });
+        drain(&rx);
+        let entries = [
+            (b"viewer's catalogue entry".as_slice(), &carol.key),
+            (b"owner's catalogue entry".as_slice(), &alice.key),
+        ];
+        for (clock, (payload, by)) in (1..).zip(entries) {
+            let update = make_update(
+                space,
+                snapshot_id,
+                Seq::<DeltaAuthor>::new(clock),
+                payload,
+                &key,
+                by,
+            );
+            state.handle_ws_message(WsServerMsg::Update {
+                seq: Seq::<Relay>::new(clock),
+                update,
+            });
+        }
+        let (applied, _) = applied_and_warned(&drain(&rx));
+        assert_eq!(applied, vec![b"owner's catalogue entry".to_vec()]);
+        state.handle_sync_event(listing(space, 1, writers));
+        let (applied, warned) = applied_and_warned(&drain(&rx));
+        assert!(applied.is_empty(), "the viewer's entry reaches no document");
+        assert_eq!(warned, vec![SyncWarningCode::WriterRefused]);
+    }
+
     /// Holds `SYNC-211` for a snapshot: one the reader sealed opens nothing,
     /// and the open falls back to the full replay. The owner's snapshot opens.
     #[test]
@@ -5955,39 +6195,6 @@ mod tests {
             doc_state.writers == crate::membership_log::Writers::Unchecked,
             "a document with no anchored log checks no signer"
         );
-    }
-
-    /// A Murmure document checks no signer against its own log. A member of
-    /// a channel writes its segments, though their own log names the creator
-    /// alone: the channel's members live in the log of `meta`. A listing that
-    /// walks such a log leaves every delta landing at once (`SYNC-211`).
-    #[test]
-    fn a_murmure_document_takes_a_delta_its_own_log_names_no_writer_of() {
-        let (mut state, rx, doc, key, _sk, snap) = setup();
-        let (writers, [alice, _bob, carol, _dave]) = writers_of_a_shared_log();
-        state.documents.get_mut(&doc).unwrap().doc_type = DocType::Murmure;
-        state.handle_sync_event(listing(doc, 1, writers));
-        drain(&rx);
-        assert!(state.documents[&doc].writers == crate::membership_log::Writers::Unchecked);
-
-        for (clock, by, payload) in [(1, &carol, &b"member"[..]), (2, &alice, &b"creator"[..])] {
-            let update = make_update(
-                doc,
-                snap,
-                Seq::<DeltaAuthor>::new(clock),
-                payload,
-                &key,
-                &by.key,
-            );
-            state.handle_ws_message(WsServerMsg::Update {
-                seq: Seq::<Relay>::new(clock),
-                update,
-            });
-        }
-        let (applied, warned) = applied_and_warned(&drain(&rx));
-        assert_eq!(applied, vec![b"member".to_vec(), b"creator".to_vec()]);
-        assert!(warned.is_empty());
-        assert!(state.documents[&doc].unvouched.is_empty());
     }
 
     /// Holds `SYNC-211`: a newcomer's delta can outrun the word that adds

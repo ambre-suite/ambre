@@ -20,25 +20,31 @@ use crate::membership_log::LinkSigners;
 use crate::pipeline;
 
 /// The links of one document, indexed by the key each starts from.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub(crate) struct Chain {
+    /// The document the links name: the document itself, or the `meta` of
+    /// the channel that groups it (`SYNC-229`).
+    scope: Id<Document>,
     links: HashMap<FixedBytes<KeyId>, KeyLink>,
 }
 
 impl Chain {
-    /// The links of `document_id` among `links`. A link of another document
-    /// is dropped, and the first link starting from a key is the one kept.
-    pub(crate) fn new(document_id: Id<Document>, links: impl IntoIterator<Item = KeyLink>) -> Self {
-        let mut chain = Self::default();
+    /// The links of `scope` among `links`. A link of another document is
+    /// dropped, and the first link starting from a key is the one kept.
+    pub(crate) fn new(scope: Id<Document>, links: impl IntoIterator<Item = KeyLink>) -> Self {
+        let mut chain = Self {
+            scope,
+            links: HashMap::new(),
+        };
         for link in links {
-            chain.push(document_id, link);
+            chain.push(link);
         }
         chain
     }
 
     /// Adds one link, the one this client just posted or one the relay served.
-    pub(crate) fn push(&mut self, document_id: Id<Document>, link: KeyLink) {
-        if link.document_id == document_id {
+    pub(crate) fn push(&mut self, link: KeyLink) {
+        if link.document_id == self.scope {
             self.links.entry(link.key).or_insert(link);
         }
     }
@@ -57,7 +63,6 @@ impl Chain {
     /// `None` when the walk ends before `wanted`.
     pub(crate) fn recover(
         &self,
-        document_id: Id<Document>,
         current: &DocumentKey,
         wanted: FixedBytes<KeyId>,
     ) -> Option<DocumentKey> {
@@ -69,7 +74,7 @@ impl Chain {
                 return Some(key);
             }
             let link = self.links.get(&key.id())?;
-            key = pipeline::open_link(link, document_id, &key).ok()?;
+            key = pipeline::open_link(link, self.scope, &key).ok()?;
         }
         None
     }
@@ -101,13 +106,7 @@ pub(crate) struct Keyring {
 impl Keyring {
     /// The key `wanted` names, as [`find_key`] reaches it.
     pub(crate) fn find(&self, wanted: FixedBytes<KeyId>) -> Option<DocumentKey> {
-        find_key(
-            self.document_id,
-            &self.current,
-            &self.previous,
-            &self.chain,
-            wanted,
-        )
+        find_key(&self.current, &self.previous, &self.chain, wanted)
     }
 }
 
@@ -115,7 +114,6 @@ impl Keyring {
 /// chain reaches from the current key. Never by trying every key in turn
 /// (`SYNC-045`).
 pub(crate) fn find_key(
-    document_id: Id<Document>,
     current: &DocumentKey,
     previous: &[DocumentKey],
     chain: &Chain,
@@ -125,7 +123,7 @@ pub(crate) fn find_key(
         .chain(previous)
         .find(|key| key.id() == wanted)
         .cloned()
-        .or_else(|| chain.recover(document_id, current, wanted))
+        .or_else(|| chain.recover(current, wanted))
 }
 
 #[cfg(test)]
@@ -170,15 +168,15 @@ mod tests {
         let chain = Chain::new(document_id, links);
         let current = keys.last().unwrap();
         for key in &keys {
-            let found = chain.recover(document_id, current, key.id()).unwrap();
+            let found = chain.recover(current, key.id()).unwrap();
             assert_eq!(found.id(), key.id());
         }
         // An older key walks back, never forward.
-        assert!(chain.recover(document_id, &keys[3], keys[5].id()).is_none());
+        assert!(chain.recover(&keys[3], keys[5].id()).is_none());
         // A key no rotation left is out of reach.
         assert!(
             chain
-                .recover(document_id, current, DocumentKey::generate().id())
+                .recover(current, DocumentKey::generate().id())
                 .is_none()
         );
     }
@@ -206,9 +204,9 @@ mod tests {
         };
         let chain = Chain::new(document_id, links);
         let current = &keys[4];
-        assert!(chain.recover(document_id, current, keys[3].id()).is_some());
+        assert!(chain.recover(current, keys[3].id()).is_some());
         for older in &keys[..3] {
-            assert!(chain.recover(document_id, current, older.id()).is_none());
+            assert!(chain.recover(current, older.id()).is_none());
         }
     }
 
@@ -224,7 +222,7 @@ mod tests {
         sealed[last] ^= 1;
         tampered.sealed = ambre_core::Payload::new(sealed);
         let chain = Chain::new(document_id, [tampered]);
-        assert!(chain.recover(document_id, &keys[1], keys[0].id()).is_none());
+        assert!(chain.recover(&keys[1], keys[0].id()).is_none());
 
         let elsewhere = Chain::new(Id::<Document>::mint(), links);
         assert_eq!(elsewhere.len(), 0);
@@ -271,8 +269,8 @@ mod tests {
         let kept = signed_by_writers(links.clone(), &log.link_signers());
         assert_eq!(kept.len(), 1);
         let chain = Chain::new(document_id, kept);
-        assert!(chain.recover(document_id, &keys[2], keys[1].id()).is_some());
-        assert!(chain.recover(document_id, &keys[2], keys[0].id()).is_none());
+        assert!(chain.recover(&keys[2], keys[1].id()).is_some());
+        assert!(chain.recover(&keys[2], keys[0].id()).is_none());
         assert_eq!(signed_by_writers(links, &LinkSigners::Unchecked).len(), 2);
     }
 
@@ -340,7 +338,7 @@ mod tests {
         let (keys, links) = rotations(document_id, 2);
         let chain = Chain::new(document_id, links);
         let current = keys[2].clone();
-        let found = find_key(document_id, &current, &[], &chain, keys[0].id()).unwrap();
+        let found = find_key(&current, &[], &chain, keys[0].id()).unwrap();
         assert_eq!(found.id(), keys[0].id());
         assert_eq!(current.id(), keys[2].id());
     }

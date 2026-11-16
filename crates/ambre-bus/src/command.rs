@@ -50,6 +50,12 @@ pub enum SyncCommand {
         /// Document kind, used to lazily create the document server-side (with the
         /// right type) on its first modification if it does not yet exist.
         doc_type: DocType,
+        /// The `meta` of the channel that groups the document, read from the
+        /// sealed state of the channel, never from the relay's listing.
+        /// `None` for a document no channel groups. The log and the key links
+        /// of that `meta` then vouch for the key and the writers of the
+        /// document (`SYNC-229`).
+        meta: Option<Id<Meta>>,
     },
 
     /// Pin the inviter that the invite link of `document_id` names

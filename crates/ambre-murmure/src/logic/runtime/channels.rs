@@ -73,6 +73,17 @@ fn trace_receipt(document_id: Id<Document>, receipt: Receipt) {
     }
 }
 
+/// The open of `document_id`, a document of the channel whose `meta` is
+/// `meta`. The caller reads `meta` from the sealed state of the channel, so
+/// the log and the links of that `meta` vouch for the key (`SYNC-229`).
+pub(crate) fn open_in_channel(meta: Id<Meta>, document_id: Id<Document>) -> SyncCommand {
+    SyncCommand::OpenDocument {
+        document_id,
+        doc_type: DocType::Murmure,
+        meta: Some(meta),
+    }
+}
+
 /// The document a change of a message of `segment` writes. A locked one may
 /// first ask the Sync worker to fetch its amendments, or to create them
 /// (the Murmure messages spec).
@@ -84,13 +95,7 @@ fn change_ask(
 ) -> Result<(Id<Document>, Option<SyncCommand>), MurmureError> {
     Ok(match channel.change_target(segment, now)? {
         ChangeTarget::Write(id) => (id, None),
-        ChangeTarget::Open(id) => (
-            id,
-            Some(SyncCommand::OpenDocument {
-                document_id: id,
-                doc_type: DocType::Murmure,
-            }),
-        ),
+        ChangeTarget::Open(id) => (id, Some(open_in_channel(channel.meta_id(), id))),
         ChangeTarget::Create(id) => (
             id,
             Some(SyncCommand::CreateAmendments {
@@ -328,14 +333,9 @@ impl<D> Runtime<D> {
     /// lands. Its whole content leaves as its first update once the Sync
     /// worker holds the document.
     pub fn hold_created(&mut self, channel: ChannelState) {
-        for document_id in [
-            channel.meta_id().document_id(),
-            channel.active_id().document_id(),
-        ] {
-            self.ask(SyncCommand::OpenDocument {
-                document_id,
-                doc_type: DocType::Murmure,
-            });
+        let meta = channel.meta_id();
+        for document_id in [meta.document_id(), channel.active_id().document_id()] {
+            self.ask(open_in_channel(meta, document_id));
         }
         self.channels.insert(channel.channel_id(), channel);
     }
@@ -522,7 +522,12 @@ impl<D> Runtime<D> {
     /// Ask the Sync worker for one document of an opening channel. A document
     /// the channel left in the local store is read back first, and opens
     /// once its copy lands (the Murmure engine spec).
-    fn open_channel_document(&mut self, channel_id: Id<Channel>, document_id: Id<Document>) {
+    fn open_channel_document(
+        &mut self,
+        channel_id: Id<Channel>,
+        meta: Id<Meta>,
+        document_id: Id<Document>,
+    ) {
         if let Some(closed) = self.closed_channels.get_mut(&channel_id)
             && let Some(horizon) = closed.copies.remove(&document_id)
         {
@@ -530,10 +535,7 @@ impl<D> Runtime<D> {
             self.store(document_id, StoreWrite::ReadBack);
             return;
         }
-        self.ask(SyncCommand::OpenDocument {
-            document_id,
-            doc_type: DocType::Murmure,
-        });
+        self.ask(open_in_channel(meta, document_id));
     }
 
     /// The local copy of a reopening channel's document landed. The opening
@@ -566,6 +568,7 @@ impl<D> Runtime<D> {
         else {
             return;
         };
+        let meta = opening.meta_id();
         if let Some(copy) = snapshot {
             trace_receipt(
                 document_id,
@@ -582,10 +585,7 @@ impl<D> Runtime<D> {
             tracing::warn!("Logic: no usable local copy of {document_id}, fetching it");
             self.ask(SyncCommand::CloseDocument { document_id });
         }
-        self.ask(SyncCommand::OpenDocument {
-            document_id,
-            doc_type: DocType::Murmure,
-        });
+        self.ask(open_in_channel(meta, document_id));
     }
 
     /// Whether a reopening channel is reading back the copy of `document_id`.
@@ -711,11 +711,9 @@ impl<D> Runtime<D> {
             self.channel_open_failed(channel_id, &"the channel has no meta document");
             return;
         };
-        *slot = Some(OpeningChannel::new(
-            channel_id,
-            Id::<Meta>::from_document(meta.document_id),
-        ));
-        self.open_channel_document(channel_id, meta.document_id);
+        let meta = Id::<Meta>::from_document(meta.document_id);
+        *slot = Some(OpeningChannel::new(channel_id, meta));
+        self.open_channel_document(channel_id, meta, meta.document_id());
     }
 
     /// Tell the view a channel could not open. Nothing of it is held.
@@ -817,8 +815,17 @@ impl<D> Runtime<D> {
         match result {
             Ok(Opening::Waiting) => {}
             Ok(Opening::OpenSegments(segments)) => {
+                // The live segments the sealed `meta` named.
+                let Some(meta) = self
+                    .opening
+                    .get(&channel_id)
+                    .and_then(Option::as_ref)
+                    .map(OpeningChannel::meta_id)
+                else {
+                    return;
+                };
                 for segment in segments {
-                    self.open_channel_document(channel_id, segment.document_id());
+                    self.open_channel_document(channel_id, meta, segment.document_id());
                 }
             }
             Ok(Opening::Open(mut state)) => {
@@ -870,10 +877,10 @@ impl<D> Runtime<D> {
     /// Move the seek for the root of a copy one step (the Murmure threads
     /// spec). It opens the next older segment, or tells the view the root.
     fn advance_seek(&mut self, channel_id: Id<Channel>) {
-        let Some(step) = self
+        let Some((meta, step)) = self
             .channels
             .get_mut(&channel_id)
-            .and_then(ChannelState::seek_step)
+            .and_then(|channel| Some((channel.meta_id(), channel.seek_step()?)))
         else {
             return;
         };
@@ -890,10 +897,9 @@ impl<D> Runtime<D> {
                     root,
                 },
             }),
-            SeekStep::Load(segment) => self.ask(SyncCommand::OpenDocument {
-                document_id: segment.document_id(),
-                doc_type: DocType::Murmure,
-            }),
+            SeekStep::Load(segment) => {
+                self.ask(open_in_channel(meta, segment.document_id()));
+            }
             SeekStep::Wait => {}
             SeekStep::Lost { thread } => {
                 tracing::warn!("Logic: channel {channel_id} holds no root for the copy");
@@ -1227,10 +1233,7 @@ impl<D> Runtime<D> {
                     Ok(ThreadTarget::Write(id)) => (id, None),
                     Ok(ThreadTarget::Open(id)) => (
                         id,
-                        Some(SyncCommand::OpenDocument {
-                            document_id: id,
-                            doc_type: DocType::Murmure,
-                        }),
+                        Some(open_in_channel(meta, id)),
                     ),
                     Ok(ThreadTarget::Create(id)) => (
                         id,
@@ -1294,6 +1297,7 @@ impl<D> Runtime<D> {
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             return;
         };
+        let meta_id = channel.meta_id();
         match command {
             MurmureCommand::PostCall { call, now } => {
                 let Some(author) = self.my_user_id else {
@@ -1357,20 +1361,14 @@ impl<D> Runtime<D> {
                 // Nothing to ask for when the segment is the oldest, or the
                 // one before it is loaded or on its way.
                 if let Some(older) = channel.request_older(segment) {
-                    self.ask(SyncCommand::OpenDocument {
-                        document_id: older.document_id(),
-                        doc_type: DocType::Murmure,
-                    });
+                    self.ask(open_in_channel(meta_id, older.document_id()));
                 }
             }
             MurmureCommand::SeekRoot { thread } => {
                 // The thread's header names the segment of its root. A
                 // probe reads it, then the older segments load down to it.
                 if let Some(probe) = channel.seek_root(thread) {
-                    self.ask(SyncCommand::OpenDocument {
-                        document_id: probe,
-                        doc_type: DocType::Murmure,
-                    });
+                    self.ask(open_in_channel(meta_id, probe));
                 }
                 self.advance_seek(channel_id);
             }
@@ -1409,10 +1407,7 @@ impl<D> Runtime<D> {
                 // serves a missing key and damaged bytes alike (the Murmure
                 // engine spec).
                 if let Some(segment) = channel.retry(segment) {
-                    self.ask(SyncCommand::OpenDocument {
-                        document_id: segment.document_id(),
-                        doc_type: DocType::Murmure,
-                    });
+                    self.ask(open_in_channel(meta_id, segment.document_id()));
                 } else if channel.lacks_closing(segment) {
                     // The closing segment has no place to load into: the
                     // channel opens anew, from its local copies.
@@ -1652,10 +1647,7 @@ impl<D> Runtime<D> {
                 // A successor that failed to open is fetched again past its
                 // delay (the Murmure segments spec).
                 if let Some(successor) = channel.successor_to_retry(now) {
-                    self.ask(SyncCommand::OpenDocument {
-                        document_id: successor.document_id(),
-                        doc_type: DocType::Murmure,
-                    });
+                    self.ask(open_in_channel(meta_id, successor.document_id()));
                 }
                 self.drive_finalization(channel_id, now);
                 self.drive_fold(channel_id, now);

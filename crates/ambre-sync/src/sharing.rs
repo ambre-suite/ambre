@@ -1542,6 +1542,9 @@ pub(crate) struct ListMembersParams {
     pub exchange_key: StaticSecret,
     /// The rule the document's log walks under (`SYNC-106`).
     pub rule: LogRule,
+    /// The document whose log the answer serves: the `meta` of the channel
+    /// that groups the document, or the document itself (`SYNC-229`).
+    pub log_document: Id<Document>,
 }
 
 /// Member-list orchestration: GET the members, map them, emit
@@ -1560,7 +1563,7 @@ pub(crate) async fn list_members_task<H: ShareHttp>(
             // for the list. This is where a new member becomes resolvable and a revoked
             // one stops resolving, with no extra round-trip.
             // Each row carries what the log says of it (`SYNC-108`).
-            let (log, _) = served_log_under(p.document_id, &p.exchange_key, &resp, &p.rule);
+            let (log, _) = served_log_under(p.log_document, &p.exchange_key, &resp, &p.rule);
             let signing_keys = presence_directory_under(
                 &log,
                 resp.members
@@ -3781,14 +3784,16 @@ mod tests {
     }
 
     fn list_params() -> ListMembersParams {
+        let document_id = Id::<Document>::mint();
         ListMembersParams {
             id: Some(ambre_bus::next_request()),
             asked: ambre_core::Seq::nth(1),
-            document_id: Id::<Document>::mint(),
+            document_id,
             url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
             exchange_key: keypair(1).0,
             rule: LogRule::document(),
+            log_document: document_id,
         }
     }
 
@@ -4516,6 +4521,7 @@ mod tests {
             let (etx, erx, _sink, _lrx) = channels();
             let mut params = list_params();
             params.document_id = logged.document_id;
+            params.log_document = logged.document_id;
             params.exchange_key = owner.xk.clone();
             params.rule = LogRule {
                 self_join: rule,

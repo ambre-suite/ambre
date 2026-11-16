@@ -65,6 +65,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-210` | `FAIL` | Given an open of a document that names no pinned inviter, the client MUST refuse the key unless this client wrapped its own copy or a valid entry of the log is signed by this client's own signing key. | this spec section 3; `SYNC-205` | `ambre_sync::key_vouch::tests::an_open_with_no_link_is_refused_unless_this_client_vouches_for_the_log` -- an invitee with no link is refused on the inviter's log and on a log the relay rooted alike, a copy the invitee wrapped itself opens, and the creator opens a copy another member wrapped for it, since it signed the creation, but not when the open knows no signing key of its own; `ambre_sync::updates::tests::an_open_pinned_to_its_inviter_refuses_a_log_the_relay_rooted` -- the open with no link fails as a key not received on either log | none | verified |
 | `SYNC-212` | `FAIL` | Given a key refused because no writer the log verifies named it, or because the pinned inviter signed no entry of the log, the open MUST fail as a key no member signed, never as a key not received. | this spec section 3; `SYNC-173`, `SYNC-200`, `SYNC-205`; `ambre-spec-message-bus.md`, `BUS-030` | `ambre_sync::key_vouch::tests::only_a_key_no_member_signed_fails_as_the_relays_fault` -- an unnamed key and a log the inviter did not sign fail as a key no member signed, and every refusal an honest relay can cause stays a key not received; `ambre_sync::updates::tests::a_key_the_relay_substitutes_is_refused_at_open` -- a key no writer named, under the genuine log and a wrapper it verifies, fails the open that way; `ambre_sync::updates::tests::an_open_pinned_to_its_inviter_refuses_a_log_the_relay_rooted` -- so does a log the relay rooted, pinned, while the open with no link stays a key not received; `ambre_bus::host::a_key_no_member_signed_crosses_the_bus_as_its_own_failure` -- the failure crosses the bus with its own bytes and its own words | none | verified |
 | `SYNC-226` | `FAIL` | Given a key that the links a writer signed do not walk back to the latest key a valid entry of the log names, the client MUST refuse the key. | audit `N23`; this spec section 3; `SYNC-200`, `SYNC-202`, `SYNC-213` | `ambre_sync::key_vouch::tests::a_key_behind_the_latest_key_the_log_names_is_refused` -- a genuine copy of the key a revoke replaced, served with the link past it withheld, is refused while every other check passes, the key the revoke names opens, and so does a later key whose links walk back to it, while a key whose links start from an older key is refused; `ambre_sync::updates::tests::a_first_open_refuses_a_key_behind_the_latest_key_the_log_names` -- that first open fails as a key not received, and the honest answer opens | none | verified |
+| `SYNC-229` | `POST` | The open of a document of a channel MUST check its key and its writers against the log and the links of the `meta` that the sealed state of the channel names. | this spec section 3; `SYNC-200`, `SYNC-211`; `ambre-spec-server.md`, `SRV-272` | `ambre_sync::updates::tests::a_channel_document_opens_under_the_log_and_links_of_its_meta` -- a segment opened naming its `meta` walks the meta's log, grants its writers alone, opens the key a meta's link reaches and keeps that link in its chain, a key the relay wrapped itself is refused, and the same answer walked under the segment reaches no key; `ambre_sync::key_vouch::tests::a_murmure_document_skips_the_inviter_check_alone` -- a Murmure open runs the wrapper and the naming checks, and skips the inviter's; `ambre_logic::channels::tests::each_document_of_an_opening_channel_names_its_meta` -- the meta, then each live segment it names, opens naming that meta | none | verified |
 
 ### 1.4 An ephemeral is attributed
 
@@ -109,7 +110,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SYNC-211` | `FAIL` | Given a delta or a snapshot of a document other than a Murmure one, whose signer no valid entry of the log ever granted a writing role, the client MUST refuse it before it reaches the document, whatever key opens it. A delta MUST first wait for a listing of the members asked after it arrived, and that listing MUST decide it. | this spec section 3; `SYNC-103`, `SYNC-121`, `SYNC-150` | `ambre_sync::updates::tests::a_relay_forwarding_a_readers_delta_reaches_no_document` -- a reader's delta under the current key and under a retired one, forwarded by the relay, reaches no document and raises a warning each, while the owner's and a removed writer's land, and a listing in flight is waited for; `ambre_sync::updates::tests::a_snapshot_no_writer_signed_opens_nothing` -- a reader's snapshot opens nothing and the open replays from the start, the owner's opens; `ambre_sync::updates::tests::a_newcomers_delta_waits_for_the_listing_asked_after_it` -- a newcomer's delta waits, an answer to a listing asked before it leaves it waiting, and the listing that names the newcomer lands it; `ambre_sync::membership_log::tests::a_writer_once_granted_stays_a_writer_and_a_viewer_never_is` -- a viewer and a stranger are no writers, a writer demoted then removed stays one, and a log with no anchor checks nobody; `ambre_sync::updates::tests::a_murmure_document_takes_a_delta_its_own_log_names_no_writer_of` -- a Murmure document keeps no writer from a listing, and a member's delta lands with the creator's | none | verified |
+| `SYNC-211` | `FAIL` | Given a delta or a snapshot whose signer no valid entry of the log ever granted a writing role, the client MUST refuse it before it reaches the document, whatever key opens it. A delta MUST first wait for a listing of the members asked after it arrived, and that listing MUST decide it. | this spec section 3; `SYNC-103`, `SYNC-121`, `SYNC-150` | `ambre_sync::updates::tests::a_relay_forwarding_a_readers_delta_reaches_no_document` -- a reader's delta under the current key and under a retired one, forwarded by the relay, reaches no document and raises a warning each, while the owner's and a removed writer's land, and a listing in flight is waited for; `ambre_sync::updates::tests::a_snapshot_no_writer_signed_opens_nothing` -- a reader's snapshot opens nothing and the open replays from the start, the owner's opens; `ambre_sync::updates::tests::a_newcomers_delta_waits_for_the_listing_asked_after_it` -- a newcomer's delta waits, an answer to a listing asked before it leaves it waiting, and the listing that names the newcomer lands it; `ambre_sync::membership_log::tests::a_writer_once_granted_stays_a_writer_and_a_viewer_never_is` -- a viewer and a stranger are no writers, a writer demoted then removed stays one, and a log with no anchor checks nobody | none | verified |
 | `SYNC-214` | `FAIL` | Given a members answer whose walked log drops a writer the held log granted, the client MUST keep the writers and the space word it held. | audit `N18`; this spec section 3; `SYNC-211` | `ambre_sync::updates::tests::a_listing_that_drops_a_writer_leaves_the_writers_of_the_open` -- a listing that leaves the log unanchored, and one the relay rooted at a log of its own, each leave the writers of the open, and the reader's delta that waited reaches no document | none | verified |
 
 * **Budget.** the key exchange costs one elliptic-curve operation per member at open, charged to
@@ -118,7 +119,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 59 `verified`. Every pure transform holds, out of the browser: the wrap, the
+* **Verification.** 60 `verified`. Every pure transform holds, out of the browser: the wrap, the
   weak key, the pin, the invitee, the role and the log walk. What is loose is the branches that only
   run against a live relay.
 ---
@@ -317,6 +318,15 @@ itself, or on a log with a valid entry its own signing key signed. A creator sig
 creation. The relay can forge neither. Any other open, from the document list or a share notice,
 is refused until the user opens the invite link.
 
+**A document of a channel.** A segment, an amendments document and a thread serve the rows, the
+links and the log of the channel's `meta` (`SRV-272`). The links name the `meta`, and so do the
+entries. The Logic thread reads the `meta` of each document from the sealed state of the channel,
+and the open names it. The worker then walks the meta's log and keeps the meta's links in the chain
+of the document. The three checks and the writers read that log (`SYNC-229`).
+
+Murmure carries no invite link, so no Murmure open names a pinned inviter. The open skips the
+inviter checks there (`SYNC-205`, `SYNC-210`), and runs the three checks above.
+
 A refused key fails the open as a key not received (`SYNC-173`), and a refused rotation keeps the
 current key. Two refusals mean that no member signed the key: no writer named it, or the pinned
 inviter signed no entry of the log. The relay chose that key, so the open fails as a key no member
@@ -443,11 +453,9 @@ authority: the role here hides what the relay would refuse anyway.
   its held deltas wait for the next change of the members (`SYNC-211`).
 * **An evicted document reads a summary from any signer.** Its light subscription counts each
   delta and reads its summary with no check of the signer (`RESID-014`).
-* **A document of a Murmure channel skips the key checks and the writer check.** Its rows and its
-  links are the `meta`'s, and its log is its own. So no log the open walks names its key or the
-  channel's writers. A segment's log names its creator alone, and a member who joined holds a copy
-  anchored at `meta`'s log. Any member of a channel thus writes its documents through a forwarding
-  relay (`SYNC-211`). The open does not name the `meta` yet.
+* **A Murmure log stands on the relay's word.** Murmure carries no invite link, so no Murmure open
+  names a pinned inviter, and the inviter checks skip it (`SYNC-205`, `SYNC-210`). A relay that
+  wraps a copy itself can root a whole log of its own under it.
 * **A relay can withhold the latest entries from every frame of a member.** An update carries the
   head its author read (`SYNC-207`), and a presence sample carries none. A relay that drops every
   update of the up-to-date members towards one member partitions it, and no rule detects that.
