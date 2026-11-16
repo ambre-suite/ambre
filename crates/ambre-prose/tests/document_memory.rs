@@ -75,7 +75,13 @@ fn a_document_holds_less_than_the_ceiling_times_its_file() {
         zone: TimeZone::UTC,
     }));
     let before = resident().expect("Linux reports the resident size");
+    // The read runs in place, as the converter thread runs it.
     let mut last = state.handle_conversion(command, Ok(&converter));
+    for (ticket, conversion) in state.take_file_requests() {
+        if let Some(next) = state.handle_file_converted(ticket, converter.convert(&conversion)) {
+            last = next;
+        }
+    }
     while state.has_pending_work() {
         last = state.resume_conversion(Some(&converter));
     }
