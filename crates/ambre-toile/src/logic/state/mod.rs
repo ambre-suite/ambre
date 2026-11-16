@@ -723,8 +723,9 @@ impl ToileState {
                     }
                     // The Office module read the deck first
                     // (`handle_conversion`), as the images module reads an
-                    // SVG drawing.
-                    ToileImportFormat::Pptx => {
+                    // SVG drawing. A PowerPoint file and an OpenDocument
+                    // presentation answer one deck, and one map lays both.
+                    ToileImportFormat::Pptx | ToileImportFormat::Odp => {
                         let _ = data;
                         let read = match self.converted.take() {
                             Some(import::ConvertedFile::Deck(read)) => read,
@@ -732,7 +733,11 @@ impl ToileState {
                                 ambre_core::StopCause::ConverterUnavailable,
                             )),
                         };
-                        self.import_deck_file(read, at)
+                        let file = match format {
+                            ToileImportFormat::Odp => ambre_bus::interop::FileFormat::Odp,
+                            _ => ambre_bus::interop::FileFormat::Pptx,
+                        };
+                        self.import_deck_file(read, file, at)
                     }
                 }
             }

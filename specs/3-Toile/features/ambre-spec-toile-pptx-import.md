@@ -2,9 +2,9 @@
 
 **Type:** Vertical (feature)
 
-> A user receives a PowerPoint deck and opens it on the board. Each slide becomes a frame of the
-> deck, with its notes, and looks as PowerPoint shows it. The report names what the board could not
-> hold.
+> A user receives a PowerPoint deck, or an OpenDocument presentation, and opens it on the board.
+> Each slide becomes a frame of the deck, with its notes, and looks as PowerPoint shows it. The
+> report names what the board could not hold.
 
 ---
 
@@ -25,6 +25,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `TOILE-IO
 | `TOILE-IO-154` | `IO` | A text MUST land as text a user edits, with its size, its ink and its emphasis. | this spec section 3 | `ambre_pptx::fixtures::a_text_box_keeps_its_own_size_ink_and_emphasis`; `ambre_toile::logic::interop::deck_import::tests::a_painted_shape_keeps_its_text_as_a_text_element_above_it`; `::a_text_is_drawn_at_its_slide_size_in_world_units` | none | verified |
 | `TOILE-IO-166` | `IO` | A deck the writer of `ambre-pptx` writes MUST read back item by item as it left. | this spec section 3 | `ambre_pptx::read::tests::a_written_deck_reads_back_as_it_left` | none | verified |
 | `TOILE-IO-172` | `IO` | Each PowerPoint input fixture, imported, exported and imported again, MUST land as the same deck: frames, titles, notes, sizes, items and bound connectors. | this spec section 3; `TOILE-IO-166`, `TOILE-IO-173` | `ambre_toile::logic::state::import::pptx_tests::every_deck_fixture_lands_the_same_deck_after_an_export_and_an_import` -- the 2 fixtures of the codec, each frame read from the board in paint order, never from the export map | none | verified |
+| `TOILE-IO-176` | `IO` | An OpenDocument presentation MUST read as the deck its PowerPoint twin reads, item by item, with the same report. | this spec section 3 | `ambre_pptx::read::odp::tests::an_odp_reads_as_the_deck_its_powerpoint_twin_reads`; `::every_outline_and_turn_reads_as_its_twin`; `::what_the_deck_cannot_hold_is_named_as_the_powerpoint_reader_names_it` -- the twin is the file the writer of `ambre-pptx` writes from the same deck | none | verified |
+| `TOILE-IO-178` | `IO` | The master page of an OpenDocument presentation MUST give each page its shapes, its background, and the box and the text style of its title. | this spec section 3 | `ambre_pptx::read::odp::tests::the_master_page_gives_its_shapes_its_background_and_its_title_style` | none | verified |
 
 ### 1.2 Open the deck on the board
 
@@ -48,9 +50,12 @@ status values are normative in `ambre-spec-template.md`. The prefix is `TOILE-IO
 | `TOILE-IO-164` | `POST` | The whole deck MUST be one undo step. | this spec section 3; `TOILE-IO-001` | `ambre_toile::logic::state::import::pptx_tests::one_undo_takes_the_whole_deck_back` | none | verified |
 | `TOILE-IO-165` | `POST` | The deck MUST land where the user dropped the file. | this spec section 4; `TOILE-IO-023` | `ambre_toile::logic::state::import::pptx_tests::the_deck_lands_on_the_drop_point` | none | verified |
 | `TOILE-IO-167` | `POST` | The import picker and a drop MUST accept a PowerPoint file. | this spec section 4; `TOILE-IO-098` | `ambre_toile::ui::interop::tests::every_format_a_converter_reads_is_accepted`; `::the_picker_offers_only_what_the_gate_accepts` | none | verified |
+| `TOILE-IO-177` | `POST` | An OpenDocument presentation MUST land on the board as its PowerPoint twin lands, and the report MUST name the format the user opened. | this spec section 3; `TOILE-IO-176` | `ambre_toile::logic::state::import::pptx_tests::an_odp_lands_on_the_board_as_its_powerpoint_twin`; `ambre_convert::engine::office_tests::an_odp_reads_through_the_module_as_a_deck` | none | verified |
+| `TOILE-IO-180` | `POST` | The import picker and a drop MUST accept an OpenDocument presentation. | this spec section 4; `TOILE-IO-098` | `ambre_toile::ui::interop::tests::every_format_a_converter_reads_is_accepted`; `::the_picker_offers_only_what_the_gate_accepts` | none | verified |
 | `TOILE-IO-161` | `FAIL` | Given a file the reader cannot read, the import MUST create nothing and leave the board as it was. | this spec section 3; `TOILE-IO-073` | `ambre_toile::logic::state::import::pptx_tests::a_broken_file_imports_nothing`; `ambre_pptx::read::tests::bytes_that_are_no_package_are_refused`; `::a_package_of_another_document_is_refused`; `::a_presentation_of_no_slide_is_refused` | none | verified |
 | `TOILE-IO-163` | `FAIL` | Given a part that declares a document type or nests past the bound, the reader MUST refuse the file whole. | this spec section 3; `INTEROP-002` | `ambre_pptx::read::tests::a_part_that_declares_a_document_type_is_refused`; `::a_part_nested_past_the_bound_is_refused`; `::malformed_parts_read_to_an_error` | none | verified |
 | `TOILE-IO-162` | `FAIL` | Given a deck whose masters, flattened onto every slide, pass the bound of the reader or of the board, the import MUST refuse the file whole. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_pptx::read::tests::a_master_that_flattens_past_the_item_bound_is_refused`; `ambre_toile::logic::interop::deck_import::tests::a_deck_past_the_element_bound_is_refused_whole` | none | verified |
+| `TOILE-IO-179` | `FAIL` | Given an OpenDocument package of another document, of no page, with a part that declares a document type or nests past the bound, or whose master pages flatten past the bound, the reader MUST refuse the file whole. | this spec section 3; `INTEROP-002` | `ambre_pptx::read::odp::tests::bytes_that_are_no_package_are_refused`; `::a_package_of_another_document_is_refused`; `::a_presentation_of_no_page_is_refused`; `::a_part_that_declares_a_document_type_is_refused`; `::a_part_nested_past_the_bound_is_refused`; `::a_master_that_flattens_past_the_item_bound_is_refused` | none | verified |
 | `TOILE-IO-171` | `FRAME` | An import of a deck MUST NOT change an element, or a slide of the deck, the board already held. | this spec section 3; `TOILE-IO-071` | `ambre_toile::logic::state::import::pptx_tests::a_deck_leaves_the_board_it_lands_on_alone` | none | verified |
 
 * **Budget.** none of its own yet: the import of a deck rides the sliced apply of
@@ -58,8 +63,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `TOILE-IO
   joins the Office module, held to its row of `ambre-spec-budgets.md section 5`.
 * **Boundary.** none of its own. The reader runs in the Office module, which imports no
   capability (`ARCH-079`), and each picture leaves as ciphertext (`TOILE-IO-068`).
-* **Verification.** 29 `verified`. Two real writers hold the reader, and the board holds the deck
-  through the Office engine the host links in place.
+* **Verification.** 34 `verified`. Two real writers hold the PowerPoint reader, and the board holds
+  the deck through the Office engine the host links in place. The OpenDocument reader is held to
+  its PowerPoint twin by packages a test writes in the markup of LibreOffice Impress. No file
+  Impress saved holds it yet.
 
 ---
 
@@ -81,12 +88,14 @@ section 3`).
 
 **Two halves, two crates.** The reader lives in `ambre-pptx`, behind its `codec` feature, and runs in
 the Office converter module. It answers the deck model the writer reads, plus a report of its own.
-The map onto the board lives in `ambre-toile`, beside the PowerPoint export. An OpenDocument reader
-answers the same deck and the same report, so it shares the map whole.
+The map onto the board lives in `ambre-toile`, beside the PowerPoint export. The OpenDocument reader
+sits beside the PowerPoint reader in `ambre-pptx`. It answers the same deck and the same report, so
+it shares the map whole.
 
 ```rust
 // ambre_pptx, behind the `codec` feature
 pub fn read(bytes: &[u8]) -> Result<ImportedDeck, PptxError>;
+pub fn read_odp(bytes: &[u8]) -> Result<ImportedDeck, PptxError>;
 pub struct ImportedDeck { pub deck: Deck, pub report: DeckReport }
 
 // ambre_toile::logic::interop
@@ -131,7 +140,10 @@ pub fn import_deck(read: &ImportedDeck, thumbs: &[Option<Pixels>], format: FileF
    the master's. A placeholder takes each property from the first level of its chain that sets it;
 4. it reads the notes page, and records each construct the deck cannot hold. It decodes the
    thumbnail of each JPEG picture, since the Main instance links no JPEG decoder (`ARCH-078`);
-5. the map lays the frames side by side, one point to one world unit, and turns each item into a
+5. an OpenDocument presentation takes the same steps over its own index: the master page of each
+   page, then the parent chain of each style. Each length lands on the grid of English Metric Units.
+   Each turn lands on the grid of a 60 000th of a degree. A file thus reads as its PowerPoint twin;
+6. the map lays the frames side by side, one point to one world unit, and turns each item into a
    create. The frames, their members, their titles and their notes are units of the sliced apply.
 
 **Code:**
@@ -140,8 +152,10 @@ pub fn import_deck(read: &ImportedDeck, thumbs: &[Option<Pixels>], format: FileF
 * `crates/ambre-pptx/src/read/graphic.rs` -- a table as its cells, a chart as the text of its values;
 * `crates/ambre-pptx/src/read/style.rs` -- the theme, the colour map and the text style chain;
 * `crates/ambre-pptx/src/read/xml.rs` -- the XML tree of one part;
+* `crates/ambre-pptx/src/read/odp.rs` -- the OpenDocument reader, its style chains and its paths;
 * `crates/ambre-pptx/src/report.rs` -- the report every presentation reader writes;
-* `crates/ambre-convert/src/engine/mod.rs` -- the `ReadPptx` conversion of the Office module;
+* `crates/ambre-convert/src/engine/mod.rs` -- the `ReadPptx` and `ReadOdp` conversions of the Office
+  module;
 * `crates/ambre-toile/src/logic/interop/deck_import.rs` -- the map onto the board;
 * `crates/ambre-toile/src/logic/state/import.rs` -- the frame units of the apply.
 
@@ -152,7 +166,8 @@ pub fn import_deck(read: &ImportedDeck, thumbs: &[Option<Pixels>], format: FileF
 | Trigger | Behaviour |
 |---|---|
 | a PowerPoint file dropped on the board | the Office module reads it, and the deck lands at the drop point (`TOILE-IO-165`) |
-| the File menu's import entry | the picker offers `.pptx`, and the deck lands in the middle of the viewport (`TOILE-IO-167`) |
+| the File menu's import entry | the picker offers `.pptx` and `.odp`, and the deck lands in the middle of the viewport (`TOILE-IO-167`, `TOILE-IO-180`) |
+| an OpenDocument presentation dropped on the board | the Office module reads it as the deck its PowerPoint twin reads (`TOILE-IO-177`) |
 | the first import of a session | waits for the Office module, which the Sync worker fetches once (`ARCH-081`) |
 | an import that landed | the shared notice says how many elements arrived, and what was dropped (`TOILE-IO-022`) |
 
@@ -166,6 +181,7 @@ pub fn import_deck(read: &ImportedDeck, thumbs: &[Option<Pixels>], format: FileF
 | The reader answers the deck model the writer reads | a reader model of its own | the OpenDocument reader would need a third model, and the map onto the board could not be shared |
 | A background becomes the fill of the frame | a rectangle under every item | a rectangle that fills the frame takes every click on the slide, and the frame already paints a fill |
 | The Office module decodes the JPEG thumbnails | a decode on the converter thread per picture | each picture would cost a round trip of its own, and the import would hold until every answer came back |
+| The OpenDocument reader lands each length and each turn on the grid of a PowerPoint part | the exact value of the file | the same presentation saved twice would land as two decks a few millionths of a point apart, and no rule could hold one to the other |
 | One point is one world unit | the slide fitted to a fixed frame width | the export writes a frame at one point per world unit (`TOILE-IO-173`), so the round trip keeps its geometry |
 | Each input fixture is imported, exported and imported again, and the two decks are compared as stored data (`TOILE-IO-172`) | comparing the bytes of the file read with the bytes of the file written | the zip order, the part names, the ids and the namespace prefixes differ with no defect. A byte comparison fails on each of them and holds nothing a user reads |
 
@@ -183,3 +199,9 @@ pub fn import_deck(read: &ImportedDeck, thumbs: &[Option<Pixels>], format: FileF
 * **A picture crop is not read.** The whole picture fills the box of the cropped one.
 * **The deck import has no budget row.** No bench reads it.
 * **The reader owns a third XML tree.** The Word and OpenDocument codecs each own one.
+* **An OpenDocument custom shape whose path holds a formula or an arc lands as its box.** A path of
+  plain points reads, as does each preset the model holds. Each such box is named.
+* **An OpenDocument picture held inline as base64 is not read.** It is named as a picture in an
+  unread format.
+* **An OpenDocument opacity, a size in percent and a text that shrinks to fit are not read.** The
+  colour lands opaque, the size falls back to the chain, and the text keeps its size.

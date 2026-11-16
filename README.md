@@ -120,7 +120,7 @@ AMBRE is organized as a Cargo workspace with the following crates:
 | `ambre-pdf` | `DrawSurface` implementation backed by krilla, for PDF export |
 | `ambre-convert` | The converter modules: one wasm instance per format family, which the Logic thread fetches on the first conversion of that family |
 | `ambre-opc` | The package layer of the office formats: the zip archive and the bounds of a hostile package, under the OPC index of content types and relationships or the OpenDocument index of a manifest, shared by the codecs below |
-| `ambre-pptx` | The PowerPoint codec: a deck model, and a writer and a reader of pure functions over the package layer and quick-xml. The reader flattens the masters onto each slide |
+| `ambre-pptx` | The PowerPoint codec: a deck model, and a writer and a reader of pure functions over the package layer and quick-xml. The reader flattens the masters onto each slide. An OpenDocument presentation reader beside it answers the same deck |
 | `ambre-xlsx` | The spreadsheet codecs: an Excel workbook or an OpenDocument spreadsheet read into one plain model and written back, pure functions over the bytes |
 | `ambre-docx` | The Word codec: a `.docx` package read into a model of the format and written back, comments and tracked changes included |
 | `ambre-odt` | The OpenDocument text codec: an `.odt` package read into the Word model and written back, so the two formats meet one mapping onto Prose |

@@ -168,6 +168,16 @@ pub enum Conversion {
         /// apart: the bound of the board's import.
         bound: ambre_core::Size<ambre_core::Px<ambre_core::Image>>,
     },
+    /// Read an OpenDocument presentation into the deck the PowerPoint
+    /// reader answers, its master pages flattened onto each slide
+    /// (`toile-pptx-import`). Answered by [`Converted::Deck`]: Toile maps
+    /// both through one map.
+    ReadOdp {
+        data: Payload<FileBytes>,
+        /// The largest picture a thumbnail is decoded from, each edge
+        /// apart: the bound of the board's import.
+        bound: ambre_core::Size<ambre_core::Px<ambre_core::Image>>,
+    },
 }
 
 impl Conversion {
@@ -197,7 +207,8 @@ impl Conversion {
             | Self::ReadOds { .. }
             | Self::WriteOds { .. }
             | Self::WritePptx { .. }
-            | Self::ReadPptx { .. } => ConverterFamily::Office,
+            | Self::ReadPptx { .. }
+            | Self::ReadOdp { .. } => ConverterFamily::Office,
         }
     }
 }

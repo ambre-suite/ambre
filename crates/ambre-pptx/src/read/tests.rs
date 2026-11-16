@@ -16,7 +16,7 @@ use crate::opc::{self, PackageWriter, PartName, RelKind, RelTarget};
 use crate::report::{DeckConstruct, DeckOutcome};
 
 /// The smallest PNG file: one transparent pixel.
-const PIXEL_PNG: &[u8] = &[
+pub(in crate::read) const PIXEL_PNG: &[u8] = &[
     0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
     0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
     0x89, 0x00, 0x00, 0x00, 0x0B, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x60, 0x00, 0x02, 0x00,
@@ -25,7 +25,8 @@ const PIXEL_PNG: &[u8] = &[
 ];
 
 /// The first bytes of a JPEG file: the reader names it by them alone.
-const JPEG_HEAD: &[u8] = &[0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, b'J', b'F', b'I', b'F'];
+pub(in crate::read) const JPEG_HEAD: &[u8] =
+    &[0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, b'J', b'F', b'I', b'F'];
 
 fn pt(value: f32) -> PrintLength<Pt> {
     PrintLength::<Pt>::new(value)
@@ -57,7 +58,7 @@ fn body(text: &str) -> TextBody {
 }
 
 /// A deck of every item the writer writes, on two slides.
-fn sample() -> Deck {
+pub(in crate::read) fn sample() -> Deck {
     let square = Item::Shape(Shape {
         name: "Square".to_owned(),
         at: placed(10.0, 20.0, 100.0, 50.0),

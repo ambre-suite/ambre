@@ -2,8 +2,8 @@
 //! under the same bounds. A `mimetype` entry and a manifest index it, in
 //! place of the content types and the relationships.
 //!
-//! The spreadsheet and the text codecs read and write it. The presentation
-//! codec will share it, each under its own [`OdfType`].
+//! The spreadsheet and the text codecs read and write it, and the
+//! presentation codec reads it, each under its own [`OdfType`].
 
 use std::io::{Cursor, Write};
 
@@ -27,6 +27,8 @@ impl OdfType {
     pub const SPREADSHEET: Self = Self("application/vnd.oasis.opendocument.spreadsheet");
     /// A text document, `.odt`.
     pub const TEXT: Self = Self("application/vnd.oasis.opendocument.text");
+    /// A presentation document, `.odp`.
+    pub const PRESENTATION: Self = Self("application/vnd.oasis.opendocument.presentation");
     /// An XML part of the package: the content, the styles, the metadata.
     pub const XML: Self = Self("text/xml");
 

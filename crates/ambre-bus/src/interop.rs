@@ -55,6 +55,8 @@ pub enum FileFormat {
     Figma,
     /// A Miro board, as its REST answer writes it in JSON.
     Miro,
+    /// An OpenDocument presentation (`.odp`).
+    Odp,
 }
 
 impl FileFormat {
@@ -76,6 +78,7 @@ impl FileFormat {
             Self::Html => "HTML document",
             Self::Figma => "Figma file",
             Self::Miro => "Miro board",
+            Self::Odp => "OpenDocument presentation",
         }
     }
 }

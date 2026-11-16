@@ -4310,6 +4310,9 @@ impl ToileView {
             crate::ui::interop::PPTX_TYPE => {
                 ToileCommand::import(ToileImportFormat::Pptx, file.bytes, at)
             }
+            crate::ui::interop::ODP_TYPE => {
+                ToileCommand::import(ToileImportFormat::Odp, file.bytes, at)
+            }
             m if m.starts_with("image/") => ToileCommand::import(
                 ToileImportFormat::Image(ambre_core::MediaType::from(m)),
                 file.bytes,

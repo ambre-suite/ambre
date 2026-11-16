@@ -9,14 +9,18 @@
 use ambre_draw::Point;
 
 /// The `accept` attribute of the import picker: the formats a converter reads
-/// today (`TOILE-IO-020`). SVG, JSON and PowerPoint are named twice on
-/// purpose -- browsers match the extension on some platforms and the type on
-/// others. A JSON file is a Figma or a Miro export (`TOILE-IO-014`).
-pub const IMPORT_ACCEPT: &str = ".svg,image/svg+xml,image/png,image/jpeg,image/webp,image/gif,.json,application/json,.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation";
+/// today (`TOILE-IO-020`). SVG, JSON and the two presentations are named
+/// twice on purpose -- browsers match the extension on some platforms and
+/// the type on others. A JSON file is a Figma or a Miro export
+/// (`TOILE-IO-014`).
+pub const IMPORT_ACCEPT: &str = ".svg,image/svg+xml,image/png,image/jpeg,image/webp,image/gif,.json,application/json,.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation,.odp,application/vnd.oasis.opendocument.presentation";
 
 /// The media type of a PowerPoint presentation (`toile-pptx-import`).
 pub const PPTX_TYPE: &str =
     "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+
+/// The media type of an OpenDocument presentation (`toile-pptx-import`).
+pub const ODP_TYPE: &str = "application/vnd.oasis.opendocument.presentation";
 
 /// Whether a converter reads this media type. A drop carries whatever type the
 /// browser guessed, so this is the one gate before a file is read into memory.
@@ -26,6 +30,7 @@ pub fn accepts(mime: &ambre_core::MediaType) -> bool {
         || mime == "application/json"
         || mime.starts_with("image/")
         || mime == PPTX_TYPE
+        || mime == ODP_TYPE
 }
 
 /// A file the shell read for the board (`TOILE-IO-020`). `at` is the drop point
@@ -52,6 +57,7 @@ mod tests {
             "image/gif",
             "application/json",
             PPTX_TYPE,
+            ODP_TYPE,
         ] {
             assert!(accepts(&mime.into()), "{mime}");
         }

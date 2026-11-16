@@ -1,4 +1,5 @@
-//! A small owned tree of one XML part of a PowerPoint package.
+//! A small owned tree of one XML part of a PowerPoint package, or of an
+//! OpenDocument presentation package.
 //!
 //! The reader builds the tree from the event stream of `quick-xml`, without
 //! recursion, so a hostile nesting costs a refusal and never the stack. It
@@ -7,8 +8,9 @@
 //! predefined entities and the character references, and nothing else.
 //!
 //! Each name keeps its namespace, read through the prefix the part declares.
-//! The tree keeps white space under `a:t` alone, where a run spells it; any
-//! other white space is layout of the XML.
+//! The tree keeps white space under `a:t`, where a run spells it. It also
+//! keeps it under an OpenDocument paragraph or span: a space between two
+//! spans is content. Any other white space is layout of the XML.
 
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -49,6 +51,30 @@ pub enum Ns {
     Mc,
     /// DrawingML charts, `c:`: the chart part a graphic frame cites.
     C,
+    /// The OpenDocument office namespace, `office:`.
+    Office,
+    /// The OpenDocument styles, `style:`.
+    Style,
+    /// The OpenDocument text, `text:`.
+    Text,
+    /// The OpenDocument drawing, `draw:`.
+    Draw,
+    /// The XSL-FO compatible properties, `fo:`.
+    Fo,
+    /// The SVG compatible attributes, `svg:`.
+    Svg,
+    /// The OpenDocument presentation, `presentation:`.
+    Presentation,
+    /// The OpenDocument table, `table:`.
+    Table,
+    /// The OpenDocument animation, `anim:`.
+    Anim,
+    /// The SMIL compatible attributes, `smil:`.
+    Smil,
+    /// The link a picture names its part by, `xlink:`.
+    Xlink,
+    /// The XML namespace itself, `xml:`: an `xml:id`.
+    Xml,
     Other,
 }
 
@@ -65,6 +91,18 @@ impl Ns {
             "http://schemas.openxmlformats.org/markup-compatibility/2006" => Self::Mc,
             "http://schemas.openxmlformats.org/drawingml/2006/chart"
             | "http://purl.oclc.org/ooxml/drawingml/chart" => Self::C,
+            "urn:oasis:names:tc:opendocument:xmlns:office:1.0" => Self::Office,
+            "urn:oasis:names:tc:opendocument:xmlns:style:1.0" => Self::Style,
+            "urn:oasis:names:tc:opendocument:xmlns:text:1.0" => Self::Text,
+            "urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" => Self::Draw,
+            "urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" => Self::Fo,
+            "urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0" => Self::Svg,
+            "urn:oasis:names:tc:opendocument:xmlns:presentation:1.0" => Self::Presentation,
+            "urn:oasis:names:tc:opendocument:xmlns:table:1.0" => Self::Table,
+            "urn:oasis:names:tc:opendocument:xmlns:animation:1.0" => Self::Anim,
+            "urn:oasis:names:tc:opendocument:xmlns:smil-compatible:1.0" => Self::Smil,
+            "http://www.w3.org/1999/xlink" => Self::Xlink,
+            "http://www.w3.org/XML/1998/namespace" => Self::Xml,
             _ => Self::Other,
         }
     }
@@ -200,9 +238,11 @@ impl Element {
     }
 }
 
-/// Whether white space under `parent` may be content: the text of a run.
+/// Whether white space under `parent` may be content: the text of a run,
+/// or the text of an OpenDocument paragraph, heading, span or link.
 fn keeps_whitespace(parent: &Element) -> bool {
     parent.is(Ns::A, "t")
+        || (parent.ns == Ns::Text && matches!(parent.name(), "p" | "h" | "span" | "a"))
 }
 
 /// The tree of one part.

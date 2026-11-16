@@ -2,6 +2,8 @@
 //! writer turns a deck into a `.pptx` file
 //! (`3-Toile/features/ambre-spec-toile-pptx-export.md`). The reader turns a
 //! file back into a deck (`3-Toile/features/ambre-spec-toile-pptx-import.md`).
+//! The OpenDocument reader turns an `.odp` file into the same deck, with the
+//! same report.
 //!
 //! The crate has two halves, and each build takes the ones it needs:
 //!
@@ -30,7 +32,7 @@ mod xml;
 #[cfg(feature = "codec")]
 pub use pml::write;
 #[cfg(feature = "codec")]
-pub use read::read;
+pub use read::{read, read_odp};
 
 /// Why the writer produced no file.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]

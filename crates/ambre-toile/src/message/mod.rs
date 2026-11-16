@@ -1256,6 +1256,10 @@ pub enum ToileImportFormat {
     /// A PowerPoint presentation, `.pptx` (`toile-pptx-import`). The Office
     /// converter module reads the deck, and the board maps it.
     Pptx,
+    /// An OpenDocument presentation, `.odp` (`toile-pptx-import`). The Office
+    /// converter module reads it into the deck a PowerPoint file reads into,
+    /// and the board maps it through the same map.
+    Odp,
 }
 
 /// The formats a board leaves in.

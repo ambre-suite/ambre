@@ -27,8 +27,11 @@
 //! | a picture in another encoding | nothing | dropped |
 
 mod graphic;
+mod odp;
 mod style;
 mod xml;
+
+pub use odp::read_odp;
 
 use std::collections::BTreeMap;
 

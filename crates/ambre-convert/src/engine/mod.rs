@@ -178,6 +178,13 @@ pub fn convert(conversion: Conversion) -> Answer {
             ambre_pptx::read(data.as_bytes()).map_err(|e| refusal::pptx(&e))?,
             bound,
         ),
+        // The OpenDocument reader answers the deck and the report the
+        // PowerPoint reader answers, and both reach Toile through one map.
+        #[cfg(feature = "office")]
+        Conversion::ReadOdp { data, bound } => read_deck(
+            ambre_pptx::read_odp(data.as_bytes()).map_err(|e| refusal::pptx(&e))?,
+            bound,
+        ),
         #[cfg(feature = "office")]
         Conversion::WritePptx { deck } => {
             let deck = crate::decode_deck(&deck).map_err(|_| FileRefusal::Request)?;
@@ -616,5 +623,47 @@ mod office_tests {
                 cached: Value::Number(2.5),
             }
         );
+    }
+
+    /// An OpenDocument presentation crosses into the module. It comes back
+    /// as the deck the PowerPoint reader answers: one slide per page, with
+    /// its notes.
+    #[test]
+    fn an_odp_reads_through_the_module_as_a_deck() {
+        use ambre_pptx::opc::PartName;
+        use ambre_pptx::opc::odf::{OdfType, OdfWriter};
+        let content = concat!(
+            r#"<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" "#,
+            r#"xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" "#,
+            r#"xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" "#,
+            r#"xmlns:presentation="urn:oasis:names:tc:opendocument:xmlns:presentation:1.0" "#,
+            r#"xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0">"#,
+            r#"<office:body><office:presentation><draw:page draw:name="Intro">"#,
+            r#"<draw:frame svg:x="1cm" svg:y="1cm" svg:width="5cm" svg:height="2cm"><draw:text-box><text:p>Hello</text:p></draw:text-box></draw:frame>"#,
+            r#"<presentation:notes><draw:frame presentation:class="notes"><draw:text-box><text:p>Say hi.</text:p></draw:text-box></draw:frame></presentation:notes>"#,
+            r#"</draw:page></office:presentation></office:body></office:document-content>"#,
+        );
+        let mut w = OdfWriter::new(OdfType::PRESENTATION);
+        w.part(
+            PartName::new("content.xml").expect("a part name"),
+            OdfType::XML,
+            Payload::new(content.as_bytes().to_vec()),
+        );
+        let file = w.finish().expect("the package writes");
+        let Ok(Converted::Deck { deck, thumbs }) = round_trip(&Conversion::ReadOdp {
+            data: file.into_role(),
+            bound: ambre_core::Size::new(
+                ambre_core::Px::<ambre_core::Image>::new(4096),
+                ambre_core::Px::<ambre_core::Image>::new(4096),
+            ),
+        }) else {
+            panic!("a read answers a deck");
+        };
+        let read = crate::decode_imported_deck(&deck).expect("the deck decodes");
+        assert_eq!(read.deck.slides.len(), 1);
+        assert_eq!(read.deck.slides[0].name, "Intro");
+        assert_eq!(read.deck.slides[0].notes, "Say hi.");
+        assert_eq!(read.deck.slides[0].items.len(), 1);
+        assert!(thumbs.is_empty());
     }
 }

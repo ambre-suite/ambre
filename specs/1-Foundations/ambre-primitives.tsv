@@ -4770,3 +4770,29 @@ ambre-toile | src/logic/state/groups.rs | crate::logic::state::groups | ToileSta
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::append_slides_inner(frames) | param | &[(Id<Frame>,&str)]	free-text	each frame of the deck beside its speaker notes, as the user typed them
 ambre-toile | src/ui/interop.rs | crate::ui::interop | PPTX_TYPE | const | &str	foreign-api	the media type a browser gives a PowerPoint file, which the drop gate matches
 ambre-pptx | src/read/mod.rs | crate::read | Mirror::of(name) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/odp.rs | crate::read::odp | Family::of(spelled) | param | &str	newtype-inner	the spelling of a style family, read back into the enum
+ambre-pptx | src/read/odp.rs | crate::read::odp | Layer.name | field | &'a str	foreign-api	the name of a style as the file spells it, matched against the style index and never parsed
+ambre-pptx | src/read/odp.rs | crate::read::odp | PathToken::Command.0 | field | char	newtype-inner	the letter of an SVG path command, which the path reader matches
+ambre-pptx | src/read/odp.rs | crate::read::odp | PathToken::Number.0 | field | f32	newtype-inner	a number of an SVG path, in the units of its view box, which carry no unit of their own
+ambre-pptx | src/read/odp.rs | crate::read::odp | Prop.name | field | &'static str	foreign-api	the name of an ODF style property, which ODF fixes and the file spells
+ambre-pptx | src/read/odp.rs | crate::read::odp | Prop::new(name) | param | &'static str	foreign-api	the name of an ODF style property, which ODF fixes and the file spells
+ambre-pptx | src/read/odp.rs | crate::read::odp | Props::element() | ret | &'static str	newtype-inner	the name of the style element that holds a group of properties, which ODF fixes
+ambre-pptx | src/read/odp.rs | crate::read::odp | StyleIndex.named | field | BTreeMap<(Named,&'a str),&'a Element>	foreign-api	the name of a master page, a page layout, a gradient, a hatch or a font face, as the file spells it
+ambre-pptx | src/read/odp.rs | crate::read::odp | StyleIndex.styles | field | BTreeMap<(Scope,Family,&'a str),&'a Element>	foreign-api	the name of a style, as the file spells it
+ambre-pptx | src/read/odp.rs | crate::read::odp | StyleIndex<'a>::face() | ret | Option<String>	free-text	the name of a font face, as the file spells it
+ambre-pptx | src/read/odp.rs | crate::read::odp | StyleIndex<'a>::first() | ret | Option<&'a str>	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/odp.rs | crate::read::odp | StyleIndex<'a>::in_chain() | ret | Option<&'a str>	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/odp.rs | crate::read::odp | StyleIndex<'a>::lookup(name) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/odp.rs | crate::read::odp | StyleIndex<'a>::style(name) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/odp.rs | crate::read::odp | colour(spelled) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/odp.rs | crate::read::odp | item_id() | ret | Option<&str>	foreign-api	the id a connector of the file names its end by, as the file spells it, matched and never parsed
+ambre-pptx | src/read/odp.rs | crate::read::odp | length(spelled) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/odp.rs | crate::read::odp | numbers() | ret | Vec<f32>	generic	the codec of a list of numbers the file spells, in the units of a view box, which the caller maps onto the box of the item
+ambre-pptx | src/read/odp.rs | crate::read::odp | numbers(spelled) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/odp.rs | crate::read::odp | paragraph_text() | ret | String	free-text	the text of a paragraph, as the user typed it
+ambre-pptx | src/read/odp.rs | crate::read::odp | path_tokens(spelled) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/odp.rs | crate::read::odp | read_odp(bytes) | param | &[u8]	foreign-api	the bytes of the file the user chose, handed to the zip reader
+ambre-pptx | src/read/odp.rs | crate::read::odp | runs() | ret | Vec<(Option<&'a str>,String)>	free-text	the runs of a paragraph: the name of the style each sits in, as the file spells it, and the text the user typed
+ambre-pptx | src/read/odp.rs | crate::read::odp | svg_path(map) | param | impl Fn(f32,f32)->SlidePoint	generic	the map from the view box of a path onto the slide, built by the caller from the box of the item; a point of a view box has no unit
+ambre-pptx | src/read/odp.rs | crate::read::odp | svg_path(spelled) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-toile | src/ui/interop.rs | crate::ui::interop | ODP_TYPE | const | &str	foreign-api	the media type a browser gives an OpenDocument presentation, which the drop gate matches

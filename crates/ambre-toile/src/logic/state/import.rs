@@ -307,7 +307,7 @@ impl ToileState {
             })) if ambre_convert::is_webp(data) => Some(ambre_core::ConverterFamily::Images),
             ToileCommand::Interop(InteropRequest::Export(ToileExport::Pptx))
             | ToileCommand::Interop(InteropRequest::Import(ToileImport {
-                format: ToileImportFormat::Pptx,
+                format: ToileImportFormat::Pptx | ToileImportFormat::Odp,
                 ..
             })) => Some(ambre_core::ConverterFamily::Office),
             _ => None,
@@ -315,11 +315,13 @@ impl ToileState {
     }
 
     /// Map the deck the Office module read from a presentation onto frames
-    /// of the deck, and apply it (`toile-pptx-import`). `Err` carries the
-    /// module's refusal, or why it did not load.
+    /// of the deck, and apply it (`toile-pptx-import`). `format` names the
+    /// file in the report. `Err` carries the module's refusal, or why it did
+    /// not load.
     pub(super) fn import_deck_file(
         &mut self,
         read: Result<ReadDeck, InteropError>,
+        format: ambre_bus::interop::FileFormat,
         at: Point,
     ) -> ToileOutcome {
         match read {
@@ -327,7 +329,7 @@ impl ToileState {
                 crate::logic::interop::import_deck(
                     &read.deck,
                     &read.thumbs,
-                    ambre_bus::interop::FileFormat::Pptx,
+                    format,
                     &Limits::default(),
                 ),
                 at,
@@ -404,13 +406,19 @@ impl ToileState {
                 ),
             )),
             ToileCommand::Interop(InteropRequest::Import(ToileImport {
-                format: ToileImportFormat::Pptx,
+                format: format @ (ToileImportFormat::Pptx | ToileImportFormat::Odp),
                 data,
                 ..
             })) => Some(ConvertedFile::Deck(
-                convert(ambre_convert::Conversion::ReadPptx {
-                    data: data.clone(),
-                    bound: Limits::default().max_image,
+                convert(match format {
+                    ToileImportFormat::Odp => ambre_convert::Conversion::ReadOdp {
+                        data: data.clone(),
+                        bound: Limits::default().max_image,
+                    },
+                    _ => ambre_convert::Conversion::ReadPptx {
+                        data: data.clone(),
+                        bound: Limits::default().max_image,
+                    },
                 })
                 .and_then(|converted| match converted {
                     ambre_convert::Converted::Deck { deck, thumbs } => {
@@ -2118,14 +2126,93 @@ mod pptx_tests {
     fn imported_bytes(
         data: ambre_core::Payload<ambre_client_core::FileBytes>,
     ) -> (ToileState, ToileReport) {
+        imported_from(import(Point::new(100.0, 50.0), data))
+    }
+
+    /// The board after the import `cmd` asks for, whole, and its report.
+    fn imported_from(cmd: ToileCommand) -> (ToileState, ToileReport) {
         let mut st = ToileState::new();
-        let out = st.handle_converted(import(Point::new(100.0, 50.0), data));
+        let out = st.handle_converted(cmd);
         let mut done = upload_all(&mut st, out);
         while st.has_pending_work() {
             done = st.resume();
         }
         let report = report_of(&done);
         (st, report)
+    }
+
+    /// An OpenDocument presentation of two pages: a title, a text frame
+    /// and notes on the first, a rectangle on the second.
+    fn odp_file() -> ambre_core::Payload<ambre_client_core::FileBytes> {
+        use ambre_pptx::opc::PartName;
+        use ambre_pptx::opc::odf::{OdfType, OdfWriter};
+        let content = concat!(
+            r#"<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" "#,
+            r#"xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" "#,
+            r#"xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" "#,
+            r#"xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" "#,
+            r#"xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" "#,
+            r#"xmlns:presentation="urn:oasis:names:tc:opendocument:xmlns:presentation:1.0" "#,
+            r#"xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0">"#,
+            r#"<office:automatic-styles><style:style style:name="gr1" style:family="graphic">"#,
+            r##"<style:graphic-properties draw:fill="solid" draw:fill-color="#3366cc" draw:stroke="none"/>"##,
+            r#"</style:style></office:automatic-styles>"#,
+            r#"<office:body><office:presentation>"#,
+            r#"<draw:page draw:name="page1"><draw:frame presentation:class="title" svg:x="2cm" svg:y="1cm" svg:width="20cm" svg:height="3cm"><draw:text-box><text:p>Opening</text:p></draw:text-box></draw:frame>"#,
+            r#"<draw:frame svg:x="2cm" svg:y="5cm" svg:width="20cm" svg:height="8cm"><draw:text-box><text:p>First point</text:p><text:p>Second point</text:p></draw:text-box></draw:frame>"#,
+            r#"<presentation:notes><draw:frame presentation:class="notes"><draw:text-box><text:p>Open with the plan.</text:p><text:p>Then move on.</text:p></draw:text-box></draw:frame></presentation:notes></draw:page>"#,
+            r#"<draw:page draw:name="page2"><draw:rect draw:style-name="gr1" svg:x="4cm" svg:y="4cm" svg:width="6cm" svg:height="3cm"/></draw:page>"#,
+            r#"</office:presentation></office:body></office:document-content>"#,
+        );
+        let mut w = OdfWriter::new(OdfType::PRESENTATION);
+        w.part(
+            PartName::new("content.xml").expect("a part name"),
+            OdfType::XML,
+            ambre_core::Payload::new(content.as_bytes().to_vec()),
+        );
+        w.finish().expect("the package writes").into_role()
+    }
+
+    /// An OpenDocument presentation lands on the board as its PowerPoint
+    /// twin lands: the same frames, titles, notes and members. The report
+    /// names the format the user opened.
+    #[test]
+    fn an_odp_lands_on_the_board_as_its_powerpoint_twin() {
+        let odp = odp_file();
+        let read = ambre_pptx::read_odp(odp.as_bytes()).expect("the presentation reads");
+        let pptx = ambre_pptx::write(&read.deck).expect("the twin writes");
+        let (from_odp, odp_report) =
+            imported_from(ToileCommand::Interop(InteropRequest::Import(ToileImport {
+                format: ToileImportFormat::Odp,
+                data: odp,
+                at: Point::new(100.0, 50.0),
+            })));
+        let (from_pptx, pptx_report) = imported_from(import(Point::new(100.0, 50.0), pptx));
+        let shape = |st: &ToileState| {
+            st.slide_order()
+                .iter()
+                .map(|f| {
+                    let id = Id::<Element>::from(f.clone());
+                    (st.frame_name(&id), st.notes(f), st.children_of(&id).len())
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            shape(&from_odp),
+            [
+                (
+                    Some("Opening".to_owned()),
+                    Some("Open with the plan.\nThen move on.".to_owned()),
+                    2
+                ),
+                (None, Some(String::new()), 1),
+            ]
+        );
+        assert_eq!(shape(&from_odp), shape(&from_pptx));
+        assert_eq!(from_odp.element_count(), from_pptx.element_count());
+        assert_eq!(odp_report.format(), ambre_bus::interop::FileFormat::Odp);
+        assert_eq!(pptx_report.format(), ambre_bus::interop::FileFormat::Pptx);
+        assert_eq!(odp_report.entries(), pptx_report.entries());
     }
 
     #[test]
