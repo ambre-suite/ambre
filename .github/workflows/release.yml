@@ -32,6 +32,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: System deps
         run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev brotli
       # The trunk of `TRUNK_VERSION` in `scripts/client_digest.py`, which a

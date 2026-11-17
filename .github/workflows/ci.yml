@@ -701,6 +701,8 @@ jobs:
             name: second
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: System deps
         run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev brotli
       # The trunk of `TRUNK_VERSION` in `scripts/client_digest.py`, which a
@@ -723,6 +725,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install just
         uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
