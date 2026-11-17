@@ -76,7 +76,7 @@ this document alone. These rows hold the harnesses. The budgets the harnesses me
 
 | Proof | Roadmap row | Receiver | What it prints |
 |---|---|---|---|
-| Android | `Call client proofs on Android` | a Galaxy A55 under Chrome | the paint phase and the worker phase |
+| Android | `Call client proofs on Android` | a Pixel 9a under Chrome | the paint phase and the worker phase |
 | iOS | `Call client proofs on iOS` | an iPhone under Safari | the two phases of Android, then a decode phase of 30 minutes |
 | Desktop paint | the `Call video paint` row of the budget register | a Chrome with a window and its GPU on the desktop that runs the senders | the paint phase and the worker phase |
 | Stall | `Call video stall on real hardware` | two Chrome and two Firefox on a second machine | the freezes of each received video |
@@ -181,7 +181,7 @@ headless receiver, with no phone, to try the setup.
 
 ### 3.1 Android
 
-Prerequisites: the Galaxy A55 and the desktop on one network, which lets the phone reach the
+Prerequisites: the Pixel 9a and the desktop on one network, which lets the phone reach the
 desktop on TCP 8443 and on UDP. `mkcert` on the desktop.
 
 1. Run `just call-proof-cert <address of the desktop>`, once. Install the root it names on the
