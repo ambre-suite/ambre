@@ -237,7 +237,11 @@ def send(
                 response.status, {k.lower(): v for k, v in response.headers.items()}, response.read()
             )
     except urllib.error.HTTPError as error:
-        return Answer(error.code, {k.lower(): v for k, v in error.headers.items()}, error.read())
+        # The error is the response too: close it once read.
+        with error:
+            return Answer(
+                error.code, {k.lower(): v for k, v in error.headers.items()}, error.read()
+            )
     except (urllib.error.URLError, OSError) as error:
         raise StackError(f"{url}: {getattr(error, 'reason', error)}") from None
 
