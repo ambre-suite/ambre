@@ -624,8 +624,8 @@ mod tests {
         );
     }
 
-    /// One slide point is one world unit, so a text of 18 pt is drawn 18
-    /// world units tall and keeps its share of the slide. Found by the
+    /// One slide point is one world unit. So a text of 18 pt is drawn 18
+    /// world units tall, and keeps its share of the slide. Found by the
     /// fixture round trip: the size landed as 18 board points, drawn a third
     /// larger, and each export and import grew it again.
     #[test]

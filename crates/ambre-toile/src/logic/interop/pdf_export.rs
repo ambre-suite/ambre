@@ -370,8 +370,9 @@ impl DeckRecording {
     ///
     /// The bytes are kept only when they spell a PNG or a JPEG whose header
     /// declares a size, and fit under [`EXPORT_BYTES_CAP`]. Anything else
-    /// leaves the picture to its thumbnail, and the report counts it: never
-    /// a silent fallback, and never a file the PDF module would draw broken.
+    /// leaves the picture to its thumbnail, and the report counts it. The
+    /// fallback is never silent, and the PDF module never gets a file it
+    /// would draw broken.
     pub fn answer(&mut self, id: Seq<Request>, data: Option<Payload<MediaBytes>>) {
         let Some(address) = self.waiting.remove(&id) else {
             return;
@@ -455,10 +456,9 @@ fn pictures_of(pdf_page: &PdfPage) -> impl Iterator<Item = &Validated<ContentHas
         })
 }
 
-/// A stored file as a page draws it, or `None` when the bytes are neither a
+/// A stored file as a page draws it. `None` when the bytes are neither a
 /// PNG nor a JPEG, or when their header declares no size or one past the
-/// import bound. Only the header is
-/// read: a JPEG is walked by `ambre_convert::jpeg`, since Main links no JPEG
+/// import bound. Only the header is read: a JPEG is walked by `ambre_convert::jpeg`, since Main links no JPEG
 /// decoder (`TOILE-IO-131`).
 #[must_use]
 pub fn stored_picture(bytes: Payload<MediaBytes>) -> Option<StoredPicture> {

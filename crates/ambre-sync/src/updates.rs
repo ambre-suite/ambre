@@ -2473,8 +2473,8 @@ mod tests {
         // put on her row is refused first (`SYNC-201`).
         assert_eq!(opens(&substituted), Err(OpenFailure::KeyNotReceived));
 
-        // A copy of a key no writer named, under a wrapper the log verifies:
-        // no member signed that key, so the open names the relay's fault,
+        // A copy of a key no writer named, under a wrapper the log verifies.
+        // No member signed that key, so the open names the relay's fault,
         // never a key still to arrive (`SYNC-212`).
         let unnamed = http::MembersResponse {
             members: vec![

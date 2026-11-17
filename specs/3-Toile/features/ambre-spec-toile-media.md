@@ -218,7 +218,7 @@ picture the document cannot resolve would be re-requested on every frame that fa
   picture it draws, and draws it whole (`TOILE-IO-100`). The paint takes no such path yet.
 * **A picture on screen never gets sharper than its thumbnail** (`TOILE-IO-035`). The screen reads
   the 256 px inline preview, because that is what crosses the bus. The state the rule names -- the
-  thumbnail shown *while* the real pixels arrive -- has no second half to give way to, and
+  thumbnail shown *while* the real pixels arrive -- has no second half to give way to. So
   `TOILE-IO-035` stays `unimplemented` for want of a distinction to assert.
 * **Every picture crosses the bus as raw pixels.** A `MediaDecoded` carries `width * height * 4` bytes. The
   queue is shared memory and the vector moves rather than copies. The cost is the decode and the peak, not a

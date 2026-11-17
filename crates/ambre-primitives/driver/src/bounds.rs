@@ -287,9 +287,9 @@ pub fn view_module(f: &str) -> bool {
 
 /// Whether an item belongs to the CRDT engine. The crate splits into
 /// `loro`, `loro_internal` and `loro_common`, and a re-export names the item
-/// where it is declared. `ambre_crdt` counts as the engine too: each of its
+/// where it is declared. `ambre_crdt` counts as the engine too. Each of its
 /// items reads or writes a document, a marker type with no engine field
-/// included, so a view reaches none of them (`UI-THREAD-020`).
+/// included. So a view reaches none of them (`UI-THREAD-020`).
 pub fn crdt(r: &Reached) -> bool {
     r.krate.starts_with("loro") || r.krate == "ambre_crdt"
 }

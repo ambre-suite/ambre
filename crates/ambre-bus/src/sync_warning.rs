@@ -37,10 +37,10 @@ pub enum SyncWarningCode {
     /// for the relay. Said aloud rather than dropped in silence (`SYNC-069`).
     UpdateRefused = 5,
 
-    /// An edit of this document will never reach the relay: the relay refused
-    /// it before it took a place in its history (`ambre-spec-sync.md`,
-    /// `SYNC-155`), or the client dropped the edits it held while the log of a
-    /// channel walked again past the bound of that walk
+    /// An edit of this document will never reach the relay, for one of two
+    /// causes. The relay refused it before it took a place in its history
+    /// (`ambre-spec-sync.md`, `SYNC-155`). The client dropped the edits it held
+    /// while the log of a channel walked again past the bound of that walk
     /// (`ambre-spec-membership.md`, `SYNC-234`). The edit stays on this client
     /// only, and nothing more is sent until the document reopens.
     EditRefused = 6,

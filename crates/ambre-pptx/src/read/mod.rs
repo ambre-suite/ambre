@@ -821,7 +821,7 @@ impl Reader<'_> {
     }
 
     /// A graphic frame: a table, a chart, a SmartArt or an embedded object.
-    /// A table lands as its cells and a chart as the text of its values; an
+    /// A table lands as its cells and a chart as the text of its values. An
     /// embedded object lands as its preview, and a SmartArt as nothing.
     fn frame(
         &mut self,

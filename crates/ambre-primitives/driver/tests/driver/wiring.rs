@@ -137,9 +137,13 @@ const AMBRE_CRDT: &str = "pub enum Steps {}\n\
     pub fn session_runs(_: &loro::LoroDoc) -> bool { true }\n\
     pub struct Fields<K>(loro::LoroMap, core::marker::PhantomData<K>);\n";
 
-// A view names each kind of item of `ambre-crdt`: a marker type with no
-// engine field, a function over the document, a typed map handle, and a
-// type the crate's Logic module re-exports under a name of its own. Each one
+// A view names each kind of item of `ambre-crdt`:
+// * a marker type with no engine field;
+// * a function over the document;
+// * a typed map handle;
+// * a type the crate's Logic module re-exports under a name of its own.
+//
+// Each one
 // writes the document or names a part of it, so each one is refused. The
 // Logic module names them freely, and a tree node's identifier still passes
 // (`UI-THREAD-020`).

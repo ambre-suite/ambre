@@ -97,7 +97,7 @@ pub const fn answer_deadline(family: ConverterFamily) -> TimeSpan<FracMs> {
         ConverterFamily::Pdf => PDF_DEADLINE,
         // The markup family measures far under the floor. A CSV file has no
         // bound to measure on, so the tables family keeps the floor
-        // unmeasured, and so does the boards family, which no bench drives.
+        // unmeasured. So does the boards family, which no bench drives.
         ConverterFamily::Markup | ConverterFamily::Tables | ConverterFamily::Boards => {
             FLOOR_DEADLINE
         }
