@@ -186,7 +186,8 @@ mod tests {
     /// a reload nor the web storage reads them afterwards. The recovery form
     /// then reads them back. The Sync worker refuses a mistyped word, a wrong
     /// count and a bad checksum, each in its own words. It reads the words
-    /// the setup showed as a seed.
+    /// the setup showed as a seed. Signed out, the panel offers no recovery
+    /// (`CHROME-135`), so the recovery runs from the unlock face.
     #[tokio::test(flavor = "multi_thread")]
     #[cfg_attr(
         not(feature = "browser"),
@@ -216,14 +217,38 @@ mod tests {
             .wait_for("the words gone from the page", &gone, STEP)
             .await;
 
-        // A reload shows the sign-in panel, and no word.
+        // A reload shows the sign-in panel, and no word. Signed out, the
+        // panel links to no recovery: the form would fail as not signed in.
         page.browser.goto(&format!("{}/", page.origin)).await;
-        follow(&page, ".ambre-signin-recover").await;
+        page.browser
+            .wait_for(
+                "the sign-in panel with no recovery link",
+                "return !!document.querySelector('.ambre-signin-setup') \
+                   && !document.querySelector('.ambre-signin-recover');",
+                BOOT,
+            )
+            .await;
         assert_eq!(
             page.browser.script(&gone, json!([])).await,
             Value::Bool(true),
             "the words are readable after the setup"
         );
+
+        // The provider comes back to this tab, so a session holds and the
+        // unlock face links to the recovery form (`CHROME-133`).
+        page.browser
+            .script(
+                "sessionStorage.setItem('ambre.signin.state', 'belt-state');",
+                json!([]),
+            )
+            .await;
+        page.browser
+            .goto(&format!(
+                "{}/signin/google?code=belt-code&state=belt-state",
+                page.origin
+            ))
+            .await;
+        follow(&page, ".ambre-keys-recover").await;
 
         record_refusals(&page).await;
         let mistyped = format!("notaword {}", words[1..].join(" "));
@@ -237,24 +262,17 @@ mod tests {
         recover(&page, &["abandon"; 24].join(" ")).await;
         wait_refusal(&page, BAD_CHECKSUM).await;
 
-        // The words the setup showed draw no refusal of the words. A
-        // signed-out page has no session to re-seal, so the worker answers
-        // the refusal of the re-seal, never one of the words.
+        // The words the setup showed, in capitals, draw no refusal: the
+        // session re-seals the seed, and the unlock face comes back.
         recover(&page, &phrase.to_uppercase()).await;
-        let answer = page
-            .browser
+        page.browser
             .wait_for(
-                "the answer to the words the setup showed",
-                "const line = document.querySelector('.ambre-keys-refusal'); \
-                 return !!line && line.textContent.length > 0 ? line.textContent : false;",
+                "the unlock face after the recovery",
+                "return !document.querySelector('.ambre-keys-words-field') \
+                   && !!document.querySelector('.ambre-keys-recover');",
                 SETUP,
             )
             .await;
-        let answer = answer.as_str().unwrap_or_default().to_owned();
-        assert!(
-            ![UNKNOWN_WORD, BAD_CHECKSUM, WRONG_COUNT].contains(&answer.as_str()),
-            "the words the setup showed were refused: {answer}"
-        );
     }
 
     /// `CHROME-132`, `SYNC-261`: a setup ends in a session. The words cover

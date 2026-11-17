@@ -221,7 +221,7 @@ pub fn landing_view(
             <Show when=move || username.get().is_none() && !keys.is_open() && !gated()>
                 {
                     let to_logic = to_logic_signin.clone();
-                    move || sign_in_panel(dev_mode, keys, to_logic.clone())
+                    move || sign_in_panel(dev_mode, username, keys, to_logic.clone())
                 }
             </Show>
 
@@ -684,6 +684,7 @@ fn sign_out_control(to_logic: crate::outbox::ShellOutbox) -> impl IntoView {
 
 fn sign_in_panel(
     dev_mode: RwSignal<Option<SignInMode>>,
+    username: RwSignal<Option<ambre_core::Validated<ambre_core::DisplayName>>>,
     keys: crate::account::KeysSignals,
     to_logic: crate::outbox::ShellOutbox,
 ) -> impl IntoView {
@@ -744,12 +745,16 @@ fn sign_in_panel(
                     >
                         "Set up an account with a passphrase"
                     </button>
-                    <button
-                        class="ambre-signin-link ambre-signin-recover"
-                        on:click=move |_| keys.open(crate::account::KeysFace::Recover)
-                    >
-                        "Recover an account with its recovery words"
-                    </button>
+                    // A recovery re-seals the seed of a session. Signed out,
+                    // the form fails as not signed in (`CHROME-135`).
+                    <Show when=move || username.get().is_some()>
+                        <button
+                            class="ambre-signin-link ambre-signin-recover"
+                            on:click=move |_| keys.open(crate::account::KeysFace::Recover)
+                        >
+                            "Recover an account with its recovery words"
+                        </button>
+                    </Show>
                 </div>
             }
             .into_any()
@@ -977,6 +982,7 @@ mod tests {
         let container = mount_in_container(move || {
             sign_in_panel(
                 dev_mode,
+                RwSignal::new(None),
                 crate::account::KeysSignals::new(),
                 crate::outbox::ShellOutbox::new(tx),
             )
@@ -1146,6 +1152,7 @@ mod tests {
         let container = mount_in_container(move || {
             sign_in_panel(
                 dev_mode,
+                RwSignal::new(None),
                 crate::account::KeysSignals::new(),
                 crate::outbox::ShellOutbox::new(tx),
             )
@@ -1175,6 +1182,44 @@ mod tests {
             (true, true),
             "the dev route once answered"
         );
+        container.remove();
+    }
+
+    /// A recovery re-seals the seed of a session, so the dev panel links to
+    /// it only while a session holds. Signed out, the form fails as not
+    /// signed in, so the panel offers no recovery (`CHROME-135`).
+    #[wasm_bindgen_test]
+    async fn the_recovery_link_shows_only_in_a_session() {
+        let owner = Owner::new();
+        owner.set();
+        let (tx, _rx) = ambre_bus::conduit::local::<LogicCommand>(ambre_core::Bounded::<
+            ambre_bus::conduit::ChannelSlots,
+        >::of::<8>());
+        let username = RwSignal::new(None);
+        let container = mount_in_container(move || {
+            sign_in_panel(
+                RwSignal::new(Some(SignInMode::Dev)),
+                username,
+                crate::account::KeysSignals::new(),
+                crate::outbox::ShellOutbox::new(tx),
+            )
+        });
+        let link =
+            |c: &web_sys::Element| c.query_selector(".ambre-signin-recover").unwrap().is_some();
+        assert!(
+            container
+                .query_selector(".ambre-signin-setup")
+                .unwrap()
+                .is_some(),
+            "the setup link shows signed out"
+        );
+        assert!(!link(&container), "a recovery link signed out");
+
+        username.set(Some(
+            ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada".to_owned()).unwrap(),
+        ));
+        tick().await;
+        assert!(link(&container), "no recovery link in a session");
         container.remove();
     }
 
