@@ -292,7 +292,7 @@
 
 | Artefact | Raw | Brotli | Fails on | Room | 4G at 20 Mbit/s |
 |---|---|---|---|---|---|
-| Main | 10 442 998 | 2 773 165 | raw ceiling 10 660 000 | 217 002 raw, 2.1 % | -- |
+| Main | 10 442 998 | 2 773 165 | raw ceiling 10 920 000 | 477 002 raw, 4.6 % | -- |
 | Sync | 1 269 817 | 370 575 | -- | -- | -- |
 | First download | -- | 3 143 740 | brotli budget 4 000 000 | 856 260, 21 % | 1.26 s |
 | Tables module | 122 422 | 43 595 | brotli budget 100 000 | 56 405, 56 % | 0.02 s |

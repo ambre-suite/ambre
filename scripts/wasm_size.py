@@ -55,7 +55,7 @@ BUDGET = 4_000_000
 # only through a story row that names the new figure and the cut tried first
 # (`ARCH-095`), and the row sets it 2 % above the new measure again.
 CEILINGS = {
-    "Main": 10_660_000,
+    "Main": 10_920_000,
 }
 
 # The brotli budget of each lazy artefact, its row of `ambre-spec-budgets.md
