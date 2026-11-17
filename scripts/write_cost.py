@@ -15,10 +15,11 @@ every 500 deltas, autovacuum off. It reads the WAL each step wrote through
 `pg_walinspect`, which no disk changes. It prints one line, a JSON object
 after `WRITE_COST `, and this script holds that line.
 
-**What still moves.** A run moves by a few bytes per delta, 0.4 % to 1.4 %,
-for a cause not known yet. `MARGIN` covers that spread, measured on the day
-the ceiling was set. The random key of each row of `updates` was not the
-cause: the spread stayed the same once the key went.
+**What still moves.** Autovacuum still visits the catalogs of every database
+of the cluster. The run charges to no step the WAL of a transaction that
+writes none of its relations, so an autoanalyze inside a window costs no
+step. That foreign WAL was the gap of 1.2 % between CI and a local run. Ten
+runs of 2026-11-16 still move by 0.44 %, and `MARGIN` covers that spread.
 
 **A ceiling moves down.** The stories on `updates` each lower the WAL per
 delta, and each one lowers `CEILING` to its new figure plus `MARGIN`, in the
@@ -55,7 +56,9 @@ CEILING = 2_280
 # keyed by document and number and two snapshots kept, five runs read
 # 2 197 B to 2 228 B, and the CI job of two snapshots kept read inside the
 # local spread. The ceiling is that dearest run plus the margin. A new index
-# on `updates` costs more than the margin.
+# on `updates` costs more than the margin. On 2026-11-16, the CI gap was the
+# WAL of autovacuum inside the windows, which the run now leaves out: ten
+# runs, five of them after the db tier, read 2 190 B to 2 200 B.
 MARGIN = 0.02
 
 TEST = "hot_tail::write_cost::write_cost_short_run"

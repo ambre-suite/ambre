@@ -367,7 +367,7 @@ impl Outcome {
         let sum: i64 = self
             .by_step
             .iter()
-            .filter(|c| c.step != "between")
+            .filter(|c| c.step != BETWEEN && c.step != FOREIGN)
             .map(pick)
             .sum();
         sum as f64 / self.deltas.max(1) as f64
@@ -391,6 +391,16 @@ impl Outcome {
         format!("{SUMMARY_PREFIX}{figures}")
     }
 }
+
+/// The bucket of the records outside every window.
+const BETWEEN: &str = "between";
+
+/// The bucket of the records another process wrote while a window was open.
+/// The run reads the WAL of the whole cluster, and autovacuum still visits
+/// the catalogs of every database. An analyze inside a window would charge
+/// 7 B to 50 B per delta to a step. That WAL was the gap between CI and a
+/// local run (`ambre-spec-budgets.md section 3`).
+const FOREIGN: &str = "foreign";
 
 /// The prefix of the summary line, which `scripts/write_cost.py` matches.
 const SUMMARY_PREFIX: &str = "WRITE_COST ";
@@ -670,6 +680,46 @@ async fn write_cost_short_run(pool: sqlx::PgPool) {
     println!("{}", outcome.summary_line());
 }
 
+/// Fills the temporary table `foreign_records` with the records between
+/// `start` and `end` that the run did not write. The run writes only the
+/// user relations of its own database. A transaction is foreign when none of
+/// its blocks is one of those, and each of its records is foreign, its commit
+/// included. A record with no transaction id is foreign when none of the
+/// blocks it writes is the run's: a vacuum of a catalog, for example. A
+/// transaction of the run may prune a catalog page on access, so a block
+/// elsewhere alone does not make it foreign.
+async fn mark_foreign(conn: &mut sqlx::PgConnection, start: &str, end: &str) {
+    sqlx::query(
+        "CREATE TEMP TABLE foreign_records AS \
+         WITH own AS ( \
+             SELECT relfilenode FROM pg_class \
+             WHERE oid >= 16384 AND relfilenode <> 0 \
+         ), blocks AS ( \
+             SELECT b.start_lsn, b.xid, \
+                    b.reldatabase = (SELECT oid FROM pg_database WHERE datname = current_database()) \
+                    AND b.relfilenode IN (SELECT relfilenode FROM own) AS mine \
+             FROM pg_get_wal_block_info($1::pg_lsn, $2::pg_lsn) b \
+         ), by_record AS ( \
+             SELECT start_lsn, bool_or(mine) AS mine FROM blocks GROUP BY start_lsn \
+         ), alien AS ( \
+             SELECT xid FROM blocks WHERE xid <> '0'::xid GROUP BY xid HAVING NOT bool_or(mine) \
+         ) \
+         SELECT r.start_lsn AS lsn FROM pg_get_wal_records_info($1::pg_lsn, $2::pg_lsn) r \
+         LEFT JOIN by_record k ON k.start_lsn = r.start_lsn \
+         WHERE (r.xid <> '0'::xid AND r.xid IN (SELECT xid FROM alien)) \
+            OR (r.xid = '0'::xid AND NOT k.mine)",
+    )
+    .bind(start)
+    .bind(end)
+    .execute(&mut *conn)
+    .await
+    .expect("the foreign records");
+    sqlx::query("ANALYZE foreign_records")
+        .execute(&mut *conn)
+        .await
+        .expect("an analyze");
+}
+
 /// Tags each WAL record and each block reference of the cycle with its step.
 /// It prints the cost per delta by step, by relation and by bucket of time.
 async fn report_wal(
@@ -721,9 +771,15 @@ async fn report_wal(
     let deltas: u64 = per_bucket.values().sum();
     let deltas = deltas as f64;
 
+    mark_foreign(&mut conn, start, end).await;
+
     let tag = "LEFT JOIN LATERAL (SELECT m.e, m.step, m.bucket FROM marks m \
-               WHERE m.s <= r.start_lsn ORDER BY m.s DESC LIMIT 1) w ON TRUE";
-    let step = "CASE WHEN r.start_lsn < w.e THEN w.step ELSE 'between' END";
+               WHERE m.s <= r.start_lsn ORDER BY m.s DESC LIMIT 1) w ON TRUE \
+               LEFT JOIN foreign_records f ON f.lsn = r.start_lsn";
+    let step = format!(
+        "CASE WHEN f.lsn IS NOT NULL THEN '{FOREIGN}' \
+              WHEN r.start_lsn < w.e THEN w.step ELSE '{BETWEEN}' END"
+    );
 
     let by_step: Vec<(String, i64, i64, i64, i64)> = sqlx::query_as(&format!(
         "SELECT {step} AS step, COUNT(*), SUM(r.record_length)::BIGINT, \
@@ -859,4 +915,89 @@ async fn report_wal(
         .into_iter()
         .map(|(step, _, bytes, fpi, _)| StepCost { step, bytes, fpi })
         .collect()
+}
+
+/// The WAL of another writer inside a window is charged to no step. An
+/// analyze stands for the autovacuum worker: it writes `pg_statistic` and
+/// `pg_class` under a transaction of its own, as autoanalyze does. The run's
+/// own insert, on a user relation, stays the run's, its commit included.
+#[sqlx::test]
+#[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+async fn a_record_of_another_writer_is_foreign(pool: sqlx::PgPool) {
+    let mut conn = pool.acquire().await.expect("a connection");
+    for statement in [
+        "CREATE EXTENSION IF NOT EXISTS pg_walinspect",
+        "CREATE TABLE own_rows (id BIGINT)",
+    ] {
+        sqlx::query(statement)
+            .execute(&mut *conn)
+            .await
+            .expect("the setup");
+    }
+    let lsn = "SELECT pg_current_wal_insert_lsn()::TEXT";
+    let xid = "SELECT pg_current_xact_id()::xid::TEXT";
+    let start: String = sqlx::query_scalar(lsn)
+        .fetch_one(&mut *conn)
+        .await
+        .expect("the start");
+
+    let mut xids = Vec::new();
+    for write in [
+        "INSERT INTO own_rows SELECT generate_series(1, 100)",
+        "ANALYZE own_rows",
+    ] {
+        sqlx::query("BEGIN")
+            .execute(&mut *conn)
+            .await
+            .expect("a begin");
+        let id: String = sqlx::query_scalar(xid)
+            .fetch_one(&mut *conn)
+            .await
+            .expect("the transaction id");
+        sqlx::query(write)
+            .execute(&mut *conn)
+            .await
+            .expect("the write");
+        sqlx::query("COMMIT")
+            .execute(&mut *conn)
+            .await
+            .expect("a commit");
+        xids.push(id);
+    }
+    let end: String = sqlx::query_scalar(lsn)
+        .fetch_one(&mut *conn)
+        .await
+        .expect("the end");
+
+    mark_foreign(&mut conn, &start, &end).await;
+    let tagged: Vec<(String, i64, i64)> = sqlx::query_as(
+        "SELECT r.xid::TEXT, COUNT(*), COUNT(f.lsn) \
+         FROM pg_get_wal_records_info($1::pg_lsn, $2::pg_lsn) r \
+         LEFT JOIN foreign_records f ON f.lsn = r.start_lsn \
+         WHERE r.xid::TEXT = ANY($3) GROUP BY 1",
+    )
+    .bind(&start)
+    .bind(&end)
+    .bind(&xids)
+    .fetch_all(&mut *conn)
+    .await
+    .expect("the tagged records");
+    let of = |id: &str| {
+        tagged
+            .iter()
+            .find(|(x, _, _)| x == id)
+            .map_or((0, 0), |(_, n, f)| (*n, *f))
+    };
+    let (own_records, own_foreign) = of(&xids[0]);
+    let (other_records, other_foreign) = of(&xids[1]);
+    assert!(own_records > 0, "the insert wrote WAL");
+    assert_eq!(
+        own_foreign, 0,
+        "no record of the run's own write is foreign"
+    );
+    assert!(other_records > 0, "the analyze wrote WAL");
+    assert_eq!(
+        other_foreign, other_records,
+        "every record of the other writer is foreign"
+    );
 }
