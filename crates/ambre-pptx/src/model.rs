@@ -223,7 +223,6 @@ impl PayloadKind for PictureBytes {
 impl Becomes<PictureBytes> for ambre_core::ThumbnailPng {}
 
 /// A picture a reader takes out of a file is a file a decoder reads.
-#[cfg(feature = "codec")]
 impl Becomes<ambre_client_core::FileBytes> for PictureBytes {}
 
 /// A picture, stretched to the box of its placement.

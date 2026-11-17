@@ -10,11 +10,11 @@ description = "The PowerPoint codec: a deck model, its writer to a PresentationM
 # deck model and its report alone: the shapes the Logic thread fills and
 # reads and the converter module answers, so the Main instance links no zip
 # and no XML parser.
-codec = ["dep:ambre-client-core", "dep:ambre-opc", "dep:quick-xml"]
+codec = ["dep:ambre-opc", "dep:quick-xml"]
 
 [dependencies]
 ambre-core = { path = "../ambre-core" }
-ambre-client-core = { path = "../ambre-client-core", optional = true }
+ambre-client-core = { path = "../ambre-client-core" }
 serde      = { workspace = true }
 thiserror  = { workspace = true }
 

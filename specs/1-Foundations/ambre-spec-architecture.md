@@ -498,7 +498,7 @@ members.
 | `ambre-docx` | `ambre-client-core`, `ambre-core`, `ambre-opc` (optional) | the Word model, and its codec behind the `codec` feature |
 | `ambre-odt` | `ambre-client-core` (optional), `ambre-core`, `ambre-docx`, `ambre-opc` (optional) | the OpenDocument text codec, which reads into the Word model |
 | `ambre-xlsx` | `ambre-client-core` (optional), `ambre-core`, `ambre-opc` (optional) | the spreadsheet model, and its Excel and OpenDocument codecs behind the `codec` feature |
-| `ambre-pptx` | `ambre-client-core` (optional), `ambre-core`, `ambre-opc` (optional) | the PowerPoint deck model, and its writer behind the `codec` feature |
+| `ambre-pptx` | `ambre-client-core`, `ambre-core`, `ambre-opc` (optional) | the PowerPoint deck model, and its writer behind the `codec` feature |
 | `ambre-pdf` | `ambre-client-core`, `ambre-core`, `ambre-draw` | the drawing surface over the PDF writer, which the PDF module alone links (`ARCH-085`) |
 | `ambre-prose-form` | `ambre-core`, `ambre-docx` | Prose's intermediate form and the Word mapping over it. A leaf with no CRDT and no document, so the Office module links it (this section, the converter modules) |
 | `ambre-convert` | `ambre-client-core`, `ambre-core`, `ambre-docx` (optional), `ambre-draw`, `ambre-odt` (optional), `ambre-pdf` (optional), `ambre-pptx`, `ambre-prose-form`, `ambre-xlsx` | the request types, the loader and the engine of each family behind its feature. Main links the loader alone (`ARCH-078`) |
