@@ -700,6 +700,12 @@ pub enum TrameCommand {
         patch: PageSetupPatch,
     },
 
+    /// Freeze or unfreeze the leading rows or columns of the active sheet,
+    /// resolved against the active cell the Logic thread tracks
+    /// (`TRAME-UI-029`). The frozen pane is stored in the document, so every
+    /// collaborator sees it. One undo item.
+    Freeze(FreezeIntent),
+
     /// The reader's own locale and convention, which the device holds
     /// (`LOCALE-015`). Local view state: nothing is written (`LOCALE-017`).
     SetReaderLocale {
@@ -1054,6 +1060,7 @@ impl std::fmt::Debug for TrameCommand {
             Self::RenameSheet { sheet_id, name } => fields!("RenameSheet", sheet_id, name),
             Self::SetDocumentLocale { locale } => fields!("SetDocumentLocale", locale),
             Self::SetPageSetup { sheet_id, patch } => fields!("SetPageSetup", sheet_id, patch),
+            Self::Freeze(intent) => f.debug_tuple("Freeze").field(intent).finish(),
             Self::SetReaderLocale { reader } => fields!("SetReaderLocale", reader),
             Self::MoveSheet { sheet_id, to_index } => fields!("MoveSheet", sheet_id, to_index),
             Self::SortRange {
@@ -1215,6 +1222,7 @@ impl ambre_bus::Mutation for TrameCommand {
             | Self::RenameSheet { .. }
             | Self::SetDocumentLocale { .. }
             | Self::SetPageSetup { .. }
+            | Self::Freeze(_)
             | Self::SetReaderLocale { .. }
             | Self::MoveSheet { .. }
             | Self::SortRange { .. }
@@ -1476,6 +1484,43 @@ pub struct PageSetupPatch {
     pub paper: Option<PaperSize>,
     pub orientation: Option<PageOrientation>,
     pub margins: Option<PageMargins>,
+}
+
+/// The leading rows and columns of a sheet that stay on screen while the
+/// rest scrolls (`TRAME-UI-029`). Both counts start at the first line of
+/// their axis. Zero on an axis freezes nothing there.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct FrozenPane {
+    /// The rows frozen at the top.
+    pub rows: Len<Row>,
+    /// The columns frozen at the left.
+    pub cols: Len<Col>,
+}
+
+impl FrozenPane {
+    /// No row and no column frozen.
+    pub const NONE: Self = Self {
+        rows: Len::new(0),
+        cols: Len::new(0),
+    };
+
+    /// Whether the pane freezes no row and no column.
+    #[must_use]
+    pub const fn is_none(self) -> bool {
+        self.rows.is_zero() && self.cols.is_zero()
+    }
+}
+
+/// What a [`TrameCommand::Freeze`] does, against the active cell.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FreezeIntent {
+    /// Freeze every row down to the active cell's row, that row included.
+    RowsThroughActive,
+    /// Freeze every column up to the active cell's column, that column
+    /// included.
+    ColsThroughActive,
+    /// Freeze no row and no column.
+    Clear,
 }
 
 /// The cells a PDF export prints.

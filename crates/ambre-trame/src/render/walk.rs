@@ -6,7 +6,7 @@
 // zoom, no header strip and no dirty cell.
 
 use crate::hash::HashMap;
-use ambre_core::index::{Pos, Span};
+use ambre_core::index::{Len, Pos, Span};
 
 use ambre_core::{Doc, Px, Surface};
 use ambre_draw::DocumentWalk;
@@ -174,6 +174,8 @@ impl DocumentWalk for SheetWalk<'_> {
             row_heights: axes.row_heights,
             origin_col: c0,
             origin_row: r0,
+            frozen_rows: Len::<Row>::ZERO,
+            frozen_cols: Len::<Col>::ZERO,
             width: Px::<Surface>::new(region.x1),
             height: Px::<Surface>::new(region.y1),
             total_cols: TOTAL_COLS,

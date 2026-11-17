@@ -395,7 +395,12 @@ impl TrameView {
             } else if dr != 0 && dc != 0 {
                 // Diagonal scroll would need an L-shaped strip; go full.
                 (ContentRepaint::Full, None)
-            } else if !self.state.col_widths.is_empty() || !self.state.row_heights.is_empty() {
+            } else if !self.state.col_widths.is_empty()
+                || !self.state.row_heights.is_empty()
+                || !self.state.frozen.is_none()
+            {
+                // A frozen band stays where it is while the rest shifts, so a
+                // blit of the whole layer would move it too (`TRAME-UI-192`).
                 // The blit-scroll shift below assumes uniform metrics: moving `dr`
                 // rows shifts the content by `dr * ROW_HEIGHT`. With any resized
                 // axis (`trame-resize`) that pixel distance is wrong, so repaint fully

@@ -57,6 +57,7 @@ fn snap_keeps_multi_block_fill_selection() {
         col_start: Pos::<Col>::new(0),
         col_widths: vec![],
         row_heights: vec![],
+        frozen: crate::message::FrozenView::default(),
         cells: vec![
             cell(Pos::<Row>::new(0), Pos::<Col>::new(0), Some(span(2, 1))), // master, rows 0..=1
             cell(Pos::<Row>::new(1), Pos::<Col>::new(0), None),
@@ -118,6 +119,7 @@ fn filtered_rows_collapse_geometry_and_nav() {
         col_start: Pos::<Col>::new(0),
         col_widths: vec![],
         row_heights: vec![],
+        frozen: crate::message::FrozenView::default(),
         cells: vec![
             cell(0, crate::message::RowFilter::Shown),
             cell(1, crate::message::RowFilter::Shown),
@@ -229,6 +231,7 @@ fn move_to_and_content_scans() {
         col_start: Pos::<Col>::new(0),
         col_widths: vec![],
         row_heights: vec![],
+        frozen: crate::message::FrozenView::default(),
         cells: vec![
             DisplayCell {
                 row: Pos::<Row>::new(2),
@@ -291,6 +294,7 @@ fn viewport_data_preserves_formula_raw_for_editing() {
         col_start: Pos::<Col>::new(0),
         col_widths: vec![],
         row_heights: vec![],
+        frozen: crate::message::FrozenView::default(),
         cells: vec![DisplayCell {
             row: Pos::<Row>::new(0),
             col: Pos::<Col>::new(2),
@@ -366,6 +370,7 @@ fn dirty_and_error_lifecycle() {
         col_start: Pos::<Col>::new(0),
         col_widths: vec![],
         row_heights: vec![],
+        frozen: crate::message::FrozenView::default(),
         cells: vec![DisplayCell {
             row: Pos::<Row>::new(0),
             col: Pos::<Col>::new(0),
@@ -476,6 +481,7 @@ fn a_stale_viewport_answer_is_dropped_by_its_version() {
         col_start: Pos::<Col>::new(0),
         col_widths: vec![],
         row_heights: vec![],
+        frozen: crate::message::FrozenView::default(),
         cells: vec![DisplayCell {
             row: Pos::<Row>::new(0),
             col: Pos::<Col>::new(0),

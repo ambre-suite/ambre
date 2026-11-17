@@ -451,6 +451,7 @@ fn merge_block_selects_as_a_whole_and_nav_steps_over_it() {
         col_start: Pos::<Col>::new(0),
         col_widths: vec![],
         row_heights: vec![],
+        frozen: crate::message::FrozenView::default(),
         cells: vec![
             cell(Pos::<Row>::new(1), Pos::<Col>::new(1), Some(span(2, 2))), // master
             cell(Pos::<Row>::new(1), Pos::<Col>::new(2), None),
@@ -629,6 +630,7 @@ fn select_rect_keeps_unmerged_cells_selected() {
         col_start: Pos::<Col>::new(0),
         col_widths: vec![],
         row_heights: vec![],
+        frozen: crate::message::FrozenView::default(),
         cells: vec![
             cell(Pos::<Row>::new(0), Pos::<Col>::new(0), Some(span(2, 1))),
             cell(Pos::<Row>::new(1), Pos::<Col>::new(0), None),
@@ -658,6 +660,7 @@ fn select_rect_keeps_unmerged_cells_selected() {
         col_start: Pos::<Col>::new(0),
         col_widths: vec![],
         row_heights: vec![],
+        frozen: crate::message::FrozenView::default(),
         cells: vec![
             cell(Pos::<Row>::new(0), Pos::<Col>::new(0), None),
             cell(Pos::<Row>::new(1), Pos::<Col>::new(0), None),

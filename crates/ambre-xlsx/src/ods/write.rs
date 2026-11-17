@@ -2,7 +2,8 @@
 //! spreadsheet.
 //!
 //! The package holds the parts a reader needs and nothing else: the
-//! content, the styles and the manifest. No timestamp enters it, so one
+//! content, the styles and the manifest. The view settings join them when a
+//! table freezes a pane. No timestamp enters it, so one
 //! workbook always writes the same bytes.
 
 use std::collections::BTreeSet;
@@ -13,7 +14,7 @@ use ambre_core::{Count, Doc, Payload, Px};
 use super::{escaped, formula, length_pt, push_escaped, styles};
 use crate::cellref::CellRange;
 use crate::formula::Formula;
-use crate::model::{Cell, Content, Sheet, Value, Visibility, Workbook};
+use crate::model::{Cell, Content, FrozenPane, Sheet, Value, Visibility, Workbook};
 use crate::opc::PartName;
 use crate::opc::odf::{OdfType, OdfWriter};
 use crate::report::{Outcome, Report, XlsxConstruct};
@@ -136,11 +137,76 @@ pub(crate) fn write(workbook: &Workbook) -> Result<Exported, XlsxError> {
         OdfType::XML,
         Payload::new(styles_part.into_bytes()),
     );
+    if let Some(settings) = settings_xml(workbook, &mut report) {
+        package.part(
+            part("settings.xml")?,
+            OdfType::XML,
+            Payload::new(settings.into_bytes()),
+        );
+    }
     let bytes = package.finish().map_err(XlsxError::Package)?;
     Ok(Exported {
         bytes: bytes.into_role(),
         report,
     })
+}
+
+/// The view settings part, which holds the frozen pane of each table that
+/// freezes one, or `None` when no table does. A split mode of 2 freezes its
+/// axis at the split position, and the position of the scrolled pane starts
+/// past the frozen lines.
+fn settings_xml(workbook: &Workbook, report: &mut Report) -> Option<String> {
+    let mut tables = String::new();
+    for sheet in workbook.sheets.iter().filter(|s| !s.frozen.is_none()) {
+        let FrozenPane { rows, cols } = sheet.frozen;
+        tables.push_str("<config:config-item-map-entry config:name=\"");
+        push_escaped(&mut tables, sheet.name.as_str());
+        tables.push_str("\">");
+        let item = |out: &mut String, name: &str, kind: &str, value: u32| {
+            let _ = write!(
+                out,
+                "<config:config-item config:name=\"{name}\" config:type=\"{kind}\">{value}</config:config-item>"
+            );
+        };
+        let mode = |frozen: bool| if frozen { 2 } else { 0 };
+        item(
+            &mut tables,
+            "HorizontalSplitMode",
+            "short",
+            mode(!cols.is_zero()),
+        );
+        item(
+            &mut tables,
+            "VerticalSplitMode",
+            "short",
+            mode(!rows.is_zero()),
+        );
+        item(&mut tables, "HorizontalSplitPosition", "int", cols.get());
+        item(&mut tables, "VerticalSplitPosition", "int", rows.get());
+        item(&mut tables, "ActiveSplitRange", "short", 2);
+        item(&mut tables, "PositionLeft", "int", 0);
+        item(&mut tables, "PositionRight", "int", cols.get());
+        item(&mut tables, "PositionTop", "int", 0);
+        item(&mut tables, "PositionBottom", "int", rows.get());
+        tables.push_str("</config:config-item-map-entry>");
+        report.record(XlsxConstruct::FrozenPane, Outcome::Carried);
+    }
+    if tables.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+         <office:document-settings \
+         xmlns:office=\"urn:oasis:names:tc:opendocument:xmlns:office:1.0\" \
+         xmlns:config=\"urn:oasis:names:tc:opendocument:xmlns:config:1.0\" \
+         office:version=\"1.3\">\
+         <office:settings><config:config-item-set config:name=\"ooo:view-settings\">\
+         <config:config-item-map-indexed config:name=\"Views\"><config:config-item-map-entry>\
+         <config:config-item config:name=\"ViewId\" config:type=\"string\">view1</config:config-item>\
+         <config:config-item-map-named config:name=\"Tables\">{tables}</config:config-item-map-named>\
+         </config:config-item-map-entry></config:config-item-map-indexed>\
+         </config:config-item-set></office:settings></office:document-settings>"
+    ))
 }
 
 fn part(name: &str) -> Result<PartName, XlsxError> {

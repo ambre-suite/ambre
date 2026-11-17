@@ -115,6 +115,21 @@ impl NumericStats {
     }
 }
 
+/// The frozen pane of a sheet as a viewport answer carries it: the pane, and
+/// the size of each frozen line before the window (`TRAME-UI-192`). A frozen
+/// line inside the window takes its size from the window's own slices.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct FrozenView {
+    /// The frozen rows and columns.
+    pub pane: super::FrozenPane,
+    /// The height of each frozen row above the window's first row, from the
+    /// first row on.
+    pub row_heights: Vec<Px<Doc>>,
+    /// The width of each frozen column left of the window's first column,
+    /// from the first column on.
+    pub col_widths: Vec<Px<Doc>>,
+}
+
 /// Display events emitted by the Trame logic to the UI Thread.
 #[derive(Clone)]
 pub enum TrameEvent {
@@ -140,6 +155,11 @@ pub enum TrameEvent {
         /// `row_start` the same way [`col_widths`](Self::ViewportData::col_widths)
         /// is to `col_start`.
         row_heights: Vec<Px<Doc>>,
+        /// The frozen pane of the active sheet and the sizes of its frozen
+        /// lines (`TRAME-UI-029`). Every answer carries it, so a pane a peer
+        /// changed reaches the view with the next window. `cells` also holds
+        /// the frozen bands of the window, which a scroll never leaves.
+        frozen: FrozenView,
     },
 
     /// The resolved formatting of the **active cell** after a
@@ -559,6 +579,7 @@ impl std::fmt::Debug for TrameEvent {
                 cells,
                 col_widths,
                 row_heights,
+                frozen,
             } => fields!(
                 "ViewportData",
                 version,
@@ -566,7 +587,8 @@ impl std::fmt::Debug for TrameEvent {
                 col_start,
                 cells,
                 col_widths,
-                row_heights
+                row_heights,
+                frozen
             ),
             Self::StyleApplied {
                 style,

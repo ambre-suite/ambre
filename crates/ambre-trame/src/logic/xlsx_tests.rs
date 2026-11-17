@@ -408,6 +408,37 @@ fn a_hidden_sheet_imports_hidden_and_leaves_hidden() {
     assert_eq!(secret.visibility, xl::Visibility::Hidden);
 }
 
+/// `TRAME-IO-088`, `TRAME-IO-089`: a frozen pane lands with its sheet, the
+/// grid answers it, and the export writes it again. A sheet that freezes
+/// nothing leaves no pane.
+#[test]
+fn a_frozen_pane_imports_frozen_and_leaves_frozen() {
+    let mut frozen = sheet("Frozen", vec![("A1", text("header")), ("C9", num(1.0))]);
+    frozen.frozen = xl::FrozenPane {
+        rows: ambre_core::index::Len::new(2),
+        cols: ambre_core::index::Len::new(1),
+    };
+    let plain = sheet("Plain", vec![("A1", num(1.0))]);
+    let mut state = TrameState::new();
+    import(&mut state, file(&workbook(vec![frozen, plain])));
+    let pane = state.frozen_pane(&state.active_sheet.clone());
+    assert_eq!(
+        (pane.rows.get(), pane.cols.get()),
+        (2, 1),
+        "the first sheet of the file is shown, frozen"
+    );
+    let (back, _) = export(&mut state);
+    let pane_of = |name: &str| {
+        back.sheets
+            .iter()
+            .find(|s| s.name.as_str() == name)
+            .map(|s| (s.frozen.rows.get(), s.frozen.cols.get()))
+            .expect("the sheet leaves")
+    };
+    assert_eq!(pane_of("Frozen"), (2, 1));
+    assert_eq!(pane_of("Plain"), (0, 0));
+}
+
 /// `TRAME-IO-016`: a merge survives an import and an export.
 #[test]
 fn merges_survive_an_import_and_an_export() {

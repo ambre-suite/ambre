@@ -235,6 +235,11 @@ fn note(change: &ContainerDiff<'_>, imported: &mut Imported) {
         // No cache holds the page setup: an export reads it from the
         // document when it starts (`TRAME-IO-022`).
         SheetRoot::PageSetup => {}
+        // A frozen pane moves where every cell is drawn: the window
+        // re-fetches, and its answer carries the new pane (`TRAME-UI-029`).
+        SheetRoot::Frozen => {
+            imported.sizes.insert(sheet);
+        }
         // The axis module alone names a line list (`TRAME-275`).
         other => match axis_list(other) {
             Some(ListAxis::Hidden) => note_hidden(change, sheet, imported),

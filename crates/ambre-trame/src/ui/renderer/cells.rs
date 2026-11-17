@@ -51,14 +51,89 @@ pub(crate) fn sheet_axes(state: &TrameUiState) -> SheetAxes<'_> {
 }
 
 /// The camera from sheet coordinates to the screen: the zoom, then the scroll
-/// origin pinned at the corner of the header strips.
+/// origin pinned at the corner the frozen bands leave. With no frozen pane,
+/// that corner is the corner of the header strips.
+#[cfg(test)]
 pub(crate) fn sheet_camera(state: &TrameUiState) -> Affine {
+    pane_camera(state, Pane::SCROLLED)
+}
+
+/// One of the four panes a frozen pane splits the cell area into. Each axis
+/// of a pane is frozen, drawn from the first line, or scrolled, drawn from
+/// the scroll origin past the frozen band.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Pane {
+    rows: Band,
+    cols: Band,
+}
+
+/// Whether the lines of one axis of a pane are frozen or scrolled.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Band {
+    Frozen,
+    Scrolled,
+}
+
+impl Pane {
+    /// The pane that scrolls on both axes.
+    pub(crate) const SCROLLED: Self = Self {
+        rows: Band::Scrolled,
+        cols: Band::Scrolled,
+    };
+
+    /// The four panes, the scrolled one first.
+    const ALL: [Self; 4] = [
+        Self::SCROLLED,
+        Self {
+            rows: Band::Frozen,
+            cols: Band::Scrolled,
+        },
+        Self {
+            rows: Band::Scrolled,
+            cols: Band::Frozen,
+        },
+        Self {
+            rows: Band::Frozen,
+            cols: Band::Frozen,
+        },
+    ];
+}
+
+/// The camera of `pane`. A frozen axis lays the sheet out from its first
+/// line at the header strip. A scrolled axis lays it out from the scroll
+/// origin, past the frozen band (`TRAME-UI-192`).
+fn pane_camera(state: &TrameUiState, pane: Pane) -> Affine {
     let axes = sheet_axes(state);
     let zoom = state.zoom.get();
-    Affine::translate((
-        state.header_w().get() - zoom * axes.col_x(state.left_col).get(),
-        state.header_h().get() - zoom * axes.row_y(state.top_row).get(),
-    )) * Affine::scale(zoom)
+    let x = match pane.cols {
+        Band::Frozen => state.header_w().get(),
+        Band::Scrolled => {
+            (state.header_w() + state.frozen_w()).get() - zoom * axes.col_x(state.left_col).get()
+        }
+    };
+    let y = match pane.rows {
+        Band::Frozen => state.header_h().get(),
+        Band::Scrolled => {
+            (state.header_h() + state.frozen_h()).get() - zoom * axes.row_y(state.top_row).get()
+        }
+    };
+    Affine::translate((x, y)) * Affine::scale(zoom)
+}
+
+/// The screen rectangle of `pane` inside the cell area `cell_area`. Empty
+/// for a frozen band of no line.
+fn pane_rect(state: &TrameUiState, pane: Pane, cell_area: Rect) -> Rect {
+    let split_x = cell_area.x0 + state.frozen_w().get();
+    let split_y = cell_area.y0 + state.frozen_h().get();
+    let (x0, x1) = match pane.cols {
+        Band::Frozen => (cell_area.x0, split_x.min(cell_area.x1)),
+        Band::Scrolled => (split_x.min(cell_area.x1), cell_area.x1),
+    };
+    let (y0, y1) = match pane.rows {
+        Band::Frozen => (cell_area.y0, split_y.min(cell_area.y1)),
+        Band::Scrolled => (split_y.min(cell_area.y1), cell_area.y1),
+    };
+    Rect::new(x0, y0, x1, y1)
 }
 
 /// Draw the cells layer (white bg + pending fill + cell text + grid lines).
@@ -122,9 +197,9 @@ pub fn draw_cells<S: DrawSurface>(
     surface.fill_rect(strip, base_fill);
     let t_pending = clock.now();
 
-    // -- 2. The sheet's walk under the camera, over the strip's sheet region. --
-    let camera = sheet_camera(state);
-    let region = camera.inverse().transform_rect_bbox(strip);
+    // -- 2. The sheet's walk under each pane's camera, over the part of the
+    //       strip the pane holds. With no frozen pane, the scrolled pane is
+    //       the whole cell area (`TRAME-UI-192`). --------------------------------
     let view = SheetView {
         cells: &CacheCells::new(&state.cell_cache),
         axes: sheet_axes(state),
@@ -136,9 +211,23 @@ pub fn draw_cells<S: DrawSurface>(
         text_cache,
         cells_drawn: ambre_core::Count::<ambre_canvas::CellsDrawn>::ZERO,
     };
-    surface.push_transform(camera);
-    walk.walk(&view, region, surface);
-    surface.pop_transform();
+    let mut drawn = Vec::with_capacity(Pane::ALL.len());
+    for pane in Pane::ALL {
+        let shown = pane_rect(state, pane, cell_area).intersect(strip);
+        if shown.width() <= 0.0 || shown.height() <= 0.0 {
+            continue;
+        }
+        let camera = pane_camera(state, pane);
+        let region = camera.inverse().transform_rect_bbox(shown);
+        surface.push_clip(shown);
+        surface.push_transform(camera);
+        walk.walk(&view, region, surface);
+        surface.pop_transform();
+        surface.pop_clip();
+        drawn.push(walk.cells_drawn);
+    }
+    walk.cells_drawn = drawn.into_iter().sum();
+    draw_frozen_edges(surface, state, palette, cell_area);
     let t_cells = clock.now();
 
     // -- 3. UI-only layers tied to cell content (dirty veil + error marker). ---
@@ -160,6 +249,37 @@ pub fn draw_cells<S: DrawSurface>(
     stats.cells_drawn = walk.cells_drawn;
 }
 
+/// Stroke one line along the far edge of each frozen band, so the reader
+/// sees where the scrolled cells pass under it.
+fn draw_frozen_edges<S: DrawSurface>(
+    surface: &mut S,
+    state: &TrameUiState,
+    palette: &Palette,
+    cell_area: Rect,
+) {
+    let width = ambre_core::Px::<ambre_core::Surface>::new(2.0);
+    if !state.frozen.rows.is_zero() {
+        let y = cell_area.y0 + state.frozen_h().get();
+        if y < cell_area.y1 {
+            surface.stroke_line(
+                ambre_draw::Line::new((cell_area.x0, y), (cell_area.x1, y)),
+                palette.header_border,
+                width,
+            );
+        }
+    }
+    if !state.frozen.cols.is_zero() {
+        let x = cell_area.x0 + state.frozen_w().get();
+        if x < cell_area.x1 {
+            surface.stroke_line(
+                ambre_draw::Line::new((x, cell_area.y0), (x, cell_area.y1)),
+                palette.header_border,
+                width,
+            );
+        }
+    }
+}
+
 /// Paint the per-cell UI-only layers for the cells intersecting the strip:
 /// a reduced-opacity veil over dirty cells, and a corner marker over errored
 /// cells. Iterates the (small) dirty/error sets rather than the visible grid,
@@ -173,8 +293,17 @@ pub(crate) fn draw_ui_cell_layers<S: DrawSurface>(
 ) {
     // Dirty veil: a translucent content_bg quad fades the optimistic value.
     let veil = palette.content_bg.with_alpha(DIRTY_VEIL_ALPHA);
+    // A cell shows when the strip holds it or a frozen band does, and no
+    // frozen band covers it.
+    let shows = |at: CellPos| {
+        let row_frozen = at.row < state.frozen.rows.as_end();
+        let col_frozen = at.col < state.frozen.cols.as_end();
+        let row_on = row_frozen || at.row >= state.top_row;
+        let col_on = col_frozen || at.col >= state.left_col;
+        (span.contains(at) || row_frozen || col_frozen) && row_on && col_on
+    };
     for &at in &state.dirty_cells {
-        if span.contains(at) && !state.is_row_hidden(at.row) {
+        if shows(at) && !state.is_row_hidden(at.row) {
             surface.fill_rect(layout.cell_rect(at), veil);
         }
     }
@@ -184,7 +313,7 @@ pub(crate) fn draw_ui_cell_layers<S: DrawSurface>(
     // surface, since `WgpuSurface` does not implement fill_path.
     let err = palette.cell_error;
     for &at in &state.formula_errors {
-        if !span.contains(at) || state.is_row_hidden(at.row) {
+        if !shows(at) || state.is_row_hidden(at.row) {
             continue;
         }
         let rect = layout.cell_rect(at);

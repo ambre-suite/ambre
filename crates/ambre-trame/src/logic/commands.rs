@@ -9,7 +9,7 @@ use super::find::Replacement;
 use super::locale::TypedKind;
 use super::*;
 use crate::formula::text::CellText;
-use crate::message::{TrameExport, TrameImport};
+use crate::message::{FrozenView, TrameExport, TrameImport};
 use ambre_bus::interop::{Direction, InteropAnswer, InteropError, InteropRequest};
 use ambre_core::Flag as _;
 use ambre_core::HistoryStep;
@@ -173,7 +173,8 @@ impl TrameState {
                     CellPos::new(row_start, col_start),
                     CellPos::new(row_end, col_end),
                 );
-                let cells = self.pack_cells(window);
+                let mut cells = self.pack_cells(window);
+                let frozen = self.frozen_view(window, &mut cells);
                 self.served_version = version;
 
                 // Per-axis metric slices for the requested window: the UI feeds
@@ -197,6 +198,7 @@ impl TrameState {
                     cells,
                     col_widths,
                     row_heights,
+                    frozen,
                 }];
                 // Hydrate the tab strip on the first viewport request of the
                 // session (the UI has no separate sheet-list fetch command).
@@ -266,6 +268,7 @@ impl TrameState {
             TrameCommand::RenameSheet { sheet_id, name } => self.rename_sheet(&sheet_id, &name),
             TrameCommand::SetDocumentLocale { locale } => self.set_document_locale(&locale),
             TrameCommand::SetPageSetup { sheet_id, patch } => self.set_page_setup(sheet_id, patch),
+            TrameCommand::Freeze(intent) => self.freeze(intent),
             TrameCommand::SetReaderLocale { reader } => self.set_reader_locale(reader),
             TrameCommand::MoveSheet { sheet_id, to_index } => self.move_sheet(&sheet_id, to_index),
             TrameCommand::DeleteSheet { sheet_id } => self.delete_sheet(&sheet_id),
@@ -512,6 +515,51 @@ impl TrameState {
     /// The display cells of `window`, as the viewport serves them: computed
     /// text through its number format, the raw text, and the resolved style.
     /// The formula cache must be current.
+    /// The frozen pane of the active sheet for an answer over `window`. The
+    /// cells of each frozen band outside the window join `cells`, so a band
+    /// stays on screen however far the window scrolls (`TRAME-UI-192`). The
+    /// sizes of the frozen lines before the window ride with the pane.
+    fn frozen_view(&self, window: CellRect, cells: &mut Vec<DisplayCell>) -> FrozenView {
+        let pane = self.frozen_pane(&self.active_sheet);
+        let (first, last) = (window.top_left, window.bottom_right);
+        // The frozen lines the window does not already hold.
+        let rows_before = pane.rows.min(first.row.len_from(Pos::<Row>::ZERO));
+        let cols_before = pane.cols.min(first.col.len_from(Pos::<Col>::ZERO));
+        let band = |top: CellPos, rows: Option<Pos<Row>>, cols: Option<Pos<Col>>| {
+            Some(CellRect::spanning(top, CellPos::new(rows?, cols?)))
+        };
+        let origin = CellPos::new(Pos::<Row>::ZERO, Pos::<Col>::ZERO);
+        let bands = [
+            band(
+                CellPos::new(Pos::<Row>::ZERO, first.col),
+                rows_before.last(),
+                Some(last.col),
+            ),
+            band(
+                CellPos::new(first.row, Pos::<Col>::ZERO),
+                Some(last.row),
+                cols_before.last(),
+            ),
+            band(origin, rows_before.last(), cols_before.last()),
+        ];
+        for rect in bands.into_iter().flatten() {
+            cells.extend(self.pack_cells(rect));
+        }
+        FrozenView {
+            pane,
+            row_heights: rows_before
+                .span()
+                .into_iter()
+                .map(|r| self.row_height(r))
+                .collect(),
+            col_widths: cols_before
+                .span()
+                .into_iter()
+                .map(|c| self.col_width(c))
+                .collect(),
+        }
+    }
+
     pub(super) fn pack_cells(&self, window: CellRect) -> Vec<DisplayCell> {
         let mut cells = Vec::with_capacity(
             window.row_count().get() as usize * window.col_count().get() as usize,

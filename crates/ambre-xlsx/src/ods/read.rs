@@ -8,18 +8,18 @@
 use std::collections::{HashMap, HashSet};
 
 use ambre_client_core::FileBytes;
-use ambre_core::index::Pos;
+use ambre_core::index::{Len, Pos};
 use ambre_core::{Count, Doc, Payload, Px, Validated};
 use quick_xml::Reader;
 use quick_xml::events::{BytesStart, Event};
 
 use super::styles::{DEFAULT, Styles};
 use super::{Node, formula, length_px, subtree, tree};
-use crate::cellref::{CellRange, CellRef, LAST_COL, LAST_ROW};
+use crate::cellref::{CellRange, CellRef, Col, LAST_COL, LAST_ROW, Row};
 use crate::formula::Formula;
 use crate::model::{
-    Cell, ColumnWidth, Content, ErrorValue, RowHeight, Sheet, SheetName, StyleId, Value,
-    Visibility, Workbook,
+    Cell, ColumnWidth, Content, ErrorValue, FrozenPane, RowHeight, Sheet, SheetName, StyleId,
+    Value, Visibility, Workbook,
 };
 use crate::opc::odf::OdfPackage;
 use crate::opc::odf::{self, OdfType};
@@ -68,10 +68,13 @@ pub(crate) fn read(bytes: &Payload<FileBytes>) -> Result<Imported, XlsxError> {
         Some((name, data)) => Some(tree(data.as_bytes()).map_err(|e| malformed(&name, e))?),
         None => None,
     };
-    if let Some((name, data)) = named_part(&mut package, "settings.xml")? {
-        let settings = tree(data.as_bytes()).map_err(|e| malformed(&name, e))?;
-        record_frozen_panes(&settings, &mut report);
-    }
+    let panes = match named_part(&mut package, "settings.xml")? {
+        Some((name, data)) => {
+            let settings = tree(data.as_bytes()).map_err(|e| malformed(&name, e))?;
+            frozen_panes(&settings)
+        }
+        None => Vec::new(),
+    };
     let scripted = package
         .part_names()
         .iter()
@@ -88,9 +91,15 @@ pub(crate) fn read(bytes: &Payload<FileBytes>) -> Result<Imported, XlsxError> {
             ContentError::TooManyCells => XlsxError::TooManyCells(MAX_CELLS),
         },
     )?;
-    let (sheets, styles) = sheets;
+    let (mut sheets, styles) = sheets;
     if sheets.is_empty() {
         return Err(XlsxError::NoSheet);
+    }
+    for sheet in &mut sheets {
+        if let Some((_, pane)) = panes.iter().find(|(name, _)| *name == sheet.name) {
+            sheet.frozen = *pane;
+            report.record(XlsxConstruct::FrozenPane, Outcome::Carried);
+        }
     }
     report.record_count(
         XlsxConstruct::Sheet,
@@ -131,24 +140,50 @@ fn named_part(
         .map(|data| (part, data)))
 }
 
-/// Report each sheet the settings freeze a pane of.
-fn record_frozen_panes(settings: &Node, report: &mut Report) {
+/// The frozen pane of each table the view settings name, by table name.
+/// A split mode of 2 freezes its axis at the split position: the horizontal
+/// split counts columns, the vertical split rows. A pane that freezes
+/// nothing is left out.
+fn frozen_panes(settings: &Node) -> Vec<(Validated<SheetName>, FrozenPane)> {
+    let mut panes = Vec::new();
     for node in settings.walk() {
         if node.name() != "config-item-map-named" || node.attr("name") != Some("Tables") {
             continue;
         }
         for table in node.children() {
-            let frozen = table.children().iter().any(|item| {
-                matches!(
-                    item.attr("name"),
-                    Some("HorizontalSplitMode" | "VerticalSplitMode")
-                ) && item.text().trim() == "2"
-            });
-            if frozen {
-                report.record(XlsxConstruct::FrozenPane, Outcome::Dropped);
+            let Some(name) = table
+                .attr("name")
+                .and_then(|n| Validated::<SheetName>::parse(n.to_owned()).ok())
+            else {
+                continue;
+            };
+            let item = |key: &str| {
+                table
+                    .children()
+                    .iter()
+                    .find(|item| item.attr("name") == Some(key))
+                    .and_then(|item| item.text().trim().parse::<u32>().ok())
+            };
+            // A split position counts whole lines only in mode 2, the frozen
+            // mode. Mode 1 is a split at a pixel offset, which Trame drops.
+            let frozen = |mode: &str, position: &str| {
+                (item(mode) == Some(2))
+                    .then(|| item(position))
+                    .flatten()
+                    .unwrap_or(0)
+            };
+            let pane = FrozenPane {
+                rows: Len::<Row>::new(frozen("VerticalSplitMode", "VerticalSplitPosition"))
+                    .min(Len::through(LAST_ROW).saturating_sub(Len::ONE)),
+                cols: Len::<Col>::new(frozen("HorizontalSplitMode", "HorizontalSplitPosition"))
+                    .min(Len::through(LAST_COL).saturating_sub(Len::ONE)),
+            };
+            if !pane.is_none() {
+                panes.push((name, pane));
             }
         }
     }
+    panes
 }
 
 /// Why the content part did not read.

@@ -72,6 +72,9 @@ const CLIPBOARD: StaticKey<Categories> = StaticKey::<Categories>::new("clipboard
 const INTEROP: StaticKey<Categories> = StaticKey::<Categories>::new("interop");
 /// The page setup the sheet stores for its PDF export (`TRAME-IO-022`).
 const PAGE: StaticKey<Categories> = StaticKey::<Categories>::new("page");
+/// The rows and columns that stay on screen while the rest scrolls
+/// (`TRAME-UI-029`).
+const VIEW: StaticKey<Categories> = StaticKey::<Categories>::new("view");
 /// Commands that belong to the application shell rather than the document.
 const GENERAL: StaticKey<Categories> = StaticKey::<Categories>::new("general");
 
@@ -127,6 +130,9 @@ commands! {
     MARGINS_WIDE = StaticKey::<Commands>::new("trame.page.margins_wide"), "Page setup: wide margins", None, &[], PAGE;
     SAVE_FILE = StaticKey::<Commands>::new("trame.interop.save_file"), "Save to a file (.ambre, not encrypted)", Some(StaticKey::<Icons>::new("content-save")), &[], INTEROP;
     SAVE_SEALED_FILE = StaticKey::<Commands>::new("trame.interop.save_sealed_file"), "Save to an encrypted file (.ambre)...", Some(StaticKey::<Icons>::new("lock-outline")), &[], INTEROP;
+    FREEZE_ROWS = StaticKey::<Commands>::new("trame.view.freeze_rows"), "Freeze up to this row", None, &[], VIEW;
+    FREEZE_COLS = StaticKey::<Commands>::new("trame.view.freeze_cols"), "Freeze up to this column", None, &[], VIEW;
+    UNFREEZE = StaticKey::<Commands>::new("trame.view.unfreeze"), "Unfreeze rows and columns", None, &[], VIEW;
     PALETTE = StaticKey::<Commands>::new("trame.palette.open"), "Command palette", None, &[KeyBinding::primary(KeyChar::K)], GENERAL;
 }
 
@@ -219,6 +225,10 @@ const CLIPBOARD_GROUP: &[StaticKey<Commands>] = &[CUT, COPY, PASTE];
 /// MergeRejected -> toast, and Unmerge outside a merge is a no-op.
 const MERGE_GROUP: &[StaticKey<Commands>] = &[MERGE, UNMERGE];
 
+/// Frozen pane group (`TRAME-UI-029`): freeze the band through the active
+/// line, or freeze nothing.
+const FREEZE_GROUP: &[StaticKey<Commands>] = &[FREEZE_ROWS, FREEZE_COLS, UNFREEZE];
+
 /// Whole-sheet sort, for the corner menu.
 const CORNER_SORT_GROUP: &[StaticKey<Commands>] = &[SORT_SHEET_ASC, SORT_SHEET_DESC];
 
@@ -275,12 +285,16 @@ pub fn context_layout(scope: CtxScope, filter: SheetFilter) -> Vec<MenuRow> {
             group(&mut rows, &[filter_command(filter)]);
             rows.push(MenuRow::Separator);
             group(&mut rows, MERGE_GROUP);
+            rows.push(MenuRow::Separator);
+            group(&mut rows, FREEZE_GROUP);
         }
         CtxScope::Column => {
             group(&mut rows, COLUMN_STRUCTURAL_GROUP);
             rows.push(MenuRow::Separator);
             group(&mut rows, SORT_GROUP);
             group(&mut rows, &[filter_command(filter)]);
+            rows.push(MenuRow::Separator);
+            group(&mut rows, &[FREEZE_COLS, UNFREEZE]);
         }
         CtxScope::Row => {
             group(&mut rows, ROW_STRUCTURAL_GROUP);
@@ -291,6 +305,8 @@ pub fn context_layout(scope: CtxScope, filter: SheetFilter) -> Vec<MenuRow> {
             if filter.is_filtered() {
                 group(&mut rows, &[CLEAR_FILTER]);
             }
+            rows.push(MenuRow::Separator);
+            group(&mut rows, &[FREEZE_ROWS, UNFREEZE]);
         }
         CtxScope::Corner => {
             // The corner selects the whole sheet: only whole-sheet ops apply.
@@ -308,7 +324,7 @@ pub fn context_layout(scope: CtxScope, filter: SheetFilter) -> Vec<MenuRow> {
 /// thread expects. `None` for a command Trame does not own, and for one
 /// `chrome::TrameHandler` resolves before the bus.
 pub fn command_to_app(id: StaticKey<Commands>) -> Option<TrameCommand> {
-    use crate::message::{PageMargins, PageOrientation, PageSetupPatch, PaperSize};
+    use crate::message::{FreezeIntent, PageMargins, PageOrientation, PageSetupPatch, PaperSize};
     let page = |patch: PageSetupPatch| TrameCommand::SetPageSetup {
         sheet_id: None,
         patch,
@@ -344,6 +360,9 @@ pub fn command_to_app(id: StaticKey<Commands>) -> Option<TrameCommand> {
         SORT_SHEET_ASC => TrameCommand::SortSheetAsc,
         SORT_SHEET_DESC => TrameCommand::SortSheetDesc,
         CLEAR_FILTER => TrameCommand::ClearActiveFilter,
+        FREEZE_ROWS => TrameCommand::Freeze(FreezeIntent::RowsThroughActive),
+        FREEZE_COLS => TrameCommand::Freeze(FreezeIntent::ColsThroughActive),
+        UNFREEZE => TrameCommand::Freeze(FreezeIntent::Clear),
         // Parameterless: the Logic thread serializes the active sheet itself.
         EXPORT_CSV => TrameCommand::export(crate::message::TrameExport::Csv {
             sheet_id: None,

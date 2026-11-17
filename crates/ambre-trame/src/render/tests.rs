@@ -39,6 +39,8 @@ fn layout() -> GridLayout<'static> {
         row_heights: empty_heights(),
         origin_col: Pos::<Col>::new(0),
         origin_row: Pos::<Row>::new(0),
+        frozen_rows: Len::<Row>::ZERO,
+        frozen_cols: Len::<Col>::ZERO,
         width: Px::<Surface>::new(800.0),
         height: Px::<Surface>::new(600.0),
         total_cols: Len::<Col>::new(1000),

@@ -652,6 +652,7 @@ mod find;
 /// feature and reaches no client build.
 #[cfg(feature = "fixtures")]
 pub mod fixtures;
+mod frozen;
 mod helpers;
 mod history;
 mod interop;

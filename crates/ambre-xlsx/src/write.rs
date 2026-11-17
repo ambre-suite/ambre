@@ -9,8 +9,9 @@ use std::fmt::Write as _;
 
 use ambre_core::{Count, Payload};
 
+use crate::cellref::CellRef;
 use crate::formula::Formula;
-use crate::model::{Cell, Content, Sheet, Value, Visibility, Workbook};
+use crate::model::{Cell, Content, FrozenPane, Sheet, Value, Visibility, Workbook};
 use crate::opc::{self, PackageWriter, PartName, RelKind, RelTarget};
 use crate::read::{column_width_attr, row_height_attr};
 use crate::report::{Outcome, Report, XlsxConstruct};
@@ -183,6 +184,48 @@ enum Tab {
     Selected,
 }
 
+/// Append the sheet view of the worksheet part to `out`: whether its tab is
+/// selected, and its frozen pane when it freezes one. The pane that scrolls
+/// on both axes is the bottom-right one, so Excel names the active pane
+/// after the axes that hold a frozen band.
+fn sheet_view_xml(out: &mut String, frozen: FrozenPane, tab: Tab, report: &mut Report) {
+    let selected = match tab {
+        Tab::Background => "",
+        Tab::Selected => " tabSelected=\"1\"",
+    };
+    if frozen.is_none() {
+        let _ = write!(
+            out,
+            "<sheetViews><sheetView{selected} workbookViewId=\"0\"/></sheetViews>"
+        );
+        return;
+    }
+    let active = match (frozen.rows.is_zero(), frozen.cols.is_zero()) {
+        (false, false) => "bottomRight",
+        (false, true) => "bottomLeft",
+        _ => "topRight",
+    };
+    let top_left = CellRef {
+        row: frozen.rows.as_end(),
+        col: frozen.cols.as_end(),
+    };
+    let _ = write!(
+        out,
+        "<sheetViews><sheetView{selected} workbookViewId=\"0\"><pane"
+    );
+    if !frozen.cols.is_zero() {
+        let _ = write!(out, " xSplit=\"{}\"", frozen.cols.get());
+    }
+    if !frozen.rows.is_zero() {
+        let _ = write!(out, " ySplit=\"{}\"", frozen.rows.get());
+    }
+    let _ = write!(
+        out,
+        " topLeftCell=\"{top_left}\" activePane=\"{active}\" state=\"frozen\"/></sheetView></sheetViews>"
+    );
+    report.record(XlsxConstruct::FrozenPane, Outcome::Carried);
+}
+
 /// The worksheet part of `sheet`.
 fn sheet_xml(
     sheet: &Sheet,
@@ -221,15 +264,8 @@ fn sheet_xml(
         );
         let _ = write!(out, "<dimension ref=\"{range}\"/>");
     }
-    let _ = write!(
-        out,
-        "<sheetViews><sheetView{} workbookViewId=\"0\"/></sheetViews>\
-         <sheetFormatPr defaultRowHeight=\"15\"/>",
-        match tab {
-            Tab::Background => "",
-            Tab::Selected => " tabSelected=\"1\"",
-        }
-    );
+    sheet_view_xml(&mut out, sheet.frozen, tab, report);
+    out.push_str("<sheetFormatPr defaultRowHeight=\"15\"/>");
     if !sheet.column_widths.is_empty() {
         out.push_str("<cols>");
         for c in &sheet.column_widths {

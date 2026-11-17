@@ -555,6 +555,7 @@ mod office_tests {
             merges: Vec::new(),
             column_widths: Vec::new(),
             row_heights: Vec::new(),
+            frozen: ambre_xlsx::model::FrozenPane::NONE,
         };
         let book = Book {
             sheets: vec![
@@ -582,6 +583,7 @@ mod office_tests {
                     merges: Vec::new(),
                     column_widths: Vec::new(),
                     row_heights: Vec::new(),
+                    frozen: ambre_xlsx::model::FrozenPane::NONE,
                 },
             ],
             styles: vec![Payload::new(Vec::new())],

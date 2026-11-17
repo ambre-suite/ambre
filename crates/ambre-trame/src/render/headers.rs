@@ -43,7 +43,7 @@ pub fn draw_col_headers_on<S: DrawSurface>(
     // hover lands on it. Skipped when the hovered column is the active one.
     if let Some(col) = hover_col
         && Some(col) != active_col
-        && col >= layout.origin_col
+        && layout.shows_col(col)
     {
         let x = layout.col_left(col).get();
         if x < w {
@@ -56,7 +56,7 @@ pub fn draw_col_headers_on<S: DrawSurface>(
 
     // Active-column tint, over the bg and under the labels.
     if let Some(col) = active_col
-        && col >= layout.origin_col
+        && layout.shows_col(col)
     {
         let x = layout.col_left(col).get();
         if x < w {
@@ -78,9 +78,11 @@ pub fn draw_col_headers_on<S: DrawSurface>(
     // the letter cells read as discrete buttons (`trame-headers`). Walks the same
     // visible columns as the label loop below, independent of `text_pass`.
     {
-        let mut col = layout.origin_col;
         let mut col_x = layout.header_width.get();
-        while col < layout.total_cols.as_end() && col_x < w {
+        for col in layout.shown_cols() {
+            if col_x >= w {
+                break;
+            }
             let edge = col_x + layout.col_w(col).get();
             surface.stroke_line(
                 ambre_draw::Line::new((edge, top), (edge, top + hh)),
@@ -88,7 +90,6 @@ pub fn draw_col_headers_on<S: DrawSurface>(
                 ambre_core::Px::<ambre_core::Surface>::new(1.0),
             );
             col_x = edge;
-            col = col.next();
         }
     }
 
@@ -96,10 +97,9 @@ pub fn draw_col_headers_on<S: DrawSurface>(
         return;
     }
     let brush = Brush::Solid(palette.header_text);
-    let mut col = layout.origin_col;
     let mut col_x = layout.header_width.get();
-    loop {
-        if col >= layout.total_cols.as_end() || col_x >= w {
+    for col in layout.shown_cols() {
+        if col_x >= w {
             break;
         }
         let cw = layout.col_w(col).get();
@@ -126,7 +126,6 @@ pub fn draw_col_headers_on<S: DrawSurface>(
             surface.pop_clip();
         }
         col_x += cw;
-        col = col.next();
     }
 }
 
@@ -180,7 +179,7 @@ pub fn draw_row_headers_on<S: DrawSurface>(
     // hover lands on it. Skipped when the hovered row is the active one or hidden.
     if let Some(row) = hover_row
         && Some(row) != active_row
-        && row >= layout.origin_row
+        && layout.shows_row(row)
         && !layout.is_hidden(row)
     {
         let y = layout.row_top(row).get();
@@ -195,7 +194,7 @@ pub fn draw_row_headers_on<S: DrawSurface>(
     // Active-row tint, over the bg and under the numbers. Positioned in collapsed
     // (filtered) row space; skipped when the active row is itself hidden.
     if let Some(row) = active_row
-        && row >= layout.origin_row
+        && layout.shows_row(row)
         && !layout.is_hidden(row)
     {
         let y = layout.row_top(row).get();

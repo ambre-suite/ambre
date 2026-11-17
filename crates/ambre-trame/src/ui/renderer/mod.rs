@@ -64,6 +64,8 @@ fn screen_layout(state: &TrameUiState) -> GridLayout<'_> {
         row_heights: &state.row_heights,
         origin_col: state.left_col,
         origin_row: state.top_row,
+        frozen_rows: state.frozen.rows,
+        frozen_cols: state.frozen.cols,
         width: state.canvas_width,
         // The grid stops above the bottom sheet-tab strip (`trame-sheets`).
         height: state.grid_bottom(),
@@ -270,6 +272,108 @@ mod tests {
             }
         }
         assert!(checked > 40, "{checked} cells compared");
+    }
+
+    /// `TRAME-UI-192`: under a frozen pane, a scroll leaves each frozen cell
+    /// where it was drawn and hit-tested. A scrolled cell is drawn where hit
+    /// testing finds it, past the frozen band.
+    #[test]
+    fn a_frozen_band_stays_drawn_and_hit_under_a_scroll() {
+        let mut state = fixture(&[]);
+        state.col_widths.insert(
+            Pos::<Col>::new(0),
+            ambre_core::Px::<ambre_core::Doc>::new(130.0),
+        );
+        state.frozen = crate::message::FrozenPane {
+            rows: ambre_core::index::Len::<Row>::new(2),
+            cols: ambre_core::index::Len::<Col>::new(1),
+        };
+        let frozen = [at(0, 0), at(1, 0), at(0, 5), at(1, 7), at(9, 0)];
+        let before: Vec<_> = frozen
+            .iter()
+            .map(|&cell| state.cell_pixel_rect(cell))
+            .collect();
+        assert!(state.scroll_by(Delta::<Row>::new(10), Delta::<Col>::new(4)));
+        let layout = screen_layout(&state);
+        for (cell, was) in frozen.iter().zip(&before) {
+            let now = state.cell_pixel_rect(*cell);
+            if cell.row.get() < 2 && cell.col.get() < 1 {
+                assert_eq!(now, *was, "{cell:?} moved under the scroll");
+            }
+            if cell.row.get() >= 2 || cell.col.get() >= 1 {
+                // A band cell scrolls along its free axis only.
+                continue;
+            }
+            let drawn = layout.cell_rect(*cell);
+            assert_eq!(now, Some(drawn));
+            let centre = drawn.center();
+            assert_eq!(state.cell_at(pointer(centre.x, centre.y)), Some(*cell));
+        }
+        // A frozen row keeps its height on screen, over a scrolled column.
+        let top = state
+            .cell_pixel_rect(at(1, 7))
+            .expect("a frozen row is on screen");
+        assert_eq!(
+            top.y0,
+            state.cell_pixel_rect(at(1, 0)).map_or(f64::NAN, |r| r.y0)
+        );
+        // The first scrolled row and column start past the bands.
+        let first = state
+            .cell_pixel_rect(at(10, 4))
+            .expect("the scroll origin is drawn");
+        assert_eq!(first.y0, (state.header_h() + state.frozen_h()).get());
+        assert_eq!(first.x0, (state.header_w() + state.frozen_w()).get());
+        assert_eq!(layout.cell_rect(at(10, 4)), first);
+        let centre = first.center();
+        assert_eq!(state.cell_at(pointer(centre.x, centre.y)), Some(at(10, 4)));
+        // A row scrolled under the band is neither drawn nor hit.
+        assert_eq!(state.cell_pixel_rect(at(5, 5)), None);
+    }
+
+    /// `TRAME-UI-192`: the cells layer draws the sheet in four panes. It
+    /// clips each pane to its part of the cell area, and strokes the edge of
+    /// each band.
+    #[test]
+    fn a_frozen_pane_draws_four_clipped_panes() {
+        let mut state = fixture(&[(0, 0, "corner"), (0, 6, "top"), (14, 0, "left")]);
+        state.frozen = crate::message::FrozenPane {
+            rows: ambre_core::index::Len::<Row>::new(1),
+            cols: ambre_core::index::Len::<Col>::new(1),
+        };
+        assert!(state.scroll_by(Delta::<Row>::new(12), Delta::<Col>::new(4)));
+        let palette = Theme::Light.palette();
+        let (mut screen, clock, mut font_cx, mut cache, mut stats) = harness();
+        draw_cells(
+            &mut screen,
+            &state,
+            palette,
+            TextPen {
+                font_cx: &mut font_cx,
+                cache: &mut cache,
+                pass: TextPass::WithText,
+            },
+            None,
+            &clock,
+            &mut stats,
+        );
+        let (hw, hh) = (state.header_w().get(), state.header_h().get());
+        let (fx, fy) = (hw + state.frozen_w().get(), hh + state.frozen_h().get());
+        let (w, h) = (state.canvas_width.get(), state.grid_bottom().get());
+        let clips = screen.clip_rects();
+        for pane in [
+            Rect::new(fx, fy, w, h),
+            Rect::new(fx, hh, w, fy),
+            Rect::new(hw, fy, fx, h),
+            Rect::new(hw, hh, fx, fy),
+        ] {
+            assert!(clips.contains(&pane), "{pane:?} is clipped and drawn");
+        }
+        let edges = screen
+            .ops()
+            .iter()
+            .filter(|op| matches!(op, DrawOp::StrokeLine { line, .. } if line.p0.y == fy && line.p1.y == fy || line.p0.x == fx && line.p1.x == fx))
+            .count();
+        assert!(edges >= 2, "{edges} band edges stroked");
     }
 
     /// Shared harness: a recording surface, a fixed clock, a real (empty) font

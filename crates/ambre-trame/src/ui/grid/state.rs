@@ -34,6 +34,7 @@ impl TrameUiState {
             active_sheet: Id::<Sheet>::from_text(String::new()),
             next_version: ambre_core::Seq::ZERO.next(),
             full_request: None,
+            frozen: crate::message::FrozenPane::NONE,
             filtered_col: None,
             hidden_rows: Vec::new(),
             col_widths: HashMap::default(),
@@ -311,21 +312,39 @@ impl TrameUiState {
     /// Returns true if the scroll position changed.
     fn scroll_to_include(&mut self, at: CellPos) -> bool {
         let mut changed = false;
-        if at.row < self.top_row {
+        // A frozen line is always on screen. The scrolled pane holds the
+        // slots the frozen band leaves, never fewer than one.
+        let rows_shown = self
+            .viewport_rows
+            .saturating_sub(self.frozen.rows)
+            .max(Len::<Row>::ONE);
+        let cols_shown = self
+            .viewport_cols
+            .saturating_sub(self.frozen.cols)
+            .max(Len::<Col>::ONE);
+        let row_scrolls = at.row >= self.frozen.rows.as_end();
+        let col_scrolls = at.col >= self.frozen.cols.as_end();
+        if !row_scrolls {
+            // A frozen row is on screen whatever the scroll.
+        } else if at.row < self.top_row {
             self.top_row = at.row;
             changed = true;
-        } else if self.visible_offset(at.row) >= Delta::<Row>::from_len(self.viewport_rows) {
+        } else if self.visible_offset(at.row) >= Delta::<Row>::from_len(rows_shown) {
             // `row` sits past the last visible slot: pull the top down so `row`
             // lands on the bottom slot, counting in collapsed (visible) rows.
-            let back = self.viewport_rows.saturating_sub(Len::<Row>::ONE);
-            self.top_row = self.nth_visible_row_back(at.row, back);
+            let back = rows_shown.saturating_sub(Len::<Row>::ONE);
+            self.top_row = self
+                .nth_visible_row_back(at.row, back)
+                .max(self.frozen.rows.as_end());
             changed = true;
         }
-        if at.col < self.left_col {
+        if !col_scrolls {
+            // A frozen column is on screen whatever the scroll.
+        } else if at.col < self.left_col {
             self.left_col = at.col;
             changed = true;
-        } else if at.col >= self.left_col + self.viewport_cols {
-            self.left_col = (at.col - self.viewport_cols).next();
+        } else if at.col >= self.left_col + cols_shown {
+            self.left_col = (at.col - cols_shown).next();
             changed = true;
         }
         changed
@@ -338,8 +357,12 @@ impl TrameUiState {
     /// The whole cells come from the accumulator of model steps alone, so a
     /// distance the grid computed itself does not move it (`KINETIC-001`).
     pub(crate) fn scroll_by(&mut self, dr: Delta<Row>, dc: Delta<Col>) -> bool {
-        let new_top = (self.top_row + dr).min(LAST_ROW);
-        let new_left = (self.left_col + dc).min(LAST_COL);
+        let new_top = (self.top_row + dr)
+            .min(LAST_ROW)
+            .max(self.frozen.rows.as_end());
+        let new_left = (self.left_col + dc)
+            .min(LAST_COL)
+            .max(self.frozen.cols.as_end());
         // Keep the top edge on a visible row so the collapsed-row slot math stays
         // consistent (`top_row` is slot 0).
         let new_top = self.next_visible_row(new_top);
@@ -356,7 +379,7 @@ impl TrameUiState {
     /// than the uniform `viewport_cols` counts (`TRAME-UI-144`).
     fn visible_col_span(&self) -> Len<Col> {
         let right = self.canvas_width;
-        let mut x = self.header_w();
+        let mut x = self.header_w() + self.frozen_w();
         let mut col = self.left_col;
         while x < right && col < TOTAL_COLS.as_end() {
             x += self.col_width_of(col);
@@ -370,7 +393,7 @@ impl TrameUiState {
     /// and takes no height.
     fn visible_row_span(&self) -> Len<Row> {
         let bottom = self.grid_bottom();
-        let mut y = self.header_h();
+        let mut y = self.header_h() + self.frozen_h();
         let mut row = self.top_row;
         while y < bottom && row < TOTAL_ROWS.as_end() {
             if !self.is_row_hidden(row) {
@@ -423,7 +446,15 @@ impl TrameUiState {
             CellPos::new(row_start, col_start),
             CellPos::new(row_end, col_end),
         );
-        self.cell_cache.retain(|&at, _| window.contains(at));
+        let evicted: Vec<CellPos> = self
+            .cell_cache
+            .keys()
+            .copied()
+            .filter(|&at| !window.contains(at) && !self.in_frozen_band(window, at))
+            .collect();
+        for at in evicted {
+            self.cell_cache.remove(&at);
+        }
         // The evicted cells may have carried filter flags; resync the hidden set.
         self.rebuild_hidden_rows();
 
@@ -456,7 +487,19 @@ impl TrameUiState {
         if asked > served {
             return None;
         }
-        let shown = intersection(window, range)?;
+        // A change in a frozen band the window does not hold re-fetches the
+        // whole window: its answer carries the bands (`TRAME-UI-192`).
+        let shown = intersection(window, range).or_else(|| {
+            let band = CellRect::spanning(
+                CellPos::new(Pos::<Row>::ZERO, Pos::<Col>::ZERO),
+                CellPos::new(window.bottom_right.row, window.bottom_right.col),
+            );
+            let touched = intersection(band, range)?;
+            let frozen = CellPos::new(touched.top_left.row, touched.top_left.col);
+            (self.in_frozen_band(window, frozen)
+                || self.in_frozen_band(window, touched.bottom_right))
+            .then_some(window)
+        })?;
         let version = self.next_version;
         self.next_version = self.next_version.next();
         Some(TrameCommand::ScrollViewport {
@@ -479,6 +522,7 @@ impl TrameUiState {
             cells,
             col_widths,
             row_heights,
+            frozen,
         } = update
         else {
             return;
@@ -487,6 +531,7 @@ impl TrameUiState {
             return;
         }
         self.accepted_version = version;
+        self.adopt_frozen(&frozen);
         // Adopt the per-axis metrics for the covered window (absolute keys). Only
         // a non-default entry is stored. A column/row reset to the default drops
         // out of the map, so it falls back to the uniform metric
@@ -520,6 +565,48 @@ impl TrameUiState {
             self.cell_cache.insert(at, CellData::from(cell));
         }
         self.rebuild_hidden_rows();
+    }
+
+    /// Adopt the frozen pane an answer carries and the sizes of its frozen
+    /// lines. Then move the scroll origin out of the frozen bands
+    /// (`TRAME-UI-193`).
+    fn adopt_frozen(&mut self, frozen: &crate::message::FrozenView) {
+        self.frozen = frozen.pane;
+        for (row, h) in
+            Span::<Row>::from_len(Pos::<Row>::ZERO, Len::<Row>::of(frozen.row_heights.len()))
+                .into_iter()
+                .zip(&frozen.row_heights)
+        {
+            if *h != ROW_HEIGHT {
+                self.row_heights.insert(row, *h);
+            } else {
+                self.row_heights.remove(&row);
+            }
+        }
+        for (col, w) in
+            Span::<Col>::from_len(Pos::<Col>::ZERO, Len::<Col>::of(frozen.col_widths.len()))
+                .into_iter()
+                .zip(&frozen.col_widths)
+        {
+            if *w != COL_WIDTH {
+                self.col_widths.insert(col, *w);
+            } else {
+                self.col_widths.remove(&col);
+            }
+        }
+        self.top_row = self.top_row.max(self.frozen.rows.as_end());
+        self.left_col = self.left_col.max(self.frozen.cols.as_end());
+    }
+
+    /// Whether `at` lies in a frozen band of the window `window`. A band is
+    /// the frozen rows over its columns, the frozen columns over its rows, or
+    /// the corner of both. A scroll keeps such a cell (`TRAME-UI-192`).
+    fn in_frozen_band(&self, window: CellRect, at: CellPos) -> bool {
+        let row_frozen = at.row < self.frozen.rows.as_end();
+        let col_frozen = at.col < self.frozen.cols.as_end();
+        let rows = at.row >= window.top_left.row && at.row <= window.bottom_right.row;
+        let cols = at.col >= window.top_left.col && at.col <= window.bottom_right.col;
+        (row_frozen && (cols || col_frozen)) || (col_frozen && rows)
     }
 
     /// Recompute [`Self::hidden_rows`] (sorted, deduped) from the `is_filtered`

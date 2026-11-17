@@ -1266,6 +1266,7 @@ fn a_merged_fill_previews_whole_blocks() {
         col_start: Pos::<Col>::new(0),
         col_widths: vec![],
         row_heights: vec![],
+        frozen: crate::message::FrozenView::default(),
         cells: vec![
             merged(Pos::<Row>::new(0), Some(span(2, 1))),
             merged(Pos::<Row>::new(1), None),

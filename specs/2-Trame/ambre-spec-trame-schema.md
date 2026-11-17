@@ -53,12 +53,14 @@ and status values are normative in `ambre-spec-template.md`.
 | `TRAME-306` | `IO` | A workbook of schema version 5 MUST NOT open in a build of version 4, which would show each line a register hides. | this spec section 7; `1-Foundations/ambre-spec-schema-version.md` (`SCHEMA-008`) | `ambre_trame::logic::schema::tests::a_version_4_build_refuses_a_workbook_that_hides_lines` -- the gate of a version-4 build, its registry of three steps, refuses the snapshot, and the version-5 build reads it with the lines hidden | none | verified |
 | `TRAME-309` | `IO` | A document of schema version 5 MUST read under version 6 with every cell in place and every sheet on the default page format. | this spec section 7; `1-Foundations/ambre-spec-schema-version.md` (`SCHEMA-018`) | `ambre_trame::logic::schema::tests::a_version_5_workbook_reads_on_the_default_page_setup` -- the page setup map stays empty after the migration; ci-gate -- `just fixtures-check`, run in the CI host job, migrates `fixtures/frozen/trame/formula_dag@v1-s5.ambre` and compares its dump with the live artifact (`FIXTURE-019`) | none | verified |
 | `TRAME-310` | `IO` | A workbook of schema version 6 MUST NOT open in a build of version 5, which would print each sheet on A4 whatever page format it stores. | this spec section 7; `1-Foundations/ambre-spec-schema-version.md` (`SCHEMA-008`) | `ambre_trame::logic::schema::tests::a_version_5_build_refuses_a_workbook_that_stores_a_page_setup` -- the gate of a version-5 build, its registry of four steps, refuses the snapshot, and the version-6 build reads it with its paper and orientation | none | verified |
+| `TRAME-311` | `IO` | A document of schema version 6 MUST read under version 7 with every cell in place and nothing frozen. | this spec section 7; `1-Foundations/ambre-spec-schema-version.md` (`SCHEMA-018`) | `ambre_trame::logic::schema::tests::a_version_6_workbook_reads_with_nothing_frozen` -- the frozen pane map stays empty after the migration; ci-gate -- `just fixtures-check`, run in the CI host job, migrates `fixtures/frozen/trame/formula_dag@v1-s6.ambre` and compares its dump with the live artifact (`FIXTURE-019`) | none | verified |
+| `TRAME-312` | `IO` | A workbook of schema version 7 MUST NOT open in a build of version 6, which would scroll each frozen row away. | this spec section 7; `1-Foundations/ambre-spec-schema-version.md` (`SCHEMA-008`) | `ambre_trame::logic::schema::tests::a_version_6_build_refuses_a_workbook_that_freezes_a_pane` -- the gate of a version-6 build, its registry of five steps, refuses the snapshot, and the version-7 build reads it with its pane | none | verified |
 
 * **Budget.** none: a format has no operation to budget. What loading one costs is legs 3 and 4 of
   `ambre-spec-budgets.md section 4`, and both are recorded there as unbudgeted.
 * **Boundary.** none: `TRAME-010` keeps computed values out of the document, and the containers
   this table declares reach the relay as ciphertext alone (`ZK-001`).
-* **Verification.** 15 `verified`. What holds is the shape a merge reads back. The identity a cell
+* **Verification.** 17 `verified`. What holds is the shape a merge reads back. The identity a cell
   keeps, and the single register a style lives in. The key set a build writes, which a CI gate holds
   append-only. A computed value is looked for in the whole document, beside the raw text too.
 
@@ -126,6 +128,7 @@ race: the last writer takes that whole unit.
 | `validations_{sheet}` | Map | `range` | `{kind, params, on_invalid, message}` | the range entry | `trame-cell-editing` | design |
 | `protections_{sheet}` | Map | `range` | `{owner, allowed, description}` | the range entry | `trame-cell-editing` | design |
 | `page_setup_{sheet}` | Map | `paper`, `orientation`, `margin_top_mm`, `margin_right_mm`, `margin_bottom_mm`, `margin_left_mm` | a word for the first two, millimetres (`f64`) for the margins | the key | `trame-pdf-export` | built |
+| `frozen_{sheet}` | Map | `rows`, `cols` | the count of leading lines frozen (`i64`) | the key | `trame-grid-viewport` | built |
 
 **Absence is a value.** No key in `cellstyle_{sheet}` means the grid default style; no key in
 `col_widths_{sheet}` means `COL_WIDTH`; an empty `filters_{sheet}` means no filter. No
@@ -150,6 +153,7 @@ container carries a "cleared" marker.
     * `col_widths_{sheet}`, `row_heights_{sheet}` -- the metrics
     * `filters_{sheet}`, `filter_hidden_{sheet}`, `cond_formats_{sheet}`, `validations_{sheet}`,
       `protections_{sheet}`, `page_setup_{sheet}` -- the data tools
+    * `frozen_{sheet}` -- the view the sheet carries
 
 ---
 
@@ -192,6 +196,8 @@ Only where a schema decision needs a reason. 40 words each.
 * **`media`.** The entry holds the content hash and the placement, never the pixels. The bytes travel
   the shared media flow of `architecture section 2.D`, so a peer resolves a hash without the document
   carrying it.
+* **`frozen_{sheet}`.** One key per axis, so two axes set at once both land (`TRAME-UI-191`). A
+  count, not a line uid: an insert above the edge keeps the band size, as a spreadsheet does.
 * **`page_setup_{sheet}`.** Persisted state, not an export parameter (`TRAME-IO-022`). One key per
   field, so two fields set at once both land (`TRAME-IO-086`). `orientation` is a field, never derived
   from the paper. An absent key is its field's default.
@@ -232,8 +238,9 @@ stops the eventual container being keyed positionally by whoever writes it first
 |---|---|---|
 | Version | root `meta`, key `schema_version` (`u32`); absent means 0 | architecture section 2.D; `TRAME-025` |
 | Read | equal proceeds, older migrates, newer is refused whole (`SchemaError::DocumentTooNew`), read in a scratch document so a refusal writes nothing | architecture section 2.D; `ambre-spec-schema-version.md section 2` |
-| Migration | the registry lives in `ambre-trame` (`logic/schema.rs`), one row per bump; the foundation owns the protocol, never the semantics. Version 1 is the first layout. The row from 1 to 2 stamps the register and rewrites nothing, and so do the rows from 2 to 3, from 3 to 4, from 4 to 5 and from 5 to 6 | architecture section 2.D; `SCHEMA-010` |
+| Migration | the registry lives in `ambre-trame` (`logic/schema.rs`), one row per bump; the foundation owns the protocol, never the semantics. Version 1 is the first layout. The row from 1 to 2 stamps the register and rewrites nothing, and so do the rows from 2 to 3, from 3 to 4, from 4 to 5, from 5 to 6 and from 6 to 7 | architecture section 2.D; `SCHEMA-010` |
 | Bump | a key, a value type or the meaning of a value changes: `SCHEMA_VERSION` rises and one named fixture is frozen in the same commit | `SCHEMA-018`; `ambre-spec-schema-version.md` `SCHEMA-017`; `ambre-spec-fixtures.md section 2` |
+| Bump to version 7 | one per-sheet family, `frozen_{sheet}`, the rows and columns that stay on screen (`TRAME-UI-029`). An absent map freezes nothing, so the migration from 6 stamps the register and rewrites nothing (`TRAME-311`). A version-6 reader would scroll each frozen row away and export it unfrozen, so the version rises, and a build of version 6 refuses the workbook (`TRAME-312`). `formula_dag@v1-s6` is frozen in the commit that bumps | `TRAME-UI-029`; `SCHEMA-018` |
 | Bump to version 6 | one per-sheet family, `page_setup_{sheet}`, the page format a PDF export prints on (`TRAME-IO-022`). An absent map reads as the default format, so the migration from 5 stamps the register and rewrites nothing (`TRAME-309`). A version-5 reader would print every sheet on A4, so the version rises, and a build of version 5 refuses the workbook (`TRAME-310`). `formula_dag@v1-s5` is frozen in the commit that bumps | `TRAME-IO-022`; `SCHEMA-018` |
 | Bump to version 5 | one key, `line_hidden_{sheet}`, the registers a block delete hides its lines under (`TRAME-302`). An absent map reads as no hidden line, so the migration from 4 stamps the register and rewrites nothing. A version-4 reader would show each hidden line, so the version rises, and a build of version 4 refuses the workbook (`TRAME-306`). `formula_dag@v1-s4` is frozen in the commit that bumps | `TRAME-302`; `SCHEMA-018` |
 | Bump to version 4 | one key, `hidden_sheets`, the sheets whose tab the strip leaves out (`TRAME-IO-015`). An absent map reads as no hidden sheet, so the migration from 3 stamps the register and rewrites nothing. A version-3 reader would show a hidden sheet, so the version rises. `formula_dag@v1-s3` is frozen in the commit that bumps | `TRAME-IO-015`; `SCHEMA-018` |

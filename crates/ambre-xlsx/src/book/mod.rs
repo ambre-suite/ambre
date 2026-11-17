@@ -16,7 +16,8 @@ use serde::{Deserialize, Serialize};
 use crate::cellref::{CellRange, CellRef};
 use crate::formula::{AmbreFormula, ExcelFormula};
 use crate::model::{
-    Borders, ColumnWidth, Decimals, HAlign, RowHeight, StyleId, VAlign, Value, Visibility,
+    Borders, ColumnWidth, Decimals, FrozenPane, HAlign, RowHeight, StyleId, VAlign, Value,
+    Visibility,
 };
 
 /// A workbook in Trame's terms: its sheets in tab order, and the styles
@@ -51,6 +52,9 @@ pub struct BookSheet {
     /// One entry per column, its first and last the same column.
     pub column_widths: Vec<ColumnWidth>,
     pub row_heights: Vec<RowHeight>,
+    /// The leading rows and columns that stay on screen while the rest
+    /// scrolls.
+    pub frozen: FrozenPane,
 }
 
 /// One cell: where it is, what it holds, and the place of its style in

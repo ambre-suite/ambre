@@ -20,7 +20,7 @@ use ambre_bus::interop::{
     Occurrences, Outcome, Steps,
 };
 use ambre_core::id::{Id, Sheet};
-use ambre_core::index::Pos;
+use ambre_core::index::{Len, Pos};
 use ambre_core::{Count, Payload};
 use ambre_xlsx::book::{Book, BookCell, BookContent, BookSheet, StyleBytes};
 use ambre_xlsx::formula::{AmbreFormula, ExcelFormula};
@@ -423,6 +423,15 @@ impl TrameState {
                     .get_map(Root::HiddenSheets.as_str())
                     .insert(id.as_str(), true);
             }
+            // The frozen pane lands with its sheet, in the step the cells
+            // join (`TRAME-IO-088`).
+            self.write_frozen_pane(
+                id,
+                crate::message::FrozenPane {
+                    rows: Len::<Row>::new(sheet.frozen.rows.get()),
+                    cols: Len::<Col>::new(sheet.frozen.cols.get()),
+                },
+            );
         }
         // The engine learns the new sheets, so a qualifier binds to them.
         self.reseed_active_sheet();
@@ -949,6 +958,13 @@ impl TrameState {
                     .collect(),
                 column_widths: self.excel_widths(&id, &index),
                 row_heights: self.excel_heights(&id, &index),
+                frozen: {
+                    let pane = self.frozen_pane(&id);
+                    xl::FrozenPane {
+                        rows: Len::new(pane.rows.get()),
+                        cols: Len::new(pane.cols.get()),
+                    }
+                },
             });
         }
         (book, title)

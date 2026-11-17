@@ -184,6 +184,7 @@ pub fn book_of(workbook: &Workbook, report: &mut Report) -> Book {
                 merges: sheet.merges.clone(),
                 column_widths,
                 row_heights,
+                frozen: sheet.frozen,
             }
         })
         .collect();
@@ -292,6 +293,7 @@ pub fn workbook_of(book: &Book, report: &mut Report) -> Workbook {
             let mut heights = sheet.row_heights.clone();
             heights.sort_by_key(|h| h.row);
             out.row_heights = heights;
+            out.frozen = sheet.frozen;
             out
         })
         .collect();

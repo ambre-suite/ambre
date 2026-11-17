@@ -60,6 +60,13 @@ pub struct GridLayout<'a> {
     pub origin_col: Pos<Col>,
     /// Absolute grid row at the content area's top edge.
     pub origin_row: Pos<Row>,
+    /// The frozen pane. Its rows are laid out from the first row under the
+    /// column strip. Its columns are laid out from the first column right of
+    /// the row strip. The origin lays out the rest, past the band. The walk
+    /// and a PDF export freeze nothing.
+    pub frozen_rows: Len<Row>,
+    /// The frozen columns, counted from the first column.
+    pub frozen_cols: Len<Col>,
     /// Full surface width in device pixels (header strip included).
     pub width: Px<Surface>,
     /// Full surface height in device pixels (header strip included).
@@ -126,7 +133,12 @@ impl GridLayout<'_> {
     /// origin yield a coordinate smaller than [`header_width`](Self::header_width)
     /// (callers clip).
     pub fn col_left(&self, col: Pos<Col>) -> Px<Surface> {
-        let mut x = self.header_width;
+        if col < self.frozen_cols.as_end() {
+            return Span::<Col>::new(Pos::<Col>::ZERO, col)
+                .into_iter()
+                .fold(self.header_width, |x, c| x + self.col_w(c));
+        }
+        let mut x = self.header_width + self.frozen_width();
         if col >= self.origin_col {
             for c in Span::<Col>::new(self.origin_col, col) {
                 x += self.col_w(c);
@@ -139,11 +151,36 @@ impl GridLayout<'_> {
         x
     }
 
+    /// Width of the frozen columns.
+    pub fn frozen_width(&self) -> Px<Surface> {
+        self.frozen_cols
+            .span()
+            .into_iter()
+            .map(|c| self.col_w(c))
+            .sum()
+    }
+
+    /// Height of the frozen rows the filter leaves shown.
+    pub fn frozen_height(&self) -> Px<Surface> {
+        self.frozen_rows
+            .span()
+            .into_iter()
+            .filter(|&r| !self.is_hidden(r))
+            .map(|r| self.row_h(r))
+            .sum()
+    }
+
     /// Y of row `row`'s top edge relative to the surface, summing the variable
     /// heights of the *visible* rows from [`origin_row`](Self::origin_row). The
     /// row axis collapses over filtered rows (`trame-shared-filter`).
     pub fn row_top(&self, row: Pos<Row>) -> Px<Surface> {
-        let mut y = self.cells_top();
+        if row < self.frozen_rows.as_end() {
+            return Span::<Row>::new(Pos::<Row>::ZERO, row)
+                .into_iter()
+                .filter(|&r| !self.is_hidden(r))
+                .fold(self.cells_top(), |y, r| y + self.row_h(r));
+        }
+        let mut y = self.cells_top() + self.frozen_height();
         if row >= self.origin_row {
             for r in Span::<Row>::new(self.origin_row, row) {
                 if !self.is_hidden(r) {
@@ -169,14 +206,13 @@ impl GridLayout<'_> {
             return None;
         }
         let mut x = self.header_width;
-        let mut col = self.origin_col;
-        while col < self.total_cols.as_end() {
+        let scrolled = Span::<Col>::new(self.origin_col, self.total_cols.as_end());
+        for col in self.frozen_cols.span().into_iter().chain(scrolled) {
             let w = self.col_w(col);
             if px < x + w {
                 return Some(col);
             }
             x += w;
-            col = col.next();
         }
         None
     }
@@ -191,8 +227,8 @@ impl GridLayout<'_> {
             return None;
         }
         let mut y = cells_top;
-        let mut row = self.origin_row;
-        while row < self.total_rows.as_end() {
+        let scrolled = Span::<Row>::new(self.origin_row, self.total_rows.as_end());
+        for row in self.frozen_rows.span().into_iter().chain(scrolled) {
             if !self.is_hidden(row) {
                 let h = self.row_h(row);
                 if py < y + h {
@@ -200,7 +236,6 @@ impl GridLayout<'_> {
                 }
                 y += h;
             }
-            row = row.next();
         }
         None
     }
@@ -224,21 +259,41 @@ impl GridLayout<'_> {
         }
     }
 
-    /// The absolute grid row drawn at visible slot `slot` (0 = the row at
-    /// `origin_row`, skipping hidden rows). `None` once the grid is exhausted.
+    /// The absolute grid row drawn at visible slot `slot`: the frozen rows
+    /// first, then the rows from `origin_row`, skipping hidden rows. `None`
+    /// once the grid is exhausted.
     pub fn row_at_slot(&self, slot: Len<Row>) -> Option<Pos<Row>> {
-        let mut row = self.origin_row;
-        let mut seen = Len::<Row>::ZERO;
-        while row < self.total_rows.as_end() {
-            if !self.is_hidden(row) {
-                if seen == slot {
-                    return Some(row);
-                }
-                seen += Len::<Row>::ONE;
-            }
-            row = row.next();
-        }
-        None
+        self.shown_rows().nth(slot.to_usize())
+    }
+
+    /// The rows the content area shows, top to bottom: the frozen rows, then
+    /// the rows from [`origin_row`](Self::origin_row). A hidden row is left
+    /// out.
+    pub fn shown_rows(&self) -> impl Iterator<Item = Pos<Row>> + '_ {
+        let scrolled = Span::<Row>::new(self.origin_row, self.total_rows.as_end());
+        self.frozen_rows
+            .span()
+            .into_iter()
+            .chain(scrolled)
+            .filter(|&r| !self.is_hidden(r))
+    }
+
+    /// The columns the content area shows, left to right: the frozen
+    /// columns, then the columns from [`origin_col`](Self::origin_col).
+    pub fn shown_cols(&self) -> impl Iterator<Item = Pos<Col>> + '_ {
+        let scrolled = Span::<Col>::new(self.origin_col, self.total_cols.as_end());
+        self.frozen_cols.span().into_iter().chain(scrolled)
+    }
+
+    /// Whether `row` lies in the frozen band or past the scroll origin, so a
+    /// header can draw it.
+    pub fn shows_row(&self, row: Pos<Row>) -> bool {
+        row < self.frozen_rows.as_end() || row >= self.origin_row
+    }
+
+    /// Whether `col` lies in the frozen band or past the scroll origin.
+    pub fn shows_col(&self, col: Pos<Col>) -> bool {
+        col < self.frozen_cols.as_end() || col >= self.origin_col
     }
 
     /// Pixel rect of cell `at` relative to the surface top-left.

@@ -7,7 +7,7 @@
 //! it. So the map from the model to the document drops nothing, and the
 //! report the reader returns is the whole of what the import lost.
 
-use ambre_core::index::Pos;
+use ambre_core::index::{Len, Pos};
 use ambre_core::{
     Bounded, Bounds, Doc, FontFamily, FontSize, Px, Refusal, Rgb, Rule, Slant, Strikethrough,
     Underline, Validated, Weight, WordBreak,
@@ -86,6 +86,9 @@ pub struct Sheet {
     pub column_widths: Vec<ColumnWidth>,
     /// The rows whose height differs from the default, each once.
     pub row_heights: Vec<RowHeight>,
+    /// The leading rows and columns that stay on screen while the rest
+    /// scrolls.
+    pub frozen: FrozenPane,
 }
 
 impl Sheet {
@@ -99,7 +102,33 @@ impl Sheet {
             merges: Vec::new(),
             column_widths: Vec::new(),
             row_heights: Vec::new(),
+            frozen: FrozenPane::NONE,
         }
+    }
+}
+
+/// The leading rows and columns of a sheet that stay on screen while the
+/// rest scrolls. Both counts start at the first row and the first column, as
+/// a spreadsheet freezes them. Zero on an axis freezes nothing there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct FrozenPane {
+    /// The rows frozen at the top.
+    pub rows: Len<Row>,
+    /// The columns frozen at the left.
+    pub cols: Len<Col>,
+}
+
+impl FrozenPane {
+    /// No row and no column frozen.
+    pub const NONE: Self = Self {
+        rows: Len::new(0),
+        cols: Len::new(0),
+    };
+
+    /// Whether the pane freezes no row and no column.
+    #[must_use]
+    pub const fn is_none(self) -> bool {
+        self.rows.is_zero() && self.cols.is_zero()
     }
 }
 

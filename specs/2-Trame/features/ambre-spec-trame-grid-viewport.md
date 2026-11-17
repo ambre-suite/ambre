@@ -5,8 +5,9 @@
 > below, ever leave the Logic thread. A cell the user has not been sent reads as pending or as
 > blank, never as a stale value.
 
-The viewport is local view state: it writes nothing to the document and reaches no collaborator.
-There is no two-peer table below, because two users scrolling one sheet see nothing of each other.
+The viewport is local view state: a scroll writes nothing to the document and reaches no
+collaborator. The frozen pane is the one exception: the document stores it, so every collaborator
+shows the same frozen rows and columns.
 
 ---
 
@@ -26,6 +27,9 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-UI-013` | `OBS` | The renderer MUST NOT paint outside the grid region, whatever the canvas size or the scroll position. | this spec section 3 | `ambre_trame::ui::renderer::tests::draw_cells_strip_skips_when_outside_grid`; `ambre_trame::ui::grid::tests::group2::grid_bottom_floors_at_header_on_tiny_canvas`; `::header_strip_starts_at_top_of_canvas` | none | verified |
 | `TRAME-UI-027` | `OBS` | A cell the user has just edited MUST read as unconfirmed until its computed value arrives. | this spec section 3 | `ambre_trame::ui::grid::tests::group2::dirty_and_error_lifecycle`; `ambre_trame::ui::renderer::tests::dirty_cell_gets_a_translucent_veil` | none | verified |
 | `TRAME-UI-028` | `OBS` | A band entering the viewport by a scroll MUST NOT be painted as pending. | this spec section 3 | `ambre_trame::ui::renderer::tests::draw_cells_scroll_strip_base_is_blank_not_pending_grey`; `::draw_cells_full_repaint_paints_pending_then_grid` | none | verified |
+| `TRAME-UI-191` | `CONC` | Two peers that freeze rows and columns at once MUST both end on the pane that holds both bands. | this spec section 2 | `ambre_trame::logic::frozen::tests::rows_and_columns_frozen_at_once_both_hold` | none | verified |
+| `TRAME-UI-192` | `OBS` | A frozen row or column MUST stay drawn and hit-tested at its place while the rest of its axis scrolls. | this spec section 3 | `ambre_trame::ui::renderer::tests::a_frozen_band_stays_drawn_and_hit_under_a_scroll`; `::a_frozen_pane_draws_four_clipped_panes`; `ambre_trame::ui::grid::tests::viewport::a_scroll_keeps_the_frozen_bands_in_the_cache`; `::a_change_in_a_frozen_band_re_fetches_the_window`; `ambre_trame::logic::frozen::tests::an_answer_far_from_the_top_carries_the_frozen_bands` | none | verified |
+| `TRAME-UI-193` | `INV` | The scroll origin MUST NOT enter a frozen band. | this spec section 2 | `ambre_trame::ui::grid::tests::viewport::the_scroll_origin_never_enters_a_frozen_band` | none | verified |
 | `TRAME-UI-049` | `OBS` | The painted grid MUST be offset by the sub-cell scroll remainder. | this spec section 5 | not built | unbuilt -- lands with the `Post-V1 surface` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 
 ### 1.2 The user scrolls
@@ -58,7 +62,8 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-UI-029` | `FRAME` | Freezing rows or columns MUST reach no collaborator: it MUST produce no change to the document. | this spec section 5 | not built | unbuilt -- lands with the `Grid surface` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-UI-029` | `POST` | Freezing rows or columns MUST store the frozen pane in the document, so a collaborator who receives the change shows the same frozen lines. | this spec section 2; `ambre-spec-trame-schema.md section 3` | `ambre_trame::logic::frozen::tests::a_freeze_reaches_a_peer_and_one_undo_takes_it_back` -- the delta carries the pane to a second peer, its viewport answer carries it, and one undo takes it back on both | none | verified |
+| `TRAME-UI-194` | `FRAME` | Freezing rows or columns MUST NOT change a cell, a line, a size or the frozen pane of another sheet. | this spec section 2 | `ambre_trame::logic::frozen::tests::a_freeze_writes_the_frozen_pane_alone` -- the whole document but the pane map of the active sheet reads the same either side of a freeze | none | verified |
 
 * **Budget.** four rows of `ambre-spec-budgets.md section 1`. The scroll round trip is in < 2 ms
   and the scroll viewport response in < 15 ms. The `ScrollViewport` send is in < 1 ms and the
@@ -66,25 +71,30 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the viewport is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. What crosses is a request and a display slice, never
   document data (`TRAME-UI-001`).
-* **Verification.** 18 `verified`, 2 `unimplemented`. What is drawn or hit-tested holds, and so
-  does the one-slot queue that caps a frame at one request (`TRAME-UI-025`). The state machines
-  hold on the host tier too. They are the window, the version guard, the eviction, the wheel and
-  the metric adoption, and the wheel is driven through the view.
+* **Verification.** 23 `verified`, 1 `unimplemented`. What is drawn or hit-tested holds, and so does
+  the one-slot queue that caps a frame at one request (`TRAME-UI-025`). The state machines hold on
+  the host tier too. They are the window, the version guard, the eviction, the wheel and the metric
+  adoption, and the wheel is driven through the view.
 
 ---
 
 ## 2. MODEL
 
-**Containers.** None. The viewport persists nothing. It reads the sizes of the rows and columns it
-covers out of the answer it receives. `col_widths_{sheet}` and `row_heights_{sheet}` belong to the
-resize feature and are declared in `ambre-spec-trame-schema.md section 3`.
+**Containers.** One: `frozen_{sheet}`. It holds one count per axis, each under its own key. Two
+peers who freeze two axes therefore keep both (`TRAME-UI-191`). An absent key
+freezes nothing. A stored count leaves at least one line of its axis to scroll.
+
+The viewport reads the sizes of its rows and columns out of each answer. `col_widths_{sheet}` and
+`row_heights_{sheet}` belong to the resize feature. `ambre-spec-trame-schema.md section 3` declares
+all three.
 
 **Commands and events** (`ambre-bus`):
 
 | Shape | Direction | Carries |
 |---|---|---|
 | `TrameCommand::ScrollViewport { version, row_start, row_end, col_start, col_end }` | UI to Logic | the padded window, in absolute indices. No sheet id: the Logic thread resolves the active sheet |
-| `TrameEvent::ViewportData { version, row_start, col_start, cells, col_widths, row_heights }` | Logic to UI | one whole window of display cells, and the sizes of its rows and columns |
+| `TrameEvent::ViewportData { version, row_start, col_start, cells, col_widths, row_heights, frozen }` | Logic to UI | one whole window of display cells, and the sizes of its rows and columns. `frozen` carries the pane and the sizes of the frozen lines before the window, and `cells` the frozen bands of the window |
+| `TrameCommand::Freeze(FreezeIntent)` | UI to Logic | freeze the rows through the active cell's row, the columns through its column, or nothing. One undo item |
 
 **View state.** Fields of `TrameUiState`:
 
@@ -97,6 +107,7 @@ accepted_version: Seq<ViewportVersion>, // the last answer taken (`TRAME-UI-005`
 next_version: Seq<ViewportVersion>,
 col_widths: HashMap<Pos<Col>, Px<Doc>>,            // only a size that differs from the default
 row_heights: HashMap<Pos<Row>, Px<Doc>>,
+frozen: FrozenPane,                                // adopted from each answer
 zoom: f64,
 ```
 
@@ -116,6 +127,11 @@ zoom: f64,
 2. adopt the sizes it carries, storing only those that differ from the default. A row reset to the
    default then falls back to the uniform metric rather than keeping a stale entry;
 3. merge its cells into the cache and clear their unconfirmed marks (`TRAME-UI-027`).
+
+**Frozen pane.** The visible lines of an axis are its frozen lines, then the lines from the scroll
+origin. The origin never enters the frozen band (`TRAME-UI-193`). A scroll keeps the cached cells of
+each band. The cells layer draws the sheet in four panes, each under its own camera and clip
+(`TRAME-UI-192`). A scroll under a frozen pane repaints the layer whole.
 
 **Geometry.** A pixel maps to an index by walking the variable sizes from the scroll origin. An
 index maps back the same way, scaled by the zoom (`TRAME-UI-007`). The row walk skips a row the
@@ -149,6 +165,8 @@ active filter hides, so the axis closes over it (`features/ambre-spec-trame-shar
 | the zoom menu in the status bar | scales the cells, both header strips and the cell font together, and re-requests the window |
 | a navigation or a selection that leaves the screen | scrolls the target into view (`features/ambre-spec-trame-selection.md section 3`) |
 | the first frame after the sheet opens | one request, with a full repaint |
+| "Freeze up to this row" or "Freeze up to this column" in the cell or header menu | the rows down to the active cell's row, or the columns up to its column, stay on screen; a line marks the edge of each band |
+| "Unfreeze rows and columns" in the same menus | nothing stays frozen |
 
 **What a cell looks like before its value arrives.**
 
@@ -178,15 +196,13 @@ painter never leaves it (`TRAME-UI-013`). Every fill comes from the theme palett
 | A cell outside the new window is evicted | keeping every cell ever received | it is unbounded on a 100 000-row sheet, and a cell that stays in the cache after leaving the window is a value nothing will refresh, which reads as authoritative. |
 | A band entering by a scroll is painted blank, not pending | painting the pending fill uniformly | it is what a full repaint does, and the pending fill is grey: a grey flash on every scroll reads as a fault rather than as a wait. |
 | Only a high-resolution pixel gesture gets momentum, from the shared model | one path for every scroll source | a notched wheel emits one large discrete delta, and feeding it to a velocity estimate sends the sheet flying from a single click. |
-| Freeze stays local | freezing as a document property, synchronized to every collaborator | a frozen pane is a reading preference and screens differ; sharing it would make two users fight over one number. |
+| The frozen pane is stored in the document | a frozen pane as local view state, the earlier design | an Excel or OpenDocument file stores the pane with its sheet. A local pane loses it on import, and an export by another collaborator drops it. A frozen header row is a property of the table. |
+| The Logic thread adds the frozen bands to each answer | a second request for the bands | two answers for one frame race under two versions, and a band could show a value older than the window beside it. |
 
 ---
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **Freeze** (`TRAME-UI-029`): the design is a second pass drawing the frozen bands at their
-  absolute offsets, with the scroll subtracted only on the free axis. A separator is stroked at
-  each boundary. No field carries it and nothing draws it.
 * **A pixel-smooth axis** (`TRAME-UI-049`). The remainder is accumulated but never drawn: the grid
   still steps by a whole row. A smooth axis means offsetting the painted content by the remainder,
   which the `Post-V1 surface` Story (`ambre-roadmap.md` POST-V1) carries.

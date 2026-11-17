@@ -7,7 +7,7 @@
 use std::collections::BTreeMap;
 
 use ambre_client_core::FileBytes;
-use ambre_core::index::{Delta, Pos};
+use ambre_core::index::{Delta, Len, Pos};
 use ambre_core::{
     Cells, Count, Doc, FracDay, Instant, Payload, Px, SheetDateTime, TimeSpan, Validated,
 };
@@ -17,8 +17,8 @@ use quick_xml::events::{BytesStart, Event};
 use crate::cellref::{CellRange, CellRef, Col, LAST_COL, LAST_ROW, Row};
 use crate::formula::{self, Formula};
 use crate::model::{
-    Cell, CellStyle, ColumnWidth, Content, ErrorValue, RowHeight, Sheet, SheetName, StyleId, Value,
-    Visibility, Workbook,
+    Cell, CellStyle, ColumnWidth, Content, ErrorValue, FrozenPane, RowHeight, Sheet, SheetName,
+    StyleId, Value, Visibility, Workbook,
 };
 use crate::opc::{self, Package, PartBytes, PartName, RelKind, RelTarget, Relationship};
 use crate::report::{Outcome, Report, XlsxConstruct};
@@ -510,7 +510,7 @@ fn read_sheet(
                         }
                     }
                     "pane" if xml::attr(e, "state")?.is_some_and(|s| s.starts_with("frozen")) => {
-                        report.record(XlsxConstruct::FrozenPane, Outcome::Dropped);
+                        read_frozen_pane(e, sheet, report)?;
                     }
                     "conditionalFormatting" => {
                         report.record(XlsxConstruct::ConditionalFormat, Outcome::Dropped);
@@ -801,6 +801,45 @@ fn set_formula(cell: &mut Cell, excel: &str, array: Option<CellRange>, report: &
     if let Ok(formula) = Formula::from_excel(excel, array, report) {
         cell.content = Content::Formula { formula, cached };
     }
+}
+
+/// Read a frozen pane: `ySplit` counts the rows frozen at the top and
+/// `xSplit` the columns frozen at the left. A count that is no whole number,
+/// or that leaves no line of the grid to scroll, freezes nothing on its axis.
+/// A pane that freezes nothing is dropped from the report too.
+fn read_frozen_pane(
+    e: &BytesStart<'_>,
+    sheet: &mut Sheet,
+    report: &mut Report,
+) -> Result<(), XmlError> {
+    // Excel writes a split as a decimal number, often with a fraction of
+    // zero: "2" and "2.0" freeze the same two lines.
+    let split = |v: Option<String>| -> Option<u32> {
+        let n: f64 = v?.trim().parse().ok()?;
+        if n.fract() != 0.0 || n < 1.0 || n > f64::from(u32::MAX) {
+            return None;
+        }
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "the guard above holds a whole number inside the range of a u32"
+        )]
+        let whole = n as u32;
+        Some(whole)
+    };
+    let rows = split(xml::attr(e, "ySplit")?)
+        .map(Len::<Row>::new)
+        .filter(|rows| *rows < Len::through(LAST_ROW))
+        .unwrap_or_default();
+    let cols = split(xml::attr(e, "xSplit")?)
+        .map(Len::<Col>::new)
+        .filter(|cols| *cols < Len::through(LAST_COL))
+        .unwrap_or_default();
+    sheet.frozen = FrozenPane { rows, cols };
+    if !sheet.frozen.is_none() {
+        report.record(XlsxConstruct::FrozenPane, Outcome::Carried);
+    }
+    Ok(())
 }
 
 fn read_col(e: &BytesStart<'_>, sheet: &mut Sheet, report: &mut Report) -> Result<(), XmlError> {

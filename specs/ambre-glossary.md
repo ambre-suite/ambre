@@ -222,5 +222,6 @@
 | cell rect | a rectangle of cells, both corners included | | `2-Trame/features/ambre-spec-trame-selection.md` |
 | cell number | a finite number a cell holds, as it crosses the bus | | `2-Trame/features/ambre-spec-trame-status-bar.md` |
 | grid cursor | the pointer shape the grid sets on the canvas | | `2-Trame/features/ambre-spec-trame-resize.md` |
+| frozen pane | the leading rows and columns that stay on screen in a scroll | | `2-Trame/features/ambre-spec-trame-grid-viewport.md` |
 | find text | the query of a find, as typed, never empty | | `1-Foundations/ambre-spec-find.md` |
 | find options | the refinements a find applies to its query | | `1-Foundations/ambre-spec-find.md` |

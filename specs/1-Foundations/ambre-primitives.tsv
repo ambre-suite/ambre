@@ -4743,3 +4743,12 @@ ambre-sfu | src/serve.rs | crate::serve | Session::renewed_by() | ret | bool	gen
 ambre-convert | src/spelling.rs | crate::spelling | <SpellWord as Rule>::admit() | ret | Result<String,NotAWord>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-convert | src/spelling.rs | crate::spelling | <SpellWord as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-prose | src/logic/spelling.rs | crate::logic::spelling | words(text) | param | &str	free-text	one block's text, cut into the words a spell check carries
+ambre-trame | src/logic/schema.rs | crate::logic::schema | <FrozenKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
+ambre-trame | src/logic/schema.rs | crate::logic::schema | frozen_v7() | ret | Result<(),String>	free-text	step failure reason, wrapped into MigrationFailed
+ambre-trame | src/message/command.rs | crate::message::command | FrozenPane::is_none() | ret | bool	generic	predicate or did-it-change return
+ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::shows_col() | ret | bool	generic	predicate or did-it-change return
+ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::shows_row() | ret | bool	generic	predicate or did-it-change return
+ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::in_frozen_band() | ret | bool	generic	predicate or did-it-change return
+ambre-xlsx | src/model.rs | crate::model | FrozenPane::is_none() | ret | bool	generic	predicate or did-it-change return
+ambre-xlsx | src/ods/write.rs | crate::ods::write | settings_xml() | ret | Option<String>	free-text	a whole markup document: the view settings part, absent when no table freezes a pane
+ambre-xlsx | src/write.rs | crate::write | sheet_view_xml(out) | param | &mut String	generic	the worksheet part being written, its sheet view appended

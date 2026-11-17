@@ -7,7 +7,7 @@
 )]
 
 use ambre_client_core::FileBytes;
-use ambre_core::index::Pos;
+use ambre_core::index::{Len, Pos};
 use ambre_core::{
     Bounded, FontFamily, FontSize, Payload, Px, Rgb, Slant, Strikethrough, Underline, Validated,
     Weight, WordBreak,
@@ -16,8 +16,8 @@ use ambre_xlsx::cellref::{CellRange, CellRef};
 use ambre_xlsx::formula::Formula;
 use ambre_xlsx::model::{
     BorderStyle, Borders, Cell, CellBorder, CellStyle, ColumnWidth, Content, ErrorValue,
-    FormatCode, HAlign, NumberFormat, RowHeight, Sheet, SheetName, StyleId, VAlign, Value,
-    Visibility, Workbook,
+    FormatCode, FrozenPane, HAlign, NumberFormat, RowHeight, Sheet, SheetName, StyleId, VAlign,
+    Value, Visibility, Workbook,
 };
 use proptest::prelude::*;
 
@@ -150,8 +150,9 @@ fn sheet(index: usize, styles: usize) -> impl Strategy<Value = Sheet> {
     let merges = prop::collection::vec((0u32..20, 12u32..20, 1u32..3, 1u32..3), 0..3);
     let widths = prop::collection::btree_set(0u32..30, 0..4);
     let heights = prop::collection::btree_map(0u32..60, 1u32..200, 0..4);
-    (cells, merges, widths, heights, any::<bool>()).prop_map(
-        move |(cells, merges, widths, heights, hidden)| {
+    let frozen = (0u32..4, 0u32..3);
+    (cells, merges, widths, heights, any::<bool>(), frozen).prop_map(
+        move |(cells, merges, widths, heights, hidden, (frozen_rows, frozen_cols))| {
             let mut sheet = Sheet::named(
                 Validated::<SheetName>::parse(format!("Sheet {}", index + 1))
                     .unwrap_or_else(|e| panic!("{e}")),
@@ -207,6 +208,10 @@ fn sheet(index: usize, styles: usize) -> impl Strategy<Value = Sheet> {
                     height: Px::new(px as f32),
                 })
                 .collect();
+            sheet.frozen = FrozenPane {
+                rows: Len::new(frozen_rows),
+                cols: Len::new(frozen_cols),
+            };
             sheet
         },
     )
@@ -386,6 +391,58 @@ fn a_sheet_of_odd_cells_reads_what_it_can() {
             .any(|c| c.at.to_string() == "A3" && c.content == Content::Value(Value::Number(3.0)))
     );
     assert!(read.workbook.sheets[0].merges.is_empty());
+}
+
+/// The pane Excel writes for a frozen band reads as the band. A split with a
+/// zero fraction counts as a whole number of lines. A split mode that is no
+/// freeze reads as nothing, and so does a split past the grid.
+#[test]
+fn an_excel_frozen_pane_reads_as_its_rows_and_columns() {
+    let read = |view: &str| {
+        let sheet = format!(
+            "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">\
+             <sheetViews><sheetView workbookViewId=\"0\">{view}</sheetView></sheetViews>\
+             <sheetData/></worksheet>"
+        );
+        let bytes = package(&[
+            ("_rels/.rels", ROOT_RELS),
+            ("xl/_rels/workbook.xml.rels", BOOK_RELS),
+            ("xl/workbook.xml", BOOK),
+            ("xl/worksheets/sheet1.xml", &sheet),
+        ]);
+        let Ok(read) = ambre_xlsx::read(&bytes) else {
+            panic!("{view} reads");
+        };
+        let carried = read.report.count(
+            ambre_xlsx::report::XlsxConstruct::FrozenPane,
+            ambre_xlsx::report::Outcome::Carried,
+        );
+        (read.workbook.sheets[0].frozen, carried.get())
+    };
+    let pane = |rows, cols| FrozenPane {
+        rows: Len::new(rows),
+        cols: Len::new(cols),
+    };
+    assert_eq!(
+        read(
+            "<pane xSplit=\"1\" ySplit=\"2.0\" topLeftCell=\"B3\" activePane=\"bottomRight\" state=\"frozen\"/>"
+        ),
+        (pane(2, 1), 1)
+    );
+    assert_eq!(
+        read(
+            "<pane ySplit=\"1\" topLeftCell=\"A2\" activePane=\"bottomLeft\" state=\"frozenSplit\"/>"
+        ),
+        (pane(1, 0), 1)
+    );
+    assert_eq!(
+        read("<pane xSplit=\"2400\" ySplit=\"1200\" state=\"split\"/>"),
+        (FrozenPane::NONE, 0)
+    );
+    assert_eq!(
+        read("<pane xSplit=\"16384\" ySplit=\"1.5\" state=\"frozen\"/>"),
+        (FrozenPane::NONE, 0)
+    );
 }
 
 /// `workbook` as Trame hands it to the writer and an OpenDocument file can

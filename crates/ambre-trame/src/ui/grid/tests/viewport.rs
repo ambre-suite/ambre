@@ -27,6 +27,7 @@ fn answer(version: u64, cells: Vec<DisplayCell>) -> TrameEvent {
         col_start: Pos::<Col>::new(0),
         col_widths: vec![],
         row_heights: vec![],
+        frozen: crate::message::FrozenView::default(),
         cells,
     }
 }
@@ -143,6 +144,7 @@ fn a_default_size_in_an_answer_clears_the_stored_one() {
         col_start: Pos::<Col>::new(2),
         col_widths: vec![ambre_core::Px::<ambre_core::Doc>::new(width as f32)],
         row_heights: vec![ambre_core::Px::<ambre_core::Doc>::new(height as f32)],
+        frozen: crate::message::FrozenView::default(),
         cells: vec![],
     };
     state.on_viewport_data(sized(ambre_core::Seq::ZERO, 200.0, 45.0));
@@ -227,4 +229,93 @@ fn a_later_window_request_carries_a_ranged_change() {
     };
     let _later = state.scroll_viewport_cmd();
     assert!(state.range_viewport_cmd(rect(0, 0, 3, 3), served).is_none());
+}
+
+/// An answer of version `version` that carries `cells` and freezes `rows`
+/// rows and `cols` columns.
+fn frozen_answer(version: u64, cells: Vec<DisplayCell>, rows: u32, cols: u32) -> TrameEvent {
+    TrameEvent::ViewportData {
+        version: ambre_core::Seq::nth(version),
+        row_start: Pos::<Row>::new(0),
+        col_start: Pos::<Col>::new(0),
+        col_widths: vec![],
+        row_heights: vec![],
+        frozen: crate::message::FrozenView {
+            pane: crate::message::FrozenPane {
+                rows: Len::<Row>::new(rows),
+                cols: Len::<Col>::new(cols),
+            },
+            ..crate::message::FrozenView::default()
+        },
+        cells,
+    }
+}
+
+/// `TRAME-UI-193`: an adopted pane moves the scroll origin out of its
+/// bands, and no scroll, however far back, brings it in again.
+#[test]
+fn the_scroll_origin_never_enters_a_frozen_band() {
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
+    state.on_viewport_data(frozen_answer(0, vec![], 3, 2));
+    assert_eq!(
+        (state.top_row.get(), state.left_col.get()),
+        (3, 2),
+        "the origin leaves the bands it sat in"
+    );
+    assert!(state.scroll_by(Delta::<Row>::new(40), Delta::<Col>::new(9)));
+    assert!(state.scroll_by(Delta::<Row>::new(-1_000), Delta::<Col>::new(-1_000)));
+    assert_eq!((state.top_row.get(), state.left_col.get()), (3, 2));
+    assert!(!state.scroll_by(Delta::<Row>::new(-1), Delta::<Col>::new(-1)));
+}
+
+/// `TRAME-UI-192`, the view half: a scroll far from the first line keeps
+/// the cells of the frozen bands it shows, and evicts the rest.
+#[test]
+fn a_scroll_keeps_the_frozen_bands_in_the_cache() {
+    use crate::message::RowFilter::Shown as Unfiltered;
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
+    state.on_viewport_data(frozen_answer(
+        0,
+        vec![
+            cell(0, 0, Unfiltered),
+            cell(0, 3, Unfiltered),
+            cell(5, 0, Unfiltered),
+            cell(5, 3, Unfiltered),
+        ],
+        1,
+        1,
+    ));
+    assert!(state.scroll_by(Delta::<Row>::new(2_000), Delta::<Col>::new(0)));
+    let _ = state.scroll_viewport_cmd();
+    let at = |row, col| CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(col));
+    assert!(state.cell_cache.contains_key(&at(0, 0)), "the corner stays");
+    assert!(
+        state.cell_cache.contains_key(&at(0, 3)),
+        "the top band stays"
+    );
+    assert!(
+        !state.cell_cache.contains_key(&at(5, 0)),
+        "a left band row off screen goes"
+    );
+    assert!(
+        !state.cell_cache.contains_key(&at(5, 3)),
+        "a scrolled cell goes"
+    );
+}
+
+/// `TRAME-UI-192`: a change a peer made in a frozen band the window does not
+/// hold re-fetches the window, whose answer carries the band.
+#[test]
+fn a_change_in_a_frozen_band_re_fetches_the_window() {
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
+    state.on_viewport_data(frozen_answer(0, vec![], 1, 0));
+    assert!(state.scroll_by(Delta::<Row>::new(2_000), Delta::<Col>::new(0)));
+    let full = window(state.scroll_viewport_cmd());
+    let at = |row, col| CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(col));
+    let served = ambre_core::Seq::nth(100);
+    let header = CellRect::spanning(at(0, 2), at(0, 2));
+    let cmd = state.range_viewport_cmd(header, served);
+    assert_eq!(cmd.map(window), Some(full));
+    let unseen = CellRect::spanning(at(40, 2), at(40, 2));
+    assert!(state.range_viewport_cmd(unseen, served).is_none());
 }

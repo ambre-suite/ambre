@@ -41,7 +41,7 @@ use super::schema_shape::{
 use crate::formula::types::NameTarget;
 use crate::logic::TrameState;
 use crate::logic::schema::{
-    FilterKey, PageSetupKey, Root, SCHEMA_VERSION, SheetContainer, SheetRoot,
+    FilterKey, FrozenKey, PageSetupKey, Root, SCHEMA_VERSION, SheetContainer, SheetRoot,
 };
 use crate::model::Uid;
 use crate::{CellPos, Col};
@@ -435,6 +435,13 @@ fn sheet_reading(
                 PageSetupKey::MarginRight => Some(format!("right margin {} mm", m.right.get())),
                 PageSetupKey::MarginBottom => Some(format!("bottom margin {} mm", m.bottom.get())),
                 PageSetupKey::MarginLeft => Some(format!("left margin {} mm", m.left.get())),
+            }
+        }
+        SheetRoot::Frozen => {
+            let pane = reader.frozen_pane(sheet);
+            match FrozenKey::parse(key)? {
+                FrozenKey::Rows => Some(format!("{} rows frozen", pane.rows.get())),
+                FrozenKey::Cols => Some(format!("{} columns frozen", pane.cols.get())),
             }
         }
         _ => None,

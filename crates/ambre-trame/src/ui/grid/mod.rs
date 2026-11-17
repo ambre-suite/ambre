@@ -587,6 +587,14 @@ pub struct TrameUiState {
     /// [`col_widths`](Self::col_widths); absence uses [`ROW_HEIGHT`].
     pub row_heights: HashMap<Pos<Row>, Px<Doc>>,
 
+    /// The frozen pane of the active sheet, adopted from each viewport answer
+    /// (`TRAME-UI-029`). Its rows are drawn under the column strip and its
+    /// columns right of the row strip, whatever the scroll. The scroll origin
+    /// never enters it: [`top_row`](Self::top_row) is at least its row count,
+    /// and [`left_col`](Self::left_col) at least its column count
+    /// (`TRAME-UI-193`).
+    pub frozen: crate::message::FrozenPane,
+
     /// The range last copied/cut, drawn with animated marching-ants until the
     /// next copy or an Escape (`trame-clipboard`). `None` when nothing is on the
     /// clipboard. Stored as a rectangle in absolute grid coordinates. UI-only

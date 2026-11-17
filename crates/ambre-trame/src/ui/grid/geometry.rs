@@ -95,11 +95,40 @@ impl TrameUiState {
         HEADER_HEIGHT * self.zoom.get()
     }
 
-    /// X of column `col`'s left edge relative to the canvas, summing the variable
-    /// widths from [`left_col`](Self::left_col). Columns left of the scroll origin
-    /// yield a value smaller than [`HEADER_WIDTH`] (callers clip).
+    /// Width of the frozen columns, drawn right of the row strip whatever the
+    /// scroll (`TRAME-UI-192`).
+    pub fn frozen_w(&self) -> Px<Surface> {
+        self.frozen
+            .cols
+            .span()
+            .into_iter()
+            .map(|c| self.col_width_of(c))
+            .sum()
+    }
+
+    /// Height of the frozen rows a filter leaves shown, drawn under the
+    /// column strip whatever the scroll (`TRAME-UI-192`).
+    pub fn frozen_h(&self) -> Px<Surface> {
+        self.frozen
+            .rows
+            .span()
+            .into_iter()
+            .filter(|&r| !self.is_row_hidden(r))
+            .map(|r| self.row_height_of(r))
+            .sum()
+    }
+
+    /// X of column `col`'s left edge relative to the canvas. A frozen column
+    /// sums the widths from the first column. Any other sums them from
+    /// [`left_col`](Self::left_col), right of the frozen band. So a column
+    /// scrolled under the band yields a value left of its edge (callers clip).
     pub fn col_x(&self, col: Pos<Col>) -> Px<Surface> {
-        let mut x = self.header_w();
+        if col < self.frozen.cols.as_end() {
+            return Span::<Col>::new(Pos::<Col>::ZERO, col)
+                .into_iter()
+                .fold(self.header_w(), |x, c| x + self.col_width_of(c));
+        }
+        let mut x = self.header_w() + self.frozen_w();
         if col >= self.left_col {
             for c in Span::<Col>::new(self.left_col, col) {
                 x += self.col_width_of(c);
@@ -113,37 +142,50 @@ impl TrameUiState {
     }
 
     /// Y of row `row`'s top edge relative to the canvas, summing the *visible*
-    /// rows' variable heights from [`top_row`](Self::top_row) (collapsing hidden
-    /// rows, `trame-shared-filter`). Mirrors `GridLayout::row_top`.
+    /// rows' variable heights (collapsing hidden rows, `trame-shared-filter`).
+    /// A frozen row sums them from the first row, any other from
+    /// [`top_row`](Self::top_row), under the frozen band. Mirrors
+    /// `GridLayout::row_top`.
     pub fn row_y(&self, row: Pos<Row>) -> Px<Surface> {
-        let cells_top = self.header_h();
-        let mut y = cells_top;
+        let shown = |r: &Pos<Row>| !self.is_row_hidden(*r);
+        if row < self.frozen.rows.as_end() {
+            return Span::<Row>::new(Pos::<Row>::ZERO, row)
+                .into_iter()
+                .filter(shown)
+                .fold(self.header_h(), |y, r| y + self.row_height_of(r));
+        }
+        let mut y = self.header_h() + self.frozen_h();
         if row >= self.top_row {
-            for r in Span::<Row>::new(self.top_row, row) {
-                if !self.is_row_hidden(r) {
-                    y += self.row_height_of(r);
-                }
+            for r in Span::<Row>::new(self.top_row, row)
+                .into_iter()
+                .filter(shown)
+            {
+                y += self.row_height_of(r);
             }
         } else {
-            for r in Span::<Row>::new(row, self.top_row) {
-                if !self.is_row_hidden(r) {
-                    y -= self.row_height_of(r);
-                }
+            for r in Span::<Row>::new(row, self.top_row)
+                .into_iter()
+                .filter(shown)
+            {
+                y -= self.row_height_of(r);
             }
         }
         y
     }
 
     /// Absolute grid column whose band contains logical `x` (>= the row
-    /// header strip), walking the variable widths. Used by a whole-axis drag,
-    /// where the pointer may be below the header strip. `None` left of the grid.
+    /// header strip), walking the frozen columns, then the variable widths
+    /// from the scroll origin. Used by a whole-axis drag, where the pointer
+    /// may be below the header strip. `None` left of the grid.
     pub fn col_at_x(&self, x: Px<View>) -> Option<Pos<Col>> {
         let px = on_grid(x);
         if px < self.header_w() {
             return None;
         }
+        let frozen = self.frozen.cols.span();
+        let scrolled = Span::<Col>::new(self.left_col, TOTAL_COLS.as_end());
         let mut cx = self.header_w();
-        for col in Span::<Col>::new(self.left_col, TOTAL_COLS.as_end()) {
+        for col in frozen.into_iter().chain(scrolled) {
             let w = self.col_width_of(col);
             if px < cx + w {
                 return Some(col);
@@ -177,15 +219,18 @@ impl TrameUiState {
     }
 
     /// Absolute *visible* grid row whose band contains logical `y` (>= the
-    /// column header strip), walking the variable heights and skipping hidden
-    /// rows. `None` above the grid.
+    /// column header strip). It walks the frozen rows, then the variable
+    /// heights from the scroll origin, and skips hidden rows. `None` above
+    /// the grid.
     pub fn row_at_y(&self, y: Px<View>) -> Option<Pos<Row>> {
         let py = on_grid(y);
         if py < self.header_h() {
             return None;
         }
+        let frozen = self.frozen.rows.span();
+        let scrolled = Span::<Row>::new(self.top_row, TOTAL_ROWS.as_end());
         let mut cy = self.header_h();
-        for row in Span::<Row>::new(self.top_row, TOTAL_ROWS.as_end()) {
+        for row in frozen.into_iter().chain(scrolled) {
             if !self.is_row_hidden(row) {
                 let h = self.row_height_of(row);
                 if py < cy + h {
@@ -243,36 +288,10 @@ impl TrameUiState {
         if x >= self.canvas_width || y >= self.grid_bottom() {
             return None;
         }
-        // Walk the variable column widths from the scroll origin.
-        let mut col = self.left_col;
-        let mut cx = self.header_w();
-        loop {
-            let w = self.col_width_of(col);
-            if x < cx + w {
-                break;
-            }
-            cx += w;
-            col = col.next();
-            if col >= TOTAL_COLS.as_end() {
-                return None;
-            }
-        }
-        // Walk the *visible* rows' variable heights from the scroll origin.
-        let mut row = self.top_row;
-        let mut cy = cells_top;
-        loop {
-            if !self.is_row_hidden(row) {
-                let h = self.row_height_of(row);
-                if y < cy + h {
-                    break;
-                }
-                cy += h;
-            }
-            row = row.next();
-            if row >= TOTAL_ROWS.as_end() {
-                return None;
-            }
-        }
+        // Walk the frozen band, then the variable sizes from the scroll
+        // origin, skipping the rows a filter hides (`TRAME-UI-192`).
+        let col = self.col_at_x(at.x)?;
+        let row = self.row_at_y(at.y)?;
         Some(CellPos::new(row, col))
     }
 
@@ -356,6 +375,23 @@ impl TrameUiState {
         self.range_pixel_rect(self.merge_master_at(self.active_cell())?)
     }
 
+    /// The left and top edges of the pane that draws `at`. A frozen line
+    /// starts at the header strip, and a line that scrolls at the far edge
+    /// of the frozen band. Nothing of `at` is drawn before them.
+    fn pane_edges(&self, at: CellPos) -> (Px<Surface>, Px<Surface>) {
+        let left = if at.col < self.frozen.cols.as_end() {
+            self.header_w()
+        } else {
+            self.header_w() + self.frozen_w()
+        };
+        let top = if at.row < self.frozen.rows.as_end() {
+            self.header_h()
+        } else {
+            self.header_h() + self.frozen_h()
+        };
+        (left, top)
+    }
+
     /// Screen pixel rect of cell `at` relative to the top-left
     /// corner of the canvas. `None` if the cell is outside the visible area.
     pub fn cell_pixel_rect(&self, at: CellPos) -> Option<ambre_draw::Rect> {
@@ -366,21 +402,23 @@ impl TrameUiState {
         }
         // Variable-metric edges; the helpers handle a cell left/above the
         // viewport (negative offset) and collapse over hidden rows.
-        let cells_top = self.header_h();
+        let (left, cells_top) = self.pane_edges(at);
         let x = self.col_x(col);
         let y = self.row_y(row);
         let cw = self.col_width_of(col);
         let rh = self.row_height_of(row);
 
-        if x + cw <= self.header_w() || x >= self.canvas_width {
+        if x + cw <= left || x >= self.canvas_width {
             return None;
         }
         if y + rh <= cells_top || y >= self.grid_bottom() {
             return None;
         }
+        // A cell scrolled partly under a frozen band shows its part past the
+        // band alone (`TRAME-UI-192`).
         Some(ambre_draw::Rect::new(
-            x.get(),
-            y.get(),
+            x.max(left).get(),
+            y.max(cells_top).get(),
             (x + cw).get(),
             (y + rh).get(),
         ))
@@ -392,7 +430,7 @@ impl TrameUiState {
     /// visible area. Used to fill / outline a multi-cell selection.
     pub fn range_pixel_rect(&self, rect: CellRect) -> Option<ambre_draw::Rect> {
         let (first, last) = (rect.top_left, rect.bottom_right);
-        let cells_top = self.header_h();
+        let (left, cells_top) = self.pane_edges(first);
         // Unclipped edges (signed: the range may start left/above the viewport).
         // Row edges are in collapsed (visible-row) space. The top is the first
         // row's slot; the bottom is one slot past the last *visible* row of the
@@ -411,7 +449,7 @@ impl TrameUiState {
             };
 
         // Clip to the visible cell area.
-        let cx1 = x_left.max(self.header_w());
+        let cx1 = x_left.max(left);
         let cx2 = x_right.min(self.canvas_width);
         let cy1 = y_top.max(cells_top);
         let cy2 = y_bot.min(self.grid_bottom());
