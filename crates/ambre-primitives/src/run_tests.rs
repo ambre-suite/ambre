@@ -87,6 +87,13 @@ fn a_build_script_is_read_under_the_record_the_driver_writes_for_it() {
         Some("build_script_build-d96ed25e6a97cc7a")
     );
     assert_eq!(
+        unit_stem(Path::new(
+            "/t/debug/build/ambre-server/40a60acf2a2dc2d6/out/build_script_build"
+        ))
+        .as_deref(),
+        Some("build_script_build-40a60acf2a2dc2d6")
+    );
+    assert_eq!(
         unit_stem(Path::new("/t/debug/deps/libambre_core-0123abcd.rlib")).as_deref(),
         Some("ambre_core-0123abcd")
     );
