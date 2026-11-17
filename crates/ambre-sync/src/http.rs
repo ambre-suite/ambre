@@ -1889,12 +1889,16 @@ pub(crate) struct ReportSnapshotRequest {
     pub signature: ambre_core::FixedBytes<ambre_core::Signature>,
 }
 
-/// Response of `POST /api/documents/{id}/snapshot/upload-url`: a presigned PUT
-/// URL plus the S3 key the server will reference when the upload is confirmed.
+/// Response of `POST /api/documents/{id}/snapshot/upload-url`. It holds a
+/// presigned PUT URL and the S3 key the confirmation names. It also holds
+/// the id the relay minted for the snapshot, which the blob seals
+/// (`SYNC-258`).
 #[derive(Deserialize)]
 pub(crate) struct SnapshotUploadUrlResponse {
     pub upload_url: ambre_core::Credential<ambre_core::PresignedUrl>,
     pub s3_key: ambre_core::ObjectKey,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub snapshot_id: Id<Snapshot>,
 }
 
 /// Body of `POST /api/documents/{id}/snapshot` (confirm upload + insert metadata).

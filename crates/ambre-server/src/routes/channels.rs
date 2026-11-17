@@ -3929,6 +3929,7 @@ mod tests {
         db::create_snapshot(
             &state.db,
             &document,
+            ambre_core::id::Id::<ambre_core::id::Snapshot>::mint(),
             &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([1; 32]),
             &ambre_core::ObjectKey::from("s"),
             ambre_core::Seq::<ambre_core::Relay>::try_from(covered).expect("a relay number"),

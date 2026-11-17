@@ -327,6 +327,7 @@ mod tests {
         let sid = create_snapshot(
             &pool,
             &document_id,
+            ambre_core::id::Id::<ambre_core::id::Snapshot>::mint(),
             &FixedBytes::<ambre_core::PublicKey>::from_array(author),
             &ambre_core::ObjectKey::from("s3/key/snap"),
             ambre_core::Seq::<ambre_core::Relay>::new(1500),
@@ -420,6 +421,7 @@ mod tests {
         let sid = create_snapshot(
             &pool,
             &document_id,
+            ambre_core::id::Id::<ambre_core::id::Snapshot>::mint(),
             &FixedBytes::<ambre_core::PublicKey>::from_array(author),
             &ambre_core::ObjectKey::from("s3/snap"),
             ambre_core::Seq::<ambre_core::Relay>::new(6),
@@ -502,6 +504,7 @@ mod tests {
             let sid = create_snapshot(
                 &pool,
                 &document_id,
+                ambre_core::id::Id::<ambre_core::id::Snapshot>::mint(),
                 &FixedBytes::<ambre_core::PublicKey>::from_array(author),
                 &ambre_core::ObjectKey::new(format!("s3/snap-{covered}")),
                 ambre_core::Seq::<ambre_core::Relay>::try_from(covered).expect("a relay number"),

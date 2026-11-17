@@ -119,30 +119,38 @@ pub struct Trim {
     pub batch_keys: Vec<ambre_core::ObjectKey>,
 }
 
-/// Inserts snapshot metadata and returns the `Id<Snapshot>` the relay mints
-/// for it (`SRV-247`).
+/// Inserts snapshot metadata under `snapshot_id`, the id the relay minted for
+/// its upload link (`SRV-247`), and returns it.
+///
+/// # Errors
+///
+/// [`AppError::Conflict`] when a row already holds that id: a second
+/// confirmation of one upload.
 pub async fn create_snapshot(
     pool: &PgPool,
     document_id: &Id<Document>,
+    snapshot_id: Id<Snapshot>,
     author_pubkey: &FixedBytes<ambre_core::PublicKey>,
     s3_key: &ambre_core::ObjectKey,
     covered_seq: ambre_core::Seq<ambre_core::Relay>,
 ) -> Result<Id<Snapshot>, AppError> {
     let did = id_to_uuid(*document_id);
-    let snapshot_id = uuid::Uuid::now_v7();
-    sqlx::query(
-        "INSERT INTO snapshots (id, document_id, author_pubkey, s3_key, covered_seq) VALUES ($1, $2, $3, $4, $5)"
+    let inserted = sqlx::query(
+        "INSERT INTO snapshots (id, document_id, author_pubkey, s3_key, covered_seq) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING"
     )
-    .bind(snapshot_id)
+    .bind(id_to_uuid(snapshot_id))
     .bind(did)
     .bind(author_pubkey.as_slice())
     .bind(s3_key.as_str())
     .bind(covered_seq.to_i64_saturating())
     .execute(pool)
     .await?;
-
-    let core_id = ambre_core::Uuid::from_bytes(*snapshot_id.as_bytes());
-    Ok(Id::<Snapshot>::from_uuid(core_id))
+    if inserted.rows_affected() == 0 {
+        return Err(AppError::Conflict {
+            detail: "snapshot already stored".into(),
+        });
+    }
+    Ok(snapshot_id)
 }
 
 /// Returns the snapshot an open is served: the most recent one somebody

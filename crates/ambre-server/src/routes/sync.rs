@@ -244,9 +244,12 @@ pub async fn create_snapshot(
     // The `s3_key` is client-supplied; it MUST resolve inside this document's own
     // snapshot prefix. Otherwise a writer could register a row pointing at another
     // document's blob, later downloadable by this document's members (IDOR).
-    if !s3::is_valid_snapshot_key(&state.config.s3_env_prefix, &doc_id, &req.s3_key) {
+    // The key names the id the upload link minted, and the blob seals it.
+    // The row takes it, so an open can check the blob it is served (`SRV-247`).
+    let Some(minted) = s3::snapshot_id_of_key(&state.config.s3_env_prefix, &doc_id, &req.s3_key)
+    else {
         return Err(AppError::BadRequest("invalid s3_key for document".into()));
-    }
+    };
 
     // Bind the snapshot author to the session identity, like the WS `Update`
     // author-key check. Each user has one signing key (the token's `spk` claim).
@@ -272,8 +275,15 @@ pub async fn create_snapshot(
         ));
     }
 
-    let sid =
-        db::create_snapshot(&state.db, &doc_id, &s.signing_pubkey, &req.s3_key, covered).await?;
+    let sid = db::create_snapshot(
+        &state.db,
+        &doc_id,
+        minted,
+        &s.signing_pubkey,
+        &req.s3_key,
+        covered,
+    )
+    .await?;
     let msg = crate::payload::StoredPayload::server_msg(
         &ambre_protocol::ws::WsServerMsg::SnapshotAvailable {
             document_id: doc_id,
@@ -294,11 +304,15 @@ pub struct SnapshotUploadUrlRequest {
     pub size: ambre_core::Count<ambre_core::Octets>,
 }
 
-/// Presigned PUT URL for direct client-to-S3 upload of an encrypted snapshot.
+/// Presigned PUT URL for direct client-to-S3 upload of an encrypted snapshot,
+/// and the id the relay minted for it. The client seals that id in the blob,
+/// and the confirmation stores the row under it (`SRV-247`).
 #[derive(serde::Serialize)]
 pub struct SnapshotUploadUrlResponse {
     pub upload_url: ambre_core::Credential<ambre_core::PresignedUrl>,
     pub s3_key: ambre_core::ObjectKey,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub snapshot_id: Id<Snapshot>,
 }
 
 pub async fn snapshot_upload_url(
@@ -343,6 +357,7 @@ pub async fn snapshot_upload_url(
     Ok(axum::Json(SnapshotUploadUrlResponse {
         upload_url: url,
         s3_key: key,
+        snapshot_id,
     }))
 }
 

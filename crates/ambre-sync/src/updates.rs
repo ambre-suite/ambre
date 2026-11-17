@@ -278,7 +278,9 @@ impl SyncState {
             return;
         };
         let opened = match blob {
-            Some(blob) => doc_state.open_signed_snapshot(&blob).map_err(Some),
+            Some(blob) => doc_state
+                .open_signed_snapshot(&blob, snapshot_id)
+                .map_err(Some),
             None => Err(None),
         };
         match opened {
@@ -450,7 +452,7 @@ impl SyncState {
         let Some(held) = doc_state.held_snapshot.take() else {
             return false;
         };
-        match doc_state.open_signed_snapshot(&held.blob) {
+        match doc_state.open_signed_snapshot(&held.blob, held.snapshot_id) {
             Ok((payload, author)) => {
                 doc_state.checks.insert(
                     held.snapshot_id,
@@ -1816,7 +1818,7 @@ impl SyncState {
         let Some(tx) = self.event_tx.clone() else {
             tracing::info!(
                 "Sync: SendSnapshot {document_id:?} sealed ({} bytes), no channel",
-                upload.blob.len()
+                upload.draft.size().get()
             );
             return;
         };
@@ -1859,6 +1861,8 @@ impl SyncState {
             document_id,
             pub_key,
             key_id: doc_key.id(),
+            // The draft measures under this placeholder. The upload seals
+            // the identifier the relay mints for its link (`SYNC-258`).
             snapshot_id: doc_state.current_snapshot_id,
             // The BLAKE2b parent chain is a post-MVP hardening (see
             // ambre-spec-sealed-envelope.md). An empty proof seals a standalone snapshot,
@@ -1868,7 +1872,12 @@ impl SyncState {
         };
         // The full sealed `Snapshot`, serialized as the S3 blob (the inverse of
         // `decode_snapshot_blob` + `open_snapshot`).
-        let blob = pipeline::snapshot_blob(payload, public_data, doc_key, signing_key)?;
+        let draft = pipeline::SnapshotDraft::new(
+            payload.clone(),
+            public_data,
+            doc_key.clone(),
+            signing_key.clone(),
+        )?;
         // The Logic thread names the last delta it holds with no gap below it,
         // not the high-water `last_seq`. A snapshot claims every delta up to
         // its horizon, and a checker holds it to that claim (`AUTHOR-016`).
@@ -1876,7 +1885,7 @@ impl SyncState {
             document_id,
             author_pubkey,
             covered_seq,
-            blob,
+            draft,
         })
     }
 
@@ -1969,8 +1978,8 @@ pub(crate) struct SnapshotUpload {
     pub author_pubkey: FixedBytes<ambre_core::PublicKey>,
     /// The last delta it covers.
     pub covered_seq: Seq<Relay>,
-    /// The sealed blob.
-    pub blob: pipeline::SealedBlob,
+    /// The snapshot, measured, to seal under the identifier the relay mints.
+    pub draft: pipeline::SnapshotDraft,
 }
 
 /// Uploads a sealed snapshot, then confirms it as its author (`AUTHOR-021`).
@@ -1988,15 +1997,20 @@ pub(crate) async fn upload_snapshot(
         document_id,
         author_pubkey,
         covered_seq,
-        blob,
+        draft,
     } = upload;
     let link: http::SnapshotUploadUrlResponse = http::post_json_auth_via(
         transport,
         &base.route(format!("/documents/{document_id}/snapshot/upload-url")),
-        &serde_json::json!({ "size_bytes": blob.len() }),
+        &serde_json::json!({ "size_bytes": draft.size() }),
         auth,
     )
     .await?;
+    // The blob seals the identifier the relay minted for this link, so an
+    // open can refuse another snapshot served in its place (`SYNC-258`).
+    let blob = draft
+        .seal(link.snapshot_id)
+        .map_err(|_| http::HttpError::Local(ambre_core::LocalFailure::Crypto))?;
     // The presigned link is its own credential: no session token goes there.
     http::put_sealed_via(transport, &link.upload_url, &blob).await?;
     let metadata = http::CreateSnapshotRequest {
@@ -4066,6 +4080,99 @@ mod tests {
         );
     }
 
+    /// `SYNC-257`, audit P6. The relay holds two snapshots of one document,
+    /// each signed by a writer. It serves one in place of the other. The open, the held snapshot and an announced snapshot each
+    /// refuse it with a warning. Nothing of it reaches the Logic thread, and
+    /// the identifier asked for stays unknown.
+    #[test]
+    fn a_snapshot_whose_sealed_identifier_differs_is_refused() {
+        let (mut state, rx, doc, key, sk, _snap) = setup();
+        let (ws_tx, _ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        let (asked, other) = (Id::<Snapshot>::mint(), Id::<Snapshot>::mint());
+        let swapped = || snapshot_blob(doc, other, b"other", &key, &sk);
+        let applied = |events: &[LogicEvent]| {
+            events.iter().any(|e| {
+                matches!(
+                    e,
+                    LogicEvent::RemoteSnapshot { .. } | LogicEvent::PendingSnapshot { .. }
+                )
+            })
+        };
+        let refused = |events: &[LogicEvent]| {
+            events.iter().any(|e| {
+                matches!(
+                    e,
+                    LogicEvent::SyncWarning {
+                        code: SyncWarningCode::DecryptFailed,
+                        ..
+                    }
+                )
+            })
+        };
+
+        // The open asks for `asked` and the relay serves `other`, as the
+        // start and as the held snapshot.
+        state.handle_sync_event(SyncEvent::OpenDocumentReady {
+            document_id: doc,
+            doc_key: key.clone(),
+            snapshot_payload: Some(swapped()),
+            snapshot_id: asked,
+            covered_seq: Seq::<Relay>::new(3),
+            held_snapshot: Some(HeldSnapshot {
+                snapshot_id: asked,
+                covered_seq: Seq::<Relay>::new(9),
+                blob: swapped(),
+            }),
+            doc_type: DocType::Trame,
+            existence: crate::Existence::OnRelay,
+            signing_keys: Vec::new(),
+            role: Role::Owner,
+            rotation_owed: ambre_core::RotationDebt::Settled,
+            links: Vec::new(),
+            writers: Default::default(),
+            departed: None,
+        });
+        let at_open = drain(&rx);
+        assert!(
+            !applied(&at_open),
+            "a swapped start was applied: {at_open:?}"
+        );
+        assert!(
+            refused(&at_open),
+            "a swapped start raised no warning: {at_open:?}"
+        );
+        assert_eq!(state.documents[&doc].last_seq, Seq::<Relay>::ZERO);
+        assert_ne!(state.documents[&doc].current_snapshot_id, asked);
+
+        assert!(!state.check_held_snapshot(doc));
+        let held = drain(&rx);
+        assert!(
+            !applied(&held),
+            "a swapped held snapshot was checked: {held:?}"
+        );
+        assert!(!state.documents[&doc].checks.contains_key(&asked));
+
+        // An announced snapshot, fetched by its id, comes back as the other.
+        let announced = Id::<Snapshot>::mint();
+        state.handle_sync_event(SyncEvent::SnapshotFetched {
+            document_id: doc,
+            snapshot_id: announced,
+            covered_seq: Seq::<Relay>::new(12),
+            blob: Some(swapped()),
+        });
+        let fetched = drain(&rx);
+        assert!(
+            !applied(&fetched),
+            "a swapped fetch was applied: {fetched:?}"
+        );
+        assert!(
+            refused(&fetched),
+            "a swapped fetch raised no warning: {fetched:?}"
+        );
+        assert!(!state.documents[&doc].known_snapshots.contains(&announced));
+    }
+
     /// A local-only (not yet server-created) or offline open has no replay to
     /// wait for, so `DocumentReady` fires immediately at open. Otherwise the
     /// overlay would hang forever with no `MissingUpdates` ever coming.
@@ -4403,17 +4510,21 @@ mod tests {
                 document_id: doc,
                 author_pubkey: FixedBytes::from_array(sk.verifying_key().to_bytes()),
                 covered_seq: ambre_bus::Seq::<ambre_bus::Relay>::new(3),
-                blob: pipeline::snapshot_blob(
-                    &ambre_core::Payload::new(b"base".to_vec()),
+                draft: pipeline::SnapshotDraft::new(
+                    ambre_core::Payload::new(b"base".to_vec()),
                     public_data,
-                    &key,
-                    &sk,
+                    key.clone(),
+                    sk.clone(),
                 )
                 .unwrap(),
             }
         };
-        let link = serde_json::json!({ "upload_url": "https://store.test/o?sig=x", "s3_key": "k" });
         let given = Id::<Snapshot>::mint();
+        let link = serde_json::json!({
+            "upload_url": "https://store.test/o?sig=x",
+            "s3_key": "k",
+            "snapshot_id": given.to_string(),
+        });
         let steps = |stored: u16| {
             vec![
                 (
@@ -4458,6 +4569,14 @@ mod tests {
                 sent[1].bearer.is_none(),
                 "the presigned link carries no session token"
             );
+            // `SYNC-258`: the object seals the id the relay minted for its
+            // link, at the size the link was asked for.
+            let size: serde_json::Value =
+                serde_json::from_slice(sent[0].body.as_ref().unwrap().1.as_bytes()).unwrap();
+            let object = sent[1].body.as_ref().unwrap().1.as_bytes();
+            assert_eq!(size["size_bytes"], object.len());
+            let stored = Payload::<pipeline::FetchedBlob>::new(object.to_vec());
+            assert!(pipeline::decode_snapshot_blob(&stored, doc, given).is_ok());
             // `SYNC-182`: the metadata names no snapshot id and no clocks.
             let metadata: serde_json::Value =
                 serde_json::from_slice(sent[2].body.as_ref().unwrap().1.as_bytes()).unwrap();

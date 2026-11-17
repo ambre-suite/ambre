@@ -189,17 +189,20 @@ pub fn format_s3_delta_key(
 /// another document's object (`.../documents/{other}/snapshots/...`). Any member
 /// of THIS document could then obtain a presigned URL for that foreign blob
 /// (cross-document IDOR). We require the exact per-document snapshot prefix and a
-/// single, slash-free object id (which also rejects `../` traversal).
-pub fn is_valid_snapshot_key(
+/// single object id in its canonical form (which also rejects `../`
+/// traversal).
+///
+/// The key names the id the relay minted for the upload link, which the blob
+/// seals (`SRV-247`). The id comes back only from the key's canonical form,
+/// so one id has one key.
+pub fn snapshot_id_of_key(
     env_prefix: &StoreText<EnvPrefix>,
     document_id: &Id<Document>,
     s3_key: &ambre_core::ObjectKey,
-) -> bool {
+) -> Option<Id<Snapshot>> {
     let expected_prefix = format!("{env_prefix}/documents/{document_id}/snapshots/");
-    let Some(id) = s3_key.as_str().strip_prefix(&expected_prefix) else {
-        return false;
-    };
-    !id.is_empty() && !id.contains('/')
+    let id = Id::<Snapshot>::parse_str(s3_key.as_str().strip_prefix(&expected_prefix)?).ok()?;
+    (format_s3_snapshot_key(env_prefix, document_id, &id) == *s3_key).then_some(id)
 }
 
 /// S3 object key for an encrypted media blob (content-addressed by hash).
@@ -1034,34 +1037,55 @@ mod tests {
     fn snapshot_key_validation_scopes_to_document() {
         let doc = Id::<Document>::from_bytes([9u8; 16]);
         let other = Id::<Document>::from_bytes([8u8; 16]);
-        let valid =
-            format_s3_snapshot_key(&env("dev"), &doc, &Id::<Snapshot>::from_bytes([1u8; 16]));
-        assert!(is_valid_snapshot_key(&env("dev"), &doc, &valid));
+        let minted = Id::<Snapshot>::from_bytes([1u8; 16]);
+        let valid = format_s3_snapshot_key(&env("dev"), &doc, &minted);
+        assert_eq!(snapshot_id_of_key(&env("dev"), &doc, &valid), Some(minted));
 
         // Another document's snapshot prefix is rejected (cross-document IDOR).
         let foreign =
             format_s3_snapshot_key(&env("dev"), &other, &Id::<Snapshot>::from_bytes([1u8; 16]));
-        assert!(!is_valid_snapshot_key(&env("dev"), &doc, &foreign));
+        assert!(snapshot_id_of_key(&env("dev"), &doc, &foreign).is_none());
 
         // Wrong env prefix, path traversal, empty id, and nested paths are rejected.
-        assert!(!is_valid_snapshot_key(&env("prod"), &doc, &valid));
-        assert!(!is_valid_snapshot_key(
-            &env("dev"),
-            &doc,
-            &ambre_core::ObjectKey::new(format!(
-                "dev/documents/{doc}/snapshots/../../{other}/snapshots/x"
-            ))
-        ));
-        assert!(!is_valid_snapshot_key(
-            &env("dev"),
-            &doc,
-            &ambre_core::ObjectKey::new(format!("dev/documents/{doc}/snapshots/"))
-        ));
-        assert!(!is_valid_snapshot_key(
-            &env("dev"),
-            &doc,
-            &ambre_core::ObjectKey::new(format!("dev/documents/{doc}/snapshots/a/b"))
-        ));
+        assert!(snapshot_id_of_key(&env("prod"), &doc, &valid).is_none());
+        assert!(
+            snapshot_id_of_key(
+                &env("dev"),
+                &doc,
+                &ambre_core::ObjectKey::new(format!(
+                    "dev/documents/{doc}/snapshots/../../{other}/snapshots/x"
+                ))
+            )
+            .is_none()
+        );
+        assert!(
+            snapshot_id_of_key(
+                &env("dev"),
+                &doc,
+                &ambre_core::ObjectKey::new(format!("dev/documents/{doc}/snapshots/"))
+            )
+            .is_none()
+        );
+        assert!(
+            snapshot_id_of_key(
+                &env("dev"),
+                &doc,
+                &ambre_core::ObjectKey::new(format!("dev/documents/{doc}/snapshots/a/b"))
+            )
+            .is_none()
+        );
+        // A non-canonical spelling of the minted id is refused: one id, one key.
+        assert!(
+            snapshot_id_of_key(
+                &env("dev"),
+                &doc,
+                &ambre_core::ObjectKey::new(format!(
+                    "dev/documents/{doc}/snapshots/{}",
+                    minted.to_simple()
+                ))
+            )
+            .is_none()
+        );
     }
 
     /// Builds an offline S3 client (static credentials, no network) for

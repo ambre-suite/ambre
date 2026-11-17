@@ -301,6 +301,7 @@ mod db_tests {
         db::create_snapshot(
             &state.db,
             doc,
+            ambre_core::id::Id::<ambre_core::id::Snapshot>::mint(),
             &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(*author),
             &key,
             covered,

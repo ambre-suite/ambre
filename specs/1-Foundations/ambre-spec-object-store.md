@@ -116,7 +116,7 @@ final segment adds one object, its sealed search index.
 | Kind | Reaches storage by | Cap | Named by |
 |---|---|---|---|
 | a delta | the relay's own flush (`ambre-spec-sequencer.md`) | 4 MiB, on the wire message (`SRV-010`) | its sequence number |
-| a snapshot | the client, on a presigned link | 50 MiB | an identifier the client mints |
+| a snapshot | the client, on a presigned link | 50 MiB | an identifier the relay mints with the link, which the blob seals (`SRV-247`) |
 | a picture or a file | the client, on a presigned link | 100 MiB | a hash of its plaintext, keyed by the document key (`SRV-059`) |
 
 **A link, in steps.** The same four for an upload and a download, and the check is always first.

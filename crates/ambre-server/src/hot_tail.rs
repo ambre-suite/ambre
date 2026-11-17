@@ -655,6 +655,7 @@ mod db_tests {
         let snap = crate::db::create_snapshot(
             &state.db,
             &doc,
+            ambre_core::id::Id::<ambre_core::id::Snapshot>::mint(),
             &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([5u8; 32]),
             &ambre_core::ObjectKey::from("snap"),
             ambre_core::Seq::<ambre_core::Relay>::new(7),

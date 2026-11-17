@@ -3587,9 +3587,10 @@ mod handler_tests {
     /// The owner of `setup_and_get_auth` uploads a snapshot covering `covered`,
     /// and gets its id back.
     async fn upload_snapshot(app: &Router, owner: &str, doc_id: &str, covered: i64) -> String {
+        let minted = uuid::Uuid::new_v4();
         let body = serde_json::json!({
             "author_pubkey": hex::encode([3u8; 32]),
-            "s3_key": format!("dev-ambre/documents/{doc_id}/snapshots/{}", uuid::Uuid::new_v4()),
+            "s3_key": format!("dev-ambre/documents/{doc_id}/snapshots/{minted}"),
             "covered_seq": covered,
         });
         let resp = app
@@ -3606,6 +3607,8 @@ mod handler_tests {
         assert_eq!(resp.status(), StatusCode::OK);
         let bytes = axum::body::to_bytes(resp.into_body(), 1024).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        // `SRV-247`: the row takes the id its object key names.
+        assert_eq!(json["snapshot_id"], minted.to_string());
         json["snapshot_id"].as_str().unwrap().to_owned()
     }
 
@@ -3626,6 +3629,49 @@ mod handler_tests {
         }
         let bytes = axum::body::to_bytes(resp.into_body(), 4096).await.unwrap();
         Some(serde_json::from_slice(&bytes).unwrap())
+    }
+
+    /// `SRV-247`: the upload link mints the id and names it, the client seals
+    /// it, and the confirmation stores the row under it. A second
+    /// confirmation of the same object is refused, and a key that spells the
+    /// id another way stores nothing.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_snapshot_takes_the_id_its_upload_link_minted(pool: sqlx::PgPool) {
+        let state = test_app_state_presigning(pool).await;
+        let setup = build_test_router(state.clone());
+        let app = shipped_router(state);
+        let owner = setup_and_get_auth(&setup).await;
+        let doc_id = create_test_doc(&setup, &owner).await;
+        let link = post_for_json(
+            &app,
+            &owner,
+            format!("/api/documents/{doc_id}/snapshot/upload-url"),
+            serde_json::json!({ "size_bytes": 10 }),
+        )
+        .await;
+        let minted = link["snapshot_id"].as_str().unwrap().to_owned();
+        let s3_key = link["s3_key"].as_str().unwrap().to_owned();
+        assert!(
+            s3_key.ends_with(&format!("/snapshots/{minted}")),
+            "{s3_key}"
+        );
+        let confirm = |s3_key: String| {
+            serde_json::json!({
+                "author_pubkey": hex::encode([3u8; 32]),
+                "s3_key": s3_key,
+                "covered_seq": 0,
+            })
+        };
+        let uri = format!("/api/documents/{doc_id}/snapshot");
+
+        let created = post_for_json(&app, &owner, uri.clone(), confirm(s3_key.clone())).await;
+        assert_eq!(created["snapshot_id"], minted.as_str());
+        let again = post_json(&app, &owner, uri.clone(), confirm(s3_key.clone())).await;
+        assert_eq!(again, StatusCode::CONFLICT);
+        let simple = s3_key.replace(&minted, &minted.replace('-', ""));
+        let status = post_json(&app, &owner, uri, confirm(simple)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
     }
 
     /// `SRV-126`, `SRV-128`, `SRV-129`: an upload is announced to the

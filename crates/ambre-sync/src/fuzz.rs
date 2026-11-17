@@ -42,6 +42,7 @@ pub fn open_stored_snapshot(bytes: &[u8]) -> Result<Vec<u8>, PipelineError> {
     let snapshot = decode_snapshot_blob(
         &Payload::<FetchedBlob>::new(bytes.to_vec()),
         named.public_data.document_id,
+        named.public_data.snapshot_id,
     )?;
     open_snapshot(&snapshot, &doc_key()).map(ambre_core::Payload::into_bytes)
 }

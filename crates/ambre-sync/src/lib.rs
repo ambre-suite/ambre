@@ -1191,15 +1191,21 @@ impl SyncDocumentState {
     fn open_snapshot_blob(
         &self,
         blob: &Payload<pipeline::FetchedBlob>,
+        asked: Id<Snapshot>,
     ) -> Result<ambre_core::Payload<ambre_core::SnapshotBytes>, pipeline::PipelineError> {
-        self.open_signed_snapshot(blob).map(|(payload, _)| payload)
+        self.open_signed_snapshot(blob, asked)
+            .map(|(payload, _)| payload)
     }
 
     /// Opens a snapshot blob, and names the signing key it verified under: the
     /// member who built it, which the snapshot check needs (`AUTHOR-021`).
+    /// A blob that seals another identifier than `asked` is refused before
+    /// any decryption, so a relay cannot serve one snapshot for another
+    /// (`SYNC-257`).
     fn open_signed_snapshot(
         &self,
         blob: &Payload<pipeline::FetchedBlob>,
+        asked: Id<Snapshot>,
     ) -> Result<
         (
             ambre_core::Payload<ambre_core::SnapshotBytes>,
@@ -1212,7 +1218,7 @@ impl SyncDocumentState {
         if !matches!(self.gate, channels::LogGate::Open) {
             return Err(pipeline::PipelineError::LogUnsettled);
         }
-        let snapshot = pipeline::decode_snapshot_blob(blob, self.document_id)?;
+        let snapshot = pipeline::decode_snapshot_blob(blob, self.document_id, asked)?;
         // A snapshot its author could not have written as a delta is refused
         // whole (`SYNC-211`).
         if !self.writers.admits(&snapshot.public_data.pub_key) {

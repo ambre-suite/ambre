@@ -227,11 +227,11 @@ mod tests {
             document_id,
             author_pubkey: ambre_core::FixedBytes::from_array(sk.verifying_key().to_bytes()),
             covered_seq: horizon,
-            blob: pipeline::snapshot_blob(
-                &ambre_core::Payload::new(b"final".to_vec()),
+            draft: pipeline::SnapshotDraft::new(
+                ambre_core::Payload::new(b"final".to_vec()),
                 public_data,
-                &key,
-                &sk,
+                key.clone(),
+                sk.clone(),
             )
             .expect("seal"),
         }
@@ -291,6 +291,7 @@ mod tests {
         let link = serde_json::json!({
             "upload_url": "https://store.test/o?sig=x",
             "s3_key": "snapshots/o",
+            "snapshot_id": given.to_string(),
         });
         let transport = Scripted::new([
             Ok((200, link)),

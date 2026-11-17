@@ -91,6 +91,8 @@ pub enum PipelineError {
     Validation(#[from] ambre_protocol::error::ValidationError),
     #[error("the snapshot names another document")]
     WrongDocument,
+    #[error("the snapshot seals another identifier than the one asked for")]
+    WrongSnapshot,
     #[error("a sealed object is shorter than its header")]
     ShortObject,
     #[error("the payload names another key than the one given")]
@@ -568,21 +570,28 @@ pub fn seal_snapshot(
 }
 
 /// Decodes a stored snapshot blob, the serialized [`Snapshot`] object storage
-/// holds, refusing another document's before any decryption. The caller
-/// reads the key it names before opening it (`SYNC-045`, `SYNC-119`).
+/// holds. It refuses another document's, and another snapshot than `asked`,
+/// before any decryption (`SYNC-257`). The caller reads the key it names
+/// before opening it (`SYNC-045`, `SYNC-119`). The signature covers the
+/// identifier, so a refusal here is final once the open verifies it.
 ///
 /// # Errors
 ///
-/// [`PipelineError::Postcard`] for bytes that are not a snapshot, and
-/// [`PipelineError::WrongDocument`] for another document's.
+/// [`PipelineError::Postcard`] for bytes that are not a snapshot,
+/// [`PipelineError::WrongDocument`] for another document's, and
+/// [`PipelineError::WrongSnapshot`] for another snapshot of the document.
 pub fn decode_snapshot_blob(
     blob: &Payload<FetchedBlob>,
     document_id: Id<Document>,
+    asked: Id<ambre_core::id::Snapshot>,
 ) -> Result<Snapshot, PipelineError> {
     let snapshot: Snapshot =
         postcard::from_bytes(blob.as_bytes()).map_err(|_| PipelineError::Postcard)?;
     if snapshot.public_data.document_id != document_id {
         return Err(PipelineError::WrongDocument);
+    }
+    if snapshot.public_data.snapshot_id != asked {
+        return Err(PipelineError::WrongSnapshot);
     }
     Ok(snapshot)
 }
@@ -818,6 +827,74 @@ pub fn snapshot_blob(
     postcard::to_allocvec(&snapshot)
         .map(SealedBlob)
         .map_err(|_| PipelineError::Postcard)
+}
+
+/// A snapshot sealed once to measure it, and kept to seal again under the
+/// identifier the relay mints for its upload link (`SYNC-258`). The upload
+/// link binds the size, and the identifier is part of the signed public data,
+/// so the size comes first. An identifier has one encoded length, so the
+/// second seal has the size of the first. `Debug` prints the size alone.
+pub struct SnapshotDraft {
+    payload: Payload<SnapshotBytes>,
+    public_data: SnapshotPublicData,
+    doc_key: DocumentKey,
+    signing_key: SigningKey,
+    size: Count<Octets>,
+}
+
+impl std::fmt::Debug for SnapshotDraft {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "SnapshotDraft({} bytes)", self.size.get())
+    }
+}
+
+impl SnapshotDraft {
+    /// Seals `payload` once under `public_data`, which runs the wire checks
+    /// before anything leaves (`SYNC-022`), and keeps what the final seal
+    /// needs.
+    ///
+    /// # Errors
+    ///
+    /// Every error [`snapshot_blob`] raises.
+    pub fn new(
+        payload: Payload<SnapshotBytes>,
+        public_data: SnapshotPublicData,
+        doc_key: DocumentKey,
+        signing_key: SigningKey,
+    ) -> Result<Self, PipelineError> {
+        let size = Count::<Octets>::of(
+            snapshot_blob(&payload, public_data.clone(), &doc_key, &signing_key)?.len(),
+        );
+        Ok(Self {
+            payload,
+            public_data,
+            doc_key,
+            signing_key,
+            size,
+        })
+    }
+
+    /// The size the upload link binds: the size of every seal of this draft.
+    pub const fn size(&self) -> Count<Octets> {
+        self.size
+    }
+
+    /// Seals the snapshot under `snapshot_id`, the identifier the relay
+    /// minted for its upload link.
+    ///
+    /// # Errors
+    ///
+    /// Every error [`snapshot_blob`] raises.
+    pub fn seal(
+        &self,
+        snapshot_id: Id<ambre_core::id::Snapshot>,
+    ) -> Result<SealedBlob, PipelineError> {
+        let public_data = SnapshotPublicData {
+            snapshot_id,
+            ..self.public_data.clone()
+        };
+        snapshot_blob(&self.payload, public_data, &self.doc_key, &self.signing_key)
+    }
 }
 
 /// Seals a media blob into a standalone object bound for object storage, in
@@ -1436,6 +1513,47 @@ mod tests {
         assert!(empty.delta.is_empty());
     }
 
+    /// `SYNC-258`: a draft seals the identifier the relay minted, at the size
+    /// it measured, whatever the identifier and whether the payload
+    /// compresses or not. `SYNC-257`: the blob opens under that identifier
+    /// alone.
+    #[test]
+    fn a_draft_seals_the_minted_identifier_at_its_measured_size() {
+        let (doc_key, signing, author) = keys();
+        let document_id = Id::<Document>::mint();
+        for len in [1_usize, 127, 128, 4_096, 70_000] {
+            let payload: Vec<u8> = (0..len).map(|i| (i % 251) as u8).collect();
+            let pd = SnapshotPublicData {
+                document_id,
+                pub_key: author,
+                key_id: key_id(),
+                snapshot_id: Id::<id::Snapshot>::genesis(document_id),
+                parent_snapshot_proof: None,
+                parent_snapshot_update_clocks: Vec::new(),
+            };
+            let draft = SnapshotDraft::new(
+                Payload::new(payload.clone()),
+                pd,
+                doc_key.clone(),
+                signing.clone(),
+            )
+            .unwrap();
+            let minted = Id::<id::Snapshot>::mint();
+            let blob = draft.seal(minted).unwrap();
+            assert_eq!(Count::<Octets>::of(blob.len()), draft.size(), "{len} bytes");
+            let fetched = Payload::<FetchedBlob>::new(blob.into_bytes());
+            let opened = decode_snapshot_blob(&fetched, document_id, minted).unwrap();
+            assert_eq!(
+                open_snapshot(&opened, &doc_key).unwrap().as_bytes(),
+                payload.as_slice()
+            );
+            assert!(matches!(
+                decode_snapshot_blob(&fetched, document_id, Id::<id::Snapshot>::mint()),
+                Err(PipelineError::WrongSnapshot)
+            ));
+        }
+    }
+
     /// What the upload sends holds no byte run of the plaintext. It opens
     /// back to it, a snapshot blob and a media blob alike (`SYNC-049`,
     /// `ZK-001`).
@@ -1449,11 +1567,12 @@ mod tests {
                 .any(|w| plaintext.windows(16).any(|p| p == w))
         };
 
+        let snapshot_id = Id::<id::Snapshot>::mint();
         let pd = SnapshotPublicData {
             document_id,
             pub_key: author,
             key_id: key_id(),
-            snapshot_id: Id::<id::Snapshot>::mint(),
+            snapshot_id,
             parent_snapshot_proof: None,
             parent_snapshot_update_clocks: Vec::new(),
         };
@@ -1463,6 +1582,7 @@ mod tests {
         let decoded = decode_snapshot_blob(
             &Payload::<FetchedBlob>::new(snapshot.as_bytes().to_vec()),
             document_id,
+            snapshot_id,
         )
         .unwrap();
         assert_eq!(open_snapshot(&decoded, &doc_key).unwrap(), plaintext);

@@ -237,6 +237,7 @@ async fn one_delta(state: &Arc<AppState>, doc: &mut Doc, draw: &mut Draw, rec: &
         let id = db::create_snapshot(
             &state.db,
             &doc.id,
+            ambre_core::id::Id::<ambre_core::id::Snapshot>::mint(),
             &doc.authors[0],
             &object,
             ambre_core::Seq::<ambre_core::Relay>::new(doc.seq),
