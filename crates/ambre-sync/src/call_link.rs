@@ -448,7 +448,7 @@ impl SyncState {
             return;
         };
         if link.log.as_ref().is_some_and(|held| !log.extends(held)) {
-            tracing::warn!("Sync: the relay served a log of the call older than the one held");
+            crate::log::warning!("Sync: the relay served a log of the call older than the one held");
             return;
         }
         let steps = link.client.heed(&log, now);

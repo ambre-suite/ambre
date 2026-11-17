@@ -920,6 +920,11 @@ impl Modal {
 /// Mount a `Dialog` under a `ModalHold` that counts takes and releases, as
 /// the launcher provides one.
 fn mount_modal(open: RwSignal<Openness>) -> Modal {
+    mount_modal_with(open, ambre_chrome::Dismissal::Free)
+}
+
+/// `mount_modal`, with what closes the modal besides its signal.
+fn mount_modal_with(open: RwSignal<Openness>, dismissal: ambre_chrome::Dismissal) -> Modal {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicI32, Ordering};
     let holds = Arc::new(AtomicI32::new(0));
@@ -937,7 +942,7 @@ fn mount_modal(open: RwSignal<Openness>) -> Modal {
     let handle = mount_to(target, move || {
         provide_context(hold);
         view! {
-            <ambre_chrome::Dialog open=open on_close=on_close>
+            <ambre_chrome::Dialog open=open on_close=on_close dismissal=dismissal>
                 <button class="inside">"Inside"</button>
             </ambre_chrome::Dialog>
         }
@@ -1133,6 +1138,49 @@ async fn a_native_close_clears_the_signal_and_the_modal_reopens() {
     leptos::task::tick().await;
     assert!(modal.dialog.open(), "the next open is not blocked");
     assert_eq!(modal.holds(), 1);
+    modal.root.remove();
+}
+
+/// `CHROME-137`: a modal only its caller closes stays open on Escape and on
+/// a backdrop click. Escape fires a `cancel` the modal prevents. A native
+/// close it could not prevent shows it again. Its signal still closes it.
+#[wasm_bindgen_test]
+async fn an_explicit_modal_closes_on_its_signal_alone() {
+    let open = RwSignal::new(Openness::Open);
+    let modal = mount_modal_with(open, ambre_chrome::Dismissal::Explicit);
+    leptos::task::tick().await;
+    assert!(modal.dialog.open());
+
+    // Any cancelable event named `cancel` reaches the handler.
+    let init = web_sys::KeyboardEventInit::new();
+    init.set_cancelable(true);
+    let cancel =
+        web_sys::KeyboardEvent::new_with_keyboard_event_init_dict("cancel", &init).unwrap();
+    modal.dialog.dispatch_event(&cancel).unwrap();
+    assert!(cancel.default_prevented(), "Escape was not refused");
+
+    let click = web_sys::MouseEvent::new("click").unwrap();
+    modal.dialog.dispatch_event(&click).unwrap();
+    leptos::task::tick().await;
+    sleep(10).await;
+    assert_eq!(
+        open.get_untracked(),
+        Openness::Open,
+        "the backdrop closed it"
+    );
+
+    let closed = modal.closed();
+    modal.dialog.close();
+    closed.await.unwrap();
+    assert!(modal.dialog.open(), "a native close kept it closed");
+    assert_eq!(open.get_untracked(), Openness::Open);
+    assert_eq!(modal.holds(), 1, "the loop is held once");
+
+    let closed = modal.closed();
+    open.set(Openness::Closed);
+    closed.await.unwrap();
+    assert!(!modal.dialog.open(), "the signal did not close it");
+    assert_eq!(modal.holds(), 0);
     modal.root.remove();
 }
 

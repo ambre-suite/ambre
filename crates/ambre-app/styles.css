@@ -2331,6 +2331,20 @@ input[type="radio"] {
     padding: var(--space-6) var(--space-8);
 }
 
+/* The recovery words in a modal over the list. The panel keeps its own
+   padding, so the modal body adds none. */
+.ambre-dialog.ambre-words-dialog {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    max-width: 520px;
+    padding: 0;
+    font-family: system-ui, sans-serif;
+}
+
+.ambre-words-dialog .ambre-keys {
+    padding: var(--space-8);
+}
+
 /* -- Account keys: the setup, the recovery words, the recovery ------------- */
 .ambre-keys {
     display: flex;

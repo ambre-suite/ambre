@@ -286,8 +286,8 @@ mod tests {
     async fn a_setup_ends_in_the_session_once_the_words_are_confirmed() {
         let page = Page::home(Arc::new(Relay::start().await)).await;
         set_up(&page, "Ada").await;
-        // The session is announced with the words: wait for the user's name in
-        // the header, then read that the words still cover the list.
+        // The session is announced with the words. Wait for the user's name
+        // in the header, then read that the words show in a modal over the list.
         page.browser
             .wait_for(
                 "the session under the words",
@@ -299,13 +299,13 @@ mod tests {
         assert_eq!(
             page.browser
                 .script(
-                    "return !document.querySelector('.ambre-doc-list') \
-                       && !!document.querySelector('.ambre-recovery-words');",
+                    "return !!document.querySelector('.ambre-doc-list') \
+                       && !!document.querySelector('dialog[open] .ambre-recovery-words');",
                     json!([]),
                 )
                 .await,
             Value::Bool(true),
-            "the list shows over the words"
+            "the words show in no modal over the list"
         );
         follow(&page, ".ambre-words-done").await;
         wait_list(&page, "Ada").await;

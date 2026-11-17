@@ -488,21 +488,31 @@ impl Switchboard {
                 "A new version of Ambre is available. Reload the page to keep syncing.",
             ))),
             UiEvent::Rest { evt, .. } => self.rest(evt, shown, roster, &mut effects),
-            // The relay refused a request or the socket for a key setup still
-            // owed: the setup, never an error (`CHROME-098`, `SYNC-134`).
+            // An unlock, a request or the socket met a key setup still owed:
+            // the setup, never an error (`CHROME-098`, `SYNC-134`).
             UiEvent::SetupRequired => effects.push(Effect::AskKeys(KeysFace::SetUp)),
             // A refusal reads where it was asked: on the setup or recovery
             // form of the account face, or else on the gate. The form covers
             // the gate, so a recovery opened from the unlock face reads its
             // refusal on the form (`CHROME-134`). With neither shown, nothing
-            // else reads it, so a toast does, in the same words.
-            UiEvent::AuthError { cause } => effects.push(match (shown.keys, shown.account_form) {
-                (_, AccountForm::Shown) => Effect::Refused(*cause),
-                (Some(_), AccountForm::Hidden) => Effect::RefuseKeys(*cause),
-                (None, AccountForm::Hidden) => {
-                    Effect::Notice(Notice::new(ToastKind::Error, cause.to_string()))
+            // else reads it, so a toast does, in the same words. A refused
+            // passphrase raises that toast beside the face too (`CHROME-136`).
+            UiEvent::AuthError { cause } => {
+                let face = match (shown.keys, shown.account_form) {
+                    (_, AccountForm::Shown) => Some(Effect::Refused(*cause)),
+                    (Some(_), AccountForm::Hidden) => Some(Effect::RefuseKeys(*cause)),
+                    (None, AccountForm::Hidden) => None,
+                };
+                let toast = face.is_none()
+                    || cause.passphrase_verdict() == ambre_bus::PassphraseVerdict::Refused;
+                effects.extend(face);
+                if toast {
+                    effects.push(Effect::Notice(Notice::new(
+                        ToastKind::Error,
+                        cause.to_string(),
+                    )));
                 }
-            }),
+            }
             // Chrome status indicator (`-chrome.md` 2.G): mirror the active
             // document's WebSocket link into the header label. Ignored for a
             // non-active document (a stale push during a fast doc switch).
@@ -622,8 +632,6 @@ impl Switchboard {
             RestEvent::ProviderSignedIn { keys_stored, .. } => {
                 effects.push(Effect::AskKeys(KeysFace::after_sign_in(*keys_stored)));
             }
-            // An unlock found no keys to open: the account owes its setup.
-            RestEvent::AccountSetupRequired => effects.push(Effect::AskKeys(KeysFace::SetUp)),
             // The words are shown once, and kept nowhere else (`CHROME-099`).
             RestEvent::AccountCreated { recovery_words } => {
                 effects.push(Effect::ShowWords(recovery_words));
@@ -2150,8 +2158,8 @@ mod tests {
     }
 
     /// `CHROME-097`, `CHROME-098`: a provider sign-in shows the face its keys
-    /// call for. An unlock that finds no keys, and a later refusal for a setup
-    /// owed, each show the setup, and no error.
+    /// call for. A later setup owed, from an unlock or a refused request,
+    /// shows the setup and no error.
     #[test]
     fn a_provider_account_is_asked_to_unlock_or_to_set_up() {
         let mut switchboard = Switchboard::new(Page::Document);
@@ -2172,17 +2180,12 @@ mod tests {
             assert_eq!(asked(&effects), [face]);
             assert_eq!(effects.len(), 1, "a sign-in lists nothing before the keys");
         }
-        for ev in [
-            rest(RestEvent::AccountSetupRequired),
-            UiEvent::SetupRequired,
-        ] {
-            let effects = switchboard.service(&ev, on(None), &nobody());
-            assert_eq!(asked(&effects), [KeysFace::SetUp]);
-            assert!(
-                effects.iter().all(|e| notice(e).is_none()),
-                "an error showed"
-            );
-        }
+        let effects = switchboard.service(&UiEvent::SetupRequired, on(None), &nobody());
+        assert_eq!(asked(&effects), [KeysFace::SetUp]);
+        assert!(
+            effects.iter().all(|e| notice(e).is_none()),
+            "an error showed"
+        );
     }
 
     /// `CHROME-131`: a refused passphrase reads on the gate that asked for it,
@@ -2197,16 +2200,61 @@ mod tests {
             ..on(None)
         };
         assert!(matches!(
-            switchboard.service(&ev, gated, &nobody()).as_slice(),
-            [Effect::RefuseKeys(refused)] if *refused == cause
+            switchboard.service(&ev, gated, &nobody()).first(),
+            Some(Effect::RefuseKeys(refused)) if *refused == cause
         ));
         let words = cause.to_string();
+        let shown = switchboard.service(&ev, on(None), &nobody());
+        assert_eq!(shown.len(), 1, "one toast with no gate shown");
         assert_eq!(
-            switchboard
-                .service(&ev, on(None), &nobody())
-                .first()
-                .and_then(notice),
+            shown.first().and_then(notice),
             Some((Tone::Error, words.as_str()))
         );
+    }
+
+    /// `CHROME-136`: a refused passphrase raises an error toast in the words
+    /// of the refusal, beside the face that reads it. A refusal of another
+    /// field reads on its face alone.
+    #[test]
+    fn a_refused_passphrase_raises_an_error_toast() {
+        let mut switchboard = Switchboard::new(Page::Document);
+        let gated = Shown {
+            keys: Some(KeysFace::Unlock),
+            ..on(None)
+        };
+        let form = Shown {
+            account_form: AccountForm::Shown,
+            ..on(None)
+        };
+        let weak = AuthFailure::WeakPassphrase(ambre_core::PassphraseWeakness::TooShort);
+        for (cause, shown, toasted) in [
+            (AuthFailure::BadPassphrase, gated, true),
+            (weak, gated, true),
+            (weak, form, true),
+            (
+                AuthFailure::BadRecoveryWords(ambre_core::RecoveryWordsRefusal::BadChecksum),
+                form,
+                false,
+            ),
+            (AuthFailure::ForeignRecoveryWords, form, false),
+        ] {
+            let ev = UiEvent::AuthError { cause };
+            let effects = switchboard.service(&ev, shown, &nobody());
+            assert!(
+                matches!(
+                    effects.first(),
+                    Some(Effect::RefuseKeys(refused) | Effect::Refused(refused)) if *refused == cause
+                ),
+                "{cause:?}: the face does not read it"
+            );
+            let words = cause.to_string();
+            let toasts: Vec<_> = effects.iter().filter_map(notice).collect();
+            let expected = if toasted {
+                vec![(Tone::Error, words.as_str())]
+            } else {
+                Vec::new()
+            };
+            assert_eq!(toasts, expected, "{cause:?}");
+        }
     }
 }

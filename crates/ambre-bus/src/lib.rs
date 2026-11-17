@@ -60,8 +60,8 @@ pub use call::{CallMembers, CallSignal, PageDescription};
 pub use command::SyncCommand;
 pub use content::{Embed, Mutation, Traffic};
 pub use event::{
-    ApiRequest, AuthFailure, FoldAnswer, LeaseAnswer, LogicEvent, OpenFailure, SignedDelta,
-    SnapshotPurpose, SnapshotVerdict, Successor,
+    ApiRequest, AuthFailure, FoldAnswer, LeaseAnswer, LogicEvent, OpenFailure, PassphraseVerdict,
+    SignedDelta, SnapshotPurpose, SnapshotVerdict, Successor,
 };
 pub use logic::{LogicCommand, StoreRoom};
 pub use lossy::{LossyOutcome, is_lossy_class};

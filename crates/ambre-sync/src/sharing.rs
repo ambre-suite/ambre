@@ -1783,7 +1783,7 @@ pub(crate) fn rooted_call_log(
     match vouch.rooted() {
         Ok(()) => Some(log),
         Err(refusal) => {
-            tracing::warn!("Sync: the log of the channel of a call stands on no root: {refusal:?}");
+            crate::log::warning!("Sync: the log of the channel of a call stands on no root: {refusal:?}");
             None
         }
     }

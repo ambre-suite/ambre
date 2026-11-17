@@ -552,6 +552,33 @@ pub enum AuthFailure {
     NoDevSignIn,
 }
 
+ambre_core::define_flag! {
+    /// Whether a failure refuses the passphrase the person typed.
+    pub enum PassphraseVerdict {
+        /// Another step failed.
+        Other,
+        /// A wrong passphrase, or one under the strength floor.
+        Refused,
+    }
+}
+
+impl AuthFailure {
+    /// Whether the failure refuses the passphrase the person typed: a wrong
+    /// one, or one under the strength floor. The view raises a toast for it
+    /// beside the line of the face that asked (`CHROME-136`).
+    pub fn passphrase_verdict(self) -> PassphraseVerdict {
+        match self {
+            Self::BadPassphrase | Self::WeakPassphrase(_) => PassphraseVerdict::Refused,
+            Self::CorruptAccount
+            | Self::SessionEnded
+            | Self::SeedNotWrapped
+            | Self::Api(_)
+            | Self::BadRecoveryWords(_)
+            | Self::ForeignRecoveryWords => PassphraseVerdict::Other,
+        }
+    }
+}
+
 impl fmt::Display for AuthFailure {
     /// The words a person reads for the failure.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -838,4 +865,41 @@ pub enum Successor {
     Fetched,
     /// This client registered it: the channel holds it at once.
     Created,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `CHROME-136`: a wrong passphrase and each weakness refuse the
+    /// passphrase. No other failure does, so no toast doubles its face.
+    #[test]
+    fn only_a_wrong_or_weak_passphrase_refuses_the_passphrase() {
+        use ambre_core::PassphraseWeakness as Weak;
+        let refusing = [
+            AuthFailure::BadPassphrase,
+            AuthFailure::WeakPassphrase(Weak::CommonPassword),
+            AuthFailure::WeakPassphrase(Weak::Repetition),
+            AuthFailure::WeakPassphrase(Weak::Sequence),
+            AuthFailure::WeakPassphrase(Weak::TooShort),
+        ];
+        assert!(
+            refusing
+                .iter()
+                .all(|cause| cause.passphrase_verdict() == PassphraseVerdict::Refused)
+        );
+        let others = [
+            AuthFailure::CorruptAccount,
+            AuthFailure::SessionEnded,
+            AuthFailure::SeedNotWrapped,
+            AuthFailure::Api(ApiFailure::Local(ambre_core::LocalFailure::NoRelay)),
+            AuthFailure::BadRecoveryWords(ambre_core::RecoveryWordsRefusal::BadChecksum),
+            AuthFailure::ForeignRecoveryWords,
+        ];
+        assert!(
+            others
+                .iter()
+                .all(|cause| cause.passphrase_verdict() == PassphraseVerdict::Other)
+        );
+    }
 }

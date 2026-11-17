@@ -59,7 +59,7 @@ pub use command::{Availability, CommandStates, Toggle, keybinding_from_event};
 pub use composed::ComposedName;
 pub use context_menu::{ContextMenu, MenuEntry, MenuItem};
 pub use debounce::{DRAG_DEBOUNCE, Debouncer};
-pub use dialog::{Dialog, ModalHold};
+pub use dialog::{Dialog, Dismissal, ModalHold};
 pub use font::{FONT_FAMILIES, FamilyChoice, FontPicker};
 pub use format::{
     FONT_SIZES, FORMAT_BAR_LIFT, FontSizeSelect, FormatBar, FormatControl, FormatToggle, Pressed,

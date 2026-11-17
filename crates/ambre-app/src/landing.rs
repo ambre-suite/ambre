@@ -208,13 +208,14 @@ pub fn landing_view(
             </header>
 
             // A provider account whose keys are still to open or to set up.
-            // The account face, the recovery words above all, covers the gate.
-            <Show when=move || !keys.is_open()>
+            // The setup and the recovery forms cover the gate.
+            <Show when=move || keys.launcher() == crate::account::Launcher::Shown>
                 {crate::keys_gate::keys_gate_view(gate, keys, to_logic_gate.clone())}
             </Show>
 
-            // Signed in: the document list.
-            <Show when=move || username.get().is_some() && !keys.is_open() && !gated()>
+            // Signed in: the document list. The recovery words show in a
+            // modal over it (`CHROME-137`).
+            <Show when=move || username.get().is_some() && keys.launcher() == crate::account::Launcher::Shown && !gated()>
                 {document_list(docs, to_logic_cards.clone(), pending_delete, booted, toasts)}
             </Show>
 
@@ -222,7 +223,7 @@ pub fn landing_view(
             // session on a development relay: the development panel, which
             // keeps the recovery link alone (`CHROME-135`).
             <Show when=move || {
-                !keys.is_open()
+                keys.launcher() == crate::account::Launcher::Shown
                     && !gated()
                     && (username.get().is_none() || dev_mode.get() == Some(SignInMode::Dev))
             }>
@@ -232,7 +233,7 @@ pub fn landing_view(
                 }
             </Show>
 
-            // The setup, the recovery words or the recovery, over both.
+            // The setup or the recovery over both, or the words in a modal.
             {crate::account::keys_view(keys, to_logic_keys)}
 
             <DeleteConfirm pending=pending_delete on_confirm=confirm_delete />

@@ -56,17 +56,16 @@ fn send_rest(state: &mut ambre_sync::SyncState, id: Seq<Request>, cmd: RestComma
 // -----------------------------------------------------------------------------
 
 #[test]
-fn unlock_returns_session_ready() {
+fn dev_login_returns_session_ready() {
     let (mut state, rx, _mock) = setup(false);
     let id = next_request();
 
     send_rest(
         &mut state,
         id,
-        RestCommand::Unlock {
-            passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new(
-                "secret".to_owned(),
-            ),
+        RestCommand::DevLogin {
+            username: ambre_core::Validated::<ambre_core::DisplayName>::parse("ada")
+                .unwrap_or_else(|_| panic!("a valid name")),
         },
     );
 
@@ -329,14 +328,13 @@ fn a_recovery_with_valid_words_goes_on_to_the_relay() {
 fn logout_returns_logged_out_and_clears_session() {
     let (mut state, rx, _mock) = setup(false);
 
-    // Unlock first to populate session keys.
+    // Sign in first to populate session keys.
     send_rest(
         &mut state,
         next_request(),
-        RestCommand::Unlock {
-            passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new(
-                "secret".to_owned(),
-            ),
+        RestCommand::DevLogin {
+            username: ambre_core::Validated::<ambre_core::DisplayName>::parse("ada")
+                .unwrap_or_else(|_| panic!("a valid name")),
         },
     );
     rx.try_iter().count(); // drain SessionReady
@@ -520,14 +518,13 @@ fn rename_document_updates_name() {
 fn open_document_subscribes_via_mock_ws() {
     let (mut state, rx, mock) = setup(true);
 
-    // Unlock first (required for ws_connected).
+    // Sign in first (required for ws_connected).
     send_rest(
         &mut state,
         next_request(),
-        RestCommand::Unlock {
-            passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new(
-                "secret".to_owned(),
-            ),
+        RestCommand::DevLogin {
+            username: ambre_core::Validated::<ambre_core::DisplayName>::parse("ada")
+                .unwrap_or_else(|_| panic!("a valid name")),
         },
     );
     rx.try_iter().count(); // drain SessionReady
@@ -563,14 +560,13 @@ fn open_document_subscribes_via_mock_ws() {
 fn close_document_unsubscribes_via_mock_ws() {
     let (mut state, rx, mock) = setup(true);
 
-    // Unlock first.
+    // Sign in first.
     send_rest(
         &mut state,
         next_request(),
-        RestCommand::Unlock {
-            passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new(
-                "secret".to_owned(),
-            ),
+        RestCommand::DevLogin {
+            username: ambre_core::Validated::<ambre_core::DisplayName>::parse("ada")
+                .unwrap_or_else(|_| panic!("a valid name")),
         },
     );
     rx.try_iter().count();
@@ -601,14 +597,13 @@ fn close_document_unsubscribes_via_mock_ws() {
 fn send_update_after_open_document_encrypts_and_sends() {
     let (mut state, rx, mock) = setup(true);
 
-    // Unlock first.
+    // Sign in first.
     send_rest(
         &mut state,
         next_request(),
-        RestCommand::Unlock {
-            passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new(
-                "secret".to_owned(),
-            ),
+        RestCommand::DevLogin {
+            username: ambre_core::Validated::<ambre_core::DisplayName>::parse("ada")
+                .unwrap_or_else(|_| panic!("a valid name")),
         },
     );
     rx.try_iter().count();
@@ -647,16 +642,17 @@ fn send_update_after_open_document_encrypts_and_sends() {
 // -----------------------------------------------------------------------------
 
 #[test]
-fn full_session_flow_unlock_create_open_close_logout() {
+fn full_session_flow_sign_in_create_open_close_logout() {
     let (mut state, rx, mock) = setup(true);
 
-    // 1. Unlock
+    // 1. Sign in: an offline unlock opens no key (`SYNC-264`).
     let id1 = next_request();
     send_rest(
         &mut state,
         id1,
-        RestCommand::Unlock {
-            passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new("pass".to_owned()),
+        RestCommand::DevLogin {
+            username: ambre_core::Validated::<ambre_core::DisplayName>::parse("ada")
+                .unwrap_or_else(|_| panic!("a valid name")),
         },
     );
     match drain_rest(&rx, id1) {

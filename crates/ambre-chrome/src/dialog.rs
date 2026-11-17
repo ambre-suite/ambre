@@ -63,6 +63,18 @@ impl OwnedHold {
     }
 }
 
+/// What closes a modal besides its caller's signal.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Dismissal {
+    /// Escape and a click on the backdrop close it.
+    #[default]
+    Free,
+    /// Only the caller closes it: Escape and the backdrop do nothing. For a
+    /// modal whose content a stray key would lose for good, such as the
+    /// recovery words shown once (`CHROME-137`).
+    Explicit,
+}
+
 /// A modal dialog driven by an `open` signal.
 ///
 /// Opening calls `show_modal()`; closing (Escape, backdrop click, or `open`
@@ -86,6 +98,10 @@ pub fn Dialog(
     /// The modal's accessible name, for one with no heading to name it.
     #[prop(optional, into)]
     label: Option<String>,
+    /// What closes the modal besides `open`. Escape and the backdrop by
+    /// default.
+    #[prop(optional)]
+    dismissal: Dismissal,
     children: ChildrenFn,
 ) -> impl IntoView {
     let dialog_ref = NodeRef::<html::Dialog>::new();
@@ -119,7 +135,21 @@ pub fn Dialog(
     // The event is queued: a modal opened again before it lands is open now,
     // and the stale close must clear, release and notify nothing.
     let handle_close = move |_| {
-        if dialog_ref.get_untracked().is_some_and(|el| el.open()) {
+        // A modal removed while open closes after its owner is gone, and the
+        // cleanup above already gave the hold back.
+        let Some(el) = dialog_ref.try_get_untracked() else {
+            return;
+        };
+        if el.as_ref().is_some_and(|el| el.open()) {
+            return;
+        }
+        // A browser may close a modal on Escape without a cancel event to
+        // prevent. A modal only its caller closes then shows again.
+        if dismissal == Dismissal::Explicit
+            && open.try_get_untracked() == Some(crate::Openness::Open)
+            && let Some(el) = el
+        {
+            let _ = el.show_modal();
             return;
         }
         open.set(crate::Openness::Closed);
@@ -142,8 +172,14 @@ pub fn Dialog(
             .target()
             .and_then(|t| t.dyn_into::<web_sys::HtmlDialogElement>().ok())
             .is_some();
-        if on_backdrop {
+        if on_backdrop && dismissal == Dismissal::Free {
             open.set(crate::Openness::Closed);
+        }
+    };
+    // Escape fires `cancel` first: preventing it keeps the modal open.
+    let handle_cancel = move |ev: web_sys::Event| {
+        if dismissal == Dismissal::Explicit {
+            ev.prevent_default();
         }
     };
 
@@ -157,6 +193,7 @@ pub fn Dialog(
             class=class
             aria-label=label
             on:close=handle_close
+            on:cancel=handle_cancel
             on:click=handle_click
         >
             <div class="ambre-dialog-body">{children()}</div>

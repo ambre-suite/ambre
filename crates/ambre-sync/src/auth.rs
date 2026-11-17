@@ -6,101 +6,64 @@ use ambre_protocol::master_rotation::{MasterRotation, SealedSeed};
 impl SyncState {
     // -- Session handlers ------------------------------------------------------
 
+    /// Open the keys the relay stores for the signed-in account under
+    /// `passphrase`. An unlock creates no key: an account that owes its keys
+    /// hears that a setup is owed, and `SetUpKeys` alone creates them
+    /// (`SYNC-264`, `SYNC-134`).
     pub(crate) fn handle_unlock(
         &mut self,
         id: Seq<Request>,
         passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
     ) {
         crate::log::info!("Sync: Unlock");
-
-        let logic_tx = self.logic_tx.clone();
-        let api_base = self.api_base.clone();
-        let url_scheme = self.url_scheme;
-        let event_tx = self.event_tx.clone();
-        let auth = self.auth_context();
-
-        if let Some(tx) = event_tx {
-            // WASM path: spawn an async HTTP task; the result flows back
-            // through the SyncEvent queue into handle_sync_event.
-            crate::spawn(async move {
-                let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
-                    .route("/keys/master");
-                match http::get_json_auth::<http::MasterKeyResponse>(&url, auth.clone()).await {
-                    Ok(resp) if resp.setup_owed() => {
-                        // No master material to unlock: the account still owes
-                        // its key setup, which is no failure (`SYNC-134`).
-                        let _ = logic_tx.send(LogicEvent::Rest {
-                            id: Some(id),
-                            evt: RestEvent::AccountSetupRequired,
-                        });
-                    }
-                    Ok(resp) => {
-                        let master_seed = match open_stored_seed(&resp, &passphrase) {
-                            Ok(seed) => seed,
-                            Err(cause) => {
-                                let _ = logic_tx.send(LogicEvent::AuthError { cause });
-                                return;
-                            }
-                        };
-                        let signing_key = master_seed.derive_signing_key();
-                        let exchange_key = master_seed.derive_exchange_key();
-
-                        let auth_url =
-                            crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
-                                .route("/auth/me");
-                        match http::get_json_auth::<http::AuthMeResponse>(&auth_url, auth.clone())
-                            .await
-                        {
-                            Ok(me) => {
-                                let tokens = match session_tokens(&auth.tokens) {
-                                    Ok(tokens) => tokens,
-                                    Err(failure) => {
-                                        let _ = logic_tx.send(*failure);
-                                        return;
-                                    }
-                                };
-                                let user_id = me.user_id;
-                                let _ = tx.send(SyncEvent::SessionReady {
-                                    id: Some(id),
-                                    user_id,
-                                    display_name: me.display_name,
-                                    email: me.email,
-                                    master_seed,
-                                    signing_key,
-                                    exchange_key,
-                                    tokens,
-                                });
-                            }
-                            Err(e) => {
-                                let _ = logic_tx.send(auth_failed(e));
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        let _ = logic_tx.send(auth_failed(e));
-                    }
-                }
+        let Some(tx) = self.event_tx.clone() else {
+            // No relay stores the keys, so there is nothing to open.
+            drop(passphrase);
+            self.send_to_logic(LogicEvent::AuthError {
+                cause: AuthFailure::Api(ApiFailure::Local(ambre_core::LocalFailure::NoRelay)),
             });
-        } else {
-            // Host-test / offline path: generate keys locally. The user it
-            // announces is the one it holds, so an opened document gets a
-            // session identity (`AUTHOR-002`).
-            let master_seed = MasterSeed::generate();
-            let user_id = *self.user_id.get_or_insert_with(Id::<User>::mint);
-            self.signing_key = Some(master_seed.derive_signing_key());
-            self.exchange_key = Some(master_seed.derive_exchange_key());
-            self.master_seed = Some(master_seed);
-            self.open_websocket();
-            self.reply(
-                id,
-                RestEvent::SessionReady {
-                    user_id,
-                    display_name: ambre_core::cut_display_name_to_fit("offline")
-                        .unwrap_or_else(|| ambre_core::display_handle(&user_id)),
-                    email: "offline@localhost".into(),
-                },
-            );
-        }
+            return;
+        };
+        let logic_tx = self.logic_tx.clone();
+        let api = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base);
+        let auth = self.auth_context();
+        crate::spawn(async move {
+            let outcome = open_keys(&http::Fetch, &auth, &api, &passphrase).await;
+            // The passphrase wipes its bytes here (H4).
+            drop(passphrase);
+            match outcome {
+                Ok(OpenedKeys { master_seed, me }) => {
+                    let tokens = match session_tokens(&auth.tokens) {
+                        Ok(tokens) => tokens,
+                        Err(failure) => {
+                            let _ = logic_tx.send(*failure);
+                            return;
+                        }
+                    };
+                    let _ = tx.send(SyncEvent::SessionReady {
+                        id: Some(id),
+                        user_id: me.user_id,
+                        display_name: me.display_name,
+                        email: me.email,
+                        signing_key: master_seed.derive_signing_key(),
+                        exchange_key: master_seed.derive_exchange_key(),
+                        master_seed,
+                        tokens,
+                    });
+                }
+                // The same answer as a request the relay refused for a setup
+                // owed: the client shows the setup, never an error.
+                Err(UnlockFailure::SetupOwed) => {
+                    let _ = logic_tx.send(LogicEvent::SetupRequired);
+                }
+                Err(UnlockFailure::Auth(cause)) => {
+                    let _ = logic_tx.send(LogicEvent::AuthError { cause });
+                }
+                Err(UnlockFailure::Http(e)) => {
+                    let _ = logic_tx.send(auth_failed(e));
+                }
+            }
+        });
     }
 
     /// Dev-only login: authenticate as `username` with keys derived
@@ -172,7 +135,9 @@ impl SyncState {
             self.exchange_key = Some(exchange_key);
             self.master_seed = Some(master_seed);
             self.open_websocket();
-            let user_id = Id::<User>::mint();
+            // The user it announces is the one it holds, so an opened
+            // document gets a session identity (`AUTHOR-002`).
+            let user_id = *self.user_id.get_or_insert_with(Id::<User>::mint);
             self.send_to_logic(LogicEvent::Rest {
                 id,
                 evt: RestEvent::SessionReady {
@@ -194,7 +159,7 @@ impl SyncState {
         _id: Option<Seq<Request>>,
         _username: ambre_core::Validated<ambre_core::DisplayName>,
     ) {
-        tracing::warn!("Sync: DevLogin refused, this build holds no development sign-in");
+        crate::log::warning!("Sync: DevLogin refused, this build holds no development sign-in");
         self.send_to_logic(LogicEvent::AuthError {
             cause: AuthFailure::NoDevSignIn,
         });
@@ -788,6 +753,21 @@ mod provider_tests {
         assert!(no_relay(&rx), "the return");
     }
 
+    /// `SYNC-264`: with no relay, an unlock fails at once and holds no key.
+    /// An unlock never mints the keys it did not find.
+    #[test]
+    fn an_unlock_with_no_relay_creates_no_key() {
+        let (mut state, rx) = worker();
+        state.handle_unlock(
+            ambre_bus::next_request(),
+            ambre_core::Confidential::<ambre_core::Passphrase>::new("anchovy glider".to_owned()),
+        );
+        assert!(no_relay(&rx));
+        assert!(state.master_seed.is_none());
+        assert!(state.signing_key.is_none());
+        assert_eq!(state.socket_opens.get(), 0);
+    }
+
     /// With no relay, a development sign-in adopts the identity its username
     /// derives, and answers that the session is ready.
     #[cfg(feature = "dev-login")]
@@ -1099,6 +1079,47 @@ async fn store_new_keys(
     Ok(StoredKeys { tokens, me })
 }
 
+/// The keys an unlock opened, and the identity of their account.
+struct OpenedKeys {
+    master_seed: MasterSeed,
+    me: http::AuthMeResponse,
+}
+
+/// Why an unlock opened no key.
+enum UnlockFailure {
+    /// The relay stores no key for the account: a setup is owed.
+    SetupOwed,
+    /// The worker refused the step itself: a wrong passphrase.
+    Auth(AuthFailure),
+    /// A request to the relay failed.
+    Http(http::HttpError),
+}
+
+/// Read the sealed seed of the signed-in account, open it under `passphrase`,
+/// then read the identity of the account (`SYNC-264`).
+///
+/// The unlock only reads. An account that owes its keys ends on `SetupOwed`
+/// before any key exists, and nothing is written to the relay.
+async fn open_keys(
+    transport: &impl http::Transport,
+    auth: &http::AuthContext,
+    api: &crate::http::Url<crate::http::ApiRoot>,
+    passphrase: &ambre_core::Confidential<ambre_core::Passphrase>,
+) -> Result<OpenedKeys, UnlockFailure> {
+    let stored: http::MasterKeyResponse =
+        http::get_json_auth_via(transport, &api.route("/keys/master"), auth)
+            .await
+            .map_err(UnlockFailure::Http)?;
+    if stored.setup_owed() {
+        return Err(UnlockFailure::SetupOwed);
+    }
+    let master_seed = open_stored_seed(&stored, passphrase).map_err(UnlockFailure::Auth)?;
+    let me: http::AuthMeResponse = http::get_json_auth_via(transport, &api.route("/auth/me"), auth)
+        .await
+        .map_err(UnlockFailure::Http)?;
+    Ok(OpenedKeys { master_seed, me })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1338,6 +1359,56 @@ mod tests {
             open_stored_seed(&resealed, &current_passphrase()),
             Err(AuthFailure::BadPassphrase)
         ));
+    }
+
+    /// `SYNC-264`: an unlock only reads. Stored keys open after two reads; an
+    /// account that owes its keys hears a setup owed after one read. Neither
+    /// unlock writes a key to the relay.
+    #[tokio::test]
+    async fn an_unlock_opens_stored_keys_and_creates_none() {
+        let seed = MasterSeed::generate();
+        let user = "66666666-6666-6666-6666-666666666666";
+        let transport = Scripted::new([
+            Ok((200, sealed_under_current(&seed))),
+            Ok((
+                200,
+                serde_json::json!({
+                    "user_id": user,
+                    "display_name": "Ada",
+                    "email": "ada@example.org",
+                }),
+            )),
+        ]);
+        let auth = session("access-1", "refresh-1");
+        let Ok(OpenedKeys { master_seed, me }) =
+            open_keys(&transport, &auth, &root(), &current_passphrase()).await
+        else {
+            panic!("the unlock did not open the stored keys");
+        };
+        assert_eq!(signing_pubkey(&master_seed), signing_pubkey(&seed));
+        assert_eq!(me.user_id.to_string(), user);
+        let reads = [
+            (
+                http::Method::Get,
+                "https://relay.test/api/keys/master".to_owned(),
+            ),
+            (
+                http::Method::Get,
+                "https://relay.test/api/auth/me".to_owned(),
+            ),
+        ];
+        assert_eq!(transport.calls(), reads);
+
+        let owed = serde_json::json!({
+            "master_key_enc": null,
+            "master_key_salt": null,
+            "signing_pubkey": null,
+            "exchange_pubkey": null,
+        });
+        let transport = Scripted::new([Ok((200, owed))]);
+        let outcome = open_keys(&transport, &auth, &root(), &current_passphrase()).await;
+        assert!(matches!(outcome, Err(UnlockFailure::SetupOwed)));
+        assert_eq!(transport.calls(), reads[..1]);
     }
 
     /// `SYNC-252`: a current passphrase that does not open the stored seed,

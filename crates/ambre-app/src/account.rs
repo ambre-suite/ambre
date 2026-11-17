@@ -35,6 +35,16 @@ pub enum KeysFace {
     Recover,
 }
 
+ambre_core::define_flag! {
+    /// Whether the launcher shows under the keys faces.
+    pub enum Launcher {
+        /// The launcher shows: no face, or the words in a modal over it.
+        Shown,
+        /// The setup or the recovery form replaces it.
+        Covered,
+    }
+}
+
 /// The state of the keys faces, which the launcher and the switchboard share.
 #[derive(Clone, Copy)]
 pub struct KeysSignals {
@@ -93,9 +103,14 @@ impl KeysSignals {
             .with_untracked(|face| matches!(face, KeysFace::Setup | KeysFace::Recover))
     }
 
-    /// Whether a face covers the launcher.
-    pub fn is_open(self) -> bool {
-        self.face.with(|face| !matches!(face, KeysFace::Closed))
+    /// Whether a form replaces the launcher. The recovery words show in a
+    /// modal over it instead, so the list of the new session stays under
+    /// them (`CHROME-137`).
+    pub fn launcher(self) -> Launcher {
+        self.face.with(|face| match face {
+            KeysFace::Setup | KeysFace::Recover => Launcher::Covered,
+            KeysFace::Closed | KeysFace::Words(_) => Launcher::Shown,
+        })
     }
 }
 
@@ -115,7 +130,7 @@ pub fn keys_view(keys: KeysSignals, to_logic: ShellOutbox) -> impl IntoView {
     move || match keys.face.get() {
         KeysFace::Closed => ().into_any(),
         KeysFace::Setup => setup_form(keys, to_logic.clone()).into_any(),
-        KeysFace::Words(words) => words_panel(keys, words).into_any(),
+        KeysFace::Words(words) => words_dialog(keys, words).into_any(),
         KeysFace::Recover => recovery_form(keys, to_logic.clone()).into_any(),
     }
 }
@@ -256,6 +271,29 @@ fn words_panel(keys: KeysSignals, words: Confidential<RecoveryWords>) -> impl In
                 </button>
             </div>
         </div>
+    }
+}
+
+/// The recovery words in the shared modal over the launcher (`CHROME-137`).
+/// Only their confirmation closes it: Escape or a stray click on the backdrop
+/// would drop words shown once.
+fn words_dialog(keys: KeysSignals, words: Confidential<RecoveryWords>) -> impl IntoView {
+    let open = RwSignal::new(ambre_chrome::Openness::Open);
+    // The dialog asks its children as a function. The slot hands the words
+    // over once, so no second copy waits in it.
+    let slot = std::sync::Mutex::new(Some(words));
+    view! {
+        <ambre_chrome::Dialog
+            open=open
+            dismissal=ambre_chrome::Dismissal::Explicit
+            class={ambre_core::StaticKey::<ambre_core::CssClasses>::new("ambre-words-dialog")}
+        >
+            {slot
+                .lock()
+                .ok()
+                .and_then(|mut words| words.take())
+                .map(|words| words_panel(keys, words))}
+        </ambre_chrome::Dialog>
     }
 }
 
@@ -430,6 +468,61 @@ mod tests {
         assert!(
             keys.face
                 .with_untracked(|face| matches!(face, KeysFace::Closed))
+        );
+        container.remove();
+    }
+
+    /// `CHROME-137`: the words show in an open modal over the launcher,
+    /// which they leave in place. A native close, the one Escape performs,
+    /// keeps them on screen. Only their confirmation closes the modal. The
+    /// setup and the recovery forms still replace the launcher.
+    #[wasm_bindgen_test]
+    async fn the_words_open_in_a_modal_that_only_their_confirmation_closes() {
+        let owner = Owner::new();
+        owner.set();
+        let keys = KeysSignals::new();
+        let (to_logic, _rx) = outbox();
+        let container = mount_in_container(move || keys_view(keys, to_logic));
+        keys.open(KeysFace::Setup);
+        assert_eq!(keys.launcher(), Launcher::Covered, "the setup");
+        keys.open(KeysFace::Recover);
+        assert_eq!(keys.launcher(), Launcher::Covered, "the recovery");
+
+        keys.show_words(Confidential::<RecoveryWords>::new(PHRASE.to_owned()));
+        tick().await;
+        assert_eq!(
+            keys.launcher(),
+            Launcher::Shown,
+            "the words hide the launcher"
+        );
+        let modal: web_sys::HtmlDialogElement = find(&container, "dialog.ambre-words-dialog")
+            .expect("the words show in a modal")
+            .dyn_into()
+            .unwrap();
+        assert!(modal.open());
+        assert!(find(&container, "dialog[open] .ambre-recovery-words li").is_some());
+
+        // The `close` event is queued: wait for it, after the modal's own
+        // handler, which was registered first.
+        let closed = js_sys::Promise::new(&mut |resolve, _| {
+            modal
+                .add_event_listener_with_callback("close", &resolve)
+                .unwrap();
+        });
+        modal.close();
+        let _ = wasm_bindgen_futures::JsFuture::from(closed).await;
+        assert!(modal.open(), "a native close dropped the words");
+        assert!(find(&container, ".ambre-recovery-words li").is_some());
+
+        find(&container, ".ambre-words-done")
+            .unwrap()
+            .dyn_into::<web_sys::HtmlElement>()
+            .unwrap()
+            .click();
+        tick().await;
+        assert!(
+            find(&container, "dialog").is_none(),
+            "the modal outlived the words"
         );
         container.remove();
     }

@@ -198,7 +198,9 @@ pub struct UserInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RestCommand {
     // -- Session -----------------------------------------------------------------
-    /// Bootstrap auth after OIDC callback. -> `SessionReady` / `AccountSetupRequired`.
+    /// Open the stored keys of the signed-in account. -> `SessionReady`. An
+    /// account that owes its keys answers `LogicEvent::SetupRequired`: the
+    /// unlock creates no key, and `SetUpKeys` alone creates them.
     Unlock {
         /// The account passphrase. Wiped on drop by [`ambre_core::Confidential`]
         /// once the Sync thread finishes deriving the user key.
@@ -435,8 +437,6 @@ pub enum RestEvent {
         display_name: ambre_core::Validated<ambre_core::DisplayName>,
         email: ambre_core::Email,
     },
-    /// First connection: no keys on the server -- the UI must show onboarding.
-    AccountSetupRequired,
     /// Display `recovery_words` **exactly once**; they cannot be retrieved later.
     AccountCreated {
         recovery_words: Confidential<RecoveryWords>,
