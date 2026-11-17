@@ -7,10 +7,13 @@
 //! under it. A space admin therefore settles the space at once. It then
 //! re-keys each public channel whose entry names an older space key.
 
+use std::cell::RefCell;
 use std::collections::HashSet;
+use std::rc::Rc;
 
 use ambre_bus::{LogicEvent, SealedChannelKey};
 use ambre_core::id::{Channel, Document, Id, Space};
+use ambre_crypto::ecdh::KeyWrapper;
 
 use crate::SyncState;
 use crate::channels::{sealed_under, unseal_channel_key};
@@ -21,6 +24,10 @@ pub(crate) struct SpaceRotation {
     channels: Vec<(Id<Channel>, SealedChannelKey)>,
     /// The channels whose rotation runs, so a second drive starts none twice.
     in_flight: HashSet<Id<Channel>>,
+    /// The wrapper the running channel rotations share, so each member
+    /// costs one exchange for the whole leave (`SYNC-264`). It drops once
+    /// no rotation runs, and its keys are wiped with it (`SYNC-265`).
+    wrapper: Option<Rc<RefCell<KeyWrapper>>>,
 }
 
 /// What a drive of one space's rotation does next.
@@ -43,10 +50,10 @@ impl SyncState {
         channels: Vec<(Id<Channel>, SealedChannelKey)>,
     ) {
         let document_id = space_id.document_id();
-        let in_flight = self
+        let (in_flight, wrapper) = self
             .space_rotations
             .remove(&document_id)
-            .map(|held| held.in_flight)
+            .map(|held| (held.in_flight, held.wrapper))
             .unwrap_or_default();
         self.space_rotations.insert(
             document_id,
@@ -54,6 +61,7 @@ impl SyncState {
                 space_id,
                 channels,
                 in_flight,
+                wrapper,
             },
         );
         self.drive_space_rotation(document_id);
@@ -149,6 +157,11 @@ impl SyncState {
             return;
         };
         rotation.in_flight.insert(channel_id);
+        let wrapper = Rc::clone(
+            rotation
+                .wrapper
+                .get_or_insert_with(|| Rc::new(RefCell::new(KeyWrapper::new(&exchange_key)))),
+        );
         let params = crate::sharing::RotateChannelParams {
             space_id: rotation.space_id,
             channel_id,
@@ -159,6 +172,7 @@ impl SyncState {
             previous,
             anchor,
             space_key: keys.current,
+            wrapper,
         };
         let http = crate::sharing::GlooHttp {
             auth: self.auth_context(),
@@ -179,6 +193,9 @@ impl SyncState {
     ) {
         if let Some(rotation) = self.space_rotations.get_mut(&space_id.document_id()) {
             rotation.in_flight.remove(&channel_id);
+            if rotation.in_flight.is_empty() {
+                rotation.wrapper = None;
+            }
             if let Ok(key) = &result
                 && let Some(entry) = rotation.channels.iter_mut().find(|(c, _)| *c == channel_id)
             {
@@ -235,6 +252,7 @@ mod tests {
                 space_id,
                 channels,
                 in_flight: HashSet::new(),
+                wrapper: None,
             },
         );
         (state, rx)
@@ -316,6 +334,39 @@ mod tests {
         assert!(rx.try_recv().is_err(), "a failure tells Logic nothing");
         let rotation = state.space_rotations.get(&document_id).unwrap();
         assert!(rotation.in_flight.is_empty(), "the next drive tries again");
+    }
+
+    /// `SYNC-265`: the channel rotations of one leave share one wrapper. A
+    /// new catalogue keeps it while a rotation runs. It drops once the last
+    /// answer lands, success or failure, and no other owner keeps it.
+    #[test]
+    fn the_shared_wrapper_drops_once_no_channel_rotates() {
+        let (key, space_id) = (DocumentKey::generate(), Id::<Space>::mint());
+        let (first, second) = (Id::<Channel>::mint(), Id::<Channel>::mint());
+        let (mut state, _rx) = space(space_id, &key, Role::Owner, Vec::new());
+        let document_id = space_id.document_id();
+        let held = Rc::new(RefCell::new(KeyWrapper::new(
+            &ambre_crypto::MasterSeed::from_array([3; 32]).derive_exchange_key(),
+        )));
+        let watch = Rc::downgrade(&held);
+        let rotation = state.space_rotations.get_mut(&document_id).unwrap();
+        rotation.in_flight.extend([first, second]);
+        rotation.wrapper = Some(held);
+        state.handle_rotate_space(space_id, Vec::new());
+
+        state.channel_rotated(space_id, first, Ok(entry(first, &key)));
+        assert!(watch.upgrade().is_some(), "one channel still rotates");
+        state.channel_rotated(
+            space_id,
+            second,
+            Err(crate::http::HttpError::Local(
+                ambre_core::LocalFailure::NoRelay,
+            )),
+        );
+        assert!(
+            watch.upgrade().is_none(),
+            "the wrapper and its keys are gone"
+        );
     }
 
     /// A new catalogue keeps the rotations already running.

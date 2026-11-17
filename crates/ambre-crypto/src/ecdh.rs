@@ -6,6 +6,9 @@
 //! document key is then sealed under the KEK with XChaCha20-Poly1305. This module
 //! provides the primitive only; the share/rotation flow lives in the Sync thread.
 
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
+
 use ambre_core::{Ciphertext, EntryDigest, ExchangePublicKey, FixedBytes, Nonce, Payload, Secret};
 use blake2::Blake2b512;
 use hkdf::SimpleHkdf;
@@ -125,20 +128,99 @@ pub fn wrap_anchored(
     doc_key: &DocumentKey,
     anchor: Option<&FixedBytes<EntryDigest>>,
 ) -> Result<WrappedKey, CryptoError> {
-    let shared = shared_secret(own_secret, peer_public)?;
-    let own_pub =
-        FixedBytes::<ExchangePublicKey>::from_array(PublicKey::from(own_secret).to_bytes());
-    let kek = derive_kek(&shared, &own_pub, peer_public);
-    let plaintext = Secret::filled(|plain: &mut Vec<u8>| {
-        plain.reserve_exact(64);
-        plain.extend_from_slice(doc_key.as_bytes());
-        if let Some(anchor) = anchor {
-            plain.extend_from_slice(anchor.as_slice());
+    KeyWrapper::new(own_secret).wrap(peer_public, doc_key, anchor)
+}
+
+/// The recipients a [`KeyWrapper`] holds a key-encryption key for.
+pub enum Recipients {}
+
+impl ambre_core::NarrowCount for Recipients {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("Recipients");
+}
+
+/// The sender side of [`wrap_anchored`], held across many wraps from one
+/// exchange key.
+///
+/// The key-encryption key of a pair depends on the two exchange keys alone. So
+/// the wrapper derives it once per recipient, and every later wrap for that
+/// recipient costs one AEAD seal. A space leave wraps one key per public
+/// channel for each member who stays, and pays one exchange per member
+/// (`SYNC-264`). A wrap through it opens as one through [`wrap_anchored`]
+/// does, since [`wrap_anchored`] is a wrapper of one wrap.
+///
+/// Each key-encryption key is a [`DocumentKey`], so the wrapper wipes them
+/// all when it drops (`SYNC-265`). Its `Debug` form prints no key.
+pub struct KeyWrapper {
+    own_secret: StaticSecret,
+    own_pub: FixedBytes<ExchangePublicKey>,
+    keks: HashMap<FixedBytes<ExchangePublicKey>, DocumentKey>,
+}
+
+impl std::fmt::Debug for KeyWrapper {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("KeyWrapper")
+            .field("own_pub", &self.own_pub)
+            .field("recipients", &self.keks.len())
+            .finish_non_exhaustive()
+    }
+}
+
+impl KeyWrapper {
+    /// A wrapper that wraps from `own_secret`, with no recipient yet.
+    #[must_use]
+    pub fn new(own_secret: &StaticSecret) -> Self {
+        Self {
+            own_secret: own_secret.clone(),
+            own_pub: FixedBytes::from_array(PublicKey::from(own_secret).to_bytes()),
+            keks: HashMap::new(),
         }
-    });
-    let (nonce, ciphertext) =
-        aead::seal(plaintext.expose(), &ambre_core::Aad::of(KEK_DOMAIN), &kek)?;
-    Ok(WrappedKey { nonce, ciphertext })
+    }
+
+    /// The exchange key this wrapper wraps from.
+    #[must_use]
+    pub fn own_public(&self) -> FixedBytes<ExchangePublicKey> {
+        self.own_pub
+    }
+
+    /// The count of recipients whose key-encryption key the wrapper holds.
+    #[must_use]
+    pub fn recipients(&self) -> ambre_core::Count<Recipients> {
+        ambre_core::Count::of(self.keks.len())
+    }
+
+    /// Wraps `doc_key` for the holder of `peer_public`, as [`wrap_anchored`]
+    /// does. The first wrap for a recipient derives its key-encryption key,
+    /// and every later one reuses it.
+    ///
+    /// # Errors
+    ///
+    /// Every error of [`wrap_anchored`]. A refused recipient leaves nothing
+    /// held, so a later wrap for it fails the same way.
+    pub fn wrap(
+        &mut self,
+        peer_public: &FixedBytes<ExchangePublicKey>,
+        doc_key: &DocumentKey,
+        anchor: Option<&FixedBytes<EntryDigest>>,
+    ) -> Result<WrappedKey, CryptoError> {
+        let kek = match self.keks.entry(*peer_public) {
+            Entry::Occupied(held) => held.into_mut(),
+            Entry::Vacant(slot) => {
+                let shared = shared_secret(&self.own_secret, peer_public)?;
+                slot.insert(derive_kek(&shared, &self.own_pub, peer_public))
+            }
+        };
+        let plaintext = Secret::filled(|plain: &mut Vec<u8>| {
+            plain.reserve_exact(64);
+            plain.extend_from_slice(doc_key.as_bytes());
+            if let Some(anchor) = anchor {
+                plain.extend_from_slice(anchor.as_slice());
+            }
+        });
+        let (nonce, ciphertext) =
+            aead::seal(plaintext.expose(), &ambre_core::Aad::of(KEK_DOMAIN), kek)?;
+        Ok(WrappedKey { nonce, ciphertext })
+    }
 }
 
 /// Unwraps a [`WrappedKey`] sent by the holder of `peer_public`, using

@@ -16,7 +16,7 @@
 )]
 
 use ambre_core::{Aad, Confidential, EntryDigest, ExchangePublicKey, FixedBytes, Plaintext};
-use ambre_crypto::ecdh::{unwrap_anchored, wrap_anchored};
+use ambre_crypto::ecdh::{KeyWrapper, unwrap_anchored};
 use ambre_crypto::{DocumentKey, MasterSeed, envelope};
 use serde_json::{Value, json};
 use wasm_bindgen_test::{console_log, wasm_bindgen_test, wasm_bindgen_test_configure};
@@ -151,7 +151,9 @@ fn measure(channels: usize, members: usize, samples: usize) -> Value {
     );
 
     // The leave: the admin wraps the fresh space key and one fresh key per
-    // public channel for each member who stays.
+    // public channel for each member who stays. The space key takes a
+    // wrapper of its own, and every channel key shares one (`SYNC-264`), as
+    // the Sync worker does. So each sample derives every pair key again.
     let (admin, admin_pub) = member(0);
     let staying: Vec<_> = (1..members - 1).map(member).collect();
     let keys: Vec<DocumentKey> = (0..=channels).map(|_| DocumentKey::generate()).collect();
@@ -160,21 +162,35 @@ fn measure(channels: usize, members: usize, samples: usize) -> Value {
     let leave = spread(samples.min(5), wraps, |runs| {
         let start = now();
         for _ in 0..runs {
-            for key in &keys {
+            let mut space = KeyWrapper::new(&admin);
+            let mut channels = KeyWrapper::new(&admin);
+            for (index, key) in keys.iter().enumerate() {
+                let wrapper = if index == 0 {
+                    &mut space
+                } else {
+                    &mut channels
+                };
                 std::hint::black_box(
-                    wrap_anchored(&admin, &admin_pub, key, Some(&anchor)).expect("wrap own"),
+                    wrapper
+                        .wrap(&admin_pub, key, Some(&anchor))
+                        .expect("wrap own"),
                 );
                 for (_, public) in &staying {
-                    std::hint::black_box(
-                        wrap_anchored(&admin, public, key, Some(&anchor)).expect("wrap"),
-                    );
+                    std::hint::black_box(wrapper.wrap(public, key, Some(&anchor)).expect("wrap"));
                 }
             }
         }
         now() - start
     });
     let (last_secret, last_public) = staying.last().expect("one member stays");
-    let wrapped = wrap_anchored(&admin, last_public, &keys[channels], Some(&anchor)).expect("wrap");
+    // The member opens a wrap the shared wrapper made from a held pair key.
+    let mut shared = KeyWrapper::new(&admin);
+    shared
+        .wrap(last_public, &keys[0], Some(&anchor))
+        .expect("wrap");
+    let wrapped = shared
+        .wrap(last_public, &keys[channels], Some(&anchor))
+        .expect("wrap");
     let (unwrapped, read_anchor) =
         unwrap_anchored(last_secret, &admin_pub, &wrapped).expect("unwrap");
     assert_eq!(

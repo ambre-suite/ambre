@@ -59,6 +59,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-043` | `POST` | A member leaving a space MUST cause the rotation of the space key and of the key of each public channel. | this spec section 3; `ambre-spec-key-rotation.md` | `ambre_sync::space_rotation::tests::a_space_debt_is_paid_before_any_channel`; `::the_entries_an_older_space_key_sealed_are_rotated_once`; `::a_new_catalogue_keeps_the_rotations_running`; `ambre_sync::sharing::tests::a_public_channel_is_rekeyed_under_the_current_space_key`; `ambre_logic::spaces::tests::an_admin_hands_the_sealed_catalogue_to_sync` -- the space key first, then each public channel | none | verified |
 | `MURMURE-044` | `POST` | The catalogue MUST hold the rotated key of each public channel once the rotation completes. | this spec section 3 | `ambre_logic::spaces::tests::a_resealed_channel_writes_its_new_key_once`; `ambre_murmure::logic::space_tests::a_reseal_replaces_the_key_and_nothing_else` | none | verified |
 | `MURMURE-045` | `FRAME` | Leaving a space MUST NOT change a channel of the catalogue beyond its key. | this spec section 3 | `ambre_murmure::logic::space_tests::a_reseal_replaces_the_key_and_nothing_else`; `ambre_logic::spaces::tests::a_resealed_channel_writes_its_new_key_once` -- name, topic, category and place stay | none | verified |
+| `MURMURE-671` | `POST` | A space leave MUST derive the pair key of each member who stays once for all the public channels it re-keys. | this spec section 3; `SYNC-264` | `ambre_sync::sharing::tests::a_public_channel_is_rekeyed_under_the_current_space_key` -- a second channel of the same leave wraps for both members and derives no new pair key; `ambre_sync::space_rotation::tests::the_shared_wrapper_drops_once_no_channel_rotates` -- the channel rotations of one leave share one wrapper | none | verified |
 | `MURMURE-234` | `POST` | Leaving a space, or being removed from it, MUST remove the member from every channel of the space, private channels included. | this spec section 3; `SRV-136` | `ambre_server::routes::channels::tests::leaving_a_space_leaves_every_channel_of_it`; `::a_removal_from_a_space_leaves_every_channel_of_it` -- a leave and a removal by an owner, over a public, a shared private and a sole-member private channel | none | verified |
 | `MURMURE-235` | `POST` | Each private channel the member leaves that way MUST owe a rotation. | this spec section 3; `SYNC-127` | `ambre_server::routes::channels::tests::leaving_a_space_leaves_every_channel_of_it` -- the shared private channel owes a rotation, the public one owes none | none | verified |
 | `MURMURE-237` | `FRAME` | Leaving a space MUST NOT remove the member from a direct message or from a channel of another space. | this spec section 3 | `ambre_server::routes::channels::tests::leaving_a_space_keeps_direct_messages_and_other_spaces` -- a direct message and a channel of a second space keep the member | none | verified |
@@ -86,10 +87,11 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-317` | `FRAME` | Setting the retention MUST NOT change a key or a membership. | this spec section 3 | not built | unbuilt -- lands with the `Space retention` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** a leave costs one rotation per public channel, bounded by the space leave row of
-  `ambre-spec-budgets.md section 1`.
+  `ambre-spec-budgets.md section 1`. Each member who stays costs one exchange for all those
+  rotations (`MURMURE-671`).
 * **Boundary.** the catalogue and every key in it are sealed with the space document (`ZK-001`).
   The relay holds the public flag and the space of each channel (`ZK-015`).
-* **Verification.** 33 `verified`, 5 `unimplemented`. The engine, the Logic thread, the Sync worker
+* **Verification.** 34 `verified`, 5 `unimplemented`. The engine, the Logic thread, the Sync worker
   and the relay's database tier hold a new space, the catalogue and a signed self-join. The relay's
   database tier holds the leave and the delete, and the wasm tier the controls of the sidebar. The
   Sync worker and the Logic thread hold the key rotation on a leave. The guest and the retention are
@@ -167,6 +169,10 @@ interface states that range, never the duration alone (`MURMURE-302`).
 each public channel. Its Sync worker seals each new key under the new space key, and the catalogue
 takes the sealed value.
 
+The channel rotations of one leave share one wrapper, so the pair key of each member who stays is
+derived once (`MURMURE-671`). The leave then costs one exchange per member, and one AEAD seal per
+member for each channel.
+
 **The space log speaks from its latest entries.** A removal counts only while no later entry adds
 the member back (`MURMURE-479`). Its writers count at any point of its history. A link seals a key
 its signer already held, and the relay takes a rotation from a current admin alone. The space log
@@ -203,7 +209,7 @@ and accepts a self-join.
 | :--- | :--- | :--- |
 | A self-join is checked against the catalogue | trusting the public flag of the relay | the relay could flip a private channel to public and show a verified member |
 | A guest stays out of the space document | letting a guest read the catalogue | the catalogue holds every public key, so the guest would read every public channel |
-| One key per public channel | one key for every public channel of a space | a guest or a bot of one channel would read them all |
+| One key per public channel | one key for every public channel of a space | a guest or a bot of one channel would read them all. The leave holds its budget without it: the exchanges cost the leave, and one per member is enough (`MURMURE-671`) |
 | The catalogue lists public channels only | private channels in the catalogue | every member of the space reads the catalogue, so it would show each private channel |
 | The catalogue names a public channel | the name in the channel `meta` document | a member who has not joined holds no key for `meta`, so the channel to join would have no name |
 | The catalogue carries the sealed key | a member online to wrap the key | a join would wait on another member, and a space leave pays for the catalogue with a rotation |

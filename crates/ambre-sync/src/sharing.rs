@@ -11,7 +11,11 @@
 // selection, the `nonce || ciphertext` wire format, and best-effort rotation.
 // ============================================================================
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use ambre_crypto::DocumentKey;
+use ambre_crypto::ecdh::KeyWrapper;
 use ambre_protocol::{EntryDigest, MembershipAct};
 use ed25519_dalek::SigningKey;
 use serde::Serialize;
@@ -239,7 +243,7 @@ pub(crate) fn build_invite_request(
 /// Nothing is skipped in silence, and nothing is encrypted to a key that did
 /// not parse.
 pub(crate) fn rotate_entries_for(
-    my_xk: &StaticSecret,
+    wrapper: &mut KeyWrapper,
     new_doc_key: &DocumentKey,
     anchor: Option<FixedBytes<EntryDigest>>,
     log: &Log,
@@ -248,7 +252,7 @@ pub(crate) fn rotate_entries_for(
     Vec<http::RotateKeyEntry>,
     Vec<ambre_core::Validated<ambre_core::DisplayName>>,
 ) {
-    let own = own_exchange_key(my_xk);
+    let own = wrapper.own_public();
     let mut unwrapped = Vec::new();
     let entries = members
         .iter()
@@ -261,7 +265,15 @@ pub(crate) fn rotate_entries_for(
                 .copied()
                 .filter(|key| *key == own || log.exchange_key(m.user_id) == Some(*key));
             let wrapped = recipient.ok_or(()).and_then(|key| {
-                wrap_anchored_b64(my_xk, &key, new_doc_key, anchor).map_err(|_| ())
+                wrapper
+                    .wrap(&key, new_doc_key, anchor.as_ref())
+                    .map(|wrapped| {
+                        ambre_core::Encoded::<ambre_core::WrappedDocKey>::from_parts(
+                            &wrapped.nonce,
+                            &wrapped.ciphertext,
+                        )
+                    })
+                    .map_err(|_| ())
             });
             match wrapped {
                 Ok(doc_key_enc) => Some(http::RotateKeyEntry {
@@ -849,8 +861,13 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
             None => None,
             Some(Err(e)) => return failed(logic_tx, ApiRequest::RevokeFromDocument, e),
         };
-        let (keys, unwrapped) =
-            rotate_entries_for(&p.exchange_key, &new_doc_key, anchor, &log, &staying);
+        let (keys, unwrapped) = rotate_entries_for(
+            &mut KeyWrapper::new(&p.exchange_key),
+            &new_doc_key,
+            anchor,
+            &log,
+            &staying,
+        );
         let body = http::RevokeRequest {
             user_id: p.user_id,
             keys,
@@ -1386,8 +1403,13 @@ pub(crate) async fn settle_task<H: ShareHttp>(
             Ok(link) => link,
             Err(e) => return unsettled(e.to_string()),
         };
-        let (keys, unwrapped) =
-            rotate_entries_for(&p.exchange_key, &new_doc_key, anchor, &log, &resp.members);
+        let (keys, unwrapped) = rotate_entries_for(
+            &mut KeyWrapper::new(&p.exchange_key),
+            &new_doc_key,
+            anchor,
+            &log,
+            &resp.members,
+        );
         if !unwrapped.is_empty() {
             tracing::warn!(
                 "Sync: the owed rotation skips {} member(s) with an unreadable key",
@@ -1437,6 +1459,8 @@ pub(crate) struct RotateChannelParams {
     pub anchor: FixedBytes<EntryDigest>,
     /// The current space key, which seals the new catalogue entry.
     pub space_key: DocumentKey,
+    /// The wrapper every channel of the space rotation shares (`SYNC-264`).
+    pub wrapper: Rc<RefCell<KeyWrapper>>,
 }
 
 /// Rotates the key of a public channel after a rotation of its space (the
@@ -1492,13 +1516,16 @@ async fn rotate_channel<H: ShareHttp>(
         );
         // The link signs the head of meta's log this try read (`SYNC-204`).
         let (_, text) = link_to(meta, &p.previous, &new_key, log.next(), &p.signing_key)?;
-        let (keys, unwrapped) = rotate_entries_for(
-            &p.exchange_key,
-            &new_key,
-            Some(p.anchor),
-            &log,
-            &resp.members,
-        );
+        // Every channel of one leave wraps through one wrapper, so each
+        // member costs one exchange for the whole leave (`SYNC-264`). The
+        // borrow ends before the next await, so a refusal never happens.
+        let entries = |wrapper: &mut KeyWrapper| {
+            rotate_entries_for(wrapper, &new_key, Some(p.anchor), &log, &resp.members)
+        };
+        let (keys, unwrapped) = match p.wrapper.try_borrow_mut() {
+            Ok(mut held) => entries(&mut held),
+            Err(_) => entries(&mut KeyWrapper::new(&p.exchange_key)),
+        };
         if !unwrapped.is_empty() {
             tracing::warn!(
                 "Sync: the channel rotation skips {} member(s) with an unreadable key",
@@ -1898,7 +1925,8 @@ mod tests {
         ]);
         let rows = [me(), alice(), bob, mallory];
         let new_key = DocumentKey::generate();
-        let (entries, unwrapped) = rotate_entries_for(&my_xk, &new_key, None, &log, &rows);
+        let (entries, unwrapped) =
+            rotate_entries_for(&mut KeyWrapper::new(&my_xk), &new_key, None, &log, &rows);
         let wrapped: Vec<_> = entries.iter().map(|e| e.user_id).collect();
         assert_eq!(wrapped, [me().user_id, alice().user_id]);
         let names: Vec<_> = unwrapped.iter().map(|n| n.as_str().to_owned()).collect();
@@ -1916,8 +1944,13 @@ mod tests {
             &[],
             crate::membership_log::no_self_join,
         );
-        let (entries, unwrapped) =
-            rotate_entries_for(&my_xk, &new_key, None, &unanchored, &[me(), alice()]);
+        let (entries, unwrapped) = rotate_entries_for(
+            &mut KeyWrapper::new(&my_xk),
+            &new_key,
+            None,
+            &unanchored,
+            &[me(), alice()],
+        );
         assert_eq!(
             entries.iter().map(|e| e.user_id).collect::<Vec<_>>(),
             [me().user_id]
@@ -1954,7 +1987,7 @@ mod tests {
             }
             let log = crate::membership_log::tests::signing(&signed);
             let (entries, unwrapped) =
-                rotate_entries_for(&my_xk, &DocumentKey::generate(), None, &log, &rows);
+                rotate_entries_for(&mut KeyWrapper::new(&my_xk), &DocumentKey::generate(), None, &log, &rows);
             let wrapped: Vec<_> = entries.iter().map(|e| e.user_id).collect();
             proptest::prop_assert_eq!(&wrapped, &expected);
             proptest::prop_assert_eq!(wrapped.len() + unwrapped.len(), rows.len());
@@ -1978,7 +2011,8 @@ mod tests {
             member("33333333-3333-3333-3333-333333333333", b_pub),
         ];
         let log = signed_by_the_log(&members);
-        let (entries, unwrapped) = rotate_entries_for(&my_xk, &new_key, None, &log, &members);
+        let (entries, unwrapped) =
+            rotate_entries_for(&mut KeyWrapper::new(&my_xk), &new_key, None, &log, &members);
 
         // The member the wrap refuses is returned for the report; the two
         // valid ones are wrapped (`SYNC-043`).
@@ -2026,8 +2060,13 @@ mod tests {
             (answer.members[0].user_id, a_pub),
             (answer.members[1].user_id, keypair(3).1),
         ]);
-        let (entries, unwrapped) =
-            rotate_entries_for(&my_xk, &new_key, None, &log, &answer.members);
+        let (entries, unwrapped) = rotate_entries_for(
+            &mut KeyWrapper::new(&my_xk),
+            &new_key,
+            None,
+            &log,
+            &answer.members,
+        );
         assert_eq!(entries.len(), 1);
         assert_eq!(
             entries[0].user_id,
@@ -3571,11 +3610,12 @@ mod tests {
             Ok(head),
             Ok(one),
             Err(changed),
-            Ok(two),
+            Ok(two.clone()),
             Ok(serde_json::json!({ "status": "rotated" })),
         ]);
         let (etx, erx, _sink, _lrx) = channels();
         let (previous, space_key) = (DocumentKey::generate(), DocumentKey::generate());
+        let wrapper = Rc::new(RefCell::new(KeyWrapper::new(&my_xk)));
         let params = RotateChannelParams {
             space_id,
             channel_id,
@@ -3586,6 +3626,7 @@ mod tests {
             previous: previous.clone(),
             anchor,
             space_key: space_key.clone(),
+            wrapper: Rc::clone(&wrapper),
         };
         rotate_channel_task(&http, params, &etx).await;
         let SyncEvent::ChannelRotated {
@@ -3621,6 +3662,42 @@ mod tests {
                 other => panic!("expected the rotate POST, got {other:?}"),
             }
         }
+        // `SYNC-264`: two reads of the members, one exchange per member.
+        assert_eq!(wrapper.borrow().recipients().get(), 2);
+
+        // A second channel of the same leave wraps for the same members, and
+        // the wrapper derives no new pair key.
+        let second = Id::<Channel>::mint();
+        let http = FakeHttp::new(vec![
+            Ok(serde_json::json!({
+                "meta_id": meta.to_string(), "role": "editor", "length": 1,
+            })),
+            Ok(two.clone()),
+            Ok(serde_json::json!({ "status": "rotated" })),
+        ]);
+        let params = RotateChannelParams {
+            space_id,
+            channel_id: second,
+            url_scheme: crate::http::UrlScheme::Https,
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
+            exchange_key: my_xk.clone(),
+            signing_key: MasterSeed::from_array([9; 32]).derive_signing_key(),
+            previous: previous.clone(),
+            anchor,
+            space_key: space_key.clone(),
+            wrapper: Rc::clone(&wrapper),
+        };
+        rotate_channel_task(&http, params, &etx).await;
+        let Ok(SyncEvent::ChannelRotated { result: Ok(_), .. }) = erx.try_recv() else {
+            panic!("expected the second channel rotated");
+        };
+        match &http.calls()[2] {
+            Call::Post(_, body) => {
+                assert_eq!(body["keys"].as_array().unwrap().len(), 2, "both members");
+            }
+            other => panic!("expected the rotate POST, got {other:?}"),
+        }
+        assert_eq!(wrapper.borrow().recipients().get(), 2, "no new exchange");
 
         // A refusal ends the rotation with its error.
         let http = FakeHttp::new(vec![Err(http::HttpError::Local(
@@ -3636,6 +3713,7 @@ mod tests {
             previous,
             anchor,
             space_key,
+            wrapper,
         };
         rotate_channel_task(&http, params, &etx).await;
         assert!(matches!(
@@ -3690,6 +3768,7 @@ mod tests {
             previous: DocumentKey::generate(),
             anchor: FixedBytes::from_array([5; 32]),
             space_key: DocumentKey::generate(),
+            wrapper: Rc::new(RefCell::new(KeyWrapper::new(&my_xk))),
         };
         let mut script = vec![Ok(head.clone())];
         for _ in 0..ROTATION_TRIES {

@@ -54,7 +54,7 @@ The budgets the pages measure stay rows of `ambre-spec-budgets.md`, and no row h
 | `murmure` | the same | the last delta read as a Loro JSON update, its operations counted | Murmure authorship check |
 | `crypto` | `crates/ambre-crypto/tests/phone_bench.rs` | one seal of 1 KB | Outbound encryption 1 KB |
 | `crypto` | the same | one open of 1 KB | Inbound decryption 1 KB |
-| `crypto` | the same | 51 keys wrapped for 199 members, 10 149 wraps | Murmure space leave |
+| `crypto` | the same | 51 keys wrapped for 199 members, 10 149 wraps through two wrappers | Murmure space leave |
 
 * **The corpus.** The criterion bench `segment` and the `murmure` page include one file:
   `crates/ambre-murmure/benches/common/segment.rs`. It builds a segment of 20 writers, one delta per
@@ -69,8 +69,9 @@ The budgets the pages measure stay rows of `ambre-spec-budgets.md`, and no row h
   * `holds` compares the 95th percentile with the target of the row.
 
 * **The space leave.** It times the wraps alone: one per remaining member for the space key and for
-  each of the 50 public channel keys. The row counts "about 10 000 key exchanges", so the wraps are
-  its floor. The page leaves out the relay round trips and the reading of the membership log.
+  each of the 50 public channel keys. The space key takes a wrapper of its own, and the channel keys
+  share one, as the Sync worker does (`MURMURE-671`). Each sample derives every pair key again. The
+  page leaves out the relay round trips and the reading of the membership log.
 
 * **The line.** Each page prints `PHONE-MEASURE` and one JSON object on the page. The object carries
   the user agent, the clock step the page read, the sizes measured and one entry per figure.

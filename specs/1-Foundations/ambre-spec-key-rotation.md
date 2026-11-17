@@ -28,6 +28,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-115` | `INV` | Every document key MUST be named by an identifier derived from the key itself. | this spec section 3 | `ambre_crypto::tests::a_key_id_is_derived_from_the_key` -- one key gives one identifier, another key another, and the key's bytes are not in it | none | verified |
 | `SYNC-116` | `INV` | Every rotation MUST leave a link that seals the previous key under the new one, except a rotation that records a history boundary. | this spec section 3 | `ambre_sync::sharing::tests::a_revoke_posts_the_removal_and_the_copies_in_one_request` -- the revoke's link opens under the new key to the key it replaced; `ambre_sync::sharing::tests::an_owed_rotation_is_paid_for_every_member` -- so does the link of a paid debt; `ambre_crypto::tests::a_previous_key_opens_under_the_next_one_and_no_other` -- the seal opens under the next key alone | none | verified |
 | `SYNC-117` | `INV` | The relay MUST keep every link of a document for as long as the document exists. | this spec section 3; `ZK-007` | `ambre_server::routes::tests::handler_tests::the_relay_keeps_every_link_in_rotation_order` -- three rotations leave three links, served back to a member in the order they landed | none | verified |
+| `SYNC-264` | `INV` | A wrap made from a pair key the wrapper holds MUST open to the same key and anchor as a wrap made from the two exchange keys. | this spec section 3; `SYNC-104` | `ambre_crypto::tests::a_held_pair_key_wraps_as_a_fresh_exchange_does` -- three keys for three members, one exchange per member; `ambre_crypto::tests::prop_a_held_pair_key_opens_under_the_plain_unwrap` -- for any two keys and any anchor; `ambre_crypto::tests::a_wrapper_holds_no_key_for_a_refused_recipient` -- a low-order key is refused on each wrap | none | verified |
+| `SYNC-265` | `INV` | A pair key MUST be wiped once no rotation that shares it runs. | this spec section 3; `ZK-019` | type-level -- each pair key is a `DocumentKey` over an `ambre_core::Secret`, which wipes it on drop; `ambre_sync::space_rotation::tests::the_shared_wrapper_drops_once_no_channel_rotates` -- the wrapper drops at the last answer, success or failure | none | verified |
 
 ### 1.2 Remove a member
 
@@ -88,13 +90,14 @@ A member who leaves cannot choose the key the others keep. The rotation is owed 
 | `SYNC-142` | `FRAME` | The sharing screen MUST NOT offer an owner a departure. | this spec section 3 | `ambre_app::shell::share::tests::an_owner_is_offered_no_departure` -- the owner's own row carries no departure; `ambre_app::shell::share::tests::each_row_offers_the_action_its_owner_may_take` -- the owner's row offers nothing | none | verified |
 
 * **Budget.** one elliptic-curve operation per remaining member, charged to the crypto rows of
-  `ambre-spec-budgets.md section 1`, which a full snapshot seal joins once `SYNC-048` lands. The
-  cache of previous keys and the unconfirmed updates are rows of `ambre-spec-budgets.md section 6`.
-  A step back along the chain costs one small open and one signature check.
+  `ambre-spec-budgets.md section 1`, which a full snapshot seal joins once `SYNC-048` lands. A space
+  leave pays it once per member (`SYNC-264`). The cache of previous keys and the unconfirmed updates
+  are rows of `ambre-spec-budgets.md section 6`. A step back along the chain costs one small open
+  and one signature check.
 * **Boundary.** every wrapped copy crosses the relay and the relay can open none of them
   (`SYNC-010`). What it learns is that a document was re-keyed and by whom, which is the membership
   metadata `ambre-spec-zero-knowledge.md` accepts. It holds each link too, and opens none.
-* **Verification.** 34 `verified`, 1 `unimplemented`. The relay half holds, as do the key wipe, the
+* **Verification.** 36 `verified`, 1 `unimplemented`. The relay half holds, as do the key wipe, the
   open by name, the one-request revoke, the departure's debt and the chain. The notice follows the
   stored copies, and each rotation this client makes reaches Logic.
 
@@ -150,6 +153,15 @@ key never leaves the Sync worker.
    the relay refuses the whole request and the client starts again at step 1 (`SYNC-143`);
 5. move the previous key into the cache, install the new one, and report the revoke done;
 6. seal a fresh snapshot under the new key (`SYNC-048`).
+
+**A pair key serves many wraps.** A wrap seals the key under a pair key, which HKDF derives from
+the exchange between the wrapper and the recipient. The pair key depends on the two exchange keys
+alone, so the same wrapper derives the same pair key for every document. A space leave re-keys every
+public channel for the same members. The Sync worker therefore shares one wrapper across the channel
+rotations of one leave, and derives each pair key once (`SYNC-264`).
+
+Each wrap still draws its own nonce, so the copies on the wire keep their form. The wrapper drops
+when the last channel rotation answers, and every pair key it holds is wiped with it (`SYNC-265`).
 
 **An invitation racing a rotation.** Both take the document's lock on the relay, so one lands
 first. If the invitation does, the rotation that read the members before it is refused and read
@@ -305,6 +317,7 @@ is for the members who stay, and it reports no departure (`SYNC-081`).
 | History is not re-keyed | re-sealing every stored snapshot on every rotation | a snapshot from before the rotation is what the removed member already read, so re-sealing it protects nothing and costs a full upload per rotation |
 | A rotation wraps for the exchange keys the log signs | wrapping for every row the relay serves | the relay alone marks a rotation owed, and a writer pays it with no prompt. A row the relay adds would then receive the next key, and every older key through the chain (`SYNC-198`) |
 | A row no entry signs is left out and reported | refusing the whole rotation | a revoke must land for the members who stay. One row the relay adds would hold back the removal of a member, which is the guarantee the rotation exists for |
+| A space leave derives each pair key once | one key for every public channel of a space | the exchanges cost the leave, and the key count does not. A shared key would let a guest or a bot of one channel read every public channel |
 | The Logic thread is not involved | the Logic thread orchestrating the steps and asking the worker for each one | it does no cryptography and no network by design, and a rotation is both. Keeping it out means the key never crosses the boundary, which is the whole reason the boundary is there |
 
 ---

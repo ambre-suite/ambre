@@ -137,6 +137,7 @@
 | key rotation | replacing a document key, and what follows | | `1-Foundations/ambre-spec-key-rotation.md` |
 | key chain | the links that seal each older document key under the next one | | `1-Foundations/ambre-spec-key-rotation.md` |
 | key identifier | the hash that names a document key without revealing it | | `1-Foundations/ambre-spec-key-rotation.md` |
+| pair key | the key two exchange keys derive to seal each wrap between them | | `1-Foundations/ambre-spec-key-rotation.md` |
 | fingerprint | the readable digest of a public key | | `1-Foundations/ambre-spec-key-verification.md` |
 | machine member | a program holding the document key, bound by its role | | `1-Foundations/ambre-spec-machine-access.md` |
 | inbox | the write-only drop box of one document | | `1-Foundations/ambre-spec-machine-access.md` |

@@ -474,6 +474,55 @@ fn the_log_anchor_travels_sealed_with_the_key() {
     assert!(ecdh::unwrap_anchored(&bob, &alice_pub, &tampered).is_err());
 }
 
+/// Holds `SYNC-264` at the primitive. A wrapper wraps many keys for one
+/// recipient from one exchange. Each wrap opens to its key and its anchor
+/// under the plain unwrap, as a fresh wrap does.
+#[test]
+fn a_held_pair_key_wraps_as_a_fresh_exchange_does() {
+    let alice = MasterSeed::from_array([0x01; 32]).derive_exchange_key();
+    let alice_pub = FixedBytes::<ambre_core::ExchangePublicKey>::from_array(
+        x25519_dalek::PublicKey::from(&alice).to_bytes(),
+    );
+    let members: Vec<_> = (2u8..5)
+        .map(|byte| MasterSeed::from_array([byte; 32]).derive_exchange_key())
+        .collect();
+    let anchor = FixedBytes::<EntryDigest>::from_array([0x66; 32]);
+    let mut wrapper = ecdh::KeyWrapper::new(&alice);
+    assert_eq!(wrapper.own_public(), alice_pub);
+    for byte in [0x10u8, 0x20, 0x30] {
+        let doc_key = DocumentKey::from_array([byte; 32]);
+        for member in &members {
+            let member_pub = FixedBytes::<ambre_core::ExchangePublicKey>::from_array(
+                x25519_dalek::PublicKey::from(member).to_bytes(),
+            );
+            let wrapped = wrapper.wrap(&member_pub, &doc_key, Some(&anchor)).unwrap();
+            let (key, read) = ecdh::unwrap_anchored(member, &alice_pub, &wrapped).unwrap();
+            assert_eq!(key.as_bytes(), doc_key.as_bytes());
+            assert_eq!(read, Some(anchor));
+        }
+    }
+    // Three keys for three members: one exchange per member.
+    assert_eq!(wrapper.recipients().get(), 3);
+    assert!(!format!("{wrapper:?}").contains("Secret"));
+}
+
+/// Holds `SYNC-264` on a refusal. A low-order recipient is refused on each
+/// wrap, and the wrapper holds no key for it.
+#[test]
+fn a_wrapper_holds_no_key_for_a_refused_recipient() {
+    let alice = MasterSeed::from_array([0x01; 32]).derive_exchange_key();
+    let low_order = FixedBytes::<ambre_core::ExchangePublicKey>::from_array([0; 32]);
+    let mut wrapper = ecdh::KeyWrapper::new(&alice);
+    let doc_key = DocumentKey::from_array([0x55; 32]);
+    for _ in 0..2 {
+        assert!(matches!(
+            wrapper.wrap(&low_order, &doc_key, None),
+            Err(CryptoError::WeakPublicKey)
+        ));
+    }
+    assert_eq!(wrapper.recipients().get(), 0);
+}
+
 /// Holds `SRV-226` against the primitives. Each length the wire reads for a
 /// wrapped key is the length a wrap writes. A change of layout fails here,
 /// rather than at every relay read.
@@ -722,6 +771,33 @@ fn a_media_address_needs_the_document_key() {
 // -- Property tests ----------------------------------------------------------
 
 proptest! {
+    /// `SYNC-264`: for any two keys wrapped in turn for one recipient, the
+    /// second wrap, made from the held pair key, opens to its own key.
+    #[test]
+    fn prop_a_held_pair_key_opens_under_the_plain_unwrap(
+        first in any::<[u8; 32]>(),
+        second in any::<[u8; 32]>(),
+        anchor in any::<[u8; 32]>(),
+    ) {
+        let alice = fixed_seed().derive_exchange_key();
+        let alice_pub = FixedBytes::<ambre_core::ExchangePublicKey>::from_array(
+            x25519_dalek::PublicKey::from(&alice).to_bytes(),
+        );
+        let bob = MasterSeed::from_array([0x02; 32]).derive_exchange_key();
+        let bob_pub = FixedBytes::<ambre_core::ExchangePublicKey>::from_array(
+            x25519_dalek::PublicKey::from(&bob).to_bytes(),
+        );
+        let anchor = FixedBytes::<EntryDigest>::from_array(anchor);
+        let mut wrapper = ecdh::KeyWrapper::new(&alice);
+        wrapper.wrap(&bob_pub, &DocumentKey::from_array(first), None).unwrap();
+        let wrapped = wrapper
+            .wrap(&bob_pub, &DocumentKey::from_array(second), Some(&anchor))
+            .unwrap();
+        let (key, read) = ecdh::unwrap_anchored(&bob, &alice_pub, &wrapped).unwrap();
+        prop_assert_eq!(key.as_bytes(), &second);
+        prop_assert_eq!(read, Some(anchor));
+    }
+
     #[test]
     fn prop_roundtrip_encrypt_decrypt(data in any::<Vec<u8>>(), key in any::<[u8; 32]>()) {
         let doc_key = DocumentKey::from_array(key);
