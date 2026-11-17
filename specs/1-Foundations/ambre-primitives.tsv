@@ -2,6 +2,7 @@
 # One line per site that keeps a bare primitive. Add a line by hand only; a reviewer reads it (ARCH-035).
 # Answer the five questions of ai/ambre-rust-style.md ("A type is the default") before adding a line.
 key	category	note
+ambre-app | src/account.rs | crate::account | KeysSignals::is_open() | ret | bool	generic	predicate result
 ambre-app | src/doc_list.rs | crate::doc_list | Recency::heading() | ret | &'static str	free-text	the display label of a band of the document list, which a person reads and no code matches back
 ambre-app | src/doc_list.rs | crate::doc_list | arrange(query) | param | &str	free-text	the search a person types into the launcher: free text with no rule, matched as the palette matches its query
 ambre-app | src/host/cell.rs | crate::host::cell | Bound.listeners | field | Vec<Listener>	foreign-api	the DOM event name each closure was added under, which removeEventListener takes as &str
@@ -3011,6 +3012,7 @@ ambre-core | src/secret.rs | crate::secret | Credential<K>::matches() | ret | bo
 ambre-core | src/secret.rs | crate::secret | Credential<AccessToken>::present_bearer(read) | param | impl FnOnce(&str)->R	generic	lends the bearer header value to the one foreign call that sets it (ARCH-049)
 ambre-core | src/secret.rs | crate::secret | Credential<AccessToken>::present_bearer::SCHEME | const | &str	foreign-api	the Bearer scheme of the HTTP Authorization header
 ambre-core | src/secret.rs | crate::secret | Credential<OidcState>::present_state(store) | param | impl FnOnce(&str)->R	generic	lends the state text to the one foreign call that stores it (ARCH-049)
+ambre-core | src/secret.rs | crate::secret | Confidential<RecoveryWords>::present_words(show) | param | impl FnOnce(&str)->R	generic	lends the recovery words to the one foreign call that writes them on the setup screen (ARCH-049, CHROME-099)
 ambre-core | src/secret.rs | crate::secret | Credential<PresignedUrl>::object_address() | ret | &str	newtype-inner	the object address before the signed query, for a log or an error
 ambre-core | src/secret.rs | crate::secret | Credential<PresignedUrl>::present_link(send) | param | impl FnOnce(&str)->R	generic	lends the signed address to the one foreign call that fetches it (ARCH-049)
 ambre-crypto | src/ecdh.rs | crate::ecdh | SharedSecret.0 | field | Secret<[u8;32]>	newtype-inner	newtype field, constructor or accessor

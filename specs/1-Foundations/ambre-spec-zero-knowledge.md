@@ -268,7 +268,8 @@ The relay takes `ed25519-dalek` directly, for signatures alone (`SRV-012`). Ever
     of the relay and of the SFU alone (`ARCH-045`, `ARCH-048`). A crate outside them calls a
     typed method:
     `MasterSeed::recovery_words`, `MasterSeed::from_recovery_words`, `MasterSeed::open_from_storage`,
-    `Credential<AccessToken>::present_bearer`, `Confidential<Plaintext>::with_plaintext`,
+    `Credential<AccessToken>::present_bearer`, `Confidential<RecoveryWords>::present_words`,
+    `Confidential<Plaintext>::with_plaintext`,
     `Confidential<Plaintext>::into_plaintext`, `seal_row` and `seal_file`. A sink that lends the text to one
     foreign call is named in the file of that call alone (`ARCH-049`). Only the Secret module names
     `zeroize` (`ARCH-046`). Code outside it that wipes a buffer does so through `Secret::wipe`.

@@ -86,6 +86,10 @@ use wasm_bindgen::JsCast;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
+/// The account keys on the launcher: the setup, the recovery words and the
+/// recovery.
+#[cfg(target_arch = "wasm32")]
+mod account;
 /// The selection anchor, mirrored from the canvas into the chrome.
 #[cfg(target_arch = "wasm32")]
 mod anchor;
@@ -228,6 +232,8 @@ struct Wiring {
     /// Set by the landing's file picker with a plaintext `.ambre` container.
     /// The relay polls it and stores the payload sealed (`RESID-025`).
     opened_file: RwSignal<Option<platform::OpenedFile>>,
+    /// The keys faces of the launcher: the setup, the words and the recovery.
+    keys: account::KeysSignals,
     /// Role selected in the invite form, carried across the two-phase invite. The
     /// phase-1 `FetchInviteeKey` does not carry it, so both the confirm path and
     /// the auto-proceed (Trusted) path grant the intended role.
@@ -607,6 +613,7 @@ pub fn main() {
     let tofu_prompt = RwSignal::new(None::<TofuPrompt>);
     let tofu_confirm = RwSignal::new(None::<TofuPrompt>);
     let opened_file = RwSignal::new(None::<platform::OpenedFile>);
+    let keys = account::KeysSignals::new();
     let invite_role = RwSignal::new(Role::Editor);
     let invite_link = RwSignal::new(None::<shell::InviteLink>);
     let me = RwSignal::new(None::<Id<User>>);
@@ -936,6 +943,7 @@ pub fn main() {
         tofu_prompt,
         tofu_confirm,
         opened_file,
+        keys,
         invite_role,
         invite_link,
         me,
@@ -1276,6 +1284,10 @@ pub fn main() {
                     })),
                     switchboard::Effect::Classify(prompt) => classify_against_pin(prompt),
                     switchboard::Effect::Status(status) => chrome_status.set(status),
+                    switchboard::Effect::OweSetup => keys.owe_setup(),
+                    switchboard::Effect::ShowWords(words) => keys.show_words(words.clone()),
+                    switchboard::Effect::Refused(cause) => keys.refuse(cause),
+                    switchboard::Effect::CloseKeys => keys.close(),
                 }
             }
             match switchboard::destination(ev) {

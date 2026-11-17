@@ -78,6 +78,9 @@ pub struct LandingSignals {
     pub toasts: Toasts,
     /// Where a plaintext `.ambre` container goes once read: the switchboard stores its payload sealed (`RESID-025`).
     pub opened_file: RwSignal<Option<crate::platform::OpenedFile>>,
+    /// The face of the account keys, which covers the sign-in panel and the
+    /// list while it is open (`ambre-spec-launcher.md` section 1.6).
+    pub keys: crate::account::KeysSignals,
 }
 
 /// The landing overlay view. `to_logic` lets the dev sign-in panel dispatch
@@ -94,6 +97,7 @@ pub fn landing_view(
         booted,
         toasts,
         opened_file,
+        keys,
     } = signals;
 
     // New document (`ambre-spec-launcher.md`): the app-agnostic type picker hands
@@ -147,6 +151,7 @@ pub fn landing_view(
     let to_logic_cards = to_logic.clone();
     let to_logic_signin = to_logic.clone();
     let to_logic_signout = to_logic.clone();
+    let to_logic_keys = to_logic.clone();
 
     let confirm_delete = {
         let to_logic = to_logic.clone();
@@ -191,17 +196,20 @@ pub fn landing_view(
             </header>
 
             // Signed in: the document list.
-            <Show when=move || username.get().is_some()>
+            <Show when=move || username.get().is_some() && !keys.is_open()>
                 {document_list(docs, to_logic_cards.clone(), pending_delete, booted, toasts)}
             </Show>
 
             // Signed out: the sign-in panel (dev field or OIDC button).
-            <Show when=move || username.get().is_none()>
+            <Show when=move || username.get().is_none() && !keys.is_open()>
                 {
                     let to_logic = to_logic_signin.clone();
-                    move || sign_in_panel(dev_mode, to_logic.clone())
+                    move || sign_in_panel(dev_mode, keys, to_logic.clone())
                 }
             </Show>
+
+            // The setup, the recovery words or the recovery, over both.
+            {crate::account::keys_view(keys, to_logic_keys)}
 
             <DeleteConfirm pending=pending_delete on_confirm=confirm_delete />
 
@@ -659,6 +667,7 @@ fn sign_out_control(to_logic: crate::outbox::ShellOutbox) -> impl IntoView {
 
 fn sign_in_panel(
     dev_mode: RwSignal<Option<SignInMode>>,
+    keys: crate::account::KeysSignals,
     to_logic: crate::outbox::ShellOutbox,
 ) -> impl IntoView {
     move || match dev_mode.get() {
@@ -708,6 +717,21 @@ fn sign_in_panel(
                     />
                     <button class="ambre-signin-btn" on:click=move |_| go()>
                         "Enter"
+                    </button>
+                    // A development relay answers the setup with no provider,
+                    // so these two reach the keys faces a provider sign-in
+                    // reaches in a deployment (`CHROME-098`).
+                    <button
+                        class="ambre-signin-link ambre-signin-setup"
+                        on:click=move |_| keys.open(crate::account::KeysFace::Setup)
+                    >
+                        "Set up an account with a passphrase"
+                    </button>
+                    <button
+                        class="ambre-signin-link ambre-signin-recover"
+                        on:click=move |_| keys.open(crate::account::KeysFace::Recover)
+                    >
+                        "Recover an account with its recovery words"
                     </button>
                 </div>
             }
@@ -934,7 +958,11 @@ mod tests {
         let before = web_sys::window().unwrap().location().href().unwrap();
 
         let container = mount_in_container(move || {
-            sign_in_panel(dev_mode, crate::outbox::ShellOutbox::new(tx))
+            sign_in_panel(
+                dev_mode,
+                crate::account::KeysSignals::new(),
+                crate::outbox::ShellOutbox::new(tx),
+            )
         });
         let button = container
             .query_selector(".ambre-signin-btn")
@@ -1099,7 +1127,11 @@ mod tests {
         >::of::<8>());
         let dev_mode = RwSignal::new(None);
         let container = mount_in_container(move || {
-            sign_in_panel(dev_mode, crate::outbox::ShellOutbox::new(tx))
+            sign_in_panel(
+                dev_mode,
+                crate::account::KeysSignals::new(),
+                crate::outbox::ShellOutbox::new(tx),
+            )
         });
         let routes = |c: &web_sys::Element| {
             (

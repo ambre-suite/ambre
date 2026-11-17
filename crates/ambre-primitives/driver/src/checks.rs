@@ -50,6 +50,7 @@ const SINKS: &[(&str, &[&str])] = &[
     ("present_bearer", &["crates/ambre-sync/src/http.rs"]),
     ("present_link", &["crates/ambre-sync/src/http.rs"]),
     ("present_state", &["crates/ambre-app/src/signin.rs"]),
+    ("present_words", &["crates/ambre-app/src/account.rs"]),
     (
         "refresh_key",
         &[

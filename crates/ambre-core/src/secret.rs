@@ -298,6 +298,16 @@ impl ConfidentialKind for RecoveryWords {
 
 impl WireConfidential for RecoveryWords {}
 
+impl Confidential<RecoveryWords> {
+    /// Lends the words to `show`, the one call that writes them on the setup
+    /// screen, once (`ambre-spec-launcher.md`, `CHROME-099`). The words stay
+    /// under the wrapper, which wipes them when the last copy drops. The
+    /// primitive gate admits this name in that one file (`ARCH-049`).
+    pub fn present_words<R>(&self, show: impl FnOnce(&str) -> R) -> R {
+        show(self.secret.expose())
+    }
+}
+
 /// The role of a plaintext on its way to or from a seal. It crosses the
 /// interface, the Logic worker and the Sync worker. `Confidential<Plaintext>`.
 ///

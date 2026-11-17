@@ -2284,6 +2284,87 @@ input[type="radio"] {
     filter: brightness(1.1);
 }
 
+.ambre-signin-link {
+    border: 0;
+    background: none;
+    color: var(--accent);
+    font-size: var(--font-body);
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+/* -- Account keys: the setup, the recovery words, the recovery ------------- */
+.ambre-keys {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    width: 100%;
+    max-width: 480px;
+    margin: 0 auto;
+    padding: var(--space-24) var(--space-8);
+}
+
+.ambre-keys h2 {
+    font-size: var(--font-heading);
+    font-weight: 600;
+}
+
+.ambre-keys-note {
+    color: var(--text-dim);
+}
+
+.ambre-keys input,
+.ambre-keys textarea {
+    padding: var(--space-4) var(--space-6);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+    font-size: var(--font-body);
+}
+
+.ambre-keys-refusal:empty {
+    display: none;
+}
+
+.ambre-keys-refusal {
+    color: var(--error);
+}
+
+.ambre-recovery-words {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-4) var(--space-8);
+    padding-left: var(--space-12);
+    font-family: monospace;
+}
+
+.ambre-keys-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-6);
+}
+
+.ambre-keys-submit {
+    padding: var(--space-4) var(--space-8);
+    border: 0;
+    border-radius: var(--radius);
+    background: var(--accent);
+    color: var(--bg);
+    font-size: var(--font-body);
+    cursor: pointer;
+}
+
+.ambre-keys-cancel {
+    padding: var(--space-4) var(--space-8);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: none;
+    color: var(--text);
+    font-size: var(--font-body);
+    cursor: pointer;
+}
+
 /* ---------------------------------------------------------------------------
    Shared filter popover (trame-shared-filter): anchored under the active column
    header, with a "by values" checkbox list and a "by condition" op+value form.

@@ -245,6 +245,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         tofu_prompt,
         tofu_confirm,
         opened_file,
+        keys,
         invite_role,
         invite_link,
         me,
@@ -658,6 +659,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         booted,
         toasts,
         opened_file,
+        keys,
     };
     let landing_tx = to_logic.clone();
 

@@ -17,13 +17,14 @@ use std::collections::{HashMap, VecDeque};
 
 use ambre_bus::conduit::{Sender, TrySendError};
 use ambre_bus::sync_warning::SyncWarningCode;
-use ambre_bus::{DocumentSummary, MemberInfo, RestCommand, RestEvent, Role};
+use ambre_bus::{AuthFailure, DocumentSummary, KeySetup, MemberInfo, RestCommand, RestEvent, Role};
 use ambre_canvas::{PerfPublisher, PerfSnapshot};
 use ambre_chrome::ToastKind;
 use ambre_core::id::{Channel, Document, Id, User};
 use ambre_core::{
-    Authored, Credential, DisplayName, ExchangePublicKey, FixedBytes, FracMs, Instant, InviterPin,
-    OidcState, Opaque, PageLoad, Payload, PlaintextContainer, ProviderUrls, TimeSpan, Validated,
+    Authored, Confidential, Credential, DisplayName, ExchangePublicKey, FixedBytes, FracMs,
+    Instant, InviterPin, OidcState, Opaque, PageLoad, Payload, PlaintextContainer, ProviderUrls,
+    RecoveryWords, TimeSpan, Validated,
 };
 use ambre_logic::app::{LogicCommand, UiEvent};
 
@@ -412,6 +413,16 @@ pub(crate) enum Effect<'e> {
     Classify(TofuPrompt),
     /// Replace the header status.
     Status(ChromeStatus),
+    /// The account owes its key setup: show the setup (`CHROME-098`).
+    OweSetup,
+    /// Show the recovery words of the account just created, once
+    /// (`CHROME-099`).
+    ShowWords(&'e Confidential<RecoveryWords>),
+    /// The Sync worker refused a sign-in, a setup or a recovery: the form
+    /// shown says why (`CHROME-130`).
+    Refused(AuthFailure),
+    /// The recovery is done: close the keys face.
+    CloseKeys,
 }
 
 /// The switchboard's own state across frames: the page it runs on, and whether it
@@ -513,6 +524,10 @@ impl Switchboard {
             }
             // Relayed service failures (for example unknown invitee) surface as a
             // warning toast so the share action gives feedback.
+            // A setup still owed calls for the setup, never for an error
+            // (`CHROME-098`, `SYNC-134`).
+            UiEvent::SetupRequired => effects.push(Effect::OweSetup),
+            UiEvent::AuthError { cause } => effects.push(Effect::Refused(*cause)),
             UiEvent::ApiError { failure, .. } => effects.push(Effect::Notice(Notice::new(
                 ToastKind::Warning,
                 failure.to_string(),
@@ -579,7 +594,15 @@ impl Switchboard {
                     "Provider sign-in done (keys stored: {})",
                     keys_stored.as_bool()
                 );
+                if matches!(keys_stored, KeySetup::Absent) {
+                    effects.push(Effect::OweSetup);
+                }
             }
+            // The words are shown once, and kept nowhere else (`CHROME-099`).
+            RestEvent::AccountCreated { recovery_words } => {
+                effects.push(Effect::ShowWords(recovery_words));
+            }
+            RestEvent::AccountRecovered => effects.push(Effect::CloseKeys),
             RestEvent::DocumentList { documents } => effects.push(Effect::ShowDocuments(documents)),
             // A document was renamed or deleted (possibly from the launcher):
             // re-list so the card reflects the new name / disappears. Delete is
@@ -882,6 +905,7 @@ mod tests {
     use crate::tofu::{KeyContact, Next, Purpose, TofuPrompt};
     use ambre_bus::conduit;
     use ambre_bus::sync_warning::SyncWarningCode;
+    use ambre_bus::{AuthFailure, KeySetup};
     use ambre_bus::{Authored, DirectMember, Instant};
     use ambre_bus::{Confidential, DocType, Plaintext, RestCommand, RestEvent, Role};
     use ambre_canvas::{PerfPublisher, PerfSnapshot};
@@ -889,7 +913,8 @@ mod tests {
     use ambre_core::id::{Channel, Document, Id, User};
     use ambre_core::{
         Count, Credential, DisplayName, Email, ExchangePublicKey, FixedBytes, KeyFingerprints,
-        LinkState, Ms, OidcState, Opaque, PageLoad, ProviderUrls, TimeSpan, Validated,
+        LinkState, Ms, OidcState, Opaque, PageLoad, ProviderUrls, RecoveryWords,
+        RecoveryWordsRefusal, TimeSpan, Validated,
     };
     use ambre_logic::app::{LogicCommand, UiEvent};
     use std::cell::Cell;
@@ -1632,6 +1657,58 @@ mod tests {
             cells_drawn: Count::new(cells),
             ..PerfSnapshot::default()
         }
+    }
+
+    /// A setup still owed shows the setup, never an error, whether the
+    /// provider sign-in or a later refusal reveals it (`CHROME-098`). An
+    /// account that holds its keys is not shown the setup.
+    #[test]
+    fn a_setup_owed_shows_the_setup() {
+        let mut switchboard = Switchboard::new(Page::Document);
+        let owed = switchboard.service(&UiEvent::SetupRequired, on(None), &nobody());
+        assert!(matches!(owed.as_slice(), [Effect::OweSetup]));
+
+        let signed_in = |keys_stored| {
+            rest(RestEvent::ProviderSignedIn {
+                user_id: Id::<User>::mint(),
+                display_name: name("Eve"),
+                email: Email::from("eve@test.local"),
+                keys_stored,
+            })
+        };
+        let absent = signed_in(KeySetup::Absent);
+        let effects = switchboard.service(&absent, on(None), &nobody());
+        assert!(matches!(effects.as_slice(), [Effect::OweSetup]));
+        let stored = signed_in(KeySetup::Stored);
+        assert!(switchboard.service(&stored, on(None), &nobody()).is_empty());
+    }
+
+    /// The words of the account just created reach the keys face alone, and
+    /// a refusal of the Sync worker reaches the form (`CHROME-099`,
+    /// `CHROME-130`).
+    #[test]
+    fn the_words_and_a_refusal_reach_the_keys_face() {
+        let mut switchboard = Switchboard::new(Page::Document);
+        let created = rest(RestEvent::AccountCreated {
+            recovery_words: Confidential::<RecoveryWords>::new("abandon art".to_owned()),
+        });
+        let effects = switchboard.service(&created, on(None), &nobody());
+        match effects.as_slice() {
+            // The words reach the face redacted in any log line.
+            [Effect::ShowWords(words)] => {
+                assert_eq!(format!("{words:?}"), "RecoveryWords(Secret([REDACTED]))");
+            }
+            _ => panic!("the words did not reach the keys face alone"),
+        }
+
+        let cause = AuthFailure::BadRecoveryWords(RecoveryWordsRefusal::BadChecksum);
+        let refused = UiEvent::AuthError { cause };
+        let effects = switchboard.service(&refused, on(None), &nobody());
+        assert!(matches!(effects.as_slice(), [Effect::Refused(shown)] if *shown == cause));
+
+        let recovered = rest(RestEvent::AccountRecovered);
+        let effects = switchboard.service(&recovered, on(None), &nobody());
+        assert!(matches!(effects.as_slice(), [Effect::CloseKeys]));
     }
 
     /// A Murmure page asks its channels once signed in, after the document
