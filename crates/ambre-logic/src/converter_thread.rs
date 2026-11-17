@@ -95,13 +95,12 @@ pub const fn answer_deadline(family: ConverterFamily) -> TimeSpan<FracMs> {
         ConverterFamily::Images => IMAGES_DEADLINE,
         ConverterFamily::Office => OFFICE_DEADLINE,
         ConverterFamily::Pdf => PDF_DEADLINE,
-        // The markup family measures far under the floor. A CSV file has no
-        // bound to measure on, so the tables family keeps the floor
-        // unmeasured. So does the boards family, which no bench drives.
-        // A spelling job reads at most 1 s, a suggestion on a French word
+        ConverterFamily::Tables => TABLES_DEADLINE,
+        // The markup family measures far under the floor. The boards family
+        // keeps the floor unmeasured, since no bench drives it. A spelling
+        // job reads at most 1 s, a suggestion on a French word
         // (`ambre-spec-budgets.md`), far under the floor.
         ConverterFamily::Markup
-        | ConverterFamily::Tables
         | ConverterFamily::Boards
         | ConverterFamily::SpellEn
         | ConverterFamily::SpellFr => FLOOR_DEADLINE,
@@ -118,6 +117,10 @@ const OFFICE_DEADLINE: TimeSpan<FracMs> = TimeSpan::new(40_000.0);
 /// The answer deadline of the PDF family: a document and the pictures an
 /// export admits.
 const PDF_DEADLINE: TimeSpan<FracMs> = TimeSpan::new(35_000.0);
+
+/// The answer deadline of the tables family: a CSV file read at the import
+/// bound, one short field a line (`ARCH-128`).
+const TABLES_DEADLINE: TimeSpan<FracMs> = TimeSpan::new(45_000.0);
 
 /// The shortest answer deadline. A deadline catches a thread that stopped,
 /// which is rare, so a shorter one buys little and risks failing a job that
@@ -1191,6 +1194,31 @@ mod tests {
         assert!(offload.take_answers(at(pdf - 1.0)).is_empty());
         assert!(matches!(
             offload.take_answers(at(pdf)).as_slice(),
+            [(_, _, Err(ConvertError::Absent))]
+        ));
+    }
+
+    /// `ARCH-128`: a CSV read runs under the deadline of the tables
+    /// family, the measured figure and not the floor.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn a_csv_read_runs_under_the_tables_deadline() {
+        let tables = answer_deadline(ConverterFamily::Tables);
+        assert!(tables > FLOOR_DEADLINE, "the tables deadline is measured");
+        let (link, _stuck) = converter_channels(&Doorbell::new());
+        let mut offload = Offload::over(link);
+        let csv = Job {
+            conversion: Conversion::ReadCsv {
+                data: Payload::new(Vec::new()),
+                delimiter: ambre_convert::CsvDelimiter::COMMA,
+            },
+            ..pdf_job(1)
+        };
+        assert!(offload.send(csv).is_ok());
+        assert!(offload.take_answers(at(0.0)).is_empty());
+        assert!(offload.take_answers(at(tables.get() - 1.0)).is_empty());
+        assert!(matches!(
+            offload.take_answers(at(tables.get())).as_slice(),
             [(_, _, Err(ConvertError::Absent))]
         ));
     }

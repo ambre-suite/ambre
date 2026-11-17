@@ -744,6 +744,47 @@ fn an_import_starting_past_the_grid_edge_writes_nothing() {
     }
 }
 
+/// `TRAME-IO-090`: a CSV file one byte past the bound fails as too large and
+/// writes nothing, and a file at the bound imports. Blank lines pad the file,
+/// so the one record lands and the test writes a single row.
+#[test]
+fn a_csv_file_past_the_bound_is_refused_and_one_at_it_imports() {
+    let bound = usize::try_from(ambre_convert::CSV_MAX_SIZE.get()).expect("the bound fits");
+    let file = |size: usize| {
+        let mut bytes = b"a,b\n".to_vec();
+        bytes.resize(size, b'\n');
+        TrameCommand::import_csv(crate::message::CsvImport {
+            data: ambre_core::Payload::<ambre_client_core::FileBytes>::new(bytes),
+            delimiter: None,
+            header: HeaderRow::Absent,
+            target_sheet_id: None,
+            start_row: Pos::<Row>::new(0),
+            start_col: Pos::<Col>::new(0),
+        })
+    };
+    let mut state = TrameState::new();
+    let sheets = state.all_sheet_ids().len();
+    let past = state.convert(file(bound + 1));
+    assert!(past.update.is_none(), "{:?}", past.display);
+    assert!(
+        matches!(
+            past.display.as_slice(),
+            [TrameEvent::Interop(InteropAnswer::Failed(InteropFailure {
+                direction: Direction::Import,
+                error: InteropError::TooLarge(size),
+            }))] if *size > ambre_convert::CSV_MAX_SIZE
+        ),
+        "{:?}",
+        past.display
+    );
+    assert_eq!(state.all_sheet_ids().len(), sheets);
+    let at = state.convert(file(bound));
+    let (sheet_id, rows, cols) = import_result(&at);
+    assert_eq!((rows, cols), (1, 2));
+    assert_eq!(state.active_sheet, sheet_id);
+    assert_eq!(read_cell(&mut state, 0, 1), "b");
+}
+
 /// An export with nothing to write says so (`TRAME-IO-041`): an empty sheet
 /// and an unknown one each answer with a notice, never with silence.
 #[test]

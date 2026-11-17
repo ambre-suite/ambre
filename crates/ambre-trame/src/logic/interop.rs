@@ -138,6 +138,13 @@ impl TrameState {
             TrameCommand::Interop(InteropRequest::Export(TrameExport::Ods)) => {
                 self.ask_workbook_write(super::xlsx::SheetFile::Ods)
             }
+            TrameCommand::Interop(InteropRequest::Import(TrameImport::Csv(import)))
+                if import.data.len() > ambre_convert::CSV_MAX_SIZE =>
+            {
+                // Refused before the delimiter scan and the module call, so a
+                // file past the bound costs no work (`TRAME-IO-090`).
+                import_failed(InteropError::TooLarge(import.data.len()))
+            }
             TrameCommand::Interop(InteropRequest::Import(TrameImport::Csv(import))) => {
                 let delimiter = import
                     .delimiter

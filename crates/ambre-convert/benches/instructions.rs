@@ -363,6 +363,56 @@ fn html_largest() {
     ));
 }
 
+/// One module call of the tables family, counted alone by `callgrind`. Its
+/// body differs from the others, so no two of them merge into one symbol.
+#[inline(never)]
+fn ambre_deadline_tables(converter: &Converter, conversion: &Conversion) -> Converted {
+    let answer = converter.convert(black_box(conversion));
+    match black_box(answer) {
+        Ok(converted) => converted,
+        Err(e) => panic!("the tables module answers: {e}"),
+    }
+}
+
+/// A CSV file of `bytes` bytes at most, `line` over and over.
+fn csv_file(line: &str, bytes: usize) -> Vec<u8> {
+    line.repeat(bytes / line.len()).into_bytes()
+}
+
+/// Read a CSV file of `line` over and over, `bytes` long at most.
+fn csv_read(line: &str, bytes: usize) {
+    let conversion = Conversion::ReadCsv {
+        data: Payload::new(csv_file(line, bytes)),
+        delimiter: ambre_convert::CsvDelimiter::COMMA,
+    };
+    black_box(ambre_deadline_tables(
+        &engine(ConverterFamily::Tables),
+        &conversion,
+    ));
+}
+
+/// One line of a common export: a date, a place, a figure and short labels.
+const CSV_LINE: &str = "2026-11-17,Paris,North,1234.50,17,ok,alpha,beta,7,x\n";
+
+/// The lines of the CSV import of `ambre-spec-budgets.md section 1`.
+const DENSE_LINES: usize = 10_000;
+
+fn csv_read_dense() {
+    csv_read(CSV_LINE, CSV_LINE.len() * DENSE_LINES);
+}
+
+/// A file at the bound of one short field per line, the dearest shape. Each
+/// record costs a record and a field for two bytes of input. On 2026-11-17,
+/// ten short fields a line counted a sixth of it, twenty one-byte fields
+/// two fifths, and twenty empty fields a quarter.
+fn csv_read_largest() {
+    let bound = match usize::try_from(ambre_convert::CSV_MAX_SIZE.get()) {
+        Ok(bound) => bound,
+        Err(e) => panic!("the CSV bound fits the address space: {e}"),
+    };
+    csv_read("a\n", bound);
+}
+
 /// Whether `cargo bench` runs the operation when no name is given.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Smoke {
@@ -373,7 +423,7 @@ enum Smoke {
 }
 
 /// Each operation, by the name `scripts/instructions.py` passes.
-const OPERATIONS: [(&str, fn(), Smoke); 12] = [
+const OPERATIONS: [(&str, fn(), Smoke); 14] = [
     ("images_dense", images_dense, Smoke::Runs),
     ("images_largest", images_largest, Smoke::Named),
     ("word_read_dense", word_read_dense, Smoke::Runs),
@@ -386,6 +436,8 @@ const OPERATIONS: [(&str, fn(), Smoke); 12] = [
     ("sheet_write_largest", sheet_write_largest, Smoke::Named),
     ("markdown_largest", markdown_largest, Smoke::Named),
     ("html_largest", html_largest, Smoke::Named),
+    ("csv_read_dense", csv_read_dense, Smoke::Runs),
+    ("csv_read_largest", csv_read_largest, Smoke::Named),
 ];
 
 fn main() {

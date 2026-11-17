@@ -421,7 +421,7 @@ CEILINGS = [
         symbol="ambre_deadline_images",
         row="Answer deadline of the images family, a JPEG at the source bound (45 s / 3)",
         ceiling=45_000 * PER_MS // 3,
-        features=("ambre-convert/images", "ambre-convert/office", "ambre-convert/markup"),
+        features=("ambre-convert/images", "ambre-convert/office", "ambre-convert/markup", "ambre-convert/tables"),
     ),
     Ceiling(
         crate="ambre-convert",
@@ -430,7 +430,7 @@ CEILINGS = [
         symbol="ambre_deadline_sheet",
         row="Answer deadline of the Office family, a sheet at the part bound (40 s / 3)",
         ceiling=40_000 * PER_MS // 3,
-        features=("ambre-convert/images", "ambre-convert/office", "ambre-convert/markup"),
+        features=("ambre-convert/images", "ambre-convert/office", "ambre-convert/markup", "ambre-convert/tables"),
     ),
     Ceiling(
         crate="ambre-convert",
@@ -439,7 +439,16 @@ CEILINGS = [
         symbol="ambre_deadline_markup",
         row="Answer deadline of the markup family, an HTML file at the import bound (30 s / 3)",
         ceiling=30_000 * PER_MS // 3,
-        features=("ambre-convert/images", "ambre-convert/office", "ambre-convert/markup"),
+        features=("ambre-convert/images", "ambre-convert/office", "ambre-convert/markup", "ambre-convert/tables"),
+    ),
+    Ceiling(
+        crate="ambre-convert",
+        bench="instructions",
+        operation="csv_read_largest",
+        symbol="ambre_deadline_tables",
+        row="Answer deadline of the tables family, a CSV file at the import bound (45 s / 3)",
+        ceiling=45_000 * PER_MS // 3,
+        features=("ambre-convert/images", "ambre-convert/office", "ambre-convert/markup", "ambre-convert/tables"),
     ),
     Ceiling(
         crate="ambre-prose",

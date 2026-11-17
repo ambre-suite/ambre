@@ -21,14 +21,14 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**4691 rows: 4273 shipped, of which 14 loose. 418 unbuilt.**
+**4692 rows: 4275 shipped, of which 14 loose. 417 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1417 | 571 | 981 | 788 | 502 | 4259 |
+| `verified` | 1418 | 572 | 981 | 788 | 502 | 4261 |
 | `failing` |  |  |  |  |  | 0 |
 | `human-review` | 14 |  |  |  |  | 14 |
-| `unimplemented` | 166 | 42 | 21 | 32 | 157 | 418 |
+| `unimplemented` | 165 | 42 | 21 | 32 | 157 | 417 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -38,7 +38,7 @@
 | :--- | ---: | ---: | ---: | ---: | ---: |
 | `ambre-spec-accessibility.md` | 15 | 14 | 14 |  | 1 |
 | `ambre-spec-adaptive-layout.md` | 9 | 7 | 7 |  | 2 |
-| `ambre-spec-architecture.md` | 129 | 128 | 120 | 8 | 1 |
+| `ambre-spec-architecture.md` | 129 | 129 | 121 | 8 |  |
 | `ambre-spec-broadcast.md` | 30 | 30 | 30 |  |  |
 | `ambre-spec-call-media.md` | 132 | 132 | 132 |  |  |
 | `ambre-spec-call-proofs.md` | 19 | 19 | 19 |  |  |
@@ -96,7 +96,7 @@
 | `ambre-spec-trame-function-library.md` | 37 | 30 | 30 |  | 7 |
 | `ambre-spec-trame-grid-viewport.md` | 24 | 23 | 23 |  | 1 |
 | `ambre-spec-trame-headers.md` | 10 | 9 | 9 |  | 1 |
-| `ambre-spec-trame-import-export.md` | 68 | 66 | 66 |  | 2 |
+| `ambre-spec-trame-import-export.md` | 69 | 67 | 67 |  | 2 |
 | `ambre-spec-trame-named-ranges.md` | 10 | 10 | 10 |  |  |
 | `ambre-spec-trame-number-formats.md` | 14 | 14 | 14 |  |  |
 | `ambre-spec-trame-pdf-export.md` | 17 | 17 | 17 |  |  |
@@ -346,7 +346,7 @@
 | `ambre-spec-trame-function-library.md` | TRAME-014,049..061,194..207,244,246..247,249..251,253..254,258 |
 | `ambre-spec-trame-grid-viewport.md` | TRAME-UI-004..005,007,012..013,024..029,049,143..149,175,191..194 |
 | `ambre-spec-trame-headers.md` | TRAME-UI-043..048,121..123,187 |
-| `ambre-spec-trame-import-export.md` | TRAME-IO-001..015,017..019,025..030,033..071,080..082,088..089 |
+| `ambre-spec-trame-import-export.md` | TRAME-IO-001..015,017..019,025..030,033..071,080..082,088..090 |
 | `ambre-spec-trame-named-ranges.md` | TRAME-062..069,155..156 |
 | `ambre-spec-trame-number-formats.md` | TRAME-102..110,157..158,223,237..238 |
 | `ambre-spec-trame-pdf-export.md` | TRAME-IO-021..023,031,072..079,083..087 |

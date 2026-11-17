@@ -15,6 +15,7 @@
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
+| `architecture` | How the client is split, and why. | implemented | 129 | 8 |
 | `broadcast` | One connection per person, carrying every document they have open. | implemented | 30 |  |
 | `call-media` | The audio and video of a call, encrypted end to end. | implemented | 132 |  |
 | `call-proofs` | The harnesses that measure a call on hardware no CI job runs. | implemented | 19 |  |
@@ -40,7 +41,6 @@
 | `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 21 |  |
 | `accessibility` | What a screen reader and a keyboard reach. | partial | 15 |  |
 | `adaptive-layout` | How the interface changes with the width of the window. | partial | 9 |  |
-| `architecture` | How the client is split, and why. | partial | 129 | 8 |
 | `chrome` | Everything around the document: the frame the canvas sits in, the menus, the modals and the toasts. | partial | 32 |  |
 | `clipboard` | Copy, cut and paste, the same way in every editor. | partial | 20 |  |
 | `drawing-surface` | The dozen calls a renderer may make: a rectangle, a line, a path, a glyph run, an image, a clip, a transform. | partial | 18 |  |
@@ -65,4 +65,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**49 features: 23 implemented, 22 partial, 4 design-only. 1596 contract rows, 14 loose.**
+**49 features: 24 implemented, 21 partial, 4 design-only. 1596 contract rows, 14 loose.**

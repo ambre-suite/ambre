@@ -153,7 +153,7 @@ required-features = ["images"]
 [[bench]]
 name = "instructions"
 harness = false
-required-features = ["images", "office", "markup"]
+required-features = ["images", "office", "markup", "tables"]
 
 [lints]
 workspace = true

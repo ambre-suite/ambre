@@ -24,7 +24,7 @@
 
 use ambre_client_core::FileBytes;
 use ambre_core::NarrowCount;
-use ambre_core::{ConverterFamily, Count, Payload, PayloadKind, Refused, Refuses};
+use ambre_core::{ConverterFamily, Count, Octets, Payload, PayloadKind, Refused, Refuses};
 use ambre_draw::list::PrintDocument;
 use ambre_prose_form::FormBytes;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -616,6 +616,17 @@ impl Refuses for DelimiterByte {
         write!(f, "byte {raw:#04x} cannot separate CSV fields")
     }
 }
+
+/// The largest CSV file an import reads: 8 MiB. The Trame import refuses a
+/// file past it before any work.
+///
+/// A sheet of ten columns fills it with about 840 000 cells. The Office
+/// module reads an Excel sheet of as many cells under its part bound. It
+/// also holds the 100 000 rows of the grid at ten columns of short text. The
+/// bound sets the dearest call of the tables module, so the tables answer
+/// deadline is measured on a file at it (`ARCH-128`,
+/// `ambre-spec-budgets.md section 8`).
+pub const CSV_MAX_SIZE: Count<Octets> = Count::<Octets>::new(8 * 1024 * 1024);
 
 /// The byte that separates the fields of a CSV record (`trame-import-export`).
 /// It is an ASCII byte other than the double quote, which opens a quoted
