@@ -3776,10 +3776,12 @@ mod tests {
 
     /// A paste of HTML another application wrote waits on the markup module,
     /// then lands formatted. A paste of Ambre's own bytes waits on nothing.
+    #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn an_html_paste_waits_on_the_markup_module_and_lands_formatted() {
         use ambre_prose::message::{ProseCommand, ProseEvent};
         let (mut state, ui, sync) = harness();
+        let mut thread = converter_thread(&mut state);
         let document_id = Id::<Document>::mint();
         state.open_with_identity(document_id, DocType::Prose);
         let block = match &state.docs.get(&document_id).expect("a live document").state {
@@ -3810,6 +3812,8 @@ mod tests {
         };
         assert_eq!(text_of(&state).as_deref(), Some(""), "the paste waits");
         load_converter(&mut state, ambre_core::ConverterFamily::Markup);
+        thread.serve();
+        state.take_converted();
         assert_eq!(text_of(&state).as_deref(), Some("Title"));
         assert!(ui.try_iter().any(|e| matches!(
             e,
@@ -3818,6 +3822,57 @@ mod tests {
                 ..
             }
         )));
+    }
+
+    /// `ARCH-130`: the HTML half of a paste reads on the converter thread.
+    /// The command returns with the read in flight and the document
+    /// untouched, and the paste lands formatted once the thread served it.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn an_html_paste_calls_its_module_on_the_converter_thread() {
+        use ambre_prose::message::ProseCommand;
+        let (mut state, _ui, sync) = harness();
+        let mut thread = converter_thread(&mut state);
+        let document_id = Id::<Document>::mint();
+        state.open_with_identity(document_id, DocType::Prose);
+        let block = match &state.docs.get(&document_id).expect("a live document").state {
+            DocState::Prose(prose) => prose.root_blocks()[0],
+            other => panic!("the registry opened {other:?}"),
+        };
+        load_converter(&mut state, ambre_core::ConverterFamily::Markup);
+        sync.try_iter().for_each(drop);
+        state.handle_logic_command(LogicCommand::App {
+            document_id,
+            command: AppCommand::Prose(ProseCommand::Paste {
+                at: (block, Pos::<DocChar>::ZERO),
+                text: "plain".to_owned(),
+                html: Some("<h1>Title</h1>".to_owned()),
+                payload: None,
+            }),
+        });
+        let text_of = |state: &LogicState| match &state.docs.get(&document_id).map(|d| &d.state) {
+            Some(DocState::Prose(prose)) => prose.text_of(&block),
+            _ => None,
+        };
+        assert!(!state.offload.is_idle(), "the read left for the thread");
+        assert_eq!(
+            text_of(&state).as_deref(),
+            Some(""),
+            "the document is untouched while the read is in flight"
+        );
+        assert!(
+            !sync
+                .try_iter()
+                .any(|c| matches!(c, SyncCommand::SendUpdate { .. })),
+            "no delta leaves before the answer"
+        );
+        thread.serve();
+        state.take_converted();
+        assert_eq!(
+            text_of(&state).as_deref(),
+            Some("Title"),
+            "the answer lands"
+        );
     }
 
     /// A paste whose markup module could not load lands its plain text: the

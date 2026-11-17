@@ -1,10 +1,11 @@
 //! Criterion benchmark for an HTML paste, read and written into a document.
 //!
 //! Target from `ambre-spec-budgets.md`, the "Prose HTML clipboard import"
-//! row: 500 KB under 100 ms on the Logic thread. Each fixture is repeated to
-//! 500 KB, so the figure covers the parse, the walk and the Loro writes. The
-//! parse runs through the markup engine the host links in place, with the
-//! encoding of the request and of the tree a module answers.
+//! row: 500 KB under 100 ms. Each fixture is repeated to 500 KB, so the
+//! figure covers the parse, the walk and the Loro writes. The parse runs on
+//! the converter thread in the browser (`ARCH-130`). Here it runs through
+//! the markup engine the host links in place, with the encoding of the
+//! request and of the tree a module answers.
 
 #![expect(clippy::panic, reason = "a bench aborts on a fixture it cannot run")]
 
@@ -56,6 +57,22 @@ fn converter() -> ambre_convert::Converter {
     }
 }
 
+/// The paste `command`: its read through `converter`, as the converter
+/// thread runs it, then the write of its items into `state`.
+fn pasted(
+    mut state: ProseState,
+    command: ProseCommand,
+    converter: &ambre_convert::Converter,
+) -> ambre_prose::ProseOutcome {
+    let mut out = state.handle_conversion(command, Ok(converter));
+    for (ticket, conversion) in state.take_file_requests() {
+        if let Some(next) = state.handle_file_converted(ticket, converter.convert(&conversion)) {
+            out = next;
+        }
+    }
+    out
+}
+
 fn bench_html_paste(c: &mut Criterion) {
     let converter = converter();
     let fixtures = [
@@ -79,7 +96,7 @@ fn bench_html_paste(c: &mut Criterion) {
         group.bench_function(name, |b| {
             b.iter_batched(
                 paste(&html),
-                |(mut state, command)| black_box(state.handle_conversion(command, Ok(&converter))),
+                |(state, command)| black_box(pasted(state, command, &converter)),
                 BatchSize::LargeInput,
             );
         });
@@ -89,7 +106,7 @@ fn bench_html_paste(c: &mut Criterion) {
     group.bench_function("nested_127", |b| {
         b.iter_batched(
             paste(&deep),
-            |(mut state, command)| black_box(state.handle_conversion(command, Ok(&converter))),
+            |(state, command)| black_box(pasted(state, command, &converter)),
             BatchSize::LargeInput,
         );
     });

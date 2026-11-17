@@ -574,6 +574,7 @@ impl LogicState {
                     outcome.ephemeral,
                     Vec::new(),
                 );
+                self.offload_prose_files(document_id);
                 self.owe_layout(document_id);
             }
             _ => {}

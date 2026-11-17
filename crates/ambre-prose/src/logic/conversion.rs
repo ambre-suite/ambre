@@ -14,12 +14,13 @@
 //! [`ProseState::take_file_requests`], and the answer comes back through
 //! [`ProseState::handle_file_converted`]. A read lands then, on the path a
 //! view command runs: caught up, refused while suggesting where it must be,
-//! and named on a refusal. A paste still calls its module in place.
+//! and named on a refusal. The HTML half of a paste reads there too
+//! (`ARCH-130`): the paste lands once its items come back.
 
 use ambre_bus::Request;
 use ambre_bus::interop::InteropRequest;
 use ambre_client_core::ExportFilename;
-use ambre_convert::{Conversion, ConvertError, Converted, Converter, FileWork, TextRead};
+use ambre_convert::{Conversion, ConvertError, Converted, Converter, FileWork};
 use ambre_core::{ConverterFamily, Seq, StopCause};
 use ambre_prose_form::clip::ClipItem;
 
@@ -65,6 +66,9 @@ impl ConvertedInput {
 pub(super) enum FileJob {
     /// The module reads the file of this import command.
     Read(ProseCommand),
+    /// The module reads the HTML half of this paste command, which no
+    /// longer holds it (`ARCH-130`). Its answer writes the document.
+    Paste(ProseCommand),
     /// The module writes the form of an export to `format`, which leaves
     /// under `filename`.
     Write {
@@ -86,7 +90,7 @@ pub(super) type FileJobs = ambre_convert::FileJobs<Request, FileJob>;
 impl ambre_convert::FileJob for FileJob {
     fn work(&self) -> FileWork {
         match self {
-            Self::Read(_) => FileWork::Read,
+            Self::Read(_) | Self::Paste(_) => FileWork::Read,
             Self::Write { .. } | Self::Print { .. } => FileWork::Write,
         }
     }
@@ -163,12 +167,41 @@ impl ProseState {
     ///
     /// An import owes the converter thread its read and changes nothing yet:
     /// it lands once [`Self::handle_file_converted`] hands the answer back
-    /// (`ARCH-122`). A file refused before the read fails at once.
+    /// (`ARCH-122`). A file refused before the read fails at once. A paste
+    /// owes its HTML half the same way, and hands the module the text the
+    /// command holds, never a copy (`ARCH-130`, `ARCH-126`).
+    ///
+    /// No module runs on the calling thread: `Ok` says the module of the
+    /// command's family loaded, so the converter thread can serve it.
     pub fn handle_conversion(
         &mut self,
         command: ProseCommand,
         converter: Result<&Converter, StopCause>,
     ) -> ProseOutcome {
+        let command = match (command, converter) {
+            (
+                ProseCommand::Paste {
+                    at,
+                    text,
+                    html: Some(html),
+                    payload,
+                },
+                Ok(_),
+            ) if !clipboard::is_own(payload.as_ref()) => {
+                self.file_jobs.ask(
+                    ambre_bus::next_request(),
+                    Conversion::ReadHtml { html },
+                    FileJob::Paste(ProseCommand::Paste {
+                        at,
+                        text,
+                        html: None,
+                        payload,
+                    }),
+                );
+                return ProseOutcome::nothing();
+            }
+            (command, _) => command,
+        };
         if let ProseCommand::Interop(InteropRequest::Import(import)) = &command {
             let request = match converter {
                 Ok(_) => read_request(import),
@@ -202,6 +235,17 @@ impl ProseState {
     ) -> ProseOutcome {
         let landed = self.land_conversion();
         self.converted = Some(ConvertedInput::Document(read));
+        let outcome = self.handle_view_command(command);
+        self.converted = None;
+        self.carry_landed(landed, outcome)
+    }
+
+    /// Run the paste `command` over the items its HTML half read into, or
+    /// over its plain text when the module could not read it. The running
+    /// conversion lands first, so two never interleave (`PROSE-IO-100`).
+    fn land_paste(&mut self, command: ProseCommand, items: Option<Vec<ClipItem>>) -> ProseOutcome {
+        let landed = self.land_conversion();
+        self.converted = Some(ConvertedInput::Html(items));
         let outcome = self.handle_view_command(command);
         self.converted = None;
         self.carry_landed(landed, outcome)
@@ -241,6 +285,13 @@ impl ProseState {
                 };
                 self.land_read(command, read)
             }
+            FileJob::Paste(command) => {
+                let items = match answer {
+                    Ok(Converted::Pasted(items)) => Some(items),
+                    _ => None,
+                };
+                self.land_paste(command, items)
+            }
             FileJob::Write { format, filename } => {
                 let written = match &format {
                     ExportFormat::Markdown(_) => markdown::write_answer(answer),
@@ -279,14 +330,8 @@ impl ProseState {
         converter: Result<&Converter, StopCause>,
     ) -> ProseOutcome {
         self.converted = match &command {
-            ProseCommand::Paste {
-                html: Some(html), ..
-            } => Some(ConvertedInput::Html(converter.ok().and_then(|converter| {
-                match converter.read_text(&TextRead::HtmlPaste(html)) {
-                    Ok(Converted::Pasted(blocks)) => Some(blocks),
-                    _ => None,
-                }
-            }))),
+            // The module did not load: the paste lands its plain text.
+            ProseCommand::Paste { html: Some(_), .. } => Some(ConvertedInput::Html(None)),
             // An export writes nothing, so it waits on no view command: the
             // walk, the mapping and the module answer it here.
             ProseCommand::Interop(InteropRequest::Export(
@@ -592,5 +637,64 @@ mod tests {
             ProseState::conversion_family(&paste(None)),
             Some(ConverterFamily::Markup)
         );
+    }
+
+    /// `ARCH-130`, `ARCH-126`: a paste owes the converter thread the read of
+    /// its HTML half, and changes nothing yet. The request holds the buffer
+    /// the command held, never a copy. The answer lands the paste formatted.
+    #[test]
+    fn a_paste_owes_its_html_read_to_the_converter_thread_and_writes_on_the_answer() {
+        let mut state = ProseState::new().expect("a document");
+        let block = state.root_blocks()[0];
+        let html = "<h1>Title</h1>".to_owned();
+        let held = html.as_ptr();
+        let converter = host_converter();
+        let asked = state.handle_conversion(
+            ProseCommand::Paste {
+                at: (block, Pos::<DocChar>::ZERO),
+                text: "plain".to_owned(),
+                html: Some(html),
+                payload: None,
+            },
+            Ok(&converter),
+        );
+        assert!(asked.update.is_none(), "no delta before the answer");
+        assert_eq!(state.text_of(&block).as_deref(), Some(""));
+        let [(ticket, request)] = &state.take_file_requests()[..] else {
+            panic!("the paste owes one read");
+        };
+        let Conversion::ReadHtml { html } = request else {
+            panic!("the paste owes a read of its HTML half: {request:?}");
+        };
+        assert_eq!(html.as_ptr(), held, "the request holds the paste's text");
+        assert_eq!(state.file_work(*ticket), Some(FileWork::Read));
+        let landed = state
+            .handle_file_converted(*ticket, converter.convert(request))
+            .expect("the ticket is the document's own");
+        assert!(landed.update.is_some(), "the answer writes the document");
+        assert_eq!(state.text_of(&block).as_deref(), Some("Title"));
+    }
+
+    /// A paste whose read the module refused lands its plain text: the user
+    /// loses the formatting and keeps the words.
+    #[test]
+    fn a_paste_whose_read_fails_lands_its_plain_text() {
+        let mut state = ProseState::new().expect("a document");
+        let block = state.root_blocks()[0];
+        let converter = host_converter();
+        let _ = state.handle_conversion(
+            ProseCommand::Paste {
+                at: (block, Pos::<DocChar>::ZERO),
+                text: "plain".to_owned(),
+                html: Some("<h1>Title</h1>".to_owned()),
+                payload: None,
+            },
+            Ok(&converter),
+        );
+        let [(ticket, _)] = &state.take_file_requests()[..] else {
+            panic!("the paste owes one read");
+        };
+        let _ = state.handle_file_converted(*ticket, Err(ConvertError::Absent));
+        assert_eq!(state.text_of(&block).as_deref(), Some("plain"));
     }
 }

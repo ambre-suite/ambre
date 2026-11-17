@@ -148,8 +148,11 @@ fn paste_clipboard(&mut self, blob: ClipboardBlob, source: PasteSource);
 | HTML that yields at least one block | the blocks and marks the reader keeps (`PROSE-UI-219`) |
 | anything else | the plain text: one paragraph per line, control characters dropped |
 
-**Reading HTML.** The parse runs on the Logic thread, in the markup converter module
-(`ARCH-086`). A tokenizer pass first measures the nesting depth. A fragment deeper than 128
+**Reading HTML.** The parse runs in the markup converter module, on the converter thread
+(`ARCH-086`, `ARCH-130`). The paste lands once its blocks come back, so a key typed in another
+document never waits behind the parse.
+
+A tokenizer pass first measures the nesting depth. A fragment deeper than 128
 elements is not built (`PROSE-UI-221`), since the tree builder costs the square of the depth. The
 WHATWG tree builder of `html5ever` then fills an arena, which the module walks once, keeping an
 allow-list. It answers the blocks of Prose's copy, and the paste checks each mark again.
@@ -248,7 +251,7 @@ their chord lists, and decodes none of them itself.
 | The payload covers the selection, never the window | building the payload from the display list | the display list is culled by construction, so a user selecting forty pages gets what was built for the frame. The loss is invisible until the paste, and then it is silent |
 | The host owns the system clipboard | calling the clipboard from the view | browsers grant clipboard access only inside the window a user gesture opens, and that window is the host's event handler. A worker or a view that asks later is refused, and the refusal cannot be retried or reported usefully |
 | The clipboard carries plain text, HTML and this application's own bytes | plain text and the private bytes only | a paste from Google Docs, Word or a web page loses every heading, list and link, and a copy into them does too. HTML is the one rich format every browser exposes; RTF and Markdown are not readable from a web page |
-| HTML is read on the Logic thread through an allow-list | sanitizing markup on the UI thread and inserting what survives | the UI thread would parse untrusted content inside the frame budget. An allow-list that emits the document's own blocks and marks keeps nothing it does not know, so no markup survives to be escaped later |
+| HTML is read off the UI thread through an allow-list | sanitizing markup on the UI thread and inserting what survives | the UI thread would parse untrusted content inside the frame budget. An allow-list that emits the document's own blocks and marks keeps nothing it does not know, so no markup survives to be escaped later |
 | An arena sink for `html5ever` | `markup5ever_rcdom` | its authors publish it as unofficial and meant for tests, and its reference-counted nodes free a deep tree recursively |
 | The kept payload is gated on the mirror | pasting the kept payload whenever there is one | it pastes what the user copied ten minutes ago. The payload in memory is not what the clipboard holds, since another application may have replaced it, and the plain-text mirror is the one field both sides wrote and can compare |
 | A menu key opens the page menu at the caret | opening it at the last pointer position | a keyboard user leaves the pointer anywhere, often off the page. The menu then opens far from the text it acts on |

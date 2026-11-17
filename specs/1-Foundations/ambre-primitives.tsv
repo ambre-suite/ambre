@@ -3887,9 +3887,6 @@ ambre-convert | src/images.rs | crate::images | SvgTransform.tx | field | f32	fo
 ambre-convert | src/images.rs | crate::images | SvgTransform.ty | field | f32	foreign-api	a coefficient of the tiny-skia transform usvg gives a node: the drawing mirrors the usvg schema
 ambre-convert | src/lib.rs | crate | Conversion::ReadHtml.html | field | String	free-text	the HTML a paste carries
 ambre-convert | src/lib.rs | crate | Conversion::ReadMarkdown.text | field | String	free-text	the Markdown text an imported file holds
-ambre-convert | src/lib.rs | crate | TextRead::Markdown.0 | field | &'a str	free-text	the Markdown text an imported file holds, borrowed from the file; the twin of Conversion::ReadMarkdown.text
-ambre-convert | src/lib.rs | crate | TextRead::HtmlPaste.0 | field | &'a str	free-text	the HTML a paste carries, borrowed from the paste; the twin of Conversion::ReadHtml.html
-ambre-convert | src/lib.rs | crate | TextRead::HtmlDocument.0 | field | &'a str	free-text	the HTML an imported file holds, borrowed from the file; the twin of Conversion::ReadHtmlDocument.html
 ambre-convert | src/markup.rs | crate::markup | HtmlAttr.name | field | String	foreign-api	an attribute name as the WHATWG tree builder spells it; Prose matches it against its allowlist
 ambre-convert | src/markup.rs | crate::markup | HtmlAttr.value | field | String	free-text	an attribute value as the pasted HTML spells it, before Prose parses it
 ambre-convert | src/markup.rs | crate::markup | HtmlData::Element.name | field | String	foreign-api	an element's local name as the WHATWG tree builder spells it; Prose matches it against its allowlist

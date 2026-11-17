@@ -136,24 +136,6 @@ impl Converter {
         crate::decode_answer(&self.answer(&request)?)
     }
 
-    /// Run one read of a text the caller holds, and read its answer. The
-    /// request is encoded from the borrowed text, so the text is never
-    /// copied into an owned [`Conversion`] first.
-    ///
-    /// # Errors
-    ///
-    /// The errors of [`Converter::convert`].
-    pub fn read_text(&self, read: &crate::TextRead<'_>) -> Result<Converted, ConvertError> {
-        if read.family() != self.family {
-            return Err(ConvertError::OtherFamily {
-                held: self.family,
-                asked: read.family(),
-            });
-        }
-        let request = crate::encode_text_read(read)?;
-        crate::decode_answer(&self.answer(&request)?)
-    }
-
     /// The answer bytes the engine wrote for `request`.
     fn answer(
         &self,
