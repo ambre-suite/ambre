@@ -1449,6 +1449,12 @@ pub struct SyncState {
     /// each Murmure log an open accepted (`SYNC-237`). The set only grows.
     murmure_roots: HashSet<FixedBytes<ambre_core::InviterPin>>,
 
+    /// The documents an open named under a type other than Murmure, for the
+    /// session (`SYNC-260`). The relay writes the Murmure label, and a
+    /// Murmure open checks its key against a channel's log, not the log of
+    /// the document. So no Murmure open installs a key on one of these.
+    typed_opens: HashSet<Id<Document>>,
+
     /// Outbound updates produced before the session keys / document were ready.
     /// The user edits a restored cell in the milliseconds after F5, while
     /// `DevLogin` is still in flight. Held here instead of dropped, and flushed
@@ -1536,6 +1542,7 @@ impl SyncState {
             pending_opens: Vec::new(),
             pinned_inviters: HashMap::new(),
             murmure_roots: HashSet::new(),
+            typed_opens: HashSet::new(),
             pending_pre_session_updates: Vec::new(),
             session_nonces: HashMap::new(),
             light: HashMap::new(),

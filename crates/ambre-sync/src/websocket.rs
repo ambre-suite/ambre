@@ -820,6 +820,18 @@ impl SyncState {
             SyncEvent::DocumentRenamed { id, document_id } => {
                 self.reply(id, RestEvent::DocumentRenamed { document_id });
             }
+            // A Murmure open that raced an open under another type installs
+            // nothing: its key met the checks of a channel, not of this
+            // document (`SYNC-260`).
+            SyncEvent::OpenDocumentReady {
+                document_id,
+                doc_type,
+                ..
+            } if doc_type == DocType::Murmure && self.typed_opens.contains(&document_id) => {
+                tracing::warn!(
+                    "Sync: Murmure open of {document_id:?} dropped: held as another type"
+                );
+            }
             SyncEvent::OpenDocumentReady {
                 document_id,
                 doc_key,

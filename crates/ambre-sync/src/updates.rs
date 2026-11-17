@@ -645,6 +645,25 @@ impl SyncState {
     }
 
     pub(crate) fn handle_open_document(&mut self, document_id: Id<Document>, doc_type: DocType) {
+        // The type comes from the relay's word, and a Murmure label checks
+        // the key against a channel's log. An open under another type claims the document for the
+        // session and drops a key a Murmure open installed (`SYNC-260`).
+        if doc_type == DocType::Murmure && self.typed_opens.contains(&document_id) {
+            tracing::warn!(
+                "Sync: open of {document_id:?} as Murmure refused: held as another type"
+            );
+            return;
+        }
+        if doc_type != DocType::Murmure {
+            self.typed_opens.insert(document_id);
+            if self
+                .documents
+                .get(&document_id)
+                .is_some_and(|doc| doc.doc_type == DocType::Murmure)
+            {
+                self.documents.remove(&document_id);
+            }
+        }
         // Without session keys we cannot authenticate the members fetch or unwrap
         // the document key. Opening now would insert a local-only doc with a
         // throwaway key and never hydrate. Queue it until the session is ready.
@@ -3557,6 +3576,88 @@ mod tests {
             "the edit left before the replay"
         );
         assert_eq!(state.pending_pre_session_updates.len(), 1);
+    }
+
+    /// The answer of an open of `document_id` labelled `doc_type`, which
+    /// installs `doc_key`.
+    fn ready(document_id: Id<Document>, doc_key: DocumentKey, doc_type: DocType) -> SyncEvent {
+        SyncEvent::OpenDocumentReady {
+            document_id,
+            doc_key,
+            snapshot_payload: None,
+            snapshot_id: Id::<Snapshot>::genesis(document_id),
+            covered_seq: Seq::<Relay>::ZERO,
+            held_snapshot: None,
+            doc_type,
+            existence: crate::Existence::OnRelay,
+            signing_keys: Vec::new(),
+            role: Role::Owner,
+            rotation_owed: ambre_core::RotationDebt::Settled,
+            links: Vec::new(),
+            writers: Default::default(),
+            departed: None,
+        }
+    }
+
+    /// Holds `SYNC-260`. The relay lists a Toile document as a channel, so
+    /// an open labels it Murmure and checks the key against a channel. The
+    /// open the Toile view made keeps the document and its key, and the
+    /// Murmure open installs nothing, as a command or as an answer. A
+    /// document no other open named still opens as Murmure.
+    #[test]
+    fn a_document_relabelled_murmure_keeps_the_key_its_own_open_installed() {
+        let (sink, _rx) = LogicSink::channel();
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
+        let toile = Id::<Document>::mint();
+        state.handle_open_document(toile, DocType::Toile);
+        let checked = state.documents[&toile].doc_key.id();
+
+        let forged = DocumentKey::generate();
+        state.handle_open_document(toile, DocType::Murmure);
+        state.handle_sync_event(ready(toile, forged.clone(), DocType::Murmure));
+        let held = &state.documents[&toile];
+        assert_eq!(held.doc_type, DocType::Toile);
+        assert_eq!(
+            held.doc_key.id(),
+            checked,
+            "the Murmure label replaced the key"
+        );
+
+        let channel = Id::<Document>::mint();
+        state.handle_sync_event(ready(channel, forged.clone(), DocType::Murmure));
+        assert_eq!(state.documents[&channel].doc_key.id(), forged.id());
+    }
+
+    /// Holds `SYNC-260` in the other order. A Murmure open installed a key
+    /// first, then the Toile view opens the same document. The key the
+    /// Murmure open installed is gone before the Toile open answers, and a
+    /// late Murmure answer installs nothing.
+    #[test]
+    fn an_open_under_another_type_drops_the_key_a_murmure_open_installed() {
+        let (sink, _rx) = LogicSink::channel();
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
+        let doc = Id::<Document>::mint();
+        let forged = DocumentKey::generate();
+        state.handle_sync_event(ready(doc, forged.clone(), DocType::Murmure));
+        assert_eq!(state.documents[&doc].doc_key.id(), forged.id());
+
+        // The Toile open waits for the session, as it waits for the relay.
+        let (event_tx, _events) = ambre_bus::conduit::unbounded();
+        state.set_event_tx(event_tx);
+        state.handle_open_document(doc, DocType::Toile);
+        assert!(
+            !state.documents.contains_key(&doc),
+            "the unchecked key outlived the open of the Toile view"
+        );
+
+        state.handle_sync_event(ready(doc, forged.clone(), DocType::Murmure));
+        assert!(!state.documents.contains_key(&doc));
     }
 
     /// A downloaded snapshot covering up to seq N must make the post-open

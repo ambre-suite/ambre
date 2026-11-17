@@ -84,6 +84,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-242` | `POST` | A Murmure open that a root of the session admits MUST hand that root to the local store as the kept pin of its document. A log that no pin and no root signed MUST hand none. | this spec section 3; `SYNC-238`, `SYNC-235` | `ambre_sync::key_vouch::tests::a_kept_murmure_root_admits_its_log_after_a_restart_and_no_relay_log` -- the open on the root of the link names that root to keep, and the log the relay rooted names none; `ambre_logic::dispatch::tests::a_proven_inviter_goes_to_the_local_store` -- the pin reaches the local store as a row of its document; `ambre_belt::murmure::tests::an_invitee_reopens_murmure_without_the_link_on_the_roots_it_kept` -- browser tier: the reload finds the roots the first session kept | none | verified |
 | `SYNC-243` | `POST` | The Main thread MUST send every pin the local store kept to the Sync worker ahead of the boot of a Murmure session. | this spec section 3; `SYNC-240`, `SYNC-241` | `ambre_app::kept::tests::a_murmure_boot_waits_for_every_kept_pin` -- the boot waits until the store answers, then takes every kept pin, a proof of this page included; `ambre_belt::murmure::tests::an_invitee_reopens_murmure_without_the_link_on_the_roots_it_kept` -- browser tier: the first space open after a reload passes on a kept pin | none | verified |
 | `SYNC-244` | `POST` | The read of the kept pins MUST answer the pins that the sessions of the signed-in user proved, and no pin of another user. | this spec section 3; `SYNC-238`, `SYNC-240`, `SYNC-243` | `ambre_logic::persistence::wasm_tests::a_second_account_reads_none_of_the_first_accounts_inviters` -- wasm tier: two accounts of one store each read back their own pins alone, the second keeps its own pin for a document the first pinned, and a row keyed by the document alone reads back for neither; `ambre_app::kept::tests::a_second_account_reads_none_of_the_first_accounts_pins` -- no pin goes before a session names the user, and a second account waits for its own answer, takes none of the first account's pins, and drops a late answer for the first | none | verified |
+| `SYNC-260` | `FAIL` | Given a document an open named under a type other than Murmure, the client MUST NOT install a key that an open labelled Murmure brought, for the session, and MUST drop such a key it holds before that open answers. | this spec section 3; `SYNC-200`, `SYNC-201`, `SYNC-202` | `ambre_sync::updates::tests::a_document_relabelled_murmure_keeps_the_key_its_own_open_installed` -- a Toile document relabelled Murmure keeps the key its own open installed, against the Murmure command and the Murmure answer alike, while a document no other open named still opens as Murmure; `ambre_sync::updates::tests::an_open_under_another_type_drops_the_key_a_murmure_open_installed` -- the Toile open drops the unchecked key while it waits, and a late Murmure answer installs nothing | none | verified |
 
 ### 1.4 An ephemeral is attributed
 
@@ -137,7 +138,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 78 `verified`. Every pure transform holds, out of the browser: the wrap, the
+* **Verification.** 79 `verified`. Every pure transform holds, out of the browser: the wrap, the
   weak key, the pin, the invitee, the role and the log walk. What is loose is the branches that only
   run against a live relay.
 ---
@@ -441,6 +442,14 @@ The creator of a space signed its creation, so the creator opens it with no link
 the space from the link, and its members then root each channel and each direct message one of
 them created.
 
+**Why a Murmure label binds nothing else.** The key checks skip a document of a Murmure channel,
+as section 6 states. The open learns that type from the relay: the channel listing names each
+channel, and the document listing names each type. So the relay can label any document Murmure.
+
+An open under another type comes from the route of a view, and claims the document for the session
+(`SYNC-260`). A Murmure open of a claimed document installs nothing, and the claim drops a key such
+an open installed first. The unchecked key thus seals only what the Murmure logic writes.
+
 A refused key fails the open as a key not received (`SYNC-173`), and a refused rotation keeps the
 current key. Two refusals mean that no member signed the key: no writer named it, or the pinned
 inviter signed no entry of the log. The relay chose that key, so the open fails as a key no member
@@ -580,6 +589,8 @@ authority: the role here hides what the relay would refuse anyway.
 * **A Murmure root lands late or never.** A member who joins a space after this client accepted
   its log roots nothing until the next open of that log. A direct message such a member creates is
   refused until then. An open that runs before the open of its space is refused the same way.
+* **A claim lasts one session.** An open under another type claims its document for the session
+  alone (`SYNC-260`). A later session holds no claim until that document opens again under its type.
 * **A relay can withhold the latest entries from every frame of a member.** An update carries the
   head its author read (`SYNC-207`), and a presence sample carries none. A relay that drops every
   update of the up-to-date members towards one member partitions it, and no rule detects that.

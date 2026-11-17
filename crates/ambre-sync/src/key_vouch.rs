@@ -44,6 +44,9 @@
 //! inviter of its own. A Murmure open checks its log against the roots of
 //! the session instead (`SYNC-235`). The roots hold the inviter a Murmure
 //! link pins, and the members of each Murmure log an open accepted.
+//!
+//! The relay writes the Murmure label, so a document an open claimed under
+//! another type never takes a key a Murmure open brought (`SYNC-260`).
 
 use ambre_core::id::{Document, Id};
 use ambre_core::{ExchangePublicKey, FixedBytes, InviterPin, PublicKey, RotationDebt, Seq};
