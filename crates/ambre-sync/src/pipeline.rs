@@ -1128,6 +1128,26 @@ pub fn object_author(object: &impl StoredObject) -> Result<FixedBytes<PublicKey>
 mod tests {
     use super::*;
 
+    /// A forged signature, a key not held and a signer with no writing role
+    /// each raise a warning of their own. Any other refusal reads as a
+    /// frame that does not decrypt.
+    #[test]
+    fn each_refusal_of_a_frame_raises_its_own_warning() {
+        use ambre_bus::sync_warning::SyncWarningCode;
+        let cases = [
+            (
+                PipelineError::Crypto(CryptoError::InvalidSignature),
+                SyncWarningCode::SignatureRefused,
+            ),
+            (PipelineError::WrongKey, SyncWarningCode::KeyNotHeld),
+            (PipelineError::NotAWriter, SyncWarningCode::WriterRefused),
+            (PipelineError::ShortBody, SyncWarningCode::DecryptFailed),
+        ];
+        for (error, warning) in cases {
+            assert_eq!(error.warning(), warning, "{error}");
+        }
+    }
+
     /// A frame and a sealed blob count their bytes, and their `Debug`
     /// prints the count alone, never a byte of what they hold.
     #[test]

@@ -172,13 +172,11 @@ impl SyncState {
                 continue;
             };
             let floor = doc_state.directory_asked.latest();
-            let refused = std::mem::take(&mut doc_state.refused);
-            doc_state
-                .unvouched
-                .extend(refused.into_iter().map(|held| crate::Unvouched {
-                    seen: floor,
-                    ..held
-                }));
+            let mut refused = std::mem::take(&mut doc_state.refused);
+            for held in &mut refused {
+                held.seen = floor;
+            }
+            doc_state.unvouched.extend(refused);
             let overflow = doc_state.unvouched.len().saturating_sub(
                 usize::try_from(crate::QUARANTINE_LIMIT.get()).unwrap_or(usize::MAX),
             );
@@ -3095,5 +3093,105 @@ pub(crate) mod tests {
         assert_eq!(released.snapshots.len(), walk_limit());
         assert!(released.snapshots.contains_key(&first));
         assert!(matches!(gate, LogGate::Open));
+    }
+
+    /// A gate whose log walks again, as the answer to the listing 2.
+    fn walking_gate() -> LogGate {
+        let mut gate = LogGate::Open;
+        gate.walk(ambre_core::Seq::nth(1), ambre_core::Seq::nth(2));
+        gate
+    }
+
+    fn one_byte_frame(byte: u8) -> pipeline::UpdateFrame {
+        pipeline::UpdateFrame::from_bytes(vec![byte])
+    }
+
+    /// A walk holds one refused frame per clock, its latest copy, and hands
+    /// them back in the order of their clocks.
+    #[test]
+    fn a_walk_holds_the_latest_refused_frame_of_each_clock() {
+        type Clock = ambre_protocol::messages::Seq<ambre_protocol::messages::DeltaAuthor>;
+        let mut gate = walking_gate();
+        let refused = vec![
+            (Clock::new(2), one_byte_frame(1)),
+            (Clock::new(1), one_byte_frame(2)),
+        ];
+        assert!(gate.hold_resend(refused).is_empty());
+        assert!(
+            gate.hold_resend(vec![(Clock::new(2), one_byte_frame(3))])
+                .is_empty()
+        );
+        let released = gate
+            .release(ambre_core::Seq::nth(2))
+            .expect("the answer of the walk");
+        let held: Vec<(Clock, Vec<u8>)> = released
+            .resend
+            .iter()
+            .map(|(clock, frame)| (*clock, frame.as_bytes().to_vec()))
+            .collect();
+        assert_eq!(
+            held,
+            vec![(Clock::new(1), vec![2]), (Clock::new(2), vec![3])]
+        );
+    }
+
+    /// An ended gate holds no edit again, and no answer opens it.
+    #[test]
+    fn an_ended_gate_seals_nothing_again() {
+        let mut gate = walking_gate();
+        gate.end();
+        assert!(matches!(gate, LogGate::Ended));
+        assert!(matches!(gate.hold(one_byte_frame(1)), Hold::Ended));
+        assert!(gate.release(ambre_core::Seq::nth(2)).is_none());
+        let mut open = LogGate::Open;
+        open.end();
+        assert!(matches!(open, LogGate::Ended));
+    }
+
+    /// A listing of an open space whose walk sets a new word walks the log of
+    /// each channel the space lists again. A listing that carries the word
+    /// held walks nothing.
+    #[test]
+    fn a_space_listing_with_a_new_word_walks_its_channel_logs_again() {
+        let (mut state, _rx) = bare_state();
+        let (space_id, meta) = (Id::<Space>::mint(), Id::<Document>::mint());
+        let space = space_id.document_id();
+        for document_id in [space, meta] {
+            state.documents.insert(
+                document_id,
+                SyncDocumentState::new(
+                    document_id,
+                    DocumentKey::generate(),
+                    DocType::Murmure,
+                    crate::Existence::OnRelay,
+                ),
+            );
+        }
+        state.self_join_logs.insert(meta, space_id);
+        let writers = state.documents[&space].writers.clone();
+        let listing =
+            |asked: u64, word: membership_log::SpaceWord| SyncEvent::DocumentMembersReady {
+                id: None,
+                asked: ambre_core::Seq::nth(asked),
+                document_id: space,
+                word,
+                rotation_owed: ambre_core::RotationDebt::Settled,
+                members: Vec::new(),
+                signing_keys: Vec::new(),
+                heads: Default::default(),
+                writers: writers.clone(),
+                departed: None,
+                revoked: None,
+                root: membership_log::Root::Free,
+            };
+        let walks = |state: &SyncState| matches!(state.documents[&meta].gate, LogGate::Walking(_));
+
+        state.handle_sync_event(listing(1, membership_log::SpaceWord::default()));
+        assert!(!walks(&state), "the word held walks nothing");
+
+        let mut word = membership_log::SpaceWord::default();
+        word.removed.insert(Id::<User>::mint());
+        state.handle_sync_event(listing(2, word));
+        assert!(walks(&state), "a new word walks the channel log again");
     }
 }

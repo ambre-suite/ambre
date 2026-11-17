@@ -594,6 +594,52 @@ mod tests {
         }
     }
 
+    /// With a transport but only half of the session keys, no creation can
+    /// start: an invite on a local-only document is refused at once, and
+    /// waits for nothing.
+    #[test]
+    fn an_invite_with_half_the_session_keys_is_refused_at_once() {
+        let (mut state, rx) = bare_state();
+        let (tx, _events) = ambre_bus::conduit::unbounded::<SyncEvent>();
+        state.set_event_tx(tx);
+        state.exchange_key = Some(StaticSecret::from([2; 32]));
+        let document_id = Id::<Document>::mint();
+        state.documents.insert(
+            document_id,
+            SyncDocumentState::new(
+                document_id,
+                DocumentKey::from_array([0x41; 32]),
+                DocType::Prose,
+                crate::Existence::LocalOnly,
+            ),
+        );
+        let key = crate::sharing::own_exchange_key(&StaticSecret::from([3; 32]));
+        state.handle_invite_to_document(
+            ambre_bus::next_request(),
+            document_id,
+            None,
+            Id::<User>::mint(),
+            Role::Editor,
+            key,
+        );
+        let refusals: Vec<ApiFailure> = rx
+            .try_iter()
+            .filter_map(|event| match event {
+                LogicEvent::ApiError {
+                    request: ApiRequest::InviteToDocument,
+                    failure,
+                    ..
+                } => Some(failure),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            refusals,
+            vec![ApiFailure::Local(ambre_core::LocalFailure::NotSignedIn)]
+        );
+        assert!(state.documents[&document_id].pending_invites.is_empty());
+    }
+
     /// `SYNC-186`: with no relay, each member request answers the Logic
     /// thread at once, so no view waits on it.
     #[test]

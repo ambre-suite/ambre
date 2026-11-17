@@ -638,6 +638,22 @@ mod tests {
             doc.bob_checks(&log, &rotated, &k1, &[]),
             Err(KeyRefusal::Unvouched)
         );
+        // A link relabelled to name the key, but sealed under another one,
+        // does not open under it and vouches for nothing.
+        let other = DocumentKey::generate();
+        let mut relabelled = pipeline::seal_link(
+            doc.document_id,
+            &doc.k0,
+            &other,
+            log.next(),
+            &doc.alice.person.key,
+        )
+        .unwrap();
+        relabelled.key = k1.id();
+        assert_eq!(
+            doc.bob_checks(&log, &rotated, &k1, std::slice::from_ref(&relabelled)),
+            Err(KeyRefusal::Unvouched)
+        );
 
         // The relay re-wraps a key of its own for Bob. Under a space, a
         // wrapper no row carries passes as a space writer, so the key check
@@ -1005,6 +1021,62 @@ mod tests {
             carol_checks(&full, &k2, &[rotation, paid], Some(left)),
             Ok(())
         );
+    }
+
+    /// A departure walked before refuses each key in force before it. A
+    /// key a writer named at the place of that departure, in a log served
+    /// without it, came into force after it: the leaver never held it.
+    #[test]
+    fn a_key_named_at_the_place_of_a_known_departure_stands() {
+        let mut doc = Shared::new();
+        let carol = Member::new(0x23);
+        let dave = Member::new(0x24);
+        let invite = doc.entry(&carol, MembershipAct::Invite, Role::Editor);
+        doc.entries.push(invite);
+        let leave = doc.entry_by(
+            &doc.bob,
+            &doc.bob,
+            MembershipAct::Revoke,
+            Role::Editor,
+            None,
+        );
+        let left = leave.position;
+        let k1 = DocumentKey::generate();
+        let fork = doc.entry_by(
+            &doc.alice,
+            &dave,
+            MembershipAct::Invite,
+            Role::Editor,
+            Some(k1.id()),
+        );
+        assert_eq!(fork.position, left, "the same place as the departure");
+        doc.entries.push(fork);
+        let log = doc.log();
+        assert_eq!(
+            log.named_at()
+                .and_then(<[NamedKey]>::last)
+                .map(|named| (named.place, named.key)),
+            Some((left, k1.id()))
+        );
+        let rows = vec![
+            row(&doc.alice, &k1, &doc.alice.xk),
+            row(&carol, &k1, &doc.alice.xk),
+        ];
+        let vouch = KeyVouch::of(
+            &log,
+            &LogRule::document(),
+            &carol.exchange(),
+            &rows,
+            &crate::key_vouch::Roots {
+                pin: Some(doc.alice_pin()),
+                signer: None,
+                ..Default::default()
+            },
+            RotationDebt::Settled,
+        )
+        .knowing(Some(left));
+        assert_eq!(vouch.departed(), Some(left));
+        assert_eq!(vouch.check(doc.document_id, &k1, &[]), Ok(()));
     }
 
     /// Holds `SYNC-222`. Bob leaves with an entry that names a key of his

@@ -1048,6 +1048,31 @@ pub(crate) mod tests {
         Log::walk(DOC, anchor(log), log, no_self_join)
     }
 
+    /// A space writer signs a key link of a channel at each head the walk
+    /// passes through, the empty head before the first entry included, and
+    /// at no head past the walk.
+    #[test]
+    fn a_space_writer_signs_a_link_at_each_head_of_the_walk() {
+        let (alice, bob, governor) = (Person::new(1), Person::new(2), Person::new(9));
+        let entries = created(&alice, &bob);
+        let mut word = SpaceWord::default();
+        word.writers.insert(governor.public());
+        let rule = LogRule {
+            space: Some(word),
+            ..LogRule::document()
+        };
+        let log = Log::walk_under(DOC, anchor(&entries), &entries, &rule);
+        let signers = log.link_signers();
+        assert!(signers.signs(&governor.public(), LogHead::EMPTY));
+        assert!(signers.signs(&governor.public(), log.next()));
+        let past = LogHead {
+            position: log.next().position.next(),
+            previous: log.next().previous,
+        };
+        assert!(!signers.signs(&governor.public(), past));
+        assert!(!signers.signs(&bob.public(), LogHead::EMPTY));
+    }
+
     /// Holds `SYNC-103`: a row counts as verified only when valid entries
     /// link it to the first. A log rooted elsewhere, or one whose link is
     /// broken, leaves every row past the break unverified.
