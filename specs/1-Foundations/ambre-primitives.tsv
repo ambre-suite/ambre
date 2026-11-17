@@ -1928,7 +1928,6 @@ ambre-server | src/db/content.rs | crate::db::content | attach_wire() | ret | Re
 ambre-server | src/db/content.rs | crate::db::content | document_holds_media() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/db/content.rs | crate::db::content | parse_status(text) | param | &str	generic	generic codec/parser/bytes API
 ambre-server | src/db/members.rs | crate::db::members | rotation_owed() | ret | Result<bool,AppError>	generic	predicate result
-ambre-server | src/db/members.rs | crate::db::members | document_has_members() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/db/mod.rs | crate::db | <Option<ambre_core::SegmentState> as TryFrom<PgOptState>>::Error | assoc | String	generic	an error that echoes the refused stored segment state
 ambre-server | src/db/mod.rs | crate::db | PgId.0 | field | uuid::Uuid	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/db/mod.rs | crate::db | PgKey.0 | field | Vec<u8>	newtype-inner	newtype inner, accessor or constructor

@@ -164,6 +164,7 @@ The test of section 1: a team that lacks one of these stories keeps its old suit
 | `[x]` A provider account is unlocked or set up | MVP | the home screen has no passphrase field and no setup, so an account that holds its keys cannot open them and one that owes them is never asked. The setup refusal reaches a screen that ignores it. Needs `The provider sign-in reaches the client` first. Done when `CHROME-097`, `CHROME-098` and `CHROME-100` read `verified` |
 | `[x]` The setup screen shows why a passphrase was refused | MVP | the Sync worker answers a weak setup with `AuthFailure::WeakPassphrase` and its words, and no screen sends a setup yet. Done when a row binding the setup screen to the words of the refusal, read by a screen reader, reads `verified` |
 | `[x]` A client refuses a signed join older than its own | MVP | a signed join carries an instant no client checks, so a relay replays an old join to a later joiner, who wraps its sender key to it (audit P5). Done when a row refusing a join older than the client's own reads `verified` |
+| `[x]` A creator never reclaims a document that holds a log or a channel | MVP | The retry of a creation registers its creator only when the document holds no member row, no log entry and no channel. Closes `P32` |
 
 ### Foundations: platform and architecture
 

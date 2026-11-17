@@ -293,13 +293,31 @@ pub async fn create_document(
             resource: Resource::Document,
         });
     }
-    // A retry registers the creator only while no member row names the document.
-    // The first call then stored the row and lost its membership on the way. Once
-    // any member row exists, the creator holds no right of its own. A creator a
-    // co-owner removed, who left, or who made a direct message ownerless, never
-    // turns owner again through this route (`SRV-268`, audit `N7`).
-    let unclaimed = created || !db::document_has_members(&state.db, &doc_id).await?;
-    if unclaimed {
+    // A retry registers the creator only while no member row, no log entry and
+    // no channel names the document. The first call then stored the row and
+    // lost its membership on the way. Past that, the creator holds no right of
+    // its own. A co-owner may have removed the creator, or the creator left. It
+    // may have made a direct message ownerless, or left a public channel last.
+    // It never turns owner again through this route (`SRV-268`, `SRV-283`,
+    // audits `N7` and `P32`).
+    let claim = if created {
+        db::Claim::Unclaimed
+    } else {
+        db::document_claim(&state.db, &doc_id).await?
+    };
+    // A creator who holds no row of a claimed document reads not-found, as
+    // every non-member does (`SRV-005`). A creator who holds its row retries
+    // with no effect.
+    if claim == db::Claim::Held
+        && db::get_document_member(&state.db, &doc_id, &s.user_id)
+            .await?
+            .is_none()
+    {
+        return Err(AppError::NotFound {
+            resource: Resource::Document,
+        });
+    }
+    if claim == db::Claim::Unclaimed {
         let doc_key_enc = req.doc_key_enc;
         // The log is never rewritten (`SYNC-107`): a document with no member row
         // holds no entry either, since the two land in one transaction.

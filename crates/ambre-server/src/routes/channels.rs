@@ -3359,6 +3359,66 @@ mod tests {
         assert!(channel.is_none());
     }
 
+    /// `SRV-283`, audit `P32`: the creator of a public channel leaves it as
+    /// its last member, and an owner removes her from the space. Her retry
+    /// of the creation of the `meta` is refused, and grants her no row.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_creator_never_reclaims_the_meta_of_a_channel(pool: sqlx::PgPool) {
+        let (state, _stub) = with_store(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let mallory = user(&state, "mallory@test.dev").await;
+        let space = space(&state, alice, &[(mallory, Role::Editor)]).await;
+        let channel = public_channel(&state, mallory, space).await;
+        let meta = channel.meta.document_id();
+        assert_eq!(
+            leave(&state, mallory, &channel).await.expect("leave"),
+            db::Removed::Kept
+        );
+        let link = ambre_protocol::KeyLink {
+            document_id: space.document_id(),
+            key: ambre_core::FixedBytes::<ambre_core::KeyId>::from_array([2; 16]),
+            previous: ambre_core::FixedBytes::<ambre_core::KeyId>::from_array([1; 16]),
+            head: ambre_protocol::LogHead::EMPTY,
+            sealed: ambre_core::Payload::new(vec![2; 200]),
+        };
+        let removed = crate::routes::share::revoke_and_rotate(
+            State(state.clone()),
+            session(alice),
+            PathId::new(space.document_id()),
+            Json::new(crate::routes::share::RevokeRequest {
+                user_id: mallory,
+                keys: vec![crate::routes::share::RotateKeyEntry {
+                    user_id: alice,
+                    doc_key_enc: ambre_core::Encoded::new([4u8; 48].to_vec()),
+                }],
+                members: vec![alice],
+                link: link.encode().expect("encode"),
+                entry: None,
+            }),
+        )
+        .await;
+        assert_eq!(status(removed), StatusCode::OK);
+        assert!(member_ids(&state, meta).await.is_empty());
+
+        let retry = crate::routes::create_document(
+            State(state.clone()),
+            session(mallory),
+            Json::new(crate::routes::CreateDocumentRequest {
+                doc_type: ambre_core::DocType::Murmure,
+                name_enc: None,
+                doc_key_enc: ambre_core::Encoded::new([9u8; 48].to_vec()),
+                document_id: Some(meta),
+                entry: None,
+                space: ambre_core::DocumentScope::default(),
+            }),
+        )
+        .await;
+
+        assert_eq!(status(retry), StatusCode::NOT_FOUND);
+        assert_eq!(role_on(&state, meta, mallory).await, None);
+    }
+
     /// Leaving a space touches neither a direct message nor a channel of
     /// another space (the Murmure spaces spec).
     #[sqlx::test]

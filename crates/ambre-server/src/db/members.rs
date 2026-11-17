@@ -120,19 +120,31 @@ pub async fn add_document_member(
     Ok(())
 }
 
-/// Whether any member row names the document. A creation whose member row never
-/// landed has none, and only then may its creator register as owner again
-/// (`SRV-268`, audit `N7`).
-pub async fn document_has_members(
-    pool: &PgPool,
-    document_id: &Id<Document>,
-) -> Result<bool, AppError> {
-    let held: bool =
-        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM document_members WHERE document_id = $1)")
-            .bind(id_to_uuid(*document_id))
-            .fetch_one(pool)
-            .await?;
-    Ok(held)
+/// Whether a creator's retry of a creation may still register its owner row.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Claim {
+    /// No member row, no log entry and no channel names the document. The
+    /// first call stored the row and lost its membership on the way.
+    Unclaimed,
+    /// The document holds a member row, a log entry, or a place in a channel.
+    Held,
+}
+
+/// Whether a retry of the creation of the document may register its creator
+/// (`SRV-268`, `SRV-283`, audits `N7` and `P32`). A member row and a log entry
+/// land in one transaction, so a lost first call leaves neither. A channel is
+/// registered after its creation, so a channel document is never a lost
+/// creation. That holds once its last member left it too (`SRV-173`).
+pub async fn document_claim(pool: &PgPool, document_id: &Id<Document>) -> Result<Claim, AppError> {
+    let held: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM document_members WHERE document_id = $1) \
+         OR EXISTS (SELECT 1 FROM document_membership_log WHERE document_id = $1) \
+         OR EXISTS (SELECT 1 FROM channel_documents WHERE document_id = $1)",
+    )
+    .bind(id_to_uuid(*document_id))
+    .fetch_one(pool)
+    .await?;
+    Ok(if held { Claim::Held } else { Claim::Unclaimed })
 }
 
 /// Appends `entry` at the next place of the document's log, inside the
