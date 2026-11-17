@@ -142,6 +142,9 @@ The test of section 1: a team that lacks one of these stories keeps its old suit
 | `[ ]` A security pre-audit of the whole workspace | MVP | once every other MVP story is ticked, AI reviewers working apart audit the code and the specs of every application, the relay and the SFU: the zero-knowledge boundary, the key hierarchy, the call chunks and sender keys, the parsers of foreign files and the server routes. It comes before the external `Call crypto review`, and never replaces it: a reviewer of the same kind as the one that wrote the code shares its blind spots. Done when each finding is fixed or answered in writing, and each high finding is a contract row that reads `verified` |
 | `[x]` The relay can depend on no application crate | MVP | `ambre-spec-zero-knowledge.md` section 2 says `deny.toml` keeps `ambre-server` from importing `ambre-trame`, and no ban names `ambre-trame`, `ambre-toile`, `ambre-prose` or `ambre-murmure`: only their CRDT dependency is banned. Done when `deny.toml` bans each application crate outside the client crates, a row binding it reads `verified`, and the section names the bans as they are |
 | `[x]` Logout forgets every pending Murmure request | MVP | the logout clears neither the pending deletes, leaves and erases nor the call asks and preview fetches, so a later session retries the erases of the previous user under its own account and sends that user's metadata to the relay. Done when a test logs out with each one pending and no later session sends it |
+| `[ ]` A passphrase change re-seals the seed | MVP | `handle_change_passphrase` still drops both passphrases after the floor. Done when a change opens the seed under the current passphrase, re-seals it through `seal_seed`, and a test unlocks under the new one |
+| `[ ]` An account setup ends in a session | MVP | the Sync worker answers a setup with `AccountCreated` alone, so Logic never learns the user id and the launcher returns to the sign-in panel once the words are confirmed. Done when a setup is followed by `SessionReady` and the list shows after the confirmation, held by a browser test |
+| `[ ]` The unlock face offers the recovery | MVP | a provider account that holds its keys reaches no recovery form, which only the development panel opens today. Done when the unlock face links to the recovery form and a browser test holds the path |
 
 ### Foundations: platform and architecture
 
@@ -272,6 +275,8 @@ row reads `V1`.
 | `[ ]` A refused dead letter keeps its delta reachable | V1 | when the dead-letter push fails after an index or pending failure, the relay logs and counts it, but the delta survives only in its index row if any. Done when each path that ends in a refused dead letter is listed, the one with no copy left is refused upstream or stated as a known loss, and a row reads `verified` |
 | `[ ]` A page hidden flushes the send window | V1 | a tab closed inside the 25 ms send window drops the held delta from the wire. It is saved locally and sent again at the next open (`AUTHOR-028`) only if the sealed store write landed. Done when a `pagehide` sends a flush command the Logic thread honours before the page goes, and a row reads `verified` under a browser test |
 | `[ ]` The send window is measured on a phone | V1 | the 25 ms send window is the client share left by the sum of the P95 targets of `ambre-spec-budgets.md` section 1, most of which no run measures. Done when the keystroke probes read the client path of one key on the reference device, and the window row is set again from that measure |
+| `[ ]` A snapshot upload compresses and seals once | V1 | the upload link binds the size before the client knows the id it seals, so each snapshot upload compresses and seals twice and holds a copy of the payload until it leaves. Done when the size is derived from one compression and the blob is sealed once, and a test pins the derived size to the sealed one |
+| `[ ]` An opened snapshot covers the deltas it claims | V1 | the covered sequence an open trusts is the relay's, not sealed in the snapshot, so a relay names a horizon past or short of what the snapshot folds in and an open skips or replays deltas. Done when the snapshot seals its horizon and a row refusing one whose sealed horizon differs from the one served reads `verified` |
 
 ### Foundations: security and zero knowledge
 
@@ -299,6 +304,14 @@ row reads `V1`.
 | `[ ]` A client refuses a signed join older than its own | V1 | a signed join carries an instant no client checks, so a relay replays an old join to a later joiner, who wraps its sender key to it (audit P5). Done when a row refusing a join older than the client's own reads `verified` |
 | `[ ]` An opened snapshot is the one asked for | V1 | a snapshot opens without a check that its sealed identifier is the requested one, so a relay swaps two snapshots of one document (audit P6). Done when a row refusing a snapshot whose sealed identifier differs reads `verified` |
 | `[ ]` A first open with no pin of a copy another member wrapped is refused | V1 | an open with neither a pin nor a kept anchor still accepts the anchor the relay chose (trust on first use, which the owner declined). Done when such an open is refused or warned per the owner's choice, and a row states it and reads `verified` |
+| `[ ]` A recovery opens the session | V1 | a recovery answers `AccountRecovered` and drops the seed, so the user types the new passphrase again to unlock. Done when a recovery ends on `SessionReady` with the recovered keys, and a row binding it reads `verified` |
+| `[ ]` A passphrase change asks for the current passphrase in the app | V1 | the Sync worker re-seals on `ChangePassphrase`, but no screen sends it with the current passphrase and shows `PassphraseChanged`. Done when the settings screen sends the change and shows each refusal, held by a test |
+| `[ ]` The setup form takes the provider identity | V1 | after a provider sign-in that owes its keys, the setup form asks again for the name and the address the provider already gave. Done when the form is prefilled from `ProviderSignedIn` and a test holds it |
+| `[ ]` A user search leaves no address in the client log | V1 | the native fallback of `handle_search_users` (`ambre-sync/src/members.rs`) logs the query at `info`, and the query is now a whole address. Done when no log line of the Sync worker carries a searched address |
+| `[ ]` The keys gate offers a sign-out | V1 | the unlock and the setup faces show before the header's sign-out, so a person who signed in with the wrong account must close the tab. Done when a row binding a sign-out on both faces reads `verified` |
+| `[ ]` The anonymous account setup is retired | V1 | `SetupAccount` posts to `/auth/setup`, which creates an account no provider vouched for; the provider path now goes through `SetUpKeys`. Done when no client path reaches `/auth/setup`, or a row states why it stays |
+| `[ ]` A second setup submission cannot race | V1 | the setup button stays disabled while the worker has not answered, but a reload mid-setup can send a second store that the relay refuses with 409 after the first landed. Done when a row binds the answer to a store the relay already holds |
+| `[ ]` A re-seal refused as stale tells the user why | V1 | a recovery or a passphrase change whose re-seal meets `CONFLICT` reaches the view as a generic HTTP failure. Done when the bus carries a refusal of its own for it, the screen asks the user to retry, and a row reads `verified` |
 
 ### Foundations: platform and architecture
 
@@ -337,6 +350,7 @@ row reads `V1`.
 | `[ ]` The launcher's perf read-out and TOFU pin read in modules | V1 | the frame loop of `lib.rs` still mirrors the perf snapshot into the status bar and reads the TOFU pin inline. Done when each concern is one module and `lib.rs` keeps the boot and the frame loop alone |
 | `[ ]` A format undo across a peer's deletion | V1 | the replay of a format step (`UNDO-015`) writes nothing when a peer deleted characters inside the formatted range, as `ambre-spec-undo.md` section 3 states, so the user sees an undo that does not work. Done when a rule of `ambre-spec-undo.md` for that case reads `verified` |
 | `[ ]` A same-tab paste on a browser refusing the web types | V1 | the ownership token rides in the HTML when the `web ` types are refused, and a Trame or Toile copy carries no HTML. Such a paste falls to rung 3. Done when `UI-THREAD-056` reads `verified` |
+| `[ ]` A worker connects only to its origin and to object storage | V1 | the worker policy leaves `connect-src` open, since the build does not know the origin of object storage. Done when the deployment names that origin, the post-build hook writes it into the worker policy, and a row reads `verified` |
 
 ### Build, CI and verification
 
@@ -356,6 +370,7 @@ row reads `V1`.
 | `[ ]` One copy of each sort in Main | V1 | on 2026-11-15 `twiggy` read about 314 KB of stable sorts and 223 KB of unstable sorts in Main, one copy of about 3.5 KB per element type and per closure, and about 164 KB of stable sorts over Ambre types alone. The cut of `Main back under its ceiling` shared seven callers through `ambre_core::order`; Trame sheet order, Prose regions, Murmure channel order, the `Id<Message>` and `Id<Channel>` sorts, the probe percentiles and about 120 more call sites still link their own copy. Done when every sort of an application crate goes through `ambre_core::order` or a lint names why not, and Main shrinks by the figure measured |
 | `[ ]` A collect into a map in Main is a loop | V1 | a `collect` into a `BTreeMap` sorts the pairs with a stable sort of its own before it builds the map, about 4.5 KB of wasm per key and value types. Two were cut on 2026-11-15; `ambre-opc` and the `loro` maps still carry one. Done when a gate refuses a `collect` into a `BTreeMap` or a `BTreeSet` in a crate Main links |
 | `[ ]` The belt reports every uncaught page error | V1 | only the two IME tests record uncaught errors, so any other belt test that a trap breaks fails as a timeout. Done when the driver records `error` events on every page and every wait fails with the stack |
+| `[ ]` The browser tier holds the worker policy | V1 | the browser test records the violations of the page alone, so a worker blocked by its policy shows no violation. Done when the belt records a violation inside each worker, and a row reads `verified` |
 
 ### Trame
 
@@ -376,6 +391,9 @@ row reads `V1`.
 | `[ ]` Trame answers once per pass | V1 | since `ARCH P9` the Logic thread answers each document once per pass, but the grid engine still recomputes its filters, its totals and the visible cells after every command. A burst of typing or a fast fill pays that once per command, all but the last stale. Scheduled only if the Keystroke latency probes Story (`ambre-roadmap.md` E6) shows the grid falling behind |
 | `[ ]` Links in Trame | V1 | clickable per-cell links, on the link and open-URL model shared with Prose and Toile |
 | `[ ]` A sweep slice that fails halfway still commits what it wrote | V1 | `Axes::sweep` returns `Swept::default()` when a list delete fails after earlier deletes of the same slice succeeded, so `sweep_slice` reads no write and skips the commit: the deletes wait in the open transaction for the next local commit, an undo step, and the cached axis view misses them -- the class of the register-only slice fixed by `A hidden line leaves the cached axis after a sweep`. Unreachable while the cached view matches the list. Done when a slice commits whenever the document holds pending operations, and a test forces a failing delete |
+| `[ ]` Frozen pane past the grid reported | V1 | an import cuts a frozen count past Trame's grid without a word. Done when the cut reaches the import report as approximated |
+| `[ ]` A frozen band bounded to the screen | V1 | a band frozen through thousands of lines ships every cell of it in each viewport answer. Done when freezing refuses a band taller or wider than the screen, under a row that reads verified |
+| `[ ]` Frozen panes checked in the browser | V1 | the four panes are proved on a recording surface only. Done when a belt test scrolls a frozen sheet in headless Chrome and reads the header row on screen |
 
 ### Toile
 
@@ -394,6 +412,7 @@ row reads `V1`.
 | `[ ]` Autoplay and loop in a presentation | V1 | the deck configuration stores autoplay and loop, and no playback reads either. Done when `TOILE-FEAT-113` and `TOILE-FEAT-114` read `verified` |
 | `[ ]` A group write walks no board | V1 | a bind, an unbind, a move or a delete on a group re-reads the whole element map, so its cost grows with the board and not with the group. Done when `TOILE-294` reads `verified` |
 | `[ ]` A board shows a picture at full resolution | V1 | the screen draws each picture from its inline thumbnail, capped at a 256 px edge. The deck export fetches and opens the stored file of each picture; the paint could take the same path, showing the thumbnail while the full blob loads. Done when `TOILE-IO-035` reads `verified` |
+| `[ ]` Toile awaits a board file it reads with a visible state | V1 | an SVG or WebP read now waits on the converter thread, and the board shows nothing until the answer lands. A large drawing leaves the user with no sign that the drop was taken. Done when a read in flight shows a waiting state on the board, under a row that reads `verified` |
 
 ### Prose
 
@@ -413,6 +432,9 @@ row reads `V1`.
 | `[ ]` A Prose document costs less than ten times its Markdown | V1 | a document holds 14.8 times its Markdown. The rest of the ratio sits in two places the MVP story leaves: the B-tree of `generic-btree` under Loro, through an upstream change first (`The text tree of Loro holds less per character`), and the mirror the undo history keeps, a copy of every text, every node map and the tree. Done when a CI test holds a document under 10 times its Markdown |
 | `[ ]` An announced session draws no caret it did not place | V1 | a Prose session announces itself once its document is ready, and a session that never placed its caret is drawn at the start of the first block on every peer's screen. Done when `PROSE-130` reads `verified` |
 | `[ ]` A Prose view that lost an event catches up | V1 | a Trame or Toile view that lost an event is resent its document, and a Prose view is resent nothing: it reconciles its text change by change, so a lost change stays out of its count until a reload (`BUS-043`). Done when `BUS-043` reads `verified` |
+| `[ ]` A paste names what it approximated | V1 | a paste has no report, so a table past 64 columns flattened to paragraphs, or overlapping spans clipped, change silently. Done when the view names the approximation after such a paste, and a row reads `verified` |
+| `[ ]` A selected picture answers its keys | V1 | a press selects a picture and draws its handles, and no key acts on it: Delete leaves it, and no arrow resizes it. Done when Delete removes a selected picture, Escape cancels a handle drag, and a row binding each reads `verified` |
+| `[ ]` A picture handle shows its cursor | V1 | a pointer over a picture handle keeps the text cursor, so nothing shows that a drag resizes. Done when the hover of each handle asks the host for its directional cursor, and a row reads `verified` |
 
 ### Murmure
 
@@ -473,6 +495,7 @@ row reads `V1`.
 | `[ ]` An import into a new workbook takes the default sheet's place | V1 | an import into a new workbook keeps the empty default sheet and renames the file's `Sheet1` to `Sheet1 (2)`; the export leaves the default sheet out (`TRAME-IO-082`), but the name the user reads has still changed. The import takes the default sheet's place when it holds nothing, or the report names the rename. Done when a workbook whose sheet is `Sheet1` lands under its own name |
 | `[ ]` An empty default sheet a formula names still leaves | V1 | the export leaves out an untouched default sheet (`TRAME-IO-082`), even when a formula of another sheet names it; the file then names a missing sheet and Excel reads `#REF!`. Done when such a sheet leaves, and a test holds it |
 | `[ ]` The sheet fixture round trip reads the document apart from the export map | V1 | `TRAME-IO-080` compares two documents as `excel_workbook` reads them, the export's own map, and a column width by its span alone. A loss that map shares passes. Done when the comparison reads the stored cells, styles and sizes, widths by value, and the row stays `verified` |
+| `[ ]` HTML import lands tables as tables | V1 | an imported HTML file still reads a table as one paragraph per cell, where a paste now lands it on its grid. Done when the import maps the reader's tables onto the form's tables, merged cells included, and a row reads `verified` |
 
 ### Calls
 
@@ -482,6 +505,7 @@ row reads `V1`.
 | `[ ]` A crossing offer in a browser | V1 | an offer of a member that crosses an offer of the SFU gets no answer (`CALL-114`), and the page then rolls its own back, answers the SFU and offers again. The SFU side is tested, and no belt drives the crossing in a browser, since the SFU offers its slots once, at the start of a call. Done when a belt test on Chrome and on Firefox makes the SFU offer while a first share offers, and the share and the camera both reach the other member |
 | `[ ]` A receiver drops an older epoch once a newer one opens | V1 | a receiver keeps a sender's older epochs open until eight openers pass, so a chunk under a retired key still opens after the switch (audit P7). CALL-116 stops a removed participant at an honest SFU; this is defence against a malicious SFU. Done when a row refusing a chunk of an older epoch after a newer one opened reads `verified` |
 | `[ ]` The browser tier holds the sender binding of the SFU | V1 | CALL-116 is held by the forwarding core on synthetic packets alone; no browser test sends a forged chunk through a real call (audit N11). Done when a belt row where a member's chunk under another index reaches nobody reads `verified` |
+| `[ ]` A roster join older than the call's own start is refused | V1 | a relay still slips the join of an earlier session into the roster of a later joiner, who wraps to it (`ambre-spec-call-media.md section 6`). Done when a row bounding the time of a roster join reads `verified` |
 
 ---
 

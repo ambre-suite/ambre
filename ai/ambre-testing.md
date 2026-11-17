@@ -80,6 +80,10 @@ unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
 just test-db
 ```
 
+If the session may not write `/etc/docker/daemon.json`, give the mirror to the daemon on its command
+line instead, and skip the two first lines of step 1:
+`(dockerd --registry-mirror=https://mirror.gcr.io > /tmp/dockerd.log 2>&1 &)`.
+
 `just services-down` tears the services down. If `just` is missing, run the recipe's lines from the
 `justfile` as they stand. The daemon does not survive a restart of the container: when the tests
 fail with `Cannot connect to the Docker daemon`, run steps 1 and 2 again.
