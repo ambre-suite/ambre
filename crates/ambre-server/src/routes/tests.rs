@@ -717,6 +717,99 @@ mod handler_tests {
         let _ = redis.del([other_seq, gone_key.as_str()]).await;
     }
 
+    // `SRV-273`: deleting a document removes every delta row of it, inline and
+    // with an object of its own, though no foreign key cascades to them. A row
+    // a late write inserts after the delete goes with the second sweep, and
+    // another document keeps its rows.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_deleted_document_leaves_no_delta_row(pool: sqlx::PgPool) {
+        let stub = S3Stub::spawn([]).await;
+        let state = test_app_state_with_s3(pool, offline_s3(Some(&stub.endpoint))).await;
+        let app = build_test_router(state.clone());
+        let auth = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &auth).await;
+        let doc = Id::<Document>::parse_str(&doc_id).unwrap();
+        let other = Id::<Document>::parse_str(&create_test_doc(&app, &auth).await).unwrap();
+        let author = ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([0xab; 32]);
+        let snap = Id::<Snapshot>::mint();
+        let insert = |doc: Id<Document>, n: u64| {
+            let state = state.clone();
+            async move {
+                let key = crate::db::NewUpdate {
+                    document_id: &doc,
+                    author_pubkey: &author,
+                    snapshot_id: &snap,
+                    clock:
+                        ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::new(
+                            n,
+                        ),
+                    seq: ambre_core::Seq::<ambre_core::Relay>::new(n),
+                };
+                let wire = crate::payload::StoredPayload::new(vec![1, 2, 3]);
+                crate::db::insert_inline_update(
+                    &state.db,
+                    &key,
+                    &wire,
+                    crate::hot_tail::INLINE_CAP,
+                )
+                .await
+                .unwrap();
+            }
+        };
+        let rows = |doc: Id<Document>| {
+            let db = state.db.clone();
+            async move {
+                sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM updates WHERE document_id = $1")
+                    .bind(crate::db::id_to_uuid(doc))
+                    .fetch_one(&db)
+                    .await
+                    .unwrap()
+            }
+        };
+        insert(doc, 1).await;
+        insert(doc, 2).await;
+        crate::db::insert_update(
+            &state.db,
+            &doc,
+            &author,
+            &snap,
+            ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::new(3),
+            ambre_core::Seq::<ambre_core::Relay>::new(3),
+            &ambre_core::ObjectKey::new("updates/3".to_owned()),
+        )
+        .await
+        .unwrap();
+        insert(other, 1).await;
+        assert_eq!(rows(doc).await, 3);
+
+        let resp = app
+            .oneshot(
+                Request::delete(format!("/api/documents/{doc_id}"))
+                    .header("authorization", &auth)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(rows(doc).await, 0, "the delete left delta rows");
+
+        // A write past its checks when the tombstone was set, landing late.
+        insert(doc, 4).await;
+        assert_eq!(rows(doc).await, 1, "no foreign key refuses a late row");
+        sqlx::query("UPDATE document_deletions SET sweep_due = 0")
+            .execute(&state.db)
+            .await
+            .unwrap();
+        crate::deletion::finish_deletions(&state).await;
+        assert_eq!(rows(doc).await, 0, "the second sweep left a late row");
+        assert_eq!(rows(other).await, 1, "another document keeps its rows");
+
+        let gone_key = crate::redis_keys::DocKey::<crate::redis_keys::Gone>::of(&doc);
+        let _ = rustis::commands::GenericCommands::del(&state.redis, gone_key.as_str()).await;
+    }
+
     // `SRV-165`: a delete the object store stops keeps its mark, and the
     // flusher's pass finishes it. The pass sets the tombstone again after a
     // reset lost it, and drops the mark once the second sweep has run.

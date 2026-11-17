@@ -119,6 +119,10 @@ async fn finish_one(
     if !count.is_zero() {
         tracing::debug!(document_id = %document_id, count = count.get(), "second sweep removed late objects");
     }
+    let rows = crate::db::delete_late_deltas(&state.db, document_id).await?;
+    if !rows.is_zero() {
+        tracing::debug!(document_id = %document_id, rows = rows.get(), "second sweep removed late delta rows");
+    }
     crate::db::end_deletion(&state.db, document_id, now).await
 }
 

@@ -612,4 +612,43 @@ mod db_tests {
                 .unwrap();
         assert!(matches!(elsewhere, InlineInsert::Stored { .. }));
     }
+
+    /// `SRV-274`: an insert of a delta takes no lock on its document row. A
+    /// row lock writes the locker into `xmax` of the row. The value stays
+    /// after the commit, so the inserts leave it as the creation left it.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn an_insert_locks_no_document_row(pool: sqlx::PgPool) {
+        let stub = S3Stub::spawn([]).await;
+        let (state, doc) = setup(pool, &stub).await;
+        let locker = || async {
+            sqlx::query_scalar::<_, String>("SELECT xmax::text FROM documents WHERE id = $1")
+                .bind(crate::db::id_to_uuid(doc))
+                .fetch_one(&state.db)
+                .await
+                .unwrap()
+        };
+        let before = locker().await;
+
+        let stored = inline(&state, &doc, 1, &frame(1), INLINE_CAP).await;
+        assert!(matches!(stored, InlineInsert::Stored { .. }));
+        let author = ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([6u8; 32]);
+        crate::db::insert_update(
+            &state.db,
+            &doc,
+            &author,
+            &Id::<Snapshot>::mint(),
+            ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::new(1),
+            ambre_core::Seq::<ambre_core::Relay>::new(2),
+            &ambre_core::ObjectKey::new("updates/2".to_owned()),
+        )
+        .await
+        .unwrap();
+        assert_eq!(homes(&state, &doc).await.len(), 2);
+        assert_eq!(
+            locker().await,
+            before,
+            "an insert, inline or with an object, locked its document row"
+        );
+    }
 }

@@ -110,6 +110,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-070` | `FAIL` | A caller MUST NOT change a member ranked above it. | audit `N2`; this spec section 3 | `ambre_server::routes::tests::handler_tests::editor_cannot_demote_owner_via_invite` -- the invitation is also the role-change path, so this is the half a clamp on the granted role alone leaves open | none | verified |
 | `SRV-266` | `FAIL` | Only an owner MUST be able to re-invite a member who already holds a row. | audit `N8`; this spec section 3 | `ambre_server::routes::tests::handler_tests::an_editor_does_not_overwrite_the_row_of_a_peer` -- an editor who re-invites another editor is refused, and that editor's row is unchanged, while an owner's re-invite lands | none | verified |
 | `SRV-017` | `FRAME` | Deleting a document MUST leave no relay state behind it. | this spec section 3 | `ambre_server::routes::tests::handler_tests::a_deleted_document_leaves_nothing` -- a delete purges the sequence, clock, pending, presence and dead-letter keys before the rows go, and the tombstone refuses every late write after | none | verified |
+| `SRV-273` | `POST` | Deleting a document MUST remove every delta row of it, a row a late write inserts after the delete included, once the late-write window has passed. | this spec section 3; `SRV-017`, `SRV-057`; `ambre-spec-sequencer.md`, `SRV-274` | `ambre_server::routes::tests::handler_tests::a_deleted_document_leaves_no_delta_row` -- a delete removes three delta rows, inline and with an object of their own, a row inserted after it goes with the second sweep, and another document keeps its row | none | verified |
 | `SRV-165` | `POST` | A delete that has begun MUST complete, even when a store fails or restarts before the end. | this spec section 3; `SRV-017`, `SRV-057` | `ambre_server::routes::tests::handler_tests::a_delete_interrupted_is_finished_by_the_pass` -- a delete the object store stops keeps its mark, and the pass empties the document, sets the lost tombstone again, then sweeps and drops the mark | none | verified |
 | `SRV-137` | `POST` | A removal MUST delete the read cursor of the member removed. | this spec section 3; `ambre-spec-zero-knowledge.md` | `ambre_server::routes::read_cursors::tests::a_removal_deletes_the_read_cursors_of_the_member_removed` -- a removal from the `meta` deletes the cursors on every document of the channel, and another member's cursor stays | none | verified |
 | `SRV-142` | `POST` | Deleting a channel MUST delete every document it groups. | this spec section 3; `SRV-017` | `ambre_server::routes::channels::tests::deleting_a_channel_deletes_its_documents_and_their_objects` -- database tier, with the objects swept from a fake store | none | verified |
@@ -176,7 +177,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
-* **Verification.** 104 `verified`, 1 `human-review`, 6 `unimplemented`. A request test drives what
+* **Verification.** 105 `verified`, 1 `human-review`, 6 `unimplemented`. A request test drives what
   holds: the roles, the rank clamps, the signature gate, the error mapping, the origin list and the
   delete. No log line can name the payload type. A deployment's isolation is read by hand.
 ---
@@ -250,6 +251,11 @@ deployment that runs an older relay drains its pending lists before the upgrade.
 register. It then sets a tombstone in the ephemeral store. Every script that writes a key of the
 document checks it and refuses. An update, a presence sample or a flush already past its checks then
 writes nothing (`SRV-017`). The objects go next, then the keys, then the rows.
+
+**The delta rows go by the relay's own hand.** No foreign key ties a delta row to its document, so
+that an insert locks no document row (`ambre-spec-sequencer.md`, `SRV-274`). The delete removes the
+delta rows in the transaction that removes the document row. A write past its checks when the
+tombstone was set may still insert a row after it. The second sweep removes such a row (`SRV-273`).
 
 A presigned upload link cannot be revoked, so the mark schedules a second sweep of the objects for
 when the last link has expired (`SRV-057`). The tombstone lives as long as that window.

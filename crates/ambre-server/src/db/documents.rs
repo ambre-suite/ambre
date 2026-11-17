@@ -319,14 +319,37 @@ pub async fn end_deletion(
     Ok(())
 }
 
-/// Cascade-deletes a document and all associated rows (members, snapshots, updates).
+/// Deletes a document and every row of it, in one transaction. The foreign
+/// keys cascade to the members and the snapshots. The delta rows carry no
+/// foreign key, so that an insert locks no document row, and this removes them
+/// first (`SRV-273`, `SRV-274`).
 pub async fn delete_document(pool: &PgPool, document_id: &Id<Document>) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
+    let mut tx = pool.begin().await?;
+    sqlx::query("DELETE FROM updates WHERE document_id = $1")
+        .bind(did)
+        .execute(&mut *tx)
+        .await?;
     sqlx::query("DELETE FROM documents WHERE id = $1")
         .bind(did)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Removes the delta rows a late write inserted after its document went: a
+/// write past its checks when the tombstone was set (`SRV-273`). The second
+/// sweep of a delete calls it once the late-write window has passed.
+pub async fn delete_late_deltas(
+    pool: &PgPool,
+    document_id: &Id<Document>,
+) -> Result<ambre_core::Count<ambre_core::Deltas>, AppError> {
+    let done = sqlx::query("DELETE FROM updates WHERE document_id = $1")
+        .bind(id_to_uuid(*document_id))
         .execute(pool)
         .await?;
-    Ok(())
+    Ok(ambre_core::Count::new(done.rows_affected()))
 }
 
 #[cfg(test)]

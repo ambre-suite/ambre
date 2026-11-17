@@ -1,0 +1,14 @@
+-- A delta row no longer checks its document through a foreign key.
+--
+-- The check of a foreign key locks the referenced row: each insert of a delta
+-- took a key-share lock on its row of `documents`. The lock wrote one WAL
+-- record per insert, and a second writer of the same document turned it into
+-- a multixact. No insert reads anything from that lock. The relay numbers a
+-- delta only for a member of a live document, and a delete sets its tombstone
+-- before it removes any row (`SRV-017`).
+--
+-- The cascade goes with the key, so the relay removes the deltas itself. The
+-- delete of a document removes them in the transaction that removes the
+-- document row. A write already past its checks may still insert a row after
+-- that, so the second sweep of the delete removes the rows again (`SRV-273`).
+ALTER TABLE updates DROP CONSTRAINT updates_document_id_fkey;

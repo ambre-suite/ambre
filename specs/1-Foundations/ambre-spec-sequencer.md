@@ -25,6 +25,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-150` | `INV` | The deltas a document holds inline MUST stay within the inline cap of the budget register, passed by no more than the writes in flight when it is reached. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_server::hot_tail::db_tests::a_full_tail_takes_no_more_inline` -- a tail at its count and one at its bytes each refuse the next delta, on the database tier, behind the feature the test recipe carries (`ambre-spec-testing.md section 5`) | none | verified |
 | `SRV-132` | `INV` | The deltas a document keeps past its latest confirmed snapshot MUST stop growing while a single author writes. | this spec section 3; `SRV-130` | `ambre_server::compaction::db_tests::a_self_snapshot_trims_its_author_alone` -- a snapshot its author alone confirmed drops that author's deltas past the reference, up to its horizon, on the database tier, behind the feature the test recipe carries (`ambre-spec-testing.md section 5`) | none | verified |
 | `SRV-263` | `INV` | The durable index MUST hold at most one delta per number of a document. | this spec section 3; `SRV-033` | `ambre_server::hot_tail::db_tests::a_number_names_one_delta_of_its_document` -- a second delta under a taken number is refused, inline and with an object of its own, the same delta again stays one row, and another document reuses the number, on the database tier, behind the feature the test recipe carries (`ambre-spec-testing.md section 5`) | none | verified |
+| `SRV-274` | `INV` | An insert of a delta MUST NOT lock the row of its document. | this spec section 3; `SRV-259`; `ambre-spec-server.md`, `SRV-273` | `ambre_server::hot_tail::db_tests::an_insert_locks_no_document_row` -- an inline delta and a delta with an object of its own leave the document row with no locker in its `xmax`, where the check of a foreign key wrote one, on the database tier, behind the feature the test recipe carries (`ambre-spec-testing.md section 5`) | none | verified |
 
 ### 1.2 A delta is numbered
 
@@ -183,7 +184,7 @@ it to every writer that asks.
 * **Boundary.** the relay orders bytes it cannot read. What it learns is the routing set of
   `ZK-007`: which key wrote to which document, at which clock, and how large the delta was.
   `SRV-001` keeps the delta out of the logs.
-* **Verification.** 74 `verified`. The ordering, the storage and the replay hold. So does each step
+* **Verification.** 75 `verified`. The ordering, the storage and the replay hold. So does each step
   of a segment's life, from its close to its fold, and the thread of a root. The recovery paths are
   driven through real failures: a register that refuses inserts, a queue that refuses pushes, an
   index that cannot be read.
@@ -260,6 +261,15 @@ random key wrote a random page of its own index instead, and that page went whol
 after each checkpoint. A number taken twice fails the insert, and the retry and the dead letter of
 `SRV-033` and `SRV-082` take the delta (`SRV-263`). Before, two rows held one number, and a replay
 from that number skipped one of them.
+
+**An insert locks no document row.** The index carries no foreign key to the register. The check of
+such a key locks the document row. That costs one more WAL record per insert, and a wait between
+two writers of one document (`SRV-274`). The relay numbers a delta only for a member of a live
+document, and a delete fences the document before any row goes. So the key held no rule the relay
+does not hold already.
+
+The delete removes the rows of the index itself, the work the cascade did (`ambre-spec-server.md`,
+`SRV-273`).
 
 **Postgres keeps the hot tail alone.** A document holds at most the inline cap in its rows
 (`SRV-150`). Past it, the oldest deltas move into one batch object (`SRV-151`), and so does the
@@ -460,6 +470,7 @@ sees is how long a document takes to open.
 | The relay offers a snapshot for confirmation | waiting for the next cold open | a document whose other members keep it open would never be confirmed, and its deltas would pile up |
 | A report drops the snapshot at once | the relay weighing the report against the snapshot | the relay reads neither, and the deltas it keeps settle the question at the next snapshot |
 | The index is keyed by the document and the number | a random key per row | no query reads it, and each insert writes a random page of its index. That page goes whole into the WAL after each checkpoint |
+| An insert locks no document row | a foreign key from the index to the register | its check locks the document row on every insert, for a rule the membership check and the tombstone already hold. The lock writes WAL, and two writers of one document share it through a multixact |
 | A small delta lives in its index row | one object per delta | a replay of 250 deltas costs 250 object requests for a few hundred bytes each |
 | A small delta lives in its index row | batch objects for every delta | a partly trimmed batch must stay, and a live document rewrites its batch at every flush |
 | The hot tail is capped, and an idle one moves out | every delta inline, trimmed by compaction alone | a document shared and then left pending would keep its whole tail in the register |
