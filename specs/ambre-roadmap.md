@@ -185,6 +185,7 @@ The test of section 1: a team that lacks one of these stories keeps its old suit
 | `[x]` An emoji presentation selector in a base family | MVP | parley 0.10 counts a presentation selector `U+FE0F` as mapped in a cluster of one shaped character, so the first base face claims `U+2764 U+FE0F` whole and draws glyph 0 for the heart. The lazy fallback cannot reach a cluster the base face already claimed. Found on 2026-11-09 while building `Lazy faces in the sealed fallback, outside a presentation selector`. A spike on parley 0.12 on 2026-11-10 still drew `U+263A U+FE0F` wrong, regressed a bare `U+2764`, added 18 KB to Main and a second `skrifa`, so parley stays on 0.10. The text style of an emoji sequence names the emoji family before the base family, through one constructor of the ranged builder that a gate makes the only one, its cost read under the `paragraph_shape` bench. Done when `CANVAS-090` reads `verified` |
 | `[x]` Sync's temporary ceiling comes back down | MVP | Sync read 1 315 076 raw bytes on `main` after the strength floor, over its ceiling of 1,310,000, and the inviter pin adds 3 331. The ceiling rose to 1,325,000 on 2026-11-15 with no cut, so that the queue behind a red `size` job can land while `Sync has room for its next feature` measures its cut. Done when `scripts/wasm_size.py` holds the figure that story measures, below 1,325,000 |
 | `[x]` Main writes to no standard stream | MVP | the ICU warnings no longer reach the standard error of the Main instance, and the rule covers ICU alone. The debug Main wasm still links callers of std's print functions: `lyon_tessellation` debug logging, `loro` lock guards, `serde_columnar` error paths. Two threads that print at once contend for the lock of the stream, and the main thread's wait traps the page as the IME test did. Done when a gate reads the debug Main wasm and refuses any caller of std's print functions outside an allowlist, and a row states the rule |
+| `[ ]` curve25519 on wasm32 runs its 64-bit backend | MVP | `curve25519-dalek` picks its 32-bit backend on wasm32, and the wasm-release profile builds it at the size level. Done when `curve25519_dalek_bits="64"` and opt-level 3 for it in `wasm-release` are each measured by the `crypto` page of `phone_bench`, and the budget register records the time and the size of each |
 
 ### Build, CI and verification
 
@@ -240,6 +241,8 @@ The test of section 1: a team that lacks one of these stories keeps its old suit
 | `[x]` A channel document seals nothing while its log walks again | MVP | between `MarkChannelListed` and the answer of the walk, a writer of the first walk still lands deltas, and the user can seal under the forged key. Done when the document holds each delta and each outbound frame until that answer, and a row reads `verified` |
 | `[x]` A channel rooted outside its space leaves no local copy | MVP | a forged channel closed before its space opened reached the local store (RESID-004). Its next open can show that copy before any walk runs. Done when a `RootOutsideSpace` failure erases the local copy of each document of the channel, and a row reads `verified` |
 | `[x]` Every path that seals or adopts waits on a channel walk | MVP | the walk gate (`SYNC-232`) holds `send_body` only: `resend_refused` seals through `seal_and_send` and skips it, and `adopt_fetched_snapshot` hands Logic a snapshot from a writer of the first walk. Done when every sealing path and every snapshot adoption of a channel document waits for the answer of the walk, the gate's outbound buffer is bounded, and a test holds each path |
+| `[ ]` A space departure holds its budget with one key for every public channel | MVP | a space leave rotates the space key and every public channel key: the p95 read 2.19 s on a desktop for a budget of 2 s, the `Murmure space leave` row. Done when the public channels of a space share one key, and the row holds its budget on the Pixel 9a |
+| `[ ]` Murmure phone seed | MVP | the phone measures need a channel of 5 000 messages on the relay the phone reaches, and the phone stack seeds none. Done when one recipe fills a channel to 5 000 messages through the relay of the phone stack, and a test holds the count |
 
 ### Import and export
 
@@ -264,6 +267,8 @@ The test of section 1: a team that lacks one of these stories keeps its old suit
 | `[x]` The share dialog shows the invite link | MVP | the link pinned to the inviter goes to the clipboard after the invite lands, outside the gesture that confirmed it; a browser that requires a fresh user activation (Firefox) refuses the write, and the inviter never sees the link. Done when the share dialog shows the last invite link with a copy button, and a row states it and reads `verified` |
 | `[x]` An invite on a fresh document lands | MVP | in the belt, an invite sent from a Prose document created moments before, with no edit, never lands: the member list stays empty and no notice shows, neither a success nor a refusal. Done when the root cause is fixed, a row states that an invite on a document with no edit lands (or is refused with a visible notice), and a belt test inviting from a fresh, unedited document reads `verified` |
 | `[x]` PowerPoint held by its input fixtures | MVP | the fixture round trip of DOCX, xlsx and the OpenDocument formats runs (`PROSE-IO-114`, `TRAME-IO-080`), and PPTX was left out while its codec was rewritten. Each PPTX input fixture is imported into Toile, exported and imported again, and the round trip fails on any difference the import report does not count, compared as data. Split from Office interop held by its input fixtures. Done when the PPTX fixture round trip runs in `cargo test` and its rows read `verified` |
+| `[ ]` A CSV read holds its memory | MVP | the CSV bound holds the time of the module call, not its memory: the file of one-byte lines at 8 MiB peaked at 729 MB of resident memory on 2026-11-17. Each record costs two allocations, and the Logic thread decodes the records again. Done when the read streams up to the rows the grid holds, the Logic thread decodes no record twice, and a test holds a peak under 100 MB at the 8 MiB bound |
+| `[ ]` The PDF export's request lists pictures without reading every element | MVP | the request of a deck export reads every element to list its pictures, so `deck_request` grows with the deck: 2 971 844 instructions for a budget of 3 200 000 on 2026-11-17. Done when the CI `instructions` job holds `deck_request` flat as the deck grows |
 
 ### Calls
 
@@ -301,6 +306,7 @@ row reads `V1`.
 | `[ ]` A page hidden flushes the send window | V1 | a tab closed inside the 25 ms send window drops the held delta from the wire. It is saved locally and sent again at the next open (`AUTHOR-028`) only if the sealed store write landed. Done when a `pagehide` sends a flush command the Logic thread honours before the page goes, and a row reads `verified` under a browser test |
 | `[ ]` The send window is measured on a phone | V1 | the 25 ms send window is the client share left by the sum of the P95 targets of `ambre-spec-budgets.md` section 1, most of which no run measures. Done when the keystroke probes read the client path of one key on the reference device, and the window row is set again from that measure |
 | `[ ]` A snapshot upload compresses and seals once | V1 | the upload link binds the size before the client knows the id it seals, so each snapshot upload compresses and seals twice and holds a copy of the payload until it leaves. Done when the size is derived from one compression and the blob is sealed once, and a test pins the derived size to the sealed one |
+| `[ ]` A presence sample carries its head only when it moved | V1 | each presence sample carries the log head and its entry, 264 B per sample below 128 entries (`SYNC-262`). Done when a sample carries them only after the head moved, a row proves a hidden revoke still warns, and the budget row reads the new cost |
 
 ### Foundations: security and zero knowledge
 
@@ -387,6 +393,8 @@ row reads `V1`.
 | `[ ]` A collect into a map in Main is a loop | V1 | a `collect` into a `BTreeMap` sorts the pairs with a stable sort of its own before it builds the map, about 4.5 KB of wasm per key and value types. Two were cut on 2026-11-15; `ambre-opc` and the `loro` maps still carry one. Done when a gate refuses a `collect` into a `BTreeMap` or a `BTreeSet` in a crate Main links |
 | `[ ]` The belt reports every uncaught page error | V1 | only the two IME tests record uncaught errors, so any other belt test that a trap breaks fails as a timeout. Done when the driver records `error` events on every page and every wait fails with the stack |
 | `[ ]` The browser tier holds the worker policy | V1 | the browser test records the violations of the page alone, so a worker blocked by its policy shows no violation. Done when the belt records a violation inside each worker, and a row reads `verified` |
+| `[ ]` A provider return is exchanged in the browser tier | V1 | the belt's server stands in for the provider exchange, so no browser test runs the real code exchange of a provider return. Done when the issuer is configurable, the belt runs a fake identity provider, and a browser test signs in through it |
+| `[ ]` A native test kills the mutants of the key link fetch | V1 | `try_fetch_key_links` runs on the browser path alone, so `.cargo/mutants.toml` excludes it and no host test reaches it. Done when a native test drives it over a scripted fetch, its mutants die, and the exclusion leaves `.cargo/mutants.toml` |
 
 ### Trame
 
@@ -453,6 +461,7 @@ row reads `V1`.
 | `[ ]` A paste names what it approximated | V1 | a paste has no report, so a table past 64 columns flattened to paragraphs, or overlapping spans clipped, change silently. Done when the view names the approximation after such a paste, and a row reads `verified` |
 | `[ ]` A selected picture answers its keys | V1 | a press selects a picture and draws its handles, and no key acts on it: Delete leaves it, and no arrow resizes it. Done when Delete removes a selected picture, Escape cancels a handle drag, and a row binding each reads `verified` |
 | `[ ]` A picture handle shows its cursor | V1 | a pointer over a picture handle keeps the text cursor, so nothing shows that a drag resizes. Done when the hover of each handle asks the host for its directional cursor, and a row reads `verified` |
+| `[ ]` The string arena of Loro keeps no doubled chunks | V1 | the string arena of the oplog holds 8.4 MB in 9 chunks for 3.7 MB of text on 2026-11-17: each chunk doubles the one before, and a slice keeps its chunk. Done when `PROSE-IO-119` reads the arena at most 1.2 times the text it holds |
 
 ### Murmure
 
@@ -490,6 +499,7 @@ row reads `V1`.
 | `[ ]` Channel guests | V1 | a user outside a space invited into one of its channels as a guest, who sees that channel alone. The relay refuses such an invite today (`SRV-225`). Done when `MURMURE-600` reads `verified` |
 | `[ ]` Murmure deltas leave Loro JSON, to design | V1 | a delta travels as a Loro JSON update (`MURMURE-223`), so Main links about 200 KB raw of `serde_json` and of the `json_schema` code of loro: about 45 KB brotli, by the main-size-cut estimate of 2026-11-11. Leaving JSON touches `MURMURE-223`, `MURMURE-226`, `MURMURE-227` and `MURMURE-228`, and bumps the schema (`MURMURE-020`). It reopens two rejected alternatives of `ambre-spec-murmure-messages.md` section 5, a fork of the segment and a decoder of our own for the binary format, which the story argues again. Done when the messages spec rules the delta format in rows that read `verified`, and `just size` lowers the ceiling of Main by the bytes saved |
 | `[ ]` The Murmure runtime tests live in its crate | V1 | the runtime tests drive it through the Logic dispatch, so `ambre-murmure` exposes its state to them under its testing feature. Done when they run against the runtime and its outcome in `ambre-murmure`, and the testing accessors are gone |
+| `[ ]` Murmure cold open measure | V1 | the cold open of a channel, the relay read included, is read by hand from a trace of the remote inspector. Done when a page of `phone-measures` times a cold open of the seeded channel and prints its row of the budget register |
 
 ### Import and export
 
@@ -514,6 +524,7 @@ row reads `V1`.
 | `[ ]` An empty default sheet a formula names still leaves | V1 | the export leaves out an untouched default sheet (`TRAME-IO-082`), even when a formula of another sheet names it; the file then names a missing sheet and Excel reads `#REF!`. Done when such a sheet leaves, and a test holds it |
 | `[ ]` The sheet fixture round trip reads the document apart from the export map | V1 | `TRAME-IO-080` compares two documents as `excel_workbook` reads them, the export's own map, and a column width by its span alone. A loss that map shares passes. Done when the comparison reads the stored cells, styles and sizes, widths by value, and the row stays `verified` |
 | `[ ]` HTML import lands tables as tables | V1 | an imported HTML file still reads a table as one paragraph per cell, where a paste now lands it on its grid. Done when the import maps the reader's tables onto the form's tables, merged cells included, and a row reads `verified` |
+| `[ ]` The PDF export's freeze step holds its budget | V1 | `deck_freeze` reads 58 430 104 instructions on 2026-11-17, of which about 17 500 000 go to the undo history. Done when the freeze step keeps no undo history, and the CI `instructions` job holds `deck_freeze` under a budget row |
 
 ### Calls
 
@@ -528,6 +539,7 @@ row reads `V1`.
 | `[ ]` The ring held in the browser tier | V1 | the ring is held on the host and in the wasm tier, never across two browsers. Done when a belt test shows Bob's page ring, a decline hang up Ada, and the timeout end both, under Chrome and Firefox |
 | `[ ]` The video region speaks to a screen reader | V1 | the grid, the speaker outline and the own tile are drawn alone; only the participants list reaches the page. Done when the region announces who joins, who speaks and the mute of the member through the live region, and a row binding it reads `verified` |
 | `[ ]` The browser tier holds the call grid | V1 | the grid, the own preview and the fill are held on host and in the wasm tier alone. Done when a belt test on Chrome and Firefox draws a tile per participant, the mirrored own camera and a filled region, and rows binding them read `verified` |
+| `[ ]` A choice of videos may ask no fill | V1 | the SFU fills a slot that a short last page of the grid leaves with recent speakers (`CALL-041`), and the page cannot refuse those videos. Done when a choice of videos can ask no fill, and a test holds a short last page that receives only the tiles it shows |
 
 ---
 
