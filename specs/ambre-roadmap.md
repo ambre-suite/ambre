@@ -19,7 +19,7 @@
 | **Epic** | the stories of one milestone, one increment of value | the milestone section; a closed epic is a heading of `ambre-roadmap-journal.md` |
 | **Area** | the stories of one milestone in one product area | one `###` heading of a milestone section |
 
-**Eight rules, and each one exists because it was broken.**
+**Ten rules, and each one exists because it was broken.**
 
 * **A story is one row, and it says what, never how.** A checkbox, a name, its milestone, the
   features it touches. The code says how it works and git says how it got there. A row that explains
@@ -47,6 +47,11 @@
   rule today, or that no mechanism holds. Its story carries the milestone in progress: the earliest
   one with a story still open. A later milestone carries only what is not built. `contracts.py`
   refuses such a row bound to a story of any other milestone.
+* **An audit finding enters a milestone by its severity alone.** A high finding that breaks the
+  zero-knowledge boundary or lets one member act as another is MVP. Every other finding is a V1 row,
+  with no debate.
+* **A story is ticked on a measure a run can make.** A phone figure is never the check of a story.
+  The phone measures of a milestone wait in one story, run in one session on `main`.
 
 **Two milestones, each with its test.**
 
@@ -240,12 +245,13 @@ The test of section 1: a team that lacks one of these stories keeps its old suit
 | `[x]` A Murmure open roots its log on a pin | MVP | Murmure carries no invite link, so no Murmure open names a pinned inviter, and SYNC-205 and SYNC-210 skip Murmure: a relay that wraps a copy itself roots a whole log of its own (audit `N15`). Done when a Murmure open checks its log against a pin the space or the channel invite carries, and a row refusing a relay-rooted log reads `verified` |
 | `[x]` A Murmure root survives the session | MVP | the roots of a Murmure open live for one session (`SYNC-235`), so an invitee who signed no entry refuses its spaces until it opens the link again. Done when the Murmure pin, or the anchor it proved, persists per device and a later open without the link checks against it, and a test holds both the reopen and a refusal |
 | `[ ]` Murmure measured on a phone | MVP | the Murmure budgets measured in WASM on a mid-range phone, in place of the desktop figures and the ratio they assume: segment replay and snapshot import, the JSON authorship check, the envelope open, the rotation of a space leave, the color emoji font size, and the two residency memory budgets. The `segment` bench of `ambre-murmure` is the starting point. It also measures a cold open end to end, relay read included, against the cold start row |
+| `[ ]` The MVP phone measures in one Pixel 9a session | MVP | the stories of the milestone are ticked on desktop figures, and the phone figures they assume wait for the reference device. Done when one `just phone-measures` session on `main` dates a Pixel 9a figure in each phone table of `ambre-spec-budgets.md` section 1, the `Murmure space leave` row included, and `Murmure measured on a phone` is ticked |
 | `[x]` A public channel opened before its space walks its self-joins | MVP | an open with no catalogue walks the meta's log under the document rule, so it stops at the first self-join: every later member's delta is refused as no writer's, and the space-root check of the key does not run. Done when a channel whose space opens after it walks its log again under the space's rule, and a row proves a self-joiner's delta lands |
 | `[x]` A channel log rooted outside its space closes the open document | MVP | a second walk that finds the creation signed by no writer of the space grants no writer, but the key accepted at the first open stays, and the deltas it already delivered stay. Done when that walk fails the open as `RootOutsideSpace`, and a row reads `verified` |
 | `[x]` A channel document seals nothing while its log walks again | MVP | between `MarkChannelListed` and the answer of the walk, a writer of the first walk still lands deltas, and the user can seal under the forged key. Done when the document holds each delta and each outbound frame until that answer, and a row reads `verified` |
 | `[x]` A channel rooted outside its space leaves no local copy | MVP | a forged channel closed before its space opened reached the local store (RESID-004). Its next open can show that copy before any walk runs. Done when a `RootOutsideSpace` failure erases the local copy of each document of the channel, and a row reads `verified` |
 | `[x]` Every path that seals or adopts waits on a channel walk | MVP | the walk gate (`SYNC-232`) holds `send_body` only: `resend_refused` seals through `seal_and_send` and skips it, and `adopt_fetched_snapshot` hands Logic a snapshot from a writer of the first walk. Done when every sealing path and every snapshot adoption of a channel document waits for the answer of the walk, the gate's outbound buffer is bounded, and a test holds each path |
-| `[ ]` A space departure holds its budget with one key for every public channel | MVP | a space leave rotates the space key and every public channel key: the p95 read 2.19 s on a desktop for a budget of 2 s, the `Murmure space leave` row. Done when a space leave derives each member's pair key once for all its public channels, and the row holds its budget on the Pixel 9a |
+| `[x]` A space departure holds its budget with one key for every public channel | MVP | a space leave rotates the space key and every public channel key: the p95 read 2.19 s on a desktop for a budget of 2 s, the `Murmure space leave` row. Done when a space leave derives each member's pair key once for all its public channels, and the row holds its budget on a desktop |
 | `[ ]` Murmure phone seed | MVP | the phone measures need a channel of 5 000 messages on the relay the phone reaches, and the phone stack seeds none. Done when one recipe fills a channel to 5 000 messages through the relay of the phone stack, and a test holds the count |
 
 ### Import and export
