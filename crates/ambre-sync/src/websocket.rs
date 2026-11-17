@@ -653,7 +653,7 @@ impl SyncState {
                     // New access token in the shared store: reopen promptly.
                     let next = self.lifecycle.renewed();
                     self.follow(next);
-                } else if let Some(username) = self.dev_username.clone() {
+                } else if let Some(username) = self.dev_user() {
                     // Refresh token also dead (for example server restarted with a fresh
                     // ephemeral key and empty Redis): re-login with the same
                     // deterministic dev identity. SessionReady reopens the socket.

@@ -5,6 +5,12 @@ edition = "2024"
 license.workspace = true
 description = "Cryptographic primitives for Ambre (AEAD, signatures, hashing, KDF, key derivation)"
 
+[features]
+# The seed a development sign-in derives from a name (`ZK-045`). Anyone who
+# knows the name derives every key, so no release build turns it on: the
+# post-build hook refuses a release whose wasm carries it.
+dev-login = []
+
 [dependencies]
 ambre-core = { path = "../ambre-core" }
 ambre-client-core = { path = "../ambre-client-core" }

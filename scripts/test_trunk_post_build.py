@@ -11,10 +11,15 @@ Run: `just test-scripts`, or `python3 -m unittest discover -s scripts`.
 from __future__ import annotations
 
 import hashlib
+import io
+import os
+import re
 import shutil
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -334,6 +339,71 @@ class Headers(unittest.TestCase):
         main = source[source.index("def main()") :]
         self.assertLess(main.index("fill_policy("), main.index("write_headers("))
         self.assertLess(main.index("write_headers("), main.index("write_brotli("))
+
+
+class DevLoginGate(unittest.TestCase):
+    """`ZK-045`: a release whose wasm carries the development sign-in fails."""
+
+    def built(self, tmp: str, wasm: bytes) -> Path:
+        root = Path(tmp)
+        (root / "ambre-sync-0123abcd_bg.wasm").write_bytes(wasm)
+        (root / "ambre-app-0123abcd_bg.wasm").write_bytes(b"\0asm")
+        return root
+
+    def test_each_mark_in_a_wasm_refuses_the_release(self) -> None:
+        for mark in hook.DEV_LOGIN_MARKS:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = self.built(tmp, b"\0asm" + mark + b"\0")
+                self.assertEqual(hook.dev_login_in(root), ["ambre-sync-0123abcd_bg.wasm"])
+                with self.assertRaises(hook.HookError):
+                    hook.refuse_dev_login(root)
+
+    def test_a_wasm_with_no_mark_passes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            hook.refuse_dev_login(self.built(tmp, b"\0asm ambre-dev"))
+
+    def test_the_release_alone_is_guarded(self) -> None:
+        self.assertTrue(hook.guards_dev_login({"TRUNK_PROFILE": "release"}))
+        self.assertFalse(hook.guards_dev_login({"TRUNK_PROFILE": "debug"}))
+
+    def test_the_former_escape_opens_nothing(self) -> None:
+        # The call proofs once passed a release through this name. It now
+        # opens nothing: the hook refuses the release all the same.
+        self.assertTrue(hook.guards_dev_login({"TRUNK_PROFILE": "release", "AMBRE_DEV_LOGIN_RELEASE": "1"}))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.built(tmp, b"\0asm ambre-dev-seed")
+            env = {"TRUNK_STAGING_DIR": str(root), "TRUNK_PROFILE": "release", "AMBRE_DEV_LOGIN_RELEASE": "1"}
+            with mock.patch.dict(os.environ, env), redirect_stderr(io.StringIO()):
+                self.assertEqual(hook.main(), 1)
+            self.assertEqual(len(list(root.iterdir())), 2)
+
+    def test_the_proofs_build_no_release_under_the_profile_of_the_release(self) -> None:
+        # The proofs measure the shipped wasm, so they take the cargo profile
+        # of the release; they sign in by a bare name, so they are no release.
+        repo = Path(__file__).resolve().parent.parent
+        page = (repo / "crates" / "ambre-app" / "index.html").read_text(encoding="utf-8")
+        profiles = set(re.findall(r'data-cargo-profile-release="([^"]+)"', page))
+        self.assertEqual(len(profiles), 1, profiles)
+        recipe = re.search(r"^proof_build := '([^']*)'$", (repo / "justfile").read_text(encoding="utf-8"), re.M)
+        assert recipe is not None
+        trunk = recipe.group(1).split("&&")[0].split()
+        self.assertEqual(trunk[:2], ["trunk", "build"])
+        self.assertNotIn("--release", trunk)
+        self.assertIn(f"--cargo-profile={profiles.pop()}", trunk)
+        self.assertIn("dev-login", trunk)
+
+    def test_the_hook_refuses_a_release_before_it_writes_a_copy(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.built(tmp, b"\0asm ambre-dev-seed")
+            env = {"TRUNK_STAGING_DIR": str(root), "TRUNK_PROFILE": "release"}
+            with mock.patch.dict(os.environ, env), redirect_stderr(io.StringIO()):
+                self.assertEqual(hook.main(), 1)
+            self.assertEqual(len(list(root.iterdir())), 2)
+
+    def test_each_mark_is_spelled_by_its_source(self) -> None:
+        repo = Path(__file__).resolve().parent.parent
+        for mark, source in hook.DEV_LOGIN_MARKS.items():
+            self.assertIn(mark.decode(), (repo / source).read_text(encoding="utf-8"), source)
 
 
 class Compressible(unittest.TestCase):

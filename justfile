@@ -31,6 +31,9 @@ lint:
     cargo fmt --all --check
     cargo clippy --workspace --all-targets --features ambre-logic/fixtures,ambre-toile/pdf,ambre-logic/toile-pdf,ambre-pptx/codec,ambre-server/db,ambre-server/test-helpers,ambre-canvas/tokens,ambre-sync/fuzz,ambre-prose/fuzz,ambre-belt/browser -- -D warnings
     cargo clippy -p ambre-belt --all-targets --features ambre-belt/firefox -- -D warnings
+    # The development sign-in, on its own line: the line above reads the
+    # refusal a build without it compiles instead (`ZK-045`).
+    cargo clippy -p ambre-sync --all-targets --features ambre-sync/dev-login -- -D warnings
 
 # Lint (wasm): the code only the browser compiles -- the application chrome, the
 # canvas host, the workers -- which host clippy never reads. `RUSTFLAGS` drops
@@ -69,6 +72,7 @@ lint-wasm:
     # clippy after their `-A warnings`.
     cargo clippy --target wasm32-unknown-unknown -p ambre-logic --tests -- -D warnings
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-app --tests
+    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-app --lib --tests --features ambre-app/dev-login
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-chrome --tests
 
 # **One invocation for the whole tier.** Cargo caches a build per feature set, so
@@ -104,18 +108,23 @@ lint-wasm:
 # `--features ambre-canvas/tokens` reaches the generator and its tests, and
 # `just tokens-check` then holds the committed theme files to `tokens.ron`.
 #
-# No feature here is read negatively -- no `cfg(not(feature = ...))` exists in
-# the workspace -- so enabling all four changes no test's outcome. The other
+# No feature of the union is read negatively -- no `cfg(not(feature = ...))`
+# names one -- so enabling all four changes no test's outcome. The other
 # half is that the gated code is genuinely optional. No recipe compiles the host
 # workspace with no feature, so `lint-wasm` holds that half. Its lines compile
 # the client crates without `fixtures` or `tokens`. Its Logic and Trame lines
 # compile `ambre-logic` and `ambre-toile` without the PDF features, which
 # `ambre-app` turns on. This tier compiles `ambre-server` without `db`.
+#
+# `dev-login` is the one feature read negatively: a build without it refuses
+# the sign-in by a bare name (`ZK-045`). The union leaves it off, so the
+# refusal runs there, and a second line runs the two crates that carry it.
 
 # native tier: the whole workspace, fixture belts and PDF export included, on
 # native x86_64, in one build.
 test-native:
     cargo test --workspace --features ambre-logic/fixtures,ambre-toile/pdf,ambre-logic/toile-pdf,ambre-pptx/codec,ambre-canvas/tokens
+    cargo test -p ambre-crypto -p ambre-sync --lib --features ambre-sync/dev-login
     just fixtures-check
     just tokens-check
     just locale-table-check
@@ -294,8 +303,10 @@ stdio:
 # 443 (`BELT_TURN_PORT`). `filter` goes to libtest as written: CI runs the
 # belt in two parts, `murmure::` and `--skip murmure::`. The print gate reads
 # the debug Main wasm the build just wrote, so it costs no build of its own.
+# The belt signs in by a bare name, so the build turns on the development
+# sign-in, which no release carries (`ZK-045`).
 test-browser *filter:
-    trunk build
+    trunk build --features dev-login
     just stdio
     cargo build -p ambre-server
     cargo build -p ambre-sfu
@@ -311,17 +322,21 @@ test-browser *filter:
 # sink first, as CI does; it plays nothing:
 # `pulseaudio --start --exit-idle-time=-1 -n -L "module-null-sink sink_name=null" -L module-native-protocol-unix`.
 test-browser-firefox *filter:
-    trunk build
+    trunk build --features dev-login
     cargo build -p ambre-server
     cargo build -p ambre-sfu
     if [ -n "${DISPLAY:-}" ]; then x=""; else x="xvfb-run --auto-servernum"; fi; S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}" $x cargo test -p ambre-belt --features firefox -- --test-threads=1 {{filter}}
 
 # The call proofs on real hardware (`specs/1-Foundations/ambre-spec-call-proofs.md`). No CI
-# job runs them. Each builds the release the users get into `target/proof-dist`, then starts
-# the relay, the SFU and nine headless senders here, and serves the page to one receiver. It
-# prints each figure against its threshold, then one `PROOF-RESULT` line of JSON. The db-tier
-# services must be up (`just services-up`). The senders capture at 30 fps.
-proof_build := 'trunk build --release --dist target/proof-dist && cargo build -p ambre-server && cargo build --release -p ambre-sfu'
+# job runs them. Each builds the page into `target/proof-dist`, then starts the relay, the SFU
+# and nine headless senders here, and serves the page to one receiver. It prints each figure
+# against its threshold, then one `PROOF-RESULT` line of JSON. The db-tier services must be up
+# (`just services-up`). The senders capture at 30 fps. The senders sign in by a bare name, so
+# the build adds the development sign-in, and a release refuses it (`ZK-045`). The build is
+# therefore no release: it takes the cargo profile of the release, `wasm-release`, so each
+# wasm compiles as the shipped one. Trunk runs no wasm-opt and minifies nothing in either
+# mode. The hook writes no brotli copy here, and the proof host never serves one.
+proof_build := 'trunk build --cargo-profile=wasm-release --features dev-login --dist target/proof-dist && cargo build -p ambre-server && cargo build --release -p ambre-sfu'
 proof_env := 'BELT_DIST="$PWD/target/proof-dist" BELT_SFU="$PWD/target/release/ambre-sfu" S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}"'
 proof_senders := '--use-fake-device-for-media-stream=fps=30'
 proof_test := 'cargo test -p ambre-belt -- --ignored --exact --nocapture proof::run::a_call_proof_on_one_receiver'

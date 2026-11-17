@@ -85,7 +85,7 @@ this document alone. These rows hold the harnesses. The budgets the harnesses me
 
 | Path | The host |
 |---|---|
-| a file of the build | serves the release build, the page with the probe |
+| a file of the build | serves the page with the probe, built under the cargo profile of the release |
 | `/api` | forwards it to the relay, as a deployment does |
 | `/sfu/call` | forwards it to the signalling of the SFU |
 | the media of the SFU | listens on the address of the machine on the network of the phone |

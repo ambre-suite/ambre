@@ -166,6 +166,7 @@ The test of section 1: a team that lacks one of these stories keeps its old suit
 | `[x]` A client refuses a signed join older than its own | MVP | a signed join carries an instant no client checks, so a relay replays an old join to a later joiner, who wraps its sender key to it (audit P5). Done when a row refusing a join older than the client's own reads `verified` |
 | `[x]` A creator never reclaims a document that holds a log or a channel | MVP | The retry of a creation registers its creator only when the document holds no member row, no log entry and no channel. Closes `P32` |
 | `[x]` The SFU forwards a frame start only under the index of its seat | MVP | The SFU offers Opus and VP8 alone, and drops a frame start whose header it cannot read whole. Closes `P30` |
+| `[x]` A release build holds no development sign-in | MVP | The seed derived from a name, its command and the `?user=` read sit behind a feature no release build turns on, and a gate fails a release that does. Closes `P28` |
 
 ### Foundations: platform and architecture
 

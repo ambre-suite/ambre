@@ -1308,6 +1308,7 @@ pub(crate) struct SetupAccountResponse {
     pub tokens: TokenPair,
 }
 
+#[cfg(feature = "dev-login")]
 #[derive(Serialize)]
 pub(crate) struct DevLoginRequest {
     pub username: ambre_core::Validated<ambre_core::DisplayName>,
@@ -1315,6 +1316,7 @@ pub(crate) struct DevLoginRequest {
     pub exchange_pub_key: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
 }
 
+#[cfg(feature = "dev-login")]
 #[derive(Deserialize)]
 pub(crate) struct DevLoginResponse {
     #[serde(with = "ambre_core::serde_id::text")]

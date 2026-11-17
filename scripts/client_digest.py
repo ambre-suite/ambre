@@ -69,7 +69,13 @@ BROTLI_SUFFIX = ".br"
 # release reads none of them from the shell of the person who runs it.
 DROPPED_PREFIXES = ("CARGO_PROFILE_", "CARGO_TARGET_", "CARGO_BUILD_", "TRUNK_")
 DROPPED_NAMES = frozenset(
-    {"RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "CARGO_TARGET_DIR"}
+    {
+        "RUSTFLAGS",
+        "CARGO_ENCODED_RUSTFLAGS",
+        "RUSTC_WRAPPER",
+        "RUSTC_WORKSPACE_WRAPPER",
+        "CARGO_TARGET_DIR",
+    }
 )
 
 

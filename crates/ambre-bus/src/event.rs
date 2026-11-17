@@ -547,6 +547,9 @@ pub enum AuthFailure {
     /// signing key is not the one the relay holds. Nothing was written
     /// (`SYNC-249`).
     ForeignRecoveryWords,
+    /// This build holds no development sign-in, so a sign-in by a bare name
+    /// derived no key and sent nothing (`ZK-045`).
+    NoDevSignIn,
 }
 
 impl fmt::Display for AuthFailure {
@@ -592,6 +595,9 @@ impl fmt::Display for AuthFailure {
             }
             Self::ForeignRecoveryWords => {
                 f.write_str("Recovery failed: these recovery words belong to another account.")
+            }
+            Self::NoDevSignIn => {
+                f.write_str("Sign-in failed: this build holds no development sign-in.")
             }
         }
     }

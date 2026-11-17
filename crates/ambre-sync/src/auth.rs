@@ -110,6 +110,9 @@ impl SyncState {
     /// multi-user behaviour on one machine; an edit survives a refresh because
     /// the same username always derives the same identity.
     /// `id` is `None` for the silent re-login, which no request asked for.
+    /// Behind the `dev-login` feature, which no release build turns on
+    /// (`ZK-045`).
+    #[cfg(feature = "dev-login")]
     pub(crate) fn handle_dev_login(
         &mut self,
         id: Option<Seq<Request>>,
@@ -179,6 +182,36 @@ impl SyncState {
                 },
             });
         }
+    }
+
+    /// A build without the `dev-login` feature holds no development sign-in
+    /// (`ZK-045`). The command derives no key, sends nothing to the relay
+    /// and keeps no name, whatever the relay says of its development mode.
+    /// The refusal tells the page why no session follows.
+    #[cfg(not(feature = "dev-login"))]
+    pub(crate) fn handle_dev_login(
+        &mut self,
+        _id: Option<Seq<Request>>,
+        _username: ambre_core::Validated<ambre_core::DisplayName>,
+    ) {
+        tracing::warn!("Sync: DevLogin refused, this build holds no development sign-in");
+        self.send_to_logic(LogicEvent::AuthError {
+            cause: AuthFailure::NoDevSignIn,
+        });
+    }
+
+    /// The name a development session signed in with, kept for the silent
+    /// re-login after a failed refresh. `None` in a provider session.
+    #[cfg(feature = "dev-login")]
+    pub(crate) fn dev_user(&self) -> Option<ambre_core::Validated<ambre_core::DisplayName>> {
+        self.dev_username.clone()
+    }
+
+    /// A build without the `dev-login` feature holds no development name to
+    /// sign in again with (`ZK-045`).
+    #[cfg(not(feature = "dev-login"))]
+    pub(crate) fn dev_user(&self) -> Option<ambre_core::Validated<ambre_core::DisplayName>> {
+        None
     }
 
     /// Ask the relay for `provider`'s authorization address and hand it to
@@ -756,6 +789,7 @@ mod provider_tests {
 
     /// With no relay, a development sign-in adopts the identity its username
     /// derives, and answers that the session is ready.
+    #[cfg(feature = "dev-login")]
     #[test]
     fn a_dev_login_with_no_relay_adopts_the_identity_of_its_username() {
         let (mut state, rx) = worker();
@@ -773,6 +807,30 @@ mod provider_tests {
                 ..
             } if display_name.as_str() == "Ada"
         )));
+    }
+
+    /// A build without the development sign-in refuses a sign-in by a bare
+    /// name (`ZK-045`). No key is derived and the socket stays closed. A
+    /// failed refresh then signs in again with no name either.
+    #[cfg(not(feature = "dev-login"))]
+    #[test]
+    fn a_build_without_the_dev_sign_in_derives_no_key_from_a_name() {
+        let (mut state, rx) = worker();
+        let name = ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada").unwrap();
+        state.handle_command(SyncCommand::Rest {
+            id: ambre_bus::next_request(),
+            cmd: RestCommand::DevLogin { username: name },
+        });
+        assert!(state.signing_key.is_none() && state.master_seed.is_none());
+        assert!(matches!(
+            rx.try_iter().collect::<Vec<_>>().as_slice(),
+            [LogicEvent::AuthError {
+                cause: AuthFailure::NoDevSignIn
+            }]
+        ));
+        state.handle_sync_event(SyncEvent::Reauthenticated { ok: false });
+        assert!(state.signing_key.is_none());
+        assert_eq!(state.socket_opens.get(), 0);
     }
 
     /// An account that owes its keys is marked so, which keeps the socket

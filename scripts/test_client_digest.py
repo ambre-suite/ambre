@@ -154,6 +154,7 @@ class Environment(unittest.TestCase):
             "CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS": "x",
             "CARGO_BUILD_RUSTFLAGS": "x",
             "TRUNK_BUILD_PUBLIC_URL": "/other/",
+            "TRUNK_BUILD_FEATURES": "dev-login",
             "RUSTC_WRAPPER": "sccache",
         }
         env = cd.build_env(base, "1700000000")

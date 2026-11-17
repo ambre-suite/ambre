@@ -190,28 +190,6 @@ pub(crate) async fn read_clipboard_item(
     text_val.as_string()
 }
 
-/// Dev-only: resolve the dev login identity from `?user=<name>` in the boot URL.
-///
-/// The engine lives for the whole session now (SPA). A single boot-time
-/// `DevLogin` therefore re-derives the session keys once, and they persist
-/// across client navigations. No `localStorage` round-trip remains, which was
-/// the old full-page-load workaround. The landing's dev-login field dispatches
-/// `DevLogin` directly thereafter. The `https://`->`{url_scheme}://` fix lives
-/// in `ambre-sync`.
-///
-/// `None` when the address names no user, or a text that breaks the rule of
-/// a display name.
-pub(crate) fn dev_user_from_url() -> Option<ambre_core::Validated<ambre_core::DisplayName>> {
-    let window = web_sys::window()?;
-    window
-        .location()
-        .search()
-        .ok()
-        .and_then(|s| web_sys::UrlSearchParams::new_with_str(&s).ok())
-        .and_then(|p| p.get("user"))
-        .and_then(|u| ambre_core::Validated::<ambre_core::DisplayName>::parse(u).ok())
-}
-
 /// localStorage key holding the reader's own locale tag, empty for none
 /// (`ambre-spec-locale.md` section 3). It lives on the device and in no
 /// document.
@@ -322,14 +300,21 @@ pub(crate) fn keep_gain(gain: ambre_murmure::ui::call_volumes::Gain) {
     }
 }
 
+// The storage half of the development sign-in (`dev_login.rs`, `ZK-045`):
+// `UI-THREAD-004` names this file as its persistence path.
+
 /// localStorage key holding the active dev username, so a refresh
-/// re-establishes the dev session without `?user=` in the URL.
+/// re-establishes the dev session without `?user=` in the URL. The
+/// post-build hook reads these bytes in a release wasm as the mark of the
+/// development sign-in, so a rename moves `scripts/trunk_post_build.py` too.
+#[cfg(feature = "dev-login")]
 const DEV_USER_KEY: ambre_core::StaticKey<ambre_core::StorageKeys> =
     ambre_core::StaticKey::new("ambre.dev_user");
 
 /// Read the dev username remembered from a prior session, if any. `None`
 /// when no name is stored, or when the stored text breaks the rule of a
 /// display name.
+#[cfg(feature = "dev-login")]
 pub(crate) fn stored_dev_user() -> Option<ambre_core::Validated<ambre_core::DisplayName>> {
     web_sys::window()?
         .local_storage()
@@ -341,8 +326,9 @@ pub(crate) fn stored_dev_user() -> Option<ambre_core::Validated<ambre_core::Disp
         .and_then(|u| ambre_core::Validated::<ambre_core::DisplayName>::parse(u.trim()).ok())
 }
 
-/// Remember `username` as the active dev identity (dev-only; the derived keys are
-/// never stored, only the name they are re-derived from).
+/// Remember `username` as the active dev identity. The derived keys are
+/// never stored, only the name they are derived from again.
+#[cfg(feature = "dev-login")]
 pub(crate) fn remember_dev_user(username: &ambre_core::Validated<ambre_core::DisplayName>) {
     if let Some(Ok(Some(storage))) = web_sys::window().map(|w| w.local_storage()) {
         let _ = storage.set_item(DEV_USER_KEY.as_str(), username.as_str());
@@ -350,6 +336,7 @@ pub(crate) fn remember_dev_user(username: &ambre_core::Validated<ambre_core::Dis
 }
 
 /// Forget the remembered dev identity, so the next boot signs no one in.
+#[cfg(feature = "dev-login")]
 pub(crate) fn forget_dev_user() {
     if let Some(Ok(Some(storage))) = web_sys::window().map(|w| w.local_storage()) {
         let _ = storage.remove_item(DEV_USER_KEY.as_str());

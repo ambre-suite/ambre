@@ -124,7 +124,7 @@ pub(crate) fn take_boot_return() -> Option<ProviderReturn> {
 /// nothing of the session the old one showed, which no list of signals to
 /// reset could promise.
 pub(crate) fn leave_session(reload: impl FnOnce()) {
-    crate::platform::forget_dev_user();
+    crate::dev_login::forget_user();
     let _ = take_pending_state();
     reload();
 }
@@ -252,7 +252,8 @@ mod tests {
     /// `CHROME-108`).
     #[wasm_bindgen_test]
     fn a_sign_out_forgets_the_user_and_boots_home_afresh() {
-        crate::platform::remember_dev_user(
+        #[cfg(feature = "dev-login")]
+        crate::dev_login::remember_user(
             &ambre_core::Validated::<ambre_core::DisplayName>::parse("ada").unwrap(),
         );
         session_storage()
@@ -262,7 +263,8 @@ mod tests {
         let mut reloaded = false;
         leave_session(|| reloaded = true);
         assert!(reloaded, "the page boots afresh");
-        assert_eq!(crate::platform::stored_dev_user(), None);
+        #[cfg(feature = "dev-login")]
+        assert_eq!(crate::dev_login::stored_user(), None);
         assert!(take_pending_state().is_none());
     }
 }

@@ -1155,6 +1155,7 @@ fn the_chain_hash_and_the_keyless_digests_keep_their_bytes() {
     assert_eq!(hash::file_digest(&file).as_array().to_vec(), headless);
 }
 
+#[cfg(feature = "dev-login")]
 #[test]
 fn the_dev_seed_keeps_its_bytes() {
     let seed: [u8; 32] = golden("31824b2cddf4df243951a9a2e3e4f6ae90373fc78543354bc52f6643631426f2")

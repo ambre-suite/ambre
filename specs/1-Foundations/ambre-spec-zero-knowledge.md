@@ -61,6 +61,7 @@ that component's prefix instead.
 | `ZK-038` | `INV` | Two release builds of one commit, each from a clean tree in its own directory, MUST give the same client digest. | this spec section 2, the code the relay serves; README pillar "Zero-Knowledge" | ci-gate -- `scripts/client_digest.py`, run by `just client-build` on two runners in two paths of different depth in the CI `reproducible` job, and by `just client-compare` in `reproducible-compare`. `scripts/test_client_digest.py` changes one byte and finds another digest | none | verified |
 | `ZK-039` | `INV` | The release of a tag MUST publish the client digest of its commit and the manifest that digest covers. | this spec section 2, the code the relay serves; `ZK-038` | ci-gate -- the `client-digest` job of `.github/workflows/release.yml` runs `just reproducible` on the tag and attaches both files to its release. It fails, and publishes nothing, when the two builds differ | none | verified |
 | `ZK-040` | `INV` | The page a deployment serves MUST be the build whose client digest the release of its commit publishes. | this spec section 2, the code the relay serves; `ZK-039` | human-review -- `b2sum -l 256 -c ambre-client.manifest` over a copy of the files the deployment serves | unheld -- `deployment` -- a browser runs whatever the origin serves and compares it with no digest. A relay can serve another page to one user alone, and an audit of the page it serves to everyone else never reads it | human-review |
+| `ZK-045` | `INV` | A release build of the client MUST NOT hold the development sign-in: no seed derived from a name, no `DevLogin` request, and no read of `?user=` or of a stored name. | this spec section 2, the development sign-in; `ZK-038` | ci-gate -- `scripts/trunk_post_build.py` refuses a release whose wasm carries a mark of the `dev-login` feature, and the CI `size` and `reproducible` jobs build the release through it. `scripts/test_trunk_post_build.py` feeds it each mark, checks that its source still spells it, and checks that no variable opens the gate; `ambre_sync::auth::provider_tests::a_build_without_the_dev_sign_in_derives_no_key_from_a_name` -- the worker of a build without the feature refuses `DevLogin` and derives no key | none | verified |
 | `ZK-044` | `INV` | What the SFU learns of a choice of videos MUST be limited to `{the senders each receiver chose, by their sender index, the one it marks large, the instant of each choice}`. | this spec section 2, the choice of videos of a call; `ambre-spec-call-media.md section 3`, the choice of videos; `ZK-021` | type-level -- `ambre_protocol::signaling::VideoChoice` holds the sender indexes and the large one alone, and the SFU reads it on its own socket; `ambre_sync::call_link::tests::a_choice_of_videos_reaches_the_sfu_alone_and_never_the_relay` -- the relay reads none of it | none | verified |
 
 * **Budget.** the four crypto rows of `ambre-spec-budgets.md section 1`: the outbound seal, the
@@ -68,7 +69,7 @@ that component's prefix instead.
   `ambre-crypto/benches`, which no CI job runs.
 * **Boundary.** this document **is** the boundary. Every other document either refines one of these
   rows on its own side, or answers `none` and says why.
-* **Verification.** 42 `verified`, 1 `human-review`, 1 `unimplemented`. Every row is an `INV`. This
+* **Verification.** 43 `verified`, 1 `human-review`, 1 `unimplemented`. Every row is an `INV`. This
   document owns no gesture, so it declares no operation table, and each rule binds the boundary at
   every instant.
 
@@ -84,6 +85,8 @@ that component's prefix instead.
   a passphrase field in a request type (`ZK-012`). A passphrase an offline guess finds seals no
   seed, because the sealing key takes a passphrase the floor admitted (`ZK-035`). A showcase page, the
   one plaintext exit, answers the download path and no frame (`ZK-037`).
+
+  A release derives no key from a bare name (`ZK-045`).
 
   No payload reaches a log line. The client's envelope prints no byte (`ZK-017`), and a wire
   message prints each ciphertext as its length. The relay holds every payload in a type a log
@@ -440,6 +443,11 @@ The limit that remains is `ZK-040`. A browser checks no digest before it runs a 
 cannot check itself: the check would be code of the same origin. A relay can therefore serve a
 changed page to one chosen user, and no audit of the page the others receive finds it. Only a
 check outside the origin closes that gap, for example a browser extension or a signed web bundle.
+
+**The development sign-in.** The Sync worker derives a development seed from a bare name, so
+anyone who knows the name derives every key. That sign-in sits behind the `dev-login` feature, and
+a release carries none of it (`ZK-045`). No variable lets a release carry it. The call proofs sign
+in by a bare name, so they build without `--release`, under the cargo profile of the release.
 
 **Code.** `crates/ambre-crypto/src/keys.rs` for the hierarchy, `crates/ambre-crypto/src/aead.rs`
 and `commitment.rs` for the seal, `deny.toml` for the capability bans.

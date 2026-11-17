@@ -58,10 +58,13 @@
          once the call ends (`crates/ambre-call`). Like the Sync worker, the post-build
          hook hashes its three files and writes its loader's address into the
          `ambre-call-worker` meta, which `platform.rs` reads. It holds the keys of one
-         call alone, which the Sync worker hands it on a port of their own. -->
+         call alone, which the Sync worker hands it on a port of their own.
+         Its features are its own: `trunk build --features dev-login` names a
+         feature of the launcher and the Sync worker, which this crate lacks. -->
     <meta name="ambre-call-worker" content="">
     <link data-trunk rel="rust" href="../ambre-call/Cargo.toml" data-type="worker"
-          data-loader-shim="true" data-wasm-opt="0" data-cargo-profile-release="wasm-release" />
+          data-loader-shim="true" data-wasm-opt="0" data-cargo-profile-release="wasm-release"
+          data-cargo-no-default-features />
 
     <!-- App-shell layout styling. Colour/spacing/font tokens are injected at
          startup from the generated theme.css (tokens.ron -> just tokens-write). -->

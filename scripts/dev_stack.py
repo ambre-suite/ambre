@@ -411,7 +411,10 @@ def up(paths: Paths, host: str | None) -> int:
         trunk = shutil.which("trunk") or "trunk"
         return subprocess.run(
             [
-                trunk, "serve", "--address", "0.0.0.0", "--port", str(PORT), "--open", "false",
+                # The stack signs in by a bare name: the development sign-in is a
+                # feature no release build turns on (`ZK-045`).
+                trunk, "serve", "--features", "dev-login",
+                "--address", "0.0.0.0", "--port", str(PORT), "--open", "false",
                 "--tls-cert-path", str(paths.cert), "--tls-key-path", str(paths.key),
             ],
             cwd=ROOT,

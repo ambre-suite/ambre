@@ -22,4 +22,6 @@ set -e
 # crates/ambre-app/index.html) is picked up. Without it, Trunk hashes the JS
 # glue filename (ambre-app-<hash>.js), breaking the static imports in
 # logic_worker.js and sync_worker.js.
-trunk serve "$@"
+# `dev-login`: the `?user=` sign-in and the name field of a development relay.
+# No release build turns it on (`ZK-045`).
+trunk serve --features dev-login "$@"

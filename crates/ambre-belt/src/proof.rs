@@ -1,10 +1,11 @@
 //! The call proofs on a receiver of real hardware (`ambre-spec-call-proofs.md`).
 //!
 //! One run starts the relay and the SFU, and a proof host in front of them. The host serves the
-//! release build of the application to the receiver under test. That receiver is a phone on the
-//! network, or a Chrome with its GPU on this desktop. It injects one probe script into the page, and starts
-//! the call worker through a timer script (`proof/probe.js`, `proof/call_shim.js`). The shipped
-//! code runs unchanged: the scripts read it and post what they read to the host.
+//! application, built under the cargo profile of the release, to the receiver under test. That
+//! receiver is a phone on the network, or a Chrome with its GPU on this desktop. It injects one
+//! probe script into the page, and starts the call worker through a timer script
+//! (`proof/probe.js`, `proof/call_shim.js`). The shipped code runs unchanged: the scripts read it
+//! and post what they read to the host.
 //!
 //! Headless Chrome pages on this machine are the senders. Each is a member of one channel,
 //! signed in through the relay, in one video call with a fake camera. They seal through their

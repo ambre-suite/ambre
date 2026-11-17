@@ -16,6 +16,10 @@ crate-type = ["cdylib", "rlib"]
 # Non-default and host-only: `ambre-app` never names it, so no client build
 # carries the entry points it adds.
 fuzz = []
+# The development sign-in: a session whose keys a bare name derives (`ZK-045`).
+# `just dev`, the browser belt and the call proofs turn it on through Trunk.
+# No release build turns it on, and the post-build hook refuses one that does.
+dev-login = ["ambre-crypto/dev-login"]
 
 [dependencies]
 ambre-bus      = { path = "../ambre-bus" }

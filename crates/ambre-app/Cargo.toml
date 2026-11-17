@@ -8,6 +8,14 @@ description = "UI Thread entry point: creates the inter-thread channels, spawns 
 [lib]
 crate-type = ["cdylib"]
 
+[features]
+# The development sign-in of the page (`ZK-045`): the `?user=` read, the
+# stored name and the name field. `trunk build --features dev-login` turns it
+# on here and in the Sync worker at once, for `just dev`, the browser belt and
+# the call proofs. No release build turns it on, and the post-build hook
+# refuses one that does.
+dev-login = []
+
 [dependencies]
 ambre-bus    = { path = "../ambre-bus" }
 # The launcher reads an `.ambre` header before it knows which application owns

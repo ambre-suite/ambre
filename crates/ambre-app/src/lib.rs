@@ -116,6 +116,9 @@ mod chrome_mirror;
 mod console_trace;
 /// The order, the groups and the search of the launcher's list, which the host
 /// tier tests.
+// The development sign-in, behind the `dev-login` feature (`ZK-045`).
+#[cfg(target_arch = "wasm32")]
+mod dev_login;
 #[cfg(any(target_arch = "wasm32", test))]
 mod doc_list;
 #[cfg(target_arch = "wasm32")]
@@ -854,15 +857,8 @@ pub fn main() {
     // Dev-only multi-user testing: `?user=<name>` in the page URL authenticates as
     // that user (created on the fly server-side, keys derived deterministically
     // from the name). Lets several browser profiles collaborate on one machine
-    // without OIDC. A prod server rejects the resulting `DevLogin` (DEV_MODE off).
-    // The engine lives once now, so this fires only for the boot URL; the landing
-    // dev-login field dispatches `DevLogin` directly thereafter (no reload).
-    //
-    // `?user=` wins. Otherwise fall back to the dev user remembered from a prior
-    // session (localStorage). A refresh of a `/trame/<id>` deep-link carries no
-    // query string, and still re-establishes the session. The dev keys are
-    // re-derived deterministically from the name, so no key material is stored --
-    // only the username. (Real-auth refresh-token persistence is Part D.)
+    // without OIDC. Only a build with the `dev-login` feature reads the name,
+    // and no release build turns it on (`ZK-045`, `dev_login.rs`).
     //
     // A return from the identity provider comes first: the page booted on it,
     // and the Sync worker exchanges it for the session (`CHROME-096`). It is
@@ -877,13 +873,8 @@ pub fn main() {
                 state: ret.state,
             },
         });
-    } else if let Some(username) = dev_user_from_url().or_else(stored_dev_user) {
-        tracing::info!("Dev login requested for user {username:?}");
-        remember_dev_user(&username);
-        shell_outbox.send(LogicCommand::Rest {
-            id: ambre_bus::next_request(),
-            cmd: RestCommand::DevLogin { username },
-        });
+    } else {
+        dev_login::sign_in_at_boot(&shell_outbox);
     }
 
     // Spawn the Sync worker: a SEPARATE wasm instance in its own Web Worker. Its

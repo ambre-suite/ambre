@@ -54,6 +54,14 @@ quality takes a quarter off the wasm against gzip, and the download budget is
 counted on it (`ambre-spec-budgets.md section 5`). It needs the `brotli`
 command on the path.
 
+**No development sign-in in a release.** The `dev-login` feature derives
+every key of an account from its bare name (`ZK-045`, audit `P28`). A release
+build whose wasm carries a mark of it fails here, before any copy is written.
+The hook reads the bytes the build wrote, so the check holds whatever turned
+the feature on: a flag, an attribute of the page or a manifest. No variable
+opens the gate. The call proofs sign in by a bare name, so they build without
+`--release`, under the cargo profile of the release (`justfile`, `proof_build`).
+
 Run by Trunk only. It reads `TRUNK_STAGING_DIR`, `TRUNK_PROFILE` and
 `TRUNK_PUBLIC_URL` from the environment Trunk gives its hooks.
 """
@@ -67,6 +75,7 @@ import re
 import shutil
 import subprocess
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 
 # The two workers the page loads as artefacts of their own: the Sync worker at
@@ -157,6 +166,15 @@ COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 INLINE_SCRIPT = re.compile(r"<script\b([^>]*)>(.*?)</script\s*>", re.DOTALL | re.IGNORECASE)
 INLINE_STYLE = re.compile(r"<style\b[^>]*>(.*?)</style\s*>", re.DOTALL | re.IGNORECASE)
 
+
+# The bytes each half of the development sign-in compiles into a wasm, and the
+# source file that spells them. `test_trunk_post_build.py` holds each source,
+# so a rename there cannot leave the gate reading a mark no build writes.
+DEV_LOGIN_MARKS = {
+    b"ambre-dev-seed": "crates/ambre-crypto/src/hash.rs",
+    b"/auth/dev/login": "crates/ambre-sync/src/auth.rs",
+    b"ambre.dev_user": "crates/ambre-app/src/platform.rs",
+}
 
 class HookError(Exception):
     """A staging directory the hook cannot finish."""
@@ -380,9 +398,35 @@ def write_brotli(files: list[Path]) -> None:
         )
 
 
+def dev_login_in(staging: Path) -> list[str]:
+    """The wasm files of `staging` that carry a mark of the development sign-in."""
+    return sorted(
+        path.name
+        for path in staging.rglob("*.wasm")
+        if any(mark in path.read_bytes() for mark in DEV_LOGIN_MARKS)
+    )
+
+
+def refuse_dev_login(staging: Path) -> None:
+    """Refuse a release whose wasm carries the development sign-in (`ZK-045`)."""
+    found = dev_login_in(staging)
+    if found:
+        raise HookError(
+            f"a release carries the development sign-in in {', '.join(found)}: "
+            "build it without the `dev-login` feature"
+        )
+
+
+def guards_dev_login(env: Mapping[str, str]) -> bool:
+    """Whether the build `env` describes must carry no development sign-in."""
+    return env.get("TRUNK_PROFILE") == "release"
+
+
 def main() -> int:
     staging = Path(os.environ["TRUNK_STAGING_DIR"])
     try:
+        if guards_dev_login(os.environ):
+            refuse_dev_login(staging)
         for worker in WORKERS:
             hash_worker(staging, worker)
             fill_worker_address(staging, os.environ.get("TRUNK_PUBLIC_URL", "/"), worker)

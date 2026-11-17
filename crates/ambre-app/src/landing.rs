@@ -10,6 +10,7 @@
 //   - Signed out (`username == None`): a sign-in panel. In dev (`dev_mode`),
 //     a username field that dispatches `DevLogin` directly to the already
 //     running Logic thread. No page reload, and the Sync worker keeps its keys.
+//     Only a build with the `dev-login` feature shows the field (`ZK-045`).
 //     Otherwise an OIDC button. The panel carries the Ambre wordmark + tagline.
 //   - Signed in with the provider, keys not open yet: the keys gate
 //     (`keys_gate.rs`), an unlock or the setup of the keys. It stands before
@@ -717,46 +718,17 @@ fn sign_in_panel(
         }
         .into_any(),
         Some(SignInMode::Dev) => {
-            // Dev login: dispatch `DevLogin` to the live Logic thread (no reload).
-            // The user (and derived keys) are created server-side on the fly; the
-            // session reply flips `username`, revealing the document list.
-            let value = RwSignal::new("alice".to_owned());
-            let to_logic = to_logic.clone();
-            let go = move || {
-                // A name the account rule refuses, a blank one among them,
-                // sends nothing: the relay would refuse it (`SRV-234`).
-                if let Ok(name) =
-                    ambre_core::Validated::<ambre_core::DisplayName>::parse(value.get())
-                {
-                    // Remember the dev identity so a later refresh re-establishes
-                    // the session without `?user=` in the URL.
-                    crate::remember_dev_user(&name);
-                    to_logic.send(LogicCommand::Rest {
-                        id: ambre_bus::next_request(),
-                        cmd: RestCommand::DevLogin { username: name },
-                    });
-                }
-            };
+            // Dev login: the name field, in a build that holds it alone
+            // (`ZK-045`). The user (and derived keys) are created server-side
+            // on the fly; the session reply flips `username`, revealing the
+            // document list.
             view! {
                 <div class="ambre-signin">
                     <span class="ambre-signin-wordmark">"Ambre"</span>
                     <p class="ambre-signin-tagline">
                         "Private collaborative office suite. End-to-end encrypted."
                     </p>
-                    <h2>"Dev sign in"</h2>
-                    <input
-                        class="ambre-signin-input"
-                        prop:value=move || value.get()
-                        on:input=move |e| value.set(event_target_value(&e))
-                        on:keydown={
-                            let go = go.clone();
-                            move |e| { if e.key() == "Enter" { go(); } }
-                        }
-                        placeholder="username"
-                    />
-                    <button class="ambre-signin-btn" on:click=move |_| go()>
-                        "Enter"
-                    </button>
+                    {crate::dev_login::sign_in_field(to_logic.clone())}
                     // A development relay answers the setup with no provider,
                     // so these two reach the keys faces a provider sign-in
                     // reaches in a deployment (`CHROME-098`).
@@ -1190,9 +1162,12 @@ mod tests {
 
         dev_mode.set(Some(SignInMode::Dev));
         tick().await;
+        // A build without the development sign-in shows no name field,
+        // whatever the relay answers (`ZK-045`).
+        let dev = cfg!(feature = "dev-login");
         assert_eq!(
             routes(&container),
-            (true, true),
+            (dev, dev),
             "the dev route once answered"
         );
         container.remove();
