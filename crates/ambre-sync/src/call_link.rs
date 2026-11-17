@@ -419,6 +419,7 @@ impl SyncState {
                 api_base: self.api_base.clone(),
                 exchange_key,
                 rule: self.log_rule(meta),
+                roots: self.roots(meta, ambre_core::DocType::Murmure),
             };
             let http = crate::sharing::GlooHttp {
                 auth: self.auth_context(),
@@ -430,13 +431,20 @@ impl SyncState {
     }
 
     /// The membership log of `meta` was read. The first read opens the call socket; a later
-    /// one is heeded within the call.
-    pub(crate) fn call_log(&mut self, meta: Id<Document>, log: Log) {
+    /// one is heeded within the call. A log that stands on no root admits no one. A first
+    /// one ends the join, and a later one leaves the held log in place (`CALL-134`).
+    pub(crate) fn call_log(&mut self, meta: Id<Document>, log: Option<Log>) {
         let now = (self.clock)();
         let Some(link) = self.call.as_mut().filter(|link| link.meta == meta) else {
             return;
         };
         let first = link.log.is_none();
+        let Some(log) = log else {
+            if first {
+                self.end_call();
+            }
+            return;
+        };
         let steps = link.client.heed(&log, now);
         link.log = Some(log);
         if first {
@@ -851,7 +859,7 @@ mod tests {
         assert!(link.sent.relay.is_empty(), "the socket waits for the log");
         assert_eq!(link.sent.log_reads, Count::new(1));
 
-        state.call_log(META, log_of(&alice));
+        state.call_log(META, Some(log_of(&alice)));
         let link = state.call.as_ref().expect("a call");
         assert!(matches!(
             link.sent.relay.first(),
@@ -903,7 +911,7 @@ mod tests {
         let alice = Person::new(1);
         let (mut state, _, port) = worker(&alice);
         state.join_call(TARGET, META, port, Opening::Join);
-        state.call_log(META, log_of(&alice));
+        state.call_log(META, Some(log_of(&alice)));
         state.call_relay(CallServerMsg::Renewed(ambre_core::Credential::new(
             "early".to_owned(),
         )));
@@ -977,7 +985,7 @@ mod tests {
             channel: TARGET.channel,
         });
         state.call_channel(TARGET.call, Some(META));
-        state.call_log(META, log_of(&alice));
+        state.call_log(META, Some(log_of(&alice)));
         state.call_relay(CallServerMsg::Admitted {
             admission: ambre_core::Credential::new("admission".to_owned()),
             sfu: Some(Validated::parse("wss://sfu.example/call").expect("an address")),
@@ -1026,7 +1034,7 @@ mod tests {
             channel: TARGET.channel,
         });
         state.call_channel(TARGET.call, Some(META));
-        state.call_log(META, log_of(&alice));
+        state.call_log(META, Some(log_of(&alice)));
         state.call_relay(CallServerMsg::Admitted {
             admission: ambre_core::Credential::new("admission".to_owned()),
             sfu: Some(Validated::parse("wss://sfu.example/call").expect("an address")),
@@ -1066,7 +1074,7 @@ mod tests {
             channel: TARGET.channel,
         });
         state.call_channel(TARGET.call, Some(META));
-        state.call_log(META, log_of(&alice));
+        state.call_log(META, Some(log_of(&alice)));
         let former = VideoChoice::new(vec![ambre_core::Seq::new(4)], None).expect("a choice");
         state.handle_command(SyncCommand::ChooseVideos(former));
         state.call_relay(CallServerMsg::Admitted {
@@ -1129,7 +1137,7 @@ mod tests {
             state.call.as_ref().map(|link| link.client().target()),
             Some(TARGET)
         );
-        state.call_log(META, log_of(&alice));
+        state.call_log(META, Some(log_of(&alice)));
         state.call_relay(CallServerMsg::Admitted {
             admission: ambre_core::Credential::new("admission".to_owned()),
             sfu: Some(Validated::parse("wss://sfu.example/call").expect("an address")),
@@ -1188,7 +1196,7 @@ mod tests {
         let alice = Person::new(1);
         let (mut state, _, port, rx) = worker_heard(&alice);
         state.join_call(TARGET, META, port.clone(), Opening::Start);
-        state.call_log(META, log_of(&alice));
+        state.call_log(META, Some(log_of(&alice)));
         assert!(matches!(
             state.call.as_ref().and_then(|l| l.sent.relay.first()),
             Some(CallClientMsg::Start { channel, .. }) if *channel == TARGET.channel
@@ -1214,7 +1222,7 @@ mod tests {
         assert!(state.call.is_none());
 
         state.join_call(TARGET, META, port, Opening::Join);
-        state.call_log(META, log_of(&alice));
+        state.call_log(META, Some(log_of(&alice)));
         state.call_relay(CallServerMsg::Refused(ambre_protocol::CallRefusal::Ended));
         assert!(matches!(
             rx.try_recv(),
@@ -1233,13 +1241,13 @@ mod tests {
         let alice = Person::new(1);
         let (mut state, _, port, rx) = worker_heard(&alice);
         state.join_call(TARGET, META, port.clone(), Opening::Start);
-        state.call_log(META, log_of(&alice));
+        state.call_log(META, Some(log_of(&alice)));
         state.leave_call();
         assert!(state.call.is_none(), "an unseated session leaves at once");
         while rx.try_recv().is_ok() {}
 
         state.join_call(TARGET, META, port, Opening::Start);
-        state.call_log(META, log_of(&alice));
+        state.call_log(META, Some(log_of(&alice)));
         admit(&mut state);
         state.leave_call();
         state.call_leave_due();
@@ -1323,13 +1331,35 @@ mod tests {
         );
     }
 
+    /// A first log of the channel that stands on no root ends the join, before any socket
+    /// opens. A later one leaves the log the call holds in place (`CALL-134`, audit `N27`).
+    #[test]
+    fn a_log_that_stands_on_no_root_admits_no_one() {
+        let alice = Person::new(1);
+        let (mut state, handed, port) = worker(&alice);
+        state.join_call(TARGET, META, port.clone(), Opening::Join);
+        state.call_log(META, None);
+        assert!(state.call.is_none());
+        assert!(matches!(handed.borrow().last(), Some(KeyHandoff::End)));
+
+        state.join_call(TARGET, META, port, Opening::Join);
+        state.call_log(META, Some(log_of(&alice)));
+        state.call_log(META, None);
+        let link = state.call.as_ref().expect("a call");
+        assert!(
+            link.log
+                .as_ref()
+                .is_some_and(|log| log.present_key(alice.id).is_some())
+        );
+    }
+
     /// A close of the call socket ends the call: the call worker drops every key of it.
     #[test]
     fn a_close_of_the_call_socket_ends_the_call() {
         let alice = Person::new(1);
         let (mut state, handed, port) = worker(&alice);
         state.join_call(TARGET, META, port, Opening::Join);
-        state.call_log(META, log_of(&alice));
+        state.call_log(META, Some(log_of(&alice)));
         admit(&mut state);
         state.call_relay_closed();
         assert!(state.call.is_none());
@@ -1379,7 +1409,7 @@ mod tests {
             let (mut state, handed, port) = worker(person);
             state.clock = clock.clone();
             state.join_call(TARGET, META, port, Opening::Join);
-            state.call_log(META, log_of_all(&[&alice, &bob]));
+            state.call_log(META, Some(log_of_all(&[&alice, &bob])));
             state.call_relay(CallServerMsg::Admitted {
                 admission: ambre_core::Credential::new("admission".to_owned()),
                 sfu: None,

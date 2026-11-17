@@ -13,8 +13,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use ambre_core::Role;
 use ambre_core::id::{Call, Channel, Id};
 use ambre_core::{
-    Authored, ClearChunk, Instant, KeyIdentifier, Payload, SealedChunk, SenderIndex, Seq, Track,
-    UnixMs,
+    Authored, ClearChunk, FixedBytes, Instant, KeyIdentifier, Payload, SealedChunk, SenderIndex,
+    Seq, Track, UnixMs,
 };
 use ambre_crypto::call::{ChunkHeader, ChunkSealer, ReceiveKeys, SenderKey, SignedJoin};
 use ambre_protocol::MembershipAct;
@@ -672,6 +672,55 @@ fn a_fresh_key_under_an_index_seen_before_is_refused() {
     let again = join_of(&world, 2, CALL, CHANNEL, index.get());
     assert_eq!(
         admit_of(&mut world, 0, &again),
+        Some(Err(Refusal::Replayed))
+    );
+}
+
+/// The join `signer` signs for `member` under `sender`, carrying the exchange key `exchange`
+/// that another join drew.
+fn claiming(
+    world: &World,
+    signer: &Person,
+    member: Id<ambre_core::id::User>,
+    sender: u64,
+    exchange: FixedBytes<ambre_core::ExchangePublicKey>,
+) -> SignedJoin {
+    let claim = ambre_crypto::call::JoinClaim {
+        call: CALL,
+        channel: CHANNEL,
+        member,
+        identity: FixedBytes::from_array(signer.key.verifying_key().to_bytes()),
+        at: Instant::<Authored>::new(world.now),
+        sender: Seq::new(sender),
+        exchange,
+    };
+    SignedJoin::sign(&signer.key, claim).unwrap_or_else(|e| panic!("{e:?}"))
+}
+
+/// A join that claims the exchange key of a later joiner evicts nobody (`CALL-133`, audit
+/// `N28`). A stranger's claim is refused and marks nothing. A member's claim under its own
+/// identity is admitted, and the genuine joiner is still admitted after both.
+#[test]
+fn a_join_claiming_another_exchange_key_evicts_nobody() {
+    let mut world = World::new();
+    person_join(&mut world, 0);
+    let genuine = join_of(&world, 1, CALL, CHANNEL, 70);
+    let exchange = genuine
+        .verified()
+        .map(|claim| claim.exchange)
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    let stranger = Person::new(200);
+    let burn = claiming(&world, &stranger, stranger.id, 68, exchange);
+    assert_eq!(
+        admit_of(&mut world, 0, &burn),
+        Some(Err(Refusal::NotAMember))
+    );
+    let mallory = &world.people[2];
+    let squat = claiming(&world, mallory, mallory.id, 69, exchange);
+    assert_eq!(admit_of(&mut world, 0, &squat), Some(Ok(())));
+    assert_eq!(admit_of(&mut world, 0, &genuine), Some(Ok(())));
+    assert_eq!(
+        admit_of(&mut world, 0, &genuine),
         Some(Err(Refusal::Replayed))
     );
 }

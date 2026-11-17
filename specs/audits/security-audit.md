@@ -775,6 +775,52 @@ low-order point. The canonical entry encoding and its digest chain. The chunk se
 its counters. The replay window, the ratchet bound and the sender keys drawn fresh at each leave.
 The join signature, which covers the index and the exchange key.
 
+## ADDENDUM 2026-11-17 -- THIRD PASS OF THE CRYPTOGRAPHIC PRE-AUDIT
+
+This addendum continues the A security pre-audit of the cryptographic design Story
+(`ambre-roadmap.md` MVP). Three AI reviewers audited the tree of the batch of that day apart. Each
+had the threats of the first pass, the findings of the two passes and the defects the roadmap
+already holds. The author of this addendum checked each finding against the code before keeping it.
+
+**Scopes.** The key hierarchy, its rotations and the space and channel keys. The sealed envelopes
+and the zero-knowledge boundary. The call chunks, the sender keys, the joins and the call log.
+
+**Out of scope.** A session in progress gives the public channels of a space one key
+(`space-one-key`). This pass fixes nothing on that key, and names each finding on it.
+
+### Numbered findings
+
+| ID | Severity | Finding | Answer | Held by |
+| :-- | :-- | :-- | :-- | :-- |
+| N27 | high | The call admitted its joiners against the log of the `meta` that a members answer served, walked from the anchor of the client's own copy alone. No check of an open ran on it. The relay wrapped a key of its own to the client, rooted a log of its own on it, and seated itself: every participant wrapped its sender key to the relay | fixed -- the log of a call counts only once it stands on the anchor, the pinned inviter or a root of the session, and a wrapper the log verifies. A first log with no root ends the join | `CALL-134` |
+| N28 | medium | A join marked its exchange key as seen before the membership check. Any member opened a second seat, then announced a join of a stranger under the exchange key of a later joiner. Each later participant then refused the genuine join as a replay | fixed -- only an admitted join marks its key, under the identity that signed it | `CALL-133` |
+
+### Answered in writing
+
+Each finding below owes a Story the report to the parent proposes, or carries its answer. A
+finding that owes a Story takes a numbered identifier and its contract row once that Story
+reaches the roadmap. The identifiers are local to this table.
+
+| Ref | Severity | Finding | Answer |
+| :-- | :-- | :-- | :-- |
+| P18 | high | `space-one-key`. The space word grants a link of a public channel to every key the space log ever granted a writing role, at every head. A writer the space removed, with the relay, signs a link to a key of its own past the latest head, and the rotation installs it. `SYNC-204` holds for a document alone | owed to the session that gives a space one key for its public channels, or to a proposed Story: the space word grants the writers present at each head, and a member the space removed closes its stretch |
+| P19 | medium | `space-one-key`. A space admin re-keys a public channel under a rule with no space word, so the walk stops at the first self-join. No member past it gets a copy, and each loses the channel for good | owed to the same session or Story: the re-key walks under the word of the space it holds |
+| P20 | medium | `space-one-key`. The media address is keyed by the document key alone. Once two channels share one key, the relay sees the same file stored in both | owed to the same session: the address binds the document before two documents share a key. `SYNC-050` holds only while each document has its own key |
+| P21 | high | A cold open reads whether a snapshot was confirmed by another member from the relay's word alone, and adopts a confirmed snapshot whole. The relay and one writer attribute forged operations to another member, as section 5 of `ambre-spec-op-authorship.md` rejects | owed to a proposed Story: a confirmer signs the document, the snapshot, the horizon and the author, and an open trusts a snapshot whole only under such a signature of a member other than its author |
+| P22 | low | The presence counter is keyed by the user's signing key, and a sender starts it again at each open. A reopened author is silent to a peer that stayed open, and a fresh peer accepts a replayed old sample | owed to a proposed Story: the guard reads a session nonce the sample carries. `ambre-spec-sealed-envelope.md` section 2 now states the reset |
+| P23 | low | A light subscription counts the summary and rings the call cue of any update that opens, with no writer check, and deduplicates on the relay's number alone. A viewer and the relay inflate the mentions of an evicted channel | owed to a proposed Story: a light subscription keeps the writers its last walk granted, and a channel never opened walks its log first |
+| P24 | medium | The relay names the `meta` of the channel of a call, and the first read of its log may be a genuine answer from before a revoke. A relay names the `meta` of another channel, or rolls the log back, and a member of its choice joins | owed to a proposed Story: the Logic thread hands the `meta` its sealed channel state names with the join, as it does for a roster ask. The roll back is the case of the log head a member announces (`N23`) |
+| P25 | info | The update, the snapshot and the ephemeral seal the same shape of additional data, with no domain of their own | answered -- moving one into another needs a canonical parse of the other over the same bytes, and the payload then fails to decode. A domain per kind is owed at the next layout change |
+
+### Checked and found sound
+
+The seed domains, the recovery checksum and the signed re-seal. The key links, which bind the
+document, the previous key and the head. The order of the open, and the strict verifiers. The
+chunk header, its counters and the replay window, marked after the tag. The wraps of a call,
+which bind the call, both indexes and both join keys. The handoff port, the video choice and the
+ring cue. The standalone seals, which each bind their document. No plaintext and no key reaches a
+key of the ephemeral store or of the object store.
+
 ---
 
 ## REMEDIATION ROADMAP

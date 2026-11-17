@@ -138,6 +138,44 @@ enum Wrapper {
     Unverified,
 }
 
+impl Wrapper {
+    /// Who wrapped the copy of `own`, among `rows`: each row's exchange key and the key of
+    /// its wrapper, as one members answer serves them.
+    fn of<'a>(
+        log: &Log,
+        rule: &LogRule,
+        own: &FixedBytes<ExchangePublicKey>,
+        rows: impl Iterator<
+            Item = (
+                Option<&'a FixedBytes<ExchangePublicKey>>,
+                Option<&'a FixedBytes<ExchangePublicKey>>,
+            ),
+        > + Clone,
+    ) -> Self {
+        // The same wrapper the unwrap runs against (`SYNC-034`).
+        let wrapper_key = rows
+            .clone()
+            .find(|(exchange, _)| *exchange == Some(own))
+            .map(|(_, wrapper)| wrapper.unwrap_or(own));
+        match wrapper_key {
+            None => Self::Unverified,
+            Some(key) if key == own => Self::Holder,
+            // The exchange key a row serves carries no signature, so the
+            // relay can put its own on the row of a verified member. Only the
+            // key the log signs for a member vouches for the wrapper.
+            Some(key) if log.signs_exchange_key(key) => Self::Member,
+            Some(key) => {
+                let carried = rows.clone().any(|(exchange, _)| exchange == Some(key));
+                if !carried && rule.space.is_some() {
+                    Self::Space
+                } else {
+                    Self::Unverified
+                }
+            }
+        }
+    }
+}
+
 /// What the log says of the inviter the open pinned out of band.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Inviter {
@@ -200,29 +238,29 @@ impl KeyVouch {
         roots: &Roots,
         debt: RotationDebt,
     ) -> Self {
-        // The same wrapper the unwrap runs against (`SYNC-034`).
-        let wrapper_key = members
+        let rows = members
             .iter()
-            .find(|m| m.exchange_pub_key.key() == Some(own))
-            .map(|m| m.wrapper_exchange_pub_key.key().unwrap_or(own));
-        let wrapper = match wrapper_key {
-            None => Wrapper::Unverified,
-            Some(key) if key == own => Wrapper::Holder,
-            // The exchange key a row serves carries no signature, so the
-            // relay can put its own on the row of a verified member. Only the
-            // key the log signs for a member vouches for the wrapper.
-            Some(key) if log.signs_exchange_key(key) => Wrapper::Member,
-            Some(key) => {
-                let carried = members
-                    .iter()
-                    .any(|m| m.exchange_pub_key.key() == Some(key));
-                if !carried && rule.space.is_some() {
-                    Wrapper::Space
-                } else {
-                    Wrapper::Unverified
-                }
-            }
-        };
+            .map(|m| (m.exchange_pub_key.key(), m.wrapper_exchange_pub_key.key()));
+        Self::of_rows(log, rule, own, rows, roots, debt)
+    }
+
+    /// [`KeyVouch::of`], over `rows`: each row's exchange key and the key of its wrapper,
+    /// as any members answer serves them. The log of a call reads the members of its
+    /// channel through another answer than an open does (`CALL-134`).
+    pub(crate) fn of_rows<'a>(
+        log: &Log,
+        rule: &LogRule,
+        own: &FixedBytes<ExchangePublicKey>,
+        rows: impl Iterator<
+            Item = (
+                Option<&'a FixedBytes<ExchangePublicKey>>,
+                Option<&'a FixedBytes<ExchangePublicKey>>,
+            ),
+        > + Clone,
+        roots: &Roots,
+        debt: RotationDebt,
+    ) -> Self {
+        let wrapper = Wrapper::of(log, rule, own, rows);
         let inviter = match &roots.pin {
             Some(pin) if log.signed_under(pin) => Inviter::Signed(*pin),
             Some(_) => Inviter::Absent,
@@ -275,6 +313,46 @@ impl KeyVouch {
         }
     }
 
+    /// The keys a writer named, once the log stands on what the relay cannot forge. That is
+    /// an anchor, the pinned inviter or a root of this client, and a wrapper the log
+    /// verifies.
+    ///
+    /// # Errors
+    ///
+    /// The first of [`KeyRefusal::Unanchored`], [`KeyRefusal::NotFromInviter`],
+    /// [`KeyRefusal::Unpinned`] and [`KeyRefusal::WrapperUnverified`] that applies.
+    fn trusted(&self) -> Result<&[NamedKey], KeyRefusal> {
+        let named = self.named.as_deref().ok_or(KeyRefusal::Unanchored)?;
+        if self.inviter == Inviter::Absent {
+            return Err(KeyRefusal::NotFromInviter);
+        }
+        // An open with no link and no root fails closed (`SYNC-210`,
+        // `SYNC-235`).
+        if self.inviter == Inviter::Unpinned && self.wrapper != Wrapper::Holder {
+            return Err(KeyRefusal::Unpinned);
+        }
+        if self.wrapper == Wrapper::Unverified {
+            return Err(KeyRefusal::WrapperUnverified);
+        }
+        Ok(named)
+    }
+
+    /// Whether the log stands on what an open checks before any key. That is the anchor,
+    /// the pinned inviter or a root of this client, and a wrapper the log verifies. A
+    /// writer of the space signed its creation. A call admits its joiners against such a log
+    /// alone, and reads no key from it (`CALL-134`, audit `N27`).
+    ///
+    /// # Errors
+    ///
+    /// The first [`KeyRefusal`] of those that applies.
+    pub(crate) fn rooted(&self) -> Result<(), KeyRefusal> {
+        self.trusted()?;
+        if self.root == Root::Stranger {
+            return Err(KeyRefusal::RootOutsideSpace);
+        }
+        Ok(())
+    }
+
     /// Whether `key` may become the current key of a document whose log and
     /// links are those of `log_document` (`SYNC-229`).
     ///
@@ -292,18 +370,7 @@ impl KeyVouch {
         key: &DocumentKey,
         links: &[KeyLink],
     ) -> Result<(), KeyRefusal> {
-        let named = self.named.as_ref().ok_or(KeyRefusal::Unanchored)?;
-        if self.inviter == Inviter::Absent {
-            return Err(KeyRefusal::NotFromInviter);
-        }
-        // An open with no link and no root fails closed (`SYNC-210`,
-        // `SYNC-235`).
-        if self.inviter == Inviter::Unpinned && self.wrapper != Wrapper::Holder {
-            return Err(KeyRefusal::Unpinned);
-        }
-        if self.wrapper == Wrapper::Unverified {
-            return Err(KeyRefusal::WrapperUnverified);
-        }
+        let named = self.trusted()?;
         let id = key.id();
         let vouching = || {
             links.iter().filter(move |link| {

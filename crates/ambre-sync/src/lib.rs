@@ -332,10 +332,11 @@ enum SyncEvent {
     /// A renewal replaced the pair in the store, on any path: arm the
     /// renewal of the new pair (`SYNC-183`).
     TokensRenewed,
-    /// The membership log of the channel of the call was read (`CALL-060`).
+    /// The membership log of the channel of the call was read (`CALL-060`). `None` for a
+    /// log that stands on no root (`CALL-134`).
     CallLog {
         meta: Id<Document>,
-        log: membership_log::Log,
+        log: Option<membership_log::Log>,
     },
     /// The call socket of the relay opened.
     CallRelayOpened,

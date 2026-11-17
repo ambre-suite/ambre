@@ -124,8 +124,10 @@ pub(crate) struct CallKeys {
     current: Held,
     pending: Option<Pending>,
     peers: HashMap<Seq<SenderIndex>, Peer>,
-    /// Every exchange key and sender index a join of this call carried, refused or not.
-    seen_keys: HashSet<FixedBytes<ExchangePublicKey>>,
+    /// Every exchange key, under the identity that signed it, and every sender index of a
+    /// join this client admitted. A refused join marks nothing, so a join that claims the
+    /// key or the index of another and fails a check evicts no one (`CALL-133`).
+    seen_keys: HashSet<(FixedBytes<PublicKey>, FixedBytes<ExchangePublicKey>)>,
     seen_senders: HashSet<Seq<SenderIndex>>,
 }
 
@@ -153,11 +155,12 @@ impl CallKeys {
             return Err(Refusal::Exhausted);
         }
         let exchange = CallExchangeKey::generate();
+        let own_identity = FixedBytes::from_array(identity.verifying_key().to_bytes());
         let claim = JoinClaim {
             call: joining.call,
             channel: joining.channel,
             member: joining.member,
-            identity: FixedBytes::from_array(identity.verifying_key().to_bytes()),
+            identity: own_identity,
             at: joining.at,
             sender: joining.sender,
             exchange: exchange.public(),
@@ -176,7 +179,7 @@ impl CallKeys {
             call: joining.call,
             channel: joining.channel,
             own: joining.sender,
-            seen_keys: HashSet::from([exchange.public()]),
+            seen_keys: HashSet::from([(own_identity, exchange.public())]),
             seen_senders: HashSet::from([joining.sender]),
             exchange,
             join,
@@ -216,11 +219,8 @@ impl CallKeys {
         if claim.call != self.call || claim.channel != self.channel {
             return Err(Refusal::OtherCall);
         }
-        let fresh_key = !self.seen_keys.contains(&claim.exchange);
-        let fresh_sender = !self.seen_senders.contains(&claim.sender);
-        self.seen_keys.insert(claim.exchange);
-        self.seen_senders.insert(claim.sender);
-        if !(fresh_key && fresh_sender) {
+        let seen = (claim.identity, claim.exchange);
+        if self.seen_keys.contains(&seen) || self.seen_senders.contains(&claim.sender) {
             return Err(Refusal::Replayed);
         }
         if log.present_key(claim.member) != Some(claim.identity) {
@@ -231,6 +231,9 @@ impl CallKeys {
         if arrival == Arrival::New && self.joined.since(claim.at) > JOIN_CLOCK_SKEW {
             return Err(Refusal::Stale);
         }
+        // Only an admitted join marks its key and its index (`CALL-133`).
+        self.seen_keys.insert(seen);
+        self.seen_senders.insert(claim.sender);
         let mut moves = Moves::default();
         if arrival == Arrival::New {
             let current = self.current.ratcheted().ok_or(Refusal::Exhausted)?;

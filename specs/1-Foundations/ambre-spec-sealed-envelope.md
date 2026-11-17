@@ -180,8 +180,13 @@ ceiling is derived per message, and the decoder streams into it rather than allo
 | absolute cap | 64 MiB | the client-memory pillar is 100 MB for a whole document |
 
 **The ephemeral counter is a per-device replay guard**, kept apart from the identity the envelope is
-delivered under. It is keyed by the author's signing key, which is per session. The map is capped
-so a peer minting keys cannot grow it without bound (`SYNC-008`). Who the author *is* is
+delivered under. It is keyed by the author's signing key, which the master seed derives: one key
+per user, not per session. A sender starts its counter again at each open. A peer that stayed open
+then drops the samples of a reopened author until the new counter passes the old one. The audit
+answer `P22` owes the fix.
+
+The map is capped so a peer minting keys cannot grow it without bound
+(`SYNC-008`). Who the author *is* is
 `ambre-spec-membership.md`.
 
 **Code.**

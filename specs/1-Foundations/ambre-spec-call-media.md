@@ -78,6 +78,8 @@ this document alone.
 | `CALL-019` | `FAIL` | Given a joiner absent from the membership log of the channel, a client MUST wrap no key for it. | this spec section 3, the join steps; `ambre-spec-membership.md` | `ambre_sync::call::tests::a_joiner_outside_the_channel_gets_no_wrap`; `::each_member_opens_exactly_what_it_should` -- an outsider and a removed member are refused, and open nothing; `ambre_sync::call_client::tests::a_joiner_outside_the_channel_gets_no_key_through_the_client` -- through the client and a model of the call socket | none | verified |
 | `CALL-020` | `FAIL` | Given a signed ephemeral key the client has seen already, the client MUST refuse it. | this spec section 3, the join steps | `ambre_sync::call::tests::a_join_seen_already_is_refused`; `::each_member_opens_exactly_what_it_should` -- a join delivered again is refused | none | verified |
 | `CALL-124` | `FAIL` | Given a signed join that arrives after the client's own and is older than its own by more than the join clock skew of `ambre-spec-budgets.md section 8`, the client MUST wrap no key for it. | this spec section 3, the join steps; `CALL-020` | `ambre_sync::call::tests::a_join_older_than_its_own_is_refused` -- a join of an earlier session, replayed after the skew, is refused, and a join that lags by the skew alone gets its wrap | none | verified |
+| `CALL-133` | `FAIL` | Given a join that a client refuses, the client MUST still admit a later join that carries the same exchange key under another identity. | this spec section 3, the join steps; `CALL-020` | `ambre_sync::call::tests::a_join_claiming_another_exchange_key_evicts_nobody` -- a stranger's claim on the exchange key of a later joiner is refused, and a member's claim under its own identity is admitted. The later joiner is admitted after both, and refused when delivered again (audit `N28`) | none | verified |
+| `CALL-134` | `FAIL` | Given a membership log of the channel that stands on no root of the client, the client MUST admit no joiner against it. | this spec section 3, the client of a call; `CALL-019`; `SYNC-205`; `SYNC-210`; `SYNC-235` | `ambre_sync::sharing::tests::a_call_log_the_relay_alone_roots_admits_no_one` -- a log the relay creates, with a copy it wraps to the client, reads as no log until a root of the session signed it; `ambre_sync::call_link::tests::a_log_that_stands_on_no_root_admits_no_one` -- a first such log ends the join before any socket opens, and a later one leaves the held log in place (audit `N27`) | none | verified |
 | `CALL-057` | `POST` | The relay MUST hand the signed join of a participant, unchanged, to every other participant of the call and to each later joiner. | this spec section 3, signalling; `CALL-016` | `ambre_server::ws::handler::call::tests::a_signed_join_reaches_every_other_seat_unchanged` -- database tier: a seat in the call hears the join, a later seat reads it in its roster, and a second announce changes nothing; `ambre_protocol::tests::the_relay_reads_only_the_listed_fields_of_a_call_frame` -- the join crosses as opaque bytes | none | verified |
 | `CALL-058` | `FRAME` | The relay MUST NOT forward a wrap to a participant session other than the one its sender index names. | this spec section 3, signalling; `CALL-030` | `ambre_server::ws::handler::call::tests::a_wrap_reaches_its_recipient_alone_on_the_call_socket` -- database tier: a second session of the same member hears no wrap | none | verified |
 | `CALL-059` | `POST` | Two clients that join one call through the relay MUST each hold the sender key of the other. | this spec section 3, the join steps; `CALL-016` | `ambre_sync::call_client::tests::two_clients_over_the_relay_each_hold_the_other_sender_key` -- host tier: two clients, each with its own keys, over a model of the call socket whose rules the database tier holds on the relay (`CALL-056` to `CALL-058`), and a chunk one seals the other opens; `::a_late_client_holds_every_key_from_its_join_on`; `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier: three Sync workers join through the relay and the SFU, and each client decodes the audio of the two others | none | verified |
@@ -242,7 +244,7 @@ A participant sends a screen or a window into the call, and stops it.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 132 `verified`. The relay admits under the cap, and the SFU mints the TURN
+* **Verification.** 134 `verified`. The relay admits under the cap, and the SFU mints the TURN
   credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography, forwards RTP and reaches a
   browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`, `CALL-050` to `CALL-052`). Each
   receiver holds fixed slots, and a seed gives one path (`CALL-045` to `CALL-053`). The seal and the
@@ -375,7 +377,8 @@ alone (`CALL-004`).
 1. The joiner draws an X25519 key for this call, and signs the call, the channel, the time and the
    key with its Ed25519 identity.
 2. Each participant checks the joiner against the membership log of the channel (`CALL-019`) and
-   refuses a signed key it has seen (`CALL-020`).
+   refuses a signed key it has seen (`CALL-020`). Only an admitted join marks its key, under the
+   identity that signed it (`CALL-133`).
 3. Each participant moves its sender key one generation up by HKDF (`CALL-017`).
 4. Each participant wraps that key to the joiner alone (`CALL-016`). The wrap binds the call, the
    sender, the recipient and the generation.
@@ -448,7 +451,11 @@ checks each join against the membership log of the channel, as a participant doe
 (`MURMURE-596`).
 
 **The client of a call** runs in the Sync worker. It reads the membership log of the channel,
-then opens the call socket. A change of the members of the channel reads the log again. The
+then opens the call socket. The log counts only once it stands on a root of the client, as an
+open of the `meta` checks it. That root is the anchor, the pinned inviter or a root of the
+session, and a wrapper the log verifies (`CALL-134`). A first log with no root ends the join.
+
+A change of the members of the channel reads the log again. The
 client then switches its key away from a member the log no longer holds (`CALL-060`).
 
 It wraps no

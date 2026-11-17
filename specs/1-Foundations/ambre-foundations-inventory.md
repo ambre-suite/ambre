@@ -17,7 +17,7 @@
 | :--- | :--- | :--- | ---: | ---: |
 | `architecture` | How the client is split, and why. | implemented | 129 | 8 |
 | `broadcast` | One connection per person, carrying every document they have open. | implemented | 30 |  |
-| `call-media` | The audio and video of a call, encrypted end to end. | implemented | 132 |  |
+| `call-media` | The audio and video of a call, encrypted end to end. | implemented | 134 |  |
 | `call-proofs` | The harnesses that measure a call on hardware no CI job runs. | implemented | 19 |  |
 | `commands` | Everything the user can ask for has one name. | implemented | 13 |  |
 | `delta-order` | A change made on one screen appears on another with the changes it was built on, or it waits. | implemented | 22 |  |
@@ -65,4 +65,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**49 features: 24 implemented, 21 partial, 4 design-only. 1605 contract rows, 14 loose.**
+**49 features: 24 implemented, 21 partial, 4 design-only. 1607 contract rows, 14 loose.**

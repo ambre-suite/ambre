@@ -1621,11 +1621,45 @@ pub(crate) struct CallLogParams {
     pub exchange_key: StaticSecret,
     /// The rule the log walks under (`SYNC-106`).
     pub rule: LogRule,
+    /// What this client holds out of band to root the log on, as an open of the
+    /// `meta` would (`CALL-134`).
+    pub roots: crate::key_vouch::Roots,
+}
+
+/// The log of the channel of a call that `resp` serves. It counts once it stands on what an
+/// open of the `meta` checks before any key (`CALL-134`, audit `N27`). The relay can wrap a
+/// key of its own to this client, and root a log of its own on it. The anchor alone then
+/// proves nothing. `None` for a log the relay alone vouches for.
+pub(crate) fn rooted_call_log(
+    p: &CallLogParams,
+    resp: &http::DocumentMembersResponse,
+) -> Option<Log> {
+    let (log, _) = served_log_under(p.document_id, &p.exchange_key, resp, &p.rule);
+    let rows = resp
+        .members
+        .iter()
+        .map(|m| (m.exchange_pub_key.key(), m.wrapper_exchange_pub_key.key()));
+    let vouch = crate::key_vouch::KeyVouch::of_rows(
+        &log,
+        &p.rule,
+        &own_exchange_key(&p.exchange_key),
+        rows,
+        &p.roots,
+        resp.rotation_owed,
+    );
+    match vouch.rooted() {
+        Ok(()) => Some(log),
+        Err(refusal) => {
+            tracing::warn!("Sync: the log of the channel of a call stands on no root: {refusal:?}");
+            None
+        }
+    }
 }
 
 /// Reads the membership log of the channel of a call, walked from our anchor, and answers
 /// [`SyncEvent::CallLog`]. A failed read answers nothing: the call keeps the log it held,
-/// and the next change of the members reads it again.
+/// and the next change of the members reads it again. A log that stands on no root
+/// answers `None` (`CALL-134`).
 #[cfg_attr(
     all(not(test), not(target_arch = "wasm32")),
     expect(dead_code, reason = "only the wasm transport of a call reads its log")
@@ -1639,10 +1673,9 @@ pub(crate) async fn call_log_task<H: ShareHttp>(
         .route(format!("/documents/{}/members", p.document_id));
     match http.get_json::<http::DocumentMembersResponse>(&url).await {
         Ok(resp) => {
-            let (log, _) = served_log_under(p.document_id, &p.exchange_key, &resp, &p.rule);
             let _ = event_tx.send(SyncEvent::CallLog {
                 meta: p.document_id,
-                log,
+                log: rooted_call_log(&p, &resp),
             });
         }
         Err(e) => tracing::warn!("Sync: the log of the call was not read: {e}"),
@@ -1691,9 +1724,7 @@ pub(crate) async fn call_roster_task<H: ShareHttp>(
             let url = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base)
                 .route(format!("/documents/{}/members", p.document_id));
             match http.get_json::<http::DocumentMembersResponse>(&url).await {
-                Ok(resp) => {
-                    Some(served_log_under(p.document_id, &p.exchange_key, &resp, &p.rule).0)
-                }
+                Ok(resp) => rooted_call_log(&p, &resp),
                 Err(e) => {
                     tracing::warn!("Sync: the log of the channel of a call was not read: {e}");
                     None
@@ -4588,6 +4619,7 @@ mod tests {
             api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
             exchange_key: owner.xk.clone(),
             rule: LogRule::document(),
+            roots: crate::key_vouch::Roots::default(),
         };
         let http = FakeHttp::new(vec![Ok(logged.answer())]);
         let (etx, erx, _sink, _lrx) = channels();
@@ -4595,7 +4627,7 @@ mod tests {
         match erx.try_recv() {
             Ok(SyncEvent::CallLog { meta, log }) => {
                 assert_eq!(meta, logged.document_id);
-                assert!(log.present_key(owner.author.user_id).is_some());
+                assert!(log.is_some_and(|log| log.present_key(owner.author.user_id).is_some()));
             }
             _ => panic!("no CallLog"),
         }
@@ -4605,5 +4637,41 @@ mod tests {
         let (etx, erx, _sink, _lrx) = channels();
         call_log_task(&http, params(), &etx).await;
         assert!(erx.try_recv().is_err());
+    }
+
+    /// A log the relay roots on a copy it wrapped itself admits no one to a call (`CALL-134`,
+    /// audit `N27`). The relay creates the log and invites this client under a key of its
+    /// own. With no root of this client, the read answers no log. Once a root of the session
+    /// signed the log, the same answer is the log of the call.
+    #[tokio::test]
+    async fn a_call_log_the_relay_alone_roots_admits_no_one() {
+        let (relay, victim) = (Peer::new(66), Peer::new(2));
+        let mut logged = Logged::new(&relay);
+        logged.invite(&relay, &victim, Role::Editor);
+        let params = |roots| CallLogParams {
+            document_id: logged.document_id,
+            url_scheme: crate::http::UrlScheme::Https,
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
+            exchange_key: victim.xk.clone(),
+            rule: LogRule::document(),
+            roots,
+        };
+        let read = async |roots| {
+            let http = FakeHttp::new(vec![Ok(logged.answer())]);
+            let (etx, erx, _sink, _lrx) = channels();
+            call_log_task(&http, params(roots), &etx).await;
+            match erx.try_recv() {
+                Ok(SyncEvent::CallLog { log, .. }) => log,
+                _ => panic!("no CallLog"),
+            }
+        };
+        assert!(read(crate::key_vouch::Roots::default()).await.is_none());
+        let relay_key = FixedBytes::from_array(relay.author.signing_key.verifying_key().to_bytes());
+        let rooted = crate::key_vouch::Roots {
+            session: vec![ambre_crypto::inviter_pin(&relay_key)],
+            ..crate::key_vouch::Roots::default()
+        };
+        let log = read(rooted).await;
+        assert!(log.is_some_and(|log| log.present_key(victim.author.user_id).is_some()));
     }
 }

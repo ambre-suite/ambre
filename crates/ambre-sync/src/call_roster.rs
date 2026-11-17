@@ -93,6 +93,7 @@ impl SyncState {
                     api_base: self.api_base.clone(),
                     exchange_key,
                     rule: self.log_rule(meta),
+                    roots: self.roots(meta, ambre_core::DocType::Murmure),
                 }),
                 _ => None,
             };
