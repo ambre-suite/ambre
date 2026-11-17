@@ -117,6 +117,9 @@ mod host;
 /// The inviters earlier opens proved, which the route sends ahead of an open.
 #[cfg(any(target_arch = "wasm32", test))]
 mod kept;
+/// The keys gate of the home screen: unlock or set up a provider account.
+#[cfg(any(target_arch = "wasm32", test))]
+mod keys_gate;
 #[cfg(target_arch = "wasm32")]
 mod landing;
 /// The local store the Main thread drives, within its budget (`RESID-002`).
@@ -244,6 +247,8 @@ struct Wiring {
     /// The signed-in user, set on `SessionReady`. The share dialog reads it to
     /// tell the user's own row from the others (`SYNC-141`).
     me: RwSignal<Option<Id<User>>>,
+    /// The keys gate of the home screen (`CHROME-097`, `CHROME-098`).
+    gate: keys_gate::KeysGate,
     /// Whether the server enables dev login; `None` until `/api/auth/config` answers.
     dev_mode: RwSignal<Option<landing::SignInMode>>,
     /// The currently routed document, or `None` on the landing route. Read by
@@ -617,6 +622,7 @@ pub fn main() {
     let invite_role = RwSignal::new(Role::Editor);
     let invite_link = RwSignal::new(None::<shell::InviteLink>);
     let me = RwSignal::new(None::<Id<User>>);
+    let gate = keys_gate::KeysGate::new();
 
     // Status-bar signals (`trame-status-bar`): selection aggregates, set from the
     // `SelectionStats` event and cleared by the view on a single cell. Also the
@@ -947,6 +953,7 @@ pub fn main() {
         invite_role,
         invite_link,
         me,
+        gate,
         presenter_slide,
         presenter_notes,
         presenter_frame,
@@ -1211,6 +1218,8 @@ pub fn main() {
             let shown = switchboard::Shown {
                 current: current_doc.get_untracked(),
                 status: chrome_status.get_untracked(),
+                keys: gate.face.get_untracked(),
+                account_form: keys.has_form(),
             };
             for effect in decisions.service(&ev, shown, &murmure_relay) {
                 match effect {
@@ -1230,6 +1239,8 @@ pub fn main() {
                     } => {
                         username.set(Some(display_name.clone()));
                         me.set(Some(user_id));
+                        // The session is ready: the list replaces the gate.
+                        gate.open();
                         draft_keeper.signed_in(user_id);
                         persist.signed_in(user_id);
                     }
@@ -1243,6 +1254,14 @@ pub fn main() {
                                 }
                             });
                         });
+                    }
+                    switchboard::Effect::AskKeys(face) => {
+                        gate.refusal.set(None);
+                        gate.face.set(Some(face));
+                    }
+                    switchboard::Effect::RefuseKeys(cause) => {
+                        gate.refusal
+                            .set(Some(keys_gate::GateRefusal::Worker(cause)));
                     }
                     switchboard::Effect::FollowProvider { url, state } => {
                         signin::follow_address(url, state, |url| {
@@ -1284,7 +1303,6 @@ pub fn main() {
                     })),
                     switchboard::Effect::Classify(prompt) => classify_against_pin(prompt),
                     switchboard::Effect::Status(status) => chrome_status.set(status),
-                    switchboard::Effect::OweSetup => keys.owe_setup(),
                     switchboard::Effect::ShowWords(words) => keys.show_words(words.clone()),
                     switchboard::Effect::Refused(cause) => keys.refuse(cause),
                     switchboard::Effect::CloseKeys => keys.close(),

@@ -2595,6 +2595,9 @@ mod tests {
                 email: ambre_core::Email::from("a@b.c"),
                 display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("A").unwrap(),
             },
+            RestCommand::SetUpKeys {
+                passphrase: typed(),
+            },
             RestCommand::DevLogin {
                 username: ambre_core::Validated::<ambre_core::DisplayName>::parse("a").unwrap(),
             },
@@ -2705,6 +2708,7 @@ mod tests {
                 RestCommand::Logout | RestCommand::DeleteDocument { .. } => true,
                 RestCommand::Unlock { .. }
                 | RestCommand::SetupAccount { .. }
+                | RestCommand::SetUpKeys { .. }
                 | RestCommand::DevLogin { .. }
                 | RestCommand::ChangePassphrase { .. }
                 | RestCommand::RecoverAccount { .. }

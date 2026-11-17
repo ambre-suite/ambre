@@ -607,6 +607,24 @@ impl SyncState {
     /// Dispatches WebSocket frames to the existing [`handle_ws_message`]
     /// pipeline, applies state mutations from HTTP result events, and handles
     /// disconnection / errors.
+    /// Hold the keys a setup just stored, and the pair the relay bound to
+    /// them, then open the socket the setup owed (`SYNC-133`).
+    fn adopt_new_keys(
+        &mut self,
+        master_seed: MasterSeed,
+        signing_key: SigningKey,
+        exchange_key: StaticSecret,
+        tokens: http::TokenPair,
+    ) {
+        self.master_seed = Some(master_seed);
+        self.signing_key = Some(signing_key);
+        self.exchange_key = Some(exchange_key);
+        self.hold_tokens(tokens);
+        self.setup_owed = false;
+        self.open_websocket();
+        self.flush_pending_opens();
+    }
+
     pub(crate) fn handle_sync_event(&mut self, event: SyncEvent) {
         match event {
             SyncEvent::WsMessage(msg) => self.handle_ws_message(msg),
@@ -752,14 +770,33 @@ impl SyncState {
                 exchange_key,
                 tokens,
             } => {
-                self.master_seed = Some(master_seed);
-                self.signing_key = Some(signing_key);
-                self.exchange_key = Some(exchange_key);
-                self.hold_tokens(tokens);
-                self.setup_owed = false;
-                self.open_websocket();
-                self.flush_pending_opens();
+                self.adopt_new_keys(master_seed, signing_key, exchange_key, tokens);
                 self.reply(id, RestEvent::AccountCreated { recovery_words });
+            }
+            SyncEvent::KeysSetUp {
+                id,
+                recovery_words,
+                master_seed,
+                signing_key,
+                exchange_key,
+                tokens,
+                user_id,
+                display_name,
+                email,
+            } => {
+                self.user_id = Some(user_id);
+                self.adopt_new_keys(master_seed, signing_key, exchange_key, tokens);
+                // The words first, then the session: the page shows the words
+                // before the list (`CHROME-099`).
+                self.reply(id, RestEvent::AccountCreated { recovery_words });
+                self.send_to_logic(LogicEvent::Rest {
+                    id: None,
+                    evt: RestEvent::SessionReady {
+                        user_id,
+                        display_name,
+                        email,
+                    },
+                });
             }
             SyncEvent::DocumentList { id, documents } => {
                 self.reply(id, RestEvent::DocumentList { documents });

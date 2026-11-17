@@ -67,17 +67,6 @@ impl KeysSignals {
         self.refusal.set(None);
     }
 
-    /// The account owes its key setup (`CHROME-098`). Words on screen stay:
-    /// they are shown once, and a late answer must not hide them.
-    pub fn owe_setup(self) {
-        if !self
-            .face
-            .with_untracked(|face| matches!(face, KeysFace::Words(_)))
-        {
-            self.open(KeysFace::Setup);
-        }
-    }
-
     /// Shows the recovery words of the account just created (`CHROME-099`).
     pub fn show_words(self, words: Confidential<RecoveryWords>) {
         self.open(KeysFace::Words(words));
@@ -86,10 +75,7 @@ impl KeysSignals {
     /// The Sync worker refused the form shown: the form says why. A refusal
     /// with no form shown belongs to another flow, and changes nothing here.
     pub fn refuse(self, cause: AuthFailure) {
-        if self
-            .face
-            .with_untracked(|face| matches!(face, KeysFace::Setup | KeysFace::Recover))
-        {
+        if self.has_form() {
             self.refusal.set(Some(cause));
         }
     }
@@ -98,6 +84,13 @@ impl KeysSignals {
     /// last copy drops, and wipes its bytes (`CHROME-099`).
     pub fn close(self) {
         self.open(KeysFace::Closed);
+    }
+
+    /// Whether the setup or the recovery form shows: a refusal of the Sync
+    /// worker then reads on that form.
+    pub fn has_form(self) -> bool {
+        self.face
+            .with_untracked(|face| matches!(face, KeysFace::Setup | KeysFace::Recover))
     }
 
     /// Whether a face covers the launcher.
@@ -426,11 +419,6 @@ mod tests {
             PHRASE.split_whitespace().collect::<Vec<_>>().join(" ")
         );
 
-        // A late setup answer leaves the words on screen.
-        keys.owe_setup();
-        tick().await;
-        assert!(find(&container, ".ambre-recovery-words").is_some());
-
         find(&container, ".ambre-words-done")
             .unwrap()
             .dyn_into::<web_sys::HtmlElement>()
@@ -455,7 +443,7 @@ mod tests {
         let keys = KeysSignals::new();
         let (to_logic, rx) = outbox();
         let container = mount_in_container(move || keys_view(keys, to_logic));
-        keys.owe_setup();
+        keys.open(KeysFace::Setup);
         tick().await;
 
         type_into(&container, ".ambre-keys-name", "Ada");

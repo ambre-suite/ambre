@@ -35,8 +35,14 @@ pub enum PassphraseIntent {
 /// passphrase the user never meant. Both spellings derive a key, both seal, and
 /// nothing downstream can notice (`DOCFILE-015`). An empty confirmation is the same
 /// mistake as a mismatched one, and the message says so rather than counting
-/// characters at the user.
-fn vet(
+/// characters at the user. The account setup of the launcher holds its two
+/// fields to the same rule (`CHROME-098`).
+///
+/// # Errors
+///
+/// The refusal the prompt shows: an empty first field, or a seal whose
+/// confirmation differs.
+pub fn vet(
     first: &Confidential<Passphrase>,
     second: &Confidential<Passphrase>,
     intent: PassphraseIntent,
@@ -52,7 +58,7 @@ fn vet(
 
 /// Why the prompt holds a submission back.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum PassphraseRefusal {
+pub enum PassphraseRefusal {
     /// Nothing typed in the first field.
     Empty,
     /// A seal whose confirmation differs from the first field.
@@ -61,7 +67,7 @@ enum PassphraseRefusal {
 
 impl PassphraseRefusal {
     /// The line the prompt shows under its fields.
-    fn message(self) -> &'static str {
+    pub fn message(self) -> &'static str {
         match self {
             Self::Empty => "Type a passphrase.",
             Self::Mismatch => "The two passphrases do not match.",

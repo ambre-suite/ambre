@@ -17,7 +17,7 @@ use std::collections::{HashMap, VecDeque};
 
 use ambre_bus::conduit::{Sender, TrySendError};
 use ambre_bus::sync_warning::SyncWarningCode;
-use ambre_bus::{AuthFailure, DocumentSummary, KeySetup, MemberInfo, RestCommand, RestEvent, Role};
+use ambre_bus::{AuthFailure, DocumentSummary, MemberInfo, RestCommand, RestEvent, Role};
 use ambre_canvas::{PerfPublisher, PerfSnapshot};
 use ambre_chrome::ToastKind;
 use ambre_core::id::{Channel, Document, Id, User};
@@ -29,8 +29,8 @@ use ambre_core::{
 use ambre_logic::app::{LogicCommand, UiEvent};
 
 use crate::ChromeStatus;
+use crate::keys_gate::KeysFace;
 use crate::tofu::{self, TofuPrompt};
-use ambre_core::Flag as _;
 
 /// How many events may wait for one view target before the oldest are dropped.
 ///
@@ -341,6 +341,10 @@ pub(crate) struct Shown {
     pub(crate) current: Option<Id<Document>>,
     /// The header status before the event.
     pub(crate) status: ChromeStatus,
+    /// The face the keys gate shows, or `None` while it shows none.
+    pub(crate) keys: Option<KeysFace>,
+    /// Whether the account face shows its setup or its recovery form.
+    pub(crate) account_form: bool,
 }
 
 /// What the switchboard needs of the Murmure members, to file a fetched key under
@@ -413,13 +417,17 @@ pub(crate) enum Effect<'e> {
     Classify(TofuPrompt),
     /// Replace the header status.
     Status(ChromeStatus),
-    /// The account owes its key setup: show the setup (`CHROME-098`).
-    OweSetup,
+    /// Show the keys gate on this face: the account's keys are still to open
+    /// or to set up (`CHROME-097`, `CHROME-098`).
+    AskKeys(KeysFace),
+    /// Say on the keys gate why the worker refused its passphrase
+    /// (`CHROME-131`).
+    RefuseKeys(AuthFailure),
     /// Show the recovery words of the account just created, once
     /// (`CHROME-099`).
     ShowWords(&'e Confidential<RecoveryWords>),
-    /// The Sync worker refused a sign-in, a setup or a recovery: the form
-    /// shown says why (`CHROME-130`).
+    /// The Sync worker refused the setup or the recovery form shown: the
+    /// form says why (`CHROME-130`).
     Refused(AuthFailure),
     /// The recovery is done: close the keys face.
     CloseKeys,
@@ -469,6 +477,18 @@ impl Switchboard {
                 "A new version of Ambre is available. Reload the page to keep syncing.",
             ))),
             UiEvent::Rest { evt, .. } => self.rest(evt, shown, roster, &mut effects),
+            // The relay refused a request or the socket for a key setup still
+            // owed: the setup, never an error (`CHROME-098`, `SYNC-134`).
+            UiEvent::SetupRequired => effects.push(Effect::AskKeys(KeysFace::SetUp)),
+            // A refusal reads where it was asked: on the gate, or on the
+            // setup or recovery form of the account face. With neither
+            // shown, nothing else reads it, so a toast does, in the same
+            // words.
+            UiEvent::AuthError { cause } => effects.push(match (shown.keys, shown.account_form) {
+                (Some(_), _) => Effect::RefuseKeys(*cause),
+                (None, true) => Effect::Refused(*cause),
+                (None, false) => Effect::Notice(Notice::new(ToastKind::Error, cause.to_string())),
+            }),
             // Chrome status indicator (`-chrome.md` 2.G): mirror the active
             // document's WebSocket link into the header label. Ignored for a
             // non-active document (a stale push during a fast doc switch).
@@ -524,10 +544,6 @@ impl Switchboard {
             }
             // Relayed service failures (for example unknown invitee) surface as a
             // warning toast so the share action gives feedback.
-            // A setup still owed calls for the setup, never for an error
-            // (`CHROME-098`, `SYNC-134`).
-            UiEvent::SetupRequired => effects.push(Effect::OweSetup),
-            UiEvent::AuthError { cause } => effects.push(Effect::Refused(*cause)),
             UiEvent::ApiError { failure, .. } => effects.push(Effect::Notice(Notice::new(
                 ToastKind::Warning,
                 failure.to_string(),
@@ -590,14 +606,10 @@ impl Switchboard {
             // Signed in with the provider: the Sync worker holds the tokens,
             // and the keys are still to open or to set up (`CHROME-096`).
             RestEvent::ProviderSignedIn { keys_stored, .. } => {
-                tracing::info!(
-                    "Provider sign-in done (keys stored: {})",
-                    keys_stored.as_bool()
-                );
-                if matches!(keys_stored, KeySetup::Absent) {
-                    effects.push(Effect::OweSetup);
-                }
+                effects.push(Effect::AskKeys(KeysFace::after_sign_in(*keys_stored)));
             }
+            // An unlock found no keys to open: the account owes its setup.
+            RestEvent::AccountSetupRequired => effects.push(Effect::AskKeys(KeysFace::SetUp)),
             // The words are shown once, and kept nowhere else (`CHROME-099`).
             RestEvent::AccountCreated { recovery_words } => {
                 effects.push(Effect::ShowWords(recovery_words));
@@ -902,10 +914,11 @@ mod tests {
     /// The bound as the backlog's length reads it.
     const VIEW_BACKLOG_LIMIT: usize = super::VIEW_BACKLOG_LIMIT.get() as usize;
     use crate::ChromeStatus;
+    use crate::keys_gate::KeysFace;
     use crate::tofu::{KeyContact, Next, Purpose, TofuPrompt};
+    use ambre_bus::AuthFailure;
     use ambre_bus::conduit;
     use ambre_bus::sync_warning::SyncWarningCode;
-    use ambre_bus::{AuthFailure, KeySetup};
     use ambre_bus::{Authored, DirectMember, Instant};
     use ambre_bus::{Confidential, DocType, Plaintext, RestCommand, RestEvent, Role};
     use ambre_canvas::{PerfPublisher, PerfSnapshot};
@@ -1389,6 +1402,8 @@ mod tests {
     fn on(current: Option<Id<Document>>) -> Shown {
         Shown {
             current,
+            keys: None,
+            account_form: false,
             status: ChromeStatus {
                 hydrating: true,
                 connected: LinkState::Connected,
@@ -1659,30 +1674,6 @@ mod tests {
         }
     }
 
-    /// A setup still owed shows the setup, never an error, whether the
-    /// provider sign-in or a later refusal reveals it (`CHROME-098`). An
-    /// account that holds its keys is not shown the setup.
-    #[test]
-    fn a_setup_owed_shows_the_setup() {
-        let mut switchboard = Switchboard::new(Page::Document);
-        let owed = switchboard.service(&UiEvent::SetupRequired, on(None), &nobody());
-        assert!(matches!(owed.as_slice(), [Effect::OweSetup]));
-
-        let signed_in = |keys_stored| {
-            rest(RestEvent::ProviderSignedIn {
-                user_id: Id::<User>::mint(),
-                display_name: name("Eve"),
-                email: Email::from("eve@test.local"),
-                keys_stored,
-            })
-        };
-        let absent = signed_in(KeySetup::Absent);
-        let effects = switchboard.service(&absent, on(None), &nobody());
-        assert!(matches!(effects.as_slice(), [Effect::OweSetup]));
-        let stored = signed_in(KeySetup::Stored);
-        assert!(switchboard.service(&stored, on(None), &nobody()).is_empty());
-    }
-
     /// The words of the account just created reach the keys face alone, and
     /// a refusal of the Sync worker reaches the form (`CHROME-099`,
     /// `CHROME-130`).
@@ -1703,7 +1694,11 @@ mod tests {
 
         let cause = AuthFailure::BadRecoveryWords(RecoveryWordsRefusal::BadChecksum);
         let refused = UiEvent::AuthError { cause };
-        let effects = switchboard.service(&refused, on(None), &nobody());
+        let form = Shown {
+            account_form: true,
+            ..on(None)
+        };
+        let effects = switchboard.service(&refused, form, &nobody());
         assert!(matches!(effects.as_slice(), [Effect::Refused(shown)] if *shown == cause));
 
         let recovered = rest(RestEvent::AccountRecovered);
@@ -2113,5 +2108,77 @@ mod tests {
             Some((Tone::Info, "The document is up to date.".to_owned()))
         );
         assert_eq!(said(busy.step(Load::Current)), None);
+    }
+
+    /// The face each event shows, or none.
+    fn asked(effects: &[Effect<'_>]) -> Vec<KeysFace> {
+        effects
+            .iter()
+            .filter_map(|effect| match effect {
+                Effect::AskKeys(face) => Some(*face),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// `CHROME-097`, `CHROME-098`: a provider sign-in shows the face its keys
+    /// call for. An unlock that finds no keys, and a later refusal for a setup
+    /// owed, each show the setup, and no error.
+    #[test]
+    fn a_provider_account_is_asked_to_unlock_or_to_set_up() {
+        let mut switchboard = Switchboard::new(Page::Document);
+        let signed_in = |keys_stored| {
+            rest(RestEvent::ProviderSignedIn {
+                user_id: Id::<User>::mint(),
+                display_name: name("Ada"),
+                email: Email::from("ada@test.local"),
+                keys_stored,
+            })
+        };
+        for (keys, face) in [
+            (ambre_bus::KeySetup::Stored, KeysFace::Unlock),
+            (ambre_bus::KeySetup::Absent, KeysFace::SetUp),
+        ] {
+            let ev = signed_in(keys);
+            let effects = switchboard.service(&ev, on(None), &nobody());
+            assert_eq!(asked(&effects), [face]);
+            assert_eq!(effects.len(), 1, "a sign-in lists nothing before the keys");
+        }
+        for ev in [
+            rest(RestEvent::AccountSetupRequired),
+            UiEvent::SetupRequired,
+        ] {
+            let effects = switchboard.service(&ev, on(None), &nobody());
+            assert_eq!(asked(&effects), [KeysFace::SetUp]);
+            assert!(
+                effects.iter().all(|e| notice(e).is_none()),
+                "an error showed"
+            );
+        }
+    }
+
+    /// `CHROME-131`: a refused passphrase reads on the gate that asked for it,
+    /// in the words of the refusal. With no gate shown, a toast says it.
+    #[test]
+    fn a_refused_passphrase_reads_on_the_gate_that_asked() {
+        let mut switchboard = Switchboard::new(Page::Document);
+        let cause = AuthFailure::WeakPassphrase(ambre_core::PassphraseWeakness::TooShort);
+        let ev = UiEvent::AuthError { cause };
+        let gated = Shown {
+            keys: Some(KeysFace::SetUp),
+            ..on(None)
+        };
+        assert!(matches!(
+            switchboard.service(&ev, gated, &nobody()).as_slice(),
+            [Effect::RefuseKeys(refused)] if *refused == cause
+        ));
+        let words = cause.to_string();
+        assert_eq!(
+            switchboard
+                .service(&ev, on(None), &nobody())
+                .first()
+                .and_then(notice),
+            Some((Tone::Error, words.as_str()))
+        );
     }
 }

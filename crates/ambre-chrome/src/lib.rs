@@ -73,7 +73,9 @@ pub use palette::{
     CommandPalette, PaletteEntry, PaletteKey, PaletteRow, filter as filter_commands,
     matches as command_matches, rows as palette_rows,
 };
-pub use passphrase::{PassphraseDialog, PassphraseIntent};
+pub use passphrase::{
+    PassphraseDialog, PassphraseIntent, PassphraseRefusal, vet as vet_passphrase,
+};
 pub use shortcut::Kbd;
 pub use status::{PerfChip, PerfDetail, StatusLabel, ZoomChip, zoom_presets};
 pub use toast::{ToastHost, ToastKind, Toasts};

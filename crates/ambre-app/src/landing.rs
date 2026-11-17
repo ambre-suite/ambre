@@ -5,12 +5,15 @@
 // A plain Leptos DOM view, consistent with the chrome, which is also Leptos. It
 // is rendered as a full-bleed overlay ON TOP of the persistent canvas. The canvas
 // is never unmounted, only covered (and its rAF paused) while on the landing.
-// It has two faces, driven by the `username` signal:
+// Its faces are driven by the `username` signal and the keys gate:
 //
 //   - Signed out (`username == None`): a sign-in panel. In dev (`dev_mode`),
 //     a username field that dispatches `DevLogin` directly to the already
 //     running Logic thread. No page reload, and the Sync worker keeps its keys.
 //     Otherwise an OIDC button. The panel carries the Ambre wordmark + tagline.
+//   - Signed in with the provider, keys not open yet: the keys gate
+//     (`keys_gate.rs`), an unlock or the setup of the keys. It stands before
+//     both other faces while it shows.
 //   - Signed in (`username == Some(..)`): the user's document list plus a
 //     "new document" action. Opening or creating a document is a client
 //     pushState to `/trame/<id>`; the persistent canvas swaps to it in place.
@@ -81,6 +84,9 @@ pub struct LandingSignals {
     /// The face of the account keys, which covers the sign-in panel and the
     /// list while it is open (`ambre-spec-launcher.md` section 1.6).
     pub keys: crate::account::KeysSignals,
+    /// The face a provider account shows before its list: an unlock or the
+    /// setup of its keys (`CHROME-097`, `CHROME-098`).
+    pub gate: crate::keys_gate::KeysGate,
 }
 
 /// The landing overlay view. `to_logic` lets the dev sign-in panel dispatch
@@ -98,6 +104,7 @@ pub fn landing_view(
         toasts,
         opened_file,
         keys,
+        gate,
     } = signals;
 
     // New document (`ambre-spec-launcher.md`): the app-agnostic type picker hands
@@ -152,6 +159,10 @@ pub fn landing_view(
     let to_logic_signin = to_logic.clone();
     let to_logic_signout = to_logic.clone();
     let to_logic_keys = to_logic.clone();
+    let to_logic_gate = to_logic.clone();
+    // The gate stands before the list and the sign-in panel alike: a face
+    // shown means the keys are still to open or to set up.
+    let gated = move || gate.face.get().is_some();
 
     let confirm_delete = {
         let to_logic = to_logic.clone();
@@ -195,13 +206,19 @@ pub fn landing_view(
                 </Show>
             </header>
 
+            // A provider account whose keys are still to open or to set up.
+            // The account face, the recovery words above all, covers the gate.
+            <Show when=move || !keys.is_open()>
+                {crate::keys_gate::keys_gate_view(gate, to_logic_gate.clone())}
+            </Show>
+
             // Signed in: the document list.
-            <Show when=move || username.get().is_some() && !keys.is_open()>
+            <Show when=move || username.get().is_some() && !keys.is_open() && !gated()>
                 {document_list(docs, to_logic_cards.clone(), pending_delete, booted, toasts)}
             </Show>
 
             // Signed out: the sign-in panel (dev field or OIDC button).
-            <Show when=move || username.get().is_none() && !keys.is_open()>
+            <Show when=move || username.get().is_none() && !keys.is_open() && !gated()>
                 {
                     let to_logic = to_logic_signin.clone();
                     move || sign_in_panel(dev_mode, keys, to_logic.clone())

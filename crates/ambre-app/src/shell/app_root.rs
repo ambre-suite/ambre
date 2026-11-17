@@ -249,6 +249,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         invite_role,
         invite_link,
         me,
+        gate,
         sel_stats,
         trame_locale,
         sel_stats_toile,
@@ -660,6 +661,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         toasts,
         opened_file,
         keys,
+        gate,
     };
     let landing_tx = to_logic.clone();
 

@@ -213,6 +213,13 @@ pub enum RestCommand {
         email: ambre_core::Email,
         display_name: ambre_core::Validated<ambre_core::DisplayName>,
     },
+    /// Set up the keys of the account this session signed in with the
+    /// provider, sealed under `passphrase` (`CHROME-098`). The relay already
+    /// knows who the person is, so no identity travels.
+    /// -> `AccountCreated { recovery_words }`, then `SessionReady`.
+    SetUpKeys {
+        passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
+    },
     /// Dev-only: authenticate as `username` (created on the fly server-side),
     /// deriving keys deterministically from the username. Triggered by the
     /// `?user=<name>` URL param to test multi-user behaviour on one machine.

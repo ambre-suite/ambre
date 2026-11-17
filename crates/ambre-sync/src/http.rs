@@ -1125,6 +1125,19 @@ pub(crate) async fn send_json_auth_via<T: Serialize>(
     expect_ok(&request, &resp)
 }
 
+/// An authenticated request carrying `body` as JSON, answered with JSON.
+pub(crate) async fn send_json_auth_read_via<T: Serialize, R: serde::de::DeserializeOwned>(
+    transport: &impl Transport,
+    method: Method,
+    url: &Url<Route>,
+    body: &T,
+    auth: &AuthContext,
+) -> Result<R, HttpError> {
+    let mut request = Outgoing::json(method, url.into(), body)?;
+    let resp = exchange_auth(transport, auth, &mut request).await?;
+    read_json(&request, &resp)
+}
+
 /// HTTP GET to JSON, treating `404 Not Found` as `Ok(None)`.
 pub(crate) async fn get_json_opt_auth<T: serde::de::DeserializeOwned>(
     url: &Url<Route>,
@@ -1341,6 +1354,26 @@ pub(crate) struct MasterKeyResponse {
     /// it with the key its words derive (`SYNC-249`).
     #[serde(default)]
     pub signing_pubkey: Option<ambre_core::FixedBytes<ambre_core::PublicKey>>,
+}
+
+/// The first key store of a signed-in account (`PUT /api/keys/master`). It
+/// holds the sealed seed, its salt and the two public keys the seed derives.
+/// No seed, word or passphrase is representable here (`SYNC-256`).
+#[derive(Serialize)]
+pub(crate) struct StoreMasterKeysRequest {
+    pub master_key_enc: ambre_core::Encoded<ambre_core::WrappedMasterKey>,
+    pub master_key_salt: ambre_core::FixedBytes<ambre_core::MasterKeySalt>,
+    pub signing_pubkey: ambre_core::FixedBytes<ambre_core::PublicKey>,
+    pub exchange_pubkey: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
+}
+
+/// The relay's answer to a first key store: a fresh pair, bound to the new
+/// signing key. The pair the store presented is stale from then on.
+#[derive(Deserialize)]
+pub(crate) struct KeysStoredResponse {
+    /// The pair, with the lifetime of its access token.
+    #[serde(flatten)]
+    pub tokens: TokenPair,
 }
 
 impl MasterKeyResponse {

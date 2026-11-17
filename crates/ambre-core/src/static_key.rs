@@ -163,6 +163,17 @@ impl KeyKind for CssClasses {
     const NAME: &'static str = "CssClass";
 }
 
+/// The id of an element that another element names, as the alert line of a
+/// form that each field names as its description. Both sides read one
+/// constant, so a typo cannot break the link a screen reader follows.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ElementIds {}
+
+impl sealed::Sealed for ElementIds {}
+impl KeyKind for ElementIds {
+    const NAME: &'static str = "ElementId";
+}
+
 /// The name of an attribute that the code sets on an element and reads back
 /// off it, possibly from another crate.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]

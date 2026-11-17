@@ -395,6 +395,20 @@ enum SyncEvent {
         exchange_key: StaticSecret,
         tokens: http::TokenPair,
     },
+    /// The keys of a signed-in account were stored (`SYNC-255`). It carries
+    /// the new seed and the pair the relay bound to its signing key. It also
+    /// carries who the account is, read under that pair.
+    KeysSetUp {
+        id: Seq<Request>,
+        recovery_words: ambre_bus::Confidential<ambre_bus::RecoveryWords>,
+        master_seed: MasterSeed,
+        signing_key: SigningKey,
+        exchange_key: StaticSecret,
+        tokens: http::TokenPair,
+        user_id: Id<User>,
+        display_name: ambre_core::Validated<ambre_core::DisplayName>,
+        email: ambre_core::Email,
+    },
     DocumentList {
         id: Seq<Request>,
         documents: Vec<DocumentSummary>,
@@ -1960,6 +1974,7 @@ impl SyncState {
                 email,
                 display_name,
             } => self.handle_setup_account(id, passphrase, email, display_name),
+            RestCommand::SetUpKeys { passphrase } => self.handle_set_up_keys(id, passphrase),
             RestCommand::DevLogin { username } => self.handle_dev_login(Some(id), username),
             RestCommand::ProviderSignIn { provider } => self.handle_provider_sign_in(id, provider),
             RestCommand::ProviderReturn {
