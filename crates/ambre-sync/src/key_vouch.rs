@@ -1024,8 +1024,9 @@ mod tests {
     }
 
     /// A departure walked before refuses each key in force before it. A
-    /// key a writer named at the place of that departure, in a log served
-    /// without it, came into force after it: the leaver never held it.
+    /// writer may name a key at the place of that departure, in a log
+    /// served without it. That key came into force after the departure: the
+    /// leaver never held it.
     #[test]
     fn a_key_named_at_the_place_of_a_known_departure_stands() {
         let mut doc = Shared::new();

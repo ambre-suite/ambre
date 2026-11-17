@@ -6281,9 +6281,9 @@ mod tests {
         );
     }
 
-    /// A reader's delta that waited in the quarantine for its parent does
-    /// not reach the document when the parent lands: it is held for a
-    /// listing, as on arrival. The owner's delta beside it lands.
+    /// A reader's delta waits in the quarantine for its parent. When the
+    /// parent lands, the delta does not reach the document: it is held for
+    /// a listing, as on arrival. The owner's delta beside it lands.
     #[test]
     fn a_readers_delta_released_from_the_quarantine_is_held_for_a_listing() {
         let (mut state, rx, doc, key, _sk, _snap) = setup();

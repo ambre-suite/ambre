@@ -1049,8 +1049,8 @@ pub(crate) mod tests {
     }
 
     /// A space writer signs a key link of a channel at each head the walk
-    /// passes through, the empty head before the first entry included, and
-    /// at no head past the walk.
+    /// passes through, at no head past the walk. The empty head before the
+    /// first entry counts as one.
     #[test]
     fn a_space_writer_signs_a_link_at_each_head_of_the_walk() {
         let (alice, bob, governor) = (Person::new(1), Person::new(2), Person::new(9));

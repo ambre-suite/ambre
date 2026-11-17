@@ -595,7 +595,7 @@ mod tests {
     }
 
     /// With a transport but only half of the session keys, no creation can
-    /// start: an invite on a local-only document is refused at once, and
+    /// start. An invite on a local-only document is refused at once, and
     /// waits for nothing.
     #[test]
     fn an_invite_with_half_the_session_keys_is_refused_at_once() {
