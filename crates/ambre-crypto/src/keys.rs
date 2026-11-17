@@ -16,8 +16,7 @@
 use std::sync::Arc;
 
 use ambre_core::{
-    Confidential, Encoded, EntryDigest, FileSalt, FixedBytes, KeyId, RecoveryWords, SALT_LEN,
-    Secret, WrappedMasterKey,
+    Encoded, EntryDigest, FileSalt, FixedBytes, KeyId, SALT_LEN, Secret, WrappedMasterKey,
 };
 use blake2::{Blake2b512, Digest};
 use ed25519_dalek::SigningKey;
@@ -26,6 +25,8 @@ use x25519_dalek::StaticSecret;
 use crate::aead;
 use crate::error::CryptoError;
 use crate::random;
+
+mod recovery;
 
 /// Domain-separation tag for the Ed25519 signing key derivation.
 const SIGN_DOMAIN: &[u8] = b"ambre-sign-v1";
@@ -120,24 +121,6 @@ impl MasterSeed {
     /// every device and every sign-in, so nothing of it is ever written down.
     pub fn derive_store_key(&self) -> StoreKey {
         StoreKey(derive32(STORE_DOMAIN, self.0.expose()))
-    }
-
-    /// The recovery phrase of the seed: its 32 bytes in lowercase hex, as the
-    /// screen of a new account shows them once. The one way out of the root
-    /// seed, and it hands out a secret that is wiped in turn.
-    pub fn recovery_words(&self) -> Confidential<RecoveryWords> {
-        const HEX: &[u8; 16] = b"0123456789abcdef";
-        // Sized once, so no reallocation leaves a copy behind; the move into
-        // the wrapper moves the buffer, not the bytes.
-        let mut text = String::with_capacity(64);
-        for byte in self.0.expose() {
-            for nibble in [byte >> 4, byte & 0x0f] {
-                if let Some(&digit) = HEX.get(usize::from(nibble)) {
-                    text.push(char::from(digit));
-                }
-            }
-        }
-        Confidential::<RecoveryWords>::new(text)
     }
 
     /// Seals the raw seed under `key` with the given `aad`, for storage as the

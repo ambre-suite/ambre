@@ -532,6 +532,9 @@ pub enum AuthFailure {
     /// The new passphrase falls under the strength floor of an offline
     /// guess, for the reason it names (`ZK-036`). No request left the worker.
     WeakPassphrase(ambre_core::PassphraseWeakness),
+    /// The recovery words do not spell a seed, for the reason it names
+    /// (`ZK-043`). No key was derived and no request left the worker.
+    BadRecoveryWords(ambre_core::RecoveryWordsRefusal),
 }
 
 impl fmt::Display for AuthFailure {
@@ -560,6 +563,20 @@ impl fmt::Display for AuthFailure {
                     }
                 })?;
                 f.write_str(" Four or more random words resist one.")
+            }
+            Self::BadRecoveryWords(refusal) => {
+                f.write_str("Recovery failed: ")?;
+                f.write_str(match refusal {
+                    ambre_core::RecoveryWordsRefusal::WrongWordCount => {
+                        "the recovery phrase holds 24 words."
+                    }
+                    ambre_core::RecoveryWordsRefusal::UnknownWord => {
+                        "a word is not one of the recovery words. Check its spelling."
+                    }
+                    ambre_core::RecoveryWordsRefusal::BadChecksum => {
+                        "the words do not match each other. Check each word and its order."
+                    }
+                })
             }
         }
     }

@@ -318,11 +318,11 @@ fn the_store_key_matches_its_frozen_domain() {
     assert_eq!(seed.derive_store_key().as_bytes(), &STORE);
 }
 
-/// The recovery phrase is the seed in lowercase hex, and prints nothing.
+/// The recovery phrase spells the seed in BIP39 words, and prints nothing.
 #[test]
-fn the_recovery_words_spell_the_seed_in_hex() {
+fn the_recovery_words_spell_the_seed_in_bip39_words() {
     let words = MasterSeed::from_array([0xa7; 32]).recovery_words();
-    assert_eq!(words.secret().expose(), &"a7".repeat(32));
+    assert_eq!(words.secret().expose().split(' ').count(), 24);
     assert_eq!(format!("{words:?}"), "RecoveryWords(Secret([REDACTED]))");
 }
 

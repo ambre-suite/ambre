@@ -3017,12 +3017,14 @@ ambre-crypto | src/keys.rs | crate::keys | DocumentKey.0 | field | Arc<Secret<[u
 ambre-crypto | src/keys.rs | crate::keys | DocumentKey::from_secret(key) | param | Secret<[u8;32]>	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/keys.rs | crate::keys | FileKey.0 | field | Secret<[u8;32]>	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/keys.rs | crate::keys | MasterSeed.0 | field | Secret<[u8;32]>	newtype-inner	newtype field, constructor or accessor
-ambre-crypto | src/keys.rs | crate::keys | MasterSeed::recovery_words::HEX | const | &[u8;16]	generic	the hex alphabet the recovery words are spelled in
 ambre-crypto | src/keys.rs | crate::keys | StoreKey.0 | field | Secret<[u8;32]>	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/keys.rs | crate::keys | derive32() | ret | Secret<[u8;32]>	generic	BLAKE2b output in a Secret; each caller wraps it in its typed key
 ambre-crypto | src/keys.rs | crate::keys | key_of() | ret | Option<Secret<[u8;32]>>	generic	generic byte/text API or codec
 ambre-crypto | src/keys.rs | crate::keys | key_of(bytes) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/keys.rs | crate::keys | split_anchored(plain) | param | &[u8]	generic	generic byte/text API or codec
+ambre-crypto | src/keys/recovery.rs | crate::keys::recovery | PHRASE_WORDS | const | usize	local	module-private count of the words of a recovery phrase, which bounds one loop and is compared with the word count of the phrase read back
+ambre-crypto | src/keys/recovery.rs | crate::keys::recovery | WORD_BITS | const | usize	local	module-private shift width of the BIP39 codec: the bits one word carries, as the list holds 2^11 words
+ambre-crypto | src/keys/recovery.rs | crate::keys::recovery | WORD_LIST | const | &str	generic	the BIP39 English word list, the table of the codec between seed bits and words; a data file that recovery_words and from_recovery_words alone read
 ambre-crypto | src/passphrase.rs | crate::passphrase | UserKey.0 | field | Secret<[u8;USER_KEY_LEN]>	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/passphrase.rs | crate::passphrase | argon2id() | ret | Result<Secret<[u8;USER_KEY_LEN]>,CryptoError>	generic	Argon2id output in a Secret; its one caller wraps it in UserKey
 ambre-crypto | src/passphrase.rs | crate::passphrase | SealingKey.0 | field | Secret<[u8;USER_KEY_LEN]>	newtype-inner	newtype field: the sealing key a chosen passphrase derives, as UserKey holds the unlock key

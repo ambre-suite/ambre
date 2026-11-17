@@ -404,6 +404,22 @@ pub enum PassphraseWeakness {
     TooShort,
 }
 
+/// Why the client refuses the recovery words it was handed
+/// (`ambre-spec-zero-knowledge.md`, `ZK-043`).
+///
+/// The refusal names the defect and nothing of the words. The client refuses
+/// before it derives any key from them.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub enum RecoveryWordsRefusal {
+    /// The phrase does not hold exactly 24 words.
+    WrongWordCount,
+    /// A word is not on the BIP39 English list.
+    UnknownWord,
+    /// Every word is on the list, but the checksum the last word carries does
+    /// not match the others.
+    BadChecksum,
+}
+
 mod credential_kind {
     /// Closes [`super::CredentialKind`] to the roles this module declares, so
     /// no crate downstream builds a credential of its own, nor admits one to

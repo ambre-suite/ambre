@@ -473,9 +473,21 @@ impl SyncState {
         let Some(new_passphrase) = self.admit_new_passphrase(new_passphrase) else {
             return;
         };
-        // The recovery itself is not built yet. The words, a master-key
-        // equivalent, and the passphrase wipe their bytes on drop (H4).
-        drop((recovery_words, new_passphrase));
+        // The words are read whole before any key is derived: a mistyped
+        // word or a bad checksum ends the recovery here (`ZK-043`).
+        let master_seed = match ambre_crypto::keys::MasterSeed::from_recovery_words(&recovery_words)
+        {
+            Ok(master_seed) => master_seed,
+            Err(refusal) => {
+                self.send_to_logic(LogicEvent::AuthError {
+                    cause: AuthFailure::BadRecoveryWords(refusal),
+                });
+                return;
+            }
+        };
+        // The re-seal under the new passphrase is not built yet. The words,
+        // the seed they spell and the passphrase wipe their bytes on drop (H4).
+        drop((recovery_words, master_seed, new_passphrase));
     }
 
     /// Tear down the session (WebSocket, document sessions, keys). The

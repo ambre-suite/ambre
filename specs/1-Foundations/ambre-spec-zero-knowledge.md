@@ -34,11 +34,12 @@ that component's prefix instead.
 | `ZK-008` | `INV` | A presigned S3 URL MUST be issued only after the ACL check. | `ambre-spec-object-store.md`, `SRV-002` | `ambre_server::routes::tests::handler_tests::a_presigned_url_is_signed_only_after_the_access_check` -- an outsider is refused all four URLs, and a viewer both uploads | none | verified |
 | `ZK-009` | `INV` | The two key-derivation domains MUST stay frozen at `ambre-sign-v1` and `ambre-exch-v1`, one context each. | this spec section 2; derived | `ambre_crypto::tests::derived_keys_match_the_frozen_domains` -- it pins the key pair one seed derives under each domain, so a renamed domain fails it | none | verified |
 | `ZK-010` | `INV` | A passphrase MUST cross the client bus in a type that wipes its own bytes when it is dropped. | README pillar "Zero-Knowledge"; audit `H4`, `H5` | type-level -- `RestCommand::Unlock`, `SetupAccount`, `ChangePassphrase` and `RecoverAccount` carry `ambre_core::Confidential<Passphrase>`, and the recovery words a `Confidential<RecoveryWords>`. Each holds an `ambre_core::Secret`, which wipes its value when the last owner drops it, so a plain `String` on that path does not compile; `ambre_core::secret::tests::a_secret_wipes_its_value_once_when_it_drops`; `::a_shared_secret_wipes_when_its_last_owner_drops`; `::a_confidential_value_wipes_once_when_its_last_owner_drops` | none | verified |
-| `ZK-011` | `INV` | The Master Seed MUST be moved and never copied: a path MUST NOT leave a second copy behind. | this spec section 2; derived | type-level -- `MasterSeed` holds an `ambre_core::Secret`, which implements no `Clone`, so a duplicate is a compile error rather than a review finding. The `compile_fail` doctests of `ambre_core::secret` show a derived `Clone` refused. The recovery words are spelled in place inside a `Confidential<RecoveryWords>`, so no bare copy of the seed is left; `ambre_crypto::tests::the_recovery_words_spell_the_seed_in_hex` | none | verified |
+| `ZK-011` | `INV` | The Master Seed MUST be moved and never copied: a path MUST NOT leave a second copy behind. | this spec section 2; derived | type-level -- `MasterSeed` holds an `ambre_core::Secret`, which implements no `Clone`, so a duplicate is a compile error rather than a review finding. The `compile_fail` doctests of `ambre_core::secret` show a derived `Clone` refused. The recovery words are spelled in place inside a `Confidential<RecoveryWords>`, so no bare copy of the seed is left; `ambre_crypto::tests::the_recovery_words_spell_the_seed_in_bip39_words` | none | verified |
 | `ZK-012` | `INV` | A passphrase MUST NOT appear in a request the client sends to the relay. | README pillar "Zero-Knowledge"; audit `N4` | ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads each field of a type of `ambre-sync` that derives `Serialize`, with its type resolved. It refuses a field named for a passphrase or a password, a field whose type holds a `Confidential` or a `Secret` under any alias, and a string literal of the worker that spells such a key, a macro-written one included (`ambre_primitives::driver::wiring::a_passphrase_under_an_alias_or_a_macro_key_is_refused_in_a_request`) | none | verified |
 | `ZK-035` | `INV` | The client MUST NOT seal the Master Seed for storage under a passphrase whose strength estimate falls under the floor of 48 bits. | README pillar "Zero-Knowledge"; this spec section 2, the strength floor | type-level -- `MasterSeed::wrap_for_storage` takes a `SealingKey`, which `ambre_crypto::passphrase::derive_sealing_key` alone builds, from a `ChosenPassphrase` that `ChosenPassphrase::check` alone builds, and the unlock key opens a seed but seals none; `ambre_crypto::strength::tests::a_known_weak_password_is_refused_with_its_weakness`; `::three_diceware_words_fall_under_the_floor_and_four_reach_it`; `::any_four_distinct_diceware_words_reach_the_floor`; `::any_three_diceware_words_fall_under_the_floor`; `::a_random_password_of_enough_characters_reaches_the_floor`; `ambre_sync::integration::a_setup_under_the_strength_floor_is_refused_before_any_key_exists` -- the worker creates no account and sends no frame | none | verified |
 | `ZK-036` | `INV` | A refusal under the strength floor MUST carry the weakness that dominated the estimate as its only content. | this spec section 2, the strength floor; `ZK-035` | type-level -- `ambre_bus::AuthFailure::WeakPassphrase` holds an `ambre_core::PassphraseWeakness`, a fieldless enum, so no figure of the estimate is representable; `ambre_crypto::strength::tests::a_known_weak_password_is_refused_with_its_weakness`; `ambre_sync::integration::a_setup_under_the_strength_floor_is_refused_before_any_key_exists` -- the weakness is the one event the worker sends | none | verified |
 | `ZK-042` | `INV` | A passphrase change or an account recovery MUST refuse a new passphrase whose strength estimate falls under the floor of `ZK-035`. | this spec section 2, the strength floor; `ZK-035`; `ZK-036` | `ambre_sync::integration::a_passphrase_change_under_the_strength_floor_is_refused`; `::a_recovery_under_the_strength_floor_is_refused` -- the weakness is the one event the worker sends, and no frame leaves; `::a_change_or_a_recovery_above_the_strength_floor_draws_no_refusal` -- a strong passphrase passes the floor | none | verified |
+| `ZK-043` | `INV` | The recovery words MUST spell the Master Seed as 24 BIP39 English words with their checksum, and a recovery MUST refuse a phrase with an unknown word or a bad checksum before it derives any key. | README pillar "Zero-Knowledge"; this spec section 2, the recovery words | `ambre_crypto::keys::recovery::tests::the_recovery_words_match_the_bip39_vectors` -- the official 24-word vectors, both ways; `::any_seed_round_trips_through_its_recovery_words`; `::the_word_list_is_the_bip39_english_list` -- the SHA-256 digest of the list is pinned; `::a_mistyped_recovery_word_is_refused`; `::a_recovery_phrase_with_a_bad_checksum_is_refused`; `::a_recovery_phrase_of_the_wrong_length_is_refused`; `ambre_sync::integration::a_recovery_with_a_mistyped_word_or_a_bad_checksum_is_refused` -- the refusal is the one event the worker sends, and no frame leaves | none | verified |
 | `ZK-013` | `INV` | The relay MUST see no field of an ephemeral beyond `document_id`, `pub_key`, `key_id` and `counter`. | `ambre-spec-broadcast.md`, `SRV-050` | `ambre_protocol::tests::the_relay_reads_only_the_listed_fields` -- the ephemeral public data destructures to exactly these four fields | none | verified |
 | `ZK-014` | `INV` | A presigned S3 URL MUST expire within 15 minutes. | `ambre-spec-object-store.md`, `SRV-052` | `ambre_server::s3::tests::a_presigned_url_never_outlives_fifteen_minutes` -- a configured lifetime of one day signs both URLs for 900 s | none | verified |
 | `ZK-015` | `INV` | What the relay learns of a Murmure channel MUST be limited to `{the documents of the channel and their kind, which documents are spaces, the space of the channel, its public flag, the state of each segment with its close time, its finalization time, its finalize lease and the horizon and identifier of its final snapshot, whether a rotation retired its key, the segment each amendments document amends, the identifier of the root message of each thread, the retention duration of the space, the read cursor of each member}`. | this spec section 2; `5-Murmure/ambre-spec-murmure-schema.md` | `ambre_server::db::channels::tests::the_channel_tables_hold_only_what_the_relay_may_learn` -- database tier | none | verified |
@@ -66,7 +67,7 @@ that component's prefix instead.
   `ambre-crypto/benches`, which no CI job runs.
 * **Boundary.** this document **is** the boundary. Every other document either refines one of these
   rows on its own side, or answers `none` and says why.
-* **Verification.** 40 `verified`, 1 `human-review`, 1 `unimplemented`. Every row is an `INV`. This
+* **Verification.** 41 `verified`, 1 `human-review`, 1 `unimplemented`. Every row is an `INV`. This
   document owns no gesture, so it declares no operation table, and each rule binds the boundary at
   every instant.
 
@@ -266,7 +267,7 @@ The relay takes `ed25519-dalek` directly, for signatures alone (`SRV-012`). Ever
   * `expose` reads the value in `ambre-crypto`, in the Secret module, and in the `src/secrets/`
     of the relay and of the SFU alone (`ARCH-045`, `ARCH-048`). A crate outside them calls a
     typed method:
-    `MasterSeed::recovery_words`, `MasterSeed::open_from_storage`,
+    `MasterSeed::recovery_words`, `MasterSeed::from_recovery_words`, `MasterSeed::open_from_storage`,
     `Credential<AccessToken>::present_bearer`, `Confidential<Plaintext>::with_plaintext`,
     `Confidential<Plaintext>::into_plaintext`, `seal_row` and `seal_file`. A sink that lends the text to one
     foreign call is named in the file of that call alone (`ARCH-049`). Only the Secret module names
@@ -324,9 +325,27 @@ pub struct MasterSeed(Secret<[u8; 32]>); // wiped on drop, not Clone
 impl MasterSeed {
     pub fn derive_signing_key(&self) -> ed25519_dalek::SigningKey;
     pub fn derive_exchange_key(&self) -> x25519_dalek::StaticSecret;
-    pub fn recovery_words(&self) -> Confidential<RecoveryWords>; // the seed in lowercase hex
+    pub fn recovery_words(&self) -> Confidential<RecoveryWords>; // 24 BIP39 words
+    pub fn from_recovery_words(words: &Confidential<RecoveryWords>)
+        -> Result<MasterSeed, RecoveryWordsRefusal>;
 }
 ```
+
+**The recovery words.** The 24 words spell the Master Seed itself (`ZK-043`). They take the mapping
+between entropy and words of BIP39, and nothing else of it:
+
+* the 256 bits of the seed and the first 8 bits of their SHA-256 digest make 264 bits;
+* each word carries 11 bits, as its index in the BIP39 English list of 2 048 words;
+* the BIP39 step from a phrase to a seed, PBKDF2 over the words, is not used. The key hierarchy
+  above derives from the seed the words spell.
+
+The list is a data file of `ambre-crypto`, `src/keys/bip39-english.txt`, copied verbatim from
+`bitcoin/bips`, `bip-0039/english.txt`. A test pins its SHA-256 digest,
+`2f5eed53a4727b4bf8880d8f3f199efc90e58503646d9ff8eff3a2ed3b24dbda`. No crate is added: `sha2` already
+sits in `ambre-crypto`, and a BIP39 crate would bring its PBKDF2 step and its other lists. A reader
+matches a word without regard to ASCII case. It refuses a phrase of another length, an unknown word
+and a bad checksum. Each refusal comes before the seed leaves `ambre-crypto`, so a refused phrase
+derives no key.
 
 **The strength floor.** The relay stores the salt and the Master Seed sealed under the passphrase,
 so the relay, or a thief of its database, can guess offline. Argon2id prices each guess, and the
@@ -401,7 +420,8 @@ The boundary has no control of its own. What a user meets is what it costs them.
 | a first invitation | the recipient's key fingerprint is shown for an out-of-band check (`ambre-spec-key-verification.md`) |
 | account setup with a weak passphrase | the setup is refused before any key exists, and the refusal names why: a common password, a repetition, a sequence or too few words (`ZK-035`) |
 | a passphrase change or a recovery with a weak new passphrase | the request is refused before the current passphrase or the recovery words are read, with the same words as at setup (`ZK-042`) |
-| account setup | 24 recovery words are shown once: they are the Master Seed, and the only path back after a forgotten passphrase |
+| account setup | 24 BIP39 recovery words are shown once: they are the Master Seed, and the only path back after a forgotten passphrase |
+| a recovery with a mistyped word, a wrong word count or a bad checksum | the recovery is refused before any key is derived, and the refusal names which of the three (`ZK-043`) |
 | losing both the passphrase and the words | the documents are unrecoverable, unless an organization holds the escrow (`ambre-spec-organizations.md`) |
 
 ---

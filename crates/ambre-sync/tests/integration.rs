@@ -95,9 +95,10 @@ fn setup_account_returns_created_with_recovery_words() {
 
     match drain_rest(&rx, id) {
         RestEvent::AccountCreated { recovery_words } => {
+            // `ZK-043`: 24 BIP39 words, which read back to a seed.
             let words = recovery_words.secret().expose();
-            assert_eq!(words.len(), 64, "32-byte hex-encoded string");
-            assert!(words.bytes().all(|b| b.is_ascii_hexdigit()));
+            assert_eq!(words.split(' ').count(), 24, "24 words");
+            assert!(ambre_crypto::keys::MasterSeed::from_recovery_words(&recovery_words).is_ok());
         }
         other => panic!("expected AccountCreated, got {other:?}"),
     }
@@ -195,9 +196,7 @@ fn a_recovery_under_the_strength_floor_is_refused() {
     for (weak, weakness) in WEAK_PASSPHRASES {
         assert_refused_under_the_floor(
             RestCommand::RecoverAccount {
-                recovery_words: ambre_core::Confidential::<ambre_core::RecoveryWords>::new(
-                    "00".repeat(32),
-                ),
+                recovery_words: valid_recovery_words(),
                 new_passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new(
                     weak.to_owned(),
                 ),
@@ -222,9 +221,7 @@ fn a_change_or_a_recovery_above_the_strength_floor_draws_no_refusal() {
             new_passphrase: strong(),
         },
         RestCommand::RecoverAccount {
-            recovery_words: ambre_core::Confidential::<ambre_core::RecoveryWords>::new(
-                "00".repeat(32),
-            ),
+            recovery_words: valid_recovery_words(),
             new_passphrase: strong(),
         },
     ] {
@@ -241,6 +238,87 @@ fn a_change_or_a_recovery_above_the_strength_floor_draws_no_refusal() {
             "{events:?}"
         );
     }
+}
+
+/// The recovery words of the all-zero seed, the first BIP39 vector.
+fn valid_recovery_words() -> ambre_core::Confidential<ambre_core::RecoveryWords> {
+    recovery_words(&format!("{}art", "abandon ".repeat(23)))
+}
+
+fn recovery_words(text: &str) -> ambre_core::Confidential<ambre_core::RecoveryWords> {
+    ambre_core::Confidential::<ambre_core::RecoveryWords>::new(text.to_owned())
+}
+
+#[test]
+fn a_recovery_with_a_mistyped_word_or_a_bad_checksum_is_refused() {
+    // `ZK-043`: the words are read whole before any key is derived. The
+    // refusal is the one event the worker sends, and no frame leaves.
+    for (text, refusal) in [
+        (
+            format!("{}art", "abandon ".repeat(22) + "abandn "),
+            ambre_core::RecoveryWordsRefusal::UnknownWord,
+        ),
+        (
+            "abandon ".repeat(24).trim_end().to_owned(),
+            ambre_core::RecoveryWordsRefusal::BadChecksum,
+        ),
+        (
+            "00".repeat(32),
+            ambre_core::RecoveryWordsRefusal::WrongWordCount,
+        ),
+    ] {
+        let (mut state, rx, mock) = setup(true);
+        send_rest(
+            &mut state,
+            next_request(),
+            RestCommand::RecoverAccount {
+                recovery_words: recovery_words(&text),
+                new_passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new(
+                    "anchovy glider ruckus tadpole".to_owned(),
+                ),
+            },
+        );
+        let events: Vec<LogicEvent> = rx.try_iter().collect();
+        assert!(
+            matches!(
+                events.as_slice(),
+                [LogicEvent::AuthError { cause: ambre_bus::AuthFailure::BadRecoveryWords(r) }]
+                    if *r == refusal
+            ),
+            "{refusal:?}: {events:?}"
+        );
+        assert!(
+            mock.server_rx.try_recv().is_err(),
+            "{refusal:?}: no frame left"
+        );
+    }
+}
+
+#[test]
+fn a_recovery_with_valid_words_draws_no_refusal() {
+    // `ZK-043`: the words of a seed read back, so no refusal answers them.
+    let (mut state, rx, mock) = setup(true);
+    send_rest(
+        &mut state,
+        next_request(),
+        RestCommand::RecoverAccount {
+            recovery_words: valid_recovery_words(),
+            new_passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new(
+                "anchovy glider ruckus tadpole".to_owned(),
+            ),
+        },
+    );
+    let events: Vec<LogicEvent> = rx.try_iter().collect();
+    assert!(
+        !events
+            .iter()
+            .any(|e| matches!(e, LogicEvent::AuthError { .. })),
+        "{events:?}"
+    );
+    assert!(
+        mock.server_rx.try_recv().is_err(),
+        "the re-seal is not built"
+    );
 }
 
 #[test]
