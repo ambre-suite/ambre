@@ -432,7 +432,9 @@ impl SyncState {
 
     /// The membership log of `meta` was read. The first read opens the call socket; a later
     /// one is heeded within the call. A log that stands on no root admits no one. A first
-    /// one ends the join, and a later one leaves the held log in place (`CALL-134`).
+    /// one ends the join, and a later one leaves the held log in place (`CALL-134`). A later
+    /// log that misses the head of the held one leaves it in place too (`CALL-138`). The relay
+    /// rolled that log back, and it may admit a member a later entry removed.
     pub(crate) fn call_log(&mut self, meta: Id<Document>, log: Option<Log>) {
         let now = (self.clock)();
         let Some(link) = self.call.as_mut().filter(|link| link.meta == meta) else {
@@ -445,12 +447,38 @@ impl SyncState {
             }
             return;
         };
+        if link.log.as_ref().is_some_and(|held| !log.extends(held)) {
+            tracing::warn!("Sync: the relay served a log of the call older than the one held");
+            return;
+        }
         let steps = link.client.heed(&log, now);
         link.log = Some(log);
         if first {
             self.open_call_socket();
         } else {
             self.carry_call(steps);
+        }
+    }
+
+    /// A signed frame of `document` carries `head` and the entry `entry` it names. The call
+    /// of that channel reads its log again when the head lies past its held log. A member
+    /// that log allows must also have signed the entry (`CALL-137`). The relay may push no frame of a
+    /// removal, and the head of a peer still brings it. A head of another document, or one no
+    /// allowed member proves, reads nothing.
+    pub(crate) fn heed_call_head(
+        &mut self,
+        document: Id<Document>,
+        head: ambre_protocol::LogHead,
+        entry: Option<&ambre_protocol::MembershipEntry>,
+    ) {
+        let past = self
+            .call
+            .as_ref()
+            .filter(|link| link.meta == document)
+            .and_then(|link| link.log.as_ref())
+            .is_some_and(|log| log.proves_past(document, head, entry));
+        if past {
+            self.read_call_log(document);
         }
     }
 
@@ -820,8 +848,24 @@ mod tests {
         (state, handed, port, rx)
     }
 
+    /// The owner of the channel of every log these tests walk.
+    fn owner() -> Person {
+        Person::new(90)
+    }
+
     fn log_of(person: &Person) -> Log {
-        let owner = Person::new(90);
+        let entries = entries_of(person);
+        Log::walk(
+            DOC,
+            entries.first().and_then(digest),
+            &entries,
+            no_self_join,
+        )
+    }
+
+    /// The entries of a channel that the owner created, then joined `person` to.
+    fn entries_of(person: &Person) -> Vec<ambre_protocol::MembershipEntry> {
+        let owner = owner();
         let mut entries = Vec::new();
         append(
             &mut entries,
@@ -837,12 +881,137 @@ mod tests {
             MembershipAct::Invite,
             Role::Editor,
         );
-        Log::walk(
-            DOC,
-            entries.first().and_then(digest),
-            &entries,
-            no_self_join,
+        entries
+    }
+
+    /// The entries of `entries_of(person)`, then the owner's invite of Eve and her revoke.
+    fn eve_in_then_out(person: &Person, eve: &Person) -> Vec<ambre_protocol::MembershipEntry> {
+        let owner = owner();
+        let mut entries = entries_of(person);
+        append(
+            &mut entries,
+            &owner,
+            eve,
+            MembershipAct::Invite,
+            Role::Editor,
+        );
+        append(
+            &mut entries,
+            &owner,
+            eve,
+            MembershipAct::Revoke,
+            Role::Editor,
+        );
+        entries
+    }
+
+    fn walk_all(entries: &[ambre_protocol::MembershipEntry]) -> Log {
+        Log::walk(DOC, entries.first().and_then(digest), entries, no_self_join)
+    }
+
+    /// `CALL-136`: the owner revokes Eve from the channel during the call. The relay pushes
+    /// neither a change of the members nor a rotation. The revoke this client signed still
+    /// reads the log of the call again.
+    #[test]
+    fn a_revoke_this_client_signs_reads_the_log_of_the_call_again() {
+        let owner = owner();
+        let (mut state, _, port) = worker(&owner);
+        state.join_call(TARGET, META, port, Opening::Join);
+        let old = crate::DocumentKey::generate();
+        let fresh = crate::DocumentKey::generate();
+        let link = crate::pipeline::seal_link(
+            META,
+            &old,
+            &fresh,
+            ambre_protocol::LogHead::EMPTY,
+            &owner.key,
         )
+        .expect("a link");
+        state.handle_sync_event(crate::SyncEvent::RevocationComplete {
+            id: ambre_bus::next_request(),
+            document_id: META,
+            new_doc_key: fresh,
+            link,
+        });
+        let reads = state.call.as_ref().map(|l| l.sent.log_reads);
+        assert_eq!(reads, Some(Count::new(2)), "the join read, then the revoke");
+    }
+
+    /// `CALL-137`: Eve is revoked, and the relay pushes no frame of it to Alice. A sample on
+    /// the channel carries the head past the log of the call, and the revoke the owner
+    /// signed. The call reads its log again. A head the log holds, or an entry no member
+    /// the log allows signed, reads nothing.
+    #[test]
+    fn a_signed_head_past_the_log_of_the_call_reads_it_again() {
+        let (alice, eve) = (Person::new(1), Person::new(5));
+        let (mut state, _, port) = worker(&alice);
+        state.join_call(TARGET, META, port, Opening::Join);
+        let whole = eve_in_then_out(&alice, &eve);
+        let held = whole.get(..whole.len() - 1).expect("a prefix").to_vec();
+        state.call_log(META, Some(walk_all(&held)));
+        let key = crate::DocumentKey::generate();
+        let sample = |author: &Person, entries: &[ambre_protocol::MembershipEntry]| {
+            let public_data = ambre_protocol::EphemeralPublicData {
+                document_id: META,
+                pub_key: author.public(),
+                key_id: key.id(),
+                counter: ambre_protocol::messages::Seq::new(1),
+                log_head: crate::membership_log::ServedHeads::of(entries).last(),
+                log_entry: entries.last().cloned().map(Box::new),
+            };
+            let payload = ambre_core::Payload::new(b"a cursor".to_vec());
+            crate::pipeline::seal_ephemeral(&payload, public_data, &key, &author.key).expect("seal")
+        };
+        let reads = |state: &SyncState| state.call.as_ref().map(|l| l.sent.log_reads);
+        state.handle_ws_message(WsServerMsg::Ephemeral(sample(&owner(), &held)));
+        assert_eq!(
+            reads(&state),
+            Some(Count::new(1)),
+            "a held head reads nothing"
+        );
+        let mut forged = held.clone();
+        append(
+            &mut forged,
+            &eve,
+            &alice,
+            MembershipAct::Revoke,
+            Role::Editor,
+        );
+        state.handle_ws_message(WsServerMsg::Ephemeral(sample(&eve, &forged)));
+        assert_eq!(
+            reads(&state),
+            Some(Count::new(1)),
+            "an entry of Eve reads nothing"
+        );
+        let revoked = whole;
+        state.handle_ws_message(WsServerMsg::Ephemeral(sample(&owner(), &revoked)));
+        assert_eq!(
+            reads(&state),
+            Some(Count::new(2)),
+            "the owner's entry reads the log"
+        );
+    }
+
+    /// `CALL-138`: the call holds the log that revokes Eve. The relay then serves the older
+    /// genuine log, in which Eve is a member. The call keeps the log it held, so it admits no
+    /// new join of Eve.
+    #[test]
+    fn an_older_log_does_not_replace_the_log_the_call_holds() {
+        let (alice, eve) = (Person::new(1), Person::new(5));
+        let (mut state, _, port) = worker(&alice);
+        state.join_call(TARGET, META, port, Opening::Join);
+        let whole = eve_in_then_out(&alice, &eve);
+        let held = walk_all(&whole);
+        let head = held.next();
+        state.call_log(META, Some(held));
+        let older = whole.get(..whole.len() - 1).expect("a prefix");
+        state.call_log(META, Some(walk_all(older)));
+        let kept = state
+            .call
+            .as_ref()
+            .and_then(|l| l.log.as_ref())
+            .map(Log::next);
+        assert_eq!(kept, Some(head), "the older log replaced the held one");
     }
 
     /// `CALL-062`: a join reads the log of the channel first, then opens the call socket with

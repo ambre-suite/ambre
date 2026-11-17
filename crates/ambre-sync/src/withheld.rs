@@ -242,6 +242,8 @@ impl SyncState {
     pub(crate) fn note_signed_head(&mut self, frame: HeadFrame<'_>) {
         let document_id = frame.document_id();
         let head = frame.head();
+        // The call of a channel heeds the head first, open document or not (`CALL-137`).
+        self.heed_call_head(document_id, head, frame.entry());
         let Some(doc_state) = self.documents.get(&document_id) else {
             return;
         };

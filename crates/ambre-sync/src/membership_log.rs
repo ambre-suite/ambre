@@ -349,13 +349,7 @@ impl ServedHeads {
         head: LogHead,
         entry: Option<&MembershipEntry>,
     ) -> bool {
-        entry.is_some_and(|entry| {
-            entry.document == document
-                && entry.position.next() == head.position
-                && entry.well_formed()
-                && digest(entry).is_some_and(|d| head.previous == Some(d))
-                && allowed(&self.vouchers, entry, no_self_join)
-        })
+        proves(&self.vouchers, document, head, entry)
     }
 
     /// The head of the whole served log.
@@ -793,6 +787,25 @@ impl Log {
         self.next
     }
 
+    /// Whether `head` lies past this log, and `entry` proves it: a member
+    /// this log allows signed the entry the head names (`SYNC-219`,
+    /// `CALL-137`). The served heads are read in place, with no copy.
+    pub(crate) fn proves_past(
+        &self,
+        document: Id<Document>,
+        head: LogHead,
+        entry: Option<&MembershipEntry>,
+    ) -> bool {
+        !self.heads.holds(head) && proves(&self.held, document, head, entry)
+    }
+
+    /// Whether this log passes through the head of `earlier`: it holds every
+    /// entry `earlier` served, and maybe more (`CALL-138`). A log the relay
+    /// rolled back, or forked, does not.
+    pub(crate) fn extends(&self, earlier: &Self) -> bool {
+        self.heads.holds(earlier.next)
+    }
+
     /// The heads of every entry served, which a signed head is checked
     /// against (`SYNC-207`), and the members that vouch for an entry past
     /// them (`SYNC-219`).
@@ -802,6 +815,23 @@ impl Log {
             ..self.heads.clone()
         }
     }
+}
+
+/// Whether `entry` proves `head`, a head of `document`, against `vouchers`,
+/// the members a walk holds (`SYNC-219`).
+fn proves(
+    vouchers: &HashMap<Id<User>, Held>,
+    document: Id<Document>,
+    head: LogHead,
+    entry: Option<&MembershipEntry>,
+) -> bool {
+    entry.is_some_and(|entry| {
+        entry.document == document
+            && entry.position.next() == head.position
+            && entry.well_formed()
+            && digest(entry).is_some_and(|d| head.previous == Some(d))
+            && allowed(vouchers, entry, no_self_join)
+    })
 }
 
 /// Whether `held`, the members a walk holds, allows `entry`, and its author

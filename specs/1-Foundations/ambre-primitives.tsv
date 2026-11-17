@@ -2095,6 +2095,9 @@ ambre-sync | src/membership_log.rs | crate::membership_log | Log.anchored | fiel
 ambre-sync | src/membership_log.rs | crate::membership_log | Log::allows() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | ServedHeads::vouches() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | allowed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-sync | src/membership_log.rs | crate::membership_log | proves() | ret | bool	generic	predicate: does the entry prove the head against the members a walk holds
+ambre-sync | src/membership_log.rs | crate::membership_log | Log::proves_past() | ret | bool	generic	predicate: does a head past the log carry an entry an allowed member signed
+ambre-sync | src/membership_log.rs | crate::membership_log | Log::extends() | ret | bool	generic	predicate: does the log pass through the head of an earlier log
 ambre-sync | src/membership_log.rs | crate::membership_log | allowed(self_join) | param | SelfJoinRule	generic	a predicate rule over one entry, whose bool answers a question
 ambre-sync | src/membership_log.rs | crate::membership_log | Log::allows(self_join) | param | SelfJoinRule	generic	a predicate rule over one entry, whose bool answers a question
 ambre-sync | src/membership_log.rs | crate::membership_log | Log::binds() | ret | bool	generic	yes/no fact or predicate answer, selects no mode

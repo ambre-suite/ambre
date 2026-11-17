@@ -15,8 +15,8 @@ use std::collections::BTreeMap;
 
 use ambre_core::id::{Call, Channel, Id};
 use ambre_core::{
-    ClearChunk, Instant, KeyIdentifier, Ms, Payload, Role, SealedChunk, SenderIndex, Seq, TimeSpan,
-    Track, UnixMs, Validated,
+    ClearChunk, Instant, KeyIdentifier, Ms, PageLoad, Payload, Role, SealedChunk, SenderIndex, Seq,
+    TimeSpan, Track, UnixMs, Validated,
 };
 use ambre_crypto::call::{ChunkSealer, ReceiveKeys, SenderKey};
 use ambre_protocol::MembershipAct;
@@ -66,7 +66,8 @@ impl Worker {
                 key,
             } => {
                 self.held.push(key.clone());
-                self.receive.insert(sender, generation, key);
+                self.receive
+                    .insert(sender, generation, key, Instant::<PageLoad>::default());
             }
             KeyHandoff::Forget { sender } => self.receive.forget(sender),
             // A curious member keeps every key it held past the end of the call.
@@ -83,7 +84,10 @@ impl Worker {
 
     fn opens(&mut self, chunk: &Payload<SealedChunk>) -> bool {
         self.receive
-            .open_audio(Payload::new(chunk.as_bytes().to_vec()))
+            .open_audio(
+                Payload::new(chunk.as_bytes().to_vec()),
+                Instant::<PageLoad>::default(),
+            )
             .is_ok()
     }
 
@@ -96,9 +100,17 @@ impl Worker {
             let mut key = key.clone();
             (0..8).any(|_| {
                 let mut keys = ReceiveKeys::default();
-                keys.insert(header.kid.sender, header.kid.generation, key.clone());
+                keys.insert(
+                    header.kid.sender,
+                    header.kid.generation,
+                    key.clone(),
+                    Instant::<PageLoad>::default(),
+                );
                 let opened = keys
-                    .open_audio(Payload::new(chunk.as_bytes().to_vec()))
+                    .open_audio(
+                        Payload::new(chunk.as_bytes().to_vec()),
+                        Instant::<PageLoad>::default(),
+                    )
                     .is_ok();
                 key = key.ratcheted();
                 opened

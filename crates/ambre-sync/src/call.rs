@@ -25,9 +25,9 @@ use ed25519_dalek::SigningKey;
 
 use crate::membership_log::Log;
 
-/// The delay between a leave and the fresh key in use: the target of the call sender key
-/// switch row of `ambre-spec-budgets.md section 1`. Late wraps arrive within it.
-pub(crate) const SWITCH_DELAY: TimeSpan<Ms> = TimeSpan::new(5_000);
+/// The delay between a leave and the fresh key in use. Late wraps arrive within it. The
+/// receiver closes the older epochs on the same figure, so `ambre-crypto` holds it.
+pub(crate) use ambre_crypto::call::SWITCH_DELAY;
 
 /// How far the clock of a later joiner may lag behind the clock of this participant: the
 /// join clock skew row of `ambre-spec-budgets.md section 8`. Past it, a join that arrives

@@ -27,6 +27,8 @@ web-sys = { workspace = true, features = [
     # The streams of the encoded frames an `RTCRtpScriptTransform` hands the worker.
     "ReadableStream", "ReadableStreamDefaultReader", "WritableStream",
     "WritableStreamDefaultWriter",
+    # The monotonic clock that closes an older epoch of a sender on time (`CALL-135`).
+    "WorkerGlobalScope", "Performance",
 ] }
 console_error_panic_hook = { workspace = true }
 

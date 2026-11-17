@@ -108,6 +108,7 @@ this document alone.
 | `CALL-025` | `FAIL` | Given a chunk whose key identifier names a sender whose key did not seal it, the receiver MUST drop it. | this spec section 3, the key identifier; audit `N11` | `ambre_crypto::call::tests::a_chunk_that_names_another_sender_is_dropped` -- a chunk Mallory seals under her key with the identifier of Bob, and one of hers she relabels. A member who holds Bob's key seals a chunk that opens under it: the SFU refuses that one (`CALL-116`) | none | verified |
 | `CALL-026` | `FAIL` | Given a chunk whose counter falls outside the replay window of its key, the receiver MUST drop it. | this spec section 3, the chunk steps | `ambre_crypto::call::tests::a_chunk_outside_the_replay_window_is_dropped`; `::the_replay_window_agrees_with_a_model_of_the_counters_opened` -- against a model of the counters opened; `::a_chunk_of_a_dropped_generation_does_not_open_again` -- the window of a dropped opener | none | verified |
 | `CALL-125` | `FAIL` | Given a chunk of a sender whose epoch is older than one a chunk of that sender opened under, the receiver MUST drop it. | this spec section 3, the chunk steps; `CALL-026`, `CALL-116` | `ambre_crypto::call::tests::a_chunk_of_an_older_epoch_does_not_open_once_a_newer_one_opened` -- after the first chunk under the fresh key, a late chunk of the sender and three chunks a removed participant seals under the older key reach no decoder: the same step, a step up and a camera chunk. The older epoch opens until then | none | verified |
+| `CALL-135` | `FAIL` | Given a chunk of a sender whose epoch is older than a key of that sender held for the switch delay of `ambre-spec-budgets.md section 1`, the receiver MUST drop it, whether a chunk of the newer epoch opened or not. | this spec section 3, the chunk steps; `CALL-125`, `CALL-027` | `ambre_crypto::call::tests::an_older_epoch_closes_at_the_switch_delay_with_no_fresh_chunk` -- no chunk of the fresh epoch reaches the receiver, and three chunks a removed participant seals under the older key open before the deadline alone: the same step, a step up and a camera chunk; `::a_second_fresh_key_keeps_the_deadline_of_the_first`; `::an_older_key_after_a_fresh_one_still_closes_at_the_deadline`; `ambre_call::tests::the_worker_closes_an_older_epoch_at_the_switch_delay` -- through the handoffs of the call worker | none | verified |
 | `CALL-100` | `FRAME` | Turning the camera on or off during a call MUST NOT renegotiate the session or replace the transform of the video sender. | this spec section 3, a camera during a call; `CALL-011` | `ambre_belt::murmure::tests::a_member_draws_the_video_of_another_on_its_canvas` -- browser tier, under Chrome and under Firefox: Ada's video sender takes her camera, then gives it up, under its first transform, and her page sets no local description | none | verified |
 
 ### 1.4 Leave a call
@@ -122,6 +123,9 @@ A participant leaves, or the channel removes a member who is in the call.
 | `CALL-029` | `POST` | Leaving a call MUST erase every sender key of that call from the call worker. | this spec section 3, the leave steps | `ambre_call::tests::the_end_of_a_call_erases_every_key_of_it`; `ambre_sync::call_link::tests::a_join_command_seats_the_call_it_names_and_hands_the_keys_on_its_port` -- a leave hands the call worker the end of the call; `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier: the call worker of a member who leaves tells the page it erased its keys | none | verified |
 | `CALL-030` | `FRAME` | A leave MUST NOT send a fresh sender key to the participant who left. | this spec section 3, the leave steps | `ambre_sync::call::tests::each_member_opens_exactly_what_it_should` -- no wrap reaches a member out of the call, and a member who left keeps every key and opens nothing after the switch | none | verified |
 | `CALL-060` | `POST` | A client in a call MUST read the membership log of the channel again when the members of the channel change, and switch its key away from a member the log no longer holds. | this spec section 3, the leave steps; `CALL-028` | `ambre_sync::call_link::tests::a_change_of_the_members_of_the_channel_reads_the_log_again` -- a change of the members, or a rotation of the key, of the channel reads the log; `ambre_sync::call_client::tests::a_member_removed_from_the_channel_holds_no_key_of_the_next_generation` -- the relay still carries the removed member's socket, and it opens nothing sealed after the switch, under any key it held or a ratchet of one; `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier: a member leaves the channel during the call, through the relay. Past the switch, the SFU still forwards her the audio of the others, and she decodes none of it | none | verified |
+| `CALL-136` | `POST` | A client in a call MUST read the membership log of the channel again once it signs a revoke on that channel. | this spec section 3, the client of a call; `CALL-060`, `CALL-028` | `ambre_sync::call_link::tests::a_revoke_this_client_signs_reads_the_log_of_the_call_again` -- the relay pushes neither a change of the members nor a rotation | none | verified |
+| `CALL-137` | `POST` | A client in a call MUST read the membership log of the channel again when a frame of the channel carries a head past the held log, and a member that log allows signed the entry the head names. | this spec section 3, the client of a call; `CALL-060`; `ambre-spec-membership.md`, `SYNC-219` | `ambre_sync::call_link::tests::a_signed_head_past_the_log_of_the_call_reads_it_again` -- the owner's revoke on a presence sample reads the log, while a held head and an entry Eve signs read nothing | none | verified |
+| `CALL-138` | `FAIL` | Given a membership log of the channel that does not pass through the head of the log a client in a call holds, the client MUST keep the held log. | this spec section 3, the client of a call; `CALL-134` | `ambre_sync::call_link::tests::an_older_log_does_not_replace_the_log_the_call_holds` -- the older genuine log, which still holds the revoked member, leaves the held log in place | none | verified |
 | `CALL-063` | `POST` | A seat that leaves its call with no close of its socket MUST reach the other participants as a leave. | this spec section 3, signalling; `SRV-251`; `CALL-027` | `ambre_server::ws::handler::call::tests::a_seat_that_stops_its_heartbeat_leaves_the_roster_and_frees_its_place` -- database tier: the heartbeat that finds the expired seat announces its leave, once | none | verified |
 | `CALL-069` | `POST` | The relay MUST answer a leave with whether its seat was the last of the call. | this spec section 3, signalling; `5-Murmure/features/ambre-spec-murmure-calls.md section 3` (`MURMURE-591`) | `ambre_server::ws::handler::call::tests::a_leave_answers_whether_its_seat_was_the_last` -- database tier | none | verified |
 | `CALL-073` | `FAIL` | Given a call socket that answers no ping of the relay for the time to live of `ambre-spec-budgets.md section 1`, the relay MUST close it and take its seat out of the call. | this spec section 3, signalling; `SRV-251`; `MURMURE-592` | `ambre_server::ws::handler::call::tests::a_call_socket_silent_for_the_time_to_live_leaves_its_seat` -- database tier | none | verified |
@@ -244,7 +248,7 @@ A participant sends a screen or a window into the call, and stops it.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 134 `verified`. The relay admits under the cap, and the SFU mints the TURN
+* **Verification.** 138 `verified`. The relay admits under the cap, and the SFU mints the TURN
   credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography, forwards RTP and reaches a
   browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`, `CALL-050` to `CALL-052`). Each
   receiver holds fixed slots, and a seed gives one path (`CALL-045` to `CALL-053`). The seal and the
@@ -362,6 +366,10 @@ is empty. The Call crypto review Story (`ambre-roadmap.md` E5) reads it, with
 * A chunk of a sender opens under a newer epoch. The receiver then drops every key and window of
   the older epochs of that sender (`CALL-125`). A removed participant holds those keys, and a
   malicious SFU forwards her chunks. A chunk of the sender still in flight under them is lost.
+* A malicious SFU also forwards no chunk of the fresh epoch. So a fresh key of a sender sets a
+  deadline: the switch delay of the budget row, on the monotonic clock of the call worker. At
+  the deadline the receiver drops the older epochs of that sender, chunk or not (`CALL-135`). A
+  second fresh key inside the delay keeps the deadline of the first, as the sender does.
 
 **The join and the wrap, byte by byte.**
 
@@ -457,6 +465,12 @@ session, and a wrapper the log verifies (`CALL-134`). A first log with no root e
 
 A change of the members of the channel reads the log again. The
 client then switches its key away from a member the log no longer holds (`CALL-060`).
+
+The relay may push no frame of a removal. So two more events read the log again. The first is a
+revoke this client signs on the channel (`CALL-136`). The second is a signed head of the channel
+past the held log, whose entry a member that log allows signed (`CALL-137`). A log that does not
+pass through the head of the held log is an older one, and the client keeps the held log
+(`CALL-138`).
 
 It wraps no
 key to a join signed under another index than its seat (`CALL-061`). A join that arrives after

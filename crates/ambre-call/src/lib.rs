@@ -11,8 +11,8 @@
 //! the open the browser runs. The wasm entry in `worker.rs` carries the frames and the port.
 
 use ambre_core::{
-    ClearChunk, KeyIdentifier, MediaSlot, Payload, PictureKind, SealedChunk, SenderIndex, Seq,
-    SlotSender, Track,
+    ClearChunk, Instant, KeyIdentifier, MediaSlot, PageLoad, Payload, PictureKind, SealedChunk,
+    SenderIndex, Seq, SlotSender, Track,
 };
 use ambre_crypto::call::{ChunkError, ChunkSealer, KeyHandoff, ReceiveKeys};
 
@@ -96,9 +96,11 @@ pub enum Handled {
 }
 
 impl CallWorker {
-    /// Takes one handoff of the Sync worker. A `Seal` replaces the sealer, so the next chunk
-    /// seals under the new key; an `End` drops every key of the call.
-    pub fn hand(&mut self, handoff: KeyHandoff) -> Handled {
+    /// Takes one handoff of the Sync worker at `now`, on the monotonic clock of the worker. A
+    /// `Seal` replaces the sealer, so the next chunk seals under the new key; an `End` drops
+    /// every key of the call. An `Open` of a fresh epoch closes the older epochs of its sender
+    /// once the switch delay passed after `now` (`CALL-135`).
+    pub fn hand(&mut self, handoff: KeyHandoff, now: Instant<PageLoad>) -> Handled {
         match handoff {
             KeyHandoff::Seal {
                 sender,
@@ -125,7 +127,7 @@ impl CallWorker {
                 generation,
                 key,
             } => {
-                self.receive.insert(sender, generation, key);
+                self.receive.insert(sender, generation, key, now);
                 Handled::Kept
             }
             KeyHandoff::Forget { sender } => {
@@ -181,13 +183,19 @@ impl CallWorker {
         })
     }
 
-    /// Opens one chunk the network handed a receiver of `track`, or `None` when no key the worker
-    /// holds opens it. A `None` chunk is dropped, and never reaches the decoder (`CALL-022`).
-    pub fn open(&mut self, track: Track, sealed: Payload<SealedChunk>) -> Option<Opened> {
+    /// Opens one chunk the network handed a receiver of `track` at `now`, or `None` when no key
+    /// the worker holds opens it. A `None` chunk is dropped, and never reaches the decoder
+    /// (`CALL-022`). A retired epoch opens nothing (`CALL-125`, `CALL-135`).
+    pub fn open(
+        &mut self,
+        track: Track,
+        sealed: Payload<SealedChunk>,
+        now: Instant<PageLoad>,
+    ) -> Option<Opened> {
         match track {
-            Track::Audio => self.receive.open_audio(sealed),
-            Track::Camera => self.receive.open_video(sealed),
-            Track::Screen => self.receive.open_screen(sealed),
+            Track::Audio => self.receive.open_audio(sealed, now),
+            Track::Camera => self.receive.open_video(sealed, now),
+            Track::Screen => self.receive.open_screen(sealed, now),
         }
         .ok()
         .map(|(sender, clear)| Opened { sender, clear })

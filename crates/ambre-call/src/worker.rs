@@ -16,8 +16,8 @@ use std::rc::Rc;
 
 use ambre_core::index::Pos;
 use ambre_core::{
-    CallWorkerNote, ClearChunk, Confidential, MediaSlot, Payload, PictureKind, Plaintext,
-    SealedChunk, SlotSender, Track, TransformSide,
+    CallWorkerNote, ClearChunk, Confidential, Instant, MediaSlot, PageLoad, Payload, PictureKind,
+    Plaintext, SealedChunk, SlotSender, Track, TransformSide,
 };
 use ambre_crypto::call::KeyHandoff;
 use wasm_bindgen::JsCast;
@@ -41,6 +41,17 @@ fn tell_sender(scope: &DedicatedWorkerGlobalScope, note: SlotSender) {
     let _ = scope.post_message(&bytes);
 }
 
+/// The monotonic clock of the worker, which times the close of an older epoch (`CALL-135`).
+/// A scope with no clock reads as the end of time. Every deadline has then passed, so an older
+/// epoch closes at once and never stays open.
+fn now(scope: &DedicatedWorkerGlobalScope) -> Instant<PageLoad> {
+    Instant::new(
+        scope
+            .performance()
+            .map_or(f64::INFINITY, |clock| clock.now()),
+    )
+}
+
 /// Reads one handoff the Sync worker posted on the port. The bytes cross as a transferred
 /// buffer, which the worker zeroes once it holds the copy it reads.
 fn read_handoff(data: &JsValue) -> Option<KeyHandoff> {
@@ -57,7 +68,7 @@ fn listen(port: &MessagePort, state: Shared, scope: DedicatedWorkerGlobalScope) 
         let Some(handoff) = read_handoff(&e.data()) else {
             return;
         };
-        if state.borrow_mut().hand(handoff) == Handled::Erased {
+        if state.borrow_mut().hand(handoff, now(&scope)) == Handled::Erased {
             tell(&scope, CallWorkerNote::Erased);
         }
     });
@@ -102,9 +113,10 @@ fn transform(
             sealed.ok().map(Payload::into_bytes)
         }
         (TransformSide::Receive, _) => {
-            let opened = state
-                .borrow_mut()
-                .open(track, Payload::<SealedChunk>::new(bytes))?;
+            let opened =
+                state
+                    .borrow_mut()
+                    .open(track, Payload::<SealedChunk>::new(bytes), now(scope))?;
             if let Some(note) = watch.and_then(|watch| watch.opened(opened.sender)) {
                 tell_sender(scope, note);
             }

@@ -1294,6 +1294,9 @@ impl SyncState {
                 self.install_key(document_id, new_doc_key, [link], None);
                 self.send_to_logic(LogicEvent::KeyRotated { document_id });
                 self.reply(id, RestEvent::RevocationComplete { document_id });
+                // The relay may push no frame of the removal: the call of the channel reads
+                // the log this client just signed into (`CALL-136`).
+                self.read_call_log(document_id);
             }
             SyncEvent::DocumentLeft { id, document_id } => {
                 // Gone from the relay's list: nothing of this document is ours

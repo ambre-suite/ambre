@@ -297,6 +297,8 @@ The test of section 1: a team that lacks one of these stories keeps its old suit
 | `[x]` A call shows each participant in a grid | MVP | the video region draws one row of camera tiles in slot order, with no name, no mark of who speaks and no tile for a participant without a camera, so a call with cameras off shows nothing. Done when the region lays its tiles out as a grid of up to three by three, each participant of the roster has a tile (its picture, or its initials), named and marked when muted, the speaker is outlined, and a "+N" tile opens the list of the others, each held by a row that reads `verified` |
 | `[x]` A member sees their own camera in a call | MVP | the camera a member sends into a call is drawn nowhere on their own page. Done when a small tile draws it, mirrored, while the camera is on, and a row binding it reads `verified` |
 | `[x]` A call fills the channel region | MVP | the video region is a band above the composer, too small to read a face among nine. Done when a control widens the call to the whole channel region and back, reachable by the keyboard, and a row binding it reads `verified` |
+| `[x]` A call follows the membership log without a frame of the relay | MVP | A call reads the log of its channel on each signed head it meets and after each removal its client signs, and never replaces a held log with an older one. Closes `P29` |
+| `[x]` An older epoch of a sender closes on a deadline | MVP | A receiver retires the older epochs of a sender once the switch delay passed after the fresh key arrived, with no chunk of the fresh epoch. Closes `P31` |
 
 ---
 

@@ -2,11 +2,15 @@
 
 use ambre_core::index::Pos;
 use ambre_core::{
-    ClearChunk, KeyIdentifier, MediaSlot, Payload, PictureKind, SealedChunk, Seq, SlotSender, Track,
+    ClearChunk, Instant, KeyGeneration, KeyIdentifier, MediaSlot, PageLoad, Payload, PictureKind,
+    SealedChunk, Seq, SlotSender, Track,
 };
-use ambre_crypto::call::{AUDIO_CHUNK_SIZE, ChunkSealer, KeyHandoff, SenderKey};
+use ambre_crypto::call::{AUDIO_CHUNK_SIZE, ChunkSealer, KeyHandoff, SWITCH_DELAY, SenderKey};
 
 use super::{CallWorker, Handled, SlotWatch, Unsealed};
+
+/// The time of every test that waits for no deadline.
+const T0: Instant<PageLoad> = Instant::new(0.0);
 
 fn clear(bytes: &[u8]) -> Payload<ClearChunk> {
     Payload::new(bytes.to_vec())
@@ -50,7 +54,7 @@ fn a_chunk_leaves_the_worker_sealed_under_the_sender_key_or_not_at_all() {
         alice.seal(&clear(b"opus before any key")),
         Err(Unsealed::NoKey)
     );
-    assert_eq!(alice.hand(seal_handoff(1, 0, &key)), Handled::Kept);
+    assert_eq!(alice.hand(seal_handoff(1, 0, &key), T0), Handled::Kept);
     let sealed = alice
         .seal(&clear(b"a packet of opus"))
         .unwrap_or_else(|e| panic!("{e:?}"));
@@ -63,9 +67,9 @@ fn a_chunk_leaves_the_worker_sealed_under_the_sender_key_or_not_at_all() {
         "the clear chunk shows through the seal"
     );
     let mut bob = CallWorker::default();
-    bob.hand(open_handoff(1, 0, &key));
+    bob.hand(open_handoff(1, 0, &key), T0);
     let opened = bob
-        .open(Track::Audio, sealed)
+        .open(Track::Audio, sealed, T0)
         .unwrap_or_else(|| panic!("no open"));
     assert_eq!(opened.clear.as_bytes(), b"a packet of opus");
     assert_eq!(opened.sender, Seq::new(1));
@@ -81,24 +85,24 @@ fn a_received_chunk_reaches_the_decoder_only_once_it_opens() {
     let other = SenderKey::generate();
     let mut bob = CallWorker::default();
     assert!(
-        bob.open(Track::Audio, sealed_by(&key, 1, 0, b"early"))
+        bob.open(Track::Audio, sealed_by(&key, 1, 0, b"early"), T0)
             .is_none()
     );
-    bob.hand(open_handoff(1, 0, &key));
+    bob.hand(open_handoff(1, 0, &key), T0);
     assert!(
-        bob.open(Track::Audio, sealed_by(&other, 1, 0, b"forged"))
+        bob.open(Track::Audio, sealed_by(&other, 1, 0, b"forged"), T0)
             .is_none()
     );
     let mut changed = sealed_by(&key, 1, 0, b"changed").into_bytes();
     if let Some(byte) = changed.get_mut(20) {
         *byte ^= 1;
     }
-    assert!(bob.open(Track::Audio, Payload::new(changed)).is_none());
+    assert!(bob.open(Track::Audio, Payload::new(changed), T0).is_none());
     assert!(
-        bob.open(Track::Audio, sealed_by(&key, 2, 0, b"unknown sender"))
+        bob.open(Track::Audio, sealed_by(&key, 2, 0, b"unknown sender"), T0)
             .is_none()
     );
-    let opened = bob.open(Track::Audio, sealed_by(&key, 1, 0, b"fine"));
+    let opened = bob.open(Track::Audio, sealed_by(&key, 1, 0, b"fine"), T0);
     assert_eq!(opened.map(|o| o.clear.into_bytes()), Some(b"fine".to_vec()));
 }
 
@@ -111,24 +115,27 @@ fn the_end_of_a_call_erases_every_key_of_it() {
     let carol = SenderKey::generate();
     let mut worker = CallWorker::default();
     assert!(worker.holds_no_key());
-    worker.hand(seal_handoff(1, 0, &own));
-    worker.hand(open_handoff(2, 0, &bob));
-    worker.hand(open_handoff(3, 0, &carol));
+    worker.hand(seal_handoff(1, 0, &own), T0);
+    worker.hand(open_handoff(2, 0, &bob), T0);
+    worker.hand(open_handoff(3, 0, &carol), T0);
     assert!(!worker.holds_no_key());
-    worker.hand(KeyHandoff::Forget {
-        sender: Seq::new(3),
-    });
+    worker.hand(
+        KeyHandoff::Forget {
+            sender: Seq::new(3),
+        },
+        T0,
+    );
     assert!(
         worker
-            .open(Track::Audio, sealed_by(&carol, 3, 0, b"after"))
+            .open(Track::Audio, sealed_by(&carol, 3, 0, b"after"), T0)
             .is_none()
     );
     assert!(
         worker
-            .open(Track::Audio, sealed_by(&bob, 2, 0, b"still"))
+            .open(Track::Audio, sealed_by(&bob, 2, 0, b"still"), T0)
             .is_some()
     );
-    assert_eq!(worker.hand(KeyHandoff::End), Handled::Erased);
+    assert_eq!(worker.hand(KeyHandoff::End, T0), Handled::Erased);
     assert!(worker.holds_no_key());
     assert_eq!(worker.seal(&clear(b"after the end")), Err(Unsealed::NoKey));
     assert_eq!(
@@ -141,7 +148,7 @@ fn the_end_of_a_call_erases_every_key_of_it() {
     );
     assert!(
         worker
-            .open(Track::Audio, sealed_by(&bob, 2, 0, b"after the end"))
+            .open(Track::Audio, sealed_by(&bob, 2, 0, b"after the end"), T0)
             .is_none()
     );
 }
@@ -152,13 +159,16 @@ fn a_key_handed_across_the_port_seals_what_the_sync_worker_key_opens() {
     let key = SenderKey::generate();
     let port = seal_handoff(4, 1, &key).to_port();
     let mut worker = CallWorker::default();
-    worker.hand(KeyHandoff::from_port(&port).unwrap_or_else(|e| panic!("{e}")));
+    worker.hand(
+        KeyHandoff::from_port(&port).unwrap_or_else(|e| panic!("{e}")),
+        T0,
+    );
     let sealed = worker
         .seal(&clear(b"through the port"))
         .unwrap_or_else(|e| panic!("{e:?}"));
     let mut peer = CallWorker::default();
-    peer.hand(open_handoff(4, 1, &key));
-    assert!(peer.open(Track::Audio, sealed).is_some());
+    peer.hand(open_handoff(4, 1, &key), T0);
+    assert!(peer.open(Track::Audio, sealed, T0).is_some());
 }
 
 /// `CALL-084`: a slot tells the page of its sender at the first chunk of each new sender, and at
@@ -167,8 +177,8 @@ fn a_key_handed_across_the_port_seals_what_the_sync_worker_key_opens() {
 fn a_slot_tells_the_page_of_each_new_sender_once() {
     let (bob, carol) = (SenderKey::generate(), SenderKey::generate());
     let mut worker = CallWorker::default();
-    worker.hand(open_handoff(2, 0, &bob));
-    worker.hand(open_handoff(3, 0, &carol));
+    worker.hand(open_handoff(2, 0, &bob), T0);
+    worker.hand(open_handoff(3, 0, &carol), T0);
     let sealer = |key: &SenderKey, sender| {
         let kid = KeyIdentifier {
             track: Track::Audio,
@@ -190,7 +200,7 @@ fn a_slot_tells_the_page_of_each_new_sender_once() {
             .seal(&clear(b"speech"))
             .unwrap_or_else(|e| panic!("{e}"));
         let opened = worker
-            .open(Track::Audio, sealed)
+            .open(Track::Audio, sealed, T0)
             .unwrap_or_else(|| panic!("no open"));
         notes.push(watch.opened(opened.sender));
     }
@@ -216,7 +226,7 @@ fn a_camera_chunk_leaves_sealed_and_opens_on_a_receiver_of_the_camera_alone() {
         alice.seal_video(Track::Camera, &clear(keyframe), PictureKind::Keyframe),
         Err(Unsealed::NoKey)
     );
-    alice.hand(seal_handoff(1, 0, &key));
+    alice.hand(seal_handoff(1, 0, &key), T0);
     assert_eq!(
         alice.seal_video(Track::Camera, &clear(keyframe), PictureKind::Delta),
         Err(Unsealed::Refused)
@@ -232,10 +242,10 @@ fn a_camera_chunk_leaves_sealed_and_opens_on_a_receiver_of_the_camera_alone() {
             .any(|w| w == b"a picture of v")
     );
     let mut bob = CallWorker::default();
-    bob.hand(open_handoff(1, 0, &key));
-    assert!(bob.open(Track::Audio, copy(&sealed)).is_none());
+    bob.hand(open_handoff(1, 0, &key), T0);
+    assert!(bob.open(Track::Audio, copy(&sealed), T0).is_none());
     let opened = bob
-        .open(Track::Camera, sealed)
+        .open(Track::Camera, sealed, T0)
         .unwrap_or_else(|| panic!("no open"));
     assert_eq!(opened.clear.as_bytes(), keyframe);
     assert_eq!(opened.sender, Seq::new(1));
@@ -247,11 +257,11 @@ fn a_camera_chunk_leaves_sealed_and_opens_on_a_receiver_of_the_camera_alone() {
 fn a_video_slot_tells_the_page_of_each_new_sender_once() {
     let (bob, carol) = (SenderKey::generate(), SenderKey::generate());
     let (mut from_bob, mut from_carol) = (CallWorker::default(), CallWorker::default());
-    from_bob.hand(seal_handoff(2, 0, &bob));
-    from_carol.hand(seal_handoff(3, 0, &carol));
+    from_bob.hand(seal_handoff(2, 0, &bob), T0);
+    from_carol.hand(seal_handoff(3, 0, &carol), T0);
     let mut ada = CallWorker::default();
-    ada.hand(open_handoff(2, 0, &bob));
-    ada.hand(open_handoff(3, 0, &carol));
+    ada.hand(open_handoff(2, 0, &bob), T0);
+    ada.hand(open_handoff(3, 0, &carol), T0);
     let keyframe = b"\x50\x2a\x00\x9d\x01\x2a\x00\x05\xd0\x02a face";
     let mut watch = SlotWatch::new(MediaSlot::Video(Pos::new(4)));
     let mut notes = Vec::new();
@@ -265,7 +275,7 @@ fn a_video_slot_tells_the_page_of_each_new_sender_once() {
             .seal_video(Track::Camera, &clear(keyframe), PictureKind::Keyframe)
             .unwrap_or_else(|e| panic!("{e:?}"));
         let opened = ada
-            .open(Track::Camera, sealed)
+            .open(Track::Camera, sealed, T0)
             .unwrap_or_else(|| panic!("no open"));
         notes.push(watch.opened(opened.sender));
     }
@@ -295,7 +305,7 @@ fn a_screen_chunk_leaves_sealed_and_opens_on_a_receiver_of_the_screen_alone() {
         alice.seal_video(Track::Screen, &clear(keyframe), PictureKind::Keyframe),
         Err(Unsealed::NoKey)
     );
-    alice.hand(seal_handoff(2, 0, &key));
+    alice.hand(seal_handoff(2, 0, &key), T0);
     assert_eq!(
         alice.seal_video(Track::Audio, &clear(keyframe), PictureKind::Keyframe),
         Err(Unsealed::NoKey)
@@ -306,18 +316,52 @@ fn a_screen_chunk_leaves_sealed_and_opens_on_a_receiver_of_the_screen_alone() {
     assert_eq!(sealed.as_bytes().get(..10), keyframe.get(..10));
     assert!(!sealed.as_bytes().windows(9).any(|w| w == b"page of t"));
     let mut bob = CallWorker::default();
-    bob.hand(open_handoff(2, 0, &key));
-    assert!(bob.open(Track::Camera, copy(&sealed)).is_none());
-    assert!(bob.open(Track::Audio, copy(&sealed)).is_none());
+    bob.hand(open_handoff(2, 0, &key), T0);
+    assert!(bob.open(Track::Camera, copy(&sealed), T0).is_none());
+    assert!(bob.open(Track::Audio, copy(&sealed), T0).is_none());
     let opened = bob
-        .open(Track::Screen, sealed)
+        .open(Track::Screen, sealed, T0)
         .unwrap_or_else(|| panic!("no open"));
     assert_eq!(opened.clear.as_bytes(), keyframe);
     assert_eq!(opened.sender, Seq::new(2));
-    assert_eq!(alice.hand(KeyHandoff::End), Handled::Erased);
+    assert_eq!(alice.hand(KeyHandoff::End, T0), Handled::Erased);
     assert!(alice.holds_no_key());
     assert_eq!(
         alice.seal_video(Track::Screen, &clear(keyframe), PictureKind::Keyframe),
         Err(Unsealed::NoKey)
+    );
+}
+
+/// `CALL-135`: Eve leaves, and the Sync worker hands Roger the fresh key of Alice. A malicious
+/// SFU forwards no chunk of the fresh epoch, and forwards chunks Eve seals under the older key
+/// of Alice. Past the switch delay of the fresh key, none of them reaches the decoder.
+#[test]
+fn the_worker_closes_an_older_epoch_at_the_switch_delay() {
+    let old = SenderKey::generate();
+    let fresh = SenderKey::generate();
+    let fresh_epoch = Seq::<KeyGeneration>::ZERO.next_epoch().map_or(0, Seq::get);
+    let mut roger = CallWorker::default();
+    roger.hand(open_handoff(1, 0, &old), T0);
+    let arrival = Instant::<PageLoad>::new(2_000.0);
+    roger.hand(open_handoff(1, fresh_epoch, &fresh), arrival);
+    let due = arrival.after(SWITCH_DELAY.to_fractional());
+    assert!(
+        roger
+            .open(Track::Audio, sealed_by(&old, 1, 0, b"in time"), arrival)
+            .is_some()
+    );
+    assert!(
+        roger
+            .open(Track::Audio, sealed_by(&old, 1, 0, b"forged"), due)
+            .is_none()
+    );
+    assert!(
+        roger
+            .open(
+                Track::Audio,
+                sealed_by(&fresh, 1, fresh_epoch, b"fresh"),
+                due
+            )
+            .is_some()
     );
 }

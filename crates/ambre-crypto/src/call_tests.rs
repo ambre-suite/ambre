@@ -2,8 +2,8 @@
 
 use ambre_core::id::{Call, Channel, Id, User};
 use ambre_core::{
-    Authored, ChunkCounter, ClearChunk, Instant, KeyGeneration, KeyIdentifier, Payload,
-    PictureKind, PublicKey, SealedChunk, SenderIndex, Seq, Track,
+    Authored, ChunkCounter, ClearChunk, Instant, KeyGeneration, KeyIdentifier, PageLoad, Payload,
+    PictureKind, PublicKey, SealedChunk, SenderIndex, Seq, TimeSpan, Track,
 };
 use ed25519_dalek::SigningKey;
 use proptest::prelude::*;
@@ -11,7 +11,7 @@ use proptest::prelude::*;
 use super::{
     AUDIO_CHUNK_SIZE, CONFIG_BYTE, CallExchangeKey, ChunkError, ChunkHeader, ChunkSealer,
     HEADER_LEN, JoinClaim, KeyHandoff, MAX_RATCHETS, OPENERS_PER_SENDER, ReceiveKeys, ReplayWindow,
-    SenderKey, SignedJoin, TAG_LEN, VIDEO_OVERHEAD, WrapBinding, unwrap_sender_key,
+    SWITCH_DELAY, SenderKey, SignedJoin, TAG_LEN, VIDEO_OVERHEAD, WrapBinding, unwrap_sender_key,
     wrap_sender_key,
 };
 
@@ -31,9 +31,12 @@ fn sealer(key: &SenderKey, sender: u64, generation: u64) -> ChunkSealer {
     ChunkSealer::new(key, kid(sender, generation)).unwrap_or_else(|e| panic!("{e}"))
 }
 
+/// The time of every receiver test that waits for no deadline.
+const T0: Instant<PageLoad> = Instant::new(0.0);
+
 fn receiver(sender: u64, generation: u64, key: &SenderKey) -> ReceiveKeys {
     let mut keys = ReceiveKeys::default();
-    keys.insert(Seq::new(sender), Seq::new(generation), key.clone());
+    keys.insert(Seq::new(sender), Seq::new(generation), key.clone(), T0);
     keys
 }
 
@@ -69,7 +72,7 @@ fn a_sealed_audio_chunk_opens_whole_under_its_sender_key() {
     let mut sealer = sealer(&key, 1, 0);
     let mut keys = receiver(1, 0, &key);
     let (sender, opened) = keys
-        .open_audio(seal(&mut sealer, b"a packet of opus"))
+        .open_audio(seal(&mut sealer, b"a packet of opus"), T0)
         .unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(sender, Seq::<SenderIndex>::new(1));
     assert_eq!(opened.as_bytes(), b"a packet of opus");
@@ -121,13 +124,13 @@ fn a_changed_byte_of_the_clear_prefix_drops_the_video_chunk() {
         }
         let mut keys = receiver(1, 0, &key);
         assert_eq!(
-            keys.open_video(Payload::new(bytes)),
+            keys.open_video(Payload::new(bytes), T0),
             Err(ChunkError::Unopened),
             "byte {at} of the prefix"
         );
     }
     let mut keys = receiver(1, 0, &key);
-    assert!(keys.open_video(chunk).is_ok());
+    assert!(keys.open_video(chunk, T0).is_ok());
 }
 
 /// `CALL-097`: the call worker seals nothing of a chunk whose keyframe bit and kind differ,
@@ -187,22 +190,22 @@ fn a_sealed_vp8_chunk_whose_prefix_is_another_length_is_dropped() {
             *first ^= 1;
         }
         let mut keys = receiver(1, 0, &key);
-        assert!(keys.open_video(Payload::new(flipped)).is_err());
+        assert!(keys.open_video(Payload::new(flipped), T0).is_err());
         for length in [0, 1, 9, 26] {
             let cut = chunk.as_bytes().get(..length).unwrap_or_default().to_vec();
             assert_eq!(
-                keys.open_video(Payload::new(cut)),
+                keys.open_video(Payload::new(cut), T0),
                 Err(ChunkError::Malformed),
                 "a chunk cut at {length} bytes"
             );
         }
     }
     let mut keys = receiver(1, 0, &key);
-    assert!(keys.open_audio(copy(&delta_chunk)).is_err());
+    assert!(keys.open_audio(copy(&delta_chunk), T0).is_err());
     let mut audio = sealer_of_audio(&key);
-    assert!(keys.open_video(seal(&mut audio, b"\x31opus")).is_err());
-    assert!(keys.open_video(key_chunk).is_ok());
-    assert!(keys.open_video(delta_chunk).is_ok());
+    assert!(keys.open_video(seal(&mut audio, b"\x31opus"), T0).is_err());
+    assert!(keys.open_video(key_chunk, T0).is_ok());
+    assert!(keys.open_video(delta_chunk, T0).is_ok());
 }
 
 /// The bytes one known key seals of a VP8 keyframe match a second path written from RFC 9605
@@ -269,7 +272,7 @@ fn a_receiver_of_one_encoding_opens_its_chunks_across_the_counters_of_the_others
             .map(|layer| seal_video(&mut sealer, &delta(&[layer, picture]), PictureKind::Delta))
             .collect();
         let low = sealed.swap_remove(0);
-        let (_, opened) = keys.open_video(low).unwrap_or_else(|e| panic!("{e}"));
+        let (_, opened) = keys.open_video(low, T0).unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(opened.as_bytes(), delta(&[0, picture]));
     }
 }
@@ -297,7 +300,7 @@ fn a_sender_key_is_drawn_fresh_and_a_ratchet_hides_the_key_before_it() {
     let mut sealer = sealer(&first, 1, 0);
     let mut keys = receiver(1, 1, &next);
     assert_eq!(
-        keys.open_audio(seal(&mut sealer, b"before")),
+        keys.open_audio(seal(&mut sealer, b"before"), T0),
         Err(ChunkError::UnknownKey)
     );
 }
@@ -310,11 +313,11 @@ fn a_receiver_ratchets_up_inside_an_epoch_alone() {
     let later = key.ratcheted().ratcheted().ratcheted();
     let mut keys = receiver(1, 0, &key);
     let mut ahead = sealer(&later, 1, 3);
-    assert!(keys.open_audio(seal(&mut ahead, b"three up")).is_ok());
+    assert!(keys.open_audio(seal(&mut ahead, b"three up"), T0).is_ok());
     let fresh_epoch = Seq::<KeyGeneration>::ZERO.next_epoch().map_or(0, Seq::get);
     let mut fresh = sealer(&key, 1, fresh_epoch);
     assert_eq!(
-        keys.open_audio(seal(&mut fresh, b"next epoch")),
+        keys.open_audio(seal(&mut fresh, b"next epoch"), T0),
         Err(ChunkError::UnknownKey)
     );
 }
@@ -328,20 +331,20 @@ fn a_chunk_outside_the_replay_window_is_dropped() {
     let mut keys = receiver(1, 0, &key);
     let first = seal(&mut sealer, b"first");
     let late = seal(&mut sealer, b"late");
-    assert!(keys.open_audio(copy(&first)).is_ok());
-    assert_eq!(keys.open_audio(copy(&first)), Err(ChunkError::Replayed));
+    assert!(keys.open_audio(copy(&first), T0).is_ok());
+    assert_eq!(keys.open_audio(copy(&first), T0), Err(ChunkError::Replayed));
     let chunks: Vec<_> = (0..200).map(|_| seal(&mut sealer, b"x")).collect();
     for chunk in chunks.into_iter().skip(10) {
-        assert!(keys.open_audio(chunk).is_ok());
+        assert!(keys.open_audio(chunk, T0).is_ok());
     }
-    assert_eq!(keys.open_audio(late), Err(ChunkError::Replayed));
+    assert_eq!(keys.open_audio(late, T0), Err(ChunkError::Replayed));
     let mut inside = Vec::new();
     for _ in 0..4 {
         inside.push(seal(&mut sealer, b"y"));
     }
     inside.reverse();
     for chunk in inside {
-        assert!(keys.open_audio(chunk).is_ok());
+        assert!(keys.open_audio(chunk, T0).is_ok());
     }
 }
 
@@ -357,10 +360,10 @@ fn a_chunk_that_does_not_open_moves_no_window() {
         *last ^= 1;
     }
     assert_eq!(
-        keys.open_audio(Payload::new(forged)),
+        keys.open_audio(Payload::new(forged), T0),
         Err(ChunkError::Unopened)
     );
-    assert!(keys.open_audio(genuine).is_ok());
+    assert!(keys.open_audio(genuine, T0).is_ok());
 }
 
 /// Mallory seals under her own key a chunk whose identifier names Bob, or relabels a
@@ -370,11 +373,11 @@ fn a_chunk_that_names_another_sender_is_dropped() {
     let bob = SenderKey::generate();
     let mallory = SenderKey::generate();
     let mut keys = ReceiveKeys::default();
-    keys.insert(Seq::new(1), Seq::ZERO, bob.clone());
-    keys.insert(Seq::new(2), Seq::ZERO, mallory.clone());
+    keys.insert(Seq::new(1), Seq::ZERO, bob.clone(), T0);
+    keys.insert(Seq::new(2), Seq::ZERO, mallory.clone(), T0);
     let mut as_bob = sealer(&mallory, 1, 0);
     assert_eq!(
-        keys.open_audio(seal(&mut as_bob, b"forged")),
+        keys.open_audio(seal(&mut as_bob, b"forged"), T0),
         Err(ChunkError::Unopened)
     );
     let mut own = sealer(&mallory, 2, 0);
@@ -384,12 +387,13 @@ fn a_chunk_that_names_another_sender_is_dropped() {
         field.copy_from_slice(&bob_kid.to_be_bytes());
     }
     assert_eq!(
-        keys.open_audio(Payload::new(relabelled)),
+        keys.open_audio(Payload::new(relabelled), T0),
         Err(ChunkError::Unopened)
     );
     let mut genuine = sealer(&bob, 1, 0);
     assert_eq!(
-        keys.open_audio(seal(&mut genuine, b"bob")).map(|(s, _)| s),
+        keys.open_audio(seal(&mut genuine, b"bob"), T0)
+            .map(|(s, _)| s),
         Ok(Seq::new(1))
     );
 }
@@ -415,7 +419,7 @@ proptest! {
         prop_assert_eq!(chunk.as_bytes().get(..prefix), bytes.get(..prefix));
         let overhead = usize::try_from(VIDEO_OVERHEAD.get()).unwrap_or(usize::MAX);
         prop_assert_eq!(chunk.as_bytes().len(), bytes.len() + overhead);
-        let (sender, opened) = keys.open_video(chunk).unwrap_or_else(|e| panic!("{e}"));
+        let (sender, opened) = keys.open_video(chunk, T0).unwrap_or_else(|e| panic!("{e}"));
         prop_assert_eq!(sender, Seq::<SenderIndex>::new(1));
         prop_assert_eq!(opened.as_bytes(), &bytes[..]);
     }
@@ -430,7 +434,7 @@ proptest! {
             let bytes = vec![0xA5; length];
             let chunk = seal(&mut sealer, &bytes);
             prop_assert_eq!(chunk.len(), AUDIO_CHUNK_SIZE);
-            let (_, opened) = keys.open_audio(chunk).map_err(|e| TestCaseError::fail(e.to_string()))?;
+            let (_, opened) = keys.open_audio(chunk, T0).map_err(|e| TestCaseError::fail(e.to_string()))?;
             prop_assert_eq!(opened.as_bytes(), &bytes[..]);
         }
     }
@@ -459,7 +463,7 @@ proptest! {
         if let Some(byte) = bytes.get_mut(position) {
             *byte ^= flip;
         }
-        prop_assert!(keys.open_audio(Payload::new(bytes)).is_err());
+        prop_assert!(keys.open_audio(Payload::new(bytes), T0).is_err());
     }
 }
 
@@ -674,12 +678,12 @@ fn a_handoff_crosses_the_port_whole() {
         (Seq::new(4), Seq::new(2), Seq::new(4))
     );
     let mut keys = ReceiveKeys::default();
-    keys.insert(*sender, *generation, opened_key.clone());
-    let (_, clear) = keys.open_audio(chunk).unwrap_or_else(|e| panic!("{e}"));
+    keys.insert(*sender, *generation, opened_key.clone(), T0);
+    let (_, clear) = keys.open_audio(chunk, T0).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(clear.as_bytes(), b"opus over the port");
     let mut resealer = ChunkSealer::new(sealing, kid(4, 2)).unwrap_or_else(|e| panic!("{e}"));
     let mut fresh = receiver(4, 2, &key);
-    assert!(fresh.open_audio(seal(&mut resealer, b"again")).is_ok());
+    assert!(fresh.open_audio(seal(&mut resealer, b"again"), T0).is_ok());
 }
 
 /// Bytes of another size, or of a kind no handoff holds, build no key.
@@ -762,19 +766,21 @@ fn a_screen_chunk_opens_through_the_door_of_the_screen_alone() {
     let filmed = seal_video(&mut camera, &keyframe(b"camera"), PictureKind::Keyframe);
     let mut keys = receiver(1, 0, &key);
     assert_eq!(
-        keys.open_video(copy(&shown)),
+        keys.open_video(copy(&shown), T0),
         Err(ChunkError::TrackNotCarried)
     );
-    assert!(keys.open_audio(copy(&shown)).is_err());
+    assert!(keys.open_audio(copy(&shown), T0).is_err());
     assert_eq!(
-        keys.open_screen(copy(&filmed)),
+        keys.open_screen(copy(&filmed), T0),
         Err(ChunkError::TrackNotCarried)
     );
-    let (sender, opened) = keys.open_screen(shown).unwrap_or_else(|e| panic!("{e}"));
+    let (sender, opened) = keys
+        .open_screen(shown, T0)
+        .unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(sender, Seq::<SenderIndex>::new(1));
     assert_eq!(opened.as_bytes(), keyframe(b"screen").as_slice());
     let delta_chunk = seal_video(&mut screen, &delta(b"more"), PictureKind::Delta);
-    assert!(keys.open_screen(delta_chunk).is_ok());
+    assert!(keys.open_screen(delta_chunk, T0).is_ok());
 }
 
 fn counter(value: u64) -> Seq<ChunkCounter> {
@@ -880,7 +886,7 @@ fn a_receiver_forgets_one_sender_alone() {
     let key = SenderKey::generate();
     let mut keys = ReceiveKeys::default();
     assert!(keys.is_empty());
-    keys.insert(Seq::new(1), Seq::ZERO, key.clone());
+    keys.insert(Seq::new(1), Seq::ZERO, key.clone(), T0);
     assert!(!keys.is_empty());
     keys.forget(Seq::new(2));
     assert!(!keys.is_empty());
@@ -888,7 +894,8 @@ fn a_receiver_forgets_one_sender_alone() {
     assert!(keys.is_empty());
     let mut sealer = sealer(&key, 1, 0);
     assert_eq!(
-        keys.open_audio(seal(&mut sealer, b"gone")).map(|(s, _)| s),
+        keys.open_audio(seal(&mut sealer, b"gone"), T0)
+            .map(|(s, _)| s),
         Err(ChunkError::UnknownKey)
     );
 }
@@ -902,11 +909,12 @@ fn a_receiver_ratchets_up_to_the_bound_and_no_further() {
     let mut keys = receiver(1, 0, &key);
     let mut past = sealer(&at(reach + 1), 1, reach + 1);
     assert_eq!(
-        keys.open_audio(seal(&mut past, b"past")).map(|(s, _)| s),
+        keys.open_audio(seal(&mut past, b"past"), T0)
+            .map(|(s, _)| s),
         Err(ChunkError::UnknownKey)
     );
     let mut bound = sealer(&at(reach), 1, reach);
-    assert!(keys.open_audio(seal(&mut bound, b"bound")).is_ok());
+    assert!(keys.open_audio(seal(&mut bound, b"bound"), T0).is_ok());
 }
 
 /// A receiver keeps the openers of the newest generations of a sender. The oldest one drops
@@ -928,7 +936,7 @@ fn a_receiver_keeps_the_openers_of_the_newest_generations_alone() {
             .ok()
             .and_then(|at| sealers.get_mut(at))
             .unwrap_or_else(|| panic!("no sealer at {generation}"));
-        keys.open_audio(seal(sealer, b"x")).map(|(s, _)| s)
+        keys.open_audio(seal(sealer, b"x"), T0).map(|(s, _)| s)
     };
     for generation in 0..kept {
         assert_eq!(open(&mut keys, generation), Ok(Seq::new(1)));
@@ -958,15 +966,15 @@ fn a_chunk_of_a_dropped_generation_does_not_open_again() {
     let mut keys = receiver(1, 0, &key);
     let mut oldest = sealer(&key, 1, 0);
     let first = seal(&mut oldest, b"first");
-    assert!(keys.open_audio(copy(&first)).is_ok());
+    assert!(keys.open_audio(copy(&first), T0).is_ok());
     let mut current = key.clone();
     for generation in 1..=OPENERS_PER_SENDER.get() {
         current = current.ratcheted();
         let mut next = sealer(&current, 1, generation);
-        assert!(keys.open_audio(seal(&mut next, b"next")).is_ok());
+        assert!(keys.open_audio(seal(&mut next, b"next"), T0).is_ok());
     }
     assert_eq!(
-        keys.open_audio(first).map(|(s, _)| s),
+        keys.open_audio(first, T0).map(|(s, _)| s),
         Err(ChunkError::Replayed)
     );
 }
@@ -980,30 +988,120 @@ fn a_chunk_of_an_older_epoch_does_not_open_once_a_newer_one_opened() {
     let fresh = SenderKey::generate();
     let fresh_epoch = Seq::<KeyGeneration>::ZERO.next_epoch().map_or(0, Seq::get);
     let mut keys = receiver(1, 0, &old);
-    keys.insert(Seq::new(1), Seq::new(fresh_epoch), fresh.clone());
+    keys.insert(Seq::new(1), Seq::new(fresh_epoch), fresh.clone(), T0);
     let mut bob_old = sealer(&old, 1, 0);
     let late = seal(&mut bob_old, b"late");
     // The fresh key waits out the switch delay: the older epoch still opens until then.
-    assert!(keys.open_audio(seal(&mut bob_old, b"before")).is_ok());
+    assert!(keys.open_audio(seal(&mut bob_old, b"before"), T0).is_ok());
     let mut bob_fresh = sealer(&fresh, 1, fresh_epoch);
-    assert!(keys.open_audio(seal(&mut bob_fresh, b"switched")).is_ok());
+    assert!(
+        keys.open_audio(seal(&mut bob_fresh, b"switched"), T0)
+            .is_ok()
+    );
 
     let mut mallory_same = sealer(&old, 1, 0);
     let mut mallory_ahead = sealer(&old.ratcheted(), 1, 1);
     let mut mallory_camera = ChunkSealer::new(&old, camera(1, 0)).unwrap_or_else(|e| panic!("{e}"));
     for forged in [
-        keys.open_audio(late),
-        keys.open_audio(seal(&mut mallory_same, b"forged")),
-        keys.open_audio(seal(&mut mallory_ahead, b"forged")),
-        keys.open_video(seal_video(
-            &mut mallory_camera,
-            &keyframe(b"forged"),
-            PictureKind::Keyframe,
-        )),
+        keys.open_audio(late, T0),
+        keys.open_audio(seal(&mut mallory_same, b"forged"), T0),
+        keys.open_audio(seal(&mut mallory_ahead, b"forged"), T0),
+        keys.open_video(
+            seal_video(
+                &mut mallory_camera,
+                &keyframe(b"forged"),
+                PictureKind::Keyframe,
+            ),
+            T0,
+        ),
     ] {
         assert_eq!(forged.map(|(s, _)| s), Err(ChunkError::Retired));
     }
-    assert!(keys.open_audio(seal(&mut bob_fresh, b"after")).is_ok());
+    assert!(keys.open_audio(seal(&mut bob_fresh, b"after"), T0).is_ok());
     let mut bob_step = sealer(&fresh.ratcheted(), 1, fresh_epoch + 1);
-    assert!(keys.open_audio(seal(&mut bob_step, b"one up")).is_ok());
+    assert!(keys.open_audio(seal(&mut bob_step, b"one up"), T0).is_ok());
+}
+
+/// `CALL-135`: Alice draws a fresh key once Eve leaves, and no chunk of the fresh epoch reaches
+/// Roger. A malicious SFU forwards chunks Eve seals under the older key of Alice. They open
+/// within the switch delay alone, and the camera and a step up close with the audio.
+#[test]
+fn an_older_epoch_closes_at_the_switch_delay_with_no_fresh_chunk() {
+    let old = SenderKey::generate();
+    let fresh = SenderKey::generate();
+    let fresh_epoch = Seq::<KeyGeneration>::ZERO.next_epoch().map_or(0, Seq::get);
+    let mut roger = receiver(1, 0, &old);
+    let arrival = Instant::<PageLoad>::new(1_000.0);
+    roger.insert(Seq::new(1), Seq::new(fresh_epoch), fresh.clone(), arrival);
+    let delay = SWITCH_DELAY.to_fractional();
+    let just_before = arrival.after(delay).before(TimeSpan::new(1.0));
+    let mut eve = sealer(&old, 1, 0);
+    assert!(
+        roger
+            .open_audio(seal(&mut eve, b"in time"), just_before)
+            .is_ok()
+    );
+
+    let due = arrival.after(delay);
+    let mut eve_ahead = sealer(&old.ratcheted(), 1, 1);
+    let mut eve_camera = ChunkSealer::new(&old, camera(1, 0)).unwrap_or_else(|e| panic!("{e}"));
+    for forged in [
+        roger.open_audio(seal(&mut eve, b"forged"), due),
+        roger.open_audio(seal(&mut eve_ahead, b"forged"), due),
+        roger.open_video(
+            seal_video(&mut eve_camera, &keyframe(b"forged"), PictureKind::Keyframe),
+            due,
+        ),
+    ] {
+        assert_eq!(forged.map(|(s, _)| s), Err(ChunkError::Retired));
+    }
+    let mut alice = sealer(&fresh, 1, fresh_epoch);
+    assert!(roger.open_audio(seal(&mut alice, b"fresh"), due).is_ok());
+}
+
+/// `CALL-135`: a second fresh key inside the delay keeps the time of the first, as the sender
+/// does. The deadline then closes both older epochs at once.
+#[test]
+fn a_second_fresh_key_keeps_the_deadline_of_the_first() {
+    let old = SenderKey::generate();
+    let first = Seq::<KeyGeneration>::ZERO.next_epoch().map_or(0, Seq::get);
+    let second = Seq::<KeyGeneration>::new(first)
+        .next_epoch()
+        .map_or(0, Seq::get);
+    let mut roger = receiver(1, 0, &old);
+    let arrival = Instant::<PageLoad>::new(1_000.0);
+    let fresh = SenderKey::generate();
+    roger.insert(Seq::new(1), Seq::new(first), fresh.clone(), arrival);
+    let later = arrival.after(TimeSpan::new(4_000.0));
+    roger.insert(Seq::new(1), Seq::new(second), SenderKey::generate(), later);
+    let due = arrival.after(SWITCH_DELAY.to_fractional());
+    let mut eve = sealer(&old, 1, 0);
+    let mut first_epoch = sealer(&fresh, 1, first);
+    for forged in [
+        roger.open_audio(seal(&mut eve, b"forged"), due),
+        roger.open_audio(seal(&mut first_epoch, b"forged"), due),
+    ] {
+        assert_eq!(forged.map(|(s, _)| s), Err(ChunkError::Retired));
+    }
+}
+
+/// `CALL-135`: the wraps of a join while a key waits may arrive in either order. A fresh key
+/// that reaches the receiver before the older one still sets the deadline.
+#[test]
+fn an_older_key_after_a_fresh_one_still_closes_at_the_deadline() {
+    let old = SenderKey::generate();
+    let fresh = SenderKey::generate();
+    let fresh_epoch = Seq::<KeyGeneration>::ZERO.next_epoch().map_or(0, Seq::get);
+    let mut roger = ReceiveKeys::default();
+    roger.insert(Seq::new(1), Seq::new(fresh_epoch), fresh, T0);
+    roger.insert(Seq::new(1), Seq::ZERO, old.clone(), T0);
+    let mut eve = sealer(&old, 1, 0);
+    assert!(roger.open_audio(seal(&mut eve, b"in time"), T0).is_ok());
+    let due = T0.after(SWITCH_DELAY.to_fractional());
+    assert_eq!(
+        roger
+            .open_audio(seal(&mut eve, b"forged"), due)
+            .map(|(s, _)| s),
+        Err(ChunkError::Retired)
+    );
 }

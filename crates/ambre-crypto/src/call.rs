@@ -28,9 +28,9 @@ use std::sync::Arc;
 use ambre_core::id::{Call, Channel, Id, User};
 use ambre_core::{
     Authored, ChunkCounter, ClearChunk, Confidential, Count, ExchangePublicKey, FixedBytes,
-    Instant, Issuer, KeyGeneration, KeyIdentifier, KeyIdentifierBytes, Octets, Payload,
-    PictureKind, Plaintext, PublicKey, SealedChunk, Secret, SenderIndex, SenderKeyWraps, Seq,
-    Signature, SignedJoins, Track, Transcript,
+    Instant, Issuer, KeyGeneration, KeyIdentifier, KeyIdentifierBytes, Ms, Octets, PageLoad,
+    Payload, PictureKind, Plaintext, PublicKey, SealedChunk, Secret, SenderIndex, SenderKeyWraps,
+    Seq, Signature, SignedJoins, TimeSpan, Track, Transcript,
 };
 use chacha20poly1305::aead::AeadInPlace;
 use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
@@ -62,6 +62,11 @@ const AUDIO_CLEAR_CAP: usize = 160;
 const AUDIO_BODY_LEN: usize = 2 + AUDIO_CLEAR_CAP;
 /// The most ratchets a receiver derives to reach the generation a chunk names.
 const MAX_RATCHETS: ambre_core::Count<ambre_core::Ratchets> = ambre_core::Count::new(64);
+/// The delay between a leave and the fresh key in use: the target of the call sender key
+/// switch row of `ambre-spec-budgets.md section 1`. A sender seals under its fresh key once the
+/// delay passed after it drew the key (`CALL-027`). A receiver retires the older epochs of that
+/// sender once the delay passed after the fresh key reached it (`CALL-135`).
+pub const SWITCH_DELAY: TimeSpan<Ms> = TimeSpan::new(5_000);
 /// The most openers a receiver keeps per sender, the newest ones.
 const OPENERS_PER_SENDER: ambre_core::Count<Openers> = ambre_core::Count::new(8);
 
@@ -525,21 +530,39 @@ struct Received {
     /// No chunk below this generation opens: its opener was dropped with its window, or a
     /// newer epoch retired its key.
     floor: Seq<KeyGeneration>,
+    /// The retirement a fresh key set: the epochs below `epoch` close at `at`, whether a chunk
+    /// of the fresh epoch arrives or not (`CALL-135`).
+    deadline: Option<Retirement>,
+}
+
+/// The epochs of one sender that close at one time on the receiver's monotonic clock.
+#[derive(Clone, Copy)]
+struct Retirement {
+    /// Every epoch below this generation closes.
+    epoch: Seq<KeyGeneration>,
+    /// The time the epochs close: the arrival of the first fresh key, plus [`SWITCH_DELAY`].
+    at: Instant<PageLoad>,
 }
 
 impl ReceiveKeys {
-    /// Holds `key` as the key of `sender` at `generation`.
+    /// Holds `key` as the key of `sender` at `generation`, at `now` on the monotonic clock of
+    /// the receiver.
+    ///
+    /// A key of an epoch above another held key of `sender` sets a deadline. Once
+    /// [`SWITCH_DELAY`] passed after `now`, every older epoch of `sender` closes, whether a
+    /// chunk of the fresh epoch opened or not (`CALL-135`). A second fresh key inside the delay
+    /// keeps the time of the first, as the sender does (`CALL-027`).
     pub fn insert(
         &mut self,
         sender: Seq<SenderIndex>,
         generation: Seq<KeyGeneration>,
         key: SenderKey,
+        now: Instant<PageLoad>,
     ) {
-        self.senders
-            .entry(sender)
-            .or_default()
-            .keys
-            .insert(generation, key);
+        let received = self.senders.entry(sender).or_default();
+        received.retire_due(now);
+        received.keys.insert(generation, key);
+        received.schedule(now);
     }
 
     /// Drops every key of `sender`.
@@ -565,9 +588,10 @@ impl ReceiveKeys {
     pub fn open_audio(
         &mut self,
         chunk: Payload<SealedChunk>,
+        now: Instant<PageLoad>,
     ) -> Result<(Seq<SenderIndex>, Payload<ClearChunk>), ChunkError> {
         let header = ChunkHeader::read_audio(&chunk)?;
-        self.open_as(header, chunk, Track::Audio, Layout::Audio)
+        self.open_as(header, chunk, Track::Audio, Layout::Audio, now)
     }
 
     /// Opens a VP8 chunk of a camera under the key its identifier names, and names its sender.
@@ -580,9 +604,10 @@ impl ReceiveKeys {
     pub fn open_video(
         &mut self,
         chunk: Payload<SealedChunk>,
+        now: Instant<PageLoad>,
     ) -> Result<(Seq<SenderIndex>, Payload<ClearChunk>), ChunkError> {
         let (prefix, header) = ChunkHeader::read_video(&chunk)?;
-        self.open_as(header, chunk, Track::Camera, Layout::Video(prefix))
+        self.open_as(header, chunk, Track::Camera, Layout::Video(prefix), now)
     }
 
     /// Opens a VP8 chunk of a screen under the key its identifier names, and names its sender.
@@ -595,18 +620,21 @@ impl ReceiveKeys {
     pub fn open_screen(
         &mut self,
         chunk: Payload<SealedChunk>,
+        now: Instant<PageLoad>,
     ) -> Result<(Seq<SenderIndex>, Payload<ClearChunk>), ChunkError> {
         let (prefix, header) = ChunkHeader::read_video(&chunk)?;
-        self.open_as(header, chunk, Track::Screen, Layout::Video(prefix))
+        self.open_as(header, chunk, Track::Screen, Layout::Video(prefix), now)
     }
 
-    /// Opens `chunk`, whose header reads `header`, for the track `track` alone.
+    /// Opens `chunk`, whose header reads `header`, for the track `track` alone, at `now` on the
+    /// monotonic clock of the receiver.
     fn open_as(
         &mut self,
         header: ChunkHeader,
         chunk: Payload<SealedChunk>,
         track: Track,
         layout: Layout,
+        now: Instant<PageLoad>,
     ) -> Result<(Seq<SenderIndex>, Payload<ClearChunk>), ChunkError> {
         let kid = header.kid;
         if kid.track != track {
@@ -616,6 +644,7 @@ impl ReceiveKeys {
             .senders
             .get_mut(&kid.sender)
             .ok_or(ChunkError::UnknownKey)?;
+        received.retire_due(now);
         if kid.generation < received.floor.epoch_start() {
             return Err(ChunkError::Retired);
         }
@@ -643,11 +672,7 @@ impl ReceiveKeys {
             // A chunk opened under a fresh key: the sender sealed its last chunk under the
             // older ones. A removed participant still holds those, and a malicious SFU could
             // forward a chunk of hers under them (`CALL-125`).
-            received.floor = epoch;
-            received.keys.retain(|&generation, _| generation >= epoch);
-            received
-                .openers
-                .retain(|&(generation, _), _| generation >= epoch);
+            received.retire_below(epoch);
         }
         if ambre_core::Count::<Openers>::of(received.openers.len()) > OPENERS_PER_SENDER
             && let Some(((oldest, _), _)) = received.openers.pop_first()
@@ -665,6 +690,45 @@ impl ReceiveKeys {
 }
 
 impl Received {
+    /// Closes every epoch below `epoch`: its keys, its openers and their windows. A deadline
+    /// that `epoch` covers is spent.
+    fn retire_below(&mut self, epoch: Seq<KeyGeneration>) {
+        self.floor = self.floor.max(epoch);
+        self.keys.retain(|&generation, _| generation >= epoch);
+        self.openers
+            .retain(|&(generation, _), _| generation >= epoch);
+        if self.deadline.is_some_and(|d| d.epoch <= epoch) {
+            self.deadline = None;
+        }
+    }
+
+    /// Closes the epochs a deadline names once `now` reached it (`CALL-135`).
+    fn retire_due(&mut self, now: Instant<PageLoad>) {
+        if let Some(due) = self.deadline
+            && now >= due.at
+        {
+            self.retire_below(due.epoch);
+        }
+    }
+
+    /// Sets the deadline of the older epochs once a held key opens an epoch above another held
+    /// key. A deadline already set keeps its time and moves to the newest epoch.
+    fn schedule(&mut self, now: Instant<PageLoad>) {
+        let (Some((&oldest, _)), Some((&newest, _))) =
+            (self.keys.first_key_value(), self.keys.last_key_value())
+        else {
+            return;
+        };
+        let epoch = newest.epoch_start();
+        if oldest >= epoch {
+            return;
+        }
+        let at = self
+            .deadline
+            .map_or_else(|| now.after(SWITCH_DELAY.to_fractional()), |d| d.at);
+        self.deadline = Some(Retirement { epoch, at });
+    }
+
     /// The key at `generation`: held, or ratcheted up from the closest held key below it
     /// in the same epoch, at most [`MAX_RATCHETS`] times.
     fn key_at(&self, generation: Seq<KeyGeneration>) -> Option<SenderKey> {

@@ -13,8 +13,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use ambre_core::Role;
 use ambre_core::id::{Call, Channel, Id};
 use ambre_core::{
-    Authored, ClearChunk, FixedBytes, Instant, KeyIdentifier, Payload, SealedChunk, SenderIndex,
-    Seq, Track, UnixMs,
+    Authored, ClearChunk, FixedBytes, Instant, KeyIdentifier, PageLoad, Payload, SealedChunk,
+    SenderIndex, Seq, Track, UnixMs,
 };
 use ambre_crypto::call::{ChunkHeader, ChunkSealer, ReceiveKeys, SenderKey, SignedJoin};
 use ambre_protocol::MembershipAct;
@@ -50,9 +50,17 @@ fn curious_open(held: &[SenderKey], chunk: &Payload<SealedChunk>) -> bool {
         let mut key = key.clone();
         (0..16).any(|_| {
             let mut keys = ReceiveKeys::default();
-            keys.insert(header.kid.sender, header.kid.generation, key.clone());
+            keys.insert(
+                header.kid.sender,
+                header.kid.generation,
+                key.clone(),
+                Instant::<PageLoad>::default(),
+            );
             let opened = keys
-                .open_audio(Payload::new(chunk.as_bytes().to_vec()))
+                .open_audio(
+                    Payload::new(chunk.as_bytes().to_vec()),
+                    Instant::<PageLoad>::default(),
+                )
                 .is_ok();
             key = key.ratcheted();
             opened
@@ -80,7 +88,8 @@ impl Session {
                 key,
             } => {
                 self.held.push(key.clone());
-                self.receive.insert(sender, generation, key);
+                self.receive
+                    .insert(sender, generation, key, Instant::<PageLoad>::default());
             }
             KeyHandoff::Forget { sender } => self.receive.forget(sender),
             // A curious member keeps every key it held past the end of the call.
@@ -435,7 +444,10 @@ impl World {
             let opened = match self.sessions.get_mut(&reader) {
                 Some((session, Standing::In)) => session
                     .receive
-                    .open_audio(Payload::new(chunk.as_bytes().to_vec()))
+                    .open_audio(
+                        Payload::new(chunk.as_bytes().to_vec()),
+                        Instant::<PageLoad>::default(),
+                    )
                     .is_ok(),
                 Some((session, _)) => curious_open(&session.held, &chunk),
                 None => false,
