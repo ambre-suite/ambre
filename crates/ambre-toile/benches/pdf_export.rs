@@ -43,7 +43,7 @@ fn bench_pdf_export(c: &mut Criterion) {
                     .record_deck(Default::default())
                     .unwrap_or_else(|e| panic!("the deck has pages: {e}"));
                 while !recording.is_recorded() {
-                    recording.record_next(&mut fonts);
+                    recording.record_next(&st, &mut fonts);
                 }
                 black_box(
                     ambre_toile::logic::interop::write_pdf(recording.into_document(), &converter)
@@ -66,7 +66,7 @@ fn bench_pdf_export(c: &mut Criterion) {
                 (recording, common::shipped_fonts())
             },
             |(mut recording, mut fonts)| {
-                recording.record_next(&mut fonts);
+                recording.record_next(&st, &mut fonts);
                 black_box(recording)
             },
             BatchSize::LargeInput,
@@ -80,7 +80,7 @@ fn bench_pdf_export(c: &mut Criterion) {
                     .record_deck(Default::default())
                     .unwrap_or_else(|e| panic!("the deck has pages: {e}"));
                 while !recording.is_recorded() {
-                    recording.record_next(&mut fonts);
+                    recording.record_next(&st, &mut fonts);
                 }
                 recording.into_document()
             },

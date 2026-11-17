@@ -30,6 +30,15 @@ use super::codec::{
 };
 use super::names::{BoardKey, ConnectorKey, ElementKey, Fields, board};
 
+/// The stored file an image element names, `None` when it names none or
+/// a peer wrote an address that does not parse.
+fn image_address(
+    em: &Fields<ElementKey>,
+) -> Option<ambre_core::Validated<ambre_core::ContentHash>> {
+    str_of(em, ElementKey::Hash)
+        .and_then(|hash| ambre_core::Validated::<ambre_core::ContentHash>::parse(&hash).ok())
+}
+
 /// A stored stroke sample as the reader takes it: the same 12 bytes as a
 /// [`StrokePoint`], with a pressure the reader clamps (`TOILE-268`).
 ///
@@ -150,6 +159,36 @@ impl ToileState {
         }
     }
 
+    /// The address of each picture the board draws at any of `cameras`, each
+    /// once and sorted: the image elements
+    /// [`derive_viewport_at`](Self::derive_viewport_at) keeps there. Each
+    /// element is read once, however many cameras see it. The request of a
+    /// deck export lists the stored files to fetch with it and derives no
+    /// page (`TOILE-IO-099`).
+    #[cfg(feature = "pdf")]
+    pub(crate) fn pictures_at(
+        &self,
+        cameras: impl Iterator<Item = Viewport>,
+    ) -> Vec<ambre_core::Validated<ambre_core::ContentHash>> {
+        let mut seen: HashSet<Id<Element>> = HashSet::default();
+        for vp in cameras {
+            seen.extend(self.index.query_visible(&vp));
+        }
+        let elements = super::names::root_map(&self.doc, super::names::Root::Elements);
+        let mut pictures: Vec<_> = seen
+            .iter()
+            .filter_map(|id| {
+                let em = super::names::entry_in::<ElementKey>(&elements, id)?;
+                // The address goes first: most elements hold none, and that
+                // one read is cheaper than the kind.
+                image_address(&em).filter(|_| has_type(&em, ElementKind::Image))
+            })
+            .collect();
+        pictures.sort_unstable();
+        pictures.dedup();
+        pictures
+    }
+
     /// Capture a frame's animatable set as a [`FrameSnapshot`] for Smart Animate
     /// (`toile-presentation`). The elements are the frame's **declared**
     /// `children`, membership being explicit, not spatial. Each carries the
@@ -251,11 +290,7 @@ impl ToileState {
                 DisplayGeom::Path(path_of(em).unwrap_or_default())
             }
             // An image or an embed that names no source paints its placeholder.
-            ElementKind::Image => {
-                DisplayGeom::Image(str_of(em, ElementKey::Hash).and_then(|hash| {
-                    ambre_core::Validated::<ambre_core::ContentHash>::parse(&hash).ok()
-                }))
-            }
+            ElementKind::Image => DisplayGeom::Image(image_address(em)),
             // A peer may have written any text here, so the stored address
             // passes the same check as a typed one (`TOILE-267`).
             ElementKind::Embed => DisplayGeom::Embed(str_of(em, ElementKey::Url).and_then(|url| {

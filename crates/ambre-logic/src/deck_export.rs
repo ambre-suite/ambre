@@ -3,11 +3,13 @@
 // The deck's PDF export, recorded one page per pass of the Logic thread
 // (`3-Toile/features/ambre-spec-toile-pdf-export.md`).
 //
-// The export reads the board once, when it starts: every page and every
-// picture. The pages are then recorded one per pass. Between two pages the
-// thread serves the other messages, a local edit or a remote delta of the
-// same board included. The recording holds no reference to the board. So
-// such an edit reaches the board at once, and no page of the file.
+// The export reads the board at the version of the request, and at no
+// other. It starts with the frame of every page, the pictures and that
+// version. The pages are then derived and recorded one per pass. Between two
+// pages the thread serves the other messages, a local edit or a remote delta
+// of the same board included. Such an edit reaches the board at once. The
+// next pass then copies the board at the version of the request, so the
+// edit reaches no page of the file.
 //
 // Before the first page, the export asks the Sync worker for the stored file
 // of every picture it draws. It records nothing until each answered (section 3
@@ -50,7 +52,7 @@ pub(crate) enum Recording {}
 
 impl LogicState {
     /// Start a deck export of `document_id`, and record its first page.
-    /// `recording` is the board read at the request. A deck export still
+    /// `recording` holds what the request read off the board. A deck export still
     /// running on the same board ends first, so each request answers its own
     /// file.
     /// The first page waits for the stored file of every picture the deck
@@ -159,8 +161,12 @@ impl LogicState {
         if stage(recording) == Stage::Fetching {
             return;
         }
+        // An export starts on a board alone, and the two leave together.
+        let DocState::Toile(board) = &doc.state else {
+            return;
+        };
         let answer = match export_cx.as_mut() {
-            Some(font_cx) => step(recording, font_cx),
+            Some(font_cx) => step(recording, board, font_cx),
             // The faces never leave once seeded, so this holds no start can
             // reach. The export still ends with a reason, never in silence.
             None => Step::Stopped(StopCause::FontsLoading),
@@ -213,10 +219,11 @@ enum Step {
     Stopped(StopCause),
 }
 
-/// Record one page of `recording`.
+/// Record one page of `recording`, read off `board` as it stood at the
+/// request.
 #[cfg(feature = "toile-pdf")]
-fn step(recording: &mut Recording, font_cx: &mut parley::FontContext) -> Step {
-    recording.record_next(font_cx);
+fn step(recording: &mut Recording, board: &ToileState, font_cx: &mut parley::FontContext) -> Step {
+    recording.record_next(board, font_cx);
     if recording.is_recorded() {
         Step::Recorded
     } else {
@@ -301,7 +308,11 @@ fn report(recording: &Recording) -> ambre_toile::message::ToileReport {
 }
 
 #[cfg(not(feature = "toile-pdf"))]
-fn step(recording: &mut Recording, _font_cx: &mut parley::FontContext) -> Step {
+fn step(
+    recording: &mut Recording,
+    _board: &ToileState,
+    _font_cx: &mut parley::FontContext,
+) -> Step {
     match *recording {}
 }
 

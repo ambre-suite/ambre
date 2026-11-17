@@ -16,10 +16,7 @@ use ambre_core::{Board, Image, Px, Scale, Size, View};
 use ambre_draw::Rect;
 use ambre_draw::list::PrintDocument;
 
-use crate::logic::command::DisplayViewport;
-use crate::message::Viewport;
-
-use super::pdf_export::{PageSize, PdfPage};
+use super::pdf_export::{PageSize, PdfPagePlan};
 
 /// The raster pixels a PNG export gives one board unit: twice the screen at
 /// 100%, so the image stays sharp on a dense display.
@@ -32,8 +29,9 @@ const BOARD_MARGIN: Px<Board> = Px::new(16.0);
 /// What a PNG export rasterizes, read off the board.
 #[derive(Debug, Clone)]
 pub struct PngPage {
-    /// The page, derived at the raster camera, and clipped to a frame.
-    pub page: PdfPage,
+    /// The frame of the page at the raster camera, clipped to a frame. The
+    /// recording derives its content.
+    pub plan: PdfPagePlan,
     /// The page size in points, which equal the raster pixels.
     pub points: PageSize,
     /// The raster size the module writes.
@@ -59,14 +57,9 @@ pub struct PngRequest {
     pub size: Size<Px<Image>>,
 }
 
-/// The page that shows `region` of the board, clipped to `clip`. `derive`
-/// culls the board at the page camera. `None` for a region with no area or
-/// a corner that is no number.
-pub(crate) fn png_page(
-    region: Rect,
-    clip: Option<Rect>,
-    derive: impl FnOnce(Viewport) -> DisplayViewport,
-) -> Option<PngPage> {
+/// The page that shows `region` of the board, clipped to `clip`. `None` for
+/// a region with no area or a corner that is no number.
+pub(crate) fn png_page(region: Rect, clip: Option<Rect>) -> Option<PngPage> {
     let (width, height) = (region.width(), region.height());
     if !(width.is_finite() && height.is_finite()) || width <= 0.0 || height <= 0.0 {
         return None;
@@ -86,12 +79,11 @@ pub(crate) fn png_page(
         ambre_core::PrintLength::<ambre_core::Pt>::new(size.height.get() as f32),
     );
     Some(PngPage {
-        page: PdfPage::framed(
+        plan: PdfPagePlan::framed(
             region.center(),
             zoom,
             ambre_draw::Size::new(f64::from(size.width.get()), f64::from(size.height.get())),
             clip,
-            derive,
         ),
         points,
         size,
@@ -107,25 +99,14 @@ pub(crate) fn board_region(content: Rect) -> Rect {
 mod tests {
     use super::*;
 
-    fn empty(_: Viewport) -> DisplayViewport {
-        DisplayViewport {
-            reactions: Default::default(),
-            pins: Vec::new(),
-            viewport: Default::default(),
-            nodes: Vec::new(),
-            version: ambre_core::Seq::ZERO,
-            grid_unit: Px::<Board>::new(20.0),
-        }
-    }
-
     /// `TOILE-IO-186`: a region rasterizes at twice its board size, and the
     /// camera maps its corners onto the corners of the raster.
     #[test]
     fn a_region_rasterizes_at_twice_its_size_corner_to_corner() {
         let region = Rect::new(-50.0, 10.0, 150.0, 110.0);
-        let page = png_page(region, None, empty).expect("the region has an area");
+        let page = png_page(region, None).expect("the region has an area");
         assert_eq!(page.size, Size::new(Px::new(400), Px::new(200)));
-        let to_screen = page.page.camera.world_to_screen();
+        let to_screen = page.plan.camera().world_to_screen();
         let origin = to_screen * kurbo::Point::new(region.x0, region.y0);
         let corner = to_screen * kurbo::Point::new(region.x1, region.y1);
         assert!(origin.distance(kurbo::Point::ZERO) < 1e-9, "{origin:?}");
@@ -140,13 +121,13 @@ mod tests {
     #[test]
     fn a_large_region_is_scaled_down_to_the_bound() {
         let region = Rect::new(0.0, 0.0, 10_000.0, 2_500.0);
-        let page = png_page(region, None, empty).expect("the region has an area");
+        let page = png_page(region, None).expect("the region has an area");
         assert_eq!(page.size.width, ambre_convert::RASTER_EDGE);
         assert_eq!(page.size.height, Px::new(1024));
     }
 
     #[test]
     fn a_region_with_no_area_yields_no_page() {
-        assert!(png_page(Rect::new(5.0, 5.0, 5.0, 9.0), None, empty).is_none());
+        assert!(png_page(Rect::new(5.0, 5.0, 5.0, 9.0), None).is_none());
     }
 }

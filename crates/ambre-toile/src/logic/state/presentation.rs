@@ -21,7 +21,7 @@ use loro::{LoroDoc, LoroMovableList, LoroText, LoroValue};
 use kurbo::Rect;
 
 #[cfg(feature = "pdf")]
-use crate::logic::interop::{PageSize, PdfPage};
+use crate::logic::interop::{PageSize, PdfPage, PdfPagePlan};
 #[cfg(feature = "pdf")]
 use crate::ui::viewport::{FIT_PAD, ViewportTransform};
 
@@ -473,6 +473,18 @@ impl ToileState {
     /// without touching `self.viewport`.
     #[cfg(feature = "pdf")]
     pub fn pdf_pages(&self, page: PageSize) -> Vec<PdfPage> {
+        self.pdf_page_plans(page)
+            .into_iter()
+            .map(|plan| self.derive_pdf_page(plan))
+            .collect()
+    }
+
+    /// The frame of each page of an export at `page` size, in deck order: the
+    /// camera and the clip of [`pdf_pages`](Self::pdf_pages), with no content
+    /// derived. A deck export plans every page at the request and derives each
+    /// one in the pass that records it (`TOILE-IO-099`).
+    #[cfg(feature = "pdf")]
+    pub(crate) fn pdf_page_plans(&self, page: PageSize) -> Vec<PdfPagePlan> {
         // The camera that frames `rect` into the page, padded like the live
         // present glide so the slide never touches the page edge.
         let fit = |rect: Rect| {
@@ -484,39 +496,53 @@ impl ToileState {
             cam
         };
 
-        let slides: Vec<(Id<Frame>, Rect)> = self
+        let slides: Vec<Rect> = self
             .slide_order()
             .into_iter()
-            .filter_map(|f| self.element_rect(&f.clone().into()).map(|r| (f, r)))
+            .filter_map(|f| self.element_rect(&f.into()))
             .collect();
 
         if slides.is_empty() {
             // Empty deck: one page framing the whole board (unclipped). No
             // content at all yields no page, so the export reports `Empty`.
-            return match self.content_bounds() {
-                Some(bounds) => {
-                    let camera = fit(bounds);
-                    vec![PdfPage {
-                        viewport: self.derive_viewport_at(camera.to_bus_viewport()),
-                        camera,
-                        clip: None,
-                    }]
-                }
-                None => Vec::new(),
-            };
+            return self
+                .content_bounds()
+                .map(|bounds| PdfPagePlan {
+                    camera: fit(bounds),
+                    clip: None,
+                })
+                .into_iter()
+                .collect();
         }
 
         slides
             .into_iter()
-            .map(|(_frame, rect)| {
-                let camera = fit(rect);
-                PdfPage {
-                    viewport: self.derive_viewport_at(camera.to_bus_viewport()),
-                    camera,
-                    clip: Some(rect),
-                }
+            .map(|rect| PdfPagePlan {
+                camera: fit(rect),
+                clip: Some(rect),
             })
             .collect()
+    }
+
+    /// The page `plan` frames, its content derived from this board now.
+    #[cfg(feature = "pdf")]
+    pub(crate) fn derive_pdf_page(&self, plan: PdfPagePlan) -> PdfPage {
+        PdfPage {
+            viewport: self.derive_viewport_at(plan.camera.to_bus_viewport()),
+            camera: plan.camera,
+            clip: plan.clip,
+        }
+    }
+
+    /// The address of each picture the pages `plans` frame draw, each once
+    /// and sorted. It reads the image elements alone and derives no page
+    /// (`TOILE-IO-099`, `TOILE-IO-100`).
+    #[cfg(feature = "pdf")]
+    pub(crate) fn pictures_of_plans(
+        &self,
+        plans: &[PdfPagePlan],
+    ) -> Vec<ambre_core::Validated<ambre_core::ContentHash>> {
+        self.pictures_at(plans.iter().map(|plan| plan.camera.to_bus_viewport()))
     }
 
     /// The page a PNG export of `scope` rasterizes (`toile-import-export`).
@@ -555,7 +581,7 @@ impl ToileState {
             crate::message::PngScope::Board => PngExportError::Empty,
             crate::message::PngScope::Frame(_) => PngExportError::NoFrame,
         };
-        png_page(region, clip, |camera| self.derive_viewport_at(camera)).ok_or(empty)
+        png_page(region, clip).ok_or(empty)
     }
 
     /// The union AABB of every element's world bounds, or `None` if the board
@@ -988,7 +1014,7 @@ mod pdf_tests {
             ambre_core::Size::new(ambre_core::Px::new(400), ambre_core::Px::new(100))
         );
         assert_eq!(
-            png.page.clip,
+            png.plan.clip,
             Some(frame),
             "the page is clipped to the frame"
         );

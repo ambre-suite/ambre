@@ -142,6 +142,18 @@ CEILINGS = [
         each="ambre_pass_end_toile_deck_page",
         features=("ambre-toile/pdf",),
     ),
+    # The pass of the request of that export, whole: the frame of every page,
+    # the pictures and the version read off the board, then the first page
+    # derived and recorded. It derives one page, not the deck (`TOILE-IO-099`).
+    Ceiling(
+        crate="ambre-toile",
+        bench="instructions",
+        operation="deck_request",
+        symbol="ambre_budget_toile_deck_request",
+        row="Toile PDF export, one slice: the pass of the request (< 4 ms)",
+        ceiling=4 * PER_MS,
+        features=("ambre-toile/pdf",),
+    ),
     # The walk and the engine step of one structural edit, the two phases its
     # budget row covers. The purge, the commit and the caches of positions,
     # merges, styles and sizes fall outside the count.

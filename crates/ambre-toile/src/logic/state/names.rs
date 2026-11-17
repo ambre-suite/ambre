@@ -157,8 +157,14 @@ impl EntrySchema for ThreadKey {
 /// `K`. An absent entry, or one that holds no map, reads as `None`.
 #[must_use]
 pub(crate) fn entry<K: EntrySchema>(doc: &LoroDoc, id: &K::Id) -> Option<Fields<K>> {
-    root_map(doc, K::ROOT)
-        .get(K::key(id))?
+    entry_in(&root_map(doc, K::ROOT), id)
+}
+
+/// The entry `id` of `root`, the root dictionary of `K`, read as for
+/// [`entry`]. A caller that reads many entries looks the root up once.
+#[must_use]
+pub(crate) fn entry_in<K: EntrySchema>(root: &LoroMap, id: &K::Id) -> Option<Fields<K>> {
+    root.get(K::key(id))?
         .into_container()
         .ok()?
         .into_map()

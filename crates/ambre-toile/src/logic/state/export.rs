@@ -246,15 +246,16 @@ impl ToileState {
     > {
         let mut recording = self.record_deck(page)?;
         while !recording.is_recorded() {
-            recording.record_next(font_cx);
+            recording.record_next(self, font_cx);
         }
         crate::logic::interop::write_pdf(recording.into_document(), converter)
     }
 
-    /// Start a deck export at `page` size: the pages and the pictures, read
-    /// now, and no page recorded yet (`TOILE-IO-099`). The recording holds
-    /// no reference to the board, so an edit after this call reaches no page
-    /// (`TOILE-IO-133`).
+    /// Start a deck export at `page` size, with no page recorded yet
+    /// (`TOILE-IO-099`). It reads the frame of every page, the pictures and
+    /// the version of the board now, and derives no page. Each step derives
+    /// one page from the board at that version, so an edit after this call
+    /// reaches no page (`TOILE-IO-133`).
     ///
     /// The recording holds the `media` map's inline thumbnails. The caller then
     /// asks for the stored files through
@@ -273,7 +274,8 @@ impl ToileState {
         // The page camera maps world units onto PDF points 1:1, so the text
         // cache of the recording runs at unit scale like the export walk.
         crate::logic::interop::DeckRecording::new(
-            self.pdf_pages(page),
+            self.pdf_page_plans(page),
+            self,
             page,
             ambre_canvas::Theme::Light.palette(),
             self.media_thumbnails(),
@@ -298,13 +300,14 @@ impl ToileState {
     ) -> Result<crate::logic::interop::PngRequest, crate::logic::interop::PngExportError> {
         let png = self.png_page(scope)?;
         let mut recording = crate::logic::interop::DeckRecording::new(
-            vec![png.page],
+            vec![png.plan],
+            self,
             png.points,
             ambre_canvas::Theme::Light.palette(),
             self.media_thumbnails(),
         )
         .map_err(|_| crate::logic::interop::PngExportError::Empty)?;
-        recording.record_next(font_cx);
+        recording.record_next(self, font_cx);
         Ok(crate::logic::interop::PngRequest {
             document: recording.into_document(),
             size: png.size,
@@ -582,7 +585,7 @@ mod tests {
             .record_deck(Default::default())
             .expect("the board records");
         while !recording.is_recorded() {
-            recording.record_next(font_cx);
+            recording.record_next(st, font_cx);
         }
         recording.into_document()
     }
@@ -734,7 +737,7 @@ mod tests {
         let mut recording = st.record_deck(Default::default()).expect("three pages");
         let mut seen = Vec::new();
         while !recording.is_recorded() {
-            recording.record_next(&mut fonts);
+            recording.record_next(&st, &mut fonts);
             let progress = recording.progress();
             seen.push((progress.done().get(), progress.total().get()));
         }
@@ -764,7 +767,7 @@ mod tests {
         let asked = st.record_deck(Default::default()).expect("two pages");
         let before = st.element_count();
         let mut recording = asked;
-        recording.record_next(&mut fonts);
+        recording.record_next(&st, &mut fonts);
         // A shape dropped on the second slide, between the two pages.
         st.handle_command(ToileCommand::CreateElement {
             kind: ElementKind::Shape(ShapeKind::Rect),
@@ -775,13 +778,13 @@ mod tests {
             correlate: None,
         });
         assert!(st.element_count() > before, "the edit landed on the board");
-        recording.record_next(&mut fonts);
+        recording.record_next(&st, &mut fonts);
         assert!(recording.is_recorded());
         let mid_export = recording.into_document();
         let record_now = |st: &ToileState, fonts: &mut ambre_draw::FontContext| {
             let mut recording = st.record_deck(Default::default()).expect("two pages");
             while !recording.is_recorded() {
-                recording.record_next(fonts);
+                recording.record_next(st, fonts);
             }
             recording.into_document()
         };
@@ -795,6 +798,52 @@ mod tests {
         assert_eq!(
             mid_export,
             record_now(&st, &mut fonts),
+            "the file is the deck as asked"
+        );
+    }
+
+    /// `TOILE-IO-133`: a peer's delta merged while a recording runs reaches
+    /// the board and no page. The pages after it come from a copy of the
+    /// board at the version of the request.
+    #[cfg(feature = "pdf")]
+    #[test]
+    fn a_remote_delta_mid_export_reaches_the_board_and_no_page() {
+        let mut st = deck(2);
+        let mut peer = ToileState::with_peer(ambre_core::PeerId::new(2));
+        peer.import_snapshot(&st.export_snapshot())
+            .expect("the peer opens the board");
+        let mut fonts = ambre_draw::FontContext::default();
+        let as_asked = recorded(&st, &mut fonts);
+        let mut recording = st.record_deck(Default::default()).expect("two pages");
+        recording.record_next(&st, &mut fonts);
+        // The peer drops a shape on the second slide, between the two pages.
+        let delta = peer
+            .handle_command(ToileCommand::CreateElement {
+                kind: ElementKind::Shape(ShapeKind::Rect),
+                at: Point::new(500.0, 100.0),
+                size: Size::new(50.0, 50.0),
+                content: InitContent::None,
+                fill: None,
+                correlate: None,
+            })
+            .update
+            .expect("the drop writes the board");
+        let before = st.element_count();
+        st.apply_remote(&delta);
+        assert!(
+            st.element_count() > before,
+            "the delta merged into the board"
+        );
+        recording.record_next(&st, &mut fonts);
+        assert!(recording.is_recorded());
+        assert_ne!(
+            recorded(&st, &mut fonts).pages.get(1),
+            as_asked.pages.get(1),
+            "the delta changes the second slide"
+        );
+        assert_eq!(
+            recording.into_document(),
+            as_asked,
             "the file is the deck as asked"
         );
     }

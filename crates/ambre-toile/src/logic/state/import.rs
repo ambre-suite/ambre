@@ -1690,7 +1690,7 @@ mod tests {
         let mut recording = st
             .record_deck(crate::logic::interop::PageSize::default())
             .expect("the picture makes a page");
-        recording.record_next(&mut ambre_draw::FontContext::default());
+        recording.record_next(&st, &mut ambre_draw::FontContext::default());
         assert!(recording.is_recorded());
         let document = recording.into_document();
         let sizes: Vec<_> = document
@@ -1709,6 +1709,7 @@ mod tests {
         h: u32,
     ) -> (
         ambre_core::Payload<ambre_core::MediaBytes>,
+        ToileState,
         crate::logic::interop::DeckRecording,
     ) {
         let mut st = ToileState::new();
@@ -1728,7 +1729,7 @@ mod tests {
         let recording = st
             .record_deck(crate::logic::interop::PageSize::default())
             .expect("the picture makes a page");
-        (ambre_core::Payload::new(file), recording)
+        (ambre_core::Payload::new(file), st, recording)
     }
 
     /// The one download a deck recording asks for, by its id.
@@ -1751,7 +1752,7 @@ mod tests {
     #[cfg(feature = "pdf")]
     #[test]
     fn a_deck_page_draws_the_stored_file_at_full_resolution() {
-        let (file, mut recording) = a_deck_of_one_picture(600, 400);
+        let (file, st, mut recording) = a_deck_of_one_picture(600, 400);
         let id = the_one_download(&mut recording);
         assert_eq!(
             recording.stage(),
@@ -1763,7 +1764,7 @@ mod tests {
             recording.stage(),
             crate::logic::interop::DeckStage::Recording
         );
-        recording.record_next(&mut ambre_draw::FontContext::default());
+        recording.record_next(&st, &mut ambre_draw::FontContext::default());
         let report = recording.report();
         let document = recording.into_document();
         let encoded: Vec<_> = document
@@ -1789,6 +1790,40 @@ mod tests {
         assert!(report.is_lossless(), "{report:?}");
     }
 
+    /// Covers `TOILE-IO-133` while the stored files are fetched. A shape
+    /// dropped on the page while its stored file is owed reaches the board
+    /// and no page. The file equals the one recorded once the drop is undone.
+    #[cfg(feature = "pdf")]
+    #[test]
+    fn an_edit_while_the_files_are_fetched_reaches_no_page() {
+        let (file, mut st, mut recording) = a_deck_of_one_picture(600, 400);
+        let id = the_one_download(&mut recording);
+        let out = st.handle_command(ToileCommand::CreateElement {
+            kind: ElementKind::Shape(ShapeKind::Rect),
+            at: Point::ZERO,
+            size: kurbo::Size::new(50.0, 50.0),
+            content: InitContent::None,
+            fill: None,
+            correlate: None,
+        });
+        assert!(out.update.is_some(), "the drop writes the board");
+        recording.answer(id, Some(file.clone()));
+        recording.record_next(&st, &mut ambre_draw::FontContext::default());
+        let mid_fetch = recording.into_document();
+        st.handle_command(ToileCommand::Undo);
+        let mut again = st
+            .record_deck(crate::logic::interop::PageSize::default())
+            .expect("the picture makes a page");
+        let id = the_one_download(&mut again);
+        again.answer(id, Some(file));
+        again.record_next(&st, &mut ambre_draw::FontContext::default());
+        assert_eq!(
+            mid_fetch,
+            again.into_document(),
+            "the file is the deck as asked"
+        );
+    }
+
     /// Covers `TOILE-IO-100`, the refusal. The Sync worker opens a blob or
     /// answers an error: an altered ciphertext and a key that does not open
     /// it both end there. Bytes that spell no picture are refused here too.
@@ -1804,10 +1839,10 @@ mod tests {
             )),
         ];
         for data in answers {
-            let (_, mut recording) = a_deck_of_one_picture(600, 400);
+            let (_, st, mut recording) = a_deck_of_one_picture(600, 400);
             let id = the_one_download(&mut recording);
             recording.answer(id, data);
-            recording.record_next(&mut ambre_draw::FontContext::default());
+            recording.record_next(&st, &mut ambre_draw::FontContext::default());
             let report = recording.report();
             assert_eq!(
                 report.count(
@@ -1837,7 +1872,7 @@ mod tests {
     #[cfg(feature = "pdf")]
     #[test]
     fn a_deck_recording_takes_only_its_own_answers() {
-        let (file, mut recording) = a_deck_of_one_picture(600, 400);
+        let (file, _st, mut recording) = a_deck_of_one_picture(600, 400);
         let id = the_one_download(&mut recording);
         recording.answer(ambre_bus::next_request(), Some(file));
         assert_eq!(recording.owes(id), Some(&hash_of("realhash")), "still owed");

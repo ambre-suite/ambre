@@ -360,6 +360,13 @@ impl ToileState {
         doc.commit();
         doc.set_peer_id(peer)
             .expect("a document outside a transaction takes a peer id");
+        Self::assemble(doc)
+    }
+
+    /// The board over `doc` as it stands, with every cache empty: the part of
+    /// [`from_doc`](Self::from_doc) that writes nothing.
+    fn assemble(doc: LoroDoc) -> Self {
+        let peer = doc.peer_id();
         // Open the history AFTER the initial commit. The board scaffolding is
         // document setup, not a user edit, so it must not sit on the stack.
         // Every comment write stays off the stack (`TOILE-FEAT-017`): undo
@@ -904,6 +911,24 @@ impl ToileState {
     #[must_use]
     pub fn crdt(&self) -> &loro::LoroDoc {
         &self.doc
+    }
+
+    /// The version of the board's document: equal on two calls only when no
+    /// change reached the board between them.
+    #[cfg(feature = "pdf")]
+    pub(crate) fn frontiers(&self) -> loro::Frontiers {
+        self.doc.state_frontiers()
+    }
+
+    /// A private copy of the board as it stood at `at`, every cache built, or
+    /// `None` when the history no longer reaches `at`. A deck export reads its
+    /// pages from it once the live board has moved on (`TOILE-IO-133`). The
+    /// copy shares nothing with the board, and nothing writes to it.
+    #[cfg(feature = "pdf")]
+    pub(crate) fn frozen_at(&self, at: &loro::Frontiers) -> Option<Self> {
+        let mut frozen = Self::assemble(self.doc.fork_at(at).ok()?);
+        frozen.rebuild_caches();
+        Some(frozen)
     }
 
     /// Full CRDT snapshot for local persistence / compaction / SnapshotNeeded.

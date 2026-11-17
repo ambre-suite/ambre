@@ -27,6 +27,7 @@ use ambre_draw::list::{ListRecorder, PrintDocument, PrintPage, RecorderTables};
 use ambre_draw::{DocumentWalk, DrawSurface, FontContext, Rect};
 
 use crate::logic::command::DisplayViewport;
+use crate::logic::state::ToileState;
 use crate::message::{DisplayElement, DisplayGeom, DisplayNode};
 use crate::ui::grid;
 use crate::ui::viewport::ViewportTransform;
@@ -77,23 +78,35 @@ pub struct PdfPage {
     pub clip: Option<Rect>,
 }
 
-impl PdfPage {
+/// The frame of one page before its content is derived: the camera that fits
+/// the slide into the page, and the clip of a [`PdfPage`]. A deck export plans
+/// every page at the request and derives each one in the step that records it.
+#[derive(Debug, Clone, Copy)]
+pub struct PdfPagePlan {
+    pub(crate) camera: ViewportTransform,
+    pub(crate) clip: Option<Rect>,
+}
+
+impl PdfPagePlan {
     /// The page whose camera centres `center` at `zoom` over `size` page
-    /// points, clipped to `clip`. `derive` culls the board at that camera.
-    /// A raster export frames its page here, so it names no view type.
+    /// points, clipped to `clip`. A raster export frames its page here, so it
+    /// names no view type.
     pub(crate) fn framed(
         center: ambre_draw::Point,
         zoom: ambre_core::Scale<ambre_core::Board, ambre_core::View>,
         size: ambre_draw::Size,
         clip: Option<Rect>,
-        derive: impl FnOnce(crate::message::Viewport) -> DisplayViewport,
     ) -> Self {
-        let camera = ViewportTransform { center, zoom, size };
         Self {
-            viewport: derive(camera.to_bus_viewport()),
-            camera,
+            camera: ViewportTransform { center, zoom, size },
             clip,
         }
+    }
+
+    /// The camera of the page, for a test that maps its corners.
+    #[cfg(test)]
+    pub(crate) fn camera(&self) -> ViewportTransform {
+        self.camera
     }
 }
 
@@ -228,17 +241,24 @@ pub type Thumbnails = HashMap<
 /// A deck export in progress: its pages are recorded one per step
 /// (`TOILE-IO-099`).
 ///
-/// The recording owns all it reads: the pages derived when it started and
-/// the stored pictures. It holds no reference to the board. The Logic thread
-/// applies a local edit or a remote delta between two steps. The file still
-/// shows the deck as it stood at the request (`TOILE-IO-133`).
+/// The recording owns the frame of every page and the stored pictures, read
+/// at the request. Each step derives the content of its own page alone, so
+/// the request costs one page and not the deck (`TOILE-IO-099`). The Logic
+/// thread applies a local edit or a remote delta between two steps. The file
+/// still shows the deck as it stood at the request (`TOILE-IO-133`). A step
+/// derives from the board while the board holds the version of the request.
+/// Once the board moved on, it derives from a private copy at that version.
 ///
 /// The output is a recorded [`PrintDocument`], which names no writer. The
 /// PDF module writes it today through [`write_pdf`]. Another sink of a draw
 /// list takes the same steps unchanged.
 pub struct DeckRecording {
-    /// The pages still to record, in deck order.
-    pages: std::vec::IntoIter<PdfPage>,
+    /// The frames of the pages still to record, in deck order.
+    plans: std::vec::IntoIter<PdfPagePlan>,
+    /// The board the pages are derived from: the version of the request.
+    source: DeckSource,
+    /// The address of each picture the pages draw, listed at the request.
+    pictures: Vec<Validated<ContentHash>>,
     /// Every page of the export: one step each.
     total: Count<Steps>,
     /// The pages recorded so far.
@@ -268,25 +288,29 @@ pub struct DeckRecording {
 }
 
 impl DeckRecording {
-    /// A recording of `pages` at `page` size, with no page recorded yet.
-    /// A picture of `thumbs` is decoded by the step of the first page that
-    /// draws it, so the start decodes none.
+    /// A recording of the pages `plans` frame at `page` size, read off
+    /// `board` as it stands now, with no page recorded yet. A picture of
+    /// `thumbs` is decoded by the step of the first page that draws it, so
+    /// the start decodes none. The start derives no page either.
     ///
     /// # Errors
     ///
-    /// [`PdfExportError::Empty`] on an empty `pages` (`TOILE-IO-048`).
-    pub fn new(
-        pages: Vec<PdfPage>,
+    /// [`PdfExportError::Empty`] on an empty `plans` (`TOILE-IO-048`).
+    pub(crate) fn new(
+        plans: Vec<PdfPagePlan>,
+        board: &ToileState,
         page: PageSize,
         palette: &'static Palette,
         thumbs: Thumbnails,
     ) -> Result<Self, PdfExportError> {
-        if pages.is_empty() {
+        if plans.is_empty() {
             return Err(PdfExportError::Empty);
         }
         Ok(Self {
-            total: Count::<Steps>::of(pages.len()),
-            pages: pages.into_iter(),
+            total: Count::<Steps>::of(plans.len()),
+            pictures: board.pictures_of_plans(&plans),
+            plans: plans.into_iter(),
+            source: DeckSource::AtRequest(board.frontiers()),
             done: Count::ZERO,
             thumbs,
             images: HashMap::default(),
@@ -308,11 +332,14 @@ impl DeckRecording {
     }
 
     /// Record the next page, if one is left: one step, through the screen's
-    /// walk. `font_cx` carries the base faces, as for [`export_pdf`].
-    pub fn record_next(&mut self, font_cx: &mut FontContext) {
-        let Some(pdf_page) = self.pages.next() else {
+    /// walk. `board` is the board the export was asked of, as it stands now;
+    /// the page shows it as it stood at the request. `font_cx` carries the
+    /// base faces, as for [`export_pdf`].
+    pub fn record_next(&mut self, board: &ToileState, font_cx: &mut FontContext) {
+        let Some(plan) = self.plans.next() else {
             return;
         };
+        let pdf_page = self.source.board(board).derive_pdf_page(plan);
         self.decode_pictures_of(&pdf_page);
         record_page(
             &mut self.document,
@@ -346,21 +373,20 @@ impl DeckRecording {
     }
 
     /// Ask for the stored file of every picture a page draws, one download
-    /// per address (`TOILE-IO-100`). The recording waits until each answered
-    /// or [`stop_waiting`](Self::stop_waiting) gives up on them. A deck with
-    /// no picture asks for nothing and waits for nothing.
+    /// per address (`TOILE-IO-100`). The request listed them off the image
+    /// elements, so no page is derived before the downloads. The recording
+    /// waits until each answered or [`stop_waiting`](Self::stop_waiting)
+    /// gives up on them. A deck with no picture asks for nothing and waits
+    /// for nothing. A second call asks for nothing.
     pub fn fetch_full(&mut self) -> Vec<crate::logic::command::ToileRequest> {
-        let mut addresses: Vec<&Validated<ContentHash>> =
-            self.pages.as_slice().iter().flat_map(pictures_of).collect();
-        addresses.sort_unstable();
-        addresses.dedup();
+        let addresses = std::mem::take(&mut self.pictures);
         let mut requests = Vec::with_capacity(addresses.len());
         for address in addresses {
             let id = ambre_bus::next_request();
             self.waiting.insert(id, address.clone());
             requests.push(crate::logic::command::ToileRequest::DownloadMedia {
                 id,
-                content_hash: address.clone(),
+                content_hash: address,
             });
         }
         requests
@@ -509,6 +535,40 @@ pub fn stored_picture(bytes: Payload<MediaBytes>) -> Option<StoredPicture> {
         bytes,
         size,
     })
+}
+
+/// The board a deck export derives its pages from.
+enum DeckSource {
+    /// No change reached the board since the request, at this version: the
+    /// board itself is the deck as it stood.
+    AtRequest(loro::Frontiers),
+    /// The board moved on: a private copy of it at the version of the
+    /// request, built once, in the first step after the change.
+    Frozen(Box<ToileState>),
+}
+
+impl DeckSource {
+    /// The board as it stood at the request. `live` is the board now.
+    fn board<'a>(&'a mut self, live: &'a ToileState) -> &'a ToileState {
+        if let Self::AtRequest(at) = self {
+            if live.frontiers() == *at {
+                return live;
+            }
+            match live.frozen_at(at) {
+                Some(frozen) => *self = Self::Frozen(Box::new(frozen)),
+                None => {
+                    // Unreachable while the board keeps its history, which it
+                    // trims nowhere. The page then shows the board as it is.
+                    tracing::warn!("Toile: the PDF export lost the version it was asked at");
+                    return live;
+                }
+            }
+        }
+        match self {
+            Self::Frozen(frozen) => frozen,
+            Self::AtRequest(_) => live,
+        }
+    }
 }
 
 /// The pixels of a stored thumbnail, or `None` when its bytes do not decode.

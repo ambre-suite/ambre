@@ -325,9 +325,10 @@ fn move_redo() {
 #[inline(never)]
 fn ambre_budget_toile_deck_page(
     recording: &mut ambre_toile::logic::interop::DeckRecording,
+    st: &ToileState,
     fonts: &mut FontContext,
 ) {
-    recording.record_next(fonts);
+    recording.record_next(st, fonts);
     black_box(recording.is_recorded());
 }
 
@@ -352,7 +353,7 @@ fn deck_page() {
         .record_deck(Default::default())
         .expect("the deck has pages");
     while !recording.is_recorded() {
-        ambre_budget_toile_deck_page(&mut recording, &mut fonts);
+        ambre_budget_toile_deck_page(&mut recording, &st, &mut fonts);
         ambre_pass_end_toile_deck_page(&recording);
     }
     let document = recording.into_document();
@@ -361,9 +362,11 @@ fn deck_page() {
 }
 
 /// The whole pass of the request of a deck export: what an edit typed at the
-/// request waits behind. It derives every page and reads every picture off
-/// the board, then records the first page
-/// (`ambre-spec-toile-pdf-export.md section 3`, step 1). The font context is seeded outside the count.
+/// request waits behind. It reads the frame of every page, the pictures and
+/// the version of the board. It asks for no stored file, since the deck draws
+/// no picture. Then it derives and records the first page
+/// (`ambre-spec-toile-pdf-export.md section 3`, step 1). The font context is
+/// seeded outside the count.
 #[cfg(feature = "pdf")]
 #[inline(never)]
 fn ambre_budget_toile_deck_request(
@@ -373,14 +376,16 @@ fn ambre_budget_toile_deck_request(
     let mut recording = st
         .record_deck(Default::default())
         .expect("the deck has pages");
-    recording.record_next(fonts);
+    assert!(
+        recording.fetch_full().is_empty(),
+        "the deck draws no picture"
+    );
+    recording.record_next(st, fonts);
     black_box(recording)
 }
 
-/// The request of the export of the 50-slide deck, on the shipped faces. The
-/// "Toile PDF export, 50 slides" row of `ambre-spec-budgets.md section 1`
-/// measures this pass. No ceiling holds it yet: the
-/// count exceeds the slice row.
+/// The request of the export of the 50-slide deck, on the shipped faces: the
+/// "Toile PDF export, one slice" row of `ambre-spec-budgets.md section 1`.
 #[cfg(feature = "pdf")]
 fn deck_request() {
     let st = common::deck(common::SLIDES);
@@ -397,12 +402,51 @@ fn deck_request() {
 #[cfg(not(feature = "pdf"))]
 fn deck_page() {}
 
+/// The step after an edit landed mid-export, counted whole. It copies the
+/// board at the version of the request (`TOILE-IO-133`). Then it derives and
+/// records its page from the copy.
+#[cfg(feature = "pdf")]
+#[inline(never)]
+fn ambre_budget_toile_deck_freeze(
+    recording: &mut ambre_toile::logic::interop::DeckRecording,
+    st: &ToileState,
+    fonts: &mut FontContext,
+) {
+    recording.record_next(st, fonts);
+    // Not `is_recorded`: a body equal to the page function's would merge
+    // the two symbols into one, and this one would count nothing.
+    black_box(recording.progress());
+}
+
+/// The export of the 50-slide deck, with a shape dropped after its first
+/// page. The step of the second page builds the copy of the board.
+#[cfg(feature = "pdf")]
+fn deck_freeze() {
+    let mut st = common::deck(common::SLIDES);
+    let mut fonts = common::shipped_fonts();
+    let mut recording = ambre_budget_toile_deck_request(&st, &mut fonts);
+    let out = st.handle_command(ToileCommand::CreateElement {
+        kind: ElementKind::Shape(ShapeKind::Rect),
+        at: Point::new(1_900.0, 100.0),
+        size: Size::new(50.0, 50.0),
+        content: InitContent::None,
+        fill: None,
+        correlate: None,
+    });
+    assert!(out.update.is_some(), "the drop writes the board");
+    ambre_budget_toile_deck_freeze(&mut recording, &st, &mut fonts);
+}
+
 /// Without the export compiled in there is no request to count: zero again.
 #[cfg(not(feature = "pdf"))]
 fn deck_request() {}
 
+/// Nor a step to count after an edit.
+#[cfg(not(feature = "pdf"))]
+fn deck_freeze() {}
+
 /// Each operation, by the name `scripts/instructions.py` passes.
-const OPERATIONS: [(&str, fn()); 7] = [
+const OPERATIONS: [(&str, fn()); 8] = [
     ("body_commit", body_commit),
     ("body_commit_at_cap", body_commit_at_cap),
     ("board_paint", board_paint),
@@ -410,6 +454,7 @@ const OPERATIONS: [(&str, fn()); 7] = [
     ("move_redo", move_redo),
     ("deck_page", deck_page),
     ("deck_request", deck_request),
+    ("deck_freeze", deck_freeze),
 ];
 
 fn main() {
