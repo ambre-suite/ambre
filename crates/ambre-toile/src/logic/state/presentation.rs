@@ -21,7 +21,7 @@ use loro::{LoroDoc, LoroMovableList, LoroText, LoroValue};
 use kurbo::Rect;
 
 #[cfg(feature = "pdf")]
-use crate::logic::interop::{PageSize, PdfPage, PdfPagePlan};
+use crate::logic::interop::{DeckPages, PageSize, PdfPage, PdfPagePlan};
 #[cfg(feature = "pdf")]
 use crate::ui::viewport::{FIT_PAD, ViewportTransform};
 
@@ -481,47 +481,56 @@ impl ToileState {
 
     /// The frame of each page of an export at `page` size, in deck order: the
     /// camera and the clip of [`pdf_pages`](Self::pdf_pages), with no content
-    /// derived. A deck export plans every page at the request and derives each
-    /// one in the pass that records it (`TOILE-IO-099`).
+    /// derived.
     #[cfg(feature = "pdf")]
     pub(crate) fn pdf_page_plans(&self, page: PageSize) -> Vec<PdfPagePlan> {
-        // The camera that frames `rect` into the page, padded like the live
-        // present glide so the slide never touches the page edge.
-        let fit = |rect: Rect| {
-            let mut cam = ViewportTransform::new(ambre_draw::Size::new(
-                f64::from(page.width.get()),
-                f64::from(page.height.get()),
-            ));
-            cam.fit_bounds(rect, FIT_PAD);
-            cam
-        };
+        match self.deck_pages(page) {
+            DeckPages::Planned(plans) => plans,
+            DeckPages::Slides(slides) => slides
+                .iter()
+                .filter_map(|frame| self.slide_plan(frame, page))
+                .collect(),
+        }
+    }
 
-        let slides: Vec<Rect> = self
+    /// The pages of a deck export, framed no further than the request needs
+    /// (`TOILE-IO-099`). Each slide whose frame the board holds is one page,
+    /// read off the deck and the bounds cache: no element is read. An empty
+    /// deck falls back to one unclipped page framing the whole board. A
+    /// board with no content at all yields no page.
+    #[cfg(feature = "pdf")]
+    pub(crate) fn deck_pages(&self, page: PageSize) -> DeckPages {
+        // A dangling `Id<Frame>` is skipped like a dangling connector. Every
+        // frame has bounds, so the cache answers without the element map.
+        let slides: Vec<Id<Element>> = self
             .slide_order()
             .into_iter()
-            .filter_map(|f| self.element_rect(&f.into()))
+            .map(Id::<Element>::from)
+            .filter(|frame| self.bounds.contains_key(frame))
             .collect();
-
         if slides.is_empty() {
-            // Empty deck: one page framing the whole board (unclipped). No
-            // content at all yields no page, so the export reports `Empty`.
-            return self
-                .content_bounds()
-                .map(|bounds| PdfPagePlan {
-                    camera: fit(bounds),
-                    clip: None,
-                })
-                .into_iter()
-                .collect();
+            return DeckPages::Planned(
+                self.content_bounds()
+                    .map(|bounds| PdfPagePlan {
+                        camera: fit_page(bounds, page),
+                        clip: None,
+                    })
+                    .into_iter()
+                    .collect(),
+            );
         }
+        DeckPages::Slides(slides)
+    }
 
-        slides
-            .into_iter()
-            .map(|rect| PdfPagePlan {
-                camera: fit(rect),
-                clip: Some(rect),
-            })
-            .collect()
+    /// The page that frames slide `frame` at `page` size, clipped to the
+    /// frame's rect. `None` when the board holds no such frame.
+    #[cfg(feature = "pdf")]
+    pub(crate) fn slide_plan(&self, frame: &Id<Element>, page: PageSize) -> Option<PdfPagePlan> {
+        let rect = self.element_rect(frame)?;
+        Some(PdfPagePlan {
+            camera: fit_page(rect, page),
+            clip: Some(rect),
+        })
     }
 
     /// The page `plan` frames, its content derived from this board now.
@@ -543,6 +552,30 @@ impl ToileState {
         plans: &[PdfPagePlan],
     ) -> Vec<ambre_core::Validated<ambre_core::ContentHash>> {
         self.pictures_at(plans.iter().map(|plan| plan.camera.to_bus_viewport()))
+    }
+
+    /// The address of each picture the pages `pages` frame at `page` size
+    /// draw, each once and sorted. A board with no picture reads no frame:
+    /// the request of its export then costs nothing per slide
+    /// (`TOILE-IO-099`).
+    #[cfg(feature = "pdf")]
+    pub(crate) fn pictures_of_pages(
+        &self,
+        pages: &DeckPages,
+        page: PageSize,
+    ) -> Vec<ambre_core::Validated<ambre_core::ContentHash>> {
+        if self.pictures.is_empty() {
+            return Vec::new();
+        }
+        match pages {
+            DeckPages::Planned(plans) => self.pictures_of_plans(plans),
+            DeckPages::Slides(slides) => self.pictures_of_plans(
+                &slides
+                    .iter()
+                    .filter_map(|frame| self.slide_plan(frame, page))
+                    .collect::<Vec<_>>(),
+            ),
+        }
     }
 
     /// The page a PNG export of `scope` rasterizes (`toile-import-export`).
@@ -709,6 +742,18 @@ fn notes_text_or_seed(em: &Fields<ElementKey>) -> Option<LoroText> {
 }
 
 /// Read the slide order's frame ids, in order.
+/// The camera that frames `rect` into a page of `page` size, padded like
+/// the live present glide so the slide never touches the page edge.
+#[cfg(feature = "pdf")]
+fn fit_page(rect: Rect, page: PageSize) -> ViewportTransform {
+    let mut cam = ViewportTransform::new(ambre_draw::Size::new(
+        f64::from(page.width.get()),
+        f64::from(page.height.get()),
+    ));
+    cam.fit_bounds(rect, FIT_PAD);
+    cam
+}
+
 fn slide_order_of(list: &LoroMovableList) -> Vec<Id<Frame>> {
     let mut out = Vec::new();
     if let LoroValue::List(items) = list.get_deep_value() {

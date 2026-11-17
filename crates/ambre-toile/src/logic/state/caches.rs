@@ -15,6 +15,7 @@ use loro::{ContainerID, Index, LoroDoc, LoroValue, Subscription};
 
 use crate::logic::index::{ElementBounds, SpatialIndex};
 use ambre_core::id::{Connector, Element, Id};
+use ambre_core::{ContentHash, Validated};
 
 use crate::logic::model::NodeId;
 
@@ -27,18 +28,34 @@ use ambre_core::crdt::CrdtName as _;
 
 impl ToileState {
     /// Recompute one element's AABB from its map and mirror it into `bounds` and
-    /// the R-tree.
-    pub(super) fn update_bounds(&mut self, id: &Id<Element>, em: &Fields<ElementKey>) {
+    /// the R-tree. Returns the AABB it replaced, `None` for an element the
+    /// caches did not hold yet.
+    pub(super) fn update_bounds(
+        &mut self,
+        id: &Id<Element>,
+        em: &Fields<ElementKey>,
+    ) -> Option<Rect> {
         let rect = expanded_aabb(stored_rect(em), rotation_of(em));
-        self.bounds.insert(id.clone(), rect);
         self.index
             .update(ElementBounds::from_rect(id.clone(), rect));
+        self.bounds.insert(id.clone(), rect)
+    }
+
+    /// Note the stored file `id` draws, or forget `id` when it draws none.
+    /// The export lists its pictures off this map alone, so a request never
+    /// reads the other elements (`TOILE-IO-099`).
+    pub(super) fn note_picture(&mut self, id: &Id<Element>, em: &Fields<ElementKey>) {
+        match picture_of(em) {
+            Some(hash) => self.pictures.insert(id.clone(), hash),
+            None => self.pictures.remove(id),
+        };
     }
 
     /// Full rebuild of every derived cache from `doc`. Used after a remote
     /// import; the incremental path (local commands) keeps them in step directly.
     pub(super) fn rebuild_caches(&mut self) {
         self.bounds.clear();
+        self.pictures.clear();
         self.parents.clear();
         self.members.clear();
         let mut leaves = Vec::new();
@@ -63,6 +80,9 @@ impl ToileState {
                     }
                     let (stored, rot) = map_placement(fields);
                     let id = Id::<Element>::from_text(key.clone());
+                    if let Some(hash) = value_picture(fields) {
+                        self.pictures.insert(id.clone(), hash);
+                    }
                     let rect = expanded_aabb(stored, rot);
                     self.bounds.insert(id.clone(), rect);
                     leaves.push(ElementBounds::from_rect(id, rect));
@@ -114,14 +134,18 @@ impl ToileState {
     fn refresh_element(&mut self, id: &Id<Element>) {
         let Some(em) = self.element_map(id) else {
             self.bounds.remove(id);
+            self.pictures.remove(id);
             self.index.remove(id);
             self.relink_members(id, Vec::new());
             return;
         };
         let kids = self.children_of(id);
         self.relink_members(id, kids);
-        if !has_type(&em, ElementKind::Group) {
-            self.update_bounds(id, &em);
+        // Only a birth writes the address of a picture, so an element the
+        // caches held already keeps the entry it had. A move of many
+        // elements then reads no address.
+        if !has_type(&em, ElementKind::Group) && self.update_bounds(id, &em).is_none() {
+            self.note_picture(id, &em);
         }
     }
 
@@ -293,6 +317,22 @@ impl ToileState {
 
 /// Remove one `value` from the list `map` keeps under `key`, and the key once
 /// the list is empty.
+/// The stored file an image element draws, `None` for any other element or
+/// for an address that does not parse.
+fn picture_of(em: &Fields<ElementKey>) -> Option<Validated<ContentHash>> {
+    super::derive::image_address(em).filter(|_| has_type(em, ElementKind::Image))
+}
+
+/// [`picture_of`], read off the resolved fields of a full rebuild.
+fn value_picture(fields: FieldValues<'_, ElementKey>) -> Option<Validated<ContentHash>> {
+    match fields.get(ElementKey::Hash) {
+        Some(LoroValue::String(hash)) if value_has_type(fields, ElementKind::Image) => {
+            Validated::<ContentHash>::parse(hash.as_str()).ok()
+        }
+        _ => None,
+    }
+}
+
 fn drop_one(
     map: &mut HashMap<Id<Element>, Vec<Id<Element>>>,
     key: &Id<Element>,

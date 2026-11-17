@@ -2188,6 +2188,7 @@ ambre-toile | src/logic/connector.rs | crate::logic::connector | outline_meets()
 ambre-toile | src/logic/connector.rs | crate::logic::connector | segment_meets() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/index.rs | crate::logic::index | <ElementBounds as RTreeObject>::Envelope | assoc | AABB<[f64;2]>	foreign-api	the envelope rstar builds over the [f64;2] point it implements Point for, the one the index stores
 ambre-toile | src/logic/index.rs | crate::logic::index | SpatialIndex::is_empty() | ret | bool	generic	predicate or handled-flag result
+ambre-toile | src/logic/index.rs | crate::logic::index | SpatialIndex::seen_by() | ret | bool	generic	predicate: whether a camera sees the leaf
 ambre-toile | src/logic/interop/board_import.rs | crate::logic::interop::board_import | ROUND_CORNER_SHARE | const | f64	math	the share of its shorter side a rounded rectangle takes as its corner radius: a ratio
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | Entry.pixels | field | Option<Vec<u8>>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaCache::is_empty() | ret | bool	generic	predicate or handled-flag result

@@ -362,9 +362,9 @@ fn deck_page() {
 }
 
 /// The whole pass of the request of a deck export: what an edit typed at the
-/// request waits behind. It reads the frame of every page, the pictures and
-/// the version of the board. It asks for no stored file, since the deck draws
-/// no picture. Then it derives and records the first page
+/// request waits behind. It reads the slides, the pictures and the version
+/// of the board. It asks for no stored file, since the deck draws no
+/// picture. Then it frames, derives and records the first page
 /// (`ambre-spec-toile-pdf-export.md section 3`, step 1). The font context is
 /// seeded outside the count.
 #[cfg(feature = "pdf")]
@@ -384,17 +384,37 @@ fn ambre_budget_toile_deck_request(
     black_box(recording)
 }
 
-/// The request of the export of the 50-slide deck, on the shipped faces: the
-/// "Toile PDF export, one slice" row of `ambre-spec-budgets.md section 1`.
+/// The request of the export of a deck of `slides` slides, on the shipped
+/// faces: the "Toile PDF export, one slice" row of
+/// `ambre-spec-budgets.md section 1`.
 #[cfg(feature = "pdf")]
-fn deck_request() {
-    let st = common::deck(common::SLIDES);
+fn deck_request_of(slides: usize) {
+    let st = common::deck(slides);
     let mut fonts = common::shipped_fonts();
     let recording = ambre_budget_toile_deck_request(&st, &mut fonts);
     assert!(
         !recording.is_recorded(),
-        "the request records the first page of fifty, not the last"
+        "the request records the first page, not the last"
     );
+}
+
+/// The request of the export of the 50-slide deck.
+#[cfg(feature = "pdf")]
+fn deck_request() {
+    deck_request_of(common::SLIDES);
+}
+
+/// The slides of the deck that shows the request flat: four times
+/// [`common::SLIDES`].
+#[cfg(feature = "pdf")]
+const LARGE_SLIDES: usize = 200;
+
+/// The request of a deck four times larger. Its count stays near the
+/// count of the 50-slide deck: the request reads no element that the first
+/// page leaves out (`TOILE-IO-099`).
+#[cfg(feature = "pdf")]
+fn deck_request_large() {
+    deck_request_of(LARGE_SLIDES);
 }
 
 /// Without the export compiled in there is no page to count: the script then
@@ -441,12 +461,16 @@ fn deck_freeze() {
 #[cfg(not(feature = "pdf"))]
 fn deck_request() {}
 
+/// Nor a request of the larger deck.
+#[cfg(not(feature = "pdf"))]
+fn deck_request_large() {}
+
 /// Nor a step to count after an edit.
 #[cfg(not(feature = "pdf"))]
 fn deck_freeze() {}
 
 /// Each operation, by the name `scripts/instructions.py` passes.
-const OPERATIONS: [(&str, fn()); 8] = [
+const OPERATIONS: [(&str, fn()); 9] = [
     ("body_commit", body_commit),
     ("body_commit_at_cap", body_commit_at_cap),
     ("board_paint", board_paint),
@@ -454,6 +478,7 @@ const OPERATIONS: [(&str, fn()); 8] = [
     ("move_redo", move_redo),
     ("deck_page", deck_page),
     ("deck_request", deck_request),
+    ("deck_request_large", deck_request_large),
     ("deck_freeze", deck_freeze),
 ];
 

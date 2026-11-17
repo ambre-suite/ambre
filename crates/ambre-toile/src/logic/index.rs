@@ -9,7 +9,7 @@
 use ambre_core::hash::HashMap;
 
 use kurbo::{Point, Rect};
-use rstar::{AABB, RTree, RTreeObject};
+use rstar::{AABB, Envelope as _, RTree, RTreeObject};
 
 use ambre_core::id::{Element, Id};
 
@@ -89,6 +89,21 @@ impl SpatialIndex {
         self.tree
             .locate_in_envelope_intersecting(&AABB::from_corners([r.x0, r.y0], [r.x1, r.y1]))
             .map(|e| e.id.clone())
+    }
+
+    /// Whether [`query_visible`](Self::query_visible) yields `id` for any of
+    /// `cameras`. O(cameras), with no descent: a caller that already holds a
+    /// few ids tests them without reading the other leaves. `false` for an
+    /// id with no leaf.
+    pub fn seen_by(&self, id: &Id<Element>, cameras: &[Viewport]) -> bool {
+        self.leaves.get(id).is_some_and(|leaf| {
+            let envelope = leaf.envelope();
+            // The envelope `query_visible` builds, so both tests agree.
+            cameras.iter().any(|vp| {
+                let r = vp.to_world_rect();
+                AABB::from_corners([r.x0, r.y0], [r.x1, r.y1]).intersects(&envelope)
+            })
+        })
     }
 
     /// Point hit pre-filter (screen->world done by caller). Exact hit-test

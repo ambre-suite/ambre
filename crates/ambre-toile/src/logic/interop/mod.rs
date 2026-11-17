@@ -49,6 +49,8 @@ pub use media::{
     CachedBlobs, ContentHash, MediaCache, MediaCacheCapacity, MediaState, RequestOutcome,
 };
 #[cfg(feature = "pdf")]
+pub(crate) use pdf_export::DeckPages;
+#[cfg(feature = "pdf")]
 pub use pdf_export::{
     DeckRecording, DeckStage, EXPORT_BYTES_CAP, PageSize, PdfExportError, PdfPage, PdfPagePlan,
     Thumbnails, export_pdf, record_pdf, stored_picture, write_pdf,

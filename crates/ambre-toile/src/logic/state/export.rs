@@ -252,9 +252,9 @@ impl ToileState {
     }
 
     /// Start a deck export at `page` size, with no page recorded yet
-    /// (`TOILE-IO-099`). It reads the frame of every page, the pictures and
-    /// the version of the board now, and derives no page. Each step derives
-    /// one page from the board at that version, so an edit after this call
+    /// (`TOILE-IO-099`). It reads the slides, the pictures and the version of
+    /// the board now, and derives no page. Each step frames and derives one
+    /// page from the board at that version, so an edit after this call
     /// reaches no page (`TOILE-IO-133`).
     ///
     /// The recording holds the `media` map's inline thumbnails. The caller then
@@ -274,7 +274,7 @@ impl ToileState {
         // The page camera maps world units onto PDF points 1:1, so the text
         // cache of the recording runs at unit scale like the export walk.
         crate::logic::interop::DeckRecording::new(
-            self.pdf_page_plans(page),
+            self.deck_pages(page),
             self,
             page,
             ambre_canvas::Theme::Light.palette(),
@@ -300,7 +300,7 @@ impl ToileState {
     ) -> Result<crate::logic::interop::PngRequest, crate::logic::interop::PngExportError> {
         let png = self.png_page(scope)?;
         let mut recording = crate::logic::interop::DeckRecording::new(
-            vec![png.plan],
+            crate::logic::interop::DeckPages::Planned(vec![png.plan]),
             self,
             png.points,
             ambre_canvas::Theme::Light.palette(),
@@ -725,6 +725,99 @@ mod tests {
         }
         st.handle_command(ToileCommand::SetSlideOrder { order });
         st
+    }
+
+    /// Create `kind` at `at`, sized `size`, holding `content`: its id.
+    #[cfg(feature = "pdf")]
+    fn placed(
+        st: &mut ToileState,
+        kind: ElementKind,
+        at: Point,
+        size: Size,
+        content: InitContent,
+    ) -> ambre_core::id::Id<ambre_core::id::Element> {
+        st.handle_command(ToileCommand::CreateElement {
+            kind,
+            at,
+            size,
+            content,
+            fill: None,
+            correlate: None,
+        })
+        .display
+        .into_iter()
+        .find_map(|e| match e {
+            ToileEvent::ElementCreated { id, .. } => Some(id),
+            _ => None,
+        })
+        .expect("a minted id")
+    }
+
+    /// The addresses a deck export of `st` asks the stored files of.
+    #[cfg(feature = "pdf")]
+    fn fetched(st: &ToileState) -> Vec<ambre_core::Validated<ambre_core::ContentHash>> {
+        st.record_deck(crate::logic::interop::PageSize::default())
+            .expect("the deck has a page")
+            .fetch_full()
+            .into_iter()
+            .filter_map(|request| match request {
+                crate::logic::command::ToileRequest::DownloadMedia { content_hash, .. } => {
+                    Some(content_hash)
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// `TOILE-IO-099`: the request lists its pictures off the picture cache,
+    /// and the cache follows every path that writes an image. A local birth,
+    /// a peer's snapshot, a peer's delete and its undo each move it. A
+    /// picture no camera sees is not fetched.
+    #[cfg(feature = "pdf")]
+    #[test]
+    fn the_request_lists_the_pictures_the_cache_holds() {
+        let hash = |c: &str| {
+            ambre_core::Validated::<ambre_core::ContentHash>::parse(c.repeat(64)).expect("a hash")
+        };
+        let image = |h| InitContent::Image(crate::logic::command::MediaRef::Stored(h));
+        let mut a = ToileState::new();
+        let frame = placed(
+            &mut a,
+            ElementKind::Frame,
+            Point::ZERO,
+            Size::new(400.0, 300.0),
+            InitContent::None,
+        );
+        let order = vec![a.frame(&frame).expect("a frame")];
+        a.handle_command(ToileCommand::SetSlideOrder { order });
+        let seen = placed(
+            &mut a,
+            ElementKind::Image,
+            Point::new(20.0, 20.0),
+            Size::new(60.0, 40.0),
+            image(hash("a")),
+        );
+        placed(
+            &mut a,
+            ElementKind::Image,
+            Point::new(9_000.0, 9_000.0),
+            Size::new(60.0, 40.0),
+            image(hash("b")),
+        );
+        assert_eq!(fetched(&a), [hash("a")], "the slide sees one picture");
+
+        let mut b = ToileState::new();
+        b.apply_remote_snapshot(&a.export_snapshot());
+        assert_eq!(fetched(&b), [hash("a")], "a peer rebuilds the same list");
+
+        let out = a.handle_command(ToileCommand::DeleteElements { ids: vec![seen] });
+        b.apply_remote(&out.update.expect("a delete writes the board"));
+        assert!(fetched(&b).is_empty(), "a peer's delete drops the picture");
+
+        let out = a.handle_command(ToileCommand::Undo);
+        b.apply_remote(&out.update.expect("the undo writes the board"));
+        assert_eq!(fetched(&a), [hash("a")], "the undo brings it back");
+        assert_eq!(fetched(&b), [hash("a")], "and the peer sees it again");
     }
 
     /// `TOILE-IO-099`: a recording takes one page per step and says how far

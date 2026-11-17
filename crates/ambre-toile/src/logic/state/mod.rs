@@ -114,6 +114,10 @@ pub struct ToileState {
     /// Rotation-expanded world AABB per element; feeds culling + connector
     /// routing. Derived, never authoritative.
     bounds: HashMap<Id<Element>, Rect>,
+    /// The stored file each image element draws. Derived, never
+    /// authoritative: an export lists its pictures off it and reads no
+    /// other element (`TOILE-IO-099`).
+    pictures: HashMap<Id<Element>, ambre_core::Validated<ambre_core::ContentHash>>,
     /// Materialized paint order, mirrored from the `layers` list.
     layers: Vec<NodeId>,
     /// The groups and frames whose `children` list names each element, one
@@ -383,6 +387,7 @@ impl ToileState {
             doc,
             index: SpatialIndex::default(),
             bounds: HashMap::default(),
+            pictures: HashMap::default(),
             layers: Vec::new(),
             parents: HashMap::default(),
             members: HashMap::default(),
@@ -1377,8 +1382,9 @@ impl ToileState {
         let mut leaves: Vec<Id<Element>> = self.index.ids().collect();
         leaves.sort();
         format!(
-            "bounds {:?}\nleaves {leaves:?}\nparents {:?}\nmembers {:?}\nlayers {:?}",
+            "bounds {:?}\npictures {:?}\nleaves {leaves:?}\nparents {:?}\nmembers {:?}\nlayers {:?}",
             sorted(self.bounds.iter().map(|(k, r)| (k.clone(), *r))),
+            sorted(self.pictures.iter().map(|(k, h)| (k.clone(), h.clone()))),
             lists(&self.parents),
             lists(&self.members),
             self.layers,

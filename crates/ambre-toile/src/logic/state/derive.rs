@@ -32,7 +32,7 @@ use super::names::{BoardKey, ConnectorKey, ElementKey, Fields, board};
 
 /// The stored file an image element names, `None` when it names none or
 /// a peer wrote an address that does not parse.
-fn image_address(
+pub(super) fn image_address(
     em: &Fields<ElementKey>,
 ) -> Option<ambre_core::Validated<ambre_core::ContentHash>> {
     str_of(em, ElementKey::Hash)
@@ -161,28 +161,22 @@ impl ToileState {
 
     /// The address of each picture the board draws at any of `cameras`, each
     /// once and sorted: the image elements
-    /// [`derive_viewport_at`](Self::derive_viewport_at) keeps there. Each
-    /// element is read once, however many cameras see it. The request of a
-    /// deck export lists the stored files to fetch with it and derives no
-    /// page (`TOILE-IO-099`).
+    /// [`derive_viewport_at`](Self::derive_viewport_at) keeps there. It
+    /// reads the picture cache alone, so its cost follows the image elements
+    /// and the cameras, never the other elements. The request of a deck
+    /// export lists the stored files to fetch with it and derives no page
+    /// (`TOILE-IO-099`).
     #[cfg(feature = "pdf")]
     pub(crate) fn pictures_at(
         &self,
         cameras: impl Iterator<Item = Viewport>,
     ) -> Vec<ambre_core::Validated<ambre_core::ContentHash>> {
-        let mut seen: HashSet<Id<Element>> = HashSet::default();
-        for vp in cameras {
-            seen.extend(self.index.query_visible(&vp));
-        }
-        let elements = super::names::root_map(&self.doc, super::names::Root::Elements);
-        let mut pictures: Vec<_> = seen
+        let cameras: Vec<Viewport> = cameras.collect();
+        let mut pictures: Vec<_> = self
+            .pictures
             .iter()
-            .filter_map(|id| {
-                let em = super::names::entry_in::<ElementKey>(&elements, id)?;
-                // The address goes first: most elements hold none, and that
-                // one read is cheaper than the kind.
-                image_address(&em).filter(|_| has_type(&em, ElementKind::Image))
-            })
+            .filter(|(id, _)| self.index.seen_by(id, &cameras))
+            .map(|(_, hash)| hash.clone())
             .collect();
         pictures.sort_unstable();
         pictures.dedup();

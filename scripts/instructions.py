@@ -142,9 +142,9 @@ CEILINGS = [
         each="ambre_pass_end_toile_deck_page",
         features=("ambre-toile/pdf",),
     ),
-    # The pass of the request of that export, whole: the frame of every page,
-    # the pictures and the version read off the board, then the first page
-    # derived and recorded. It derives one page, not the deck (`TOILE-IO-099`).
+    # The pass of the request of that export, whole: the slides, the
+    # pictures and the version read off the board, then the first page
+    # framed, derived and recorded. It derives one page, not the deck (`TOILE-IO-099`).
     Ceiling(
         crate="ambre-toile",
         bench="instructions",
@@ -152,6 +152,21 @@ CEILINGS = [
         symbol="ambre_budget_toile_deck_request",
         row="Toile PDF export, one slice: the pass of the request (< 4 ms)",
         ceiling=4 * PER_MS,
+        features=("ambre-toile/pdf",),
+    ),
+    # The same pass for a deck of 200 slides. The request reads no element to
+    # list its pictures, and frames each page in the step that records it.
+    # The ceiling is the count reached on 2026-11-17 under the fixed key,
+    # plus 0.5 % rounded up to the next 10 000: 1 714 580, against 1 516 899
+    # for 50 slides. A request that reads each element again fails here. It
+    # only moves down (`TOILE-IO-099`).
+    Ceiling(
+        crate="ambre-toile",
+        bench="instructions",
+        operation="deck_request_large",
+        symbol="ambre_budget_toile_deck_request",
+        row="Toile PDF export, one slice: the pass of the request, 200 slides (< 4 ms, the ceiling reached)",
+        ceiling=1_730_000,
         features=("ambre-toile/pdf",),
     ),
     # The walk and the engine step of one structural edit, the two phases its

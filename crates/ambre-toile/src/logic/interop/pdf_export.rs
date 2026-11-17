@@ -79,8 +79,8 @@ pub struct PdfPage {
 }
 
 /// The frame of one page before its content is derived: the camera that fits
-/// the slide into the page, and the clip of a [`PdfPage`]. A deck export plans
-/// every page at the request and derives each one in the step that records it.
+/// the slide into the page, and the clip of a [`PdfPage`]. A deck export frames
+/// and derives each page in the step that records it.
 #[derive(Debug, Clone, Copy)]
 pub struct PdfPagePlan {
     pub(crate) camera: ViewportTransform,
@@ -238,11 +238,46 @@ pub type Thumbnails = HashMap<
     ambre_core::Payload<ambre_core::ThumbnailPng>,
 >;
 
+/// The pages of a deck export, as the request reads them (`TOILE-IO-099`).
+pub(crate) enum DeckPages {
+    /// Each page framed already: the page of a board with no deck, or the
+    /// one page of a raster export.
+    Planned(Vec<PdfPagePlan>),
+    /// The frame of each slide, in deck order. Each page is framed in the
+    /// step that records it, so the request reads no frame.
+    Slides(Vec<ambre_core::id::Id<ambre_core::id::Element>>),
+}
+
+impl DeckPages {
+    /// How many pages the export records: one step each.
+    fn steps(&self) -> Count<Steps> {
+        Count::<Steps>::of(match self {
+            Self::Planned(plans) => plans.len(),
+            Self::Slides(slides) => slides.len(),
+        })
+    }
+}
+
+/// The pages a recording has still to record, in deck order.
+enum PageQueue {
+    Planned(std::vec::IntoIter<PdfPagePlan>),
+    Slides(std::vec::IntoIter<ambre_core::id::Id<ambre_core::id::Element>>),
+}
+
+impl From<DeckPages> for PageQueue {
+    fn from(pages: DeckPages) -> Self {
+        match pages {
+            DeckPages::Planned(plans) => Self::Planned(plans.into_iter()),
+            DeckPages::Slides(slides) => Self::Slides(slides.into_iter()),
+        }
+    }
+}
+
 /// A deck export in progress: its pages are recorded one per step
 /// (`TOILE-IO-099`).
 ///
-/// The recording owns the frame of every page and the stored pictures, read
-/// at the request. Each step derives the content of its own page alone, so
+/// The recording owns the slides and the stored pictures, read at the
+/// request. Each step frames and derives its own page alone, so
 /// the request costs one page and not the deck (`TOILE-IO-099`). The Logic
 /// thread applies a local edit or a remote delta between two steps. The file
 /// still shows the deck as it stood at the request (`TOILE-IO-133`). A step
@@ -253,8 +288,10 @@ pub type Thumbnails = HashMap<
 /// PDF module writes it today through [`write_pdf`]. Another sink of a draw
 /// list takes the same steps unchanged.
 pub struct DeckRecording {
-    /// The frames of the pages still to record, in deck order.
-    plans: std::vec::IntoIter<PdfPagePlan>,
+    /// The pages still to record, in deck order.
+    pages: PageQueue,
+    /// The size of every page.
+    page: PageSize,
     /// The board the pages are derived from: the version of the request.
     source: DeckSource,
     /// The address of each picture the pages draw, listed at the request.
@@ -288,28 +325,30 @@ pub struct DeckRecording {
 }
 
 impl DeckRecording {
-    /// A recording of the pages `plans` frame at `page` size, read off
-    /// `board` as it stands now, with no page recorded yet. A picture of
+    /// A recording of `pages` at `page` size, read off `board` as it stands
+    /// now, with no page recorded yet. A picture of
     /// `thumbs` is decoded by the step of the first page that draws it, so
     /// the start decodes none. The start derives no page either.
     ///
     /// # Errors
     ///
-    /// [`PdfExportError::Empty`] on an empty `plans` (`TOILE-IO-048`).
+    /// [`PdfExportError::Empty`] on empty `pages` (`TOILE-IO-048`).
     pub(crate) fn new(
-        plans: Vec<PdfPagePlan>,
+        pages: DeckPages,
         board: &ToileState,
         page: PageSize,
         palette: &'static Palette,
         thumbs: Thumbnails,
     ) -> Result<Self, PdfExportError> {
-        if plans.is_empty() {
+        let total = pages.steps();
+        if total == Count::ZERO {
             return Err(PdfExportError::Empty);
         }
         Ok(Self {
-            total: Count::<Steps>::of(plans.len()),
-            pictures: board.pictures_of_plans(&plans),
-            plans: plans.into_iter(),
+            total,
+            pictures: board.pictures_of_pages(&pages, page),
+            pages: pages.into(),
+            page,
             source: DeckSource::AtRequest(board.frontiers()),
             done: Count::ZERO,
             thumbs,
@@ -336,10 +375,26 @@ impl DeckRecording {
     /// the page shows it as it stood at the request. `font_cx` carries the
     /// base faces, as for [`export_pdf`].
     pub fn record_next(&mut self, board: &ToileState, font_cx: &mut FontContext) {
-        let Some(plan) = self.plans.next() else {
+        let source = self.source.board(board);
+        let plan = match &mut self.pages {
+            PageQueue::Planned(plans) => plans.next(),
+            // The frame is read off the board at the request, like the
+            // content of its page (`TOILE-IO-133`).
+            PageQueue::Slides(slides) => match slides.next() {
+                Some(frame) => source.slide_plan(&frame, self.page),
+                None => return,
+            },
+        };
+        let Some(plan) = plan else {
+            // A slide whose frame the version of the request lacks: its step
+            // counts and records no page. The request listed held frames
+            // only, so no deck reaches this.
+            if matches!(self.pages, PageQueue::Slides(_)) {
+                self.done = self.done.incremented();
+            }
             return;
         };
-        let pdf_page = self.source.board(board).derive_pdf_page(plan);
+        let pdf_page = source.derive_pdf_page(plan);
         self.decode_pictures_of(&pdf_page);
         record_page(
             &mut self.document,

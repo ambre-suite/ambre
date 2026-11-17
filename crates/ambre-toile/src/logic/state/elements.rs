@@ -117,6 +117,9 @@ impl ToileState {
         self.bounds.insert(id.clone(), rect);
         self.index
             .insert(ElementBounds::from_rect(id.clone(), rect));
+        if let InitContent::Image(MediaRef::Stored(hash)) = content {
+            self.pictures.insert(id.clone(), hash);
+        }
         self.layers.push(NodeId::Element(id.clone()));
         Ok(id)
     }
@@ -558,6 +561,7 @@ impl ToileState {
         self.drop_slides(&del);
         for id in &expanded {
             self.bounds.remove(id);
+            self.pictures.remove(id);
             self.index.remove(id);
         }
         // A group whose members were all deleted is now empty and meaningless;

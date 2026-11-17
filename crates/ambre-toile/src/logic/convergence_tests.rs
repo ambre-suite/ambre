@@ -6105,6 +6105,12 @@ enum PeerOp {
         x: f64,
         y: f64,
     },
+    /// An image element: its address feeds the picture cache an export
+    /// lists its pictures from (`TOILE-IO-099`).
+    CreateImage {
+        x: f64,
+        y: f64,
+    },
     SetSlideOrderRot {
         by: usize,
     },
@@ -6170,6 +6176,7 @@ fn op_strategy() -> impl Strategy<Value = PeerOp> {
         (0usize..6, 0usize..6).prop_map(|(i, j)| PeerOp::ConnectNth { i, j }),
         (-200.0f64..200.0, -200.0f64..200.0).prop_map(|(x, y)| PeerOp::Stroke { x, y }),
         (-200.0f64..200.0, -200.0f64..200.0).prop_map(|(x, y)| PeerOp::CreateFrame { x, y }),
+        (-200.0f64..200.0, -200.0f64..200.0).prop_map(|(x, y)| PeerOp::CreateImage { x, y }),
         (0usize..6).prop_map(|by| PeerOp::SetSlideOrderRot { by }),
         (0usize..6, 0usize..6).prop_map(|(frame, nth)| PeerOp::FrameNth { frame, nth }),
         (0usize..6).prop_map(|nth| PeerOp::UnframeNth { nth }),
@@ -6307,6 +6314,17 @@ fn apply_local(
             at: Point::new(*x, *y),
             size: Size::new(200.0, 200.0),
             content: InitContent::None,
+            fill: None,
+            correlate: None,
+        }),
+        PeerOp::CreateImage { x, y } => st.handle_command(ToileCommand::CreateElement {
+            kind: ElementKind::Image,
+            at: Point::new(*x, *y),
+            size: Size::new(60.0, 40.0),
+            content: InitContent::Image(crate::logic::command::MediaRef::Stored(
+                ambre_core::Validated::<ambre_core::ContentHash>::parse("cd".repeat(32))
+                    .expect("a hash"),
+            )),
             fill: None,
             correlate: None,
         }),

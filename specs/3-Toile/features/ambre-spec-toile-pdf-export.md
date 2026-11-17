@@ -39,7 +39,7 @@ characters is `ambre-spec-pdf-export.md section 1.1`. What a deck adds is the pa
 | `TOILE-IO-029` | `POST` | A user MUST be able to export the deck as a PDF. | this spec section 4 | `ambre_logic::dispatch::tests::a_deck_export_answers_with_the_file` -- it sends the menu's own command to a live board and reads the named file out of the answer; `ambre_toile::ui::menu_bar::tests::file_menu_exports_resolve_to_board_commands` -- the entry that sends it; `ambre_toile::logic::state::export::tests::the_deck_exports_as_a_pdf_document` -- the Logic handler | none | verified |
 | `TOILE-IO-046` | `FRAME` | An export MUST NOT move the viewer's own camera. | this spec section 3 | structural -- the page builder takes the board by shared reference and mints a fresh transform per page, and the viewport it would move is a plain field, not a container that mutates through such a reference | none | verified |
 | `TOILE-IO-047` | `FRAME` | A page MUST NOT carry the board grid. | this spec section 3 | `ambre_toile::logic::state::presentation::pdf_tests::a_page_carries_no_grid` -- the page draws no grid line, where the same viewport walked for editing draws some | none | verified |
-| `TOILE-IO-099` | `FRAME` | An export MUST NOT stall the edits on the board it reads. | this spec section 3; `ambre-spec-budgets.md section 1` | `ambre_logic::pass_tests::an_edit_and_a_remote_delta_land_mid_deck_export` -- the export records one page per pass and the loop comes back for it unasked. A local edit and a peer's delta of the same board each land between two pages, while the export still runs; `ambre_toile::logic::state::export::tests::a_deck_records_one_page_per_step` -- one page per step, and the steps record what one call records; ci-gate -- `scripts/instructions.py`, run by `just instructions` in the CI `instructions` job, holds each page of a deck of 50 slides, `deck_page` of `crates/ambre-toile/benches/instructions.rs`, and the whole pass of its request, `deck_request`, under the slice row of `ambre-spec-budgets.md section 1`. The step after an edit copies the board, and no ceiling holds it, section 6 | none | verified |
+| `TOILE-IO-099` | `FRAME` | An export MUST NOT stall the edits on the board it reads. | this spec section 3; `ambre-spec-budgets.md section 1` | `ambre_logic::pass_tests::an_edit_and_a_remote_delta_land_mid_deck_export` -- the export records one page per pass and the loop comes back for it unasked. A local edit and a peer's delta of the same board each land between two pages, while the export still runs; `ambre_toile::logic::state::export::tests::a_deck_records_one_page_per_step` -- one page per step, and the steps record what one call records; ci-gate -- `scripts/instructions.py`, run by `just instructions` in the CI `instructions` job, holds each page of a deck of 50 slides, `deck_page` of `crates/ambre-toile/benches/instructions.rs`, and the whole pass of its request, `deck_request`, under the slice row of `ambre-spec-budgets.md section 1`. It holds the same pass for a deck of 200 slides, `deck_request_large`, under the count it reached: a request that reads each element again fails; `ambre_toile::logic::state::export::tests::the_request_lists_the_pictures_the_cache_holds` -- the cache of image elements follows a birth, a peer's snapshot, a peer's delete and an undo, and a picture no camera sees is not fetched. The step after an edit copies the board, and no ceiling holds it, section 6 | none | verified |
 | `TOILE-IO-133` | `FRAME` | An export MUST write the deck as it stood at the request: an edit made while it runs MUST NOT reach the file. | this spec section 3 | `ambre_toile::logic::state::export::tests::an_edit_mid_export_reaches_the_board_and_no_page` -- a shape dropped on the second slide between two pages reaches the board, and the file equals the one recorded once the drop is undone; `ambre_toile::logic::state::export::tests::a_remote_delta_mid_export_reaches_the_board_and_no_page` -- a peer's shape merged between two pages reaches the board, and the file equals the one recorded before it; `ambre_toile::logic::state::import::tests::an_edit_while_the_files_are_fetched_reaches_no_page` -- a shape dropped while the stored file is owed reaches no page | none | verified |
 | `TOILE-IO-134` | `POST` | An export MUST report its progress after every page but the last. | this spec section 3; `ambre-spec-interop.md` | `ambre_logic::pass_tests::an_edit_and_a_remote_delta_land_mid_deck_export` -- a deck of four slides answers three progress reports, then the file; `ambre_toile::logic::state::export::tests::a_deck_records_one_page_per_step` -- each step counts one page more against one total | none | verified |
 | `TOILE-IO-135` | `POST` | An export asked while another runs on the same board MUST answer its own file, after the first one. | this spec section 3 | `ambre_logic::pass_tests::a_second_deck_export_answers_both_files` | none | verified |
@@ -111,15 +111,15 @@ pub struct PageSize { pub width: PrintLength<Pt>, pub height: PrintLength<Pt> }
 board at the version of the request, and at no other. So a remote delta merges while it runs, and
 `ARCH-031` does not land it first.
 
-1. at the request, read the frame of every page, every stored thumbnail, still encoded, and the
-   version of the board. List the address of each image element the camera of a page sees. No page
-   is derived;
+1. at the request, read the slides of the deck, every stored thumbnail, still encoded, and the
+   version of the board. List the address of each image element the camera of a page sees, off the
+   cache of image elements. No page is derived, and a board with no picture frames no page;
 2. ask the Sync worker for the stored file of each address listed, one download per address,
    and record nothing until each answered. The Sync worker fetches the ciphertext and opens it. A
    page draws an opened file whole. A refused one, or one past the export cap, leaves the thumbnail
    and a line in the report (`TOILE-IO-100`). Then record the first page;
 3. record one more page on each pass of the Logic thread, and serve the other messages between two
-   pages (`TOILE-IO-099`). A pass derives its own page alone. It reads the board while the board
+   pages (`TOILE-IO-099`). A pass frames and derives its own page alone. It reads the board while the board
    holds the version of the request. After an edit or a delta, during the downloads too, the next
    pass copies the board at that version. Every later page reads the copy (`TOILE-IO-133`). A page
    decodes each thumbnail it is the first to draw;
@@ -192,6 +192,8 @@ pure-vector file -- are `ambre-spec-pdf-export.md section 5`. Toile's own:
 | The export reads the board at the version of the request | an edit lands the export first, as in Prose (`PROSE-IO-100`) | the edit then waits for the rest of the export, which is the stall this export removes |
 | Each page is derived at its own step, from the version of the request | every page derived at the request | the pass of the request then derives the deck: 9 248 839 instructions for 50 slides on 2026-11-15, about 2.9 times the slice row of `ambre-spec-budgets.md section 1` |
 | The request lists the pictures off the image elements the camera of each page sees | the pictures read off the derived pages | the downloads come before the first page, so the request would derive every page again |
+| The request lists the pictures off a cache of the image elements | each element the cameras see, read at the request | the request then grows with the deck: 2 971 844 instructions for 50 slides on 2026-11-17, about 800 000 of them for the list. The cache holds the few image elements, and a birth alone writes an address |
+| Each page is framed at its own step | the frame of every page read at the request | each frame costs about 7 600 instructions, so 200 slides spent 1 531 234 of them in the request on 2026-11-17. The step reads its frame from the board at the version of the request, like its content |
 | The board is copied only once it changed | a copy of the board taken at each request | the copy is the dearest step of the export, section 6, and most exports see no edit. The version of the board costs nothing to keep |
 | The board is copied only once it changed | each page derived from the live board | an edit made between two pages would reach the later pages alone, so one file would show two states of the deck |
 | `krilla` is compiled behind a feature | linking it unconditionally | the writer is large and only the Logic thread needs it. The saving is real for every build that is not the launcher -- the workspace test run, the server, a host tool -- and not for the client: the launcher enables the feature, so the shipped bundle carries the writer either way (`ambre-spec-budgets.md section 5`). Making the client pay only on the first export needs a separate wasm chunk, which no build step produces -- section 6 |
@@ -212,9 +214,12 @@ The shared gaps are in `ambre-spec-pdf-export.md section 6`. Toile's own:
 
   On 2026-11-15 the fork took about 32 000 000 of them, and the undo history of the copy about
   17 500 000. The copy never uses that history.
-* **The pass of the request still reads each element its cameras see** (`TOILE-IO-099`). The list
-  of pictures reads the element once, whatever its kind. On 2026-11-17 that part cost about 800 000
-  of the 2 971 844 instructions of `deck_request`, for 351 elements. It grows with the deck.
+* **The pass of the request still grows with the board** (`TOILE-IO-099`). It reads no element
+  to list its pictures, and frames no page beyond the first. On 2026-11-17, `scripts/instructions.py`
+  counted 1 516 899 instructions for `deck_request` and 1 714 580 for `deck_request_large`, 200
+  slides. The rest grows by about 1 300 instructions per slide. The walk of the first page reads
+  every entry of the paint order, and the request reads the slide list whole. A board that holds a
+  picture still frames every slide at the request, to test each picture against each camera.
 * **The write of the file runs in one job** (`ambre-spec-budgets.md section 1`). The PDF module
   writes every recorded page in one call: 7.8 ms for 50 slides on the same host and day. The call
   runs on the converter thread (`ARCH-124`), so the Logic thread never waits for it, and no row
