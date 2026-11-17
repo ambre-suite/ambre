@@ -1084,7 +1084,16 @@ impl ChannelState {
             segment,
             document: segment.document_id(),
             delta,
-            summary: summary_of(&[]),
+            // The cue rings the pages of the other members. They read it from the sealed
+            // summary with no document loaded (the Murmure calls spec, the ring).
+            summary: ActivitySummary {
+                call: Some(ambre_bus::CallCue {
+                    call,
+                    kind: ambre_bus::CueKind::Ring,
+                    at: now,
+                }),
+                ..summary_of(&[])
+            },
             event: MurmureEvent::Messages {
                 segment,
                 messages: vec![MessageView {
@@ -1125,6 +1134,33 @@ impl ChannelState {
         user: Id<User>,
         now: Instant<Authored>,
     ) -> Result<Option<Sent>, MurmureError> {
+        self.write_call_end(call, user, now, ambre_bus::CueKind::End)
+    }
+
+    /// Write the end of `user` into the call message of `call` as a decline of its ring (the
+    /// Murmure calls spec, the ring). The write is the one [`ChannelState::end_call`] makes,
+    /// under the member's own key, and its summary cues a decline: the page of the caller
+    /// hangs up. `None` when that member wrote its end already.
+    ///
+    /// # Errors
+    /// Every refusal of [`ChannelState::end_call`].
+    pub fn decline_call(
+        &mut self,
+        call: Id<ambre_core::id::Call>,
+        user: Id<User>,
+        now: Instant<Authored>,
+    ) -> Result<Option<Sent>, MurmureError> {
+        self.write_call_end(call, user, now, ambre_bus::CueKind::Decline)
+    }
+
+    /// The end of `user` in the call message of `call`, its summary carrying the cue `kind`.
+    fn write_call_end(
+        &mut self,
+        call: Id<ambre_core::id::Call>,
+        user: Id<User>,
+        now: Instant<Authored>,
+        kind: ambre_bus::CueKind,
+    ) -> Result<Option<Sent>, MurmureError> {
         let found = self.held_segments().into_iter().find_map(|segment| {
             let doc = self.doc(segment.document_id())?;
             call_message(doc, call).map(|message| (segment, message))
@@ -1137,7 +1173,21 @@ impl ChannelState {
             return Ok(None);
         }
         let delta = session.export_json(doc)?;
-        self.reacted_at(at, delta).map(Some)
+        let mut sent = self.reacted_at(at, delta)?;
+        sent.summary.call = Some(ambre_bus::CallCue {
+            call,
+            kind,
+            at: now,
+        });
+        Ok(Some(sent))
+    }
+
+    /// The held segment whose call message names `call`, `None` when no held segment does.
+    pub fn call_segment(&self, call: Id<ambre_core::id::Call>) -> Option<Id<Segment>> {
+        self.held_segments().into_iter().find(|segment| {
+            self.doc(segment.document_id())
+                .is_some_and(|doc| call_message(doc, call).is_some())
+        })
     }
 
     /// The calls a reader asks the relay about (`MURMURE-595`). Each is named by a call
@@ -2269,6 +2319,7 @@ fn reaction_summary() -> ActivitySummary {
         mentions: Vec::new(),
         mentions_all: ambre_bus::MentionScope::Named,
         anchor: None,
+        call: None,
     }
 }
 
@@ -2290,5 +2341,6 @@ fn summary_of(marked: &[Mention]) -> ActivitySummary {
         mentions,
         mentions_all,
         anchor: None,
+        call: None,
     }
 }

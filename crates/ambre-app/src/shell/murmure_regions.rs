@@ -555,6 +555,100 @@ async fn the_call_controls_name_themselves_and_take_the_focus() {
     phase.set(CallPhase::Idle);
 }
 
+/// The ring alert of a call (`MURMURE-641`, `MURMURE-646`). A ring cue of a public channel
+/// rings nothing. A ring cue of the direct message shows the alert. Its title reads as an
+/// alert. Accept and decline are buttons with an accessible name, and each takes the focus. A
+/// press of decline ends the ring, and the alert goes.
+#[wasm_bindgen_test]
+async fn the_ring_alert_names_the_caller_and_offers_accept_and_decline() {
+    use ambre_murmure::ui::call_ring::Ring;
+    let acme = Acme::new();
+    let frame = acme.frame().await;
+    let (to_logic, logic) = ambre_bus::conduit::local(ambre_core::Bounded::<
+        ambre_bus::conduit::ChannelSlots,
+    >::of::<4>());
+    crate::call_ring::install(crate::outbox::ShellOutbox::new(to_logic), frame.relay);
+    let ring = crate::call_ring::ring();
+    let cue = ambre_bus::CallCue {
+        call: Id::<ambre_core::id::Call>::mint(),
+        kind: ambre_bus::CueKind::Ring,
+        at: Instant::<Authored>::new(js_sys::Date::now() as u64),
+    };
+    crate::call_ring::heard(&frame.relay, acme.general, cue);
+    leptos::task::tick().await;
+    assert!(
+        frame.query(".murmure-ring").is_none(),
+        "a channel rings nothing"
+    );
+    crate::call_ring::heard(&frame.relay, acme.direct, cue);
+    leptos::task::tick().await;
+    let title = frame
+        .query(".murmure-ring .murmure-ring-title")
+        .expect("the alert shows");
+    assert_eq!(title.get_attribute("role").as_deref(), Some("alert"));
+    assert_eq!(title.text_content().as_deref(), Some("Incoming call"));
+    for (selector, name) in [
+        (".murmure-ring-accept", "Accept the call"),
+        (".murmure-ring-decline", "Decline the call"),
+    ] {
+        let button: web_sys::HtmlElement = frame
+            .query(&format!(".murmure-ring {selector}"))
+            .unwrap_or_else(|| panic!("{selector} is in the alert"))
+            .dyn_into()
+            .unwrap();
+        assert_eq!(button.tag_name(), "BUTTON", "{selector}");
+        assert_eq!(button.get_attribute("aria-label").as_deref(), Some(name));
+        button.focus().unwrap();
+        assert_eq!(
+            frame.inner.active_element().as_ref(),
+            Some(button.unchecked_ref::<web_sys::Element>()),
+            "{selector} takes the focus"
+        );
+    }
+    frame.click(".murmure-ring-decline").await;
+    assert_eq!(ring.get_untracked(), Ring::Quiet, "decline ends the ring");
+    assert!(frame.query(".murmure-ring").is_none(), "the alert goes");
+    let declined = logic.try_iter().any(|command| {
+        matches!(
+            command,
+            ambre_bus::LogicCommand::Channel {
+                channel_id,
+                command: ambre_murmure::message::MurmureCommand::DeclineCall { call, .. },
+            } if channel_id == acme.direct && call == cue.call
+        )
+    });
+    assert!(
+        declined,
+        "decline writes the decline of the call into its direct message"
+    );
+}
+
+/// The notice of a ring that ended with no answer (`MURMURE-645`). It is a status beside the
+/// call button, and it names a decline apart from no answer.
+#[wasm_bindgen_test]
+async fn the_header_says_why_a_call_rang_with_no_answer() {
+    use ambre_murmure::ui::call_ring::Unanswered;
+    let frame = Frame::new(1025, channel()).await;
+    let unanswered = crate::call_ring::unanswered();
+    assert!(frame.query(".murmure-call-unanswered").is_none());
+    for why in [Unanswered::Declined, Unanswered::NoAnswer] {
+        unanswered.set(Some(why));
+        leptos::task::tick().await;
+        let notice = frame
+            .query(".murmure-channel-header .murmure-call-unanswered")
+            .expect("the notice shows");
+        assert_eq!(notice.get_attribute("role").as_deref(), Some("status"));
+        assert_eq!(notice.text_content().as_deref(), Some(why.notice()));
+        assert!(
+            frame.query(".murmure-call-start").is_some(),
+            "the call button stays"
+        );
+    }
+    crate::call_ring::clear_notice();
+    leptos::task::tick().await;
+    assert!(frame.query(".murmure-call-unanswered").is_none());
+}
+
 /// The camera button of a call (`MURMURE-624`, `MURMURE-623`). A call offers it beside mute. It
 /// is a button with an accessible name that takes the focus, and carries its pressed state. A
 /// refused camera reads as an alert, and the call keeps mute and hang up.

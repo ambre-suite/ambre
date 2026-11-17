@@ -120,6 +120,7 @@
 | sealed envelope | the shape every encrypted message takes | sealed frame | `1-Foundations/ambre-spec-sealed-envelope.md` |
 | call | live audio and video between members of one channel | huddle | `1-Foundations/ambre-spec-call-media.md` |
 | chunk | one encoded picture or audio packet of a call | media frame, video frame, audio frame | `1-Foundations/ambre-spec-call-media.md` |
+| ring | the alert and the tone of an incoming call | incoming call screen | `5-Murmure/features/ambre-spec-murmure-calls.md` |
 | sender key | the key one participant seals its chunks with during a call | meeting key | `1-Foundations/ambre-spec-call-media.md` |
 | SFU | the server that forwards the sealed chunks of a call | media server | `1-Foundations/ambre-spec-call-media.md` |
 | commitment tag | the tag binding a ciphertext to one key | | `1-Foundations/ambre-spec-sealed-envelope.md` |

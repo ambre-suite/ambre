@@ -51,6 +51,12 @@ impl MurmureMirror {
         }
     }
 
+    /// Let a call of a direct message ring this page. Only a Murmure page shows the ring
+    /// alert, so only a Murmure page rings (the Murmure calls spec, the ring).
+    pub(crate) fn ring_here(&self) {
+        crate::call_ring::install(self.to_logic.clone(), self.chrome);
+    }
+
     /// Refresh this user's presence on each space once per refresh period
     /// (the Murmure members spec). The tick reaches the shown channel too
     /// (the Murmure typing spec). An interval, not the frame loop: a hidden
@@ -81,6 +87,11 @@ impl MurmureMirror {
     pub(crate) fn mirror(&self, ev: &UiEvent) {
         for command in self.chrome.absorb(ev) {
             self.to_logic.send(command.map(AppCommand::embed));
+        }
+        // A call message of a direct message rings the page (the Murmure calls spec, the
+        // ring).
+        if let UiEvent::CallCue { channel_id, cue } = ev {
+            crate::call_ring::heard(&self.chrome, *channel_id, *cue);
         }
         if let Some(notice) = self.chrome.notice(
             ev,

@@ -619,6 +619,37 @@ input[type="radio"] {
     color: var(--error);
 }
 
+.murmure-call-ringing,
+.murmure-call-unanswered {
+    font-size: var(--font-xs);
+}
+
+/* The alert of a call that rings on the page (the Murmure calls spec, the ring). It floats
+   over the top of the page, so the page underneath keeps its layout. */
+.murmure-ring {
+    position: fixed;
+    top: var(--space-4);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-4);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md, 8px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.murmure-ring-title {
+    margin: 0;
+}
+
+.murmure-ring-decline {
+    color: var(--error);
+}
+
 /* The device panel of a call, beside the call controls (the Murmure calls spec, the
    devices). */
 .murmure-call-panel {

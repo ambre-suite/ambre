@@ -77,7 +77,7 @@ impl LightSubscription {
         update: &Update,
         me: Option<Id<User>>,
         mine: Option<&FixedBytes<PublicKey>>,
-    ) -> Option<ActivityCounters> {
+    ) -> Option<(ActivityCounters, Option<ambre_bus::CallCue>)> {
         if seq.get() <= self.seen.get() {
             return None;
         }
@@ -94,7 +94,7 @@ impl LightSubscription {
             .and_then(|body| pipeline::split_update_body(body).ok())
             .and_then(|body| body.summary);
         self.counters.advance(summary.as_ref(), me);
-        Some(self.counters)
+        Some((self.counters, summary.and_then(|summary| summary.call)))
     }
 }
 
@@ -168,11 +168,16 @@ impl SyncState {
         let counted = light.count(seq, update, me, mine.as_ref());
         let key_id = update.public_data.key_id;
         let ask = counted.is_some() && key_id != light.doc_key.id() && light.asked.insert(key_id);
-        if let Some(counters) = counted {
+        if let Some((counters, cue)) = counted {
             self.send_to_logic(LogicEvent::Activity {
                 document_id,
                 counters,
             });
+            // A call message of another member rings with no document loaded (the Murmure
+            // calls spec, the ring). The summary is sealed, so the relay reads no cue.
+            if let Some(cue) = cue {
+                self.send_to_logic(LogicEvent::CallCue { document_id, cue });
+            }
         }
         if ask {
             self.fetch_rotated_key(document_id);
@@ -447,6 +452,7 @@ mod tests {
             mentions: vec![Id::<User>::from_bytes([7; 16])],
             mentions_all: ambre_bus::MentionScope::Named,
             anchor: None,
+            call: None,
         }
     }
 
@@ -496,6 +502,41 @@ mod tests {
             update(document_id, snapshot, &doc_key, Some(&mention())),
         );
         assert!(drain(&rx).is_empty(), "a number read twice counted twice");
+    }
+
+    /// A call cue in the summary of a light document reaches the Logic thread after its
+    /// counters. No document loads (the Murmure calls spec, the ring).
+    #[test]
+    fn a_call_cue_of_a_light_document_reaches_logic_with_no_document_loaded() {
+        let (mut state, rx, document_id, doc_key, snapshot) =
+            released(ambre_bus::Seq::<ambre_bus::Relay>::new(9));
+        drain(&rx);
+        let cue = ambre_bus::CallCue {
+            call: Id::<ambre_core::id::Call>::from_bytes([3; 16]),
+            kind: ambre_bus::CueKind::Ring,
+            at: ambre_bus::Instant::<ambre_bus::Authored>::new(42),
+        };
+        let ring = ActivitySummary {
+            call: Some(cue),
+            ..mention()
+        };
+        state.receive_update(
+            Seq::<Relay>::new(10),
+            update(document_id, snapshot, &doc_key, Some(&ring)),
+        );
+        let events = drain(&rx);
+        let [
+            LogicEvent::Activity { .. },
+            LogicEvent::CallCue {
+                document_id: cued,
+                cue: heard,
+            },
+        ] = events.as_slice()
+        else {
+            panic!("expected the counters then the cue, got {events:?}");
+        };
+        assert_eq!((*cued, *heard), (document_id, cue));
+        assert_eq!(state.documents_len().get(), 0, "the cue loaded the document");
     }
 
     /// Holds `RESID-015`: an update with no summary, or one that does not

@@ -119,11 +119,18 @@ pub struct ActivitySummary {
     pub mentions: Vec<Id<User>>,         // the users the update names
     pub mentions_all: MentionScope,      // Named, or All: every member, an `@channel`
     pub anchor: Option<ActivityAnchor>,  // an application key, for example a thread root
+    pub call: Option<CallCue>,           // the cue of a call: its ring, a decline or its end
 }
 pub enum ActivityKind { Content, Reaction, Edit, Other }
 pub enum MentionScope { Named, All }   // `define_flag!`: the seal keeps its flag bit
 pub struct ActivityAnchor(Vec<u8>);     // opaque to the foundation, typed by the application
+pub struct CallCue { pub call: Id<Call>, pub kind: CueKind, pub at: Instant<Authored> }
+pub enum CueKind { Ring, Decline, End } // two bits of the flag byte; the call and the instant follow the anchor
 ```
+
+A call cue lets a page ring for a call message of a channel it does not hold. The Sync worker
+hands a cue of another member to the Logic thread beside the counters
+(`5-Murmure/features/ambre-spec-murmure-calls.md section 3`, the ring).
 
 `ActivityAnchor::new` bounds an anchor to `MAX_ANCHOR_LEN` bytes. Serde reads an anchor with no
 bound, so the seal checks it again and drops one past the bound.

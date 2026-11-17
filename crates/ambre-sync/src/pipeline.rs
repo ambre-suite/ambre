@@ -1476,6 +1476,7 @@ mod tests {
             mentions: vec![mentioned],
             mentions_all: ambre_bus::MentionScope::Named,
             anchor: None,
+            call: None,
         };
         let seal = |summary: Option<&ActivitySummary>| {
             let body = update_body(&nonce, summary, &b"delta".to_vec().into()).unwrap();
@@ -2025,6 +2026,7 @@ mod tests {
             mentions: vec![Id::<User>::from_bytes([0xA7; 16])],
             mentions_all: ambre_bus::MentionScope::Named,
             anchor: None,
+            call: None,
         };
         for (summary, golden) in [
             (None, "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a0064656c7461"),

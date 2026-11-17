@@ -2561,6 +2561,7 @@ mod seal_tests {
             mentions: vec![Id::<User>::from_bytes([5; 16])],
             mentions_all: ambre_bus::MentionScope::Named,
             anchor: None,
+            call: None,
         };
         let signing_key = state.signing_key.take();
         state.handle_command(SyncCommand::SendUpdate {

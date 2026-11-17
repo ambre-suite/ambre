@@ -629,6 +629,7 @@ fn open(call: Id<Call>, channel: Id<Channel>, opening: Opening, camera: WithCame
     if !accepted {
         return;
     }
+    crate::call_ring::clear_notice();
     let chosen = call_devices::choice(DeviceKind::Microphone).get_untracked();
     wasm_bindgen_futures::spawn_local(async move {
         match microphone(&chosen).await {
@@ -1573,6 +1574,8 @@ async fn drive(worker: web_sys::Worker, rx: ambre_bus::conduit::Receiver<Drive>)
                 for (slot, volume) in call_volumes::admitted(sender, member) {
                     play_at(slot, volume);
                 }
+                // Another member in the call answered its ring (the Murmure calls spec).
+                crate::call_ring::admitted(member);
             }
             (CallSignal::Departed(sender), _) => call_volumes::departed(sender),
             // A later share took the screen of the room: the share of this page stops
@@ -1585,6 +1588,7 @@ async fn drive(worker: web_sys::Worker, rx: ambre_bus::conduit::Receiver<Drive>)
     if let Some(pc) = pc {
         pc.close();
     }
+    crate::call_ring::hung_up();
     let ended = SESSION.with(|slot| {
         slot.borrow_mut()
             .take_if(|session| session.worker == worker)

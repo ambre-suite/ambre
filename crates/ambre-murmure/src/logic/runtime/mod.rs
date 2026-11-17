@@ -142,6 +142,9 @@ pub struct Runtime<D> {
     /// The asks of who is in the calls of each open channel (the Murmure
     /// calls spec).
     call_asks: HashMap<Id<Channel>, calls::CallAsks>,
+    /// The declines of a ring whose channel was not open, each held until the
+    /// channel opens (the Murmure calls spec, the ring).
+    declines: HashMap<Id<Channel>, Vec<crate::message::MurmureCommand>>,
     /// The members of each open or opening channel, as Sync lists them for
     /// its `meta` (`SYNC-150`). The `@` list offers them, and a mention of
     /// anyone else notifies no one (the Murmure mentions spec). Removed with
@@ -217,6 +220,7 @@ impl<D> Runtime<D> {
             owed_replays: HashMap::new(),
             channel_watchers: HashMap::new(),
             call_asks: HashMap::new(),
+            declines: HashMap::new(),
             channel_members: HashMap::new(),
             spaces: HashMap::new(),
             space_opening: HashMap::new(),
@@ -278,6 +282,7 @@ impl<D> Runtime<D> {
         self.erasing.clear();
         self.erase_owed.clear();
         self.call_asks.clear();
+        self.declines.clear();
         self.handing_off.clear();
         self.direct.clear();
         self.unsent.clear();

@@ -4,7 +4,7 @@
 // this tree by the per-frame route poll in `main`.
 
 use super::super::*;
-use super::call_bar::CallBar;
+use super::call_bar::{CallBar, RingAlert};
 use super::prose_status::ProseFigures;
 use super::share::{ShareInviteLink, ShareMembers};
 use super::sync_badge::SyncBadge;
@@ -56,6 +56,7 @@ pub(crate) fn MurmureShell(
                 <ChannelHeader pane=pane name=relay.channel_name() has_members=relay.has_members()>
                     <CallBar pane=pane phase=call_phase relay=relay />
                 </ChannelHeader>
+                <RingAlert />
                 <InviteControl relay=relay send=send />
                 <MessageSearch relay=relay send=send />
             </Toolbar>

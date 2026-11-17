@@ -658,6 +658,11 @@ impl LogicState {
                 }
                 self.route(|m| m.closed_meta_moved(document_id));
             }
+            // The cue of a call in a document this thread does not hold (the Murmure calls
+            // spec, the ring). A document of no closed channel cues nothing.
+            LogicEvent::CallCue { document_id, cue } => {
+                self.route(|m| m.cue_closed(document_id, cue));
+            }
             LogicEvent::Released { document_id } => {
                 self.store_sent(document_id);
             }

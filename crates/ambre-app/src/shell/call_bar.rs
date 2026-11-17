@@ -12,6 +12,7 @@ use ambre_murmure::MurmurePane;
 use ambre_murmure::chrome::MurmureRelay;
 use ambre_murmure::ui::call_controls::{CallControls, CallPhase, Camera, Microphone, Share};
 use ambre_murmure::ui::call_devices::{DeviceKind, Entry, Panel};
+use ambre_murmure::ui::call_ring::{Ring, ring_title};
 use ambre_murmure::ui::call_volumes::{
     Gain, gain_from_slider, slider_of_gain, slider_of_volume, volume_from_slider,
 };
@@ -40,6 +41,7 @@ pub(super) fn CallBar(
         Signal::from(call_devices::fallback());
     let camera = crate::call::camera();
     let share = crate::call::share();
+    let (ring, unanswered) = (crate::call_ring::ring(), crate::call_ring::unanswered());
     view! {
         <span class="murmure-call">
             {move || match controls() {
@@ -50,7 +52,11 @@ pub(super) fn CallBar(
                         title="Call"
                         aria-label="Start a call"
                         on:click=move |_| {
-                            crate::call::start(channel);
+                            // A call of a direct message rings the other member, and the
+                            // header waits for the answer (the Murmure calls spec, the ring).
+                            if let Some(call) = crate::call::start(channel) {
+                                crate::call_ring::started(&relay, call, channel);
+                            }
                         }
                     >
                         <Icon icon=icondata::MdiPhone />
@@ -103,6 +109,12 @@ pub(super) fn CallBar(
                 .then(|| view! { <DevicePanel phase=phase relay=relay /> })}
             {move || fallback.get().map(|gone| view! {
                 <span class="murmure-call-fallback" role="status">{gone.notice()}</span>
+            })}
+            {move || matches!(ring.get(), Ring::Outgoing(_)).then(|| view! {
+                <span class="murmure-call-ringing" role="status">"Calling: waiting for an answer"</span>
+            })}
+            {move || unanswered.get().map(|why| view! {
+                <span class="murmure-call-unanswered" role="status">{why.notice()}</span>
             })}
             {move || phase.get().refusal().map(|refusal| view! {
                 <span class="murmure-call-refusal" role="alert">{refusal.notice()}</span>
@@ -451,5 +463,44 @@ fn ShareButton() -> impl IntoView {
                 view! { <Icon icon=icondata::MdiMonitorShare /> }.into_any()
             }}
         </button>
+    }
+}
+
+/// The alert of a call that rings on this page (the Murmure calls spec, section 3, the ring).
+/// Its title names the caller as an alert, so a screen reader reads it when it shows. Accept
+/// and decline are buttons with an accessible name, each in the order of the keyboard. The
+/// alert takes no focus: a member who types keeps the key in the field.
+#[component]
+pub(super) fn RingAlert() -> impl IntoView {
+    let ring = crate::call_ring::ring();
+    view! {
+        {move || match ring.get() {
+            Ring::Incoming(incoming) => {
+                let title = ring_title(incoming.caller.as_ref());
+                view! {
+                    <div class="murmure-ring" role="group" aria-label="Incoming call">
+                        <p class="murmure-ring-title" role="alert">{title}</p>
+                        <button
+                            class="icon murmure-ring-accept"
+                            title="Accept"
+                            aria-label="Accept the call"
+                            on:click=move |_| crate::call_ring::accept()
+                        >
+                            <Icon icon=icondata::MdiPhone />
+                        </button>
+                        <button
+                            class="icon murmure-ring-decline"
+                            title="Decline"
+                            aria-label="Decline the call"
+                            on:click=move |_| crate::call_ring::decline()
+                        >
+                            <Icon icon=icondata::MdiPhoneHangup />
+                        </button>
+                    </div>
+                }
+                .into_any()
+            }
+            Ring::Quiet | Ring::Outgoing(_) => ().into_any(),
+        }}
     }
 }

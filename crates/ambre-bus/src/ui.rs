@@ -155,6 +155,15 @@ pub enum UiEvent<E = Infallible, P: ChannelPlane = NoChannels> {
         message: Option<(Id<Segment>, Id<Message>)>,
     },
 
+    /// Another member posted a call message, or wrote an end into one, and
+    /// its sealed summary carries the cue (the Murmure calls spec, the ring).
+    /// The view decides whether the page rings. It alone knows the direct
+    /// messages and the clock.
+    CallCue {
+        channel_id: Id<Channel>,
+        cue: crate::CallCue,
+    },
+
     /// Every channel and every space this user is a member of, whole. It
     /// comes at start, and again each time the relay adds the user to one.
     /// None of them is open. `names` holds the name each named channel shows
@@ -376,6 +385,7 @@ impl<E, P: ChannelPlane> UiEvent<E, P> {
                 mention,
                 message,
             },
+            Self::CallCue { channel_id, cue } => UiEvent::CallCue { channel_id, cue },
             Self::MemberChannels {
                 channels,
                 spaces,

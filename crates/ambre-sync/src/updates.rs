@@ -3251,6 +3251,7 @@ mod tests {
             mentions: Vec::new(),
             mentions_all: ambre_bus::MentionScope::All,
             anchor: None,
+            call: None,
         };
         let public_data = UpdatePublicData {
             document_id: doc,

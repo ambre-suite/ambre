@@ -869,6 +869,9 @@ impl<D> Runtime<D> {
                 self.open_amendments(channel_id);
                 self.open_threads(channel_id);
                 self.emit_count(channel_id);
+                for decline in self.declines.remove(&channel_id).unwrap_or_default() {
+                    self.handle_channel_command(channel_id, decline);
+                }
             }
             Err(error) => self.end_opening(channel_id, &error),
         }
@@ -1053,6 +1056,8 @@ impl<D> Runtime<D> {
             }
         }
         self.end_light_channel(channel_id);
+        // A decline that waited on the open writes nothing: the ring ends at its timeout.
+        self.declines.remove(&channel_id);
         self.channel_open_failed(channel_id, cause);
     }
 
@@ -1219,6 +1224,14 @@ impl<D> Runtime<D> {
         if let Some(event) = self.held_send(channel_id, &command) {
             return self.emit(UiEvent::Channel { channel_id, event });
         }
+        // A ring sounds on a page that may not hold its channel. The decline opens the
+        // channel, and writes its end once it is open (the Murmure calls spec, the ring).
+        if matches!(command, MurmureCommand::DeclineCall { .. })
+            && !self.channels.contains_key(&channel_id)
+        {
+            self.declines.entry(channel_id).or_default().push(command);
+            return self.open_channel(channel_id);
+        }
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             tracing::warn!("Logic: command for channel {channel_id}, which is not open; dropped");
             return;
@@ -1232,6 +1245,11 @@ impl<D> Runtime<D> {
             // The end writes in the segment that holds the call message, whose session the
             // write finds or refuses (the Murmure calls spec).
             MurmureCommand::EndCall { .. } => None,
+            // A decline may reach a channel that opened for it. It waits on the identity of
+            // the segment of the call message (the Murmure calls spec, the ring).
+            MurmureCommand::DeclineCall { call, .. } => {
+                channel.call_segment(*call).map(|segment| segment.document_id())
+            }
             MurmureCommand::Name { .. } => Some(channel.meta_id().document_id()),
             // A reply changes in its thread, which the channel holds once
             // its root is on screen (the Murmure threads spec).
@@ -1386,6 +1404,14 @@ impl<D> Runtime<D> {
                 };
                 let ended = channel.end_call(call, user, now);
                 self.send_change(channel_id, ended);
+            }
+            MurmureCommand::DeclineCall { call, now } => {
+                let Some(user) = self.my_user_id else {
+                    tracing::warn!("Logic: a decline before the session; dropped");
+                    return;
+                };
+                let declined = channel.decline_call(call, user, now);
+                self.send_change(channel_id, declined);
             }
             MurmureCommand::SendMessage {
                 draft,
@@ -2096,12 +2122,14 @@ impl<D> Runtime<D> {
         let mut events = Vec::new();
         let mut outdated = false;
         let mut fresh = None;
+        let mut cues = Vec::new();
         for (delta, verdict) in deltas.iter().zip(verdicts) {
             let accepted = verdict.is_ok();
             if accepted && open.is_some() {
                 fresh = self.news_of(delta).map_or(fresh, |mention| {
                     Some(mention.max(fresh.unwrap_or_default()))
                 });
+                cues.extend(self.cue_of(delta));
             }
             self.record_channel_seq(document_id, delta.seq, accepted.then_some(&delta.payload));
             match verdict {
@@ -2141,9 +2169,32 @@ impl<D> Runtime<D> {
                     message,
                 });
             }
+            for cue in cues {
+                self.emit(UiEvent::CallCue { channel_id, cue });
+            }
             self.follow_close(channel_id);
         }
         true
+    }
+
+    /// The cue of a call a delta of another member carries in its sealed summary, if any
+    /// (the Murmure calls spec, the ring). A cue of this user rings none of its own pages.
+    pub fn cue_of(&self, delta: &SignedDelta) -> Option<ambre_bus::CallCue> {
+        let cue = delta.summary.as_ref()?.call?;
+        (delta.user.is_none() || delta.user != self.my_user_id).then_some(cue)
+    }
+
+    /// The cue of a call a closed channel's document carried, named to the view under its
+    /// channel (the Murmure calls spec, the ring). A document of no closed channel cues
+    /// nothing.
+    pub fn cue_closed(&mut self, document_id: Id<Document>, cue: ambre_bus::CallCue) {
+        let channel_id = self
+            .closed_channels
+            .iter()
+            .find_map(|(channel_id, closed)| closed.holds(document_id).then_some(*channel_id));
+        if let Some(channel_id) = channel_id {
+            self.emit(UiEvent::CallCue { channel_id, cue });
+        }
     }
 
     /// Whether a delta is a message another member wrote, from its sealed

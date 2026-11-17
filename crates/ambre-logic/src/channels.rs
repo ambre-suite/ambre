@@ -5110,6 +5110,176 @@ mod tests {
         assert!(state.rt().channels()[&channel_id].live_calls().is_empty());
     }
 
+    /// The ring of a call message (the Murmure calls spec, the ring). The post cues a ring in
+    /// its sealed summary, and the open channel of another member names the cue to the view.
+    /// A cue of this user's own reaches none of its pages, and the last leave cues the end.
+    #[test]
+    fn a_call_message_of_another_member_cues_a_ring_and_the_last_leave_cues_its_end() {
+        let (mut alice, _, alice_sync) = harness();
+        let author = Id::<User>::mint();
+        signed_in(&mut alice, author);
+        let channel_id = Id::<Channel>::mint();
+        alice.hold_channel(
+            ChannelState::create(channel_id, ChannelType::Public, None, NOW).expect("create"),
+        );
+        let original = &alice.rt().channels()[&channel_id];
+        let active = original.active_id();
+        let segments = std::collections::HashMap::from([(
+            active,
+            original.snapshot(active.document_id()).expect("active"),
+        )]);
+        let meta = original
+            .snapshot(original.meta_id().document_id())
+            .expect("meta");
+        let copy =
+            ChannelState::open(channel_id, original.meta_id(), &meta, &segments).expect("open");
+        let (mut bob, bob_ui, _) = harness();
+        let bob_id = Id::<User>::mint();
+        signed_in(&mut bob, bob_id);
+        bob.hold_channel(copy);
+        drain(&bob_ui);
+
+        let call = Id::<ambre_core::id::Call>::mint();
+        alice.handle_logic_event(LogicEvent::CallStarted {
+            call,
+            channel: channel_id,
+            at: NOW,
+        });
+        let Ok(SyncCommand::SendUpdate {
+            document_id,
+            payload,
+            summary,
+        }) = alice_sync.try_recv()
+        else {
+            panic!("alice sends one update");
+        };
+        let ring = ambre_bus::CallCue {
+            call,
+            kind: ambre_bus::CueKind::Ring,
+            at: NOW,
+        };
+        assert_eq!(summary.as_ref().and_then(|s| s.call), Some(ring));
+        let delta = ambre_bus::SignedDelta {
+            seq: ambre_core::Seq::<ambre_core::Relay>::new(1),
+            payload,
+            nonce: FixedBytes::from_array([0; 16]),
+            peer: alice.rt().channels()[&channel_id]
+                .peer(document_id)
+                .expect("a session"),
+            user: Some(author),
+            summary,
+        };
+        let mut own = delta.clone();
+        own.user = Some(bob_id);
+        assert_eq!(
+            bob.rt().cue_of(&own),
+            None,
+            "a cue of bob's own rings no page of his"
+        );
+        bob.handle_logic_event(LogicEvent::RemoteUpdate { document_id, delta });
+        let cues: Vec<_> = drain(&bob_ui)
+            .into_iter()
+            .filter_map(|event| match event {
+                UiEvent::CallCue { channel_id: c, cue } => Some((c, cue)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(cues, [(channel_id, ring)]);
+
+        drain(&alice_sync);
+        alice.handle_logic_event(LogicEvent::CallEnded {
+            call,
+            channel: channel_id,
+            at: at(1_000),
+        });
+        let ends: Vec<_> = summaries(&alice_sync)
+            .into_iter()
+            .map(|s| s.call.map(|cue| cue.kind))
+            .collect();
+        assert_eq!(ends, [Some(ambre_bus::CueKind::End)]);
+    }
+
+    /// A cue in a document of a closed channel reaches the view under its channel. A cue in a
+    /// document of no channel reaches it under none (the Murmure calls spec, the ring).
+    #[test]
+    fn a_cue_of_a_closed_channel_names_its_channel_to_the_view() {
+        let (mut state, ui, _sync) = harness();
+        let (channel_id, active, _) = closed_counted(&mut state);
+        drain(&ui);
+        let cue = ambre_bus::CallCue {
+            call: Id::<ambre_core::id::Call>::mint(),
+            kind: ambre_bus::CueKind::Ring,
+            at: NOW,
+        };
+        state.handle_logic_event(LogicEvent::CallCue {
+            document_id: active.document_id(),
+            cue,
+        });
+        state.handle_logic_event(LogicEvent::CallCue {
+            document_id: Id::<Document>::mint(),
+            cue,
+        });
+        let shown: Vec<_> = drain(&ui)
+            .into_iter()
+            .filter_map(|event| match event {
+                UiEvent::CallCue { channel_id: c, cue } => Some((c, cue)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(shown, [(channel_id, cue)]);
+    }
+
+    /// A decline on a page that does not hold the channel opens it (the Murmure calls spec,
+    /// the ring). Once the channel is open, the end of this member goes into the call
+    /// message, under a decline cue. Nothing leaves before: the relay reads one update.
+    #[test]
+    fn a_decline_opens_the_channel_and_writes_its_end_once_open() {
+        let (mut state, _ui, sync) = harness();
+        signed_in(&mut state, Id::<User>::mint());
+        let (channel_id, mut stored) = stored_channel();
+        let call = Id::<ambre_core::id::Call>::mint();
+        stored
+            .post_call(call, Id::<User>::mint(), NOW)
+            .expect("the call message");
+        state.handle_logic_command(LogicCommand::Channel {
+            channel_id,
+            command: MurmureCommand::DeclineCall {
+                call,
+                now: at(2_000),
+            },
+        });
+        assert_eq!(
+            sent(&sync),
+            [Sent::List(channel_id)],
+            "the decline opens the channel"
+        );
+        state.handle_logic_event(LogicEvent::ChannelDocuments {
+            channel_id,
+            documents: listing(&stored),
+        });
+        for document_id in [
+            stored.meta_id().document_id(),
+            stored.active_id().document_id(),
+        ] {
+            serve(&mut state, &stored, document_id);
+        }
+        assert!(
+            summaries(&sync).is_empty(),
+            "nothing is written before the identity"
+        );
+        state.grant_identity(stored.active_id().document_id());
+        let declined: Vec<_> = summaries(&sync).into_iter().map(|s| s.call).collect();
+        assert_eq!(
+            declined,
+            [Some(ambre_bus::CallCue {
+                call,
+                kind: ambre_bus::CueKind::Decline,
+                at: at(2_000),
+            })]
+        );
+        assert!(state.rt().channels()[&channel_id].live_calls().is_empty());
+    }
+
     /// The tick of a shown channel asks who is in each live call, once per
     /// interval at most. A call the relay holds no state of is asked about no more, and a
     /// channel with no live call asks nothing.

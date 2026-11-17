@@ -217,6 +217,13 @@ pub enum MurmureCommand {
         call: Id<ambre_core::id::Call>,
         now: Instant<Authored>,
     },
+    /// Write this member's end into the call message of `call` as a decline of its ring (the
+    /// Murmure calls spec, the ring). The Logic thread opens the channel first when it is not
+    /// open, and writes the end once it is.
+    DeclineCall {
+        call: Id<ambre_core::id::Call>,
+        now: Instant<Authored>,
+    },
     /// Append a message to the active segment, under this session's user
     /// (`MURMURE-080`).
     SendMessage {
@@ -356,6 +363,7 @@ impl MurmureCommand {
             Self::SendMessage { .. }
             | Self::PostCall { .. }
             | Self::EndCall { .. }
+            | Self::DeclineCall { .. }
             | Self::Name { .. }
             | Self::React { .. }
             | Self::Unreact { .. }
@@ -398,6 +406,7 @@ impl ambre_bus::Mutation for MurmureCommand {
             Self::SendMessage { .. }
             | Self::PostCall { .. }
             | Self::EndCall { .. }
+            | Self::DeclineCall { .. }
             | Self::LoadOlder { .. }
             | Self::MarkRead
             | Self::MarkUnread { .. }

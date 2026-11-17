@@ -107,6 +107,7 @@ fn sync_command_roundtrips_through_postcard() {
             mentions: vec![Id::<User>::mint()],
             mentions_all: ambre_bus::MentionScope::All,
             anchor: ActivityAnchor::new(vec![1, 2]),
+            call: None,
         }),
     });
     roundtrip_sync(&SyncCommand::SendUnsent {
@@ -145,6 +146,7 @@ fn logic_event_roundtrips_through_postcard() {
                 mentions: vec![Id::<User>::from_bytes([3; 16])],
                 mentions_all: ambre_bus::MentionScope::Named,
                 anchor: None,
+                call: None,
             }),
         },
     });
@@ -244,6 +246,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
         LogicEvent::DocumentReady { .. } => "DocumentReady",
         LogicEvent::ConnectionStatus { .. } => "ConnectionStatus",
         LogicEvent::Activity { .. } => "Activity",
+        LogicEvent::CallCue { .. } => "CallCue",
         LogicEvent::Released { .. } => "Released",
         LogicEvent::SyncWarning { .. } => "SyncWarning",
         LogicEvent::SnapshotNeeded { .. } => "SnapshotNeeded",
@@ -356,6 +359,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
                 mentions: vec![user],
                 mentions_all: ambre_bus::MentionScope::Named,
                 anchor: ActivityAnchor::new(vec![3]),
+                call: None,
             }),
         },
         SyncCommand::SendUnsent {

@@ -207,6 +207,14 @@ pub enum LogicEvent {
         counters: ambre_core::activity::ActivityCounters,
     },
 
+    /// Another member wrote a call cue into the summary of a document not
+    /// held in memory (the Murmure calls spec, the ring). The Logic thread
+    /// names its channel to the view.
+    CallCue {
+        document_id: Id<Document>,
+        cue: crate::CallCue,
+    },
+
     /// A released document turned into a light subscription: the relay
     /// acknowledged every frame this client sent of it (`RESID-009`). Its
     /// local copy holds nothing the relay lacks (`RESID-019`).

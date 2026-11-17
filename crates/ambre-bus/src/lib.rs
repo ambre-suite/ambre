@@ -45,7 +45,9 @@ pub mod sync_warning;
 pub mod ui;
 
 // Re-export the main types for convenient use.
-pub use activity::{Activity, ActivityAnchor, ActivityKind, ActivitySummary, MentionScope};
+pub use activity::{
+    Activity, ActivityAnchor, ActivityKind, ActivitySummary, CallCue, CueKind, MentionScope,
+};
 // The channel types of the service plane, which the Sync worker reads.
 pub use app::murmure::{
     Authored, ChannelActivity, ChannelDocument, ChannelMeta, ChannelName, ChannelPlace,

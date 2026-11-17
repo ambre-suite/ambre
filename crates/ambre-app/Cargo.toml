@@ -79,6 +79,8 @@ web-sys      = { workspace = true, features = [
     # side alone, never on the playout (`ambre-spec-call-media.md section 3`, the gain).
     "AudioContext", "BaseAudioContext", "AudioNode", "AudioParam", "GainNode", "AnalyserNode",
     "MediaStreamAudioSourceNode", "MediaStreamAudioDestinationNode", "AudioContextState",
+    # The tone of a ring (`src/call_ring.rs`), synthesized so the page ships no sound file.
+    "OscillatorNode", "AudioScheduledSourceNode", "AudioDestinationNode",
 ] }
 # The TURN servers of a call, which the peer connection reads as JSON, and the session
 # descriptions it sends (`src/call.rs`).

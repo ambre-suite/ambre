@@ -98,6 +98,9 @@ mod call;
 /// The devices of a call: the device list, the stored choice and the routing.
 #[cfg(target_arch = "wasm32")]
 mod call_devices;
+/// The ring of the page: its alert, its tone and its timer.
+#[cfg(target_arch = "wasm32")]
+mod call_ring;
 /// The volumes of a call: the volume of each member, the gain and its meter.
 #[cfg(target_arch = "wasm32")]
 mod call_volumes;
@@ -1077,6 +1080,7 @@ pub fn main() {
     let murmure_mirror = murmure_mirror::MurmureMirror::new(murmure_relay, shell_outbox.clone());
     if boot_is_murmure {
         murmure_mirror.keep_presence();
+        murmure_mirror.ring_here();
     }
     // The switchboard's handle on the view fan-out: it routes every view's
     // events, and prunes a child sender whose receiver has been dropped.

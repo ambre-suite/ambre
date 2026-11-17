@@ -9,7 +9,8 @@ use crate::Count;
 use serde::{Deserialize, Serialize};
 
 use crate::Flag as _;
-use crate::id::{Id, User};
+use crate::id::{Call, Id, User};
+use crate::{Authored, Instant};
 
 /// The most members one summary names. A message that names more names the
 /// channel, as an `@channel` does.
@@ -76,6 +77,55 @@ impl ActivityKind {
     }
 }
 
+/// What an update tells the members of a call message about its ring (the
+/// Murmure calls spec, section 3, the ring). A page that does not hold the
+/// channel reads it from the summary alone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CueKind {
+    /// The update posts the call message: the other members' pages ring.
+    Ring,
+    /// A member declined the ring: it wrote an end into the call message.
+    Decline,
+    /// The last leave wrote the end of the call: every ring of it stops.
+    End,
+}
+
+impl CueKind {
+    /// The two bits of the flag byte of a summary that carry the kind, above
+    /// the bit of [`MentionScope`].
+    const fn bits(self) -> u8 {
+        match self {
+            Self::Ring => 0b010,
+            Self::Decline => 0b100,
+            Self::End => 0b110,
+        }
+    }
+
+    /// The kind the flag byte `flags` names, `None` for a byte of no cue.
+    const fn of(flags: u8) -> Option<Self> {
+        match flags & 0b110 {
+            0b010 => Some(Self::Ring),
+            0b100 => Some(Self::Decline),
+            0b110 => Some(Self::End),
+            _ => None,
+        }
+    }
+}
+
+/// The call cue of a sealed summary. It names the call, what the update
+/// says of the ring, and when its writer wrote it. The relay reads
+/// none of it: the summary travels sealed with its update (`SYNC-113`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CallCue {
+    /// The call the call message names.
+    pub call: Id<Call>,
+    /// What the update says of the ring.
+    pub kind: CueKind,
+    /// The instant the writer wrote the update, on its own clock. A page
+    /// rings no call older than the ring timeout by this instant.
+    pub at: Instant<Authored>,
+}
+
 /// An application key a summary points at, opaque to the foundation.
 ///
 /// [`ActivityAnchor::new`] holds the bound of [`MAX_ANCHOR_LEN`] bytes. The
@@ -119,6 +169,9 @@ pub struct ActivitySummary {
     pub mentions_all: MentionScope,
     /// The application key it points at, such as a thread root.
     pub anchor: Option<ActivityAnchor>,
+    /// The cue of a call, on the update that posts a call message or writes
+    /// its end.
+    pub call: Option<CallCue>,
 }
 
 /// Why a summary could not be read.
@@ -143,7 +196,8 @@ const FLAG_ALL: u8 = 0b01;
 
 impl ActivitySummary {
     /// The summary as bytes: the kind, the flag byte, the mention count, each
-    /// member, then the anchor length and the anchor.
+    /// member, then the anchor length and the anchor. A call cue sets two
+    /// bits of the flag byte, and its call and its instant follow the anchor.
     ///
     /// # Errors
     ///
@@ -163,19 +217,26 @@ impl ActivitySummary {
             .ok()
             .filter(|len| usize::from(*len) <= MAX_ANCHOR_LEN)
             .ok_or(SummaryError::LongAnchor)?;
-        let mut out = Vec::with_capacity(4 + 16 * self.mentions.len() + anchor.len());
+        // A call cue adds its call and its instant: 16 and 8 bytes.
+        let mut out = Vec::with_capacity(4 + 16 * self.mentions.len() + anchor.len() + 24);
         out.push(self.kind.byte());
-        out.push(if self.mentions_all == MentionScope::All {
+        let all = if self.mentions_all == MentionScope::All {
             FLAG_ALL
         } else {
             0
-        });
+        };
+        let cue = self.call.map_or(0, |cue| cue.kind.bits());
+        out.push(all | cue);
         out.push(count);
         for user in &self.mentions {
             out.extend_from_slice(user.as_bytes());
         }
         out.push(anchor_len);
         out.extend_from_slice(anchor);
+        if let Some(cue) = self.call {
+            out.extend_from_slice(cue.call.as_bytes());
+            out.extend_from_slice(&cue.at.get().to_be_bytes());
+        }
         Ok(out)
     }
 
@@ -212,11 +273,25 @@ impl ActivitySummary {
         let (anchor, rest) = rest
             .split_at_checked(anchor_len)
             .ok_or(SummaryError::Short)?;
+        let (call, rest) = match CueKind::of(flags) {
+            None => (None, rest),
+            Some(kind) => {
+                let (call, rest) = rest.split_first_chunk::<16>().ok_or(SummaryError::Short)?;
+                let (at, rest) = rest.split_first_chunk::<8>().ok_or(SummaryError::Short)?;
+                let cue = CallCue {
+                    call: Id::<Call>::from_bytes(*call),
+                    kind,
+                    at: Instant::<Authored>::new(u64::from_be_bytes(*at)),
+                };
+                (Some(cue), rest)
+            }
+        };
         let summary = Self {
             kind,
             mentions,
             mentions_all: MentionScope::from_bool(flags & FLAG_ALL != 0),
             anchor: (!anchor.is_empty()).then(|| ActivityAnchor(anchor.to_vec())),
+            call,
         };
         Ok((summary, rest))
     }
@@ -329,6 +404,7 @@ mod tests {
             mentions: Vec::new(),
             mentions_all: MentionScope::Named,
             anchor: Some(decoded_anchor(MAX_ANCHOR_LEN + 1)),
+            call: None,
         };
         assert_eq!(summary.encode(), Err(SummaryError::LongAnchor));
         let at = ActivitySummary {
@@ -348,6 +424,7 @@ mod tests {
             mentions: vec![user(1), user(2)],
             mentions_all: MentionScope::Named,
             anchor: ActivityAnchor::new(b"root".to_vec()),
+            call: None,
         }
     }
 
@@ -358,6 +435,30 @@ mod tests {
         let (read, rest) = ActivitySummary::decode(&bytes).expect("a summary");
         assert_eq!(read, summary());
         assert_eq!(rest, b"delta");
+    }
+
+    /// A call cue of each kind reads back whole and leaves what follows. One
+    /// cut inside its call is refused (the Murmure calls spec, the ring).
+    #[test]
+    fn a_call_cue_of_each_kind_reads_back_and_a_cut_one_is_refused() {
+        for kind in [CueKind::Ring, CueKind::Decline, CueKind::End] {
+            let cued = ActivitySummary {
+                call: Some(CallCue {
+                    call: Id::<Call>::from_bytes([7; 16]),
+                    kind,
+                    at: Instant::<Authored>::new(1_700_000_000_123),
+                }),
+                mentions_all: MentionScope::All,
+                ..summary()
+            };
+            let mut bytes = cued.encode().expect("within bounds");
+            bytes.extend_from_slice(b"delta");
+            let (read, rest) = ActivitySummary::decode(&bytes).expect("a summary");
+            assert_eq!(read, cued);
+            assert_eq!(rest, b"delta");
+            bytes.truncate(bytes.len() - 5 - 9);
+            assert_eq!(ActivitySummary::decode(&bytes), Err(SummaryError::Short));
+        }
     }
 
     #[test]
@@ -391,6 +492,7 @@ mod tests {
                 mentions: Vec::new(),
                 mentions_all: MentionScope::All,
                 anchor: None,
+                call: None,
             }),
             None,
         );

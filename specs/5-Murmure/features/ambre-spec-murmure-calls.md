@@ -34,6 +34,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-633` | `INV` | The share button MUST carry an accessible name, take the keyboard focus and carry its pressed state. | this spec section 3, the screen; `1-Foundations/ambre-spec-accessibility.md section 2` (`CHROME-022`) | `ambre_app::shell::murmure_regions::the_share_button_names_itself_and_carries_its_pressed_state` -- wasm tier: the share control is a button with its name, which takes the focus and reads its pressed state; `ambre_murmure::ui::call_controls::tests::a_press_shares_the_screen_and_a_second_stops_it` -- the name says what a press does | none | verified |
 | `MURMURE-629` | `OBS` | While the page receives a screen, the video region MUST draw it in a tile taller than each tile of a camera. | this spec section 3, the video region; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-015`) | `ambre_murmure::ui::call_videos::tests::a_screen_takes_a_tile_taller_than_each_camera_above_their_row`; `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: the moved pixels of Bob's canvas span more than the tallest tile of a camera | none | verified |
 | `MURMURE-630` | `OBS` | Given a share that the screen of another member took over, the header MUST say that another member shares. | this spec section 3, the screen; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-107`) | `ambre_murmure::ui::call_controls::tests::another_screen_takes_over_a_share_and_the_header_says_so`; `ambre_app::shell::murmure_regions::the_share_button_names_itself_and_carries_its_pressed_state` -- wasm tier: the take-over is a status; `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Ada's header reads that another member shares | none | verified |
+| `MURMURE-645` | `OBS` | Given a ring of the caller that ended with no answer, the header MUST say whether the member declined or did not answer, until the next call gesture. | this spec section 3, the ring | `ambre_murmure::ui::call_ring::tests::the_header_says_why_a_ring_ended_with_no_answer`; `ambre_app::shell::murmure_regions::the_header_says_why_a_call_rang_with_no_answer` -- wasm tier: the notice is a status beside the call button | none | verified |
+| `MURMURE-646` | `INV` | The title of the ring alert MUST read as an alert, and accept and decline MUST each carry an accessible name and take the keyboard focus. | this spec section 3, the ring; `1-Foundations/ambre-spec-accessibility.md section 2` (`CHROME-022`) | `ambre_app::shell::murmure_regions::the_ring_alert_names_the_caller_and_offers_accept_and_decline` -- wasm tier: the title is an alert, and each control is a button with its name that takes the focus | none | verified |
 
 ### 1.2 Start a call
 
@@ -115,12 +117,27 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-634` | `FAIL` | Given a capture of the screen that the browser refuses or the member cancels, the header MUST show that no screen is shared, and why. | this spec section 3, the screen; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-109`) | `ambre_murmure::ui::call_controls::tests::a_refused_screen_says_why_and_a_press_tries_again`; `ambre_app::shell::murmure_regions::the_share_button_names_itself_and_carries_its_pressed_state` -- wasm tier: the refusal is an alert, and mute and hang up stay; `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Bob's refused capture reads its reason | none | verified |
 | `MURMURE-631` | `FRAME` | A share of the screen MUST NOT write into the channel. | this spec section 3, the screen; `ZK-032` | structural -- the share button runs `toggle_share` of the page, whose one command marks the start for the socket of the SFU (`ZK-032`); `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Ada's share posts that start and nothing else but the roster ask | none | verified |
 
+### 1.12 Ring a direct message
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-641` | `POST` | Given a call message that another member posts in a direct message, each open page of Murmure of the member MUST ring, with an accept and a decline, whatever channel it shows. | this spec section 3, the ring; `1-Foundations/ambre-spec-residency.md section 3` | `ambre_sync::light::tests::a_call_cue_of_a_light_document_reaches_logic_with_no_document_loaded` -- a channel the page does not hold cues its call with no document loaded; `ambre_logic::channels::tests::a_cue_of_a_closed_channel_names_its_channel_to_the_view`; `ambre_logic::channels::tests::a_call_message_of_another_member_cues_a_ring_and_the_last_leave_cues_its_end` -- an open channel cues the call message of another member; `ambre_murmure::ui::call_ring::tests::a_ring_cue_of_a_direct_message_rings_a_free_page_until_its_timeout`; `ambre_app::shell::murmure_regions::the_ring_alert_names_the_caller_and_offers_accept_and_decline` -- wasm tier: the cue of the direct message shows the alert, with its accept and its decline | none | verified |
+| `MURMURE-642` | `POST` | Accept MUST join the call as Join call does, the microphone first, and decline MUST write the end of the member into the call message. | this spec section 3, the ring; `MURMURE-411`; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-076`) | `ambre_murmure::ui::call_ring::tests::accept_joins_the_call_and_decline_writes_the_decline`; structural -- the join of a ring runs `crate::call::join`, the path of Join call; `ambre_logic::channels::tests::a_decline_opens_the_channel_and_writes_its_end_once_open` -- a channel the page does not hold opens, and the end leaves once its segment may be written; `ambre_app::shell::murmure_regions::the_ring_alert_names_the_caller_and_offers_accept_and_decline` -- wasm tier: a press of decline sends the decline of the call to the Logic thread | none | verified |
+| `MURMURE-643` | `POST` | A ring with no answer MUST stop on the page of the member once the ring timeout of `ambre-spec-budgets.md section 1` has passed since the call message, and MUST write nothing. | this spec section 3, the ring | `ambre_murmure::ui::call_ring::tests::a_ring_cue_of_a_direct_message_rings_a_free_page_until_its_timeout` -- the tick at the timeout stops the ring, and asks the page to do nothing | none | verified |
+| `MURMURE-644` | `POST` | On the page of the caller, a decline or the ring timeout with no answer MUST end the ring and hang up the call, and another member admitted into the call MUST end the ring with no hang-up. | this spec section 3, the ring; `MURMURE-604` | `ambre_murmure::ui::call_ring::tests::a_decline_or_the_timeout_ends_the_ring_of_the_caller`; `ambre_logic::channels::tests::a_decline_opens_the_channel_and_writes_its_end_once_open` -- the end of a decline leaves under a decline cue | none | verified |
+| `MURMURE-647` | `FRAME` | A ring MUST NOT show the relay anything beyond the call message, and, on a decline, the open of its channel and the end of the member who declines. | this spec section 3, the ring; `1-Foundations/ambre-spec-zero-knowledge.md section 2` (`ZK-001`); `1-Foundations/ambre-spec-residency.md section 3` | type-level -- the cue rides the activity summary, which the Sync worker seals inside its update, and no command of the Sync worker names a ring; `ambre_logic::channels::tests::a_decline_opens_the_channel_and_writes_its_end_once_open` -- the decline asks for the channel, then leaves as one update of its segment | none | verified |
+| `MURMURE-648` | `FAIL` | Given a ring cue older than the ring timeout, or a page in a call, the page MUST NOT ring. | this spec section 3, the ring | `ambre_murmure::ui::call_ring::tests::a_ring_cue_of_a_direct_message_rings_a_free_page_until_its_timeout` -- a cue replayed past the timeout and a page on the line ring nothing | none | verified |
+| `MURMURE-649` | `FRAME` | A call of a channel that is no direct message MUST ring no page. | this spec section 3, the ring | `ambre_murmure::ui::call_ring::tests::a_ring_cue_of_a_direct_message_rings_a_free_page_until_its_timeout` -- the cue of a channel rings nothing; `ambre_app::shell::murmure_regions::the_ring_alert_names_the_caller_and_offers_accept_and_decline` -- wasm tier: the cue of a public channel shows no alert | none | verified |
+| `MURMURE-650` | `POST` | A decline or an end written into the call message MUST stop its ring on each page that hears it. | this spec section 3, the ring; `MURMURE-591` | `ambre_murmure::ui::call_ring::tests::a_decline_or_an_end_of_the_call_stops_its_ring`; `ambre_logic::channels::tests::a_call_message_of_another_member_cues_a_ring_and_the_last_leave_cues_its_end` -- the last leave writes its end under an end cue | none | verified |
+
 * **Budget.** the interval between two asks of who is in a call is the call roster row of
-  `ambre-spec-budgets.md section 1`. The participant cap and the time to live of a call are the
+  `ambre-spec-budgets.md section 1`. The time a call rings is the call ring row. The participant
+  cap and the time to live of a call are the
   call rows of that section. The time of a paint that draws the videos is the call video paint row.
-* **Boundary.** the call message and its end are sealed like any message (`ZK-001`). What the relay
+* **Boundary.** the call message and its end are sealed like any message (`ZK-001`). A ring
+  rides their sealed summaries, so the relay learns no ring and no decline (`MURMURE-647`). What the relay
   learns from an ask of who is in a call is `ZK-024`. `ZK-021` and `ZK-022` bound the rest.
-* **Verification.** 47 `verified`. The relay half holds in the database tier. The engine and the two
+* **Verification.** 57 `verified`. The relay half holds in the database tier. The engine and the two
   workers hold on the host, and the whole path in the browser tier, under Chrome and Firefox.
 
 ---
@@ -141,6 +158,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | is in the call | joins from the message | the same message | Ada and Bob in the call (`MURMURE-411`) | `ambre_belt::murmure::tests::a_call_message_shows_who_is_in_the_call_until_it_ended` |
 | leaves | leaves last | the message and its end | the call ended, and no join (`MURMURE-591`, `MURMURE-412`) | `ambre_belt::murmure::tests::a_call_message_shows_who_is_in_the_call_until_it_ended` |
 | is alone in the call, and her browser dies | nothing | the message, no end | the call ended, one time to live later at most (`MURMURE-592`) | `ambre_belt::murmure::tests::a_call_whose_last_participant_crashed_reads_ended` |
+| calls Bob from the header of their direct message | reads another channel | a call message | Bob's page rings, with an accept and a decline (`MURMURE-641`) | `ambre_app::shell::murmure_regions::the_ring_alert_names_the_caller_and_offers_accept_and_decline` |
+| waits | declines | the message and Bob's end | Ada's call ends, and her header says the call was declined (`MURMURE-644`, `MURMURE-645`) | `ambre_murmure::ui::call_ring::tests::a_decline_or_the_timeout_ends_the_ring_of_the_caller` |
+| waits | does not answer | the message and Ada's end | the ring stops on both pages at the timeout, and Ada's header says no answer (`MURMURE-643`, `MURMURE-644`) | `ambre_murmure::ui::call_ring::tests::a_decline_or_the_timeout_ends_the_ring_of_the_caller` |
 | starts a call | starts a call at the same instant | two call messages | two calls, each with its own members (`MURMURE-594`) | `ambre_murmure::logic::call_tests::two_starts_at_once_hold_two_calls` |
 
 ---
@@ -216,6 +236,48 @@ Mute stops the sound of the member and keeps the call. What mute does on the wir
 `CALL-074` and `CALL-075`. Hang up is a leave, so the relay takes the seat out of the roster. Each
 reader of the call message then reads the member out of the call (`MURMURE-604`). A last hang-up
 writes the end, as any last leave does (`MURMURE-591`).
+
+**The ring.** A call of a direct message rings the other member. The call message alone tells
+that member's pages of the call. Its sealed summary carries a cue: the call, a ring, and the
+instant its writer wrote it (`1-Foundations/ambre-spec-residency.md section 3`). A page that does
+not hold the channel reads the cue from the summary alone, as it counts a badge (`MURMURE-641`).
+
+1. The caller starts the call from the header, and posts the call message once seated
+   (`MURMURE-408`). Its header says that it waits for an answer.
+2. Each open page of Murmure of the other member hears the cue. A free page rings: an alert
+   names the caller, and a tone sounds. The alert offers accept and decline.
+3. Accept joins the call as Join call does, the microphone first (`MURMURE-642`).
+4. Decline writes the end of the member into the call message, under a decline cue. A page
+   that does not hold the channel opens it to write the end (`MURMURE-642`).
+
+The ring ends at the first of these:
+
+| The event | The page of the member | The page of the caller |
+|---|---|---|
+| the member accepts | stops ringing, and joins | stops waiting once the call admits the member (`MURMURE-644`) |
+| the member declines | stops ringing | hangs up, and says the call was declined (`MURMURE-644`, `MURMURE-645`) |
+| the ring timeout passes | stops ringing, and writes nothing (`MURMURE-643`) | hangs up, and says no answer (`MURMURE-644`, `MURMURE-645`) |
+| the caller hangs up | stops ringing at the end cue (`MURMURE-650`) | ends the call |
+
+A hang-up of the caller is the last leave, so it writes the end under an end cue. That end
+also stops the ring of another tab of the member that declined. A page in a call rings for no
+other call, and a cue older than the timeout rings nothing: a reconnect replays old cues
+(`MURMURE-648`). A call of any other channel rings no page: its members join from the call
+message (`MURMURE-649`).
+
+The timeout reads the instant of the cue on the clock of the reader. So a drift between the two
+clocks moves the end of the ring on the page of the member. The ring timeout is the call ring row of
+`ambre-spec-budgets.md section 1`.
+
+The title of the alert reads as an alert, so a screen reader reads it when it shows. Accept and
+decline are buttons with an accessible name, each in the order of the keyboard (`MURMURE-646`).
+The alert takes no focus: a member who types keeps the key in the field. The tone is
+synthesized by the page, two pitches together, one second on and two off. A browser that holds
+audio until a gesture keeps the tone silent, and the alert still shows.
+
+**What the relay learns by a ring** is what a call message and an end tell it (`ZK-001`). That
+is an update of the channel, at its instant. The cue travels sealed inside it. A page that declines
+and does not hold the channel asks for its documents, as a read does (`MURMURE-647`).
 
 **The devices.** The devices control sits beside the call controls of the header, in a call and
 out of one. It opens the device panel: a choice of microphone, and a choice of speaker where the
@@ -344,6 +406,8 @@ region.
 | `crates/ambre-app/src/call_devices.rs` | the device list, the change of a device and the stored choice of the page |
 | `crates/ambre-murmure/src/ui/call_volumes.rs` | the volume of each slot, the stored volumes, the gain and the level of the meter |
 | `crates/ambre-app/src/call_volumes.rs` | the volume of each element, the graph of the gain and the meter of the page |
+| `crates/ambre-murmure/src/ui/call_ring.rs` | the steps of a ring, on the page of the member and on the page of the caller |
+| `crates/ambre-app/src/call_ring.rs` | the ring of the page: its alert, its tone, its timer, and the join, the decline or the hang-up a step asks for |
 | `crates/ambre-murmure/src/ui/call_videos.rs` | the band and the tiles of the video region, the screen included |
 | `crates/ambre-canvas/src/video.rs` | the detached video element of each slot, which the render runtime copies |
 
@@ -371,6 +435,10 @@ region.
 | a share of another member, while the page shares | the share stops, and the header says so |
 | a refused camera | the call goes on with its audio, and the header shows why |
 | a video received | the video region shows it above the composer |
+| a call message of another member, in a direct message | the page rings, with an accept and a decline |
+| accept, on the ring alert | the member joins the call |
+| decline, on the ring alert | the end of the member goes into the call message, and the caller hangs up |
+| the ring timeout | the ring stops, and the caller hangs up |
 
 ---
 
@@ -394,6 +462,11 @@ region.
 | A received screen takes a tile above the cameras | the screen in a tile of the row of the cameras | the tile of a camera is about 160 pixels tall, where the text of a screen cannot be read |
 | A share stops when another member shares | a share that goes on unseen | the member would show a screen that no other member sees |
 | A reader asks while the view shows the channel | the relay pushes the roster to every member of the channel | the relay would send who is in a call to sessions that show nothing of it |
+| The ring rides the sealed summary of the call message | a ring frame the relay forwards to the members of the direct message | the relay would learn whom a call rings and who declines it, beyond the call it already holds |
+| A decline writes the end of the member | a decline that writes nothing | the caller would wait the whole timeout for a member who already said no |
+| A call of a direct message rings | every call of a channel rings | each member of a large channel would ring for each call |
+| The alert takes no focus | the alert takes the focus | a member who types would accept or decline with the next key |
+| The tone is synthesized by the page | a sound file | the page would ship and fetch a file for one tone |
 
 ---
 
@@ -401,6 +474,11 @@ region.
 
 * **A removed member stays in the list until it leaves.** The reader keeps the membership log it
   read, and reads it again only when a join names a member that log does not hold.
+* **A page with every tab closed rings nothing.** A ring then needs a push, which lands with the
+  `Push notifications` Story (`ambre-roadmap.md` E5).
+* **A page of Prose, Trame or Toile rings nothing.** The alert sits in the shell of Murmure.
+* **A long-hidden tab may ring late or stop late.** A browser may slow the timers of a hidden
+  tab, which delays the timeout.
 * **The label on the screen is not chosen.** The term is `call` in the corpus; the word the
   interface shows belongs to `ambre-spec-locale.md`.
 

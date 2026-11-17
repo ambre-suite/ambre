@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use ambre_core::id::{Id, User};
 
-pub use sealed::{Activity, ActivityAnchor, ActivityKind, MentionScope};
+pub use sealed::{Activity, ActivityAnchor, ActivityKind, CallCue, CueKind, MentionScope};
 
 /// What one update holds, readable with no Loro document.
 ///
@@ -28,6 +28,9 @@ pub struct ActivitySummary {
     pub mentions_all: MentionScope,
     /// An application key, for example a thread root. Opaque here.
     pub anchor: Option<ActivityAnchor>,
+    /// The cue of a call, on the update that posts a call message or writes
+    /// its end (the Murmure calls spec, section 3, the ring).
+    pub call: Option<CallCue>,
 }
 
 impl ActivitySummary {
@@ -46,6 +49,7 @@ impl ActivitySummary {
             mentions,
             mentions_all,
             anchor: self.anchor.clone().and_then(ActivityAnchor::within_bound),
+            call: self.call,
         }
     }
 }
@@ -57,6 +61,7 @@ impl From<sealed::ActivitySummary> for ActivitySummary {
             mentions: summary.mentions,
             mentions_all: summary.mentions_all,
             anchor: summary.anchor,
+            call: summary.call,
         }
     }
 }
@@ -74,6 +79,7 @@ mod tests {
             mentions: vec![Id::<User>::from_bytes([1; 16])],
             mentions_all: crate::MentionScope::Named,
             anchor: ActivityAnchor::new(vec![9; 8]),
+            call: None,
         };
         assert_eq!(ActivitySummary::from(within.to_sealed()), within);
         let past = ActivitySummary {
