@@ -32,7 +32,7 @@ impl SyncState {
         passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
     ) {
         let Ok((key, salt)) = FileKey::for_new_file(&passphrase) else {
-            tracing::warn!("Sync: SealDocFile: key derivation failed");
+            crate::log::warning!("Sync: SealDocFile: key derivation failed");
             self.reply(id, RestEvent::DocFileSealFailed);
             return;
         };
@@ -42,7 +42,7 @@ impl SyncState {
                 self.reply(id, RestEvent::DocFileSealed { data });
             }
             Err(_) => {
-                tracing::warn!("Sync: SealDocFile: seal failed");
+                crate::log::warning!("Sync: SealDocFile: seal failed");
                 self.reply(id, RestEvent::DocFileSealFailed);
             }
         }
@@ -62,12 +62,12 @@ impl SyncState {
         passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
     ) {
         let Ok(envelope) = parse_sealed_header(&sealed) else {
-            tracing::warn!("Sync: OpenDocFile: not a sealed .ambre file");
+            crate::log::warning!("Sync: OpenDocFile: not a sealed .ambre file");
             self.reply(id, RestEvent::DocFileOpenFailed);
             return;
         };
         let Ok(key) = FileKey::from_passphrase(&passphrase, &envelope.salt) else {
-            tracing::warn!("Sync: OpenDocFile: key derivation failed");
+            crate::log::warning!("Sync: OpenDocFile: key derivation failed");
             self.reply(id, RestEvent::DocFileOpenFailed);
             return;
         };
@@ -79,7 +79,7 @@ impl SyncState {
         ) {
             Ok(plaintext) => self.reply(id, RestEvent::DocFileOpened { plaintext }),
             Err(_) => {
-                tracing::warn!("Sync: OpenDocFile: wrong passphrase or tampered file");
+                crate::log::warning!("Sync: OpenDocFile: wrong passphrase or tampered file");
                 self.reply(id, RestEvent::DocFileOpenFailed);
             }
         }

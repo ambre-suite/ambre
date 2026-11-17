@@ -496,7 +496,7 @@ pub fn seal_update(
     let aad = aad_of(&public_data)?;
     let sealed = seal_payload(payload.as_bytes(), &aad, doc_key, signing_key)?;
     let (ciphertext, nonce, commitment_tag, signature) = message_parts(sealed);
-    tracing::debug!(
+    crate::log::debug!(
         "[Pipeline] seal_update: {} bytes plaintext -> {} bytes ciphertext",
         payload.len(),
         ciphertext.as_bytes().len(),
@@ -521,7 +521,7 @@ pub fn open_update(update: &Update, doc_key: &DocumentKey) -> Result<UpdateFrame
         &update.signature,
     );
     let frame = open_payload(&sealed, &aad, doc_key, &update.public_data.pub_key)?.into_frame();
-    tracing::debug!(
+    crate::log::debug!(
         "[Pipeline] open_update: {} bytes ciphertext -> {} bytes plaintext",
         update.ciphertext.as_bytes().len(),
         frame.len(),

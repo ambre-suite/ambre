@@ -38,7 +38,7 @@ impl SyncState {
             // Past the AEAD size limit: nothing is stored, as for a seed that
             // is missing.
             Err(_) => {
-                tracing::warn!("Sync: SealLocalRow: seal failed");
+                crate::log::warning!("Sync: SealLocalRow: seal failed");
                 self.reply(id, RestEvent::LocalStoreLocked);
             }
         }

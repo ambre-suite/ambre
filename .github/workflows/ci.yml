@@ -622,8 +622,8 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # size -- the release build Trunk ships: the brotli of the first download
-  # and of each lazy module against its budget, and the raw bytes of Main
-  # against its ceiling (`scripts/wasm_size.py`, budgets spec section 5,
+  # and of each lazy module against its budget, and the raw bytes of Main and
+  # of Sync against their ceilings (`scripts/wasm_size.py`, budgets spec section 5,
   # `ARCH-096`). The post-build hook writes the brotli copies. Every push runs
   # it, so every push prints the change of each artefact against the last
   # measure of `main` (`ARCH-115`): the gate fails on the product budgets

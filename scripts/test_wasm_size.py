@@ -2,8 +2,8 @@
 """What `wasm_size.py` passes, and what it fails.
 
 The verdict is tested on figures alone: a brotli figure over its budget
-fails, and so does the raw figure of Main over its ceiling. No other raw
-figure fails, and no change against main does. Building the release is left
+fails, and so does the raw figure of Main or Sync over its ceiling. No
+other raw figure fails, and no change against main does. Building the release is left
 to `just size`.
 
 Run: `just test-scripts`, or `python3 -m unittest discover -s scripts`.
@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import wasm_size  # noqa: E402  -- the module under test
 
-CEILINGS = {"Main": 3_000_000}
+CEILINGS = {"Main": 3_000_000, "Sync": 1_000_000}
 
 
 class Verdict(unittest.TestCase):
@@ -29,12 +29,22 @@ class Verdict(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("1 over the ceiling", lines[0])
 
+    def test_sync_over_its_raw_ceiling_fails_under_the_budget(self) -> None:
+        # Sync holds a raw ceiling of its own (`ARCH-096`): its brotli stays
+        # far under the first download budget, and the build still fails.
+        sizes = {"Main": 1, "Sync": 1_000_001}
+        ok, lines = wasm_size.verdict(sizes, CEILINGS, 2_000_000, {}, {"Main": 1, "Sync": 1})
+        self.assertFalse(ok)
+        self.assertIn("1 over the ceiling", lines[1])
+
     def test_an_artefact_no_ceiling_names_fails_nothing_on_its_raw_bytes(self) -> None:
-        # The ceilings of the workers and the modules became a report
+        # The ceilings of the call worker and the modules became a report
         # (`ARCH-096`): a raw figure far over its old ceiling passes.
-        ok, lines = wasm_size.verdict({"Main": 1, "Sync": 9_000_000}, CEILINGS, 2_000_000, {}, {"Main": 1, "Sync": 1})
+        sizes = {"Main": 1, "Sync": 1, "Call worker": 9_000_000}
+        compressed = {"Main": 1, "Sync": 1, "Call worker": 1}
+        ok, lines = wasm_size.verdict(sizes, CEILINGS, 2_000_000, {}, compressed)
         self.assertTrue(ok)
-        self.assertEqual("Sync: 9,000,000 bytes raw; 1 brotli", lines[1])
+        self.assertEqual("Call worker: 9,000,000 bytes raw; 1 brotli", lines[2])
 
     def test_figures_under_the_ceilings_but_over_the_budget_fail(self) -> None:
         ok, lines = wasm_size.verdict({"Main": 2_400_000, "Sync": 100_000}, CEILINGS, 2_000_000)
@@ -145,9 +155,9 @@ class Find(unittest.TestCase):
 
 
 class Ceilings(unittest.TestCase):
-    def test_main_alone_holds_a_raw_ceiling(self) -> None:
-        self.assertEqual(wasm_size.CEILINGS.keys(), {"Main"})
-        self.assertGreater(wasm_size.CEILINGS["Main"], 0)
+    def test_the_first_download_alone_holds_raw_ceilings(self) -> None:
+        self.assertEqual(wasm_size.CEILINGS.keys(), set(wasm_size.FIRST_DOWNLOAD))
+        self.assertTrue(all(figure > 0 for figure in wasm_size.CEILINGS.values()))
 
 
 HEAD = wasm_size.Measure("a" * 40, {"Main": 1_000, "Sync": 500}, {"Main": 300, "Sync": 100})

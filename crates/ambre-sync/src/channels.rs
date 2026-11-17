@@ -43,7 +43,7 @@ impl SyncState {
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route(format!("/channels/{channel_id}/documents"));
             let result = http::get_json_auth::<http::ChannelDocumentsResponse>(&url, auth)
@@ -93,11 +93,11 @@ impl SyncState {
             Err(error) if error.is(ambre_core::RefusalCode::Forbidden) => {
                 // No member of the channel any more: a leave or a delete
                 // whose answer was lost, or one from another client.
-                tracing::info!("Sync: channel {channel_id} refused its listing");
+                crate::log::info!("Sync: channel {channel_id} refused its listing");
                 self.send_to_logic(LogicEvent::ChannelRefused { channel_id });
             }
             Err(error) => {
-                tracing::warn!("Sync: listing channel {channel_id} failed: {error}");
+                crate::log::warning!("Sync: listing channel {channel_id} failed: {error}");
                 self.send_to_logic(LogicEvent::ChannelOpenFailed {
                     channel_id,
                     failure: error.failure(),
@@ -149,7 +149,7 @@ impl SyncState {
         doc_state.unvouched.clear();
         doc_state.refused.clear();
         doc_state.gate.end();
-        tracing::warn!("Sync: the log of {document_id:?} starts outside its space");
+        crate::log::warning!("Sync: the log of {document_id:?} starts outside its space");
         self.send_to_logic(LogicEvent::DocumentOpenFailed {
             document_id,
             cause: ambre_bus::OpenFailure::RootOutsideSpace,
@@ -273,7 +273,7 @@ impl SyncState {
         match result {
             Ok(event) => self.send_to_logic(event),
             Err(error) => {
-                tracing::warn!("Sync: channel {channel_id} request failed: {error}");
+                crate::log::warning!("Sync: channel {channel_id} request failed: {error}");
                 self.send_to_logic(LogicEvent::ChannelRequestFailed {
                     channel_id,
                     failure: error.failure(),
@@ -408,7 +408,7 @@ impl SyncState {
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             let base = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base);
             let result = async {
                 for (document_id, doc_key_enc, entry, name_enc) in documents {
@@ -453,21 +453,23 @@ impl SyncState {
         let name_enc = match self.sealed_channel_name(meta, &name.unwrap_or_default()) {
             Ok(name_enc) => name_enc,
             Err(message) => {
-                tracing::warn!("Sync: the name of {meta} stays unsealed: {message}");
+                crate::log::warning!("Sync: the name of {meta} stays unsealed: {message}");
                 return;
             }
         };
         let Some(_tx) = self.event_tx.as_ref() else {
-            tracing::warn!("Sync: no relay on this transport, the name of {meta} stays local");
+            crate::log::warning!(
+                "Sync: no relay on this transport, the name of {meta} stays local"
+            );
             return;
         };
         let url = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base)
             .route(format!("/documents/{}", meta.document_id()));
         let auth = self.auth_context();
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             let body = http::RenameDocumentRequest { name_enc };
             if let Err(message) = http::patch_json_auth(&url, &body, auth).await {
-                tracing::warn!("Sync: the name of {meta} did not reach the relay: {message}");
+                crate::log::warning!("Sync: the name of {meta} did not reach the relay: {message}");
             }
         });
     }
@@ -532,7 +534,7 @@ impl SyncState {
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route(format!("/channels/{channel_id}/join"));
             let result = async {
@@ -561,7 +563,7 @@ impl SyncState {
         let (tx, meta_key, exchange_key, author) = match self.channel_creation(meta) {
             Ok(prepared) => prepared,
             Err(error) => {
-                tracing::warn!("Sync: a channel step of {channel_id} failed: {error}");
+                crate::log::warning!("Sync: a channel step of {channel_id} failed: {error}");
                 return self.send_to_logic(LogicEvent::SegmentCloseFailed {
                     channel_id,
                     closing,
@@ -582,7 +584,7 @@ impl SyncState {
         let http = crate::sharing::GlooHttp {
             auth: self.auth_context(),
         };
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             let result = crate::sharing::close_segment_task(&http, params).await;
             let _ = tx.send(SyncEvent::SegmentClosed {
                 channel_id,
@@ -634,7 +636,7 @@ impl SyncState {
         let (tx, meta_key, exchange_key, author) = match self.channel_creation(meta) {
             Ok(prepared) => prepared,
             Err(error) => {
-                tracing::warn!("Sync: a channel step of {channel_id} failed: {error}");
+                crate::log::warning!("Sync: a channel step of {channel_id} failed: {error}");
                 return self.send_to_logic(LogicEvent::AmendmentsLinkFailed {
                     channel_id,
                     segment,
@@ -656,7 +658,7 @@ impl SyncState {
         let http = crate::sharing::GlooHttp {
             auth: self.auth_context(),
         };
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             let result = crate::sharing::amendments_task(&http, params).await;
             let _ = tx.send(SyncEvent::AmendmentsLinked {
                 channel_id,
@@ -680,7 +682,7 @@ impl SyncState {
         let (tx, meta_key, exchange_key, author) = match self.channel_creation(meta) {
             Ok(prepared) => prepared,
             Err(error) => {
-                tracing::warn!("Sync: a channel step of {channel_id} failed: {error}");
+                crate::log::warning!("Sync: a channel step of {channel_id} failed: {error}");
                 return self.send_to_logic(LogicEvent::ThreadLinkFailed {
                     channel_id,
                     segment,
@@ -703,7 +705,7 @@ impl SyncState {
         let http = crate::sharing::GlooHttp {
             auth: self.auth_context(),
         };
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             let result = crate::sharing::thread_task(&http, params).await;
             let _ = tx.send(SyncEvent::ThreadLinked {
                 channel_id,
@@ -725,7 +727,7 @@ impl SyncState {
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route(format!("/channels/{channel_id}"));
             let result = http::delete_auth(&url, auth).await;
@@ -758,7 +760,7 @@ impl SyncState {
         let http = crate::sharing::GlooHttp {
             auth: self.auth_context(),
         };
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             let result = crate::sharing::leave_channel_task(&http, params).await;
             let _ = tx.send(SyncEvent::ChannelLeft { channel_id, result });
         });
@@ -797,7 +799,7 @@ impl SyncState {
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             let base = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base);
             let result = async {
                 let mut signing_keys = Vec::with_capacity(members.len());
@@ -852,13 +854,13 @@ impl SyncState {
             .filter_map(|document_id| self.read_up_to(document_id).map(|seq| (document_id, seq)))
             .collect();
         if self.event_tx.is_none() {
-            tracing::warn!("Sync: no relay on this transport, the read cursors stay");
+            crate::log::warning!("Sync: no relay on this transport, the read cursors stay");
             return;
         }
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             let base = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base);
             put_cursors(&base, cursors, auth.clone()).await;
             if !finals.is_empty() {
@@ -868,7 +870,7 @@ impl SyncState {
                     documents: Some(finals.iter().map(Id::<Segment>::document_id).collect()),
                 };
                 if let Err(e) = http::post_json_auth_ok(&url, &body, auth).await {
-                    tracing::warn!("Sync: read cursors of the final segments not moved: {e}");
+                    crate::log::warning!("Sync: read cursors of the final segments not moved: {e}");
                 }
             }
         });
@@ -892,18 +894,20 @@ impl SyncState {
     pub(crate) fn handle_mark_thread_read(&self, thread: Id<Document>) {
         match self.read_up_to(thread) {
             Some(seq) => self.move_cursors(vec![(thread, seq)]),
-            None => tracing::warn!("Sync: thread {thread} has nothing delivered, its cursor stays"),
+            None => crate::log::warning!(
+                "Sync: thread {thread} has nothing delivered, its cursor stays"
+            ),
         }
     }
 
     fn move_cursors(&self, cursors: Vec<(Id<Document>, Seq<Relay>)>) {
         if self.event_tx.is_none() {
-            tracing::warn!("Sync: no relay on this transport, the read cursors stay");
+            crate::log::warning!("Sync: no relay on this transport, the read cursors stay");
             return;
         }
         let base = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base);
         let auth = self.auth_context();
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             put_cursors(&base, cursors, auth).await;
         });
     }
@@ -922,19 +926,19 @@ impl SyncState {
 
     fn fetch_activity(&self, fetch: ActivityFetch) {
         let Some(tx) = self.event_tx.clone() else {
-            tracing::warn!("Sync: no relay on this transport, no activity answer");
+            crate::log::warning!("Sync: no relay on this transport, no activity answer");
             return;
         };
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             if fetch == ActivityFetch::MarkAllReadFirst {
                 let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                     .route("/read-cursors/mark-read");
                 let body = http::MarkReadRequest { documents: None };
                 if let Err(e) = http::post_json_auth_ok(&url, &body, auth.clone()).await {
-                    tracing::warn!("Sync: mark all read failed: {e}");
+                    crate::log::warning!("Sync: mark all read failed: {e}");
                 }
             }
             let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
@@ -951,7 +955,7 @@ impl SyncState {
     pub(crate) fn activity_fetched(&self, result: Result<Vec<DocumentActivity>, http::HttpError>) {
         match result {
             Ok(documents) => self.send_to_logic(LogicEvent::ChannelActivity { documents }),
-            Err(message) => tracing::warn!("Sync: activity answer failed: {message}"),
+            Err(message) => crate::log::warning!("Sync: activity answer failed: {message}"),
         }
     }
 
@@ -959,13 +963,13 @@ impl SyncState {
     /// so a space admin can drop an entry whose channel is gone.
     pub(crate) fn handle_list_space_channels(&self, space_id: Id<Space>) {
         let Some(tx) = self.event_tx.clone() else {
-            tracing::warn!("Sync: no relay on this transport, no channels of a space");
+            crate::log::warning!("Sync: no relay on this transport, no channels of a space");
             return;
         };
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route(format!("/spaces/{space_id}/channels"));
             let result = http::get_json_auth::<http::SpaceChannelsResponse>(&url, auth)
@@ -986,7 +990,9 @@ impl SyncState {
         match result {
             Ok(channels) => self.send_to_logic(LogicEvent::SpaceChannels { space_id, channels }),
             Err(message) => {
-                tracing::warn!("Sync: listing the channels of space {space_id} failed: {message}");
+                crate::log::warning!(
+                    "Sync: listing the channels of space {space_id} failed: {message}"
+                );
             }
         }
     }
@@ -997,14 +1003,14 @@ impl SyncState {
     pub(crate) fn handle_list_member_channels(&mut self) {
         let asked = self.member_channels_asked.issue();
         let Some(tx) = self.event_tx.clone() else {
-            tracing::warn!("Sync: no relay on this transport, no channels of the user");
+            crate::log::warning!("Sync: no relay on this transport, no channels of the user");
             return;
         };
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
         let exchange_key = self.exchange_key.clone();
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route("/channels");
             let result =
@@ -1072,7 +1078,7 @@ impl SyncState {
                 });
             }
             Err(message) => {
-                tracing::warn!("Sync: listing the channels of the user failed: {message}");
+                crate::log::warning!("Sync: listing the channels of the user failed: {message}");
             }
         }
     }
@@ -1158,7 +1164,7 @@ async fn put_cursors(
         let url = base.route(format!("/documents/{document_id}/read-cursor"));
         let body = http::ReadCursorRequest { seq };
         if let Err(e) = http::put_json_auth(&url, &body, auth.clone()).await {
-            tracing::warn!("Sync: read cursor of {document_id} not moved: {e}");
+            crate::log::warning!("Sync: read cursor of {document_id} not moved: {e}");
         }
     }
 }
@@ -1568,7 +1574,7 @@ impl LogGate {
                         walk.resend.push((clock, body));
                     }
                 }
-                walk.resend.sort_by_key(|(clock, _)| *clock);
+                ambre_core::order::sort_by_seq(&mut walk.resend, |(clock, _)| *clock);
                 Vec::new()
             }
             Self::Ended => {

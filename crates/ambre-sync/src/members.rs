@@ -44,7 +44,7 @@ impl SyncState {
             invitee_email,
         };
         let http = sharing::GlooHttp { auth };
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             sharing::fetch_invitee_key_task(&http, params, &tx, &logic_tx).await;
         });
     }
@@ -70,7 +70,7 @@ impl SyncState {
         let http = sharing::GlooHttp {
             auth: self.auth_context(),
         };
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             sharing::fetch_member_key_task(&http, params, &tx, &logic_tx).await;
         });
     }
@@ -185,7 +185,7 @@ impl SyncState {
             rule: self.log_rule(document_id),
         };
         let http = sharing::GlooHttp { auth };
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             sharing::invite_task(&http, params, &tx, &logic_tx).await;
         });
     }
@@ -215,7 +215,7 @@ impl SyncState {
                     invite.expect_exchange_pub_key,
                 ),
                 Some(failed) => {
-                    tracing::warn!(
+                    crate::log::warning!(
                         "Sync: invite {} waits on a document not created: {failed}",
                         invite.id
                     );
@@ -305,7 +305,7 @@ impl SyncState {
             rule: self.log_rule(document_id),
         };
         let http = sharing::GlooHttp { auth };
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             sharing::revoke_task(&http, params, &tx, &logic_tx).await;
         });
     }
@@ -382,7 +382,7 @@ impl SyncState {
         let http = sharing::GlooHttp {
             auth: self.auth_context(),
         };
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             sharing::leave_task(&http, params, &tx, &logic_tx).await;
         });
     }
@@ -420,7 +420,7 @@ impl SyncState {
                 footing: self.footing(document_id),
             };
             let http = sharing::GlooHttp { auth };
-            wasm_bindgen_futures::spawn_local(async move {
+            crate::spawn(async move {
                 sharing::list_members_task(&http, params, &tx).await;
             });
         } else if let Some(id) = id {
@@ -477,11 +477,13 @@ impl SyncState {
             let http = sharing::GlooHttp {
                 auth: self.auth_context(),
             };
-            wasm_bindgen_futures::spawn_local(async move {
+            crate::spawn(async move {
                 sharing::role_change_task(&http, params, &tx, &logic_tx).await;
             });
         } else {
-            tracing::info!("Sync: UpdateDocumentMemberRole {document_id:?} {user_id:?} {role:?}");
+            crate::log::info!(
+                "Sync: UpdateDocumentMemberRole {document_id:?} {user_id:?} {role:?}"
+            );
             self.reply(
                 id,
                 RestEvent::MemberRoleUpdated {
@@ -508,7 +510,7 @@ impl SyncState {
         let auth = self.auth_context();
 
         if let Some(tx) = event_tx {
-            wasm_bindgen_futures::spawn_local(async move {
+            crate::spawn(async move {
                 let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                     .route("/users/search")
                     .query(http::QueryKey::Query, query.as_str());
@@ -533,7 +535,7 @@ impl SyncState {
                 }
             });
         } else {
-            tracing::info!("Sync: SearchUsers '{}'", query.as_str());
+            crate::log::info!("Sync: SearchUsers '{}'", query.as_str());
             self.reply(id, RestEvent::UserSearchResults { users: Vec::new() });
         }
     }

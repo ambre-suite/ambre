@@ -52,7 +52,7 @@ impl CallPort {
                     .post_message_with_transferable(&buffer, &js_sys::Array::of1(&buffer))
                     .is_err()
                 {
-                    tracing::warn!("Sync: a key did not reach the call worker");
+                    crate::log::warning!("Sync: a key did not reach the call worker");
                 }
             });
         })
@@ -177,7 +177,7 @@ impl SyncState {
     /// open, or while another join waits, changes nothing.
     pub(crate) fn handle_join_call(&mut self, target: CallTarget, opening: Opening) {
         let Some(port) = self.call_ports.take() else {
-            tracing::warn!("Sync: a call joined with no port to the call worker");
+            crate::log::warning!("Sync: a call joined with no port to the call worker");
             return;
         };
         if self.call.is_some() || self.call_joining.is_some() {
@@ -195,7 +195,7 @@ impl SyncState {
         let http = crate::sharing::GlooHttp {
             auth: self.auth_context(),
         };
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             let meta = crate::sharing::channel_meta(&http, target.channel, scheme, &base).await;
             let _ = tx.send(SyncEvent::CallChannel {
                 call: target.call,
@@ -216,7 +216,7 @@ impl SyncState {
         match meta {
             Some(meta) => self.join_call(joining.target, meta, joining.port, joining.opening),
             None => {
-                tracing::warn!("Sync: the channel of the call holds no meta document");
+                crate::log::warning!("Sync: the channel of the call holds no meta document");
                 self.send_to_logic(LogicEvent::Call(CallSignal::Ended));
             }
         }
@@ -280,7 +280,7 @@ impl SyncState {
         opening: Opening,
     ) {
         let Some(member) = self.user_id else {
-            tracing::warn!("Sync: a call joined before the session is ready");
+            crate::log::warning!("Sync: a call joined before the session is ready");
             return;
         };
         if self.call.is_some() {
@@ -424,7 +424,7 @@ impl SyncState {
             let http = crate::sharing::GlooHttp {
                 auth: self.auth_context(),
             };
-            wasm_bindgen_futures::spawn_local(async move {
+            crate::spawn(async move {
                 crate::sharing::call_log_task(&http, params, &tx).await;
             });
         }
@@ -591,7 +591,7 @@ impl SyncState {
             self.arm_event_timer(SyncEvent::CallTick, delay);
         }
         if let Some(end) = steps.ended {
-            tracing::info!("Sync: the call ended: {end:?}");
+            crate::log::info!("Sync: the call ended: {end:?}");
             // A join refused as ended tells the reader of the call message at once
             // (the Murmure calls spec).
             if end == CallEnd::Refused(ambre_protocol::CallRefusal::Ended)
@@ -660,7 +660,7 @@ impl SyncState {
             target.call,
         );
         let Ok(ws) = web_sys::WebSocket::new(url.as_str()) else {
-            tracing::error!("Sync: the call socket did not open");
+            crate::log::error!("Sync: the call socket did not open");
             return;
         };
         ws.set_binary_type(web_sys::BinaryType::Arraybuffer);
@@ -684,14 +684,16 @@ impl SyncState {
     /// Opens the socket of the SFU at `address`.
     fn open_call_sfu(&mut self, address: Validated<SfuSocket>) {
         let Ok(ws) = web_sys::WebSocket::new(address.as_str()) else {
-            tracing::error!("Sync: the socket of the SFU did not open");
+            crate::log::error!("Sync: the socket of the SFU did not open");
             return;
         };
         let socket = self.call_socket(
             ws,
             |data| {
                 let text = data.as_string()?;
-                serde_json::from_str::<SfuMsg>(&text)
+                // The slice reader the REST answers use: a second reader
+                // would link a second copy of the JSON parser.
+                serde_json::from_slice::<SfuMsg>(text.as_bytes())
                     .ok()
                     .map(SyncEvent::CallSfu)
             },
@@ -773,7 +775,7 @@ impl SyncState {
         if let Ok(bytes) = postcard::to_allocvec(frame) {
             let array = js_sys::Uint8Array::from(bytes.as_slice());
             if socket.ws.send_with_array_buffer(&array.buffer()).is_err() {
-                tracing::warn!("Sync: a frame of the call socket was not sent");
+                crate::log::warning!("Sync: a frame of the call socket was not sent");
             }
         }
     }

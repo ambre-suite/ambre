@@ -163,9 +163,9 @@ impl SyncState {
     #[cfg_attr(test, mutants::skip)]
     fn renew_ahead(&mut self, stale: Credential<AccessToken>) {
         let auth = self.auth_context();
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             if let Err(e) = auth.renew(&stale).await {
-                tracing::warn!("Sync: token renewal ahead of the expiry failed: {e}");
+                crate::log::warning!("Sync: token renewal ahead of the expiry failed: {e}");
             }
         });
     }

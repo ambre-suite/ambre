@@ -259,7 +259,7 @@ impl SyncState {
         if !asks {
             return;
         }
-        tracing::warn!(
+        crate::log::warning!(
             "[Sync] a member signed a log head this client has not read doc={document_id} place={}",
             head.position.get()
         );
@@ -284,7 +284,7 @@ impl SyncState {
         let verdict = doc_state.head_watch.served(listing, served);
         let released = doc_state.head_watch.release();
         if verdict == Verdict::Withheld {
-            tracing::warn!(
+            crate::log::warning!(
                 "[Sync] the relay withholds a log entry a member signed doc={document_id}"
             );
             self.send_to_logic(LogicEvent::SyncWarning {
@@ -293,7 +293,7 @@ impl SyncState {
             });
         }
         if !released.is_empty() {
-            tracing::info!(
+            crate::log::info!(
                 "[Sync] the log passes through the signed head, {} held edit(s) leave doc={document_id}",
                 released.len()
             );

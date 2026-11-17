@@ -641,13 +641,31 @@ impl Outgoing {
     }
 
     /// A request carrying `body` as JSON.
+    ///
+    /// Only the encode is generic: one copy per body type stays in the worker,
+    /// and the rest is [`Outgoing::with_json`] once (`ambre-spec-budgets.md`
+    /// section 5).
     fn json<T: Serialize>(method: Method, url: Target, body: &T) -> Result<Self, HttpError> {
-        let bytes = serde_json::to_vec(body).map_err(|e| {
-            tracing::warn!("Sync: {} {url}: serialize error: {e}", method.as_str());
+        Self::with_json(
+            method,
+            url,
+            serde_json::to_vec(body).map(Payload::<HttpBody>::new),
+        )
+    }
+
+    /// A request carrying `encoded` as JSON, or the refusal of a body that
+    /// did not encode.
+    fn with_json(
+        method: Method,
+        url: Target,
+        encoded: Result<Payload<HttpBody>, serde_json::Error>,
+    ) -> Result<Self, HttpError> {
+        let body = encoded.map_err(|e| {
+            crate::log::warning!("Sync: {} {url}: serialize error: {e}", method.as_str());
             HttpError::Local(LocalFailure::Encode)
         })?;
         Ok(Self {
-            body: Some((ContentType::Json, Payload::<HttpBody>::new(bytes))),
+            body: Some((ContentType::Json, body)),
             ..Self::new(method, url)
         })
     }
@@ -941,7 +959,7 @@ pub(crate) trait Reported: std::fmt::Display {
     /// This error as the failure of `step`. The step's name and the error's
     /// text go to the log here: the bus carries the failure alone (`BUS-046`).
     fn at(&self, step: &str) -> Failed {
-        tracing::warn!("Sync: {step}: {self}");
+        crate::log::warning!("Sync: {step}: {self}");
         Failed {
             failure: self.failure(),
         }
@@ -1010,7 +1028,13 @@ fn read_json<R: serde::de::DeserializeOwned>(
     resp: &Incoming,
 ) -> Result<R, HttpError> {
     expect_ok(request, resp)?;
-    serde_json::from_slice(resp.body.as_bytes()).map_err(|e| HttpError::Unreadable {
+    // Only the decode is generic: the error mapping is `unreadable`, once.
+    serde_json::from_slice(resp.body.as_bytes()).map_err(|e| unreadable(request, &e))
+}
+
+/// The error of a successful answer whose JSON body did not decode.
+fn unreadable(request: &Outgoing, e: &serde_json::Error) -> HttpError {
+    HttpError::Unreadable {
         method: request.method,
         url: request.url.shown(),
         // A word of a closed set this build does not know means the relay is
@@ -1021,7 +1045,7 @@ fn read_json<R: serde::de::DeserializeOwned>(
             UnreadableCause::Malformed
         },
         reason: e.to_string(),
-    })
+    }
 }
 
 /// Sends `request` once. A request that got no answer reads as its method
@@ -2083,7 +2107,7 @@ pub(crate) async fn fetch_key_links(
     match try_fetch_key_links(url_scheme, api_base, document_id, auth).await {
         Ok(links) => links,
         Err(e) => {
-            tracing::warn!("Sync: key links of {document_id:?} unavailable: {e}");
+            crate::log::warning!("Sync: key links of {document_id:?} unavailable: {e}");
             Vec::new()
         }
     }
@@ -2131,7 +2155,7 @@ impl WriteAnswer {
         if self.status == asked {
             Ok(())
         } else {
-            tracing::warn!("Sync: answered {:?}, not {asked:?}", self.status);
+            crate::log::warning!("Sync: answered {:?}, not {asked:?}", self.status);
             Err(HttpError::Local(LocalFailure::UnexpectedAnswer))
         }
     }

@@ -327,7 +327,7 @@ pub(crate) fn presence_directory<'a>(
         })
         .collect();
     if skipped > 0 {
-        tracing::warn!(
+        crate::log::warning!(
             "[Sync] presence directory skipped {skipped} rows whose signing key did not parse"
         );
     }
@@ -348,7 +348,7 @@ pub(crate) fn presence_directory_under<'a>(
         .filter(|(key, member)| log.binds(key, *member))
         .collect();
     if bound.len() < held {
-        tracing::warn!(
+        crate::log::warning!(
             "[Sync] presence directory dropped {} rows whose key the log binds to no such member",
             held.saturating_sub(bound.len())
         );
@@ -500,7 +500,7 @@ fn advanced(
 
 /// Reports `error` as the failure of `request`.
 fn failed(logic_tx: &LogicSink, request: ApiRequest, error: impl http::Reported) {
-    tracing::warn!("Sync: {} failed: {error}", request.as_str());
+    crate::log::warning!("Sync: {} failed: {error}", request.as_str());
     api_error(logic_tx, request, error.failure());
 }
 
@@ -552,7 +552,7 @@ pub(crate) async fn invite_task<H: ShareHttp>(
     };
     // TOFU pin: the re-fetched key must match the one confirmed in phase 1.
     if invitee.exchange_pubkey != p.expect_exchange_pub_key {
-        tracing::warn!("Sync: invitee key changed since confirmation; invite refused");
+        crate::log::warning!("Sync: invitee key changed since confirmation; invite refused");
         return api_error(
             logic_tx,
             ApiRequest::InviteToDocument,
@@ -577,7 +577,7 @@ pub(crate) async fn invite_task<H: ShareHttp>(
         {
             Ok(resp) => resp,
             Err(e) => {
-                tracing::warn!("Sync: get members failed: {e}");
+                crate::log::warning!("Sync: get members failed: {e}");
                 return api_error(logic_tx, ApiRequest::InviteToDocument, e.failure());
             }
         };
@@ -664,7 +664,7 @@ async fn invitee_keys<H: ShareHttp>(http: &H, p: &InviteParams) -> Result<Invite
                 signing_pubkey: served.signing_pubkey,
             }),
             Err(e) => {
-                tracing::warn!("Sync: key fetch failed: {e}");
+                crate::log::warning!("Sync: key fetch failed: {e}");
                 Err(e.failure())
             }
         };
@@ -675,7 +675,7 @@ async fn invitee_keys<H: ShareHttp>(http: &H, p: &InviteParams) -> Result<Invite
     let users = match http.get_json::<http::UserSearchResult>(&search_url).await {
         Ok(resp) => resp.users,
         Err(e) => {
-            tracing::warn!("Sync: user search failed: {e}");
+            crate::log::warning!("Sync: user search failed: {e}");
             return Err(e.failure());
         }
     };
@@ -736,7 +736,7 @@ pub(crate) async fn fetch_invitee_key_task<H: ShareHttp>(
     let users = match http.get_json::<http::UserSearchResult>(&search_url).await {
         Ok(resp) => resp.users,
         Err(e) => {
-            tracing::warn!("Sync: user search failed: {e}");
+            crate::log::warning!("Sync: user search failed: {e}");
             return api_error(logic_tx, ApiRequest::FetchInviteeKey, e.failure());
         }
     };
@@ -786,7 +786,7 @@ pub(crate) async fn fetch_member_key_task<H: ShareHttp>(
     let served = match http.get_json::<http::PubkeysResponse>(&url).await {
         Ok(served) => served,
         Err(e) => {
-            tracing::warn!("Sync: key fetch failed: {e}");
+            crate::log::warning!("Sync: key fetch failed: {e}");
             return api_error(logic_tx, ApiRequest::FetchMemberKey, e.failure());
         }
     };
@@ -856,7 +856,7 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
         {
             Ok(resp) => resp,
             Err(e) => {
-                tracing::warn!("Sync: get members failed: {e}");
+                crate::log::warning!("Sync: get members failed: {e}");
                 return api_error(logic_tx, ApiRequest::RevokeFromDocument, e.failure());
             }
         };
@@ -936,7 +936,7 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
                 if (e.is(RefusalCode::MembersChanged) || e.is(RefusalCode::LogMoved))
                     && tries < ROTATION_TRIES => {}
             Err(e) => {
-                tracing::warn!("Sync: revoke failed: {e}");
+                crate::log::warning!("Sync: revoke failed: {e}");
                 return api_error(logic_tx, ApiRequest::RevokeFromDocument, e.failure());
             }
         }
@@ -1159,7 +1159,7 @@ pub(crate) async fn close_segment_task<H: ShareHttp>(
     if closed.created == ambre_core::Creation::Existing {
         let url = base.route(format!("/documents/{successor}"));
         if let Err(e) = http.delete(&url, &()).await {
-            tracing::warn!("[Sync] the successor of a lost close stays on the relay: {e}");
+            crate::log::warning!("[Sync] the successor of a lost close stays on the relay: {e}");
         }
     }
     Ok(closed)
@@ -1216,7 +1216,9 @@ pub(crate) async fn amendments_task<H: ShareHttp>(
     if linked.created == ambre_core::Creation::Existing {
         let url = base.route(format!("/documents/{}", p.amendments));
         if let Err(e) = http.delete(&url, &()).await {
-            tracing::warn!("[Sync] the amendments of a lost registration stay on the relay: {e}");
+            crate::log::warning!(
+                "[Sync] the amendments of a lost registration stay on the relay: {e}"
+            );
         }
     }
     Ok(linked.amendments)
@@ -1270,7 +1272,9 @@ pub(crate) async fn thread_task<H: ShareHttp>(
     if linked.created == ambre_core::Creation::Existing {
         let url = base.route(format!("/documents/{}", p.thread));
         if let Err(e) = http.delete(&url, &()).await {
-            tracing::warn!("[Sync] the thread of a lost registration stays on the relay: {e}");
+            crate::log::warning!(
+                "[Sync] the thread of a lost registration stays on the relay: {e}"
+            );
         }
     }
     Ok(linked.thread)
@@ -1333,7 +1337,7 @@ pub(crate) async fn role_change_task<H: ShareHttp>(
         {
             Ok(resp) => resp,
             Err(e) => {
-                tracing::warn!("Sync: get members failed: {e}");
+                crate::log::warning!("Sync: get members failed: {e}");
                 return api_error(logic_tx, ApiRequest::UpdateDocumentMemberRole, e.failure());
             }
         };
@@ -1480,7 +1484,7 @@ pub(crate) async fn settle_task<H: ShareHttp>(
             &resp.members,
         );
         if !unwrapped.is_empty() {
-            tracing::warn!(
+            crate::log::warning!(
                 "Sync: the owed rotation skips {} member(s) with an unreadable key",
                 unwrapped.len()
             );
@@ -1567,7 +1571,7 @@ async fn rotate_channel<H: ShareHttp>(
     let head = http
         .get_json::<http::JoinHeadResponse>(&base.route(format!("/channels/{}/join", p.channel_id)))
         .await
-        .inspect_err(|e| tracing::warn!("Sync: get the join head failed: {e}"))?;
+        .inspect_err(|e| crate::log::warning!("Sync: get the join head failed: {e}"))?;
     let meta = head.meta_id.document_id();
     let members_url = base.route(format!("/documents/{meta}/members"));
     let rotate_url = base.route(format!("/documents/{meta}/rotate-key"));
@@ -1579,7 +1583,7 @@ async fn rotate_channel<H: ShareHttp>(
         let resp = http
             .get_json::<http::DocumentMembersResponse>(&members_url)
             .await
-            .inspect_err(|e| tracing::warn!("Sync: get members failed: {e}"))?;
+            .inspect_err(|e| crate::log::warning!("Sync: get members failed: {e}"))?;
         // A space admin may hold no row of meta. The walk starts at the
         // anchor the catalogue sealed, under the rule of a public channel
         // and the word of its space. With no word, the walk stops at the
@@ -1617,7 +1621,7 @@ async fn rotate_channel<H: ShareHttp>(
             Err(_) => entries(&mut KeyWrapper::new(&p.exchange_key)),
         };
         if !unwrapped.is_empty() {
-            tracing::warn!(
+            crate::log::warning!(
                 "Sync: the channel rotation skips {} member(s) with an unreadable key",
                 unwrapped.len()
             );
@@ -1638,7 +1642,7 @@ async fn rotate_channel<H: ShareHttp>(
             // A member joined since the read (`SYNC-143`): read them again.
             Err(e) if e.is(RefusalCode::MembersChanged) && tries < ROTATION_TRIES => {}
             Err(e) => {
-                tracing::warn!("Sync: rotate key failed: {e}");
+                crate::log::warning!("Sync: rotate key failed: {e}");
                 return Err(e);
             }
         }
@@ -1731,7 +1735,7 @@ pub(crate) async fn list_members_task<H: ShareHttp>(
             // directory it held stays, and the next change asks again. A
             // log head under check hears of it (`SYNC-220`).
             None => {
-                tracing::warn!("Sync: the members could not be read again: {e}");
+                crate::log::warning!("Sync: the members could not be read again: {e}");
                 let _ = event_tx.send(SyncEvent::DocumentMembersFailed {
                     document_id: p.document_id,
                     asked: p.asked,
@@ -1807,7 +1811,7 @@ pub(crate) async fn call_log_task<H: ShareHttp>(
                 log: rooted_call_log(&p, &resp),
             });
         }
-        Err(e) => tracing::warn!("Sync: the log of the call was not read: {e}"),
+        Err(e) => crate::log::warning!("Sync: the log of the call was not read: {e}"),
     }
 }
 
@@ -1844,7 +1848,7 @@ pub(crate) async fn call_roster_task<H: ShareHttp>(
     {
         Ok(roster) => Some(roster),
         Err(e) => {
-            tracing::warn!("Sync: who is in the call was not read: {e}");
+            crate::log::warning!("Sync: who is in the call was not read: {e}");
             None
         }
     };
@@ -1855,7 +1859,9 @@ pub(crate) async fn call_roster_task<H: ShareHttp>(
             match http.get_json::<http::DocumentMembersResponse>(&url).await {
                 Ok(resp) => rooted_call_log(&p, &resp),
                 Err(e) => {
-                    tracing::warn!("Sync: the log of the channel of a call was not read: {e}");
+                    crate::log::warning!(
+                        "Sync: the log of the channel of a call was not read: {e}"
+                    );
                     None
                 }
             }

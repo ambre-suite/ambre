@@ -13,7 +13,7 @@ impl SyncState {
             let url_scheme = self.url_scheme;
             let auth = self.auth_context();
             let exchange_key = self.exchange_key.clone();
-            wasm_bindgen_futures::spawn_local(async move {
+            crate::spawn(async move {
                 let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                     .route("/documents");
                 match http::get_json_auth::<http::DocumentListResponse>(&url, auth.clone()).await {
@@ -75,7 +75,7 @@ impl SyncState {
                 .collect();
             let count = documents.len();
             self.reply(id, RestEvent::DocumentList { documents });
-            tracing::info!("Sync: ListDocuments ({count} docs)");
+            crate::log::info!("Sync: ListDocuments ({count} docs)");
         }
     }
 
@@ -126,7 +126,7 @@ impl SyncState {
             let auth = self.auth_context();
             let exchange_key = self.exchange_key.clone();
             let author = self.author();
-            wasm_bindgen_futures::spawn_local(async move {
+            crate::spawn(async move {
                 // E2EE: the server only ever stores ciphertext. Generate a fresh
                 // DocumentKey, seal the name with it, and wrap the key for the
                 // owner (ourselves) via X25519. We can then recover it on open.
@@ -197,7 +197,7 @@ impl SyncState {
                 }
             });
         } else {
-            tracing::info!("Sync: CreateDocument {doc_type:?} {name:?}");
+            crate::log::info!("Sync: CreateDocument {doc_type:?} {name:?}");
             let document_id = Id::<Document>::mint();
             self.doc_metadata.insert(document_id, (doc_type, name));
             self.reply(
@@ -218,7 +218,7 @@ impl SyncState {
             let url_scheme = self.url_scheme;
             let auth = self.auth_context();
             let doc_id = document_id;
-            wasm_bindgen_futures::spawn_local(async move {
+            crate::spawn(async move {
                 let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                     .route(format!("/documents/{doc_id}"));
                 match http::delete_auth(&url, auth).await {
@@ -234,7 +234,7 @@ impl SyncState {
                 }
             });
         } else {
-            tracing::info!("Sync: DeleteDocument {document_id:?}");
+            crate::log::info!("Sync: DeleteDocument {document_id:?}");
             self.doc_metadata.remove(&document_id);
             self.reply(id, RestEvent::DocumentDeleted { document_id });
         }
@@ -265,7 +265,7 @@ impl SyncState {
             };
             let exchange_key = self.exchange_key.clone();
             let signing_key = self.signing_key.clone();
-            wasm_bindgen_futures::spawn_local(async move {
+            crate::spawn(async move {
                 let Some(signing_key) = signing_key else {
                     let _ = tx.send(SyncEvent::http_error(
                         id,
@@ -342,7 +342,7 @@ impl SyncState {
                 }
             });
         } else {
-            tracing::info!("Sync: RenameDocument {document_id:?} {name:?}");
+            crate::log::info!("Sync: RenameDocument {document_id:?} {name:?}");
             if let Some((_doc_type, old_name)) = self.doc_metadata.get_mut(&document_id) {
                 *old_name = name;
             }

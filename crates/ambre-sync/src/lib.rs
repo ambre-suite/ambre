@@ -155,11 +155,29 @@ fn step_owed(failure: ApiFailure) -> Option<LogicEvent> {
 /// it asks for, or an authentication error with its failure.
 fn auth_failed(error: impl http::Reported) -> LogicEvent {
     step_owed(error.failure()).unwrap_or_else(|| {
-        tracing::warn!("Sync: authentication failed: {error}");
+        crate::log::warning!("Sync: authentication failed: {error}");
         LogicEvent::AuthError {
             cause: ambre_bus::AuthFailure::Api(error.failure()),
         }
     })
+}
+
+/// Runs `task` on the event loop of the worker.
+///
+/// The task is boxed here. So `spawn_local` keeps one copy of its scheduler
+/// for the worker, not one per future type (`ambre-spec-budgets.md` section 5).
+// A spawned task runs on the event loop of the browser alone, and no host
+// test reaches one, so cargo-mutants skips the two functions.
+#[cfg_attr(test, mutants::skip)]
+fn spawn(task: impl std::future::Future<Output = ()> + 'static) {
+    spawn_boxed(Box::pin(task));
+}
+
+/// The one call into `spawn_local`, over the boxed future of [`spawn`].
+#[cfg_attr(test, mutants::skip)]
+#[inline(never)]
+fn spawn_boxed(task: std::pin::Pin<Box<dyn std::future::Future<Output = ()>>>) {
+    wasm_bindgen_futures::spawn_local(task);
 }
 
 mod auth;
@@ -183,6 +201,7 @@ mod key_vouch;
 mod lifecycle;
 mod light;
 mod local_store;
+mod log;
 mod media;
 mod members;
 mod membership_log;
@@ -819,7 +838,7 @@ impl SyncEvent {
     /// The failure of the service-plane request `id`, from a relay's answer
     /// or from this device.
     fn http_error(id: Seq<Request>, error: impl http::Reported) -> Self {
-        tracing::warn!("Sync: request {id} failed: {error}");
+        crate::log::warning!("Sync: request {id} failed: {error}");
         Self::HttpError {
             id,
             failure: error.failure(),
@@ -1606,7 +1625,7 @@ impl SyncState {
 
     fn send_to_logic(&self, event: LogicEvent) {
         if let Err(SendError(ev)) = self.logic_tx.send(event) {
-            tracing::warn!(
+            crate::log::warning!(
                 "Sync: Logic receiver dropped, discarding {:?}",
                 std::mem::discriminant(&*ev),
             );
@@ -1624,11 +1643,13 @@ impl SyncState {
     ) {
         match opened {
             None => {
-                tracing::warn!("Sync: inbound message for unopened doc {document_id:?}, dropping")
+                crate::log::warning!(
+                    "Sync: inbound message for unopened doc {document_id:?}, dropping"
+                )
             }
             Some(Ok(payload)) => self.send_to_logic(make_event(payload)),
             Some(Err(e)) => {
-                tracing::warn!("Sync: dropping inbound for {document_id:?}: {e}");
+                crate::log::warning!("Sync: dropping inbound for {document_id:?}: {e}");
                 self.send_to_logic(LogicEvent::SyncWarning {
                     document_id,
                     code: e.warning(),
@@ -1672,7 +1693,7 @@ impl SyncState {
     /// (`SYNC-001`).
     fn ws_send(&self, msg: &WsClientMsg) {
         if carries_payload(msg) {
-            tracing::error!("[Sync->Server] a payload frame that skipped the seal, dropped");
+            crate::log::error!("[Sync->Server] a payload frame that skipped the seal, dropped");
             return;
         }
         if let WsClientMsg::RequestMissing {
@@ -1711,10 +1732,10 @@ impl SyncState {
                 self.held_outbox.borrow_mut().push(wire);
                 return;
             }
-            tracing::warn!("[Sync->Server] ws_send called with no socket, dropping message");
+            crate::log::warning!("[Sync->Server] ws_send called with no socket, dropping message");
             return;
         };
-        tracing::debug!(
+        crate::log::debug!(
             "[Sync->Server] ws_send {:?} -> {} bytes wire",
             std::mem::discriminant(msg),
             wire.len().get()
@@ -1747,7 +1768,9 @@ impl SyncState {
             js_sys::Uint8Array::new_with_length(wire.len().saturating_len().to_usize() as u32);
         buf.copy_from(wire.as_bytes());
         if let Err(e) = ws.send_with_array_buffer(&buf.buffer()) {
-            tracing::warn!("[Sync->Server] WebSocket send failed ({e:?}); reconnect will retry");
+            crate::log::warning!(
+                "[Sync->Server] WebSocket send failed ({e:?}); reconnect will retry"
+            );
         }
         if let Some(tx) = &self.mock_ws_tx {
             let _ = tx.send(wire);
@@ -1809,7 +1832,7 @@ impl SyncState {
                 payload,
                 summary,
             } => {
-                tracing::info!(
+                crate::log::info!(
                     "[Sync] received SendUpdate doc={document_id} delta_size={}",
                     payload.len().get()
                 );
@@ -2143,15 +2166,17 @@ impl SyncState {
             RestCommand::OpenLocalRows { rows } => self.handle_open_local_rows(id, rows),
 
             // -- Meetings ------------------------------------------------------
-            RestCommand::CreateMeeting { name } => tracing::info!("Sync: CreateMeeting {name:?}"),
+            RestCommand::CreateMeeting { name } => {
+                crate::log::info!("Sync: CreateMeeting {name:?}")
+            }
             RestCommand::JoinMeeting { meeting_id } => {
-                tracing::info!("Sync: JoinMeeting {meeting_id:?}");
+                crate::log::info!("Sync: JoinMeeting {meeting_id:?}");
             }
             RestCommand::LeaveMeeting { meeting_id } => {
-                tracing::info!("Sync: LeaveMeeting {meeting_id:?}");
+                crate::log::info!("Sync: LeaveMeeting {meeting_id:?}");
             }
             RestCommand::EndMeeting { meeting_id } => {
-                tracing::info!("Sync: EndMeeting {meeting_id:?}");
+                crate::log::info!("Sync: EndMeeting {meeting_id:?}");
             }
         }
     }
@@ -2179,11 +2204,11 @@ pub(crate) async fn run_wasm(
     api_base: Url<RelayHost>,
     call_ports: call_link::CallPorts,
 ) {
-    tracing::info!("Ambre Sync worker starting (wasm async)");
+    crate::log::info!("Ambre Sync worker starting (wasm async)");
     let mut state = SyncState::new(logic_sink, api_base);
     state.call_ports = call_ports;
     run(cmd_rx, state).await;
-    tracing::info!("Ambre Sync worker exiting (command channel closed)");
+    crate::log::info!("Ambre Sync worker exiting (command channel closed)");
 }
 
 /// The worker's loop: one wait over the commands relayed in and the events

@@ -140,7 +140,7 @@ impl SyncState {
             || !doc.rekey.settled()
             || !doc.head_watch.settled()
         {
-            tracing::debug!("[Sync] release of doc={document_id} waits on unsent frames");
+            crate::log::debug!("[Sync] release of doc={document_id} waits on unsent frames");
             return;
         }
         let Some(doc) = self.documents.remove(&document_id) else {
@@ -149,7 +149,7 @@ impl SyncState {
         self.session_nonces.remove(&document_id);
         self.light
             .insert(document_id, LightSubscription::of(doc, applied));
-        tracing::info!("Sync: doc={document_id} kept as a light subscription");
+        crate::log::info!("Sync: doc={document_id} kept as a light subscription");
         // The local copy now holds nothing the relay lacks (`RESID-019`).
         self.send_to_logic(LogicEvent::Released { document_id });
     }
@@ -255,7 +255,7 @@ impl SyncState {
             .map(|light| light.doc_key.clone())
             .or_else(|| self.documents.get(&meta).map(|doc| doc.doc_key.clone()))
         else {
-            tracing::warn!("[Sync] no key to watch document {document_id}");
+            crate::log::warning!("[Sync] no key to watch document {document_id}");
             return;
         };
         self.light.insert(
@@ -286,7 +286,7 @@ impl SyncState {
             .filter(|(listed, _)| *listed == meta)
             .map(|(_, key)| key.clone())
         else {
-            tracing::warn!("[Sync] no listed key to watch channel {channel_id}");
+            crate::log::warning!("[Sync] no listed key to watch channel {channel_id}");
             return;
         };
         let meta_entry = (meta.document_id(), meta_last);

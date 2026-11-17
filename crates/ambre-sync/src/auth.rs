@@ -11,7 +11,7 @@ impl SyncState {
         id: Seq<Request>,
         passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
     ) {
-        tracing::info!("Sync: Unlock");
+        crate::log::info!("Sync: Unlock");
 
         let logic_tx = self.logic_tx.clone();
         let api_base = self.api_base.clone();
@@ -22,7 +22,7 @@ impl SyncState {
         if let Some(tx) = event_tx {
             // WASM path: spawn an async HTTP task; the result flows back
             // through the SyncEvent queue into handle_sync_event.
-            wasm_bindgen_futures::spawn_local(async move {
+            crate::spawn(async move {
                 let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                     .route("/keys/master");
                 match http::get_json_auth::<http::MasterKeyResponse>(&url, auth.clone()).await {
@@ -118,7 +118,7 @@ impl SyncState {
         id: Option<Seq<Request>>,
         username: ambre_core::Validated<ambre_core::DisplayName>,
     ) {
-        tracing::info!("Sync: DevLogin (username={username:?})");
+        crate::log::info!("Sync: DevLogin (username={username:?})");
         // Remember it so a WS auth rejection (close 4401) whose refresh also fails
         // can silently re-login with the same deterministic identity.
         self.dev_username = Some(username.clone());
@@ -139,7 +139,7 @@ impl SyncState {
             let signing_pub_key =
                 ambre_core::FixedBytes::from_array(signing_key.verifying_key().to_bytes());
             let exchange_pub_key = crate::sharing::own_exchange_key(&exchange_key);
-            wasm_bindgen_futures::spawn_local(async move {
+            crate::spawn(async move {
                 let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                     .route("/auth/dev/login");
                 let body = http::DevLoginRequest {
@@ -222,7 +222,7 @@ impl SyncState {
         id: Seq<Request>,
         provider: ambre_core::OidcProvider,
     ) {
-        tracing::info!("Sync: ProviderSignIn ({provider})");
+        crate::log::info!("Sync: ProviderSignIn ({provider})");
         if self.event_tx.is_none() {
             self.send_to_logic(LogicEvent::AuthError {
                 cause: AuthFailure::Api(ApiFailure::Local(ambre_core::LocalFailure::NoRelay)),
@@ -232,7 +232,7 @@ impl SyncState {
         let logic_tx = self.logic_tx.clone();
         let url = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base)
             .route(format!("/auth/{provider}/login"));
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             let evt = match http::get_json::<http::ProviderLoginResponse>(&url).await {
                 Ok(resp) => LogicEvent::Rest {
                     id: Some(id),
@@ -259,7 +259,7 @@ impl SyncState {
         code: ambre_core::Credential<ambre_core::OidcCode>,
         state: ambre_core::Credential<ambre_core::OidcState>,
     ) {
-        tracing::info!("Sync: ProviderReturn ({provider})");
+        crate::log::info!("Sync: ProviderReturn ({provider})");
         let Some(tx) = self.event_tx.clone() else {
             self.send_to_logic(LogicEvent::AuthError {
                 cause: AuthFailure::Api(ApiFailure::Local(ambre_core::LocalFailure::NoRelay)),
@@ -269,7 +269,7 @@ impl SyncState {
         let logic_tx = self.logic_tx.clone();
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route(format!("/auth/{provider}/callback"));
             let body = http::ProviderCallbackRequest { code, state };
@@ -322,7 +322,7 @@ impl SyncState {
         email: ambre_core::Email,
         display_name: ambre_core::Validated<ambre_core::DisplayName>,
     ) {
-        tracing::info!("Sync: SetupAccount");
+        crate::log::info!("Sync: SetupAccount");
 
         // The strength floor runs first, before any key or request exists.
         let Some(passphrase) = self.admit_new_passphrase(passphrase) else {
@@ -335,7 +335,7 @@ impl SyncState {
         let event_tx = self.event_tx.clone();
 
         if let Some(tx) = event_tx {
-            wasm_bindgen_futures::spawn_local(async move {
+            crate::spawn(async move {
                 let master_seed = MasterSeed::generate();
                 let signing_pub_key = ambre_core::FixedBytes::from_array(
                     master_seed.derive_signing_key().verifying_key().to_bytes(),
@@ -398,7 +398,7 @@ impl SyncState {
         id: Seq<Request>,
         passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
     ) {
-        tracing::info!("Sync: SetUpKeys");
+        crate::log::info!("Sync: SetUpKeys");
         let Some(passphrase) = self.admit_new_passphrase(passphrase) else {
             return;
         };
@@ -412,7 +412,7 @@ impl SyncState {
         let logic_tx = self.logic_tx.clone();
         let api = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base);
         let auth = self.auth_context();
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             let master_seed = MasterSeed::generate();
             let outcome =
                 store_new_keys(&http::Fetch, &auth, &api, &master_seed, &passphrase).await;
@@ -465,7 +465,7 @@ impl SyncState {
         current_passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
         new_passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
     ) {
-        tracing::info!("Sync: ChangePassphrase");
+        crate::log::info!("Sync: ChangePassphrase");
         // The new passphrase takes the floor before the current one is read,
         // so a weak choice costs no derivation and no request (`ZK-042`).
         let Some(new_passphrase) = self.admit_new_passphrase(new_passphrase) else {
@@ -496,7 +496,7 @@ impl SyncState {
         recovery_words: Confidential<RecoveryWords>,
         new_passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
     ) {
-        tracing::info!("Sync: RecoverAccount");
+        crate::log::info!("Sync: RecoverAccount");
         // The new passphrase takes the floor before the recovery words are
         // read: the words rebuild the seed, which a weak passphrase would
         // then seal (`ZK-042`).
@@ -555,7 +555,7 @@ impl SyncState {
         reseal: impl std::future::Future<Output = Result<(), KeyWriteFailure>> + 'static,
     ) {
         let logic_tx = self.logic_tx.clone();
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             let evt = match reseal.await {
                 Ok(()) => LogicEvent::Rest {
                     id: Some(id),
@@ -588,7 +588,7 @@ impl SyncState {
         self.exchange_key = None;
         *self.tokens.borrow_mut() = None;
         self.renewal.cancel();
-        tracing::info!("Sync: logged out, all keys zeroized");
+        crate::log::info!("Sync: logged out, all keys zeroized");
     }
 
     /// A sign-out the user asked for. The session ends on the worker at once,
@@ -615,9 +615,9 @@ impl SyncState {
             renewed: None,
         };
         let logic_tx = self.logic_tx.clone();
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             if let Err(e) = auth.revoke().await {
-                tracing::warn!("Sync: the refresh token was not revoked: {e}");
+                crate::log::warning!("Sync: the refresh token was not revoked: {e}");
             }
             let _ = logic_tx.send(LogicEvent::Rest {
                 id: Some(id),
@@ -869,11 +869,11 @@ fn open_stored_seed(
 ) -> Result<MasterSeed, AuthFailure> {
     let (Some(master_key_enc), Some(salt)) = (&stored.master_key_enc, &stored.master_key_salt)
     else {
-        tracing::warn!("Sync: master key without its salt");
+        crate::log::warning!("Sync: master key without its salt");
         return Err(AuthFailure::CorruptAccount);
     };
     let user_key = ambre_crypto::passphrase::derive_user_key(passphrase, salt).map_err(|e| {
-        tracing::warn!("Sync: user-key derivation failed: {e}");
+        crate::log::warning!("Sync: user-key derivation failed: {e}");
         AuthFailure::BadPassphrase
     })?;
     // The seed opens straight into its wrapper, so no bare copy of it is left
@@ -886,11 +886,11 @@ fn open_stored_seed(
     .map_err(|e| match e {
         // Almost always the wrong passphrase; a tampered row reads the same.
         ambre_crypto::CryptoError::AeadFailed => {
-            tracing::warn!("Sync: master-seed AEAD open failed: {e}");
+            crate::log::warning!("Sync: master-seed AEAD open failed: {e}");
             AuthFailure::BadPassphrase
         }
         e => {
-            tracing::warn!("Sync: the stored master seed does not open: {e}");
+            crate::log::warning!("Sync: the stored master seed does not open: {e}");
             AuthFailure::CorruptAccount
         }
     })
@@ -906,19 +906,19 @@ fn seal_seed(
 ) -> Result<SealedSeed, AuthFailure> {
     let mut salt = [0u8; 32];
     getrandom::fill(&mut salt).map_err(|e| {
-        tracing::warn!("Sync: no CSPRNG for the account salt: {e}");
+        crate::log::warning!("Sync: no CSPRNG for the account salt: {e}");
         AuthFailure::SeedNotWrapped
     })?;
     let master_key_salt = ambre_core::FixedBytes::<ambre_core::MasterKeySalt>::from_array(salt);
     let sealing_key = ambre_crypto::passphrase::derive_sealing_key(passphrase, &master_key_salt)
         .map_err(|e| {
-            tracing::warn!("Sync: user-key derivation failed: {e}");
+            crate::log::warning!("Sync: user-key derivation failed: {e}");
             AuthFailure::SeedNotWrapped
         })?;
     let master_key_enc = master_seed
         .wrap_for_storage(&sealing_key, &ambre_core::Aad::of(b"ambre-master-seed"))
         .map_err(|e| {
-            tracing::warn!("Sync: master-seed wrap failed: {e}");
+            crate::log::warning!("Sync: master-seed wrap failed: {e}");
             AuthFailure::SeedNotWrapped
         })?;
     Ok(SealedSeed {
@@ -955,7 +955,7 @@ async fn reseal_recovered_seed(
     // The proof names the seal it replaces. An account with no sealed seed
     // has none to replace, and the relay would refuse the write.
     let Some(replaces) = stored.master_key_salt else {
-        tracing::warn!("Sync: recovery of an account with no sealed seed");
+        crate::log::warning!("Sync: recovery of an account with no sealed seed");
         return Err(KeyWriteFailure::Auth(AuthFailure::CorruptAccount));
     };
     let sealed = seal_seed(master_seed, new_passphrase).map_err(KeyWriteFailure::Auth)?;

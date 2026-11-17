@@ -84,7 +84,7 @@ impl SyncState {
             .as_ref()
             .map(|t| t.access_token().clone())
         else {
-            tracing::warn!("Sync: socket opened before the access token is ready");
+            crate::log::warning!("Sync: socket opened before the access token is ready");
             return;
         };
         self.ws_send(&WsClientMsg::Authenticate { token });
@@ -106,7 +106,7 @@ impl SyncState {
         // hardcoded `wss://` fails on a localhost http dev server (TLS error,
         // WS close code 1015).
         if self.tokens.borrow().is_none() {
-            tracing::warn!("Sync: WebSocket open requested before access token is ready");
+            crate::log::warning!("Sync: WebSocket open requested before access token is ready");
             return;
         }
         let url = crate::http::Url::<crate::http::Socket>::of(self.url_scheme, &self.api_base);
@@ -119,10 +119,10 @@ impl SyncState {
                 // handler, NOT here. The socket is still CONNECTING at this point
                 // and `ws_send` would be dropped. The server would then hold a
                 // socket that never authenticates, and close it.
-                tracing::info!("Sync: WebSocket connecting ({url})");
+                crate::log::info!("Sync: WebSocket connecting ({url})");
             }
             Err(e) => {
-                tracing::error!("Sync: WebSocket::new({url}) failed: {e:?}");
+                crate::log::error!("Sync: WebSocket::new({url}) failed: {e:?}");
             }
         }
     }
@@ -134,7 +134,7 @@ impl SyncState {
             return;
         }
         self.socket_opens = self.socket_opens.incremented();
-        tracing::info!("Sync: WebSocket opened (native mock)");
+        crate::log::info!("Sync: WebSocket opened (native mock)");
     }
 
     /// (Re)subscribes every server-side document once the socket is OPEN, and
@@ -204,7 +204,7 @@ impl SyncState {
                     Err(e) if e.is_from_newer_peer() => {
                         let _ = tx.send(SyncEvent::WireOutdated);
                     }
-                    Err(e) => tracing::error!("Sync: WS decode error: {e:?}"),
+                    Err(e) => crate::log::error!("Sync: WS decode error: {e:?}"),
                 }
             }) as Box<dyn FnMut(JsValue)>);
             ws.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
@@ -306,7 +306,7 @@ impl SyncState {
                 cb.as_ref().unchecked_ref(),
                 i32::try_from(delay.get()).unwrap_or(i32::MAX),
             );
-            tracing::warn!("Sync: reconnect scheduled in {}ms", delay.get());
+            crate::log::warning!("Sync: reconnect scheduled in {}ms", delay.get());
         }
         // Keep the closure alive until it fires (replaces any previous pending one).
         self._reconnect_timer = Some(cb);
@@ -351,7 +351,9 @@ impl SyncState {
             Some(last) if after_seq <= last.after => last.count.incremented(),
             _ => Count::new(1),
         };
-        tracing::warn!("Sync: replay of {document_id:?} stopped after {after_seq:?} (stop {stop})");
+        crate::log::warning!(
+            "Sync: replay of {document_id:?} stopped after {after_seq:?} (stop {stop})"
+        );
         let delay = replay_retry_delay(stop);
         let ticket = if delay.is_some() {
             self.replay_ticket.issue()
@@ -373,7 +375,7 @@ impl SyncState {
             };
             self.arm_event_timer(retry, delay);
         } else if stop == REPLAY_RETRY_LIMIT.incremented() {
-            tracing::warn!("Sync: replay of {document_id:?} stopped {stop} times");
+            crate::log::warning!("Sync: replay of {document_id:?} stopped {stop} times");
             // A first replay given up is an open that failed: no ready would
             // ever follow it, and nothing of the document is kept (`SYNC-157`).
             let opening = self
@@ -508,7 +510,7 @@ impl SyncState {
             .borrow()
             .as_ref()
             .map(|t| t.access_token().clone());
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             let renewed = match stale {
                 Some(stale) => auth.renew(&stale).await,
                 None => Err(crate::http::HttpError::Local(
@@ -518,7 +520,7 @@ impl SyncState {
             let ok = match renewed {
                 Ok(()) => true,
                 Err(e) => {
-                    tracing::warn!("Sync: token refresh failed: {e}");
+                    crate::log::warning!("Sync: token refresh failed: {e}");
                     false
                 }
             };
@@ -576,7 +578,7 @@ impl SyncState {
         code: Option<Bounded<CloseCode>>,
         reason: String,
     ) {
-        tracing::warn!("Sync: WS disconnected (code={code:?}): {reason}");
+        crate::log::warning!("Sync: WS disconnected (code={code:?}): {reason}");
         self.ws = None;
         self._onmessage = None;
         self._onclose = None;
@@ -657,19 +659,19 @@ impl SyncState {
                     // Refresh token also dead (for example server restarted with a fresh
                     // ephemeral key and empty Redis): re-login with the same
                     // deterministic dev identity. SessionReady reopens the socket.
-                    tracing::warn!(
+                    crate::log::warning!(
                         "Sync: refresh failed, re-running dev login for silent recovery"
                     );
                     self.handle_dev_login(None, username);
                 } else {
                     // Real session with no usable refresh: surface so the UI can
                     // prompt re-auth. Fall back to backoff to avoid a tight loop.
-                    tracing::error!("Sync: reauth failed and no dev fallback; backing off");
+                    crate::log::error!("Sync: reauth failed and no dev fallback; backing off");
                     self.schedule_reconnect();
                 }
             }
             SyncEvent::WsError => {
-                tracing::error!("Sync: WebSocket error");
+                crate::log::error!("Sync: WebSocket error");
                 // A raw socket `onerror` is not always followed by a clean
                 // `onclose`, so treat it as a disconnect. Tear down the dead
                 // socket and reconnect on the same backoff path as
@@ -817,7 +819,7 @@ impl SyncState {
                 doc_type,
                 ..
             } if doc_type == DocType::Murmure && self.typed_opens.contains(&document_id) => {
-                tracing::warn!(
+                crate::log::warning!(
                     "Sync: Murmure open of {document_id:?} dropped: held as another type"
                 );
             }
@@ -887,7 +889,7 @@ impl SyncState {
                         });
                     }
                     Some(Err(e)) => {
-                        tracing::warn!("Sync: the latest snapshot does not open: {e}");
+                        crate::log::warning!("Sync: the latest snapshot does not open: {e}");
                         self.send_to_logic(LogicEvent::SyncWarning {
                             document_id,
                             code: SyncWarningCode::DecryptFailed,
@@ -960,7 +962,7 @@ impl SyncState {
                 }
             }
             SyncEvent::OpenDocumentFailed { document_id, cause } => {
-                tracing::error!("Sync: open document {document_id:?} failed: {cause}");
+                crate::log::error!("Sync: open document {document_id:?} failed: {cause}");
                 self.send_to_logic(LogicEvent::DocumentOpenFailed { document_id, cause });
             }
             SyncEvent::RootsVouched { roots } => self.murmure_roots.extend(roots),
@@ -1203,7 +1205,7 @@ impl SyncState {
                 if self.ws_connected() {
                     self.ws_send(&WsClientMsg::Subscribe { document_id });
                 }
-                tracing::info!(
+                crate::log::info!(
                     "Sync: document {document_id:?} materialized, flushing {} update(s)",
                     pending.len()
                 );
@@ -1221,7 +1223,7 @@ impl SyncState {
                 if let Some(doc_state) = self.documents.get_mut(&document_id) {
                     doc_state.creating = false;
                 }
-                tracing::error!("Sync: lazy create failed for {document_id:?}: {failure}");
+                crate::log::error!("Sync: lazy create failed for {document_id:?}: {failure}");
                 self.flush_pending_uploads(document_id, Some(&failure));
                 self.flush_pending_invites(document_id, Some(&failure));
                 self.refuse_creations(document_id);
@@ -1338,7 +1340,9 @@ impl SyncState {
                 document_id,
                 message,
             } => {
-                tracing::warn!("Sync: the owed rotation of {document_id:?} failed: {message}");
+                crate::log::warning!(
+                    "Sync: the owed rotation of {document_id:?} failed: {message}"
+                );
                 if let Some(doc_state) = self.documents.get_mut(&document_id) {
                     doc_state.rekey.payment_failed();
                 }
@@ -1374,7 +1378,7 @@ impl SyncState {
                             word_changed = doc_state.word != word;
                             doc_state.word = word;
                         } else {
-                            tracing::warn!(
+                            crate::log::warning!(
                                 "[Sync] doc={document_id}: a member listing walked a log that drops a writer; kept the log of the open"
                             );
                         }
@@ -1592,7 +1596,7 @@ impl SyncState {
             }
 
             WsServerMsg::Update { seq, update } => {
-                tracing::debug!(
+                crate::log::debug!(
                     "[Sync<-Server] WS Update seq={} doc={} clock={}",
                     seq.get(),
                     update.public_data.document_id,
@@ -1627,7 +1631,7 @@ impl SyncState {
                 // Presence is best-effort; a dropped sample is corrected by the
                 // next one.
                 let Some(from_user_id) = doc_state.resolve_ephemeral_author(&author_pk) else {
-                    tracing::debug!(
+                    crate::log::debug!(
                         "Sync: dropping ephemeral from unattributable author {author_pk:?}"
                     );
                     return;
@@ -1641,7 +1645,7 @@ impl SyncState {
                 if opened.is_ok()
                     && !doc_state.accept_ephemeral_counter(&author_pk, eph.public_data.counter)
                 {
-                    tracing::debug!(
+                    crate::log::debug!(
                         "Sync: dropping replayed ephemeral from {:?} (counter {})",
                         author_pk,
                         eph.public_data.counter.get()
@@ -1670,7 +1674,7 @@ impl SyncState {
                     return;
                 };
                 let Some(user_id) = doc_state.resolve_ephemeral_author(&pub_key) else {
-                    tracing::debug!("Sync: dropping PeerLeft from an unattributable key");
+                    crate::log::debug!("Sync: dropping PeerLeft from an unattributable key");
                     return;
                 };
                 self.send_to_logic(LogicEvent::PeerLeft {
@@ -1727,7 +1731,7 @@ impl SyncState {
                     // files one document's update in another's replay would move its plaintext
                     // across a membership boundary, so the two must agree (`SYNC-203`).
                     if seq_update.update.public_data.document_id != document_id {
-                        tracing::warn!(
+                        crate::log::warning!(
                             "Sync: a replay of {document_id:?} carries an update of another document, dropping"
                         );
                         continue;
@@ -1785,7 +1789,7 @@ impl SyncState {
                 snapshot_id,
                 covered_seq,
             } => {
-                tracing::info!("Sync: SnapshotAvailable {snapshot_id:?} for {document_id:?}");
+                crate::log::info!("Sync: SnapshotAvailable {snapshot_id:?} for {document_id:?}");
                 // Announced is not held: fetch it first (`SYNC-030`).
                 self.fetch_announced_snapshot(document_id, snapshot_id, covered_seq);
             }
@@ -1811,7 +1815,7 @@ impl SyncState {
                 expected,
                 signature,
             } => {
-                tracing::info!(
+                crate::log::info!(
                     "Sync: clock {} refused doc={document_id}, expected {}",
                     clock.get(),
                     expected.get()
@@ -1843,7 +1847,7 @@ impl SyncState {
             WsServerMsg::DocumentRevoked { document_id } => {
                 // The server removed us from this document (targeted push on our
                 // personal topic).
-                tracing::info!("Sync: DocumentRevoked {document_id:?}");
+                crate::log::info!("Sync: DocumentRevoked {document_id:?}");
                 self.document_removed(document_id);
             }
 
@@ -1851,7 +1855,7 @@ impl SyncState {
                 document_id,
                 doc_type,
             } => {
-                tracing::info!("Sync: DocumentShared {document_id:?} ({doc_type:?})");
+                crate::log::info!("Sync: DocumentShared {document_id:?} ({doc_type:?})");
                 self.send_to_logic(LogicEvent::DocumentShared {
                     document_id,
                     doc_type,
@@ -1869,7 +1873,7 @@ impl SyncState {
                 document_id: Some(document_id),
                 code: RefusalCode::Forbidden,
             } if self.documents.contains_key(&document_id) => {
-                tracing::info!("Sync: subscription refused for {document_id}");
+                crate::log::info!("Sync: subscription refused for {document_id}");
                 self.document_removed(document_id);
             }
             // The relay erased a document still held here, as a fold erases
@@ -1878,13 +1882,13 @@ impl SyncState {
                 document_id: Some(document_id),
                 code: RefusalCode::NotFound,
             } if self.documents.contains_key(&document_id) => {
-                tracing::info!("Sync: {document_id} is gone from the relay");
+                crate::log::info!("Sync: {document_id} is gone from the relay");
                 self.documents.remove(&document_id);
                 self.light.remove(&document_id);
                 self.send_to_logic(LogicEvent::DocumentGone { document_id });
             }
             WsServerMsg::Error { document_id, code } => {
-                tracing::error!("Sync: socket refusal {code} for {document_id:?}");
+                crate::log::error!("Sync: socket refusal {code} for {document_id:?}");
                 self.send_to_logic(LogicEvent::ApiError {
                     id: None,
                     request: ApiRequest::Websocket,
@@ -1921,7 +1925,7 @@ impl SyncState {
             .get(&document_id)
             .and_then(|doc| doc.departed);
         let roots = doc_type.map(|doc_type| self.roots(document_id, doc_type));
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             let members_url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route(format!("/documents/{document_id}/members"));
             let resp = match http::get_json_auth::<http::MembersResponse>(
@@ -1932,7 +1936,7 @@ impl SyncState {
             {
                 Ok(resp) => resp,
                 Err(e) => {
-                    tracing::error!("Sync: KeyRotationRequired fetch members failed: {e}");
+                    crate::log::error!("Sync: KeyRotationRequired fetch members failed: {e}");
                     return;
                 }
             };
@@ -1946,7 +1950,7 @@ impl SyncState {
             let (new_doc_key, anchor) = match Self::unwrap_anchored(&ek, &resp.members) {
                 Ok(unwrapped) => unwrapped,
                 Err(e) => {
-                    tracing::error!("Sync: KeyRotationRequired unwrap failed: {e}");
+                    crate::log::error!("Sync: KeyRotationRequired unwrap failed: {e}");
                     return;
                 }
             };
@@ -1958,7 +1962,7 @@ impl SyncState {
                 match http::try_fetch_key_links(url_scheme, &api_base, document_id, auth).await {
                     Ok(links) => links,
                     Err(e) => {
-                        tracing::error!("Sync: KeyRotationRequired fetch links failed: {e}");
+                        crate::log::error!("Sync: KeyRotationRequired fetch links failed: {e}");
                         return;
                     }
                 };
@@ -1979,7 +1983,7 @@ impl SyncState {
             )
             .knowing(departed);
             if checked && let Err(refusal) = vouch.check(log_document, &new_doc_key, &links) {
-                tracing::error!("Sync: KeyRotationRequired key refused: {refusal:?}");
+                crate::log::error!("Sync: KeyRotationRequired key refused: {refusal:?}");
                 // A payment the relay answered settled stays owed: the next
                 // edit tries again, and none seals meanwhile (`SYNC-223`).
                 let _ = tx.send(SyncEvent::DebtUnsettled {

@@ -80,7 +80,7 @@ impl SyncState {
         };
         let base = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base);
         let auth = self.auth_context();
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             let result = take_fold_lease(&http::Fetch, &auth, &base, channel_id, segment).await;
             let _ = tx.send(SyncEvent::FoldLeaseAnswered {
                 channel_id,
@@ -115,7 +115,7 @@ impl SyncState {
         };
         let base = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base);
         let auth = self.auth_context();
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             let result = commit_fold(
                 &http::Fetch,
                 &auth,
@@ -142,7 +142,7 @@ impl SyncState {
         segment: Id<Segment>,
         error: &dyn http::Reported,
     ) {
-        tracing::warn!("[Sync] fold of {segment} failed: {error}");
+        crate::log::warning!("[Sync] fold of {segment} failed: {error}");
         self.send_to_logic(LogicEvent::SegmentFoldFailed {
             channel_id,
             segment,

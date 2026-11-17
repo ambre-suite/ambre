@@ -272,7 +272,8 @@
   figures alone:
   1. the first download, Main plus Sync, under 4 MB brotli;
   2. each lazy artefact, a converter module or the call worker, under its own brotli budget;
-  3. the raw wasm of Main under a ceiling set at least 2 % above its measure.
+  3. the raw wasm of Main under a ceiling set at least 2 % above its measure. Since 2026-11-17,
+     the raw wasm of Sync under its own ceiling too.
 * **The brotli budgets are wide, so the brotli noise cannot move them.** Brotli moves Main by
   about 850 bytes between two builds of one source, and the first download holds about 856 KB of
   room. A tight brotli figure would pass or fail on that noise, which is why `ARCH-096` once moved
@@ -867,6 +868,34 @@
   ceiling rounds it up to 1 270 000, with 9 313 bytes of room once the pin lands. Main and the
   converter modules hold their figures, and the call worker reads 77 bytes less. The first
   download reads 3 138 616 bytes of brotli.
+* **Five cuts took Sync to 1 267 331 raw bytes on 2026-11-17, and a gate holds its ceiling.** Sync
+  read 1 363 513 bytes over `claude/batch-merge` at `041e88f`, 93 513 over its ceiling of
+  1 270 000. No script held that ceiling, so no build failed. `twiggy` compared a build of the crate
+  alone that keeps the name section with the same build at `6fe7e50`. It found about 100 KB of
+  code spread over the features of two days, and no crate pulled in whole. So each cut removes a
+  copy that the code made per call site or per type, and the worker keeps every feature:
+  1. The 227 `tracing` messages of the crate reach `tracing` through one call per level
+     (`crates/ambre-sync/src/log.rs`). Each macro wrote a static callsite. The level, the text
+     and the source line of each message stay.
+  2. `spawn_local` takes a boxed future, so its scheduler links once and not once per task type.
+  3. The JSON encode and decode of a REST body keep the serde call alone generic. The error
+     mapping links once.
+  4. The socket of the SFU reads its JSON through the slice reader of the REST answers. A second
+     reader linked a second copy of the parser.
+  5. Three stable sorts call the shared sorts of `ambre_core::order`.
+* **`scripts/wasm_size.py` holds the raw ceiling of Sync since 2026-11-17 (`ARCH-096`).** The
+  brotli budget of the first download holds about 770 KB of room, so it could not see Sync grow.
+  The figures are `trunk build --release`, then `scripts/wasm_size.py`, on the session container.
+  The two cuts dropped below were measured on the build of the crate alone, in code bytes.
+
+| Build | Sync raw | Change | Verdict |
+|---|---|---|---|
+| `claude/batch-merge` at `041e88f` | 1 363 513 | -- | before the story |
+| cuts 1 to 4 | 1 269 441 | -94 072 | kept |
+| cut 5: the shared sorts | 1 267 331 | -2 110 | kept |
+| each REST body decoded through a `serde_json::Value` | about -5 000 | -- | dropped: it builds a tree for each answer, and the error loses its line and column |
+| a subscriber of the crate in place of `tracing-wasm` | about -18 000 | -- | not built: the marks of each log in the performance panel would go |
+
 * **The PNG raster raised the PDF module ceiling on 2026-11-15.** The PNG export rasterizes a
   recorded page in the PDF module, on the converter thread
   (`3-Toile/features/ambre-spec-toile-import-export.md section 3`). Three cuts came before the

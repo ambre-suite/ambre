@@ -169,7 +169,7 @@ impl From<SyncError> for HttpError {
         match error {
             SyncError::Http(error) => error,
             other => {
-                tracing::warn!("Sync: {other}");
+                crate::log::warning!("Sync: {other}");
                 Self::Local(other.local().unwrap_or(LocalFailure::Crypto))
             }
         }

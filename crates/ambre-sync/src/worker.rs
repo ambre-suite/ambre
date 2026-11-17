@@ -41,7 +41,7 @@ fn post_bytes(scope: &DedicatedWorkerGlobalScope, post: &Payload<WorkerPost>) {
     let buffer = array.buffer();
     let transfer = js_sys::Array::of1(&buffer);
     if let Err(e) = scope.post_message_with_transfer(&buffer, &transfer) {
-        tracing::warn!("[Sync] post_message to Main failed: {e:?}");
+        crate::log::warning!("[Sync] post_message to Main failed: {e:?}");
     }
 }
 
@@ -68,7 +68,7 @@ pub fn start() {
     let logic_sink = LogicSink::new(
         move |event: LogicEvent| match postcard::to_allocvec(&event) {
             Ok(bytes) => post_bytes(&sink_scope, &Payload::<WorkerPost>::new(bytes)),
-            Err(e) => tracing::error!("[Sync] failed to encode LogicEvent: {e}"),
+            Err(e) => crate::log::error!("[Sync] failed to encode LogicEvent: {e}"),
         },
     );
 
@@ -87,7 +87,7 @@ pub fn start() {
             Ok(cmd) => {
                 let _ = cmd_tx.send(cmd);
             }
-            Err(err) => tracing::error!("[Sync] failed to decode SyncCommand: {err}"),
+            Err(err) => crate::log::error!("[Sync] failed to decode SyncCommand: {err}"),
         }
     });
     scope.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
@@ -103,5 +103,5 @@ pub fn start() {
     // `OpenDocument` queued forever behind the loading overlay (`SYNC-057`).
     post_bytes(&scope, &ambre_bus::start::ANNOUNCEMENT);
 
-    wasm_bindgen_futures::spawn_local(run_wasm(cmd_rx, logic_sink, api_base, call_ports));
+    crate::spawn(run_wasm(cmd_rx, logic_sink, api_base, call_ports));
 }

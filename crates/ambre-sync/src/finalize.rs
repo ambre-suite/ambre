@@ -70,7 +70,7 @@ impl SyncState {
         };
         let base = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base);
         let auth = self.auth_context();
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             let result = take_lease(&http::Fetch, &auth, &base, channel_id, segment).await;
             let _ = tx.send(SyncEvent::FinalizeLeaseAnswered {
                 channel_id,
@@ -140,7 +140,7 @@ impl SyncState {
         };
         let base = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base);
         let auth = self.auth_context();
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             let result = commit_final(
                 &http::Fetch,
                 &auth,
@@ -167,7 +167,7 @@ impl SyncState {
         end: ambre_core::FinalizeEnd,
         error: &dyn http::Reported,
     ) {
-        tracing::warn!("[Sync] finalization of {segment} failed: {error}");
+        crate::log::warning!("[Sync] finalization of {segment} failed: {error}");
         self.send_to_logic(LogicEvent::SegmentFinalizeFailed {
             channel_id,
             segment,

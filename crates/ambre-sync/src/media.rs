@@ -143,7 +143,7 @@ impl SyncState {
             doc_key,
             signing_key,
         };
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             let base = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route(format!("/documents/{document_id}"));
             upload_media(&GlooHttp { auth }, &base, upload, &tx, &logic_tx).await;
@@ -167,7 +167,9 @@ impl SyncState {
             match failure {
                 None => self.handle_upload_media(id, document_id, data),
                 Some(failed) => {
-                    tracing::warn!("Sync: upload {id} waits on a document not created: {failed}");
+                    crate::log::warning!(
+                        "Sync: upload {id} waits on a document not created: {failed}"
+                    );
                     self.send_to_logic(LogicEvent::ApiError {
                         id: Some(id),
                         request: ApiRequest::UploadMedia,
@@ -220,7 +222,7 @@ impl SyncState {
             return;
         };
 
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             let base = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route(format!("/documents/{document_id}"));
             let http = GlooHttp { auth };
@@ -251,7 +253,7 @@ impl SyncState {
         let auth = self.auth_context();
         let base = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base)
             .route(format!("/documents/{document_id}"));
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             let http = GlooHttp { auth };
             erase_media(&http, &base, id, document_id, content_hash, &tx, &logic_tx).await;
         });
@@ -316,7 +318,7 @@ impl MediaHttp for GlooHttp {
 
 /// Reports a failed media leg to the caller that asked for it.
 fn report(logic_tx: &LogicSink, id: Seq<Request>, request: ApiRequest, error: impl http::Reported) {
-    tracing::warn!("Sync: {} {id} failed: {error}", request.as_str());
+    crate::log::warning!("Sync: {} {id} failed: {error}", request.as_str());
     let _ = logic_tx.send(LogicEvent::ApiError {
         id: Some(id),
         request,
@@ -357,7 +359,7 @@ async fn upload_media(
     let outcome = match seal_blob(&data, document_id, &address, &doc_key, &signing_key) {
         Ok(blob) => upload_leg(http, base, &content_hash, &blob).await,
         Err(e) => {
-            tracing::warn!("Sync: seal: {e}");
+            crate::log::warning!("Sync: seal: {e}");
             Err(http::Failed::local(ambre_core::LocalFailure::Crypto))
         }
     };
@@ -497,7 +499,7 @@ async fn download_leg(
         .await
         .map_err(|e| e.at("S3 GET"))?;
     open_blob_named(&blob, content_hash, keyring).map_err(|e| {
-        tracing::warn!("Sync: Open: {e}");
+        crate::log::warning!("Sync: Open: {e}");
         http::Failed::local(ambre_core::LocalFailure::Crypto)
     })
 }

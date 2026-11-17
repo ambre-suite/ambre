@@ -8,12 +8,12 @@ section 5` (`ARCH-096`):
   the whole suite;
 * each lazy artefact, a converter module or the call worker, under its own
   brotli figure of `MODULE_BUDGETS`;
-* the raw wasm of Main under its ceiling of `CEILINGS`, set at least 2 % above
-  its measure: the net against growth on the first download.
+* the raw wasm of Main and of Sync, each under its ceiling of `CEILINGS`: the
+  net against growth on the first download.
 
 No other figure fails. A brotli budget holds a wide margin, so the noise of
 brotli at quality 11, about 850 bytes between two builds of one source on
-Main until 2026-11-14, cannot move its verdict. The Main ceiling holds raw
+Main until 2026-11-14, cannot move its verdict. The two ceilings hold raw
 bytes, which moved by about 63 bytes between two such builds. The build is
 reproducible since that day (`ZK-038`).
 
@@ -50,12 +50,14 @@ ROOT = Path(__file__).resolve().parent.parent
 # story row (`ARCH-095`).
 BUDGET = 4_000_000
 
-# The raw wasm bytes of Main, the one raw ceiling that fails a build. Set at
-# least 2 % above the measure of `main`, rounded up to 10,000 bytes. It rises
-# only through a story row that names the new figure and the cut tried first
-# (`ARCH-095`), and the row sets it 2 % above the new measure again.
+# The raw wasm bytes of the first download, the two raw ceilings that fail a
+# build. Main sits at least 2 % above the measure of `main`, rounded up to
+# 10,000 bytes. Sync sat over its ceiling for two days with no gate to say so,
+# since the brotli budget holds a wide margin. A figure rises only through a
+# story row that names the new figure and the cut tried first (`ARCH-095`).
 CEILINGS = {
     "Main": 10_920_000,
+    "Sync": 1_270_000,
 }
 
 # The brotli budget of each lazy artefact, its row of `ambre-spec-budgets.md

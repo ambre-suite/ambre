@@ -85,11 +85,11 @@ impl SyncState {
             return None;
         }
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
-            tracing::warn!("Sync: Update for unopened doc {document_id:?}, dropping");
+            crate::log::warning!("Sync: Update for unopened doc {document_id:?}, dropping");
             return None;
         };
         if !doc_state.first_arrival(seq) {
-            tracing::debug!(
+            crate::log::debug!(
                 "[Sync] dropping a second copy of seq={} doc={document_id}",
                 seq.get()
             );
@@ -126,7 +126,7 @@ impl SyncState {
                 return None;
             }
             let opened = doc_state.open_signed_update(&update, seq);
-            tracing::info!(
+            crate::log::info!(
                 "[Sync->Logic] decrypted update doc={document_id} seq={} clock={} size={}",
                 seq.get(),
                 update.public_data.clock.get(),
@@ -140,7 +140,7 @@ impl SyncState {
             .entry(snapshot_id)
             .or_default()
             .push((seq, update));
-        tracing::debug!(
+        crate::log::debug!(
             "[Sync] quarantined update doc={document_id} seq={} snapshot={snapshot_id:?}",
             seq.get(),
         );
@@ -192,7 +192,7 @@ impl SyncState {
                         doc_state.quarantine.remove(&snap);
                     }
                 }
-                tracing::warn!(
+                crate::log::warning!(
                     "Sync: quarantine overflow on {document_id:?}, dropped oldest update (clock {clock})"
                 );
                 self.send_to_logic(LogicEvent::SyncWarning {
@@ -207,7 +207,7 @@ impl SyncState {
     /// were quarantined waiting for it, in ascending `clock` order.
     pub(crate) fn snapshot_known(&mut self, document_id: Id<Document>, snapshot_id: Id<Snapshot>) {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
-            tracing::warn!("Sync: SnapshotAvailable for unopened doc {document_id:?}");
+            crate::log::warning!("Sync: SnapshotAvailable for unopened doc {document_id:?}");
             return;
         };
         doc_state.known_snapshots.insert(snapshot_id);
@@ -226,7 +226,7 @@ impl SyncState {
         covered_seq: Seq<Relay>,
     ) {
         let Some(doc_state) = self.documents.get(&document_id) else {
-            tracing::warn!("Sync: SnapshotAvailable for unopened doc {document_id:?}");
+            crate::log::warning!("Sync: SnapshotAvailable for unopened doc {document_id:?}");
             return;
         };
         if doc_state.known_snapshots.contains(&snapshot_id) {
@@ -234,13 +234,13 @@ impl SyncState {
             return;
         }
         let Some(tx) = self.event_tx.clone() else {
-            tracing::info!("Sync: snapshot {snapshot_id:?} announced, no storage");
+            crate::log::info!("Sync: snapshot {snapshot_id:?} announced, no storage");
             return;
         };
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             let dl_url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route(format!("/documents/{document_id}/snapshot/download-url"));
             let body = http::SnapshotDownloadUrlRequest { snapshot_id };
@@ -314,7 +314,7 @@ impl SyncState {
                 match doc_state.gate.defer_snapshot(snapshot_id, covered_seq) {
                     crate::channels::Deferral::Held | crate::channels::Deferral::Dropped => {}
                     crate::channels::Deferral::Overflow => {
-                        tracing::warn!(
+                        crate::log::warning!(
                             "Sync: snapshot {snapshot_id:?} dropped while the log walks"
                         );
                         self.send_to_logic(LogicEvent::SyncWarning {
@@ -327,9 +327,13 @@ impl SyncState {
             Err(error) => {
                 match error {
                     Some(e) => {
-                        tracing::warn!("Sync: a snapshot of {document_id:?} does not open: {e}")
+                        crate::log::warning!(
+                            "Sync: a snapshot of {document_id:?} does not open: {e}"
+                        )
                     }
-                    None => tracing::warn!("Sync: a snapshot of {document_id:?} did not download"),
+                    None => {
+                        crate::log::warning!("Sync: a snapshot of {document_id:?} did not download")
+                    }
                 }
                 self.send_to_logic(LogicEvent::SyncWarning {
                     document_id,
@@ -357,7 +361,7 @@ impl SyncState {
     ) -> Option<Vouch> {
         let doc_state = self.documents.get_mut(&document_id)?;
         let Some(check) = doc_state.checks.remove(&snapshot_id) else {
-            tracing::warn!("Sync: a verdict on snapshot {snapshot_id:?} nobody asked for");
+            crate::log::warning!("Sync: a verdict on snapshot {snapshot_id:?} nobody asked for");
             return None;
         };
         let passes = match &verdict {
@@ -385,7 +389,7 @@ impl SyncState {
                 None
             }
             SnapshotPurpose::Open => {
-                tracing::warn!(
+                crate::log::warning!(
                     "Sync: snapshot {snapshot_id:?} of {document_id:?} refused \
                      (mismatch: {mismatch})"
                 );
@@ -412,13 +416,13 @@ impl SyncState {
                 );
                 let signature =
                     ed25519_dalek::Signer::sign(signing_key, transcript.as_bytes()).to_bytes();
-                tracing::warn!(
+                crate::log::warning!(
                     "Sync: snapshot {snapshot_id:?} of {document_id:?} contradicts its deltas"
                 );
                 Some(Vouch::Report(FixedBytes::from_array(signature)))
             }
             SnapshotPurpose::Confirm => {
-                tracing::info!("Sync: snapshot {snapshot_id:?} left unchecked");
+                crate::log::info!("Sync: snapshot {snapshot_id:?} left unchecked");
                 None
             }
         }
@@ -433,12 +437,12 @@ impl SyncState {
         vouch: Vouch,
     ) {
         let Some(tx) = self.event_tx.clone() else {
-            tracing::info!("Sync: snapshot {snapshot_id:?} vouch, no relay");
+            crate::log::info!("Sync: snapshot {snapshot_id:?} vouch, no relay");
             return;
         };
         let base = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base);
         let auth = self.auth_context();
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             let sent =
                 send_vouch(&http::Fetch, &auth, &base, document_id, snapshot_id, &vouch).await;
             match sent {
@@ -449,7 +453,7 @@ impl SyncState {
                     });
                 }
                 Ok(None) => {}
-                Err(e) => tracing::warn!("Sync: snapshot {snapshot_id:?} vouch failed: {e}"),
+                Err(e) => crate::log::warning!("Sync: snapshot {snapshot_id:?} vouch failed: {e}"),
             }
         });
     }
@@ -492,7 +496,9 @@ impl SyncState {
                 true
             }
             Err(e) => {
-                tracing::warn!("Sync: latest snapshot of {document_id:?} does not open ({e})");
+                crate::log::warning!(
+                    "Sync: latest snapshot of {document_id:?} does not open ({e})"
+                );
                 false
             }
         }
@@ -514,7 +520,7 @@ impl SyncState {
                 .remove(&snapshot_id)
                 .unwrap_or_default()
         };
-        pending.sort_by_key(|(_, u)| u.public_data.clock.get());
+        ambre_core::order::sort_by_seq(&mut pending, |(_, u)| u.public_data.clock);
         if let Some(doc_state) = self.documents.get_mut(&document_id)
             && doc_state.quarantine_len() < QUARANTINE_ALERT
         {
@@ -659,7 +665,7 @@ impl SyncState {
         // the key against a channel's log. An open under another type claims the document for the
         // session and drops a key a Murmure open installed (`SYNC-260`).
         if doc_type == DocType::Murmure && self.typed_opens.contains(&document_id) {
-            tracing::warn!(
+            crate::log::warning!(
                 "Sync: open of {document_id:?} as Murmure refused: held as another type"
             );
             return;
@@ -680,7 +686,7 @@ impl SyncState {
         // (Only in the real wasm path; the mock/host path has `event_tx == None`
         // and seeds keys synchronously.)
         if self.event_tx.is_some() && self.signing_key.is_none() {
-            tracing::info!("Sync: queuing OpenDocument {document_id:?} until session ready");
+            crate::log::info!("Sync: queuing OpenDocument {document_id:?} until session ready");
             self.pending_opens.push((document_id, doc_type));
             return;
         }
@@ -707,7 +713,7 @@ impl SyncState {
             // opens as it is (`AUTHOR-022` reads another user's).
             let own_key = self.author_pub_key();
             let roots = self.roots(document_id, doc_type);
-            wasm_bindgen_futures::spawn_local(Self::open_from_relay(
+            crate::spawn(Self::open_from_relay(
                 RelayOpen {
                     api_base,
                     url_scheme,
@@ -734,7 +740,7 @@ impl SyncState {
             if self.ws_connected() {
                 self.ws_send(&WsClientMsg::Subscribe { document_id });
             }
-            tracing::info!("Sync: OpenDocument {document_id:?}");
+            crate::log::info!("Sync: OpenDocument {document_id:?}");
         }
     }
 
@@ -804,7 +810,7 @@ impl SyncState {
                         )
                     }
                     Err((cause, _)) => {
-                        tracing::warn!("Sync: cannot unwrap the key of {doc_id:?}");
+                        crate::log::warning!("Sync: cannot unwrap the key of {doc_id:?}");
                         let _ = tx.send(SyncEvent::OpenDocumentFailed {
                             document_id: doc_id,
                             cause,
@@ -813,7 +819,7 @@ impl SyncState {
                     }
                 },
                 None => {
-                    tracing::warn!("Sync: open of {doc_id:?}: session not ready");
+                    crate::log::warning!("Sync: open of {doc_id:?}: session not ready");
                     let _ = tx.send(SyncEvent::OpenDocumentFailed {
                         document_id: doc_id,
                         cause: OpenFailure::Transient,
@@ -853,7 +859,7 @@ impl SyncState {
             match http::try_fetch_key_links(url_scheme, &api_base, doc_id, auth.clone()).await {
                 Ok(links) => crate::chain::signed_by_writers(links, &link_signers),
                 Err(error) => {
-                    tracing::warn!("Sync: key links of {doc_id:?} unavailable: {error}");
+                    crate::log::warning!("Sync: key links of {doc_id:?} unavailable: {error}");
                     let _ = tx.send(SyncEvent::OpenDocumentFailed {
                         document_id: doc_id,
                         cause: OpenFailure::Transient,
@@ -867,7 +873,7 @@ impl SyncState {
         if let Err((cause, message)) =
             Self::named_key_holds(log_document, &doc_key, named_key, &links)
         {
-            tracing::warn!("Sync: open of {doc_id:?}: {message}");
+            crate::log::warning!("Sync: open of {doc_id:?}: {message}");
             let _ = tx.send(SyncEvent::OpenDocumentFailed {
                 document_id: doc_id,
                 cause,
@@ -880,7 +886,7 @@ impl SyncState {
                 .map(|accepted| (v.proved(), accepted))
         }) {
             Some(Err(refusal)) => {
-                tracing::warn!("Sync: open of {doc_id:?}: key refused: {refusal:?}");
+                crate::log::warning!("Sync: open of {doc_id:?}: key refused: {refusal:?}");
                 let cause = refusal.open_failure();
                 let _ = tx.send(SyncEvent::OpenDocumentFailed {
                     document_id: doc_id,
@@ -1206,7 +1212,7 @@ impl SyncState {
         self.documents.remove(&document_id);
         self.session_nonces.remove(&document_id);
         self.light.remove(&document_id);
-        tracing::info!("Sync: CloseDocument {document_id:?}");
+        crate::log::info!("Sync: CloseDocument {document_id:?}");
     }
 
     pub(crate) fn handle_reconnect(&mut self, document_id: Id<Document>) {
@@ -1246,7 +1252,7 @@ impl SyncState {
             .partition::<Vec<_>, _>(|(doc, ..)| *doc == document_id);
         self.pending_pre_session_updates = kept;
         if !drained.is_empty() {
-            tracing::info!(
+            crate::log::info!(
                 "[Sync] flushing {} buffered pre-session update(s) doc={document_id}",
                 drained.len()
             );
@@ -1274,7 +1280,9 @@ impl SyncState {
             // Session not established yet (for example an edit landed in the gap between
             // an F5 and DevLogin completing). Buffer instead of dropping; flushed
             // once the document opens (see `pending_pre_session_updates`).
-            tracing::info!("[Sync] SendUpdate before session ready, buffering doc={document_id}");
+            crate::log::info!(
+                "[Sync] SendUpdate before session ready, buffering doc={document_id}"
+            );
             self.pending_pre_session_updates
                 .push((document_id, payload, summary));
             return;
@@ -1292,7 +1300,9 @@ impl SyncState {
                 });
                 return;
             }
-            tracing::warn!("[Sync] SendUpdate with no session nonce doc={document_id}, dropped");
+            crate::log::warning!(
+                "[Sync] SendUpdate with no session nonce doc={document_id}, dropped"
+            );
             return;
         };
         let summary = summary.as_ref().map(ActivitySummary::to_sealed);
@@ -1309,7 +1319,9 @@ impl SyncState {
     ) {
         match pipeline::update_body(&nonce, summary, delta) {
             Ok(body) => self.send_body(document_id, body),
-            Err(error) => tracing::warn!("[Sync] update body refused doc={document_id}: {error}"),
+            Err(error) => {
+                crate::log::warning!("[Sync] update body refused doc={document_id}: {error}")
+            }
         }
     }
 
@@ -1324,7 +1336,9 @@ impl SyncState {
     ) {
         if self.signing_key.is_none() {
             // Sent after the document is ready, so after the session is.
-            tracing::warn!("[Sync] SendUnsent before session ready doc={document_id}, dropped");
+            crate::log::warning!(
+                "[Sync] SendUnsent before session ready doc={document_id}, dropped"
+            );
             return;
         }
         // What an earlier session left unsent is replayed with no summary:
@@ -1359,7 +1373,7 @@ impl SyncState {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             // No session of this document: the update cannot reach the relay,
             // so the refusal is said aloud (`SYNC-069`).
-            tracing::warn!("[Sync] SendUpdate for unknown doc {document_id:?}");
+            crate::log::warning!("[Sync] SendUpdate for unknown doc {document_id:?}");
             body.wipe();
             self.send_to_logic(LogicEvent::SyncWarning {
                 document_id,
@@ -1370,7 +1384,7 @@ impl SyncState {
         // A delta refused by name holds the document: a later one would build
         // on an edit the relay lacks (`SYNC-156`).
         if doc_state.rekey.holds_refused() {
-            tracing::debug!("[Sync] edit held: doc={document_id} has a refused delta");
+            crate::log::debug!("[Sync] edit held: doc={document_id} has a refused delta");
             body.wipe();
             return;
         }
@@ -1382,7 +1396,9 @@ impl SyncState {
             crate::channels::Hold::Seal(body) => body,
             crate::channels::Hold::Held | crate::channels::Hold::Ended => return,
             crate::channels::Hold::Overflow => {
-                tracing::warn!("[Sync] edits dropped: doc={document_id} walks its log too long");
+                crate::log::warning!(
+                    "[Sync] edits dropped: doc={document_id} walks its log too long"
+                );
                 // The refusal checked above was not held yet, so this drop is
                 // the first one to report.
                 doc_state.rekey.edit_lost();
@@ -1407,7 +1423,7 @@ impl SyncState {
         // comes after the owed rotation, whose waiting edits come back
         // through here, so the two holds keep the order of the edits.
         if doc_state.head_watch.holds_edits() {
-            tracing::debug!("[Sync] edit held: doc={document_id} checks a signed log head");
+            crate::log::debug!("[Sync] edit held: doc={document_id} checks a signed log head");
             doc_state.head_watch.hold(body);
             return;
         }
@@ -1428,7 +1444,7 @@ impl SyncState {
         match self.documents.get_mut(&document_id) {
             Some(doc_state) => {
                 if doc_state.rekey.record_sent(sent) {
-                    tracing::warn!(
+                    crate::log::warning!(
                         "[Sync] unconfirmed log full doc={document_id}, oldest forgotten"
                     );
                 }
@@ -1468,14 +1484,14 @@ impl SyncState {
         };
         match pipeline::update_frame(body, public_data, doc_key, signing_key) {
             Ok(frame) => {
-                tracing::info!("[Sync] seal_update ok doc={document_id} clock={clock}");
+                crate::log::info!("[Sync] seal_update ok doc={document_id} clock={clock}");
                 self.ws_send_sealed(&frame);
                 frame
                     .update_signature()
                     .map(|signature| (key_id, signature))
             }
             Err(e) => {
-                tracing::error!("[Sync] SendUpdate seal failed for {document_id:?}: {e}");
+                crate::log::error!("[Sync] SendUpdate seal failed for {document_id:?}: {e}");
                 None
             }
         }
@@ -1534,7 +1550,7 @@ impl SyncState {
         let Some(bodies) = doc_state.rekey.clock_refused(&signature) else {
             return;
         };
-        tracing::info!(
+        crate::log::info!(
             "[Sync] clock refused doc={document_id}, {} delta(s) leave again from {expected}",
             bodies.len()
         );
@@ -1587,7 +1603,7 @@ impl SyncState {
             .filter_map(|body| pipeline::split_update_body(body).ok())
             .map(|body| body.delta)
             .collect();
-        tracing::warn!("[Sync] delta refused for a locked segment doc={document_id}");
+        crate::log::warning!("[Sync] delta refused for a locked segment doc={document_id}");
         self.send_to_logic(LogicEvent::DeltasLocked {
             document_id,
             deltas,
@@ -1608,7 +1624,7 @@ impl SyncState {
         if !doc_state.rekey.delta_refused(signature) {
             return;
         }
-        tracing::warn!("[Sync] delta refused doc={document_id}: {cause}");
+        crate::log::warning!("[Sync] delta refused doc={document_id}: {cause}");
         self.send_to_logic(LogicEvent::SyncWarning {
             document_id,
             code: SyncWarningCode::EditRefused,
@@ -1636,7 +1652,7 @@ impl SyncState {
         };
         match resend_retry_delay(failure) {
             Some(delay) => {
-                tracing::warn!("[Sync] delta failed doc={document_id} (failure {failure})");
+                crate::log::warning!("[Sync] delta failed doc={document_id} (failure {failure})");
                 let retry = SyncEvent::ResendRetry {
                     document_id,
                     ticket,
@@ -1665,7 +1681,7 @@ impl SyncState {
             return;
         };
         doc_state.local_clock = clock.before();
-        tracing::info!(
+        crate::log::info!(
             "[Sync] resend doc={document_id}, {} delta(s) leave again from {clock}",
             bodies.len()
         );
@@ -1706,7 +1722,7 @@ impl SyncState {
             return;
         };
         if new_key.id() != doc_state.doc_key.id() && doc_state.key_named(new_key.id()).is_some() {
-            tracing::warn!(
+            crate::log::warning!(
                 "[Sync] doc={document_id}: a rotation names a key the current one replaced; kept the current key"
             );
             return;
@@ -1721,7 +1737,7 @@ impl SyncState {
                 chain.push(link.clone());
             }
             if chain.recover(&new_key, awaited).is_none() {
-                tracing::warn!(
+                crate::log::warning!(
                     "[Sync] doc={document_id}: a rotation names a key that does not follow the latest revoke; edits stay held"
                 );
                 doc_state.rekey.payment_failed();
@@ -1729,7 +1745,7 @@ impl SyncState {
             }
         }
         if new_key.id() == doc_state.doc_key.id() && doc_state.rekey.owes() {
-            tracing::warn!(
+            crate::log::warning!(
                 "[Sync] doc={document_id}: a rotation names the current key while one is owed; the debt stands"
             );
             doc_state.rekey.payment_failed();
@@ -1784,7 +1800,7 @@ impl SyncState {
         let http = crate::sharing::GlooHttp {
             auth: self.auth_context(),
         };
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             crate::sharing::settle_task(&http, params, &tx).await;
         });
     }
@@ -1807,7 +1823,7 @@ impl SyncState {
             return;
         };
         let (Some(exchange_key), Some(author)) = (self.exchange_key.clone(), self.author()) else {
-            tracing::warn!("[Sync] lazy create for {document_id:?} without session keys");
+            crate::log::warning!("[Sync] lazy create for {document_id:?} without session keys");
             return;
         };
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
@@ -1824,7 +1840,7 @@ impl SyncState {
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             // The copy carries the anchor of the log its creator starts
             // (`SYNC-104`, `SYNC-132`).
             let (doc_key_enc, entry) =
@@ -1888,14 +1904,14 @@ impl SyncState {
         let upload = match self.snapshot_upload(document_id, &payload, covered_seq) {
             Ok(upload) => upload,
             Err(e) => {
-                tracing::warn!("Sync: SendSnapshot for {document_id:?} dropped: {e}");
+                crate::log::warning!("Sync: SendSnapshot for {document_id:?} dropped: {e}");
                 return;
             }
         };
         // Off the wasm path (host tests / mock relay) there is no event queue
         // and no real S3: sealing is the observable behavior, stop here.
         let Some(tx) = self.event_tx.clone() else {
-            tracing::info!(
+            crate::log::info!(
                 "Sync: SendSnapshot {document_id:?} sealed ({} bytes), no channel",
                 upload.draft.size().get()
             );
@@ -1903,7 +1919,7 @@ impl SyncState {
         };
         let base = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base);
         let auth = self.auth_context();
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             match upload_snapshot(&http::Fetch, &auth, &base, upload).await {
                 Ok(snapshot_id) => {
                     let _ = tx.send(SyncEvent::SnapshotUploaded {
@@ -1911,7 +1927,7 @@ impl SyncState {
                         snapshot_id,
                     });
                 }
-                Err(e) => tracing::error!("Sync: SendSnapshot failed for {document_id:?}: {e}"),
+                Err(e) => crate::log::error!("Sync: SendSnapshot failed for {document_id:?}: {e}"),
             }
         });
     }
@@ -1976,14 +1992,14 @@ impl SyncState {
         payload: ambre_core::Payload<ambre_core::EphemeralBytes>,
     ) {
         let Some(signing_key) = self.signing_key.clone() else {
-            tracing::warn!("Sync: SendEphemeral before session keys ready, dropping");
+            crate::log::warning!("Sync: SendEphemeral before session keys ready, dropping");
             return;
         };
         let Some(pub_key) = self.author_pub_key() else {
             return;
         };
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
-            tracing::warn!("Sync: SendEphemeral for unknown doc {document_id:?}");
+            crate::log::warning!("Sync: SendEphemeral for unknown doc {document_id:?}");
             return;
         };
         // A presence sample is not worth a hold: one sealed while the log
@@ -1994,7 +2010,7 @@ impl SyncState {
         // A wrapped counter would read as a replay to every peer, so an
         // exhausted counter drops the ephemeral instead.
         let Some(next) = doc_state.ephemeral_counter.get().checked_add(1) else {
-            tracing::warn!("Sync: ephemeral counter exhausted for {document_id:?}, dropping");
+            crate::log::warning!("Sync: ephemeral counter exhausted for {document_id:?}, dropping");
             return;
         };
         doc_state.ephemeral_counter =
@@ -2011,7 +2027,9 @@ impl SyncState {
         };
         match pipeline::ephemeral_frame(&payload, public_data, &doc_key, &signing_key) {
             Ok(frame) => self.ws_send_sealed(&frame),
-            Err(e) => tracing::error!("Sync: SendEphemeral seal failed for {document_id:?}: {e}"),
+            Err(e) => {
+                crate::log::error!("Sync: SendEphemeral seal failed for {document_id:?}: {e}")
+            }
         }
     }
 }
@@ -2125,7 +2143,7 @@ pub(crate) async fn upload_snapshot(
     )
     .await
     {
-        tracing::warn!("Sync: SendSnapshot self-confirm failed for {document_id:?}: {e}");
+        crate::log::warning!("Sync: SendSnapshot self-confirm failed for {document_id:?}: {e}");
     }
     Ok(snapshot_id)
 }
@@ -2241,15 +2259,19 @@ pub(crate) fn members_failure_cause(error: &crate::http::HttpError) -> OpenFailu
 pub(crate) fn log_members_failure(document_id: Id<Document>, error: &crate::http::HttpError) {
     match error.failure() {
         ApiFailure::Relay { .. } => {
-            tracing::warn!(
+            crate::log::warning!(
                 "Sync: the relay refused the members request of {document_id:?}: {error}"
             );
         }
         ApiFailure::Unreadable { .. } => {
-            tracing::warn!("Sync: the members answer of {document_id:?} does not read: {error}");
+            crate::log::warning!(
+                "Sync: the members answer of {document_id:?} does not read: {error}"
+            );
         }
         ApiFailure::Local(_) | ApiFailure::NoAnswer => {
-            tracing::warn!("Sync: the server could not be reached for {document_id:?}: {error}");
+            crate::log::warning!(
+                "Sync: the server could not be reached for {document_id:?}: {error}"
+            );
         }
     }
 }

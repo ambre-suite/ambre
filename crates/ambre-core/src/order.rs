@@ -9,7 +9,7 @@
 
 use std::cmp::Ordering;
 
-use crate::{Entity, Id, Uuid};
+use crate::{Entity, Id, Seq, Uuid, Wire};
 
 /// Sorts `items` by their partial order, stable. A pair with no order, such
 /// as a NaN and a number, counts as equal, so the sort keeps their order.
@@ -49,6 +49,15 @@ pub fn sort_by_key_then_id<T, K: Ord, E: Entity<Repr = Uuid>>(
         let (first, id) = key(item);
         (first, *id.as_bytes())
     });
+}
+
+/// Sorts `items` by the sequence number `key` gives each one, stable: two
+/// items with an equal number keep their order.
+///
+/// Every caller shares one copy of the sort, whatever its element type and
+/// its sequence family: the sort runs over the numbers.
+pub fn sort_by_seq<T, K: Wire>(items: &mut [T], key: impl Fn(&T) -> Seq<K>) {
+    sort_keyed(items, |item| key(item).get());
 }
 
 /// Sorts `items` by the key `key` gives each one, stable. The callers of one
@@ -120,6 +129,26 @@ mod tests {
             sort_by_id(&mut ours, key);
             let mut std_sort = items;
             std_sort.sort_by_key(|item| *key(item).as_bytes());
+            assert_eq!(ours, std_sort, "length {len}");
+        }
+    }
+
+    #[test]
+    fn a_sort_by_seq_matches_the_stable_sort_of_the_standard_library() {
+        let mut seed: u64 = 0xD1B5_4A32_D192_ED03;
+        for len in 0..40 {
+            let items: Vec<(u64, usize)> = (0..len)
+                .map(|place| {
+                    seed = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+                    // Few distinct numbers, so ties are common.
+                    (seed >> 61, place)
+                })
+                .collect();
+            let key = |item: &(u64, usize)| Seq::<crate::Relay>::new(item.0);
+            let mut ours = items.clone();
+            sort_by_seq(&mut ours, key);
+            let mut std_sort = items;
+            std_sort.sort_by_key(|item| item.0);
             assert_eq!(ours, std_sort, "length {len}");
         }
     }

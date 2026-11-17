@@ -50,7 +50,7 @@ pub(crate) fn members_in(
             unknown = Unknown::Some;
         }
     }
-    members.sort_by(|a, b| a.as_bytes().cmp(b.as_bytes()));
+    ambre_core::order::sort_by_id(&mut members, |member| *member);
     (CallMembers::Live(members), unknown)
 }
 
@@ -101,7 +101,7 @@ impl SyncState {
             let http = crate::sharing::GlooHttp {
                 auth: self.auth_context(),
             };
-            wasm_bindgen_futures::spawn_local(async move {
+            crate::spawn(async move {
                 let read =
                     crate::sharing::call_roster_task(&http, call, channel, scheme, &base, log)
                         .await;

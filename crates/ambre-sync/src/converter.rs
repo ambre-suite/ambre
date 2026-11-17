@@ -55,11 +55,11 @@ impl ambre_core::Becomes<ConverterModule> for FetchedModule {}
 /// The digest this build carries for `family`, or why there is none.
 fn expected(family: ConverterFamily) -> Result<FixedBytes<ModuleDigest>, ConverterRefusal> {
     let hex = digest_hex(family).ok_or_else(|| {
-        tracing::warn!("Sync: this build carries no {family} converter");
+        crate::log::warning!("Sync: this build carries no {family} converter");
         ConverterRefusal::NoDigest
     })?;
     FixedBytes::from_hex(hex).map_err(|e| {
-        tracing::warn!("Sync: the build's {family} converter digest is unreadable: {e}");
+        crate::log::warning!("Sync: the build's {family} converter digest is unreadable: {e}");
         ConverterRefusal::NoDigest
     })
 }
@@ -88,7 +88,7 @@ pub(crate) fn check(
     if &got == expected {
         Ok(bytes.into_role())
     } else {
-        tracing::warn!("Sync: the converter fetched is not the one this build names");
+        crate::log::warning!("Sync: the converter fetched is not the one this build names");
         Err(ConverterRefusal::DigestMismatch)
     }
 }
@@ -111,7 +111,7 @@ impl SyncState {
             });
         };
         let path = module_path(family, &digest);
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             let result = fetch(&path).await;
             let _ = tx.send(crate::SyncEvent::ConverterFetched { family, result });
         });
@@ -137,7 +137,7 @@ impl SyncState {
 /// to the log here.
 async fn fetch(path: &str) -> Result<Payload<FetchedModule>, ConverterRefusal> {
     let not_fetched = |e: &dyn std::fmt::Display| {
-        tracing::warn!("Sync: the converter at {path} did not download: {e}");
+        crate::log::warning!("Sync: the converter at {path} did not download: {e}");
         ConverterRefusal::NotFetched
     };
     let response = gloo_net::http::Request::get(path)

@@ -151,7 +151,7 @@ impl SyncState {
         let (tx, exchange_key, signing_key, previous, anchor) = match prepared {
             Ok(prepared) => prepared,
             Err(message) => {
-                tracing::warn!("Sync: channel {channel_id} keeps its key: {message}");
+                crate::log::warning!("Sync: channel {channel_id} keeps its key: {message}");
                 return;
             }
         };
@@ -183,7 +183,7 @@ impl SyncState {
         let http = crate::sharing::GlooHttp {
             auth: self.auth_context(),
         };
-        wasm_bindgen_futures::spawn_local(async move {
+        crate::spawn(async move {
             crate::sharing::rotate_channel_task(&http, params, &tx).await;
         });
     }
@@ -219,7 +219,9 @@ impl SyncState {
                 key,
             }),
             Err(message) => {
-                tracing::warn!("Sync: the rotation of channel {channel_id} failed: {message}");
+                crate::log::warning!(
+                    "Sync: the rotation of channel {channel_id} failed: {message}"
+                );
             }
         }
     }
