@@ -4226,7 +4226,6 @@ ambre-server | src/redis_ops.rs | crate::redis_ops | CallOpening::word() | ret |
 ambre-server | src/redis_ops.rs | crate::redis_ops | call_roster::LUA | const | &str	foreign-api	Lua script text sent to Redis
 ambre-sync | src/call_client.rs | crate::call_client | <HeldWraps as CountKind>::Repr | assoc | u64	newtype-inner	the number a count of this kind holds
 ambre-sync | src/call_client.rs | crate::call_client | CallClient::is_seated() | ret | bool	generic	predicate result
-ambre-sync | src/channels.rs | crate::channels | walk_limit() | ret | usize	math	the quarantine bound as the length a Vec compares against
 ambre-server | src/redis_keys.rs | crate::redis_keys | CallKey.text | field | String	newtype-inner	the key text CallKey wraps, call:{id}:{slot}
 ambre-server | src/redis_keys.rs | crate::redis_keys | CallKey<S>::as_str() | ret | &str	newtype-inner	the key text, as a store command takes it
 ambre-logic | src/data.rs | crate::data | state_has_pending_work() | ret | bool	generic	a predicate: whether a document's engine holds an import still to apply
