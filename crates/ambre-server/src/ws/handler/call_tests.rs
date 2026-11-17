@@ -374,6 +374,8 @@ async fn a_wrap_reaches_its_recipient_alone_on_the_call_socket(pool: sqlx::PgPoo
     }
 
     // The socket of the document plane takes no call frame: its first frame must authenticate.
+    // A call frame carries no wire version, so its first byte reads as an arbitrary one.
+    // The plane refuses it either as an unauthenticated frame or as an older wire.
     let mut plane = tokio_tungstenite::connect_async(format!("{root}/api/ws"))
         .await
         .expect("a socket")
@@ -393,7 +395,14 @@ async fn a_wrap_reaches_its_recipient_alone_on_the_call_socket(pool: sqlx::PgPoo
     })
     .await
     .expect("the plane answers");
-    assert_eq!(closed, Some(Bounded::<CloseCode>::UNAUTHORIZED.get()));
+    let refusals = [
+        Bounded::<CloseCode>::UNAUTHORIZED.get(),
+        Bounded::<CloseCode>::UPDATE_REQUIRED.get(),
+    ];
+    assert!(
+        closed.is_some_and(|code| refusals.contains(&code)),
+        "the plane refuses a call frame, got {closed:?}"
+    );
 
     for socket in [&mut a, &mut b, &mut c] {
         socket.close(None).await.expect("a close");
