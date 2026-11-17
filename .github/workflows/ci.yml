@@ -832,7 +832,8 @@ jobs:
   # host tier (`ambre-spec-testing.md section 2`). Non-blocking, in the
   # nightly lane alone. The whole scope took 1 h 56 min on four cores with
   # three jobs (measured 2026-11-05), so a push leaves it to `mutants-diff`.
-  # Eight shards, each built in place in the restored cache. Each uploads its
+  # Twelve shards, each built in place in the restored cache: eight left two
+  # of them past 90 min (measured 2026-11-17). Each uploads its
   # report.
   # ---------------------------------------------------------------------------
   mutants:
@@ -843,7 +844,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -864,7 +865,7 @@ jobs:
           save-if: ${{ env.CACHE_WRITE == 'true' && matrix.shard == 0 }}
       - name: Date the std sources
         run: just ci-cache pin-std
-      - run: just mutants ${{ matrix.shard }}/8 --in-place
+      - run: just mutants ${{ matrix.shard }}/12 --in-place
       - name: Prune the cache
         if: env.CACHE_WRITE == 'true' && matrix.shard == 0
         run: just ci-cache prune

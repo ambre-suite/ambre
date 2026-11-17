@@ -487,7 +487,7 @@ merge when the change touches what they hold.
 | `reproducible` | two clean release builds of the commit, on two runners and in two paths, with no cache. `reproducible-compare` then finds one client digest in the two manifests (`ZK-038`) |
 | `deny` | `cargo deny`: advisories, licences, sources, and the capability bans |
 | `coverage` | `cargo-llvm-cov` over the host tier, non-blocking. An `lcov` baseline as an artifact |
-| `mutants` | `cargo-mutants` over the scope of `.cargo/mutants.toml` on the host tier, eight shards, non-blocking. Each shard uploads its report |
+| `mutants` | `cargo-mutants` over the scope of `.cargo/mutants.toml` on the host tier, twelve shards, non-blocking. Each shard uploads its report |
 | `mutants-diff` | `cargo-mutants --in-diff` on the lines a pull request changes in that scope, blocking (`ARCH-069`) |
 | `devcontainer` | the dev container built with its layer cache, the test stack started in it, then one HTTPS request for the page and one for the relay from the runner, then one object put and read back through the links the relay presigns: `just devcontainer-check` (`ARCH-110`, `ARCH-114`) |
 
