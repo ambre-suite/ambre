@@ -52,6 +52,7 @@ fn snapshot_roundtrip() {
             pub_key: FixedBytes::from_array([12u8; 32]),
             key_id: FixedBytes::from_array([8u8; 16]),
             snapshot_id: Id::<id::Snapshot>::mint(),
+            covered_seq: Seq::<Relay>::new(14),
             parent_snapshot_proof: Some(FixedBytes::from_array([13u8; 32])),
             parent_snapshot_update_clocks: vec![
                 (
@@ -585,6 +586,7 @@ fn the_relay_reads_only_the_listed_fields() {
             pub_key: pk,
             key_id: kid,
             snapshot_id: Id::<id::Snapshot>::mint(),
+            covered_seq: Seq::<Relay>::new(9),
             parent_snapshot_proof: None,
             parent_snapshot_update_clocks: vec![],
         },
@@ -632,6 +634,7 @@ fn the_relay_reads_only_the_listed_fields() {
         pub_key: _,
         key_id: _,
         snapshot_id: _,
+        covered_seq: _,
         parent_snapshot_proof: _,
         parent_snapshot_update_clocks: _,
     } = public_data;

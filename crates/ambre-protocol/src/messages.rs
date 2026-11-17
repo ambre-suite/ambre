@@ -310,6 +310,7 @@ mod validate_tests {
                 pub_key: FixedBytes::from_array([2u8; 32]),
                 key_id: FixedBytes::from_array([4u8; 16]),
                 snapshot_id: Id::from_bytes([3u8; 16]),
+                covered_seq: Seq::<Relay>::new(5),
                 parent_snapshot_proof: proof,
                 parent_snapshot_update_clocks: clocks,
             },

@@ -14,7 +14,7 @@ use ambre_core::authorship::SessionNonce;
 use ambre_core::id::{Document, Id};
 use ambre_core::{
     Aad, Confidential, Count, EphemeralBytes, FixedBytes, KeyId, MediaBytes, Octets, Payload,
-    Plaintext, PublicKey, SnapshotBytes,
+    Plaintext, PublicKey, Relay, Seq, SnapshotBytes,
 };
 use ambre_crypto::{CryptoError, DocumentKey, Sealed, envelope};
 use ambre_protocol::messages::{Ciphertext, CommitmentTag, Nonce, Signature};
@@ -93,6 +93,8 @@ pub enum PipelineError {
     WrongDocument,
     #[error("the snapshot seals another identifier than the one asked for")]
     WrongSnapshot,
+    #[error("the snapshot seals another horizon than the one the relay served")]
+    WrongHorizon,
     #[error("a sealed object is shorter than its header")]
     ShortObject,
     #[error("the payload names another key than the one given")]
@@ -569,29 +571,47 @@ pub fn seal_snapshot(
     Ok(snapshot)
 }
 
+/// What the relay names for a snapshot it serves: its identifier, and the
+/// horizon its row records. The open holds the blob to both, because the
+/// replay starts after that horizon (`SYNC-257`, `SYNC-259`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ServedSnapshot {
+    /// The identifier the client asked for.
+    pub snapshot_id: Id<ambre_core::id::Snapshot>,
+    /// The last relay number the relay says the snapshot folds in.
+    pub covered_seq: Seq<Relay>,
+}
+
 /// Decodes a stored snapshot blob, the serialized [`Snapshot`] object storage
-/// holds. It refuses another document's, and another snapshot than `asked`,
-/// before any decryption (`SYNC-257`). The caller reads the key it names
+/// holds. It refuses another document's, another snapshot than the one
+/// `served` names (`SYNC-257`), and a horizon other than the served one
+/// (`SYNC-259`), before any decryption. The caller reads the key it names
 /// before opening it (`SYNC-045`, `SYNC-119`). The signature covers the
-/// identifier, so a refusal here is final once the open verifies it.
+/// identifier and the horizon, so a refusal here is final once the open
+/// verifies it.
 ///
 /// # Errors
 ///
-/// [`PipelineError::Postcard`] for bytes that are not a snapshot,
-/// [`PipelineError::WrongDocument`] for another document's, and
-/// [`PipelineError::WrongSnapshot`] for another snapshot of the document.
+/// * [`PipelineError::Postcard`] for bytes that are not a snapshot.
+/// * [`PipelineError::WrongDocument`] for another document's.
+/// * [`PipelineError::WrongSnapshot`] for another snapshot of the document.
+/// * [`PipelineError::WrongHorizon`] for a sealed horizon the relay did not
+///   serve.
 pub fn decode_snapshot_blob(
     blob: &Payload<FetchedBlob>,
     document_id: Id<Document>,
-    asked: Id<ambre_core::id::Snapshot>,
+    served: ServedSnapshot,
 ) -> Result<Snapshot, PipelineError> {
     let snapshot: Snapshot =
         postcard::from_bytes(blob.as_bytes()).map_err(|_| PipelineError::Postcard)?;
     if snapshot.public_data.document_id != document_id {
         return Err(PipelineError::WrongDocument);
     }
-    if snapshot.public_data.snapshot_id != asked {
+    if snapshot.public_data.snapshot_id != served.snapshot_id {
         return Err(PipelineError::WrongSnapshot);
+    }
+    if snapshot.public_data.covered_seq != served.covered_seq {
+        return Err(PipelineError::WrongHorizon);
     }
     Ok(snapshot)
 }
@@ -877,6 +897,12 @@ impl SnapshotDraft {
     /// The size the upload link binds: the size of every seal of this draft.
     pub const fn size(&self) -> Count<Octets> {
         self.size
+    }
+
+    /// The horizon every seal of this draft carries, which the upload
+    /// metadata names (`SYNC-259`).
+    pub const fn covered_seq(&self) -> Seq<Relay> {
+        self.public_data.covered_seq
     }
 
     /// Seals the snapshot under `snapshot_id`, the identifier the relay
@@ -1323,6 +1349,7 @@ mod tests {
             pub_key: author,
             key_id: key_id(),
             snapshot_id: Id::<id::Snapshot>::mint(),
+            covered_seq: Seq::<Relay>::new(7),
             parent_snapshot_proof: None,
             parent_snapshot_update_clocks: Vec::new(),
         };
@@ -1346,6 +1373,7 @@ mod tests {
             pub_key: author,
             key_id: key_id(),
             snapshot_id: Id::<id::Snapshot>::mint(),
+            covered_seq: Seq::<Relay>::new(7),
             parent_snapshot_proof: None,
             parent_snapshot_update_clocks: vec![
                 (author, Seq::<DeltaAuthor>::new(1)),
@@ -1528,6 +1556,7 @@ mod tests {
                 pub_key: author,
                 key_id: key_id(),
                 snapshot_id: Id::<id::Snapshot>::genesis(document_id),
+                covered_seq: Seq::<Relay>::new(7),
                 parent_snapshot_proof: None,
                 parent_snapshot_update_clocks: Vec::new(),
             };
@@ -1542,15 +1571,33 @@ mod tests {
             let blob = draft.seal(minted).unwrap();
             assert_eq!(Count::<Octets>::of(blob.len()), draft.size(), "{len} bytes");
             let fetched = Payload::<FetchedBlob>::new(blob.into_bytes());
-            let opened = decode_snapshot_blob(&fetched, document_id, minted).unwrap();
+            let served = |covered| ServedSnapshot {
+                snapshot_id: minted,
+                covered_seq: Seq::<Relay>::new(covered),
+            };
+            let opened = decode_snapshot_blob(&fetched, document_id, served(7)).unwrap();
             assert_eq!(
                 open_snapshot(&opened, &doc_key).unwrap().as_bytes(),
                 payload.as_slice()
             );
             assert!(matches!(
-                decode_snapshot_blob(&fetched, document_id, Id::<id::Snapshot>::mint()),
+                decode_snapshot_blob(
+                    &fetched,
+                    document_id,
+                    ServedSnapshot {
+                        snapshot_id: Id::<id::Snapshot>::mint(),
+                        ..served(7)
+                    }
+                ),
                 Err(PipelineError::WrongSnapshot)
             ));
+            // `SYNC-259`: a horizon short of the sealed one, or past it.
+            for covered in [6, 8] {
+                assert!(matches!(
+                    decode_snapshot_blob(&fetched, document_id, served(covered)),
+                    Err(PipelineError::WrongHorizon)
+                ));
+            }
         }
     }
 
@@ -1573,6 +1620,7 @@ mod tests {
             pub_key: author,
             key_id: key_id(),
             snapshot_id,
+            covered_seq: Seq::<Relay>::new(7),
             parent_snapshot_proof: None,
             parent_snapshot_update_clocks: Vec::new(),
         };
@@ -1582,7 +1630,10 @@ mod tests {
         let decoded = decode_snapshot_blob(
             &Payload::<FetchedBlob>::new(snapshot.as_bytes().to_vec()),
             document_id,
-            snapshot_id,
+            ServedSnapshot {
+                snapshot_id,
+                covered_seq: Seq::<Relay>::new(7),
+            },
         )
         .unwrap();
         assert_eq!(open_snapshot(&decoded, &doc_key).unwrap(), plaintext);

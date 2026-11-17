@@ -38,6 +38,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-022` | `POST` | A snapshot MUST pass the wire checks before it is uploaded, because no relay ever sees it. | this spec section 2 | `ambre_sync::pipeline::tests::a_snapshot_that_fails_a_wire_check_is_never_sealed` -- a parent clock list naming one author twice draws the check's own refusal and no snapshot. The empty-cipher refusal cannot arise from a seal, which always appends a tag | none | verified |
 | `SYNC-257` | `FAIL` | A snapshot whose sealed identifier differs from the one the client asked for MUST be refused, and no part of it applied. | this spec section 2 | `ambre_sync::updates::tests::a_snapshot_whose_sealed_identifier_differs_is_refused` -- a relay serves one signed snapshot of the document in place of another at the open, as the held snapshot and on a fetch. Each raises a warning, hands the Logic thread nothing and leaves the asked identifier unknown; `ambre_sync::pipeline::tests::a_draft_seals_the_minted_identifier_at_its_measured_size` -- the blob opens under its own identifier alone | none | verified |
 | `SYNC-258` | `POST` | An uploaded snapshot MUST seal the identifier the relay minted for its upload link. | this spec section 2; `ambre-spec-server.md`, `SRV-247` | `ambre_sync::updates::tests::an_uploaded_snapshot_is_confirmed_by_its_author_once_stored` -- the object sent opens under the identifier the link named, at the size the link was asked for; `ambre_sync::pipeline::tests::a_draft_seals_the_minted_identifier_at_its_measured_size` -- the seal under any identifier keeps the measured size | none | verified |
+| `SYNC-259` | `FAIL` | A snapshot whose sealed horizon differs from the horizon the relay served MUST be refused, and no part of it applied. | this spec section 2; `ambre-spec-delta-order.md`, `SYNC-028`; `ambre-spec-sequencer.md`, `SRV-083` | `ambre_sync::updates::tests::a_snapshot_whose_sealed_horizon_differs_is_refused` -- a relay serves a snapshot sealed at one horizon at a shorter one, then a longer one, at the open, as the held snapshot and on a fetch. Each raises a warning, hands the Logic thread nothing and leaves the replay cursor at zero, while the horizon sealed is adopted and replayed past; `ambre_sync::pipeline::tests::a_draft_seals_the_minted_identifier_at_its_measured_size` -- the blob decodes under its sealed horizon alone; `ambre_sync::updates::tests::an_uploaded_snapshot_is_confirmed_by_its_author_once_stored` -- the object sent seals the horizon its metadata names | none | verified |
 | `SYNC-112` | `POST` | The payload of an update MUST carry the session nonce of its author inside the ciphertext. | this spec section 2; `ambre-spec-op-authorship.md` (`AUTHOR-010`) | `ambre_sync::pipeline::tests::the_session_nonce_is_sealed_inside_the_ciphertext` -- one delta sealed under two nonces shows the relay the same readable part, and each opens back to its own nonce | none | verified |
 | `SYNC-113` | `POST` | An update that carries an activity summary MUST carry it inside the ciphertext. | this spec section 2; `ambre-spec-residency.md` | `ambre_sync::pipeline::tests::the_activity_summary_is_sealed_inside_the_ciphertext`; `ambre_sync::tests::a_summary_handed_with_a_delta_leaves_sealed_beside_it` -- the relay's readable part is the same with or without a summary, and the summary the Logic thread hands opens from inside the ciphertext | none | verified |
 | `SYNC-020` | `FRAME` | The seal MUST NOT place the compression version outside the ciphertext, where the relay would read it. | `ZK-007`; this spec section 2 | `ambre_sync::pipeline::tests::the_compression_version_is_sealed_inside_the_ciphertext` -- the version byte is read back from the opened plaintext and from no public field | none | verified |
@@ -69,7 +70,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this is the boundary `ambre-spec-zero-knowledge.md` draws, on the client side. Every
   byte of user content that leaves the client leaves through the seal here. `SYNC-001` and
   `SYNC-020` keep the metadata down to the whitelist `ZK-007` names.
-* **Verification.** 27 `verified`, 1 `unimplemented`. What holds is refusal: a tampered byte, a
+* **Verification.** 28 `verified`, 1 `unimplemented`. What holds is refusal: a tampered byte, a
   wrong document and a wrong key fail closed. So do a bad signature, a replayed counter, a
   decompression bomb and an unknown codec. The nonce is drawn fresh, and the signature is checked
   first.
@@ -108,6 +109,15 @@ the client seals once to measure, then once under the minted identifier; an iden
 encoded length. An open compares the sealed identifier to the one it asked for, before step 1
 below. The signature covers it, so a relay cannot serve one snapshot of the document for another
 (`SYNC-257`).
+
+**A snapshot names its horizon.** The client seals the horizon, the last relay number the snapshot
+folds in, beside the identifier. The upload metadata names the same horizon, read from the sealed
+draft. An open compares the sealed horizon to the one the relay served, before step 1 below. A
+mismatch is refused, and the replay starts from zero, as with no snapshot (`SYNC-259`).
+
+The client refuses rather than trust its sealed value alone. The relay trims each delta at or below
+the horizon of its row (`SRV-083`). So a sealed horizon short of the row asks for removed deltas.
+The mismatch is the evidence of a relay that lies, and a silent choice would hide it.
 
 **The open, in the inverse order.** The order is the rule, not an implementation detail. The
 signature says who wrote the envelope, the tag says under which key, and only then is the cipher run

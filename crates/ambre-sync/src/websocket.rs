@@ -864,8 +864,12 @@ impl SyncState {
                 // parent and gates the replay (`SYNC-030`). One that does not
                 // falls back to the full replay from genesis, so no history
                 // is skipped on the strength of a snapshot nobody applied.
+                let served = pipeline::ServedSnapshot {
+                    snapshot_id,
+                    covered_seq,
+                };
                 let opened =
-                    snapshot_payload.map(|blob| doc_state.open_snapshot_blob(&blob, snapshot_id));
+                    snapshot_payload.map(|blob| doc_state.open_snapshot_blob(&blob, served));
                 match opened {
                     Some(Ok(payload)) => {
                         doc_state.current_snapshot_id = snapshot_id;

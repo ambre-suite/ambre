@@ -206,13 +206,13 @@ mod tests {
             pub_key: ambre_core::FixedBytes::from_array(sk.verifying_key().to_bytes()),
             key_id: key.id(),
             snapshot_id: Id::<Snapshot>::mint(),
+            covered_seq: horizon,
             parent_snapshot_proof: None,
             parent_snapshot_update_clocks: Vec::new(),
         };
         SnapshotUpload {
             document_id,
             author_pubkey: ambre_core::FixedBytes::from_array(sk.verifying_key().to_bytes()),
-            covered_seq: horizon,
             draft: pipeline::SnapshotDraft::new(
                 ambre_core::Payload::new(b"fold".to_vec()),
                 public_data,

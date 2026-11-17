@@ -279,7 +279,13 @@ impl SyncState {
         };
         let opened = match blob {
             Some(blob) => doc_state
-                .open_signed_snapshot(&blob, snapshot_id)
+                .open_signed_snapshot(
+                    &blob,
+                    pipeline::ServedSnapshot {
+                        snapshot_id,
+                        covered_seq,
+                    },
+                )
                 .map_err(Some),
             None => Err(None),
         };
@@ -452,7 +458,11 @@ impl SyncState {
         let Some(held) = doc_state.held_snapshot.take() else {
             return false;
         };
-        match doc_state.open_signed_snapshot(&held.blob, held.snapshot_id) {
+        let served = pipeline::ServedSnapshot {
+            snapshot_id: held.snapshot_id,
+            covered_seq: held.covered_seq,
+        };
+        match doc_state.open_signed_snapshot(&held.blob, served) {
             Ok((payload, author)) => {
                 doc_state.checks.insert(
                     held.snapshot_id,
@@ -1864,6 +1874,9 @@ impl SyncState {
             // The draft measures under this placeholder. The upload seals
             // the identifier the relay mints for its link (`SYNC-258`).
             snapshot_id: doc_state.current_snapshot_id,
+            // The relay records this horizon in the row, and an open refuses
+            // a row that names another (`SYNC-259`).
+            covered_seq,
             // The BLAKE2b parent chain is a post-MVP hardening (see
             // ambre-spec-sealed-envelope.md). An empty proof seals a standalone snapshot,
             // which the compaction model accepts for the genesis-parented MVP.
@@ -1884,7 +1897,6 @@ impl SyncState {
         Ok(SnapshotUpload {
             document_id,
             author_pubkey,
-            covered_seq,
             draft,
         })
     }
@@ -1976,8 +1988,6 @@ pub(crate) struct SnapshotUpload {
     pub document_id: Id<Document>,
     /// Its author's signing key.
     pub author_pubkey: FixedBytes<ambre_core::PublicKey>,
-    /// The last delta it covers.
-    pub covered_seq: Seq<Relay>,
     /// The snapshot, measured, to seal under the identifier the relay mints.
     pub draft: pipeline::SnapshotDraft,
 }
@@ -1996,7 +2006,6 @@ pub(crate) async fn upload_snapshot(
     let SnapshotUpload {
         document_id,
         author_pubkey,
-        covered_seq,
         draft,
     } = upload;
     let link: http::SnapshotUploadUrlResponse = http::post_json_auth_via(
@@ -2016,7 +2025,9 @@ pub(crate) async fn upload_snapshot(
     let metadata = http::CreateSnapshotRequest {
         author_pubkey,
         s3_key: link.s3_key,
-        covered_seq,
+        // The metadata names the horizon the blob seals, from the one
+        // source, so the row the relay serves matches it (`SYNC-259`).
+        covered_seq: draft.covered_seq(),
     };
     let created: http::CreateSnapshotResponse = http::post_json_auth_via(
         transport,
@@ -3106,7 +3117,7 @@ mod tests {
             .collect();
         let current = keys.last().unwrap().clone();
         let snapshot_id = Id::<Snapshot>::mint();
-        let blob = snapshot_blob(doc, snapshot_id, b"snap", &keys[0], &sk);
+        let blob = snapshot_blob(doc, served(snapshot_id, 3), b"snap", &keys[0], &sk);
         state.handle_sync_event(SyncEvent::OpenDocumentReady {
             document_id: doc,
             doc_key: current.clone(),
@@ -3151,10 +3162,19 @@ mod tests {
         );
     }
 
-    /// The blob object storage holds for a snapshot of `document_id`.
+    /// What a relay names for `snapshot_id` at the horizon `covered`.
+    fn served(snapshot_id: Id<Snapshot>, covered: u64) -> pipeline::ServedSnapshot {
+        pipeline::ServedSnapshot {
+            snapshot_id,
+            covered_seq: Seq::<Relay>::new(covered),
+        }
+    }
+
+    /// The blob object storage holds for a snapshot of `document_id`, sealing
+    /// the identifier and the horizon `sealed` names.
     fn snapshot_blob(
         document_id: Id<Document>,
-        snapshot_id: Id<Snapshot>,
+        sealed: pipeline::ServedSnapshot,
         payload: &[u8],
         doc_key: &DocumentKey,
         signing_key: &SigningKey,
@@ -3163,7 +3183,8 @@ mod tests {
             document_id,
             pub_key: FixedBytes::<PublicKey>::from_array(signing_key.verifying_key().to_bytes()),
             key_id: doc_key.id(),
-            snapshot_id,
+            snapshot_id: sealed.snapshot_id,
+            covered_seq: sealed.covered_seq,
             parent_snapshot_proof: None,
             parent_snapshot_update_clocks: Vec::new(),
         };
@@ -3548,7 +3569,7 @@ mod tests {
         state.set_mock_ws(ws_tx);
         let snapshot_id = Id::<Snapshot>::mint();
 
-        let blob = snapshot_blob(doc, snapshot_id, b"snap", &key, &_sk);
+        let blob = snapshot_blob(doc, served(snapshot_id, 1500), b"snap", &key, &_sk);
         state.handle_sync_event(SyncEvent::OpenDocumentReady {
             document_id: doc,
             doc_key: key,
@@ -3962,7 +3983,7 @@ mod tests {
         let (ws_tx, _ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
         let snapshot_id = Id::<Snapshot>::mint();
-        let blob = snapshot_blob(doc, snapshot_id, b"snap", &key, &sk);
+        let blob = snapshot_blob(doc, served(snapshot_id, 0), b"snap", &key, &sk);
 
         state.handle_sync_event(SyncEvent::OpenDocumentReady {
             document_id: doc,
@@ -4031,13 +4052,19 @@ mod tests {
         state.handle_sync_event(SyncEvent::OpenDocumentReady {
             document_id: doc,
             doc_key: key.clone(),
-            snapshot_payload: Some(snapshot_blob(doc, reference, b"reference", &key, &sk)),
+            snapshot_payload: Some(snapshot_blob(
+                doc,
+                served(reference, 3),
+                b"reference",
+                &key,
+                &sk,
+            )),
             snapshot_id: reference,
             covered_seq: Seq::<Relay>::new(3),
             held_snapshot: Some(HeldSnapshot {
                 snapshot_id: held,
                 covered_seq: Seq::<Relay>::new(9),
-                blob: snapshot_blob(doc, held, b"latest", &key, &sk),
+                blob: snapshot_blob(doc, served(held, 9), b"latest", &key, &sk),
             }),
             doc_type: DocType::Trame,
             existence: crate::Existence::OnRelay,
@@ -4090,7 +4117,7 @@ mod tests {
         let (ws_tx, _ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
         let (asked, other) = (Id::<Snapshot>::mint(), Id::<Snapshot>::mint());
-        let swapped = || snapshot_blob(doc, other, b"other", &key, &sk);
+        let swapped = |covered| snapshot_blob(doc, served(other, covered), b"other", &key, &sk);
         let applied = |events: &[LogicEvent]| {
             events.iter().any(|e| {
                 matches!(
@@ -4116,13 +4143,13 @@ mod tests {
         state.handle_sync_event(SyncEvent::OpenDocumentReady {
             document_id: doc,
             doc_key: key.clone(),
-            snapshot_payload: Some(swapped()),
+            snapshot_payload: Some(swapped(3)),
             snapshot_id: asked,
             covered_seq: Seq::<Relay>::new(3),
             held_snapshot: Some(HeldSnapshot {
                 snapshot_id: asked,
                 covered_seq: Seq::<Relay>::new(9),
-                blob: swapped(),
+                blob: swapped(9),
             }),
             doc_type: DocType::Trame,
             existence: crate::Existence::OnRelay,
@@ -4159,7 +4186,7 @@ mod tests {
             document_id: doc,
             snapshot_id: announced,
             covered_seq: Seq::<Relay>::new(12),
-            blob: Some(swapped()),
+            blob: Some(swapped(12)),
         });
         let fetched = drain(&rx);
         assert!(
@@ -4171,6 +4198,102 @@ mod tests {
             "a swapped fetch raised no warning: {fetched:?}"
         );
         assert!(!state.documents[&doc].known_snapshots.contains(&announced));
+    }
+
+    /// `SYNC-259`. Each snapshot seals the horizon 7. A relay serves it at
+    /// a horizon short of that, then past it, at the open, as the held
+    /// snapshot and on a fetch. Each raises a warning and hands the Logic
+    /// thread nothing. The replay cursor stays at zero, so no delta is
+    /// skipped on the relay's word. Served at its own horizon, the open
+    /// adopts it and the replay starts past 7.
+    #[test]
+    fn a_snapshot_whose_sealed_horizon_differs_is_refused() {
+        const SEALED: u64 = 7;
+        let applied = |events: &[LogicEvent]| {
+            events.iter().any(|e| {
+                matches!(
+                    e,
+                    LogicEvent::RemoteSnapshot { .. } | LogicEvent::PendingSnapshot { .. }
+                )
+            })
+        };
+        let refused = |events: &[LogicEvent]| {
+            events.iter().any(|e| {
+                matches!(
+                    e,
+                    LogicEvent::SyncWarning {
+                        code: SyncWarningCode::DecryptFailed,
+                        ..
+                    }
+                )
+            })
+        };
+        for covered in [SEALED - 1, SEALED + 1, SEALED] {
+            let (mut state, rx, doc, key, sk, _snap) = setup();
+            let (ws_tx, _ws_rx) = ambre_bus::conduit::unbounded();
+            state.set_mock_ws(ws_tx);
+            let (start, held, announced) = (
+                Id::<Snapshot>::mint(),
+                Id::<Snapshot>::mint(),
+                Id::<Snapshot>::mint(),
+            );
+            let sealed = |id| snapshot_blob(doc, served(id, SEALED), b"base", &key, &sk);
+            let honest = covered == SEALED;
+
+            state.handle_sync_event(SyncEvent::OpenDocumentReady {
+                document_id: doc,
+                doc_key: key.clone(),
+                snapshot_payload: Some(sealed(start)),
+                snapshot_id: start,
+                covered_seq: Seq::<Relay>::new(covered),
+                held_snapshot: Some(HeldSnapshot {
+                    snapshot_id: held,
+                    covered_seq: Seq::<Relay>::new(covered),
+                    blob: sealed(held),
+                }),
+                doc_type: DocType::Trame,
+                existence: crate::Existence::OnRelay,
+                signing_keys: Vec::new(),
+                role: Role::Owner,
+                rotation_owed: ambre_core::RotationDebt::Settled,
+                links: Vec::new(),
+                writers: Default::default(),
+                departed: None,
+            });
+            let at_open = drain(&rx);
+            assert_eq!(applied(&at_open), honest, "{covered}: {at_open:?}");
+            assert_eq!(refused(&at_open), !honest, "{covered}: {at_open:?}");
+            let cursor = if honest { SEALED } else { 0 };
+            assert_eq!(
+                state.documents[&doc].last_seq,
+                Seq::<Relay>::new(cursor),
+                "{covered}: the replay starts past the sealed horizon alone"
+            );
+
+            assert_eq!(state.check_held_snapshot(doc), honest, "{covered}");
+            let at_check = drain(&rx);
+            assert_eq!(applied(&at_check), honest, "{covered}: {at_check:?}");
+            assert_eq!(
+                state.documents[&doc].checks.contains_key(&held),
+                honest,
+                "{covered}"
+            );
+
+            state.handle_sync_event(SyncEvent::SnapshotFetched {
+                document_id: doc,
+                snapshot_id: announced,
+                covered_seq: Seq::<Relay>::new(covered),
+                blob: Some(sealed(announced)),
+            });
+            let fetched = drain(&rx);
+            assert_eq!(applied(&fetched), honest, "{covered}: {fetched:?}");
+            assert_eq!(refused(&fetched), !honest, "{covered}: {fetched:?}");
+            assert_eq!(
+                state.documents[&doc].known_snapshots.contains(&announced),
+                honest,
+                "{covered}"
+            );
+        }
     }
 
     /// A local-only (not yet server-created) or offline open has no replay to
@@ -4335,7 +4458,7 @@ mod tests {
         );
         assert!(!state.documents[&doc].known_snapshots.contains(&announced));
 
-        let blob = snapshot_blob(doc, announced, b"base", &key, &sk);
+        let blob = snapshot_blob(doc, served(announced, 0), b"base", &key, &sk);
         state.handle_sync_event(SyncEvent::SnapshotFetched {
             document_id: doc,
             snapshot_id: announced,
@@ -4371,7 +4494,7 @@ mod tests {
         ] {
             let (mut state, rx, doc, key, sk, reference) = setup();
             let held = Id::<Snapshot>::mint();
-            let blob = snapshot_blob(doc, held, b"base", &key, &sk);
+            let blob = snapshot_blob(doc, served(held, 7), b"base", &key, &sk);
             state.documents.get_mut(&doc).expect("open").held_snapshot = Some(HeldSnapshot {
                 snapshot_id: held,
                 covered_seq: Seq::<Relay>::new(7),
@@ -4435,7 +4558,7 @@ mod tests {
             let reporter = MasterSeed::generate().derive_signing_key();
             state.signing_key = Some(reporter.clone());
             let pending = Id::<Snapshot>::mint();
-            let blob = snapshot_blob(doc, pending, b"base", &key, &author);
+            let blob = snapshot_blob(doc, served(pending, 3), b"base", &key, &author);
             state.adopt_fetched_snapshot(doc, pending, Seq::<Relay>::new(3), Some(blob));
             drain(&rx);
             let expected = match verdict {
@@ -4503,13 +4626,13 @@ mod tests {
                 pub_key: FixedBytes::<PublicKey>::from_array(sk.verifying_key().to_bytes()),
                 key_id: key.id(),
                 snapshot_id: reference,
+                covered_seq: Seq::<Relay>::new(3),
                 parent_snapshot_proof: None,
                 parent_snapshot_update_clocks: Vec::new(),
             };
             SnapshotUpload {
                 document_id: doc,
                 author_pubkey: FixedBytes::from_array(sk.verifying_key().to_bytes()),
-                covered_seq: ambre_bus::Seq::<ambre_bus::Relay>::new(3),
                 draft: pipeline::SnapshotDraft::new(
                     ambre_core::Payload::new(b"base".to_vec()),
                     public_data,
@@ -4576,7 +4699,8 @@ mod tests {
             let object = sent[1].body.as_ref().unwrap().1.as_bytes();
             assert_eq!(size["size_bytes"], object.len());
             let stored = Payload::<pipeline::FetchedBlob>::new(object.to_vec());
-            assert!(pipeline::decode_snapshot_blob(&stored, doc, given).is_ok());
+            // `SYNC-259`: it seals the horizon the metadata names.
+            assert!(pipeline::decode_snapshot_blob(&stored, doc, served(given, 3)).is_ok());
             // `SYNC-182`: the metadata names no snapshot id and no clocks.
             let metadata: serde_json::Value =
                 serde_json::from_slice(sent[2].body.as_ref().unwrap().1.as_bytes()).unwrap();
@@ -4596,7 +4720,13 @@ mod tests {
     fn a_snapshot_that_does_not_open_stays_unknown() {
         let (mut state, rx, doc, key, sk, _snap) = setup();
         let announced = Id::<Snapshot>::mint();
-        let foreign = snapshot_blob(Id::<Document>::mint(), announced, b"x", &key, &sk);
+        let foreign = snapshot_blob(
+            Id::<Document>::mint(),
+            served(announced, 0),
+            b"x",
+            &key,
+            &sk,
+        );
         for blob in [
             None,
             Some(Payload::<pipeline::FetchedBlob>::new(b"garbage".to_vec())),
@@ -5706,7 +5836,15 @@ mod tests {
             let doc = Id::<Document>::mint();
             let key = DocumentKey::generate();
             let snapshot_id = Id::<Snapshot>::mint();
-            let blob = with_snapshot.then(|| snapshot_blob(doc, snapshot_id, b"s", &key, &sk));
+            let blob = with_snapshot.then(|| {
+                snapshot_blob(
+                    doc,
+                    served(snapshot_id, u64::from(with_snapshot)),
+                    b"s",
+                    &key,
+                    &sk,
+                )
+            });
             state.handle_sync_event(SyncEvent::OpenDocumentReady {
                 document_id: doc,
                 doc_key: key,
@@ -6509,7 +6647,13 @@ mod tests {
             state.handle_sync_event(SyncEvent::OpenDocumentReady {
                 document_id: doc,
                 doc_key: key.clone(),
-                snapshot_payload: Some(snapshot_blob(doc, snapshot_id, b"snap", &key, &author.key)),
+                snapshot_payload: Some(snapshot_blob(
+                    doc,
+                    served(snapshot_id, 3),
+                    b"snap",
+                    &key,
+                    &author.key,
+                )),
                 snapshot_id,
                 covered_seq: Seq::<Relay>::new(3),
                 held_snapshot: None,
@@ -7308,7 +7452,7 @@ mod tests {
             ..
         } = walking_channel(&mallory, None);
         let forged = Id::<Snapshot>::mint();
-        let blob = snapshot_blob(doc, forged, b"forged", &key, &mallory.key);
+        let blob = snapshot_blob(doc, served(forged, 3), b"forged", &key, &mallory.key);
         state.adopt_fetched_snapshot(doc, forged, Seq::<Relay>::new(3), Some(blob.clone()));
         let events = drain(&rx);
         assert!(

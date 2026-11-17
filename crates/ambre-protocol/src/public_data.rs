@@ -8,7 +8,7 @@ use ambre_core::{ChainHash, FixedBytes, KeyId, PublicKey};
 use serde::{Deserialize, Serialize};
 
 use crate::membership::{LogHead, MembershipEntry};
-use crate::messages::{DeltaAuthor, Ephemerals, Seq};
+use crate::messages::{DeltaAuthor, Ephemerals, Relay, Seq};
 
 /// Public data of an [`Update`](crate::messages::Update).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -47,6 +47,10 @@ pub struct SnapshotPublicData {
     pub key_id: FixedBytes<KeyId>,
     /// Unique identifier of this snapshot.
     pub snapshot_id: Id<Snapshot>,
+    /// The horizon: the last relay number of the deltas the snapshot folds
+    /// in. The signature covers it, so a relay that names another horizon
+    /// for the snapshot is caught at the open (`SYNC-259`).
+    pub covered_seq: Seq<Relay>,
     /// BLAKE2b hash chain proving integrity of the parent snapshot without
     /// decrypting it. `None` on the first snapshot, whose parent is the
     /// genesis base.
