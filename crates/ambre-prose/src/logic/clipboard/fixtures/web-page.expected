@@ -18,13 +18,8 @@ ListItem list=Bullet
 ListItem list=Bullet
   "crates.io" a=https://crates.io/
   ", le d\u{e9}p\u{f4}t."
-Paragraph
-  "Version"
-Paragraph
-  "Date"
-Paragraph
-  "1.0"
-Paragraph
-  "2015"
+Table
+  | "Version" | "Date" |
+  | "1.0" | "2015" |
 CodeBlock
   "fn main() {\n    println!(\"<ok>\");\n}" bg=#f8f9fa

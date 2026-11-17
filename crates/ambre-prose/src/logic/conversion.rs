@@ -21,7 +21,7 @@ use ambre_bus::interop::InteropRequest;
 use ambre_client_core::ExportFilename;
 use ambre_convert::{Conversion, ConvertError, Converted, Converter, FileWork, TextRead};
 use ambre_core::{ConverterFamily, Seq, StopCause};
-use ambre_prose_form::clip::ClipBlock;
+use ambre_prose_form::clip::ClipItem;
 
 use crate::events::ProseEvent;
 use crate::interop::word::TextPackage;
@@ -37,15 +37,15 @@ use crate::message::{ConversionReport, InteropError, ProseCommand, ProseImport};
 
 /// What a module read for the command in flight.
 pub(super) enum ConvertedInput {
-    /// The blocks a paste's HTML half reads into, or none when the module
+    /// The items a paste's HTML half reads into, or none when the module
     /// could not read it.
-    Html(Option<Vec<ClipBlock>>),
+    Html(Option<Vec<ClipItem>>),
     /// A file mapped onto the form, or why it was not.
     Document(Result<(ProseIr, ConversionReport), InteropError>),
 }
 
 impl ConvertedInput {
-    pub(super) fn html(self) -> Option<Vec<ClipBlock>> {
+    pub(super) fn html(self) -> Option<Vec<ClipItem>> {
         match self {
             Self::Html(tree) => tree,
             Self::Document(_) => None,

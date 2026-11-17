@@ -26,8 +26,9 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-220` | `INV` | A paste of HTML MUST insert only text and the formatting this document knows: no script, style, hidden content, embedded object or link outside http, https and mailto MUST reach the document. | this spec section 5 | `ambre_prose::logic::clipboard::html_paste::hostile_markup_leaves_only_its_text` | none | verified |
 | `PROSE-UI-234` | `INV` | A paste of this application's own bytes MUST write only marks whose key is exactly a formatting root. Each value MUST pass the validation of a typed mark under its key. A link MUST also pass the scheme and length check of an HTML paste. A family name MUST pass the length cap of an HTML paste. A flag MUST land as present, or not at all. Any other mark MUST be dropped. | this spec section 3 | `ambre_prose::logic::clipboard::tests::a_crafted_payload_writes_only_the_marks_a_typed_mark_may` -- a payload built by hand carries an anchor, an unknown key, a number, and a colour, a size and a flag the grammar refuses, and only the two valid marks land; `::a_crafted_link_lands_only_when_a_reader_may_follow_it` -- a `javascript:`, a `data:` and an overlong link are dropped; `::a_crafted_family_name_lands_only_within_the_cap` -- a name of 100 000 characters is dropped; `::a_crafted_key_lands_only_when_it_names_a_root_exactly` -- `b:zz` and `fg:x` are dropped; `::a_crafted_flag_lands_as_present_or_not_at_all` -- `true` lands as the empty string and `false` does not land | none | verified |
 | `PROSE-UI-224` | `INV` | A paste of HTML MUST NOT turn a page's theme into marks: the style of an element holding blocks, and a body ink black or near it, MUST set no mark. | this spec section 3 | `ambre_prose::logic::clipboard::html_paste::a_web_page_keeps_its_formatting_and_drops_its_theme`; `ambre_prose::logic::clipboard::tests::each_html_fixture_pastes_as_its_golden_says` -- the web page fixture's themed container | none | verified |
-| `PROSE-UI-225` | `IO` | A paste of an HTML table MUST land as a table, its rows, columns and merged cells kept. | this spec section 3 | not built | unbuilt -- lands with the `Rich paste: tables and pictures` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-226` | `IO` | A paste of HTML holding a picture the clipboard also carries MUST land the picture at its place in the text. | this spec section 3 | not built | unbuilt -- lands with the `Rich paste: tables and pictures` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-225` | `IO` | A paste of an HTML table MUST land as a table, its rows, columns and merged cells kept. | this spec section 3 | `ambre_prose::logic::clipboard::tests::an_html_table_pastes_as_a_table_with_its_merged_cells` -- a column span and a row span land as two regions, a cell keeps its marks and its list, and one undo takes the paste back; `::a_table_pasted_inside_a_paragraph_splits_it`; `::a_table_pasted_at_the_start_of_a_paragraph_lands_before_it`; `::each_html_fixture_pastes_as_its_golden_says` -- the web page fixture's table; `ambre_prose::logic::clipboard::html_paste::a_web_table_reads_on_its_grid_with_its_merged_cells`; `::a_word_table_keeps_the_blocks_of_each_cell`; `::a_sheet_range_reads_as_its_grid` -- Google Sheets and Excel; `::overlapping_spans_stop_at_the_cell_they_meet` -- the reader, one source at a time | none | verified |
+| `PROSE-UI-240` | `IO` | A table that cannot land as a table MUST land as one block or more per cell, in reading order: a table inside a pasted cell, one wider than 64 columns, and one pasted where no table can sit. | this spec section 3 | `ambre_prose::logic::clipboard::html_paste::a_nested_or_too_wide_table_reads_as_its_cells` -- a span of 65, of 1 000 and one past `u32` read as cells, and 64 columns read as a table; `ambre_prose::logic::clipboard::tests::a_table_pasted_inside_a_cell_lands_as_its_cells` | none | verified |
+| `PROSE-UI-226` | `IO` | A paste of HTML holding a picture the clipboard also carries MUST land the picture at its place in the text. | this spec section 3 | not built | unbuilt -- lands with the `Rich paste: pictures` Story (`ambre-roadmap.md` V1) | unimplemented |
 
 ### 1.2 Copy
 
@@ -73,7 +74,7 @@ status values are normative in `ambre-spec-template.md`.
   It carries the user's own selection, already plaintext on their machine; nothing is encrypted,
   nothing is sent, and the host performs the write (`PROSE-UI-041`). The browser's own handling is
   outside Ambre's control, and gates the mirror (`ambre-spec-clipboard.md`).
-* **Verification.** 26 `verified`, 2 `unimplemented`. The Logic rows are host tests over a real
+* **Verification.** 28 `verified`, 1 `unimplemented`. The Logic rows are host tests over a real
   document, a round trip included; the view rows drive the input queue with a recording sender.
   `PROSE-UI-041`, `PROSE-UI-105` and `PROSE-UI-106` are held by where the types live.
 
@@ -92,6 +93,7 @@ Two peers, one selection. The last column names the row each line rests on.
 | copies in Ambre, copies again in another application, pastes back | -- | the second copy's text | the other application's text, not the earlier rich payload | none -- `PROSE-UI-043` |
 | pastes a titled list from a web page | -- | a heading and list items, bold and links kept | the page's structure, in the document's own styles | none -- `PROSE-UI-219` |
 | copies in Ambre, pastes into Google Docs | -- | nothing | the headings, lists and formatting she copied | none -- `PROSE-UI-222` |
+| pastes a range copied from a sheet, a title cell merged across two columns | -- | a table of the same grid, the title cell one region | the table she copied, its title across both columns | none -- `PROSE-UI-225` |
 
 ---
 
@@ -159,9 +161,15 @@ passes the same validation a typed mark does. Scripts, styles, hidden elements, 
 embedded objects and Word's list glyphs leave nothing (`PROSE-UI-220`).
 
 The style of a container and a near-black ink
-are the page's theme, and set no mark (`PROSE-UI-224`). A table reads as one paragraph per cell
-and a picture reads as nothing, until `PROSE-UI-225` and `PROSE-UI-226` land. A PDF viewer's
-text layer reads as one paragraph per visual line, as its plain text does.
+are the page's theme, and set no mark (`PROSE-UI-224`). A picture reads as nothing, until
+`PROSE-UI-226` lands. A PDF viewer's text layer reads as one paragraph per visual line, as its
+plain text does.
+
+**Reading a table.** The module lays an outermost table out on its grid, as a browser places its
+cells. A covered slot points left or up at its merged cell, so the grid carries no count. The paste
+mints that table, and writes each merged cell as one region (`PROSE-UI-225`). The other tables
+read as their cells' blocks (`PROSE-UI-240`). Word caps a table at 63 columns, and the cap of 64
+bounds what a crafted span can ask for.
 
 **Writing HTML.** The copy writes one element per block, groups consecutive list items into one
 list, and escapes every text and attribute value (`PROSE-UI-222`). An empty paragraph at the
@@ -244,6 +252,8 @@ their chord lists, and decodes none of them itself.
 | An arena sink for `html5ever` | `markup5ever_rcdom` | its authors publish it as unofficial and meant for tests, and its reference-counted nodes free a deep tree recursively |
 | The kept payload is gated on the mirror | pasting the kept payload whenever there is one | it pastes what the user copied ten minutes ago. The payload in memory is not what the clipboard holds, since another application may have replaced it, and the plain-text mirror is the one field both sides wrote and can compare |
 | A menu key opens the page menu at the caret | opening it at the last pointer position | a keyboard user leaves the pointer anywhere, often off the page. The menu then opens far from the text it acts on |
+| A merged cell of a pasted table lands as a region | landing each spanned slot as a plain cell | every slot after the span shifts left, so the columns no longer line up. Prose stores a merge as its two corner cells, which a pasted span maps onto exactly |
+| The markup module lays out a pasted table's grid | laying the grid out in the Logic thread of the Main instance | the walk that reads the cells already runs in the module, and the Main instance is held to its size ceiling. The paste receives a grid it only writes |
 | A cut copies first | deleting and then copying | it loses the content if the copy is refused, with nothing on the clipboard to show for it. The other order makes the failure harmless |
 | Importing a file is not a paste | routing a file drop through the paste path | it puts an untrusted document parse on a gesture that has no report. A dropped or opened document needs a parser, a report of what was lost, and a progress path for a large file; a paste has none of those and must not grow them |
 

@@ -60,6 +60,68 @@ mod stored_lang {
     }
 }
 
+/// One item the HTML half of a paste reads into: a block, or a table whose
+/// cells hold blocks (`PROSE-UI-225`). A cell holds no table, so the type
+/// nests one level alone and postcard recurses a bounded depth.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum ClipItem {
+    Block(ClipBlock),
+    Table(ClipTable),
+}
+
+impl ClipItem {
+    /// The blocks the item reads as when no table may land: the item's own
+    /// block, or one block or more per cell, in reading order.
+    #[must_use]
+    pub fn flattened(self) -> Vec<ClipBlock> {
+        match self {
+            Self::Block(block) => vec![block],
+            Self::Table(table) => table
+                .rows
+                .into_iter()
+                .flat_map(|row| row.cells)
+                .filter_map(|cell| match cell {
+                    ClipCell::Own(blocks) => Some(blocks),
+                    ClipCell::Covered(_) => None,
+                })
+                .flatten()
+                .collect(),
+        }
+    }
+}
+
+/// A pasted table, laid out on its grid: every row holds one cell per
+/// column. A merged cell is one [`ClipCell::Own`], and each slot it covers is
+/// a [`ClipCell::Covered`].
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ClipTable {
+    pub rows: Vec<ClipRow>,
+}
+
+/// One row of a pasted table.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ClipRow {
+    pub cells: Vec<ClipCell>,
+}
+
+/// One slot of a pasted table's grid.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum ClipCell {
+    /// A cell of its own, with the blocks it holds. It may hold none.
+    Own(Vec<ClipBlock>),
+    /// A slot a merged cell covers.
+    Covered(ClipCover),
+}
+
+/// Which way a covered slot reaches the cell that covers it. A slot in the
+/// merged cell's own row points left; a slot in a row below points up. So
+/// the extent of a merge reads off the grid alone, with no count stored.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ClipCover {
+    Left,
+    Above,
+}
+
 /// A run of text and the formatting marks it carries. Anchors stay behind:
 /// a comment or a suggestion does not travel with its text. The text is
 /// content, so `Debug` prints its length alone.

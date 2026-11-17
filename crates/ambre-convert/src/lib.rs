@@ -71,7 +71,7 @@ pub enum Conversion {
         form: Payload<FormBytes>,
         flavor: ambre_prose_form::MarkdownFlavor,
     },
-    /// Read an HTML document into the blocks a paste writes
+    /// Read an HTML document into the items a paste writes
     /// (`prose-clipboard`). Answered by [`Converted::Pasted`].
     ReadHtml { html: String },
     /// Read a whole HTML document through the walk a paste runs, onto
@@ -278,9 +278,9 @@ pub enum Converted {
     },
     /// The bytes of a written file.
     File(Payload<FileBytes>),
-    /// The blocks the HTML half of a paste reads into, in the shape this
-    /// application's own copy writes.
-    Pasted(Vec<ambre_prose_form::clip::ClipBlock>),
+    /// The items the HTML half of a paste reads into: blocks in the shape
+    /// this application's own copy writes, and the tables between them.
+    Pasted(Vec<ambre_prose_form::clip::ClipItem>),
     /// The drawing of an SVG file.
     Svg(images::SvgTree),
     /// The bytes of the board of a Figma or a Miro export, a

@@ -12,13 +12,16 @@
 #[cfg(not(target_arch = "wasm32"))]
 mod html_paste;
 mod html_write;
+mod table_paste;
 
 use ambre_core::index::{Len, Pos, Span};
 use loro::{LoroValue, TreeID, TreeParentId};
 use serde::{Deserialize, Serialize};
 
 use crate::message::{BlockInit, DocChar, HeadingLevel, ListStyle};
-use ambre_prose_form::clip::{ClipBlock, ClipKind, ClipRun, ClipValue, safe_family, safe_link};
+use ambre_prose_form::clip::{
+    ClipBlock, ClipItem, ClipKind, ClipRun, ClipValue, safe_family, safe_link,
+};
 
 use super::ProseState;
 use super::text::{MarkedRun, marked_runs, write_runs};
@@ -246,25 +249,42 @@ impl ProseState {
     /// then HTML, then the plain text. Bytes another application wrote do not
     /// decode, and HTML with no text in it reads as no block. Each then falls
     /// through to the next half. The markup module reads the HTML half into
-    /// `html`, the blocks a copy writes, and each of their marks is checked
-    /// here again. A paste whose module could not load holds no block, and
-    /// falls through to the text.
+    /// `html`: the blocks a copy writes, and the tables between them. Each
+    /// of their marks is checked here again. A paste whose module could not
+    /// load holds no item, and falls through to the text.
+    ///
+    /// A table lands as a table where the caret's block may sit beside one
+    /// (`PROSE-UI-225`). Inside a cell, a list, a band or a note it lands as
+    /// one block or more per cell, as it read before tables landed.
     pub(super) fn paste(
         &mut self,
         at: (TreeID, Pos<DocChar>),
         text: &str,
-        html: Vec<ClipBlock>,
+        html: Vec<ClipItem>,
         bytes: Option<&ambre_core::Payload<ambre_core::ClipboardBytes>>,
     ) -> ProseOutcome {
         if let Some(payload) = own_payload(bytes) {
             return self.paste_blocks(at, payload);
+        }
+        // A table lands beside the caret's block when its parent takes one,
+        // and the block sits in no band or note.
+        let tree = doc::blocks(&self.doc);
+        let parent = match tree.parent(at.0) {
+            Some(TreeParentId::Node(parent)) => Some(parent),
+            _ => None,
+        };
+        let tables = html.iter().any(|item| matches!(item, ClipItem::Table(_)))
+            && !doc::is_aside(&tree, &at.0)
+            && doc::nesting_allows(&tree, parent, BlockType::Table);
+        if tables {
+            return self.paste_items(at, html);
         }
         if !html.is_empty() {
             return self.paste_blocks(
                 at,
                 Payload {
                     magic: MAGIC,
-                    blocks: html,
+                    blocks: html.into_iter().flat_map(ClipItem::flattened).collect(),
                 },
             );
         }
@@ -917,6 +937,36 @@ mod tests {
             kind.push_str(&format!(" lang={}", lang.as_str()));
         }
         let mut out = kind;
+        if state.block_type_of(block) == Some(BlockType::Table) {
+            let table = tree_id(*block);
+            let tree = doc::blocks(state.document());
+            for row in state.grid_of(&table).expect("a table").cells {
+                let cells: Vec<String> = row
+                    .iter()
+                    .map(|cell| {
+                        doc::children_of(&tree, Some(*cell))
+                            .iter()
+                            .map(|child| {
+                                let text = state.text_of(&block_id(*child)).unwrap_or_default();
+                                format!("\"{}\"", text.escape_default())
+                            })
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    })
+                    .collect();
+                out.push_str(&format!("\n  | {} |", cells.join(" | ")));
+            }
+            for (_, rect) in state.merged_rects(&table) {
+                out.push_str(&format!(
+                    "\n  merged {},{} to {},{}",
+                    rect.top_left.row.get(),
+                    rect.top_left.col.get(),
+                    rect.bottom_right.row.get(),
+                    rect.bottom_right.col.get()
+                ));
+            }
+            return out;
+        }
         let Some(LoroValue::List(runs)) = state.marks_of(block) else {
             return out;
         };
@@ -991,5 +1041,142 @@ mod tests {
             }
         }
         assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
+
+    /// Paste `html` at `at`, the HTML half alone.
+    fn paste_html(state: &mut ProseState, at: (BlockId, u32), html: &str) -> ProseOutcome {
+        state.handle_converted(ProseCommand::Paste {
+            at: (at.0, Pos::<DocChar>::new(at.1)),
+            text: String::new(),
+            html: Some(html.to_owned()),
+            payload: None,
+        })
+    }
+
+    /// Every root block, a table drawn as its rows, as the golden draws it.
+    fn drawn(state: &ProseState) -> Vec<String> {
+        state
+            .root_blocks()
+            .iter()
+            .map(|block| golden_block(state, block))
+            .collect()
+    }
+
+    const MERGED_TABLE: &str = concat!(
+        "<table><tr><th colspan=\"2\">Region</th><th>Q1</th></tr>",
+        "<tr><td rowspan=\"2\">North</td><td>a</td><td><b>12</b></td></tr>",
+        "<tr><td>b</td><td><ul><li>one</li><li>two</li></ul></td></tr></table>",
+    );
+
+    /// `PROSE-UI-225`: a pasted table lands as a table of its grid, each
+    /// cell with its blocks and marks, each merged cell as one region. A
+    /// paragraph follows it, where the caret lands, and one undo takes the
+    /// whole paste back.
+    #[test]
+    fn an_html_table_pastes_as_a_table_with_its_merged_cells() {
+        let (mut state, first) = document();
+        let outcome = paste_html(&mut state, (first, 0), MERGED_TABLE);
+        assert_eq!(
+            drawn(&state),
+            [
+                concat!(
+                    "Table\n",
+                    "  | \"Region\" | \"\" | \"Q1\" |\n",
+                    "  | \"North\" | \"a\" | \"12\" |\n",
+                    "  | \"\" | \"b\" | \"one\" \"two\" |\n",
+                    "  merged 0,0 to 0,1\n",
+                    "  merged 1,0 to 2,0",
+                ),
+                "Paragraph",
+            ]
+        );
+        let roots = state.root_blocks();
+        assert!(outcome.display.contains(&ProseEvent::CaretPlaced {
+            block: roots[1],
+            offset: Pos::<DocChar>::ZERO,
+        }));
+        let table = tree_id(roots[0]);
+        let tree = doc::blocks(state.document());
+        let grid = state.grid_of(&table).expect("a table");
+        let cell = |row: usize, col: usize| doc::children_of(&tree, Some(grid.cells[row][col]));
+        let bold = block_id(cell(1, 2)[0]);
+        assert!(format!("{:?}", state.marks_of(&bold)).contains("\"b\""));
+        let list = cell(2, 2);
+        assert_eq!(
+            state.block_type_of(&block_id(list[1])),
+            Some(BlockType::ListItem)
+        );
+        state.handle_command(ProseCommand::Undo);
+        assert_eq!(drawn(&state), ["Paragraph"]);
+    }
+
+    /// `PROSE-UI-225`: a table pasted inside a paragraph splits it. The text
+    /// before the caret joins the first pasted block, and the text after it
+    /// joins the last one.
+    #[test]
+    fn a_table_pasted_inside_a_paragraph_splits_it() {
+        let (mut state, _) = document();
+        let target = append(&mut state, BlockInit::Paragraph, "headtail");
+        paste_html(
+            &mut state,
+            (target, 4),
+            "<p>x</p><table><tr><td>1</td><td>2</td></tr></table><p>y</p>",
+        );
+        let drawn = drawn(&state);
+        assert_eq!(
+            drawn[drawn.len() - 3..],
+            [
+                "Paragraph\n  \"headx\"",
+                "Table\n  | \"1\" | \"2\" |",
+                "Paragraph\n  \"ytail\""
+            ]
+        );
+    }
+
+    /// `PROSE-UI-225`: a table pasted at the start of a paragraph lands
+    /// before it, and the paragraph keeps its text.
+    #[test]
+    fn a_table_pasted_at_the_start_of_a_paragraph_lands_before_it() {
+        let (mut state, _) = document();
+        let target = append(&mut state, BlockInit::Paragraph, "kept");
+        paste_html(
+            &mut state,
+            (target, 0),
+            "<table><tr><td>1</td></tr></table>",
+        );
+        let drawn = drawn(&state);
+        assert_eq!(
+            drawn[drawn.len() - 2..],
+            ["Table\n  | \"1\" |", "Paragraph\n  \"kept\""]
+        );
+    }
+
+    /// `PROSE-UI-240`: a table pasted inside a table cell, where no table
+    /// may sit, lands as one paragraph per cell.
+    #[test]
+    fn a_table_pasted_inside_a_cell_lands_as_its_cells() {
+        let (mut state, table) =
+            crate::logic::tables::tests::document_with_table(ambre_core::PeerId::new(1), 1, 1);
+        let cell = crate::logic::tables::tests::cell_at(&state, table, 0, 0);
+        let paragraph = crate::logic::tables::tests::first_block_of(&state, cell);
+        paste_html(
+            &mut state,
+            (block_id(paragraph), 0),
+            "<table><tr><td>a</td><td>b</td></tr></table>",
+        );
+        let tree = doc::blocks(state.document());
+        let texts: Vec<String> = doc::children_of(&tree, Some(cell))
+            .iter()
+            .map(|child| state.text_of(&block_id(*child)).unwrap_or_default())
+            .collect();
+        assert_eq!(texts, ["a", "b"]);
+        assert_eq!(
+            state
+                .root_blocks()
+                .iter()
+                .filter(|block| state.block_type_of(block) == Some(BlockType::Table))
+                .count(),
+            1
+        );
     }
 }

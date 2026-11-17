@@ -130,7 +130,7 @@ pub(crate) fn surviving_regions(
 /// A region written after another one was seen carries a greater stamp than
 /// it, which is what "the later of the two" means (`PROSE-FEAT-254`). Two
 /// concurrent writes may share a stamp, and the anchor breaks the tie.
-fn next_stamp(document: &LoroDoc) -> ambre_core::LamportStamp {
+pub(super) fn next_stamp(document: &LoroDoc) -> ambre_core::LamportStamp {
     let mut next = 0_i64;
     for id in document.oplog_frontiers().iter() {
         let Some(change) = document.get_change(id) else {
@@ -576,11 +576,26 @@ impl ProseState {
                 return Self::err_write(e);
             }
         }
+        if let Err(e) = self.write_region(table, &anchor, &extent, stamp) {
+            return Self::err_write(e);
+        }
+        self.commit_with(Vec::new())
+    }
+
+    /// Write one region record: its anchor, its extent and its stamp
+    /// (`PROSE-FEAT-243`). The caller has checked the rectangle.
+    pub(super) fn write_region(
+        &self,
+        table: &TreeID,
+        anchor: &TreeID,
+        extent: &TreeID,
+        stamp: ambre_core::LamportStamp,
+    ) -> Result<(), doc::WriteError> {
         let Some(map) = self
             .table_attrs(table)
             .and_then(|attrs| doc::map_at(&attrs, doc::AttrKey::Merged))
         else {
-            return Self::err_write(doc::WriteError::Refused(
+            return Err(doc::WriteError::Refused(
                 doc::RefusalCause::RegionMapRefused,
             ));
         };
@@ -599,10 +614,8 @@ impl ProseState {
             .collect::<std::collections::HashMap<_, _>>()
             .into(),
         );
-        if let Err(e) = map.insert(&anchor.to_string(), record) {
-            return Self::err_write(e);
-        }
-        self.commit_with(Vec::new())
+        map.insert(&anchor.to_string(), record)
+            .map_err(doc::WriteError::from)
     }
 
     /// Remove the region `cell` anchors, or the one covering it

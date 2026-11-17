@@ -3,7 +3,8 @@
 //! It runs in the markup module, beside the tree builder, so the Main
 //! instance links neither the walk nor the style parser
 //! (`ambre-spec-budgets.md section 5`). It answers the blocks Prose's own copy
-//! writes, and Prose checks each mark of them again on the paste. A value
+//! writes and the tables between them, and Prose checks each mark again on
+//! the paste. A value
 //! this walk keeps already passes that check, so the two never disagree.
 //!
 //! The tree builder closes implied tags as a browser does. The walk then keeps
@@ -13,7 +14,7 @@
 //! loads. The walk holds its own stack, so a deep tree never recurses.
 
 use ambre_core::Validated;
-use ambre_core::index::Pos;
+use ambre_core::index::{Axis, Len, Pos, Span};
 use ambre_core::{FontSize, Rgb, Rgba};
 use std::collections::BTreeMap;
 
@@ -21,7 +22,10 @@ use crate::markup::{HtmlAttr, HtmlData, HtmlNode, HtmlTree, attr};
 
 use ambre_core::Count;
 use ambre_core::NarrowCount;
-use ambre_prose_form::clip::{ClipBlock, ClipKind, ClipRun, ClipValue, safe_family, safe_link};
+use ambre_prose_form::clip::{
+    ClipBlock, ClipCell, ClipCover, ClipItem, ClipKind, ClipRow, ClipRun, ClipTable, ClipValue,
+    safe_family, safe_link,
+};
 use ambre_prose_form::{
     CodeLang, DroppedElement, FormConstruct, FormOutcome, FormReport, HeadingLevel, MarkKey,
     OrderedStyle, TodoMark, UnsupportedFeature,
@@ -154,11 +158,19 @@ pub struct DocumentRead {
     pub losses: FormReport,
 }
 
-/// Read the tree of an HTML document into blocks. The markup module builds
-/// the tree (`ambre_convert::markup::HtmlTree`). A document with no text reads
-/// as no block, and so does one the module found nested past its bound.
-pub fn read(tree: &HtmlTree) -> Vec<ClipBlock> {
-    read_document(tree).blocks
+/// Read the tree of an HTML document into the items a paste writes. The
+/// markup module builds the tree (`ambre_convert::markup::HtmlTree`). A
+/// document with no text reads as no item, and so does one the module found
+/// nested past its bound.
+///
+/// An outermost table reads as a table laid out on its grid
+/// (`PROSE-UI-225`). A table inside a cell, and one wider than
+/// [`COLUMNS_MAX`], read as one block or more per cell.
+pub fn read(tree: &HtmlTree) -> Vec<ClipItem> {
+    let mut reader = Reader::default();
+    reader.walk(tree);
+    reader.flush(EmptyBlock::Drop);
+    items(reader.blocks, reader.tables)
 }
 
 /// Read the tree of an HTML document whole: the walk [`read`] runs, and what
@@ -260,6 +272,104 @@ enum Opened {
 struct Frame {
     restore: Vec<(MarkRoot, Option<MarkValue>)>,
     opened: Opened,
+    /// The part of a kept table the element opened.
+    table: TablePart,
+}
+
+/// The part of a table an element opens, as the walk keeps it.
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+enum TablePart {
+    /// No part of a kept table.
+    #[default]
+    Outside,
+    /// A table, kept or flattened.
+    Table,
+    /// A cell of the kept table.
+    Cell,
+}
+
+/// The part of a table an element names: `table`, `tr`, `td` or `th`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TableTag {
+    Table,
+    Row,
+    Cell,
+    Other,
+}
+
+/// The span attribute of a table cell.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SpanAttr {
+    Colspan,
+    Rowspan,
+}
+
+/// The places of the blocks the walk wrote, in order.
+#[derive(PartialEq, Eq)]
+enum ReadBlock {}
+
+impl Axis for ReadBlock {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ReadBlock");
+}
+
+/// A row of a pasted table's grid.
+#[derive(PartialEq, Eq)]
+enum GridRow {}
+
+impl Axis for GridRow {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("GridRow");
+}
+
+/// A column of a pasted table's grid.
+#[derive(PartialEq, Eq)]
+enum GridCol {}
+
+impl Axis for GridCol {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("GridCol");
+}
+
+/// The widest table a paste lays out on its grid: the column cap of a Word
+/// table, 63, rounded up. A wider one reads as one block or more per cell,
+/// so a crafted span never grows the grid past this many slots per row.
+const COLUMNS_MAX: Len<GridCol> = Len::new(64);
+
+/// The largest spans an HTML cell may ask for, as a browser clamps them.
+const COLSPAN_MAX: Len<GridCol> = Len::new(1000);
+const ROWSPAN_MAX: Len<GridRow> = Len::new(65_534);
+
+/// How many rows a cell covers, as its `rowspan` asks.
+#[derive(Clone, Copy)]
+enum RowReach {
+    /// This many rows, its own included.
+    Rows(Len<GridRow>),
+    /// Every row to the end of the table: a `rowspan` of zero.
+    ToEnd,
+}
+
+/// One cell of a kept table, as the walk read it: the blocks it wrote, and
+/// the span its attributes ask for.
+struct ReadCell {
+    blocks: Span<ReadBlock>,
+    cols: Len<GridCol>,
+    rows: RowReach,
+}
+
+/// A table the walk is inside. Only the outermost one is kept: a table in a
+/// cell reads as its blocks.
+enum OpenTable {
+    Kept(ReadTable),
+    Flattened,
+}
+
+/// A kept table: the blocks the walk wrote inside it, and its cells row by
+/// row. A block inside the table and in no cell, a caption for example,
+/// lands before the table.
+struct ReadTable {
+    blocks: Span<ReadBlock>,
+    rows: Vec<Vec<ReadCell>>,
 }
 
 #[derive(Default)]
@@ -276,6 +386,10 @@ struct Reader {
     /// The list nesting of each block of `blocks`.
     nesting: Vec<Count<ListNesting>>,
     losses: FormReport,
+    /// The tables the walk is inside, the outermost first.
+    open_tables: Vec<OpenTable>,
+    /// The kept tables the walk closed, in document order.
+    tables: Vec<ReadTable>,
 }
 
 /// The style properties a paste reads. Any other is kept as `Other` and
@@ -590,6 +704,13 @@ impl Reader {
             }
             _ => {}
         }
+        let element = match tag {
+            "table" => TableTag::Table,
+            "tr" => TableTag::Row,
+            "td" | "th" => TableTag::Cell,
+            _ => TableTag::Other,
+        };
+        frame.table = self.enter_table(element, attrs);
         let flow = if self.pre > 0 {
             Flow::Pre
         } else {
@@ -644,6 +765,71 @@ impl Reader {
                 || wrote;
             if touched && let Some(parent) = self.open.last_mut() {
                 parent.touched = Touched::Written;
+            }
+        }
+        self.leave_table(frame.table);
+    }
+
+    /// The place the next block the walk writes takes.
+    fn next_block(&self) -> Pos<ReadBlock> {
+        Pos::<ReadBlock>::from_usize(self.blocks.len())
+    }
+
+    /// Open a table, or a cell of the kept one, once the block the element
+    /// opens closed the block before it. A row holds no block of its own.
+    fn enter_table(&mut self, element: TableTag, attrs: &[HtmlAttr]) -> TablePart {
+        let at = self.next_block();
+        match (element, self.open_tables.last_mut()) {
+            (TableTag::Table, None) => {
+                self.open_tables.push(OpenTable::Kept(ReadTable {
+                    blocks: Span::new(at, at),
+                    rows: Vec::new(),
+                }));
+                TablePart::Table
+            }
+            (TableTag::Table, Some(_)) => {
+                self.open_tables.push(OpenTable::Flattened);
+                TablePart::Table
+            }
+            (TableTag::Row, Some(OpenTable::Kept(table))) => {
+                table.rows.push(Vec::new());
+                TablePart::Outside
+            }
+            (TableTag::Cell, Some(OpenTable::Kept(table))) => {
+                if table.rows.is_empty() {
+                    table.rows.push(Vec::new());
+                }
+                if let Some(row) = table.rows.last_mut() {
+                    row.push(ReadCell {
+                        blocks: Span::new(at, at),
+                        cols: colspan(attrs),
+                        rows: rowspan(attrs),
+                    });
+                }
+                TablePart::Cell
+            }
+            _ => TablePart::Outside,
+        }
+    }
+
+    /// Close a cell of the kept table, or a table, once the element's own
+    /// block is written.
+    fn leave_table(&mut self, part: TablePart) {
+        let end = self.next_block();
+        match part {
+            TablePart::Outside => {}
+            TablePart::Cell => {
+                if let Some(OpenTable::Kept(table)) = self.open_tables.last_mut()
+                    && let Some(cell) = table.rows.last_mut().and_then(|row| row.last_mut())
+                {
+                    cell.blocks = Span::new(cell.blocks.start, end);
+                }
+            }
+            TablePart::Table => {
+                if let Some(OpenTable::Kept(mut table)) = self.open_tables.pop() {
+                    table.blocks = Span::new(table.blocks.start, end);
+                    self.tables.push(table);
+                }
             }
         }
     }
@@ -731,6 +917,167 @@ impl Reader {
         }
         true
     }
+}
+
+/// The number an HTML span attribute holds, read as a browser reads it:
+/// its leading digits, capped at `cap`. None, or zero, reads as `None`.
+fn span_attr<A: Axis>(attrs: &[HtmlAttr], which: SpanAttr, cap: Len<A>) -> Option<Len<A>> {
+    let name = match which {
+        SpanAttr::Colspan => "colspan",
+        SpanAttr::Rowspan => "rowspan",
+    };
+    let value = attr(attrs, name)?.trim();
+    let digits = value
+        .find(|c: char| !c.is_ascii_digit())
+        .map_or(value, |end| value.get(..end).unwrap_or(""));
+    // A number too long to parse is past every cap, so it reads as the cap.
+    let span = if digits.is_empty() {
+        0
+    } else {
+        digits.parse::<u32>().unwrap_or(u32::MAX)
+    };
+    (span > 0).then(|| Len::<A>::new(span).min(cap))
+}
+
+/// How many columns a cell covers: one unless its `colspan` asks more.
+fn colspan(attrs: &[HtmlAttr]) -> Len<GridCol> {
+    span_attr(attrs, SpanAttr::Colspan, COLSPAN_MAX).unwrap_or(Len::new(1))
+}
+
+/// How many rows a cell covers. A `rowspan` of zero reaches the end of the
+/// table, and none reads as one row.
+fn rowspan(attrs: &[HtmlAttr]) -> RowReach {
+    if attr(attrs, "rowspan").map(str::trim) == Some("0") {
+        return RowReach::ToEnd;
+    }
+    RowReach::Rows(span_attr(attrs, SpanAttr::Rowspan, ROWSPAN_MAX).unwrap_or(Len::new(1)))
+}
+
+/// One slot of a grid being laid out.
+#[derive(Clone, Copy)]
+enum Slot {
+    Free,
+    Own(Span<ReadBlock>),
+    Covered(ClipCover),
+}
+
+/// The grid a table's cells lay out on, as a browser places them. Each cell
+/// takes the first free slot of its row, and covers the slots its spans
+/// ask for. A span stops at a slot another cell holds, so no two cells
+/// overlap. `None` when a cell reaches past [`COLUMNS_MAX`], or the table
+/// holds no cell.
+fn layout(rows: &[Vec<ReadCell>]) -> Option<Vec<Vec<Slot>>> {
+    let height = rows.len();
+    let max = COLUMNS_MAX.to_usize();
+    let mut grid: Vec<Vec<Slot>> = vec![Vec::new(); height];
+    let free = |grid: &Vec<Vec<Slot>>, row: usize, col: usize| {
+        grid.get(row)
+            .is_some_and(|cells| matches!(cells.get(col), None | Some(Slot::Free)))
+    };
+    let set = |grid: &mut Vec<Vec<Slot>>, row: usize, col: usize, slot: Slot| {
+        if let Some(cells) = grid.get_mut(row) {
+            if cells.len() <= col {
+                cells.resize(col + 1, Slot::Free);
+            }
+            if let Some(place) = cells.get_mut(col) {
+                *place = slot;
+            }
+        }
+    };
+    for (row, cells) in rows.iter().enumerate() {
+        let mut col = 0;
+        for cell in cells {
+            while !free(&grid, row, col) {
+                col += 1;
+            }
+            let wanted = cell.cols.to_usize();
+            if col + wanted > max {
+                return None;
+            }
+            let width = (0..wanted)
+                .take_while(|step| free(&grid, row, col + step))
+                .count()
+                .max(1);
+            let below = height - row;
+            let wanted = match cell.rows {
+                RowReach::Rows(rows) => rows.to_usize().clamp(1, below),
+                RowReach::ToEnd => below,
+            };
+            let depth = 1
+                + (1..wanted)
+                    .take_while(|down| (0..width).all(|step| free(&grid, row + down, col + step)))
+                    .count();
+            set(&mut grid, row, col, Slot::Own(cell.blocks));
+            for step in 1..width {
+                set(&mut grid, row, col + step, Slot::Covered(ClipCover::Left));
+            }
+            for down in 1..depth {
+                for step in 0..width {
+                    set(
+                        &mut grid,
+                        row + down,
+                        col + step,
+                        Slot::Covered(ClipCover::Above),
+                    );
+                }
+            }
+            col += width;
+        }
+    }
+    let width = grid.iter().map(Vec::len).max().unwrap_or(0);
+    if width == 0 {
+        return None;
+    }
+    for cells in &mut grid {
+        cells.resize(width, Slot::Free);
+    }
+    Some(grid)
+}
+
+/// The items the blocks of a walk and its kept tables make, in document
+/// order. A table whose grid does not lay out reads as its blocks.
+fn items(blocks: Vec<ClipBlock>, tables: Vec<ReadTable>) -> Vec<ClipItem> {
+    let end = Pos::<ReadBlock>::from_usize(blocks.len());
+    let mut slots: Vec<Option<ClipBlock>> = blocks.into_iter().map(Some).collect();
+    let mut take = |span: Span<ReadBlock>| -> Vec<ClipBlock> {
+        slots
+            .get_mut(span.to_usize_range())
+            .map(|range| range.iter_mut().filter_map(Option::take).collect())
+            .unwrap_or_default()
+    };
+    let mut items = Vec::new();
+    let mut next = Pos::<ReadBlock>::ZERO;
+    for table in tables {
+        items.extend(
+            take(Span::new(next, table.blocks.start))
+                .into_iter()
+                .map(ClipItem::Block),
+        );
+        next = table.blocks.end;
+        let Some(grid) = layout(&table.rows) else {
+            items.extend(take(table.blocks).into_iter().map(ClipItem::Block));
+            continue;
+        };
+        let rows: Vec<ClipRow> = grid
+            .into_iter()
+            .map(|cells| ClipRow {
+                cells: cells
+                    .into_iter()
+                    .map(|slot| match slot {
+                        Slot::Free => ClipCell::Own(Vec::new()),
+                        Slot::Own(span) => ClipCell::Own(take(span)),
+                        Slot::Covered(cover) => ClipCell::Covered(cover),
+                    })
+                    .collect(),
+            })
+            .collect();
+        // What the table holds outside its cells, a caption for example,
+        // lands before it.
+        items.extend(take(table.blocks).into_iter().map(ClipItem::Block));
+        items.push(ClipItem::Table(ClipTable { rows }));
+    }
+    items.extend(take(Span::new(next, end)).into_iter().map(ClipItem::Block));
+    items
 }
 
 /// The language a code block names through a `language-` or `lang-` class.

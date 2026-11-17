@@ -3,19 +3,29 @@
 //! The walk itself lives in the markup module.
 
 use ambre_core::Validated;
-use ambre_prose_form::clip::{ClipBlock, ClipKind, ClipRun, ClipValue};
+use ambre_prose_form::clip::{
+    ClipBlock, ClipCell, ClipCover, ClipItem, ClipKind, ClipRun, ClipTable, ClipValue,
+};
 
 use crate::message::{CodeLang, HeadingLevel, MarkKey, OrderedStyle};
 
-/// The blocks `html` reads into, as a paste reads them.
-fn read(html: &str) -> Vec<ClipBlock> {
+/// The items `html` reads into, as a paste reads them.
+fn items(html: &str) -> Vec<ClipItem> {
     let converter = crate::logic::conversion::host_converter();
     match converter.convert(&ambre_convert::Conversion::ReadHtml {
         html: html.to_owned(),
     }) {
-        Ok(ambre_convert::Converted::Pasted(blocks)) => blocks,
-        other => panic!("the markup engine answers blocks: {other:?}"),
+        Ok(ambre_convert::Converted::Pasted(items)) => items,
+        other => panic!("the markup engine answers items: {other:?}"),
     }
+}
+
+/// The blocks `html` reads into, each table read as its cells' blocks.
+fn read(html: &str) -> Vec<ClipBlock> {
+    items(html)
+        .into_iter()
+        .flat_map(ClipItem::flattened)
+        .collect()
 }
 
 fn texts(blocks: &[ClipBlock]) -> Vec<String> {
@@ -301,4 +311,152 @@ fn a_pdf_text_layer_reads_one_paragraph_per_line() {
             .iter()
             .all(|block| block.runs.iter().all(|run| run.marks.is_empty()))
     );
+}
+
+/// The texts of the cells of the one table among `items`, row by row. A
+/// covered slot reads as `<` or `^`, the way it points.
+fn table_of(items: &[ClipItem]) -> Vec<Vec<String>> {
+    let tables: Vec<&ClipTable> = items
+        .iter()
+        .filter_map(|item| match item {
+            ClipItem::Table(table) => Some(table),
+            ClipItem::Block(_) => None,
+        })
+        .collect();
+    assert_eq!(tables.len(), 1, "one table: {items:?}");
+    tables[0]
+        .rows
+        .iter()
+        .map(|row| {
+            row.cells
+                .iter()
+                .map(|cell| match cell {
+                    ClipCell::Own(blocks) => texts(blocks).join("/"),
+                    ClipCell::Covered(ClipCover::Left) => "<".to_owned(),
+                    ClipCell::Covered(ClipCover::Above) => "^".to_owned(),
+                })
+                .collect()
+        })
+        .collect()
+}
+
+/// `PROSE-UI-225`: a web page's table reads on its grid. A header cell is a
+/// cell, and a span covers its slots. A row span of zero reaches the last
+/// row. A caption lands before the table, and a
+/// missing cell is an empty one.
+#[test]
+fn a_web_table_reads_on_its_grid_with_its_merged_cells() {
+    let html = concat!(
+        "<p>before</p><table><caption>Sales</caption>",
+        "<tr><th colspan=\"2\">Region</th><th rowspan=\"0\">Note</th></tr>",
+        "<tr><td rowspan=\"2\">North</td><td>12</td></tr>",
+        "<tr><td>14</td></tr><tr><td>South</td></tr></table><p>after</p>",
+    );
+    let items = items(html);
+    let blocks: Vec<String> = items
+        .iter()
+        .map(|item| match item {
+            ClipItem::Block(block) => texts(std::slice::from_ref(block)).join(""),
+            ClipItem::Table(_) => "<table>".to_owned(),
+        })
+        .collect();
+    assert_eq!(blocks, ["before", "Sales", "<table>", "after"]);
+    assert_eq!(
+        table_of(&items),
+        [
+            ["Region", "<", "Note"],
+            ["North", "12", "^"],
+            ["^", "14", "^"],
+            ["South", "", "^"],
+        ]
+    );
+}
+
+/// `PROSE-UI-225`: Word writes each cell as paragraphs of its own, so a
+/// cell keeps its blocks, its list item and its marks.
+#[test]
+fn a_word_table_keeps_the_blocks_of_each_cell() {
+    let html = concat!(
+        "<table class=MsoTableGrid border=1 cellspacing=0 cellpadding=0>",
+        "<tr style='mso-yfti-irow:0'><td width=302 valign=top style='width:226.55pt'>",
+        "<p class=MsoNormal><b>Nom<o:p></o:p></b></p></td>",
+        "<td width=302 valign=top><p class=MsoNormal>Valeur<o:p></o:p></p></td></tr>",
+        "<tr><td width=604 colspan=2 valign=top>",
+        "<p class=MsoNormal>Ligne une<o:p></o:p></p>",
+        "<p class=MsoListParagraphCxSpFirst style='mso-list:l0 level1 lfo1'>",
+        "<![if !supportLists]><span style='mso-list:Ignore'>&#183;</span><![endif]>",
+        "Point<o:p></o:p></p></td></tr></table>",
+    );
+    let items = items(html);
+    assert_eq!(
+        table_of(&items),
+        [["Nom", "Valeur"], ["Ligne une/Point", "<"]]
+    );
+    let ClipItem::Table(table) = &items[0] else {
+        panic!("a table");
+    };
+    let ClipCell::Own(first) = &table.rows[0].cells[0] else {
+        panic!("a cell");
+    };
+    assert_eq!(keys(&first[0].runs[0]), ["b"]);
+    let ClipCell::Own(merged) = &table.rows[1].cells[0] else {
+        panic!("a cell");
+    };
+    assert_eq!(kinds(merged), [ClipKind::Paragraph, ClipKind::Bullet]);
+}
+
+/// `PROSE-UI-225`: a range copied from Google Sheets or Excel reads as its
+/// grid, its style sheet and its fragment markers dropped.
+#[test]
+fn a_sheet_range_reads_as_its_grid() {
+    let sheets = concat!(
+        "<google-sheets-html-origin><style type=\"text/css\"><!--td {border: 1px solid #cccccc;}--></style>",
+        "<table xmlns=\"http://www.w3.org/1999/xhtml\" cellspacing=\"0\" cellpadding=\"0\" dir=\"ltr\" border=\"1\">",
+        "<colgroup><col width=\"100\"/><col width=\"100\"/></colgroup><tbody>",
+        "<tr style=\"height:21px;\"><td style=\"overflow:hidden;padding:2px 3px 2px 3px;\">Item</td>",
+        "<td style=\"overflow:hidden;padding:2px 3px 2px 3px;text-align:right;\" data-sheets-value=\"{&quot;1&quot;:3,&quot;3&quot;:4}\">4</td></tr>",
+        "<tr style=\"height:21px;\"><td colspan=\"2\" rowspan=\"1\" style=\"font-weight:bold;\">Total</td></tr>",
+        "</tbody></table>",
+    );
+    assert_eq!(table_of(&items(sheets)), [["Item", "4"], ["Total", "<"]]);
+    let excel = concat!(
+        "<html><body><!--StartFragment--><table border=0 cellpadding=0 cellspacing=0 width=128>",
+        "<col width=64 span=2><tr height=20><td height=20 class=xl65 width=64>1</td>",
+        "<td class=xl65 width=64>2</td></tr><tr height=20><td height=20 class=xl65>3</td>",
+        "<td class=xl65></td></tr><!--EndFragment--></table></body></html>",
+    );
+    assert_eq!(table_of(&items(excel)), [["1", "2"], ["3", ""]]);
+}
+
+/// `PROSE-UI-240`: a table inside a cell reads as one block per cell of its
+/// own. A table that reaches past 64 columns reads as one block per cell,
+/// so a crafted span never grows the grid.
+#[test]
+fn a_nested_or_too_wide_table_reads_as_its_cells() {
+    let nested = "<table><tr><td>outer</td><td><table><tr><td>a</td><td>b</td></tr></table></td></tr></table>";
+    assert_eq!(table_of(&items(nested)), [["outer", "a/b"]]);
+    for span in ["65", "1000", "99999999999999"] {
+        let wide = format!(
+            "<table><tr><td>x</td><td colspan=\"{span}\">y</td></tr><tr><td>z</td></tr></table>"
+        );
+        let items = items(&wide);
+        assert!(
+            items.iter().all(|item| matches!(item, ClipItem::Block(_))),
+            "{span}"
+        );
+        assert_eq!(texts(&read(&wide)), ["x", "y", "z"]);
+    }
+    let edge = "<table><tr><td colspan=\"63\">a</td><td>b</td></tr></table>";
+    assert_eq!(table_of(&items(edge))[0].len(), 64);
+}
+
+/// `PROSE-UI-225`: spans that would overlap stop at the slot another cell
+/// holds, so each slot is one cell's, and the grid stays a rectangle.
+#[test]
+fn overlapping_spans_stop_at_the_cell_they_meet() {
+    let html = concat!(
+        "<table><tr><td>a</td><td rowspan=\"2\">b</td></tr>",
+        "<tr><td colspan=\"3\">c</td></tr></table>",
+    );
+    assert_eq!(table_of(&items(html)), [["a", "b"], ["c", "^"]]);
 }
