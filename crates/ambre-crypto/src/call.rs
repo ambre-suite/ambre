@@ -117,6 +117,10 @@ pub enum ChunkError {
     /// A clear audio chunk larger than the fixed size.
     #[error("chunk too large")]
     ChunkTooLarge,
+    /// The key identifier names an epoch of its sender older than one a chunk opened under.
+    /// A newer epoch retires every older key of that sender (`CALL-125`).
+    #[error("retired key")]
+    Retired,
     /// A track this version seals nothing of, or a chunk handed to the door of another track.
     #[error("track not carried")]
     TrackNotCarried,
@@ -518,7 +522,8 @@ struct Received {
     keys: BTreeMap<Seq<KeyGeneration>, SenderKey>,
     /// The openers of the key identifiers that opened a chunk, the newest ones.
     openers: BTreeMap<(Seq<KeyGeneration>, Track), ChunkOpener>,
-    /// No chunk below this generation opens: its opener was dropped with its window.
+    /// No chunk below this generation opens: its opener was dropped with its window, or a
+    /// newer epoch retired its key.
     floor: Seq<KeyGeneration>,
 }
 
@@ -611,6 +616,9 @@ impl ReceiveKeys {
             .senders
             .get_mut(&kid.sender)
             .ok_or(ChunkError::UnknownKey)?;
+        if kid.generation < received.floor.epoch_start() {
+            return Err(ChunkError::Retired);
+        }
         if kid.generation < received.floor {
             return Err(ChunkError::Replayed);
         }
@@ -630,6 +638,17 @@ impl ReceiveKeys {
         let clear = opener.open(header, chunk, layout)?;
         received.keys.insert(kid.generation, key);
         received.openers.insert(slot, opener);
+        let epoch = kid.generation.epoch_start();
+        if epoch > received.floor {
+            // A chunk opened under a fresh key: the sender sealed its last chunk under the
+            // older ones. A removed participant still holds those, and a malicious SFU could
+            // forward a chunk of hers under them (`CALL-125`).
+            received.floor = epoch;
+            received.keys.retain(|&generation, _| generation >= epoch);
+            received
+                .openers
+                .retain(|&(generation, _), _| generation >= epoch);
+        }
         if ambre_core::Count::<Openers>::of(received.openers.len()) > OPENERS_PER_SENDER
             && let Some(((oldest, _), _)) = received.openers.pop_first()
         {

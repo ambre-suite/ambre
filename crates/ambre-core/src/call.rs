@@ -352,6 +352,12 @@ impl Seq<KeyGeneration> {
         Some(Self::new(self.get() + 1))
     }
 
+    /// The first generation of the epoch of this one: the generation of its fresh key.
+    #[must_use]
+    pub const fn epoch_start(self) -> Self {
+        Self::new(self.get() >> 32 << 32)
+    }
+
     /// The first generation of the epoch after this one, for a fresh key, or `None` past
     /// the last epoch a key identifier carries.
     #[must_use]

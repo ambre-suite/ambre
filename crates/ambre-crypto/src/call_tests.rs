@@ -970,3 +970,40 @@ fn a_chunk_of_a_dropped_generation_does_not_open_again() {
         Err(ChunkError::Replayed)
     );
 }
+
+/// `CALL-125`: once a chunk of Bob opens under his fresh key, no chunk under his older keys
+/// opens. Mallory left and still holds the older key. A malicious SFU forwards her chunks,
+/// sealed after the switch, and a chunk of Bob that arrives late.
+#[test]
+fn a_chunk_of_an_older_epoch_does_not_open_once_a_newer_one_opened() {
+    let old = SenderKey::generate();
+    let fresh = SenderKey::generate();
+    let fresh_epoch = Seq::<KeyGeneration>::ZERO.next_epoch().map_or(0, Seq::get);
+    let mut keys = receiver(1, 0, &old);
+    keys.insert(Seq::new(1), Seq::new(fresh_epoch), fresh.clone());
+    let mut bob_old = sealer(&old, 1, 0);
+    let late = seal(&mut bob_old, b"late");
+    // The fresh key waits out the switch delay: the older epoch still opens until then.
+    assert!(keys.open_audio(seal(&mut bob_old, b"before")).is_ok());
+    let mut bob_fresh = sealer(&fresh, 1, fresh_epoch);
+    assert!(keys.open_audio(seal(&mut bob_fresh, b"switched")).is_ok());
+
+    let mut mallory_same = sealer(&old, 1, 0);
+    let mut mallory_ahead = sealer(&old.ratcheted(), 1, 1);
+    let mut mallory_camera = ChunkSealer::new(&old, camera(1, 0)).unwrap_or_else(|e| panic!("{e}"));
+    for forged in [
+        keys.open_audio(late),
+        keys.open_audio(seal(&mut mallory_same, b"forged")),
+        keys.open_audio(seal(&mut mallory_ahead, b"forged")),
+        keys.open_video(seal_video(
+            &mut mallory_camera,
+            &keyframe(b"forged"),
+            PictureKind::Keyframe,
+        )),
+    ] {
+        assert_eq!(forged.map(|(s, _)| s), Err(ChunkError::Retired));
+    }
+    assert!(keys.open_audio(seal(&mut bob_fresh, b"after")).is_ok());
+    let mut bob_step = sealer(&fresh.ratcheted(), 1, fresh_epoch + 1);
+    assert!(keys.open_audio(seal(&mut bob_step, b"one up")).is_ok());
+}

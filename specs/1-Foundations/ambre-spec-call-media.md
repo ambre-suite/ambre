@@ -105,6 +105,7 @@ this document alone.
 | `CALL-024` | `FAIL` | Given a chunk that does not open, the receiver MUST drop it. | this spec section 3, the chunk steps | `ambre_crypto::call::tests::a_changed_byte_drops_the_chunk`; `::a_chunk_that_does_not_open_moves_no_window` | none | verified |
 | `CALL-025` | `FAIL` | Given a chunk whose key identifier names a sender whose key did not seal it, the receiver MUST drop it. | this spec section 3, the key identifier; audit `N11` | `ambre_crypto::call::tests::a_chunk_that_names_another_sender_is_dropped` -- a chunk Mallory seals under her key with the identifier of Bob, and one of hers she relabels. A member who holds Bob's key seals a chunk that opens under it: the SFU refuses that one (`CALL-116`) | none | verified |
 | `CALL-026` | `FAIL` | Given a chunk whose counter falls outside the replay window of its key, the receiver MUST drop it. | this spec section 3, the chunk steps | `ambre_crypto::call::tests::a_chunk_outside_the_replay_window_is_dropped`; `::the_replay_window_agrees_with_a_model_of_the_counters_opened` -- against a model of the counters opened; `::a_chunk_of_a_dropped_generation_does_not_open_again` -- the window of a dropped opener | none | verified |
+| `CALL-125` | `FAIL` | Given a chunk of a sender whose epoch is older than one a chunk of that sender opened under, the receiver MUST drop it. | this spec section 3, the chunk steps; `CALL-026`, `CALL-116` | `ambre_crypto::call::tests::a_chunk_of_an_older_epoch_does_not_open_once_a_newer_one_opened` -- after the first chunk under the fresh key, a late chunk of the sender and three chunks a removed participant seals under the older key reach no decoder: the same step, a step up and a camera chunk. The older epoch opens until then | none | verified |
 | `CALL-100` | `FRAME` | Turning the camera on or off during a call MUST NOT renegotiate the session or replace the transform of the video sender. | this spec section 3, a camera during a call; `CALL-011` | `ambre_belt::murmure::tests::a_member_draws_the_video_of_another_on_its_canvas` -- browser tier, under Chrome and under Firefox: Ada's video sender takes her camera, then gives it up, under its first transform, and her page sets no local description | none | verified |
 
 ### 1.4 Leave a call
@@ -241,7 +242,7 @@ A participant sends a screen or a window into the call, and stops it.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 124 `verified`. The relay admits under the cap, and the SFU mints the TURN
+* **Verification.** 125 `verified`. The relay admits under the cap, and the SFU mints the TURN
   credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography, forwards RTP and reaches a
   browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`, `CALL-050` to `CALL-052`). Each
   receiver holds fixed slots, and a seed gives one path (`CALL-045` to `CALL-053`). The seal and the
@@ -342,6 +343,9 @@ is empty. The Call crypto review Story (`ambre-roadmap.md` E5) reads it, with
 * A receiver ratchets a held key up to 64 steps inside its epoch, never into another. It keeps a
   window of 128 counters per key identifier, marked once a tag verifies. It keeps the 8 newest key
   identifiers of each sender, and refuses a generation below one it dropped.
+* A chunk of a sender opens under a newer epoch. The receiver then drops every key and window of
+  the older epochs of that sender (`CALL-125`). A removed participant holds those keys, and a
+  malicious SFU forwards her chunks. A chunk of the sender still in flight under them is lost.
 
 **The join and the wrap, byte by byte.**
 
