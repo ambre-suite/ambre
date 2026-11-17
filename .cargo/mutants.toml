@@ -67,6 +67,9 @@ exclude_re = [
     # Equivalent: the shift leaves the low 8 bits of the accumulator at zero,
     # so OR and XOR with a byte give the same value.
     'replace \| with \^ in fingerprint',
+    # Equivalent for the same reason: each word index shifts left by one bit
+    # before the next bit joins it, so the low bit is zero and OR is XOR.
+    'replace \| with \^ in MasterSeed::recovery_words',
     # Equivalent: at ten keys, truncating the cache to ten removes nothing.
     "replace > with >= in SyncDocumentState::rotate_key",
     # Equivalent: at a counter equal to the highest the shift is 0, so the
