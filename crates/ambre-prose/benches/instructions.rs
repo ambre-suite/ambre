@@ -769,10 +769,10 @@ fn pdf_write_of(pictures: ExportPictures) {
         // The last slice hands the write to the converter thread, which
         // this bench runs in place.
         for (ticket, conversion) in state.take_file_requests() {
-            if let Some(answer) = state.handle_file_converted(ticket, pdf.convert(&conversion)) {
-                if is_ready(&answer) {
-                    return;
-                }
+            if let Some(answer) = state.handle_file_converted(ticket, pdf.convert(&conversion))
+                && is_ready(&answer)
+            {
+                return;
             }
         }
         if progress_of(&out).is_none() {

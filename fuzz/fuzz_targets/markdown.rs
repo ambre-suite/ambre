@@ -11,6 +11,10 @@ fuzz_target!(|data: &[u8]| {
     let Ok(converter) = Converter::load(ConverterFamily::Markup, &Payload::new(Vec::new())) else {
         return;
     };
-    let file = ambre_core::Payload::<ambre_core::FileBytes>::new(data.to_vec());
-    let _ = ambre_prose::interop::markdown::read(&file, &converter);
+    let file = Payload::<ambre_client_core::FileBytes>::new(data.to_vec());
+    // The request and the answer the host runs, in place.
+    let Ok(request) = ambre_prose::interop::markdown::read_request(&file) else {
+        return;
+    };
+    let _ = ambre_prose::interop::markdown::read_answer(converter.convert(&request));
 });

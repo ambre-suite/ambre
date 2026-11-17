@@ -141,10 +141,17 @@ impl RouteBinding {
                     }
                 });
             }
-            if let Some(document_id) = step.show
-                && let Some(sw) = self.switcher.borrow().as_ref()
-            {
-                sw.set_document(document_id);
+            if let Some(sw) = self.switcher.borrow().as_ref() {
+                if let Some(document_id) = step.show {
+                    sw.set_document(document_id);
+                }
+                // The open waited for the kept pins, and the view may have
+                // asked for its window before it. The Logic thread dropped
+                // that request, as one for no live document, so the view
+                // asks again after the open.
+                if step.open.is_some() {
+                    sw.document_opened();
+                }
             }
             self.raf.set_cover(route::cover(&cur_route));
             self.prev = Some(cur_route);

@@ -414,7 +414,9 @@ where
     // Hand the caller a route-driven document-swap handle. It captures the host
     // (kept alive by the rAF closure regardless), so swapping the active
     // document never touches the GPU surface.
+    let opened = Rc::clone(&host);
     DocSwitcher {
         set: Rc::new(move |id| host.borrow_mut().set_document(id)),
+        opened: Rc::new(move || opened.borrow_mut().document_opened()),
     }
 }

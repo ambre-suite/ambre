@@ -5,12 +5,11 @@
 //! PowerPoint file is read by the office engine, then mapped onto the deck.
 #![no_main]
 
+use ambre_client_core::{FileBytes, docfile::write_ambre_plaintext};
 use ambre_convert::{Conversion, Converted, Converter};
 use ambre_core::ConverterFamily;
 use ambre_core::id::{Document, Id};
-use ambre_core::{
-    DeltaBytes, DocType, FileBytes, Payload, SnapshotBytes, Uuid, docfile::write_ambre_plaintext,
-};
+use ambre_core::{DeltaBytes, DocType, Payload, SnapshotBytes, Uuid};
 use ambre_toile::ToileState;
 use ambre_toile::logic::interop::{Limits, import_deck, import_raster, import_svg};
 use libfuzzer_sys::fuzz_target;
@@ -32,7 +31,12 @@ fuzz_target!(|data: &[u8]| {
         })
         && let Ok(read) = ambre_convert::decode_imported_deck(&deck)
     {
-        let _ = import_deck(&read, &thumbs, ambre_bus::interop::FileFormat::Pptx, &limits);
+        let _ = import_deck(
+            &read,
+            &thumbs,
+            ambre_bus::interop::FileFormat::Pptx,
+            &limits,
+        );
     }
     let _ = import_raster(&picked, &limits);
     let file = write_ambre_plaintext(

@@ -433,7 +433,7 @@ enum Deadline {
     /// The deadline of the family of the oldest job in flight
     /// ([`answer_deadline`]).
     PerFamily,
-    /// One deadline for every family: a test's.
+    /// One deadline for every family: a host test's.
     #[cfg(all(test, any(not(target_arch = "wasm32"), target_feature = "atomics")))]
     Fixed(TimeSpan<FracMs>),
 }
@@ -1510,7 +1510,7 @@ mod respawn_tests {
         };
         seen.extend(run(&mut offload, &waiter, job(2, html)));
         // The next thread starts as the first did, under the production
-        // deadline.
+        // deadline of the family it runs.
         let mut offload = offload.with_deadline(answer_deadline(ConverterFamily::Tables));
         let reloaded = !offload.holds(ConverterFamily::Tables)
             && offload

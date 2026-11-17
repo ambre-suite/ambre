@@ -50,6 +50,7 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 name = "ambre-bus"
 version = "0.1.0"
 dependencies = [
+ "ambre-client-core",
  "ambre-core",
  "ambre-protocol",
  "atomic-waker",
@@ -66,9 +67,11 @@ dependencies = [
  "ambre-core",
  "ambre-draw",
  "bytemuck",
+ "icu_provider",
  "js-sys",
  "kurbo",
- "lyon",
+ "lyon_path",
+ "lyon_tessellation",
  "parley",
  "peniko",
  "rustc-hash 2.1.3",
@@ -84,6 +87,7 @@ dependencies = [
 name = "ambre-chrome"
 version = "0.1.0"
 dependencies = [
+ "ambre-client-core",
  "ambre-commands",
  "ambre-core",
  "icondata",
@@ -91,6 +95,15 @@ dependencies = [
  "leptos_icons",
  "wasm-bindgen",
  "web-sys",
+]
+
+[[package]]
+name = "ambre-client-core"
+version = "0.1.0"
+dependencies = [
+ "ambre-core",
+ "serde",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -104,6 +117,7 @@ dependencies = [
 name = "ambre-convert"
 version = "0.1.0"
 dependencies = [
+ "ambre-client-core",
  "ambre-core",
  "ambre-docx",
  "ambre-draw",
@@ -112,8 +126,10 @@ dependencies = [
  "ambre-prose-form",
  "ambre-xlsx",
  "csv",
+ "gif",
  "html5ever",
  "image-webp",
+ "png",
  "postcard",
  "pulldown-cmark",
  "roxmltree",
@@ -152,11 +168,11 @@ dependencies = [
 name = "ambre-crypto"
 version = "0.1.0"
 dependencies = [
+ "ambre-client-core",
  "ambre-core",
  "argon2",
  "blake2",
  "chacha20poly1305",
- "data-encoding",
  "ed25519-dalek",
  "getrandom 0.2.17",
  "getrandom 0.3.4",
@@ -171,6 +187,7 @@ dependencies = [
 name = "ambre-docx"
 version = "0.1.0"
 dependencies = [
+ "ambre-client-core",
  "ambre-core",
  "ambre-opc",
  "quick-xml",
@@ -182,6 +199,7 @@ dependencies = [
 name = "ambre-draw"
 version = "0.1.0"
 dependencies = [
+ "ambre-client-core",
  "ambre-core",
  "kurbo",
  "parley",
@@ -194,6 +212,7 @@ name = "ambre-fuzz"
 version = "0.0.0"
 dependencies = [
  "ambre-bus",
+ "ambre-client-core",
  "ambre-convert",
  "ambre-core",
  "ambre-crypto",
@@ -209,6 +228,7 @@ dependencies = [
 name = "ambre-odt"
 version = "0.1.0"
 dependencies = [
+ "ambre-client-core",
  "ambre-core",
  "ambre-docx",
  "ambre-opc",
@@ -220,6 +240,7 @@ dependencies = [
 name = "ambre-opc"
 version = "0.1.0"
 dependencies = [
+ "ambre-client-core",
  "ambre-core",
  "flate2",
  "quick-xml",
@@ -231,6 +252,7 @@ dependencies = [
 name = "ambre-pptx"
 version = "0.1.0"
 dependencies = [
+ "ambre-client-core",
  "ambre-core",
  "ambre-opc",
  "quick-xml",
@@ -244,6 +266,7 @@ version = "0.1.0"
 dependencies = [
  "ambre-bus",
  "ambre-chrome",
+ "ambre-client-core",
  "ambre-commands",
  "ambre-convert",
  "ambre-core",
@@ -290,6 +313,7 @@ name = "ambre-sync"
 version = "0.1.0"
 dependencies = [
  "ambre-bus",
+ "ambre-client-core",
  "ambre-core",
  "ambre-crypto",
  "ambre-protocol",
@@ -322,6 +346,7 @@ dependencies = [
  "ambre-bus",
  "ambre-canvas",
  "ambre-chrome",
+ "ambre-client-core",
  "ambre-commands",
  "ambre-convert",
  "ambre-core",
@@ -354,6 +379,7 @@ dependencies = [
  "ambre-bus",
  "ambre-canvas",
  "ambre-chrome",
+ "ambre-client-core",
  "ambre-commands",
  "ambre-convert",
  "ambre-core",
@@ -381,6 +407,7 @@ dependencies = [
 name = "ambre-xlsx"
 version = "0.1.0"
 dependencies = [
+ "ambre-client-core",
  "ambre-core",
  "ambre-opc",
  "postcard",
@@ -1036,12 +1063,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "data-encoding"
-version = "2.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4583a4551df46e2792f82ceeac45e850d2e2d5debba0b91f102385cda5b11f06"
-
-[[package]]
 name = "data-url"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1581,6 +1602,15 @@ dependencies = [
  "libc",
  "r-efi 6.0.0",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "gif"
+version = "0.14.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee8cfcc411d9adbbaba82fb72661cc1bcca13e8bba98b364e62b2dba8f960159"
+dependencies = [
+ "weezl",
 ]
 
 [[package]]
@@ -2256,6 +2286,7 @@ checksum = "d27bbb9d3abbefac45d55f647c9de1d44aafcd1186eb91879afef17c396c3e73"
 dependencies = [
  "displaydoc",
  "icu_locale_core",
+ "log",
  "serde",
  "stable_deref_trait",
  "writeable",
@@ -2918,26 +2949,6 @@ dependencies = [
  "once_cell",
  "rand",
  "serde",
-]
-
-[[package]]
-name = "lyon"
-version = "1.0.19"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd0578bdecb7d6d88987b8b2b1e3a4e2f81df9d0ece1078623324a567904e7b7"
-dependencies = [
- "lyon_algorithms",
- "lyon_tessellation",
-]
-
-[[package]]
-name = "lyon_algorithms"
-version = "1.0.21"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cdfa8785f95e57914ddb35e3b59994aeba6f5e79e9cfd03da1c269f010f36009"
-dependencies = [
- "lyon_path",
- "num-traits",
 ]
 
 [[package]]
@@ -5085,6 +5096,12 @@ dependencies = [
  "string_cache",
  "string_cache_codegen",
 ]
+
+[[package]]
+name = "weezl"
+version = "0.1.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a28ac98ddc8b9274cb41bb4d9d4d5c425b6020c50c46f25559911905610b4a88"
 
 [[package]]
 name = "wgpu"

@@ -2620,7 +2620,7 @@ mod tests {
                 Some(bob.id),
                 &membership_log::LogRule::document(),
                 &crate::key_vouch::Roots {
-                    pin: Some(alice_pin.clone()),
+                    pin: Some(alice_pin),
                     signer: None,
                     ..Default::default()
                 },

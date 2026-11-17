@@ -95,13 +95,14 @@ pub(crate) mod tests {
     }
 
     /// Invites `invitee` into the open space from `page`, and confirms their
-    /// key. Answers the path and the fragment of the invite link the page
-    /// copies: a Murmure page pinned to the inviter (`SYNC-236`).
+    /// key. Answers the path and the fragment of the invite link the toolbar
+    /// then shows: a Murmure page pinned to the inviter (`SYNC-236`). The
+    /// link of an earlier invite is put away first, so the one read is the
+    /// link of this invite.
     pub(crate) async fn invite_into_space(page: &Page, invitee: &str) -> String {
         page.browser
             .script(
-                "navigator.clipboard.writeText = t => { \
-                   window.__beltInviteLink = t; return Promise.resolve(); }; \
+                "document.querySelector('.murmure-invite-link-close')?.click(); \
                  window.__beltInviteLink = null; return true;",
                 json!([]),
             )
@@ -115,6 +116,15 @@ pub(crate) mod tests {
         .await;
         confirm_key(page).await;
         page.wait_toast(&format!("Invited {invitee}")).await;
+        page.browser
+            .wait_for(
+                "the invite link in the toolbar",
+                "const l = document.querySelector('.murmure-invite-link .ambre-share-link-input'); \
+                 if (!l || !l.value) return false; \
+                 window.__beltInviteLink = l.value; return true;",
+                STEP,
+            )
+            .await;
         page.invite_link().await
     }
 

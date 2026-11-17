@@ -28,9 +28,9 @@ fuzz_target!(|data: &[u8]| {
     let _ = ambre_sync::fuzz::open_relayed_update(data);
     let _ = ambre_sync::fuzz::open_stored_snapshot(data);
     let _ = ambre_sync::fuzz::open_authenticated(data);
-    if let Ok(file) =
-        ambre_core::docfile::parse_sealed_header(&Payload::<SealedContainer>::new(data.to_vec()))
-    {
+    if let Ok(file) = ambre_client_core::docfile::parse_sealed_header(
+        &Payload::<SealedContainer>::new(data.to_vec()),
+    ) {
         let _ =
             ambre_crypto::aead::open_file(&file.nonce, &file.ciphertext, &file.aad(), file_key());
     }

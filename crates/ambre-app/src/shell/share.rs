@@ -170,19 +170,49 @@ enum CopyOutcome {
 }
 
 /// The link of the last invite, when it shares the document the dialog is
-/// on, with a copy button (`SYNC-245`). The copy runs inside the click: a
-/// browser that asks a fresh user activation, as Firefox does, refuses a
-/// write outside one. A refused copy says so, and the field stays there to
-/// select by hand.
+/// on, with a copy button (`SYNC-245`).
 #[component]
 pub(crate) fn ShareInviteLink(
     link: RwSignal<Option<InviteLink>>,
     current_doc: RwSignal<Option<Id<Document>>>,
 ) -> impl IntoView {
-    let shown = move || {
+    let shown = Signal::derive(move || {
         link.get()
             .filter(|l| current_doc.get() == Some(l.document_id))
-    };
+    });
+    view! { <InviteLinkField shown=shown /> }
+}
+
+/// The link of the last invite into a space of a Murmure page, with a copy
+/// button and a button that puts it away (`SYNC-245`). A Murmure page binds
+/// no document, so the link is the page's own address with the pin. The
+/// invitee's page roots every Murmure open of its session on that pin
+/// (`SYNC-236`).
+#[component]
+pub(crate) fn MurmureInviteLink(link: RwSignal<Option<InviteLink>>) -> impl IntoView {
+    view! {
+        <Show when=move || link.with(Option::is_some)>
+            <div class="murmure-invite-link">
+                <InviteLinkField shown=Signal::from(link) />
+                <button
+                    r#type="button"
+                    class="murmure-invite-link-close"
+                    on:click=move |_| link.set(None)
+                >
+                    "Close"
+                </button>
+            </div>
+        </Show>
+    }
+}
+
+/// The field that shows the invite link `shown` names, and its copy button.
+/// The copy runs inside the click: a browser that asks a fresh user
+/// activation, as Firefox does, refuses a write outside one. A refused copy
+/// says so, and the field stays there to select by hand.
+#[component]
+fn InviteLinkField(shown: Signal<Option<InviteLink>>) -> impl IntoView {
+    let shown = move || shown.get();
     // The address of the link: the path of the page, which shows the document
     // the link shares, then the fragment that carries the pin. The text stays
     // inside this view: the field shows it and the click copies it.
