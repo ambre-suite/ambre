@@ -1,5 +1,5 @@
 //! The texts a search carries: a message search, which reads only what the
-//! client holds, and a user search, which the relay answers.
+//! client holds, and a user search by address, which the relay answers.
 
 use crate::Rule;
 
@@ -21,11 +21,11 @@ impl Rule for SearchQuery {
     }
 }
 
-/// The rule of the text a user search matches: two characters at least once
-/// trimmed. A shorter text would match a near-arbitrary slice of the user
-/// table. The sharing lookup would then list the directory, each email and key
-/// with it. A `Validated<UserSearch>` holds one, and the rule keeps the
-/// trimmed text. `Debug` prints the length alone.
+/// The rule of the text a user search carries: two characters at least once
+/// trimmed. The relay answers only the account whose whole address equals the
+/// text, in any case (`SRV-280`), so a fragment lists nobody. A
+/// `Validated<UserSearch>` holds one, and the rule keeps the trimmed text.
+/// `Debug` prints the length alone.
 pub enum UserSearch {}
 
 impl Rule for UserSearch {

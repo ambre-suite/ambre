@@ -2179,7 +2179,10 @@ mod handler_tests {
         let search = || async {
             let resp = app
                 .clone()
-                .oneshot(get_with("/api/users/search?query=keyless", &auth))
+                .oneshot(get_with(
+                    "/api/users/search?query=keyless%40example.com",
+                    &auth,
+                ))
                 .await
                 .unwrap();
             assert_eq!(resp.status(), StatusCode::OK);
@@ -4727,6 +4730,62 @@ mod handler_tests {
             json["users"].as_array().unwrap().len(),
             0,
             "'%%' must be matched literally, not as a wildcard sweep"
+        );
+    }
+
+    /// `SRV-280`: a search by address answers only the account whose whole
+    /// address is the query. A part of an address, a part of a name and a
+    /// whole name answer nobody. A padded address in another case answers its
+    /// one account.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_search_answers_a_whole_address_and_nothing_less(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let auth = setup_and_get_auth(&app).await;
+        let _ = setup_named(&app, "alice@test.com", 81).await;
+        let _ = setup_named(&app, "alfred@test.com", 82).await;
+
+        let search = |query: &'static str| {
+            let app = app.clone();
+            let auth = auth.clone();
+            async move {
+                let resp = app
+                    .oneshot(get_with(&format!("/api/users/search?query={query}"), &auth))
+                    .await
+                    .unwrap();
+                assert_eq!(resp.status(), StatusCode::OK);
+                let body = axum::body::to_bytes(resp.into_body(), 16384).await.unwrap();
+                let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+                json["users"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|u| u["email"].as_str().unwrap().to_owned())
+                    .collect::<Vec<_>>()
+            }
+        };
+
+        for fragment in [
+            "al",
+            "alice",
+            "test.com",
+            "%40test.com",
+            "alice%40test.co",
+            "lice%40test.com",
+            "Second",
+            "Second%20User",
+            "Test%20User",
+        ] {
+            assert_eq!(search(fragment).await, Vec::<String>::new(), "{fragment}");
+        }
+        assert_eq!(
+            search("%20%20ALICE%40Test.com%20").await,
+            vec!["alice@test.com".to_owned()]
+        );
+        assert_eq!(
+            search("alfred%40test.com").await,
+            vec!["alfred@test.com".to_owned()]
         );
     }
 

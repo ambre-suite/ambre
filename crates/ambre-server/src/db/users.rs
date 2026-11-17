@@ -306,7 +306,10 @@ pub async fn dev_upsert_user(
 
 pub use ambre_core::{UserSearch, Validated};
 
-/// Full-text search over users by email or display name (ILIKE).
+/// The account whose whole address is `query`, compared without regard to
+/// case, the rule of `users_email_lower_unique`. A part of an address or of a
+/// name matches nothing, so a session cannot list the directory (`SRV-280`).
+/// The answer holds one account at most.
 ///
 /// An account without keys is left out: nothing can be shared with it until it
 /// registers them (`SRV-163`).
@@ -314,20 +317,10 @@ pub async fn search_users(
     pool: &PgPool,
     query: &Validated<UserSearch>,
 ) -> Result<Vec<UserInfoRow>, AppError> {
-    // Escape the LIKE metacharacters (`\ % _`) in the user-supplied query so they
-    // match literally. Without this a caller could pass `%` / `_` as wildcards and
-    // widen `ILIKE '%q%'` into a directory-enumeration primitive, defeating the
-    // minimum-length guard at the route. `ESCAPE '\'` binds the escape char.
-    let escaped = query
-        .as_str()
-        .replace('\\', "\\\\")
-        .replace('%', "\\%")
-        .replace('_', "\\_");
-    let pattern = format!("%{escaped}%");
     let rows = sqlx::query(
-        "SELECT id, email, email_verified, display_name, signing_pubkey, exchange_pubkey FROM users WHERE signing_pubkey IS NOT NULL AND (email ILIKE $1 ESCAPE '\\' OR display_name ILIKE $1 ESCAPE '\\') LIMIT 20"
+        "SELECT id, email, email_verified, display_name, signing_pubkey, exchange_pubkey FROM users WHERE signing_pubkey IS NOT NULL AND lower(email) = lower($1)"
     )
-    .bind(pattern)
+    .bind(query.as_str())
     .fetch_all(pool)
     .await?;
 

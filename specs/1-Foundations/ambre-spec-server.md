@@ -106,6 +106,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-016` | `FAIL` | A caller MUST NOT grant a role above its own. | audit `N2`; this spec section 3 | `ambre_server::routes::share::tests::editor_cannot_grant_owner` -- the refusal; `::owner_can_grant_any_valid_role`; `::doc_role_rank_ordering` -- the ordering the clamp is read off | none | verified |
 | `SRV-190` | `FAIL` | Given an invite on a document of a channel other than its `meta`, the relay MUST refuse it and add no row. | this spec section 3; `5-Murmure/features/ambre-spec-murmure-channels.md` | `ambre_server::routes::channels::tests::an_invite_on_meta_opens_every_document_of_the_channel` -- an invite on the segment answers `409` and adds no row, database tier | none | verified |
 | `SRV-224` | `POST` | An invite MUST name its invitee by id or by email, exactly one, so a member known by id alone can be invited. | this spec section 3; `5-Murmure/features/ambre-spec-murmure-channels.md` | `ambre_server::routes::tests::handler_tests::an_invite_names_its_invitee_by_id_or_by_email_once` -- both or neither answer `409` and add no row, an unknown id `404`, an id alone invites, database tier | none | verified |
+| `SRV-280` | `POST` | A search by address MUST answer only the account whose whole address is the query, after the normalization of section 3, and never an account for a part of its address or of its name. | this spec section 3; `SRV-163` | `ambre_server::routes::tests::handler_tests::a_search_answers_a_whole_address_and_nothing_less` -- a fragment of an address, a fragment of a name and a name answer no user, and a padded address in another case answers its one account, database tier | none | verified |
 | `SRV-225` | `FAIL` | Given an invite into a channel of a space whose invitee is no member of that space, the relay MUST refuse it and add no row. | this spec section 3; `SRV-105`; `5-Murmure/features/ambre-spec-murmure-channels.md` | `ambre_server::routes::channels::tests::an_invite_into_a_channel_of_a_space_needs_a_member_of_it` -- a private and a public channel each answer `409` with no row, and the same invite lands once the invitee joins the space, database tier | none | verified |
 | `SRV-070` | `FAIL` | A caller MUST NOT change a member ranked above it. | audit `N2`; this spec section 3 | `ambre_server::routes::tests::handler_tests::editor_cannot_demote_owner_via_invite` -- the invitation is also the role-change path, so this is the half a clamp on the granted role alone leaves open | none | verified |
 | `SRV-266` | `FAIL` | Only an owner MUST be able to re-invite a member who already holds a row. | audit `N8`; this spec section 3 | `ambre_server::routes::tests::handler_tests::an_editor_does_not_overwrite_the_row_of_a_peer` -- an editor who re-invites another editor is refused, and that editor's row is unchanged, while an owner's re-invite lands | none | verified |
@@ -178,7 +179,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
-* **Verification.** 106 `verified`, 1 `human-review`, 6 `unimplemented`. A request test drives what
+* **Verification.** 107 `verified`, 1 `human-review`, 6 `unimplemented`. A request test drives what
   holds: the roles, the rank clamps, the signature gate, the error mapping, the origin list and the
   delete. No log line can name the payload type. A deployment's isolation is read by hand.
 ---
@@ -350,6 +351,12 @@ with no document open (`ambre-spec-launcher.md`).
 path. A clamp on the granted role alone lets an editor re-invite an owner as an editor, and
 overwrite that owner's sealed key on the way. The target's current rank is clamped as well
 (`SRV-070`).
+
+**A search by address names one account.** The search exists to find the keys of an invitee the
+sharer already knows by address. The relay compares the trimmed
+query to each stored address without regard to case, as the unique index on addresses does. Only an
+equal address matches, so the answer holds one account at most (`SRV-280`). A caller learns whether
+a known address has an account. No part of an address or of a name lists anyone.
 
 **A channel is invited into on `meta`.** The rows of `meta` grant every document of the channel.
 A row on a segment would grant nothing, so an invite there is refused (`SRV-190`).
@@ -535,6 +542,7 @@ threads appear: `meta` and amendments carry no message a member reads.
 | The thread library is vendored without its evaluated strings | `unsafe-eval` in the policy | it would admit any string an injected value reaches `eval` with. The copy changes four calls (`vendor/wasm_thread/PATCH.md`) |
 | The script of each thread is a file of the build | a `blob:` worker, as the thread library builds it | a `blob:` source in `worker-src` admits a worker built from any text a script of the page holds |
 | The sweep connects to each primary in turn | a scan through the cluster client | the client refuses `SCAN` on a cluster, since each node answers for its own slots alone. `KEYS` on every shard blocks each node for the length of its keyspace |
+| A search by address matches the whole address | a match on a part of the address or of the name, for a suggestion list | any caller with a session lists the directory two characters at a time, each address and key with it, and the setup route issues a session to anyone (audit `P4`). The sharing flow already holds the whole address it searches |
 
 ---
 
