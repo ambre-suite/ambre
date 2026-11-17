@@ -319,6 +319,15 @@ mod tests {
             Value::Bool(true),
             "the sign-in panel shows after the setup"
         );
+        // In the session, the development panel links to the recovery
+        // (`CHROME-135`).
+        page.browser
+            .wait_for(
+                "the recovery link in the session",
+                "return !!document.querySelector('.ambre-signin-recover');",
+                STEP,
+            )
+            .await;
     }
 
     /// `CHROME-133`, `CHROME-134`: the unlock face of a provider account links

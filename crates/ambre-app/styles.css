@@ -2324,6 +2324,13 @@ input[type="radio"] {
     cursor: pointer;
 }
 
+/* The development panel in a session: the recovery link alone, under the list. */
+.ambre-dev-panel {
+    display: flex;
+    justify-content: center;
+    padding: var(--space-6) var(--space-8);
+}
+
 /* -- Account keys: the setup, the recovery words, the recovery ------------- */
 .ambre-keys {
     display: flex;

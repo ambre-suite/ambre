@@ -217,8 +217,14 @@ pub fn landing_view(
                 {document_list(docs, to_logic_cards.clone(), pending_delete, booted, toasts)}
             </Show>
 
-            // Signed out: the sign-in panel (dev field or OIDC button).
-            <Show when=move || username.get().is_none() && !keys.is_open() && !gated()>
+            // Signed out: the sign-in panel (dev field or OIDC button). In a
+            // session on a development relay: the development panel, which
+            // keeps the recovery link alone (`CHROME-135`).
+            <Show when=move || {
+                !keys.is_open()
+                    && !gated()
+                    && (username.get().is_none() || dev_mode.get() == Some(SignInMode::Dev))
+            }>
                 {
                     let to_logic = to_logic_signin.clone();
                     move || sign_in_panel(dev_mode, username, keys, to_logic.clone())
@@ -689,6 +695,21 @@ fn sign_in_panel(
     to_logic: crate::outbox::ShellOutbox,
 ) -> impl IntoView {
     move || match dev_mode.get() {
+        // In a session, the development panel keeps only the recovery: a
+        // recovery re-seals the seed of that session (`CHROME-135`). The
+        // sign-in field stays hidden, so the setup ends in the list alone
+        // (`CHROME-132`).
+        Some(SignInMode::Dev) if username.get().is_some() => view! {
+            <div class="ambre-dev-panel">
+                <button
+                    class="ambre-signin-link ambre-signin-recover"
+                    on:click=move |_| keys.open(crate::account::KeysFace::Recover)
+                >
+                    "Recover an account with its recovery words"
+                </button>
+            </div>
+        }
+        .into_any(),
         None => view! {
             <div class="ambre-signin">
                 <p class="ambre-signin-loading">"Connecting..."</p>
@@ -745,16 +766,8 @@ fn sign_in_panel(
                     >
                         "Set up an account with a passphrase"
                     </button>
-                    // A recovery re-seals the seed of a session. Signed out,
-                    // the form fails as not signed in (`CHROME-135`).
-                    <Show when=move || username.get().is_some()>
-                        <button
-                            class="ambre-signin-link ambre-signin-recover"
-                            on:click=move |_| keys.open(crate::account::KeysFace::Recover)
-                        >
-                            "Recover an account with its recovery words"
-                        </button>
-                    </Show>
+                    // No recovery link: signed out, the form fails as not
+                    // signed in (`CHROME-135`).
                 </div>
             }
             .into_any()
@@ -1187,7 +1200,8 @@ mod tests {
 
     /// A recovery re-seals the seed of a session, so the dev panel links to
     /// it only while a session holds. Signed out, the form fails as not
-    /// signed in, so the panel offers no recovery (`CHROME-135`).
+    /// signed in, so the panel offers no recovery (`CHROME-135`). In a
+    /// session the panel keeps the link alone, with no sign-in field.
     #[wasm_bindgen_test]
     async fn the_recovery_link_shows_only_in_a_session() {
         let owner = Owner::new();
@@ -1220,6 +1234,13 @@ mod tests {
         ));
         tick().await;
         assert!(link(&container), "no recovery link in a session");
+        assert!(
+            container
+                .query_selector(".ambre-signin-input")
+                .unwrap()
+                .is_none(),
+            "the sign-in field shows in a session"
+        );
         container.remove();
     }
 
