@@ -1309,9 +1309,10 @@ pub(crate) mod wasm_tests {
     }
 
     /// `ARCH-107`: a module that traps in the middle of a job fails that job
-    /// as unavailable, and the thread catches the trap and lives on. Its
-    /// instance loads again: the page the trap left grown is gone. The next
-    /// job is answered too, so no job waits for ever.
+    /// as stopped. A module the browser did not load answers the same error.
+    /// The thread catches the trap and lives on. Its instance loads again:
+    /// the page the trap left grown is gone. The next job is answered too,
+    /// so no job waits for ever.
     #[wasm_bindgen_test]
     fn a_module_that_traps_mid_job_fails_it_and_is_loaded_again() {
         let (link, ends) = converter_channels(&Doorbell::new());
@@ -1333,9 +1334,9 @@ pub(crate) mod wasm_tests {
             assert!(
                 matches!(
                     answers.as_slice(),
-                    [(answered, _, Err(ConvertError::Absent))] if answered.get() == ticket
+                    [(answered, _, Err(ConvertError::Stopped(_)))] if answered.get() == ticket
                 ),
-                "the trapped job is answered once, as unavailable"
+                "the trapped job is answered once, as stopped"
             );
             assert_eq!(
                 thread.footprint(ConverterFamily::Tables),
@@ -1371,8 +1372,8 @@ pub(crate) mod wasm_tests {
         thread.serve();
         let answers = offload.take_answers(now());
         assert!(
-            matches!(answers.as_slice(), [(_, _, Err(ConvertError::Absent))]),
-            "the job is answered once"
+            matches!(answers.as_slice(), [(_, _, Err(ConvertError::Malformed))]),
+            "the job is answered once, as malformed: the module wrote no answer"
         );
         assert_eq!(
             thread.footprint(ConverterFamily::Tables),
