@@ -268,8 +268,8 @@ two writers of one document (`SRV-274`). The relay numbers a delta only for a me
 document, and a delete fences the document before any row goes. So the key held no rule the relay
 does not hold already.
 
-The delete removes the rows of the index itself, the work the cascade did (`ambre-spec-server.md`,
-`SRV-273`).
+A trigger on the delete of a document row removes the rows of the index, the work the cascade did
+(`ambre-spec-server.md`, `SRV-275`).
 
 **Postgres keeps the hot tail alone.** A document holds at most the inline cap in its rows
 (`SRV-150`). Past it, the oldest deltas move into one batch object (`SRV-151`), and so does the

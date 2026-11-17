@@ -374,6 +374,58 @@ mod db_tests {
         .collect()
     }
 
+    /// `SRV-275`: a plain SQL delete of a document row removes every delta
+    /// row of it. No relay code is on its path. Another document keeps its
+    /// rows.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_document_deleted_by_sql_leaves_no_delta_row(pool: sqlx::PgPool) {
+        let stub = S3Stub::spawn([]).await;
+        let (state, doc) = setup(pool.clone(), &stub).await;
+        let owner = create_test_user(&pool, "other@ambre.app").await;
+        let other = create_test_document(&pool, owner, "prose").await;
+        assert!(matches!(
+            inline(&state, &doc, 1, &frame(1), INLINE_CAP).await,
+            InlineInsert::Stored { .. }
+        ));
+        let author = ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([6u8; 32]);
+        crate::db::insert_update(
+            &state.db,
+            &doc,
+            &author,
+            &Id::<Snapshot>::mint(),
+            ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::new(2),
+            ambre_core::Seq::<ambre_core::Relay>::new(2),
+            &ambre_core::ObjectKey::new("updates/2".to_owned()),
+        )
+        .await
+        .unwrap();
+        assert!(matches!(
+            inline(&state, &other, 1, &frame(1), INLINE_CAP).await,
+            InlineInsert::Stored { .. }
+        ));
+        assert_eq!(homes(&state, &doc).await.len(), 2);
+
+        sqlx::query("DELETE FROM documents WHERE id = $1")
+            .bind(crate::db::id_to_uuid(doc))
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let left = |d: Id<Document>| {
+            let pool = pool.clone();
+            async move {
+                sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM updates WHERE document_id = $1")
+                    .bind(crate::db::id_to_uuid(d))
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap()
+            }
+        };
+        assert_eq!(left(doc).await, 0, "a plain delete left delta rows");
+        assert_eq!(left(other).await, 1, "another document lost its rows");
+    }
+
     /// `SRV-150`: a tail at its cap, in deltas or in bytes, takes no more, and
     /// the delta is left for an object of its own.
     #[sqlx::test]

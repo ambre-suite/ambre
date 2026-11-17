@@ -319,22 +319,15 @@ pub async fn end_deletion(
     Ok(())
 }
 
-/// Deletes a document and every row of it, in one transaction. The foreign
-/// keys cascade to the members and the snapshots. The delta rows carry no
-/// foreign key, so that an insert locks no document row, and this removes them
-/// first (`SRV-273`, `SRV-274`).
+/// Deletes a document and every row of it. The foreign keys cascade to the
+/// members and the snapshots. The delta rows carry no foreign key, so that an
+/// insert locks no document row (`SRV-274`). A trigger on `documents` removes
+/// them in the same statement (`SRV-275`).
 pub async fn delete_document(pool: &PgPool, document_id: &Id<Document>) -> Result<(), AppError> {
-    let did = id_to_uuid(*document_id);
-    let mut tx = pool.begin().await?;
-    sqlx::query("DELETE FROM updates WHERE document_id = $1")
-        .bind(did)
-        .execute(&mut *tx)
-        .await?;
     sqlx::query("DELETE FROM documents WHERE id = $1")
-        .bind(did)
-        .execute(&mut *tx)
+        .bind(id_to_uuid(*document_id))
+        .execute(pool)
         .await?;
-    tx.commit().await?;
     Ok(())
 }
 
