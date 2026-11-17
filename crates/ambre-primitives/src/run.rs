@@ -532,12 +532,18 @@ fn artifact(root: &Path, message: &str) -> Result<Option<Artifact>, String> {
 /// stem, with a `lib` prefix dropped. A build script is the exception: cargo
 /// names the file `build-script-build` with no hash, in a directory named by
 /// the package and the hash. The driver compiled it as the crate
-/// `build_script_build` with that hash, so the record takes that name.
+/// `build_script_build` with that hash, so the record takes that name. A
+/// newer cargo writes it as `build/<package>/<hash>/out/build_script_build`,
+/// and the record takes the hash of that directory.
 fn unit_stem(file: &Path) -> Option<String> {
     let stem = file.file_stem()?.to_string_lossy();
     if stem == "build-script-build" {
         let dir = file.parent()?.file_name()?.to_string_lossy();
         let (_, hash) = dir.rsplit_once('-')?;
+        return Some(format!("build_script_build-{hash}"));
+    }
+    if stem == "build_script_build" {
+        let hash = file.parent()?.parent()?.file_name()?.to_string_lossy();
         return Some(format!("build_script_build-{hash}"));
     }
     Some(stem.strip_prefix("lib").unwrap_or(&stem).to_owned())

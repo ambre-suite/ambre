@@ -344,7 +344,18 @@ pub(crate) struct Shown {
     /// The face the keys gate shows, or `None` while it shows none.
     pub(crate) keys: Option<KeysFace>,
     /// Whether the account face shows its setup or its recovery form.
-    pub(crate) account_form: bool,
+    pub(crate) account_form: AccountForm,
+}
+
+ambre_core::define_flag! {
+    /// Whether the account face shows a form that reads a refusal: its setup
+    /// or its recovery form.
+    pub(crate) enum AccountForm {
+        /// No form: the face is closed, or shows no setup and no recovery.
+        Hidden,
+        /// The setup or the recovery form.
+        Shown,
+    }
 }
 
 /// What the switchboard needs of the Murmure members, to file a fetched key under
@@ -486,8 +497,10 @@ impl Switchboard {
             // words.
             UiEvent::AuthError { cause } => effects.push(match (shown.keys, shown.account_form) {
                 (Some(_), _) => Effect::RefuseKeys(*cause),
-                (None, true) => Effect::Refused(*cause),
-                (None, false) => Effect::Notice(Notice::new(ToastKind::Error, cause.to_string())),
+                (None, AccountForm::Shown) => Effect::Refused(*cause),
+                (None, AccountForm::Hidden) => {
+                    Effect::Notice(Notice::new(ToastKind::Error, cause.to_string()))
+                }
             }),
             // Chrome status indicator (`-chrome.md` 2.G): mirror the active
             // document's WebSocket link into the header label. Ignored for a
@@ -907,8 +920,8 @@ impl Roster for ambre_murmure::chrome::MurmureRelay {
 #[cfg(test)]
 mod tests {
     use super::{
-        BusyNotice, Destination, Effect, Load, Notice, Page, PerfCadence, Roster, Shown,
-        Switchboard, Target, ViewFanOut, destination, pin_read,
+        AccountForm, BusyNotice, Destination, Effect, Load, Notice, Page, PerfCadence, Roster,
+        Shown, Switchboard, Target, ViewFanOut, destination, pin_read,
     };
 
     /// The bound as the backlog's length reads it.
@@ -1403,7 +1416,7 @@ mod tests {
         Shown {
             current,
             keys: None,
-            account_form: false,
+            account_form: AccountForm::Hidden,
             status: ChromeStatus {
                 hydrating: true,
                 connected: LinkState::Connected,
@@ -1695,7 +1708,7 @@ mod tests {
         let cause = AuthFailure::BadRecoveryWords(RecoveryWordsRefusal::BadChecksum);
         let refused = UiEvent::AuthError { cause };
         let form = Shown {
-            account_form: true,
+            account_form: AccountForm::Shown,
             ..on(None)
         };
         let effects = switchboard.service(&refused, form, &nobody());

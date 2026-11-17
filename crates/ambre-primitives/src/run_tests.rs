@@ -86,6 +86,14 @@ fn a_build_script_is_read_under_the_record_the_driver_writes_for_it() {
         .as_deref(),
         Some("build_script_build-d96ed25e6a97cc7a")
     );
+    // The layout of a newer cargo: one directory per package, then the hash.
+    assert_eq!(
+        unit_stem(Path::new(
+            "/t/debug/build/ambre-server/1f26460c104cee33/out/build_script_build"
+        ))
+        .as_deref(),
+        Some("build_script_build-1f26460c104cee33")
+    );
     assert_eq!(
         unit_stem(Path::new("/t/debug/deps/libambre_core-0123abcd.rlib")).as_deref(),
         Some("ambre_core-0123abcd")

@@ -4515,7 +4515,6 @@ ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | Slider(value) | par
 ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | Slider(on_input) | param | Callback<String>	generic	the value text of a range input, which volume_from_slider or gain_from_slider parses
 ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | SliderOf::class() | ret | &'static str	newtype-inner	the CSS class of each slider kind, a fieldless enum's own spelling the stylesheet reads
 ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | SliderOf::max() | ret | String	generic	the value text of the highest percent of a range input, which slider_of_volume or slider_of_gain spells
-ambre-app | src/switchboard.rs | crate::switchboard | Shown.account_form | field | bool	generic	named flag
 ambre-convert | src/engine/html.rs | crate::engine::html | read_bounded(html) | param | &str	free-text	the HTML an imported file holds
 ambre-convert | src/engine/prose/html_doc.rs | crate::engine::prose::html_doc | color(text) | param | &str	generic	a colour mark value of a pasted run, the input of its parse into an Rgba
 ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | Reader::note(tag) | param | &str	foreign-api	an element's local name as the tree builder spells it, matched against the allowlist and the losses

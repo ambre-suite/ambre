@@ -1226,7 +1226,11 @@ pub fn main() {
                 current: current_doc.get_untracked(),
                 status: chrome_status.get_untracked(),
                 keys: gate.face.get_untracked(),
-                account_form: keys.has_form(),
+                account_form: if keys.has_form() {
+                    switchboard::AccountForm::Shown
+                } else {
+                    switchboard::AccountForm::Hidden
+                },
             };
             for effect in decisions.service(&ev, shown, &murmure_relay) {
                 match effect {

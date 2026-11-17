@@ -560,7 +560,20 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
         let krate = tcx.crate_name(rustc_span::def_id::LOCAL_CRATE);
         // Named as cargo names the unit's output, so the gate finds the
         // record of each unit cargo reports.
-        let unit = format!("{krate}{}", tcx.sess.opts.cg.extra_filename);
+        let mut unit = format!("{krate}{}", tcx.sess.opts.cg.extra_filename);
+        // A cargo that writes a build script under `build/<package>/<hash>/out/`
+        // passes no extra filename, so every build script of the workspace
+        // would write one record. The hash of its directory tells them apart,
+        // as the gate reads it from the path cargo reports.
+        if tcx.sess.opts.cg.extra_filename.is_empty() && krate.as_str() == "build_script_build" {
+            let out = tcx.sess.io.output_dir.as_deref();
+            if let Some(hash) = out
+                .and_then(std::path::Path::parent)
+                .and_then(std::path::Path::file_name)
+            {
+                unit = format!("{krate}-{}", hash.to_string_lossy());
+            }
+        }
         let mut text = format!(
             "unit\t{}\t{}\t{}\n",
             self.unit.krate,
