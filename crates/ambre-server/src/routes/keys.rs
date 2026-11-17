@@ -138,24 +138,36 @@ impl RotatedResponse {
     }
 }
 
-/// Request to rotate the master key after a passphrase change.
-/// Only `master_key_enc` and `master_key_salt` change; the seed is unchanged.
-#[derive(serde::Deserialize)]
-pub struct RotateMasterKeysRequest {
-    pub master_key_enc: ambre_core::Encoded<ambre_core::WrappedMasterKey>,
-    pub master_key_salt: FixedBytes<MasterKeySalt>,
-}
-
+/// `PUT /keys/master/rotate`: store the Master Seed sealed under a new
+/// passphrase, after a passphrase change or a recovery. The seed and both
+/// public keys stay.
+///
+/// The session alone does not authorize the write. The body carries a proof
+/// that the account's signing key signed the new sealed seed and the salt of
+/// the one it replaces. A proof that does not verify answers
+/// `INVALID_SIGNATURE`, and nothing is written (`SRV-278`). A proof over a
+/// sealed seed the relay no longer holds answers `CONFLICT`, and nothing is
+/// written (`SRV-279`).
 pub async fn rotate_master_keys(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    body: Json<RotateMasterKeysRequest>,
+    body: Json<ambre_protocol::master_rotation::MasterRotation>,
 ) -> Result<impl IntoResponse, AppError> {
-    let req = body.into_inner();
-    let s = auth;
-    let mk_enc = req.master_key_enc;
-    let mk_salt = req.master_key_salt;
-    db::update_master_key(&state.db, &s.user_id, &mk_enc, &mk_salt).await?;
-    tracing::debug!(user_id = %s.user_id, "master key rotated");
+    use ed25519_dalek::{Signature, VerifyingKey};
+    let rotation = body.into_inner();
+    // The session's signing key is the one the account registered: the token
+    // is minted from the register, and the register never moves it (`SRV-030`).
+    let signature = Signature::from_bytes(rotation.signature.as_array());
+    VerifyingKey::from_bytes(auth.signing_pubkey.as_array())
+        .and_then(|key| key.verify_strict(rotation.transcript().as_bytes(), &signature))
+        .map_err(|_| AppError::InvalidSignature)?;
+    db::replace_master_key(
+        &state.db,
+        &auth.user_id,
+        &rotation.replaces,
+        &rotation.sealed,
+    )
+    .await?;
+    tracing::debug!(user_id = %auth.user_id, "master key rotated");
     Ok(RotatedResponse::rotated())
 }

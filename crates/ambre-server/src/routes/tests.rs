@@ -27,6 +27,10 @@ mod handler_tests {
                 "/keys/master",
                 axum::routing::put(routes::store_master_keys).get(routes::get_master_keys),
             )
+            .route(
+                "/keys/master/rotate",
+                axum::routing::put(routes::rotate_master_keys),
+            )
             .route("/users/search", axum::routing::get(routes::search_users))
             .route(
                 "/users/{id}/pubkeys",
@@ -1851,6 +1855,116 @@ mod handler_tests {
         // First upload succeeds; the re-store is rejected, not silently applied.
         assert_eq!(put_master_keys(&app, &auth).await, StatusCode::OK);
         assert_eq!(put_master_keys(&app, &auth).await, StatusCode::CONFLICT);
+    }
+
+    /// A re-seal to the sealed seed `enc` salted `salt`, over the seal salted
+    /// `replaces`, signed by `key`, as Sync sends it.
+    fn rotation_body(
+        key: &ed25519_dalek::SigningKey,
+        replaces: u8,
+        enc: u8,
+        salt: u8,
+    ) -> serde_json::Value {
+        use ambre_protocol::master_rotation::{MasterRotation, SealedSeed, rotation_transcript};
+        use ed25519_dalek::Signer;
+        let sealed = SealedSeed {
+            master_key_enc: ambre_core::Encoded::new(vec![enc; 72]),
+            master_key_salt: ambre_core::FixedBytes::from_array([salt; 32]),
+        };
+        let replaces = ambre_core::FixedBytes::from_array([replaces; 32]);
+        let signature = key
+            .sign(rotation_transcript(&replaces, &sealed).as_bytes())
+            .to_bytes();
+        serde_json::to_value(MasterRotation {
+            sealed,
+            replaces,
+            signature: ambre_core::FixedBytes::from_array(signature),
+        })
+        .unwrap()
+    }
+
+    /// The sealed seed and the salt the relay stores for `id`.
+    async fn stored_seal(state: &AppState, id: Id<User>) -> (Vec<u8>, Vec<u8>) {
+        sqlx::query_as("SELECT master_key_enc, master_key_salt FROM users WHERE id = $1")
+            .bind(uuid::Uuid::from_bytes(*id.uuid().as_bytes()))
+            .fetch_one(&state.db)
+            .await
+            .unwrap()
+    }
+
+    /// `SRV-278`: a re-seal that the account's signing key does not sign is
+    /// refused, and the sealed seed stays. So is one signed over another seal
+    /// than the body carries, and one with no proof. The signed one lands.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_re_seal_the_account_key_does_not_sign_is_refused_and_writes_nothing(
+        pool: sqlx::PgPool,
+    ) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let (auth, key, id) = setup_signed(&app, &state, "owner@ambre.app", 11).await;
+        let before = stored_seal(&state, id).await;
+        let rotate = "/api/keys/master/rotate";
+
+        let thief = ed25519_dalek::SigningKey::from_bytes(&[12; 32]);
+        let mut tampered = rotation_body(&key, 2, 5, 6);
+        tampered["sealed"] = rotation_body(&key, 2, 7, 6)["sealed"].clone();
+        let mut unproved = rotation_body(&key, 2, 5, 6);
+        unproved.as_object_mut().unwrap().remove("signature");
+        for (case, body) in [
+            ("another key", rotation_body(&thief, 2, 5, 6)),
+            ("another seal", tampered),
+        ] {
+            let (status, code) =
+                status_and_code(&app, json_request("PUT", rotate, &auth, &body)).await;
+            assert_eq!(
+                (status, code.as_str()),
+                (StatusCode::UNPROCESSABLE_ENTITY, "INVALID_SIGNATURE"),
+                "{case}"
+            );
+            assert_eq!(stored_seal(&state, id).await, before, "{case}");
+        }
+        let (status, _) =
+            status_and_code(&app, json_request("PUT", rotate, &auth, &unproved)).await;
+        assert!(status.is_client_error(), "no proof: {status}");
+        assert_eq!(stored_seal(&state, id).await, before, "no proof");
+
+        let body = rotation_body(&key, 2, 5, 6);
+        let (status, _) = status_and_code(&app, json_request("PUT", rotate, &auth, &body)).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(stored_seal(&state, id).await, (vec![5; 72], vec![6; 32]));
+    }
+
+    /// `SRV-279`: two re-seals over one seal race, and one lands. The loser
+    /// and a replay of the winner name a seal the relay no longer holds. Each
+    /// is refused, and the winner's sealed seed stays.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_re_seal_over_a_replaced_seal_is_refused_and_writes_nothing(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let (auth, key, id) = setup_signed(&app, &state, "owner@ambre.app", 11).await;
+        let rotate = "/api/keys/master/rotate";
+
+        let first = rotation_body(&key, 2, 5, 6);
+        let second = rotation_body(&key, 2, 7, 8);
+        let (a, b) = tokio::join!(
+            status_and_code(&app, json_request("PUT", rotate, &auth, &first)),
+            status_and_code(&app, json_request("PUT", rotate, &auth, &second)),
+        );
+        let moved = (StatusCode::CONFLICT, "CONFLICT".to_owned());
+        let (winner, landed, lost) = match (a, b) {
+            ((StatusCode::OK, _), lost) => (first, (vec![5; 72], vec![6; 32]), lost),
+            (lost, (StatusCode::OK, _)) => (second, (vec![7; 72], vec![8; 32]), lost),
+            other => panic!("no re-seal landed: {other:?}"),
+        };
+        assert_eq!(lost, moved, "the loser is refused");
+        let stored = stored_seal(&state, id).await;
+        assert_eq!(stored, landed, "the winner's sealed seed is stored");
+
+        let replay = status_and_code(&app, json_request("PUT", rotate, &auth, &winner)).await;
+        assert_eq!(replay, moved, "the replay is refused");
+        assert_eq!(stored_seal(&state, id).await, stored);
     }
 
     /// `SRV-232`: a public key of the wrong length is refused before any row

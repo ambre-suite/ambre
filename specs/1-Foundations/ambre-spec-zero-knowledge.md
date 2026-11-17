@@ -355,9 +355,11 @@ steps, and a refusal at one step writes nothing:
 2. It reads the master material of the account. It compares the signing key the seed derives with
    the key the relay holds, and refuses words of another seed (`ambre-spec-sync.md`, `SYNC-249`).
    The re-seal moves no public key, so a foreign seed would leave the account unopenable.
-3. It seals the seed under a fresh salt, as the setup does. It sends the sealed seed and the salt
-   alone to the re-seal route, and the seed never leaves the worker (`ambre-spec-sync.md`,
-   `SYNC-250`).
+3. It seals the seed under a fresh salt, as the setup does. It sends the sealed seed, the salt and
+   a proof to the re-seal route, and the seed never leaves the worker (`ambre-spec-sync.md`,
+   `SYNC-250`). The signing key of the seed signs the proof over the new seal and the salt of the
+   seal it read (`SYNC-254`). The relay writes only under that key, over that seal
+   (`ambre-spec-session.md`, `SRV-278`, `SRV-279`).
 
 **The re-seal of a passphrase change.** A passphrase change writes the same seed back to the
 relay, sealed under the new passphrase (`ambre-spec-sync.md`, `SYNC-251`). It takes the route and
@@ -367,8 +369,8 @@ the seal of a recovery, in three steps, and a refusal at one step writes nothing
 2. It reads the master material of the account and opens the seed under the current passphrase,
    as the unlock does. A current passphrase that does not open it is refused
    (`ambre-spec-sync.md`, `SYNC-252`).
-3. It seals the seed under a fresh salt and sends the sealed seed and the salt alone
-   (`ambre-spec-sync.md`, `SYNC-253`).
+3. It seals the seed under a fresh salt and sends the sealed seed, the salt and the proof of a
+   recovery (`ambre-spec-sync.md`, `SYNC-253`, `SYNC-254`).
 
 **The strength floor.** The relay stores the salt and the Master Seed sealed under the passphrase,
 so the relay, or a thief of its database, can guess offline. Argon2id prices each guess, and the

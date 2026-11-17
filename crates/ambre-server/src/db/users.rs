@@ -345,20 +345,34 @@ pub async fn search_users(
         .collect()
 }
 
-/// Updates the encrypted master key and its salt for passphrase rotation.
-pub async fn update_master_key(
+/// Replaces the sealed Master Seed of `user_id` with `sealed`, only while the
+/// stored salt is still `replaces` (`SRV-279`).
+///
+/// The guard and the write are one statement, so two re-seals that read the
+/// same seal cannot both land: the second finds another salt. A replayed proof
+/// names a salt the account no longer holds, and fails the same way. An
+/// account with no sealed seed holds no salt, so it matches nothing.
+pub async fn replace_master_key(
     pool: &PgPool,
     user_id: &Id<User>,
-    master_key_enc: &ambre_core::Encoded<ambre_core::WrappedMasterKey>,
-    master_key_salt: &FixedBytes<ambre_core::MasterKeySalt>,
+    replaces: &FixedBytes<ambre_core::MasterKeySalt>,
+    sealed: &ambre_protocol::master_rotation::SealedSeed,
 ) -> Result<(), AppError> {
     let uid = id_to_uuid(*user_id);
-    sqlx::query("UPDATE users SET master_key_enc = $2, master_key_salt = $3 WHERE id = $1")
-        .bind(uid)
-        .bind(master_key_enc.as_bytes())
-        .bind(master_key_salt.as_slice())
-        .execute(pool)
-        .await?;
+    let result = sqlx::query(
+        "UPDATE users SET master_key_enc = $2, master_key_salt = $3 WHERE id = $1 AND master_key_salt = $4",
+    )
+    .bind(uid)
+    .bind(sealed.master_key_enc.as_bytes())
+    .bind(sealed.master_key_salt.as_slice())
+    .bind(replaces.as_slice())
+    .execute(pool)
+    .await?;
+    if result.rows_affected() == 0 {
+        return Err(AppError::Conflict {
+            detail: "the sealed master key changed since the re-seal read it".into(),
+        });
+    }
     Ok(())
 }
 

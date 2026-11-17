@@ -47,6 +47,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-091` | `FRAME` | A sign-in MUST NOT carry a passphrase, nor anything the relay could derive a key from. | `ZK-003`; this spec section 3 | cargo-deny -- `argon2` is granted to `ambre-crypto` alone, and `ambre-server` declares neither, so the relay has no way to turn a secret into a key: what it stores is the sealed master material and the sealed salt, and it opens neither | none | verified |
 | `SRV-023` | `FAIL` | The development sign-in MUST be refused unless the deployment enables it. | this spec section 3 | `ambre_server::routes::tests::handler_tests::dev_login_rejected_when_dev_mode_off` -- the refusal; `::dev_login_creates_user_and_returns_token` -- the enabled case still works, so neither end can rot into the other | none | verified |
 | `SRV-030` | `FAIL` | The sealed master material MUST be written once; a later write MUST be refused. | this spec section 3 | `ambre_server::routes::tests::handler_tests::store_master_keys_is_first_time_only` -- the first upload succeeds and the second answers a conflict rather than overwriting, and the re-seal route is the passphrase path and touches neither public key | none | verified |
+| `SRV-278` | `FAIL` | Given a re-seal of the master material that the account's signing key does not sign, the relay MUST refuse it and write nothing. | this spec section 3; `SRV-030` | `ambre_server::routes::tests::handler_tests::a_re_seal_the_account_key_does_not_sign_is_refused_and_writes_nothing` -- a proof signed by another key, and one signed over another sealed seed than the body carries, answer `INVALID_SIGNATURE`, a body with no proof is refused, and the stored seal stays each time, while the proof of the account's key lands, database tier; `ambre_protocol::master_rotation::tests::the_transcript_names_the_replaced_salt_and_the_new_sealed_seed` -- the signature covers the domain, the replaced salt and the new sealed seed | none | verified |
+| `SRV-279` | `FAIL` | Given a re-seal whose proof names a sealed seed the relay no longer holds, the relay MUST refuse it and write nothing. | this spec section 3; `SRV-278` | `ambre_server::routes::tests::handler_tests::a_re_seal_over_a_replaced_seal_is_refused_and_writes_nothing` -- two re-seals over one seal race and one lands, then the other and a replay of the winner answer `CONFLICT`, and the winner's seal stays, database tier | none | verified |
 | `SRV-232` | `FAIL` | Given an account setup, a development sign-in or a key registration with a public key that is not 32 bytes, the relay MUST refuse it and write no row. | this spec section 3; `SRV-231` | `ambre_server::routes::tests::handler_tests::a_public_key_of_the_wrong_length_is_refused_and_written_nowhere` -- a short signing key and a short exchange key each refuse the setup, the sign-in and the registration, and no account or key material is written, database tier | none | verified |
 | `SRV-172` | `POST` | A sign-in with an identity provider MUST be sent to that provider's authorization endpoint, under the configured client. | this spec section 3 | `ambre_server::routes::tests::handler_tests::a_provider_route_reaches_its_provider` -- the shipped router hands the provider in the path to the handler, which names an unconfigured one in its refusal; `ambre_server::oidc::tests::a_sign_in_is_sent_to_the_configured_provider` -- a provider stub is discovered, and the sign-in goes to its authorization endpoint under the configured client | none | verified |
 | `SRV-022` | `POST` | A provider's return MUST exchange its code for an identity token the relay verifies, and sign the user in. | this spec section 3 | `ambre_server::oidc::tests::a_provider_code_is_exchanged_for_a_verified_identity` -- a stub provider signs an identity token with a key it publishes, and the code is exchanged under the kept verifier for its claims; `::an_identity_the_relay_cannot_verify_is_refused` -- a foreign key and a wrong one-time value fail the verification, and a wrong verifier fails the exchange; `ambre_server::routes::tests::handler_tests::a_provider_return_signs_the_person_in` -- through the shipped router, the return opens a session that `/auth/me` answers as that person, and it is not taken twice | none | verified |
@@ -67,7 +69,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   and sees none of the three secrets behind them (`ZK-003`, `SRV-091`). What it mints is its own
   token, and `SRV-012` refuses it every other cryptographic act. The socket takes its token in its
   first frame, so no address carries one (`SRV-031`).
-* **Verification.** 23 `verified`. What holds is what a request test can drive: the token gate, the
+* **Verification.** 25 `verified`. What holds is what a request test can drive: the token gate, the
   address namespace, the one-shot key write and the refresh race. A provider exchange runs against a
   stub that signs its own identity tokens. A real provider never runs under a test.
 ---
@@ -146,6 +148,23 @@ The master material is written once and refused afterwards. Overwriting the publ
 leave every document key already sealed to the previous exchange key unopenable (`SRV-030`).
 A passphrase change re-seals the material alone and moves neither public key.
 
+**A re-seal proves the seal it replaces.** A passphrase change and a recovery each replace the
+sealed master material. A session alone does not authorize the write: a stolen session would
+replace the seal and lock the owner out of the seed. The client signs a proof with the account's
+signing key, which only the seed derives. The proof covers three values after its own domain:
+
+| Part | Why |
+|---|---|
+| the salt of the seal the client read | each seal draws a fresh salt, so the salt names one seal |
+| the new salt | the relay stores the pair, and a swap of either part fails the proof |
+| the new sealed seed | a fixed length, so no two inputs share a transcript |
+
+The relay verifies the proof under the signing key the account registered, and refuses a proof
+another key signed (`SRV-278`). It then writes only while it still holds the named seal, in one
+statement. A replay, or a second re-seal that read the same seal, names a seal already replaced
+and is refused (`SRV-279`). The domain separates this signature from every other signature of the
+account. The relay verifies an Ed25519 signature here, the one act `SRV-012` allows it.
+
 **The socket's token.** A browser socket carries no header of ours. The upgrade therefore takes its
 token in the address, and the relay verifies it exactly as it verifies a header. A refusal closes
 with a
@@ -191,6 +210,8 @@ where each of those is drawn.
 | The token carries the caller's signing key | reading the key from the register on every delta | the write path verifies a signature per delta, so a lookup there is a query per keystroke burst. The claim is minted from the register at sign-in, so it is as fresh as the session (`ambre-spec-broadcast.md`) |
 | A provider-verified address wins over a self-asserted one | first claimant wins, which is what the namespace rule alone produced | the address is what a share resolves against, so letting anyone assert any address turns a signup form into a way to squat a person's identity and receive documents meant for them. The verified claimant reclaims it, and the unverified account keeps everything except the address (`SRV-029`) |
 | The master material is written once | letting the write repeat | it reads like an idempotent upload and is not: a second write replaces both public keys, and every document key already sealed to the previous exchange key stops opening. The failure is silent and total -- the account loses every shared document it had |
+| A re-seal carries a proof signed by the account's key | the session alone, which is what the route took until audit `P3` | a session is a bearer token. Whoever steals one replaces the sealed seed under a passphrase they chose, and the owner's own passphrase no longer opens it. The signing key never leaves the client, so a stolen session cannot sign (`SRV-278`) |
+| The proof names the seal it replaces, and the relay writes over that seal alone | the relay builds the proof's transcript from the seal it holds | a proof over a seal already replaced then fails as a bad signature. The client cannot tell a concurrent re-seal from a fault, and retries nothing it understands. A named seal answers `CONFLICT` instead, apart from the `INVALID_SIGNATURE` of a forged proof (`SRV-279`) |
 | The development sign-in derives its keys from the name | a fixture account with a stored passphrase | it is a secret to store and keep in step for an account whose only requirement is to be the same on every run. Deriving from the name gives that with nothing stored, and the switch that enables it is off by default |
 
 ---

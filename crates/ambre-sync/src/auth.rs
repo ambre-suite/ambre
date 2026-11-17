@@ -1,6 +1,7 @@
 use super::*;
 use ambre_bus::AuthFailure;
 use ambre_core::Flag as _;
+use ambre_protocol::master_rotation::{MasterRotation, SealedSeed};
 
 impl SyncState {
     // -- Session handlers ------------------------------------------------------
@@ -309,7 +310,7 @@ impl SyncState {
                 let signing_pub_key =
                     ambre_core::FixedBytes::from_array(signing_key.verifying_key().to_bytes());
                 let exchange_pub_key = crate::sharing::own_exchange_key(&exchange_key);
-                let http::SealedSeed {
+                let SealedSeed {
                     master_key_enc,
                     master_key_salt,
                 } = match seal_seed(&master_seed, &passphrase) {
@@ -775,7 +776,7 @@ fn open_stored_seed(
 fn seal_seed(
     master_seed: &MasterSeed,
     passphrase: &ambre_crypto::strength::ChosenPassphrase,
-) -> Result<http::SealedSeed, AuthFailure> {
+) -> Result<SealedSeed, AuthFailure> {
     let mut salt = [0u8; 32];
     getrandom::fill(&mut salt).map_err(|e| {
         tracing::warn!("Sync: no CSPRNG for the account salt: {e}");
@@ -793,7 +794,7 @@ fn seal_seed(
             tracing::warn!("Sync: master-seed wrap failed: {e}");
             AuthFailure::SeedNotWrapped
         })?;
-    Ok(http::SealedSeed {
+    Ok(SealedSeed {
         master_key_enc,
         master_key_salt,
     })
@@ -804,8 +805,9 @@ fn seal_seed(
 /// The worker first reads the master material of the account. It refuses
 /// words whose seed derives another signing key than the relay holds, before
 /// any write. The re-seal moves no public key, so a foreign seed would leave
-/// the account unopenable (`SYNC-249`). The one write carries the sealed seed
-/// and its salt alone (`SYNC-248`, `SYNC-250`).
+/// the account unopenable (`SYNC-249`). The one write carries the sealed seed,
+/// its salt and the proof of the seed's signing key (`SYNC-248`, `SYNC-250`,
+/// `SYNC-254`).
 async fn reseal_recovered_seed(
     transport: &impl http::Transport,
     auth: &http::AuthContext,
@@ -823,16 +825,20 @@ async fn reseal_recovered_seed(
     if stored.signing_pubkey.as_ref() != Some(&own) {
         return Err(ResealFailure::Auth(AuthFailure::ForeignRecoveryWords));
     }
+    // The proof names the seal it replaces. An account with no sealed seed
+    // has none to replace, and the relay would refuse the write.
+    let Some(replaces) = stored.master_key_salt else {
+        tracing::warn!("Sync: recovery of an account with no sealed seed");
+        return Err(ResealFailure::Auth(AuthFailure::CorruptAccount));
+    };
     let sealed = seal_seed(master_seed, new_passphrase).map_err(ResealFailure::Auth)?;
-    http::send_json_auth_via(
+    send_rotation(
         transport,
-        http::Method::Put,
-        &api.route("/keys/master/rotate"),
-        &sealed,
         auth,
+        api,
+        prove_rotation(master_seed, replaces, sealed),
     )
     .await
-    .map_err(ResealFailure::Http)
 }
 
 /// Store the seed sealed under a new passphrase, in place of the seal under
@@ -841,7 +847,8 @@ async fn reseal_recovered_seed(
 /// The worker reads the master material of the account and opens the seed
 /// under `current`, as the unlock does. A passphrase that does not open it is
 /// refused before any write (`SYNC-252`). The one write carries the seed
-/// sealed under `new` and a fresh salt alone (`SYNC-251`, `SYNC-253`).
+/// sealed under `new`, a fresh salt and the proof of the seed's signing key
+/// (`SYNC-251`, `SYNC-253`, `SYNC-254`).
 async fn reseal_changed_passphrase(
     transport: &impl http::Transport,
     auth: &http::AuthContext,
@@ -854,12 +861,50 @@ async fn reseal_changed_passphrase(
             .await
             .map_err(ResealFailure::Http)?;
     let master_seed = open_stored_seed(&stored, current).map_err(ResealFailure::Auth)?;
+    // The open above read the salt, so the stored material holds one.
+    let Some(replaces) = stored.master_key_salt else {
+        return Err(ResealFailure::Auth(AuthFailure::CorruptAccount));
+    };
     let sealed = seal_seed(&master_seed, new).map_err(ResealFailure::Auth)?;
+    send_rotation(
+        transport,
+        auth,
+        api,
+        prove_rotation(&master_seed, replaces, sealed),
+    )
+    .await
+}
+
+/// The re-seal of `sealed` in place of the seal salted `replaces`, signed by
+/// the signing key of `master_seed` (`SYNC-254`). The relay writes it only
+/// under that key, and only over that seal (`SRV-278`, `SRV-279`).
+fn prove_rotation(
+    master_seed: &MasterSeed,
+    replaces: ambre_core::FixedBytes<ambre_core::MasterKeySalt>,
+    sealed: SealedSeed,
+) -> MasterRotation {
+    let transcript = ambre_protocol::master_rotation::rotation_transcript(&replaces, &sealed);
+    let signing_key = master_seed.derive_signing_key();
+    let signature = ed25519_dalek::Signer::sign(&signing_key, transcript.as_bytes()).to_bytes();
+    MasterRotation {
+        sealed,
+        replaces,
+        signature: ambre_core::FixedBytes::from_array(signature),
+    }
+}
+
+/// Send the one write of a re-seal.
+async fn send_rotation(
+    transport: &impl http::Transport,
+    auth: &http::AuthContext,
+    api: &crate::http::Url<crate::http::ApiRoot>,
+    rotation: MasterRotation,
+) -> Result<(), ResealFailure> {
     http::send_json_auth_via(
         transport,
         http::Method::Put,
         &api.route("/keys/master/rotate"),
-        &sealed,
+        &rotation,
         auth,
     )
     .await
@@ -901,15 +946,57 @@ mod tests {
     fn stored(signer: Option<ambre_core::FixedBytes<ambre_core::PublicKey>>) -> serde_json::Value {
         serde_json::json!({
             "master_key_enc": ambre_core::Encoded::<ambre_core::WrappedMasterKey>::new(vec![1; 72]),
-            "master_key_salt": ambre_core::FixedBytes::<ambre_core::MasterKeySalt>::from_array([2; 32]),
+            "master_key_salt": stored_salt(),
             "signing_pubkey": signer,
             "exchange_pubkey": null,
         })
     }
 
-    /// `SYNC-248`: a recovery reads the account, then writes the seed sealed
-    /// under the new passphrase. The write holds the sealed seed and its salt
-    /// alone, and the unlock path opens it under the new passphrase.
+    /// The salt of the master material `stored` answers.
+    fn stored_salt() -> ambre_core::FixedBytes<ambre_core::MasterKeySalt> {
+        ambre_core::FixedBytes::from_array([2; 32])
+    }
+
+    /// The names of the fields of the JSON object `value`, sorted.
+    fn fields_of(value: &serde_json::Value) -> Vec<&str> {
+        let mut fields: Vec<&str> = value
+            .as_object()
+            .expect("an object")
+            .keys()
+            .map(String::as_str)
+            .collect();
+        fields.sort_unstable();
+        fields
+    }
+
+    /// `SYNC-254`: the re-seal `body` names the seal salted `replaces`, and
+    /// the signing key of `seed` signs it, as the relay verifies it.
+    fn assert_proves(body: &serde_json::Value, seed: &MasterSeed, replaces: &serde_json::Value) {
+        assert_eq!(&body["replaces"], replaces);
+        let rotation: MasterRotation = serde_json::from_value(body.clone()).expect("a rotation");
+        let key = ed25519_dalek::VerifyingKey::from_bytes(signing_pubkey(seed).as_array())
+            .expect("a key");
+        let signature = ed25519_dalek::Signature::from_bytes(rotation.signature.as_array());
+        assert!(
+            key.verify_strict(rotation.transcript().as_bytes(), &signature)
+                .is_ok()
+        );
+        // Another key does not sign it.
+        let other = ed25519_dalek::VerifyingKey::from_bytes(
+            signing_pubkey(&MasterSeed::generate()).as_array(),
+        )
+        .expect("a key");
+        assert!(
+            other
+                .verify_strict(rotation.transcript().as_bytes(), &signature)
+                .is_err()
+        );
+    }
+
+    /// `SYNC-248`, `SYNC-254`: a recovery reads the account, then writes the
+    /// seed sealed under the new passphrase. The write holds the sealed seed,
+    /// its salt and the proof the seed's signing key signed over the seal it
+    /// replaces. The unlock path opens it under the new passphrase.
     #[tokio::test]
     async fn a_recovery_re_seals_the_seed_that_a_later_unlock_opens() {
         let seed = recovered_seed();
@@ -941,16 +1028,17 @@ mod tests {
         let body: serde_json::Value =
             serde_json::from_slice(sent[1].body.as_ref().expect("a body").1.as_bytes())
                 .expect("json");
-        let fields: Vec<&str> = body
-            .as_object()
-            .expect("an object")
-            .keys()
-            .map(String::as_str)
-            .collect();
-        assert_eq!(fields, ["master_key_enc", "master_key_salt"]);
+        assert_eq!(fields_of(&body), ["replaces", "sealed", "signature"]);
+        assert_eq!(
+            fields_of(&body["sealed"]),
+            ["master_key_enc", "master_key_salt"]
+        );
+        assert_proves(&body, &seed, &serde_json::json!(stored_salt()));
 
         // The unlock reads the stored material through `open_stored_seed`.
-        let resealed: http::MasterKeyResponse = serde_json::from_value(body).expect("material");
+        let resealed: http::MasterKeyResponse =
+            serde_json::from_value(body["sealed"].clone()).expect("material");
+
         let opened = open_stored_seed(&resealed, &new_passphrase()).expect("the unlock opens");
         assert_eq!(signing_pubkey(&opened), signing_pubkey(&seed));
         let wrong = ambre_core::Confidential::<ambre_core::Passphrase>::new("not it".to_owned());
@@ -1007,9 +1095,9 @@ mod tests {
         material
     }
 
-    /// `SYNC-251`, `SYNC-253`: a change opens the seed under the current
-    /// passphrase. It then writes the seed sealed under the new one and a
-    /// fresh salt. The unlock path opens the write under the new passphrase
+    /// `SYNC-251`, `SYNC-253`, `SYNC-254`: a change opens the seed under the
+    /// current passphrase. It then writes the seed sealed under the new one
+    /// and a fresh salt, with the proof over the seal it replaces. The unlock path opens the write under the new passphrase
     /// alone.
     #[tokio::test]
     async fn a_passphrase_change_re_seals_the_seed_that_a_later_unlock_opens() {
@@ -1045,17 +1133,17 @@ mod tests {
         let body: serde_json::Value =
             serde_json::from_slice(sent[1].body.as_ref().expect("a body").1.as_bytes())
                 .expect("json");
-        let fields: Vec<&str> = body
-            .as_object()
-            .expect("an object")
-            .keys()
-            .map(String::as_str)
-            .collect();
-        assert_eq!(fields, ["master_key_enc", "master_key_salt"]);
-        assert_ne!(body["master_key_salt"], before["master_key_salt"]);
+        assert_eq!(fields_of(&body), ["replaces", "sealed", "signature"]);
+        assert_eq!(
+            fields_of(&body["sealed"]),
+            ["master_key_enc", "master_key_salt"]
+        );
+        assert_ne!(body["sealed"]["master_key_salt"], before["master_key_salt"]);
+        assert_proves(&body, &seed, &before["master_key_salt"]);
 
         // The unlock reads the stored material through `open_stored_seed`.
-        let resealed: http::MasterKeyResponse = serde_json::from_value(body).expect("material");
+        let resealed: http::MasterKeyResponse =
+            serde_json::from_value(body["sealed"].clone()).expect("material");
         let opened = open_stored_seed(&resealed, &new_passphrase()).expect("the unlock opens");
         assert_eq!(signing_pubkey(&opened), signing_pubkey(&seed));
         assert!(matches!(

@@ -1981,6 +1981,7 @@ ambre-prose | src/xref.rs | crate::xref | decode(value) | param | &str	foreign-a
 ambre-prose | src/xref.rs | crate::xref | resolve() | ret | Option<String>	free-text	the text a cross-reference shows: a page, a section number or a label
 ambre-protocol | src/key_link.rs | crate::key_link | MAX_SEALED_KEY_LEN | const | usize	generic	domain-separation tag or length constant
 ambre-protocol | src/membership.rs | crate::membership | DIRECT_MESSAGE_MAX_MEMBERS | const | usize	generic	member count cap of a direct message, its creator included
+ambre-protocol | src/master_rotation.rs | crate::master_rotation | ROTATION_DOMAIN | const | &[u8]	generic	domain-separation tag or length constant
 ambre-protocol | src/membership.rs | crate::membership | ENTRY_DOMAIN | const | &[u8]	generic	domain-separation tag or length constant
 ambre-protocol | src/membership.rs | crate::membership | ENTRY_SIGNATURE_LEN | const | usize	generic	domain-separation tag or length constant
 ambre-protocol | src/membership.rs | crate::membership | MembershipEntry::well_formed() | ret | bool	generic	predicate

@@ -1343,14 +1343,6 @@ pub(crate) struct MasterKeyResponse {
     pub signing_pubkey: Option<ambre_core::FixedBytes<ambre_core::PublicKey>>,
 }
 
-/// The Master Seed sealed under a passphrase, and the salt that derives the
-/// sealing key: all a re-seal sends to the relay (`SYNC-248`).
-#[derive(Serialize)]
-pub(crate) struct SealedSeed {
-    pub master_key_enc: ambre_core::Encoded<ambre_core::WrappedMasterKey>,
-    pub master_key_salt: ambre_core::FixedBytes<ambre_core::MasterKeySalt>,
-}
-
 impl MasterKeyResponse {
     /// Whether the account still owes its key setup: the relay holds no master
     /// material for it, and sends the fields `null`.
