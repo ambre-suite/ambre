@@ -359,6 +359,17 @@ steps, and a refusal at one step writes nothing:
    alone to the re-seal route, and the seed never leaves the worker (`ambre-spec-sync.md`,
    `SYNC-250`).
 
+**The re-seal of a passphrase change.** A passphrase change writes the same seed back to the
+relay, sealed under the new passphrase (`ambre-spec-sync.md`, `SYNC-251`). It takes the route and
+the seal of a recovery, in three steps, and a refusal at one step writes nothing:
+
+1. It holds the strength floor on the new passphrase (`ZK-042`).
+2. It reads the master material of the account and opens the seed under the current passphrase,
+   as the unlock does. A current passphrase that does not open it is refused
+   (`ambre-spec-sync.md`, `SYNC-252`).
+3. It seals the seed under a fresh salt and sends the sealed seed and the salt alone
+   (`ambre-spec-sync.md`, `SYNC-253`).
+
 **The strength floor.** The relay stores the salt and the Master Seed sealed under the passphrase,
 so the relay, or a thief of its database, can guess offline. Argon2id prices each guess, and the
 client refuses a new passphrase that too few guesses find (`ZK-035`, `ZK-036`). A setup, a
@@ -436,6 +447,8 @@ The boundary has no control of its own. What a user meets is what it costs them.
 | a recovery with a mistyped word, a wrong word count or a bad checksum | the recovery is refused before any key is derived, and the refusal names which of the three (`ZK-043`) |
 | a recovery with the words of another account | the recovery is refused, and the account keeps its sealed seed (`ambre-spec-sync.md`, `SYNC-249`) |
 | a recovery that succeeds | the new passphrase unlocks the account from then on (`ambre-spec-sync.md`, `SYNC-248`) |
+| a passphrase change with a wrong current passphrase | the change is refused, and the account keeps its sealed seed (`ambre-spec-sync.md`, `SYNC-252`) |
+| a passphrase change that succeeds | the new passphrase unlocks the account from then on, and the old one no longer does (`ambre-spec-sync.md`, `SYNC-251`) |
 | losing both the passphrase and the words | the documents are unrecoverable, unless an organization holds the escrow (`ambre-spec-organizations.md`) |
 
 ---

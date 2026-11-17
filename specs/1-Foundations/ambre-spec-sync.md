@@ -123,6 +123,14 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-249` | `FAIL` | Given recovery words whose seed does not derive the signing key the relay holds for the account, a recovery MUST refuse them and write nothing. | `ambre-spec-zero-knowledge.md section 2`, the re-seal of a recovery; `ambre-spec-session.md`, `SRV-030` | `ambre_sync::auth::tests::recovery_words_of_another_account_write_nothing` -- the words of another seed, and an account that holds no key, each draw `AuthFailure::ForeignRecoveryWords` after the one read, and no write leaves | none | verified |
 | `SYNC-250` | `FRAME` | A recovery MUST NOT send the relay the Master Seed, the recovery words or a passphrase. | `ambre-spec-zero-knowledge.md`, `ZK-003`; `ambre-spec-zero-knowledge.md section 2`, the re-seal of a recovery | type-level -- the re-seal body `SealedSeed` holds an `Encoded<WrappedMasterKey>` and a `FixedBytes<MasterKeySalt>` alone, so no other value is representable in the write; `ambre_sync::auth::tests::a_recovery_re_seals_the_seed_that_a_later_unlock_opens` -- the body of the write names the sealed seed and the salt, and no other field | none | verified |
 
+### 1.8 The passphrase changes
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SYNC-251` | `POST` | A passphrase change MUST store the Master Seed sealed under the new passphrase, so that a later unlock opens the account under the new passphrase and not under the current one. | `ambre-spec-zero-knowledge.md section 2`, the re-seal of a passphrase change; `ambre-spec-zero-knowledge.md`, `ZK-042`; `SYNC-248` | `ambre_sync::auth::tests::a_passphrase_change_re_seals_the_seed_that_a_later_unlock_opens` -- the one write goes to the re-seal route under a fresh salt, and the open of the unlock reads it under the new passphrase to the same signing key, and refuses the current one | none | verified |
+| `SYNC-252` | `FAIL` | Given a current passphrase that does not open the stored Master Seed, a passphrase change MUST refuse it and write nothing. | `ambre-spec-zero-knowledge.md section 2`, the re-seal of a passphrase change; `SYNC-251` | `ambre_sync::auth::tests::a_wrong_current_passphrase_writes_nothing` -- a wrong current passphrase draws `AuthFailure::BadPassphrase`, and an account that owes its setup draws `AuthFailure::CorruptAccount`, each after the one read, and no write leaves | none | verified |
+| `SYNC-253` | `FRAME` | A passphrase change MUST NOT send the relay the Master Seed or a passphrase. | `ambre-spec-zero-knowledge.md`, `ZK-003`; `SYNC-250` | type-level -- the change writes the same `SealedSeed` body as a recovery, which holds an `Encoded<WrappedMasterKey>` and a `FixedBytes<MasterKeySalt>` alone; `ambre_sync::auth::tests::a_passphrase_change_re_seals_the_seed_that_a_later_unlock_opens` -- the body of the write names the sealed seed and the salt, and no other field | none | verified |
+
 * **Budget.** the relay hop of `ambre-spec-budgets.md section 1`, one encode plus one transfer
   under 1 ms, the two per-session holders of `section 6`, and the send window of
   `ambre-spec-budgets.md section 8`. The socket carries no budget of its own: the network
@@ -130,7 +138,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this worker **is** the client side of the boundary `ambre-spec-zero-knowledge.md`
   draws. `SYNC-002` and `SYNC-095` keep the keys in. `SYNC-060` and `SYNC-061` keep the tokens in,
   and `SYNC-067` seals the one document field that is content rather than routing.
-* **Verification.** 69 `verified`, 1 `unimplemented`. The crate graph holds the keys and the CRDT
+* **Verification.** 72 `verified`, 1 `unimplemented`. The crate graph holds the keys and the CRDT
   apart. Unit tests hold the token redaction and wipe, the refused channel send and the name bound
   to its document. A gate refuses browser storage in the worker. Each gap left is a browser property
   the wasm tier cannot boot, `ambre-spec-testing.md section 9`.

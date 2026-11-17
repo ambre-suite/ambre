@@ -1971,7 +1971,7 @@ impl SyncState {
                 current_passphrase,
                 new_passphrase,
             } => {
-                self.handle_change_passphrase(current_passphrase, new_passphrase);
+                self.handle_change_passphrase(id, current_passphrase, new_passphrase);
             }
             RestCommand::RecoverAccount {
                 recovery_words,

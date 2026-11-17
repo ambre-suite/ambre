@@ -382,6 +382,7 @@ impl SyncState {
 
     pub(crate) fn handle_change_passphrase(
         &mut self,
+        id: Seq<Request>,
         current_passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
         new_passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
     ) {
@@ -391,9 +392,23 @@ impl SyncState {
         let Some(new_passphrase) = self.admit_new_passphrase(new_passphrase) else {
             return;
         };
-        // The re-seal under the new passphrase is not built yet. Both secrets
-        // wipe their bytes on drop (H4).
-        drop((current_passphrase, new_passphrase));
+        let Some((auth, api)) = self.reseal_target() else {
+            return;
+        };
+        self.spawn_reseal(id, RestEvent::PassphraseChanged, async move {
+            let outcome = reseal_changed_passphrase(
+                &http::Fetch,
+                &auth,
+                &api,
+                &current_passphrase,
+                &new_passphrase,
+            )
+            .await;
+            // Both passphrases wipe their bytes here (H4). The user unlocks
+            // under the new passphrase from now on.
+            drop((current_passphrase, new_passphrase));
+            outcome
+        });
     }
 
     pub(crate) fn handle_recover_account(
@@ -423,27 +438,49 @@ impl SyncState {
         };
         // The words are spent: only the seed they spell goes on (H4).
         drop(recovery_words);
-        if self.event_tx.is_none() {
-            // No relay holds the account, so nothing can take the re-seal.
-            self.send_to_logic(LogicEvent::AuthError {
-                cause: AuthFailure::Api(ApiFailure::Local(ambre_core::LocalFailure::NoRelay)),
-            });
+        let Some((auth, api)) = self.reseal_target() else {
             return;
-        }
-        let logic_tx = self.logic_tx.clone();
-        let api = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base);
-        let auth = self.auth_context();
-        wasm_bindgen_futures::spawn_local(async move {
+        };
+        self.spawn_reseal(id, RestEvent::AccountRecovered, async move {
             let outcome =
                 reseal_recovered_seed(&http::Fetch, &auth, &api, &master_seed, &new_passphrase)
                     .await;
             // The seed and the passphrase wipe their bytes here (H4). The
             // user unlocks under the new passphrase to open the session.
             drop((master_seed, new_passphrase));
-            let evt = match outcome {
+            outcome
+        });
+    }
+
+    /// The session and the API root a re-seal writes to. With no relay, the
+    /// worker answers the refusal itself and `None` ends the caller: nothing
+    /// can take the re-seal.
+    fn reseal_target(&self) -> Option<(http::AuthContext, crate::http::Url<crate::http::ApiRoot>)> {
+        if self.event_tx.is_none() {
+            self.send_to_logic(LogicEvent::AuthError {
+                cause: AuthFailure::Api(ApiFailure::Local(ambre_core::LocalFailure::NoRelay)),
+            });
+            return None;
+        }
+        let api = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base);
+        Some((self.auth_context(), api))
+    }
+
+    /// Run a re-seal, then answer request `id` with `done`, or with the
+    /// refusal the re-seal met. A recovery and a passphrase change answer
+    /// through this one path.
+    fn spawn_reseal(
+        &self,
+        id: Seq<Request>,
+        done: RestEvent,
+        reseal: impl std::future::Future<Output = Result<(), ResealFailure>> + 'static,
+    ) {
+        let logic_tx = self.logic_tx.clone();
+        wasm_bindgen_futures::spawn_local(async move {
+            let evt = match reseal.await {
                 Ok(()) => LogicEvent::Rest {
                     id: Some(id),
-                    evt: RestEvent::AccountRecovered,
+                    evt: done,
                 },
                 Err(ResealFailure::Auth(cause)) => LogicEvent::AuthError { cause },
                 Err(ResealFailure::Http(e)) => auth_failed(e),
@@ -798,6 +835,37 @@ async fn reseal_recovered_seed(
     .map_err(ResealFailure::Http)
 }
 
+/// Store the seed sealed under a new passphrase, in place of the seal under
+/// the current one.
+///
+/// The worker reads the master material of the account and opens the seed
+/// under `current`, as the unlock does. A passphrase that does not open it is
+/// refused before any write (`SYNC-252`). The one write carries the seed
+/// sealed under `new` and a fresh salt alone (`SYNC-251`, `SYNC-253`).
+async fn reseal_changed_passphrase(
+    transport: &impl http::Transport,
+    auth: &http::AuthContext,
+    api: &crate::http::Url<crate::http::ApiRoot>,
+    current: &ambre_core::Confidential<ambre_core::Passphrase>,
+    new: &ambre_crypto::strength::ChosenPassphrase,
+) -> Result<(), ResealFailure> {
+    let stored: http::MasterKeyResponse =
+        http::get_json_auth_via(transport, &api.route("/keys/master"), auth)
+            .await
+            .map_err(ResealFailure::Http)?;
+    let master_seed = open_stored_seed(&stored, current).map_err(ResealFailure::Auth)?;
+    let sealed = seal_seed(&master_seed, new).map_err(ResealFailure::Auth)?;
+    http::send_json_auth_via(
+        transport,
+        http::Method::Put,
+        &api.route("/keys/master/rotate"),
+        &sealed,
+        auth,
+    )
+    .await
+    .map_err(ResealFailure::Http)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -917,6 +985,123 @@ mod tests {
                     http::Method::Get,
                     "https://relay.test/api/keys/master".to_owned()
                 )]
+            );
+        }
+    }
+
+    const CURRENT_PASSPHRASE: &str = "pelican harbor voltage minnow";
+
+    fn current_passphrase() -> ambre_core::Confidential<ambre_core::Passphrase> {
+        ambre_core::Confidential::<ambre_core::Passphrase>::new(CURRENT_PASSPHRASE.to_owned())
+    }
+
+    /// The master material the relay answers for `seed`, sealed under the
+    /// current passphrase through the seal of the setup.
+    fn sealed_under_current(seed: &MasterSeed) -> serde_json::Value {
+        let chosen =
+            ambre_crypto::strength::ChosenPassphrase::check(current_passphrase()).expect("strong");
+        let mut material =
+            serde_json::to_value(seal_seed(seed, &chosen).expect("sealed")).expect("json");
+        material["signing_pubkey"] = serde_json::to_value(signing_pubkey(seed)).expect("json");
+        material["exchange_pubkey"] = serde_json::Value::Null;
+        material
+    }
+
+    /// `SYNC-251`, `SYNC-253`: a change opens the seed under the current
+    /// passphrase. It then writes the seed sealed under the new one and a
+    /// fresh salt. The unlock path opens the write under the new passphrase
+    /// alone.
+    #[tokio::test]
+    async fn a_passphrase_change_re_seals_the_seed_that_a_later_unlock_opens() {
+        let seed = MasterSeed::generate();
+        let before = sealed_under_current(&seed);
+        let transport = Scripted::new([
+            Ok((200, before.clone())),
+            Ok((200, serde_json::json!({ "status": "rotated" }))),
+        ]);
+        let auth = session("access-1", "refresh-1");
+        let chosen =
+            ambre_crypto::strength::ChosenPassphrase::check(new_passphrase()).expect("strong");
+
+        let outcome =
+            reseal_changed_passphrase(&transport, &auth, &root(), &current_passphrase(), &chosen)
+                .await;
+        assert!(outcome.is_ok());
+        assert_eq!(
+            transport.calls(),
+            [
+                (
+                    http::Method::Get,
+                    "https://relay.test/api/keys/master".to_owned()
+                ),
+                (
+                    http::Method::Put,
+                    "https://relay.test/api/keys/master/rotate".to_owned()
+                ),
+            ]
+        );
+
+        let sent = transport.sent.borrow();
+        let body: serde_json::Value =
+            serde_json::from_slice(sent[1].body.as_ref().expect("a body").1.as_bytes())
+                .expect("json");
+        let fields: Vec<&str> = body
+            .as_object()
+            .expect("an object")
+            .keys()
+            .map(String::as_str)
+            .collect();
+        assert_eq!(fields, ["master_key_enc", "master_key_salt"]);
+        assert_ne!(body["master_key_salt"], before["master_key_salt"]);
+
+        // The unlock reads the stored material through `open_stored_seed`.
+        let resealed: http::MasterKeyResponse = serde_json::from_value(body).expect("material");
+        let opened = open_stored_seed(&resealed, &new_passphrase()).expect("the unlock opens");
+        assert_eq!(signing_pubkey(&opened), signing_pubkey(&seed));
+        assert!(matches!(
+            open_stored_seed(&resealed, &current_passphrase()),
+            Err(AuthFailure::BadPassphrase)
+        ));
+    }
+
+    /// `SYNC-252`: a current passphrase that does not open the stored seed,
+    /// and an account that owes its setup, draw the refusal after the one
+    /// read. Nothing is written.
+    #[tokio::test]
+    async fn a_wrong_current_passphrase_writes_nothing() {
+        let seed = MasterSeed::generate();
+        let owed = serde_json::json!({
+            "master_key_enc": null,
+            "master_key_salt": null,
+            "signing_pubkey": null,
+            "exchange_pubkey": null,
+        });
+        for (material, refusal) in [
+            (sealed_under_current(&seed), AuthFailure::BadPassphrase),
+            (owed, AuthFailure::CorruptAccount),
+        ] {
+            let transport = Scripted::new([
+                Ok((200, material)),
+                Ok((200, serde_json::json!({ "status": "rotated" }))),
+            ]);
+            let auth = session("access-1", "refresh-1");
+            let chosen =
+                ambre_crypto::strength::ChosenPassphrase::check(new_passphrase()).expect("strong");
+
+            let outcome =
+                reseal_changed_passphrase(&transport, &auth, &root(), &new_passphrase(), &chosen)
+                    .await;
+            assert!(
+                matches!(&outcome, Err(ResealFailure::Auth(cause)) if *cause == refusal),
+                "{refusal:?}"
+            );
+            assert_eq!(
+                transport.calls(),
+                [(
+                    http::Method::Get,
+                    "https://relay.test/api/keys/master".to_owned()
+                )],
+                "{refusal:?}"
             );
         }
     }
