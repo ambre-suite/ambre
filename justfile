@@ -356,6 +356,18 @@ call-stall-proof host:
     @date -u +"call stall proof, %F %H:%M UTC"
     LOAD_HOST={{host}} LOAD_SECONDS="${LOAD_SECONDS:-600}" cargo test -p ambre-sfu --release -- --ignored --exact --nocapture sim::load::load_of_one_call
 
+# The Murmure measures on a phone (`specs/5-Murmure/features/ambre-spec-murmure-phone-measures.md`).
+# No CI job runs them. `page` is `murmure`, the segment of the Logic thread, or
+# `crypto`, the open and the space leave of the Sync worker. The recipe builds
+# the page as the product ships, under `wasm-release`, and serves it on port
+# 8000 of every address of this machine. `host` is the address the phone
+# reaches. The phone runs the page on load and prints one `PHONE-MEASURE` line.
+# Ctrl-C stops the server.
+phone-measures page host:
+    @case "{{page}}" in murmure|crypto) ;; *) echo "page is murmure or crypto, not {{page}}"; exit 2 ;; esac
+    @echo "on the phone, open http://{{host}}:8000 and keep the screen on"
+    NO_HEADLESS=1 WASM_BINDGEN_TEST_ADDRESS=0.0.0.0:8000 {{wasm_test_env}} cargo test --profile wasm-release --target wasm32-unknown-unknown -p ambre-{{page}} --test phone_bench -- --include-ignored --nocapture measure_on_the_phone
+
 # `cargo test` runs each wasm test module through `wasm-bindgen-test-runner`,
 # named as the target's runner; the pinned nightly + rust-src
 # (rust-toolchain.toml) supply `-Z build-std`. The runner must be the version of
@@ -406,8 +418,12 @@ test-wasm:
     {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-toile
     # The Prose unit tests are host-only (proptest, shaped fixtures): the chrome tests alone.
     {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-prose --test chrome_panel --test chrome_ui
-    # The Murmure unit tests are host-only too: the chrome relay test alone.
-    {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-murmure --test chrome_relay
+    # The Murmure unit tests are host-only too: the chrome relay test alone,
+    # and the smoke of the phone page (`ambre-spec-murmure-phone-measures.md`).
+    {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-murmure --test chrome_relay --test phone_bench
+    # The smoke of the phone page of the Sync worker's crypto. The crate's own
+    # tests run on the host.
+    {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-crypto --test phone_bench
     # Threaded: the converter respawn test spawns real workers from a Logic
     # worker (`ARCH-108`). The Logic thread runs on a shared memory in the
     # product too.

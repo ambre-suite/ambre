@@ -21,6 +21,7 @@
 | `murmure-keyboard` | No frequent action in Murmure needs the mouse. | implemented | 21 |  |
 | `murmure-mentions` | A member names another in a message with `@`. | implemented | 23 |  |
 | `murmure-messages` | A member writes a message, edits it, or deletes it. | implemented | 26 |  |
+| `murmure-phone-measures` | The pages that time the Murmure budgets in the browser of a phone, where no CI job runs. | implemented | 7 |  |
 | `murmure-reactions` | A member answers a message with an emoji. | implemented | 7 |  |
 | `murmure-segments` | A channel grows for years and still opens fast. | implemented | 26 |  |
 | `murmure-unread` | The sidebar shows where something new is, and how much. | implemented | 18 |  |
@@ -44,4 +45,4 @@
 | `murmure-pins` | A member pins a message for every member of the channel: a decision, a link, the rules of the room. | design-only | 10 |  |
 | `murmure-sidebar` | Each member arranges the channel list for themselves: groups and order of their own, channels muted or hidden, and messages bookmarked. | design-only | 16 |  |
 
-**28 features: 9 implemented, 11 partial, 8 design-only. 635 contract rows, 0 loose.**
+**29 features: 10 implemented, 11 partial, 8 design-only. 642 contract rows, 0 loose.**

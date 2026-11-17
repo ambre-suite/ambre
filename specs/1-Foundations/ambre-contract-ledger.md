@@ -21,11 +21,11 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**4700 rows: 4283 shipped, of which 14 loose. 417 unbuilt.**
+**4707 rows: 4290 shipped, of which 14 loose. 417 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1426 | 572 | 981 | 788 | 502 | 4269 |
+| `verified` | 1426 | 572 | 981 | 788 | 509 | 4276 |
 | `failing` |  |  |  |  |  | 0 |
 | `human-review` | 14 |  |  |  |  | 14 |
 | `unimplemented` | 165 | 42 | 21 | 32 | 157 | 417 |
@@ -182,6 +182,7 @@
 | `ambre-spec-murmure-message-list.md` | 40 | 39 | 39 |  | 1 |
 | `ambre-spec-murmure-messages.md` | 26 | 26 | 26 |  |  |
 | `ambre-spec-murmure-notifications.md` | 19 | 8 | 8 |  | 11 |
+| `ambre-spec-murmure-phone-measures.md` | 7 | 7 | 7 |  |  |
 | `ambre-spec-murmure-reactions.md` | 7 | 7 | 7 |  |  |
 | `ambre-spec-murmure-search.md` | 18 | 7 | 7 |  | 11 |
 | `ambre-spec-murmure-segments.md` | 26 | 26 | 26 |  |  |
@@ -245,6 +246,7 @@
 | `ambre-spec-murmure-messages.md` | MURMURE-078..090,223..228,253,255..256,565,567..568,586 |
 | `ambre-spec-murmure-moderation.md` | MURMURE-299..300,305..312 |
 | `ambre-spec-murmure-notifications.md` | MURMURE-142..146,265..274,493..494,507..508 |
+| `ambre-spec-murmure-phone-measures.md` | MURMURE-660..666 |
 | `ambre-spec-murmure-pins.md` | MURMURE-338..347 |
 | `ambre-spec-murmure-reactions.md` | MURMURE-091..097 |
 | `ambre-spec-murmure-schema.md` | MURMURE-001..020,157,437,566,582 |

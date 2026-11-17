@@ -32,8 +32,20 @@ getrandom_02 = { package = "getrandom", version = "0.2", features = ["js"] }
 # against. The fingerprint itself is hand-written: the generic encoder of this
 # crate linked 18 KB into the Sync worker.
 data-encoding = { workspace = true }
-proptest = { workspace = true }
 criterion = { workspace = true }
+# The JSON line the phone page prints (`tests/phone_bench.rs`).
+serde_json = { workspace = true }
+
+# proptest pulls `wait-timeout`, which does not build on wasm32, so it is gated
+# to the host target as ambre-murmure does.
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+proptest = { workspace = true }
+
+# The phone page times the seal, the open and the wraps of a space leave in the
+# browser (`tests/phone_bench.rs`, `just phone-measures crypto`).
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3"
+web-sys = { workspace = true }
 
 [[bench]]
 name = "crypto"

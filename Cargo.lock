@@ -332,8 +332,11 @@ dependencies = [
  "hkdf 0.12.4",
  "hmac 0.12.1",
  "proptest",
+ "serde_json",
  "sha2 0.10.9",
  "thiserror 2.0.18",
+ "wasm-bindgen-test",
+ "web-sys",
  "x25519-dalek 2.0.1",
 ]
 
