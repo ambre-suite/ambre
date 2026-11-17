@@ -115,7 +115,8 @@ wasm-bindgen-test = "0.3"
 # host-testable, so gate it to the host target like ambre-trame does.
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 proptest = { workspace = true }
-# The PDF tests write the recorded deck, and the SVG tests read a drawing,
+# The PDF tests write the recorded deck, the SVG tests read a drawing and the
+# PowerPoint tests write a package,
 # through the engines linked in place, as the Logic thread's host build does
 # (`ambre_convert::Converter`). The PowerPoint import tests read a deck
 # through the office engine the same way.

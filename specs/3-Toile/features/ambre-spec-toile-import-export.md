@@ -205,7 +205,9 @@ pub struct ImportBatch {
 **Steps, on an import:**
 
 1. parse and convert the whole file in memory, and return an error carrying no command on any parse
-   failure or breached bound (`TOILE-IO-073`, `TOILE-IO-074`);
+   failure or breached bound (`TOILE-IO-073`, `TOILE-IO-074`). A module reads an SVG drawing, a
+   Figma or Miro board, a deck or a WebP picture on the converter thread. The board waits for its
+   answer (`ARCH-129`);
 2. hold the batch and upload each media blob when the file carries one, applying nothing until every
    real content hash returns (`features/ambre-spec-toile-media.md section 1`);
 3. create each slot and turn it, then restyle it. Build the groups innermost-first, then title and

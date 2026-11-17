@@ -405,6 +405,9 @@ pub(crate) enum JobOwner {
         document_id: Id<Document>,
         report: Box<ambre_toile::message::ToileReport>,
     },
+    /// The read of an import or the write of an export of a Toile board, by
+    /// the ticket Toile minted (`ARCH-129`).
+    ToileFile(Id<Document>),
     /// The preview of a Murmure message.
     Murmure {
         channel_id: Id<Channel>,

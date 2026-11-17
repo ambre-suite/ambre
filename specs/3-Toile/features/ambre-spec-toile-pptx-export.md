@@ -144,7 +144,7 @@ does not hold. It reads a package back under the bounds of `ambre-spec-budgets.m
 
 | Trigger | Behaviour |
 |---|---|
-| the File menu's PowerPoint export entry | the board walk and the map run on the Logic thread; the deck crosses to the Office converter module, which writes the package (`TOILE-IO-126`) |
+| the File menu's PowerPoint export entry | the board walk and the map run on the Logic thread; the deck crosses to the Office converter module, which writes the package on the converter thread (`TOILE-IO-126`, `ARCH-129`) |
 | the answer | the file, `deck.pptx`, and the map's report take the shared export path, as the PDF export does. A board with no element answers a failure and no file (`TOILE-IO-128`) |
 | the first export of a session | waits for the Office module, which the Sync worker fetches once (`ARCH-081`) |
 

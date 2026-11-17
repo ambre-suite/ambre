@@ -16,8 +16,6 @@
 //! view command runs: caught up, refused while suggesting where it must be,
 //! and named on a refusal. A paste still calls its module in place.
 
-use std::collections::HashMap;
-
 use ambre_bus::Request;
 use ambre_bus::interop::InteropRequest;
 use ambre_client_core::ExportFilename;
@@ -82,20 +80,15 @@ pub(super) enum FileJob {
     },
 }
 
-/// The file conversions of one document on the converter thread: those in
-/// flight by their ticket, and those the Logic dispatcher has not drained.
-#[derive(Default)]
-pub(super) struct FileJobs {
-    in_flight: HashMap<Seq<Request>, FileJob>,
-    outbox: Vec<(Seq<Request>, Conversion)>,
-}
+/// The file conversions of one document on the converter thread.
+pub(super) type FileJobs = ambre_convert::FileJobs<Request, FileJob>;
 
-impl FileJobs {
-    /// Owe the converter thread `conversion`, whose answer `job` lands.
-    fn ask(&mut self, conversion: Conversion, job: FileJob) {
-        let ticket = ambre_bus::next_request();
-        self.in_flight.insert(ticket, job);
-        self.outbox.push((ticket, conversion));
+impl ambre_convert::FileJob for FileJob {
+    fn work(&self) -> FileWork {
+        match self {
+            Self::Read(_) => FileWork::Read,
+            Self::Write { .. } | Self::Print { .. } => FileWork::Write,
+        }
     }
 }
 
@@ -183,7 +176,11 @@ impl ProseState {
             };
             return match request {
                 Ok(conversion) => {
-                    self.file_jobs.ask(conversion, FileJob::Read(command));
+                    self.file_jobs.ask(
+                        ambre_bus::next_request(),
+                        conversion,
+                        FileJob::Read(command),
+                    );
                     ProseOutcome::nothing()
                 }
                 Err(e) => self.land_read(command, Err(e)),
@@ -214,7 +211,7 @@ impl ProseState {
     /// drained. The Logic dispatcher sends each one and never waits for it
     /// (`ARCH-122`).
     pub fn take_file_requests(&mut self) -> Vec<(Seq<Request>, Conversion)> {
-        std::mem::take(&mut self.file_jobs.outbox)
+        self.file_jobs.take_requests()
     }
 
     /// What the file conversion under `ticket` does, or `None` when the
@@ -222,10 +219,7 @@ impl ProseState {
     /// it lands; a write never does.
     #[must_use]
     pub fn file_work(&self, ticket: Seq<Request>) -> Option<FileWork> {
-        self.file_jobs.in_flight.get(&ticket).map(|job| match job {
-            FileJob::Read(_) => FileWork::Read,
-            FileJob::Write { .. } | FileJob::Print { .. } => FileWork::Write,
-        })
+        self.file_jobs.work(ticket)
     }
 
     /// Land the answer of a file conversion this document asked for, or
@@ -237,7 +231,7 @@ impl ProseState {
         ticket: Seq<Request>,
         answer: Result<Converted, ConvertError>,
     ) -> Option<ProseOutcome> {
-        Some(match self.file_jobs.in_flight.remove(&ticket)? {
+        Some(match self.file_jobs.land(ticket)? {
             FileJob::Read(command) => {
                 let read = match &command {
                     ProseCommand::Interop(InteropRequest::Import(import)) => {
@@ -385,8 +379,11 @@ impl ProseState {
         };
         match request {
             Ok((filename, conversion)) => {
-                self.file_jobs
-                    .ask(conversion, FileJob::Write { format, filename });
+                self.file_jobs.ask(
+                    ambre_bus::next_request(),
+                    conversion,
+                    FileJob::Write { format, filename },
+                );
                 ProseOutcome::nothing()
             }
             Err(e) => Self::exported(&format, Err(e)),
@@ -409,6 +406,7 @@ impl ProseState {
             ambre_client_core::ExportExtension::Pdf,
         );
         self.file_jobs.ask(
+            ambre_bus::next_request(),
             Conversion::WritePdf { document },
             FileJob::Print {
                 format,

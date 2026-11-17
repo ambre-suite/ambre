@@ -1797,6 +1797,8 @@ mod pass_tests {
         from_ui: Receiver<LogicCommand>,
         from_sync: Receiver<LogicEvent>,
         persist: Receiver<(Id<Document>, PersistWrite)>,
+        /// The converter thread, served by hand (`ARCH-129`).
+        thread: crate::converter_thread::ConverterThread,
         /// What the view received. Only the deck export tests read it.
         #[cfg_attr(
             not(feature = "toile-pdf"),
@@ -1811,6 +1813,9 @@ mod pass_tests {
         let mut state = LogicState::new(to_ui, test_link().0, to_persist);
         let document_id = Id::<Document>::mint();
         state.open_with_identity(document_id, DocType::Toile);
+        let (link, ends) = crate::converter_thread::converter_channels(&Doorbell::new());
+        state.offload = crate::converter_thread::Offload::over(link);
+        let thread = crate::converter_thread::ConverterThread::new(ends).0;
         // The images module is loaded first: these tests time the import,
         // never the one fetch of a session.
         state.handle_logic_event(LogicEvent::ConverterFetched {
@@ -1833,6 +1838,7 @@ mod pass_tests {
             from_ui,
             from_sync,
             persist,
+            thread,
             ui,
         }
     }
@@ -1869,11 +1875,16 @@ mod pass_tests {
             to_logic,
             from_ui,
             from_sync,
+            mut thread,
             ..
         } = board();
         to_logic
             .try_send(import(document_id, 1_000))
             .expect("queued");
+        // The first pass hands the read to the converter thread, and the
+        // next lands its answer (`ARCH-129`).
+        state.drain_pass(&from_ui, &from_sync);
+        thread.serve();
         state.drain_pass(&from_ui, &from_sync);
         let first = elements(&state, document_id);
         assert!(
@@ -1882,12 +1893,12 @@ mod pass_tests {
             "one slice landed: {first}"
         );
         assert!(state.has_pending_work(), "the loop comes back unasked");
-        let mut passes = 1;
+        let mut passes = 2;
         while state.has_pending_work() {
             state.drain_pass(&from_ui, &from_sync);
             passes += 1;
         }
-        assert!(passes > 2, "the import took {passes} passes");
+        assert!(passes > 3, "the import took {passes} passes");
         assert_eq!(
             elements(&state, document_id),
             ambre_core::Count::<ambre_core::Elements>::new(1_000)
@@ -2217,11 +2228,16 @@ mod pass_tests {
             from_ui,
             from_sync,
             persist,
+            mut thread,
             ..
         } = board();
         to_logic
             .try_send(import(document_id, 1_000))
             .expect("queued");
+        // The first pass hands the read to the converter thread, and the
+        // next lands its answer (`ARCH-129`).
+        state.drain_pass(&from_ui, &from_sync);
+        thread.serve();
         state.drain_pass(&from_ui, &from_sync);
         assert!(state.has_pending_work());
         to_logic
@@ -2260,11 +2276,16 @@ mod pass_tests {
             to_logic,
             from_ui,
             from_sync,
+            mut thread,
             ..
         } = board();
         to_logic
             .try_send(import(document_id, 1_000))
             .expect("queued");
+        // The first pass hands the read to the converter thread, and the
+        // next lands its answer (`ARCH-129`).
+        state.drain_pass(&from_ui, &from_sync);
+        thread.serve();
         state.drain_pass(&from_ui, &from_sync);
         assert!(state.has_pending_work());
         let mut peer = ambre_toile::ToileState::new();
@@ -2273,16 +2294,17 @@ mod pass_tests {
             &ambre_core::Payload::new(Vec::new()),
         )
         .expect("the host links the images engine");
+        peer.handle_conversion(ambre_toile::message::ToileCommand::import(
+            ambre_toile::message::ToileImportFormat::Svg,
+            ambre_core::Payload::<ambre_client_core::FileBytes>::new(drawing(1)),
+            kurbo::Point::new(-50.0, 0.0),
+        ));
+        let [(ticket, read)] = &peer.take_file_requests()[..] else {
+            panic!("the peer owes one read");
+        };
         let delta = peer
-            .handle_conversion(
-                ambre_toile::message::ToileCommand::import(
-                    ambre_toile::message::ToileImportFormat::Svg,
-                    ambre_core::Payload::<ambre_client_core::FileBytes>::new(drawing(1)),
-                    kurbo::Point::new(-50.0, 0.0),
-                ),
-                Ok(&images),
-            )
-            .update
+            .handle_file_converted(*ticket, images.convert(read))
+            .and_then(|outcome| outcome.update)
             .expect("the peer's delta");
         state.apply_remote(
             document_id,

@@ -39,6 +39,7 @@ mod derive;
 mod docfile;
 mod elements;
 mod export;
+mod file_jobs;
 mod find;
 /// The generators, and the per-app half of `shape_of` / `canonical_dump`
 /// (`fixtures`). Public, because `ambre-logic`'s registry names the generators;
@@ -217,12 +218,15 @@ pub struct ToileState {
     /// carries it (`AUTHOR-009`). Set by [`adopt_session`](Self::adopt_session).
     entry_end: Option<ambre_core::OpCounter>,
     /// The file a converter module read for the import in flight, set by
-    /// `handle_conversion` for the length of one dispatch.
+    /// `handle_file_converted` for the length of one dispatch.
     converted: Option<import::ConvertedFile>,
     /// The JPEG pictures whose thumbnail the converter thread decodes, by the
     /// ticket of each decode (`TOILE-IO-131`). Nothing is applied until the
     /// answer lands.
     decoding: HashMap<ambre_core::Seq<crate::logic::command::Request>, import::PendingPicture>,
+    /// The file reads and writes on the converter thread, by their ticket
+    /// (`ARCH-129`).
+    file_jobs: file_jobs::FileJobs,
 }
 
 /// Write a merge's edits into the text it was computed against, in order. The
@@ -400,6 +404,7 @@ impl ToileState {
             entry_end: None,
             converted: None,
             decoding: HashMap::default(),
+            file_jobs: file_jobs::FileJobs::default(),
         }
     }
 
@@ -684,7 +689,7 @@ impl ToileState {
                 match format {
                     ToileImportFormat::Svg => {
                         // The images module read the file first
-                        // (`handle_conversion`). A caller that reaches this
+                        // (`handle_file_converted`). A caller that reaches this
                         // arm with nothing read is answered by name.
                         let _ = data;
                         let read = match self.converted.take() {
@@ -696,7 +701,7 @@ impl ToileState {
                         self.import_svg_drawing(read, at)
                     }
                     // A WebP picture arrives decoded by the images module
-                    // (`handle_conversion`) and lands as PNG; any other
+                    // (`handle_file_converted`) and lands as PNG; any other
                     // picture is read here, as it came.
                     ToileImportFormat::Image(_) => match self.converted.take() {
                         Some(import::ConvertedFile::Picture(Ok(pixels))) => {
@@ -756,7 +761,7 @@ impl ToileState {
                     InteropError::Stopped(ambre_core::StopCause::Misrouted),
                 ),
                 // The writer runs in the Office module, which reaches the board
-                // through `handle_conversion` alone. A caller driving the
+                // through `handle_conversion` alone, on the converter thread. A caller driving the
                 // state without a module lands here, and learns why.
                 ToileExport::Pptx => Self::interop_failed(
                     Direction::Export,

@@ -422,6 +422,61 @@ pub enum FileWork {
     Write,
 }
 
+/// What an application keeps of one file conversion until its answer lands:
+/// what the answer needs and the module call does not carry.
+pub trait FileJob {
+    /// Whether the answer writes the document or hands over a file.
+    fn work(&self) -> FileWork;
+}
+
+/// The file conversions of one document on the converter thread
+/// (`ARCH-122`, `ARCH-123`, `ARCH-129`). Those in flight wait by their ticket.
+/// Those the Logic dispatcher has not drained wait in the outbox. Every
+/// application holds this one type, so a format family that moves off the
+/// Logic thread adds a job variant and no new mechanism. `R` is the marker of
+/// the ticket, which the bus mints.
+pub struct FileJobs<R: ambre_core::SeqKind, J> {
+    in_flight: ambre_core::hash::HashMap<ambre_core::Seq<R>, J>,
+    outbox: Vec<(ambre_core::Seq<R>, Conversion)>,
+}
+
+impl<R: ambre_core::SeqKind, J> Default for FileJobs<R, J> {
+    fn default() -> Self {
+        Self {
+            in_flight: ambre_core::hash::HashMap::default(),
+            outbox: Vec::new(),
+        }
+    }
+}
+
+impl<R: ambre_core::SeqKind, J: FileJob> FileJobs<R, J> {
+    /// Owe the converter thread `conversion` under `ticket`. `job` lands its
+    /// answer.
+    pub fn ask(&mut self, ticket: ambre_core::Seq<R>, conversion: Conversion, job: J) {
+        self.in_flight.insert(ticket, job);
+        self.outbox.push((ticket, conversion));
+    }
+
+    /// The conversions owed and not yet sent, drained. The Logic dispatcher
+    /// sends each one and never waits for it.
+    pub fn take_requests(&mut self) -> Vec<(ambre_core::Seq<R>, Conversion)> {
+        std::mem::take(&mut self.outbox)
+    }
+
+    /// What the conversion under `ticket` does, or `None` when the ticket is
+    /// not in flight here.
+    #[must_use]
+    pub fn work(&self, ticket: ambre_core::Seq<R>) -> Option<FileWork> {
+        self.in_flight.get(&ticket).map(FileJob::work)
+    }
+
+    /// The job under `ticket`, removed, once its answer arrived. `None` when
+    /// the ticket is not in flight here.
+    pub fn land(&mut self, ticket: ambre_core::Seq<R>) -> Option<J> {
+        self.in_flight.remove(&ticket)
+    }
+}
+
 /// Why a conversion produced nothing.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ConvertError {

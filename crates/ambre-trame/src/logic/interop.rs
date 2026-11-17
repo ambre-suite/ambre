@@ -92,20 +92,17 @@ pub(super) enum FileJob {
     },
 }
 
-/// The file conversions of one workbook on the converter thread: those in
-/// flight by their ticket, and those the Logic dispatcher has not drained.
-#[derive(Default)]
-pub(super) struct FileJobs {
-    in_flight: HashMap<Seq<Request>, FileJob>,
-    outbox: Vec<(Seq<Request>, Conversion)>,
-}
+/// The file conversions of one workbook on the converter thread.
+pub(super) type FileJobs = ambre_convert::FileJobs<Request, FileJob>;
 
-impl FileJobs {
-    /// Owe the converter thread `conversion`, whose answer `job` lands.
-    pub(super) fn ask(&mut self, conversion: Conversion, job: FileJob) {
-        let ticket = ambre_bus::next_request();
-        self.in_flight.insert(ticket, job);
-        self.outbox.push((ticket, conversion));
+impl ambre_convert::FileJob for FileJob {
+    fn work(&self) -> FileWork {
+        match self {
+            Self::ReadCsv { .. } | Self::ReadWorkbook(_) => FileWork::Read,
+            Self::WriteCsv { .. } | Self::WriteWorkbook { .. } | Self::WritePdf { .. } => {
+                FileWork::Write
+            }
+        }
     }
 }
 
@@ -146,6 +143,7 @@ impl TrameState {
                     .delimiter
                     .unwrap_or_else(|| detect_csv_delimiter(&import.data));
                 self.file_jobs.ask(
+                    ambre_bus::next_request(),
                     Conversion::ReadCsv {
                         data: import.data,
                         delimiter,
@@ -192,7 +190,7 @@ impl TrameState {
     /// drained. The Logic dispatcher sends each one and never waits for it
     /// (`ARCH-123`).
     pub fn take_file_requests(&mut self) -> Vec<(Seq<Request>, Conversion)> {
-        std::mem::take(&mut self.file_jobs.outbox)
+        self.file_jobs.take_requests()
     }
 
     /// What the file conversion under `ticket` does, or `None` when the
@@ -200,12 +198,7 @@ impl TrameState {
     /// it lands; a write never does.
     #[must_use]
     pub fn file_work(&self, ticket: Seq<Request>) -> Option<FileWork> {
-        self.file_jobs.in_flight.get(&ticket).map(|job| match job {
-            FileJob::ReadCsv { .. } | FileJob::ReadWorkbook(_) => FileWork::Read,
-            FileJob::WriteCsv { .. } | FileJob::WriteWorkbook { .. } | FileJob::WritePdf { .. } => {
-                FileWork::Write
-            }
-        })
+        self.file_jobs.work(ticket)
     }
 
     /// Land the answer of a file conversion this workbook asked for, or
@@ -218,7 +211,7 @@ impl TrameState {
         ticket: Seq<Request>,
         answer: Result<Converted, ConvertError>,
     ) -> Option<TrameOutcome> {
-        let job = self.file_jobs.in_flight.remove(&ticket)?;
+        let job = self.file_jobs.land(ticket)?;
         Some(match job {
             FileJob::ReadCsv {
                 header,
@@ -254,8 +247,11 @@ impl TrameState {
         file: super::xlsx::SheetFile,
         data: ambre_core::Payload<ambre_client_core::FileBytes>,
     ) -> TrameOutcome {
-        self.file_jobs
-            .ask(file.read(data), FileJob::ReadWorkbook(file));
+        self.file_jobs.ask(
+            ambre_bus::next_request(),
+            file.read(data),
+            FileJob::ReadWorkbook(file),
+        );
         TrameOutcome::display_only(Vec::new())
     }
 
@@ -266,6 +262,7 @@ impl TrameState {
         match self.workbook_write_request(file) {
             Ok((conversion, filename, report)) => {
                 self.file_jobs.ask(
+                    ambre_bus::next_request(),
                     conversion,
                     FileJob::WriteWorkbook {
                         file,
@@ -290,8 +287,11 @@ impl TrameState {
     ) -> TrameOutcome {
         match self.csv_write_request(sheet_id, delimiter, range) {
             Ok((conversion, filename)) => {
-                self.file_jobs
-                    .ask(conversion, FileJob::WriteCsv { filename });
+                self.file_jobs.ask(
+                    ambre_bus::next_request(),
+                    conversion,
+                    FileJob::WriteCsv { filename },
+                );
                 TrameOutcome::display_only(Vec::new())
             }
             Err(outcome) => outcome,

@@ -47,6 +47,15 @@ fn converter() -> ambre_convert::Converter {
     }
 }
 
+/// Serve `command` as the Logic dispatcher and the converter thread do: owe
+/// the read, run it on `converter`, land the answer.
+fn convert(state: &mut ToileState, command: ToileCommand, converter: &ambre_convert::Converter) {
+    state.handle_conversion(command);
+    for (ticket, conversion) in state.take_file_requests() {
+        state.handle_file_converted(ticket, converter.convert(&conversion));
+    }
+}
+
 fn bench_import(c: &mut Criterion) {
     let bytes = drawing(5_000);
     let converter = converter();
@@ -57,7 +66,7 @@ fn bench_import(c: &mut Criterion) {
         b.iter_batched(
             || (ToileState::new(), command(&bytes)),
             |(mut state, command)| {
-                state.handle_conversion(command, Ok(&converter));
+                convert(&mut state, command, &converter);
                 while state.has_pending_work() {
                     black_box(state.resume());
                 }
@@ -70,7 +79,7 @@ fn bench_import(c: &mut Criterion) {
         b.iter_batched(
             || {
                 let mut state = ToileState::new();
-                state.handle_conversion(command(&bytes), Ok(&converter));
+                convert(&mut state, command(&bytes), &converter);
                 state
             },
             |mut state| black_box(state.resume()),

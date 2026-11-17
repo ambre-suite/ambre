@@ -13,11 +13,10 @@ use ambre_core::Validated;
 use ambre_core::hash::HashMap;
 use ambre_core::index::Pos;
 
-use crate::message::{ToileConstruct, ToileExport, ToileImport, ToileImportFormat};
+use crate::message::ToileConstruct;
 use ambre_bus::RestEvent;
 use ambre_bus::interop::{
-    ConversionProgress, Direction, InteropAnswer, InteropError, InteropRequest, Occurrences,
-    Outcome, Steps,
+    ConversionProgress, Direction, InteropAnswer, InteropError, Occurrences, Outcome, Steps,
 };
 use ambre_core::Seq;
 use kurbo::Point;
@@ -63,8 +62,8 @@ pub(super) enum ConvertedFile {
 /// The deck the Office module read, and the thumbnails it decoded: one per
 /// picture of the deck, in slide order then item order.
 pub(super) struct ReadDeck {
-    deck: ambre_pptx::model::ImportedDeck,
-    thumbs: Vec<Option<ambre_convert::images::Pixels>>,
+    pub(super) deck: ambre_pptx::model::ImportedDeck,
+    pub(super) thumbs: Vec<Option<ambre_convert::images::Pixels>>,
 }
 use super::names::{Fields, MediaKey, Root};
 
@@ -284,36 +283,6 @@ impl ToileState {
         }
     }
 
-    /// The converter family `cmd` waits on, if any. The images module reads
-    /// an SVG drawing, a Figma or a Miro board, and a WebP picture, which Main
-    /// cannot decode. The Office module for a PowerPoint export, which writes the package. The PDF
-    /// export waits on the PDF module, which the Logic dispatcher serves
-    /// itself.
-    #[must_use]
-    pub fn conversion_family(cmd: &ToileCommand) -> Option<ambre_core::ConverterFamily> {
-        match cmd {
-            ToileCommand::Interop(InteropRequest::Import(ToileImport {
-                format: ToileImportFormat::Svg,
-                ..
-            })) => Some(ambre_core::ConverterFamily::Images),
-            ToileCommand::Interop(InteropRequest::Import(ToileImport {
-                format: ToileImportFormat::Board,
-                ..
-            })) => Some(ambre_core::ConverterFamily::Boards),
-            ToileCommand::Interop(InteropRequest::Import(ToileImport {
-                format: ToileImportFormat::Image(_),
-                data,
-                ..
-            })) if ambre_convert::is_webp(data) => Some(ambre_core::ConverterFamily::Images),
-            ToileCommand::Interop(InteropRequest::Export(ToileExport::Pptx))
-            | ToileCommand::Interop(InteropRequest::Import(ToileImport {
-                format: ToileImportFormat::Pptx | ToileImportFormat::Odp,
-                ..
-            })) => Some(ambre_core::ConverterFamily::Office),
-            _ => None,
-        }
-    }
-
     /// Map the deck the Office module read from a presentation onto frames
     /// of the deck, and apply it (`toile-pptx-import`). `format` names the
     /// file in the report. `Err` carries the module's refusal, or why it did
@@ -336,116 +305,6 @@ impl ToileState {
             ),
             Err(error) => Self::interop_failed(Direction::Import, error),
         }
-    }
-
-    /// [`Self::handle_conversion`] through the engine the host links in
-    /// place for the family `cmd` waits on, the images engine by default. A
-    /// test drives an import as the Logic dispatcher does once the module
-    /// loaded.
-    #[cfg(test)]
-    pub(crate) fn handle_converted(&mut self, cmd: ToileCommand) -> ToileOutcome {
-        let family = Self::conversion_family(&cmd).unwrap_or(ambre_core::ConverterFamily::Images);
-        match ambre_convert::Converter::load(family, &ambre_core::Payload::new(Vec::new())) {
-            Ok(converter) => self.handle_conversion(cmd, Ok(&converter)),
-            Err(e) => panic!("the host links the {family} engine: {e}"),
-        }
-    }
-
-    /// Run a command [`Self::conversion_family`] names, once its module is
-    /// loaded. The module reads an SVG drawing or a WebP picture, or writes
-    /// a PowerPoint file. `Err` carries the reason the module did not load,
-    /// and the conversion fails with it.
-    pub fn handle_conversion(
-        &mut self,
-        cmd: ToileCommand,
-        converter: Result<&ambre_convert::Converter, ambre_core::StopCause>,
-    ) -> ToileOutcome {
-        if let ToileCommand::Interop(InteropRequest::Export(ToileExport::Pptx)) = cmd {
-            return self.export_pptx_file(converter);
-        }
-        let convert = |conversion: ambre_convert::Conversion| {
-            converter
-                .map_err(InteropError::Stopped)
-                .and_then(|converter| match converter.convert(&conversion) {
-                    Ok(converted) => Ok(converted),
-                    Err(ambre_convert::ConvertError::Refused(refusal)) => {
-                        Err(InteropError::ParseFailed(refusal))
-                    }
-                    Err(e) => {
-                        tracing::warn!("Toile: a conversion stopped: {e}");
-                        Err(InteropError::Stopped(e.stop_cause()))
-                    }
-                })
-        };
-        let malformed = || InteropError::Stopped(ambre_core::StopCause::ConverterAnswered);
-        self.converted = match &cmd {
-            ToileCommand::Interop(InteropRequest::Import(ToileImport {
-                format: ToileImportFormat::Svg,
-                data,
-                ..
-            })) => Some(ConvertedFile::Drawing(
-                convert(ambre_convert::Conversion::ReadSvg { data: data.clone() }).and_then(
-                    |converted| match converted {
-                        ambre_convert::Converted::Svg(tree) => Ok(tree),
-                        _ => Err(malformed()),
-                    },
-                ),
-            )),
-            ToileCommand::Interop(InteropRequest::Import(ToileImport {
-                format: ToileImportFormat::Board,
-                data,
-                ..
-            })) => Some(ConvertedFile::Board(
-                convert(ambre_convert::Conversion::ReadBoard { data: data.clone() }).and_then(
-                    |converted| match converted {
-                        ambre_convert::Converted::Board(bytes) => {
-                            ambre_convert::boards::decode_board(&bytes).map_err(|_| malformed())
-                        }
-                        _ => Err(malformed()),
-                    },
-                ),
-            )),
-            ToileCommand::Interop(InteropRequest::Import(ToileImport {
-                format: format @ (ToileImportFormat::Pptx | ToileImportFormat::Odp),
-                data,
-                ..
-            })) => Some(ConvertedFile::Deck(
-                convert(match format {
-                    ToileImportFormat::Odp => ambre_convert::Conversion::ReadOdp {
-                        data: data.clone(),
-                        bound: Limits::default().max_image,
-                    },
-                    _ => ambre_convert::Conversion::ReadPptx {
-                        data: data.clone(),
-                        bound: Limits::default().max_image,
-                    },
-                })
-                .and_then(|converted| match converted {
-                    ambre_convert::Converted::Deck { deck, thumbs } => {
-                        ambre_convert::decode_imported_deck(&deck)
-                            .map(|deck| ReadDeck { deck, thumbs })
-                            .map_err(|_| malformed())
-                    }
-                    _ => Err(malformed()),
-                }),
-            )),
-            ToileCommand::Interop(InteropRequest::Import(ToileImport {
-                format: ToileImportFormat::Image(_),
-                data,
-                ..
-            })) => Some(ConvertedFile::Picture(
-                convert(ambre_convert::Conversion::DecodeWebp { data: data.clone() }).and_then(
-                    |converted| match converted {
-                        ambre_convert::Converted::Pixels(pixels) => Ok(pixels),
-                        _ => Err(malformed()),
-                    },
-                ),
-            )),
-            _ => None,
-        };
-        let outcome = self.handle_command(cmd);
-        self.converted = None;
-        outcome
     }
 
     /// Convert a dropped raster image and apply it (`toile-import-export`). The mime
@@ -1692,23 +1551,34 @@ mod tests {
         assert_eq!(st.export_snapshot(), before);
     }
 
-    /// A WebP picture whose module did not load fails by name, and the board
-    /// stays as it was.
+    /// A WebP picture whose module did not answer fails by name, and the
+    /// board stays as it was. The read leaves for the converter thread
+    /// first, and nothing lands before its answer (`ARCH-129`).
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn a_webp_picture_without_its_module_fails_and_changes_nothing() {
         let mut st = ToileState::new();
-        let out = st.handle_conversion(
-            import_cmd(
-                ToileImportFormat::Image(ambre_core::MediaType::from("image/webp")),
-                ambre_core::Payload::<ambre_client_core::FileBytes>::new(small_webp()),
-                Point::ZERO,
-            ),
-            Err(ambre_core::StopCause::ConverterRefused(
-                ambre_core::ConverterRefusal::NotFetched,
-            )),
-        );
+        let out = st.handle_conversion(import_cmd(
+            ToileImportFormat::Image(ambre_core::MediaType::from("image/webp")),
+            ambre_core::Payload::<ambre_client_core::FileBytes>::new(small_webp()),
+            Point::ZERO,
+        ));
         assert!(out.requests.is_empty());
+        assert!(out.display.is_empty(), "nothing lands before the answer");
+        let [(ticket, _)] = st.take_file_requests()[..] else {
+            panic!("one read owed to the converter thread");
+        };
+        let out = st
+            .handle_file_converted(ticket, Err(ambre_convert::ConvertError::Absent))
+            .expect("the ticket is the board's");
+        assert!(out.requests.is_empty());
+        assert!(
+            out.display
+                .iter()
+                .any(|event| matches!(event, ToileEvent::Interop(InteropAnswer::Failed(_)))),
+            "the user is told: {:?}",
+            out.display
+        );
         assert_eq!(st.element_count(), Count::<Elements>::ZERO);
     }
 

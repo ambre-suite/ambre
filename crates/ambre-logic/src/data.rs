@@ -805,6 +805,22 @@ impl LogicState {
         }
     }
 
+    /// Hand the converter thread the file reads and writes a Toile board
+    /// owes, and never wait for them (`ARCH-129`, `ARCH-098`).
+    pub(crate) fn offload_toile_files(&mut self, document_id: Id<Document>) {
+        let Some(DocState::Toile(state)) = self.docs.get_mut(&document_id).map(|d| &mut d.state)
+        else {
+            return;
+        };
+        for (ticket, conversion) in state.take_file_requests() {
+            self.offload(crate::converter_thread::Job {
+                ticket,
+                owner: crate::converter_thread::JobOwner::ToileFile(document_id),
+                conversion,
+            });
+        }
+    }
+
     /// Hand the converter thread the file reads and writes a Prose document
     /// owes, and never wait for them (`ARCH-122`, `ARCH-098`).
     pub(crate) fn offload_prose_files(&mut self, document_id: Id<Document>) {

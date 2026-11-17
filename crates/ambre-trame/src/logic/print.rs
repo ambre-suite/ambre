@@ -471,6 +471,7 @@ impl TrameState {
             document, filename, ..
         } = *job;
         self.file_jobs.ask(
+            ambre_bus::next_request(),
             Conversion::WritePdf { document },
             super::interop::FileJob::WritePdf { filename },
         );

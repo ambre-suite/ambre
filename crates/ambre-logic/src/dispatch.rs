@@ -3210,9 +3210,11 @@ mod tests {
     /// Office module and waits for it. It comes back to the UI thread as a
     /// named PowerPoint file with the map's report. The report names the
     /// sticky note as approximated, never lost in silence.
+    #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn a_pptx_export_reaches_the_ui_as_a_file_and_its_report() {
         let (mut state, ui_rx, sync_rx) = harness();
+        let mut thread = converter_thread(&mut state);
         let doc_id = board_with_content(&mut state);
         state.handle_logic_command(LogicCommand::App {
             document_id: doc_id,
@@ -3241,6 +3243,9 @@ mod tests {
         ));
         assert!(toile_answers(&ui_rx).is_empty(), "the export waits");
         load_converter(&mut state, ambre_core::ConverterFamily::Office);
+        // The write runs on the converter thread (`ARCH-129`).
+        thread.serve();
+        state.take_converted();
         let answer = toile_answers(&ui_rx).into_iter().next();
         let Some(ambre_toile::message::ToileEvent::Interop(
             ambre_bus::interop::InteropAnswer::ExportReady { file, report },
@@ -3776,6 +3781,7 @@ mod tests {
     #[test]
     fn a_webp_picture_waits_on_the_images_module() {
         let (mut state, _ui_rx, sync_rx) = harness();
+        let mut thread = converter_thread(&mut state);
         let doc_id = board_with_content(&mut state);
         sync_rx.try_iter().for_each(drop);
         let picture = |format: image::ImageFormat, mime: &str| {
@@ -3816,6 +3822,9 @@ mod tests {
             })
         ));
         load_converter(&mut state, ambre_core::ConverterFamily::Images);
+        // The decode runs on the converter thread (`ARCH-129`).
+        thread.serve();
+        state.take_converted();
         assert!(
             sync_rx.try_iter().any(|c| matches!(
                 c,
@@ -4419,9 +4428,11 @@ mod tests {
 
     /// An SVG drop waits on the images module, and the drawing lands once it
     /// does.
+    #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn an_svg_import_waits_on_the_images_module() {
         let (mut state, ui_rx, sync_rx) = harness();
+        let mut thread = converter_thread(&mut state);
         let doc_id = board_with_content(&mut state);
         sync_rx.try_iter().for_each(drop);
         ui_rx.try_iter().for_each(drop);
@@ -4442,6 +4453,9 @@ mod tests {
         ));
         assert!(toile_answers(&ui_rx).is_empty(), "the drop waits");
         load_converter(&mut state, ambre_core::ConverterFamily::Images);
+        // The read runs on the converter thread (`ARCH-129`).
+        thread.serve();
+        state.take_converted();
         state.settle_import(doc_id);
         assert!(toile_answers(&ui_rx).iter().any(|a| matches!(
             a,
@@ -4449,6 +4463,87 @@ mod tests {
                 ambre_bus::interop::InteropAnswer::ImportCompleted { .. }
             )
         )));
+    }
+
+    /// `ARCH-129`: an SVG import and a PowerPoint export of a board each call
+    /// their module on the converter thread. The command returns with the job
+    /// in flight and the board untouched. The answer lands the import, then
+    /// the file, each once the thread served it.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn a_board_import_and_export_call_their_module_on_the_converter_thread() {
+        use ambre_bus::interop::InteropAnswer;
+        use ambre_toile::message::ToileEvent;
+        let (mut state, ui_rx, sync_rx) = harness();
+        let mut thread = converter_thread(&mut state);
+        let doc_id = live_toile(&mut state, Role::Editor);
+        load_converter(&mut state, ambre_core::ConverterFamily::Images);
+        load_converter(&mut state, ambre_core::ConverterFamily::Office);
+        sync_rx.try_iter().for_each(drop);
+        ui_rx.try_iter().for_each(drop);
+        let svg = br#"<svg xmlns="http://www.w3.org/2000/svg"><rect width="4" height="4"/></svg>"#;
+        state.handle_logic_command(LogicCommand::App {
+            document_id: doc_id,
+            command: AppCommand::Toile(ToileCommand::import(
+                ambre_toile::message::ToileImportFormat::Svg,
+                ambre_core::Payload::<ambre_client_core::FileBytes>::new(svg.to_vec()),
+                kurbo::Point::ZERO,
+            )),
+        });
+        assert!(!state.offload.is_idle(), "the read left for the thread");
+        assert!(
+            !sync_rx
+                .try_iter()
+                .any(|c| matches!(c, SyncCommand::SendUpdate { .. })),
+            "the board is untouched while the read is in flight"
+        );
+        assert!(
+            toile_answers(&ui_rx).is_empty(),
+            "nothing lands before the answer"
+        );
+        thread.serve();
+        state.take_converted();
+        state.settle_import(doc_id);
+        assert!(
+            toile_answers(&ui_rx).iter().any(|a| matches!(
+                a,
+                ToileEvent::Interop(InteropAnswer::ImportCompleted { .. })
+            )),
+            "the answer lands the import"
+        );
+        let Some(DocState::Toile(board)) = state.docs.get(&doc_id).map(|d| &d.state) else {
+            panic!("the board is open");
+        };
+        assert!(
+            board.element_count() > ambre_core::Count::<ambre_core::Elements>::ZERO,
+            "the answer writes the board"
+        );
+        state.handle_logic_command(LogicCommand::App {
+            document_id: doc_id,
+            command: AppCommand::Toile(ToileCommand::export(
+                ambre_toile::message::ToileExport::Pptx,
+            )),
+        });
+        assert!(
+            !toile_answers(&ui_rx)
+                .iter()
+                .any(|a| matches!(a, ToileEvent::Interop(InteropAnswer::ExportReady { .. }))),
+            "the write is in flight"
+        );
+        thread.serve();
+        state.take_converted();
+        let file = toile_answers(&ui_rx).into_iter().find_map(|a| match a {
+            ToileEvent::Interop(InteropAnswer::ExportReady { file, .. }) => Some(file),
+            _ => None,
+        });
+        let file = file.expect("the answer hands the file over");
+        assert!(file.data.as_bytes().starts_with(b"PK"), "a zip package");
+        assert!(
+            !sync_rx
+                .try_iter()
+                .any(|c| matches!(c, SyncCommand::FetchConverter { .. })),
+            "the thread was handed the modules the Logic thread held"
+        );
     }
 
     /// A setup still owed reaches the UI as a setup to complete, and as

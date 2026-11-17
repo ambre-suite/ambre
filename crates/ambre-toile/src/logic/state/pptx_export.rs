@@ -13,18 +13,16 @@ use kurbo::Rect;
 use super::ToileState;
 use super::codec::{bin_of, str_of};
 use super::names::{ConnectorKey, ElementKey};
-use crate::logic::command::{ToileEvent, ToileOutcome};
 use crate::logic::connector::anchor_point;
 use crate::logic::interop::{PptxConnector, PptxElement, PptxExport, PptxSlideSource, export_pptx};
 use crate::logic::model::{ElementKind, NodeId};
-use ambre_bus::interop::{Direction, ExportedFile, InteropAnswer, InteropError};
 
 /// The stem of the name a PowerPoint export carries. The PDF of the deck
 /// carries the same stem: the Logic thread holds a document, not its title.
-const PPTX_STEM: &str = "deck";
+pub(super) const PPTX_STEM: &str = "deck";
 
 /// The media type of a PowerPoint package.
-const PPTX_MEDIA_TYPE: &str =
+pub(super) const PPTX_MEDIA_TYPE: &str =
     "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 
 impl ToileState {
@@ -81,55 +79,6 @@ impl ToileState {
             })
             .collect();
         Some(export_pptx(&slides))
-    }
-
-    /// The deck written as a PowerPoint file by the Office module, as one
-    /// [`InteropAnswer::ExportReady`] the UI thread saves and reports
-    /// (`TOILE-IO-126`). The report is the map's: the writer carries every
-    /// item it receives (`TOILE-IO-125`). Read-only: the outcome carries no
-    /// update (`TOILE-IO-127`).
-    ///
-    /// Three cases answer a failure with its reason and no file
-    /// (`TOILE-IO-128`). The board holds no element, the module did not
-    /// load, or the writer refused.
-    pub(super) fn export_pptx_file(
-        &self,
-        converter: Result<&ambre_convert::Converter, ambre_core::StopCause>,
-    ) -> ToileOutcome {
-        let Some(PptxExport { deck, report }) = self.export_pptx_deck() else {
-            return Self::interop_failed(
-                Direction::Export,
-                InteropError::Stopped(ambre_core::StopCause::NothingToConvert),
-            );
-        };
-        let written = converter.and_then(|converter| {
-            let written = ambre_convert::encode_deck(&deck)
-                .and_then(|deck| converter.convert(&ambre_convert::Conversion::WritePptx { deck }));
-            match written {
-                Ok(ambre_convert::Converted::File(data)) => Ok(data),
-                Ok(_) => Err(ambre_core::StopCause::ConverterAnswered),
-                Err(e) => {
-                    tracing::warn!("Toile: the PowerPoint export stopped: {e}");
-                    Err(e.stop_cause())
-                }
-            }
-        });
-        match written {
-            Ok(data) => {
-                ToileOutcome::display_only(vec![ToileEvent::Interop(InteropAnswer::ExportReady {
-                    file: ExportedFile {
-                        filename: ambre_client_core::ExportFilename::named(
-                            PPTX_STEM,
-                            ambre_client_core::ExportExtension::Pptx,
-                        ),
-                        media_type: ambre_core::MediaType::from(PPTX_MEDIA_TYPE),
-                        data,
-                    },
-                    report,
-                })])
-            }
-            Err(cause) => Self::interop_failed(Direction::Export, InteropError::Stopped(cause)),
-        }
     }
 
     /// Every element of the board, in paint order, with the samples of a

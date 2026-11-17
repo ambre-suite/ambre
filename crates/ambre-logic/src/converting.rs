@@ -313,6 +313,9 @@ impl LogicState {
         if let JobOwner::TrameFile(document_id) = owner {
             return self.answer_trame_file(document_id, ticket, answer);
         }
+        if let JobOwner::ToileFile(document_id) = owner {
+            return self.answer_toile_file(document_id, ticket, answer);
+        }
         // A still answer for the owner that reads pixels alone; Prose and
         // Murmure read the frames of an animation too.
         let answer = answer.map_err(|error| failure_of(&error));
@@ -345,7 +348,10 @@ impl LogicState {
                 }
             }
             // Served above, before the answer is read as pixels.
-            JobOwner::ProseFile(_) | JobOwner::TrameFile(_) | JobOwner::DeckPdf { .. } => {}
+            JobOwner::ProseFile(_)
+            | JobOwner::TrameFile(_)
+            | JobOwner::DeckPdf { .. }
+            | JobOwner::ToileFile(_) => {}
             JobOwner::Toile(document_id) => {
                 let Some(DocState::Toile(state)) =
                     self.docs.get_mut(&document_id).map(|d| &mut d.state)
@@ -471,6 +477,31 @@ impl LogicState {
         );
     }
 
+    /// Land the answer of a Toile file read or write (`ARCH-129`). A read
+    /// runs its import command in the frame of any command, so a running
+    /// import lands whole first. A document closed meanwhile drops it.
+    fn answer_toile_file(
+        &mut self,
+        document_id: Id<Document>,
+        ticket: ambre_core::Seq<ambre_bus::Request>,
+        answer: Result<ambre_convert::Converted, ConvertError>,
+    ) {
+        let Some(DocState::Toile(state)) = self.docs.get_mut(&document_id).map(|d| &mut d.state)
+        else {
+            return;
+        };
+        let Some(outcome) = state.handle_file_converted(ticket, answer) else {
+            return;
+        };
+        self.dispatch_outcome(
+            document_id,
+            outcome.display.into_iter().map(AppEvent::Toile).collect(),
+            outcome.update,
+            outcome.ephemeral,
+            outcome.requests,
+        );
+    }
+
     /// Run one conversion on the loaded module of `family`. The document may
     /// have closed while the module loaded: its command is then dropped, as
     /// any command of a closed document is.
@@ -518,7 +549,7 @@ impl LogicState {
                 self.offload_trame_files(document_id);
             }
             (DocState::Toile(state), AppCommand::Toile(cmd)) => {
-                let outcome = state.handle_conversion(cmd, Ok(converter));
+                let outcome = state.handle_conversion(cmd);
                 self.dispatch_outcome(
                     document_id,
                     outcome.display.into_iter().map(AppEvent::Toile).collect(),
@@ -526,6 +557,7 @@ impl LogicState {
                     outcome.ephemeral,
                     outcome.requests,
                 );
+                self.offload_toile_files(document_id);
             }
             (DocState::Prose(state), AppCommand::Prose(cmd)) => {
                 let outcome = state.handle_conversion(cmd, Ok(converter));
