@@ -50,7 +50,7 @@ pub(crate) struct PreviewFrame {
 
 impl Preview {
     /// The bytes its frames hold.
-    #[cfg(test)]
+    #[cfg(all(test, not(target_arch = "wasm32")))]
     fn bytes(&self) -> Count<Octets> {
         self.frames.iter().map(|f| f.pixels.len()).sum()
     }
