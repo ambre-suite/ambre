@@ -92,9 +92,10 @@ impl Frame {
 
         let sent = RwSignal::new(Vec::new());
         let send = Callback::new(move |command| sent.update(|s| s.push(command)));
+        let invite_link = RwSignal::new(None);
         let handle = mount_to(inner.body().unwrap(), move || {
             view! {
-                <MurmureShell relay=relay send=send>
+                <MurmureShell relay=relay send=send invite_link=invite_link>
                     <span class="title">"Ambre"</span>
                 </MurmureShell>
             }
