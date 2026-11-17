@@ -587,6 +587,15 @@ impl AppView {
         }
     }
 
+    /// The shell sent the open of the active document. A view that fetches
+    /// its window asks it again: a fetch sent before the open was dropped.
+    fn document_opened(&mut self) {
+        match self {
+            AppView::Trame(v) => v.document_opened(),
+            AppView::Toile(_) | AppView::Prose(_) | AppView::Murmure(_) => {}
+        }
+    }
+
     /// Swap the active document in place, keeping the GPU surface.
     fn set_document(&mut self, document_id: Id<Document>) {
         match self {
@@ -672,12 +681,20 @@ impl AppView {
 #[derive(Clone)]
 pub struct DocSwitcher {
     set: Rc<dyn Fn(Id<Document>)>,
+    opened: Rc<dyn Fn()>,
 }
 
 impl DocSwitcher {
     /// Point the canvas at `document_id`. A no-op if it is already current.
     pub fn set_document(&self, document_id: Id<Document>) {
         (self.set)(document_id);
+    }
+
+    /// Say that the shell sent the open of the active document. The open
+    /// waits for the kept pins (`SYNC-240`), so it may follow the view's
+    /// first requests.
+    pub fn document_opened(&self) {
+        (self.opened)();
     }
 }
 

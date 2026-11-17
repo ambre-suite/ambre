@@ -33,6 +33,15 @@ impl TrameView {
         self.anchor.publish(None);
     }
 
+    /// The Logic thread now holds the document: the shell sent its open. A
+    /// fetch the view sent before that reached no live document, and the
+    /// Logic thread dropped it. Every later change would then name a version
+    /// the view never saw served. So the first fetch goes again on the next
+    /// frame, after the open.
+    pub fn document_opened(&mut self) {
+        self.initial_viewport_sent = false;
+    }
+
     /// Canvas-side reaction to a single [`TrameEvent`] (`trame-engine`, the
     /// update from the Logic thread). Exhaustive on purpose: a new variant must
     /// fail the build here rather than be dropped silently. Variants that only

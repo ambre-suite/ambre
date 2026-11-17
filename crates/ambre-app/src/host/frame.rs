@@ -425,6 +425,11 @@ impl FrameHost {
         self.view.set_document(document_id);
     }
 
+    /// The shell sent the open of the active document.
+    pub fn document_opened(&mut self) {
+        self.view.document_opened();
+    }
+
     /// Reconfigure the GPU surface and notify the view of a canvas resize.
     /// The view hears the logical size alone (`CANVAS-044`). A density change
     /// keeps it, and still reaches the view so every layer repaints.

@@ -2007,6 +2007,31 @@ fn a_ranged_change_refetches_its_cells_and_a_reset_the_window() {
     assert_eq!(whole, vec![window], "the whole window");
 }
 
+/// A first fetch that left before the open of its document reached no live
+/// document, and the Logic thread dropped it. Once the shell sends the open,
+/// the view asks for its whole window again, once.
+#[test]
+fn an_open_sent_after_the_first_fetch_fetches_the_window_again() {
+    let mut rig = Rig::new();
+    rig.frame();
+    let window = rig
+        .sent()
+        .iter()
+        .find_map(bounds)
+        .expect("the opening fetch");
+    rig.frame();
+    assert!(rig.sent().iter().all(|c| bounds(c).is_none()));
+    rig.view.document_opened();
+    rig.frame();
+    let again: Vec<_> = rig.sent().iter().filter_map(bounds).collect();
+    assert_eq!(again, vec![window], "the whole window, after the open");
+    rig.frame();
+    assert!(
+        rig.sent().iter().all(|c| bounds(c).is_none()),
+        "asked twice"
+    );
+}
+
 /// The content and the overlay the view paints now, recorded.
 fn painted(rig: &mut Rig) -> RecordingSurface {
     let mut surface = RecordingSurface::new();
