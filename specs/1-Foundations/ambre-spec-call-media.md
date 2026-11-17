@@ -77,6 +77,7 @@ this document alone.
 | `CALL-018` | `FRAME` | A join MUST NOT show a sender key to the relay or to the SFU. | `ZK-002`; this spec section 3 | type-level -- a join hands the relay a `SignedJoin`, which holds no key, and wraps that open under the X25519 key of their recipient alone. No wire type names a `SenderKey` (`ZK-002`); `ambre_crypto::call::tests::a_wrap_opens_for_its_recipient_and_binding_alone` | none | verified |
 | `CALL-019` | `FAIL` | Given a joiner absent from the membership log of the channel, a client MUST wrap no key for it. | this spec section 3, the join steps; `ambre-spec-membership.md` | `ambre_sync::call::tests::a_joiner_outside_the_channel_gets_no_wrap`; `::each_member_opens_exactly_what_it_should` -- an outsider and a removed member are refused, and open nothing; `ambre_sync::call_client::tests::a_joiner_outside_the_channel_gets_no_key_through_the_client` -- through the client and a model of the call socket | none | verified |
 | `CALL-020` | `FAIL` | Given a signed ephemeral key the client has seen already, the client MUST refuse it. | this spec section 3, the join steps | `ambre_sync::call::tests::a_join_seen_already_is_refused`; `::each_member_opens_exactly_what_it_should` -- a join delivered again is refused | none | verified |
+| `CALL-124` | `FAIL` | Given a signed join that arrives after the client's own and is older than its own by more than the join clock skew of `ambre-spec-budgets.md section 8`, the client MUST wrap no key for it. | this spec section 3, the join steps; `CALL-020` | `ambre_sync::call::tests::a_join_older_than_its_own_is_refused` -- a join of an earlier session, replayed after the skew, is refused, and a join that lags by the skew alone gets its wrap | none | verified |
 | `CALL-057` | `POST` | The relay MUST hand the signed join of a participant, unchanged, to every other participant of the call and to each later joiner. | this spec section 3, signalling; `CALL-016` | `ambre_server::ws::handler::call::tests::a_signed_join_reaches_every_other_seat_unchanged` -- database tier: a seat in the call hears the join, a later seat reads it in its roster, and a second announce changes nothing; `ambre_protocol::tests::the_relay_reads_only_the_listed_fields_of_a_call_frame` -- the join crosses as opaque bytes | none | verified |
 | `CALL-058` | `FRAME` | The relay MUST NOT forward a wrap to a participant session other than the one its sender index names. | this spec section 3, signalling; `CALL-030` | `ambre_server::ws::handler::call::tests::a_wrap_reaches_its_recipient_alone_on_the_call_socket` -- database tier: a second session of the same member hears no wrap | none | verified |
 | `CALL-059` | `POST` | Two clients that join one call through the relay MUST each hold the sender key of the other. | this spec section 3, the join steps; `CALL-016` | `ambre_sync::call_client::tests::two_clients_over_the_relay_each_hold_the_other_sender_key` -- host tier: two clients, each with its own keys, over a model of the call socket whose rules the database tier holds on the relay (`CALL-056` to `CALL-058`), and a chunk one seals the other opens; `::a_late_client_holds_every_key_from_its_join_on`; `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier: three Sync workers join through the relay and the SFU, and each client decodes the audio of the two others | none | verified |
@@ -240,7 +241,7 @@ A participant sends a screen or a window into the call, and stops it.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 123 `verified`. The relay admits under the cap, and the SFU mints the TURN
+* **Verification.** 124 `verified`. The relay admits under the cap, and the SFU mints the TURN
   credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography, forwards RTP and reaches a
   browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`, `CALL-050` to `CALL-052`). Each
   receiver holds fixed slots, and a seed gives one path (`CALL-045` to `CALL-053`). The seal and the
@@ -433,7 +434,9 @@ then opens the call socket. A change of the members of the channel reads the log
 client then switches its key away from a member the log no longer holds (`CALL-060`).
 
 It wraps no
-key to a join signed under another index than its seat (`CALL-061`). It opens the socket of the
+key to a join signed under another index than its seat (`CALL-061`). A join that arrives after
+its own must be no older than its own, within the join clock skew (`CALL-124`). The roster
+names joins older by right, so the client checks no time there. It opens the socket of the
 SFU that the admission names, with the admission first (`CALL-062`). It hands each key it
 draws, ratchets or unwraps to the call worker as a handoff, on a port of their own.
 
@@ -1016,9 +1019,9 @@ Versions and bug numbers read on 2026-10-18, from the sources in the session res
 * **The SFU builds on two patched str0m crates.** The upstream backend builds its certificate
   through rcgen, which links aws-lc-sys. Upstream str0m offers no seam for an external congestion
   control. The workspace patches both until str0m ships the changes.
-* **The time of a signed join is not checked.** A client refuses a join it has seen. A join of an
-  earlier session of a member, which this client never saw, still gets a wrap while the log holds
-  that member.
+* **The time of a signed join in the roster is not checked.** A client refuses a join it has
+  seen, and a later join older than its own (`CALL-124`). A join of an earlier session that the
+  relay puts in the roster still gets a wrap while the log holds that member.
 * **No rule caps the calls of one channel.** Whether a channel holds one live call or several is
   not ruled.
 * **Safari on iOS offers no volume for a participant.** Its element volume is read-only, and no

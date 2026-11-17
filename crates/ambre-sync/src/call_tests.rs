@@ -20,7 +20,7 @@ use ambre_crypto::call::{ChunkHeader, ChunkSealer, ReceiveKeys, SenderKey, Signe
 use ambre_protocol::MembershipAct;
 use proptest::prelude::*;
 
-use super::{Arrival, CallKeys, Joining, Moves, Refusal, SWITCH_DELAY};
+use super::{Arrival, CallKeys, JOIN_CLOCK_SKEW, Joining, Moves, Refusal, SWITCH_DELAY};
 use crate::membership_log::tests::{DOC, Person, append};
 use crate::membership_log::{Log, digest, no_self_join};
 use ambre_crypto::call::KeyHandoff;
@@ -555,6 +555,36 @@ fn a_join_seen_already_is_refused() {
         .get_mut(&0)
         .map(|(s, _)| s.keys.admit(&join, &world.log, Arrival::New).map(|_| ()));
     assert_eq!(result, Some(Err(Refusal::Replayed)));
+}
+
+/// A relay that replays to a later joiner the join of an earlier session gets no wrap
+/// (`CALL-124`, audit P5). A join whose clock lags by the skew alone still gets one.
+#[test]
+fn a_join_older_than_its_own_is_refused() {
+    let mut world = World::new();
+    let old = join_of(&world, 1, CALL, CHANNEL, 60);
+    world.advance(JOIN_CLOCK_SKEW.get() + 1);
+    person_join(&mut world, 0);
+    assert_eq!(admit_of(&mut world, 0, &old), Some(Err(Refusal::Stale)));
+    let person = &world.people[1];
+    let (keys, _) = CallKeys::start(
+        &person.key,
+        Joining {
+            call: CALL,
+            channel: CHANNEL,
+            member: person.id,
+            sender: Seq::new(61),
+            at: Instant::<Authored>::new(world.now - JOIN_CLOCK_SKEW.get()),
+        },
+    )
+    .unwrap_or_else(|e| panic!("{e:?}"));
+    let lagging = keys.join().clone();
+    let wraps = world.sessions.get_mut(&0).map(|(s, _)| {
+        s.keys
+            .admit(&lagging, &world.log, Arrival::New)
+            .map(|m| m.wraps.len())
+    });
+    assert_eq!(wraps, Some(Ok(1)));
 }
 
 /// A joiner the log of the channel does not hold gets no wrap.

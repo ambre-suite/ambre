@@ -29,6 +29,11 @@ use crate::membership_log::Log;
 /// switch row of `ambre-spec-budgets.md section 1`. Late wraps arrive within it.
 pub(crate) const SWITCH_DELAY: TimeSpan<Ms> = TimeSpan::new(5_000);
 
+/// How far the clock of a later joiner may lag behind the clock of this participant: the
+/// join clock skew row of `ambre-spec-budgets.md section 8`. Past it, a join that arrives
+/// after this participant's own is older than its own, and is refused (`CALL-124`).
+pub(crate) const JOIN_CLOCK_SKEW: TimeSpan<Ms> = TimeSpan::new(60_000);
+
 /// How a joiner meets this participant.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Arrival {
@@ -52,6 +57,9 @@ pub(crate) enum Refusal {
     NotAMember,
     /// The client saw this exchange key or this sender index already (`CALL-020`).
     Replayed,
+    /// The join arrives after this participant's own, but is older than it past the clock
+    /// skew. A relay replays a join of an earlier session (`CALL-124`).
+    Stale,
     /// The wrap comes from no participant this client admitted, or does not open.
     UnknownSender,
     /// The sender index or the generation is past the width of a key identifier.
@@ -111,6 +119,8 @@ pub(crate) struct CallKeys {
     own: Seq<SenderIndex>,
     exchange: CallExchangeKey,
     join: SignedJoin,
+    /// The time this session signed its join, on its own clock.
+    joined: Instant<Authored>,
     current: Held,
     pending: Option<Pending>,
     peers: HashMap<Seq<SenderIndex>, Peer>,
@@ -170,6 +180,7 @@ impl CallKeys {
             seen_senders: HashSet::from([joining.sender]),
             exchange,
             join,
+            joined: joining.at,
             current,
             pending: None,
             peers: HashMap::new(),
@@ -188,8 +199,9 @@ impl CallKeys {
     }
 
     /// Admits a joiner: checks its signature, its call, the membership log of the
-    /// channel and its freshness, then wraps this participant's keys to it alone. A
-    /// joiner that `arrival` names new first moves this participant one generation up.
+    /// channel and its freshness, and the time of a new joiner. Then wraps this
+    /// participant's keys to the joiner alone. A joiner that `arrival` names new first
+    /// moves this participant one generation up.
     ///
     /// # Errors
     ///
@@ -213,6 +225,11 @@ impl CallKeys {
         }
         if log.present_key(claim.member) != Some(claim.identity) {
             return Err(Refusal::NotAMember);
+        }
+        // A joiner the roster names was in the call before this participant, so its join is
+        // older by right. A new joiner signed after this participant did.
+        if arrival == Arrival::New && self.joined.since(claim.at) > JOIN_CLOCK_SKEW {
+            return Err(Refusal::Stale);
         }
         let mut moves = Moves::default();
         if arrival == Arrival::New {
