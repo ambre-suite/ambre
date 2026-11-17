@@ -435,6 +435,15 @@ strip = "symbols"
 # in brotli, and two machines build the same bytes.
 trim-paths = "all"
 
+# The field arithmetic of X25519 and Ed25519 is the hot path of the Sync
+# worker: the space leave runs about 10 000 key exchanges. At level 3 the crypto
+# page of `phone_bench` reads the leave 12 % faster and the open 18 % faster.
+# Sync grows by 23 KB raw, 5 KB brotli (`ambre-spec-budgets.md` section 1).
+# The crate keeps its 32-bit backend: on wasm32 the 64-bit one reads the leave
+# 67 % slower, since wasm has no 64x64->128 multiply.
+[profile.wasm-release.package.curve25519-dalek]
+opt-level = 3
+
 # leptos_macro emitted the slots of a component in the order of a HashMap
 # seeded at random per process, so two builds of one commit wrote two Main
 # instances (`ZK-038`). The vendored copy emits them in name order

@@ -144,6 +144,41 @@
   `import_snapshot`. Both are legs 2 to 4 of section 4. Its binary contribution is
   negligible for the same reason -- a few dozen bytes in `ambre-core`, shared rather than duplicated
   per app (`ambre-spec-docfile.md section 3`).
+* **The curve25519 build of the Sync worker, measured on 2026-11-17.** `curve25519-dalek` signs,
+  verifies and runs each key exchange. Two settings of its build were measured, alone and
+  together. The first is `curve25519_dalek_bits="64"`, its 64-bit backend. The second is
+  `opt-level = 3` for the crate alone in `wasm-release`, where every other crate stays at `"z"`.
+* **The method.** The `crypto` page of `phone_bench` ran headless, by `wasm-bindgen-test-runner`
+  under Chrome for Testing 157. The machine was a cloud container of 4 vCPU, Intel Xeon 2.10 GHz.
+  The command is the one of `just phone-measures crypto`, without `NO_HEADLESS`. Each setting ran
+  three times, interleaved with the others. The table gives the median of the three medians, in
+  microseconds for the seal and the open and in milliseconds for the leave.
+* **The size.** `cargo build --profile wasm-release` of `ambre-sync` and `ambre-call` under the flags
+  of `.cargo/config.toml`, then `wasm-bindgen --target no-modules`. Brotli is at quality 11. Trunk
+  did not run, so a figure differs from `just size`. The change between two settings is the figure
+  to read.
+
+| Setting | Seal 1 KB | Open 1 KB | Space leave | Sync raw | Sync brotli | Call worker raw | Verdict |
+|---|---|---|---|---|---|---|---|
+| 32-bit backend, `"z"`, before | 76.7 us | 151.7 us | 1 682 ms | 1 362 845 | 396 212 | 112 627 | -- |
+| 64-bit backend, `"z"` | 120.8 us | 248.2 us | 2 815 ms | 1 364 567 | 396 337 | 112 627 | refused: the leave reads 67 % slower |
+| 32-bit backend, level 3 | 72.4 us | 124.4 us | 1 483 ms | 1 385 877 | 401 379 | 112 461 | kept: the leave reads 12 % faster, the open 18 % |
+| 64-bit backend, level 3 | 82.1 us | 192.2 us | 2 677 ms | 1 375 881 | 398 349 | 112 461 | refused: slower than both 32-bit rows |
+
+* **Why the 64-bit backend loses on wasm32.** It multiplies two 64-bit limbs into 128 bits. Wasm has
+  no such instruction, so the compiler emulates each product with several 64-bit multiplies. The 32-bit
+  backend multiplies two 32-bit limbs into one native 64-bit multiply.
+* **The level 3 build holds the size budget.** Sync grows by 23 032 raw bytes and 5 167 brotli. Sync
+  holds no ceiling of its own, and the first download keeps about 850 KB of room under its 4 MB
+  (section 5). The call worker reads 166 raw bytes less.
+* **The phone figure is open.** On the phone, run `just phone-measures crypto <address>` as
+  `5-Murmure/features/ambre-spec-murmure-phone-measures.md section 3.1` states. Run it once on the
+  head of `main`, then once with the override of `Cargo.toml` removed.
+
+| Date | Phone, browser and version | Setting | Seal 1 KB | Open 1 KB | Space leave |
+|---|---|---|---|---|---|
+| to fill | Pixel 9a, Chrome | 32-bit backend, `"z"` | -- | -- | -- |
+| to fill | Pixel 9a, Chrome | 32-bit backend, level 3 | -- | -- | -- |
 
 ---
 
