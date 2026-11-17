@@ -1054,6 +1054,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         {boot_is_prose.then(|| view! {
             <ambre_prose::chrome::ProseCommentsPanel signals=prose_signals />
             <ambre_prose::chrome::ProseSuggestionPopover signals=prose_signals />
+            <ambre_prose::chrome::ProseSpellingPopover signals=prose_signals />
             <ambre_prose::chrome::ProseFormatBar signals=prose_signals />
             <ambre_prose::chrome::ProseSlashMenu signals=prose_signals />
             <ambre_prose::chrome::ProseRuler signals=prose_signals />

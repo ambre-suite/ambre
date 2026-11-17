@@ -352,3 +352,80 @@ async fn a_ruler_drag_hands_back_one_release() {
     assert_eq!(signals.ruler_release.get_untracked(), None, "one release");
     root.remove();
 }
+
+/// `PROSE-UI-248`: the spelling popover sits under the pressed word, says it
+/// is looking up until the corrections arrive, then lists them. A pick and
+/// the Ignore button each hand their intent, naming the word's range, back to
+/// the view. The DOM sends no command.
+#[wasm_bindgen_test]
+async fn the_spelling_popover_lists_the_corrections_and_hands_back_a_pick() {
+    use ambre_convert::spelling::SpellWord;
+    use ambre_core::Validated;
+    use ambre_core::index::Span;
+    use ambre_prose::message::DocChar;
+    use ambre_prose::view::annotate::{Offered, SpellingPopover};
+
+    let signals = ProseSignals::new();
+    signals.canvas_origin.set(origin());
+    let block_id = ambre_prose::events::block_id(loro::TreeID::new(1, 0));
+    let range = Span::<DocChar>::new(Pos::<DocChar>::new(2), Pos::<DocChar>::new(9));
+    let open = |suggestions| SpellingPopover {
+        block_id,
+        range,
+        rect: ScreenRect {
+            x0: Px::<View>::new(100.0),
+            y0: Px::<View>::new(200.0),
+            x1: Px::<View>::new(150.0),
+            y1: Px::<View>::new(220.0),
+        },
+        suggestions,
+    };
+    let root =
+        mount_in_container(move || view! { <chrome::ProseSpellingPopover signals=signals /> });
+    leptos::task::tick().await;
+    assert!(
+        one(&root, ".ambre-prose-spelling").is_none(),
+        "nothing pressed"
+    );
+
+    signals.spelling.set(Some(open(Offered::Waiting)));
+    leptos::task::tick().await;
+    let r = one(&root, ".ambre-prose-spelling")
+        .unwrap()
+        .get_bounding_client_rect();
+    // Under the word: its corner moved onto the page, 4 pixels below it.
+    assert_eq!((r.left() as f32, r.top() as f32), (140.0, 254.0));
+    assert!(one(&root, ".ambre-prose-spelling-waiting").is_some());
+
+    let receive = Validated::<SpellWord>::parse("receive").unwrap();
+    let relieve = Validated::<SpellWord>::parse("relieve").unwrap();
+    signals
+        .spelling
+        .set(Some(open(Offered::Ready(vec![receive.clone(), relieve]))));
+    leptos::task::tick().await;
+    let picks = all(&root, ".ambre-prose-spelling-pick");
+    assert_eq!(picks.len(), 2);
+    assert_eq!(picks[0].text_content().as_deref(), Some("receive"));
+    picks[0].click();
+    assert_eq!(
+        signals.intent.get_untracked(),
+        Some(AnnotationIntent::Correct {
+            block_id,
+            range,
+            replacement: receive,
+        })
+    );
+    one(&root, ".ambre-prose-spelling-ignore").unwrap().click();
+    assert_eq!(
+        signals.intent.get_untracked(),
+        Some(AnnotationIntent::Ignore { block_id, range })
+    );
+
+    signals.spelling.set(Some(open(Offered::Ready(Vec::new()))));
+    leptos::task::tick().await;
+    assert!(one(&root, ".ambre-prose-spelling-none").is_some());
+    signals.spelling.set(None);
+    leptos::task::tick().await;
+    assert!(one(&root, ".ambre-prose-spelling").is_none(), "closed");
+    root.remove();
+}

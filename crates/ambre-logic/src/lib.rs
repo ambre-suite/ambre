@@ -427,7 +427,10 @@ impl DocState {
     fn set_reader_locale(&mut self, reader: &ambre_client_core::ReaderLocale) {
         match self {
             DocState::Trame(state) => state.adopt_reader_locale(reader.clone()),
-            DocState::Toile(_) | DocState::Prose(_) => {}
+            // The reader's language is the spelling fallback of a document
+            // that names none.
+            DocState::Prose(state) => state.set_spelling_reader(reader.own.tag().cloned()),
+            DocState::Toile(_) => {}
         }
     }
 

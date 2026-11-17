@@ -51,6 +51,7 @@ mod pictures;
 mod presence;
 mod print;
 mod sliced;
+mod spelling;
 mod suggestions;
 mod sweep;
 pub(crate) mod tables;
@@ -183,6 +184,9 @@ pub struct ProseState {
         ambre_core::Seq<ambre_bus::rest::Request>,
         ambre_convert::Conversion,
     )>,
+    /// The reader's spelling session: never in the document
+    /// (`PROSE-FEAT-106`).
+    spelling: spelling::Spelling,
     /// The version vector already exported to Sync. A delta is every operation
     /// past it (`PROSE-050`, `PROSE-098`).
     last_exported_vv: VersionVector,
@@ -393,6 +397,7 @@ impl ProseState {
             in_flight: HashMap::new(),
             decoding: HashMap::new(),
             decode_outbox: Vec::new(),
+            spelling: spelling::Spelling::default(),
             last_exported_vv: VersionVector::default(),
             peer: ambre_core::PeerId::new(peer),
             my_user_id: None,
@@ -443,6 +448,7 @@ impl ProseState {
         // flush them first. A commit with nothing pending writes nothing.
         self.doc.commit();
         dirty.extend(self.touched.take(&self.doc));
+        self.spelling_touched(&dirty);
         let structural = self.touched.take_structural();
         let faces = &self.faces;
         let window = self.window;
@@ -994,6 +1000,17 @@ impl ProseState {
             ProseCommand::FindClose => self.find_close(),
             ProseCommand::ReplaceOne { replacement } => self.replace_one(&replacement),
             ProseCommand::ReplaceAll { replacement } => self.replace_all(&replacement),
+            ProseCommand::SuggestSpelling { block_id, range } => {
+                self.suggest_spelling(block_id, range)
+            }
+            ProseCommand::CorrectSpelling {
+                block_id,
+                range,
+                replacement,
+            } => self.correct_spelling(block_id, range, &replacement),
+            ProseCommand::IgnoreSpelling { block_id, range } => {
+                self.ignore_spelling(block_id, range)
+            }
             ProseCommand::InsertFootnote {
                 block_id,
                 pos,

@@ -93,7 +93,16 @@ GLUE, WASM, LOADER = worker_files()
 # The modules and their digests, as the pre-build hook writes them, one pair
 # per family of `scripts/converter_build.py`.
 CONVERTER_DIR = Path(__file__).resolve().parent.parent / "target" / "converter"
-CONVERTER_FAMILIES = ("tables", "pdf", "markup", "images", "office", "boards")
+CONVERTER_FAMILIES = (
+    "tables",
+    "pdf",
+    "markup",
+    "images",
+    "office",
+    "boards",
+    "spell_en",
+    "spell_fr",
+)
 
 
 def converter_module(family: str) -> str:

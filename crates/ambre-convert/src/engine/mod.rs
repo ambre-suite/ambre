@@ -20,7 +20,9 @@ use ambre_core::{Count, Payload};
     feature = "markup",
     feature = "images",
     feature = "office",
-    feature = "boards"
+    feature = "boards",
+    feature = "spell_en",
+    feature = "spell_fr"
 ))]
 use crate::Converted;
 #[cfg(feature = "tables")]
@@ -46,6 +48,8 @@ mod png;
 mod prose;
 #[cfg(any(feature = "office", feature = "pdf", feature = "images"))]
 mod refusal;
+#[cfg(any(feature = "spell_en", feature = "spell_fr"))]
+mod spell;
 #[cfg(feature = "images")]
 mod svg;
 #[cfg(feature = "images")]
@@ -196,13 +200,21 @@ pub fn convert(conversion: Conversion) -> Answer {
                 .map(Converted::File)
                 .map_err(|e| refusal::pptx(&e))
         }
+        #[cfg(any(feature = "spell_en", feature = "spell_fr"))]
+        Conversion::CheckSpelling(check) => spell::check(&check).map(Converted::Misspelled),
+        #[cfg(any(feature = "spell_en", feature = "spell_fr"))]
+        Conversion::SuggestSpelling(suggest) => {
+            spell::suggest(&suggest).map(Converted::Suggestions)
+        }
         #[cfg(not(all(
             feature = "tables",
             feature = "pdf",
             feature = "markup",
             feature = "images",
             feature = "office",
-            feature = "boards"
+            feature = "boards",
+            feature = "spell_en",
+            feature = "spell_fr"
         )))]
         _ => Err(FileRefusal::NotCarried),
     }

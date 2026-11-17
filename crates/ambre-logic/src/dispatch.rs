@@ -1197,6 +1197,80 @@ mod tests {
     /// document's id. Its answer comes back to the document, which tells the
     /// view what the address shows (`features/ambre-spec-prose-images.md
     /// section 3`).
+    /// The spell checker of Prose
+    /// (`4-Prose/features/ambre-spec-prose-spell-check.md`). A Prose document
+    /// in French is checked on the converter thread, in the French spelling
+    /// module the Sync worker fetched for it. Sync is asked for the module by
+    /// its family alone, and no command it receives carries a word of the
+    /// text.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn a_prose_spell_check_runs_on_the_converter_thread_and_sync_sees_no_word() {
+        use ambre_prose::message::{DocChar, ProseCommand, ProseEvent};
+        let (mut state, ui, sync) = harness();
+        let mut thread = converter_thread(&mut state);
+        let document_id = Id::<Document>::mint();
+        state.open_with_identity(document_id, DocType::Prose);
+        state.answer_pass();
+        let block = match &state.docs.get(&document_id).expect("a live document").state {
+            DocState::Prose(prose) => prose.root_blocks()[0],
+            other => panic!("the registry opened {other:?}"),
+        };
+        for command in [
+            ProseCommand::SetDocumentLocale {
+                locale: ambre_client_core::DocumentLocale::parse("fr").expect("a tag"),
+            },
+            ProseCommand::InsertText {
+                block_id: block,
+                pos: ambre_core::index::Pos::<DocChar>::ZERO,
+                text: "Une maisn bleue".to_owned(),
+            },
+        ] {
+            state.handle_logic_command(LogicCommand::App {
+                document_id,
+                command: AppCommand::Prose(command),
+            });
+        }
+        state.answer_pass();
+        let to_sync: Vec<SyncCommand> = sync.try_iter().collect();
+        let fetches: Vec<_> = to_sync
+            .iter()
+            .filter_map(|cmd| match cmd {
+                SyncCommand::FetchConverter { family } => Some(*family),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(fetches, vec![ambre_core::ConverterFamily::SpellFr]);
+        for cmd in &to_sync {
+            assert!(
+                !format!("{cmd:?}").contains("maisn"),
+                "no command to Sync names a word"
+            );
+        }
+        state.handle_logic_event(LogicEvent::ConverterFetched {
+            family: ambre_core::ConverterFamily::SpellFr,
+            module: ambre_core::Payload::new(Vec::new()),
+        });
+        thread.serve();
+        state.take_converted();
+        state.answer_pass();
+        let underlined = ui.try_iter().find_map(|event| match event {
+            UiEvent::Viewport {
+                event: AppEvent::Prose(ProseEvent::Misspelled { block_id, ranges }),
+                ..
+            } if block_id == block => Some(ranges),
+            _ => None,
+        });
+        let ranges = underlined.expect("the view was told the misspelled word");
+        assert_eq!(
+            ranges
+                .iter()
+                .map(|r| r.to_usize_range())
+                .collect::<Vec<_>>(),
+            vec![4..9]
+        );
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn a_prose_picture_is_asked_for_with_its_document_and_answered_to_it() {

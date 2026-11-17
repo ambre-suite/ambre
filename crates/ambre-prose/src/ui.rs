@@ -439,6 +439,12 @@ pub struct ProseUiState {
     /// one. Empty once the search closes (`PROSE-FEAT-289`).
     pub find_matches: Vec<FindMatch>,
     pub find_current: Option<Pos<ambre_bus::app::find::Match>>,
+    /// The misspelled words of each block, as the last check found them, to
+    /// underline (`PROSE-FEAT-333`). This reader's alone.
+    pub misspelled: HashMap<BlockId, Vec<Span<DocChar>>>,
+    /// The spelling popover a press on an underlined word opened, until the
+    /// reader picks from it or presses elsewhere.
+    pub spelling: Option<crate::view::annotate::SpellingPopover>,
     /// The four band blocks and their settings, as last answered: the blocks
     /// the ordinary text commands aim at to edit a band.
     pub bands: BandSet,
@@ -824,6 +830,34 @@ impl ProseUiState {
             ProseEvent::FindUpdated { current } => {
                 self.find_current = *current;
                 self.reveal_current_match();
+            }
+            ProseEvent::Misspelled { block_id, ranges } => {
+                if ranges.is_empty() {
+                    self.misspelled.remove(block_id);
+                } else {
+                    self.misspelled.insert(*block_id, ranges.clone());
+                }
+                // A popover over a word no longer misspelled closes.
+                if self
+                    .spelling
+                    .as_ref()
+                    .is_some_and(|open| open.block_id == *block_id && !ranges.contains(&open.range))
+                {
+                    self.spelling = None;
+                }
+                self.index_highlights();
+            }
+            ProseEvent::SpellingSuggestions {
+                block_id,
+                range,
+                suggestions,
+            } => {
+                if let Some(open) = self.spelling.as_mut()
+                    && open.block_id == *block_id
+                    && open.range == *range
+                {
+                    open.suggestions = crate::view::annotate::Offered::Ready(suggestions.clone());
+                }
             }
             ProseEvent::BandsUpdated { bands } => self.bands = bands.clone(),
             ProseEvent::RemoteCursors { cursors } => {

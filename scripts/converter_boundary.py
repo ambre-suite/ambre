@@ -47,13 +47,18 @@ FAMILY_CONVERTERS = {
     "images": ("usvg", "roxmltree"),
     "office": ("ambre-opc", "zip", "quick-xml", "jiff"),
     "boards": (),
+    # The spell checker: its engine is shared, its dictionary its own.
+    "spell_en": (),
+    "spell_fr": (),
 }
 
 # The converters two modules hold: the WebP, the JPEG and the GIF decoders,
 # which the images module runs and krilla links to embed a picture in a PDF.
+# The spell checker `spellbook` is the engine of the two spelling modules,
+# each with its own dictionary.
 # Neither instance may link one, and no family owns it. The PNG decoder is
 # not one: Main links it for the encoder its picture paths share.
-SHARED_CONVERTERS = ("image-webp", "zune-jpeg", "gif")
+SHARED_CONVERTERS = ("image-webp", "zune-jpeg", "gif", "spellbook")
 
 # Every converter, which neither instance may link.
 CONVERTERS = tuple(c for family in FAMILY_CONVERTERS.values() for c in family) + SHARED_CONVERTERS

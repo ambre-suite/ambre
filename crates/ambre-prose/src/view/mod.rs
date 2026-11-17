@@ -49,6 +49,8 @@ pub enum HighlightKind {
     Insertion,
     Deletion,
     Find,
+    /// A word the dictionary does not know: a wavy underline, no fill.
+    Misspelled,
 }
 
 /// One inline highlight, on the laid run of its block.
@@ -234,6 +236,11 @@ impl ProseUiState {
             };
             for span in &suggestion.spans {
                 push(span.block_id, kind, span.start, span.end);
+            }
+        }
+        for (block, ranges) in &self.misspelled {
+            for range in ranges {
+                push(*block, HighlightKind::Misspelled, range.start, range.end);
             }
         }
         for found in &self.find_matches {

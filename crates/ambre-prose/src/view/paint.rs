@@ -2256,6 +2256,49 @@ mod tests {
         assert!((line(pal.error) - middle).abs() < 0.5);
     }
 
+    /// `PROSE-UI-247`: a misspelled word is drawn bare, with a wave of short
+    /// strokes in the error colour along its bottom, across its width alone.
+    #[test]
+    fn a_misspelled_word_is_drawn_with_a_wave_and_no_tint() {
+        let (_, shaped) = laid_out(1, 20);
+        let mut ui = ProseUiState::default();
+        ui.resize(Px::<View>::new(1200.0), Px::<View>::new(900.0));
+        ui.apply_layout(shaped);
+        let id = first_block(&ui);
+        ui.apply_event(&crate::events::ProseEvent::Misspelled {
+            block_id: id,
+            ranges: vec![Span::<DocChar>::new(
+                Pos::<DocChar>::new(5),
+                Pos::<DocChar>::new(9),
+            )],
+        });
+        let surface = paint(&mut ui);
+        let pal = palette();
+        let wave: Vec<_> = surface
+            .ops()
+            .iter()
+            .filter_map(|op| match op {
+                DrawOp::StrokeLine { line, color, .. } if *color == pal.error => Some(*line),
+                _ => None,
+            })
+            .collect();
+        assert!(wave.len() > 2, "a wave of several strokes: {}", wave.len());
+        assert!(
+            wave.windows(2).all(|pair| pair[0].p0.y != pair[1].p0.y),
+            "each stroke turns"
+        );
+        let tinted = surface
+            .ops()
+            .iter()
+            .any(|op| matches!(op, DrawOp::FillRect { color, .. } if *color == pal.error));
+        assert!(!tinted, "the word itself stays bare");
+        let width = wave.last().map_or(0.0, |l| l.p1.x) - wave[0].p0.x;
+        assert!(
+            width > 0.0 && width < 80.0,
+            "across the word alone: {width}"
+        );
+    }
+
     proptest::proptest! {
         #![proptest_config(proptest::prelude::ProptestConfig::with_cases(32))]
 

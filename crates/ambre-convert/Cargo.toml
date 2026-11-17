@@ -21,10 +21,14 @@ pdf = ["engine", "dep:ambre-pdf", "dep:tiny-skia-path", "dep:skrifa", "dep:flate
 markup = ["engine", "dep:pulldown-cmark", "dep:html5ever"]
 images = ["engine", "dep:usvg", "dep:roxmltree", "dep:image-webp", "dep:zune-jpeg", "dep:png", "dep:gif"]
 office = ["engine", "dep:ambre-docx", "ambre-docx/codec", "dep:ambre-odt", "ambre-prose-form/word", "ambre-xlsx/codec", "ambre-pptx/codec", "dep:zune-jpeg"]
-# Every family, linked in place: the host tier and the tests.
 # boards: the Figma and Miro reader, over a JSON reader of the module's own.
 boards = ["engine"]
-all-families = ["tables", "pdf", "markup", "images", "office", "boards"]
+# One spelling module per dictionary: the shared engine, and the dictionary
+# the module embeds (`dictionaries/NOTICE.txt`).
+spell_en = ["engine", "dep:spellbook"]
+spell_fr = ["engine", "dep:spellbook"]
+# Every family, linked in place: the host tier and the tests.
+all-families = ["tables", "pdf", "markup", "images", "office", "boards", "spell_en", "spell_fr"]
 # Set by each family: this build carries an engine and its exports.
 engine = []
 # The loader that instantiates the fetched module, on wasm. On in the Main
@@ -109,6 +113,12 @@ zune-jpeg  = { workspace = true, optional = true }
 # the Logic thread (`ARCH-097`).
 png        = { workspace = true, optional = true }
 gif        = { workspace = true, optional = true }
+# spell_en, spell_fr: the spell checker, a pure Rust reader of Hunspell
+# dictionaries (MPL-2.0). Chosen over `zspell`, whose licence the registry
+# does not state, and over a Hunspell binding, which fails the Rust-first
+# pillar (`4-Prose/features/ambre-spec-prose-spell-check.md section 4`). Its
+# default hasher is foldhash, which the workspace already links.
+spellbook  = { version = "0.4.2", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # The module's exports, and the loader the Logic thread instantiates it with.

@@ -3908,7 +3908,7 @@ ambre-prose-form | src/word_write.rs | crate::word_write | author_name() | ret |
 ambre-prose | src/logic/interop.rs | crate::logic::interop | author_text() | ret | String	foreign-api	the author text an annotation entry of the document stores
 ambre-prose | src/message/mod.rs | crate::message | <ProseConstruct as ambre_bus::interop::Construct>::plural() | ret | &'static str	free-text	the plural a report reads for a carried construct
 ambre-sync | src/converter.rs | crate::converter | digest_hex() | ret | Option<&'static str>	foreign-api	the hex digest the build script wrote, which FixedBytes::from_hex parses
-ambre-sync | build.rs | crate | FAMILIES | const | [&str;6]	generic	the name of each ConverterFamily as its digest file spells it
+ambre-sync | build.rs | crate | FAMILIES | const | [&str;8]	generic	the name of each ConverterFamily as its digest file spells it
 ambre-pptx | src/lib.rs | crate | PptxError::Xml.0 | field | String	free-text	foreign error message
 ambre-pptx | src/model.rs | crate::model | Connector.name | field | String	free-text	the name PowerPoint lists a connector under in its selection pane
 ambre-pptx | src/model.rs | crate::model | Picture.name | field | String	free-text	the name PowerPoint lists a picture under in its selection pane
@@ -4740,3 +4740,6 @@ ambre-core | src/call.rs | crate::call | <MemberPseudonym as FixedRole>::Array |
 ambre-server | src/jwt.rs | crate::jwt | MEMBER_DOMAIN | const | &[u8]	generic	domain-separation tag or length constant
 ambre-sfu | src/forward.rs | crate::forward | names_its_seat() | ret | bool	generic	predicate
 ambre-sfu | src/serve.rs | crate::serve | Session::renewed_by() | ret | bool	generic	predicate
+ambre-convert | src/spelling.rs | crate::spelling | <SpellWord as Rule>::admit() | ret | Result<String,NotAWord>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-convert | src/spelling.rs | crate::spelling | <SpellWord as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-prose | src/logic/spelling.rs | crate::logic::spelling | words(text) | param | &str	free-text	one block's text, cut into the words a spell check carries

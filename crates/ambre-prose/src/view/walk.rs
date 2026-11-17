@@ -47,6 +47,7 @@ impl PagePalette {
             HighlightKind::Insertion => self.success.multiply_alpha(0.3),
             HighlightKind::Deletion => self.error.multiply_alpha(0.3),
             HighlightKind::Find => self.accent.multiply_alpha(0.3),
+            HighlightKind::Misspelled => self.error,
         }
     }
 }
@@ -257,6 +258,12 @@ impl PageWalk<'_> {
             self.highlights_walked = self.highlights_walked.incremented();
             for rect in data.range_boxes(mark.span) {
                 let rect = to_rect(placed, &rect);
+                // A misspelled word keeps its text bare: the wave alone
+                // marks it (`PROSE-UI-247`).
+                if mark.kind == HighlightKind::Misspelled {
+                    wave(surface, palette.highlight(mark.kind), &rect);
+                    continue;
+                }
                 surface.fill_rect(rect, palette.highlight(mark.kind));
                 // A suggestion reads in the text itself: an insertion is
                 // underlined, a deletion struck through (`PROSE-UI-051`).
@@ -277,11 +284,39 @@ impl PageWalk<'_> {
                             ambre_core::Px::<ambre_core::Surface>::new(1.0),
                         );
                     }
-                    HighlightKind::Comment | HighlightKind::Find => {}
+                    HighlightKind::Comment | HighlightKind::Find | HighlightKind::Misspelled => {}
                 }
             }
         }
         surface.pop_clip();
+    }
+}
+
+/// The pitch of the wave under a misspelled word: half a period, in pixels
+/// of the surface, and its height.
+const WAVE_STEP: Px<Surface> = Px::<Surface>::new(2.0);
+
+/// Draw a wavy line along the bottom of `rect`, one stroke per half period,
+/// so a misspelled word reads apart from an underlined one.
+fn wave<S: DrawSurface>(surface: &mut S, color: Color, rect: &Rect) {
+    let step = WAVE_STEP.get();
+    let base = rect.y1 - 1.0;
+    let mut x = rect.x0;
+    let mut up = true;
+    while x < rect.x1 {
+        let next = (x + step).min(rect.x1);
+        let (from, to) = if up {
+            (base, base - step)
+        } else {
+            (base - step, base)
+        };
+        surface.stroke_line(
+            ambre_draw::Line::new((x, from), (next, to)),
+            color,
+            ambre_core::Px::<ambre_core::Surface>::new(1.0),
+        );
+        x = next;
+        up = !up;
     }
 }
 

@@ -195,7 +195,7 @@ impl ProseState {
 
     /// Delete one range of one block and insert the replacement in its place,
     /// uncommitted.
-    fn replace_range(
+    pub(super) fn replace_range(
         &mut self,
         id: &TreeID,
         range: Span<DocChar>,

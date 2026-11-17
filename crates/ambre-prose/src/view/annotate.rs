@@ -15,6 +15,7 @@ use crate::events::{
     BlockId, CommentThread, LinkSpan, Page, ProseCommand, SuggestionKind, tree_id,
 };
 use crate::layout::run::RunChar;
+use crate::message::DocChar;
 use crate::ui::ProseUiState;
 use crate::view::answered_span;
 use crate::view::column::DocPos;
@@ -42,6 +43,25 @@ pub struct HoveredSuggestion {
     pub suggestion_id: Id<Suggestion>,
     pub kind: SuggestionKind,
     pub rect: ScreenRect,
+}
+
+/// The corrections a spelling popover offers.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Offered {
+    /// Asked of the Logic thread, not answered yet.
+    Waiting,
+    /// Answered, best first, at most five. An empty list offers none.
+    Ready(Vec<ambre_core::Validated<ambre_convert::spelling::SpellWord>>),
+}
+
+/// The spelling popover over one misspelled word (`PROSE-UI-248`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct SpellingPopover {
+    pub block_id: BlockId,
+    pub range: Span<DocChar>,
+    /// The piece of the word the press landed on.
+    pub rect: ScreenRect,
+    pub suggestions: Offered,
 }
 
 /// Where a comment thread's anchor starts, for the panel to line it up with.
@@ -85,6 +105,17 @@ pub enum AnnotationIntent {
     Reject {
         suggestion_id: Id<Suggestion>,
     },
+    /// Replace a misspelled word with the correction picked.
+    Correct {
+        block_id: BlockId,
+        range: Span<DocChar>,
+        replacement: ambre_core::Validated<ambre_convert::spelling::SpellWord>,
+    },
+    /// Stop underlining a misspelled word for the session.
+    Ignore {
+        block_id: BlockId,
+        range: Span<DocChar>,
+    },
 }
 
 impl std::fmt::Debug for AnnotationIntent {
@@ -110,6 +141,21 @@ impl std::fmt::Debug for AnnotationIntent {
             Self::Reject { suggestion_id } => f
                 .debug_struct("Reject")
                 .field("suggestion_id", suggestion_id)
+                .finish(),
+            Self::Correct {
+                block_id,
+                range,
+                replacement,
+            } => f
+                .debug_struct("Correct")
+                .field("block_id", block_id)
+                .field("range", range)
+                .field("replacement", replacement)
+                .finish(),
+            Self::Ignore { block_id, range } => f
+                .debug_struct("Ignore")
+                .field("block_id", block_id)
+                .field("range", range)
                 .finish(),
         }
     }
@@ -265,6 +311,40 @@ impl ProseUiState {
         })
     }
 
+    /// The misspelled word drawn under a canvas point, if any, and the piece
+    /// of it the point is on (`PROSE-UI-248`).
+    #[must_use]
+    pub fn misspelling_at(
+        &self,
+        at: Point<Px<View>>,
+    ) -> Option<(BlockId, Span<DocChar>, ScreenRect)> {
+        let page = self.page_under(at)?;
+        self.misspelled.iter().find_map(|(block, ranges)| {
+            ranges.iter().find_map(|range| {
+                let rect =
+                    self.span_under(*block, answered_span(range.start, range.end), page, at)?;
+                Some((*block, *range, rect))
+            })
+        })
+    }
+
+    /// A press at a canvas point: on a misspelled word it opens the spelling
+    /// popover and answers the command that asks for its corrections.
+    /// Anywhere else it closes the popover (`PROSE-UI-248`).
+    pub fn press_spelling(&mut self, at: Point<Px<View>>) -> Option<ProseCommand> {
+        let Some((block_id, range, rect)) = self.misspelling_at(at) else {
+            self.spelling = None;
+            return None;
+        };
+        self.spelling = Some(SpellingPopover {
+            block_id,
+            range,
+            rect,
+            suggestions: Offered::Waiting,
+        });
+        Some(ProseCommand::SuggestSpelling { block_id, range })
+    }
+
     /// The link drawn under a canvas point, if any: over its marked text
     /// alone (`PROSE-UI-153`).
     #[must_use]
@@ -367,6 +447,22 @@ impl ProseUiState {
                 self.hovered = None;
                 ProseCommand::RejectSuggestion { suggestion_id }
             }
+            AnnotationIntent::Correct {
+                block_id,
+                range,
+                replacement,
+            } => {
+                self.spelling = None;
+                ProseCommand::CorrectSpelling {
+                    block_id,
+                    range,
+                    replacement,
+                }
+            }
+            AnnotationIntent::Ignore { block_id, range } => {
+                self.spelling = None;
+                ProseCommand::IgnoreSpelling { block_id, range }
+            }
         })
     }
 
@@ -406,6 +502,8 @@ impl ProseUiState {
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]
 mod tests {
+    use super::{AnnotationIntent, Offered};
+    use crate::events::ProseCommand;
     use crate::layout::run::RunChar;
     use crate::message::DocChar;
     use ambre_core::id::{self, Comment, Id, User};
@@ -506,6 +604,66 @@ mod tests {
         // Plain text beside a suggestion names none.
         assert!(ui.hover(middle(&ui, a, 12, 16)));
         assert_eq!(ui.hovered, None);
+    }
+
+    /// `PROSE-UI-248`: a press on an underlined word opens the popover over
+    /// it and asks for its corrections. The answer fills the popover, a pick
+    /// sends the correction and closes it, and a press elsewhere closes it.
+    #[test]
+    fn a_press_on_a_misspelled_word_opens_its_popover() {
+        let mut ui = view(2);
+        let a = text_block(&ui, 0);
+        let range = Span::<DocChar>::new(Pos::<DocChar>::new(2), Pos::<DocChar>::new(6));
+        ui.apply_event(&ProseEvent::Misspelled {
+            block_id: a,
+            ranges: vec![range],
+        });
+        assert_eq!(ui.press_spelling(middle(&ui, a, 12, 16)), None);
+        assert_eq!(ui.spelling, None, "plain text opens nothing");
+        let at = middle(&ui, a, 2, 6);
+        assert_eq!(
+            ui.press_spelling(at),
+            Some(ProseCommand::SuggestSpelling { block_id: a, range })
+        );
+        let open = ui.spelling.clone().expect("the popover opens");
+        assert_eq!(open.suggestions, Offered::Waiting);
+        assert!(open.rect.x0 <= at.x && at.x < open.rect.x1);
+        let word = ambre_core::Validated::<ambre_convert::spelling::SpellWord>::parse("word")
+            .expect("a word");
+        ui.apply_event(&ProseEvent::SpellingSuggestions {
+            block_id: a,
+            range,
+            suggestions: vec![word.clone()],
+        });
+        assert_eq!(
+            ui.spelling.as_ref().map(|open| open.suggestions.clone()),
+            Some(Offered::Ready(vec![word.clone()]))
+        );
+        let picked = ui.take_intent(
+            AnnotationIntent::Correct {
+                block_id: a,
+                range,
+                replacement: word.clone(),
+            },
+            Instant::<Authored>::new(0),
+        );
+        assert_eq!(
+            picked,
+            Some(ProseCommand::CorrectSpelling {
+                block_id: a,
+                range,
+                replacement: word,
+            })
+        );
+        assert_eq!(ui.spelling, None, "a pick closes the popover");
+        // A check that no longer finds the word closes a popover over it.
+        ui.press_spelling(at);
+        ui.apply_event(&ProseEvent::Misspelled {
+            block_id: a,
+            ranges: Vec::new(),
+        });
+        assert_eq!(ui.spelling, None);
+        assert_eq!(ui.misspelling_at(at), None, "nothing is underlined there");
     }
 
     #[test]

@@ -1519,6 +1519,27 @@ pub enum ProseCommand {
         replacement: String,
     },
 
+    // -- Spell checking (`features/ambre-spec-prose-spell-check.md`) --
+    /// Ask for the corrections of the misspelled word at `range`. It writes
+    /// nothing, and the answer is [`ProseEvent::SpellingSuggestions`].
+    SuggestSpelling {
+        block_id: BlockId,
+        range: Span<DocChar>,
+    },
+    /// Replace the misspelled word at `range` with `replacement`, as an
+    /// ordinary edit (`PROSE-FEAT-109`).
+    CorrectSpelling {
+        block_id: BlockId,
+        range: Span<DocChar>,
+        replacement: ambre_core::Validated<ambre_convert::spelling::SpellWord>,
+    },
+    /// Stop underlining the word at `range` for this reader, for the session.
+    /// It writes nothing (`PROSE-FEAT-108`).
+    IgnoreSpelling {
+        block_id: BlockId,
+        range: Span<DocChar>,
+    },
+
     // -- Footnotes (`features/ambre-spec-prose-footnotes.md`) --
     /// A note, and one call to it at `pos` in `block_id` (`PROSE-FEAT-099`).
     InsertFootnote {
@@ -1838,6 +1859,15 @@ impl fmt::Debug for ProseCommand {
             Self::FindClose => f.write_str("FindClose"),
             Self::ReplaceOne { replacement } => texts!("ReplaceOne"; replacement),
             Self::ReplaceAll { replacement } => texts!("ReplaceAll"; replacement),
+            Self::SuggestSpelling { block_id, range } => {
+                fields!("SuggestSpelling", block_id, range)
+            }
+            Self::CorrectSpelling {
+                block_id,
+                range,
+                replacement,
+            } => fields!("CorrectSpelling", block_id, range, replacement),
+            Self::IgnoreSpelling { block_id, range } => fields!("IgnoreSpelling", block_id, range),
             Self::InsertFootnote {
                 block_id,
                 pos,
@@ -2167,6 +2197,9 @@ impl ambre_bus::Mutation for ProseCommand {
             | Self::FindClose
             | Self::ReplaceOne { .. }
             | Self::ReplaceAll { .. }
+            | Self::SuggestSpelling { .. }
+            | Self::CorrectSpelling { .. }
+            | Self::IgnoreSpelling { .. }
             | Self::InsertFootnote { .. }
             | Self::EditFootnote { .. }
             | Self::DeleteFootnote { .. }
@@ -2213,6 +2246,8 @@ impl ProseCommand {
                 | Self::FindNext
                 | Self::FindPrev
                 | Self::FindClose
+                | Self::SuggestSpelling { .. }
+                | Self::IgnoreSpelling { .. }
                 | Self::FollowCrossRef { .. }
                 | Self::RetryImageLoad { .. }
         ) && match self {
@@ -2298,6 +2333,9 @@ impl ProseCommand {
             Self::FindClose => "closing the search",
             Self::ReplaceOne { .. } => "replacing the match",
             Self::ReplaceAll { .. } => "replacing every match",
+            Self::SuggestSpelling { .. } => "asking for spelling suggestions",
+            Self::CorrectSpelling { .. } => "correcting the spelling",
+            Self::IgnoreSpelling { .. } => "ignoring the word",
             Self::InsertFootnote { .. } => "inserting a footnote",
             Self::EditFootnote { .. } => "editing the footnote",
             Self::DeleteFootnote { .. } => "deleting the footnote",
@@ -2452,6 +2490,20 @@ pub enum ProseEvent {
         matches: Vec<FindMatch>,
         current: Option<Pos<ambre_bus::app::find::Match>>,
     },
+    /// The misspelled words of one block, as the last check found them, in
+    /// code points of its text. An empty list clears the block's underline
+    /// (`PROSE-FEAT-333`). It goes to this reader alone (`PROSE-FEAT-106`).
+    Misspelled {
+        block_id: BlockId,
+        ranges: Vec<Span<DocChar>>,
+    },
+    /// The corrections of the misspelled word at `range`, best first, at most
+    /// five (`PROSE-FEAT-105`). An empty list offers none.
+    SpellingSuggestions {
+        block_id: BlockId,
+        range: Span<DocChar>,
+        suggestions: Vec<ambre_core::Validated<ambre_convert::spelling::SpellWord>>,
+    },
     /// The current match moved; the list did not (`PROSE-FEAT-152`).
     FindUpdated {
         current: Option<Pos<ambre_bus::app::find::Match>>,
@@ -2528,6 +2580,12 @@ impl fmt::Debug for ProseEvent {
             Self::BandsUpdated { bands } => fields!("BandsUpdated", bands),
             Self::FindResults { matches, current } => fields!("FindResults", matches, current),
             Self::FindUpdated { current } => fields!("FindUpdated", current),
+            Self::Misspelled { block_id, ranges } => fields!("Misspelled", block_id, ranges),
+            Self::SpellingSuggestions {
+                block_id,
+                range,
+                suggestions,
+            } => fields!("SpellingSuggestions", block_id, range, suggestions),
             Self::UndoState { undo, redo } => fields!("UndoState", undo, redo),
             Self::Error(error) => f.debug_tuple("Error").field(error).finish(),
         }

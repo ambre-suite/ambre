@@ -779,12 +779,26 @@ impl LogicState {
         else {
             return;
         };
-        for (ticket, conversion) in state.take_decode_requests() {
+        let mut jobs = state.take_decode_requests();
+        // The spelling checks leave the same way, and the view learns at once
+        // what a change of language cleared.
+        let (checks, spelled) = state.spell_pass();
+        jobs.extend(checks);
+        for (ticket, conversion) in jobs {
             self.offload(crate::converter_thread::Job {
                 ticket,
                 owner: crate::converter_thread::JobOwner::Prose(document_id),
                 conversion,
             });
+        }
+        if !spelled.display.is_empty() {
+            self.dispatch_outcome(
+                document_id,
+                spelled.display.into_iter().map(AppEvent::Prose).collect(),
+                None,
+                None,
+                Vec::new(),
+            );
         }
         self.offload_prose_files(document_id);
     }
@@ -944,6 +958,20 @@ impl LogicState {
             .filter(|(_, doc)| matches!(doc.state, DocState::Trame(_)))
             .map(|(id, _)| *id)
             .collect();
+        // A Prose document checks its spelling in the reader's language when
+        // it names none, so it is answered again under it.
+        let prose: Vec<Id<Document>> = self
+            .docs
+            .iter_mut()
+            .filter(|(_, doc)| matches!(doc.state, DocState::Prose(_)))
+            .map(|(id, doc)| {
+                doc.state.set_reader_locale(&self.reader_locale);
+                *id
+            })
+            .collect();
+        for document_id in prose {
+            self.owe_layout(document_id);
+        }
         for document_id in open {
             let command = AppCommand::Trame(ambre_trame::TrameCommand::SetReaderLocale {
                 reader: self.reader_locale.clone(),

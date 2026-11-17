@@ -346,17 +346,24 @@ pub enum ConverterFamily {
     Office,
     /// The board exports of other whiteboards: Figma and Miro, as JSON.
     Boards,
+    /// The spell checker and its English dictionary
+    /// (`4-Prose/features/ambre-spec-prose-spell-check.md`).
+    SpellEn,
+    /// The spell checker and its French dictionary.
+    SpellFr,
 }
 
 impl ConverterFamily {
     /// Every family, in the order the build writes them.
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 8] = [
         Self::Tables,
         Self::Pdf,
         Self::Markup,
         Self::Images,
         Self::Office,
         Self::Boards,
+        Self::SpellEn,
+        Self::SpellFr,
     ];
 
     /// The family's own name: the word its module file and its digest file
@@ -370,6 +377,8 @@ impl ConverterFamily {
             Self::Images => "images",
             Self::Office => "office",
             Self::Boards => "boards",
+            Self::SpellEn => "spell_en",
+            Self::SpellFr => "spell_fr",
         }
     }
 }

@@ -106,7 +106,7 @@ ambre-prose-form = { path = "../ambre-prose-form", features = ["word"] }
 # thread's host build links them: the readers' tests convert through the same
 # request bytes, the PDF tests write a drawn page and read its characters back
 # (`PDF-005`), and a picture decodes as the converter thread decodes it.
-ambre-convert = { path = "../ambre-convert", features = ["markup", "pdf", "office", "images"] }
+ambre-convert = { path = "../ambre-convert", features = ["markup", "pdf", "office", "images", "spell_en", "spell_fr"] }
 # The JPEG and GIF fixtures are written by the encoders of the `image` crate
 # at test time. Main links no JPEG or GIF decoder (`ARCH-078`).
 image = { workspace = true, features = ["jpeg", "gif"] }

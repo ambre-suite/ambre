@@ -67,6 +67,10 @@ MODULE_BUDGETS = {
     "Images module": 300_000,
     "Office module": 900_000,
     "Boards module": 100_000,
+    # One module per dictionary: the spell checker and the dictionary of its
+    # language, fetched on the first check of that language.
+    "English spelling module": 300_000,
+    "French spelling module": 450_000,
     # The call worker waits for a call as a module waits for a conversion, so it
     # holds a budget of its own and stays out of the first download.
     "Call worker": 100_000,
@@ -88,6 +92,8 @@ GLOBS = {
     "Images module": "ambre-convert-images-*.wasm.br",
     "Office module": "ambre-convert-office-*.wasm.br",
     "Boards module": "ambre-convert-boards-*.wasm.br",
+    "English spelling module": "ambre-convert-spell_en-*.wasm.br",
+    "French spelling module": "ambre-convert-spell_fr-*.wasm.br",
     "Call worker": "ambre-call*_bg.wasm.br",
 }
 

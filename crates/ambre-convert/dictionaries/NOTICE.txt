@@ -1,0 +1,9 @@
+The Hunspell dictionaries of the two spelling modules
+(4-Prose/features/ambre-spec-prose-spell-check.md). Each module embeds one
+pair at build time: the feature spell_en the English pair, spell_fr the French
+pair. The files are copied as they are, never edited here.
+
+| File | Upstream | Commit | Upstream path | Licence |
+|---|---|---|---|---|
+| en_US.aff, en_US.dic | https://github.com/LibreOffice/dictionaries | c0865a85eb67dc377f2cf8e8fe2c4fa9e53f0dcb | en/en_US.aff, en/en_US.dic | the SCOWL licence, permissive: LICENSE-en_US.txt |
+| fr.aff, fr.dic | https://github.com/wooorm/dictionaries | 8cfea406b505e4d7df52d5a19bce525df98c54ab | dictionaries/fr/index.aff, dictionaries/fr/index.dic | MPL-2.0, Grammalecte 7.5: LICENSE-fr.txt |

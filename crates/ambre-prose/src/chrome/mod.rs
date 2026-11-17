@@ -29,7 +29,9 @@ use ambre_chrome::{FormatBar, FormatControl, Pressed};
 
 use crate::events::{SuggestionKind, TriState};
 use crate::ui::ProseUiState;
-use crate::view::annotate::{AnnotationIntent, HoveredSuggestion, LostReply, PanelThread};
+use crate::view::annotate::{
+    AnnotationIntent, HoveredSuggestion, LostReply, Offered, PanelThread, SpellingPopover,
+};
 use crate::view::ruler::{RulerDrag, RulerHandle, RulerRelease, RulerState};
 use crate::view::slash::SlashMenuState;
 use crate::view::toolbar::{ToolbarState, state_of};
@@ -61,6 +63,9 @@ pub struct ProseSignals {
     pub drafts: RwSignal<HashMap<Id<Comment>, String>>,
     /// The suggestion under the pointer, for the popover.
     pub hovered: RwSignal<Option<HoveredSuggestion>>,
+    /// The spelling popover a press on a misspelled word opened
+    /// (`PROSE-UI-248`).
+    pub spelling: RwSignal<Option<SpellingPopover>>,
     /// What the chrome asked for, until the view drains it.
     pub intent: RwSignal<Option<AnnotationIntent>>,
     /// The pointer rests on a link: the canvas shows the link cursor
@@ -113,6 +118,7 @@ impl ProseSignals {
             threads: RwSignal::new(Vec::new()),
             drafts: RwSignal::new(HashMap::new()),
             hovered: RwSignal::new(None),
+            spelling: RwSignal::new(None),
             intent: RwSignal::new(None),
             over_link: RwSignal::new(LinkHover::Elsewhere),
             followed: RwSignal::new(None),
@@ -335,6 +341,73 @@ pub fn ProseSuggestionPopover(signals: ProseSignals) -> impl IntoView {
                             .set(Some(AnnotationIntent::Reject { suggestion_id }))
                     >
                         "Reject"
+                    </button>
+                </div>
+            }
+        })
+    }
+}
+
+/// The corrections of the misspelled word a press opened, then an Ignore
+/// button, under the word (`PROSE-UI-248`). Each button hands its pick back
+/// to the view as one intent: the DOM holds no command channel.
+#[component]
+pub fn ProseSpellingPopover(signals: ProseSignals) -> impl IntoView {
+    move || {
+        let origin = signals.canvas_origin.get();
+        signals.spelling.get().map(|open| {
+            let (block_id, range) = (open.block_id, open.range);
+            let left = format!("{}px", open.rect.x0.on_page(origin.x).get());
+            let top = format!("{}px", open.rect.y1.on_page(origin.y).get() + 4.0);
+            let choices = match open.suggestions {
+                Offered::Waiting => view! {
+                    <span class="ambre-prose-spelling-waiting">"Looking up"</span>
+                }
+                .into_any(),
+                Offered::Ready(found) if found.is_empty() => view! {
+                    <span class="ambre-prose-spelling-none">"No suggestion"</span>
+                }
+                .into_any(),
+                Offered::Ready(found) => found
+                    .into_iter()
+                    .map(|word| {
+                        let label = word.as_str().to_owned();
+                        view! {
+                            <button
+                                class="ambre-prose-spelling-pick"
+                                on:click=move |_| signals.intent.set(Some(
+                                    AnnotationIntent::Correct {
+                                        block_id,
+                                        range,
+                                        replacement: word.clone(),
+                                    },
+                                ))
+                            >
+                                {label}
+                            </button>
+                        }
+                    })
+                    .collect_view()
+                    .into_any(),
+            };
+            view! {
+                <div
+                    class="ambre-prose-spelling"
+                    style:position="fixed"
+                    style:left=left
+                    style:top=top
+                    style:z-index="61"
+                    role="group"
+                    aria-label="Spelling"
+                >
+                    {choices}
+                    <button
+                        class="ambre-prose-spelling-ignore"
+                        on:click=move |_| signals
+                            .intent
+                            .set(Some(AnnotationIntent::Ignore { block_id, range }))
+                    >
+                        "Ignore"
                     </button>
                 </div>
             }

@@ -339,6 +339,12 @@ impl LogicState {
                 else {
                     return;
                 };
+                // A spelling answer goes to the view alone. The document is
+                // answered again this pass, which sends the next check
+                // (`4-Prose/features/ambre-spec-prose-spell-check.md`).
+                if let Some(outcome) = state.handle_spelled(ticket, &answer) {
+                    return self.dispatch_prose_media(document_id, outcome);
+                }
                 let decoded = answer.map_err(|failure| match failure {
                     JobFailure::Unavailable => ambre_prose::message::MediaFailure::Unavailable,
                     JobFailure::Refused => ambre_prose::message::MediaFailure::Undecodable,

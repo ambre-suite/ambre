@@ -402,6 +402,11 @@ impl ProseView {
         if self.annotations.hovered.get_untracked() != hovered {
             self.annotations.hovered.set(hovered);
         }
+        // The spelling popover follows the view the same way: a pick, a
+        // press elsewhere or a check that clears the word closes it.
+        if self.annotations.spelling.get_untracked() != self.state.spelling {
+            self.annotations.spelling.set(self.state.spelling.clone());
+        }
     }
 
     /// Publish the threads the panel lists, lined up with their anchors.
@@ -586,6 +591,19 @@ impl ProseView {
                 Consumed::Yes
             }
             _ => {
+                // A primary press on an underlined word opens its spelling
+                // popover and asks for its corrections (`PROSE-UI-248`).
+                if let InputEvent::PointerDown {
+                    at,
+                    button: ambre_canvas::PointerButton::Primary,
+                    ..
+                } = ev
+                {
+                    if let Some(command) = self.state.press_spelling(*at) {
+                        send_edit(&mut self.outbox, self.document_id, command);
+                    }
+                    self.publish_hover();
+                }
                 if let InputEvent::PointerMove { at } = ev {
                     if self.state.hover(*at) {
                         self.publish_hover();

@@ -83,7 +83,10 @@
 | Prose find, 100 pages, 10-character query | < 20 ms | -- | Logic | **none exists**, and no code either |
 | Prose replace all, 50 occurrences | < 30 ms | -- | Logic | **none exists**, and no code either |
 | Prose word count, 100 pages | < 5 ms | -- | Logic | debounced off the keystroke path -- **none exists**, and no code either |
-| Prose spell check, 200 words | < 10 ms | -- | Logic | post-V1, and the dictionary is lazily loaded -- **none exists**, and no code either |
+| Prose spell check, 200 words, its lookups | < 10 ms | -- | Converter | the converter thread, never the Logic thread (`PROSE-FEAT-041`). On 2026-11-16, a scratch binary over `spellbook` 0.4.2, host release build in a cloud container, read 6 000 lookups in 0.6 ms in English and 30 ms in French: about 0.02 ms and 1 ms for 200 words. No bench of the workspace holds it, and no phone was measured |
+| Prose spell check, the first load of one dictionary | < 300 ms | -- | Converter | the module parses its dictionary on its first request and keeps it. The same binary read 11 ms for English and 33 ms for French on the host, and 2.3 MB and 5.7 MB of resident memory, under the 64 MiB reset of a converter instance (`ARCH-099`) |
+| Prose spelling suggestions, one word | < 1 s | -- | Converter | one job per press on an underlined word, never one per error (`features/ambre-spec-prose-spell-check.md section 4`). The same binary read 6 ms to 13 ms for an English word and 40 ms to 250 ms for a French one |
+| Prose spell check, the Logic thread's half: the cut of the stale blocks into words | < 4 ms | -- | Logic | the words of one check are capped at 4 096, so a pasted book is cut in several passes -- **none exists**: no bench counts it |
 | Prose DOCX import / export, 100 pages | < 500 ms / < 300 ms | -- | Logic, then the converter thread | sequential ZIP and XML work, one-shot and off the render frame. `crates/ambre-docx/benches/codec.rs` measures the codec alone, desktop only: on 2026-11-09, `cargo bench -p ambre-docx --bench codec` in a cloud container (Xeon at 2.1 GHz, host release build) reads 100 pages of 500 words, each with a table, a comment and a tracked change, in 7.9 ms and writes them in 4.5 ms. A novel of 300 pages reads in 3.7 ms, and a real 12 MB Word body in 270 to 550 ms. The module boundary and the mapping into the document are built and not measured, and **no mobile figure exists** |
 | Prose DOCX import / export, 300 pages | < 1.5 s / < 1 s | -- | Logic, then the converter thread | a novel, the whole conversion. The Logic thread holds it a slice at a time, as the row below states (`PROSE-IO-048`). The converter thread holds the module call whole, so a key typed in another document never waits behind it (`ARCH-122`) -- **none exists** |
 | Prose import or export, one slice: the write of 12 operations into the document, or the walk of 48 top-level blocks | < 4 ms | -- | Logic | the Logic pass that answers a keystroke row: a key typed in another document waits behind one slice (`PROSE-IO-099`). The CI `instructions` job holds `import_slice` and `export_slice` of `crates/ambre-prose/benches/instructions.rs` under 3 200 000 each, a slice past the middle of a file of 2 000 paragraphs. On 2026-11-12, native build in a cloud container: 2 169 924 and 2 195 180. On 2026-11-13, once an import wrote its list once and no longer rehearsed it, same build: 2 158 076 and 2 202 852. The module call stays whole, a few percent of the conversion: on 2026-11-12, host release build, a Markdown file of 11 MB read in 84 ms and wrote into the document in 3.8 s, and its walk took 1.3 s and its module write 92 ms. Through the Logic passes, by a probe kept out of the tree, 6 000 operations landed in 0.69 s over 1 000 passes, p95 0.56 ms a pass, against 0.7 s whole. The slowest pass, 191 ms, holds the module read or the layout at the end |
@@ -295,6 +298,12 @@
 | Images module | 813 828 | 253 750 | brotli budget 300 000 | 46 250, 15 % | 0.10 s |
 | Office module | 1 457 724 | 394 037 | brotli budget 900 000 | 505 963, 56 % | 0.16 s |
 | Call worker | 107 452 | 37 181 | brotli budget 100 000 | 62 819, 63 % | 0.01 s |
+
+* **The two spelling modules joined on 2026-11-16.** Each holds `spellbook` and one Hunspell
+  dictionary, measured as `scripts/converter_build.py` builds them. The English module reads
+  830 626 raw and 243 424 brotli, the French one 1 704 676 raw and 363 308 brotli. The dictionary
+  is most of each: 166 KB and 287 KB of brotli for the files alone. Their budgets are 300 000 and
+  450 000 bytes of brotli, by the The spell checker Story (`ambre-roadmap.md`).
 
 * **A budget or the Main ceiling rises only through a story of its own (`ARCH-095`).** The ceiling
   of Main rose twice in a row, to 2.73 MB and then 2.74 MB, each time inside the merge of a feature
@@ -881,7 +890,7 @@
 |---|---|---|---|
 | `ambre-prose`, engine plus features plus interop plus UI | ~230 KB | ~72 KB | Of which the UI module is ~50 KB raw |
 | `unicode-segmentation` | ~40 KB | ~15 KB | Word and grapheme boundaries: the word count, caret movement |
-| `zspell` plus one dictionary | ~550 KB | ~210 KB | Post-V1, and lazily loaded on the first spell check |
+| `spellbook` plus one dictionary | 830 626 raw for English, 1 704 676 for French | 243 424 and 363 308 brotli | Measured on 2026-11-16, `cargo build -p ambre-convert --features spell_en` then `spell_fr`, `wasm-release`, as `scripts/converter_build.py` builds them. A module of its own per language, fetched on the first check of that language. No instance links it (`PROSE-FEAT-104`) |
 | `ambre-docx`, with `zip` and `quick-xml` | ~427 KB | ~147 KB brotli | The Word codec, read and write, in a test `cdylib` at `opt-level = "z"` with LTO, measured on 2026-11-09. `docx-rs` measured 505 KB of brotli in the same frame. No instance links it: the Office module does since 2026-11-10, over the package layer `ambre-opc`, and Main links its model alone |
 | `html5ever` plus `markup5ever_rcdom` | ~200 KB | ~60 KB | In the markup module since 2026-11-09, fetched on the first paste of HTML or the first Markdown import. `markup5ever_rcdom` never linked: the module builds its own arena |
 | `pulldown-cmark` and its writer | ~80 KB | ~25 KB | The parser is in the markup module since 2026-11-09, and Prose's own writer since 2026-11-10 |

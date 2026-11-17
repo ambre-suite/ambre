@@ -34,6 +34,7 @@ pub mod images;
 pub mod jpeg;
 pub mod markup;
 pub mod raster;
+pub mod spelling;
 
 #[cfg(feature = "engine")]
 pub mod engine;
@@ -187,6 +188,13 @@ pub enum Conversion {
         document: PrintDocument,
         size: ambre_core::Size<ambre_core::Px<ambre_core::Image>>,
     },
+    /// Look the words up in one dictionary (`prose-spell-check`). The
+    /// converter thread runs it, never the Logic thread. Answered by
+    /// [`Converted::Misspelled`].
+    CheckSpelling(spelling::SpellCheck),
+    /// Suggest at most five corrections of one word (`prose-spell-check`).
+    /// Answered by [`Converted::Suggestions`].
+    SuggestSpelling(spelling::SpellSuggest),
 }
 
 /// The longest edge a PNG export rasterizes. Past it, the caller scales the
@@ -224,6 +232,8 @@ impl Conversion {
             | Self::WritePptx { .. }
             | Self::ReadPptx { .. }
             | Self::ReadOdp { .. } => ConverterFamily::Office,
+            Self::CheckSpelling(check) => check.dictionary.family(),
+            Self::SuggestSpelling(suggest) => suggest.dictionary.family(),
         }
     }
 }
@@ -319,6 +329,11 @@ pub enum Converted {
         deck: Payload<DeckBytes>,
         thumbs: Vec<Option<images::Pixels>>,
     },
+    /// The words of a check the dictionary does not know, by their position
+    /// in the list asked, in order.
+    Misspelled(Vec<ambre_core::index::Pos<spelling::CheckedWord>>),
+    /// The corrections of a word, best first, at most five.
+    Suggestions(Vec<ambre_core::Validated<spelling::SpellWord>>),
 }
 
 /// The role of Trame's form of a workbook, or of a report, as it crosses a

@@ -30,6 +30,8 @@ const fn digest_hex(family: ConverterFamily) -> Option<&'static str> {
         ConverterFamily::Images => option_env!("AMBRE_CONVERTER_DIGEST_IMAGES"),
         ConverterFamily::Office => option_env!("AMBRE_CONVERTER_DIGEST_OFFICE"),
         ConverterFamily::Boards => option_env!("AMBRE_CONVERTER_DIGEST_BOARDS"),
+        ConverterFamily::SpellEn => option_env!("AMBRE_CONVERTER_DIGEST_SPELL_EN"),
+        ConverterFamily::SpellFr => option_env!("AMBRE_CONVERTER_DIGEST_SPELL_FR"),
     }
 }
 

@@ -222,6 +222,7 @@ The test of section 1: a team that lacks one of these stories keeps its old suit
 | `[x]` A failed import keeps the undo history | MVP | a Prose import that fails rolls the document back to its state before the import, and the rollback clears the whole undo history of the document. Done when a failed import leaves the undo history as it stood before the import, and a row states it and reads `verified` |
 | `[x]` A pasted table lands as a table | MVP | an HTML table pasted from a web page, Word or a sheet lands as one paragraph per cell. Done when it lands as a Prose table with its rows, columns and cell text, merged cells approximated and named, and a row binding it reads `verified` |
 | `[x]` A picture resized from its handles | MVP | a picture in a page keeps the size it was inserted at, since the resize command reaches the engine and nothing on the page sends it. Done when corner handles resize with the aspect locked and edge handles resize one side, both applied on release as one undo step, and a row binding each reads `verified` |
+| `[x]` The spell checker | MVP | Prose draws its text on a canvas, so the browser's spell checker never sees it, and a team writing without misspellings underlined keeps its old editor. Done when a misspelled word of a Prose page is underlined, its popover offers suggestions and an ignore, in English and French, each dictionary loads off the Logic thread under a budget row of `ambre-spec-budgets.md`, in a module of its own under a brotli budget: the English spelling module 300 000, the French spelling module 450 000, no cut tried since neither is in the first download, and the rows of `features/ambre-spec-prose-spell-check.md` bound to it read `verified` |
 
 ### Murmure
 
@@ -436,6 +437,8 @@ row reads `V1`.
 | `[ ]` The text tree of Loro holds less per character | V1 | the rest of the Prose memory ratio, 14.8 times its Markdown on 2026-11-15, sits in the B-tree of `generic-btree` under Loro, which the workspace does not own. Done when a change that shrinks its nodes is proposed upstream and either lands in a release the workspace takes, or, if upstream stalls, a `[patch]` fork carries it with its reason in `ambre-spec-budgets.md` |
 | `[ ]` A Prose document costs less than ten times its Markdown | V1 | a document holds 14.8 times its Markdown. The rest of the ratio sits in two places the MVP story leaves: the B-tree of `generic-btree` under Loro, through an upstream change first (`The text tree of Loro holds less per character`), and the mirror the undo history keeps, a copy of every text, every node map and the tree. Done when a CI test holds a document under 10 times its Markdown |
 | `[ ]` An announced session draws no caret it did not place | V1 | a Prose session announces itself once its document is ready, and a session that never placed its caret is drawn at the start of the first block on every peer's screen. Done when `PROSE-130` reads `verified` |
+| `[ ]` The personal dictionary | V1 | a word a reader ignores stays ignored in that document for the session alone: no dictionary of the reader's own keeps it, across documents and devices, in the reader's sealed settings (`PROSE-FEAT-043`, `PROSE-FEAT-107`). Done when both rows read `verified` |
+| `[ ]` More spelling languages | V1 | the spell checker carries English and French. German, Spanish, Italian and Portuguese each need a dictionary under a licence the workspace admits, and a module and a budget row of their own. Done when each has a row of `features/ambre-spec-prose-spell-check.md` that reads `verified` |
 | `[ ]` A Prose view that lost an event catches up | V1 | a Trame or Toile view that lost an event is resent its document, and a Prose view is resent nothing: it reconciles its text change by change, so a lost change stays out of its count until a reload (`BUS-043`). Done when `BUS-043` reads `verified` |
 | `[ ]` A paste names what it approximated | V1 | a paste has no report, so a table past 64 columns flattened to paragraphs, or overlapping spans clipped, change silently. Done when the view names the approximation after such a paste, and a row reads `verified` |
 | `[ ]` A selected picture answers its keys | V1 | a press selects a picture and draws its handles, and no key acts on it: Delete leaves it, and no arrow resizes it. Done when Delete removes a selected picture, Escape cancels a handle drag, and a row binding each reads `verified` |
@@ -561,7 +564,6 @@ row reads `V1`.
 | Story | Touches |
 | :--- | :--- |
 | `[ ]` The later writing set | regular-expression find, bookmarks, version history, linked styles, pageless mode, line numbers, tables of figures, an index, a bibliography, section breaks and columns, protected zones, an equation editor |
-| `[ ]` The spell checker | misspelled words underlined, with suggestions |
 
 ### Trame
 
