@@ -47,18 +47,19 @@ ROOT = Path(__file__).resolve().parent.parent
 
 # The most WAL the steps may write per delta, in bytes: the figure of the
 # budget row, which `test_write_cost.py` checks the row names.
-CEILING = 2_280
+CEILING = 2_240
 
 # The room a ceiling leaves above the dearest run it was set from, as a
 # fraction. Ten runs of 2026-11-14 read 2 632 B to 2 643 B per delta, a spread
 # of 0.41 %. The CI `test-db` job read 2 676 B the same day, 1.2 % over the
 # dearest local run, for a cause not known yet. On 2026-11-15, with `updates`
 # keyed by document and number and two snapshots kept, five runs read
-# 2 197 B to 2 228 B, and the CI job of two snapshots kept read inside the
-# local spread. The ceiling is that dearest run plus the margin. A new index
-# on `updates` costs more than the margin. On 2026-11-16, the CI gap was the
-# WAL of autovacuum inside the windows, which the run now leaves out: ten
-# runs, five of them after the db tier, read 2 190 B to 2 200 B.
+# 2 197 B to 2 228 B. The CI job of run 43726544175, which merged both
+# changes on main, read 2 191 B, and the next two runs of main read 2 194 B
+# and 2 199 B. The ceiling is that CI reading of 2 191 B plus the margin. A
+# new index on `updates` costs more than the margin. On 2026-11-16, the CI gap
+# was the WAL of autovacuum inside the windows, which the run now leaves out:
+# ten runs, five of them after the db tier, read 2 190 B to 2 200 B.
 MARGIN = 0.02
 
 TEST = "hot_tail::write_cost::write_cost_short_run"
