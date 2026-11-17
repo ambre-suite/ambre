@@ -58,6 +58,7 @@ sequence has already moved.
 | `SRV-151` | `POST` | Past the inline cap, the relay MUST move the oldest inline deltas of the document into one batch object, and point their rows at it. | this spec section 3; `SRV-150` | `ambre_server::hot_tail::db_tests::a_move_takes_the_oldest_and_keeps_the_newest` -- of two hundred inline deltas the oldest 136 move to one batch their rows name, and the newest 64 stay; `ambre_server::hot_tail::tests::a_move_starts_at_three_quarters_of_either_bound` -- the move starts before the cap; `ambre_server::hot_tail::tests::a_move_keeps_a_quarter_of_the_cap` -- what stays | none | verified |
 | `SRV-152` | `POST` | A document with no write for the idle delay MUST have its inline deltas moved into one batch object. | this spec section 3; `ambre-spec-budgets.md section 8` | `ambre_server::hot_tail::db_tests::an_idle_tail_moves_whole` -- a tail written a day ago moves whole, and one written since stays | none | verified |
 | `SRV-153` | `FRAME` | Moving deltas into a batch object MUST NOT change their numbers or their bytes. | this spec section 3 | `ambre_server::hot_tail::db_tests::a_move_takes_the_oldest_and_keeps_the_newest` -- the batch holds each number with its bytes unchanged; `ambre_server::hot_tail::tests::a_batch_keeps_each_number_and_frame` -- the encoding round trip; `ambre_server::ws::handler::message::hot_tail_tests::a_replay_reads_the_rows_and_each_batch_once` -- a replay after a move sends the bytes it sent before | none | verified |
+| `SRV-276` | `POST` | The move of an inline delta into its batch object MUST write no index entry. | this spec section 3; `SRV-151` | `ambre_server::hot_tail::db_tests::a_move_is_a_heap_only_update` -- of two hundred inline deltas of 256 bytes, the 136 moved count as 136 heap-only updates in the table statistics, and the tail count past the move reads the 64 kept | none | verified |
 | `SRV-259` | `POST` | Making one accepted delta durable, its move and its trim included, MUST write no more WAL than the ceiling of the delta index row of `ambre-spec-budgets.md section 3`. | this spec section 3; `ambre-spec-budgets.md section 3` | `ambre_server::hot_tail::write_cost::write_cost_short_run` -- 4 000 deltas over four documents of a steady index, the WAL of each step read through `pg_walinspect`, under the ceiling of `scripts/write_cost.py` in the CI `test-db` job (`just write-cost`) | none | verified |
 
 ### 1.4 A history is folded and trimmed
@@ -184,7 +185,7 @@ it to every writer that asks.
 * **Boundary.** the relay orders bytes it cannot read. What it learns is the routing set of
   `ZK-007`: which key wrote to which document, at which clock, and how large the delta was.
   `SRV-001` keeps the delta out of the logs.
-* **Verification.** 75 `verified`. The ordering, the storage and the replay hold. So does each step
+* **Verification.** 76 `verified`. The ordering, the storage and the replay hold. So does each step
   of a segment's life, from its close to its fold, and the thread of a root. The recovery paths are
   driven through real failures: a register that refuses inserts, a queue that refuses pushes, an
   index that cannot be read.
@@ -276,6 +277,20 @@ A trigger on the delete of a document row removes the rows of the index, the wor
 whole tail of a document idle for a day (`SRV-152`). Compaction trims the rest. So the inline bytes
 stay bounded by the documents in use at once, never by every document ever written. A batch
 object is dropped only once a retained snapshot covers every delta in it (`SRV-154`).
+
+**The move writes no index entry** (`SRV-276`). Postgres writes an update in place on its page,
+with no index entry, when no index reads a column it changes. So no index reads the frame or the
+batch key.
+
+**What reads the primary key instead.** The tail count reads the range of the document past its
+newest batch row. A frame put back later in an older row (`SRV-034`) falls out of that count. The
+trim asks whether a batch is still named within the range of its own document. The idle pass
+reads the whole table, once an hour.
+
+**Why half of each page stays free.** Inside the move, the old and the new version of each moved
+row share the page. A frame under about 100 bytes,
+or one stored out of line, is shorter than the batch key that replaces it. Its move can then leave
+the page and write its index entries.
 
 **Why the cap may be passed.** The move starts at three quarters of either bound and keeps a
 quarter inline, so a writer seldom meets the cap. The count and the insert are one statement, so
@@ -473,6 +488,8 @@ sees is how long a document takes to open.
 | An insert locks no document row | a foreign key from the index to the register | its check locks the document row on every insert, for a rule the membership check and the tombstone already hold. The lock writes WAL, and two writers of one document share it through a multixact |
 | A small delta lives in its index row | one object per delta | a replay of 250 deltas costs 250 object requests for a few hundred bytes each |
 | A small delta lives in its index row | batch objects for every delta | a partly trimmed batch must stay, and a live document rewrites its batch at every flush |
+| The move writes no index entry | a partial index of the inline rows, and one of the batch rows | each index reads a column the move changes, so each move wrote a new row version and an entry in every index: the move cost as much as the insert |
+| The move writes no index entry | a batch reference shorter than the object key | it saved about 60 bytes per moved row, and the fillfactor it allows rose by 10 points only, in a trial of 2026-11-16 |
 | The hot tail is capped, and an idle one moves out | every delta inline, trimmed by compaction alone | a document shared and then left pending would keep its whole tail in the register |
 
 ---

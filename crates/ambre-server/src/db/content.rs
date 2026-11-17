@@ -360,6 +360,12 @@ pub struct NewUpdate<'a> {
 /// inline tail is at `cap` (`SRV-148`, `SRV-150`). The count and the insert
 /// are one statement. Two writers racing at the cap may each see room, so the
 /// tail can pass it by the writers in flight at once.
+///
+/// The count reads the primary key range of the document past its newest batch
+/// row. A move takes the oldest inline deltas and keeps the newest. No
+/// index reads `wire`, so the move stays a heap-only update. A frame put back
+/// in an older row (`attach_wire`) falls out of the count, and the tail can
+/// pass the cap by that delta.
 pub async fn insert_inline_update(
     pool: &PgPool,
     update: &NewUpdate<'_>,
@@ -370,6 +376,9 @@ pub async fn insert_inline_update(
         "WITH tail AS ( \
              SELECT COUNT(*) AS n, COALESCE(SUM(octet_length(wire)), 0)::BIGINT AS bytes \
              FROM updates WHERE document_id = $1 AND wire IS NOT NULL \
+               AND seq > COALESCE(( \
+                   SELECT seq FROM updates WHERE document_id = $1 AND batch_key IS NOT NULL \
+                   ORDER BY seq DESC LIMIT 1), 0) \
          ), ins AS ( \
              INSERT INTO updates (document_id, author_pubkey, snapshot_id, clock, seq, wire) \
              SELECT $1, $2, $3, $4, $5, $6 FROM tail \
@@ -597,7 +606,7 @@ pub async fn get_clock_state(
 /// A batch object goes only once no row names it, so a batch that still holds
 /// an uncovered delta stays (`SRV-154`).
 pub async fn purge_superseded_updates(pool: &PgPool) -> Result<Trim, AppError> {
-    let (rows, touched): (i64, Vec<String>) = sqlx::query_as(
+    let (rows, documents, touched): (i64, Vec<uuid::Uuid>, Vec<String>) = sqlx::query_as(
         "WITH horizon AS (
             SELECT document_id, MIN(covered_seq) AS min_covered
             FROM snapshots
@@ -630,19 +639,25 @@ pub async fn purge_superseded_updates(pool: &PgPool) -> Result<Trim, AppError> {
                 WHERE c.document_id = u.document_id AND c.state = 'final'
                   AND f.status = 'confirmed' AND u.seq <= f.covered_seq
             )
-            RETURNING u.batch_key
+            RETURNING u.document_id, u.batch_key
+        ), touched AS (
+            SELECT DISTINCT document_id, batch_key FROM gone WHERE batch_key IS NOT NULL
         )
         SELECT (SELECT COUNT(*) FROM gone),
-               ARRAY(SELECT DISTINCT batch_key FROM gone WHERE batch_key IS NOT NULL)",
+               ARRAY(SELECT document_id FROM touched ORDER BY batch_key),
+               ARRAY(SELECT batch_key FROM touched ORDER BY batch_key)",
     )
     .fetch_one(pool)
     .await?;
     // The statement above reads the rows as they were before its delete, so
-    // whether a batch is still named is a second question.
+    // whether a batch is still named is a second question. A batch belongs to
+    // one document, and no index reads `batch_key`, so the question reads the
+    // primary key range of that document.
     let batch_keys: Vec<String> = sqlx::query_scalar(
-        "SELECT k FROM unnest($1::TEXT[]) AS k \
-         WHERE NOT EXISTS (SELECT 1 FROM updates WHERE batch_key = k)",
+        "SELECT k FROM unnest($1::UUID[], $2::TEXT[]) AS t(d, k) \
+         WHERE NOT EXISTS (SELECT 1 FROM updates WHERE document_id = d AND batch_key = k)",
     )
+    .bind(&documents)
     .bind(&touched)
     .fetch_all(pool)
     .await?;

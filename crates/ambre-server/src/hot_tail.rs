@@ -502,6 +502,57 @@ mod db_tests {
         );
     }
 
+    /// The updates and the heap-only updates of `updates`, as the statistics of
+    /// the database read once they count `at_least` more updates than `since`.
+    /// A backend reports its counts once idle, about a second after its write.
+    async fn table_updates(state: &AppState, since: (i64, i64), at_least: i64) -> (i64, i64) {
+        let mut counts = since;
+        for _ in 0..150 {
+            counts = sqlx::query_as(
+                "SELECT n_tup_upd, n_tup_hot_upd FROM pg_stat_user_tables WHERE relname = 'updates'",
+            )
+            .fetch_one(&state.db)
+            .await
+            .unwrap();
+            if counts.0 - since.0 >= at_least {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        (counts.0 - since.0, counts.1 - since.1)
+    }
+
+    /// The move clears the frame and names the batch without an index entry:
+    /// each moved row is a heap-only update. The tail count past the move
+    /// reads the kept deltas alone.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_move_is_a_heap_only_update(pool: sqlx::PgPool) {
+        let stub = S3Stub::spawn([]).await;
+        let (state, doc) = setup(pool, &stub).await;
+        // A sealed envelope of about a keystroke: a few hundred bytes.
+        let sized = |seq: i64| {
+            let mut f = frame(seq);
+            f.resize(256, 0x5a);
+            f
+        };
+        for seq in 1..=200 {
+            inline(&state, &doc, seq, &sized(seq), INLINE_CAP).await;
+        }
+        let before = table_updates(&state, (0, 0), 0).await;
+        assert_eq!(move_to_batch(&state, &doc, None).await.unwrap().get(), 136);
+
+        let (updated, heap_only) = table_updates(&state, before, 136).await;
+        assert_eq!(updated, 136, "the statistics count each moved row once");
+        assert_eq!(heap_only, 136, "each move writes no index entry");
+
+        let next = inline(&state, &doc, 201, &sized(201), INLINE_CAP).await;
+        assert!(
+            matches!(next, InlineInsert::Stored { deltas, .. } if deltas == Count::<Deltas>::new(65)),
+            "the count past the move reads the 64 kept deltas and the new one: {next:?}"
+        );
+    }
+
     /// `SRV-152`: a document idle past the delay has its whole tail moved, and
     /// one written since keeps its own.
     #[sqlx::test]
