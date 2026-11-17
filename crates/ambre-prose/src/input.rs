@@ -425,6 +425,11 @@ impl ProseUiState {
         if matches!(input, ProseInput::Press { .. } | ProseInput::Key { .. }) {
             self.stop_fling();
         }
+        // A key or typed text leaves the picture: its handles go
+        // (`PROSE-UI-241`).
+        if matches!(input, ProseInput::Text(_) | ProseInput::Key { .. }) {
+            self.picture_selected = None;
+        }
         match input {
             ProseInput::Text(text) => self.type_into_menu(text, send),
             ProseInput::Key { key, mods } => {
@@ -473,6 +478,8 @@ impl ProseUiState {
                     }
                 }
             }
+            ProseInput::Drag { at } if self.drag_handle(*at).is_yes() => Consumed::Yes,
+            ProseInput::Release if self.release_handle(send).is_yes() => Consumed::Yes,
             ProseInput::Drag { at } => {
                 self.update_drag(*at);
                 Consumed::yes_if(self.dragging.is_some())
@@ -981,12 +988,20 @@ impl ProseUiState {
             }
             return Consumed::Yes;
         }
+        // A press on a handle of the selected picture starts its resize, and
+        // moves no caret (`PROSE-UI-244`).
+        if self.press_handle(at).is_yes() {
+            return Consumed::Yes;
+        }
         // A press on a picture that failed for good asks for it again, and
-        // moves no caret (`PROSE-UI-145`).
-        if let Some(block_id) = self.failed_picture_at(at) {
+        // moves no caret (`PROSE-UI-145`). One on any other picture selects
+        // it, and places the caret as before (`PROSE-UI-241`).
+        let picture = self.picture_at(at);
+        if let Some((block_id, crate::view::picture_handles::PictureFailed::Failed)) = picture {
             send(ProseCommand::RetryImageLoad { block_id });
             return Consumed::Yes;
         }
+        self.picture_selected = picture.map(|(block, _)| block);
         let Some(spot) = self.place_at(at) else {
             return Consumed::No;
         };

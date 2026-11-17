@@ -508,6 +508,11 @@ pub struct ProseUiState {
     /// every page, and the caret shows on the one it was placed on
     /// (`PROSE-UI-033`).
     pub(crate) band_page: Option<Pos<Page>>,
+    /// The picture a press selected: it wears its handles (`PROSE-UI-241`).
+    pub(crate) picture_selected: Option<BlockId>,
+    /// A drag of a picture handle in flight. It writes nothing until the
+    /// release (`PROSE-UI-244`).
+    pub(crate) picture_resize: Option<crate::view::picture_handles::PictureResize>,
     /// A drag in flight: its anchor is frozen while it lasts (`PROSE-UI-152`).
     pub(crate) dragging: Option<(BlockId, Pos<DocChar>)>,
     /// The last pointer of the drag in flight, and its autoscroll

@@ -344,6 +344,7 @@ impl ProseUiState {
             self.caret_drawn =
                 Some((camera * Affine::translate((0.0, top.get()))).transform_rect_bbox(bar));
         }
+        self.paint_picture_handles(surface, palette);
         // Last, so a collaborator's caret never hides the text under it.
         for block in frame
             .blocks

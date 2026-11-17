@@ -287,39 +287,6 @@ impl ProseUiState {
         }
     }
 
-    /// The picture block under a canvas point whose picture failed for good,
-    /// so a press there asks for it again (`PROSE-UI-145`).
-    pub(crate) fn failed_picture_at(&self, at: Point<Px<View>>) -> Option<BlockId> {
-        let DocPos::OnPage {
-            page,
-            x_in_page,
-            y_in_page,
-        } = self.column.screen_to_doc(&self.viewport, at)
-        else {
-            return None;
-        };
-        let layout = &self.shaped.layout;
-        let x = x_in_page - layout.margin_left;
-        let y = y_in_page - layout.body_top();
-        let (pieces, _) = self.pieces(page);
-        pieces.iter().find_map(|piece| {
-            let picture = piece.picture.as_ref()?;
-            let inside = x >= picture.x
-                && x < picture.x + picture.width
-                && y >= piece.fragment.top
-                && y < piece.fragment.top + picture.height;
-            let failed = matches!(
-                picture
-                    .address
-                    .as_ref()
-                    .and_then(|address| self.pictures.get(address)),
-                Some(crate::message::PictureShown::Failed(_))
-            );
-            let block = self.shaped.block(piece.index)?;
-            (inside && failed).then(|| crate::events::block_id(block.block_id))
-        })
-    }
-
     /// The block and the offset under a canvas point, tagged with the run it
     /// was read off. [`HitTest`] gives it as a document offset.
     ///

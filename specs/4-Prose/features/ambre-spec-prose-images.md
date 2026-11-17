@@ -34,6 +34,8 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-046` | `OBS` | A picture that failed for good MUST paint a mark distinct from the loading placeholder. | this spec section 4 | `ambre_prose::view::paint::tests::a_failed_picture_paints_a_mark_the_placeholder_does_not` | none | verified |
 | `PROSE-UI-145` | `OBS` | A picture that failed for good MUST offer the gesture that asks for it again. | this spec section 4 | `ambre_prose::input_tests::a_press_on_a_failed_picture_asks_for_it_again` -- a press on it sends the retry and moves no caret | none | verified |
 | `PROSE-UI-146` | `OBS` | A picture not yet resolved MUST paint a neutral placeholder carrying its alternative text. | this spec section 4 | `ambre_prose::view::paint::tests::a_waiting_picture_paints_a_placeholder_with_its_alternative_text` | none | verified |
+| `PROSE-UI-241` | `OBS` | A press on a picture MUST select it, and a selected picture MUST wear an outline and eight handles: one on each corner and one in the middle of each side. | this spec section 4 | `ambre_prose::input_tests::a_press_on_a_picture_selects_it_and_draws_its_handles` -- the eight centres, and the handles go on a key; `ambre_prose::view::picture_handles::tests::a_press_grabs_the_corner_first_then_the_side_then_nothing` | none | verified |
+| `PROSE-UI-245` | `OBS` | While a handle is dragged, the page MUST draw the outline and the handles on the box the release would send. | this spec section 4 | `ambre_prose::input_tests::a_corner_drag_sends_one_locked_resize_on_release_and_one_undo_takes_it_back` -- the outline of the preview before the release | none | verified |
 
 ### 1.2 Insert a picture
 
@@ -140,6 +142,15 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-FEAT-328` | `POST` | A stored picture MUST show as it was taken: the orientation its file stated MUST survive the stripping. | this spec section 3 | `ambre_prose::picture::tests::a_stored_picture_keeps_its_orientation`; `ambre_prose::logic::print::tests::a_printed_picture_stands_as_it_was_taken` -- the PDF draws the file turned | none | verified |
 | `PROSE-FEAT-329` | `POST` | A picture an import carries MUST be stored without its metadata, as one chosen from a file is. | this spec section 3 | `ambre_prose::logic::picture_interop_tests::an_imported_picture_is_stored_without_its_metadata` | none | verified |
 
+### 1.13 Resize a picture from its handles
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-UI-242` | `POST` | The release of a drag from a corner handle MUST send one resize carrying the box drawn, with the aspect locked. | this spec section 4; `PROSE-FEAT-214` | `ambre_prose::input_tests::a_corner_drag_sends_one_locked_resize_on_release_and_one_undo_takes_it_back`; `ambre_prose::view::picture_handles::tests::a_corner_keeps_the_ratio_and_the_opposite_corner` | none | verified |
+| `PROSE-UI-243` | `POST` | The release of a drag from a side handle MUST send one resize that changes that side alone. | this spec section 4 | `ambre_prose::input_tests::a_side_drag_sends_one_free_resize_of_that_side`; `ambre_prose::view::picture_handles::tests::a_side_moves_alone_and_stops_at_the_smallest_side` | none | verified |
+| `PROSE-UI-244` | `FRAME` | A drag of a handle MUST NOT send anything before its release, nor move the caret. | this spec section 4 | `ambre_prose::input_tests::a_corner_drag_sends_one_locked_resize_on_release_and_one_undo_takes_it_back` -- two moves send nothing, and a press and a release in place send nothing | none | verified |
+| `PROSE-UI-246` | `POST` | A resize from the handles MUST be one step of the history: one undo MUST give the picture its size back. | this spec section 4; `PROSE-FEAT-213` | `ambre_prose::input_tests::a_corner_drag_sends_one_locked_resize_on_release_and_one_undo_takes_it_back` -- one undo, then the stored size of the insert | none | verified |
+
 * **Budget.** the PDF export with pictures and one decode are rows of
   `ambre-spec-budgets.md section 1`. The cache, the export bytes and the edges are of section 6.
 * **Boundary.** the picture blobs are Prose's only outbound flow of user content that is not the
@@ -147,7 +158,7 @@ status values are normative in `ambre-spec-template.md`.
   seals every blob, and the document holds an address, not pixels. Before a blob leaves, the Logic
   thread strips its location, device and dates (`PROSE-FEAT-326`). The seal hides them from the
   relay, and the stripping keeps them from every member and every exported file.
-* **Verification.** 63 `verified`, all on the host: pure functions, `ProseState` with the Sync
+* **Verification.** 69 `verified`, all on the host: pure functions, `ProseState` with the Sync
   worker's answers driven by hand, and the recording surface.
 
 ---
@@ -356,6 +367,8 @@ keeps the stored size (`PROSE-FEAT-317`).
 * `crates/ambre-prose/src/logic/pictures.rs` -- the commands, the media answers, the import and
   export stages;
 * `crates/ambre-prose/src/view/walk.rs` -- the picture, the placeholder and the broken mark;
+* `crates/ambre-prose/src/view/picture_handles.rs` -- the handles, the hit on them and the box a
+  drag of one draws;
 * `crates/ambre-logic/src/data.rs` -- the lowering of each request and the routing of its answer.
 
 ---
@@ -366,7 +379,20 @@ keeps the stored size (`PROSE-FEAT-317`).
 |---|---|
 | the "Insert a picture" command, from the palette or the file menu | a file chooser, then a picture after the caret's block, once its blob has been stored |
 | a press on a picture that failed for good | asks for the blob again, and moves no caret |
-| `ResizeImage`, `SetImageAlign`, `SetImageAlt`, `SetImageCaption` | each reaches the engine as a command; the handles and the picture menu that send them are not built |
+| a press on a picture | selects it: the picture wears an outline and eight handles, and the caret goes beside it as before. A key or typed text leaves it |
+| a drag of a corner handle of the selected picture | previews the box with the ratio kept, and the release sends one `ResizeImage`, aspect locked |
+| a drag of a side handle of the selected picture | previews the box with that side moved, and the release sends one `ResizeImage`, aspect free |
+| `SetImageAlign`, `SetImageAlt`, `SetImageCaption` | each reaches the engine as a command; the picture menu that sends them is not built |
+
+**The handles.** A handle grabs a press within 8 screen pixels at every zoom, and the whole of a
+side grabs its handle. A corner wins where it meets two sides. The box a drag draws keeps the edges
+the handle does not move. A corner keeps the ratio of the box drawn, and the side that moved most
+drives, as the engine's rule does (`PROSE-FEAT-214`). No side goes under 8 document pixels, so the
+box stays grabbable.
+
+The drag writes nothing, and its release sends one command, so the resize is
+one step of the history (`PROSE-UI-246`). The command carries the box drawn, which is the stored
+size unless the column scaled the picture down (`PROSE-FEAT-317`).
 
 A picture not yet resolved paints a neutral placeholder carrying its alternative text. A picture
 that failed for good paints a distinct broken mark, a cross over its box, and a press on it asks
@@ -403,9 +429,11 @@ again. No picture stays on the loading placeholder for ever (`PROSE-UI-046`).
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **Nothing resizes or aligns a picture by hand.** The commands reach the engine, and the corner
-  handles, the edge handles and the picture menu that would send them are not built. The
-  `Picture handles and menu` Story (`ambre-roadmap.md` E5) builds them.
+* **Nothing aligns a picture or sets its texts by hand.** The commands reach the engine, and the
+  picture menu that would send them is not built. The `Picture menu` Story (`ambre-roadmap.md`
+  E5) builds it.
+* **A selected picture answers no key.** Delete does not remove it, and no arrow resizes it. A key
+  leaves the picture, and the caret beside it takes the key.
 * **Nothing says whether a paste follows the refusal or the lift.** A picture pasted into a table
   cell meets `PROSE-FEAT-211` on an insert and `PROSE-FEAT-053` on an import, and the two answers
   differ. The `Rich paste: tables and pictures` Story (`ambre-roadmap.md` E5) rules on it.

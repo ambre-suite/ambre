@@ -2901,3 +2901,252 @@ fn a_caret_past_the_canvas_holds_the_menu_inside_it() {
         ambre_core::Point::new(Px::<View>::new(0.0), Px::<View>::new(0.0))
     );
 }
+
+// -- The handles of a picture -------------------------------------------------
+
+use crate::view::picture_handles::PictureBox;
+
+/// A document of one paragraph and a picture of 200 by 100 after it, laid
+/// out, with the picture's box on the column.
+fn picture_rig() -> (Rig, BlockId, PictureBox) {
+    let mut rig = Rig::new(&["before the picture"]);
+    let address =
+        ambre_core::Validated::<ambre_core::ContentHash>::parse("c".repeat(64)).expect("a hash");
+    let first = rig.blocks()[0];
+    rig.logic.handle_command(ProseCommand::InsertImage {
+        parent_id: None,
+        after_id: Some(first),
+        content_hash: address,
+        alt: ambre_core::Validated::default(),
+        size: ambre_core::Size::new(Px::<Doc>::new(200.0), Px::<Doc>::new(100.0)),
+    });
+    rig.lay();
+    let picture = rig.blocks()[1];
+    let frame = rig.ui.picture_box(picture).expect("the picture is drawn");
+    (rig, picture, frame)
+}
+
+/// A point of the column as the canvas shows it.
+fn on_canvas(rig: &Rig, x: Px<Doc>, y: Px<Doc>) -> (f32, f32) {
+    let ui = &rig.ui;
+    let scale = ui.viewport.scale();
+    (
+        ui.column.left(&ui.viewport).get() + x.get() * scale,
+        (y - ui.viewport.scroll_y).get() * scale,
+    )
+}
+
+/// The accent the handles paint in, apart from every other colour.
+fn handle_palette() -> crate::view::paint::PagePalette {
+    let ink = ambre_draw::Color::from_rgba8(20, 20, 20, 255);
+    crate::view::paint::PagePalette {
+        sheet: ink,
+        sheet_border: ink,
+        shadow: ink,
+        text: ink,
+        accent: ambre_draw::Color::from_rgba8(200, 0, 0, 255),
+        warning: ink,
+        success: ink,
+        error: ink,
+    }
+}
+
+/// The handle squares and the outline a paint draws: the accent's fills of
+/// the handle size, and the accent's stroked rectangles.
+fn handles_drawn(rig: &mut Rig) -> (Vec<ambre_draw::Rect>, Vec<ambre_draw::Rect>) {
+    use ambre_draw::testing::DrawOp;
+    let palette = handle_palette();
+    let mut surface = ambre_draw::testing::RecordingSurface::new();
+    rig.ui.paint(&mut surface, &palette);
+    let squares = surface
+        .ops()
+        .iter()
+        .filter_map(|op| match op {
+            DrawOp::FillRect { rect, color }
+                if *color == palette.accent
+                    && (rect.width() - 8.0).abs() < 0.01
+                    && (rect.height() - 8.0).abs() < 0.01 =>
+            {
+                Some(*rect)
+            }
+            _ => None,
+        })
+        .collect();
+    let outlines = surface
+        .ops()
+        .iter()
+        .filter_map(|op| match op {
+            DrawOp::StrokeRect { rect, color, .. } if *color == palette.accent => Some(*rect),
+            _ => None,
+        })
+        .collect();
+    (squares, outlines)
+}
+
+fn same_rect(rect: ambre_draw::Rect, frame: PictureBox) -> bool {
+    (rect.x0 - f64::from(frame.origin.x.get())).abs() < 0.01
+        && (rect.y0 - f64::from(frame.origin.y.get())).abs() < 0.01
+        && (rect.width() - f64::from(frame.size.width.get())).abs() < 0.01
+        && (rect.height() - f64::from(frame.size.height.get())).abs() < 0.01
+}
+
+/// Press the middle of the picture to select it, and release.
+fn select_picture(rig: &mut Rig, frame: PictureBox, now: f64) {
+    let at = on_canvas(
+        rig,
+        frame.origin.x + frame.size.width / 2.0,
+        frame.origin.y + frame.size.height / 2.0,
+    );
+    rig.press(at, false, Instant::<PageLoad>::new(now));
+    rig.input(ProseInput::Release);
+}
+
+fn drag(rig: &mut Rig, (x, y): (f32, f32)) -> bool {
+    rig.input(ProseInput::Drag { at: view_at(x, y) })
+}
+
+/// `PROSE-UI-241`: a press on a picture selects it. The picture wears its
+/// outline and eight handles: the four corners and the middle of each side.
+/// A key leaves it, and the handles go.
+#[test]
+fn a_press_on_a_picture_selects_it_and_draws_its_handles() {
+    let (mut rig, picture, frame) = picture_rig();
+    assert_eq!(
+        handles_drawn(&mut rig).0.len(),
+        0,
+        "nothing is selected yet"
+    );
+    select_picture(&mut rig, frame, 10_000.0);
+    assert_eq!(rig.ui.picture_selected, Some(picture));
+    let (squares, outlines) = handles_drawn(&mut rig);
+    assert!(outlines.iter().any(|rect| same_rect(*rect, frame)));
+    let mut centres: Vec<(i64, i64)> = squares
+        .iter()
+        .map(|rect| {
+            let centre = rect.center();
+            (centre.x.round() as i64, centre.y.round() as i64)
+        })
+        .collect();
+    centres.sort_unstable();
+    let (x0, y0) = (
+        f64::from(frame.origin.x.get()),
+        f64::from(frame.origin.y.get()),
+    );
+    let mut expected: Vec<(i64, i64)> = [
+        (0.0, 0.0),
+        (100.0, 0.0),
+        (200.0, 0.0),
+        (200.0, 50.0),
+        (200.0, 100.0),
+        (100.0, 100.0),
+        (0.0, 100.0),
+        (0.0, 50.0),
+    ]
+    .iter()
+    .map(|(dx, dy)| ((x0 + dx).round() as i64, (y0 + dy).round() as i64))
+    .collect();
+    expected.sort_unstable();
+    assert_eq!(centres, expected);
+    rig.key(ProseKey::Right, false, false);
+    assert_eq!(rig.ui.picture_selected, None);
+    assert_eq!(
+        handles_drawn(&mut rig).0.len(),
+        0,
+        "a key leaves the picture"
+    );
+}
+
+/// `PROSE-UI-242`, `PROSE-UI-244`, `PROSE-UI-245`, `PROSE-UI-246`: a drag
+/// of a corner sends nothing and moves no caret until the release. The page
+/// draws the box the release asks for. The release sends one resize with the
+/// aspect locked, and one undo gives the size back. A press and a release in
+/// place send nothing.
+#[test]
+fn a_corner_drag_sends_one_locked_resize_on_release_and_one_undo_takes_it_back() {
+    let (mut rig, picture, frame) = picture_rig();
+    select_picture(&mut rig, frame, 10_000.0);
+    let corner = (
+        frame.origin.x + frame.size.width - Px::<Doc>::new(2.0),
+        frame.origin.y + frame.size.height - Px::<Doc>::new(2.0),
+    );
+    let (x, y) = on_canvas(&rig, corner.0, corner.1);
+
+    // In place: nothing.
+    rig.sent.clear();
+    assert!(rig.press((x, y), false, Instant::<PageLoad>::new(20_000.0)));
+    assert!(rig.input(ProseInput::Release));
+    assert!(rig.sent.is_empty(), "a release in place sends nothing");
+
+    let caret = rig.ui.cursor;
+    assert!(rig.press((x, y), false, Instant::<PageLoad>::new(30_000.0)));
+    assert!(drag(&mut rig, (x + 40.0, y + 5.0)));
+    assert!(drag(&mut rig, (x + 100.0, y + 10.0)));
+    assert!(
+        rig.sent.is_empty(),
+        "a drag sends nothing before its release"
+    );
+    assert_eq!(rig.ui.cursor, caret, "a handle drag moves no caret");
+    let (squares, outlines) = handles_drawn(&mut rig);
+    let preview = PictureBox {
+        origin: frame.origin,
+        size: ambre_core::Size::new(Px::<Doc>::new(300.0), Px::<Doc>::new(150.0)),
+    };
+    assert!(outlines.iter().any(|rect| same_rect(*rect, preview)));
+    assert_eq!(squares.len(), 8);
+
+    assert!(rig.input(ProseInput::Release));
+    assert_eq!(
+        rig.sent,
+        vec![ProseCommand::ResizeImage {
+            block_id: picture,
+            size: preview.size,
+            lock_aspect: crate::message::AspectLock::Locked,
+        }]
+    );
+    rig.deliver();
+    rig.lay();
+    assert_eq!(
+        rig.ui.picture_box(picture).map(|frame| frame.size),
+        Some(preview.size)
+    );
+    rig.key(ProseKey::Undo, false, false);
+    rig.deliver();
+    rig.lay();
+    assert_eq!(
+        rig.ui.picture_box(picture).map(|frame| frame.size),
+        Some(frame.size),
+        "one undo gives the size back"
+    );
+}
+
+/// `PROSE-UI-243`: a drag of a side sends one resize on release that moves
+/// that side alone, with the aspect free.
+#[test]
+fn a_side_drag_sends_one_free_resize_of_that_side() {
+    let (mut rig, picture, frame) = picture_rig();
+    select_picture(&mut rig, frame, 10_000.0);
+    let (x, y) = on_canvas(
+        &rig,
+        frame.origin.x + frame.size.width + Px::<Doc>::new(3.0),
+        frame.origin.y + frame.size.height / 2.0,
+    );
+    rig.sent.clear();
+    assert!(rig.press((x, y), false, Instant::<PageLoad>::new(20_000.0)));
+    assert!(drag(&mut rig, (x + 50.0, y + 80.0)));
+    assert!(rig.input(ProseInput::Release));
+    let size = ambre_core::Size::new(Px::<Doc>::new(250.0), Px::<Doc>::new(100.0));
+    assert_eq!(
+        rig.sent,
+        vec![ProseCommand::ResizeImage {
+            block_id: picture,
+            size,
+            lock_aspect: crate::message::AspectLock::Free,
+        }]
+    );
+    rig.deliver();
+    rig.lay();
+    assert_eq!(
+        rig.ui.picture_box(picture).map(|frame| frame.size),
+        Some(size)
+    );
+}
