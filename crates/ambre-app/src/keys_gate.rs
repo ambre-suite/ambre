@@ -6,7 +6,9 @@
 // screen then shows one of two faces before the list. An account that holds
 // its keys sees a passphrase field that opens them (`CHROME-097`). An account
 // that owes them sees the setup that creates them (`CHROME-098`). A later
-// refusal for a setup still owed brings the setup back over the list.
+// refusal for a setup still owed brings the setup back over the list. The
+// unlock face links to the recovery form, the one way in after a forgotten
+// passphrase (`CHROME-133`).
 //
 // The passphrase lives in the field alone. It is read once, at submission,
 // into a `Confidential`, and the field is emptied in the same step. No signal,
@@ -111,8 +113,10 @@ mod view {
     }
 
     /// The face the gate shows, or nothing while no account waits on its keys.
+    /// `keys` opens the recovery form over the gate (`CHROME-133`).
     pub(crate) fn keys_gate_view(
         gate: KeysGate,
+        keys: crate::account::KeysSignals,
         to_logic: crate::outbox::ShellOutbox,
     ) -> impl IntoView {
         move || {
@@ -211,6 +215,16 @@ mod view {
                     >
                         {action}
                     </button>
+                    // The words open the account under a new passphrase. The
+                    // form covers the gate, which shows again once it closes.
+                    <Show when=move || face == KeysFace::Unlock>
+                        <button
+                            class="ambre-signin-link ambre-keys-recover"
+                            on:click=move |_| keys.open(crate::account::KeysFace::Recover)
+                        >
+                            "Forgot the passphrase? Recover the account with its recovery words"
+                        </button>
+                    </Show>
                 </div>
             })
         }
@@ -242,6 +256,7 @@ mod view {
         fn mounted() -> (
             web_sys::Element,
             KeysGate,
+            crate::account::KeysSignals,
             ambre_bus::conduit::Receiver<LogicCommand>,
         ) {
             let document = web_sys::window().unwrap().document().unwrap();
@@ -252,9 +267,12 @@ mod view {
             >::of::<8>());
             let outbox = crate::outbox::ShellOutbox::new(tx);
             let gate = KeysGate::new();
+            let keys = crate::account::KeysSignals::new();
             let html: web_sys::HtmlElement = container.clone().unchecked_into();
-            std::mem::forget(mount_to(html, move || keys_gate_view(gate, outbox.clone())));
-            (container, gate, rx)
+            std::mem::forget(mount_to(html, move || {
+                keys_gate_view(gate, keys, outbox.clone())
+            }));
+            (container, gate, keys, rx)
         }
 
         fn field(container: &web_sys::Element, class: &str) -> web_sys::HtmlInputElement {
@@ -307,7 +325,7 @@ mod view {
         /// the field is empty from then on.
         #[wasm_bindgen_test]
         async fn an_unlock_sends_the_passphrase_once_and_empties_the_field() {
-            let (container, gate, rx) = mounted();
+            let (container, gate, _keys, rx) = mounted();
             assert!(
                 container.query_selector("input").unwrap().is_none(),
                 "no face before a sign-in"
@@ -339,7 +357,7 @@ mod view {
         /// line, and the face stays for another try.
         #[wasm_bindgen_test]
         async fn a_wrong_passphrase_is_said_and_the_face_stays() {
-            let (container, gate, rx) = mounted();
+            let (container, gate, _keys, rx) = mounted();
             gate.face.set(Some(KeysFace::Unlock));
             tick().await;
             field(&container, "ambre-keys-passphrase").set_value("anchovy glider");
@@ -363,7 +381,7 @@ mod view {
         /// send the setup once, and both fields are empty from then on.
         #[wasm_bindgen_test]
         async fn a_setup_sends_only_a_confirmed_passphrase() {
-            let (container, gate, rx) = mounted();
+            let (container, gate, _keys, rx) = mounted();
             gate.face.set(Some(KeysFace::SetUp));
             tick().await;
             let passphrase = field(&container, "ambre-keys-passphrase");
@@ -400,7 +418,7 @@ mod view {
         /// from the field.
         #[wasm_bindgen_test]
         async fn a_weak_setup_passphrase_is_announced_with_its_reason() {
-            let (container, gate, _rx) = mounted();
+            let (container, gate, _keys, _rx) = mounted();
             gate.face.set(Some(KeysFace::SetUp));
             tick().await;
             let refusal =
@@ -428,10 +446,41 @@ mod view {
             );
         }
 
+        /// `CHROME-133`: the unlock face links to the recovery form, and the
+        /// setup face does not. The link opens the form and sends nothing.
+        #[wasm_bindgen_test]
+        async fn the_unlock_face_links_to_the_recovery_form() {
+            let (container, gate, keys, rx) = mounted();
+            gate.face.set(Some(KeysFace::SetUp));
+            tick().await;
+            assert!(
+                container
+                    .query_selector(".ambre-keys-recover")
+                    .unwrap()
+                    .is_none(),
+                "the setup offers the recovery"
+            );
+            gate.face.set(Some(KeysFace::Unlock));
+            tick().await;
+            let link: web_sys::HtmlElement = container
+                .query_selector(".ambre-keys-recover")
+                .unwrap()
+                .expect("the unlock face links to the recovery")
+                .unchecked_into();
+            link.click();
+            tick().await;
+            assert!(
+                keys.face
+                    .with_untracked(|face| matches!(face, crate::account::KeysFace::Recover)),
+                "the link opened no recovery form"
+            );
+            assert!(sent(&rx).is_empty());
+        }
+
         /// The gate opened by a ready session shows no face and no refusal.
         #[wasm_bindgen_test]
         async fn an_open_gate_shows_nothing() {
-            let (container, gate, _rx) = mounted();
+            let (container, gate, _keys, _rx) = mounted();
             gate.face.set(Some(KeysFace::Unlock));
             gate.refusal
                 .set(Some(GateRefusal::Worker(AuthFailure::BadPassphrase)));

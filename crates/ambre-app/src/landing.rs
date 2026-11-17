@@ -209,7 +209,7 @@ pub fn landing_view(
             // A provider account whose keys are still to open or to set up.
             // The account face, the recovery words above all, covers the gate.
             <Show when=move || !keys.is_open()>
-                {crate::keys_gate::keys_gate_view(gate, to_logic_gate.clone())}
+                {crate::keys_gate::keys_gate_view(gate, keys, to_logic_gate.clone())}
             </Show>
 
             // Signed in: the document list.

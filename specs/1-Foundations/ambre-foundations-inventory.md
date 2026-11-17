@@ -27,7 +27,7 @@
 | `high-density` | A screen with two or more physical pixels per CSS pixel. | implemented | 10 |  |
 | `key-verification` | Before a document is shared with someone, their key is shown as a short readable fingerprint and the user confirms it. | implemented | 18 |  |
 | `kinetic-scroll` | A finger moves the view the same way in every editor. | implemented | 15 |  |
-| `launcher` | The home screen at the root of the site: sign in, then every document you can open, whatever kind it is. | implemented | 42 |  |
+| `launcher` | The home screen at the root of the site: sign in, then every document you can open, whatever kind it is. | implemented | 45 |  |
 | `locale` | A document carries one language tag, so two collaborators on differently configured machines read the same number, the same currency and the same date. | implemented | 23 |  |
 | `media` | A picture in a document travels apart from it. | implemented | 19 |  |
 | `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | implemented | 79 |  |
@@ -56,7 +56,7 @@
 | `render-assets` | What the renderer loads before it can draw anything: the fonts a script needs, the glyphs rasterized from them, the icons, the embedded images. | partial | 26 |  |
 | `sealed-envelope` | Nothing a user writes leaves the browser readable. | partial | 29 |  |
 | `server` | The one process every client talks to. | partial | 116 | 1 |
-| `sync` | The one part of the client that talks to the network. | partial | 76 |  |
+| `sync` | The one part of the client that talks to the network. | partial | 77 |  |
 | `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 20 |  |
 | `ui` | The page's own thread. | partial | 23 |  |
 | `zero-knowledge` | What the relay is allowed to learn, and what it must never be able to learn. | partial | 44 | 1 |
@@ -65,4 +65,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**49 features: 24 implemented, 21 partial, 4 design-only. 1598 contract rows, 14 loose.**
+**49 features: 24 implemented, 21 partial, 4 design-only. 1602 contract rows, 14 loose.**

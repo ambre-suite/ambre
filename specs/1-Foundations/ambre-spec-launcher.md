@@ -31,6 +31,7 @@ other five documents of the DOM side.
 | `CHROME-099` | `OBS` | The recovery words MUST be shown once, at the setup, and be readable nowhere afterwards. | this spec section 2; `ambre-spec-zero-knowledge.md` section 3 | `ambre_belt::account::tests::the_setup_shows_the_words_once_and_the_recovery_reads_them` -- browser tier, the setup shows 24 words, and after the confirmation neither the page, a reload nor the web storage holds them; `ambre_app::account::tests::the_words_show_once_and_leave_with_the_confirmation` -- wasm tier, the list reads the words in order, and the confirmation empties the face; `ambre_app::switchboard::tests::the_words_and_a_refusal_reach_the_keys_face` -- the words reach the keys face alone; type-level -- the words cross the UI thread as a `Confidential<RecoveryWords>`, and `present_words`, named in `account.rs` alone (`ARCH-049`), is the one read of them | none | verified |
 | `CHROME-130` | `OBS` | The recovery form MUST show the refusal the Sync worker answers, in the words of that refusal. | this spec section 2; `ambre-spec-zero-knowledge.md`, `ZK-043`; `CHROME-128` | `ambre_belt::account::tests::the_setup_shows_the_words_once_and_the_recovery_reads_them` -- browser tier, a mistyped word, a wrong count and a bad checksum each show their own words; `ambre_app::account::tests::the_recovery_sends_the_words_and_shows_the_refusal` -- wasm tier, the refusal reads as its words, and one with no form shown changes nothing; `ambre_app::switchboard::tests::the_words_and_a_refusal_reach_the_keys_face` -- a refusal of the worker reaches the form | none | verified |
 | `CHROME-131` | `OBS` | The setup MUST show the words of a refused passphrase, its reason included, in a line a screen reader announces. | this spec section 2; `ambre-spec-zero-knowledge.md`, `ZK-036`; `ambre-spec-accessibility.md` | `ambre_app::keys_gate::view::tests::a_weak_setup_passphrase_is_announced_with_its_reason` -- wasm tier, the alert line reads the words of the refusal, and each field names it as its description; `ambre_app::switchboard::tests::a_refused_passphrase_reads_on_the_gate_that_asked` -- the refusal reaches the gate, and a toast when no gate shows | none | verified |
+| `CHROME-134` | `OBS` | A refusal of the recovery form opened from the unlock face MUST read on that form, never on the hidden gate. | this spec section 2; `CHROME-130`; `CHROME-133` | `ambre_app::switchboard::tests::the_words_and_a_refusal_reach_the_keys_face` -- a refusal with the gate and a form shown reaches the form; `ambre_belt::account::tests::the_unlock_face_leads_to_a_recovery_that_opens_the_account` -- browser tier, a bad checksum reads on the form opened from the unlock face | none | verified |
 | `CHROME-123` | `OBS` | The search field MUST carry an accessible name inside a search landmark, and the count a query lists MUST be announced to a screen reader. | this spec section 2; `ambre-spec-accessibility.md` | `ambre_app::landing::tests::the_search_field_is_named_announces_its_count_and_clears_on_escape` -- wasm tier, the name, the landmark and the status line read back: it says nothing before a search, then two documents, one, and that nothing matches | none | verified |
 | `CHROME-124` | `OBS` | A query that answers nothing MUST say so, never the invitation an empty list shows. | this spec section 2 | `ambre_app::landing::tests::a_search_filters_the_bands_and_sends_nothing` -- wasm tier, the one message shown is the search's own | none | verified |
 
@@ -88,6 +89,8 @@ The provider says who the person is; a passphrase opens their keys, or a setup c
 | `CHROME-100` | `FRAME` | A passphrase typed on this screen MUST NOT outlive its submission on the UI thread. | this spec section 2; `ambre-spec-zero-knowledge.md`, `ZK-010` | type-level -- the gate's state `KeysGate` holds its face and its refusal alone, and the text is read once from the field into a `Confidential`, which wipes it on drop; `ambre_app::keys_gate::view::tests::an_unlock_sends_the_passphrase_once_and_empties_the_field`; `::a_setup_sends_only_a_confirmed_passphrase` -- wasm tier, every field reads empty after a submission, a refused one included | none | verified |
 | `CHROME-129` | `FRAME` | A passphrase typed in the setup or the recovery form MUST NOT outlive its submission on the UI thread. | this spec section 2; `ambre-spec-zero-knowledge.md`, `ZK-010`; `CHROME-100` | `ambre_app::account::tests::the_setup_sends_the_passphrase_and_empties_its_fields` -- wasm tier, both fields read empty after a submission, a refused one included; `ambre_app::account::tests::the_recovery_sends_the_words_and_shows_the_refusal` -- wasm tier, the same on the recovery form; type-level -- the text moves from the field into a `Confidential<Passphrase>`, the type the bus carries (`ZK-010`) | none | verified |
 | `CHROME-128` | `POST` | The recovery form MUST hand the words it reads to the Sync worker. | this spec section 2; `ambre-spec-zero-knowledge.md`, `ZK-043` | `ambre_belt::account::tests::the_setup_shows_the_words_once_and_the_recovery_reads_them` -- browser tier, the worker refuses a mistyped word, a wrong count and a bad checksum, and passes the words the setup showed; `ambre_app::account::tests::the_recovery_sends_the_words_and_shows_the_refusal` -- wasm tier, the form sends one recovery | none | verified |
+| `CHROME-132` | `POST` | An account setup MUST end in the session of the account it created: once the recovery words are confirmed, the list MUST show, never the sign-in panel. | this spec section 2; `ambre-spec-sync.md`, `SYNC-261`; `CHROME-099` | `ambre_belt::account::tests::a_setup_ends_in_the_session_once_the_words_are_confirmed` -- browser tier, the words cover the list while they show, and their confirmation shows the list of the new user with no sign-in panel | none | verified |
+| `CHROME-133` | `POST` | The unlock face MUST link to the recovery form, and a recovery there MUST bring the unlock face back for the new passphrase. | this spec section 2; `ambre-spec-zero-knowledge.md`, `ZK-043`; `CHROME-097`; `CHROME-128` | `ambre_app::keys_gate::view::tests::the_unlock_face_links_to_the_recovery_form` -- wasm tier, the unlock face links to the form and the setup face does not; `ambre_belt::account::tests::the_unlock_face_leads_to_a_recovery_that_opens_the_account` -- browser tier, a provider account recovers from the unlock face, and the unlock face then refuses the old passphrase and opens the list under the new one | none | verified |
 
 ### 1.7 Sign out
 
@@ -120,10 +123,10 @@ first, in bands of age, and narrows it by a query that never leaves the page.
   is not: it arrives decrypted from the Sync thread (`CHROME-044`). The launcher opens one
   unauthenticated same-origin read of the sign-in configuration, keeps the sign-in's own state and
   owns the local store. Each is an exception `UI-THREAD-004` names.
-* **Verification.** 42 `verified`. What holds is what a pure function or one
-  mounted control carries, and what a scan of the source refuses. Creation is held by the gate that
-  keeps the named command off the page. A composed name is held by its type, which converts to no
-  `String` (`CHROME-080`).
+* **Verification.** 45 `verified`. What holds is what a pure function or one mounted control
+  carries, and what a scan of the source refuses. Creation is held by the gate that keeps the named
+  command off the page. A composed name is held by its type, which converts to no `String`
+  (`CHROME-080`).
 ---
 
 ## 2. MODEL
@@ -139,7 +142,7 @@ surface, and which face it shows is decided by the state of the session.
 | unknown, and the server has not answered | a neutral placeholder (`CHROME-045`) |
 | unknown, and the server reports a development mode | a name field that signs in without reloading the page, and two links to the setup and to the recovery |
 | unknown, otherwise | a single button that hands the browser to the identity provider (`CHROME-095`) |
-| signed in with the provider, keys stored | a passphrase field that opens them (`CHROME-097`) |
+| signed in with the provider, keys stored | a passphrase field that opens them (`CHROME-097`), and a link to the recovery form (`CHROME-133`) |
 | signed in with the provider, keys owed | the setup: a passphrase, then the recovery words once (`CHROME-098`, `CHROME-099`) |
 | known | the header, the kind picker and the document list |
 
@@ -169,6 +172,15 @@ recovery words as the only way in.
 A refusal, the worker's or the fields' own, fills one alert line
 that each field names as its description (`CHROME-131`). The worker's words for a weak passphrase
 name the reason, and a screen reader announces them where a sighted user reads them.
+
+**The way back in.** The unlock face links to the recovery form, which covers the gate
+(`CHROME-133`). A refusal of the form reads on the form, because the gate under it is hidden
+(`CHROME-134`). A recovery re-seals the seed under the new passphrase and drops it, so the unlock
+face shows again and asks for that passphrase.
+
+**A setup ends in a session.** The Sync worker answers a setup with the recovery words, then
+announces the session of the user the relay assigned (`SYNC-261`). The words cover the list until
+the person confirms them, and the list of the new account then shows (`CHROME-132`).
 
 The development route matters for a reason that is not convenience. It signs in on the live
 threads, so the Sync worker keeps the keys it already holds instead of losing them to a page
@@ -289,8 +301,9 @@ holds the kinds, their monograms, their generic labels and the creatable list. T
 | the identity provider button | the browser leaves for the provider and comes back signed in (`CHROME-095`, `CHROME-096`) |
 | a return this tab did not start | it is dropped, its address cleared, and the sign-in panel shows again (`CHROME-101`) |
 | a provider account holds its keys | a passphrase field opens them, then the list appears (`CHROME-097`) |
+| the recovery link of the unlock face | the recovery form; once it succeeds, the unlock face asks the new passphrase (`CHROME-133`, `CHROME-134`) |
 | a provider account owes its keys, or the relay refuses it for that later | the setup: a passphrase, then the recovery words, shown once (`CHROME-098`, `CHROME-099`) |
-| the recovery words are confirmed | the words leave the page and the view, and no reload shows them again (`CHROME-099`) |
+| the recovery words are confirmed | the words leave the page and the view, and no reload shows them again (`CHROME-099`). The list of the new account shows (`CHROME-132`) |
 | the recovery form is submitted | the words reach the Sync worker, and a refusal shows its own words: a mistyped word, a wrong count or a bad checksum (`CHROME-128`, `CHROME-130`) |
 | a setup passphrase the worker refuses as weak | the line under the fields says why, and a screen reader announces it (`CHROME-131`) |
 | the sign-out control | the session ends, and the sign-in panel shows over nothing of it (`CHROME-107`, `CHROME-108`) |

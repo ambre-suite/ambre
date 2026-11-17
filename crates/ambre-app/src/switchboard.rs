@@ -491,13 +491,14 @@ impl Switchboard {
             // The relay refused a request or the socket for a key setup still
             // owed: the setup, never an error (`CHROME-098`, `SYNC-134`).
             UiEvent::SetupRequired => effects.push(Effect::AskKeys(KeysFace::SetUp)),
-            // A refusal reads where it was asked: on the gate, or on the
-            // setup or recovery form of the account face. With neither
-            // shown, nothing else reads it, so a toast does, in the same
-            // words.
+            // A refusal reads where it was asked: on the setup or recovery
+            // form of the account face, or else on the gate. The form covers
+            // the gate, so a recovery opened from the unlock face reads its
+            // refusal on the form (`CHROME-134`). With neither shown, nothing
+            // else reads it, so a toast does, in the same words.
             UiEvent::AuthError { cause } => effects.push(match (shown.keys, shown.account_form) {
-                (Some(_), _) => Effect::RefuseKeys(*cause),
-                (None, AccountForm::Shown) => Effect::Refused(*cause),
+                (_, AccountForm::Shown) => Effect::Refused(*cause),
+                (Some(_), AccountForm::Hidden) => Effect::RefuseKeys(*cause),
                 (None, AccountForm::Hidden) => {
                     Effect::Notice(Notice::new(ToastKind::Error, cause.to_string()))
                 }
@@ -1689,7 +1690,7 @@ mod tests {
 
     /// The words of the account just created reach the keys face alone, and
     /// a refusal of the Sync worker reaches the form (`CHROME-099`,
-    /// `CHROME-130`).
+    /// `CHROME-130`). A form over the gate reads it too (`CHROME-134`).
     #[test]
     fn the_words_and_a_refusal_reach_the_keys_face() {
         let mut switchboard = Switchboard::new(Page::Document);
@@ -1712,6 +1713,16 @@ mod tests {
             ..on(None)
         };
         let effects = switchboard.service(&refused, form, &nobody());
+        assert!(matches!(effects.as_slice(), [Effect::Refused(shown)] if *shown == cause));
+
+        // `CHROME-134`: the recovery form opened from the unlock face covers
+        // the gate, and reads the refusal in its place.
+        let over_the_gate = Shown {
+            keys: Some(KeysFace::Unlock),
+            account_form: AccountForm::Shown,
+            ..on(None)
+        };
+        let effects = switchboard.service(&refused, over_the_gate, &nobody());
         assert!(matches!(effects.as_slice(), [Effect::Refused(shown)] if *shown == cause));
 
         let recovered = rest(RestEvent::AccountRecovered);

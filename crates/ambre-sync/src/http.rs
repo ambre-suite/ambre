@@ -1296,8 +1296,13 @@ pub(crate) struct SetupAccountRequest {
     pub exchange_pubkey: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
 }
 
+/// The relay's answer to an account setup: the user it assigned, and the
+/// session's tokens. The worker announces the session with that user
+/// (`SYNC-261`).
 #[derive(Deserialize)]
 pub(crate) struct SetupAccountResponse {
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub user_id: Id<User>,
     /// The pair, with the lifetime of its access token.
     #[serde(flatten)]
     pub tokens: TokenPair,

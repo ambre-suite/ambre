@@ -304,12 +304,11 @@ impl SyncState {
         if let Some(tx) = event_tx {
             wasm_bindgen_futures::spawn_local(async move {
                 let master_seed = MasterSeed::generate();
-                let recovery_words = master_seed.recovery_words();
-                let signing_key = master_seed.derive_signing_key();
-                let exchange_key = master_seed.derive_exchange_key();
-                let signing_pub_key =
-                    ambre_core::FixedBytes::from_array(signing_key.verifying_key().to_bytes());
-                let exchange_pub_key = crate::sharing::own_exchange_key(&exchange_key);
+                let signing_pub_key = ambre_core::FixedBytes::from_array(
+                    master_seed.derive_signing_key().verifying_key().to_bytes(),
+                );
+                let exchange_pub_key =
+                    crate::sharing::own_exchange_key(&master_seed.derive_exchange_key());
                 let SealedSeed {
                     master_key_enc,
                     master_key_salt,
@@ -336,14 +335,7 @@ impl SyncState {
                 };
                 match http::post_json::<_, http::SetupAccountResponse>(&url, &body).await {
                     Ok(resp) => {
-                        let _ = tx.send(SyncEvent::AccountCreated {
-                            id,
-                            recovery_words,
-                            master_seed,
-                            signing_key,
-                            exchange_key,
-                            tokens: resp.tokens,
-                        });
+                        let _ = tx.send(account_set_up(id, master_seed, resp, body));
                     }
                     Err(e) => {
                         let _ = logic_tx.send(auth_failed(e));
@@ -598,6 +590,28 @@ impl SyncState {
                 evt: RestEvent::LoggedOut,
             });
         });
+    }
+}
+
+/// The event an answered account setup raises (`SYNC-261`). It carries the
+/// keys of `master_seed`, the pair the relay answered and the user it assigned.
+/// The name and the address are the ones the setup sent.
+fn account_set_up(
+    id: Seq<Request>,
+    master_seed: MasterSeed,
+    resp: http::SetupAccountResponse,
+    sent: http::SetupAccountRequest,
+) -> SyncEvent {
+    SyncEvent::KeysSetUp {
+        id,
+        recovery_words: master_seed.recovery_words(),
+        signing_key: master_seed.derive_signing_key(),
+        exchange_key: master_seed.derive_exchange_key(),
+        master_seed,
+        tokens: resp.tokens,
+        user_id: resp.user_id,
+        display_name: sent.display_name,
+        email: sent.email,
     }
 }
 
@@ -1454,6 +1468,68 @@ mod set_up_keys_tests {
             "told {told:?}"
         );
         assert!(state.master_seed.is_none());
+    }
+
+    /// `SYNC-261`: an account setup the relay answered opens a session. The
+    /// worker holds the keys and the user the relay assigned. Logic hears the
+    /// words, then the session of that user, under the name the setup sent.
+    #[test]
+    fn an_answered_account_setup_announces_the_session_of_the_assigned_user() {
+        let (mut state, rx) = worker();
+        let user = "55555555-5555-5555-5555-555555555555";
+        let resp: http::SetupAccountResponse = serde_json::from_value(serde_json::json!({
+            "user_id": user,
+            "access_token": "access-1",
+            "refresh_token": "refresh-1",
+            "access_expires_in": 900,
+        }))
+        .expect("the relay's answer");
+        let seed = MasterSeed::generate();
+        let chosen = ambre_crypto::strength::ChosenPassphrase::check(ambre_core::Confidential::<
+            ambre_core::Passphrase,
+        >::new(
+            "violet-harbor-quietly-folds-ninety-kites".to_owned(),
+        ))
+        .expect("strong");
+        let sealed = seal_seed(&seed, &chosen).expect("sealed");
+        let signing = seed.derive_signing_key().verifying_key().to_bytes();
+        let sent = http::SetupAccountRequest {
+            email: "ada@example.org".into(),
+            display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada").unwrap(),
+            master_key_enc: sealed.master_key_enc,
+            master_key_salt: sealed.master_key_salt,
+            signing_pubkey: ambre_core::FixedBytes::from_array(signing),
+            exchange_pubkey: crate::sharing::own_exchange_key(&seed.derive_exchange_key()),
+        };
+        let id = ambre_bus::next_request();
+        let user_id = resp.user_id;
+        assert_eq!(user_id.to_string(), user, "the id the relay assigned");
+        state.handle_sync_event(account_set_up(id, seed, resp, sent));
+
+        assert_eq!(state.user_id, Some(user_id));
+        assert_eq!(state.socket_opens.get(), 1);
+        let held = state.signing_key.as_ref().expect("the keys are held");
+        assert_eq!(held.verifying_key().to_bytes(), signing);
+        let told: Vec<LogicEvent> = rx
+            .try_iter()
+            .filter(|e| matches!(e, LogicEvent::Rest { .. }))
+            .collect();
+        assert!(
+            matches!(
+                told.as_slice(),
+                [
+                    LogicEvent::Rest {
+                        id: Some(answered),
+                        evt: RestEvent::AccountCreated { .. },
+                    },
+                    LogicEvent::Rest {
+                        id: None,
+                        evt: RestEvent::SessionReady { user_id: ready, display_name, .. },
+                    },
+                ] if *answered == id && *ready == user_id && display_name.as_str() == "Ada"
+            ),
+            "told {told:?}"
+        );
     }
 
     /// `SYNC-255`: once the keys are stored, the worker holds them and the new

@@ -204,7 +204,8 @@ pub enum RestCommand {
         /// once the Sync thread finishes deriving the user key.
         passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
     },
-    /// First-time account setup. -> `AccountCreated { recovery_words }`.
+    /// First-time account setup. -> `AccountCreated { recovery_words }`, then
+    /// `SessionReady` for the user the relay assigned.
     /// `email`/`display_name` are the user-supplied identity; the server records
     /// them verbatim instead of a hardcoded placeholder (N3). `email` is the
     /// handle other members resolve when sharing a document.

@@ -762,17 +762,6 @@ impl SyncState {
                     },
                 );
             }
-            SyncEvent::AccountCreated {
-                id,
-                recovery_words,
-                master_seed,
-                signing_key,
-                exchange_key,
-                tokens,
-            } => {
-                self.adopt_new_keys(master_seed, signing_key, exchange_key, tokens);
-                self.reply(id, RestEvent::AccountCreated { recovery_words });
-            }
             SyncEvent::KeysSetUp {
                 id,
                 recovery_words,
@@ -2258,7 +2247,7 @@ mod tests {
         assert_eq!(state.socket_opens.get(), 0);
 
         let master_seed = MasterSeed::from_array([7u8; 32]);
-        state.handle_sync_event(SyncEvent::AccountCreated {
+        state.handle_sync_event(SyncEvent::KeysSetUp {
             id: ambre_bus::next_request(),
             recovery_words: ambre_bus::Confidential::<ambre_bus::RecoveryWords>::default(),
             signing_key: master_seed.derive_signing_key(),
@@ -2269,6 +2258,9 @@ mod tests {
                 Credential::new("refresh".to_owned()),
                 ambre_core::TimeSpan::<ambre_core::Sec>::new(900),
             ),
+            user_id: Id::<User>::mint(),
+            display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada").unwrap(),
+            email: "ada@example.org".into(),
         });
         assert_eq!(state.socket_opens.get(), 1);
     }

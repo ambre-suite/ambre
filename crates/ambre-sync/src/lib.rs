@@ -387,17 +387,10 @@ enum SyncEvent {
         keys_stored: ambre_bus::KeySetup,
         tokens: http::TokenPair,
     },
-    AccountCreated {
-        id: Seq<Request>,
-        recovery_words: ambre_bus::Confidential<ambre_bus::RecoveryWords>,
-        master_seed: MasterSeed,
-        signing_key: SigningKey,
-        exchange_key: StaticSecret,
-        tokens: http::TokenPair,
-    },
-    /// The keys of a signed-in account were stored (`SYNC-255`). It carries
-    /// the new seed and the pair the relay bound to its signing key. It also
-    /// carries who the account is, read under that pair.
+    /// The keys of an account were stored: by the setup of a new account
+    /// (`SYNC-261`), or by the key setup of a signed-in one (`SYNC-255`). It
+    /// carries the new seed and the pair the relay bound to its signing key.
+    /// It also carries who the account is.
     KeysSetUp {
         id: Seq<Request>,
         recovery_words: ambre_bus::Confidential<ambre_bus::RecoveryWords>,
