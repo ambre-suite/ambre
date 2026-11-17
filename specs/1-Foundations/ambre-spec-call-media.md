@@ -137,7 +137,9 @@ A participant sends a packet to the SFU, and the SFU forwards it within the room
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CALL-033` | `FRAME` | The SFU MUST NOT send a packet to its own sender, or to a participant of another room. | this spec section 3, the SFU; `CALL-009` | `ambre_sfu::forward::tests::no_packet_goes_back_to_its_sender_or_into_another_room` | none | verified |
-| `CALL-116` | `FAIL` | Given a chunk whose key identifier names a sender other than the index the relay signed into the admission of its connection, the SFU MUST NOT forward it. | audit `N11`; this spec section 3, the SFU seats; `CALL-025` | `ambre_sfu::forward::tests::a_chunk_under_the_identifier_of_another_sender_never_leaves_the_sfu` -- an audio chunk and the first packet of a camera frame that Mallory sends under Bob's index reach nobody, and her own chunk passes | none | verified |
+| `CALL-116` | `FAIL` | Given a chunk whose key identifier names a sender other than the index the relay signed into the admission of its connection, the SFU MUST NOT forward it. | audit `N11`; this spec section 3, the SFU seats; `CALL-025` | `ambre_sfu::forward::tests::a_chunk_under_the_identifier_of_another_sender_never_leaves_the_sfu` -- an audio chunk and the first packet of a camera keyframe that Mallory sends under Bob's index reach nobody, and her own chunk passes | none | verified |
+| `CALL-139` | `FAIL` | Given a track in a codec other than Opus or VP8, the SFU MUST NOT forward a packet of it. | this spec section 3, the SFU seats; `CALL-116` | `ambre_sfu::forward::tests::a_camera_in_a_codec_other_than_vp8_never_leaves_the_sfu` -- Mallory offers H264 alone for her camera, and her packets under Bob's index reach nobody | none | verified |
+| `CALL-140` | `FAIL` | Given a packet that starts a frame and holds no whole chunk header where the receiver reads one, the SFU MUST NOT forward it. | this spec section 3, the SFU seats; `CALL-116` | `ambre_sfu::forward::tests::a_frame_start_cut_inside_its_chunk_header_never_leaves_the_sfu` -- a keyframe start cut inside its header, the rest under Bob's index in the next packet, reaches nobody, and her own keyframe passes; `ambre_sfu::forward::tests::a_loud_packet_that_names_no_seat_takes_no_speaker_slot` -- an audio packet with no header reaches nobody | none | verified |
 | `CALL-123` | `FAIL` | Given an audio packet whose chunk header does not name the sender index of its seat, the SFU MUST NOT count it as speech for the choice of the audio slots. | audit `N25`; this spec section 3, the playout; `CALL-045` | `ambre_sfu::forward::tests::a_loud_packet_that_names_no_seat_takes_no_speaker_slot` -- loud packets of Mallory with no chunk header take no slot from three speakers, and her latest one reaches nobody | none | verified |
 | `CALL-034` | `POST` | A participant who joins a room MUST receive each track the room already carries. | this spec section 3, the SFU | `ambre_sfu::forward::tests::a_late_joiner_receives_the_tracks_already_in_the_room` | none | verified |
 | `CALL-035` | `POST` | A keyframe request from a receiver MUST reach the sender of its track. | this spec section 3, the SFU | `ambre_sfu::forward::tests::a_keyframe_request_reaches_the_sender_of_the_track` | none | verified |
@@ -248,7 +250,7 @@ A participant sends a screen or a window into the call, and stops it.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 138 `verified`. The relay admits under the cap, and the SFU mints the TURN
+* **Verification.** 140 `verified`. The relay admits under the cap, and the SFU mints the TURN
   credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography, forwards RTP and reaches a
   browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`, `CALL-050` to `CALL-052`). Each
   receiver holds fixed slots, and a seed gives one path (`CALL-045` to `CALL-053`). The seal and the
@@ -789,6 +791,10 @@ The SFU reads the key identifier of each chunk as the receiver reads it, and for
 under another index (`CALL-116`). For VP8 it reads the first packet of each frame, which holds the
 header of the whole frame. The SFU already sees each index in each key identifier (`ZK-021`), so
 the admission tells it nothing new.
+
+A receiver joins the packets of a frame before it reads the header. So the SFU drops a frame start
+that holds no whole header, since the next packet could complete it under another index
+(`CALL-140`). The SFU offers Opus and VP8 alone, the two codecs whose header it reads (`CALL-139`).
 
 **The SFU.** It forwards packets and never decodes them.
 

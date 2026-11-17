@@ -45,9 +45,10 @@ const AUDIO_SIZE: usize = 100;
 
 /// A tag in the opaque part, to tell a synthetic payload from anything else.
 const AUDIO_TAG: u8 = 0xA0;
-/// The chunk header that opens each audio payload: the configuration byte, then the key
-/// identifier. The SFU counts a packet as speech only when the header names its seat.
-const AUDIO_HEADER: usize = 9;
+/// The chunk header that opens each sealed chunk: the configuration byte, then the key
+/// identifier. The SFU forwards a frame start, and counts speech, only when the header names
+/// its seat.
+const CHUNK_HEADER: usize = 9;
 const VIDEO_TAG: u8 = 0xB0;
 
 /// The size of the VP8 payload descriptor the client writes: X, I, a 15-bit picture id.
@@ -395,13 +396,7 @@ impl Synth {
         self.audio_seq += 1;
         let mut payload = vec![0u8; AUDIO_SIZE];
         let speech = u8::from(self.speaking);
-        let kid = ambre_core::KeyIdentifier {
-            track: ambre_core::Track::Audio,
-            sender: ambre_core::Seq::new(u64::from(self.index)),
-            generation: ambre_core::Seq::new(1),
-        };
-        let mut meta = vec![ambre_core::CHUNK_CONFIG_BYTE];
-        meta.extend_from_slice(kid.to_bytes().expect("a small identifier").as_slice());
+        let mut meta = self.chunk_header(ambre_core::Track::Audio);
         meta.extend_from_slice(&[AUDIO_TAG, speech]);
         meta.extend_from_slice(&self.index.to_le_bytes());
         meta.extend_from_slice(&self.micros(at).to_le_bytes());
@@ -443,15 +438,7 @@ impl Synth {
         let mid = self.video_mid;
         for index in 0..count {
             let start = index == 0;
-            let mut payload = vec![
-                0x80 | if start { 0x10 } else { 0 },
-                0x80,
-                0x80 | u8::try_from(pid >> 8).unwrap_or(0),
-                u8::try_from(pid & 0xff).unwrap_or(0),
-                // The VP8 payload header: its P bit is clear on a keyframe.
-                u8::from(!keyframe),
-                VIDEO_TAG,
-            ];
+            let mut payload = self.video_head(ambre_core::Track::Camera, start, pid, keyframe);
             payload.extend_from_slice(&self.index.to_le_bytes());
             payload.push(u8::try_from(layer).unwrap_or(0));
             payload.extend_from_slice(&picture.to_le_bytes());
@@ -494,14 +481,7 @@ impl Synth {
         let mid = self.screen_mid;
         for index in 0..count {
             let start = index == 0;
-            let mut payload = vec![
-                0x80 | if start { 0x10 } else { 0 },
-                0x80,
-                0x80 | u8::try_from(pid >> 8).unwrap_or(0),
-                u8::try_from(pid & 0xff).unwrap_or(0),
-                u8::from(!keyframe),
-                VIDEO_TAG,
-            ];
+            let mut payload = self.video_head(ambre_core::Track::Screen, start, pid, keyframe);
             payload.extend_from_slice(&self.index.to_le_bytes());
             payload.push(SCREEN_LAYER);
             payload.extend_from_slice(&picture.to_le_bytes());
@@ -519,6 +499,48 @@ impl Synth {
                 );
             }
         }
+    }
+
+    /// The chunk header the seal of this client writes on `track`.
+    fn chunk_header(&self, track: ambre_core::Track) -> Vec<u8> {
+        let kid = ambre_core::KeyIdentifier {
+            track,
+            sender: ambre_core::Seq::new(u64::from(self.index)),
+            generation: ambre_core::Seq::new(1),
+        };
+        let mut header = vec![ambre_core::CHUNK_CONFIG_BYTE];
+        header.extend_from_slice(kid.to_bytes().expect("a small identifier").as_slice());
+        header
+    }
+
+    /// The head of one video packet on `track`, as the SFU reads a frame start (`CALL-116`).
+    /// It holds the descriptor, the clear prefix of the chunk, then the chunk header. A packet
+    /// that continues the frame carries the same head, which the SFU never reads.
+    fn video_head(
+        &self,
+        track: ambre_core::Track,
+        start: bool,
+        pid: u16,
+        keyframe: bool,
+    ) -> Vec<u8> {
+        let mut head = vec![
+            0x80 | if start { 0x10 } else { 0 },
+            0x80,
+            0x80 | u8::try_from(pid >> 8).unwrap_or(0),
+            u8::try_from(pid & 0xff).unwrap_or(0),
+            // The VP8 payload header: its P bit is clear on a keyframe.
+            u8::from(!keyframe),
+        ];
+        let prefix = if keyframe {
+            ambre_core::VP8_KEYFRAME_PREFIX
+        } else {
+            ambre_core::VP8_DELTA_PREFIX
+        };
+        let prefix = usize::try_from(prefix.get()).expect("a short prefix");
+        head.resize(DESCRIPTOR + prefix, 0);
+        head.extend(self.chunk_header(track));
+        head.push(VIDEO_TAG);
+        head
     }
 
     fn pt(&mut self, codec: Codec) -> Option<str0m::media::Pt> {
@@ -606,9 +628,9 @@ impl Synth {
                 };
                 let payload = &packet.payload[..];
                 let audio = payload.first() == Some(&ambre_core::CHUNK_CONFIG_BYTE);
-                match payload.get(AUDIO_HEADER) {
+                match payload.get(CHUNK_HEADER) {
                     Some(&AUDIO_TAG) if audio => {
-                        let payload = payload.get(AUDIO_HEADER..).unwrap_or(&[]);
+                        let payload = payload.get(CHUNK_HEADER..).unwrap_or(&[]);
                         let speech = payload.get(1) == Some(&1);
                         if let Some(sender) = payload
                             .get(2..4)
@@ -627,10 +649,20 @@ impl Synth {
                         }
                     }
                     _ => {
-                        let Some(meta) = payload.get(DESCRIPTOR..) else {
+                        let Some(&vp8) = payload.get(DESCRIPTOR) else {
                             return;
                         };
-                        if meta.get(1) != Some(&VIDEO_TAG) {
+                        let keyframe = vp8 & 1 == 0;
+                        let prefix = if keyframe {
+                            ambre_core::VP8_KEYFRAME_PREFIX
+                        } else {
+                            ambre_core::VP8_DELTA_PREFIX
+                        };
+                        let prefix = usize::try_from(prefix.get()).unwrap_or(0);
+                        let Some(meta) = payload.get(DESCRIPTOR + prefix + CHUNK_HEADER..) else {
+                            return;
+                        };
+                        if meta.first() != Some(&VIDEO_TAG) {
                             return;
                         }
                         let read = |range: std::ops::Range<usize>| meta.get(range);
@@ -640,18 +672,18 @@ impl Synth {
                                 .map(u16::from_le_bytes)
                                 .unwrap_or(0)
                         };
-                        let sender = field16(2);
-                        let layer = meta.get(4).copied().unwrap_or(0);
-                        let picture = read(5..9)
+                        let sender = field16(1);
+                        let layer = meta.get(3).copied().unwrap_or(0);
+                        let picture = read(4..8)
                             .and_then(|b| b.try_into().ok())
                             .map(u32::from_le_bytes)
                             .unwrap_or(0);
-                        let sent = read(9..17)
+                        let sent = read(8..16)
                             .and_then(|b| b.try_into().ok())
                             .map(u64::from_le_bytes)
                             .unwrap_or(0);
-                        let index = field16(17);
-                        let count = field16(19);
+                        let index = field16(16);
+                        let count = field16(18);
                         let start = payload.first().is_some_and(|b| b & 0x10 != 0);
                         let arrival = Arrival {
                             seq: packet.header.sequence_number,
@@ -659,7 +691,7 @@ impl Synth {
                             layer,
                             picture,
                             index,
-                            keyframe_start: start && meta.first() == Some(&0),
+                            keyframe_start: start && keyframe,
                             at: now,
                             sent: self.epoch + Duration::from_micros(sent),
                         };

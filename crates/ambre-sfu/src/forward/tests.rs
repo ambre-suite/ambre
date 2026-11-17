@@ -15,7 +15,7 @@ use str0m::rtp::{RtpWrite, SeqNo};
 use str0m::{Candidate, Event, Input, Output, Rtc};
 
 use super::{Participant, Room, Sfu, Signal};
-use ambre_core::{Seq, Validated};
+use ambre_core::{Seq, Track, Validated};
 
 /// One packet a client received: the track, the header fields the SFU keeps, the payload.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -159,10 +159,15 @@ impl Net {
     /// Joins a new client to `name`, which offers an audio and a camera track, as a page does,
     /// and answers its index. The screen track comes with a later offer ([`add_screen`]).
     fn join(&mut self, name: &str) -> usize {
+        self.join_with(name, Rtc::builder())
+    }
+
+    /// Joins a new client to `name` as [`Net::join`] does, with the codecs of `config`.
+    fn join_with(&mut self, name: &str, config: str0m::RtcConfig) -> usize {
         let index = self.clients.len();
         let last = u8::try_from(index + 1).expect("a few clients");
         let addr: SocketAddr = (Ipv4Addr::new(10, 0, 0, last), 5000).into();
-        let mut rtc = Rtc::builder()
+        let mut rtc = config
             .set_rtp_mode(true)
             .set_crypto_provider(Arc::new(str0m::crypto::from_feature_flags()))
             .build(self.now);
@@ -323,9 +328,11 @@ fn burst(net: &mut Net, from: usize, count: u8) -> (Vec<Got>, Vec<Got>) {
     for n in 0..count {
         let now = net.now;
         let client = net.clients.get_mut(from).expect("a client");
-        audio.push(client.send(now, MediaKind::Audio, &[0xA0, tag, n, 1, 2, 3], false));
-        // A VP8 payload descriptor, then bytes the SFU must copy without reading.
-        video.push(client.send(now, MediaKind::Video, &[0x10, tag, n, 9, 8, 7], n % 4 == 3));
+        let audio_chunk = sealed(Track::Audio, from, &[tag, n, 1, 2, 3]);
+        audio.push(client.send(now, MediaKind::Audio, &audio_chunk, false));
+        // A keyframe start, then bytes the SFU must copy without reading.
+        let frame = keyframe(Track::Camera, from, &[tag, n, 9, 8, 7]);
+        video.push(client.send(now, MediaKind::Video, &frame, n % 4 == 3));
         net.run(Duration::from_millis(20));
     }
     net.run(Duration::from_millis(500));
@@ -431,8 +438,7 @@ fn share(net: &mut Net, from: usize, count: u8) -> Vec<Got> {
     for n in 0..count {
         let now = net.now;
         let client = net.clients.get_mut(from).expect("a client");
-        // A VP8 descriptor that starts a partition, then a payload header of a keyframe.
-        sent.push(client.send_screen(now, &[0x10, 0x00, 0x5C, tag, n]));
+        sent.push(client.send_screen(now, &keyframe(Track::Screen, from, &[tag, n])));
         net.run(Duration::from_millis(40));
     }
     net.run(Duration::from_millis(500));
@@ -494,13 +500,13 @@ fn the_screen_of_the_last_share_reaches_each_other_receiver_and_none_reaches_its
             net.clients
                 .get_mut(1)
                 .expect("Bob")
-                .send_screen(now, &[0x10, 0x00, 0x5C, 1, n]),
+                .send_screen(now, &keyframe(Track::Screen, 1, &[1, n])),
         );
         let now = net.now;
         net.clients
             .get_mut(0)
             .expect("Ada")
-            .send_screen(now, &[0x10, 0x00, 0x5C, 0, 100 + n]);
+            .send_screen(now, &keyframe(Track::Screen, 0, &[0, 100 + n]));
         net.run(Duration::from_millis(40));
     }
     net.run(Duration::from_millis(500));
@@ -511,7 +517,8 @@ fn the_screen_of_the_last_share_reaches_each_other_receiver_and_none_reaches_its
         let read = since(&net, if who == "Ada" { 0 } else { 2 }, before);
         let first = read
             .iter()
-            .position(|p| p.get(3) == Some(&1))
+            // The sharer byte sits past the keyframe start and the chunk header.
+            .position(|p| p.get(KEYFRAME_START.len() + 9) == Some(&1))
             .unwrap_or(read.len());
         assert!(
             first <= 1,
@@ -571,7 +578,7 @@ fn a_still_screen_that_changes_again_takes_no_screen_back() {
     net.clients
         .get_mut(0)
         .expect("Ada")
-        .send_screen(now, &[0x10, 0x00, 0x5C, 0, 200]);
+        .send_screen(now, &keyframe(Track::Screen, 0, &[0, 200]));
     net.run(Duration::from_millis(100));
     let more = share(&mut net, 1, 6);
     let more: Vec<Vec<u8>> = more.into_iter().map(|g| g.payload).collect();
@@ -729,9 +736,24 @@ fn a_later_share_tells_the_former_sharer_alone_each_time() {
     assert_eq!(carol, back, "Carol reads Ada's screen again");
 }
 
+/// A chunk of client `sender` on `track`: its header, then the bytes `tail`.
+fn sealed(track: Track, sender: usize, tail: &[u8]) -> Vec<u8> {
+    let mut chunk = chunk_naming(track, u64::try_from(sender).expect("a small index"));
+    chunk.truncate(9);
+    chunk.extend_from_slice(tail);
+    chunk
+}
+
+/// The first packet of a keyframe of client `sender` on `track`, whose chunk ends with `tail`.
+fn keyframe(track: Track, sender: usize, tail: &[u8]) -> Vec<u8> {
+    let mut packet = KEYFRAME_START.to_vec();
+    packet.extend(sealed(track, sender, tail));
+    packet
+}
+
 /// A chunk header, as the seal writes one, naming `sender` on `track`, then bytes for the
 /// counter and the tag.
-fn chunk_naming(track: ambre_core::Track, sender: u64) -> Vec<u8> {
+fn chunk_naming(track: Track, sender: u64) -> Vec<u8> {
     let kid = ambre_core::KeyIdentifier {
         track,
         sender: Seq::new(sender),
@@ -748,13 +770,12 @@ fn chunk_naming(track: ambre_core::Track, sender: u64) -> Vec<u8> {
 /// and her own chunks still pass.
 #[test]
 fn a_chunk_under_the_identifier_of_another_sender_never_leaves_the_sfu() {
-    use ambre_core::Track;
     let mut net = connected(&["r", "r", "r"]);
     let mallory = net.clients.get_mut(0).expect("a client");
     let now = net.now;
     mallory.send(now, MediaKind::Audio, &chunk_naming(Track::Audio, 1), true);
-    // The descriptor (S set, partition 0), a delta frame byte, then the chunk header.
-    let mut frame = vec![0x10, 0x01];
+    // A keyframe start, which would open the video slot, then the chunk header.
+    let mut frame = KEYFRAME_START.to_vec();
     frame.extend(chunk_naming(Track::Camera, 1));
     mallory.send(now, MediaKind::Video, &frame, true);
     net.run(Duration::from_millis(200));
@@ -776,7 +797,6 @@ fn a_chunk_under_the_identifier_of_another_sender_never_leaves_the_sfu() {
 /// packet reaches nobody.
 #[test]
 fn a_loud_packet_that_names_no_seat_takes_no_speaker_slot() {
-    use ambre_core::Track;
     let mut net = connected(&["r", "r", "r", "r", "r"]);
     let speak_all = |net: &mut Net, round: u8| {
         for speaker in 1..=3u64 {
@@ -805,6 +825,90 @@ fn a_loud_packet_that_names_no_seat_takes_no_speaker_slot() {
         assert!(
             eve.iter().any(|g| g.payload == named),
             "speaker {speaker} reached no slot"
+        );
+    }
+}
+
+/// The descriptor of a VP8 packet that starts a frame (S set, partition 0), then the clear
+/// prefix of a keyframe. A video slot opens on a keyframe alone (`CALL-039`).
+const KEYFRAME_START: [u8; 11] = [
+    0x10, 0x00, 0x00, 0x00, 0x9d, 0x01, 0x2a, 0x00, 0x05, 0xd0, 0x02,
+];
+
+/// `CALL-140`, audit `P30`: Mallory, seated as sender 0, opens her camera with a keyframe of her
+/// own. She then cuts the first packet of a keyframe inside its chunk header. The rest of the
+/// header, under the index of Bob, sender 1, rides the next packet. A receiver joins the two and
+/// reads the header whole, so the SFU drops the first.
+#[test]
+fn a_frame_start_cut_inside_its_chunk_header_never_leaves_the_sfu() {
+    let mut net = connected(&["r", "r", "r"]);
+    let mut own = KEYFRAME_START.to_vec();
+    own.extend(chunk_naming(Track::Camera, 0));
+    let forged = chunk_naming(Track::Camera, 1);
+    let (head, tail) = forged.split_at(4);
+    let mut start = KEYFRAME_START.to_vec();
+    start.extend_from_slice(head);
+    // The descriptor of a packet that continues the frame, then the rest of the header.
+    let mut rest = vec![0x00];
+    rest.extend_from_slice(tail);
+    let mallory = net.clients.get_mut(0).expect("a client");
+    let now = net.now;
+    mallory.send(now, MediaKind::Video, &own, true);
+    net.run(Duration::from_millis(100));
+    let mallory = net.clients.get_mut(0).expect("a client");
+    let now = net.now;
+    mallory.send(now, MediaKind::Video, &start, false);
+    mallory.send(now, MediaKind::Video, &rest, true);
+    net.run(Duration::from_millis(200));
+    let got = client(&net, 2).got(MediaKind::Video);
+    assert!(
+        got.iter().any(|g| g.payload == own),
+        "her own keyframe did not pass"
+    );
+    assert!(
+        !got.iter().any(|g| g.payload == start),
+        "a frame start cut inside its header was forwarded"
+    );
+}
+
+/// `CALL-139`, audit `P30`: Mallory offers H264 alone for her camera, a codec whose packets the SFU
+/// cannot read. Her packets under the index of Bob reach nobody.
+#[test]
+fn a_camera_in_a_codec_other_than_vp8_never_leaves_the_sfu() {
+    let mut net = Net::new();
+    let h264 = Rtc::builder()
+        .clear_codecs()
+        .enable_opus(true, false)
+        .enable_h264(true);
+    net.join_with("r", h264);
+    net.run(Duration::from_millis(300));
+    for _ in 0..2 {
+        net.join("r");
+        net.run(Duration::from_millis(300));
+    }
+    net.run(Duration::from_secs(2));
+    let mallory = net.clients.get_mut(0).expect("a client");
+    let now = net.now;
+    let (_, mid) = *mallory.sending.get(1).expect("a camera track");
+    let pt = mallory
+        .rtc
+        .codec_config()
+        .find(|p| p.spec().codec == Codec::H264)
+        .map(|p| p.pt());
+    let mut api = mallory.rtc.direct_api();
+    // A camera the SFU refused has no stream to write on, so nothing leaves at all.
+    if let (Some(pt), Some(stream)) = (pt, api.stream_tx_by_mid(mid, None)) {
+        for seq in 1..=3u64 {
+            let payload = chunk_naming(Track::Camera, 1);
+            let time = u32::try_from(seq * 3000).expect("a small time");
+            stream.write_rtp(RtpWrite::new(pt, SeqNo::from(seq), time, now, payload).marker(true));
+        }
+    }
+    net.run(Duration::from_millis(300));
+    for receiver in [1, 2] {
+        assert!(
+            client(&net, receiver).got(MediaKind::Video).is_empty(),
+            "a camera packet in H264 was forwarded"
         );
     }
 }

@@ -3431,7 +3431,7 @@ ambre-trame | src/ui/locale.rs | crate::ui::locale | spelled() | ret | &str	loca
 ambre-sfu | src/forward.rs | crate::forward | Member.new_layer | field | bool	generic	fact flag: a track showed a layer the last choice did not know, selects no mode
 ambre-sfu | src/forward.rs | crate::forward | Member.touched | field | bool	generic	fact flag: the SFU wrote to the connection since its last drain, selects no mode
 ambre-sfu | src/forward.rs | crate::forward | Member::has_work() | ret | bool	generic	predicate
-ambre-sfu | src/forward.rs | crate::forward | names_another_sender() | ret | bool	generic	predicate
+ambre-sfu | src/forward.rs | crate::forward | leaves_its_seat() | ret | bool	generic	predicate
 ambre-sfu | src/forward.rs | crate::forward | SPEECH_LEVEL | const | i8	foreign-api	the audio level of RFC 6464 in -dBov, as the ExtensionValues of str0m hold it
 ambre-sfu | src/layer.rs | crate::layer | UPGRADE_MARGIN | const | f64	math	a scalar multiplier: the factor of the layer choice
 ambre-sfu | src/layer.rs | crate::layer | VIDEO_SHARE | const | f64	math	a scalar multiplier: ratio of the estimate the video may take

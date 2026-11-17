@@ -33,8 +33,18 @@ pub fn participant_config() -> RtcConfig {
         // reads the transport-wide feedback str0m hands over (`CALL-038`, `CALL-044`).
         .enable_bwe(Some(forward::INITIAL_ESTIMATE))
         .enable_twcc_acks(true);
+    keep_opus_and_vp8(&mut config);
     cap_audio(&mut config);
     config
+}
+
+/// Offers Opus and VP8 alone. The SFU reads the chunk header of these two codecs alone, and
+/// drops each packet of any other (`CALL-139`, audit `P30`).
+fn keep_opus_and_vp8(config: &mut RtcConfig) {
+    let codecs = config.codec_config();
+    codecs.clear();
+    codecs.enable_opus(true, false);
+    codecs.enable_vp8(true);
 }
 
 /// Asks each sender for Opus at the constant bitrate of a call, in each session description of

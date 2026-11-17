@@ -1158,7 +1158,7 @@ impl Member {
                 // A participant forwards its own chunks alone. Every member holds the key of
                 // every sender. So the index the relay signed tells Bob's chunks from the ones
                 // Mallory seals under his key (`CALL-116`).
-                if names_another_sender(&*packet.payload, params.spec().codec, self.sender) {
+                if !leaves_its_seat(&*packet.payload, params.spec().codec, self.sender) {
                     return None;
                 }
                 let layer = Layer::new(rid);
@@ -1303,25 +1303,27 @@ impl Member {
     }
 }
 
-/// Whether the packet `chunk` of a track in `codec` opens with a chunk header that names a
-/// sender other than `seat` (`CALL-116`). The header is read as the receiver reads it. A
-/// payload that holds no header passes, since no receiver opens it either. So does a VP8
-/// packet that does not start its frame. The header of a frame sits in its first packet,
-/// and a receiver drops a frame whose first packet it never got. A codec the SFU cannot
-/// read passes too.
-fn names_another_sender<B: AsRef<[u8]> + ?Sized>(
+/// Whether the packet `chunk` of a track in `codec` may leave the seat `seat` (`CALL-116`).
+/// A packet that starts a frame passes only when its whole chunk header names `seat`. The
+/// header is read as the receiver reads it. A frame start cut inside its header drops, since
+/// a receiver joins the next packet to it and reads the header whole (`CALL-140`, audit
+/// `P30`). A VP8 packet that continues a frame passes: a receiver drops a frame whose first
+/// packet it never got. A codec the SFU cannot read drops whole (`CALL-139`).
+fn leaves_its_seat<B: AsRef<[u8]> + ?Sized>(
     chunk: &B,
     codec: Codec,
     seat: Seq<SenderIndex>,
 ) -> bool {
     let start = match codec {
-        Codec::Opus => Some(Count::new(0)),
-        Codec::Vp8 => vp8_frame_start(chunk),
-        _ => None,
+        Codec::Opus => Count::new(0),
+        Codec::Vp8 => match vp8_frame_start(chunk) {
+            Vp8Start::Continues => return true,
+            Vp8Start::At(start) => start,
+            Vp8Start::Cut => return false,
+        },
+        _ => return false,
     };
-    start
-        .and_then(|start| KeyIdentifier::at(chunk, start))
-        .is_some_and(|kid| kid.sender != seat)
+    KeyIdentifier::at(chunk, start).is_some_and(|kid| kid.sender == seat)
 }
 
 /// Whether the packet `chunk` of a track in `codec` opens with a chunk header that names
@@ -1336,16 +1338,36 @@ fn names_its_seat<B: AsRef<[u8]> + ?Sized>(
         && KeyIdentifier::at(chunk, Count::new(0)).is_some_and(|kid| kid.sender == seat)
 }
 
-/// Where the sealed chunk starts in a VP8 packet that starts a frame. It starts past the
-/// payload descriptor of RFC 7741 and the clear prefix of the chunk. `None` for a packet that starts
-/// no frame, or bytes too short for the descriptor.
-fn vp8_frame_start<B: AsRef<[u8]> + ?Sized>(chunk: &B) -> Option<Count<ambre_core::Octets>> {
+/// What the first bytes of a VP8 packet say about the start of its frame.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Vp8Start {
+    /// The packet continues a frame, so it holds no chunk header.
+    Continues,
+    /// The packet starts a frame, and its sealed chunk starts this many bytes in.
+    At(Count<ambre_core::Octets>),
+    /// The packet holds no descriptor, or ends inside its descriptor or its clear prefix.
+    Cut,
+}
+
+/// Where the sealed chunk starts in a VP8 packet. A frame start holds the payload descriptor
+/// of RFC 7741, the clear prefix of the chunk, then the chunk.
+fn vp8_frame_start<B: AsRef<[u8]> + ?Sized>(chunk: &B) -> Vp8Start {
     let bytes = chunk.as_ref();
-    let &required = bytes.first()?;
+    let Some(&required) = bytes.first() else {
+        return Vp8Start::Cut;
+    };
     // S marks the start of a partition, and the partition index 0 the start of the frame.
     if required & 0x10 == 0 || required & 0x07 != 0 {
-        return None;
+        return Vp8Start::Continues;
     }
+    vp8_chunk_at(chunk).map_or(Vp8Start::Cut, Vp8Start::At)
+}
+
+/// Where the sealed chunk starts in `chunk`, a VP8 packet that starts a frame, or `None` when
+/// the bytes end before it.
+fn vp8_chunk_at<B: AsRef<[u8]> + ?Sized>(chunk: &B) -> Option<Count<ambre_core::Octets>> {
+    let bytes = chunk.as_ref();
+    let &required = bytes.first()?;
     let mut descriptor = 1usize;
     if required & 0x80 != 0 {
         let &extension = bytes.get(descriptor)?;
@@ -1363,8 +1385,10 @@ fn vp8_frame_start<B: AsRef<[u8]> + ?Sized>(chunk: &B) -> Option<Count<ambre_cor
         }
     }
     let at = Count::of(descriptor);
-    let (_, prefix) = PictureKind::of_vp8_at(chunk, at)?;
-    Some(at.plus(prefix))
+    let (_, prefix) = PictureKind::of_vp8_at(bytes, at)?;
+    let start = at.plus(prefix);
+    // The clear prefix must sit whole in this packet, or the header lies past what it holds.
+    (usize::try_from(start.get()).ok()? <= bytes.len()).then_some(start)
 }
 
 #[cfg(test)]
