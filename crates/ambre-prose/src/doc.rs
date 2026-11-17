@@ -646,6 +646,12 @@ pub(crate) fn hiding() -> ambre_crdt::history::Hide {
     ambre_crdt::history::Hide {
         key: loro::InternalString::from(NodeKey::Hidden.as_str()),
         value: |doc| loro::LoroValue::from(doc.peer_id().to_string()),
+        body: |id| {
+            Some(loro::ContainerID::new_root(
+                BodyKey::of(&id).as_str(),
+                loro::ContainerType::Text,
+            ))
+        },
     }
 }
 

@@ -186,6 +186,9 @@ impl Rich {
     /// Merge each run into the one before it when both carry the same marks.
     fn tidy(&mut self) {
         let runs = std::mem::take(&mut self.runs);
+        // The mirror keeps one per text for the life of the document: room for
+        // the runs it had, never the four a first push reserves.
+        self.runs = Vec::with_capacity(runs.len());
         for run in runs {
             if run.text.is_empty() {
                 continue;

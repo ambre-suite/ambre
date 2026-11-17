@@ -5,6 +5,9 @@
 // keeps once its import ends, as a multiple of its Markdown file.
 // The test is alone in its binary, so no other test shares the process it
 // measures. Linux alone reports the resident size, and CI runs on Linux.
+//
+// The test runs itself again in a child process, under a fixed trim
+// threshold of the C allocator, and the child measures.
 // ============================================================================
 #![cfg(target_os = "linux")]
 
@@ -14,11 +17,20 @@ use ambre_prose::interop::markdown::MAX_SIZE;
 use ambre_prose::logic::ProseState;
 use ambre_prose::message::{ImportFormat, ProseCommand, ProseImport, TimeZone};
 
-/// The ceiling, in multiples of the file. This test reads about 16.4 times:
-/// the 14.8 times a counting allocator reads, and what the allocator keeps
-/// of the import's freed memory. Before the undo step dropped its copy of
-/// the text, it read about 18 times.
-const CEILING: usize = 17;
+/// The ceiling, in multiples of the file. On 2026-11-17 this test reads
+/// about 14.4 times, and a heap profile of the same import 13.9 times.
+/// Before the step of the import kept no write into a block it created,
+/// the two read 15.8 times.
+const CEILING: usize = 15;
+
+/// The variable that marks the child process, the one that measures.
+const CHILD: &str = "AMBRE_DOCUMENT_MEMORY_CHILD";
+
+/// The tunable that fixes the trim threshold of the C allocator at its
+/// default, 128 KiB. By default, a free of a large block raises the
+/// threshold. The allocator then keeps up to tens of megabytes of the
+/// import's freed memory, which is no part of the document.
+const TUNABLES: &str = "glibc.malloc.trim_threshold=131072";
 
 /// One kibibyte, the unit `/proc/self/status` reports in.
 const KIB: usize = 1024;
@@ -57,9 +69,24 @@ fn novel(size: usize) -> Vec<u8> {
 /// less than `CEILING` times its file once the import ends. The resident
 /// size is read before the import and after it, the file and every answer
 /// dropped. What the allocator keeps of the freed memory counts
-/// against the document, so the figure is an upper bound.
+/// against the document, so the figure is an upper bound. The child
+/// process measures, under `TUNABLES`.
 #[test]
 fn a_document_holds_less_than_the_ceiling_times_its_file() {
+    if std::env::var_os(CHILD).is_none() {
+        let status = std::process::Command::new(std::env::current_exe().expect("a test binary"))
+            .args([
+                "--exact",
+                "a_document_holds_less_than_the_ceiling_times_its_file",
+                "--nocapture",
+            ])
+            .env(CHILD, "1")
+            .env("GLIBC_TUNABLES", TUNABLES)
+            .status()
+            .expect("the test runs itself again");
+        assert!(status.success(), "the child process measures: {status}");
+        return;
+    }
     let converter = ambre_convert::Converter::load(
         ambre_core::ConverterFamily::Markup,
         &ambre_core::Payload::new(Vec::new()),

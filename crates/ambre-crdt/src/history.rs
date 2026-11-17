@@ -33,7 +33,7 @@ use ambre_core::{Availability, HistoryStep};
 use loro::event::{ContainerDiff, Diff, DiffEvent};
 use loro::{
     Container, ContainerID, ContainerTrait, ContainerType, EventTriggerKind, InternalString,
-    LoroDoc, LoroMap, LoroValue, Subscription,
+    LoroDoc, LoroMap, LoroValue, Subscription, TreeID,
 };
 
 use ambre_core::Flag as _;
@@ -77,6 +77,11 @@ pub struct Hide {
     pub key: InternalString,
     /// The value the marker takes, read from the document when the undo runs.
     pub value: fn(&LoroDoc) -> LoroValue,
+    /// The container that holds the node's content outside its map, when the
+    /// application keeps one. The commit that creates the node creates that
+    /// content too. An undo hides it with the node, and the step keeps no
+    /// write of that commit into it.
+    pub body: fn(TreeID) -> Option<ContainerID>,
 }
 
 impl std::fmt::Debug for Hide {
@@ -177,12 +182,33 @@ struct Chunk {
     lists: Vec<ListWrite>,
     texts: Vec<TextWrite>,
     trees: Vec<TreeWrite>,
-    /// The containers the commit created. A write into one rides its
-    /// creation by value, so a replay skips it.
+    /// The containers the commit created, while the commit is read. A write
+    /// into one rides its creation by value, so no step keeps it.
     born: HashSet<ContainerID>,
 }
 
 impl Chunk {
+    /// Drop each write into a container the commit created, then the set of
+    /// those containers. The creation carries what they hold: an undo takes
+    /// it out whole, or hides it. A Prose import so keeps one tree write per commit. It
+    /// kept a map write and a text write per paragraph before
+    /// (`Prose document, held after an import` row of `ambre-spec-budgets.md`).
+    /// The pass runs once the whole commit is read: the order of the
+    /// container changes in an event is no part of the rule.
+    fn settle(&mut self) {
+        let born = std::mem::take(&mut self.born);
+        self.maps.retain(|write| !born.contains(&write.map));
+        self.lists.retain(|write| !born.contains(&write.list));
+        self.texts.retain(|write| !born.contains(&write.text));
+        self.maps.shrink_to_fit();
+        self.lists.shrink_to_fit();
+        self.texts.shrink_to_fit();
+        for tree in &mut self.trees {
+            tree.shrink_to_fit();
+        }
+        self.trees.shrink_to_fit();
+    }
+
     /// Whether the commit wrote nothing a step replays.
     fn is_empty(&self) -> bool {
         self.maps.is_empty()
@@ -341,7 +367,7 @@ impl History {
             past.append(&mut self.past);
             self.past = past;
         }
-        self.group = Group::Closed;
+        self.close();
     }
 
     /// The held command failed, and its writes were taken back: the history
@@ -355,9 +381,25 @@ impl History {
 
     /// End the step of the last command and open one for the next.
     fn seal(&mut self) {
+        self.close();
         self.group = Group::Open {
             started: Started::Not,
         };
+    }
+
+    /// End the group under way. The step it built keeps no set of touched
+    /// containers: only an open step meets a peer's change.
+    fn close(&mut self) {
+        if matches!(
+            self.group,
+            Group::Open {
+                started: Started::Yes
+            }
+        ) && let Some(step) = self.past.last_mut()
+        {
+            step.touched = HashSet::default();
+        }
+        self.group = Group::Closed;
     }
 
     /// A peer's change that meets what the open step wrote ends it. Each later
@@ -373,7 +415,7 @@ impl History {
             .last()
             .is_some_and(|step| !step.touched.is_disjoint(touched));
         if met {
-            self.group = Group::Closed;
+            self.close();
         }
     }
 }
@@ -532,7 +574,7 @@ impl UndoHistory {
     /// End the step under way: each later commit is a step of its own until
     /// the next [`seal`](Self::seal).
     pub fn close(&self) {
-        self.held().history.group = Group::Closed;
+        self.held().history.close();
     }
 
     /// Forget every step, for a new identity: a step names this peer's work.
@@ -693,7 +735,10 @@ impl Recorder {
         }
         match event.triggered_by {
             EventTriggerKind::Local if record => match replayable {
-                Replayable::Whole => self.history.record(chunk, touched),
+                Replayable::Whole => {
+                    chunk.settle();
+                    self.history.record(chunk, touched);
+                }
                 Replayable::Lost => self.history.lose(),
             },
             EventTriggerKind::Import => self.history.meet_import(&touched),
@@ -950,7 +995,9 @@ impl Mirror {
                     return Replayable::Lost;
                 };
                 let edits = rich.take(delta);
-                if let Some(chunk) = journal {
+                // A text the commit created rides its creation: its cursors
+                // are not worth reading.
+                if let Some(chunk) = journal.filter(|chunk| !chunk.born.contains(target)) {
                     chunk.texts.push(TextWrite::record(doc, target, edits));
                 }
                 Replayable::Whole
@@ -976,6 +1023,11 @@ impl Mirror {
                 }
                 write.tree = Some(target.clone());
                 chunk.born.extend(write.born_metas());
+                if let Some(hide) = hide {
+                    chunk
+                        .born
+                        .extend(write.born.iter().filter_map(|(node, _)| (hide.body)(*node)));
+                }
                 chunk.trees.push(write);
                 Replayable::Whole
             }
@@ -1105,7 +1157,7 @@ impl Step {
                 lists,
                 texts,
                 trees,
-                born,
+                born: _,
             } = chunk;
             let write_lists = |read: &mut HashMap<ContainerID, Vec<LoroValue>>,
                                renames: &Renames| {
@@ -1113,7 +1165,7 @@ impl Step {
                     Direction::Back => lists.iter().rev().collect(),
                     Direction::Forward => lists.iter().collect(),
                 };
-                for write in writes.into_iter().filter(|w| !born.contains(&w.list)) {
+                for write in writes {
                     let id = renames.resolve(&write.list);
                     let Some(list) = seq_list(doc, &id) else {
                         continue;
@@ -1127,14 +1179,14 @@ impl Step {
                     write.write(&list, cur, step);
                 }
             };
-            let texts = texts.iter_mut().filter(|t| !born.contains(&t.text));
+            let texts = texts.iter_mut();
             match undo {
                 Direction::Back => {
                     for text in texts.rev() {
                         text.write(doc, undo, renames, &mut shifts);
                     }
                     write_lists(&mut read, renames);
-                    for write in maps.iter_mut().filter(|w| !born.contains(&w.map)) {
+                    for write in maps.iter_mut() {
                         write.write(doc, undo, renames, &mut roots);
                     }
                     for tree in trees.iter_mut().rev() {
@@ -1145,7 +1197,7 @@ impl Step {
                     for tree in trees.iter_mut() {
                         tree.write(doc, undo, hide);
                     }
-                    for write in maps.iter_mut().filter(|w| !born.contains(&w.map)) {
+                    for write in maps.iter_mut() {
                         write.write(doc, undo, renames, &mut roots);
                     }
                     write_lists(&mut read, renames);
@@ -1807,6 +1859,7 @@ mod tests {
             Some(super::Hide {
                 key: loro::InternalString::from("gone"),
                 value: |_| loro::LoroValue::Bool(true),
+                body: |_| None,
             }),
         );
         history.seal();
@@ -1823,6 +1876,117 @@ mod tests {
         let _ = replay(&doc, &history, HistoryStep::Redo);
         assert!(tree.get_meta(node).expect("a meta").get("gone").is_none());
         assert_eq!(tree.roots(), vec![node]);
+    }
+
+    /// The writes of the step on top of the past, by kind: maps, lists,
+    /// texts and trees.
+    fn kept(history: &UndoHistory) -> [usize; 4] {
+        let held = history.held();
+        let chunks = held
+            .history
+            .past
+            .last()
+            .map_or(&[][..], |step| &step.chunks);
+        chunks.iter().fold([0; 4], |[m, l, t, r], chunk| {
+            [
+                m + chunk.maps.len(),
+                l + chunk.lists.len(),
+                t + chunk.texts.len(),
+                r + chunk.trees.len(),
+            ]
+        })
+    }
+
+    /// `UNDO-022`: a map and a text created in one commit with their content
+    /// leave one write in the step, the key that holds the map. The undo
+    /// takes both out, and the redo writes them back with their content.
+    #[test]
+    fn a_step_keeps_no_write_into_a_container_its_commit_created() {
+        let doc = LoroDoc::new();
+        let history = UndoHistory::watch_nested(&doc, &[], None);
+        history.seal();
+        let element = doc
+            .get_map("elements")
+            .insert_container("e", loro::LoroMap::new())
+            .expect("a nested map");
+        element.insert("x", 1).expect("a write");
+        let body = element
+            .insert_container("text", loro::LoroText::new())
+            .expect("a nested text");
+        body.insert(0, "hi").expect("a text write");
+        doc.commit();
+        assert_eq!(kept(&history), [1, 0, 0, 0]);
+        let _ = replay(&doc, &history, HistoryStep::Undo);
+        assert_eq!(element_of(&doc), None);
+        let _ = replay(&doc, &history, HistoryStep::Redo);
+        assert_eq!(element_of(&doc), Some((1, "hi".to_owned())));
+    }
+
+    /// The body text of node `node`, a root container outside its map.
+    fn body_of(node: loro::TreeID) -> Option<loro::ContainerID> {
+        Some(loro::ContainerID::new_root(
+            &format!("body:{node}"),
+            loro::ContainerType::Text,
+        ))
+    }
+
+    /// `UNDO-023`: a node created with its body text in one commit leaves the
+    /// tree write alone in the step. The undo hides the node with its body,
+    /// and the redo shows both as they stood. A later edit of the body is a
+    /// step of its own, which an undo takes out.
+    #[test]
+    fn an_undone_node_creation_hides_its_body_with_it() {
+        let doc = LoroDoc::new();
+        let tree = doc.get_tree("blocks");
+        tree.enable_fractional_index(0);
+        let history = UndoHistory::watch_nested(
+            &doc,
+            &[],
+            Some(super::Hide {
+                key: loro::InternalString::from("gone"),
+                value: |_| loro::LoroValue::Bool(true),
+                body: body_of,
+            }),
+        );
+        history.seal();
+        let node = tree.create(None).expect("a node");
+        let body = doc.get_text(format!("body:{node}").as_str());
+        body.insert(0, "hello").expect("a text write");
+        doc.commit();
+        assert_eq!(kept(&history), [0, 0, 0, 1]);
+        history.seal();
+        body.insert(5, "!").expect("a later edit");
+        doc.commit();
+        assert_eq!(kept(&history), [0, 0, 1, 0]);
+        let _ = replay(&doc, &history, HistoryStep::Undo);
+        assert_eq!(body.to_string(), "hello");
+        let _ = replay(&doc, &history, HistoryStep::Undo);
+        assert!(tree.get_meta(node).expect("a meta").get("gone").is_some());
+        assert_eq!(body.to_string(), "hello", "a hidden node keeps its body");
+        let _ = replay(&doc, &history, HistoryStep::Redo);
+        assert!(tree.get_meta(node).expect("a meta").get("gone").is_none());
+        let _ = replay(&doc, &history, HistoryStep::Redo);
+        assert_eq!(body.to_string(), "hello!");
+    }
+
+    /// A closed step keeps no set of the containers it touched: only the
+    /// open step meets a peer's change.
+    #[test]
+    fn a_closed_step_forgets_what_it_touched() {
+        let doc = LoroDoc::new();
+        let history = UndoHistory::watch(&doc, &[]);
+        write(&doc, &history, "a", 1);
+        let touched = |history: &UndoHistory| {
+            history
+                .held()
+                .history
+                .past
+                .last()
+                .map_or(0, |step| step.touched.len())
+        };
+        assert_eq!(touched(&history), 1);
+        history.close();
+        assert_eq!(touched(&history), 0);
     }
 
     /// A history of the roots alone ends at a write into a nested container.

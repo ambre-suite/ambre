@@ -251,6 +251,13 @@ impl TreeWrite {
         }
     }
 
+    /// Give back the room the two lists hold past their length: a step
+    /// keeps the write for as long as the history does.
+    pub(super) fn shrink_to_fit(&mut self) {
+        self.born.shrink_to_fit();
+        self.moved.shrink_to_fit();
+    }
+
     /// The meta map of each node the commit created: a write into it rides
     /// the creation, and a replay skips it.
     pub(super) fn born_metas(&self) -> impl Iterator<Item = loro::ContainerID> + '_ {
