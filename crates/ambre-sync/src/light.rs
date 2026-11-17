@@ -536,7 +536,11 @@ mod tests {
             panic!("expected the counters then the cue, got {events:?}");
         };
         assert_eq!((*cued, *heard), (document_id, cue));
-        assert_eq!(state.documents_len().get(), 0, "the cue loaded the document");
+        assert_eq!(
+            state.documents_len().get(),
+            0,
+            "the cue loaded the document"
+        );
     }
 
     /// Holds `RESID-015`: an update with no summary, or one that does not

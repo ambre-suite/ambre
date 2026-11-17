@@ -473,12 +473,12 @@ fn cell_menu_has_clipboard_and_merge() {
     ] {
         assert!(cmds.contains(&expected), "cell menu must list {expected:?}");
     }
-    // Separators group the entries (clipboard | structural | sort/filter | merge).
+    // Separators group the entries (clipboard | structural | sort/filter | merge | freeze).
     let seps = entries
         .iter()
         .filter(|e| matches!(e, ambre_chrome::MenuEntry::Separator))
         .count();
-    assert_eq!(seps, 3, "cell menu has three group separators");
+    assert_eq!(seps, 4, "cell menu has four group separators");
 }
 
 #[wasm_bindgen_test]

@@ -638,8 +638,8 @@ input[type="radio"] {
     padding: var(--space-2) var(--space-4);
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: var(--radius-md, 8px);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-mid);
 }
 
 .murmure-ring-title {
