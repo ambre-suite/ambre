@@ -1977,7 +1977,7 @@ impl SyncState {
                 recovery_words,
                 new_passphrase,
             } => {
-                self.handle_recover_account(recovery_words, new_passphrase);
+                self.handle_recover_account(id, recovery_words, new_passphrase);
             }
             RestCommand::Logout => self.handle_sign_out(id),
 

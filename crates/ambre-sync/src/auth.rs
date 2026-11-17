@@ -34,49 +34,10 @@ impl SyncState {
                         });
                     }
                     Ok(resp) => {
-                        // An AuthError names its kind alone. It never carries
-                        // crypto detail (algorithm names, key/salt lengths,
-                        // decrypt-failure specifics) that would leak the account's
-                        // cryptographic shape to whatever renders it. The concrete
-                        // cause is logged locally instead.
-                        const CORRUPT: AuthFailure = AuthFailure::CorruptAccount;
-                        const BAD_PASS: AuthFailure = AuthFailure::BadPassphrase;
-
-                        let (Some(master_key_enc), Some(salt)) =
-                            (&resp.master_key_enc, &resp.master_key_salt)
-                        else {
-                            tracing::warn!("Sync: master key without its salt");
-                            let _ = logic_tx.send(LogicEvent::AuthError { cause: CORRUPT });
-                            return;
-                        };
-                        let user_key =
-                            match ambre_crypto::passphrase::derive_user_key(&passphrase, salt) {
-                                Ok(k) => k,
-                                Err(e) => {
-                                    tracing::warn!("Sync: user-key derivation failed: {e}");
-                                    let _ =
-                                        logic_tx.send(LogicEvent::AuthError { cause: BAD_PASS });
-                                    return;
-                                }
-                            };
-                        // The seed opens straight into its wrapper, so no bare
-                        // copy of it is left on this path (`ZK-019`).
-                        let master_seed = match MasterSeed::open_from_storage(
-                            master_key_enc,
-                            &user_key,
-                            &ambre_core::Aad::of(b"ambre-master-seed"),
-                        ) {
+                        let master_seed = match open_stored_seed(&resp, &passphrase) {
                             Ok(seed) => seed,
-                            Err(e @ ambre_crypto::CryptoError::AeadFailed) => {
-                                // Almost always the wrong passphrase (AEAD auth
-                                // failure); could also be a tampered/corrupt row.
-                                tracing::warn!("Sync: master-seed AEAD open failed: {e}");
-                                let _ = logic_tx.send(LogicEvent::AuthError { cause: BAD_PASS });
-                                return;
-                            }
-                            Err(e) => {
-                                tracing::warn!("Sync: the stored master seed does not open: {e}");
-                                let _ = logic_tx.send(LogicEvent::AuthError { cause: CORRUPT });
+                            Err(cause) => {
+                                let _ = logic_tx.send(LogicEvent::AuthError { cause });
                                 return;
                             }
                         };
@@ -348,37 +309,11 @@ impl SyncState {
                 let signing_pub_key =
                     ambre_core::FixedBytes::from_array(signing_key.verifying_key().to_bytes());
                 let exchange_pub_key = crate::sharing::own_exchange_key(&exchange_key);
-                // Each step below fails only on a broken platform or a bug. The
-                // account is not created then, and the user reads why.
-                let mut salt = [0u8; 32];
-                let wrapped = getrandom::fill(&mut salt)
-                    .map_err(|e| {
-                        tracing::warn!("Sync: no CSPRNG for the account salt: {e}");
-                        AuthFailure::SeedNotWrapped
-                    })
-                    .map(|()| ambre_core::FixedBytes::<ambre_core::MasterKeySalt>::from_array(salt))
-                    .and_then(|salt| {
-                        ambre_crypto::passphrase::derive_sealing_key(&passphrase, &salt)
-                            .map(|sealing_key| (salt, sealing_key))
-                            .map_err(|e| {
-                                tracing::warn!("Sync: user-key derivation failed: {e}");
-                                AuthFailure::SeedNotWrapped
-                            })
-                    })
-                    .and_then(|(salt, sealing_key)| {
-                        master_seed
-                            .wrap_for_storage(
-                                &sealing_key,
-                                &ambre_core::Aad::of(b"ambre-master-seed"),
-                            )
-                            .map(|wrapped| (salt, wrapped))
-                            .map_err(|e| {
-                                tracing::warn!("Sync: master-seed wrap failed: {e}");
-                                AuthFailure::SeedNotWrapped
-                            })
-                    });
-                let (master_key_salt, master_key_enc) = match wrapped {
-                    Ok(pair) => pair,
+                let http::SealedSeed {
+                    master_key_enc,
+                    master_key_salt,
+                } = match seal_seed(&master_seed, &passphrase) {
+                    Ok(sealed) => sealed,
                     Err(cause) => {
                         let _ = logic_tx.send(LogicEvent::AuthError { cause });
                         return;
@@ -463,6 +398,7 @@ impl SyncState {
 
     pub(crate) fn handle_recover_account(
         &mut self,
+        id: Seq<Request>,
         recovery_words: Confidential<RecoveryWords>,
         new_passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
     ) {
@@ -485,9 +421,35 @@ impl SyncState {
                 return;
             }
         };
-        // The re-seal under the new passphrase is not built yet. The words,
-        // the seed they spell and the passphrase wipe their bytes on drop (H4).
-        drop((recovery_words, master_seed, new_passphrase));
+        // The words are spent: only the seed they spell goes on (H4).
+        drop(recovery_words);
+        if self.event_tx.is_none() {
+            // No relay holds the account, so nothing can take the re-seal.
+            self.send_to_logic(LogicEvent::AuthError {
+                cause: AuthFailure::Api(ApiFailure::Local(ambre_core::LocalFailure::NoRelay)),
+            });
+            return;
+        }
+        let logic_tx = self.logic_tx.clone();
+        let api = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base);
+        let auth = self.auth_context();
+        wasm_bindgen_futures::spawn_local(async move {
+            let outcome =
+                reseal_recovered_seed(&http::Fetch, &auth, &api, &master_seed, &new_passphrase)
+                    .await;
+            // The seed and the passphrase wipe their bytes here (H4). The
+            // user unlocks under the new passphrase to open the session.
+            drop((master_seed, new_passphrase));
+            let evt = match outcome {
+                Ok(()) => LogicEvent::Rest {
+                    id: Some(id),
+                    evt: RestEvent::AccountRecovered,
+                },
+                Err(ResealFailure::Auth(cause)) => LogicEvent::AuthError { cause },
+                Err(ResealFailure::Http(e)) => auth_failed(e),
+            };
+            let _ = logic_tx.send(evt);
+        });
     }
 
     /// Tear down the session (WebSocket, document sessions, keys). The
@@ -717,5 +679,245 @@ mod provider_tests {
         assert!(state.setup_owed);
         state.handle_sync_event(SyncEvent::ReconnectNow);
         assert_eq!(state.socket_opens.get(), 0);
+    }
+}
+
+/// Why a recovery wrote no re-seal.
+enum ResealFailure {
+    /// The worker refused the step itself: foreign words, or a seal that
+    /// failed.
+    Auth(AuthFailure),
+    /// A request to the relay failed.
+    Http(http::HttpError),
+}
+
+/// Open the Master Seed the relay stores under `passphrase`. The unlock reads
+/// the seed through this one path, so a re-seal it cannot open fails a test
+/// rather than a user (`SYNC-248`).
+///
+/// An error names its kind alone. Crypto detail would leak the shape of the
+/// account to whatever renders it: an algorithm name, a key length, the cause
+/// of a failed open. The worker logs the cause instead.
+fn open_stored_seed(
+    stored: &http::MasterKeyResponse,
+    passphrase: &ambre_core::Confidential<ambre_core::Passphrase>,
+) -> Result<MasterSeed, AuthFailure> {
+    let (Some(master_key_enc), Some(salt)) = (&stored.master_key_enc, &stored.master_key_salt)
+    else {
+        tracing::warn!("Sync: master key without its salt");
+        return Err(AuthFailure::CorruptAccount);
+    };
+    let user_key = ambre_crypto::passphrase::derive_user_key(passphrase, salt).map_err(|e| {
+        tracing::warn!("Sync: user-key derivation failed: {e}");
+        AuthFailure::BadPassphrase
+    })?;
+    // The seed opens straight into its wrapper, so no bare copy of it is left
+    // on this path (`ZK-019`).
+    MasterSeed::open_from_storage(
+        master_key_enc,
+        &user_key,
+        &ambre_core::Aad::of(b"ambre-master-seed"),
+    )
+    .map_err(|e| match e {
+        // Almost always the wrong passphrase; a tampered row reads the same.
+        ambre_crypto::CryptoError::AeadFailed => {
+            tracing::warn!("Sync: master-seed AEAD open failed: {e}");
+            AuthFailure::BadPassphrase
+        }
+        e => {
+            tracing::warn!("Sync: the stored master seed does not open: {e}");
+            AuthFailure::CorruptAccount
+        }
+    })
+}
+
+/// Seal `master_seed` under `passphrase` and a fresh salt, as the relay
+/// stores it. The setup and the recovery seal through this one path, and the
+/// seed never leaves the worker in the clear (`SYNC-248`). Each step fails only
+/// on a broken platform or a bug.
+fn seal_seed(
+    master_seed: &MasterSeed,
+    passphrase: &ambre_crypto::strength::ChosenPassphrase,
+) -> Result<http::SealedSeed, AuthFailure> {
+    let mut salt = [0u8; 32];
+    getrandom::fill(&mut salt).map_err(|e| {
+        tracing::warn!("Sync: no CSPRNG for the account salt: {e}");
+        AuthFailure::SeedNotWrapped
+    })?;
+    let master_key_salt = ambre_core::FixedBytes::<ambre_core::MasterKeySalt>::from_array(salt);
+    let sealing_key = ambre_crypto::passphrase::derive_sealing_key(passphrase, &master_key_salt)
+        .map_err(|e| {
+            tracing::warn!("Sync: user-key derivation failed: {e}");
+            AuthFailure::SeedNotWrapped
+        })?;
+    let master_key_enc = master_seed
+        .wrap_for_storage(&sealing_key, &ambre_core::Aad::of(b"ambre-master-seed"))
+        .map_err(|e| {
+            tracing::warn!("Sync: master-seed wrap failed: {e}");
+            AuthFailure::SeedNotWrapped
+        })?;
+    Ok(http::SealedSeed {
+        master_key_enc,
+        master_key_salt,
+    })
+}
+
+/// Store the seed a recovery read back, sealed under the new passphrase.
+///
+/// The worker first reads the master material of the account. It refuses
+/// words whose seed derives another signing key than the relay holds, before
+/// any write. The re-seal moves no public key, so a foreign seed would leave
+/// the account unopenable (`SYNC-249`). The one write carries the sealed seed
+/// and its salt alone (`SYNC-248`, `SYNC-250`).
+async fn reseal_recovered_seed(
+    transport: &impl http::Transport,
+    auth: &http::AuthContext,
+    api: &crate::http::Url<crate::http::ApiRoot>,
+    master_seed: &MasterSeed,
+    new_passphrase: &ambre_crypto::strength::ChosenPassphrase,
+) -> Result<(), ResealFailure> {
+    let stored: http::MasterKeyResponse =
+        http::get_json_auth_via(transport, &api.route("/keys/master"), auth)
+            .await
+            .map_err(ResealFailure::Http)?;
+    let own = ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(
+        master_seed.derive_signing_key().verifying_key().to_bytes(),
+    );
+    if stored.signing_pubkey.as_ref() != Some(&own) {
+        return Err(ResealFailure::Auth(AuthFailure::ForeignRecoveryWords));
+    }
+    let sealed = seal_seed(master_seed, new_passphrase).map_err(ResealFailure::Auth)?;
+    http::send_json_auth_via(
+        transport,
+        http::Method::Put,
+        &api.route("/keys/master/rotate"),
+        &sealed,
+        auth,
+    )
+    .await
+    .map_err(ResealFailure::Http)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::http::scripted::{Scripted, session};
+
+    fn root() -> crate::http::Url<crate::http::ApiRoot> {
+        crate::http::Url::<crate::http::ApiRoot>::of(
+            crate::http::UrlScheme::Https,
+            &crate::http::Url::<crate::http::RelayHost>::new("relay.test".to_owned()),
+        )
+    }
+
+    const NEW_PASSPHRASE: &str = "anchovy glider ruckus tadpole";
+
+    fn new_passphrase() -> ambre_core::Confidential<ambre_core::Passphrase> {
+        ambre_core::Confidential::<ambre_core::Passphrase>::new(NEW_PASSPHRASE.to_owned())
+    }
+
+    /// The seed of the first BIP39 vector, read back from its words.
+    fn recovered_seed() -> MasterSeed {
+        let words = ambre_core::Confidential::<ambre_core::RecoveryWords>::new(format!(
+            "{}art",
+            "abandon ".repeat(23)
+        ));
+        MasterSeed::from_recovery_words(&words).expect("valid words")
+    }
+
+    fn signing_pubkey(seed: &MasterSeed) -> ambre_core::FixedBytes<ambre_core::PublicKey> {
+        ambre_core::FixedBytes::from_array(seed.derive_signing_key().verifying_key().to_bytes())
+    }
+
+    /// The master material the relay answers, under the signing key `signer`.
+    fn stored(signer: Option<ambre_core::FixedBytes<ambre_core::PublicKey>>) -> serde_json::Value {
+        serde_json::json!({
+            "master_key_enc": ambre_core::Encoded::<ambre_core::WrappedMasterKey>::new(vec![1; 72]),
+            "master_key_salt": ambre_core::FixedBytes::<ambre_core::MasterKeySalt>::from_array([2; 32]),
+            "signing_pubkey": signer,
+            "exchange_pubkey": null,
+        })
+    }
+
+    /// `SYNC-248`: a recovery reads the account, then writes the seed sealed
+    /// under the new passphrase. The write holds the sealed seed and its salt
+    /// alone, and the unlock path opens it under the new passphrase.
+    #[tokio::test]
+    async fn a_recovery_re_seals_the_seed_that_a_later_unlock_opens() {
+        let seed = recovered_seed();
+        let transport = Scripted::new([
+            Ok((200, stored(Some(signing_pubkey(&seed))))),
+            Ok((200, serde_json::json!({ "status": "rotated" }))),
+        ]);
+        let auth = session("access-1", "refresh-1");
+        let chosen =
+            ambre_crypto::strength::ChosenPassphrase::check(new_passphrase()).expect("strong");
+
+        let outcome = reseal_recovered_seed(&transport, &auth, &root(), &seed, &chosen).await;
+        assert!(outcome.is_ok());
+        assert_eq!(
+            transport.calls(),
+            [
+                (
+                    http::Method::Get,
+                    "https://relay.test/api/keys/master".to_owned()
+                ),
+                (
+                    http::Method::Put,
+                    "https://relay.test/api/keys/master/rotate".to_owned()
+                ),
+            ]
+        );
+
+        let sent = transport.sent.borrow();
+        let body: serde_json::Value =
+            serde_json::from_slice(sent[1].body.as_ref().expect("a body").1.as_bytes())
+                .expect("json");
+        let fields: Vec<&str> = body
+            .as_object()
+            .expect("an object")
+            .keys()
+            .map(String::as_str)
+            .collect();
+        assert_eq!(fields, ["master_key_enc", "master_key_salt"]);
+
+        // The unlock reads the stored material through `open_stored_seed`.
+        let resealed: http::MasterKeyResponse = serde_json::from_value(body).expect("material");
+        let opened = open_stored_seed(&resealed, &new_passphrase()).expect("the unlock opens");
+        assert_eq!(signing_pubkey(&opened), signing_pubkey(&seed));
+        let wrong = ambre_core::Confidential::<ambre_core::Passphrase>::new("not it".to_owned());
+        assert!(matches!(
+            open_stored_seed(&resealed, &wrong),
+            Err(AuthFailure::BadPassphrase)
+        ));
+    }
+
+    /// `SYNC-249`: words whose seed is not the account's, and an account that
+    /// holds no key, draw the refusal after the one read. Nothing is written.
+    #[tokio::test]
+    async fn recovery_words_of_another_account_write_nothing() {
+        let seed = recovered_seed();
+        for signer in [Some(signing_pubkey(&MasterSeed::generate())), None] {
+            let transport = Scripted::new([
+                Ok((200, stored(signer))),
+                Ok((200, serde_json::json!({ "status": "rotated" }))),
+            ]);
+            let auth = session("access-1", "refresh-1");
+            let chosen =
+                ambre_crypto::strength::ChosenPassphrase::check(new_passphrase()).expect("strong");
+
+            let outcome = reseal_recovered_seed(&transport, &auth, &root(), &seed, &chosen).await;
+            assert!(matches!(
+                outcome,
+                Err(ResealFailure::Auth(AuthFailure::ForeignRecoveryWords))
+            ));
+            assert_eq!(
+                transport.calls(),
+                [(
+                    http::Method::Get,
+                    "https://relay.test/api/keys/master".to_owned()
+                )]
+            );
+        }
     }
 }

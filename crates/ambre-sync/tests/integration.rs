@@ -295,8 +295,10 @@ fn a_recovery_with_a_mistyped_word_or_a_bad_checksum_is_refused() {
 }
 
 #[test]
-fn a_recovery_with_valid_words_draws_no_refusal() {
-    // `ZK-043`: the words of a seed read back, so no refusal answers them.
+fn a_recovery_with_valid_words_goes_on_to_the_relay() {
+    // `ZK-043`: the words of a seed read back, so no refusal of the words
+    // answers them. The re-seal needs the relay, which an offline worker
+    // lacks, so that is the one answer, and no frame leaves (`SYNC-248`).
     let (mut state, rx, mock) = setup(true);
     send_rest(
         &mut state,
@@ -310,15 +312,17 @@ fn a_recovery_with_valid_words_draws_no_refusal() {
     );
     let events: Vec<LogicEvent> = rx.try_iter().collect();
     assert!(
-        !events
-            .iter()
-            .any(|e| matches!(e, LogicEvent::AuthError { .. })),
+        matches!(
+            events.as_slice(),
+            [LogicEvent::AuthError {
+                cause: ambre_bus::AuthFailure::Api(ambre_bus::ApiFailure::Local(
+                    ambre_core::LocalFailure::NoRelay
+                ))
+            }]
+        ),
         "{events:?}"
     );
-    assert!(
-        mock.server_rx.try_recv().is_err(),
-        "the re-seal is not built"
-    );
+    assert!(mock.server_rx.try_recv().is_err(), "no frame left");
 }
 
 #[test]

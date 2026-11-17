@@ -347,6 +347,18 @@ matches a word without regard to ASCII case. It refuses a phrase of another leng
 and a bad checksum. Each refusal comes before the seed leaves `ambre-crypto`, so a refused phrase
 derives no key.
 
+**The re-seal of a recovery.** A recovery writes the seed the words spell back to the relay,
+sealed under the new passphrase (`ambre-spec-sync.md`, `SYNC-248`). The Sync worker takes three
+steps, and a refusal at one step writes nothing:
+
+1. It holds the strength floor on the new passphrase (`ZK-042`), then reads the words (`ZK-043`).
+2. It reads the master material of the account. It compares the signing key the seed derives with
+   the key the relay holds, and refuses words of another seed (`ambre-spec-sync.md`, `SYNC-249`).
+   The re-seal moves no public key, so a foreign seed would leave the account unopenable.
+3. It seals the seed under a fresh salt, as the setup does. It sends the sealed seed and the salt
+   alone to the re-seal route, and the seed never leaves the worker (`ambre-spec-sync.md`,
+   `SYNC-250`).
+
 **The strength floor.** The relay stores the salt and the Master Seed sealed under the passphrase,
 so the relay, or a thief of its database, can guess offline. Argon2id prices each guess, and the
 client refuses a new passphrase that too few guesses find (`ZK-035`, `ZK-036`). A setup, a
@@ -422,6 +434,8 @@ The boundary has no control of its own. What a user meets is what it costs them.
 | a passphrase change or a recovery with a weak new passphrase | the request is refused before the current passphrase or the recovery words are read, with the same words as at setup (`ZK-042`) |
 | account setup | 24 BIP39 recovery words are shown once: they are the Master Seed, and the only path back after a forgotten passphrase |
 | a recovery with a mistyped word, a wrong word count or a bad checksum | the recovery is refused before any key is derived, and the refusal names which of the three (`ZK-043`) |
+| a recovery with the words of another account | the recovery is refused, and the account keeps its sealed seed (`ambre-spec-sync.md`, `SYNC-249`) |
+| a recovery that succeeds | the new passphrase unlocks the account from then on (`ambre-spec-sync.md`, `SYNC-248`) |
 | losing both the passphrase and the words | the documents are unrecoverable, unless an organization holds the escrow (`ambre-spec-organizations.md`) |
 
 ---

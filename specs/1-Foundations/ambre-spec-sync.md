@@ -115,6 +115,14 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-100` | `FRAME` | A sign-out MUST leave no token behind it. | `ZK-006`; `ambre-spec-session.md`, `SRV-026` | `ambre_sync::websocket::tests::session_tokens_wipe_on_drop` -- both tokens are held in an `ambre_core::Secret`, wiped when the last owner drops it, so ending the session clears them | none | verified |
 | `SYNC-177` | `POST` | A sign-out MUST ask the relay to revoke the refresh token the session holds. | `ambre-spec-session.md`, `SRV-026` | `ambre_sync::http::tests::a_sign_out_revokes_the_refresh_token_it_holds` -- one request under the access token carries the refresh token, a refused access token makes it carry the token the renewal handed out, and a refusal is reported | none | verified |
 
+### 1.7 An account is recovered
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SYNC-248` | `POST` | A recovery MUST store the Master Seed sealed under the new passphrase, so that a later unlock under that passphrase opens the account. | `ambre-spec-zero-knowledge.md section 2`, the re-seal of a recovery; `ambre-spec-zero-knowledge.md`, `ZK-035`, `ZK-043` | `ambre_sync::auth::tests::a_recovery_re_seals_the_seed_that_a_later_unlock_opens` -- the one write goes to the re-seal route, and the open of the unlock reads it under the new passphrase to the signing key of the words, and refuses another passphrase | none | verified |
+| `SYNC-249` | `FAIL` | Given recovery words whose seed does not derive the signing key the relay holds for the account, a recovery MUST refuse them and write nothing. | `ambre-spec-zero-knowledge.md section 2`, the re-seal of a recovery; `ambre-spec-session.md`, `SRV-030` | `ambre_sync::auth::tests::recovery_words_of_another_account_write_nothing` -- the words of another seed, and an account that holds no key, each draw `AuthFailure::ForeignRecoveryWords` after the one read, and no write leaves | none | verified |
+| `SYNC-250` | `FRAME` | A recovery MUST NOT send the relay the Master Seed, the recovery words or a passphrase. | `ambre-spec-zero-knowledge.md`, `ZK-003`; `ambre-spec-zero-knowledge.md section 2`, the re-seal of a recovery | type-level -- the re-seal body `SealedSeed` holds an `Encoded<WrappedMasterKey>` and a `FixedBytes<MasterKeySalt>` alone, so no other value is representable in the write; `ambre_sync::auth::tests::a_recovery_re_seals_the_seed_that_a_later_unlock_opens` -- the body of the write names the sealed seed and the salt, and no other field | none | verified |
+
 * **Budget.** the relay hop of `ambre-spec-budgets.md section 1`, one encode plus one transfer
   under 1 ms, the two per-session holders of `section 6`, and the send window of
   `ambre-spec-budgets.md section 8`. The socket carries no budget of its own: the network
@@ -122,7 +130,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this worker **is** the client side of the boundary `ambre-spec-zero-knowledge.md`
   draws. `SYNC-002` and `SYNC-095` keep the keys in. `SYNC-060` and `SYNC-061` keep the tokens in,
   and `SYNC-067` seals the one document field that is content rather than routing.
-* **Verification.** 66 `verified`, 1 `unimplemented`. The crate graph holds the keys and the CRDT
+* **Verification.** 69 `verified`, 1 `unimplemented`. The crate graph holds the keys and the CRDT
   apart. Unit tests hold the token redaction and wipe, the refused channel send and the name bound
   to its document. A gate refuses browser storage in the worker. Each gap left is a browser property
   the wasm tier cannot boot, `ambre-spec-testing.md section 9`.

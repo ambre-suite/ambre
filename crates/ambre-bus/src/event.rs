@@ -535,6 +535,10 @@ pub enum AuthFailure {
     /// The recovery words do not spell a seed, for the reason it names
     /// (`ZK-043`). No key was derived and no request left the worker.
     BadRecoveryWords(ambre_core::RecoveryWordsRefusal),
+    /// The recovery words spell a seed, but not the seed of this account: its
+    /// signing key is not the one the relay holds. Nothing was written
+    /// (`SYNC-249`).
+    ForeignRecoveryWords,
 }
 
 impl fmt::Display for AuthFailure {
@@ -577,6 +581,9 @@ impl fmt::Display for AuthFailure {
                         "the words do not match each other. Check each word and its order."
                     }
                 })
+            }
+            Self::ForeignRecoveryWords => {
+                f.write_str("Recovery failed: these recovery words belong to another account.")
             }
         }
     }
