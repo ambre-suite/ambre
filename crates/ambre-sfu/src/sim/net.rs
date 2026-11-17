@@ -167,6 +167,13 @@ impl Net {
         index
     }
 
+    /// Ends the session of participant `index`: the SFU drops it, and it sends nothing more.
+    pub fn leave(&mut self, index: usize) {
+        let member = self.members.get_mut(index).expect("a participant");
+        member.synth.rtc.disconnect();
+        self.sfu.leave(member.id);
+    }
+
     pub fn member(&mut self, index: usize) -> &mut Member {
         self.members.get_mut(index).expect("a participant")
     }

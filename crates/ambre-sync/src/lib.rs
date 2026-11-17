@@ -1962,6 +1962,7 @@ impl SyncState {
                 self.handle_call_description(description);
             }
             SyncCommand::ShareStarted => self.handle_share_started(),
+            SyncCommand::ChooseVideos(choice) => self.handle_choose_videos(choice),
 
             // -- Flow control --------------------------------------------------
             SyncCommand::HoldInbound => self.hold_inbound(),

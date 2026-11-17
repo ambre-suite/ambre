@@ -12,6 +12,7 @@ use ambre_core::{
     Count, Issuer, KeyIdentifier, Payload, PayloadKind, PictureKind, Rule, SenderIndex, Seq,
     SeqKind, Validated,
 };
+use ambre_protocol::signaling::VideoChoice;
 use str0m::bwe::Bitrate;
 use str0m::change::{SdpAnswer, SdpOffer, SdpPendingOffer};
 use str0m::error::IceError;
@@ -281,9 +282,44 @@ fn assign(slots: &mut [&mut Slot], wanted: &[Feed]) {
     }
 }
 
+/// The cameras a receiver gets, in the order the layer choice serves them, from `videos`
+/// ranked by their senders' last speech.
+///
+/// The senders the receiver chose come first, as long as they send a layer (`CALL-126`). The
+/// most recent speakers fill the slots they leave (`CALL-041`). A sender who left is in no
+/// track, so its slot falls to a speaker (`CALL-127`). The first track gets the top layer the
+/// estimate holds. It is the large sender of the choice, or else the most recent speaker
+/// served (`CALL-128`). The tracks past the count of videos get nothing.
+fn forwarded<'a>(videos: &[&'a Track], choice: &VideoChoice) -> Vec<&'a Track> {
+    let cap = usize::try_from(VIDEOS_PER_RECEIVER.get()).unwrap_or(usize::MAX);
+    let chosen = |t: &Track| choice.senders().contains(&t.sender) && !t.offered.is_empty();
+    let picked = videos.iter().copied().filter(|t| chosen(t)).take(cap);
+    let filled = videos.iter().copied().filter(|t| !chosen(t));
+    let mut served: Vec<&Track> = picked.chain(filled).take(cap).collect();
+    let lead = choice
+        .large()
+        .and_then(|large| served.iter().position(|t| t.sender == large))
+        .or_else(|| {
+            // The most recent speaker of those served: `videos` ranks them, so the first of
+            // `videos` in `served`.
+            videos
+                .iter()
+                .find_map(|v| served.iter().position(|t| t.source == v.source))
+        });
+    if let Some(lead) = lead
+        && lead > 0
+    {
+        let track = served.remove(lead);
+        served.insert(0, track);
+    }
+    served
+}
+
 /// One track of the call, as one layer choice reads it.
 struct Track {
     source: Seq<Participant>,
+    /// The sender index of its participant, which a choice of videos names (`CALL-126`).
+    sender: Seq<SenderIndex>,
     room: Validated<Room>,
     /// When its sender last spoke.
     spoke: Option<Instant>,
@@ -348,6 +384,9 @@ struct Member {
     /// the signalling socket (`CALL-106`). A still screen sends no packet for seconds, so no
     /// pause in the packets tells a share apart. A start may come before the screen section.
     shared: Option<Instant>,
+    /// The senders whose video this receiver chose, and the one it shows large (`CALL-126`,
+    /// `CALL-128`). Empty until its page chooses.
+    choice: VideoChoice,
     /// Whether a track of this participant showed a layer the last choice did not know.
     new_layer: bool,
     /// Whether the congestion control of this participant lowered its target, or entered or
@@ -396,6 +435,10 @@ pub struct Sfu {
     routes: HashMap<SocketAddr, Seq<Participant>>,
     /// The most threads that run the connections of one poll.
     workers: Count<Threads>,
+    /// The keyframes the layer choice asked of each layer of each track, and when. A layer
+    /// is asked once per [`KEYFRAME_RETRY`], whatever the count of receivers that wait for it,
+    /// or until a keyframe of it passes (`CALL-130`).
+    keyframes_asked: Vec<(Feed, Instant)>,
 }
 
 impl Sfu {
@@ -410,6 +453,7 @@ impl Sfu {
             next_choice: None,
             routes: HashMap::new(),
             workers: WORKERS,
+            keyframes_asked: Vec::new(),
         }
     }
 
@@ -467,6 +511,7 @@ impl Sfu {
             congestion: Congestion::new(INITIAL_ESTIMATE),
             spoke: None,
             shared: None,
+            choice: VideoChoice::default(),
             new_layer: false,
             rechoose: false,
             touched: true,
@@ -534,6 +579,16 @@ impl Sfu {
         }
         if let Some(former) = former {
             self.signals.push_back((former, Signal::TakenOver));
+        }
+    }
+
+    /// Takes the choice of videos of receiver `id`, which replaces its choice before
+    /// (`CALL-126`). The layer choice runs again at the next poll, and asks a keyframe of each
+    /// sender the choice brings in (`CALL-129`).
+    pub fn choose_videos(&mut self, id: Seq<Participant>, choice: VideoChoice) {
+        if let Some(member) = self.members.iter_mut().find(|m| m.id == id) {
+            member.choice = choice;
+            member.rechoose = true;
         }
     }
 
@@ -694,6 +749,7 @@ impl Sfu {
             .flat_map(|m| {
                 m.tracks_in.iter().map(|t| Track {
                     source: m.id,
+                    sender: m.sender,
                     room: m.room.clone(),
                     spoke: m.spoke,
                     mid: t.mid,
@@ -753,7 +809,8 @@ impl Sfu {
                 .copied()
                 .filter(|t| t.role == Role::Camera)
                 .collect();
-            let choices: Vec<Choice> = videos
+            let ordered = forwarded(&videos, &member.choice);
+            let choices: Vec<Choice> = ordered
                 .iter()
                 .map(|t| Choice {
                     layers: t.offered.clone(),
@@ -771,7 +828,7 @@ impl Sfu {
             );
             let chosen = choose(left, &choices);
             let rates = rates(&choices, &chosen);
-            let video: Vec<Feed> = videos
+            let video: Vec<Feed> = ordered
                 .iter()
                 .zip(&chosen)
                 .filter_map(|(t, layer)| {
@@ -880,7 +937,15 @@ impl Sfu {
             bwe.set_bitrate(minimum, desired);
             member.touched = true;
         }
+        // One keyframe of a layer serves every receiver that waits for it. So a layer is asked
+        // once per retry, however many receivers page to its sender (`CALL-130`).
+        self.keyframes_asked
+            .retain(|(_, at)| now < *at + KEYFRAME_RETRY);
         for feed in asks {
+            if self.keyframes_asked.iter().any(|(asked, _)| *asked == feed) {
+                continue;
+            }
+            self.keyframes_asked.push((feed, now));
             self.propagated.push_back(Propagated::Keyframe(
                 feed.source,
                 feed.mid,
@@ -902,6 +967,20 @@ impl Sfu {
                 return;
             }
         };
+        // A keyframe of a layer that the choice asked for answers the ask. A receiver that
+        // waits for that layer later then asks again at once, not after the retry.
+        if let Propagated::Packet(_, mid, layer, params, packet) = &p
+            && self
+                .keyframes_asked
+                .iter()
+                .any(|(f, _)| f.source == origin && f.mid == *mid && f.layer == *layer)
+            && params.spec().codec == Codec::Vp8
+            && Vp8Descriptor::parse(&packet.payload)
+                .is_ok_and(|d| d.starts_keyframe(&packet.payload))
+        {
+            self.keyframes_asked
+                .retain(|(f, _)| !(f.source == origin && f.mid == *mid && f.layer == *layer));
+        }
         let Some(room) = self
             .members
             .iter()

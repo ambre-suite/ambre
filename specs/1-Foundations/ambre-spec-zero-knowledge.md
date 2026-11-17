@@ -61,13 +61,14 @@ that component's prefix instead.
 | `ZK-038` | `INV` | Two release builds of one commit, each from a clean tree in its own directory, MUST give the same client digest. | this spec section 2, the code the relay serves; README pillar "Zero-Knowledge" | ci-gate -- `scripts/client_digest.py`, run by `just client-build` on two runners in two paths of different depth in the CI `reproducible` job, and by `just client-compare` in `reproducible-compare`. `scripts/test_client_digest.py` changes one byte and finds another digest | none | verified |
 | `ZK-039` | `INV` | The release of a tag MUST publish the client digest of its commit and the manifest that digest covers. | this spec section 2, the code the relay serves; `ZK-038` | ci-gate -- the `client-digest` job of `.github/workflows/release.yml` runs `just reproducible` on the tag and attaches both files to its release. It fails, and publishes nothing, when the two builds differ | none | verified |
 | `ZK-040` | `INV` | The page a deployment serves MUST be the build whose client digest the release of its commit publishes. | this spec section 2, the code the relay serves; `ZK-039` | human-review -- `b2sum -l 256 -c ambre-client.manifest` over a copy of the files the deployment serves | unheld -- `deployment` -- a browser runs whatever the origin serves and compares it with no digest. A relay can serve another page to one user alone, and an audit of the page it serves to everyone else never reads it | human-review |
+| `ZK-044` | `INV` | What the SFU learns of a choice of videos MUST be limited to `{the senders each receiver chose, by their sender index, the one it marks large, the instant of each choice}`. | this spec section 2, the choice of videos of a call; `ambre-spec-call-media.md section 3`, the choice of videos; `ZK-021` | type-level -- `ambre_protocol::signaling::VideoChoice` holds the sender indexes and the large one alone, and the SFU reads it on its own socket; `ambre_sync::call_link::tests::a_choice_of_videos_reaches_the_sfu_alone_and_never_the_relay` -- the relay reads none of it | none | verified |
 
 * **Budget.** the four crypto rows of `ambre-spec-budgets.md section 1`: the outbound seal, the
   inbound open, the full round trip and the snapshot compression. `criterion` measures all four in
   `ambre-crypto/benches`, which no CI job runs.
 * **Boundary.** this document **is** the boundary. Every other document either refines one of these
   rows on its own side, or answers `none` and says why.
-* **Verification.** 41 `verified`, 1 `human-review`, 1 `unimplemented`. Every row is an `INV`. This
+* **Verification.** 42 `verified`, 1 `human-review`, 1 `unimplemented`. Every row is an `INV`. This
   document owns no gesture, so it declares no operation table, and each rule binds the boundary at
   every instant.
 
@@ -113,7 +114,7 @@ that component's prefix instead.
 | `ambre-server` | `document_id`, `pub_key` (Ed25519), `clock`, `seq`, `snapshot_id`, `key_id`, `nonce` | CRDT content, Document Key, Master Seed, User Key, passphrase |
 | `ambre-server`, per update | the head of the membership log the author of the update read (`SYNC-207`), and the entry that head names (`SYNC-218`) | anything else about that author's view of the log |
 | `ambre-server`, per key link | the head of the membership log the rotator read (`SYNC-204`) | the key the link seals |
-| `ambre-sfu` | the set of `ZK-021`, each participant under the pseudonyms of `ZK-023`, and who shares a screen and when (`ZK-033`) | the audio and video of a call, every sender key, the channel, the user and the key of a participant |
+| `ambre-sfu` | the set of `ZK-021`, each participant under the pseudonyms of `ZK-023`, who shares a screen and when (`ZK-033`), and whose video each receiver chose (`ZK-044`) | the audio and video of a call, every sender key, the channel, the user and the key of a participant |
 
 **The showcase bundle.** A board exported as a showcase page leaves the boundary in the clear,
 for anyone who holds the file. It is the one path out of an application that carries content
@@ -175,6 +176,12 @@ screen slot shows it.
 The SFU also learns the size and the time of each chunk of the screen, and never what the screen
 shows (`ZK-032`, `ZK-033`). A screen holds text. So the size and the timing of its chunks tell the
 SFU when the member types or scrolls, and no word of it.
+
+**The choice of videos of a call.** A receiver names the senders whose video it wants, on the
+socket of the SFU alone. So the SFU learns who watches whom, under the sender indexes it sees in
+each key identifier already (`ZK-021`). It also learns whom each receiver shows large, and when a
+choice changes, as a page switch does. The relay learns nothing of a choice (`ZK-044`). The SFU
+needs the choice to forward a sender who does not speak, so the choice cannot stay on the client.
 
 **The cast of a scenario.** Every scenario table of the corpus draws its actors from this list, so
 a reader knows who is hostile from the name alone.

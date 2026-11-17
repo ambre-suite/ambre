@@ -21,6 +21,7 @@ use ambre_core::{
 };
 use ambre_protocol::signaling::{
     Admission as Claims, CallParticipants, PARTICIPANT_CAP, SessionDescription, SfuMsg as Wire,
+    VideoChoice,
 };
 use axum::Router;
 use axum::extract::State;
@@ -75,6 +76,8 @@ enum Command {
     Answer(Seq<Participant>, SdpAnswer),
     /// The participant's screen sender took a track: a share starts (`CALL-106`).
     Share(Seq<Participant>),
+    /// The participant chose the videos it receives (`CALL-126`).
+    Videos(Seq<Participant>, VideoChoice),
     /// A later offer of the participant, which adds its screen section (`CALL-112`).
     Offer(Seq<Participant>, SdpOffer),
     /// A renewal of the participant's admission, verified: it keeps the seat while it names
@@ -232,6 +235,7 @@ async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver
                 }
                 Some(Command::Answer(id, answer)) => sfu.accept_answer(id, answer),
                 Some(Command::Share(id)) => sfu.share_started(Instant::now(), id),
+                Some(Command::Videos(id, choice)) => sfu.choose_videos(id, choice),
                 Some(Command::Offer(id, offer)) => {
                     let answer = sfu.accept_offer(id, offer).and_then(|answer| {
                         Validated::<SessionDescription>::parse(answer.to_sdp_string()).ok()
@@ -434,6 +438,11 @@ async fn session(mut socket: WebSocket, gate: Gate) {
                 }
                 Some(Some(Wire::Share)) => {
                     if commands.send(Command::Share(id)).await.is_err() {
+                        break;
+                    }
+                }
+                Some(Some(Wire::Videos(choice))) => {
+                    if commands.send(Command::Videos(id, choice)).await.is_err() {
                         break;
                     }
                 }

@@ -5,6 +5,8 @@
 
 use std::time::{Duration, Instant};
 
+use ambre_core::Seq;
+use ambre_protocol::signaling::VideoChoice;
 use str0m::media::MediaKind;
 
 use super::client::{Arrival, SCREEN_LAYER, VideoRx};
@@ -277,6 +279,204 @@ fn a_receiver_gets_the_video_of_the_most_recent_speakers_alone() {
         senders.contains(&0),
         "the speaker before it is missing: {senders:?}"
     );
+}
+
+/// The senders of `receiver` whose video arrived at `from` or later, each once.
+fn video_senders(net: &Net, receiver: usize, from: Instant) -> Vec<u16> {
+    let mut senders: Vec<u16> = net
+        .members
+        .get(receiver)
+        .expect("a receiver")
+        .synth
+        .video
+        .values()
+        .flat_map(|rx| since(rx, from).map(|a| a.sender))
+        .collect();
+    senders.sort_unstable();
+    senders.dedup();
+    senders
+}
+
+/// The choice of the senders `senders`, by their sender index, which the simulation draws from
+/// the index of each participant.
+fn choice(senders: &[u64], large: Option<u64>) -> VideoChoice {
+    VideoChoice::new(
+        senders.iter().copied().map(Seq::new).collect(),
+        large.map(Seq::new),
+    )
+    .expect("a choice under the cap")
+}
+
+/// A call of twelve, participant 0 speaking, over links of 150 ms of round trip with no loss.
+/// Participant 1 then chooses senders 10 and 11, who never spoke and joined last, so neither
+/// is among the nine speakers it got. Answers the network and the instant of the choice.
+fn chosen_run() -> (Net, Instant) {
+    let mut net = call(12, Profile::half(Duration::from_millis(150), 0.0));
+    net.run(Duration::from_secs(4));
+    assert!(
+        !video_senders(&net, 1, net.now - Duration::from_secs(1)).contains(&11),
+        "before the choice, the receiver got the video of 11"
+    );
+    let at = net.now;
+    let id = net.member(1).id;
+    net.sfu.choose_videos(id, choice(&[10, 11], None));
+    net.run(Duration::from_secs(3));
+    (net, at)
+}
+
+/// `CALL-126`: a receiver of a call of twelve chooses two senders outside the nine it gets.
+/// It then gets the video of both.
+#[test]
+fn a_receiver_gets_the_video_of_the_senders_it_chose() {
+    let (net, _) = chosen_run();
+    let senders = video_senders(&net, 1, net.now - Duration::from_secs(1));
+    assert!(
+        senders.contains(&10) && senders.contains(&11),
+        "the receiver got {senders:?}"
+    );
+}
+
+/// `CALL-041`, under a choice: the speakers fill the seven slots a choice of two leaves. The
+/// speaker stays, the two who joined last of the fillers give way, and a receiver who chose
+/// nothing keeps the nine speakers.
+#[test]
+fn the_most_recent_speakers_fill_the_slots_a_choice_leaves() {
+    let (net, _) = chosen_run();
+    let from = net.now - Duration::from_secs(1);
+    let chooser = video_senders(&net, 1, from);
+    assert_eq!(
+        chooser,
+        vec![0, 2, 3, 4, 5, 6, 7, 10, 11],
+        "the chooser got"
+    );
+    let other = video_senders(&net, 2, from);
+    assert_eq!(
+        other,
+        vec![0, 1, 3, 4, 5, 6, 7, 8, 9],
+        "a receiver of no choice got"
+    );
+}
+
+/// `CALL-129`: the SFU asks each sender a choice brings in for a keyframe. Its first picture
+/// then reaches the receiver within the switch row of `ambre-spec-budgets.md section 3`.
+/// The synthetic senders send a keyframe on request alone, so no picture shows without it.
+#[test]
+fn a_chosen_sender_is_asked_a_keyframe_and_shows_within_the_budget() {
+    let (net, at) = chosen_run();
+    for sender in [10, 11] {
+        let asked = net
+            .members
+            .get(usize::from(sender))
+            .expect("a sender")
+            .synth
+            .keyframe_requests
+            .iter()
+            .any(|(when, layer)| *when >= at && *layer == Some(0));
+        assert!(
+            asked,
+            "the SFU asked {sender} for no keyframe of its lowest layer"
+        );
+        let first = net
+            .members
+            .get(1)
+            .expect("a receiver")
+            .synth
+            .video
+            .values()
+            .flat_map(|rx| since(rx, at))
+            .filter(|a| a.sender == sender)
+            .min_by_key(|a| a.at)
+            .expect("a packet of the chosen sender");
+        assert!(first.keyframe_start, "the slot opened on {first:?}");
+        let delay = first.at - at;
+        println!("sender {sender}: first packet {delay:?} after the choice");
+        assert!(
+            delay < CHOSEN_SWITCH,
+            "the first packet of {sender} came {delay:?} after the choice"
+        );
+    }
+}
+
+/// The chosen sender switch row of `ambre-spec-budgets.md section 3`: from the choice the SFU
+/// reads to the first packet of a chosen sender at the receiver.
+const CHOSEN_SWITCH: Duration = Duration::from_millis(500);
+
+/// `CALL-127`: a chosen sender who leaves frees its slot. The most recent speaker the choice
+/// had pushed out takes it, and the receiver gets nine videos again.
+#[test]
+fn a_chosen_sender_who_leaves_frees_its_slot_to_a_speaker() {
+    let (mut net, _) = chosen_run();
+    net.leave(11);
+    net.run(Duration::from_secs(3));
+    let senders = video_senders(&net, 1, net.now - Duration::from_secs(1));
+    assert_eq!(
+        senders,
+        vec![0, 2, 3, 4, 5, 6, 7, 8, 10],
+        "after the leave, the receiver got"
+    );
+}
+
+/// `CALL-128`: a receiver that marks a sender large gets that sender at the top layer, and the
+/// speaker at the lowest. Another receiver keeps the speaker at the top layer.
+#[test]
+fn a_large_sender_gets_the_top_layer_in_place_of_the_speaker() {
+    let mut net = call(3, Profile::half(Duration::from_millis(150), 0.0));
+    net.run(Duration::from_secs(10));
+    let id = net.member(2).id;
+    net.sfu.choose_videos(id, choice(&[1], Some(1)));
+    net.run(Duration::from_secs(8));
+    let from = net.now - Duration::from_secs(1);
+    let layers = |receiver: usize, sender: u16| -> Vec<u8> {
+        let mut layers: Vec<u8> = since(track(&net, receiver, sender), from)
+            .map(|a| a.layer)
+            .collect();
+        layers.dedup();
+        layers
+    };
+    assert_eq!(layers(2, 1), vec![2], "the large sender at the chooser");
+    assert_eq!(layers(2, 0), vec![0], "the speaker at the chooser");
+    assert_eq!(
+        layers(1, 0),
+        vec![2],
+        "the speaker at a receiver of no choice"
+    );
+}
+
+/// `CALL-130`: ten receivers choose one sender, 10 ms apart. Each choice lands in a poll of its
+/// own, and all ten come before the keyframe of the first ask. The SFU asks that sender one
+/// keyframe of its lowest layer for all ten, and each receiver decodes it.
+#[test]
+fn ten_receivers_who_choose_one_sender_ask_it_one_keyframe() {
+    let mut net = call(12, Profile::half(Duration::from_millis(150), 0.0));
+    net.run(Duration::from_secs(4));
+    let at = net.now;
+    for receiver in 1..=10 {
+        let id = net.member(receiver).id;
+        net.sfu.choose_videos(id, choice(&[11], None));
+        net.run(Duration::from_millis(10));
+    }
+    net.run(Duration::from_millis(500));
+    let asks: Vec<Instant> = net
+        .member(11)
+        .synth
+        .keyframe_requests
+        .iter()
+        .filter(|(when, layer)| {
+            *when >= at && *when < at + Duration::from_millis(100) && *layer == Some(0)
+        })
+        .map(|(when, _)| *when)
+        .collect();
+    assert_eq!(
+        asks.len(),
+        1,
+        "keyframe requests of the lowest layer: {asks:?}"
+    );
+    for receiver in 1..=10 {
+        assert!(
+            video_senders(&net, receiver, at).contains(&11),
+            "receiver {receiver} got no picture of the chosen sender"
+        );
+    }
 }
 
 /// A call of twelve where the speaker moves from participant 0 to participant 11, who joined

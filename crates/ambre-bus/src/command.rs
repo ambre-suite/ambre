@@ -387,6 +387,9 @@ pub enum SyncCommand {
     /// The screen sender of the page took a track: a share starts, which the socket of the SFU
     /// alone carries (`CALL-106`, `ZK-032`).
     ShareStarted,
+    /// The page chose the videos it receives: the socket of the SFU alone carries the choice
+    /// (`CALL-132`, `ZK-044`).
+    ChooseVideos(ambre_protocol::signaling::VideoChoice),
 
     // -- Read cursors (Murmure) --------------------------------------------------
     /// Move the read cursors of one channel to its latest message

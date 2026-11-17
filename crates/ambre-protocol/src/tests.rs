@@ -288,6 +288,41 @@ fn a_message_of_the_sfu_socket_is_json_of_one_key() {
     assert!(Validated::<SessionDescription>::parse(&long).is_err());
 }
 
+/// `CALL-131`: a choice of videos reads as JSON of one key. The SFU reads none of a choice that
+/// names more senders than a receiver gets videos, a sender twice, or a stray large sender.
+#[test]
+fn a_choice_of_too_many_videos_or_a_stray_large_sender_reads_as_nothing() {
+    use ambre_core::Seq;
+    use signaling::{ChoiceError, SfuMsg, VideoChoice};
+    let choice = VideoChoice::new(vec![Seq::new(3), Seq::new(7)], Some(Seq::new(7)))
+        .expect("a choice of two");
+    let text = serde_json::to_string(&SfuMsg::Videos(choice.clone())).expect("a choice encodes");
+    assert_eq!(text, r#"{"videos":{"senders":[3,7],"large":7}}"#);
+    let read: SfuMsg = serde_json::from_str(&text).expect("a choice decodes");
+    assert!(matches!(read, SfuMsg::Videos(c) if c == choice));
+    let nine: Vec<Seq<_>> = (1..=9).map(Seq::new).collect();
+    assert!(VideoChoice::new(nine, None).is_ok(), "nine senders fit");
+    let ten = r#"{"videos":{"senders":[1,2,3,4,5,6,7,8,9,10],"large":null}}"#;
+    let twice = r#"{"videos":{"senders":[4,4],"large":null}}"#;
+    let stray = r#"{"videos":{"senders":[4],"large":5}}"#;
+    for refused in [ten, twice, stray] {
+        assert!(
+            serde_json::from_str::<SfuMsg>(refused).is_err(),
+            "{refused} was read"
+        );
+    }
+    let ten: Vec<Seq<_>> = (1..=10).map(Seq::new).collect();
+    assert_eq!(VideoChoice::new(ten, None), Err(ChoiceError::TooMany));
+    assert_eq!(
+        VideoChoice::new(vec![Seq::new(4), Seq::new(4)], None),
+        Err(ChoiceError::Repeated)
+    );
+    assert_eq!(
+        VideoChoice::new(vec![Seq::new(4)], Some(Seq::new(5))),
+        Err(ChoiceError::LargeNotChosen)
+    );
+}
+
 #[test]
 fn version_check() {
     use version::{CURRENT_VERSION, check_version};

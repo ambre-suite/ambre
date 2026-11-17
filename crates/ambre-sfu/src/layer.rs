@@ -20,9 +20,16 @@ impl NarrowCount for Slots {
         ambre_core::StaticKey::new("SlotCount");
 }
 
-/// The count of videos one receiver gets: the most recent speakers (`CALL-041`), from the call
-/// row of `ambre-spec-budgets.md section 1`. Each receiver holds this many video slots.
-pub const VIDEOS_PER_RECEIVER: Count<Slots> = Count::new(9);
+/// The count of videos one receiver gets: the senders it chose, then the most recent speakers
+/// (`CALL-126`, `CALL-041`), from the call row of `ambre-spec-budgets.md section 1`. Each
+/// receiver holds this many video slots. The wire holds the figure, since a choice names this
+/// many senders at most.
+pub const VIDEOS_PER_RECEIVER: Count<Slots> =
+    Count::recount(ambre_protocol::signaling::VIDEOS_PER_RECEIVER);
+
+/// A slot carries one received video, so the count of videos a receiver gets counts its video
+/// slots.
+impl ambre_core::Recounts<ambre_protocol::signaling::ReceivedVideos> for Slots {}
 
 /// The count of screen slots of one receiver: one screen per room (`CALL-104`, `CALL-106`).
 pub const SCREEN_SLOTS: Count<Slots> = Count::new(1);
@@ -78,7 +85,8 @@ pub struct Candidate {
 /// The layer each candidate gets, in the order of `candidates`: none for a track the
 /// receiver does not get.
 ///
-/// The most recent speakers come first. Each of the first [`VIDEOS_PER_RECEIVER`] gets its
+/// The order of `candidates` ranks them: the forwarding core puts the large sender of the
+/// receiver, or else the most recent speaker, first (`CALL-128`). Each of the first [`VIDEOS_PER_RECEIVER`] gets its
 /// lowest layer while the estimate holds it. Then the first candidate moves up to the
 /// highest layer the rest of the estimate holds.
 pub fn choose(estimate: Bitrate, candidates: &[Candidate]) -> Vec<Option<Layer>> {

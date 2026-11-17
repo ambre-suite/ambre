@@ -374,15 +374,120 @@ impl Rule for SessionDescription {
 /// stay far under it.
 pub const SESSION_DESCRIPTION_MAX: Count<Octets> = Count::new(64 * 1024);
 
+/// How many videos one receiver of a call gets.
+pub enum ReceivedVideos {}
+
+impl NarrowCount for ReceivedVideos {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ReceivedVideos");
+}
+
+/// The count of videos the SFU forwards one receiver, from the call row of
+/// `ambre-spec-budgets.md section 1`. A choice names this many senders at most (`CALL-131`).
+pub const VIDEOS_PER_RECEIVER: Count<ReceivedVideos> = Count::new(9);
+
+/// The senders whose video a receiver asks of the SFU, by the sender index of each
+/// (`CALL-126`). The SFU fills the slots the choice leaves with the most recent speakers
+/// (`CALL-041`). A choice replaces the one before it, and an empty one asks for the speakers
+/// alone.
+///
+/// The constructor is the one door: a choice names [`VIDEOS_PER_RECEIVER`] senders at most,
+/// each once, and its large sender is one of them. Deserialisation goes through it.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "ChoiceFields")]
+pub struct VideoChoice {
+    senders: Vec<Seq<SenderIndex>>,
+    large: Option<Seq<SenderIndex>>,
+}
+
+/// The fields of a [`VideoChoice`] as the wire spells them, before the check.
+#[derive(Deserialize)]
+struct ChoiceFields {
+    senders: Vec<Seq<SenderIndex>>,
+    large: Option<Seq<SenderIndex>>,
+}
+
+/// Why a choice of videos is refused (`CALL-131`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ChoiceError {
+    /// The choice names more senders than a receiver gets videos.
+    TooMany,
+    /// The choice names one sender twice.
+    Repeated,
+    /// The large sender is not among the senders of the choice.
+    LargeNotChosen,
+}
+
+impl fmt::Display for ChoiceError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::TooMany => "a choice names more senders than a receiver gets videos",
+            Self::Repeated => "a choice names one sender twice",
+            Self::LargeNotChosen => "the large sender of a choice is not among its senders",
+        })
+    }
+}
+
+impl VideoChoice {
+    /// A choice of `senders`, the first wanted first, with `large` shown at the top layer
+    /// its downlink holds (`CALL-128`).
+    ///
+    /// # Errors
+    ///
+    /// [`ChoiceError`] for more senders than [`VIDEOS_PER_RECEIVER`], a sender named twice,
+    /// or a large sender outside `senders`.
+    pub fn new(
+        senders: Vec<Seq<SenderIndex>>,
+        large: Option<Seq<SenderIndex>>,
+    ) -> Result<Self, ChoiceError> {
+        if Count::<ReceivedVideos>::of(senders.len()) > VIDEOS_PER_RECEIVER {
+            return Err(ChoiceError::TooMany);
+        }
+        let repeated = senders
+            .iter()
+            .enumerate()
+            .any(|(i, s)| senders.iter().take(i).any(|t| t == s));
+        if repeated {
+            return Err(ChoiceError::Repeated);
+        }
+        if large.is_some_and(|l| !senders.contains(&l)) {
+            return Err(ChoiceError::LargeNotChosen);
+        }
+        Ok(Self { senders, large })
+    }
+
+    /// The senders of the choice, the first wanted first.
+    pub fn senders(&self) -> &[Seq<SenderIndex>] {
+        &self.senders
+    }
+
+    /// The sender the receiver shows large, if any.
+    pub fn large(&self) -> Option<Seq<SenderIndex>> {
+        self.large
+    }
+}
+
+impl TryFrom<ChoiceFields> for VideoChoice {
+    type Error = ChoiceError;
+
+    fn try_from(fields: ChoiceFields) -> Result<Self, Self::Error> {
+        Self::new(fields.senders, fields.large)
+    }
+}
+
 /// A message on the signalling socket of the SFU, as JSON of one key. The client sends
 /// `{"admission": "<token>"}` first, and the SFU answers `{"ice": [...]}`. Then the session
 /// descriptions go in either direction: `{"offer": "<sdp>"}` or `{"answer": "<sdp>"}`. The
 /// client sends `"share"` when its screen sender takes a track, which starts a share
 /// (`CALL-106`). The SFU sends `"unshared"` to a sharer once a later share took the screen
-/// (`CALL-107`). These are all the SFU reads of a participant (`ZK-023`, `ZK-033`).
+/// (`CALL-107`).
 ///
 /// A later `{"admission": "<token>"}` renews the seat. The SFU keeps the seat while a renewal
 /// of it arrives before the last admission expires (audit `N25`).
+///
+/// The client sends `{"videos": {"senders": [..], "large": ..}}` to choose the videos it
+/// receives (`CALL-126`). These are all the SFU reads of a participant (`ZK-023`, `ZK-033`,
+/// `ZK-044`).
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SfuMsg {
@@ -392,4 +497,5 @@ pub enum SfuMsg {
     Answer(Validated<SessionDescription>),
     Share,
     Unshared,
+    Videos(VideoChoice),
 }

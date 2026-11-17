@@ -243,6 +243,9 @@ pub struct Synth {
     pub outbox: Vec<Transmit>,
     pub wake: Instant,
     pub keyframes_asked: usize,
+    /// Each keyframe request of the camera this participant received: its time, and the
+    /// layer it names, or none for every layer.
+    pub keyframe_requests: Vec<(Instant, Option<usize>)>,
     /// The round trip of the link to the SFU, which the playout model of each track adds.
     pub playout_rtt: Duration,
 }
@@ -300,6 +303,7 @@ impl Synth {
             outbox: Vec::new(),
             wake: now,
             keyframes_asked: 0,
+            keyframe_requests: Vec::new(),
             playout_rtt: Duration::ZERO,
         };
         (synth, offer)
@@ -581,6 +585,7 @@ impl Synth {
                 let layer = request
                     .rid
                     .and_then(|rid| LAYERS.iter().position(|(r, _)| Rid::from(*r) == rid));
+                self.keyframe_requests.push((now, layer));
                 match layer {
                     Some(l) => {
                         if let Some(due) = self.keyframe_due.get_mut(l) {

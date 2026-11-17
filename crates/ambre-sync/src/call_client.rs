@@ -400,7 +400,7 @@ impl CallClient {
             SfuMsg::Offer(sdp) => ambre_bus::CallSignal::Offer(sdp),
             SfuMsg::Answer(sdp) => ambre_bus::CallSignal::Answer(sdp),
             SfuMsg::Unshared => ambre_bus::CallSignal::ShareTakenOver,
-            SfuMsg::Admission(_) | SfuMsg::Share => return steps,
+            SfuMsg::Admission(_) | SfuMsg::Share | SfuMsg::Videos(_) => return steps,
         };
         steps.page.push(signal);
         steps

@@ -12,7 +12,7 @@ use std::rc::Rc;
 use ambre_core::Validated;
 use ambre_core::id::{Call, Document, Id};
 use ambre_crypto::call::KeyHandoff;
-use ambre_protocol::signaling::{CallClientMsg, CallServerMsg, SfuMsg, SfuSocket};
+use ambre_protocol::signaling::{CallClientMsg, CallServerMsg, SfuMsg, SfuSocket, VideoChoice};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsCast;
 
@@ -230,6 +230,16 @@ impl SyncState {
             return;
         };
         link.sfu_queue.push(SfuMsg::Share);
+        self.call_sfu_flush();
+    }
+
+    /// The page chose the videos it receives. The choice goes to the socket of the SFU alone,
+    /// with the other frames, and never to the relay (`CALL-132`, `ZK-044`).
+    pub(crate) fn handle_choose_videos(&mut self, choice: VideoChoice) {
+        let Some(link) = self.call.as_mut() else {
+            return;
+        };
+        link.sfu_queue.push(SfuMsg::Videos(choice));
         self.call_sfu_flush();
     }
 
@@ -722,7 +732,7 @@ mod tests {
     use ambre_core::id::{Call, Channel, Document, Id};
     use ambre_core::{Count, Role, Sec, TimeSpan, Validated};
     use ambre_protocol::MembershipAct;
-    use ambre_protocol::signaling::{CallClientMsg, CallServerMsg, SfuMsg};
+    use ambre_protocol::signaling::{CallClientMsg, CallServerMsg, SfuMsg, VideoChoice};
     use ambre_protocol::ws::WsServerMsg;
 
     use super::{CallPort, Rc};
@@ -971,6 +981,49 @@ mod tests {
             rx.try_recv(),
             Ok(LogicEvent::Call(ambre_bus::CallSignal::ShareTakenOver))
         ));
+    }
+
+    /// `CALL-132`: a choice of videos the page posts reaches the socket of the SFU, after the
+    /// frames before it, and never the relay.
+    #[test]
+    fn a_choice_of_videos_reaches_the_sfu_alone_and_never_the_relay() {
+        let alice = Person::new(1);
+        let (mut state, _handed, port, _rx) = worker_heard(&alice);
+        let chosen = VideoChoice::new(vec![ambre_core::Seq::new(5)], Some(ambre_core::Seq::new(5)))
+            .expect("a choice of one");
+        state.handle_command(SyncCommand::ChooseVideos(chosen.clone()));
+        assert!(state.call.is_none(), "a choice with no call opens nothing");
+        state.call_ports.offer(port);
+        state.handle_command(SyncCommand::JoinCall {
+            call: TARGET.call,
+            channel: TARGET.channel,
+        });
+        state.call_channel(TARGET.call, Some(META));
+        state.call_log(META, log_of(&alice));
+        state.call_relay(CallServerMsg::Admitted {
+            admission: ambre_core::Credential::new("admission".to_owned()),
+            sfu: Some(Validated::parse("wss://sfu.example/call").expect("an address")),
+            sender: ambre_core::Seq::new(3),
+            roster: Vec::new(),
+        });
+        state.call_sfu(SfuMsg::Ice(Vec::new()));
+        state.handle_command(SyncCommand::CallDescription(
+            ambre_bus::PageDescription::Offer(Validated::parse("v=0".to_owned()).expect("sdp")),
+        ));
+        let relay_before = state.call.as_ref().map(|l| l.sent.relay.len());
+        state.handle_command(SyncCommand::ChooseVideos(chosen.clone()));
+        let link = state.call.as_ref().expect("the call");
+        assert_eq!(
+            link.sent.sfu.len(),
+            3,
+            "the admission, the offer, then the choice"
+        );
+        assert!(matches!(link.sent.sfu.last(), Some(SfuMsg::Videos(c)) if *c == chosen));
+        assert_eq!(
+            Some(link.sent.relay.len()),
+            relay_before,
+            "the choice reached the relay"
+        );
     }
 
     /// `CALL-065`, `CALL-029`: a command of the bus joins the call and the channel it names,
