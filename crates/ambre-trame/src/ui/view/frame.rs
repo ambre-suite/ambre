@@ -544,9 +544,7 @@ impl TrameView {
             headers: self.draw_stats.headers,
             cells_drawn: self.draw_stats.cells_drawn,
             input_latency: self.draw_stats.input_latency,
-            glyph_misses: ambre_core::Count::<ambre_canvas::GlyphMisses>::of(
-                text_cache.frame_misses,
-            ),
+            glyph_misses: text_cache.frame_misses,
         });
 
         // The in-cell edit field sits above everything (after the active border).

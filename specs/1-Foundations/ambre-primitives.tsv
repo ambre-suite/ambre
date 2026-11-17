@@ -2,6 +2,7 @@
 # One line per site that keeps a bare primitive. Add a line by hand only; a reviewer reads it (ARCH-035).
 # Answer the five questions of ai/ambre-rust-style.md ("A type is the default") before adding a line.
 key	category	note
+ambre-app | src/account.rs | crate::account | KeysSignals::has_form() | ret | bool	generic	predicate result
 ambre-app | src/account.rs | crate::account | KeysSignals::is_open() | ret | bool	generic	predicate result
 ambre-app | src/doc_list.rs | crate::doc_list | Recency::heading() | ret | &'static str	free-text	the display label of a band of the document list, which a person reads and no code matches back
 ambre-app | src/doc_list.rs | crate::doc_list | arrange(query) | param | &str	free-text	the search a person types into the launcher: free text with no rule, matched as the palette matches its query
@@ -640,7 +641,7 @@ ambre-bus | src/conduit.rs | crate::conduit | UnboundedSender<T>::is_disconnecte
 ambre-bus | src/conduit.rs | crate::conduit | <ChannelSlots as Bounds>::MAX | const | u32	generic	a bound of the quantity, which Bounded compares each value against
 ambre-bus | src/conduit.rs | crate::conduit | <ChannelSlots as Bounds>::MIN | const | u32	generic	a bound of the quantity, which Bounded compares each value against
 ambre-bus | src/conduit.rs | crate::conduit | <ChannelSlots as Bounds>::Repr | assoc | u32	newtype-inner	the number a value of this quantity holds
-ambre-bus | src/conduit.rs | crate::conduit | backlog(factor) | param | u32	math	a multiplier of the capacity, not a length
+ambre-bus | src/conduit.rs | crate::conduit | backlog(factor) | param | u32	math	a scalar multiplier: the factor of the capacity, not a length
 ambre-bus | src/event.rs | crate::event | ApiRequest::as_str() | ret | &'static str	newtype-inner	the wire word of the ApiRequest enum
 ambre-bus | src/lib.rs | crate | ClipToken.0 | field | String	newtype-inner	ViewportVersion/ClipToken newtype
 ambre-bus | src/lib.rs | crate | ClipToken::as_str() | ret | &str	newtype-inner	ViewportVersion/ClipToken newtype
@@ -684,8 +685,6 @@ ambre-canvas | src/editor.rs | crate::editor | TextEditor::selected_text() | ret
 ambre-canvas | src/editor.rs | crate::editor | TextEditor::set_compose(text) | param | &str	free-text	text, label or message
 ambre-canvas | src/editor.rs | crate::editor | TextEditor::set_text(text) | param | &str	free-text	text, label or message
 ambre-canvas | src/editor.rs | crate::editor | TextEditor::text() | ret | String	free-text	text, label or message
-ambre-canvas | src/editor.rs | crate::editor | offset_box(dx) | param | f64	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/editor.rs | crate::editor | offset_box(dy) | param | f64	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/editor.rs | crate::editor | reads_geometry() | ret | bool	generic	predicate result
 ambre-canvas | src/editor.rs | crate::editor | Caret::shown_if(visible) | param | bool	newtype-inner	enum/newtype own accessor or constructor
 ambre-canvas | src/editor.rs | crate::editor | Extend::select_if(shift) | param | bool	newtype-inner	the bool the one constructor of Extend reads into its variant
@@ -695,7 +694,6 @@ ambre-canvas | src/fatal.rs | crate::fatal | FATAL_MSG | static | Mutex<String>	
 ambre-canvas | src/fatal.rs | crate::fatal | fatal_message() | ret | Option<String>	free-text	text, label or message
 ambre-canvas | src/fatal.rs | crate::fatal | signal_fatal(message) | param | &str	free-text	text, label or message
 ambre-canvas | src/fonts.rs | crate::fonts | LazyFontLoader::observe(text) | param | &str	free-text	text, label or message
-ambre-canvas | src/fonts.rs | crate::fonts | LazyFontLoader::requested_count() | ret | usize	math	count of font loads, read by tests and diagnostics
 ambre-canvas | src/fonts.rs | crate::fonts | <ArmedFetches as CountKind>::Repr | assoc | u64	newtype-inner	the number a count of this kind holds, the inside of Count
 ambre-canvas | src/frame.rs | crate::frame | Phases::any_build() | ret | bool	generic	predicate result
 ambre-canvas | src/frame.rs | crate::frame | RafControl::is_running() | ret | bool	generic	predicate result
@@ -703,7 +701,6 @@ ambre-canvas | src/frame.rs | crate::frame | draw_centered(text) | param | &str	
 ambre-canvas | src/frame.rs | crate::frame | drive_hidden(hidden) | param | bool	generic	named state or style flag, local
 ambre-canvas | src/frame.rs | crate::frame | paint_fatal(message) | param | &str	free-text	text, label or message
 ambre-canvas | src/frame.rs | crate::frame | paint_fatal::TITLE_TEXT | const | &str	free-text	message text of the fatal frame
-ambre-canvas | src/frame.rs | crate::frame | text_height() | ret | f64	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/frame.rs | crate::frame | text_height(text) | param | &str	free-text	text, label or message
 ambre-canvas | src/host.rs | crate::host | FrameSlot | alias | RefCell<Option<Closure<dyn FnMut(f64)>>>	foreign-api	the requestAnimationFrame callback, which wasm-bindgen types with the f64 the browser passes; start_raf_loop wraps it in an Instant<PageLoad>
 ambre-canvas | src/host.rs | crate::host | fetch_bytes() | ret | Option<Vec<u8>>	generic	generic codec/parser/bytes API
@@ -715,147 +712,62 @@ ambre-canvas | src/intent.rs | crate::intent | FilterOpenPublisher::take() | ret
 ambre-canvas | src/intent.rs | crate::intent | NoticePublisher.queue | field | Rc<RefCell<Vec<String>>>	free-text	text, label or message
 ambre-canvas | src/intent.rs | crate::intent | NoticePublisher::publish(message) | param | impl Into<String>	free-text	text, label or message
 ambre-canvas | src/intent.rs | crate::intent | NoticePublisher::take() | ret | Vec<String>	free-text	text, label or message
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | ATLAS_PAD | const | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | ATLAS_SIZE | const | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasSlot.bearing_left | field | i32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasSlot.bearing_top | field | i32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasSlot.pixel_height | field | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasSlot.texel_scale | field | f32	math	device pixels per atlas texel, a bare ratio the quad multiplies by
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasSlot.pixel_width | field | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasSlot.uv_max | field | [f32;2]	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasSlot.uv_min | field | [f32;2]	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | CachedGlyph.last_used | field | u64	math	geometry, layout, GPU or count arithmetic
+ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasSlot.texel_scale | field | f32	math	a scalar multiplier: the device pixels one atlas texel covers, the ratio a glyph box is multiplied by
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphAtlas::ensure_color_atlas() | ret | bool	generic	predicate result
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphAtlas::new_color_texture(size) | param | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphBitmap.data | field | Vec<u8>	generic	bytes
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphBitmap.h | field | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphBitmap.w | field | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphCache.color_ready | field | bool	generic	named state or style flag, local
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphCache.color_wanted | field | bool	generic	named state or style flag, local
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphCache.frame | field | u64	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphCache.needs_compact | field | bool	generic	named state or style flag, local
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphCache.size | field | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphCache::color_atlas_due() | ret | bool	generic	predicate result
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphCache::compact::KEEP_FRAMES | const | u64	math	eviction age in frames, local to the atlas compaction
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphCache::new(size) | param | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | Raster.data | field | Vec<u8>	generic	bytes
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | Raster.h | field | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | Raster.left | field | i32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | Raster.top | field | i32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | Raster.w | field | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | ShelfPacker.atlas_size | field | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | ShelfPacker.cur_x | field | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | ShelfPacker.cur_y | field | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | ShelfPacker.shelf_h | field | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | ShelfPacker::allocate() | ret | Option<(u32,u32)>	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | ShelfPacker::allocate(h) | param | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | ShelfPacker::allocate(w) | param | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | ShelfPacker::new(atlas_size) | param | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | upload_glyph(bpp) | param | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | FontId.0 | field | u64	newtype-inner	newtype inner, accessor or constructor
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | FontId::of_blob(blob_id) | param | u64	newtype-inner	newtype inner, accessor or constructor
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphId.0 | field | u16	newtype-inner	newtype inner, accessor or constructor
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphId::get() | ret | u16	newtype-inner	newtype inner, accessor or constructor
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphId::new(index) | param | u16	newtype-inner	newtype inner, accessor or constructor
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | Upload.bytes | field | Vec<u8>	generic	raw texel bytes the GPU copies
-ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | MipLevel.height | field | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | MipLevel.width | field | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | level_count() | ret | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | reduce(h) | param | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | reduce(nh) | param | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | reduce(nw) | param | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | reduce(w) | param | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mod.rs | crate::render | GLYPH_VERTEX_SIZE | const | usize	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mod.rs | crate::render | GlyphVertex.color | field | [f32;4]	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mod.rs | crate::render | GlyphVertex.pos | field | [f32;2]	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mod.rs | crate::render | GlyphVertex.uv | field | [f32;2]	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mod.rs | crate::render | IMAGE_VERTEX_SIZE | const | usize	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mod.rs | crate::render | INITIAL_GLYPHS | const | usize	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mod.rs | crate::render | INITIAL_QUADS | const | usize	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mod.rs | crate::render | ImageRun.end | field | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mod.rs | crate::render | ImageRun.start | field | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mod.rs | crate::render | ImageVertex.pos | field | [f32;2]	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mod.rs | crate::render | ImageVertex.uv | field | [f32;2]	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mod.rs | crate::render | LayerBatches.color_glyph_indices | field | Vec<u32>	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mod.rs | crate::render | LayerBatches.drawn_color_glyph_indices | field | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mod.rs | crate::render | LayerBatches.drawn_glyph_indices | field | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mod.rs | crate::render | LayerBatches.drawn_image_runs | field | Vec<(Binding,u32,u32)>	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mod.rs | crate::render | LayerBatches.drawn_quad_indices | field | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mod.rs | crate::render | LayerBatches.glyph_indices | field | Vec<u32>	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mod.rs | crate::render | LayerBatches.image_indices | field | Vec<u32>	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mod.rs | crate::render | LayerBatches.quad_indices | field | Vec<u32>	math	geometry, layout, GPU or count arithmetic
+ambre-canvas | src/render/mod.rs | crate::render | GlyphVertex.color | field | [f32;4]	foreign-api	a field of a vertex layout the GPU dictates: the glyph pipeline reads it as the vertex attribute its shader declares
+ambre-canvas | src/render/mod.rs | crate::render | GlyphVertex.pos | field | [f32;2]	foreign-api	a field of a vertex layout the GPU dictates: the glyph pipeline reads it as the vertex attribute its shader declares
+ambre-canvas | src/render/mod.rs | crate::render | GlyphVertex.uv | field | [f32;2]	foreign-api	a field of a vertex layout the GPU dictates: the glyph pipeline reads it as the vertex attribute its shader declares
+ambre-canvas | src/render/mod.rs | crate::render | ImageVertex.pos | field | [f32;2]	foreign-api	a field of a vertex layout the GPU dictates: the image pipeline reads it as the vertex attribute its shader declares
+ambre-canvas | src/render/mod.rs | crate::render | ImageVertex.uv | field | [f32;2]	foreign-api	a field of a vertex layout the GPU dictates: the image pipeline reads it as the vertex attribute its shader declares
+ambre-canvas | src/render/mod.rs | crate::render | LayerBatches.color_glyph_indices | field | Vec<u32>	foreign-api	the index buffer the GPU reads, in the u32 of IndexFormat::Uint32 that each draw names
+ambre-canvas | src/render/mod.rs | crate::render | LayerBatches.glyph_indices | field | Vec<u32>	foreign-api	the index buffer the GPU reads, in the u32 of IndexFormat::Uint32 that each draw names
+ambre-canvas | src/render/mod.rs | crate::render | LayerBatches.image_indices | field | Vec<u32>	foreign-api	the index buffer the GPU reads, in the u32 of IndexFormat::Uint32 that each draw names
+ambre-canvas | src/render/mod.rs | crate::render | LayerBatches.quad_indices | field | Vec<u32>	foreign-api	the index buffer the GPU reads, in the u32 of IndexFormat::Uint32 that each draw names
 ambre-canvas | src/render/mod.rs | crate::render | LayerBatches::new(label_prefix) | param | &str	free-text	text, label or message
 ambre-canvas | src/render/mod.rs | crate::render | LayerBatches::upload_if_rebuilding(label_prefix) | param | &str	free-text	text, label or message
-ambre-canvas | src/render/mod.rs | crate::render | QUAD_VERTEX_SIZE | const | usize	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mod.rs | crate::render | QuadVertex.color | field | [f32;4]	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mod.rs | crate::render | QuadVertex.pos | field | [f32;2]	math	geometry, layout, GPU or count arithmetic
+ambre-canvas | src/render/mod.rs | crate::render | QuadVertex.color | field | [f32;4]	foreign-api	a field of a vertex layout the GPU dictates: the quad pipeline reads it as the vertex attribute its shader declares
+ambre-canvas | src/render/mod.rs | crate::render | QuadVertex.pos | field | [f32;2]	foreign-api	a field of a vertex layout the GPU dictates: the quad pipeline reads it as the vertex attribute its shader declares
 ambre-canvas | src/render/mod.rs | crate::render | RebuildLatch.0 | field | bool	newtype-inner	newtype inner, accessor or constructor
 ambre-canvas | src/render/mod.rs | crate::render | RebuildLatch::take() | ret | bool	newtype-inner	newtype inner, accessor or constructor
-ambre-canvas | src/render/mod.rs | crate::render | color_f32() | ret | [f32;4]	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/mod.rs | crate::render | grow_buffer_if_needed(label_prefix) | param | &str	free-text	text, label or message
 ambre-canvas | src/render/mod.rs | crate::render | grow_buffer_if_needed(name) | param | &'static str	free-text	text, label or message
 ambre-canvas | src/render/mod.rs | crate::render | make_blit_bg(label) | param | &str	free-text	text, label or message
-ambre-canvas | src/render/renderer.rs | crate::render::renderer | CacheEntry.last_used | field | u64	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/renderer.rs | crate::render::renderer | ImageCache.clock | field | u64	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/renderer.rs | crate::render::renderer | OffscreenTarget::new(label) | param | &str	free-text	text, label or message
-ambre-canvas | src/render/renderer.rs | crate::render::renderer | QuadRenderer.current_offscreen_idx | field | usize	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/renderer.rs | crate::render::renderer | QuadRenderer.height | field | f32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/renderer.rs | crate::render::renderer | QuadRenderer.width | field | f32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/renderer.rs | crate::render::renderer | QuadRenderer::offscreen(idx) | param | usize	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/renderer.rs | crate::render::renderer | QuadRenderer::push_color_glyph_quad(corners) | param | [[f32;2];4]	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/renderer.rs | crate::render::renderer | QuadRenderer::push_color_glyph_quad(uv_max) | param | [f32;2]	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/renderer.rs | crate::render::renderer | QuadRenderer::push_color_glyph_quad(uv_min) | param | [f32;2]	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/renderer.rs | crate::render::renderer | QuadRenderer::push_glyph_quad(corners) | param | [[f32;2];4]	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/renderer.rs | crate::render::renderer | QuadRenderer::push_glyph_quad(uv_max) | param | [f32;2]	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/renderer.rs | crate::render::renderer | QuadRenderer::push_glyph_quad(uv_min) | param | [f32;2]	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/renderer.rs | crate::render::renderer | QuadRenderer::push_image(corners) | param | [[f32;2];4]	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/renderer.rs | crate::render::renderer | QuadRenderer::push_textured(corners) | param | [[f32;2];4]	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/renderer.rs | crate::render::renderer | QuadRenderer::push_video(corners) | param | [[f32;2];4]	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/renderer.rs | crate::render::renderer | QuadRenderer::push_line(width) | param | f32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/renderer.rs | crate::render::renderer | QuadRenderer::push_mesh(indices) | param | &[u32]	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/renderer.rs | crate::render::renderer | QuadRenderer::push_mesh(vertices) | param | &[[f32;2]]	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/renderer.rs | crate::render::renderer | extend_runs(end) | param | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/renderer.rs | crate::render::renderer | extend_runs(start) | param | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/surface.rs | crate::render::surface | Mesh | alias | VertexBuffers<[f32;2],u32>	foreign-api	the lyon tessellation buffers: vertex positions and indices, which the renderer copies to the GPU as they are
-ambre-canvas | src/render/surface.rs | crate::render::surface | PATH_TOLERANCE_PX | const | f64	math	geometry, layout, GPU or count arithmetic
+ambre-canvas | src/render/renderer.rs | crate::render::renderer | QuadRenderer::push_mesh(indices) | param | &[u32]	foreign-api	the triangle indices lyon writes for its own vertices, in the u32 of IndexFormat::Uint32 the GPU reads
+ambre-canvas | src/render/surface.rs | crate::render::surface | Mesh | alias | VertexBuffers<ambre_core::Point<Px<View>>,u32>	foreign-api	the buffers lyon tessellates into: the u32 is the index type lyon writes and IndexFormat::Uint32 the GPU reads
 ambre-canvas | src/render/surface.rs | crate::render::surface | WgpuSurface<'r>::path_outside_clip() | ret | bool	generic	predicate result
 ambre-canvas | src/render/surface.rs | crate::render::surface | WgpuSurface<'r>::path_outside_clip_padded() | ret | bool	generic	predicate result
-ambre-canvas | src/render/surface.rs | crate::render::surface | WgpuSurface<'r>::path_outside_clip_padded(pad) | param | f64	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/surface.rs | crate::render::surface | WgpuSurface<'r>::quad_corners() | ret | Option<[[f32;2];4]>	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/video.rs | crate::video::page | holds() | ret | bool	generic	predicate result: whether the page holds a video under the slot
 ambre-canvas | src/video.rs | crate::video::page | is_live() | ret | bool	generic	predicate result: whether the video of a slot holds a picture and its track carries media
-ambre-canvas | src/render/surface.rs | crate::render::surface | WgpuSurface<'r>::tolerance() | ret | f32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/surface.rs | crate::render::surface | affine_scale() | ret | f64	math	geometry, layout, GPU or count arithmetic
+ambre-canvas | src/render/surface.rs | crate::render::surface | affine_scale() | ret | f64	math	a scalar multiplier: the uniform scale of a transform, the square root of the determinant of its linear part
 ambre-canvas | src/render/surface.rs | crate::render::surface | fill_mesh() | ret | Option<Mesh>	foreign-api	the lyon tessellation buffers: vertex positions and indices, which the renderer copies to the GPU as they are
-ambre-canvas | src/render/surface.rs | crate::render::surface | fill_mesh(tolerance) | param | f32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/surface.rs | crate::render::surface | screen_vertex() | ret | [f32;2]	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/surface.rs | crate::render::surface | split_linear() | ret | Option<(f64,Affine)>	math	geometry, layout, GPU or count arithmetic
+ambre-canvas | src/render/surface.rs | crate::render::surface | split_linear() | ret | Option<(f64,Affine)>	math	a scalar multiplier: the uniform scale of a transform, beside the linear part it divides
 ambre-canvas | src/render/surface.rs | crate::render::surface | stroke_mesh() | ret | Option<Mesh>	foreign-api	the lyon tessellation buffers: vertex positions and indices, which the renderer copies to the GPU as they are
-ambre-canvas | src/render/surface.rs | crate::render::surface | stroke_mesh(tolerance) | param | f32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/text_cache.rs | crate::text_cache | CacheKey.font_size_x100 | field | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/text_cache.rs | crate::text_cache | CacheKey.max_width_x10 | field | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/text_cache.rs | crate::text_cache | CacheKey.text | field | Box<str>	free-text	text, label or message
-ambre-canvas | src/text_cache.rs | crate::text_cache | CachedLayout.last_used | field | u64	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache.frame_hits | field | usize	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache.frame_misses | field | usize	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache.tick | field | u64	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache::build_layout(text) | param | &str	free-text	text, label or message
-ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache::cache_size() | ret | usize	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache::evict_if_oversized(max_entries) | param | usize	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache::get_or_build(text) | param | &str	free-text	text, label or message
 ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache::get_or_build_look(text) | param | &str	free-text	text, label or message
 ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache::get_or_build_spans(text) | param | &str	free-text	text, label or message
-ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache::hit_rate() | ret | f32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache::lazy_fonts_requested() | ret | usize	math	count of font loads, read by tests and diagnostics
+ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache::hit_rate() | ret | f32	math	a scalar multiplier: the ratio of the reads the cache answered to all its reads in a frame
 ambre-canvas | src/text_cache.rs | crate::text_cache | break_indented(text) | param | &str	free-text	text, label or message
 ambre-canvas | src/text_cache.rs | crate::text_cache | paragraphs(text) | param | &str	free-text	text, label or message
 ambre-canvas | src/text_cache.rs | crate::text_cache | push_shape() | ret | bool	generic	predicate result
 ambre-canvas | src/text_cache.rs | crate::text_cache | push_shape(text) | param | &str	free-text	text, label or message
 ambre-canvas | src/text_input.rs | crate::text_input | ContentKind::label() | ret | &'static str	free-text	text, label or message
 ambre-canvas | src/text_input.rs | crate::text_input | ContentKind::role_description() | ret | &'static str	free-text	text, label or message
-ambre-canvas | src/text_input.rs | crate::text_input | TextInput.focus_requests | field | Rc<Cell<u32>>	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/text_input.rs | crate::text_input | TextInput::announce(text) | param | &str	free-text	text, label or message
-ambre-canvas | src/text_input.rs | crate::text_input | TextInput::focus_requests() | ret | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/text_input.rs | crate::text_input | Typing::text_if(typing) | param | bool	newtype-inner	the bool the one constructor of Typing reads into its variant
 ambre-canvas | src/theme.rs | crate::theme | THEME_CSS | const | &str	free-text	text, label or message
 ambre-canvas | src/theme.rs | crate::theme | Theme::as_u8() | ret | u8	newtype-inner	newtype inner, accessor or constructor
@@ -1077,7 +989,7 @@ ambre-core | src/font.rs | crate::font | FontSize::from_whole_points(points) | p
 ambre-core | src/font.rs | crate::font | FontSize::new(points) | param | f32	newtype-inner	FontSize field, constructor or accessor
 ambre-core | src/font.rs | crate::font | FontSize::points() | ret | f32	newtype-inner	FontSize field, constructor or accessor
 ambre-core | src/font.rs | crate::font | FontSize::whole_points() | ret | u16	newtype-inner	FontSize field, constructor or accessor
-ambre-core | src/font.rs | crate::font | PX_PER_PT | const | f32	math	the one points-to-pixels ratio, private to ambre-core; only Pt::to_doc_px, Px<Doc>::to_pt and FontSize::to_px read it
+ambre-core | src/font.rs | crate::font | PX_PER_PT | const | f32	math	a scalar multiplier: the one points-to-pixels ratio, private to ambre-core; only Pt::to_doc_px, Px<Doc>::to_pt and FontSize::to_px read it
 ambre-core | src/font.rs | crate::font | Bounded<FontWeight>::is_bold() | ret | bool	generic	predicate result
 ambre-core | src/font.rs | crate::font | FontFamily::Other.0 | field | String	newtype-inner	FontFamily constructor or accessor
 ambre-core | src/font.rs | crate::font | FontFamily::from_label(label) | param | &str	generic	the codec of an enum that carries data: a font family name as the store or the picker writes it; any name reads, an unknown one as Other
@@ -1581,7 +1493,7 @@ ambre-murmure | src/ui/notices.rs | crate::ui::notices | ROOT_LOST | const | &st
 ambre-murmure | src/ui/notices.rs | crate::ui::notices | SPACE_NOT_OPENED | const | &str	free-text	UI text/label const
 ambre-murmure | src/ui/notices.rs | crate::ui::notices | warning_of() | ret | Option<&'static str>	free-text	the fixed UI text of a warning toast
 ambre-murmure | src/logic/opening.rs | crate::logic::opening | OpeningChannel::expects() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/ui/paint.rs | crate::ui::paint | PLACEHOLDER_ASPECT | const | f32	math	a ratio: the width-to-height aspect of a picture not decoded yet
+ambre-murmure | src/ui/paint.rs | crate::ui::paint | PLACEHOLDER_ASPECT | const | f32	math	a scalar multiplier: a ratio, the width-to-height aspect of a picture not decoded yet
 ambre-murmure | src/ui/paint.rs | crate::ui::paint | chip_boxes(labels) | param | &[String]	free-text	text, label or user content
 ambre-murmure | src/ui/paint.rs | crate::ui::paint | paint_list(time_of) | param | &dyn Fn(Instant<Authored>)->String	free-text	text, label or user content
 ambre-murmure | src/ui/paint.rs | crate::ui::paint | shape(text) | param | &str	free-text	text, label or user content
@@ -1650,7 +1562,7 @@ ambre-murmure | src/ui/uploads.rs | crate::ui::uploads | Uploads::busy() | ret |
 ambre-murmure | src/ui/uploads.rs | crate::ui::uploads | Uploads::uploading() | ret | Vec<&str>	free-text	text, label or user content
 ambre-murmure | src/ui/uploads.rs | crate::ui::uploads | FALLBACK_STEM | const | &str	free-text	a stem the suite names itself
 ambre-murmure | src/ui/uploads.rs | crate::ui::uploads | size_label() | ret | String	free-text	text, label or user content
-ambre-murmure | src/ui/view.rs | crate::ui::view | AT_FRACTION | const | f32	math	a ratio: where in the viewport a named message rests, a fraction of the list height
+ambre-murmure | src/ui/view.rs | crate::ui::view | AT_FRACTION | const | f32	math	a scalar multiplier: a ratio, where in the viewport a named message rests, a fraction of the list height
 ambre-murmure | src/ui/view.rs | crate::ui::view | MurmureView::clipboard() | ret | Option<String>	free-text	text, label or user content
 ambre-murmure | src/ui/view.rs | crate::ui::view | MurmureView::close_thread() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/ui/view.rs | crate::ui::view | MurmureView::copy() | ret | Option<String>	free-text	text, label or user content
@@ -1783,7 +1695,7 @@ ambre-prose-form | src/lib.rs | crate | IrRun.text | field | String	free-text	th
 ambre-prose-form | src/lib.rs | crate | IrRun::plain(text) | param | impl Into<String>	free-text	the text of a run with no mark
 ambre-prose | src/layout/fonts.rs | crate::layout::fonts | coverage_grew() | ret | bool	generic	whether a face now covers a script a past layout was missing, which makes it stale
 ambre-prose | src/layout/fonts.rs | crate::layout::fonts | missing_scripts(text) | param | &str	free-text	a block's text, scanned for the scripts no loaded face covers
-ambre-prose | src/layout/geometry.rs | crate::layout::geometry | BAND_SHARE | const | f32	math	a ratio of the content height, read only as the factor of Px<Doc> * f32; a ratio is no length
+ambre-prose | src/layout/geometry.rs | crate::layout::geometry | BAND_SHARE | const | f32	math	a scalar multiplier: a ratio of the content height, read only as the factor of Px<Doc> * f32; a ratio is no length
 ambre-prose | src/layout/measure.rs | crate::layout::measure | MarkedSpan::is_marked() | ret | bool	generic	predicate result: whether a span carries a mark the shaper reads
 ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::coverage_grew() | ret | bool	generic	whether a face arrived for a script a past run was missing, which makes it stale
 ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::measure(text) | param | &str	free-text	a block's text, shaped for its heights alone
@@ -1928,7 +1840,7 @@ ambre-prose | src/mark.rs | crate::mark | is_registered() | ret | bool	generic	w
 ambre-prose | src/numbering.rs | crate::numbering | Counters.0 | field | [u32;LEVELS]	newtype-inner	newtype inner field
 ambre-prose | src/numbering.rs | crate::numbering | LEVELS | const | usize	local	the length of the constant array of heading levels, which sizes the private counters
 ambre-prose | src/probe.rs | crate::probe | lays_out() | ret | bool	generic	whether an event lays the document out again, when a moved caret can first be drawn
-ambre-prose | src/style.rs | crate::style | heading_scale() | ret | f32	math	the scale a heading level is drawn at, local to the cascade
+ambre-prose | src/style.rs | crate::style | heading_scale() | ret | f32	math	a scalar multiplier: the scale a heading level is drawn at, local to the cascade
 ambre-prose | src/suggest.rs | crate::suggest | of_key(key) | param | &str	foreign-api	a mark key as the Loro attribute map yields it, parsed with no copy
 ambre-prose | src/toc.rs | crate::toc | lines() | ret | String	free-text	the text a table of contents is measured on, one line per entry
 ambre-prose | src/ui.rs | crate::ui | Change::Insert.0 | field | String	free-text	the text a draft entry inserts, as the user typed it; Debug prints its length alone
@@ -1959,7 +1871,7 @@ ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::end_drag() 
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::joins() | ret | bool	generic	whether a selection may run between two spots without crossing a band's edge
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::shown_text() | ret | Option<String>	free-text	the text a block shows, the draft laid over the layout in force
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::tick_autoscroll() | ret | bool	generic	whether an autoscroll tick moved the view
-ambre-prose | src/view/column.rs | crate::view::column | Viewport::scale() | ret | f32	math	the zoom the column draws at, a multiplier held finite and above zero
+ambre-prose | src/view/column.rs | crate::view::column | Viewport::scale() | ret | f32	math	a scalar multiplier: the zoom the column draws at, a multiplier held finite and above zero
 ambre-prose | src/view/fling.rs | crate::view::fling | ProseUiState::tick_fling() | ret | bool	generic	whether a tick of a flick moved the view
 ambre-prose | src/view/fling.rs | crate::view::fling | ProseUiState::touch_move() | ret | bool	generic	whether a finger's move scrolled the view past the tap slop
 ambre-prose | src/view/hit.rs | crate::view::hit | ProseUiState::is_band() | ret | bool	generic	whether a block is drawn apart from the flow: a header, a footer or a note
@@ -2187,10 +2099,9 @@ ambre-sync | src/membership_log.rs | crate::membership_log | public_channel_self
 ambre-sync | src/membership_log.rs | crate::membership_log | signed_by() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | ServedHeads::holds() | ret | bool	generic	predicate: does the served log pass through the head
 ambre-sync | src/membership_log.rs | crate::membership_log | SpaceWord::admits_joiner() | ret | bool	generic	predicate: does the space hold the joiner present under the keys the self-join names
-ambre-sync | src/mock_relay.rs | crate::mock_relay | MockBlindRelay::drain_client() | ret | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/mock_relay.rs | crate::mock_relay | MockBlindRelay::handle_message() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/pipeline.rs | crate::pipeline | LINK_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | MAX_DECOMPRESS_RATIO | const | usize	math	decompressed bytes allowed per compressed byte, a factor of the bomb bound
+ambre-sync | src/pipeline.rs | crate::pipeline | MAX_DECOMPRESS_RATIO | const | usize	math	a scalar multiplier: decompressed bytes allowed per compressed byte, a factor of the bomb bound
 ambre-sync | src/pipeline.rs | crate::pipeline | MEDIA_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | NAME_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | PipelineError::UnknownLayout.0 | field | u8	generic	generic byte/text API or codec
@@ -2248,7 +2159,7 @@ ambre-toile | src/logic/animate.rs | crate::logic::animate | <Bounded<Phase> as 
 ambre-toile | src/logic/animate.rs | crate::logic::animate | <Phase as Bounds>::MAX | const | f64	generic	a bound of the quantity, which Bounded compares each value against
 ambre-toile | src/logic/animate.rs | crate::logic::animate | <Phase as Bounds>::MIN | const | f64	generic	a bound of the quantity, which Bounded compares each value against
 ambre-toile | src/logic/animate.rs | crate::logic::animate | <Phase as Bounds>::Repr | assoc | f64	newtype-inner	the number a value of this quantity holds
-ambre-toile | src/logic/animate.rs | crate::logic::animate | Tween::clamped(t) | param | f64	math	a raw factor of a transition, any f64, which the phase clamps into 0..=1: a scalar multiplier
+ambre-toile | src/logic/animate.rs | crate::logic::animate | Tween::clamped(t) | param | f64	math	a scalar multiplier: a raw factor of a transition, any f64, which the phase clamps into 0..=1: a scalar multiplier
 ambre-toile | src/logic/boolean.rs | crate::logic::boolean | Contour | alias | Vec<[f64;2]>	foreign-api	the point ring i_overlay takes and returns
 ambre-toile | src/logic/boolean.rs | crate::logic::boolean | Shape | alias | Vec<Contour>	foreign-api	the contour list i_overlay takes and returns
 ambre-toile | src/logic/boolean.rs | crate::logic::boolean | flatten_to_contours() | ret | Shape	foreign-api	the contour list i_overlay takes as a subject or clip
@@ -2523,11 +2434,11 @@ ambre-toile | src/ui/viewport.rs | crate::ui::viewport | FIT_PAD | const | f64	m
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::clamp_zoom(z) | param | f64	math	a scalar multiplier: the raw product of a zoom and a relative factor, clamped into a Scale<Board, View>
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::fit_bounds(pad_frac) | param | f64	math	a scalar multiplier: the padding fraction the bounds are scaled by, as 1 + pad_frac
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::fit_target(pad_frac) | param | f64	math	a scalar multiplier: the padding fraction forwarded to the same 1 + pad_frac scale
-ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::zoom_about(factor) | param | f64	math	relative zoom factor, not an absolute zoom
-ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::zoom_by_center(factor) | param | f64	math	relative zoom factor, not an absolute zoom
-ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ZOOM_STEP | const | f64	math	the multiplier one zoom step applies to the zoom
+ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::zoom_about(factor) | param | f64	math	a scalar multiplier: relative zoom factor, not an absolute zoom
+ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::zoom_by_center(factor) | param | f64	math	a scalar multiplier: relative zoom factor, not an absolute zoom
+ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ZOOM_STEP | const | f64	math	a scalar multiplier: the multiplier one zoom step applies to the zoom
 ambre-toile | src/ui/walk.rs | crate::ui::walk | ELLIPSE_FOUR_CUBICS_MAX_R | const | f64	generic	the widest radius four cubics draw within 0.1 of the ellipse, in the space of the rect ellipse_path fills: the board walk and the screen-space draft both call it, so no one length type fits
-ambre-toile | src/ui/walk.rs | crate::ui::walk | KAPPA | const | f64	math	the multiplier a radius takes to place a quarter-circle Bezier control point
+ambre-toile | src/ui/walk.rs | crate::ui::walk | KAPPA | const | f64	math	a scalar multiplier: the multiplier a radius takes to place a quarter-circle Bezier control point
 ambre-toile | src/ui/walk.rs | crate::ui::walk | LINEAR | static | LazyLock<[f64;256]>	math	a term inside a formula: the sRGB transfer table of the luminance formula, one linear value per 8-bit channel
 ambre-toile | src/ui/walk.rs | crate::ui::walk | contrast() | ret | f64	math	a term inside a formula: the contrast ratio (L1 + 0.05) / (L2 + 0.05) of two luminances
 ambre-toile | src/ui/walk.rs | crate::ui::walk | luminance() | ret | f64	math	a term inside a formula: the relative luminance, a weighted sum of the linear channels
@@ -2561,33 +2472,33 @@ ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache::has_
 ambre-trame | src/formula/cache.rs | crate::formula::cache | Compiled::lines_back() | ret | bool	generic	predicate
 ambre-trame | src/formula/engine.rs | crate::formula::engine | FormulaEngine::evaluated_text() | ret | Option<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/engine.rs | crate::formula::engine | FormulaEngine::is_formula_cell() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | SUM_SCALE | const | f64	math	the power of two an exact sum scales its terms by when a partial overflows
-ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | exact_partials() | ret | f64	math	the exact sum of the terms inside the formula engine
-ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | exact_partials(nums) | param | impl IntoIterator<Item=f64>	math	the terms of an exact sum inside the formula engine
-ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | exact_sum() | ret | f64	math	the exact sum of the terms inside the formula engine
-ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | exact_sum(nums) | param | impl IntoIterator<Item=f64>	math	the terms of an exact sum inside the formula engine
-ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | first_num() | ret | Option<f64>	math	the first formula number of the first argument of a call
-ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | flatten_numeric() | ret | Vec<f64>	math	the formula numbers of the arguments, flattened from ranges
-ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | flatten_numeric_inner(out) | param | &mut Vec<f64>	math	the accumulator of the flattened formula numbers
-ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | flatten_total() | ret | Result<Vec<f64>,CellValue>	math	the flattened formula numbers, or the first error value
+ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | SUM_SCALE | const | f64	math	a scalar multiplier: the power of two an exact sum scales its terms by when a partial overflows
+ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | exact_partials() | ret | f64	math	a term inside a formula: the exact sum of the terms inside the formula engine
+ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | exact_partials(nums) | param | impl IntoIterator<Item=f64>	math	a term inside a formula: the terms of an exact sum inside the formula engine
+ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | exact_sum() | ret | f64	math	a term inside a formula: the exact sum of the terms inside the formula engine
+ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | exact_sum(nums) | param | impl IntoIterator<Item=f64>	math	a term inside a formula: the terms of an exact sum inside the formula engine
+ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | first_num() | ret | Option<f64>	math	a term inside a formula: the first formula number of the first argument of a call
+ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | flatten_numeric() | ret | Vec<f64>	math	a term inside a formula: the formula numbers of the arguments, flattened from ranges
+ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | flatten_numeric_inner(out) | param | &mut Vec<f64>	math	a term inside a formula: the accumulator of the flattened formula numbers
+ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | flatten_total() | ret | Result<Vec<f64>,CellValue>	math	a term inside a formula: the flattened formula numbers, or the first error value
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | is_truthy() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | group_thousands() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | group_thousands(s) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | keys_ascending() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | log_checked(f) | param | fn(f64)->f64	math	the std f64 logarithm a LOG function applies to a formula number
-ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | numbers_at() | ret | Vec<f64>	math	the formula numbers of a range argument at the matched places
+ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | log_checked(f) | param | fn(f64)->f64	math	a term inside a formula: the std f64 logarithm a LOG function applies to a formula number
+ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | numbers_at() | ret | Vec<f64>	math	a term inside a formula: the formula numbers of a range argument at the matched places
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | push_display(out) | param | &mut String	free-text	free text: user content, label, message or display string
-ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | sum_at() | ret | f64	math	the sum of the formula numbers at the matched indices
-ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | unary_math(f) | param | fn(f64)->f64	math	the std f64 function a one-argument formula function applies
+ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | sum_at() | ret | f64	math	a term inside a formula: the sum of the formula numbers at the matched indices
+ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | unary_math(f) | param | fn(f64)->f64	math	a term inside a formula: the std f64 function a one-argument formula function applies
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | values_equal_ci() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | Annuity.periods | field | f64	math	a term inside a formula: the period number of an annuity, a formula number the call passed, which may be fractional
-ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | Annuity.rate | field | f64	math	the rate per period of an annuity, a formula number the call passed
-ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | Annuity::factor() | ret | f64	math	the annuity factor PMT, PV, FV and RATE read, a formula number
-ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | PayTiming::growth() | ret | f64	math	the factor one payment grows by before it counts, a formula number
-ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | PayTiming::growth(rate) | param | f64	math	the rate per period of the annuity, a formula number
-ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | opt_num() | ret | f64	math	an optional numeric argument of a call, or its default formula number
-ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | opt_num(default) | param | f64	math	the formula number an absent argument reads as
-ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::Num.1 | field | f64	math	the formula number a criterion compares against
+ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | Annuity.rate | field | f64	math	a term inside a formula: the rate per period of an annuity, a formula number the call passed
+ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | Annuity::factor() | ret | f64	math	a term inside a formula: the annuity factor PMT, PV, FV and RATE read, a formula number
+ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | PayTiming::growth() | ret | f64	math	a term inside a formula: the factor one payment grows by before it counts, a formula number
+ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | PayTiming::growth(rate) | param | f64	math	a term inside a formula: the rate per period of the annuity, a formula number
+ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | opt_num() | ret | f64	math	a term inside a formula: an optional numeric argument of a call, or its default formula number
+ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | opt_num(default) | param | f64	math	a term inside a formula: the formula number an absent argument reads as
+ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::Num.1 | field | f64	math	a term inside a formula: the formula number a criterion compares against
 ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::Text.1 | field | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::matches() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/identity.rs | crate::formula::identity | gone() | ret | bool	generic	predicate
@@ -2682,18 +2593,18 @@ ambre-trame | src/formula/text.rs | crate::formula::text | fold_char_simple(ch) 
 ambre-trame | src/formula/types.rs | crate::formula::types | CellValue::Boolean.0 | field | bool	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/formula/types.rs | crate::formula::types | CellValue::Number.0 | field | f64	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/formula/types.rs | crate::formula::types | CellValue::Text.0 | field | String	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
-ambre-trame | src/formula/types.rs | crate::formula::types | CellValue::as_number() | ret | Result<f64,FormulaError>	math	the cell value read as a formula number
+ambre-trame | src/formula/types.rs | crate::formula::types | CellValue::as_number() | ret | Result<f64,FormulaError>	math	a term inside a formula: the cell value read as a formula number
 ambre-trame | src/formula/types.rs | crate::formula::types | CellValue::to_display() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/types.rs | crate::formula::types | Op::PushBool.0 | field | bool	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/formula/types.rs | crate::formula::types | Op::PushNum.0 | field | f64	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep::contains() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeId::contains() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/formula/types.rs | crate::formula::types | finite_number() | ret | Option<f64>	math	the finite number a cell's text spells, inside the formula engine
+ambre-trame | src/formula/types.rs | crate::formula::types | finite_number() | ret | Option<f64>	math	a term inside a formula: the finite number a cell's text spells, inside the formula engine
 ambre-trame | src/formula/types.rs | crate::formula::types | finite_number(text) | param | &str	generic	a cell text, the input of its parse into a finite number
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(x) | param | f64	math	one of the two formula numbers compared, the order of the two free
-ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(y) | param | f64	math	the other formula number compared, the order of the two free
-ambre-trame | src/formula/vm.rs | crate::formula::vm | finite(n) | param | f64	math	an operator's result inside the formula engine
+ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(x) | param | f64	math	a term inside a formula: one of the two formula numbers compared, the order of the two free
+ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(y) | param | f64	math	a term inside a formula: the other formula number compared, the order of the two free
+ambre-trame | src/formula/vm.rs | crate::formula::vm | finite(n) | param | f64	math	a term inside a formula: an operator's result inside the formula engine
 ambre-trame | src/formula/vm.rs | crate::formula::vm | values_equal() | ret | bool	generic	predicate or did-it-change return
 ambre-crdt | src/history.rs | crate::history | Chunk::is_empty() | ret | bool	generic	predicate
 ambre-crdt | src/history.rs | crate::history | Mirror::nests() | ret | bool	generic	predicate
@@ -2740,7 +2651,7 @@ ambre-trame | src/logic/number_format.rs | crate::logic::number_format | DAYS | 
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | MONTHS | const | [&str;12]	free-text	the English month names a mmm or mmmm run prints
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | format_custom() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | format_custom(pattern) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/logic/number_format.rs | crate::logic::number_format | format_custom(value) | param | f64	math	the formula number a custom pattern formats
+ambre-trame | src/logic/number_format.rs | crate::logic::number_format | format_custom(value) | param | f64	math	a term inside a formula: the formula number a custom pattern formats
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | format_date() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | format_time() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | group_thousands() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
@@ -2753,11 +2664,11 @@ ambre-trame | src/logic/number_format.rs | crate::logic::number_format | place_i
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | place_integer(digits) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | render_date() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | render_number() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/logic/number_format.rs | crate::logic::number_format | render_number(value) | param | f64	math	the formula number the format tokens render
+ambre-trame | src/logic/number_format.rs | crate::logic::number_format | render_number(value) | param | f64	math	a term inside a formula: the formula number the format tokens render
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | split_sections() | ret | Vec<String>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | split_sections(pattern) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/packing.rs | crate::logic::packing | format_number() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/packing.rs | crate::logic::packing | format_number(value) | param | f64	math	the formula number formatted to the cell format
+ambre-trame | src/logic/packing.rs | crate::logic::packing | format_number(value) | param | f64	math	a term inside a formula: the formula number formatted to the cell format
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer.0 | field | String	newtype-inner	the per-sheet root name SheetContainer types
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer::as_str() | ret | &str	newtype-inner	the per-sheet root name SheetContainer holds, which the Loro call that opens the root reads
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::canonical_name_reference(reference) | param | &str	generic	the A1 reference text a DefineName command carries, before it is parsed; DefineName.reference is free-text
@@ -2883,10 +2794,10 @@ ambre-trame | src/ui/view/mod.rs | crate::ui::view | PerfMark::name() | ret | &'
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | PerfMeasure::name() | ret | &'static str	newtype-inner	the name the browser Performance panel knows the measure by
 ambre-prose | src/band.rs | crate::band | field_of(key) | param | &str	foreign-api	the mark key a loro text delta reports; parsed into a HeaderField at once, the inverse of FieldMark
 ambre-prose | src/probe.rs | crate::probe | ProbeName::as_str() | ret | &'static str	newtype-inner	the enum's own word, the name performance.measure and performance.mark take, which the profiler shows
-ambre-core | src/unit.rs | crate::unit | PX_PER_MM | const | f32	math	unit conversion factor, millimetres to pixels
+ambre-core | src/unit.rs | crate::unit | PX_PER_MM | const | f32	math	a scalar multiplier: unit conversion factor, millimetres to pixels
 ambre-core | src/unit.rs | crate::unit | Radians::to_degrees() | ret | f64	newtype-inner	the angle unwrapped in degrees, for a writer whose format takes degrees
 ambre-toile | src/ui/view.rs | crate::ui::view | WheelZoomRate.0 | field | f64	newtype-inner	the log-zoom rate per wheel pixel
-ambre-toile | src/ui/view.rs | crate::ui::view | WheelZoomRate::factor() | ret | f64	math	relative zoom factor, not an absolute zoom: the argument of ViewportTransform::zoom_about
+ambre-toile | src/ui/view.rs | crate::ui::view | WheelZoomRate::factor() | ret | f64	math	a scalar multiplier: relative zoom factor, not an absolute zoom: the argument of ViewportTransform::zoom_about
 ambre-prose | src/message/mod.rs | crate::message | LineHeight::from_stored(value) | param | f32	generic	the stored number of the line height codec, a ratio or points by the mode beside it
 ambre-prose | src/message/mod.rs | crate::message | LineHeight::stored_value() | ret | f32	generic	the stored number of the line height codec, a ratio or points by the mode beside it
 ambre-prose-form | src/kinds.rs | crate::kinds | <HeadingLevel as TryFrom<u8>>::try_from(level) | param | u8	newtype-inner	HeadingLevel field, constructor or accessor
@@ -2951,8 +2862,6 @@ ambre-core | src/envelope.rs | crate::envelope | Transcript::covered_bytes() | r
 ambre-core | src/mode.rs | crate::mode | Visibility::public_if(public) | param | bool	newtype-inner	the bool the one constructor of Visibility reads into its variant
 ambre-server | src/db/mod.rs | crate::db | decode_member_count(count) | param | i64	foreign-api	the COUNT(*) column sqlx reads, decoded to Count<Members> at once
 ambre-server | src/db/mod.rs | crate::db | decode_salt(bytes) | param | Vec<u8>	foreign-api	the column bytes sqlx hands a decoder, read into a MasterKeySalt at once
-ambre-canvas | src/render/mod.rs | crate::render | GlyphQuad.uv_max | field | [f32;2]	math	GPU vertex arithmetic: a glyph quad written into GlyphVertex, private to render/
-ambre-canvas | src/render/mod.rs | crate::render | GlyphQuad.uv_min | field | [f32;2]	math	GPU vertex arithmetic: a glyph quad written into GlyphVertex, private to render/
 ambre-murmure | src/ui/list.rs | crate::ui::list | HeaderWords.author | field | String	free-text	header text a message row draws
 ambre-murmure | src/ui/list.rs | crate::ui::list | HeaderWords.time | field | String	free-text	header text a message row draws
 ambre-murmure | src/ui/paint.rs | crate::ui::paint | LaidRow::holds() | ret | bool	generic	predicate result
@@ -3156,7 +3065,7 @@ ambre-core | src/color.rs | crate::color | Alpha.0 | field | u8	newtype-inner	th
 ambre-core | src/color.rs | crate::color | Alpha::get() | ret | u8	newtype-inner	the one way out of an alpha, to a renderer that takes the channel byte
 ambre-core | src/color.rs | crate::color | Alpha::new(byte) | param | u8	newtype-inner	the constructor of an alpha; every byte is one
 ambre-core | src/color.rs | crate::color | Bounded<Opacity>::clamped(value) | param | f32	newtype-inner	the opacity unwrapped: the raw fraction it clamps into range
-ambre-core | src/color.rs | crate::color | Bounded<Opacity>::scaled(factor) | param | f32	math	scalar multiplier
+ambre-core | src/color.rs | crate::color | Bounded<Opacity>::scaled(factor) | param | f32	math	a scalar multiplier: the factor an opacity is scaled by
 ambre-core | src/ordinal.rs | crate::ordinal | <Ordinal<K> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
 ambre-core | src/ordinal.rs | crate::ordinal | Ordinal<K>::from_position(position) | param | usize	generic	the 0-based position of an item on any axis, which the ordinal numbers from one
 ambre-core | src/ordinal.rs | crate::ordinal | Ordinal<K>::get() | ret | u32	newtype-inner	Ordinal newtype, the number a reader sees
@@ -3183,8 +3092,8 @@ ambre-prose | src/xref.rs | crate::xref | CrossRefMark.0 | field | String	newtyp
 ambre-prose | src/xref.rs | crate::xref | CrossRefMark::as_str() | ret | &str	newtype-inner	CrossRefMark's own hex text, as the carrier mark stores it
 ambre-trame | src/ui/commands.rs | crate::ui::commands | SheetFilter::is_filtered() | ret | bool	generic	predicate or did-it-change return
 ambre-primitives | src/main.rs | crate | USAGE | const | &str	free-text	the usage line printed to the terminal
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | raster_of_layout(scale) | param | f64	math	the scale of the drawing transform, a bare ratio
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | texel_scale() | ret | f32	math	device pixels per atlas texel, a bare ratio of the size to the raster cap
+ambre-canvas | src/render/atlas.rs | crate::render::atlas | raster_of_layout(scale) | param | f64	math	a scalar multiplier: the scale of the drawing transform, the factor a layout size is multiplied by
+ambre-canvas | src/render/atlas.rs | crate::render::atlas | texel_scale() | ret | f32	math	a scalar multiplier: the device pixels one atlas texel covers, the ratio of the size asked to the raster cap
 ambre-core | src/scale.rs | crate::scale | <Scale<A,B> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
 ambre-core | src/scale.rs | crate::scale | Scale.0 | field | f64	newtype-inner	the inside of the scale between two pixel spaces, its accessor or constructor
 ambre-core | src/scale.rs | crate::scale | Scale<A,B>::get() | ret | f64	newtype-inner	the inside of the scale between two pixel spaces, its accessor or constructor
@@ -3217,10 +3126,10 @@ ambre-core | src/space.rs | crate::space | <f32 as Float>::finite() | ret | bool
 ambre-core | src/space.rs | crate::space | <f64 as Float>::finite() | ret | bool	generic	predicate
 ambre-core | src/space.rs | crate::space | Rescale::scaled(factor) | param | f64	math	a scalar multiplier: the factor a length number is scaled by between two float spaces; the seal closes the source number to the scalar list
 ambre-core | src/space.rs | crate::space | Rescale::unscaled(factor) | param | f64	math	a scalar multiplier: the factor a length number is divided by between two float spaces; the seal closes the source number to the scalar list
-ambre-core | src/unit.rs | crate::unit | <Px<S> as Div<f32>>::div(divisor) | param | f32	math	a bare factor a float length is scaled or divided by
-ambre-core | src/unit.rs | crate::unit | <Px<S> as Div<f64>>::div(divisor) | param | f64	math	a bare factor a float length is scaled or divided by
-ambre-core | src/unit.rs | crate::unit | <Px<S> as Mul<f32>>::mul(factor) | param | f32	math	a bare factor a float length is scaled or divided by
-ambre-core | src/unit.rs | crate::unit | <Px<S> as Mul<f64>>::mul(factor) | param | f64	math	a bare factor a float length is scaled or divided by
+ambre-core | src/unit.rs | crate::unit | <Px<S> as Div<f32>>::div(divisor) | param | f32	math	a scalar multiplier: a bare factor a float length is scaled or divided by
+ambre-core | src/unit.rs | crate::unit | <Px<S> as Div<f64>>::div(divisor) | param | f64	math	a scalar multiplier: a bare factor a float length is scaled or divided by
+ambre-core | src/unit.rs | crate::unit | <Px<S> as Mul<f32>>::mul(factor) | param | f32	math	a scalar multiplier: a bare factor a float length is scaled or divided by
+ambre-core | src/unit.rs | crate::unit | <Px<S> as Mul<f64>>::mul(factor) | param | f64	math	a scalar multiplier: a bare factor a float length is scaled or divided by
 ambre-core | src/unit.rs | crate::unit | <Px<S> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
 ambre-core | src/unit.rs | crate::unit | Px<S>::is_finite() | ret | bool	generic	predicate
 ambre-core | src/unit.rs | crate::unit | Px<S>::unsigned_abs() | ret | u32	newtype-inner	the magnitude of a signed length, in the unsigned texel coordinate wgpu takes
@@ -3262,18 +3171,24 @@ ambre-core | src/index.rs | crate::index | Span<A>::first_where(pred) | param | 
 ambre-core | src/index.rs | crate::index | Span<A>::from_usize_range(range) | param | Range<usize>	generic	the range of slice indices a foreign API hands back, read into a span: the codec of a struct of two fields
 ambre-core | src/index.rs | crate::index | Span<A>::is_empty() | ret | bool	generic	predicate
 ambre-core | src/index.rs | crate::index | Span<A>::to_usize_range() | ret | Range<usize>	generic	the span as the range of slice indices a foreign API takes: the codec of a struct of two fields
+ambre-canvas | src/space.rs | crate::space | <FineDevice as Space>::Repr | assoc | f64	newtype-inner	the number a length of this pixel space holds, the inside of Px
+ambre-canvas | src/space.rs | crate::space | <Model as Space>::Repr | assoc | f64	newtype-inner	the number a length of this pixel space holds, the inside of Px
+ambre-canvas | src/space.rs | crate::space | <ParleyHundredths as Space>::Repr | assoc | u32	newtype-inner	the number a length of this pixel space holds, the inside of Px
+ambre-canvas | src/space.rs | crate::space | <ParleyTenths as Space>::Repr | assoc | u32	newtype-inner	the number a length of this pixel space holds, the inside of Px
+ambre-canvas | src/space.rs | crate::space | <TexelShift as Space>::Repr | assoc | i32	newtype-inner	the number a length of this pixel space holds, the inside of Px
+ambre-canvas | src/space.rs | crate::space | <Uv as Space>::Repr | assoc | f32	newtype-inner	the number a length of this pixel space holds, the inside of Px
 ambre-canvas | src/space.rs | crate::space | <GlyphRaster as Space>::Repr | assoc | f32	newtype-inner	the number a length of this pixel space holds, the inside of Px
 ambre-canvas | src/space.rs | crate::space | <RasterKey as Space>::Repr | assoc | u32	newtype-inner	the number a length of this pixel space holds, the inside of Px
 ambre-canvas | src/space.rs | crate::space | <Parley as Space>::Repr | assoc | f32	newtype-inner	the number a length of this pixel space holds, the inside of Px
 ambre-canvas | src/space.rs | crate::space | <TokenCss as Space>::Repr | assoc | u32	newtype-inner	the number a length of this pixel space holds, the inside of Px
 ambre-canvas | src/space.rs | crate::space | <WholeParley as Space>::Repr | assoc | u16	newtype-inner	the number a length of this pixel space holds, the inside of Px
-ambre-core | src/span.rs | crate::span | <Ms as ClockUnit>::PER_SECOND | const | u64	math	unit conversion factor, ticks of the unit in one second
+ambre-core | src/span.rs | crate::span | <Ms as ClockUnit>::PER_SECOND | const | u64	math	a scalar multiplier: unit conversion factor, ticks of the unit in one second
 ambre-core | src/span.rs | crate::span | <Ms as TimeUnit>::Repr | assoc | u64	newtype-inner	the number a span of this unit holds, the inside of TimeSpan and Instant
-ambre-core | src/span.rs | crate::span | <Sec as ClockUnit>::PER_SECOND | const | u64	math	unit conversion factor, ticks of the unit in one second
+ambre-core | src/span.rs | crate::span | <Sec as ClockUnit>::PER_SECOND | const | u64	math	a scalar multiplier: unit conversion factor, ticks of the unit in one second
 ambre-core | src/span.rs | crate::span | <Sec as TimeUnit>::Repr | assoc | u64	newtype-inner	the number a span of this unit holds, the inside of TimeSpan and Instant
-ambre-core | src/span.rs | crate::span | <Ns as ClockUnit>::PER_SECOND | const | u64	math	unit conversion factor, ticks of the unit in one second
+ambre-core | src/span.rs | crate::span | <Ns as ClockUnit>::PER_SECOND | const | u64	math	a scalar multiplier: unit conversion factor, ticks of the unit in one second
 ambre-core | src/span.rs | crate::span | <Ns as TimeUnit>::Repr | assoc | u64	newtype-inner	the number a span of this unit holds, the inside of TimeSpan and Instant
-ambre-core | src/span.rs | crate::span | <FracMs as ClockUnit>::PER_SECOND | const | u64	math	unit conversion factor, ticks of the unit in one second
+ambre-core | src/span.rs | crate::span | <FracMs as ClockUnit>::PER_SECOND | const | u64	math	a scalar multiplier: unit conversion factor, ticks of the unit in one second
 ambre-core | src/span.rs | crate::span | <FracMs as TimeUnit>::Repr | assoc | f64	newtype-inner	the number a span of this unit holds, the inside of TimeSpan and Instant
 ambre-core | src/span.rs | crate::span | <Day as TimeUnit>::Repr | assoc | i64	newtype-inner	the number a span of this unit holds, the inside of TimeSpan and Instant
 ambre-core | src/span.rs | crate::span | <FracDay as TimeUnit>::Repr | assoc | f64	newtype-inner	the number a span of this unit holds, the inside of TimeSpan and Instant
@@ -3288,35 +3203,35 @@ ambre-core | src/span.rs | crate::span | StoredAsI64::from_stored_count(count) |
 ambre-core | src/span.rs | crate::span | StoredAsI64::stored_count() | ret | u64	generic	the unsigned count of any implementor, which the trait turns into its store spelling
 ambre-core | src/span.rs | crate::span | StoredAsI64::from_i64(stored) | param | i64	generic	the store codec of any implementor: the i64 a CRDT or a Postgres BIGINT holds, having no unsigned integer
 ambre-core | src/span.rs | crate::span | StoredAsI64::to_i64_saturating() | ret | i64	generic	the store codec of any implementor: the i64 a CRDT or a Postgres BIGINT holds, having no unsigned integer
-ambre-core | src/span.rs | crate::span | <TimeSpan<FracMs> as Div<f64>>::div(divisor) | param | f64	math	a bare factor a float span is scaled or divided by
-ambre-core | src/span.rs | crate::span | <TimeSpan<FracMs> as Mul<f64>>::mul(factor) | param | f64	math	a bare factor a float span is scaled or divided by
-ambre-core | src/span.rs | crate::span | <TimeSpan<FracMs> as Div>::Output | assoc | f64	math	the bare ratio of two spans
-ambre-core | src/span.rs | crate::span | <TimeSpan<FracMs> as Div>::div() | ret | f64	math	the bare ratio of two spans
+ambre-core | src/span.rs | crate::span | <TimeSpan<FracMs> as Div<f64>>::div(divisor) | param | f64	math	a scalar multiplier: a bare factor a float span is scaled or divided by
+ambre-core | src/span.rs | crate::span | <TimeSpan<FracMs> as Mul<f64>>::mul(factor) | param | f64	math	a scalar multiplier: a bare factor a float span is scaled or divided by
+ambre-core | src/span.rs | crate::span | <TimeSpan<FracMs> as Div>::Output | assoc | f64	math	a scalar multiplier: the bare ratio of two spans
+ambre-core | src/span.rs | crate::span | <TimeSpan<FracMs> as Div>::div() | ret | f64	math	a scalar multiplier: the bare ratio of two spans
 ambre-core | src/span.rs | crate::span | TimeSpan<FracMs>::is_finite() | ret | bool	generic	predicate
 ambre-core | src/span.rs | crate::span | TimeSpan<Ms>::to_timer_i32() | ret | i32	foreign-api	the span as the i32 of milliseconds a browser timer takes
 ambre-core | src/span.rs | crate::span | TimeSpan<Ns>::from_mean(mean) | param | f64	foreign-api	the mean in nanoseconds that the bench harness measures as a float
-ambre-core | src/span.rs | crate::span | TimeSpan<U>::times(n) | param | u64	math	a multiplier, not a span
+ambre-core | src/span.rs | crate::span | TimeSpan<U>::times(n) | param | u64	math	a scalar multiplier: the whole factor a span is repeated by, not a span
 ambre-core | src/space.rs | crate::space | <Board as Space>::Repr | assoc | f64	newtype-inner	the number a length of this pixel space holds, the inside of Px
 ambre-core | src/space.rs | crate::space | <StoredBoard as Space>::Repr | assoc | f32	newtype-inner	the number a length of this pixel space holds, the inside of Px
-ambre-core | src/unit.rs | crate::unit | <Mm as PrintUnit>::DOC_PX | const | f32	math	unit conversion factor, document pixels per millimetre
-ambre-core | src/unit.rs | crate::unit | <Pt as PrintUnit>::DOC_PX | const | f32	math	unit conversion factor, document pixels per point
-ambre-core | src/unit.rs | crate::unit | <PrintLength<U> as Div<f32>>::div(divisor) | param | f32	math	a bare factor a print length is scaled or divided by
-ambre-core | src/unit.rs | crate::unit | <PrintLength<U> as Mul<f32>>::mul(factor) | param | f32	math	a bare factor a print length is scaled or divided by
-ambre-core | src/unit.rs | crate::unit | <PrintLength<U> as Div>::Output | assoc | f32	math	the bare ratio of two print lengths
-ambre-core | src/unit.rs | crate::unit | <PrintLength<U> as Div>::div() | ret | f32	math	the bare ratio of two print lengths
+ambre-core | src/unit.rs | crate::unit | <Mm as PrintUnit>::DOC_PX | const | f32	math	a scalar multiplier: unit conversion factor, document pixels per millimetre
+ambre-core | src/unit.rs | crate::unit | <Pt as PrintUnit>::DOC_PX | const | f32	math	a scalar multiplier: unit conversion factor, document pixels per point
+ambre-core | src/unit.rs | crate::unit | <PrintLength<U> as Div<f32>>::div(divisor) | param | f32	math	a scalar multiplier: a bare factor a print length is scaled or divided by
+ambre-core | src/unit.rs | crate::unit | <PrintLength<U> as Mul<f32>>::mul(factor) | param | f32	math	a scalar multiplier: a bare factor a print length is scaled or divided by
+ambre-core | src/unit.rs | crate::unit | <PrintLength<U> as Div>::Output | assoc | f32	math	a scalar multiplier: the bare ratio of two print lengths
+ambre-core | src/unit.rs | crate::unit | <PrintLength<U> as Div>::div() | ret | f32	math	a scalar multiplier: the bare ratio of two print lengths
 ambre-core | src/unit.rs | crate::unit | <PrintLength<U> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
 ambre-core | src/unit.rs | crate::unit | PrintLength.0 | field | f32	newtype-inner	the number of points or millimetres a print length holds
 ambre-core | src/unit.rs | crate::unit | PrintLength<U>::get() | ret | f32	newtype-inner	the number of units, for a foreign API that takes the float
 ambre-core | src/unit.rs | crate::unit | PrintLength<U>::new(value) | param | f32	newtype-inner	the number of units a print length wraps
 ambre-core | src/unit.rs | crate::unit | PrintLength<U>::narrowed(value) | param | f64	newtype-inner	the constructor of PrintLength from the f64 a geometry crate computes a length in
 ambre-core | src/unit.rs | crate::unit | PrintLength<U>::is_finite() | ret | bool	generic	predicate
-ambre-core | src/unit.rs | crate::unit | <Radians as Mul<f64>>::mul(factor) | param | f64	math	a bare factor an angle is scaled by
+ambre-core | src/unit.rs | crate::unit | <Radians as Mul<f64>>::mul(factor) | param | f64	math	a scalar multiplier: a bare factor an angle is scaled by
 ambre-core | src/unit.rs | crate::unit | Radians.0 | field | f64	newtype-inner	the number of radians an angle holds
 ambre-core | src/unit.rs | crate::unit | Radians::get() | ret | f64	newtype-inner	the number of radians, for a foreign API that takes the float
 ambre-core | src/unit.rs | crate::unit | Radians::new(value) | param | f64	newtype-inner	the number of radians an angle wraps
 ambre-core | src/unit.rs | crate::unit | Radians::is_finite() | ret | bool	generic	predicate
-ambre-core | src/unit.rs | crate::unit | <ViewSpeed as Mul<f32>>::mul(factor) | param | f32	math	a decay or blend weight the speed is multiplied by
-ambre-core | src/unit.rs | crate::unit | Vector<ViewSpeed>::scaled(factor) | param | f32	math	a decay or blend weight the velocity is multiplied by
+ambre-core | src/unit.rs | crate::unit | <ViewSpeed as Mul<f32>>::mul(factor) | param | f32	math	a scalar multiplier: a decay or blend weight the speed is multiplied by
+ambre-core | src/unit.rs | crate::unit | Vector<ViewSpeed>::scaled(factor) | param | f32	math	a scalar multiplier: a decay or blend weight the velocity is multiplied by
 ambre-core | src/unit.rs | crate::unit | ViewSpeed.0 | field | f32	newtype-inner	the number of view pixels per millisecond a speed holds
 ambre-core | src/unit.rs | crate::unit | ViewSpeed::get() | ret | f32	newtype-inner	the number of view pixels per millisecond, for a foreign API that takes the float
 ambre-core | src/unit.rs | crate::unit | ViewSpeed::new(value) | param | f32	newtype-inner	the number of view pixels per millisecond a speed wraps
@@ -3503,8 +3418,8 @@ ambre-sfu | src/forward.rs | crate::forward | Member.touched | field | bool	gene
 ambre-sfu | src/forward.rs | crate::forward | Member::has_work() | ret | bool	generic	predicate
 ambre-sfu | src/forward.rs | crate::forward | names_another_sender() | ret | bool	generic	predicate
 ambre-sfu | src/forward.rs | crate::forward | SPEECH_LEVEL | const | i8	foreign-api	the audio level of RFC 6464 in -dBov, as the ExtensionValues of str0m hold it
-ambre-sfu | src/layer.rs | crate::layer | UPGRADE_MARGIN | const | f64	math	scalar multiplier of the layer choice
-ambre-sfu | src/layer.rs | crate::layer | VIDEO_SHARE | const | f64	math	ratio of the estimate the video may take
+ambre-sfu | src/layer.rs | crate::layer | UPGRADE_MARGIN | const | f64	math	a scalar multiplier: the factor of the layer choice
+ambre-sfu | src/layer.rs | crate::layer | VIDEO_SHARE | const | f64	math	a scalar multiplier: ratio of the estimate the video may take
 ambre-sfu | src/rewrite.rs | crate::rewrite | PICTURE_ID_MASK | const | u16	foreign-api	the width of a 15-bit VP8 picture id, as the Vp8Descriptor of str0m reads it
 ambre-app | src/host/mod.rs | crate::host | dropped_item(build) | param | impl Fn(&[(ClipboardFormat,Option<&str>)])->Option<T>	foreign-api	the pairs clipboard_item hands the ClipboardItem record; its type is already a ClipboardFormat
 ambre-app | src/host/mod.rs | crate::host | publish(build) | param | impl Fn(&[(ClipboardFormat,Option<&str>)])->Option<T>	foreign-api	the pairs clipboard_item hands the ClipboardItem record; its type is already a ClipboardFormat
@@ -3738,25 +3653,25 @@ ambre-trame | src/formula/types.rs | crate::formula::types | CellId::reads_a_vir
 ambre-trame | src/logic/schema.rs | crate::logic::schema | <FilterKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-trame | src/logic/schema.rs | crate::logic::schema | <Root as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-trame | src/logic/schema.rs | crate::logic::schema | <SheetRoot as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-sfu | src/congestion.rs | crate::congestion | LOSS_CONFIDENCE | const | f64	math	scalar multiplier of the standard error of the loss reading
-ambre-sfu | src/congestion.rs | crate::congestion | LOSS_GROWTH | const | f64	math	growth factor per second of the loss bound
-ambre-sfu | src/congestion.rs | crate::congestion | LOSS_HIGH | const | f64	math	ratio of lost packets above which the loss bound falls
-ambre-sfu | src/congestion.rs | crate::congestion | LOSS_LOW | const | f64	math	ratio of lost packets under which the loss bound rises
-ambre-sfu | src/congestion.rs | crate::congestion | RTT_WEIGHT | const | f64	math	smoothing weight of a round-trip sample
-ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | ACKED_RATIO | const | f64	math	scalar multiplier of the acknowledged rate, the cap of an increase
-ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | BETA | const | f64	math	ratio of the acknowledged rate a decrease keeps
-ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | CAPACITY_BAND | const | f64	math	scalar multiplier of the standard deviation of the capacity
-ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | CAPACITY_WEIGHT | const | f64	math	smoothing weight of a capacity sample
+ambre-sfu | src/congestion.rs | crate::congestion | LOSS_CONFIDENCE | const | f64	math	a scalar multiplier: the factor of the standard error of the loss reading
+ambre-sfu | src/congestion.rs | crate::congestion | LOSS_GROWTH | const | f64	math	a scalar multiplier: growth factor per second of the loss bound
+ambre-sfu | src/congestion.rs | crate::congestion | LOSS_HIGH | const | f64	math	a scalar multiplier: ratio of lost packets above which the loss bound falls
+ambre-sfu | src/congestion.rs | crate::congestion | LOSS_LOW | const | f64	math	a scalar multiplier: ratio of lost packets under which the loss bound rises
+ambre-sfu | src/congestion.rs | crate::congestion | RTT_WEIGHT | const | f64	math	a scalar multiplier: smoothing weight of a round-trip sample
+ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | ACKED_RATIO | const | f64	math	a scalar multiplier: the factor of the acknowledged rate, the cap of an increase
+ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | BETA | const | f64	math	a scalar multiplier: ratio of the acknowledged rate a decrease keeps
+ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | CAPACITY_BAND | const | f64	math	a scalar multiplier: the factor of the standard deviation of the capacity
+ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | CAPACITY_WEIGHT | const | f64	math	a scalar multiplier: smoothing weight of a capacity sample
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Capacity::above() | ret | bool	generic	predicate result
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Capacity::below() | ret | bool	generic	predicate result
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Capacity::holds() | ret | bool	generic	predicate result
-ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | GROWTH | const | f64	math	growth factor per second of the target
+ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | GROWTH | const | f64	math	a scalar multiplier: growth factor per second of the target
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Group::holds() | ret | bool	generic	predicate result
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | K_DOWN | const | f64	math	a scalar multiplier: the adaptation rate of the trend threshold, per millisecond of its distance to the trend
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | K_UP | const | f64	math	a scalar multiplier: the adaptation rate of the trend threshold, per millisecond of its distance to the trend
-ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | SMOOTHING | const | f64	math	smoothing weight of the accumulated delay
-ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | START_GROWTH | const | f64	math	growth factor per second of the target before its first decrease
-ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | TREND_GAIN | const | f64	math	scalar multiplier of the trend against the threshold
+ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | SMOOTHING | const | f64	math	a scalar multiplier: smoothing weight of the accumulated delay
+ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | START_GROWTH | const | f64	math	a scalar multiplier: growth factor per second of the target before its first decrease
+ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | TREND_GAIN | const | f64	math	a scalar multiplier: the factor of the trend against the threshold
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Trendline.previous_trend | field | f64	math	a term inside a formula: the slope of the previous least-squares fit, a ratio of delay to time
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Trendline::detect(trend) | param | f64	math	a term inside a formula: the slope of the least-squares fit, a ratio of delay to time
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Trendline::slope() | ret | Option<f64>	math	a term inside a formula: the slope of the least-squares fit, a ratio of delay to time, none on a degenerate history
@@ -3767,8 +3682,8 @@ ambre-sfu | src/congestion.rs | crate::congestion | Congestion::congested() | re
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | DelayControl::overusing() | ret | bool	generic	predicate result
 ambre-sfu | src/forward.rs | crate::forward | Member.rechoose | field | bool	generic	fact flag: the congestion control lowered its target or changed its overuse since the last choice, selects no mode
 ambre-sfu | src/congestion.rs | crate::congestion | Congestion::probing() | ret | bool	generic	predicate result
-ambre-sfu | src/congestion.rs | crate::congestion | PROBE_DELIVERED | const | f64	math	ratio of the probed step the acknowledged rate reaches when the link carries the probe
-ambre-sfu | src/congestion.rs | crate::congestion | PROBE_PACE | const | f64	math	scalar multiplier of the probed step, the pace of the probe padding
+ambre-sfu | src/congestion.rs | crate::congestion | PROBE_DELIVERED | const | f64	math	a scalar multiplier: ratio of the probed step the acknowledged rate reaches when the link carries the probe
+ambre-sfu | src/congestion.rs | crate::congestion | PROBE_PACE | const | f64	math	a scalar multiplier: the factor of the probed step, the pace of the probe padding
 ambre-convert | src/exports.rs | crate::exports | INPUT | const | LocalKey<RefCell<Vec<u8>>>	foreign-api	the buffer the loader writes into the module's memory through JavaScript, read as a request by run
 ambre-convert | src/exports.rs | crate::exports | OUTPUT | const | LocalKey<RefCell<Vec<u8>>>	foreign-api	the buffer the loader reads out of the module's memory through JavaScript
 ambre-convert | src/exports.rs | crate::exports | input_reserve() | ret | u32	foreign-api	an address in the module's memory, the raw export the loader calls through a JavaScript number
@@ -3805,7 +3720,7 @@ ambre-sync | src/converter.rs | crate::converter | fetch(path) | param | &str	fo
 ambre-sync | src/converter.rs | crate::converter | module_path() | ret | String	foreign-api	the relative address handed to gloo_net::http::Request::get
 ambre-bus | src/interop.rs | crate::interop | Construct::label() | ret | &'static str	free-text	the words a report reads for one construct
 ambre-bus | src/interop.rs | crate::interop | Construct::plural() | ret | &'static str	free-text	the words a report reads for several of a construct
-ambre-bus | src/interop.rs | crate::interop | ConversionProgress::ratio() | ret | f64	math	ratio of the steps done to the total, for a progress bar
+ambre-bus | src/interop.rs | crate::interop | ConversionProgress::ratio() | ret | f64	math	a scalar multiplier: ratio of the steps done to the total, for a progress bar
 ambre-bus | src/interop.rs | crate::interop | ConversionReport<C>::carried_clause() | ret | Option<String>	free-text	the part of the report sentence a user reads for what arrived
 ambre-bus | src/interop.rs | crate::interop | ConversionReport<C>::is_lossless() | ret | bool	generic	predicate
 ambre-bus | src/interop.rs | crate::interop | ConversionReport<C>::loss_clause() | ret | Option<String>	free-text	the part of the report sentence a user reads for one outcome
@@ -3868,10 +3783,10 @@ ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | Share::noti
 ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | Share::sends() | ret | bool	generic	predicate result: whether a screen goes into the call, which the pressed state of the button reads
 ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | ShareRefusal::from_error_name(name) | param | &str	newtype-inner	the name the browser gives the DOMException of getDisplayMedia, which this parses into the fieldless enum
 ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | ShareRefusal::notice() | ret | &'static str	free-text	the words the header shows the user when the capture of the screen is refused or cancelled
-ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | BAND_SHARE | const | f32	math	a ratio: the share of the height of the region the video band takes at most
-ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | TILE_ASPECT | const | f32	math	a ratio: the width of a video tile over its height, the aspect of a camera
-ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | CAMERA_ROW_SHARE | const | f32	math	a ratio: the share of a band with a screen that the row of the cameras takes
-ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | SCREEN_BAND_SHARE | const | f32	math	a ratio: the share of the height of the region a band with a screen takes at most
+ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | BAND_SHARE | const | f32	math	a scalar multiplier: a ratio, the share of the height of the region the video band takes at most
+ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | TILE_ASPECT | const | f32	math	a scalar multiplier: a ratio, the width of a video tile over its height, the aspect of a camera
+ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | CAMERA_ROW_SHARE | const | f32	math	a scalar multiplier: a ratio, the share of a band with a screen that the row of the cameras takes
+ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | SCREEN_BAND_SHARE | const | f32	math	a scalar multiplier: a ratio, the share of the height of the region a band with a screen takes at most
 ambre-murmure | src/ui/call_devices.rs | crate::ui::call_devices | Device::is_named() | ret | bool	generic	predicate result: whether the browser gives the device an identifier and a label
 ambre-murmure | src/ui/call_devices.rs | crate::ui::call_devices | Entry::label() | ret | &str	free-text	the words the device panel shows for one entry: the label of the browser, or the name of the default device
 ambre-murmure | src/ui/call_devices.rs | crate::ui::call_devices | Fallback::notice() | ret | &'static str	free-text	the words the header shows the user when a chosen device went away
@@ -4040,7 +3955,7 @@ ambre-pptx | src/xml.rs | crate::xml | xml_chars(text) | param | &str	free-text	
 ambre-pptx | src/pml.rs | crate::pml | THEME_TYPE | const | &str	foreign-api	the content type of a theme part, which ECMA-376 fixes and the package layer writes as text
 ambre-pptx | src/pml.rs | crate::pml | pml_type() | ret | String	foreign-api	a PresentationML content type, which the package layer writes as text
 ambre-pptx | src/pml.rs | crate::pml | rel_kind(kind) | param | &str	generic	the name of a presentation property part, which picks its relationship type
-ambre-toile | src/logic/interop/pptx_export.rs | crate::logic::interop::pptx_export | Fit.scale | field | f64	math	the factor from world units to points on a slide
+ambre-toile | src/logic/interop/pptx_export.rs | crate::logic::interop::pptx_export | Fit.scale | field | f64	math	a scalar multiplier: the factor from world units to points on a slide
 ambre-toile | src/logic/interop/pptx_export.rs | crate::logic::interop::pptx_export | PptxConnector.caption | field | String	free-text	the caption on a connector, as the user typed it
 ambre-toile | src/logic/interop/pptx_export.rs | crate::logic::interop::pptx_export | PptxSlideSource.name | field | String	free-text	the title of a frame, as the user typed it
 ambre-toile | src/logic/interop/pptx_export.rs | crate::logic::interop::pptx_export | PptxSlideSource.notes | field | String	free-text	the speaker notes of a frame, as the user typed them
@@ -4298,6 +4213,7 @@ ambre-server | src/redis_ops.rs | crate::redis_ops | CallOpening::word() | ret |
 ambre-server | src/redis_ops.rs | crate::redis_ops | call_roster::LUA | const | &str	foreign-api	Lua script text sent to Redis
 ambre-sync | src/call_client.rs | crate::call_client | <HeldWraps as CountKind>::Repr | assoc | u64	newtype-inner	the number a count of this kind holds
 ambre-sync | src/call_client.rs | crate::call_client | CallClient::is_seated() | ret | bool	generic	predicate result
+ambre-sync | src/channels.rs | crate::channels | walk_limit() | ret | usize	math	the quarantine bound as the length a Vec compares against
 ambre-server | src/redis_keys.rs | crate::redis_keys | CallKey.text | field | String	newtype-inner	the key text CallKey wraps, call:{id}:{slot}
 ambre-server | src/redis_keys.rs | crate::redis_keys | CallKey<S>::as_str() | ret | &str	newtype-inner	the key text, as a store command takes it
 ambre-logic | src/data.rs | crate::data | state_has_pending_work() | ret | bool	generic	a predicate: whether a document's engine holds an import still to apply
@@ -4586,6 +4502,7 @@ ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | Slider(value) | par
 ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | Slider(on_input) | param | Callback<String>	generic	the value text of a range input, which volume_from_slider or gain_from_slider parses
 ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | SliderOf::class() | ret | &'static str	newtype-inner	the CSS class of each slider kind, a fieldless enum's own spelling the stylesheet reads
 ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | SliderOf::max() | ret | String	generic	the value text of the highest percent of a range input, which slider_of_volume or slider_of_gain spells
+ambre-app | src/switchboard.rs | crate::switchboard | Shown.account_form | field | bool	generic	named flag
 ambre-convert | src/engine/html.rs | crate::engine::html | read_bounded(html) | param | &str	free-text	the HTML an imported file holds
 ambre-convert | src/engine/prose/html_doc.rs | crate::engine::prose::html_doc | color(text) | param | &str	generic	a colour mark value of a pasted run, the input of its parse into an Rgba
 ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | Reader::note(tag) | param | &str	foreign-api	an element's local name as the tree builder spells it, matched against the allowlist and the losses
@@ -4708,6 +4625,7 @@ ambre-sfu | src/metrics.rs | crate::metrics | ROUTE | const | &str	foreign-api	t
 ambre-sfu | src/metrics.rs | crate::metrics | TEXT_FORMAT | const | &str	foreign-api	the media type of the Prometheus text format, the header value axum answers
 ambre-sfu | src/metrics.rs | crate::metrics | SfuMetrics::exposition() | ret | String	free-text	the text of a scrape, a whole document of the Prometheus text format
 ambre-sync | src/membership_log.rs | crate::membership_log | Log::signed_under() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-sync | src/membership_log.rs | crate::membership_log | Log::signs_exchange_key() | ret | bool	generic	predicate result
 ambre-trame | src/logic/page_setup.rs | crate::logic::page_setup | PageSetup::is_printable() | ret | bool	generic	predicate result: whether the margins leave the smallest printable area on the paper
 ambre-trame | src/logic/schema.rs | crate::logic::schema | <PageSetupKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-trame | src/logic/schema.rs | crate::logic::schema | page_setup_v6() | ret | Result<(),String>	free-text	step failure reason, wrapped into MigrationFailed

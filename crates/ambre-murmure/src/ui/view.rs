@@ -4555,9 +4555,9 @@ mod tests {
     fn the_composer_takes_the_pipe_until_escape() {
         let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
-        assert_eq!(page.view.reads.pipe.focus_requests(), 0);
+        assert_eq!(page.view.reads.pipe.focus_requests().get(), 0);
         assert!(press_composer(&mut page), "the press is the composer's");
-        assert_eq!(page.view.reads.pipe.focus_requests(), 1);
+        assert_eq!(page.view.reads.pipe.focus_requests().get(), 1);
         assert!(page.view.composer().focused());
         type_text(&mut page, "ab");
         assert!(key(
@@ -5221,7 +5221,7 @@ mod tests {
             None,
             "the tap is taken"
         );
-        assert_eq!(page.view.reads.pipe.focus_requests(), 1);
+        assert_eq!(page.view.reads.pipe.focus_requests().get(), 1);
         assert!(page.view.composer().focused());
         let press = InputEvent::PointerDown {
             at: pointer(40.0, 20.0),

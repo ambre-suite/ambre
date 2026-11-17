@@ -6,6 +6,7 @@
 // ============================================================================
 
 use super::*;
+use crate::space::{FineDevice, Model, Uv};
 use ambre_core::{Css, Device, Px, Scale, View};
 use ambre_draw::{
     Affine, Brush, Color, DrawSurface, GlyphRun, ImageSource, Line, ParleyBrush, Point, Rect,
@@ -19,11 +20,11 @@ use lyon_tessellation::{
     StrokeTessellator, StrokeVertex, VertexBuffers,
 };
 
-// Flattening tolerance in *device* pixels. Divided by the active transform's
+// Flattening tolerance on the screen. Divided by the active transform's
 // scale and by the density before tessellation, so a zoomed-in Toile path and
 // a dense screen both stay smooth. We tessellate in model space, then map
 // vertices to screen space.
-const PATH_TOLERANCE_PX: f64 = 0.15;
+const PATH_TOLERANCE: Px<FineDevice> = Px::<FineDevice>::new(0.15);
 
 /// A transform's linear part split into its scale and the rest. The scale is
 /// the square root of the determinant, as a path's tolerance reads it. The
@@ -66,11 +67,14 @@ struct GlyphBox {
 /// every screen.
 fn glyph_box(slot: &AtlasSlot, density: Scale<Css, Device>) -> GlyphBox {
     let per_texel = slot.texel_scale / density.get() as f32;
+    let shift =
+        |texels: Px<crate::space::TexelShift>| Px::<View>::new(texels.get() as f32 * per_texel);
+    let edge = |texels: Px<ambre_core::Texel>| Px::<View>::new(texels.get() as f32 * per_texel);
     GlyphBox {
-        left_bearing: Px::<View>::new(slot.bearing_left as f32 * per_texel),
-        top_bearing: Px::<View>::new(slot.bearing_top as f32 * per_texel),
-        width: Px::<View>::new(slot.pixel_width as f32 * per_texel),
-        height: Px::<View>::new(slot.pixel_height as f32 * per_texel),
+        left_bearing: shift(slot.bearing_left),
+        top_bearing: shift(slot.bearing_top),
+        width: edge(slot.size.width),
+        height: edge(slot.size.height),
     }
 }
 
@@ -105,10 +109,9 @@ impl GlyphSink for QuadRenderer {
         slot: &AtlasSlot,
         tint: Option<Color>,
     ) {
-        let corners = corners.map(|p| [p.x.get(), p.y.get()]);
         match tint {
-            Some(color) => self.push_glyph_quad(corners, slot.uv_min, slot.uv_max, color),
-            None => self.push_color_glyph_quad(corners, slot.uv_min, slot.uv_max),
+            Some(color) => self.push_glyph_quad(corners, slot.uv, color),
+            None => self.push_color_glyph_quad(corners, slot.uv),
         }
     }
 }
@@ -178,8 +181,7 @@ fn emit_glyph(sink: &mut impl GlyphSink, slot: &AtlasSlot, at: &GlyphPlacement) 
             y: y0,
             width: sw,
             height: sh,
-            uv_min: slot.uv_min,
-            uv_max: slot.uv_max,
+            uv: slot.uv,
         };
         sink.glyph(quad, tint);
         return;
@@ -197,18 +199,21 @@ fn emit_glyph(sink: &mut impl GlyphSink, slot: &AtlasSlot, at: &GlyphPlacement) 
     }
     let (nx0, nx1) = (x0.max(cx0), x1.min(cx1));
     let (ny0, ny1) = (y0.max(cy0), y1.min(cy1));
-    let lerp = |a: f32, b: f32, t: f32| a + (b - a) * t;
-    let u0 = lerp(slot.uv_min[0], slot.uv_max[0], (nx0 - x0) / sw);
-    let u1 = lerp(slot.uv_min[0], slot.uv_max[0], (nx1 - x0) / sw);
-    let v0 = lerp(slot.uv_min[1], slot.uv_max[1], (ny0 - y0) / sh);
-    let v1 = lerp(slot.uv_min[1], slot.uv_max[1], (ny1 - y0) / sh);
+    let lerp = |a: Px<Uv>, b: Px<Uv>, t: f32| a + (b - a) * t;
+    let (min, max) = (slot.uv.min, slot.uv.max);
+    let u0 = lerp(min.x, max.x, (nx0 - x0) / sw);
+    let u1 = lerp(min.x, max.x, (nx1 - x0) / sw);
+    let v0 = lerp(min.y, max.y, (ny0 - y0) / sh);
+    let v1 = lerp(min.y, max.y, (ny1 - y0) / sh);
     let quad = GlyphQuad {
         x: nx0,
         y: ny0,
         width: nx1 - nx0,
         height: ny1 - ny0,
-        uv_min: [u0, v0],
-        uv_max: [u1, v1],
+        uv: UvBox {
+            min: ambre_core::Point::new(u0, v0),
+            max: ambre_core::Point::new(u1, v1),
+        },
     };
     sink.glyph(quad, tint);
 }
@@ -286,7 +291,7 @@ impl<'r> WgpuSurface<'r> {
 
     /// The four corners of `dest` on screen, `[tl, tr, br, bl]`, mapped through the active
     /// transform. `None` when `dest` holds no area, or when the clip rejects its box.
-    fn quad_corners(&self, dest: Rect) -> Option<[[f32; 2]; 4]> {
+    fn quad_corners(&self, dest: Rect) -> Option<[ambre_core::Point<Px<View>>; 4]> {
         if dest.width() <= 0.0 || dest.height() <= 0.0 {
             return None;
         }
@@ -317,7 +322,9 @@ impl<'r> WgpuSurface<'r> {
                 return None;
             }
         }
-        Some(mapped.map(|p| [p.x as f32, p.y as f32]))
+        Some(mapped.map(|p| {
+            ambre_core::Point::new(Px::<View>::new(p.x as f32), Px::<View>::new(p.y as f32))
+        }))
     }
 
     /// The active model-to-screen transform (identity when the stack is empty).
@@ -329,10 +336,11 @@ impl<'r> WgpuSurface<'r> {
     }
 
     /// The flattening tolerance in model units under `t`.
-    fn tolerance(&self, t: Affine) -> f32 {
+    fn tolerance(&self, t: Affine) -> Px<Model> {
         // The ratio narrowed to f32 as a glyph reads it, as it always was.
         let scale = affine_scale(t) * f64::from(self.renderer.density().get() as f32);
-        (PATH_TOLERANCE_PX / scale.max(1e-6)) as f32
+        // The tolerance stays rounded to the f32 lyon takes, as it always was.
+        Px::new(f64::from((PATH_TOLERANCE.get() / scale.max(1e-6)) as f32))
     }
 
     fn active_clip(&self) -> Option<Rect> {
@@ -351,17 +359,17 @@ impl<'r> WgpuSurface<'r> {
     /// meshes are not trimmed to the clip (arbitrary geometry), so this is the
     /// only clip interaction for `fill_path`/`stroke_path`.
     fn path_outside_clip(&self, path: &BezPath, t: Affine) -> bool {
-        self.path_outside_clip_padded(path, t, 0.0)
+        self.path_outside_clip_padded(path, t, Px::ZERO)
     }
 
     /// As `path_outside_clip`, but inflates the path bbox by `pad` model units
     /// (half the stroke width) before the transform. A thick stroke is then
     /// not culled when its centerline sits just outside the clip.
-    fn path_outside_clip_padded(&self, path: &BezPath, t: Affine, pad: f64) -> bool {
+    fn path_outside_clip_padded(&self, path: &BezPath, t: Affine, pad: Px<Model>) -> bool {
         let Some(clip) = self.active_clip() else {
             return false;
         };
-        let bbox = path.bounding_box().inflate(pad, pad);
+        let bbox = path.bounding_box().inflate(pad.get(), pad.get());
         let hit = clip.intersect(t.transform_rect_bbox(bbox));
         hit.width() <= 0.0 || hit.height() <= 0.0
     }
@@ -406,7 +414,6 @@ impl DrawSurface for WgpuSurface<'_> {
     }
 
     fn stroke_line(&mut self, line: Line, color: Color, width: Px<ambre_core::Surface>) {
-        let width = width.get();
         let t = self.transform();
         let p0 = t * line.p0;
         let p1 = t * line.p1;
@@ -432,7 +439,7 @@ impl DrawSurface for WgpuSurface<'_> {
             }
         }
         self.renderer
-            .push_line(Line::new((x0, y0), (x1, y1)), color, width as f32);
+            .push_line(Line::new((x0, y0), (x1, y1)), color, width.view_length());
     }
 
     fn draw_glyphs(
@@ -493,7 +500,7 @@ impl DrawSurface for WgpuSurface<'_> {
                 None => continue,
             };
 
-            if slot.pixel_width == 0 || slot.pixel_height == 0 {
+            if slot.size.width == Px::ZERO || slot.size.height == Px::ZERO {
                 continue; // whitespace / invisible glyph
             }
 
@@ -541,7 +548,7 @@ impl DrawSurface for WgpuSurface<'_> {
         let t = self.transform();
         // The stroke widens the fill bbox by half the line width. Grow the test
         // box so a thick stroke straddling the clip edge is not wrongly culled.
-        if self.path_outside_clip_padded(path, t, stroke.width * 0.5) {
+        if self.path_outside_clip_padded(path, t, Px::new(stroke.width * 0.5)) {
             return;
         }
         if let Some(mesh) = stroke_mesh(path, stroke, t, self.tolerance(t)) {
@@ -584,14 +591,14 @@ impl DrawSurface for WgpuSurface<'_> {
 // ============================================================================
 
 /// A tessellated path: screen-space vertices and the triangles over them.
-type Mesh = VertexBuffers<[f32; 2], u32>;
+type Mesh = VertexBuffers<ambre_core::Point<Px<View>>, u32>;
 
 /// Tessellate the inside of `path` under the non-zero rule, at `tolerance`
 /// in model units. Vertices come out mapped through `t` to the screen.
 /// `None` when the tessellator refuses the path.
-fn fill_mesh(path: &BezPath, t: Affine, tolerance: f32) -> Option<Mesh> {
+fn fill_mesh(path: &BezPath, t: Affine, tolerance: Px<Model>) -> Option<Mesh> {
     let mut mesh = Mesh::new();
-    let opts = FillOptions::tolerance(tolerance).with_fill_rule(FillRule::NonZero);
+    let opts = FillOptions::tolerance(tolerance.get() as f32).with_fill_rule(FillRule::NonZero);
     FillTessellator::new()
         .tessellate_path(
             &build_lyon_path(path),
@@ -606,9 +613,9 @@ fn fill_mesh(path: &BezPath, t: Affine, tolerance: f32) -> Option<Mesh> {
 /// Tessellating in model space keeps the line width in model units, so it
 /// scales with `t` as a Toile zoom expects. `None` when the tessellator
 /// refuses the path.
-fn stroke_mesh(path: &BezPath, stroke: &Stroke, t: Affine, tolerance: f32) -> Option<Mesh> {
+fn stroke_mesh(path: &BezPath, stroke: &Stroke, t: Affine, tolerance: Px<Model>) -> Option<Mesh> {
     let mut mesh = Mesh::new();
-    let opts = StrokeOptions::tolerance(tolerance)
+    let opts = StrokeOptions::tolerance(tolerance.get() as f32)
         .with_line_width(stroke.width as f32)
         .with_line_cap(line_cap(stroke.start_cap))
         .with_line_join(line_join(stroke.join))
@@ -670,10 +677,10 @@ fn build_lyon_path(path: &BezPath) -> LyonPath {
 }
 
 /// Map a lyon model-space vertex through the active transform to a screen-space
-/// `[f32; 2]` position for the quad batch.
-fn screen_vertex(p: lyon_path::math::Point, t: Affine) -> [f32; 2] {
+/// position for the quad batch.
+fn screen_vertex(p: lyon_path::math::Point, t: Affine) -> ambre_core::Point<Px<View>> {
     let sp = t * Point::new(p.x as f64, p.y as f64);
-    [sp.x as f32, sp.y as f32]
+    ambre_core::Point::new(Px::new(sp.x as f32), Px::new(sp.y as f32))
 }
 
 /// Uniform scale factor of an affine transform (sqrt of the absolute
@@ -720,7 +727,10 @@ mod tests {
         mesh.indices
             .chunks(3)
             .map(|tri| {
-                let p = |i: u32| mesh.vertices[i as usize];
+                let p = |i: u32| {
+                    let v = mesh.vertices[i as usize];
+                    [v.x.get(), v.y.get()]
+                };
                 let (a, b, c) = (p(tri[0]), p(tri[1]), p(tri[2]));
                 let cross = (b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1]);
                 f64::from(cross.abs()) / 2.0
@@ -820,9 +830,9 @@ mod tests {
     /// applied, so a scale of 3 covers nine times the area.
     #[test]
     fn a_fill_covers_the_path_in_screen_space() {
-        let mesh = fill_mesh(&triangle(), Affine::IDENTITY, 0.1).expect("a mesh");
+        let mesh = fill_mesh(&triangle(), Affine::IDENTITY, Px::new(0.1)).expect("a mesh");
         assert!((area(&mesh) - 50.0).abs() < 1e-3, "{}", area(&mesh));
-        let scaled = fill_mesh(&triangle(), Affine::scale(3.0), 0.1).expect("a mesh");
+        let scaled = fill_mesh(&triangle(), Affine::scale(3.0), Px::new(0.1)).expect("a mesh");
         assert!((area(&scaled) - 450.0).abs() < 1e-2, "{}", area(&scaled));
     }
 
@@ -834,20 +844,18 @@ mod tests {
         path.move_to((0.0, 0.0));
         path.line_to((20.0, 0.0));
         let stroke = Stroke::new(2.0).with_caps(kurbo::Cap::Butt);
-        let mesh = stroke_mesh(&path, &stroke, Affine::IDENTITY, 0.1).expect("a mesh");
+        let mesh = stroke_mesh(&path, &stroke, Affine::IDENTITY, Px::new(0.1)).expect("a mesh");
         assert!((area(&mesh) - 40.0).abs() < 1e-3, "{}", area(&mesh));
-        let scaled = stroke_mesh(&path, &stroke, Affine::scale(2.0), 0.1).expect("a mesh");
+        let scaled = stroke_mesh(&path, &stroke, Affine::scale(2.0), Px::new(0.1)).expect("a mesh");
         assert!((area(&scaled) - 160.0).abs() < 1e-2, "{}", area(&scaled));
     }
 
     fn slot(left: i32, top: i32, w: u32, h: u32) -> AtlasSlot {
         AtlasSlot {
-            uv_min: [0.0; 2],
-            uv_max: [1.0; 2],
-            pixel_width: w,
-            pixel_height: h,
-            bearing_left: left,
-            bearing_top: top,
+            uv: UvBox::WHOLE,
+            size: ambre_core::Size::new(Px::new(w), Px::new(h)),
+            bearing_left: Px::new(left),
+            bearing_top: Px::new(top),
             atlas: AtlasKind::Mask,
             texel_scale: 1.0,
         }
@@ -951,6 +959,6 @@ mod tests {
     fn transform_maps_vertices_to_screen() {
         let t = Affine::translate((100.0, 50.0)) * Affine::scale(2.0);
         let v = screen_vertex(lpoint(3.0, 4.0), t);
-        assert_eq!(v, [106.0, 58.0]);
+        assert_eq!(v, ambre_core::Point::new(Px::new(106.0), Px::new(58.0)));
     }
 }

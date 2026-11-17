@@ -16,21 +16,81 @@
 
 use rustc_hash::FxHashMap;
 
-use ambre_core::{Css, Device, Px, Scale, Size, Texel};
+use ambre_core::{
+    Count, CountsSince, Css, Device, NarrowCount, Point, Px, Scale, Seq, SeqKind, Size, Texel,
+};
 
-use crate::space::{GlyphRaster, Parley, RasterKey};
+use crate::space::{GlyphRaster, Parley, RasterKey, TexelShift, Uv};
 
 // ============================================================================
 // GlyphAtlas
 // ============================================================================
 
-const ATLAS_SIZE: u32 = 2048;
+/// The side of both atlases.
+const ATLAS_SIZE: Px<Texel> = Px::<Texel>::new(2048);
 /// The largest em a glyph is rasterized at, in device pixels: half the atlas
 /// side. A glyph box up to twice its em then still packs. A larger size is
 /// rasterized at this one and drawn scaled up (`CANVAS-087`).
-const RASTER_CAP: Px<GlyphRaster> = Px::<GlyphRaster>::new((ATLAS_SIZE / 2) as f32);
+const RASTER_CAP: Px<GlyphRaster> = Px::<GlyphRaster>::new((ATLAS_SIZE.get() / 2) as f32);
 // 1-pixel padding between glyphs prevents bilinear bleed at atlas boundaries.
-const ATLAS_PAD: u32 = 1;
+const ATLAS_PAD: Px<Texel> = Px::<Texel>::new(1);
+
+/// The frames the atlas ages its glyphs by: the clock `begin_frame` steps,
+/// and the frame a glyph was last drawn on.
+pub(super) enum AtlasFrames {}
+
+impl SeqKind for AtlasFrames {
+    type IssueRight = ();
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("AtlasFrame");
+}
+
+impl CountsSince for AtlasFrames {
+    type Count = FramesUnused;
+}
+
+/// The atlas frames since a glyph was last drawn.
+pub(super) enum FramesUnused {}
+
+impl NarrowCount for FramesUnused {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("FramesUnused");
+}
+
+/// A glyph's box in its atlas, as a sampler reads it: the corner nearest the
+/// origin of the texture, and the opposite one.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct UvBox {
+    /// The top-left corner.
+    pub min: Point<Px<Uv>>,
+    /// The bottom-right corner.
+    pub max: Point<Px<Uv>>,
+}
+
+impl UvBox {
+    /// The whole texture, as a picture samples it.
+    pub const WHOLE: Self = Self {
+        min: Point::new(Px::<Uv>::new(0.0), Px::<Uv>::new(0.0)),
+        max: Point::new(Px::<Uv>::new(1.0), Px::<Uv>::new(1.0)),
+    };
+
+    /// The four corners, `[tl, tr, br, bl]`, the order a quad lists its own.
+    pub fn corners(self) -> [Point<Px<Uv>>; 4] {
+        let (min, max) = (self.min, self.max);
+        [min, Point::new(max.x, min.y), max, Point::new(min.x, max.y)]
+    }
+
+    /// The box of `size` texels at `at`, in an atlas of side `side`.
+    fn of(at: Point<Px<Texel>>, size: Size<Px<Texel>>, side: Px<Texel>) -> Self {
+        // The ratio of a texel to the side: a texel length over a texel length.
+        let inv = 1.0 / side.get() as f32;
+        let uv = |texels: Px<Texel>| Px::<Uv>::new(texels.get() as f32 * inv);
+        Self {
+            min: Point::new(uv(at.x), uv(at.y)),
+            max: Point::new(uv(at.x + size.width), uv(at.y + size.height)),
+        }
+    }
+}
 
 /// The font a glyph is drawn from: the id of its registered blob, stable for
 /// as long as the blob lives.
@@ -118,8 +178,7 @@ impl GlyphKey {
 /// or RGBA color is carried by the owning slot's `atlas`. The compaction
 /// path reads it to re-queue into the matching atlas.
 struct GlyphBitmap {
-    w: u32,
-    h: u32,
+    size: Size<Px<Texel>>,
     data: Vec<u8>,
 }
 
@@ -127,22 +186,22 @@ struct GlyphBitmap {
 /// compaction), and the retained bitmap. `None` marks a zero-size glyph.
 struct CachedGlyph {
     slot: AtlasSlot,
-    last_used: u64,
+    last_used: Seq<AtlasFrames>,
     bitmap: Option<GlyphBitmap>,
 }
 
 /// UV rect and pixel-space bearing for one atlas entry.
 #[derive(Clone, Copy)]
 pub struct AtlasSlot {
-    pub uv_min: [f32; 2],
-    pub uv_max: [f32; 2],
-    pub pixel_width: u32,
-    pub pixel_height: u32,
-    /// Horizontal offset from the glyph origin to the bitmap left edge (px).
-    pub bearing_left: i32,
-    /// Vertical offset from the glyph origin (baseline) to the bitmap top (px).
+    /// The box of the bitmap in its atlas.
+    pub uv: UvBox,
+    /// The size of the bitmap.
+    pub size: Size<Px<Texel>>,
+    /// Horizontal offset from the glyph origin to the bitmap left edge.
+    pub bearing_left: Px<TexelShift>,
+    /// Vertical offset from the glyph origin (baseline) to the bitmap top.
     /// Positive = above baseline. Apply as: `screen_y = origin_y - bearing_top`.
-    pub bearing_top: i32,
+    pub bearing_top: Px<TexelShift>,
     /// The atlas this glyph lives in. Routes the draw to the matching
     /// pipeline.
     pub atlas: AtlasKind,
@@ -163,47 +222,49 @@ ambre_core::define_flag! {
 }
 
 struct ShelfPacker {
-    cur_x: u32,
-    cur_y: u32,   // top of the current shelf
-    shelf_h: u32, // max glyph height on the current shelf
-    atlas_size: u32,
+    cur_x: Px<Texel>,
+    /// The top of the current shelf.
+    cur_y: Px<Texel>,
+    /// The tallest glyph on the current shelf.
+    shelf_h: Px<Texel>,
+    atlas_size: Px<Texel>,
 }
 
 impl ShelfPacker {
-    fn new(atlas_size: u32) -> Self {
+    fn new(atlas_size: Px<Texel>) -> Self {
         Self {
-            cur_x: 0,
-            cur_y: 0,
-            shelf_h: 0,
+            cur_x: Px::ZERO,
+            cur_y: Px::ZERO,
+            shelf_h: Px::ZERO,
             atlas_size,
         }
     }
 
     fn reset(&mut self) {
-        self.cur_x = 0;
-        self.cur_y = 0;
-        self.shelf_h = 0;
+        self.cur_x = Px::ZERO;
+        self.cur_y = Px::ZERO;
+        self.shelf_h = Px::ZERO;
     }
 
-    /// Try to allocate a region of `(w, h)` pixels.
-    /// Returns the top-left pixel coordinate on success, or `None` if the
+    /// Try to allocate a region of `size` texels.
+    /// Returns the top-left texel on success, or `None` if the
     /// atlas is full (caller should reset the atlas and retry).
-    fn allocate(&mut self, w: u32, h: u32) -> Option<(u32, u32)> {
-        let w_padded = w + ATLAS_PAD;
+    fn allocate(&mut self, size: Size<Px<Texel>>) -> Option<Point<Px<Texel>>> {
+        let w_padded = size.width + ATLAS_PAD;
         // Advance to next shelf if this glyph doesn't fit horizontally.
         if self.cur_x + w_padded > self.atlas_size {
             self.cur_y += self.shelf_h + ATLAS_PAD;
-            self.cur_x = 0;
-            self.shelf_h = 0;
+            self.cur_x = Px::ZERO;
+            self.shelf_h = Px::ZERO;
         }
         // Check vertical overflow.
-        if self.cur_y + h > self.atlas_size {
+        if self.cur_y + size.height > self.atlas_size {
             return None;
         }
-        let (x, y) = (self.cur_x, self.cur_y);
+        let at = Point::new(self.cur_x, self.cur_y);
         self.cur_x += w_padded;
-        self.shelf_h = self.shelf_h.max(h);
-        Some((x, y))
+        self.shelf_h = self.shelf_h.max(size.height);
+        Some(at)
     }
 }
 
@@ -240,14 +301,12 @@ pub(super) struct Upload {
 
 /// One glyph as the rasterizer returned it, before it is packed.
 pub(super) struct Raster {
-    /// Bitmap width in pixels; zero for an invisible glyph.
-    pub(super) w: u32,
-    /// Bitmap height in pixels; zero for an invisible glyph.
-    pub(super) h: u32,
+    /// The bitmap size; zero on an edge for an invisible glyph.
+    pub(super) size: Size<Px<Texel>>,
     /// Horizontal offset from the glyph origin to the bitmap's left edge.
-    pub(super) left: i32,
+    pub(super) left: Px<TexelShift>,
     /// Vertical offset from the baseline to the bitmap's top edge.
-    pub(super) top: i32,
+    pub(super) top: Px<TexelShift>,
     /// Whether the bytes are RGBA colour rather than an R8 coverage mask.
     pub(super) atlas: AtlasKind,
     /// The bitmap, one byte per pixel for a mask and four for colour.
@@ -258,8 +317,8 @@ pub(super) struct Raster {
 /// the two shelf packers, the eviction order and the uploads still to send.
 /// No device is named here, so a host test drives it whole.
 pub(super) struct GlyphCache {
-    /// The side of both atlases, in pixels.
-    size: u32,
+    /// The side of both atlases.
+    size: Px<Texel>,
     cache: FxHashMap<GlyphKey, CachedGlyph>,
     packer: ShelfPacker,
     /// Independent shelf packer for the color atlas.
@@ -277,7 +336,7 @@ pub(super) struct GlyphCache {
     color_wanted: bool,
     /// Monotonic frame counter, bumped in `begin_frame`. A glyph drawn this
     /// frame has `last_used == frame`; compaction keeps that working set.
-    frame: u64,
+    frame: Seq<AtlasFrames>,
     /// Set when an allocation overflowed mid-frame. Compaction is deferred to
     /// the next `begin_frame` so it never moves a glyph whose UVs were already
     /// baked into this frame's vertex buffer.
@@ -286,7 +345,7 @@ pub(super) struct GlyphCache {
 
 impl GlyphCache {
     /// An empty cache over two atlases of `size` x `size` pixels.
-    pub(super) fn new(size: u32) -> Self {
+    pub(super) fn new(size: Px<Texel>) -> Self {
         Self {
             size,
             cache: FxHashMap::default(),
@@ -296,7 +355,7 @@ impl GlyphCache {
             color_pending: Vec::new(),
             color_ready: false,
             color_wanted: false,
-            frame: 0,
+            frame: Seq::ZERO,
             needs_compact: false,
         }
     }
@@ -310,7 +369,7 @@ impl GlyphCache {
     /// Advance the frame clock that ages glyphs, and run a compaction the
     /// previous frame deferred.
     pub(super) fn begin_frame(&mut self) {
-        self.frame += 1;
+        self.frame = self.frame.next();
         if self.needs_compact {
             self.compact();
             self.needs_compact = false;
@@ -327,8 +386,8 @@ impl GlyphCache {
         // Keep the frame that overflowed and the one before it, so glyphs that
         // flicker in and out across a couple of frames are not thrashed. This
         // runs at the start of a frame, which has drawn nothing yet.
-        const KEEP_FRAMES: u64 = 2;
-        let cutoff = self.frame.saturating_sub(KEEP_FRAMES);
+        const KEEP_FRAMES: Count<FramesUnused> = Count::new(2);
+        let frame = self.frame;
 
         self.packer.reset();
         self.color_packer.reset();
@@ -341,11 +400,10 @@ impl GlyphCache {
         let mut entries: Vec<(GlyphKey, CachedGlyph)> = self
             .cache
             .drain()
-            .filter(|(_, c)| c.last_used >= cutoff)
+            .filter(|(_, c)| frame.since(c.last_used) <= KEEP_FRAMES)
             .collect();
         entries.sort_by_key(|(_, c)| std::cmp::Reverse(c.last_used));
 
-        let inv = 1.0 / self.size as f32;
         for (key, mut cached) in entries {
             match &cached.bitmap {
                 // Zero-size (invisible) glyph: no atlas space, keep as-is.
@@ -359,17 +417,16 @@ impl GlyphCache {
                     } else {
                         (&mut self.packer, &mut self.pending)
                     };
-                    let Some((ax, ay)) = packer.allocate(bmp.w, bmp.h) else {
+                    let Some(at) = packer.allocate(bmp.size) else {
                         // Working set itself overflows: drop the rest.
                         continue;
                     };
-                    cached.slot.uv_min = [ax as f32 * inv, ay as f32 * inv];
-                    cached.slot.uv_max = [(ax + bmp.w) as f32 * inv, (ay + bmp.h) as f32 * inv];
+                    cached.slot.uv = UvBox::of(at, bmp.size, self.size);
                     pending.push(Upload {
                         rect: TexelRect {
-                            x: Px::new(ax),
-                            y: Px::new(ay),
-                            size: Size::new(Px::new(bmp.w), Px::new(bmp.h)),
+                            x: at.x,
+                            y: at.y,
+                            size: bmp.size,
                         },
                         bytes: bmp.data.clone(),
                     });
@@ -392,8 +449,7 @@ impl GlyphCache {
     /// grown yet, or the atlas is full and compacts at the next frame.
     pub(super) fn insert(&mut self, key: GlyphKey, raster: Raster) -> Option<AtlasSlot> {
         let Raster {
-            w,
-            h,
+            size,
             left,
             top,
             atlas,
@@ -401,12 +457,10 @@ impl GlyphCache {
         } = raster;
         let is_color = atlas == AtlasKind::Color;
         // Invisible glyph (for example space): cache a zero-size slot, no upload.
-        if w == 0 || h == 0 || data.is_empty() {
+        if size.width == Px::ZERO || size.height == Px::ZERO || data.is_empty() {
             let slot = AtlasSlot {
-                uv_min: [0.0; 2],
-                uv_max: [0.0; 2],
-                pixel_width: 0,
-                pixel_height: 0,
+                uv: UvBox::default(),
+                size: Size::default(),
                 bearing_left: left,
                 bearing_top: top,
                 atlas,
@@ -439,17 +493,14 @@ impl GlyphCache {
         } else {
             (&mut self.packer, &mut self.pending)
         };
-        let Some((ax, ay)) = packer.allocate(w, h) else {
+        let Some(at) = packer.allocate(size) else {
             self.needs_compact = true;
             return None;
         };
 
-        let inv = 1.0 / self.size as f32;
         let slot = AtlasSlot {
-            uv_min: [ax as f32 * inv, ay as f32 * inv],
-            uv_max: [(ax + w) as f32 * inv, (ay + h) as f32 * inv],
-            pixel_width: w,
-            pixel_height: h,
+            uv: UvBox::of(at, size, self.size),
+            size,
             bearing_left: left,
             bearing_top: top,
             atlas,
@@ -458,9 +509,9 @@ impl GlyphCache {
 
         pending.push(Upload {
             rect: TexelRect {
-                x: Px::new(ax),
-                y: Px::new(ay),
-                size: Size::new(Px::new(w), Px::new(h)),
+                x: at.x,
+                y: at.y,
+                size,
             },
             bytes: data.clone(),
         });
@@ -469,7 +520,7 @@ impl GlyphCache {
             CachedGlyph {
                 slot,
                 last_used: self.frame,
-                bitmap: Some(GlyphBitmap { w, h, data }),
+                bitmap: Some(GlyphBitmap { size, data }),
             },
         );
         Some(slot)
@@ -490,8 +541,8 @@ impl GlyphAtlas {
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("glyph_atlas"),
             size: wgpu::Extent3d {
-                width: ATLAS_SIZE,
-                height: ATLAS_SIZE,
+                width: ATLAS_SIZE.get(),
+                height: ATLAS_SIZE.get(),
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
@@ -504,7 +555,7 @@ impl GlyphAtlas {
         let view = texture.create_view(&Default::default());
 
         // Lazy: a 1x1 placeholder until the first color glyph (see `color_ready`).
-        let color_texture = Self::new_color_texture(device, 1);
+        let color_texture = Self::new_color_texture(device, Px::new(1));
         let color_view = color_texture.create_view(&Default::default());
 
         Self {
@@ -518,12 +569,12 @@ impl GlyphAtlas {
     }
 
     /// Create an `Rgba8Unorm` color-atlas texture of `size` x `size`.
-    fn new_color_texture(device: &wgpu::Device, size: u32) -> wgpu::Texture {
+    fn new_color_texture(device: &wgpu::Device, size: Px<Texel>) -> wgpu::Texture {
         device.create_texture(&wgpu::TextureDescriptor {
             label: Some("glyph_color_atlas"),
             size: wgpu::Extent3d {
-                width: size,
-                height: size,
+                width: size.get(),
+                height: size.get(),
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
@@ -584,13 +635,11 @@ impl GlyphAtlas {
     /// Upload all pending rasterized glyphs to the two GPU textures.
     pub fn flush_uploads(&mut self, queue: &wgpu::Queue) {
         let (pending, color_pending) = self.glyphs.take_uploads();
-        // R8 mask atlas: 1 byte/px.
         for upload in pending {
-            upload_glyph(queue, &self.texture, upload, 1);
+            upload_glyph(queue, &self.texture, upload, AtlasKind::Mask);
         }
-        // RGBA color atlas: 4 bytes/px.
         for upload in color_pending {
-            upload_glyph(queue, &self.color_texture, upload, 4);
+            upload_glyph(queue, &self.color_texture, upload, AtlasKind::Color);
         }
     }
 }
@@ -665,10 +714,12 @@ pub(super) fn rasterize(
         glyph.get(),
     )?;
     Some(Raster {
-        w: image.placement.width,
-        h: image.placement.height,
-        left: image.placement.left,
-        top: image.placement.top,
+        size: Size::new(
+            Px::new(image.placement.width),
+            Px::new(image.placement.height),
+        ),
+        left: Px::new(image.placement.left),
+        top: Px::new(image.placement.top),
         atlas: match image.content {
             swash::scale::image::Content::Color => AtlasKind::Color,
             _ => AtlasKind::Mask,
@@ -679,16 +730,21 @@ pub(super) fn rasterize(
 
 /// Upload one rasterized glyph bitmap to `texture`, over its texel rectangle.
 ///
-/// `bpp` is 1 (R8 coverage mask) or 4 (RGBA color). WebGL2 (via the wgpu GL
+/// `atlas` names the format: an R8 coverage mask, one byte a texel, or RGBA
+/// colour, four. WebGL2 (via the wgpu GL
 /// backend) requires `bytes_per_row` to be a multiple of 4 for
 /// `texSubImage2D`. The R8 path pads each row up to that alignment. The RGBA
 /// path is already a multiple of 4 (`w * 4`), so it uploads as-is.
-fn upload_glyph(queue: &wgpu::Queue, texture: &wgpu::Texture, upload: Upload, bpp: u32) {
+fn upload_glyph(queue: &wgpu::Queue, texture: &wgpu::Texture, upload: Upload, atlas: AtlasKind) {
     let Upload {
         rect: TexelRect { x, y, size },
         bytes: data,
     } = upload;
     let (x, y, w, h) = (x.get(), y.get(), size.width.get(), size.height.get());
+    let bpp: u32 = match atlas {
+        AtlasKind::Mask => 1,
+        AtlasKind::Color => 4,
+    };
     let row_bytes = w * bpp;
     let aligned_bpr = (row_bytes + 3) & !3;
     let upload_data: Vec<u8> = if aligned_bpr == row_bytes {
@@ -742,10 +798,9 @@ mod tests {
     /// A square mask glyph of side `side`, filled with `fill`.
     fn mask(side: u32, fill: u8) -> Raster {
         Raster {
-            w: side,
-            h: side,
-            left: 1,
-            top: 2,
+            size: Size::new(Px::new(side), Px::new(side)),
+            left: Px::new(1),
+            top: Px::new(2),
             atlas: AtlasKind::Mask,
             data: vec![fill; (side * side) as usize],
         }
@@ -762,7 +817,7 @@ mod tests {
     /// The pixel origin of a slot in an atlas of side `size`.
     fn origin(slot: AtlasSlot, size: u32) -> (u32, u32) {
         let at = |uv: f32| (uv * size as f32).round() as u32;
-        (at(slot.uv_min[0]), at(slot.uv_min[1]))
+        (at(slot.uv.min.x.get()), at(slot.uv.min.y.get()))
     }
 
     /// Rasterize the glyph `ch` of a shipped face at `size` device pixels.
@@ -791,19 +846,11 @@ mod tests {
     fn a_dense_raster_has_the_physical_resolution() {
         let logical = raster_of("NotoSans-Regular.ttf", 'H', 14.0);
         let dense = raster_of("NotoSans-Regular.ttf", 'H', 28.0);
-        assert!(logical.h > 0 && logical.atlas == AtlasKind::Mask);
-        assert!(
-            dense.h.abs_diff(2 * logical.h) <= 1,
-            "{} vs {}",
-            dense.h,
-            logical.h
-        );
-        assert!(
-            dense.w.abs_diff(2 * logical.w) <= 1,
-            "{} vs {}",
-            dense.w,
-            logical.w
-        );
+        let (lw, lh) = (logical.size.width.get(), logical.size.height.get());
+        let (dw, dh) = (dense.size.width.get(), dense.size.height.get());
+        assert!(lh > 0 && logical.atlas == AtlasKind::Mask);
+        assert!(dh.abs_diff(2 * lh) <= 1, "{dh} vs {lh}");
+        assert!(dw.abs_diff(2 * lw) <= 1, "{dw} vs {lw}");
     }
 
     /// A glyph past the raster cap is rasterized at the cap, and its slot
@@ -831,10 +878,10 @@ mod tests {
         };
         let at_cap = slot_at(RASTER_CAP.get()).expect("a glyph at the cap");
         assert_eq!(at_cap.texel_scale, 1.0);
-        for size in [ATLAS_SIZE as f32 + 1.0, 1.0e6] {
+        for size in [ATLAS_SIZE.get() as f32 + 1.0, 1.0e6] {
             let past = slot_at(size).expect("a glyph past the cap");
-            assert_eq!(past.pixel_height, at_cap.pixel_height, "{size}");
-            assert_eq!(past.uv_min, at_cap.uv_min, "one bitmap, {size}");
+            assert_eq!(past.size, at_cap.size, "{size}");
+            assert_eq!(past.uv.min, at_cap.uv.min, "one bitmap, {size}");
             assert_eq!(past.texel_scale, size / RASTER_CAP.get(), "{size}");
         }
         assert!(slot_at(f32::INFINITY).is_none());
@@ -848,10 +895,11 @@ mod tests {
     #[test]
     fn an_emoji_rasterizes_to_colour_and_a_letter_to_a_mask() {
         let emoji = raster_of("NotoColorEmoji.ttf", '\u{1F44D}', 28.0);
-        assert!(emoji.atlas == AtlasKind::Color && emoji.h > 0);
-        assert_eq!(emoji.data.len(), (emoji.w * emoji.h * 4) as usize, "RGBA");
+        let texels = |r: &Raster| (r.size.width.get() * r.size.height.get()) as usize;
+        assert!(emoji.atlas == AtlasKind::Color && emoji.size.height.get() > 0);
+        assert_eq!(emoji.data.len(), texels(&emoji) * 4, "RGBA");
         let letter = raster_of("NotoSans-Regular.ttf", 'a', 28.0);
-        assert_eq!(letter.data.len(), (letter.w * letter.h) as usize, "R8");
+        assert_eq!(letter.data.len(), texels(&letter), "R8");
     }
 
     /// A glyph goes right of the last one, with one pixel of padding. When
@@ -859,27 +907,39 @@ mod tests {
     /// taller than what is left does not fit.
     #[test]
     fn a_shelf_opens_below_when_a_row_is_full() {
-        let mut packer = ShelfPacker::new(10);
-        assert_eq!(packer.allocate(4, 3), Some((0, 0)));
-        assert_eq!(packer.allocate(4, 2), Some((5, 0)));
-        assert_eq!(packer.allocate(4, 5), Some((0, 4)));
-        assert_eq!(packer.allocate(3, 7), None);
+        let mut packer = ShelfPacker::new(Px::new(10));
+        let mut allocate = |w: u32, h: u32| {
+            packer
+                .allocate(Size::new(Px::new(w), Px::new(h)))
+                .map(|at| (at.x.get(), at.y.get()))
+        };
+        assert_eq!(allocate(4, 3), Some((0, 0)));
+        assert_eq!(allocate(4, 2), Some((5, 0)));
+        assert_eq!(allocate(4, 5), Some((0, 4)));
+        assert_eq!(allocate(3, 7), None);
         packer.reset();
-        assert_eq!(packer.allocate(4, 3), Some((0, 0)));
+        assert_eq!(
+            packer.allocate(Size::new(Px::new(4), Px::new(3))),
+            Some(Point::new(Px::ZERO, Px::ZERO))
+        );
     }
 
     /// A packed glyph is found again with the slot it was given. Its bitmap
     /// is queued once, and the queue empties when the uploads are taken.
     #[test]
     fn a_packed_glyph_is_found_and_uploaded_once() {
-        let mut cache = GlyphCache::new(64);
+        let mut cache = GlyphCache::new(Px::new(64));
         cache.begin_frame();
         let slot = cache.insert(key(1), mask(4, 9)).expect("the glyph fits");
-        assert_eq!((slot.pixel_width, slot.pixel_height), (4, 4));
-        assert_eq!((slot.bearing_left, slot.bearing_top), (1, 2));
-        assert_eq!(slot.uv_max, [4.0 / 64.0, 4.0 / 64.0]);
+        assert_eq!(slot.size, Size::new(Px::new(4), Px::new(4)));
+        assert_eq!(
+            (slot.bearing_left, slot.bearing_top),
+            (Px::new(1), Px::new(2))
+        );
+        let quarter = Px::<Uv>::new(4.0 / 64.0);
+        assert_eq!(slot.uv.max, Point::new(quarter, quarter));
         let again = cache.lookup(&key(1)).expect("the glyph is cached");
-        assert_eq!((again.uv_min, again.uv_max), (slot.uv_min, slot.uv_max));
+        assert_eq!(again.uv, slot.uv);
         assert!(cache.lookup(&key(2)).is_none());
         let (masks, colors) = cache.take_uploads();
         assert_eq!(masks, vec![upload(0, 0, 4, 4, vec![9; 16])]);
@@ -892,7 +952,7 @@ mod tests {
     /// drops the ones not drawn for more than two frames (`CANVAS-021`).
     #[test]
     fn an_overflow_repacks_the_hot_glyphs_at_the_next_frame() {
-        let mut cache = GlyphCache::new(16);
+        let mut cache = GlyphCache::new(Px::new(16));
         cache.begin_frame();
         cache.insert(key(1), mask(4, 1)).expect("cold fits");
         for _ in 0..3 {
@@ -909,7 +969,7 @@ mod tests {
         );
         // Drawn again this frame: the hot glyph keeps its place until the next.
         let unmoved = cache.lookup(&key(3)).expect("still cached");
-        assert_eq!(unmoved.uv_min, hot.uv_min, "nothing moves mid-frame");
+        assert_eq!(unmoved.uv.min, hot.uv.min, "nothing moves mid-frame");
         assert_eq!(cache.take_uploads(), (Vec::new(), Vec::new()));
 
         cache.begin_frame();
@@ -921,14 +981,14 @@ mod tests {
         let (masks, _) = cache.take_uploads();
         let bytes: Vec<u8> = masks.iter().map(|upload| upload.bytes[0]).collect();
         assert_eq!(bytes, [3, 2], "both are uploaded again, from their bitmaps");
-        assert_eq!(cache.size, 16, "the atlas repacks and never grows");
+        assert_eq!(cache.size, Px::new(16), "the atlas repacks and never grows");
     }
 
     /// Covers `CANVAS-054`: a glyph that survives a repack draws what it drew.
     /// Its bitmap, size and bearings are the ones it was rasterized with.
     #[test]
     fn a_repack_moves_a_surviving_glyph_and_changes_nothing_it_draws() {
-        let mut cache = GlyphCache::new(16);
+        let mut cache = GlyphCache::new(Px::new(16));
         cache.begin_frame();
         cache.insert(key(1), mask(4, 1)).expect("cold fits");
         cache.begin_frame();
@@ -944,8 +1004,8 @@ mod tests {
         );
         cache.begin_frame();
         let after = cache.lookup(&key(2)).expect("the hot glyph survives");
-        assert_ne!(after.uv_min, before.uv_min, "the repack moved it");
-        let size = |s: AtlasSlot| (s.pixel_width, s.pixel_height, s.bearing_left, s.bearing_top);
+        assert_ne!(after.uv.min, before.uv.min, "the repack moved it");
+        let size = |s: AtlasSlot| (s.size, s.bearing_left, s.bearing_top);
         assert_eq!(size(after), size(before));
         let (masks, _) = cache.take_uploads();
         let (x, y) = origin(after, 16);
@@ -961,7 +1021,7 @@ mod tests {
     /// the full colour atlas. The first colour glyph asks for it once.
     #[test]
     fn the_color_atlas_is_grown_only_for_a_color_glyph() {
-        let mut cache = GlyphCache::new(64);
+        let mut cache = GlyphCache::new(Px::new(64));
         for glyph in 0..20 {
             cache.begin_frame();
             cache.insert(key(glyph), mask(4, 1));
@@ -985,14 +1045,14 @@ mod tests {
     /// compaction keeps it.
     #[test]
     fn an_invisible_glyph_takes_no_space() {
-        let mut cache = GlyphCache::new(8);
+        let mut cache = GlyphCache::new(Px::new(8));
         cache.begin_frame();
         let blank = Raster {
             data: Vec::new(),
             ..mask(0, 0)
         };
         let slot = cache.insert(key(1), blank).expect("a blank slot");
-        assert_eq!((slot.pixel_width, slot.uv_max), (0, [0.0, 0.0]));
+        assert_eq!((slot.size, slot.uv), (Size::default(), UvBox::default()));
         assert_eq!(cache.take_uploads(), (Vec::new(), Vec::new()));
         assert!(
             cache.insert(key(2), mask(8, 1)).is_none(),
@@ -1006,7 +1066,7 @@ mod tests {
     /// asks for it. Once grown, it packs into the colour atlas alone.
     #[test]
     fn a_color_glyph_waits_for_the_color_atlas() {
-        let mut cache = GlyphCache::new(32);
+        let mut cache = GlyphCache::new(Px::new(32));
         cache.begin_frame();
         let emoji = || Raster {
             atlas: AtlasKind::Color,

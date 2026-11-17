@@ -106,10 +106,18 @@ pub struct TextInput {
     composing: Rc<Cell<Composition>>,
     /// How many times a view asked for the focus. A host test reads it to state
     /// that a gesture left the focus where it was.
-    focus_requests: Rc<Cell<u32>>,
+    focus_requests: Rc<Cell<ambre_core::Count<FocusRequests>>>,
     /// Whether a key on the pipe is typed text. Mirrored on the element as
     /// [`TYPING_ATTR`], which the keymap listener reads off the key's target.
     typing: Rc<Cell<Typing>>,
+}
+
+/// The times a view asked a pipe for the focus.
+pub enum FocusRequests {}
+
+impl ambre_core::NarrowCount for FocusRequests {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("FocusRequests");
 }
 
 /// What a key on the pipe is (`CHROME-103`): a command a keymap reads, or
@@ -155,7 +163,7 @@ impl TextInput {
         Self {
             dom: None,
             composing: Rc::new(Cell::new(Composition::Idle)),
-            focus_requests: Rc::new(Cell::new(0)),
+            focus_requests: Rc::new(Cell::new(ambre_core::Count::ZERO)),
             typing: Rc::new(Cell::new(Typing::Text)),
         }
     }
@@ -219,7 +227,7 @@ impl TextInput {
         Self {
             dom: Some(Pipe { textarea, live }),
             composing: Rc::new(Cell::new(Composition::Idle)),
-            focus_requests: Rc::new(Cell::new(0)),
+            focus_requests: Rc::new(Cell::new(ambre_core::Count::ZERO)),
             typing: Rc::new(Cell::new(Typing::Text)),
         }
     }
@@ -262,14 +270,14 @@ impl TextInput {
     /// an edit session opens.
     pub fn focus(&self) {
         self.focus_requests
-            .set(self.focus_requests.get().saturating_add(1));
+            .set(self.focus_requests.get().incremented());
         if let Some(dom) = &self.dom {
             let _ = dom.textarea.focus();
         }
     }
 
     /// How many times [`focus`](Self::focus) was called on this pipe.
-    pub fn focus_requests(&self) -> u32 {
+    pub fn focus_requests(&self) -> ambre_core::Count<FocusRequests> {
         self.focus_requests.get()
     }
 

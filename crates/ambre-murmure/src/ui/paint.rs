@@ -1698,7 +1698,7 @@ pub(crate) mod tests {
                 &|_| ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada").ok(),
                 &|_| "t".to_owned(),
             );
-            cache.lazy_fonts_requested()
+            cache.lazy_fonts_requested().get()
         };
         let ada = Id::<User>::mint();
         let mut plain = MessageList::default();

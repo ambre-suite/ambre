@@ -815,7 +815,7 @@ impl TextEditor {
                     };
                     let tint = Brush::Solid(tint);
                     for (bb, _line) in covered(layout, span.range).geometry(layout) {
-                        surface.fill_path(&rect_path(offset_box(bb, dx, dy)), &tint);
+                        surface.fill_path(&rect_path(offset_box(bb, origin)), &tint);
                     }
                 }
                 laid_on(self.editor.raw_selection(), layout).geometry(layout)
@@ -823,7 +823,7 @@ impl TextEditor {
             None => self.editor.selection_geometry(),
         };
         for (bb, _line) in band {
-            surface.fill_path(&rect_path(offset_box(bb, dx, dy)), &sel);
+            surface.fill_path(&rect_path(offset_box(bb, origin)), &sel);
         }
 
         // Glyph runs, each in the ink of its own style.
@@ -894,7 +894,7 @@ impl TextEditor {
         if caret == Caret::Shown
             && let Some(bb) = self.caret_local()
         {
-            surface.fill_path(&rect_path(offset_box(bb, dx, dy)), &brush);
+            surface.fill_path(&rect_path(offset_box(bb, origin)), &brush);
         }
     }
 }
@@ -944,7 +944,8 @@ fn covered(layout: &Layout<Brush>, range: Span<Byte>) -> Selection {
 }
 
 /// Translate a parley `BoundingBox` (local editor space) into a screen `Rect`.
-fn offset_box(bb: BoundingBox, dx: f64, dy: f64) -> Rect {
+fn offset_box(bb: BoundingBox, origin: Point) -> Rect {
+    let (dx, dy) = (origin.x, origin.y);
     Rect::new(bb.x0 + dx, bb.y0 + dy, bb.x1 + dx, bb.y1 + dy)
 }
 

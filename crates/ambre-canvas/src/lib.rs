@@ -95,9 +95,12 @@ pub use perf::PerfPublisher;
 pub use render::{ContentRepaint, Layer, LayerRepaint, QuadRenderer, VideosDrawn, WgpuSurface};
 pub use space::{Parley, WholeParley};
 pub use text_cache::{
-    Look, Slant, SpanShape, TextCache, TextLength, Weight, WordBreak, registered_face,
+    CachedLayouts, GlyphHits, Look, Slant, SpanShape, TextCache, TextLength, Weight, WordBreak,
+    registered_face,
 };
-pub use text_input::{Composition, ContentKind, Embedding, TYPING_ATTR, TextInput, Typing};
+pub use text_input::{
+    Composition, ContentKind, Embedding, FocusRequests, TYPING_ATTR, TextInput, Typing,
+};
 pub use theme::{Palette, Theme, ThemeControl};
 pub use view::{
     CellsDrawn, FrameStats, GlyphMisses, HudTick, InputEvent, PerfSnapshot, PointerButton,

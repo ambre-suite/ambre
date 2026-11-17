@@ -107,6 +107,14 @@ pub fn font_context_from_bytes(
 /// missing (`PROSE-110`).
 pub use ambre_draw::LazyFont;
 
+/// The lazy scripts a loader has started a fetch for.
+pub enum LazyFonts {}
+
+impl ambre_core::NarrowCount for LazyFonts {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("LazyFonts");
+}
+
 /// The fetches of lazy faces that one thread has armed (`PDF-019`).
 pub enum ArmedFetches {}
 
@@ -202,8 +210,8 @@ impl LazyFontLoader {
 
     /// Number of scripts a fetch has been started for (test/diagnostic hook).
     #[cfg(any(test, not(target_arch = "wasm32")))]
-    pub fn requested_count(&self) -> usize {
-        self.requested.len()
+    pub fn requested_count(&self) -> ambre_core::Count<LazyFonts> {
+        ambre_core::Count::of(self.requested.len())
     }
 
     /// Start the async, same-origin fetch of a lazy face and hand the bytes to
@@ -270,18 +278,18 @@ mod tests {
     fn observe_latches_each_script_once() {
         let mut loader = LazyFontLoader::new();
         loader.observe("plain ascii");
-        assert_eq!(loader.requested_count(), 0);
+        assert_eq!(loader.requested_count().get(), 0);
 
         // A Han codepoint triggers exactly one request...
         loader.observe("mixed 中文 text");
-        assert_eq!(loader.requested_count(), 1);
+        assert_eq!(loader.requested_count().get(), 1);
         // ...and re-observing the same script does not fetch again.
         loader.observe("more 漢字");
-        assert_eq!(loader.requested_count(), 1);
+        assert_eq!(loader.requested_count().get(), 1);
 
         // A different script adds one more request.
         loader.observe("عربى");
-        assert_eq!(loader.requested_count(), 2);
+        assert_eq!(loader.requested_count().get(), 2);
     }
 
     /// A drained face comes back to the caller, which owes it to the threads

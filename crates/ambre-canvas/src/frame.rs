@@ -244,8 +244,8 @@ pub fn paint_fatal(
     let x = (f64::from(width) - f64::from(column.get())) / 2.0;
     let heading = FONT_HEADING;
     let body = FONT_BODY;
-    let title_h = text_height(font_cx, cache, TITLE_TEXT, heading, column);
-    let body_h = text_height(font_cx, cache, message, body, column);
+    let title_h = f64::from(text_height(font_cx, cache, TITLE_TEXT, heading, column).get());
+    let body_h = f64::from(text_height(font_cx, cache, message, body, column).get());
     let gap = 16.0;
     let title_y = (f64::from(height) - (title_h + gap + body_h)) / 2.0;
     let lines = [
@@ -282,7 +282,7 @@ fn text_height(
     text: &str,
     size: Px<View>,
     width: Px<View>,
-) -> f64 {
+) -> Px<View> {
     let layout = cache.get_or_build(
         font_cx,
         text,
@@ -291,7 +291,7 @@ fn text_height(
             ..crate::Look::body(size, width)
         },
     );
-    f64::from(layout.height())
+    Px::new(layout.height())
 }
 
 /// Draw `text` as centered glyph runs over the column of `place`.

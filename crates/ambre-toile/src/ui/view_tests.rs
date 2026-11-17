@@ -781,7 +781,10 @@ fn a_press_on_the_board_focuses_the_pipe() {
     let before = rig.view.text_input.focus_requests();
     rig.click(A.center().x, A.center().y);
     rig.click(A.x1 + 400.0, A.y1 + 400.0);
-    assert_eq!(rig.view.text_input.focus_requests(), before + 2);
+    assert_eq!(
+        rig.view.text_input.focus_requests(),
+        before.plus(ambre_core::Count::new(2))
+    );
 }
 
 /// Covers `UI-THREAD-022` and `UI-THREAD-046`: the kept copy answers when the

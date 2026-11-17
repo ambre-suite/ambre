@@ -10,7 +10,7 @@
 use super::*;
 use crate::SurfaceSize;
 use ambre_core::index::Pos;
-use ambre_core::{Count, Octets};
+use ambre_core::{Count, Octets, Point, Seq, SeqKind};
 use ambre_core::{Css, Device, Image, Px, Scale, Size, Texel, VideoSlots, View};
 use ambre_draw::{Color, ImageSource, Line, Rect};
 use std::collections::HashMap;
@@ -140,15 +140,14 @@ pub struct QuadRenderer {
     blit_bgl: wgpu::BindGroupLayout,
     #[cfg(target_arch = "wasm32")]
     blit_sampler: wgpu::Sampler,
-    /// Index of the offscreen that holds the latest valid CELLS pixels.
-    /// After a Full/Scroll repaint, we render into the OTHER index and flip.
-    current_offscreen_idx: usize,
+    /// The offscreen that holds the latest valid CELLS pixels.
+    /// After a Full/Scroll repaint, we render into the OTHER one and flip.
+    current_offscreen: Offscreen,
 
     // -- Viewport state --
     /// The logical size every push is written in. The projection maps it onto
     /// the whole buffer, which is where the density applies (`CANVAS-032`).
-    width: f32,
-    height: f32,
+    viewport: Size<Px<View>>,
     /// The buffer in device pixels, which an offscreen copy counts in.
     physical: Size<Px<Texel>>,
     /// Device pixels per logical pixel, which a glyph is rasterized at.
@@ -172,8 +171,37 @@ struct CacheEntry<T> {
     /// changed behind its identity, so the cache replaces the entry rather than
     /// stretching it (`ImageSource::key`).
     size: Size<Px<Image>>,
-    /// Frame ordinal of the last draw that bound it, for eviction.
-    last_used: u64,
+    /// The frame of the last draw that bound it, for eviction.
+    last_used: Seq<ImageFrames>,
+}
+
+/// The frames the picture cache ages its entries by: the clock each frame
+/// steps, and the frame an entry was last drawn on.
+enum ImageFrames {}
+
+impl SeqKind for ImageFrames {
+    type IssueRight = ();
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ImageFrame");
+}
+
+/// One of the two ping-pong offscreens of the cells layer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Offscreen {
+    /// The first of the pair, which a resize makes current.
+    First,
+    /// The second of the pair.
+    Second,
+}
+
+impl Offscreen {
+    /// The other offscreen of the pair.
+    fn other(self) -> Self {
+        match self {
+            Self::First => Self::Second,
+            Self::Second => Self::First,
+        }
+    }
 }
 
 /// The uploaded pictures, bounded by `IMAGE_VRAM_BUDGET` and evicted
@@ -193,7 +221,7 @@ struct ImageCache<T> {
     bytes: Count<Octets>,
     budget: Count<Octets>,
     /// Monotonic per-frame counter, stamped onto an entry at each draw.
-    clock: u64,
+    clock: Seq<ImageFrames>,
 }
 
 impl<T> ImageCache<T> {
@@ -202,7 +230,7 @@ impl<T> ImageCache<T> {
             map: HashMap::new(),
             bytes: Count::<Octets>::new(0),
             budget,
-            clock: 0,
+            clock: Seq::ZERO,
         }
     }
 
@@ -290,11 +318,53 @@ pub enum VideosDrawn {
 /// picture a single draw, while keeping two different pictures in the order the
 /// walk drew them. A merge that ignored order would let the later picture land
 /// under the earlier one.
-fn extend_runs(runs: &mut Vec<ImageRun>, key: Binding, start: u32, end: u32) {
+fn extend_runs(runs: &mut Vec<ImageRun>, key: Binding, indices: Span<IndexSlots>) {
     match runs.last_mut() {
-        Some(run) if run.key == key && run.end == start => run.end = end,
-        _ => runs.push(ImageRun { key, start, end }),
+        Some(run) if run.key == key && run.indices.end == indices.start => {
+            run.indices.end = indices.end;
+        }
+        _ => runs.push(ImageRun { key, indices }),
     }
+}
+
+/// The corners of an axis-aligned glyph quad, `[tl, tr, br, bl]`. `None`
+/// for a quad with no area. The sums are made in view pixels, so each corner
+/// rounds as the vertex buffer always read it.
+fn quad_corners(quad: GlyphQuad) -> Option<[Point<Px<View>>; 4]> {
+    let GlyphQuad {
+        x,
+        y,
+        width,
+        height,
+        ..
+    } = quad;
+    if width <= Px::<View>::ZERO || height <= Px::<View>::ZERO {
+        return None;
+    }
+    let (x1, y1) = (x + width, y + height);
+    Some([
+        Point::new(x, y),
+        Point::new(x1, y),
+        Point::new(x1, y1),
+        Point::new(x, y1),
+    ])
+}
+
+/// The four vertices of a glyph quad at `corners`, `[tl, tr, br, bl]`,
+/// sampling the atlas box `uv` in the same order, tinted `color`.
+fn glyph_vertices(
+    corners: [Point<Px<View>>; 4],
+    uv: UvBox,
+    color: Option<Color>,
+) -> [GlyphVertex; 4] {
+    let [tl, tr, br, bl] = corners;
+    let [uv_tl, uv_tr, uv_br, uv_bl] = uv.corners();
+    [
+        GlyphVertex::new(tl, uv_tl, color),
+        GlyphVertex::new(tr, uv_tr, color),
+        GlyphVertex::new(br, uv_br, color),
+        GlyphVertex::new(bl, uv_bl, color),
+    ]
 }
 
 impl QuadRenderer {
@@ -351,7 +421,7 @@ impl QuadRenderer {
                 entry_point: Some("vs_main"),
                 compilation_options: Default::default(),
                 buffers: &[wgpu::VertexBufferLayout {
-                    array_stride: QUAD_VERTEX_SIZE as u64,
+                    array_stride: std::mem::size_of::<QuadVertex>() as u64,
                     step_mode: wgpu::VertexStepMode::Vertex,
                     attributes: &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x4],
                 }],
@@ -415,7 +485,7 @@ impl QuadRenderer {
                 entry_point: Some("vs_main"),
                 compilation_options: Default::default(),
                 buffers: &[wgpu::VertexBufferLayout {
-                    array_stride: GLYPH_VERTEX_SIZE as u64,
+                    array_stride: std::mem::size_of::<GlyphVertex>() as u64,
                     step_mode: wgpu::VertexStepMode::Vertex,
                     attributes: &wgpu::vertex_attr_array![
                         0 => Float32x2,
@@ -460,7 +530,7 @@ impl QuadRenderer {
                 entry_point: Some("vs_main"),
                 compilation_options: Default::default(),
                 buffers: &[wgpu::VertexBufferLayout {
-                    array_stride: GLYPH_VERTEX_SIZE as u64,
+                    array_stride: std::mem::size_of::<GlyphVertex>() as u64,
                     step_mode: wgpu::VertexStepMode::Vertex,
                     attributes: &wgpu::vertex_attr_array![
                         0 => Float32x2,
@@ -611,7 +681,7 @@ impl QuadRenderer {
                 entry_point: Some("vs_main"),
                 compilation_options: Default::default(),
                 buffers: &[wgpu::VertexBufferLayout {
-                    array_stride: IMAGE_VERTEX_SIZE as u64,
+                    array_stride: std::mem::size_of::<ImageVertex>() as u64,
                     step_mode: wgpu::VertexStepMode::Vertex,
                     attributes: &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2],
                 }],
@@ -715,19 +785,20 @@ impl QuadRenderer {
             blit_bgl,
             #[cfg(target_arch = "wasm32")]
             blit_sampler,
-            current_offscreen_idx: 0,
-            width: 1.0,
-            height: 1.0,
+            current_offscreen: Offscreen::First,
+            viewport: Size::new(Px::new(1.0), Px::new(1.0)),
             physical: Size::new(Px::new(1), Px::new(1)),
             density: Scale::<Css, Device>::ONE,
         }
     }
 
-    /// One of the two ping-pong offscreens: the first for index 0, the second
-    /// for any other. The index only ever holds 0 or 1.
-    fn offscreen(&self, idx: usize) -> &OffscreenTarget {
+    /// One of the two ping-pong offscreens.
+    fn offscreen(&self, which: Offscreen) -> &OffscreenTarget {
         let [first, second] = &self.offscreens;
-        if idx == 0 { first } else { second }
+        match which {
+            Offscreen::First => first,
+            Offscreen::Second => second,
+        }
     }
 
     /// Resize the ping-pong offscreens to the buffer. Call it whenever the
@@ -757,7 +828,7 @@ impl QuadRenderer {
                 "blit_bg_b",
             ),
         ];
-        self.current_offscreen_idx = 0;
+        self.current_offscreen = Offscreen::First;
     }
 
     /// Per-frame init: ticks the atlas and updates the cached viewport size.
@@ -769,14 +840,12 @@ impl QuadRenderer {
         // Advance the eviction clock so "least recently drawn" means a frame
         // count and not an arbitrary order. An image the walk stops drawing is
         // the first to go when the VRAM budget binds.
-        self.images.clock = self.images.clock.wrapping_add(1);
+        self.images.clock = self.images.clock.next();
         self.videos_drawn = VideosDrawn::None;
         // A video the page no longer holds frees its texture.
         #[cfg(target_arch = "wasm32")]
         self.videos.retain(|slot, _| crate::video::holds(*slot));
-        let Size { width, height, .. } = size.logical();
-        self.width = width.get() as f32;
-        self.height = height.get() as f32;
+        self.viewport = size.view();
         self.physical = size.physical();
         self.density = size.density();
     }
@@ -812,7 +881,7 @@ impl QuadRenderer {
         if rect.width() <= 0.0 || rect.height() <= 0.0 {
             return;
         }
-        let c = color_f32(color);
+        let c = color.components;
         let x0 = rect.x0 as f32;
         let y0 = rect.y0 as f32;
         let x1 = rect.x1 as f32;
@@ -841,7 +910,7 @@ impl QuadRenderer {
             .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
     }
 
-    pub fn push_line(&mut self, line: Line, color: Color, width: f32) {
+    pub fn push_line(&mut self, line: Line, color: Color, width: Px<View>) {
         let (x0, y0) = (line.p0.x as f32, line.p0.y as f32);
         let (x1, y1) = (line.p1.x as f32, line.p1.y as f32);
         let dx = x1 - x0;
@@ -850,10 +919,10 @@ impl QuadRenderer {
         if len < 0.001 {
             return;
         }
-        let hw = width * 0.5;
+        let hw = width.get() * 0.5;
         let nx = -dy / len * hw;
         let ny = dx / len * hw;
-        let c = color_f32(color);
+        let c = color.components;
         let b = self.active_batches_mut();
         let base = b.quad_vertices.len() as u32;
         b.quad_vertices.extend_from_slice(&[
@@ -886,15 +955,14 @@ impl QuadRenderer {
     /// tessellation. Path meshes share the solid-color quad pipeline (same
     /// `QuadVertex`, same `TriangleList` topology), so they need no pipeline of
     /// their own.
-    pub fn push_mesh(&mut self, vertices: &[[f32; 2]], indices: &[u32], color: Color) {
+    pub fn push_mesh(&mut self, vertices: &[Point<Px<View>>], indices: &[u32], color: Color) {
         if vertices.is_empty() || indices.is_empty() {
             return;
         }
-        let c = color_f32(color);
         let b = self.active_batches_mut();
         let base = b.quad_vertices.len() as u32;
         b.quad_vertices
-            .extend(vertices.iter().map(|&pos| QuadVertex { pos, color: c }));
+            .extend(vertices.iter().map(|&pos| QuadVertex::new(pos, color)));
         b.quad_indices.extend(indices.iter().map(|&i| base + i));
     }
 
@@ -915,7 +983,7 @@ impl QuadRenderer {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         image: &ImageSource<'_>,
-        corners: [[f32; 2]; 4],
+        corners: [Point<Px<View>>; 4],
     ) {
         if image.size.width == Px::ZERO || image.size.height == Px::ZERO {
             return;
@@ -944,7 +1012,7 @@ impl QuadRenderer {
         queue: &wgpu::Queue,
         slot: Pos<VideoSlots>,
         picture: (&web_sys::HtmlVideoElement, Size<Px<Image>>),
-        corners: [[f32; 2]; 4],
+        corners: [Point<Px<View>>; 4],
     ) {
         let (element, size) = picture;
         if size.width == Px::ZERO || size.height == Px::ZERO {
@@ -1025,21 +1093,22 @@ impl QuadRenderer {
     }
 
     /// Append one textured quad at `corners`, drawn with the texture `key` binds.
-    fn push_textured(&mut self, key: Binding, corners: [[f32; 2]; 4]) {
+    fn push_textured(&mut self, key: Binding, corners: [Point<Px<View>>; 4]) {
         let b = match self.active_layer {
             Layer::Content => &mut self.cells,
             Layer::Overlay => &mut self.overlay,
         };
         let base = b.image_vertices.len() as u32;
-        let uv = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
-        for (pos, uv) in corners.into_iter().zip(uv) {
-            b.image_vertices.push(ImageVertex { pos, uv });
+        for (pos, uv) in corners.into_iter().zip(UvBox::WHOLE.corners()) {
+            b.image_vertices.push(ImageVertex::new(pos, uv));
         }
-        let start = b.image_indices.len() as u32;
-        b.image_indices
-            .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
-        let end = b.image_indices.len() as u32;
-        extend_runs(&mut b.image_runs, key, start, end);
+        let quad = [base, base + 1, base + 2, base, base + 2, base + 3];
+        let indices = Span::from_len(
+            Pos::ZERO + indices_len(&b.image_indices),
+            indices_len(&quad),
+        );
+        b.image_indices.extend_from_slice(&quad);
+        extend_runs(&mut b.image_runs, key, indices);
     }
 
     /// Upload one picture and its CPU-built mip chain, and mint the bind group
@@ -1065,7 +1134,7 @@ impl QuadRenderer {
                 height: image.size.height.get(),
                 depth_or_array_layers: 1,
             },
-            mip_level_count: levels,
+            mip_level_count: levels.get(),
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba8Unorm,
@@ -1104,8 +1173,8 @@ impl QuadRenderer {
             write(
                 i as u32 + 1,
                 level.pixels.as_bytes(),
-                level.width,
-                level.height,
+                level.size.width.get(),
+                level.size.height.get(),
             );
             bytes = bytes.plus(level.pixels.len());
         }
@@ -1134,100 +1203,18 @@ impl QuadRenderer {
 
     // -- Glyph geometry -------------------------------------------------------
     pub(super) fn push_glyph(&mut self, quad: GlyphQuad, color: Color) {
-        let GlyphQuad {
-            x,
-            y,
-            width: w,
-            height: h,
-            uv_min,
-            uv_max,
-        } = quad;
-        if w <= Px::<View>::ZERO || h <= Px::<View>::ZERO {
-            return;
+        if let Some(corners) = quad_corners(quad) {
+            self.push_glyph_quad(corners, quad.uv, color);
         }
-        // The vertex buffer takes the bare `f32`: the sums are made in view
-        // pixels first, so each corner rounds as it did.
-        let (x0, y0, x1, y1) = (x.get(), y.get(), (x + w).get(), (y + h).get());
-        let c = color_f32(color);
-        let b = self.active_batches_mut();
-        let base = b.glyph_vertices.len() as u32;
-        b.glyph_vertices.extend_from_slice(&[
-            GlyphVertex {
-                pos: [x0, y0],
-                uv: [uv_min[0], uv_min[1]],
-                color: c,
-            },
-            GlyphVertex {
-                pos: [x1, y0],
-                uv: [uv_max[0], uv_min[1]],
-                color: c,
-            },
-            GlyphVertex {
-                pos: [x1, y1],
-                uv: [uv_max[0], uv_max[1]],
-                color: c,
-            },
-            GlyphVertex {
-                pos: [x0, y1],
-                uv: [uv_min[0], uv_max[1]],
-                color: c,
-            },
-        ]);
-        b.glyph_indices
-            .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
     }
 
     /// Append a color-glyph quad (color emoji) to the active layer's color
     /// batch. Same geometry as `push_glyph`; the color pipeline samples the
-    /// RGBA atlas and ignores the tint, so `color` is a placeholder here.
+    /// RGBA atlas and ignores the tint.
     pub(super) fn push_color_glyph(&mut self, quad: GlyphQuad) {
-        let GlyphQuad {
-            x,
-            y,
-            width: w,
-            height: h,
-            uv_min,
-            uv_max,
-        } = quad;
-        if w <= Px::<View>::ZERO || h <= Px::<View>::ZERO {
-            return;
+        if let Some(corners) = quad_corners(quad) {
+            self.push_color_glyph_quad(corners, quad.uv);
         }
-        // The vertex buffer takes the bare `f32`: the sums are made in view
-        // pixels first, so each corner rounds as it did.
-        let (x0, y0, x1, y1) = (x.get(), y.get(), (x + w).get(), (y + h).get());
-        let c = [0.0, 0.0, 0.0, 1.0];
-        let b = self.active_batches_mut();
-        let base = b.color_glyph_vertices.len() as u32;
-        b.color_glyph_vertices.extend_from_slice(&[
-            GlyphVertex {
-                pos: [x0, y0],
-                uv: [uv_min[0], uv_min[1]],
-                color: c,
-            },
-            GlyphVertex {
-                pos: [x1, y0],
-                uv: [uv_max[0], uv_min[1]],
-                color: c,
-            },
-            GlyphVertex {
-                pos: [x1, y1],
-                uv: [uv_max[0], uv_max[1]],
-                color: c,
-            },
-            GlyphVertex {
-                pos: [x0, y1],
-                uv: [uv_min[0], uv_max[1]],
-                color: c,
-            },
-        ]);
-        b.color_glyph_indices.extend_from_slice(&[
-            base,
-            base + 1,
-            base + 2,
-            base,
-            base + 2,
-            base + 3,
-        ]);
     }
 
     /// Append a coverage-mask glyph quad from four explicit corner positions
@@ -1235,52 +1222,23 @@ impl QuadRenderer {
     /// **rotated** glyph run. The caller has already mapped the quad corners
     /// through the run transform. The glyph bitmap therefore rotates with the
     /// text rather than staying upright (`toile-tools`). `corners` are
-    /// `[tl, tr, br, bl]`, matching the `uv_min`/`uv_max` mapping of
-    /// [`push_glyph`].
-    pub fn push_glyph_quad(
-        &mut self,
-        corners: [[f32; 2]; 4],
-        uv_min: [f32; 2],
-        uv_max: [f32; 2],
-        color: Color,
-    ) {
-        let c = color_f32(color);
-        let uv = [
-            [uv_min[0], uv_min[1]],
-            [uv_max[0], uv_min[1]],
-            [uv_max[0], uv_max[1]],
-            [uv_min[0], uv_max[1]],
-        ];
+    /// `[tl, tr, br, bl]`, matching the corners of `uv` in that order.
+    pub fn push_glyph_quad(&mut self, corners: [Point<Px<View>>; 4], uv: UvBox, color: Color) {
         let b = self.active_batches_mut();
         let base = b.glyph_vertices.len() as u32;
-        for (pos, uv) in corners.into_iter().zip(uv) {
-            b.glyph_vertices.push(GlyphVertex { pos, uv, color: c });
-        }
+        b.glyph_vertices
+            .extend_from_slice(&glyph_vertices(corners, uv, Some(color)));
         b.glyph_indices
             .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
     }
 
     /// Rotated-quad counterpart of [`push_color_glyph`] (color emoji): same corner
     /// convention as [`push_glyph_quad`]; the color pipeline ignores the tint.
-    pub fn push_color_glyph_quad(
-        &mut self,
-        corners: [[f32; 2]; 4],
-        uv_min: [f32; 2],
-        uv_max: [f32; 2],
-    ) {
-        let c = [0.0, 0.0, 0.0, 1.0];
-        let uv = [
-            [uv_min[0], uv_min[1]],
-            [uv_max[0], uv_min[1]],
-            [uv_max[0], uv_max[1]],
-            [uv_min[0], uv_max[1]],
-        ];
+    pub fn push_color_glyph_quad(&mut self, corners: [Point<Px<View>>; 4], uv: UvBox) {
         let b = self.active_batches_mut();
         let base = b.color_glyph_vertices.len() as u32;
-        for (pos, uv) in corners.into_iter().zip(uv) {
-            b.color_glyph_vertices
-                .push(GlyphVertex { pos, uv, color: c });
-        }
+        b.color_glyph_vertices
+            .extend_from_slice(&glyph_vertices(corners, uv, None));
         b.color_glyph_indices.extend_from_slice(&[
             base,
             base + 1,
@@ -1323,7 +1281,12 @@ impl QuadRenderer {
         let (cells, overlay) = (plan.content, plan.overlay);
         let backdrop = clear_color(plan.backdrop);
         // -- 0. Uniform + atlas + conditional batch uploads. ------------------
-        let vp: [f32; 4] = [self.width, self.height, 0.0, 0.0];
+        let vp: [f32; 4] = [
+            self.viewport.width.get(),
+            self.viewport.height.get(),
+            0.0,
+            0.0,
+        ];
         queue.write_buffer(&self.uniform_buf, 0, bytemuck::cast_slice(&vp));
         // Grow the lazily-allocated color atlas on the first color glyph and
         // rebuild its bind group over the new texture view.
@@ -1353,13 +1316,13 @@ impl QuadRenderer {
         // -- 1. Cells layer: shift + render to the destination offscreen. -----
         let cells_dirty = !matches!(cells, ContentRepaint::Reuse);
         let dst_idx = if cells_dirty {
-            1 - self.current_offscreen_idx
+            self.current_offscreen.other()
         } else {
-            self.current_offscreen_idx
+            self.current_offscreen
         };
 
         if let ContentRepaint::Scroll { dx, dy } = cells {
-            let src = &self.offscreen(self.current_offscreen_idx).texture;
+            let src = &self.offscreen(self.current_offscreen).texture;
             let dst = &self.offscreen(dst_idx).texture;
             copy_offscreen_with_offset(encoder, src, dst, self.physical, dx, dy);
         }
@@ -1387,23 +1350,24 @@ impl QuadRenderer {
             let g_count = self.cells.drawn_glyph_indices;
             let cg_count = self.cells.drawn_color_glyph_indices;
             let has_images = !self.cells.drawn_image_runs.is_empty();
-            if q_count > 0 || g_count > 0 || cg_count > 0 || has_images {
+            let drawn = |n: Len<IndexSlots>| !n.is_zero();
+            if drawn(q_count) || drawn(g_count) || drawn(cg_count) || has_images {
                 pass.set_bind_group(0, &self.uniform_bg, &[]);
-                if q_count > 0 {
+                if drawn(q_count) {
                     pass.set_pipeline(&self.quad_pipeline);
                     pass.set_vertex_buffer(0, self.cells.quad_vb.slice(..));
                     pass.set_index_buffer(self.cells.quad_ib.slice(..), wgpu::IndexFormat::Uint32);
-                    pass.draw_indexed(0..q_count, 0, 0..1);
+                    pass.draw_indexed(0..q_count.get(), 0, 0..1);
                 }
                 // Pictures sit between the shapes and the text, one draw per
                 // run. That is a paint order, not a z-order. A shape the walk
                 // drew after a picture still lands under it, the same way text
                 // already lands over both. The board's real order is the
                 // `paint-order rewrite` of `ambre-roadmap.md` E6.
-                for (key, start, end) in &self.cells.drawn_image_runs {
+                for run in &self.cells.drawn_image_runs {
                     // An entry evicted since the upload leaves its run undrawn
                     // rather than binding another picture's texture.
-                    if let Some(bg) = self.bound(*key) {
+                    if let Some(bg) = self.bound(run.key) {
                         pass.set_pipeline(&self.image_pipeline);
                         pass.set_bind_group(1, bg, &[]);
                         pass.set_vertex_buffer(0, self.cells.image_vb.slice(..));
@@ -1411,17 +1375,17 @@ impl QuadRenderer {
                             self.cells.image_ib.slice(..),
                             wgpu::IndexFormat::Uint32,
                         );
-                        pass.draw_indexed(*start..*end, 0, 0..1);
+                        pass.draw_indexed(run.indices.start.get()..run.indices.end.get(), 0, 0..1);
                     }
                 }
-                if g_count > 0 {
+                if drawn(g_count) {
                     pass.set_pipeline(&self.glyph_pipeline);
                     pass.set_bind_group(1, &self.atlas_bind_group, &[]);
                     pass.set_vertex_buffer(0, self.cells.glyph_vb.slice(..));
                     pass.set_index_buffer(self.cells.glyph_ib.slice(..), wgpu::IndexFormat::Uint32);
-                    pass.draw_indexed(0..g_count, 0, 0..1);
+                    pass.draw_indexed(0..g_count.get(), 0, 0..1);
                 }
-                if cg_count > 0 {
+                if drawn(cg_count) {
                     pass.set_pipeline(&self.color_glyph_pipeline);
                     pass.set_bind_group(1, &self.color_atlas_bind_group, &[]);
                     pass.set_vertex_buffer(0, self.cells.color_glyph_vb.slice(..));
@@ -1429,10 +1393,10 @@ impl QuadRenderer {
                         self.cells.color_glyph_ib.slice(..),
                         wgpu::IndexFormat::Uint32,
                     );
-                    pass.draw_indexed(0..cg_count, 0, 0..1);
+                    pass.draw_indexed(0..cg_count.get(), 0, 0..1);
                 }
             }
-            self.current_offscreen_idx = dst_idx;
+            self.current_offscreen = dst_idx;
         }
 
         // -- 2. Blit the persistent cells offscreen to the swapchain. ---------
@@ -1452,10 +1416,9 @@ impl QuadRenderer {
             });
             pass.set_pipeline(&self.blit_pipeline);
             let [first, second] = &self.blit_bind_groups;
-            let blit = if self.current_offscreen_idx == 0 {
-                first
-            } else {
-                second
+            let blit = match self.current_offscreen {
+                Offscreen::First => first,
+                Offscreen::Second => second,
             };
             pass.set_bind_group(0, blit, &[]);
             pass.draw(0..3, 0..1);
@@ -1466,7 +1429,8 @@ impl QuadRenderer {
         let overlay_g = self.overlay.drawn_glyph_indices;
         let overlay_cg = self.overlay.drawn_color_glyph_indices;
         let overlay_img = !self.overlay.drawn_image_runs.is_empty();
-        if overlay_q > 0 || overlay_g > 0 || overlay_cg > 0 || overlay_img {
+        let drawn = |n: Len<IndexSlots>| !n.is_zero();
+        if drawn(overlay_q) || drawn(overlay_g) || drawn(overlay_cg) || overlay_img {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("overlay_pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -1481,14 +1445,14 @@ impl QuadRenderer {
                 ..Default::default()
             });
             pass.set_bind_group(0, &self.uniform_bg, &[]);
-            if overlay_q > 0 {
+            if drawn(overlay_q) {
                 pass.set_pipeline(&self.quad_pipeline);
                 pass.set_vertex_buffer(0, self.overlay.quad_vb.slice(..));
                 pass.set_index_buffer(self.overlay.quad_ib.slice(..), wgpu::IndexFormat::Uint32);
-                pass.draw_indexed(0..overlay_q, 0, 0..1);
+                pass.draw_indexed(0..overlay_q.get(), 0, 0..1);
             }
-            for (key, start, end) in &self.overlay.drawn_image_runs {
-                if let Some(bg) = self.bound(*key) {
+            for run in &self.overlay.drawn_image_runs {
+                if let Some(bg) = self.bound(run.key) {
                     pass.set_pipeline(&self.image_pipeline);
                     pass.set_bind_group(1, bg, &[]);
                     pass.set_vertex_buffer(0, self.overlay.image_vb.slice(..));
@@ -1496,17 +1460,17 @@ impl QuadRenderer {
                         self.overlay.image_ib.slice(..),
                         wgpu::IndexFormat::Uint32,
                     );
-                    pass.draw_indexed(*start..*end, 0, 0..1);
+                    pass.draw_indexed(run.indices.start.get()..run.indices.end.get(), 0, 0..1);
                 }
             }
-            if overlay_g > 0 {
+            if drawn(overlay_g) {
                 pass.set_pipeline(&self.glyph_pipeline);
                 pass.set_bind_group(1, &self.atlas_bind_group, &[]);
                 pass.set_vertex_buffer(0, self.overlay.glyph_vb.slice(..));
                 pass.set_index_buffer(self.overlay.glyph_ib.slice(..), wgpu::IndexFormat::Uint32);
-                pass.draw_indexed(0..overlay_g, 0, 0..1);
+                pass.draw_indexed(0..overlay_g.get(), 0, 0..1);
             }
-            if overlay_cg > 0 {
+            if drawn(overlay_cg) {
                 pass.set_pipeline(&self.color_glyph_pipeline);
                 pass.set_bind_group(1, &self.color_atlas_bind_group, &[]);
                 pass.set_vertex_buffer(0, self.overlay.color_glyph_vb.slice(..));
@@ -1514,7 +1478,7 @@ impl QuadRenderer {
                     self.overlay.color_glyph_ib.slice(..),
                     wgpu::IndexFormat::Uint32,
                 );
-                pass.draw_indexed(0..overlay_cg, 0, 0..1);
+                pass.draw_indexed(0..overlay_cg.get(), 0, 0..1);
             }
         }
     }
@@ -1529,8 +1493,13 @@ mod image_cache_tests {
             payload: w,
             bytes: Count::<Octets>::new(bytes),
             size: Size::new(Px::new(w), Px::new(h)),
-            last_used,
+            last_used: frame(last_used),
         }
+    }
+
+    /// The frame `n` frames after the first.
+    fn frame(n: u64) -> Seq<ImageFrames> {
+        (0..n).fold(Seq::ZERO, |at, _| at.next())
     }
 
     /// A resident picture is a hit, and the hit stamps the frame clock
@@ -1540,12 +1509,12 @@ mod image_cache_tests {
     fn a_hit_stamps_the_entry_with_the_current_frame() {
         let mut c: ImageCache<u32> = ImageCache::new(Count::<Octets>::new(1024));
         c.insert(ImageKey::new(1), entry(16, 2, 2, 0));
-        c.clock = 7;
+        c.clock = frame(7);
         assert_eq!(
             c.get(ImageKey::new(1), Size::new(Px::new(2), Px::new(2))),
             Some(&2)
         );
-        assert_eq!(c.map[&ImageKey::new(1)].last_used, 7);
+        assert_eq!(c.map[&ImageKey::new(1)].last_used, frame(7));
     }
 
     /// A key that comes back at a different size is a miss. The caller
@@ -1614,12 +1583,16 @@ mod image_run_tests {
     fn runs_of(spec: &[(u64, u32, u32)]) -> Vec<(u64, u32, u32)> {
         let mut runs = Vec::new();
         for (k, s, e) in spec {
-            extend_runs(&mut runs, Binding::Picture(ImageKey::new(*k)), *s, *e);
+            let indices = Span::new(Pos::new(*s), Pos::new(*e));
+            extend_runs(&mut runs, Binding::Picture(ImageKey::new(*k)), indices);
         }
         runs.iter()
-            .map(|r| match r.key {
-                Binding::Picture(key) => (key.get(), r.start, r.end),
-                Binding::Video(slot) => (u64::from(slot.get()), r.start, r.end),
+            .map(|r| {
+                let (start, end) = (r.indices.start.get(), r.indices.end.get());
+                match r.key {
+                    Binding::Picture(key) => (key.get(), start, end),
+                    Binding::Video(slot) => (u64::from(slot.get()), start, end),
+                }
             })
             .collect()
     }

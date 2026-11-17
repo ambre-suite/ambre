@@ -27,10 +27,12 @@
 //                    Routes pushes to the renderer's currently active layer.
 // ============================================================================
 use ambre_core::VideoSlots;
-use ambre_core::index::Pos;
-use ambre_core::{Count, Device, Octets, Px, Size, Texel, View};
+use ambre_core::index::{Axis, Len, Pos, Span};
+use ambre_core::{Count, Device, NarrowCount, Octets, Point, Px, Size, Texel, View};
 use ambre_draw::{Color, ImageKey};
 use bytemuck::{Pod, Zeroable};
+
+use crate::space::Uv;
 
 // The renderer is split across sibling modules; `atlas`/`renderer`/`surface`
 // reach the shared primitives below (vertex types, `LayerBatches`, helpers) via
@@ -41,7 +43,7 @@ mod renderer;
 mod surface;
 
 pub(crate) use atlas::raster_of_layout;
-pub use atlas::{AtlasKind, AtlasSlot, GlyphAtlas, GlyphId};
+pub use atlas::{AtlasKind, AtlasSlot, GlyphAtlas, GlyphId, UvBox};
 pub use renderer::{ContentRepaint, LayerRepaint, QuadRenderer, VideosDrawn};
 pub use surface::WgpuSurface;
 // ============================================================================
@@ -55,8 +57,52 @@ struct QuadVertex {
     color: [f32; 4],
 }
 
-const QUAD_VERTEX_SIZE: usize = std::mem::size_of::<QuadVertex>();
-const INITIAL_QUADS: usize = 8192;
+impl QuadVertex {
+    /// A vertex at `pos`, filled with `color`.
+    fn new(pos: Point<Px<View>>, color: Color) -> Self {
+        Self {
+            pos: [pos.x.get(), pos.y.get()],
+            // peniko::AlphaColor<Srgb> stores [r, g, b, a] as f32 0..=1.
+            color: color.components,
+        }
+    }
+}
+
+/// The quads a layer's quad buffers hold before they first grow.
+const INITIAL_QUADS: Count<Quads> = Count::new(8192);
+
+/// The quads of a batch: a rectangle, a line, a glyph or a picture, each
+/// four vertices and six indices.
+enum Quads {}
+
+impl NarrowCount for Quads {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Quads");
+}
+
+/// The bytes `quads` quads of the vertex `V` take: four vertices each.
+fn vertex_bytes<V>(quads: Count<Quads>) -> Count<Octets> {
+    Count::<Octets>::new(u64::from(quads.get()) * 4 * std::mem::size_of::<V>() as u64)
+}
+
+/// The bytes the indices of `quads` quads take: six `u32` each.
+fn index_bytes(quads: Count<Quads>) -> Count<Octets> {
+    Count::<Octets>::new(u64::from(quads.get()) * 6 * std::mem::size_of::<u32>() as u64)
+}
+
+/// The slots of an index buffer: where a draw starts and stops reading it.
+#[derive(Debug, PartialEq, Eq)]
+enum IndexSlots {}
+
+impl Axis for IndexSlots {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("IndexSlot");
+}
+
+/// The len of an index list a batch holds, as a draw reads it. A batch never
+/// holds four billion indices: the buffer could not be allocated first.
+fn indices_len<I>(indices: &[I]) -> Len<IndexSlots> {
+    Len::new(u32::try_from(indices.len()).unwrap_or(u32::MAX))
+}
 
 // ============================================================================
 // Glyph pipeline
@@ -70,6 +116,19 @@ struct GlyphVertex {
     color: [f32; 4],
 }
 
+impl GlyphVertex {
+    /// A vertex at `pos` that samples the atlas at `uv`, tinted `tint`. A
+    /// colour glyph has no tint: its pipeline ignores the opaque black it
+    /// carries.
+    fn new(pos: Point<Px<View>>, uv: Point<Px<Uv>>, tint: Option<Color>) -> Self {
+        Self {
+            pos: [pos.x.get(), pos.y.get()],
+            uv: [uv.x.get(), uv.y.get()],
+            color: tint.map_or([0.0, 0.0, 0.0, 1.0], |c| c.components),
+        }
+    }
+}
+
 /// One axis-aligned glyph quad in view pixels, and the box of the atlas it
 /// samples. The lengths are unwrapped into the `f32` of `GlyphVertex` alone.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -80,14 +139,12 @@ struct GlyphQuad {
     y: Px<View>,
     width: Px<View>,
     height: Px<View>,
-    /// The texture coordinate of the top-left corner.
-    uv_min: [f32; 2],
-    /// The texture coordinate of the bottom-right corner.
-    uv_max: [f32; 2],
+    /// The box of the atlas the quad samples.
+    uv: UvBox,
 }
 
-const GLYPH_VERTEX_SIZE: usize = std::mem::size_of::<GlyphVertex>();
-const INITIAL_GLYPHS: usize = 4096;
+/// The glyph quads a layer's glyph buffers hold before they first grow.
+const INITIAL_GLYPHS: Count<Quads> = Count::new(4096);
 
 // ============================================================================
 // Image pipeline
@@ -100,7 +157,15 @@ struct ImageVertex {
     uv: [f32; 2],
 }
 
-const IMAGE_VERTEX_SIZE: usize = std::mem::size_of::<ImageVertex>();
+impl ImageVertex {
+    /// A vertex at `pos` that samples its picture at `uv`.
+    fn new(pos: Point<Px<View>>, uv: Point<Px<Uv>>) -> Self {
+        Self {
+            pos: [pos.x.get(), pos.y.get()],
+            uv: [uv.x.get(), uv.y.get()],
+        }
+    }
+}
 
 /// A stretch of the image index buffer drawn with one texture bound.
 ///
@@ -110,11 +175,11 @@ const IMAGE_VERTEX_SIZE: usize = std::mem::size_of::<ImageVertex>();
 /// Consecutive quads sharing a texture extend the run they are already in. A
 /// board of ten copies of one picture costs one draw, and two overlapping
 /// pictures keep the walk's own order between them.
+#[derive(Clone, Copy, Debug, PartialEq)]
 struct ImageRun {
     key: Binding,
     /// Index range into the layer's image index buffer.
-    start: u32,
-    end: u32,
+    indices: Span<IndexSlots>,
 }
 /// The texture one run of the image batch binds. It holds a picture the caller decoded, or the
 /// picture of a received video, copied at this paint (`CALL-015`).
@@ -173,13 +238,13 @@ struct LayerBatches {
     image_ib: wgpu::Buffer,
     /// Number of quad indices in the last upload. Used as the draw_indexed
     /// upper bound on any subsequent frame that reuses the GPU buffer.
-    drawn_quad_indices: u32,
-    drawn_glyph_indices: u32,
-    drawn_color_glyph_indices: u32,
+    drawn_quad_indices: Len<IndexSlots>,
+    drawn_glyph_indices: Len<IndexSlots>,
+    drawn_color_glyph_indices: Len<IndexSlots>,
     /// The runs of the last upload, kept whole. An idle frame re-encodes the
     /// same draws against the same buffer, as the `drawn_*` counts do for the
     /// other three batches.
-    drawn_image_runs: Vec<(Binding, u32, u32)>,
+    drawn_image_runs: Vec<ImageRun>,
     /// Armed by `begin_rebuild()`. When armed, `upload_if_rebuilding()`
     /// transfers the CPU vecs to the GPU and refreshes `drawn_*`. Otherwise
     /// the GPU buffer state is preserved across frames.
@@ -209,59 +274,59 @@ impl LayerBatches {
     fn new(device: &wgpu::Device, label_prefix: &str) -> Self {
         let quad_vb = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some(&format!("{label_prefix}_quad_vb")),
-            size: (INITIAL_QUADS * 4 * QUAD_VERTEX_SIZE) as u64,
+            size: vertex_bytes::<QuadVertex>(INITIAL_QUADS).get(),
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let quad_ib = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some(&format!("{label_prefix}_quad_ib")),
-            size: (INITIAL_QUADS * 6 * 4) as u64,
+            size: index_bytes(INITIAL_QUADS).get(),
             usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let glyph_vb = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some(&format!("{label_prefix}_glyph_vb")),
-            size: (INITIAL_GLYPHS * 4 * GLYPH_VERTEX_SIZE) as u64,
+            size: vertex_bytes::<GlyphVertex>(INITIAL_GLYPHS).get(),
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let glyph_ib = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some(&format!("{label_prefix}_glyph_ib")),
-            size: (INITIAL_GLYPHS * 6 * 4) as u64,
+            size: index_bytes(INITIAL_GLYPHS).get(),
             usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         // Color glyphs are rare (emoji): start small, grow on demand.
         let color_glyph_vb = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some(&format!("{label_prefix}_color_glyph_vb")),
-            size: (256 * 4 * GLYPH_VERTEX_SIZE) as u64,
+            size: vertex_bytes::<GlyphVertex>(Count::new(256)).get(),
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let color_glyph_ib = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some(&format!("{label_prefix}_color_glyph_ib")),
-            size: (256 * 6 * 4) as u64,
+            size: index_bytes(Count::new(256)).get(),
             usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         // Images are few per frame even on a busy board: start small and grow.
         let image_vb = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some(&format!("{label_prefix}_image_vb")),
-            size: (64 * 4 * IMAGE_VERTEX_SIZE) as u64,
+            size: vertex_bytes::<ImageVertex>(Count::new(64)).get(),
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let image_ib = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some(&format!("{label_prefix}_image_ib")),
-            size: (64 * 6 * 4) as u64,
+            size: index_bytes(Count::new(64)).get(),
             usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         Self {
-            quad_vertices: Vec::with_capacity(INITIAL_QUADS * 4),
-            quad_indices: Vec::with_capacity(INITIAL_QUADS * 6),
-            glyph_vertices: Vec::with_capacity(INITIAL_GLYPHS * 4),
-            glyph_indices: Vec::with_capacity(INITIAL_GLYPHS * 6),
+            quad_vertices: Vec::with_capacity(INITIAL_QUADS.get() as usize * 4),
+            quad_indices: Vec::with_capacity(INITIAL_QUADS.get() as usize * 6),
+            glyph_vertices: Vec::with_capacity(INITIAL_GLYPHS.get() as usize * 4),
+            glyph_indices: Vec::with_capacity(INITIAL_GLYPHS.get() as usize * 6),
             color_glyph_vertices: Vec::new(),
             color_glyph_indices: Vec::new(),
             image_vertices: Vec::new(),
@@ -275,9 +340,9 @@ impl LayerBatches {
             color_glyph_ib,
             image_vb,
             image_ib,
-            drawn_quad_indices: 0,
-            drawn_glyph_indices: 0,
-            drawn_color_glyph_indices: 0,
+            drawn_quad_indices: Len::ZERO,
+            drawn_glyph_indices: Len::ZERO,
+            drawn_color_glyph_indices: Len::ZERO,
             drawn_image_runs: Vec::new(),
             rebuilding: RebuildLatch::default(),
         }
@@ -314,7 +379,7 @@ impl LayerBatches {
             grow_buffer_if_needed(
                 device,
                 &mut self.quad_vb,
-                Count::<Octets>::of(self.quad_vertices.len() * QUAD_VERTEX_SIZE),
+                Count::<Octets>::of(std::mem::size_of_val(self.quad_vertices.as_slice())),
                 wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                 "quad_vb",
                 label_prefix,
@@ -322,7 +387,7 @@ impl LayerBatches {
             grow_buffer_if_needed(
                 device,
                 &mut self.quad_ib,
-                Count::<Octets>::of(self.quad_indices.len() * 4),
+                Count::<Octets>::of(std::mem::size_of_val(self.quad_indices.as_slice())),
                 wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
                 "quad_ib",
                 label_prefix,
@@ -334,7 +399,7 @@ impl LayerBatches {
             grow_buffer_if_needed(
                 device,
                 &mut self.glyph_vb,
-                Count::<Octets>::of(self.glyph_vertices.len() * GLYPH_VERTEX_SIZE),
+                Count::<Octets>::of(std::mem::size_of_val(self.glyph_vertices.as_slice())),
                 wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                 "glyph_vb",
                 label_prefix,
@@ -342,7 +407,7 @@ impl LayerBatches {
             grow_buffer_if_needed(
                 device,
                 &mut self.glyph_ib,
-                Count::<Octets>::of(self.glyph_indices.len() * 4),
+                Count::<Octets>::of(std::mem::size_of_val(self.glyph_indices.as_slice())),
                 wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
                 "glyph_ib",
                 label_prefix,
@@ -358,7 +423,7 @@ impl LayerBatches {
             grow_buffer_if_needed(
                 device,
                 &mut self.color_glyph_vb,
-                Count::<Octets>::of(self.color_glyph_vertices.len() * GLYPH_VERTEX_SIZE),
+                Count::<Octets>::of(std::mem::size_of_val(self.color_glyph_vertices.as_slice())),
                 wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                 "color_glyph_vb",
                 label_prefix,
@@ -366,7 +431,7 @@ impl LayerBatches {
             grow_buffer_if_needed(
                 device,
                 &mut self.color_glyph_ib,
-                Count::<Octets>::of(self.color_glyph_indices.len() * 4),
+                Count::<Octets>::of(std::mem::size_of_val(self.color_glyph_indices.as_slice())),
                 wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
                 "color_glyph_ib",
                 label_prefix,
@@ -386,7 +451,7 @@ impl LayerBatches {
             grow_buffer_if_needed(
                 device,
                 &mut self.image_vb,
-                Count::<Octets>::of(self.image_vertices.len() * IMAGE_VERTEX_SIZE),
+                Count::<Octets>::of(std::mem::size_of_val(self.image_vertices.as_slice())),
                 wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                 "image_vb",
                 label_prefix,
@@ -394,7 +459,7 @@ impl LayerBatches {
             grow_buffer_if_needed(
                 device,
                 &mut self.image_ib,
-                Count::<Octets>::of(self.image_indices.len() * 4),
+                Count::<Octets>::of(std::mem::size_of_val(self.image_indices.as_slice())),
                 wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
                 "image_ib",
                 label_prefix,
@@ -408,26 +473,21 @@ impl LayerBatches {
         }
         // Refresh the drawn counts for subsequent encode passes.
         self.drawn_image_runs.clear();
-        self.drawn_image_runs
-            .extend(self.image_runs.iter().map(|r| (r.key, r.start, r.end)));
-        self.drawn_quad_indices = self.quad_indices.len() as u32;
-        self.drawn_glyph_indices = self.glyph_indices.len() as u32;
-        self.drawn_color_glyph_indices = self.color_glyph_indices.len() as u32;
+        self.drawn_image_runs.extend_from_slice(&self.image_runs);
+        self.drawn_quad_indices = indices_len(&self.quad_indices);
+        self.drawn_glyph_indices = indices_len(&self.glyph_indices);
+        self.drawn_color_glyph_indices = indices_len(&self.color_glyph_indices);
     }
 }
 // ============================================================================
 // Helpers
 // ============================================================================
 
-fn color_f32(c: Color) -> [f32; 4] {
-    // peniko::AlphaColor<Srgb> stores [r, g, b, a] as f32 0..=1.
-    c.components
-}
-
 /// The clear colour of a pass, in the same components a vertex carries, so a
 /// cleared pixel and a filled one agree (`CANVAS-060`).
 fn clear_color(c: Color) -> wgpu::Color {
-    let [r, g, b, a] = color_f32(c).map(f64::from);
+    // peniko::AlphaColor<Srgb> stores [r, g, b, a] as f32 0..=1.
+    let [r, g, b, a] = c.components.map(f64::from);
     wgpu::Color { r, g, b, a }
 }
 
@@ -546,7 +606,7 @@ fn copy_offscreen_with_offset(
 
 #[cfg(test)]
 mod tests {
-    use super::{RebuildLatch, clear_color, color_f32};
+    use super::{RebuildLatch, clear_color};
 
     /// A layer the frame never began uploads nothing, and a rebuilt one
     /// uploads once (`CANVAS-003`).
@@ -569,7 +629,7 @@ mod tests {
         for theme in [crate::Theme::Light, crate::Theme::Dark] {
             let bg = theme.palette().content_bg;
             let clear = clear_color(bg);
-            let [r, g, b, a] = color_f32(bg).map(f64::from);
+            let [r, g, b, a] = bg.components.map(f64::from);
             assert_eq!((clear.r, clear.g, clear.b, clear.a), (r, g, b, a));
         }
         assert_ne!(

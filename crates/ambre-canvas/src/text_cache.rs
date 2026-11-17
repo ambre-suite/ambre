@@ -12,7 +12,7 @@
 // ============================================================================
 
 use ambre_core::index::Span;
-use ambre_core::{Byte, Doc, Px, View};
+use ambre_core::{Byte, Count, Doc, NarrowCount, Px, Seq, SeqKind, View};
 
 use ambre_draw::{Brush, BundledFamily, Color, TextBuilder, text_builder};
 use parley::style::{FontStyle, FontWeight, OverflowWrap, StyleProperty};
@@ -33,7 +33,8 @@ enum LazyFaces {
     /// covers draws the missing glyph (`PDF-019`).
     Held,
 }
-use crate::space::{Parley, WholeParley};
+use crate::GlyphMisses;
+use crate::space::{Parley, ParleyHundredths, ParleyTenths, WholeParley};
 
 /// Map a font family to the face the application ships. `None` names the
 /// default family.
@@ -57,8 +58,8 @@ pub fn registered_face(family: Option<&ambre_core::FontFamily>) -> BundledFamily
 #[derive(Clone, PartialEq, Eq)]
 struct CacheKey {
     text: Box<str>,
-    font_size_x100: u32,
-    max_width_x10: u32,
+    font_size: Px<ParleyHundredths>,
+    max_width: Px<ParleyTenths>,
     /// Each of the six alignments is its own entry: `Left` and `Start`
     /// differ in a right-to-left text, and `Justify` spreads its lines.
     align: Alignment,
@@ -80,8 +81,8 @@ struct CacheKey {
 impl std::hash::Hash for CacheKey {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.text.hash(state);
-        self.font_size_x100.hash(state);
-        self.max_width_x10.hash(state);
+        self.font_size.hash(state);
+        self.max_width.hash(state);
         std::mem::discriminant(&self.align).hash(state);
         self.weight.hash(state);
         self.slant.hash(state);
@@ -287,24 +288,50 @@ impl<L> Look<'_, L> {
 /// least-recently-used eviction instead of clearing the whole cache.
 struct CachedLayout {
     layout: Layout<Brush>,
-    last_used: u64,
+    last_used: Seq<LayoutReads>,
+}
+
+/// The reads of the text cache, one number each: the clock the cache steps on
+/// every `get_or_build`, and the read that last touched a layout.
+enum LayoutReads {}
+
+impl SeqKind for LayoutReads {
+    type IssueRight = ();
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("LayoutRead");
+}
+
+/// The layouts the text cache holds.
+pub enum CachedLayouts {}
+
+impl NarrowCount for CachedLayouts {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("CachedLayouts");
+}
+
+/// The layouts one frame read from the cache rather than shaped afresh.
+pub enum GlyphHits {}
+
+impl NarrowCount for GlyphHits {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("GlyphHits");
 }
 
 pub struct TextCache {
     layouts: FxHashMap<CacheKey, CachedLayout>,
     layout_cx: LayoutContext<Brush>,
     /// Monotonic access clock; bumped on every `get_or_build` so eviction can
-    /// rank entries by recency. Wraps only after 2^64 accesses (never in
+    /// rank entries by recency. Saturates only after 2^64 accesses (never in
     /// practice).
-    tick: u64,
+    tick: Seq<LayoutReads>,
     /// On-demand loader for scripts outside the base fonts (CJK, Arabic,
     /// Devanagari). Fed every string this cache shapes (on a miss); it fetches a
     /// face the first time it sees a codepoint the base fonts cannot cover.
     /// A cache over held faces has none.
     lazy_fonts: LazyFaces,
     // Per-frame diagnostics.
-    pub frame_hits: usize,
-    pub frame_misses: usize,
+    pub frame_hits: Count<GlyphHits>,
+    pub frame_misses: Count<GlyphMisses>,
 }
 
 impl Default for TextCache {
@@ -322,10 +349,10 @@ impl TextCache {
         Self {
             layouts: FxHashMap::default(),
             layout_cx: LayoutContext::new(),
-            tick: 0,
+            tick: Seq::ZERO,
             lazy_fonts: LazyFaces::Fetch(LazyFontLoader::new()),
-            frame_hits: 0,
-            frame_misses: 0,
+            frame_hits: Count::ZERO,
+            frame_misses: Count::ZERO,
         }
     }
 
@@ -367,29 +394,28 @@ impl TextCache {
     /// Number of lazy scripts a fetch has been started for, over every string
     /// shaped so far (test/diagnostic hook).
     #[cfg(any(test, not(target_arch = "wasm32")))]
-    pub fn lazy_fonts_requested(&self) -> usize {
+    pub fn lazy_fonts_requested(&self) -> Count<crate::fonts::LazyFonts> {
         match &self.lazy_fonts {
             LazyFaces::Fetch(loader) => loader.requested_count(),
-            LazyFaces::Held => 0,
+            LazyFaces::Held => Count::ZERO,
         }
     }
 
     pub fn reset_frame_stats(&mut self) {
-        self.frame_hits = 0;
-        self.frame_misses = 0;
+        self.frame_hits = Count::ZERO;
+        self.frame_misses = Count::ZERO;
     }
 
-    pub fn cache_size(&self) -> usize {
-        self.layouts.len()
+    /// The layouts the cache holds.
+    pub fn cache_size(&self) -> Count<CachedLayouts> {
+        Count::of(self.layouts.len())
     }
 
+    /// The share of this frame's reads the cache answered, from 0 to 1.
     pub fn hit_rate(&self) -> f32 {
-        let total = (self.frame_hits + self.frame_misses) as f32;
-        if total == 0.0 {
-            0.0
-        } else {
-            self.frame_hits as f32 / total
-        }
+        let (hits, misses) = (self.frame_hits.get() as f32, self.frame_misses.get() as f32);
+        let total = hits + misses;
+        if total == 0.0 { 0.0 } else { hits / total }
     }
 
     /// Evict the least-recently-used entries when the cache exceeds
@@ -401,7 +427,8 @@ impl TextCache {
     /// drop entries in ascending `last_used` order down to a low-water mark
     /// (75% of the cap). A single overflow frame then reshapes only the coldest
     /// quarter rather than everything.
-    pub fn evict_if_oversized(&mut self, max_entries: usize) {
+    pub fn evict_if_oversized(&mut self, max_entries: Count<CachedLayouts>) {
+        let max_entries = max_entries.get() as usize;
         if self.layouts.len() <= max_entries {
             return;
         }
@@ -412,7 +439,7 @@ impl TextCache {
         // Partial selection of the `to_remove` smallest `last_used` ticks. A
         // full sort of the keys is O(n log n). Collecting the ticks and picking
         // a threshold is O(n), and enough here since caps are a few thousand.
-        let mut ticks: Vec<u64> = self.layouts.values().map(|c| c.last_used).collect();
+        let mut ticks: Vec<Seq<LayoutReads>> = self.layouts.values().map(|c| c.last_used).collect();
         // `select_nth_unstable` partitions so everything left of `to_remove`
         // is <= the pivot: that pivot is the eviction threshold.
         let threshold = *ticks.select_nth_unstable(to_remove - 1).1;
@@ -471,8 +498,8 @@ impl TextCache {
         } = look;
         let key = CacheKey {
             text: text.into(),
-            font_size_x100: (font_size.layout_units().get() * 100.0) as u32,
-            max_width_x10: (max_width.layout_units().get() * 10.0) as u32,
+            font_size: Px::new((font_size.layout_units().get() * 100.0) as u32),
+            max_width: Px::new((max_width.layout_units().get() * 10.0) as u32),
             align,
             weight,
             slant,
@@ -481,19 +508,19 @@ impl TextCache {
             spans: spans.into(),
         };
 
-        self.tick += 1;
+        self.tick = self.tick.next();
         let tick = self.tick;
 
         use std::collections::hash_map::Entry;
         match self.layouts.entry(key) {
             Entry::Occupied(e) => {
-                self.frame_hits += 1;
+                self.frame_hits = self.frame_hits.incremented();
                 let cached = e.into_mut();
                 cached.last_used = tick;
                 &cached.layout
             }
             Entry::Vacant(e) => {
-                self.frame_misses += 1;
+                self.frame_misses = self.frame_misses.incremented();
                 // First shaping of this string: check it for codepoints outside
                 // the base fonts and kick off a lazy fetch if needed. Only on a
                 // miss -- a cache hit means we already scanned this text.
@@ -674,7 +701,7 @@ mod tests {
             &[off],
         );
         assert_eq!(faces_of(off), 1, "a range past the text shapes nothing");
-        assert_eq!(cache.cache_size(), 3);
+        assert_eq!(cache.cache_size().get(), 3);
         cache.reset_frame_stats();
         cache.get_or_build_spans(
             &mut cx,
@@ -683,7 +710,7 @@ mod tests {
             Px::<View>::new(400.0),
             &[bold],
         );
-        assert_eq!((cache.frame_hits, cache.frame_misses), (1, 0));
+        assert_eq!((cache.frame_hits.get(), cache.frame_misses.get()), (1, 0));
     }
 
     /// A span's indent starts each line of the paragraphs it holds that far
@@ -753,16 +780,24 @@ mod tests {
         shape(&mut cache, &mut cx, "cell 0");
         shape(&mut cache, &mut cx, "cell 1");
 
-        cache.evict_if_oversized(8);
-        assert_eq!(cache.cache_size(), 6, "the cache trims to three quarters");
+        cache.evict_if_oversized(ambre_core::Count::new(8));
+        assert_eq!(
+            cache.cache_size().get(),
+            6,
+            "the cache trims to three quarters"
+        );
 
         cache.reset_frame_stats();
         for hot in ["cell 0", "cell 1", "cell 9"] {
             shape(&mut cache, &mut cx, hot);
         }
-        assert_eq!(cache.frame_misses, 0, "a hot layout survives the overflow");
+        assert_eq!(
+            cache.frame_misses.get(),
+            0,
+            "a hot layout survives the overflow"
+        );
         shape(&mut cache, &mut cx, "cell 2");
-        assert_eq!(cache.frame_misses, 1, "the coldest layout is gone");
+        assert_eq!(cache.frame_misses.get(), 1, "the coldest layout is gone");
     }
 
     /// A layout that survives an eviction draws what it drew before
@@ -778,10 +813,10 @@ mod tests {
         }
         shape(&mut cache, &mut cx, "Quarterly revenue");
 
-        cache.evict_if_oversized(8);
+        cache.evict_if_oversized(ambre_core::Count::new(8));
         cache.reset_frame_stats();
         let after = shape(&mut cache, &mut cx, "Quarterly revenue");
-        assert_eq!(cache.frame_hits, 1, "the layout survived");
+        assert_eq!(cache.frame_hits.get(), 1, "the layout survived");
         assert_eq!(after, before);
     }
 
@@ -794,8 +829,12 @@ mod tests {
         let mut cx = font_cx();
         let mut cache = TextCache::new();
         shape(&mut cache, &mut cx, "中文");
-        assert_eq!(cache.lazy_fonts_requested(), 1, "the fetch is armed");
-        assert_eq!(cache.cache_size(), 1, "the frame shaped without waiting");
+        assert_eq!(cache.lazy_fonts_requested().get(), 1, "the fetch is armed");
+        assert_eq!(
+            cache.cache_size().get(),
+            1,
+            "the frame shaped without waiting"
+        );
         assert!(
             cache.poll_lazy_fonts(&mut cx).is_empty(),
             "nothing arrived yet"
@@ -803,7 +842,7 @@ mod tests {
 
         cache.loader().deliver(b"face".to_vec());
         assert_eq!(cache.poll_lazy_fonts(&mut cx).len(), 1);
-        assert_eq!(cache.cache_size(), 0, "the stale layouts are dropped");
+        assert_eq!(cache.cache_size().get(), 0, "the stale layouts are dropped");
     }
 
     /// A cache over held faces arms no fetch, however often it meets a script
@@ -820,7 +859,7 @@ mod tests {
             let mut cache = TextCache::over_held_faces();
             shape(&mut cache, &mut cx, "\u{4e2d}\u{6587} \u{1F44D}");
             shape(&mut cache, &mut cx, "\u{0633}\u{0644}\u{0627}\u{0645}");
-            assert_eq!(cache.lazy_fonts_requested(), 0);
+            assert_eq!(cache.lazy_fonts_requested().get(), 0);
             assert!(cache.poll_lazy_fonts(&mut cx).is_empty());
         }
         assert_eq!(armed(), before, "a cache over held faces armed a fetch");
@@ -960,7 +999,7 @@ mod tests {
             );
         }
         assert_eq!(
-            cache.cache_size(),
+            cache.cache_size().get() as usize,
             all.len(),
             "two alignments shared an entry"
         );

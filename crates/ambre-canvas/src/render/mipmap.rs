@@ -16,13 +16,20 @@
 //   stays on screen. So the CPU pays once and no frame pays.
 // ============================================================================
 
-use ambre_core::{Count, Image, Octets, Payload, Px, RgbaPixels, Size};
+use ambre_core::{Count, Image, NarrowCount, Octets, Payload, Px, RgbaPixels, Size};
 
 /// One level of a mip chain: RGBA8 samples and the dimensions they describe.
 pub struct MipLevel {
     pub pixels: Payload<RgbaPixels>,
-    pub width: u32,
-    pub height: u32,
+    pub size: Size<Px<Image>>,
+}
+
+/// The levels of a mip chain, level 0 included, as wgpu counts them.
+pub enum MipLevels {}
+
+impl NarrowCount for MipLevels {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("MipLevels");
 }
 
 /// The bytes level 0 of an image of `size` holds: four per pixel, RGBA8.
@@ -56,29 +63,29 @@ pub fn build_chain(pixels: &Payload<RgbaPixels>, size: Size<Px<Image>>) -> Vec<M
         return out;
     }
     let mut src = pixels.clone();
-    let (mut w, mut h) = (width, height);
-    while w > 1 || h > 1 {
-        let (nw, nh) = ((w / 2).max(1), (h / 2).max(1));
-        src = reduce(&src, w, h, nw, nh);
+    let mut from = size;
+    let one = Px::<Image>::new(1);
+    while from.width > one || from.height > one {
+        let half = |edge: Px<Image>| Px::<Image>::new(edge.get() / 2).max(one);
+        let to = Size::new(half(from.width), half(from.height));
+        src = reduce(&src, from, to);
         out.push(MipLevel {
             pixels: src.clone(),
-            width: nw,
-            height: nh,
+            size: to,
         });
-        w = nw;
-        h = nh;
+        from = to;
     }
     out
 }
 
 /// The number of mip levels wgpu expects for an image of this size, level 0
 /// included -- `floor(log2(max(w, h))) + 1`, and 1 for a degenerate size.
-pub fn level_count(size: Size<Px<Image>>) -> u32 {
+pub fn level_count(size: Size<Px<Image>>) -> Count<MipLevels> {
     let longest = size.width.max(size.height).get();
     if longest <= 1 {
-        return 1;
+        return Count::new(1);
     }
-    32 - longest.leading_zeros()
+    Count::new(32 - longest.leading_zeros())
 }
 
 /// The sampler a picture is drawn through.
@@ -108,7 +115,13 @@ pub fn sampler() -> wgpu::SamplerDescriptor<'static> {
 /// * An odd dimension leaves a final row or column with no partner. Each such
 ///   texel takes the block that starts at its own doubled coordinate, clamped.
 ///   The clamp carries the edge rather than dropping it.
-fn reduce(src: &Payload<RgbaPixels>, w: u32, h: u32, nw: u32, nh: u32) -> Payload<RgbaPixels> {
+fn reduce(
+    src: &Payload<RgbaPixels>,
+    from: Size<Px<Image>>,
+    to: Size<Px<Image>>,
+) -> Payload<RgbaPixels> {
+    let (w, h) = (from.width.get(), from.height.get());
+    let (nw, nh) = (to.width.get(), to.height.get());
     let src = src.as_bytes();
     let mut dst = vec![0u8; (nw as usize) * (nh as usize) * 4];
     // A texel past the end of `src` reads as zero. The caller sizes `src` as
@@ -154,10 +167,13 @@ mod tests {
     fn the_chain_halves_down_to_one_texel() {
         let px = vec![128u8; 8 * 8 * 4];
         let chain = chain_of(px, 8, 8);
-        let dims: Vec<(u32, u32)> = chain.iter().map(|l| (l.width, l.height)).collect();
+        let dims: Vec<(u32, u32)> = chain
+            .iter()
+            .map(|l| (l.size.width.get(), l.size.height.get()))
+            .collect();
         assert_eq!(dims, vec![(4, 4), (2, 2), (1, 1)]);
         // The chain omits level 0, so it holds one level less than wgpu counts.
-        assert_eq!(chain.len() as u32 + 1, level_count(size(8, 8)));
+        assert_eq!(chain.len() as u32 + 1, level_count(size(8, 8)).get());
     }
 
     /// A picture is sampled through its chain: linear inside a level and
@@ -183,9 +199,12 @@ mod tests {
     fn a_flat_image_keeps_halving_its_long_axis() {
         let px = vec![0u8; 8 * 2 * 4];
         let chain = chain_of(px, 8, 2);
-        let dims: Vec<(u32, u32)> = chain.iter().map(|l| (l.width, l.height)).collect();
+        let dims: Vec<(u32, u32)> = chain
+            .iter()
+            .map(|l| (l.size.width.get(), l.size.height.get()))
+            .collect();
         assert_eq!(dims, vec![(4, 1), (2, 1), (1, 1)]);
-        assert_eq!(chain.len() as u32 + 1, level_count(size(8, 2)));
+        assert_eq!(chain.len() as u32 + 1, level_count(size(8, 2)).get());
     }
 
     /// A reduced texel is the mean of the four it replaces, per channel. This is
@@ -210,7 +229,10 @@ mod tests {
     fn an_odd_dimension_clamps_instead_of_overrunning() {
         let px = vec![200u8; 3 * 4];
         let chain = chain_of(px, 3, 1);
-        let dims: Vec<(u32, u32)> = chain.iter().map(|l| (l.width, l.height)).collect();
+        let dims: Vec<(u32, u32)> = chain
+            .iter()
+            .map(|l| (l.size.width.get(), l.size.height.get()))
+            .collect();
         assert_eq!(dims, vec![(1, 1)]);
         assert_eq!(chain[0].pixels.as_bytes(), [200, 200, 200, 200]);
     }
@@ -228,7 +250,7 @@ mod tests {
     /// the sampler falls back to level 0.
     #[test]
     fn a_single_texel_image_has_no_chain() {
-        assert_eq!(level_count(size(1, 1)), 1);
+        assert_eq!(level_count(size(1, 1)).get(), 1);
         assert!(chain_of(vec![1, 2, 3, 4], 1, 1).is_empty());
     }
 }

@@ -655,7 +655,8 @@ impl FrameHost {
                     );
                 }
             }
-            gpu.text_cache.evict_if_oversized(5_000);
+            gpu.text_cache
+                .evict_if_oversized(ambre_core::Count::<ambre_canvas::CachedLayouts>::new(5_000));
             Instant::<PageLoad>::new(self.perf.now()) - t_draw_start
         } else {
             TimeSpan::<FracMs>::ZERO
