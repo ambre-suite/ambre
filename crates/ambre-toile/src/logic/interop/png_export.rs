@@ -17,7 +17,7 @@ use ambre_draw::Rect;
 use ambre_draw::list::PrintDocument;
 
 use crate::logic::command::DisplayViewport;
-use crate::ui::viewport::ViewportTransform;
+use crate::message::Viewport;
 
 use super::pdf_export::{PageSize, PdfPage};
 
@@ -65,7 +65,7 @@ pub struct PngRequest {
 pub(crate) fn png_page(
     region: Rect,
     clip: Option<Rect>,
-    derive: impl FnOnce(&ViewportTransform) -> DisplayViewport,
+    derive: impl FnOnce(Viewport) -> DisplayViewport,
 ) -> Option<PngPage> {
     let (width, height) = (region.width(), region.height());
     if !(width.is_finite() && height.is_finite()) || width <= 0.0 || height <= 0.0 {
@@ -81,21 +81,18 @@ pub(crate) fn png_page(
         Px::<Image>::new(u32::try_from(pixels as i64).unwrap_or(1))
     };
     let size = Size::new(pixels(width), pixels(height));
-    let camera = ViewportTransform {
-        center: region.center(),
-        zoom,
-        size: ambre_draw::Size::new(f64::from(size.width.get()), f64::from(size.height.get())),
-    };
     let points = PageSize::new(
         ambre_core::PrintLength::<ambre_core::Pt>::new(size.width.get() as f32),
         ambre_core::PrintLength::<ambre_core::Pt>::new(size.height.get() as f32),
     );
     Some(PngPage {
-        page: PdfPage {
-            viewport: derive(&camera),
-            camera,
+        page: PdfPage::framed(
+            region.center(),
+            zoom,
+            ambre_draw::Size::new(f64::from(size.width.get()), f64::from(size.height.get())),
             clip,
-        },
+            derive,
+        ),
         points,
         size,
     })
@@ -110,7 +107,7 @@ pub(crate) fn board_region(content: Rect) -> Rect {
 mod tests {
     use super::*;
 
-    fn empty(_: &ViewportTransform) -> DisplayViewport {
+    fn empty(_: Viewport) -> DisplayViewport {
         DisplayViewport {
             reactions: Default::default(),
             pins: Vec::new(),

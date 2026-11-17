@@ -1527,7 +1527,9 @@ impl LogGate {
     pub(crate) fn hold(&mut self, body: pipeline::UpdateFrame) -> Hold {
         match self {
             Self::Open => Hold::Seal(body),
-            Self::Walking(walk) if walk.outbound.len() >= walk_limit() => {
+            Self::Walking(walk)
+                if ambre_core::Count::of(walk.outbound.len()) >= crate::QUARANTINE_LIMIT =>
+            {
                 body.wipe();
                 walk.outbound
                     .drain(..)
@@ -1587,7 +1589,7 @@ impl LogGate {
     ) -> Deferral {
         match self {
             Self::Walking(walk)
-                if walk.snapshots.len() >= walk_limit()
+                if ambre_core::Count::of(walk.snapshots.len()) >= crate::QUARANTINE_LIMIT
                     && !walk.snapshots.contains_key(&snapshot_id) =>
             {
                 Deferral::Overflow
@@ -1627,14 +1629,14 @@ impl LogGate {
     }
 }
 
-/// [`QUARANTINE_LIMIT`] as a length, the bound of what a walk holds.
-fn walk_limit() -> usize {
-    usize::try_from(QUARANTINE_LIMIT.get()).unwrap_or(usize::MAX)
-}
-
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+
+    /// [`QUARANTINE_LIMIT`] as a length, the bound of what a walk holds.
+    fn walk_limit() -> usize {
+        usize::try_from(QUARANTINE_LIMIT.get()).unwrap_or(usize::MAX)
+    }
     use ambre_bus::Role;
 
     /// The listing as the relay writes it: each row's id as its text.
