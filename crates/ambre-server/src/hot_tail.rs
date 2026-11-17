@@ -553,6 +553,33 @@ mod db_tests {
         );
     }
 
+    /// `SRV-150`: after a move, the next insert counts the rows still inline.
+    /// It counts none of the rows that point at a batch.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn the_tail_count_skips_the_moved_rows(pool: sqlx::PgPool) {
+        let stub = S3Stub::spawn([]).await;
+        let (state, doc) = setup(pool, &stub).await;
+        for seq in 1..=200 {
+            inline(&state, &doc, seq, &frame(seq), INLINE_CAP).await;
+        }
+        assert_eq!(move_to_batch(&state, &doc, None).await.unwrap().get(), 136);
+        let kept: i64 = (137..=200)
+            .map(|s| frame(s).len())
+            .sum::<usize>()
+            .try_into()
+            .unwrap();
+        let next = frame(201);
+        let got = inline(&state, &doc, 201, &next, INLINE_CAP).await;
+        assert_eq!(
+            got,
+            InlineInsert::Stored {
+                deltas: Count::<Deltas>::from_i64(65),
+                bytes: Count::<Octets>::from_i64(kept + i64::try_from(next.len()).unwrap()),
+            }
+        );
+    }
+
     /// `SRV-152`: a document idle past the delay has its whole tail moved, and
     /// one written since keeps its own.
     #[sqlx::test]
