@@ -98,6 +98,11 @@ ambre-core = { path = "../ambre-core", features = ["testing"] }
 # the host target as ambre-toile and ambre-trame do.
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 proptest = { workspace = true }
+# A counting global allocator for `tests/document_memory.rs` (`PROSE-IO-119`):
+# the bytes the heap holds, which the resident size of a process blurs with
+# what the C allocator keeps. Test builds alone; the crate's own `unsafe`
+# stays inside it, and the test declares the allocator in safe code.
+cap = "0.1"
 # A Word test assembles its package with the codec, and reads an export back
 # through the mapping, as the Office module does.
 ambre-docx = { path = "../ambre-docx" }

@@ -1,56 +1,33 @@
 // ambre-prose document memory test (tier `host`, `PROSE-IO-119`).
 // ============================================================================
 // The ceiling of the `Prose document, held after an import` row of
-// `ambre-spec-budgets.md section 6`. It reads the resident size a document
-// keeps once its import ends, as a multiple of its Markdown file.
-// The test is alone in its binary, so no other test shares the process it
-// measures. Linux alone reports the resident size, and CI runs on Linux.
-//
-// The test runs itself again in a child process, under a fixed trim
-// threshold of the C allocator, and the child measures.
+// `ambre-spec-budgets.md section 6`. It reads the bytes the heap holds once
+// a document's import ends, as a multiple of its Markdown file.
+// The test is alone in its binary, so no other test shares the allocator it
+// counts. A counting allocator reads the heap itself: what the C allocator
+// keeps of the freed memory, and the pages it never touched, do not count.
 // ============================================================================
-#![cfg(target_os = "linux")]
+#![cfg(not(target_arch = "wasm32"))]
+
+use std::alloc::System;
 
 use ambre_bus::interop::{InteropAnswer, InteropRequest};
 use ambre_prose::events::ProseEvent;
 use ambre_prose::interop::markdown::MAX_SIZE;
 use ambre_prose::logic::ProseState;
 use ambre_prose::message::{ImportFormat, ProseCommand, ProseImport, TimeZone};
+use cap::Cap;
+
+/// The allocator of this binary: the system one, with a count of the bytes
+/// it holds and no limit.
+#[global_allocator]
+static HEAP: Cap<System> = Cap::new(System, usize::MAX);
 
 /// The ceiling, in multiples of the file. On 2026-11-17 this test reads
-/// about 14.4 times, and a heap profile of the same import 13.9 times.
+/// 13.9 times, as a heap profile of the same import does.
 /// Before the step of the import kept no write into a block it created,
-/// the two read 15.8 times.
+/// the profile read 15.8 times.
 const CEILING: usize = 15;
-
-/// The variable that marks the child process, the one that measures.
-const CHILD: &str = "AMBRE_DOCUMENT_MEMORY_CHILD";
-
-/// The tunable that fixes the trim threshold of the C allocator at its
-/// default, 128 KiB. By default, a free of a large block raises the
-/// threshold. The allocator then keeps up to tens of megabytes of the
-/// import's freed memory, which is no part of the document.
-const TUNABLES: &str = "glibc.malloc.trim_threshold=131072";
-
-/// One kibibyte, the unit `/proc/self/status` reports in.
-const KIB: usize = 1024;
-
-/// The current resident size of this process, in bytes, or `None` when the
-/// status does not name it.
-fn resident() -> Option<usize> {
-    let status = std::fs::read_to_string("/proc/self/status").ok()?;
-    status
-        .lines()
-        .find_map(|line| line.strip_prefix("VmRSS:"))
-        .and_then(|rest| {
-            rest.trim()
-                .trim_end_matches("kB")
-                .trim()
-                .parse::<usize>()
-                .ok()
-        })
-        .map(|kib| kib * KIB)
-}
 
 /// A Markdown file of 400-character paragraphs, the file the row measures.
 fn novel(size: usize) -> Vec<u8> {
@@ -66,33 +43,21 @@ fn novel(size: usize) -> Vec<u8> {
 }
 
 /// `PROSE-IO-119`: a document imported from Markdown at the bound keeps
-/// less than `CEILING` times its file once the import ends. The resident
-/// size is read before the import and after it, the file and every answer
-/// dropped. What the allocator keeps of the freed memory counts
-/// against the document, so the figure is an upper bound. The child
-/// process measures, under `TUNABLES`.
+/// less than `CEILING` times its file once the import ends. The heap is
+/// counted before the import and after it, the file and every answer
+/// dropped. The difference is what the document holds, its undo history
+/// included.
 #[test]
 fn a_document_holds_less_than_the_ceiling_times_its_file() {
-    if std::env::var_os(CHILD).is_none() {
-        let status = std::process::Command::new(std::env::current_exe().expect("a test binary"))
-            .args([
-                "--exact",
-                "a_document_holds_less_than_the_ceiling_times_its_file",
-                "--nocapture",
-            ])
-            .env(CHILD, "1")
-            .env("GLIBC_TUNABLES", TUNABLES)
-            .status()
-            .expect("the test runs itself again");
-        assert!(status.success(), "the child process measures: {status}");
-        return;
-    }
     let converter = ambre_convert::Converter::load(
         ambre_core::ConverterFamily::Markup,
         &ambre_core::Payload::new(Vec::new()),
     )
     .expect("the host links the markup engine");
     let mut state = ProseState::new().expect("a fresh document builds");
+    // The count starts before the file exists. The import frees the file,
+    // so a count taken after it would take the file off the document.
+    let before = HEAP.allocated();
     let file = novel(MAX_SIZE.saturating_len().to_usize());
     let size = file.len();
     let command = ProseCommand::Interop(InteropRequest::Import(ProseImport {
@@ -101,7 +66,6 @@ fn a_document_holds_less_than_the_ceiling_times_its_file() {
         now: ambre_core::Instant::new(1_800_000_000_000),
         zone: TimeZone::UTC,
     }));
-    let before = resident().expect("Linux reports the resident size");
     // The read runs in place, as the converter thread runs it.
     let mut last = state.handle_conversion(command, Ok(&converter));
     for (ticket, conversion) in state.take_file_requests() {
@@ -120,7 +84,7 @@ fn a_document_holds_less_than_the_ceiling_times_its_file() {
         "the import lands whole"
     );
     drop(last);
-    let after = resident().expect("Linux reports the resident size");
+    let after = HEAP.allocated();
     let held = after.saturating_sub(before);
     assert!(
         held < CEILING * size,
