@@ -735,20 +735,40 @@ mod isolation_tests {
     /// repository ships.
     const TRUNK: &str = include_str!("../../../Trunk.toml");
 
+    /// The header lines of `[serve.headers]`, which Trunk sets on every answer.
+    fn served_headers() -> &'static str {
+        TRUNK
+            .split("[serve.headers]")
+            .nth(1)
+            .and_then(|rest| rest.split("\n[").next())
+            .unwrap_or("")
+    }
+
     /// `SRV-171`: the page that loads the client is served cross-origin
     /// isolated, both headers set on the development server.
     #[test]
     fn the_page_is_served_cross_origin_isolated() {
-        let headers = TRUNK
-            .split("[serve.headers]")
-            .nth(1)
-            .and_then(|rest| rest.split("\n[").next())
-            .unwrap_or("");
+        let headers = served_headers();
         for line in [
             r#""Cross-Origin-Opener-Policy" = "same-origin""#,
             r#""Cross-Origin-Embedder-Policy" = "credentialless""#,
         ] {
             assert!(headers.lines().any(|l| l.trim() == line), "{line}");
         }
+    }
+
+    /// `SRV-281`: the development server answers every path with a content
+    /// policy that refuses any frame, and with no other policy.
+    #[test]
+    fn the_development_server_refuses_a_frame() {
+        let policies: Vec<&str> = served_headers()
+            .lines()
+            .map(str::trim)
+            .filter(|l| l.starts_with(r#""Content-Security-Policy""#))
+            .collect();
+        assert_eq!(
+            policies,
+            [r#""Content-Security-Policy" = "frame-ancestors 'none'""#]
+        );
     }
 }

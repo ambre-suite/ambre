@@ -38,6 +38,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-171` | `INV` | The development server MUST serve the page that loads the client cross-origin isolated. | `ambre-spec-architecture.md section 2` | `ambre_server::isolation_tests::the_page_is_served_cross_origin_isolated` -- the development server's configuration sets both headers | none | verified |
 | `SRV-069` | `INV` | The page that loads the client MUST be served cross-origin isolated in every deployment. | `ambre-spec-architecture.md section 2` | human-review -- `crossOriginIsolated` read in the console of each deployment's page | unheld -- `deployment` -- the relay serves the requests and not the page, and the development server's headers, which a test reads, say nothing of a deployment's | human-review |
 | `SRV-260` | `INV` | The page that loads the client MUST admit as a script only the files of its own build, each inline script it ships by its digest, and the compile of a wasm module. | README pillar "Security"; this spec section 3 | `ambre_belt::csp::tests::the_page_runs_the_scripts_it_ships_and_no_other` -- browser tier, under Chrome: the built application boots under the policy its build writes and opens a board, a spreadsheet and a text document with no violation, so no code of the client evaluates a string. A script injected into the page, an injected event handler and a `blob:` worker each run nowhere; ci-gate -- `scripts/test_trunk_post_build.py`, run by `just test-scripts` in the CI `lint` job: its `ContentPolicy` tests hold that the post-build hook names each inline script and style of the page by its digest, a script quoted in a comment by none, and writes no `unsafe-inline` and no `unsafe-eval` | none | verified |
+| `SRV-281` | `INV` | The server of the page MUST answer every path with a content policy that refuses any frame. | README pillar "Security"; this spec section 3; `SRV-260` | ci-gate -- `scripts/test_trunk_post_build.py`, run by `just test-scripts` in the CI `lint` job: its `Headers` tests hold that the post-build hook writes `_headers` beside the page, with `frame-ancestors 'none'` on every path; `ambre_belt::serve::tests::every_answer_refuses_a_frame_and_a_worker_script_carries_its_policy` -- the server of the browser tier applies that file as a deployment's server does, and the page, a deep link and any file each refuse a frame; `ambre_server::isolation_tests::the_development_server_refuses_a_frame` -- `Trunk.toml` sets the same policy on every answer of the development server | none | verified |
+| `SRV-282` | `INV` | The server of the page MUST serve the script of each worker under a policy that admits only the files of the build and a wasm compile. | README pillar "Security"; this spec section 3; `SRV-260` | ci-gate -- `scripts/test_trunk_post_build.py`, run by `just test-scripts` in the CI `lint` job: its `Headers` tests hold that `_headers` names the loader of the Sync worker, the loader of the call worker and the thread script each under the worker policy, with no `unsafe-eval`, no `unsafe-inline` and no `blob:`, and that a build missing one of the three is refused; `ambre_belt::serve::tests::every_answer_refuses_a_frame_and_a_worker_script_carries_its_policy` -- the server of the browser tier answers each worker script under that policy, and no other file | none | verified |
 | `SRV-261` | `INV` | Every answer of the relay MUST carry a content policy that loads nothing and lets no page frame it. | this spec section 3 | `ambre_server::answer_policy_tests::every_answer_carries_the_policy_that_loads_nothing` -- a success, the generic `500` of a panic and an unknown route each carry it through the layers the relay serves | none | verified |
 | `SRV-270` | `INV` | Every answer of the relay MUST carry a strict transport policy of two years that covers the subdomains. | this spec section 3 | `ambre_server::answer_policy_tests::every_route_answers_with_the_strict_transport_policy` -- each route of the public listener with each of its methods, read from the router source, an unknown route, a preflight and the scrape of the metrics listener; `ambre_server::answer_policy_tests::every_answer_carries_the_policy_that_loads_nothing` -- the generic `500` of a panic | none | verified |
 | `SRV-103` | `INV` | Membership of a channel MUST grant access to each document the channel groups, and to no other document. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | `ambre_server::db::channels::tests::channel_membership_reaches_every_document_it_groups`; `ambre_server::db::channels::tests::channel_membership_reaches_no_other_document`; `ambre_server::db::channels::tests::a_member_row_on_a_segment_grants_nothing` -- database tier | none | verified |
@@ -179,7 +181,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
-* **Verification.** 107 `verified`, 1 `human-review`, 6 `unimplemented`. A request test drives what
+* **Verification.** 109 `verified`, 1 `human-review`, 6 `unimplemented`. A request test drives what
   holds: the roles, the rank clamps, the signature gate, the error mapping, the origin list and the
   delete. No log line can name the payload type. A deployment's isolation is read by hand.
 ---
@@ -422,9 +424,22 @@ which the policy does not govern. It never sets a `style` attribute, which the p
 (`UI-THREAD-063`). The thread library read its global scope through an evaluated string. The
 vendored copy reads it without one (`vendor/wasm_thread/PATCH.md`).
 
-Two limits remain. A meta policy governs the page alone. A thread or a worker takes its policy from
-the answer that serves its script, and every such script is a file of the build. And a meta cannot
-refuse a page that frames this one. Both need a header of the deployment's server.
+A meta policy governs the page alone, and it cannot refuse a page that frames this one. A thread or
+a worker takes its policy from the answer that serves its script. So the post-build hook also
+writes `_headers` beside the page, the format Netlify and Cloudflare Pages read. The file travels
+with the build, as the meta does.
+
+| Path | What its answer carries |
+|---|---|
+| every path | the two isolation headers, and `frame-ancestors 'none'` (`SRV-281`) |
+| the loader of the Sync worker, the loader of the call worker, the thread script | the worker policy (`SRV-282`) |
+
+The worker policy admits as a script the files of the build and the compile of a wasm module. It
+admits a worker of its own origin alone. It leaves a connection open: the Sync worker fetches the
+links the relay presigns, and the build does not know the origin of object storage. The server of
+the browser tier applies the file. The development server sets one set of headers on every answer,
+so it carries the frame refusal alone. A deployment's server applies the file, or writes the same
+headers in its own configuration.
 
 **Where the process is stateless, and where it is not.** Every store is external, so a client
 reaches any instance and the fan-out crosses them (`SRV-021`). Two things are per process, and
@@ -537,7 +552,8 @@ threads appear: `meta` and amendments carry no message a member reads.
 | One set of unflushed documents, marked once per drained list | one set per bucket of documents, each with a hash tag of its own | the mark is one `SADD` per list that was empty, not one per delta, so the one set is not the hot key of a cluster. Buckets add keys and a read per bucket to every flush cycle, for a load no measure shows |
 | The metrics are a crate of the workspace | the official Prometheus client, or the `metrics` facade | each one takes a label value as a runtime text, so one call with an identifier copies the membership graph into the store. A closed `enum` makes that call unwritable. The format is a few lines, and each crate adds a registry and a lock for nothing more |
 | The scrape answers no token, on the loopback by default | a bearer token on a public port | a token is one more secret to rotate, for figures that name no one. The loopback, or a private network the operator names, keeps the scrape off the internet |
-| The page carries its content policy in a meta its build writes | a header of the server that serves the page | the deployment's server is outside the repository, so no test reads its header, and the digest of each inline script changes with each build. A header still adds what a meta cannot: the policy of a worker, and a refusal to be framed (`SRV-260`) |
+| The page carries its content policy in a meta its build writes | a header of the server that serves the page | the deployment's server is outside the repository, so no test reads its header, and the digest of each inline script changes with each build. The build writes the headers a meta cannot carry into `_headers`: the policy of a worker, and a refusal to be framed (`SRV-281`, `SRV-282`) |
+| The headers file names each worker script by its exact path | a pattern such as `/ambre-*.js` | a pattern reaches a file that is no worker script, and the hook knows each hashed name when it writes the file |
 | An inline script is admitted by its digest | a nonce, or `unsafe-inline` | a nonce needs a server that writes a fresh one into each answer, and the page is a static file. `unsafe-inline` admits the injected script the policy exists to refuse |
 | The thread library is vendored without its evaluated strings | `unsafe-eval` in the policy | it would admit any string an injected value reaches `eval` with. The copy changes four calls (`vendor/wasm_thread/PATCH.md`) |
 | The script of each thread is a file of the build | a `blob:` worker, as the thread library builds it | a `blob:` source in `worker-src` admits a worker built from any text a script of the page holds |

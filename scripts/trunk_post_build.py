@@ -39,6 +39,14 @@ reads the page as the build left it, so the digests name the bytes it ships.
 It writes the policy into the page's `Content-Security-Policy` meta, last of
 the edits to the page.
 
+**The headers each answer carries.** A meta policy governs the page alone, and
+it cannot refuse a page that frames this one. A worker takes its policy from
+the answer that serves its script (`SRV-281`, `SRV-282`). So the hook writes `_headers`
+beside the page, in the format Netlify and Cloudflare Pages read: every
+answer refuses any frame, and the script of each worker carries the worker
+policy. A deployment's server applies the file, or the same headers from its
+own configuration.
+
 **A brotli copy of each compressible file, in a release.** A static server
 serves `name.br` to a browser that accepts brotli, without compressing on each
 request (nginx `brotli_static`, Caddy `precompressed`). Brotli at its highest
@@ -254,6 +262,64 @@ def policy(scripts: list[str], styles: list[str]) -> str:
     )
 
 
+# The policy every answer carries: no page may frame this origin. A meta
+# cannot carry `frame-ancestors`, so only a header refuses the frame.
+FRAME_POLICY = "frame-ancestors 'none'"
+
+# The name of the headers file, as Netlify and Cloudflare Pages read it.
+HEADERS_FILE = "_headers"
+
+
+def worker_policy() -> str:
+    """The content policy of a worker, carried by the answer that serves its script.
+
+    A worker runs the files of the build, the compile of a wasm module, and
+    workers of its own origin. No evaluated string and no `blob:` worker. A
+    connection stays open: the Sync worker fetches the links the relay
+    presigns, and the build does not know the origin of object storage.
+    """
+    return "; ".join(
+        [
+            "script-src 'self' 'wasm-unsafe-eval'",
+            "worker-src 'self'",
+            "object-src 'none'",
+            "base-uri 'none'",
+            FRAME_POLICY,
+        ]
+    )
+
+
+def write_headers(staging: Path, public_url: str = "/") -> str:
+    """Write `_headers` for the build in `staging`, and return its text.
+
+    Every answer carries the two isolation headers and refuses any frame. The
+    loader of each worker of `WORKERS`, and the thread script, carry the worker
+    policy. Each script is named exactly, so no pattern reaches another file.
+    """
+    base = public_url.rstrip("/") + "/"
+    scripts: list[str] = []
+    for worker in WORKERS:
+        loaders = sorted(staging.glob(f"{worker}-*_loader.js"))
+        if len(loaders) != 1:
+            raise HookError(f"{len(loaders)} {worker} loaders in {staging}, not one")
+        scripts.append(loaders[0].name)
+    threads = sorted(staging.glob("ambre-thread-*.js"))
+    if len(threads) != 1:
+        raise HookError(f"{len(threads)} thread scripts in {staging}, not one")
+    scripts.append(threads[0].name)
+    lines = [
+        f"{base}*",
+        "  Cross-Origin-Opener-Policy: same-origin",
+        "  Cross-Origin-Embedder-Policy: credentialless",
+        f"  Content-Security-Policy: {FRAME_POLICY}",
+    ]
+    for name in scripts:
+        lines += [f"{base}{name}", f"  Content-Security-Policy: {worker_policy()}"]
+    text = "\n".join(lines) + "\n"
+    (staging / HEADERS_FILE).write_text(text, encoding="utf-8")
+    return text
+
+
 def settle_autoreload(html: str, public_url: str) -> str:
     """The page with the address of the reload socket of `trunk serve` written in.
 
@@ -315,6 +381,7 @@ def main() -> int:
         for family in CONVERTER_FAMILIES:
             copy_converter(staging, CONVERTER_DIR, family)
         fill_policy(staging, public_url=os.environ.get("TRUNK_PUBLIC_URL", "/"))
+        write_headers(staging, os.environ.get("TRUNK_PUBLIC_URL", "/"))
         if os.environ.get("TRUNK_PROFILE") == "release":
             write_brotli(compressible(staging))
     except HookError as err:

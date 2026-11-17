@@ -73,9 +73,15 @@ no_system_proxy = true
 # COEP=credentialless strips credentials from cross-origin sub-resource fetches
 # (less invasive than `require-corp`, which would force every third-party asset
 # to opt in via CORP headers).
+#
+# The content policy refuses any page that frames this one, which the meta of
+# the page cannot do (`SRV-281`). Trunk sets one set of headers on every
+# answer, so the worker policy of the build's `_headers` file holds behind a
+# deployment's server alone.
 [serve.headers]
 "Cross-Origin-Opener-Policy" = "same-origin"
 "Cross-Origin-Embedder-Policy" = "credentialless"
+"Content-Security-Policy" = "frame-ancestors 'none'"
 
 [profile.dev]
 wasm_opt = false # disable wasm optimization for faster builds during development

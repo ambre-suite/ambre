@@ -266,6 +266,76 @@ class ContentPolicy(unittest.TestCase):
             self.assertIn(hook.digest(settled), self.directive(text, "script-src"))
 
 
+class Headers(unittest.TestCase):
+    """`SRV-281`, `SRV-282`: the headers file of the build refuses any frame on every answer,
+    and gives the script of each worker the worker policy."""
+
+    BUILT = ("ambre-sync-0123abcd_loader.js", "ambre-call-4567ef01_loader.js", "ambre-thread-89ab2345.js")
+
+    def built(self, tmp: str, names: tuple[str, ...] = BUILT) -> Path:
+        root = Path(tmp)
+        for name in names:
+            (root / name).write_text("script", encoding="utf-8")
+        return root
+
+    def rules(self, text: str) -> dict[str, list[str]]:
+        """Each path of the file and the header lines under it."""
+        found: dict[str, list[str]] = {}
+        path = ""
+        for line in text.splitlines():
+            if line.startswith("  "):
+                found[path].append(line.strip())
+            else:
+                path = line
+                self.assertNotIn(path, found, f"{path} twice")
+                found[path] = []
+        return found
+
+    def test_every_answer_refuses_a_frame_and_is_isolated(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            rules = self.rules(hook.write_headers(self.built(tmp)))
+            self.assertEqual(
+                rules["/*"],
+                [
+                    "Cross-Origin-Opener-Policy: same-origin",
+                    "Cross-Origin-Embedder-Policy: credentialless",
+                    "Content-Security-Policy: frame-ancestors 'none'",
+                ],
+            )
+
+    def test_the_script_of_each_worker_carries_the_worker_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.built(tmp)
+            (root / "ambre-app-0123abcd.js").write_text("glue", encoding="utf-8")
+            text = hook.write_headers(root, "/app/")
+            self.assertEqual((root / hook.HEADERS_FILE).read_text(encoding="utf-8"), text)
+            rules = self.rules(text)
+            self.assertEqual(sorted(rules), sorted(["/app/*", *(f"/app/{n}" for n in self.BUILT)]))
+            for name in self.BUILT:
+                self.assertEqual(rules[f"/app/{name}"], [f"Content-Security-Policy: {hook.worker_policy()}"])
+
+    def test_the_worker_policy_runs_the_build_alone(self) -> None:
+        policy = hook.worker_policy()
+        directives = {d.split()[0]: d.split()[1:] for d in policy.split("; ")}
+        self.assertEqual(directives["script-src"], ["'self'", "'wasm-unsafe-eval'"])
+        self.assertEqual(directives["worker-src"], ["'self'"])
+        self.assertEqual(directives["object-src"], ["'none'"])
+        self.assertEqual(directives["frame-ancestors"], ["'none'"])
+        for banned in ("'unsafe-inline'", "'unsafe-eval'", "blob:", "data:"):
+            self.assertNotIn(banned, policy)
+
+    def test_a_build_without_each_worker_script_is_refused(self) -> None:
+        for missing in self.BUILT:
+            with tempfile.TemporaryDirectory() as tmp, self.assertRaises(hook.HookError, msg=missing):
+                hook.write_headers(self.built(tmp, tuple(n for n in self.BUILT if n != missing)))
+
+    def test_the_hook_writes_the_file_after_the_policy(self) -> None:
+        source = Path(hook.__file__).read_text(encoding="utf-8")
+        main = source[source.index("def main()") :]
+        self.assertLess(main.index("fill_policy("), main.index("write_headers("))
+        self.assertLess(main.index("write_headers("), main.index("write_brotli("))
+
+
 class Compressible(unittest.TestCase):
     def test_text_and_wasm_are_chosen_and_compressed_formats_are_not(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
