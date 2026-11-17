@@ -4,9 +4,12 @@
 //! While the page is in a call, the channel region gives a band to the call, above its composer.
 //! Each other participant takes a tile of a grid of three by three at most. A tile shows the
 //! picture of its member, or its initials while no video of it arrives, with its name below
-//! (`MURMURE-651`). A ninth tile and more turn the last cell into a tile that counts the others
-//! and opens their list (`MURMURE-654`). The tile of a participant who speaks is outlined
-//! (`MURMURE-653`). The member's own tile sits apart, small, and marks its mute (`MURMURE-652`).
+//! (`MURMURE-651`). Past nine, the grid shows pages of nine, which an arrow at each side turns
+//! (`MURMURE-654`). A pinned participant takes a larger tile beside the grid, on every page
+//! (`MURMURE-668`). The page asks the SFU for the video of each tile it shows (`MURMURE-667`).
+//!
+//! The tile of a participant who speaks is outlined (`MURMURE-653`). The member's own tile sits
+//! apart, small, and marks its mute (`MURMURE-652`).
 //!
 //! Out of a call, the band takes no height (`MURMURE-621`). A received screen takes a taller
 //! band, and a tile above the grid, taller than each of its tiles (`MURMURE-629`). This module
@@ -17,12 +20,12 @@ use ambre_canvas::TextCache;
 use ambre_canvas::theme::{FONT_DISPLAY, FONT_UI};
 use ambre_canvas::video::Facing;
 use ambre_core::id::{Id, User};
-use ambre_core::index::Pos;
+use ambre_core::index::{Axis, Len, Numbered, Pos, Shown};
 use ambre_core::{
-    Bounded, Count, DisplayName, FracMs, Instant, Members, MeterLevel, PageLoad, Px, Size, Surface,
-    TimeSpan, Validated, VideoSlots, View,
+    Bounded, Count, DisplayName, FracMs, Instant, MeterLevel, Ordinal, OrdinalKind, PageLoad, Px,
+    Size, Surface, TimeSpan, Validated, VideoSlots, View,
 };
-use ambre_draw::{DrawSurface, FontContext, Rect};
+use ambre_draw::{DrawSurface, FontContext, Point, Rect};
 
 use crate::ui::call_controls::Microphone;
 use crate::ui::paint::{draw, painter_px, shape, surface_px, text_height, text_width, view_rect};
@@ -59,6 +62,16 @@ impl ambre_core::NarrowCount for Tiles {
 /// (`ambre-spec-budgets.md section 1`, the call videos row).
 const GRID_CELLS: Count<Tiles> = Count::<Tiles>::new(9);
 
+/// The share of the grid's area a pinned tile takes at most, at its left (`MURMURE-668`).
+const PINNED_SHARE: f32 = 0.5;
+
+/// The largest share of the width of a pinned tile that a tile of the grid beside it takes. So
+/// the pinned one stays the larger (`MURMURE-668`).
+const BESIDE_PINNED: f32 = 0.5;
+
+/// The width of the arrow at each side of a grid of more than one page (`MURMURE-654`).
+const ARROW_WIDTH: Px<View> = Px::<View>::new(28.0);
+
 /// The widest the member's own tile grows, so it stays small beside the grid.
 const OWN_WIDTH: Px<View> = Px::<View>::new(160.0);
 
@@ -88,6 +101,153 @@ pub enum Voice {
     Quiet,
     /// The participant speaks: its tile is outlined (`MURMURE-653`).
     Speaks,
+}
+
+/// A page of the grid of a call, counted from zero: `Pos<GridPages>` (`MURMURE-654`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum GridPages {}
+
+impl Axis for GridPages {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("GridPage");
+}
+
+/// A page of the grid as the header names it: counted from one.
+impl OrdinalKind for GridPages {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("GridPageNumber");
+}
+
+/// The number the header shows for a page: its index plus one.
+impl Numbered for GridPages {
+    type Number = Ordinal<GridPages>;
+
+    fn number_of(pos: Pos<GridPages>) -> Ordinal<GridPages> {
+        Ordinal::<GridPages>::of_index(pos)
+    }
+}
+
+/// The header shows the count of the pages.
+impl Shown for GridPages {}
+
+/// Which way a press turns the page of the grid.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Turn {
+    /// To the page before.
+    Previous,
+    /// To the page after.
+    Next,
+}
+
+impl Turn {
+    /// The accessible name of the page button of the header that turns this way.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Previous => "Previous page of the call",
+            Self::Next => "Next page of the call",
+        }
+    }
+
+    /// The text of the arrow of the grid that turns this way.
+    const fn arrow(self) -> &'static str {
+        match self {
+            Self::Previous => "<",
+            Self::Next => ">",
+        }
+    }
+}
+
+/// What a press on the video region asks of the page. Neither writes into the channel
+/// (`MURMURE-670`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CallPress {
+    /// An arrow of the grid: show the page before or after (`MURMURE-654`).
+    Turn(Turn),
+    /// The tile of a participant: pin it, or unpin it when it is pinned (`MURMURE-668`).
+    Pin(Id<User>),
+}
+
+/// Which page of the grid shows, and how many the grid holds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Paging {
+    /// The page the grid shows, within its pages.
+    pub page: Pos<GridPages>,
+    /// How many pages the grid holds: one at least.
+    pub pages: Len<GridPages>,
+}
+
+impl Paging {
+    /// The page a turn shows: the turns stop at the first and at the last page.
+    #[must_use]
+    pub fn turned(self, turn: Turn) -> Pos<GridPages> {
+        match turn {
+            Turn::Previous => self.page.prev().unwrap_or(self.page),
+            Turn::Next => self.page.next().within(self.pages),
+        }
+    }
+}
+
+/// The members one page of the grid shows: the pinned one apart, then the tiles of the page.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Grid {
+    /// The pinned member, while it is in the call.
+    pub pinned: Option<Id<User>>,
+    /// The members of the tiles of the page, in the order the call admitted them.
+    pub shown: Vec<Id<User>>,
+    /// The page shown, and the count of pages.
+    pub paging: Paging,
+}
+
+/// The members whose video the page asks of the SFU: exactly those whose tile the grid shows,
+/// the pinned one first and large (`MURMURE-667`, `MURMURE-668`).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Wanted {
+    /// The members, in the order of the grid.
+    pub members: Vec<Id<User>>,
+    /// The member the page shows large: the pinned one.
+    pub large: Option<Id<User>>,
+}
+
+/// The page `page` of `others`, the other participants in the order the call admitted them, with
+/// `pinned` apart. A page holds nine tiles, or eight beside a pinned one. So a choice of videos
+/// names nine senders at most (`ambre-spec-budgets.md section 1`, the call videos row). A page
+/// past the last shows the last. A pin of a member out of the call pins nobody.
+#[must_use]
+pub fn grid(others: &[Id<User>], pinned: Option<Id<User>>, page: Pos<GridPages>) -> Grid {
+    let pinned = pinned.filter(|member| others.contains(member));
+    let rest: Vec<Id<User>> = others
+        .iter()
+        .copied()
+        .filter(|member| Some(*member) != pinned)
+        .collect();
+    let cells =
+        usize::try_from(GRID_CELLS.get()).unwrap_or_default() - usize::from(pinned.is_some());
+    let pages = Len::<GridPages>::of(rest.len().div_ceil(cells).max(1));
+    let page = page.within(pages);
+    let shown = rest
+        .iter()
+        .skip(page.to_usize() * cells)
+        .take(cells)
+        .copied()
+        .collect();
+    Grid {
+        pinned,
+        shown,
+        paging: Paging { page, pages },
+    }
+}
+
+impl Grid {
+    /// The members whose video the page asks for: the pinned one first and large, then each tile
+    /// of the page (`MURMURE-667`).
+    #[must_use]
+    pub fn wanted(&self) -> Wanted {
+        Wanted {
+            members: self.pinned.iter().chain(&self.shown).copied().collect(),
+            large: self.pinned,
+        }
+    }
 }
 
 /// One other participant of the call of the page, as the video region shows it.
@@ -148,12 +308,30 @@ impl Fill {
 pub struct CallStage {
     /// The other participants, in the order the call admitted them.
     pub others: Vec<Participant>,
+    /// The page of the grid the member turned to (`MURMURE-654`).
+    pub page: Pos<GridPages>,
+    /// The participant the member pinned (`MURMURE-668`).
+    pub pinned: Option<Id<User>>,
     /// The screen slot, while a received screen holds a picture.
     pub screen: Option<Pos<VideoSlots>>,
     /// The member's own tile.
     pub own: Own,
     /// How much of the channel region the call takes.
     pub fill: Fill,
+}
+
+impl CallStage {
+    /// The page of the grid the region shows.
+    #[must_use]
+    pub fn grid(&self) -> Grid {
+        let others: Vec<Id<User>> = self.others.iter().map(|p| p.member).collect();
+        grid(&others, self.pinned, self.page)
+    }
+
+    /// The participant `member`, while it is in the call.
+    fn participant(&self, member: Id<User>) -> Option<Participant> {
+        self.others.iter().copied().find(|p| p.member == member)
+    }
 }
 
 /// Whose tile a tile is.
@@ -180,13 +358,31 @@ pub struct Tile {
     pub voice: Voice,
 }
 
-/// The tile that counts the participants the grid has no room for, and opens their list.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct More {
-    /// The tile.
-    pub frame: Rect,
-    /// How many participants the grid shows no tile for.
-    pub hidden: Count<Members>,
+/// The arrows of a grid of more than one page: each one while it turns to another page
+/// (`MURMURE-654`).
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Pager {
+    /// The arrow to the page before.
+    pub previous: Option<Rect>,
+    /// The arrow to the page after.
+    pub next: Option<Rect>,
+}
+
+impl Pager {
+    /// Each arrow, and the way it turns.
+    fn arrows(self) -> impl Iterator<Item = (Turn, Rect)> {
+        let previous = self.previous.map(|r| (Turn::Previous, r));
+        let next = self.next.map(|r| (Turn::Next, r));
+        previous.into_iter().chain(next)
+    }
+
+    /// The turn of the arrow at `at`, if any.
+    #[must_use]
+    pub fn at(self, at: Point) -> Option<Turn> {
+        self.arrows()
+            .find(|(_, frame)| frame.contains(at))
+            .map(|(turn, _)| turn)
+    }
 }
 
 /// Where each thing of the region lies.
@@ -194,10 +390,28 @@ pub struct More {
 pub struct Placed {
     /// The tile of the received screen.
     pub screen: Option<(Pos<VideoSlots>, Rect)>,
-    /// The tiles of the participants, the member's own last.
+    /// The tiles of the participants: the pinned one first, the member's own last.
     pub tiles: Vec<Tile>,
-    /// The tile that counts the others, when the grid has no room for each participant.
-    pub more: Option<More>,
+    /// The arrows that turn the page, when the grid holds more than one.
+    pub pager: Pager,
+}
+
+impl Placed {
+    /// What a press at `at` asks of the page: an arrow turns the page, and the tile of another
+    /// participant pins it (`MURMURE-654`, `MURMURE-668`).
+    #[must_use]
+    pub fn press_at(&self, at: Point) -> Option<CallPress> {
+        if let Some(turn) = self.pager.at(at) {
+            return Some(CallPress::Turn(turn));
+        }
+        self.tiles
+            .iter()
+            .find(|t| t.frame.contains(at))
+            .and_then(|t| match t.who {
+                Who::Member(member) => Some(CallPress::Pin(member)),
+                Who::Own => None,
+            })
+    }
 }
 
 /// Where the band lies in its region.
@@ -245,18 +459,10 @@ pub fn region_height(
     }
 }
 
-/// The participants in the order of the grid. Each one with a video comes first, by its slot.
-/// Each one without follows, in the order the call admitted them.
-fn ordered(others: &[Participant]) -> Vec<Participant> {
-    let mut shown = others.to_vec();
-    shown.sort_by_key(|p| (p.video.is_none(), p.video));
-    shown
-}
-
 /// Where each thing of `stage` lies in the band `at`. A screen takes the top of the band, above
-/// the grid (`MURMURE-629`). The member's own tile takes the right end of the grid's area, and
-/// the grid the rest. Nine participants or fewer each take a cell. Past nine, the last cell
-/// counts the others (`MURMURE-654`).
+/// the grid (`MURMURE-629`). The member's own tile takes the right end of the grid's area. A
+/// pinned participant takes a larger tile at its left (`MURMURE-668`). Past one page, an arrow
+/// takes each side of the grid, which shows the page of the stage (`MURMURE-654`).
 pub fn place(at: Band, stage: &CallStage) -> Placed {
     if at.height <= Px::<View>::ZERO {
         return Placed::default();
@@ -274,7 +480,7 @@ pub fn place(at: Band, stage: &CallStage) -> Placed {
                 height: at.height - row,
                 ..band
             };
-            let screen = cells(screen_area, Count::<Tiles>::new(1))
+            let screen = cells(screen_area, Count::<Tiles>::new(1), None)
                 .first()
                 .copied()
                 .map(|r| (slot, r));
@@ -288,41 +494,88 @@ pub fn place(at: Band, stage: &CallStage) -> Placed {
         None => (None, band),
     };
     let (own_frame, grid_area) = own_corner(people);
-    let shown = ordered(&stage.others);
-    let room = usize::try_from(GRID_CELLS.get()).unwrap_or_default();
-    let (fits, hidden) = if shown.len() > room {
-        (room - 1, shown.len() - (room - 1))
-    } else {
-        (shown.len(), 0)
+    let grid = stage.grid();
+    let mut tiles = Vec::new();
+    let (grid_area, widest) = match grid.pinned.and_then(|m| stage.participant(m)) {
+        Some(pinned) => {
+            let (frame, rest) = pinned_side(grid_area);
+            let widest = frame.map(|f| painter_px(Px::<Surface>::new(f.width())) * BESIDE_PINNED);
+            if let Some(frame) = frame {
+                tiles.push(tile(
+                    Who::Member(pinned.member),
+                    frame,
+                    pinned.video,
+                    pinned.voice,
+                ));
+            }
+            (rest, widest)
+        }
+        None => (grid_area, None),
     };
-    let grid = cells(
-        grid_area,
-        Count::<Tiles>::of(fits + usize::from(hidden > 0)),
-    );
-    let mut tiles: Vec<Tile> = shown
+    let (pager, grid_area) = pager(grid_area, grid.paging);
+    let shown: Vec<Participant> = grid
+        .shown
         .iter()
-        .zip(&grid)
-        .take(fits)
-        .map(|(p, frame)| tile(Who::Member(p.member), *frame, p.video, p.voice))
+        .filter_map(|m| stage.participant(*m))
         .collect();
-    let more = (hidden > 0)
-        .then(|| grid.get(fits).copied())
-        .flatten()
-        .and_then(|frame| {
-            let hidden = u32::try_from(hidden).ok()?;
-            Some(More {
-                frame,
-                hidden: Count::<Members>::new(hidden),
-            })
-        });
+    let frames = cells(grid_area, Count::<Tiles>::of(shown.len()), widest);
+    tiles.extend(
+        shown
+            .iter()
+            .zip(&frames)
+            .map(|(p, frame)| tile(Who::Member(p.member), *frame, p.video, p.voice)),
+    );
     if let Some(frame) = own_frame {
         tiles.push(tile(Who::Own, frame, stage.own.video, Voice::Quiet));
     }
     Placed {
         screen,
         tiles,
-        more,
+        pager,
     }
+}
+
+/// The tile of a pinned participant at the left of `area`, and the area the grid keeps beside
+/// it (`MURMURE-668`).
+fn pinned_side(area: Area) -> (Option<Rect>, Area) {
+    let side = Area {
+        width: area.width * PINNED_SHARE,
+        ..area
+    };
+    let frame = cells(side, Count::<Tiles>::new(1), None).first().copied();
+    let taken = frame.map_or(Px::<View>::ZERO, |f| {
+        painter_px(Px::<Surface>::new(f.x1)) - area.left
+    });
+    let rest = Area {
+        left: area.left + taken,
+        width: (area.width - taken).max(Px::<View>::ZERO),
+        ..area
+    };
+    (frame, rest)
+}
+
+/// The arrows of a grid of more than one page, each at one side of `area`, and the area the
+/// grid keeps between them. An arrow shows while it turns to another page (`MURMURE-654`).
+fn pager(area: Area, paging: Paging) -> (Pager, Area) {
+    if paging.pages <= Len::<GridPages>::ONE || area.width <= ARROW_WIDTH * 2.0 {
+        return (Pager::default(), area);
+    }
+    let gap = TILE_GAP;
+    let (top, bottom) = (area.top + gap, area.top + area.height - gap);
+    let left = area.left;
+    let right = area.left + area.width;
+    let previous = view_rect(left + gap, top, left + ARROW_WIDTH, bottom);
+    let next = view_rect(right - ARROW_WIDTH, top, right - gap, bottom);
+    let pager = Pager {
+        previous: (paging.turned(Turn::Previous) != paging.page).then_some(previous),
+        next: (paging.turned(Turn::Next) != paging.page).then_some(next),
+    };
+    let rest = Area {
+        left: left + ARROW_WIDTH,
+        width: area.width - ARROW_WIDTH * 2.0,
+        ..area
+    };
+    (pager, rest)
 }
 
 /// The tile of `who` in `frame`: the picture above, the name strip below.
@@ -362,8 +615,9 @@ fn own_corner(area: Area) -> (Option<Rect>, Area) {
 
 /// `count` cells of the aspect of a camera, in a grid of three by three at most inside `area`,
 /// row by row. The grid takes the count of columns that gives the largest cells, and sits
-/// centred; its last row too. A count past nine takes nine.
-fn cells(area: Area, count: Count<Tiles>) -> Vec<Rect> {
+/// centred; its last row too. A count past nine takes nine. A cell is `widest` wide at most, when
+/// one is given.
+fn cells(area: Area, count: Count<Tiles>, widest: Option<Px<View>>) -> Vec<Rect> {
     let Ok(count) = u16::try_from(count.get().min(GRID_CELLS.get())) else {
         return Vec::new();
     };
@@ -376,7 +630,9 @@ fn cells(area: Area, count: Count<Tiles>) -> Vec<Rect> {
         let (c, r) = (f32::from(columns), f32::from(rows));
         let across = (area.width.get() - (c + 1.0) * gap) / c;
         let down = (area.height.get() - (r + 1.0) * gap) / r;
-        (across.min(down * TILE_ASPECT), columns, rows)
+        let largest = across.min(down * TILE_ASPECT);
+        let largest = widest.map_or(largest, |w| largest.min(w.get()));
+        (largest, columns, rows)
     };
     // Three columns at most, and three rows at most: the nine tiles of `GRID_CELLS`.
     let Some((width, columns, rows)) = (1..=3)
@@ -465,11 +721,6 @@ pub fn label(who: Who, name: Option<&Validated<DisplayName>>, microphone: Microp
     }
 }
 
-/// The words of the tile that counts the others: "+" and their count.
-pub fn more_label(hidden: Count<Members>) -> String {
-    format!("+{}", hidden.get())
-}
-
 /// Reads of `name_of` for each member of the region: the page's directory of the spaces.
 pub type NameOf<'n> = &'n dyn Fn(Id<User>) -> Option<Validated<DisplayName>>;
 
@@ -495,8 +746,8 @@ pub struct Words {
 }
 
 /// The texts of the region, in the order the paint draws them. Each tile with no picture gives
-/// its initials, then each tile its name. The count of the others comes last (`MURMURE-651`,
-/// `MURMURE-652`, `MURMURE-654`).
+/// its initials, then each tile its name. The arrows that turn the page come last
+/// (`MURMURE-651`, `MURMURE-652`, `MURMURE-654`).
 pub fn words(stage: &CallStage, placed: &Placed, name_of: NameOf<'_>) -> Vec<Words> {
     let mut out = Vec::new();
     for tile in &placed.tiles {
@@ -524,10 +775,10 @@ pub fn words(stage: &CallStage, placed: &Placed, name_of: NameOf<'_>) -> Vec<Wor
             size: FONT_UI,
         });
     }
-    if let Some(more) = placed.more {
+    for (turn, frame) in placed.pager.arrows() {
         out.push(Words {
-            text: more_label(more.hidden),
-            inside: more.frame,
+            text: turn.arrow().to_owned(),
+            inside: frame,
             size: FONT_DISPLAY,
         });
     }
@@ -564,7 +815,7 @@ pub fn paint<S: DrawSurface>(
         .map(|(_, screen)| screen)
         .into_iter()
         .chain(placed.tiles.iter().map(|t| t.frame))
-        .chain(placed.more.map(|m| m.frame));
+        .chain(placed.pager.arrows().map(|(_, frame)| frame));
     for backdrop in backdrops {
         surface.fill_rect(backdrop, palette.content_pending);
     }
@@ -668,6 +919,8 @@ mod tests {
                     voice: Voice::Quiet,
                 })
                 .collect(),
+            page: Pos::<GridPages>::new(0),
+            pinned: None,
             screen: None,
             own: Own {
                 member: None,
@@ -722,6 +975,17 @@ mod tests {
             .collect()
     }
 
+    /// The member of each tile of another participant, in the order of the tiles.
+    fn member_ids(placed: &Placed) -> Vec<Id<User>> {
+        members(placed)
+            .iter()
+            .filter_map(|t| match t.who {
+                Who::Member(member) => Some(member),
+                Who::Own => None,
+            })
+            .collect()
+    }
+
     fn own(placed: &Placed) -> Option<Tile> {
         placed.tiles.iter().copied().find(|t| t.who == Who::Own)
     }
@@ -742,8 +1006,8 @@ mod tests {
         );
     }
 
-    /// `MURMURE-651`: each participant takes a tile of a grid of three by three at most. Those
-    /// with a video come first, by their slot. The tiles keep the aspect of a camera,
+    /// `MURMURE-651`: each participant takes a tile of a grid of three by three at most. The
+    /// tiles keep the order of the admission, with a video or not. The tiles keep the aspect of a camera,
     /// overlap none, and stay inside the band and the width, the member's own tile included.
     #[test]
     fn each_participant_takes_a_tile_of_a_grid_of_three_by_three_at_most() {
@@ -753,7 +1017,7 @@ mod tests {
                 let placed = place(at, &shown);
                 let tiles = members(&placed);
                 assert_eq!(tiles.len(), shown.others.len());
-                assert!(placed.more.is_none());
+                assert_eq!(placed.pager, Pager::default(), "one page shows no arrow");
                 let rows: Vec<i64> = {
                     let mut tops: Vec<i64> = tiles.iter().map(|t| t.frame.y0 as i64).collect();
                     tops.dedup();
@@ -783,11 +1047,9 @@ mod tests {
                         );
                     }
                 }
-                // Those with a video come first, in the order of their slot.
-                let slots: Vec<Option<Pos<VideoSlots>>> = tiles.iter().map(|t| t.video).collect();
-                let mut sorted = slots.clone();
-                sorted.sort_by_key(|v| (v.is_none(), *v));
-                assert_eq!(slots, sorted);
+                // A video moves no tile: the order is that of the admission.
+                let admitted: Vec<Id<User>> = shown.others.iter().map(|p| p.member).collect();
+                assert_eq!(member_ids(&placed), admitted);
                 assert!(own(&placed).is_some(), "the member's own tile");
             }
         }
@@ -938,26 +1200,139 @@ mod tests {
         assert!(initials.contains(&"AL".to_owned()), "{initials:?}");
     }
 
-    /// `MURMURE-654`: past nine participants, the grid shows eight and a ninth tile counts the
-    /// others. Nine take nine tiles, and no count.
+    /// `MURMURE-654`: past nine participants, the grid shows pages of nine, in the order the call
+    /// admitted them, with an arrow to each other page. The turns stop at the first and at the
+    /// last page, and a page past the last shows the last.
     #[test]
-    fn past_nine_participants_a_tile_counts_the_others() {
+    fn past_nine_participants_the_grid_shows_pages_of_nine() {
         let at = band(0.0, 820.0, 1200.0);
         let nine = place(at, &stage(9, 9));
         assert_eq!(members(&nine).len(), 9);
-        assert!(nine.more.is_none());
-        let twelve = place(at, &stage(12, 9));
-        assert_eq!(members(&twelve).len(), 8);
-        let more = twelve
-            .more
-            .unwrap_or_else(|| panic!("a tile counts the others"));
-        assert_eq!(more.hidden, Count::<Members>::new(4));
-        assert_eq!(more_label(more.hidden), "+4");
-        for t in &twelve.tiles {
-            assert!(t.frame.intersect(more.frame).area() < 1e-6);
+        assert_eq!(nine.pager, Pager::default(), "one page turns nowhere");
+        let mut twenty = stage(20, 3);
+        let order: Vec<Id<User>> = twenty.others.iter().map(|p| p.member).collect();
+        let first = place(at, &twenty);
+        assert_eq!(member_ids(&first), order[..9]);
+        assert!(first.pager.previous.is_none(), "no page before the first");
+        let next = first
+            .pager
+            .next
+            .unwrap_or_else(|| panic!("an arrow to the next page"));
+        assert_eq!(
+            first.press_at(next.center()),
+            Some(CallPress::Turn(Turn::Next))
+        );
+        let paging = twenty.grid().paging;
+        assert_eq!(paging.pages, Len::<GridPages>::new(3));
+        assert_eq!(paging.turned(Turn::Previous), Pos::<GridPages>::new(0));
+        twenty.page = paging.turned(Turn::Next);
+        let second = place(at, &twenty);
+        assert_eq!(member_ids(&second), order[9..18]);
+        let previous = second
+            .pager
+            .previous
+            .unwrap_or_else(|| panic!("an arrow to the page before"));
+        assert_eq!(
+            second.press_at(previous.center()),
+            Some(CallPress::Turn(Turn::Previous))
+        );
+        for t in &second.tiles {
+            for (_, arrow) in second.pager.arrows() {
+                assert!(t.frame.intersect(arrow).area() < 1e-6, "{t:?} {arrow:?}");
+            }
         }
-        // The eight shown are those with a video.
-        assert!(members(&twelve).iter().all(|t| t.video.is_some()));
+        twenty.page = Pos::<GridPages>::new(2);
+        let last = place(at, &twenty);
+        assert_eq!(member_ids(&last), order[18..]);
+        assert!(last.pager.next.is_none(), "no page after the last");
+        assert_eq!(
+            twenty.grid().paging.turned(Turn::Next),
+            Pos::<GridPages>::new(2)
+        );
+        twenty.page = Pos::<GridPages>::new(7);
+        assert_eq!(
+            twenty.grid().paging.page,
+            Pos::<GridPages>::new(2),
+            "a page past the last shows the last"
+        );
+        let texts = painted_texts(&twenty, &HashMapNames::new());
+        assert!(texts.contains(&"<".to_owned()), "{texts:?}");
+        assert!(!texts.contains(&">".to_owned()), "{texts:?}");
+        assert_ne!(Turn::Previous.label(), Turn::Next.label());
+    }
+
+    /// `MURMURE-667`: the page asks for exactly the members whose tile the grid shows. It names
+    /// them in the order of its tiles, the pinned one first and large, nine at most. A pin of a member out of
+    /// the call pins nobody.
+    #[test]
+    fn the_choice_names_exactly_the_tiles_the_grid_shows() {
+        let at = band(0.0, 180.0, 800.0);
+        for count in [0, 1, 5, 9, 10, 17, 30] {
+            let mut shown = stage(count, count / 3);
+            let inside = shown.others.get(3).map(|p| p.member);
+            for page in 0..4 {
+                for pin in [None, inside, Some(Id::<User>::mint())] {
+                    shown.page = Pos::<GridPages>::new(page);
+                    shown.pinned = pin;
+                    let wanted = shown.grid().wanted();
+                    assert_eq!(wanted.members, member_ids(&place(at, &shown)));
+                    assert!(wanted.members.len() <= 9, "{count}: {wanted:?}");
+                    let pinned = pin.filter(|m| shown.others.iter().any(|p| p.member == *m));
+                    assert_eq!(wanted.large, pinned);
+                    if pinned.is_some() {
+                        assert_eq!(wanted.members.first().copied(), pinned);
+                    }
+                }
+            }
+            // The pages together name each participant once.
+            shown.pinned = None;
+            let pages = shown.grid().paging.pages.get();
+            let mut all = Vec::new();
+            for page in 0..pages {
+                shown.page = Pos::<GridPages>::new(page);
+                all.extend(shown.grid().wanted().members);
+            }
+            let admitted: Vec<Id<User>> = shown.others.iter().map(|p| p.member).collect();
+            assert_eq!(all, admitted);
+        }
+    }
+
+    /// `MURMURE-668`: a pinned participant takes a tile at the left of the grid, on every page.
+    /// That tile is larger than each tile of the grid, and the grid beside it holds eight. A press on its tile asks
+    /// for the pin again, which unpins it, and a press on the member's own tile asks nothing.
+    #[test]
+    fn a_pinned_participant_stays_large_on_every_page() {
+        for at in [band(0.0, 180.0, 800.0), band(0.0, 820.0, 1200.0)] {
+            let mut shown = stage(20, 20);
+            let ada = shown.others[12].member;
+            shown.pinned = Some(ada);
+            assert_eq!(shown.grid().paging.pages, Len::<GridPages>::new(3));
+            for page in 0..3 {
+                shown.page = Pos::<GridPages>::new(page);
+                let placed = place(at, &shown);
+                let tiles = members(&placed);
+                let pinned = tiles[0];
+                assert_eq!(pinned.who, Who::Member(ada));
+                assert!(tiles.len() <= 9, "{} tiles", tiles.len());
+                for t in &tiles[1..] {
+                    assert!(t.frame.height() < pinned.frame.height(), "{t:?} {pinned:?}");
+                    assert!(t.frame.x0 >= pinned.frame.x1, "{t:?} left of {pinned:?}");
+                    assert_ne!(t.who, Who::Member(ada));
+                }
+                assert_eq!(
+                    placed.press_at(pinned.frame.center()),
+                    Some(CallPress::Pin(ada))
+                );
+                let mine = own(&placed).unwrap_or_else(|| panic!("an own tile"));
+                assert_eq!(placed.press_at(mine.frame.center()), None);
+            }
+        }
+        // A sole other participant, pinned, shows large, and the grid beside it holds nothing.
+        let mut one = stage(1, 1);
+        one.pinned = one.others.first().map(|p| p.member);
+        let placed = place(band(0.0, 180.0, 800.0), &one);
+        assert_eq!(members(&placed).len(), 1);
+        assert_eq!(one.grid().paging.pages, Len::<GridPages>::ONE);
     }
 
     /// `MURMURE-653`: a member stays outlined while its level passed the level of speech within

@@ -116,6 +116,16 @@ struct Socket {
     _callbacks: Vec<wasm_bindgen::closure::Closure<dyn FnMut(wasm_bindgen::JsValue)>>,
 }
 
+/// Where the choice of videos of the page stands against the first offer of its peer
+/// connection. The SFU reads the admission, then the offer, and closes a socket that sends
+/// anything else first, so a choice waits for that offer.
+enum Choosing {
+    /// No offer left yet: the latest choice waits.
+    BeforeOffer(Option<VideoChoice>),
+    /// The offer left: each choice follows it at once.
+    Offered,
+}
+
 /// The call the worker is in.
 pub(crate) struct CallLink {
     client: CallClient,
@@ -126,6 +136,8 @@ pub(crate) struct CallLink {
     port: CallPort,
     /// The frames for the SFU, held until its socket opens.
     sfu_queue: Vec<SfuMsg>,
+    /// The choice of videos of the page, held until its first offer leaves.
+    choosing: Choosing,
     /// The client sent its leave frame, and waits for the relay to say whether it was the
     /// last (`CALL-069`). The keys and the peer connection are gone already.
     leaving: Leaving,
@@ -216,10 +228,17 @@ impl SyncState {
         let Some(link) = self.call.as_mut() else {
             return;
         };
+        let offer = matches!(description, PageDescription::Offer(_));
         link.sfu_queue.push(match description {
             PageDescription::Offer(sdp) => SfuMsg::Offer(sdp),
             PageDescription::Answer(sdp) => SfuMsg::Answer(sdp),
         });
+        if offer
+            && let Choosing::BeforeOffer(held) =
+                std::mem::replace(&mut link.choosing, Choosing::Offered)
+        {
+            link.sfu_queue.extend(held.map(SfuMsg::Videos));
+        }
         self.call_sfu_flush();
     }
 
@@ -234,12 +253,19 @@ impl SyncState {
     }
 
     /// The page chose the videos it receives. The choice goes to the socket of the SFU alone,
-    /// with the other frames, and never to the relay (`CALL-132`, `ZK-044`).
+    /// with the other frames, and never to the relay (`CALL-132`, `ZK-044`). Before the first
+    /// offer of the page, the latest choice waits for it.
     pub(crate) fn handle_choose_videos(&mut self, choice: VideoChoice) {
         let Some(link) = self.call.as_mut() else {
             return;
         };
-        link.sfu_queue.push(SfuMsg::Videos(choice));
+        match &mut link.choosing {
+            Choosing::BeforeOffer(held) => {
+                *held = Some(choice);
+                return;
+            }
+            Choosing::Offered => link.sfu_queue.push(SfuMsg::Videos(choice)),
+        }
         self.call_sfu_flush();
     }
 
@@ -266,6 +292,7 @@ impl SyncState {
             log: None,
             port,
             sfu_queue: Vec::new(),
+            choosing: Choosing::BeforeOffer(None),
             leaving: Leaving::No,
             #[cfg(target_arch = "wasm32")]
             relay: None,
@@ -1024,6 +1051,46 @@ mod tests {
             relay_before,
             "the choice reached the relay"
         );
+    }
+
+    /// `CALL-132`: a choice the page posts before its first offer waits for that offer, and the
+    /// latest one alone leaves. The SFU closes a socket that sends anything else first.
+    #[test]
+    fn a_choice_before_the_offer_leaves_after_it() {
+        let alice = Person::new(1);
+        let (mut state, _handed, port, _rx) = worker_heard(&alice);
+        let chosen = VideoChoice::new(vec![ambre_core::Seq::new(5)], None).expect("a choice");
+        state.call_ports.offer(port);
+        state.handle_command(SyncCommand::JoinCall {
+            call: TARGET.call,
+            channel: TARGET.channel,
+        });
+        state.call_channel(TARGET.call, Some(META));
+        state.call_log(META, log_of(&alice));
+        let former = VideoChoice::new(vec![ambre_core::Seq::new(4)], None).expect("a choice");
+        state.handle_command(SyncCommand::ChooseVideos(former));
+        state.call_relay(CallServerMsg::Admitted {
+            admission: ambre_core::Credential::new("admission".to_owned()),
+            sfu: Some(Validated::parse("wss://sfu.example/call").expect("an address")),
+            sender: ambre_core::Seq::new(3),
+            roster: Vec::new(),
+        });
+        state.call_sfu(SfuMsg::Ice(Vec::new()));
+        state.handle_command(SyncCommand::ChooseVideos(chosen.clone()));
+        let sent = |state: &SyncState| state.call.as_ref().map(|l| l.sent.sfu.len());
+        assert_eq!(
+            sent(&state),
+            Some(1),
+            "the admission alone, before the offer"
+        );
+        state.handle_command(SyncCommand::CallDescription(
+            ambre_bus::PageDescription::Offer(Validated::parse("v=0".to_owned()).expect("sdp")),
+        ));
+        let link = state.call.as_ref().expect("the call");
+        assert!(matches!(link.sent.sfu.first(), Some(SfuMsg::Admission(_))));
+        assert!(matches!(link.sent.sfu.get(1), Some(SfuMsg::Offer(_))));
+        assert!(matches!(link.sent.sfu.get(2), Some(SfuMsg::Videos(c)) if *c == chosen));
+        assert_eq!(link.sent.sfu.len(), 3, "the latest choice alone");
     }
 
     /// `CALL-065`, `CALL-029`: a command of the bus joins the call and the channel it names,

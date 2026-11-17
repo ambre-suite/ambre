@@ -65,7 +65,7 @@ pub fn channel_of(
         save_file: Rc::new(|_, _| {}),
         warn: Rc::new(|_| {}),
         call: Rc::new(|| None),
-        show_roster: Rc::new(|| {}),
+        press_call: Rc::new(|_| {}),
     };
     let (events, from_logic) =
         local(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<8>());

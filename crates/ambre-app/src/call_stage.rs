@@ -10,6 +10,11 @@
 //! Murmure lays the region out and paints it
 //! (`ambre_murmure::ui::call_videos`).
 //!
+//! The page keeps the page of the grid and the pinned participant, which the member sets by a
+//! press. At each change of the grid, the page asks the SFU for the video of each tile. It names
+//! each tile by the sender index of its member. The choice reaches the socket of the SFU alone,
+//! and nothing of it writes into the channel (the Murmure calls spec, the video region).
+//!
 //! The level of a slot is the audio level the browser reads from the header extension of each
 //! received packet (`getSynchronizationSources`). The SFU already reads it in the clear to rank
 //! speakers (`CALL-047`), and the page reads it on its own receivers. So outlining who speaks
@@ -18,10 +23,14 @@
 use std::cell::{Cell, RefCell};
 
 use ambre_core::id::{Id, User};
+use ambre_core::index::Pos;
 use ambre_core::{Bounded, FracMs, Instant, MeterLevel, OWN_SLOT, PageLoad, SCREEN_SLOT, TimeSpan};
 use ambre_murmure::ui::call_controls::CallPhase;
-use ambre_murmure::ui::call_videos::{CallStage, Fill, Own, Participant, Voices};
-use leptos::prelude::{ArcRwSignal, GetUntracked, Set};
+use ambre_murmure::ui::call_videos::{
+    CallPress, CallStage, Fill, GridPages, Own, Paging, Participant, Turn, Voices, grid,
+};
+use ambre_protocol::signaling::VideoChoice;
+use leptos::prelude::{ArcRwSignal, Get, GetUntracked, Set};
 
 use crate::call_volumes;
 
@@ -41,6 +50,12 @@ thread_local! {
     /// Whether the header shows the list of the participants (the Murmure calls spec, section 3, the video region).
     static ROSTER: ArcRwSignal<ambre_chrome::Openness> =
         ArcRwSignal::new(ambre_chrome::Openness::Closed);
+    /// The page of the grid the member turned to (the Murmure calls spec, the video region).
+    static PAGE: ArcRwSignal<Pos<GridPages>> = ArcRwSignal::new(Pos::<GridPages>::new(0));
+    /// The participant the member pinned (the Murmure calls spec, the video region).
+    static PINNED: ArcRwSignal<Option<Id<User>>> = ArcRwSignal::new(None);
+    /// The choice of videos the page last handed the Sync worker, so it hands none twice.
+    static CHOSEN: RefCell<Option<VideoChoice>> = const { RefCell::new(None) };
 }
 
 /// How much of the channel region the call takes, for the fill button.
@@ -59,10 +74,78 @@ pub(crate) fn roster() -> ArcRwSignal<ambre_chrome::Openness> {
     ROSTER.with(ArcRwSignal::clone)
 }
 
-/// Opens the list of the participants: the tile that counts the others asks for it
-/// (the Murmure calls spec, section 3, the video region).
-pub(crate) fn show_roster() {
-    ROSTER.with(|roster| roster.set(ambre_chrome::Openness::Open));
+/// The page of the grid the member turned to, for the page buttons of the header.
+pub(crate) fn page() -> ArcRwSignal<Pos<GridPages>> {
+    PAGE.with(ArcRwSignal::clone)
+}
+
+/// The participant the member pinned, for the pin buttons of the list.
+pub(crate) fn pinned() -> ArcRwSignal<Option<Id<User>>> {
+    PINNED.with(ArcRwSignal::clone)
+}
+
+/// The page of the grid and the count of its pages, for `participants` in the order the call
+/// admitted them. Read by a reactive view, it tracks the page and the pin.
+pub(crate) fn paging(participants: &[Id<User>]) -> Paging {
+    let (page, pinned) = (page().get(), pinned().get());
+    grid(participants, pinned, page).paging
+}
+
+/// Hands the page a press on the video region (the Murmure calls spec, the video region).
+pub(crate) fn press(press: CallPress) {
+    match press {
+        CallPress::Turn(way) => turn(way),
+        CallPress::Pin(member) => toggle_pin(member),
+    }
+}
+
+/// Shows the page before or after: an arrow of the grid or a page button of the header. Nothing
+/// leaves the page but the choice of videos the next paint makes (the Murmure calls spec).
+pub(crate) fn turn(way: Turn) {
+    let participants = call_volumes::participants().get_untracked();
+    let (page, pinned) = (
+        PAGE.with(GetUntracked::get_untracked),
+        PINNED.with(GetUntracked::get_untracked),
+    );
+    let turned = grid(&participants, pinned, page).paging.turned(way);
+    PAGE.with(|p| p.set(turned));
+}
+
+/// Pins `member`, or unpins it when it is pinned. A press on its tile or on its pin button asks
+/// for it (the Murmure calls spec, the video region).
+pub(crate) fn toggle_pin(member: Id<User>) {
+    PINNED.with(|pinned| {
+        let next = (pinned.get_untracked() != Some(member)).then_some(member);
+        pinned.set(next);
+    });
+}
+
+/// Asks the SFU for the video of each tile `stage` shows, the pinned one large. The choice names
+/// each member by its sender index (the Murmure calls spec, the video region). A choice the page
+/// made already leaves nothing. A call with no other participant asks nothing yet.
+fn choose(stage: &CallStage) {
+    let wanted = stage.grid().wanted();
+    let senders: Vec<_> = wanted
+        .members
+        .iter()
+        .filter_map(|member| call_volumes::sender_of(*member))
+        .collect();
+    let large = wanted.large.and_then(call_volumes::sender_of);
+    let Ok(choice) = VideoChoice::new(senders, large) else {
+        return;
+    };
+    let fresh = CHOSEN.with(|chosen| {
+        let chosen = &mut *chosen.borrow_mut();
+        let fresh =
+            chosen.as_ref() != Some(&choice) && !(chosen.is_none() && choice.senders().is_empty());
+        if fresh {
+            *chosen = Some(choice.clone());
+        }
+        fresh
+    });
+    if fresh {
+        crate::call::choose_videos(choice);
+    }
 }
 
 /// What the video region shows of the call of the page, `None` out of a call. `me` names the
@@ -75,7 +158,7 @@ pub(crate) fn stage(me: Option<Id<User>>) -> Option<CallStage> {
     hear(now);
     own_camera(crate::call::camera_track());
     let live = ambre_canvas::video::live();
-    let others = call_volumes::participants()
+    let others: Vec<Participant> = call_volumes::participants()
         .get_untracked()
         .into_iter()
         .map(|member| Participant {
@@ -86,8 +169,14 @@ pub(crate) fn stage(me: Option<Id<User>>) -> Option<CallStage> {
             voice: VOICES.with(|voices| voices.borrow().of(member, now)),
         })
         .collect();
-    Some(CallStage {
+    // A pinned member who left frees the pin, and a page past the last shows the last.
+    let pinned = PINNED
+        .with(GetUntracked::get_untracked)
+        .filter(|member| others.iter().any(|p| p.member == *member));
+    let stage = CallStage {
         others,
+        page: PAGE.with(GetUntracked::get_untracked),
+        pinned,
         screen: live.contains(&SCREEN_SLOT).then_some(SCREEN_SLOT),
         own: Own {
             member: me,
@@ -95,7 +184,16 @@ pub(crate) fn stage(me: Option<Id<User>>) -> Option<CallStage> {
             microphone,
         },
         fill: FILL.with(GetUntracked::get_untracked),
-    })
+    };
+    let paging = stage.grid().paging;
+    if PAGE.with(GetUntracked::get_untracked) != paging.page {
+        PAGE.with(|page| page.set(paging.page));
+    }
+    if PINNED.with(GetUntracked::get_untracked) != stage.pinned {
+        PINNED.with(|p| p.set(stage.pinned));
+    }
+    choose(&stage);
+    Some(stage)
 }
 
 /// Hands the render runtime the camera the member sends, under `OWN_SLOT`, and takes it back
@@ -160,6 +258,9 @@ pub(crate) fn forget() {
     OWN_CAMERA.with(|own| *own.borrow_mut() = None);
     FILL.with(|fill| fill.set(Fill::Band));
     ROSTER.with(|roster| roster.set(ambre_chrome::Openness::Closed));
+    PAGE.with(|page| page.set(Pos::<GridPages>::new(0)));
+    PINNED.with(|pinned| pinned.set(None));
+    CHOSEN.with(|chosen| *chosen.borrow_mut() = None);
 }
 
 #[cfg(test)]

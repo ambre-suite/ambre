@@ -704,10 +704,11 @@ async fn the_camera_button_names_itself_and_carries_its_pressed_state() {
     phase.set(CallPhase::Idle);
 }
 
-/// The participants button of a call (`MURMURE-654`). A call offers it in the header. It is a
-/// button with an accessible name that takes the focus, and reports whether its list is open.
-/// The list names the member and each other participant, and the tile that counts the others
-/// opens it too.
+/// The participants button of a call (`MURMURE-668`, `MURMURE-669`). A call offers
+/// it in the header. It is a button with an accessible name that takes the focus, and reports
+/// whether its list is open. The list names the member and each other participant. Each other
+/// participant carries a pin button with an accessible name and its pressed state, which pins
+/// it and unpins it.
 #[wasm_bindgen_test]
 async fn the_participants_button_names_itself_and_lists_each_participant() {
     use ambre_murmure::ui::call_controls::{CallPhase, Microphone};
@@ -750,12 +751,106 @@ async fn the_participants_button_names_itself_and_lists_each_participant() {
     button.click();
     leptos::task::tick().await;
     assert!(frame.query(".murmure-call-roster-list").is_none());
-    // A press on the tile that counts the others opens the same list.
-    crate::call_stage::show_roster();
+    // Each other participant carries a pin button, which pins it and a second press unpins.
+    button.click();
     leptos::task::tick().await;
-    assert_eq!(read("aria-expanded"), "true");
-    assert!(frame.query(".murmure-call-roster-list").is_some());
+    let pins = frame
+        .inner
+        .query_selector_all(".murmure-call-roster-list .murmure-call-pin")
+        .unwrap();
+    assert_eq!(pins.length(), 2, "one pin button per other participant");
+    let pin: web_sys::HtmlElement = pins.get(0).unwrap().dyn_into().unwrap();
+    assert_eq!(pin.tag_name(), "BUTTON");
+    pin.focus().unwrap();
+    assert_eq!(
+        frame.inner.active_element().as_ref(),
+        Some(pin.unchecked_ref::<web_sys::Element>()),
+        "a pin button takes the focus"
+    );
+    let pin_read = |attribute: &str| pin.get_attribute(attribute).unwrap_or_default();
+    assert_eq!(pin_read("aria-label"), "Pin A participant");
+    assert_eq!(pin_read("aria-pressed"), "false");
+    let first = participants.get_untracked()[0];
+    pin.click();
+    leptos::task::tick().await;
+    assert_eq!(crate::call_stage::pinned().get_untracked(), Some(first));
+    let pin: web_sys::HtmlElement = frame
+        .query(".murmure-call-roster-list .murmure-call-pin")
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    assert_eq!(
+        pin.get_attribute("aria-label").unwrap_or_default(),
+        "Unpin A participant"
+    );
+    assert_eq!(
+        pin.get_attribute("aria-pressed").unwrap_or_default(),
+        "true"
+    );
+    pin.click();
+    leptos::task::tick().await;
+    assert_eq!(crate::call_stage::pinned().get_untracked(), None);
     roster.set(ambre_chrome::Openness::Closed);
+    participants.set(Vec::new());
+    phase.set(CallPhase::Idle);
+}
+
+/// The page buttons of a call (`MURMURE-654`, `MURMURE-669`). A grid of one page offers none.
+/// Past nine other participants, the header offers the two, each a button with an accessible
+/// name that takes the focus. Each is disabled at the end it turns to, and a press turns the
+/// page.
+#[wasm_bindgen_test]
+async fn the_page_buttons_name_themselves_and_turn_the_page() {
+    use ambre_core::index::Pos;
+    use ambre_murmure::ui::call_controls::{CallPhase, Microphone};
+    use ambre_murmure::ui::call_videos::GridPages;
+    let frame = Frame::new(1025, channel()).await;
+    let (phase, participants) = (crate::call::phase(), crate::call_volumes::participants());
+    let page = crate::call_stage::page();
+    phase.set(CallPhase::InCall(Microphone::Live));
+    participants.set((0..9).map(|_| Id::<User>::mint()).collect());
+    leptos::task::tick().await;
+    assert!(
+        frame.query(".murmure-call-page-next").is_none(),
+        "nine participants take one page"
+    );
+    participants.set((0..12).map(|_| Id::<User>::mint()).collect());
+    leptos::task::tick().await;
+    let named = |selector: &str| -> web_sys::HtmlButtonElement {
+        frame
+            .query(&format!(".murmure-channel-header {selector}"))
+            .expect("a page button in the header")
+            .dyn_into()
+            .unwrap()
+    };
+    let (previous, next) = (
+        named(".murmure-call-page-previous"),
+        named(".murmure-call-page-next"),
+    );
+    assert_eq!(
+        next.get_attribute("aria-label").unwrap_or_default(),
+        "Next page of the call"
+    );
+    assert_eq!(
+        previous.get_attribute("aria-label").unwrap_or_default(),
+        "Previous page of the call"
+    );
+    assert!(previous.disabled(), "no page before the first");
+    next.focus().unwrap();
+    assert_eq!(
+        frame.inner.active_element().as_ref(),
+        Some(next.unchecked_ref::<web_sys::Element>()),
+        "a page button takes the focus"
+    );
+    next.click();
+    leptos::task::tick().await;
+    assert_eq!(page.get_untracked(), Pos::<GridPages>::new(1));
+    assert!(next.disabled(), "no page after the last");
+    assert!(!previous.disabled());
+    assert_eq!(frame.texts(".murmure-call-page-number"), ["2 / 2"]);
+    previous.click();
+    leptos::task::tick().await;
+    assert_eq!(page.get_untracked(), Pos::<GridPages>::new(0));
     participants.set(Vec::new());
     phase.set(CallPhase::Idle);
 }

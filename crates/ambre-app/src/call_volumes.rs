@@ -117,6 +117,12 @@ pub(crate) fn videos_of(member: Id<User>) -> Vec<Pos<VideoSlots>> {
     PLAYOUT.with(|playout| playout.borrow().videos_of(member))
 }
 
+/// The sender index that names `member` in a choice of videos (the Murmure calls spec, the video
+/// region).
+pub(crate) fn sender_of(member: Id<User>) -> Option<Seq<SenderIndex>> {
+    PLAYOUT.with(|playout| playout.borrow().sender_of(member))
+}
+
 /// The member the audio slot `slot` carries now (the Murmure calls spec, section 3, the video region).
 pub(crate) fn member_in(slot: Pos<AudioSlots>) -> Option<Id<User>> {
     PLAYOUT.with(|playout| playout.borrow().member_in(slot))

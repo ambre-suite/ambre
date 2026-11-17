@@ -146,9 +146,9 @@ pub struct PageReads {
     /// What the video region shows of the call of the page, `None` out of a call. The channel
     /// region draws it above its composer (`MURMURE-620`, `MURMURE-651`).
     pub call: Rc<dyn Fn() -> Option<crate::ui::call_videos::CallStage>>,
-    /// Open the list of the participants of the call: a press on the tile that counts the
-    /// others asks for it (`MURMURE-654`).
-    pub show_roster: Rc<dyn Fn()>,
+    /// Hand the page a press on the video region. An arrow turns the page of the grid, and the
+    /// tile of a participant pins it (`MURMURE-654`, `MURMURE-668`).
+    pub press_call: Rc<dyn Fn(crate::ui::call_videos::CallPress)>,
 }
 
 /// What the page does with a file fetched, and its bytes.
@@ -1789,11 +1789,10 @@ impl MurmureView {
         Some(crate::ui::call_videos::place(self.band(), stage))
     }
 
-    /// Whether `at` falls on the tile that counts the others of the call (`MURMURE-654`).
-    fn on_more(&self, at: Point) -> bool {
-        self.placed()
-            .and_then(|placed| placed.more)
-            .is_some_and(|more| more.frame.contains(at))
+    /// What a press at `at` asks of the call. An arrow turns the page, and the tile of a
+    /// participant pins it (`MURMURE-654`, `MURMURE-668`).
+    fn call_press(&self, at: Point) -> Option<crate::ui::call_videos::CallPress> {
+        self.placed()?.press_at(at)
     }
 
     /// The region now lays out at `size` logical pixels (`CANVAS-044`).
@@ -1855,9 +1854,11 @@ impl MurmureView {
                     self.composer.blur();
                     self.dirty = Repaint::Due;
                 }
-                if button == PointerButton::Primary && self.on_more(at) {
-                    // The tile that counts the others opens their list (`MURMURE-654`).
-                    (self.reads.show_roster)();
+                if button == PointerButton::Primary
+                    && let Some(press) = self.call_press(at)
+                {
+                    // The page turns or pins, and writes nothing into the channel (`MURMURE-670`).
+                    (self.reads.press_call)(press);
                     return Consumed::Yes;
                 }
                 if button == PointerButton::Secondary {
@@ -2181,8 +2182,9 @@ mod tests {
         warned: Rc<RefCell<Vec<String>>>,
         /// What the page shows of its call now, `None` out of one (`MURMURE-620`).
         call: Rc<RefCell<Option<crate::ui::call_videos::CallStage>>>,
-        /// How many times the view asked for the list of the participants (`MURMURE-654`).
-        rosters: Rc<Cell<u32>>,
+        /// Each press the view handed the page on its video region, oldest first
+        /// (`MURMURE-654`, `MURMURE-668`).
+        presses: Rc<RefCell<Vec<crate::ui::call_videos::CallPress>>>,
     }
 
     /// A file the view handed the page, and its bytes.
@@ -2251,8 +2253,8 @@ mod tests {
         let warns = Rc::clone(&warned);
         let call = Rc::new(RefCell::new(None));
         let received = Rc::clone(&call);
-        let rosters = Rc::new(Cell::new(0));
-        let asked_roster = Rc::clone(&rosters);
+        let presses = Rc::new(RefCell::new(Vec::new()));
+        let call_pressed = Rc::clone(&presses);
         let reads = PageReads {
             pane: Rc::new(move || shown.get()),
             name_of: Rc::new(|_| {
@@ -2328,7 +2330,7 @@ mod tests {
             }),
             warn: Rc::new(move |text: &str| warns.borrow_mut().push(text.to_owned())),
             call: Rc::new(move || received.borrow().clone()),
-            show_roster: Rc::new(move || asked_roster.set(asked_roster.get() + 1)),
+            press_call: Rc::new(move |press| call_pressed.borrow_mut().push(press)),
         };
         let size = ambre_core::Size::new(ambre_core::Px::new(300), ambre_core::Px::new(400));
         let view = MurmureView::new(
@@ -2364,7 +2366,7 @@ mod tests {
             saved,
             warned,
             call,
-            rosters,
+            presses,
         }
     }
 
@@ -4493,6 +4495,8 @@ mod tests {
                     voice: Voice::Quiet,
                 })
                 .collect(),
+            page: Pos::<crate::ui::call_videos::GridPages>::new(0),
+            pinned: None,
             screen: None,
             own: Own {
                 member: None,
@@ -4621,10 +4625,12 @@ mod tests {
         assert!(!full && !overlay, "an idle region reuses its paint");
     }
 
-    /// `MURMURE-654`: a press on the tile that counts the others asks the page for their list,
-    /// and a press on another tile asks for nothing.
+    /// `MURMURE-654`, `MURMURE-668`: a press on an arrow asks the page for the next page. A press
+    /// on the tile of a participant asks for its pin. Neither sends a command
+    /// to the Logic thread.
     #[test]
-    fn a_press_on_the_count_of_the_others_opens_their_list() {
+    fn a_press_on_an_arrow_turns_the_page_and_a_press_on_a_tile_pins_it() {
+        use crate::ui::call_videos::{CallPress, Turn, Who};
         let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         let stage = in_call(12, 0);
@@ -4634,36 +4640,36 @@ mod tests {
             .view
             .placed()
             .unwrap_or_else(|| panic!("the call is placed"));
-        let more = placed
-            .more
-            .unwrap_or_else(|| panic!("a tile counts the others"));
+        let next = placed
+            .pager
+            .next
+            .unwrap_or_else(|| panic!("an arrow to the next page"));
+        let tile = placed
+            .tiles
+            .first()
+            .copied()
+            .unwrap_or_else(|| panic!("a tile"));
+        let Who::Member(member) = tile.who else {
+            panic!("the first tile is another participant's");
+        };
         let press = |at: Point| InputEvent::PointerDown {
             at: ambre_core::Point::new(Px::<View>::new(at.x as f32), Px::<View>::new(at.y as f32)),
             button: PointerButton::Primary,
             mods: ModifierKeys::NONE,
         };
-        let other = placed.tiles.first().map(|t| t.frame.center());
-        if let Some(other) = other {
-            let _ = page.view.handle_input(&press(other));
-            let _ = page.view.handle_input(&InputEvent::PointerUp {
-                at: ambre_core::Point::new(
-                    Px::<View>::new(other.x as f32),
-                    Px::<View>::new(other.y as f32),
-                ),
-                button: PointerButton::Primary,
-                mods: ModifierKeys::NONE,
-            });
-        }
-        assert_eq!(page.rosters.get(), 0, "a tile of a member opens nothing");
         while page.commands.try_recv().is_ok() {}
+        assert_eq!(page.view.handle_input(&press(next.center())), Consumed::Yes);
         assert_eq!(
-            page.view.handle_input(&press(more.frame.center())),
+            page.view.handle_input(&press(tile.frame.center())),
             Consumed::Yes
         );
-        assert_eq!(page.rosters.get(), 1);
+        assert_eq!(
+            *page.presses.borrow(),
+            [CallPress::Turn(Turn::Next), CallPress::Pin(member)]
+        );
         assert!(
             page.commands.try_recv().is_err(),
-            "the press sends no command to the Logic thread"
+            "a press sends no command to the Logic thread"
         );
     }
 

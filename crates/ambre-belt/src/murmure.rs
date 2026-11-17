@@ -3082,6 +3082,279 @@ pub(crate) mod tests {
         }
     }
 
+    /// Hands each worker the page spawns to `window.beltWorkers`, with the address of its
+    /// script. The DevTools Protocol runs it before the script of each document.
+    const WORKERS: &str = "window.beltSpawned = []; const W = window.Worker; \
+        window.Worker = class extends W { constructor(url, ...a) { super(url, ...a); \
+          window.beltSpawned.push([String(url), this]); } };";
+
+    /// A page of Murmure signed in as `name`, whose workers [`WORKERS`] records from the boot.
+    async fn murmure_with_workers(relay: Arc<Relay>, name: &str) -> Page {
+        let page = Page::home(relay).await;
+        page.sign_in(name).await;
+        page.browser
+            .cdp(
+                "Page.addScriptToEvaluateOnNewDocument",
+                json!({ "source": WORKERS }),
+            )
+            .await;
+        page.browser
+            .goto(&format!("{}/murmure/{}", page.origin, uuid::Uuid::now_v7()))
+            .await;
+        page.browser
+            .wait_for(
+                "the Murmure sidebar",
+                "return !!document.querySelector('.murmure-new-space-toggle');",
+                BOOT,
+            )
+            .await;
+        page
+    }
+
+    /// Hands the page `page` the event `event`, as its Sync worker posts one.
+    async fn from_sync(page: &Page, event: &ambre_bus::LogicEvent) {
+        let bytes = postcard::to_allocvec(event).expect("an event encodes");
+        let handed = page
+            .browser
+            .script(
+                "const sync = window.beltSpawned.filter(([url]) => /sync/i.test(url)); \
+                 if (sync.length !== 1) return sync.length; \
+                 sync[0][1].dispatchEvent(new MessageEvent('message', \
+                   { data: new Uint8Array(arguments[0]).buffer })); \
+                 return true;",
+                json!([bytes]),
+            )
+            .await;
+        assert_eq!(handed, json!(true), "the page spawned one Sync worker");
+    }
+
+    /// The first byte of a command of the bus that chooses videos.
+    fn choice_tag() -> u8 {
+        let choose = ambre_bus::SyncCommand::ChooseVideos(Default::default());
+        postcard::to_allocvec(&choose)
+            .ok()
+            .and_then(|bytes| bytes.first().copied())
+            .expect("a choice encodes")
+    }
+
+    /// Each choice of videos `page` posted to a worker, from post `from` on, oldest first.
+    async fn choices(page: &Page, from: u64) -> Vec<ambre_protocol::signaling::VideoChoice> {
+        let posted = page
+            .browser
+            .script(
+                "return window.beltPosted.slice(arguments[0]).map((p) => Array.from(p));",
+                json!([from]),
+            )
+            .await;
+        let tag = choice_tag();
+        posted
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|post| serde_json::from_value::<Vec<u8>>(post.clone()).ok())
+            .filter(|bytes| bytes.first() == Some(&tag))
+            .filter_map(|bytes| match postcard::from_bytes(&bytes) {
+                Ok(ambre_bus::SyncCommand::ChooseVideos(choice)) => Some(choice),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Waits until the latest choice of videos of `page` holds, by `holds`, and answers it.
+    async fn chosen(
+        page: &Page,
+        what: &str,
+        holds: impl Fn(&ambre_protocol::signaling::VideoChoice) -> bool,
+    ) -> ambre_protocol::signaling::VideoChoice {
+        let deadline = std::time::Instant::now() + ROSTER_WAIT;
+        loop {
+            let all = choices(page, 0).await;
+            if let Some(last) = all.last().filter(|c| holds(c)) {
+                return last.clone();
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "within {ROSTER_WAIT:?}, no choice of {what}: {all:?}"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+    }
+
+    /// The first byte of a command of the bus that sends a presence sample, which no history
+    /// keeps.
+    fn sample_tag() -> u64 {
+        let sample = ambre_bus::SyncCommand::SendEphemeral {
+            document_id: ambre_core::id::Id::mint(),
+            payload: ambre_core::Payload::new(Vec::new()),
+        };
+        postcard::to_allocvec(&sample)
+            .ok()
+            .and_then(|bytes| bytes.first().copied())
+            .map(u64::from)
+            .expect("a sample encodes")
+    }
+
+    /// The sender indexes `from`, then each after it up to `to` included.
+    fn senders(from: u64, to: u64) -> Vec<ambre_core::Seq<ambre_core::SenderIndex>> {
+        (from..=to).map(ambre_core::Seq::new).collect()
+    }
+
+    /// `MURMURE-654`, `MURMURE-667`, `MURMURE-668` and `MURMURE-670`, in the browser.
+    ///
+    /// Ada, Bob and Carol join one call with a fake camera. Ada's page then hears ten more members
+    /// admitted, whom no seat of the SFU carries, so her grid holds two pages. Each choice she
+    /// posts names the senders of the tiles her grid shows, in its order. A turn of the page posts
+    /// the senders of the next page alone.
+    ///
+    /// Ada pins Bob from her list of the participants. Her choice names him first and large, and
+    /// she decodes his video at the top size while Carol alone speaks. Her turns and her pin post
+    /// nothing else but the roster ask.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build, the SFU, a driver and the services; run just test-browser"
+    )]
+    #[cfg_attr(
+        feature = "firefox",
+        ignore = "records the workers through the DevTools Protocol, which Firefox does not speak"
+    )]
+    async fn a_page_switch_and_a_pin_choose_the_videos_the_grid_shows() {
+        use ambre_bus::{CallSignal, LogicEvent};
+        use ambre_core::id::{Id, User};
+        let sfu = crate::call::Sfu::start(None).await;
+        let relay = Arc::new(Relay::start_with(&sfu.relay_env()).await);
+        let (ada, bob, carol) = (user(), user(), user());
+        let ada_page = murmure_with_workers(Arc::clone(&relay), &ada).await;
+        let bob_page = murmure(Arc::clone(&relay), &bob).await;
+        let carol_page = murmure(Arc::clone(&relay), &carol).await;
+        space_with_channel(&ada_page, "Belt", "general", &bob, &bob_page).await;
+        let link = invite_into_space(&ada_page, &carol).await;
+        follow(&carol_page, &link).await;
+        open(&bob_page, "general").await;
+        open(&carol_page, "general").await;
+        open(&ada_page, "general").await;
+        let channel = last_channel();
+        let pages = [&ada_page, &bob_page, &carol_page];
+        for page in pages {
+            page.browser.script(RECORD, json!([])).await;
+        }
+        ada_page.browser.script(DEVICES, json!([])).await;
+        let call = ada_page
+            .browser
+            .script(
+                "return window.wasmBindings.start_video_call(arguments[0]);",
+                json!([channel]),
+            )
+            .await;
+        let call = call.as_str().unwrap_or_default().to_owned();
+        assert!(!call.is_empty(), "the page started no call");
+        read_until(&bob_page, "a live call", |h| h.contains(LIVE), ROSTER_WAIT).await;
+        for page in [&bob_page, &carol_page] {
+            page.browser
+                .script(
+                    "window.wasmBindings.join_video_call(arguments[0], arguments[1]); \
+                     return true;",
+                    json!([call, channel]),
+                )
+                .await;
+        }
+        decoded_past(&pages, &[0.0; 3], 48_000.0).await;
+
+        // Two others take one page: the choice names both, and nobody large (`MURMURE-667`).
+        let both = chosen(&ada_page, "Bob and Carol", |c| c.senders().len() == 2).await;
+        assert_eq!(both.large(), None, "{both:?}");
+        let real = both.senders().to_vec();
+
+        // Ten members more: the first page holds the nine admitted first (`MURMURE-654`).
+        for index in 1_000..1_010 {
+            let admitted = LogicEvent::Call(CallSignal::Admitted {
+                sender: ambre_core::Seq::new(index),
+                member: Id::<User>::mint(),
+            });
+            from_sync(&ada_page, &admitted).await;
+        }
+        let mut first: Vec<_> = real.clone();
+        first.extend(senders(1_000, 1_006));
+        let first_page = chosen(&ada_page, "the first page", |c| c.senders().len() == 9).await;
+        assert_eq!(first_page.senders(), first.as_slice(), "{first_page:?}");
+        assert_eq!(first_page.large(), None);
+
+        // A turn of the page asks for the senders of the next page alone.
+        let posted = ada_page
+            .browser
+            .script("return window.beltPosted.length;", json!([]))
+            .await
+            .as_u64()
+            .unwrap_or_default();
+        click_header(&ada_page, ".murmure-call-page-next").await;
+        let next = senders(1_007, 1_009);
+        chosen(&ada_page, "the second page", |c| {
+            c.senders() == next.as_slice()
+        })
+        .await;
+        click_header(&ada_page, ".murmure-call-page-previous").await;
+        chosen(&ada_page, "the first page again", |c| {
+            c.senders() == first.as_slice()
+        })
+        .await;
+
+        // Ada pins Bob from her list: he leads the choice, large, and the page holds eight
+        // more (`MURMURE-668`).
+        click_header(&ada_page, ".murmure-call-roster").await;
+        let pinned = ada_page
+            .browser
+            .wait_for(
+                "the pin button of Bob",
+                &format!(
+                    "const item = [...document.querySelectorAll('.murmure-call-roster-list li')] \
+                       .find((li) => li.textContent === {}); \
+                     const pin = item && item.querySelector('.murmure-call-pin'); \
+                     if (!pin) return null; pin.click(); return true;",
+                    Value::String(bob.clone())
+                ),
+                STEP,
+            )
+            .await;
+        assert_eq!(pinned, json!(true));
+        let with_pin = chosen(&ada_page, "Bob pinned", |c| c.large().is_some()).await;
+        let bob_sender = with_pin.large().expect("a large sender");
+        assert!(real.contains(&bob_sender), "{with_pin:?}");
+        let carol_sender = real.iter().copied().find(|s| *s != bob_sender);
+        let mut expected = vec![bob_sender];
+        expected.extend(carol_sender);
+        expected.extend(senders(1_000, 1_006));
+        assert_eq!(with_pin.senders(), expected.as_slice());
+
+        // A turn and a pin post a choice of videos, and nothing else but the roster ask. The
+        // presence sample each page sends at its interval passes too: no history keeps it
+        // (`MURMURE-670`).
+        let (tag, roster, sample) = (u64::from(choice_tag()), roster_tag(), sample_tag());
+        let posts = ada_page
+            .browser
+            .script(
+                "return window.beltPosted.slice(arguments[0]).map((p) => p[0]);",
+                json!([posted]),
+            )
+            .await;
+        let others: Vec<&Value> = posts
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|first| ![Some(tag), Some(roster), Some(sample)].contains(&first.as_u64()))
+            .collect();
+        assert!(others.is_empty(), "the turns and the pin posted {others:?}");
+
+        // Carol alone speaks, and Ada still decodes Bob at the top size (`MURMURE-668`,
+        // `CALL-128`).
+        set_mute(&ada_page, "true").await;
+        set_mute(&bob_page, "true").await;
+        let before = video_stats(&ada_page).await;
+        top_and_low(&ada_page, &before, 30, &bob_page, &carol_page).await;
+        for page in pages {
+            click_header(page, ".murmure-call-hang-up").await;
+        }
+    }
+
     /// The pixels of the channel canvas of `page`, as a screenshot shows them, cut to the canvas.
     /// A screenshot reads what the GPU drew. Every element but the canvas hides during the shot,
     /// so a toast or a menu over the canvas reads as nothing.

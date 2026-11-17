@@ -15,7 +15,7 @@
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
-| `murmure-calls` | A member starts an audio and video call from a channel in one click. | implemented | 66 |  |
+| `murmure-calls` | A member starts an audio and video call from a channel in one click. | implemented | 70 |  |
 | `murmure-composer` | The field where a member writes. | implemented | 45 |  |
 | `murmure-engine` | A channel opens, shows its latest messages, and carries what the user writes to every member. | implemented | 17 |  |
 | `murmure-keyboard` | No frequent action in Murmure needs the mouse. | implemented | 21 |  |
@@ -45,4 +45,4 @@
 | `murmure-pins` | A member pins a message for every member of the channel: a decision, a link, the rules of the room. | design-only | 10 |  |
 | `murmure-sidebar` | Each member arranges the channel list for themselves: groups and order of their own, channels muted or hidden, and messages bookmarked. | design-only | 16 |  |
 
-**29 features: 10 implemented, 11 partial, 8 design-only. 642 contract rows, 0 loose.**
+**29 features: 10 implemented, 11 partial, 8 design-only. 646 contract rows, 0 loose.**

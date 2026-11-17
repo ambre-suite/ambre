@@ -13,6 +13,7 @@ use ambre_murmure::chrome::MurmureRelay;
 use ambre_murmure::ui::call_controls::{CallControls, CallPhase, Camera, Microphone, Share};
 use ambre_murmure::ui::call_devices::{DeviceKind, Entry, Panel};
 use ambre_murmure::ui::call_ring::{Ring, ring_title};
+use ambre_murmure::ui::call_videos::{GridPages, Turn};
 use ambre_murmure::ui::call_volumes::{
     Gain, gain_from_slider, slider_of_gain, slider_of_volume, volume_from_slider,
 };
@@ -65,6 +66,7 @@ pub(super) fn CallBar(
                 .into_any(),
                 CallControls::During(microphone) => view! {
                     <RosterButton relay=relay />
+                    <PageButtons />
                     <FillButton />
                     <CameraButton />
                     <ShareButton />
@@ -137,9 +139,9 @@ pub(super) fn CallBar(
 }
 
 /// The list of the participants of a call (the Murmure calls spec, section 3, the video region).
-/// A button with an accessible name opens it and reports whether it is open. The tile that
-/// counts the others on the canvas opens it too. So each participant the grid has no room for
-/// reaches the page (`CHROME-029`).
+/// A button with an accessible name opens it and reports whether it is open. So each participant
+/// the page of the grid shows no tile for reaches the page (`CHROME-029`). Each one carries a
+/// pin button, with an accessible name and its pressed state.
 #[component]
 fn RosterButton(
     /// The members of the spaces, which name each participant.
@@ -147,6 +149,7 @@ fn RosterButton(
 ) -> impl IntoView {
     let roster = crate::call_stage::roster();
     let participants = call_volumes::participants();
+    let pinned = crate::call_stage::pinned();
     let (expanded, toggled, shown) = (roster.clone(), roster.clone(), roster);
     let names = move || {
         participants
@@ -156,7 +159,32 @@ fn RosterButton(
                 let name = relay
                     .member_name(member)
                     .map_or_else(|| "A participant".to_owned(), |n| n.as_str().to_owned());
-                view! { <li>{name}</li> }
+                let (labelled, pressed, icon) = (pinned.clone(), pinned.clone(), pinned.clone());
+                let pin_name = name.clone();
+                let label = move || {
+                    let verb = if labelled.get() == Some(member) { "Unpin" } else { "Pin" };
+                    format!("{verb} {pin_name}")
+                };
+                view! {
+                    <li>
+                        {name}
+                        <button
+                            class="icon murmure-call-pin"
+                            title=label.clone()
+                            aria-label=label
+                            aria-pressed=move || {
+                                ambre_chrome::Pressed::from_bool(pressed.get() == Some(member)).aria()
+                            }
+                            on:click=move |_| crate::call_stage::toggle_pin(member)
+                        >
+                            {move || if icon.get() == Some(member) {
+                                view! { <Icon icon=icondata::MdiPinOff /> }.into_any()
+                            } else {
+                                view! { <Icon icon=icondata::MdiPin /> }.into_any()
+                            }}
+                        </button>
+                    </li>
+                }
             })
             .collect_view()
     };
@@ -176,6 +204,48 @@ fn RosterButton(
                 {names.clone()}
             </ul>
         })}
+    }
+}
+
+/// The page buttons of a call, while its grid holds more than one page (the Murmure calls spec,
+/// the video region). Each is a button with an accessible name, which takes the focus. A button
+/// is disabled at the end it turns to. The two turn the page as the arrows of the grid do.
+#[component]
+fn PageButtons() -> impl IntoView {
+    let participants = call_volumes::participants();
+    let paging = Memo::new(move |_| crate::call_stage::paging(&participants.get()));
+    let button = move |way: Turn, class: &'static str| {
+        view! {
+            <button
+                class=format!("icon {class}")
+                title=way.label()
+                aria-label=way.label()
+                prop:disabled=move || {
+                    let paging = paging.get();
+                    paging.turned(way) == paging.page
+                }
+                on:click=move |_| crate::call_stage::turn(way)
+            >
+                {match way {
+                    Turn::Previous => view! { <Icon icon=icondata::MdiChevronLeft /> }.into_any(),
+                    Turn::Next => view! { <Icon icon=icondata::MdiChevronRight /> }.into_any(),
+                }}
+            </button>
+        }
+    };
+    move || {
+        let paging = paging.get();
+        (paging.pages > ambre_core::index::Len::<GridPages>::ONE).then(|| {
+            view! {
+                <span class="murmure-call-pages" role="group" aria-label="Pages of the call">
+                    {button(Turn::Previous, "murmure-call-page-previous")}
+                    <span class="murmure-call-page-number">
+                        {format!("{} / {}", paging.page.number(), paging.pages)}
+                    </span>
+                    {button(Turn::Next, "murmure-call-page-next")}
+                </span>
+            }
+        })
     }
 }
 

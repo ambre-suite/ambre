@@ -556,6 +556,12 @@ async fn send_screen(track: web_sys::MediaStreamTrack) {
     }
 }
 
+/// Hands the Sync worker the choice of videos of the page, which it writes on the socket of the
+/// SFU alone (`CALL-132`).
+pub(crate) fn choose_videos(choice: ambre_protocol::signaling::VideoChoice) {
+    to_sync(&SyncCommand::ChooseVideos(choice), None);
+}
+
 /// Tells the SFU, through the Sync worker, that the screen sender took a track. A share starts,
 /// and the SFU forwards the share that started last (`CALL-106`). A still screen sends no
 /// packet for seconds, so the SFU reads no start from the packets. The command carries

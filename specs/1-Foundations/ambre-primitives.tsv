@@ -348,13 +348,15 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey.0 | fiel
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey::as_bytes() | ret | &[u8]	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey::from_bytes(bytes) | param | Vec<u8>	newtype-inner	newtype
 ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | Fill::label() | ret | &'static str	free-text	the accessible name of the fill button, which a person reads and no code matches back
+ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | Turn::label() | ret | &'static str	free-text	the accessible name of a page button of the header, which a person reads and no code matches back
+ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | Turn::arrow() | ret | &'static str	free-text	the sign an arrow of the grid draws for a person to read, which no code matches back
+ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | PINNED_SHARE | const | f32	math	the share of the area of the grid a pinned tile takes at most, a scalar multiplier of that width
+ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | BESIDE_PINNED | const | f32	math	the share of the width of a pinned tile a tile of the grid beside it takes at most, a scalar multiplier of that width
 ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | NAME_SHARE | const | f32	math	the share of a tile its name strip takes at most, a scalar multiplier of the height of the tile
 ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | OWN_SHARE | const | f32	math	the share of the width of the band the own tile takes at most, a scalar multiplier of that width
-ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | Words.text | field | String	free-text	the words the region draws for a person: a name, the initials of a name, "You" or the count of the others
+ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | Words.text | field | String	free-text	the words the region draws for a person: a name, the initials of a name, "You" or the sign of an arrow
 ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | initials() | ret | String	free-text	the initials a tile draws for a person to read, made of a display name
 ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | label() | ret | String	free-text	the words under a tile, which a person reads: a display name, or "You" and its mute
-ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | more_label() | ret | String	free-text	the words of the tile that counts the others, which a person reads
-ambre-murmure | src/ui/view.rs | crate::ui::view | MurmureView::on_more() | ret | bool	generic	predicate result: whether a point falls on the tile that counts the others
 ambre-odt | src/lib.rs | crate | <PackagePictures<'_,'_> as read::Pictures>::picture(path) | param | &str	foreign-api	a part path of the OpenDocument package, as the file spells it
 ambre-odt | src/lib.rs | crate | OdtError::MissingPart.0 | field | &'static str	free-text	the name of the missing part in words the user reads, never a name from the file
 ambre-odt | src/lib.rs | crate | part_name(name) | param | &str	foreign-api	a part path of the OpenDocument package, as the file spells it

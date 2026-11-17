@@ -275,6 +275,17 @@ impl Playout {
         members
     }
 
+    /// The sender index that names `member` in a choice of videos: the one the call admitted
+    /// last. So a member who joined again names its live session (`MURMURE-667`).
+    #[must_use]
+    pub fn sender_of(&self, member: Id<User>) -> Option<Seq<SenderIndex>> {
+        self.members
+            .iter()
+            .rev()
+            .find(|(_, m)| *m == member)
+            .map(|(index, _)| *index)
+    }
+
     /// The member of the sender index `sender`, once the Sync worker named it.
     fn member_of(&self, sender: Seq<SenderIndex>) -> Option<Id<User>> {
         self.members
@@ -398,6 +409,29 @@ mod tests {
         playout.carries(note(0, 4), &volumes);
         assert_eq!(playout.member_in(Pos::new(0)), Some(carol));
         assert_eq!(playout.member_in(Pos::new(2)), None);
+    }
+
+    /// `MURMURE-667`: the page names a member to the SFU by the sender the call admitted last, and
+    /// a member who left names none. The members keep the order of their first admission.
+    #[test]
+    fn a_member_is_chosen_by_the_sender_it_was_admitted_with_last() {
+        let (bob, carol) = (Id::<User>::mint(), Id::<User>::mint());
+        let mut playout = Playout::default();
+        assert_eq!(playout.sender_of(bob), None, "no member named yet");
+        playout.admitted(Seq::new(2), bob);
+        playout.admitted(Seq::new(4), carol);
+        playout.admitted(Seq::new(7), bob);
+        assert_eq!(playout.sender_of(bob), Some(Seq::new(7)));
+        assert_eq!(playout.sender_of(carol), Some(Seq::new(4)));
+        assert_eq!(playout.participants(), vec![bob, carol]);
+        playout.departed(Seq::new(7));
+        assert_eq!(playout.sender_of(bob), Some(Seq::new(2)));
+        playout.departed(Seq::new(2));
+        assert_eq!(
+            playout.sender_of(bob),
+            None,
+            "a member who left names no sender"
+        );
     }
 
     /// `CALL-085`, `CALL-086`, `CALL-087`: a member turned down to nothing plays silence in the
