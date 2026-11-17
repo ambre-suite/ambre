@@ -225,6 +225,17 @@ impl Reader<'_> {
             .and_then(|sz| sz.parse::<f32>().ok())
             .filter(|sz| sz.is_finite() && *sz > 0.0)
             .map_or(CHART_TEXT_SIZE, |sz| PrintLength::<Pt>::new(sz / 100.0));
+        // The face the chart's text names, else the theme's body face, as a
+        // table cell's text takes it: an export writes the face it carries,
+        // so a face left empty here would not survive a round trip.
+        let typeface = root
+            .path(Ns::C, &["txPr"])
+            .and_then(|body| body.descendants(Ns::A, "latin").into_iter().next())
+            .and_then(|latin| latin.attr("typeface"))
+            .map_or_else(
+                || context.palette.theme.face("+mn-lt"),
+                |face| context.palette.theme.face(face),
+            );
         let _ = out.push(Item::Shape(Shape {
             name: name_of(frame, "nvGraphicFramePr"),
             at: transform.frame(origin).placement(),
@@ -233,7 +244,7 @@ impl Reader<'_> {
             line: Some(STYLE_GRID),
             text: Some(TextBody {
                 text: lines.join("\n"),
-                typeface: String::new(),
+                typeface,
                 size,
                 colour: BLACK,
                 weight: Weight::Regular,

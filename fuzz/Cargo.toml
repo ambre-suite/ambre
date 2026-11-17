@@ -15,6 +15,8 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 ambre-core = { path = "../crates/ambre-core" }
+# The container readers (`docfile`) live in the client core.
+ambre-client-core = { path = "../crates/ambre-client-core" }
 # The interop request a Trame import travels in.
 ambre-bus = { path = "../crates/ambre-bus" }
 ambre-protocol = { path = "../crates/ambre-protocol" }

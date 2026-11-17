@@ -4,13 +4,11 @@
 #![no_main]
 
 use ambre_bus::interop::InteropRequest;
+use ambre_client_core::{FileBytes, docfile::write_ambre_plaintext};
 use ambre_convert::Converter;
 use ambre_core::id::{Document, Id};
 use ambre_core::index::Pos;
-use ambre_core::{
-    ConverterFamily, DeltaBytes, DocType, FileBytes, Payload, SnapshotBytes, Uuid,
-    docfile::write_ambre_plaintext,
-};
+use ambre_core::{ConverterFamily, DeltaBytes, DocType, Payload, SnapshotBytes, Uuid};
 use ambre_trame::message::{CsvImport, TrameImport};
 use ambre_trame::{Col, HeaderRow, Row, TrameCommand, TrameState};
 use libfuzzer_sys::fuzz_target;
@@ -30,10 +28,14 @@ fuzz_target!(|data: &[u8]| {
         start_row: Pos::<Row>::ZERO,
         start_col: Pos::<Col>::ZERO,
     };
-    let _ = state.handle_conversion(
-        TrameCommand::Interop(InteropRequest::Import(TrameImport::Csv(csv))),
-        &tables,
-    );
+    let _ = state.handle_conversion(TrameCommand::Interop(InteropRequest::Import(
+        TrameImport::Csv(csv),
+    )));
+    // The converter thread's turn, in place: each owed request runs and its
+    // answer lands.
+    for (ticket, conversion) in state.take_file_requests() {
+        let _ = state.handle_file_converted(ticket, tables.convert(&conversion));
+    }
     let file = write_ambre_plaintext(
         DocType::Trame,
         Id::<Document>::from_uuid(Uuid::from_bytes([7; 16])),

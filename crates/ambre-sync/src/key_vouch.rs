@@ -779,7 +779,7 @@ mod tests {
                 &carol.exchange(),
                 &rows,
                 &crate::key_vouch::Roots {
-                    pin: Some(pin.clone()),
+                    pin: Some(pin),
                     signer: None,
                     ..Default::default()
                 },
@@ -887,7 +887,7 @@ mod tests {
                 &carol.exchange(),
                 &rows,
                 &crate::key_vouch::Roots {
-                    pin: Some(pin.clone()),
+                    pin: Some(pin),
                     signer: None,
                     ..Default::default()
                 },
@@ -982,7 +982,7 @@ mod tests {
                 &carol.exchange(),
                 &rows,
                 &crate::key_vouch::Roots {
-                    pin: Some(pin.clone()),
+                    pin: Some(pin),
                     signer: None,
                     ..Default::default()
                 },
@@ -1034,7 +1034,7 @@ mod tests {
                 &doc.alice.exchange(),
                 &rows,
                 &crate::key_vouch::Roots {
-                    pin: Some(pin.clone()),
+                    pin: Some(pin),
                     signer: None,
                     ..Default::default()
                 },
