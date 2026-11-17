@@ -695,8 +695,9 @@ impl LogicState {
         id: Seq<Request>,
         evt: RestEvent,
     ) {
-        // A stored file a deck export asked for (`TOILE-IO-100`). Any answer
-        // other than the opened bytes leaves the picture to its thumbnail.
+        // A stored file a deck export asked for
+        // (`ambre-spec-toile-pdf-export.md section 3`). Any answer other than
+        // the opened bytes leaves the picture to its thumbnail.
         if self.deck_fetch_owed(document_id, id).is_some() {
             let data = match evt {
                 RestEvent::MediaDownloaded { data, .. } => Some(data),
@@ -831,7 +832,7 @@ impl LogicState {
     ) {
         // A stored file the Sync worker could not fetch or open: a blob the
         // relay altered, or one no key of the chain opens. The picture goes
-        // out from its thumbnail, counted in the report (`TOILE-IO-100`).
+        // out from its thumbnail, counted in the report.
         if self.deck_fetch_owed(document_id, id).is_some() {
             tracing::debug!("Logic: a deck export's stored file failed: {failure}");
             self.answer_deck_fetch(document_id, id, None);
@@ -1554,7 +1555,7 @@ pub(crate) fn deck_file_answer(
             },
             // The deck walk draws every element through the shared surface,
             // so a page holds what the slide holds. A picture drawn without
-            // its stored file is counted (`TOILE-IO-100`).
+            // its stored file is counted.
             report,
         }),
         Err(cause) => ToileEvent::Interop(InteropAnswer::failed(

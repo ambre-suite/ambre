@@ -10,8 +10,8 @@
 // such an edit reaches the board at once, and no page of the file.
 //
 // Before the first page, the export asks the Sync worker for the stored file
-// of every picture it draws, and records nothing until each answered
-// (`TOILE-IO-100`). The Sync worker fetches the ciphertext and opens it; this
+// of every picture it draws. It records nothing until each answered (section 3
+// of that spec). The Sync worker fetches the ciphertext and opens it; this
 // thread only routes the request and the plaintext answer. The messages
 // between are served as usual, and the loop does not spin on the wait.
 //
@@ -54,7 +54,7 @@ impl LogicState {
     /// running on the same board ends first, so each request answers its own
     /// file.
     /// The first page waits for the stored file of every picture the deck
-    /// draws, which the Sync worker fetches and opens (`TOILE-IO-100`).
+    /// draws, which the Sync worker fetches and opens.
     pub(crate) fn start_deck_export(
         &mut self,
         document_id: Id<Document>,

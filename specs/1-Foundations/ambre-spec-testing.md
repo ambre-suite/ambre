@@ -66,8 +66,8 @@ compiler needs no test, no run and no reading.
 **A measure the CI holds to a ceiling repeats exactly.** Two runs of one build on one input give
 the same count. Otherwise the ceiling fails a build on noise, and the noise hides a regression. A
 random key per process moves the probes of every hash lookup, so it moves a count of instructions.
-On 2026-11-09 a Trame block undo read 73 597 735 against a ceiling of 73 500 000, with no change
-to the code.
+On 2026-11-09 a Trame block undo read 73 597 735 against a ceiling of 73 500 000, with the code
+unchanged.
 
 * **Each source of variation is fixed in the bench build, and only there.** The bench build of
   `scripts/instructions.py` turns on the `fixed-hash-key` feature of `ambre-core`, so every table
@@ -95,7 +95,7 @@ threat (`ARCH-047`). Two examples:
 * a build outside the compiles of the lint (`ARCH-077`).
 
 Test code is what a test build compiles: `cfg(test)`, a test macro, an integration test, a bench
-and an example. A module name and a feature such as `test-helpers` mark none, since a release build
+and an example. A module name and a feature such as `test-helpers` mark none: a release build
 can compile either. A site is a field, a parameter, a return, a constant, a static, an alias or an
 associated type of an impl. Its type holds a primitive, each alias resolved. Its key names the
 crate, the file, the module, the item, the kind and the type as written, and no line number.
@@ -231,8 +231,8 @@ the frame on the phone and the page a deployment serves. The third holds three r
 decides by meaning: `ARCH-035`, `ARCH-063` and `ARCH-076`. On 2026-11-10 it gains `INTEROP-025`
 and `INTEROP-026`: whether an input fixture is a real document, and whether its licence is true.
 The fourth holds five rows of the primitive gate, `ARCH-041`, `ARCH-042`, `ARCH-047`, `ARCH-067`
-and `ARCH-077`. They hold what
-flows at run time, what clippy scores, and the builds the gate does not run.
+and `ARCH-077`. They hold what flows at run time, what clippy scores, and the builds the gate does
+not run.
 
 On 2026-11-12 the fifth obstacle holds `CANVAS-096`: a present that fails.
 
@@ -268,27 +268,26 @@ On 2026-11-14 the second obstacle also holds `ZK-040`: the files a deployment se
 
 **The backing services run in containers, never on the host.** Postgres, Redis and Garage run from
 the images `docker-compose.yml` pins, through `just services-up` on a workstation or a cloud
-session, and as `services:` in CI. A package manager installs another version than the one the
-code is written against. Redis 7.0 lacks `HEXPIRE`, and a test that fails there fails for the
-environment. The pinned image is the only version a tier result
-speaks for. Production deployment is out of scope of this rule.
+session, and as `services:` in CI. A package manager installs another version than the code
+targets. Redis 7.0 lacks `HEXPIRE`, and a test that fails there fails for the environment. A tier
+result speaks for the pinned image alone. Production deployment is out of scope of this rule.
 
 **An image is pinned by a release and a digest.** A tag such as `8-alpine` moves to each new
 release, and a registry can push a release tag again. So each image names its release and the
 digest of its multi-arch index, and the CI `services:` name the images of `docker-compose.yml`
-(`ARCH-087`, `ARCH-088`). Docker runs the digest. The tag tells the reader which release that is.
+(`ARCH-087`, `ARCH-088`). Docker runs the digest. The tag names the release for the reader.
 A bump resolves both again, the same day, in both files.
 
 **The dev container runs the same images.** The test stack a phone reaches runs in the dev
-container of `.devcontainer/`, and PostgreSQL, Redis and Garage beside it, from the images of
+container of `.devcontainer/`, beside PostgreSQL, Redis and Garage from the images of
 `docker-compose.yml`. Its own base names a release and a digest too (`ARCH-109`). Its certificate
 authority signs private addresses alone, so a phone that trusts it trusts no public site through it
 (`ARCH-111`). Object storage sits under `/s3/` of that origin (`ARCH-114`).
 
 **A browser is pinned by its version.** The browser tier speaks for one Chrome, one Firefox and one
 geckodriver. Each setup action defaults to a channel, `stable` or `latest`, which moves under the
-same commit. So each step of the CI names an exact version of what it installs (`ARCH-105`). A bump
-is an edit of `.github/workflows/ci.yml`, reviewed as such.
+same commit. So each CI step names the exact version it installs (`ARCH-105`). A bump is an edit of
+`.github/workflows/ci.yml`, reviewed as such.
 
 **The browser tier pauses a worker, never the product.** A test that needs a thread to stall
 pauses that worker through the DevTools Protocol. The product carries no hook for a test. A browser

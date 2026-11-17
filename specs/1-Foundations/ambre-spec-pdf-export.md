@@ -93,8 +93,8 @@ Each application adds the scenarios its own page format turns on, in its own pdf
 crate, in the PDF converter module. They also hold the font database the shaping needs
 (`CANVAS-025`, `CANVAS-028`).
 The Logic thread records each page as a draw list. The PDF converter module writes the file on
-the converter thread (`ARCH-124`, `ambre-spec-architecture.md section 2`, the converter thread). This document adds no primitive of
-its own.
+the converter thread (`ARCH-124`, `ambre-spec-architecture.md section 2`, the converter thread).
+This document adds no primitive of its own.
 
 **The export context is sealed** (`PDF-007`). A default context discovers the faces of the machine,
 and parley falls back to one of them for a codepoint the asked family misses. Two peers would then

@@ -1811,9 +1811,8 @@ mod tests {
         ));
     }
 
-    /// A Murmure page shows the invite link too: the invitee's page reads
-    /// the pin off it and roots every Murmure open on it (`SYNC-236`). No
-    /// effect writes the clipboard (`SYNC-245`).
+    /// A Murmure page shows the invite link too, with the pin the invitee's
+    /// page reads off it. No effect writes the clipboard (`SYNC-245`).
     #[test]
     fn a_landed_invite_on_a_murmure_page_shows_its_link() {
         let pin = FixedBytes::<ambre_core::InviterPin>::from_array([3; 32]);
