@@ -39,6 +39,12 @@ ignore = [
     # public key, and holds no RSA private key. No fixed version exists upstream.
     # Closes when `openidconnect` drops the `rsa` crate or upstream ships a fix.
     "RUSTSEC-2023-0071",
+    # chrono, unmaintained (2026-11-17). No CVE: the advisory warns of no
+    # fixes to come. ambre-server names it for its timestamps, and sqlx,
+    # oauth2 and openidconnect pull it in too, so a swap to `time` or `jiff`
+    # in the server alone leaves it in the graph. Closes when the server and
+    # those three crates move off it.
+    "RUSTSEC-2026-0543",
     # Nothing else. The h2 0.3 / rustls-webpki 0.101 advisories that the legacy
     # AWS client stack used to drag in were fixed rather than ignored: the SDK's
     # default `rustls` feature is off (root `Cargo.toml`), leaving only the
