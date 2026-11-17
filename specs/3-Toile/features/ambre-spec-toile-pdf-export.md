@@ -20,7 +20,7 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 | `TOILE-IO-038` | `IO` | The bytes an export hands back MUST be a PDF document. | this spec section 3 | `ambre_toile::logic::interop::pdf_export::tests::export_yields_a_pdf` -- it asserts the `%PDF` header. Its second assertion, a length over 400 bytes, holds no row: a page with no content clears it too, section 6; `ambre_toile::logic::interop::pdf_export::tests::multiple_pages_serialize` -- a three-page export also starts with the `%PDF` header | none | verified |
 | `TOILE-IO-030` | `IO` | A page MUST carry its own slide alone: content outside the frame MUST NOT reach it. | this spec section 3 | `ambre_toile::logic::state::presentation::pdf_tests::the_page_clip_leaves_the_neighbour_out` -- a shape in view of the page camera lies wholly outside the clip, which is the frame rect the walk takes as its region | none | verified |
 | `TOILE-IO-031` | `IO` | A picture MUST reach the page as its pixels, never as a placeholder box. | this spec section 3 | `ambre_toile::logic::state::import::tests::a_picture_reaches_the_page_as_pixels` -- an imported picture is drawn as an image of its own size from the store the export fills, and as none from an empty store; `ambre_toile::logic::state::import::tests::a_recorded_page_decodes_its_picture` -- the page of the recording the Logic thread runs decodes the stored thumbnail, and the document it records carries the 8x8 pixels | none | verified |
-| `TOILE-IO-100` | `IO` | A picture MUST reach the page at the resolution it was stored at. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_toile::logic::state::import::tests::a_deck_page_draws_the_stored_file_at_full_resolution` -- the page draws the opened 600 x 400 file whole, no thumbnail beside it; `ambre_toile::logic::state::import::tests::a_stored_file_that_did_not_open_falls_back_to_the_thumbnail_and_is_reported` -- a refused download or bytes that spell no picture draw the thumbnail, never a broken file, and the report counts the picture; `ambre_logic::pass_tests::a_deck_export_awaits_the_stored_file_of_its_picture` -- the export asks the Sync worker, waits without spinning the loop, then writes the file; `ambre_logic::pass_tests::a_deck_export_whose_stored_file_did_not_open_reports_the_fallback` -- the same through an error answer. The Sync worker refuses an altered blob or a wrong key (`SYNC-055`) | none | verified |
+| `TOILE-IO-100` | `IO` | A picture MUST reach the page at the resolution it was stored at. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_toile::logic::state::import::tests::a_deck_page_draws_the_stored_file_at_full_resolution` -- the page draws the opened 600 x 400 file whole, no thumbnail beside it; `ambre_toile::logic::state::import::tests::a_stored_file_that_did_not_open_falls_back_to_the_thumbnail_and_is_reported` -- a refused download or bytes that spell no picture draw the thumbnail, never a broken file, and the report counts the picture; `ambre_toile::logic::state::import::tests::a_deck_recording_takes_only_its_own_answers` -- an answer the recording did not ask for is dropped, and a wait that a second export settles still draws the thumbnail; `ambre_logic::pass_tests::a_deck_export_awaits_the_stored_file_of_its_picture` -- the export asks the Sync worker, waits without spinning the loop, then writes the file; `ambre_logic::pass_tests::a_deck_export_whose_stored_file_did_not_open_reports_the_fallback` -- the same through an error answer. The Sync worker refuses an altered blob or a wrong key (`SYNC-055`) | none | verified |
 
 ### 1.2 Export the deck as a PDF
 
@@ -116,7 +116,7 @@ first.
    (`TOILE-IO-133`);
 2. ask the Sync worker for the stored file of each picture a page draws, one download per address,
    and record nothing until each answered. The Sync worker fetches the ciphertext and opens it. A
-   page draws an opened file whole; a refused one, or one past the export cap, leaves the thumbnail
+   page draws an opened file whole. A refused one, or one past the export cap, leaves the thumbnail
    and a line in the report (`TOILE-IO-100`). Then record the first page;
 3. record one more page on each pass of the Logic thread, and serve the other messages between two
    pages (`TOILE-IO-099`). A page decodes each thumbnail it is the first to draw;
@@ -125,7 +125,8 @@ first.
 5. with the last page, hand the recorded pages to the PDF module on the converter thread, and
    answer the file once it is written (`ARCH-124`);
 6. a second request on the same board gives up the downloads still owed, records the rest of the
-   first export at once, then starts (`TOILE-IO-135`). A board that closes takes its export along (`TOILE-IO-136`).
+   first export at once, then starts (`TOILE-IO-135`). A board that closes takes its export along
+   (`TOILE-IO-136`).
 
 The recorded pages are a draw list, which names no writer. A sink other than the PDF module takes the
 same steps unchanged.

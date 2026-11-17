@@ -216,24 +216,21 @@ impl Chars {
     /// The sum of the runs of the text. A run is a maximal stretch of one
     /// class. A capital after a small letter starts a run too, so each word of
     /// a phrase written in camel case counts as one word.
+    ///
+    /// The split walks `chunk_by`, which moves forward at each step whatever
+    /// its test answers: no change of the test can loop.
     fn estimate(&self) -> Estimate {
         let text = self.0.expose();
         let class_at = |i: Option<usize>| i.and_then(|i| text.get(i)).map(|&c| Class::of(c));
         let apart = |class: Option<Class>| class.is_none_or(|class| class == Class::Separator);
+        let one_run = |a: &char, b: &char| {
+            Class::of(*a) == Class::of(*b) && !(a.is_ascii_lowercase() && b.is_ascii_uppercase())
+        };
         let mut total = Estimate::NOTHING;
         let mut start = 0;
-        while let Some(&first) = text.get(start) {
-            let class = Class::of(first);
-            let mut end = start + 1;
-            while let Some(&c) = text.get(end) {
-                let camel = text.get(end - 1).is_some_and(char::is_ascii_lowercase)
-                    && c.is_ascii_uppercase();
-                if Class::of(c) != class || camel {
-                    break;
-                }
-                end += 1;
-            }
-            let chars = text.get(start..end).unwrap_or_default();
+        for chars in text.chunk_by(one_run) {
+            let end = start + chars.len();
+            let class = chars.first().map_or(Class::Letter, |&c| Class::of(c));
             let standing = if apart(class_at(start.checked_sub(1))) && apart(class_at(Some(end))) {
                 Standing::Alone
             } else {
@@ -644,6 +641,125 @@ mod tests {
         let plain_text = estimate(&pass("monkeyfootball")).bits;
         let folded = estimate(&pass("m0nk3yf00tb4ll")).bits;
         assert!(folded <= plain_text.plus(ONE_BIT));
+    }
+
+    /// The estimate of `text` as typed, with no fold of its substitutions.
+    fn typed(text: &str) -> Estimate {
+        Chars::of(&pass(text)).estimate()
+    }
+
+    fn bits(text: &str) -> Count<Centibits> {
+        typed(text).bits
+    }
+
+    #[test]
+    fn a_substitution_folds_back_beside_a_letter_alone() {
+        let folded =
+            |text: &str| -> String { Chars::of(&pass(text)).folded().0.expose().iter().collect() };
+        assert_eq!(folded("b0b1b3b4b@b5b$b7b2"), "bobibebababsbsbtb2");
+        assert_eq!(folded("1337 2024 x 1 y"), "1337 2024 x 1 y");
+    }
+
+    #[test]
+    fn a_common_password_costs_the_log_of_its_rank() {
+        // `qwerty` is the second entry, `letmein` the fourth: one bit and two
+        // bits of rank, and one bit of the choice to try the list.
+        assert_eq!(bits("qwerty"), Count::new(200));
+        assert_eq!(bits("letmein"), Count::new(300));
+        assert_eq!(
+            typed("qwerty").met,
+            Some(PassphraseWeakness::CommonPassword)
+        );
+    }
+
+    #[test]
+    fn a_row_read_backward_is_a_sequence() {
+        // log2(26) for the first letter, log2(10) for the length, one bit
+        // for the direction.
+        assert_eq!(bits("poiuytrewq"), Count::new(870));
+        assert_eq!(typed("poiuytrewq").met, Some(PassphraseWeakness::Sequence));
+    }
+
+    #[test]
+    fn a_short_run_reads_as_a_word_when_it_stands_alone() {
+        // Two letters alone read as a word; three letters follow the vowel
+        // rule, and `tqk` holds no vowel.
+        assert_eq!(bits("xq"), Count::new(500));
+        assert_eq!(bits("tqk"), Count::new(1_410));
+    }
+
+    #[test]
+    fn five_consonants_in_a_row_read_as_random_letters() {
+        assert_eq!(bits("strngaeiou"), Count::new(4_700));
+        assert_eq!(bits("strnaeiou"), Count::new(1_300));
+    }
+
+    #[test]
+    fn a_run_of_digits_reads_as_a_year_a_date_or_random_digits() {
+        let cases = [
+            ("1111", 532),
+            ("5821", 1_328),
+            ("1984", 720),
+            ("2031", 720),
+            ("58213", 1_660),
+            ("582193", 1_520),
+            ("58219374", 1_520),
+            ("5821937", 2_324),
+        ];
+        for (text, centibits) in cases {
+            assert_eq!(bits(text), Count::new(centibits), "{text}");
+        }
+        assert_eq!(typed("1111").met, Some(PassphraseWeakness::Repetition));
+    }
+
+    #[test]
+    fn a_symbol_said_again_costs_the_log_of_its_count() {
+        assert_eq!(bits("!!!!"), Count::new(704));
+        assert_eq!(bits("!#%&"), Count::new(2_016));
+        assert_eq!(typed("!!!!").met, Some(PassphraseWeakness::Repetition));
+    }
+
+    #[test]
+    fn the_case_of_a_run_costs_one_bit_or_one_per_capital() {
+        let case = |text: &str| {
+            let chars: Vec<char> = text.chars().collect();
+            Run {
+                class: Class::Letter,
+                chars: &chars,
+                standing: Standing::Alone,
+            }
+            .case()
+        };
+        let cases = [
+            ("abcd", 0),
+            ("Abcd", 100),
+            ("ABCD", 100),
+            ("aBcd", 100),
+            ("AbCd", 200),
+            ("aBcD", 200),
+        ];
+        for (text, centibits) in cases {
+            assert_eq!(case(text), Count::new(centibits), "{text}");
+        }
+    }
+
+    #[test]
+    fn a_capital_after_a_small_letter_starts_a_run() {
+        // `ab` and `CD` are two runs, two letters each and embedded: random.
+        // `ZXqk` is one run of letters, random, with a bit per capital.
+        assert_eq!(bits("abCD"), Count::new(940 + 940 + 100));
+        assert_eq!(bits("ZXqk"), Count::new(1_880 + 200));
+    }
+
+    #[test]
+    fn a_tie_between_the_two_readings_keeps_the_text_as_typed() {
+        // As typed, `11` is a digit said twice: 4.32 bits and a repetition.
+        // Folded, `1istapie` costs one bit more than its 16.32 bits of runs,
+        // and meets nothing. Both readings give 17.32 bits.
+        let tie = "11stapie";
+        assert_eq!(bits(tie), Count::new(1_732));
+        assert_eq!(estimate(&pass(tie)).bits, Count::new(1_732));
+        assert_eq!(refusal(tie), Some(PassphraseWeakness::Repetition));
     }
 
     #[test]

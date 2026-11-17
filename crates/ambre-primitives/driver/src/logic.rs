@@ -66,11 +66,6 @@ pub const LOGIC_VIEW_REACH: &[(&str, &str, &str)] = &[
         "the camera of a page: the export frames each page with the transform the screen camera uses",
     ),
     (
-        "crates/ambre-toile/src/logic/interop/png_export.rs",
-        "ambre_toile::ui::viewport",
-        "the camera of the image: the PNG export frames its region with the transform the screen camera uses",
-    ),
-    (
         "crates/ambre-toile/src/logic/interop/pdf_export.rs",
         "ambre_toile::ui::walk",
         "the one board walk the screen and the export share (CANVAS-074)",

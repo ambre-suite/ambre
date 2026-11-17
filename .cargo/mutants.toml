@@ -67,6 +67,9 @@ exclude_re = [
     # Equivalent: the shift leaves the low 8 bits of the accumulator at zero,
     # so OR and XOR with a byte give the same value.
     'replace \| with \^ in fingerprint',
+    # Equivalent for the same reason: each word index shifts left by one bit
+    # before the next bit joins it, so the low bit is zero and OR is XOR.
+    'replace \| with \^ in MasterSeed::recovery_words',
     # Equivalent: at ten keys, truncating the cache to ten removes nothing.
     "replace > with >= in SyncDocumentState::rotate_key",
     # Equivalent: at a counter equal to the highest the shift is 0, so the
@@ -123,6 +126,17 @@ exclude_re = [
     # relay the step spawns a browser task.
     'replace SyncState::(drive_space_rotation|start_channel_rotation) with \(\)',
     'delete match arm .* in SyncState::start_channel_rotation',
+    # Log only: the count of rows the log binds to no such member decides
+    # whether a warning is written, and nothing else reads it.
+    'replace < with (==|>|<=) in presence_directory_under',
+    # Log only: a refusal for a changed key and any other refusal send Logic
+    # the same `ApiError`. The guard decides whether a warning is written.
+    'replace match guard e\.is\(RefusalCode::KeyChanged\) with (true|false) in invite_task',
+    # Log only: each arm writes a warning, and the function returns nothing.
+    'replace log_members_failure with \(\)',
+    # Log only: the count of the held edits a check releases decides whether
+    # an info line is written. The loop that sends them reads the list itself.
+    'delete ! in SyncState::check_served_heads',
     # Log only: a count of rows skipped decides a warning, and nothing else.
     'delete ! in (settle_task|rotate_channel)',
     'replace == with != in SyncState::fetch_activity',
@@ -141,6 +155,9 @@ exclude_re = [
     # The request helpers bound to `Fetch`: each hands its request to a
     # `_via` twin, or to `exchange`, that host tests drive in its place.
     'http\.rs:.*replace (get_json_opt_auth|download_snapshot|delete_auth|put_sealed|patch_json_auth|delete_json_auth|put_json_auth|post_json_auth_ok|fetch_bytes|fetch_key_links) -> ',
+    # The fetch of the key links over `Fetch`, which only the `spawn_local`
+    # tasks of the browser path call: no host test reaches it.
+    'http\.rs:.*replace try_fetch_key_links -> ',
     'Method::gloo',
     # Equivalent on the host: `build.rs` hands a digest to a wasm build alone, so
     # with each mutant a host build still refuses every family, as without it.

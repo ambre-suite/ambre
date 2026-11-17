@@ -1745,7 +1745,7 @@ mod tests {
     }
 
     /// Covers `TOILE-IO-100`. A deck recording asks for the stored file of
-    /// its picture, records no page before the answer, and then draws that
+    /// its picture, and records no page before the answer. It then draws that
     /// file whole: the PDF carries the 600 x 400 picture, not the thumbnail
     /// capped at a 256 px edge. The report counts no approximated picture.
     #[cfg(feature = "pdf")]
@@ -1832,8 +1832,8 @@ mod tests {
     }
 
     /// Covers `TOILE-IO-100`: an answer the recording did not ask for is
-    /// not its own, and a second export that settles the first stops
-    /// waiting, so the file still comes out from the thumbnail.
+    /// not its own. A second export that settles the first stops the wait,
+    /// so the file still comes out from the thumbnail.
     #[cfg(feature = "pdf")]
     #[test]
     fn a_deck_recording_takes_only_its_own_answers() {
@@ -2281,9 +2281,9 @@ mod pptx_tests {
             .collect();
         // Slide one: the mark of the master and two placeholders.
         // Slide two: the mark, two placeholders, four shapes, a text box.
-        // Slide three: the mark, two pictures, two members, a poster, the
-        // four cells of the table and the text of its one written cell, and
-        // the box of the chart with the text of its values.
+        // Slide three: the mark, two pictures, two members and a poster.
+        // Then the four cells of the table and the text of its one written
+        // cell. Last, the box of the chart with the text of its values.
         assert_eq!(held, [3, 8, 13]);
     }
 

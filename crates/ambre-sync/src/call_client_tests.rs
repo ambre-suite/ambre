@@ -702,6 +702,7 @@ fn a_leave_asks_a_tick_that_finds_the_switch_due() {
 
 /// `CALL-118`: a tick that finds the switch not yet due asks another. The wall clock stepped
 /// back between the leave and the timer, and the removed key would serve until the next leave.
+/// Once the switch is done, a tick asks none.
 #[test]
 fn a_tick_before_the_switch_asks_another() {
     let mut world = World::new(3);
@@ -734,6 +735,17 @@ fn a_tick_before_the_switch_asks_another() {
     world.switch();
     let after = world.worker(alice).seal();
     assert!(!world.worker(bob).curious_opens(&after));
+    let later = world.instant();
+    let steps = world
+        .sessions
+        .get_mut(alice)
+        .expect("a session")
+        .client
+        .tick(later);
+    assert!(
+        steps.tick_in.is_none(),
+        "a tick after the switch asks no other"
+    );
 }
 
 /// A read of the log that removes a participant asks a tick, even with no one left to wrap

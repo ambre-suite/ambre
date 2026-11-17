@@ -2586,10 +2586,11 @@ mod pass_tests {
             .collect()
     }
 
-    /// Covers `TOILE-IO-100` across the thread. A deck export asks the Sync
-    /// worker for the stored file of its picture, records no page and does
-    /// not spin while it waits, and writes the PDF once the opened bytes
-    /// came back. The file reports no approximated picture.
+    /// Covers the stored-file wait of a deck export across the thread
+    /// (`ambre-spec-toile-pdf-export.md section 3`). A deck export asks the Sync
+    /// worker for the stored file of its picture. It records no page and does
+    /// not spin while it waits. It writes the PDF once the opened bytes came
+    /// back. The file reports no approximated picture.
     #[cfg(all(feature = "toile-pdf", not(target_arch = "wasm32")))]
     #[test]
     fn a_deck_export_awaits_the_stored_file_of_its_picture() {
@@ -2640,7 +2641,8 @@ mod pass_tests {
         }
     }
 
-    /// Covers `TOILE-IO-100`, the refusal across the thread. The Sync worker
+    /// Covers the refused stored file of a deck export across the thread
+    /// (`ambre-spec-toile-pdf-export.md section 3`). The Sync worker
     /// answers an error, as it does for an altered blob or a key that does
     /// not open it. The export still writes its file, from the thumbnail, and
     /// its report names the picture as approximated: no silent fallback.

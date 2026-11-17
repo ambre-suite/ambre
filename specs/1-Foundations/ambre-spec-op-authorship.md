@@ -152,10 +152,11 @@ other's state.
 5. A local restore in that wait is shown at once and kept. A restore may write, and a write under
    the provisional PeerID never travels. So the PeerID rebuilds the document from a fresh state and
    runs the restore again (`AUTHOR-027`). The Sync worker sends the PeerID before it fetches, so
-   the rebuild drops nothing from the relay. The document a page opens at boot reads its copy back
-   only once its session identity landed, since its open waits for the kept pins of the signed-in
-   user (`ambre-spec-membership.md`, `SYNC-244`). Its copy lands under that identity and takes no
-   rebuild.
+   the rebuild drops nothing from the relay.
+
+   The document a page opens at boot reads its copy back only once its session identity landed.
+   Its open waits for the kept pins of the signed-in user (`ambre-spec-membership.md`,
+   `SYNC-244`). Its copy lands under that identity and takes no rebuild.
 6. A document this client creates is rebuilt the same way. It is written at once, so it shows, and
    written again from a fresh state under the PeerID. That whole content is its first update, sent
    once the Sync worker holds the document. Each edit waits until that update has left. Murmure

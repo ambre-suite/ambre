@@ -331,12 +331,16 @@ mod tests {
         // The answer to the ask still hides the entry.
         assert_eq!(watch.served(Seq::nth(3), hidden.clone()), Verdict::Withheld);
         assert!(!watch.asks(signed), "a withheld head does not ask twice");
+        // A later log that still hides the entry keeps the check.
+        assert_eq!(watch.served(Seq::nth(4), hidden.clone()), Verdict::Nothing);
+        assert!(watch.holds_edits(), "the head stays withheld");
         // A later log that holds the head clears the check.
         assert_eq!(
-            watch.served(Seq::nth(4), ServedHeads::of(&entries)),
+            watch.served(Seq::nth(5), ServedHeads::of(&entries)),
             Verdict::Nothing
         );
         assert!(!watch.asks(signed));
+        assert!(!watch.holds_edits());
     }
 
     #[test]

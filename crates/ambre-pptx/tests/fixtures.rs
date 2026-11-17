@@ -273,8 +273,8 @@ fn what_the_deck_cannot_hold_is_named_in_the_report() {
     }
 }
 
-/// A table lands as a shape per cell, its text editable, and a chart as a
-/// text box of the values its part caches, from both writers.
+/// From the files of both writers, a table lands as a shape per cell, its
+/// text editable. A chart lands as a text box of the values its part caches.
 #[test]
 fn a_table_lands_as_its_cells_and_a_chart_as_its_values() {
     for file in FILES {

@@ -416,7 +416,8 @@ fails to decode.
 
 The launcher turns the `logging` feature of `icu_provider` on itself too, and a gate refuses a
 launcher that links ICU without it (`ARCH-120`). On 2026-11-15, over `df6196a`, a warning of ICU
-on the standard error trapped the Prose IME test of the browser tier in about one run in fifty.
+on the standard error trapped the Prose IME test of the browser tier. It did so in about one run
+in fifty.
 
 **The Logic thread parks on a doorbell.** Every queue into it rings the bell on a push, and on
 the drop of its last sender (`ARCH-022`, `ARCH-024`). Ringing unparks the thread, which is an

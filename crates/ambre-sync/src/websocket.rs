@@ -1404,17 +1404,16 @@ impl SyncState {
                     }
                     _ => None,
                 };
-                let behind = fresh == Some(true);
-                let fresh = fresh.is_some();
                 // A walk that finds the log rooted outside its space ends the
                 // open, whatever an earlier walk accepted (`SYNC-231`).
-                let rooted_outside = fresh && root == crate::membership_log::Root::Stranger;
-                if behind && !rooted_outside {
-                    self.fetch_rotated_key(document_id);
-                }
+                let rooted_outside =
+                    fresh.is_some() && root == crate::membership_log::Root::Stranger;
                 if rooted_outside {
                     self.fail_rooted_outside(document_id);
-                } else if fresh {
+                } else if let Some(behind) = fresh {
+                    if behind {
+                        self.fetch_rotated_key(document_id);
+                    }
                     self.check_served_heads(document_id, asked, heads);
                     // A delta held for its signer is settled by the writers
                     // this answer walked (`SYNC-211`).
@@ -1437,7 +1436,7 @@ impl SyncState {
                     ),
                     // A refresh no view asked for: the view takes its rows
                     // from this answer rather than asking again (`SYNC-151`).
-                    None if fresh => self.send_to_logic(LogicEvent::MembersChanged {
+                    None if fresh.is_some() => self.send_to_logic(LogicEvent::MembersChanged {
                         document_id,
                         members,
                     }),

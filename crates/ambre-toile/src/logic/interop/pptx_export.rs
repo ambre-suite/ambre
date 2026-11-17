@@ -125,8 +125,9 @@ pub struct PptxExport {
 
 /// The deck of `slides`, in their order, and its report.
 ///
-/// The first slide sets the slide size: one point per world unit, as the
-/// import reads a slide, so a deck read and written keeps its geometry. A
+/// The first slide sets the slide size, at one point per world unit. The
+/// import reads a slide the same way, so a deck read and written keeps its
+/// geometry. A
 /// frame past the edges a presentation accepts takes 960 pt wide, at its
 /// ratio. Every frame then fits into that slide, centred.
 #[must_use]

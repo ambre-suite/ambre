@@ -229,6 +229,28 @@ fn snake(name: &str) -> String {
     out
 }
 
+/// The suffix cargo gives the output of the unit: its `extra-filename`. A
+/// build script that cargo names without one takes `-<hash>`, read off the
+/// directory above its `out`, as `unit_stem` of the gate reads it.
+fn unit_suffix(tcx: TyCtxt<'_>) -> String {
+    let extra = &tcx.sess.opts.cg.extra_filename;
+    if !extra.is_empty() || tcx.crate_name(rustc_span::def_id::LOCAL_CRATE).as_str() != BUILD_SCRIPT
+    {
+        return extra.clone();
+    }
+    tcx.sess
+        .io
+        .output_dir
+        .as_deref()
+        .filter(|dir| dir.file_name().is_some_and(|name| name == "out"))
+        .and_then(|dir| dir.parent()?.file_name())
+        .map(|hash| format!("-{}", hash.to_string_lossy()))
+        .unwrap_or_default()
+}
+
+/// The crate name cargo compiles a build script under.
+const BUILD_SCRIPT: &str = "build_script_build";
+
 impl<'tcx> LateLintPass<'tcx> for Gate {
     fn check_crate(&mut self, cx: &LateContext<'tcx>) {
         let tcx = cx.tcx;
@@ -559,21 +581,11 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
         };
         let krate = tcx.crate_name(rustc_span::def_id::LOCAL_CRATE);
         // Named as cargo names the unit's output, so the gate finds the
-        // record of each unit cargo reports.
-        let mut unit = format!("{krate}{}", tcx.sess.opts.cg.extra_filename);
-        // A cargo that writes a build script under `build/<package>/<hash>/out/`
-        // passes no extra filename, so every build script of the workspace
-        // would write one record. The hash of its directory tells them apart,
-        // as the gate reads it from the path cargo reports.
-        if tcx.sess.opts.cg.extra_filename.is_empty() && krate.as_str() == "build_script_build" {
-            let out = tcx.sess.io.output_dir.as_deref();
-            if let Some(hash) = out
-                .and_then(std::path::Path::parent)
-                .and_then(std::path::Path::file_name)
-            {
-                unit = format!("{krate}-{}", hash.to_string_lossy());
-            }
-        }
+        // record of each unit cargo reports. Since cargo 1.101 a build script
+        // takes no `extra-filename`, and every one is `build_script_build`.
+        // Its hash is then the directory above its `out`, as the gate reads
+        // it, so two build scripts never share one record.
+        let unit = format!("{krate}{}", unit_suffix(tcx));
         let mut text = format!(
             "unit\t{}\t{}\t{}\n",
             self.unit.krate,

@@ -530,11 +530,14 @@ fn artifact(root: &Path, message: &str) -> Result<Option<Artifact>, String> {
 ///
 /// A library or a binary is named by its crate and its hash, the record's own
 /// stem, with a `lib` prefix dropped. A build script is the exception: cargo
-/// names the file `build-script-build` with no hash, in a directory named by
-/// the package and the hash. The driver compiled it as the crate
-/// `build_script_build` with that hash, so the record takes that name. A
-/// newer cargo writes it as `build/<package>/<hash>/out/build_script_build`,
-/// and the record takes the hash of that directory.
+/// names its file with no hash. The driver compiled it as the crate
+/// `build_script_build` with that hash, so the record takes that name.
+///
+/// Cargo puts the file in one of two layouts. Before 1.101 it is
+/// `build/<package>-<hash>/build-script-build`. Since then it is
+/// `build/<package>/<hash>/out/build_script_build`. Every build script of the
+/// workspace bears one name. A stem without the hash makes two of them share
+/// one record, and the gate then reads only the last one.
 fn unit_stem(file: &Path) -> Option<String> {
     let stem = file.file_stem()?.to_string_lossy();
     if stem == "build-script-build" {

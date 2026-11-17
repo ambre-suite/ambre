@@ -126,9 +126,9 @@ impl Reader<'_> {
         Ok(landed)
     }
 
-    /// The chart the graphic data `data` of the frame `frame` cites: a text
-    /// box of its title, then one line per series of the values its part
-    /// caches. [`Landed::Nothing`] for a chart part that is missing or caches nothing.
+    /// The chart the graphic data `data` of the frame `frame` cites. It lands
+    /// as a text box of its title, then one line per series of the values its
+    /// part caches. [`Landed::Nothing`] for a chart part that is missing or caches nothing.
     pub(super) fn chart(
         &mut self,
         frame: &Element,
@@ -226,7 +226,7 @@ impl Reader<'_> {
             .filter(|sz| sz.is_finite() && *sz > 0.0)
             .map_or(CHART_TEXT_SIZE, |sz| PrintLength::<Pt>::new(sz / 100.0));
         // The face the chart's text names, else the theme's body face, as a
-        // table cell's text takes it: an export writes the face it carries,
+        // table cell's text takes it. An export writes the face it carries,
         // so a face left empty here would not survive a round trip.
         let typeface = root
             .path(Ns::C, &["txPr"])

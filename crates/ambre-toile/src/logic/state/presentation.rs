@@ -555,10 +555,7 @@ impl ToileState {
             crate::message::PngScope::Board => PngExportError::Empty,
             crate::message::PngScope::Frame(_) => PngExportError::NoFrame,
         };
-        png_page(region, clip, |camera| {
-            self.derive_viewport_at(camera.to_bus_viewport())
-        })
-        .ok_or(empty)
+        png_page(region, clip, |camera| self.derive_viewport_at(camera)).ok_or(empty)
     }
 
     /// The union AABB of every element's world bounds, or `None` if the board

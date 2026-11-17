@@ -504,7 +504,7 @@ fn cell(attrs: &str, text: &str, props: &str) -> String {
 }
 
 /// Each cell lands as a shape of its own at its place in the grid, with its
-/// text, its fill and its border; a merged cell spans what it names, and
+/// text, its fill and its border. A merged cell spans what it names, and
 /// the cells it covers land nothing.
 #[test]
 fn a_table_lands_as_one_shape_per_cell_in_its_grid() {

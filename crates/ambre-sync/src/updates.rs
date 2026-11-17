@@ -2517,8 +2517,8 @@ mod tests {
         // put on her row is refused first (`SYNC-201`).
         assert_eq!(opens(&substituted), Err(OpenFailure::KeyNotReceived));
 
-        // A copy of a key no writer named, under a wrapper the log verifies:
-        // no member signed that key, so the open names the relay's fault,
+        // A copy of a key no writer named, under a wrapper the log verifies.
+        // No member signed that key, so the open names the relay's fault,
         // never a key still to arrive (`SYNC-212`).
         let unnamed = http::MembersResponse {
             members: vec![
@@ -6637,6 +6637,68 @@ mod tests {
         assert_eq!(
             state.documents[&doc].directory_asked.latest(),
             ambre_core::Seq::nth(2)
+        );
+    }
+
+    /// A reader's delta that waited in the quarantine for its parent does
+    /// not reach the document when the parent lands: it is held for a
+    /// listing, as on arrival. The owner's delta beside it lands.
+    #[test]
+    fn a_readers_delta_released_from_the_quarantine_is_held_for_a_listing() {
+        let (mut state, rx, doc, key, _sk, _snap) = setup();
+        let (writers, [alice, _bob, carol, _dave]) = writers_of_a_shared_log();
+        state.documents.get_mut(&doc).unwrap().writers = writers;
+        let parent = Id::<Snapshot>::mint();
+        let waiting = [(b"reader".as_slice(), &carol.key), (b"owner", &alice.key)];
+        for (clock, (payload, by)) in (1..).zip(waiting) {
+            let update = make_update(
+                doc,
+                parent,
+                Seq::<DeltaAuthor>::new(clock),
+                payload,
+                &key,
+                by,
+            );
+            state.receive_update(Seq::<Relay>::new(clock), update);
+        }
+        assert!(drain(&rx).is_empty(), "an unknown parent holds both");
+
+        state.snapshot_known(doc, parent);
+        let (applied, _) = applied_and_warned(&drain(&rx));
+        assert_eq!(applied, vec![b"owner".to_vec()]);
+        assert_eq!(state.documents[&doc].unvouched.len(), 1);
+    }
+
+    /// Past the bound of the held deltas, the oldest one is dropped and Logic
+    /// is warned once. Under the bound, nothing is dropped and no warning
+    /// goes.
+    #[test]
+    fn held_deltas_past_their_bound_drop_the_oldest_and_warn() {
+        let (mut state, rx, doc, key, sk, snap) = setup();
+        let held = |from: u64, to: u64| {
+            (from..to)
+                .map(|clock| {
+                    let update =
+                        make_update(doc, snap, Seq::<DeltaAuthor>::new(clock), b"x", &key, &sk);
+                    (Seq::<Relay>::new(clock), update)
+                })
+                .collect::<Vec<_>>()
+        };
+        let limit = QUARANTINE_LIMIT as u64;
+        state.hold_unvouched(doc, held(1, limit + 1));
+        let (_, warned) = applied_and_warned(&drain(&rx));
+        assert!(warned.is_empty(), "the bound itself drops nothing");
+        assert_eq!(state.documents[&doc].unvouched.len(), QUARANTINE_LIMIT);
+
+        state.hold_unvouched(doc, held(limit + 1, limit + 2));
+        let (_, warned) = applied_and_warned(&drain(&rx));
+        assert_eq!(warned, vec![SyncWarningCode::WriterRefused]);
+        let unvouched = &state.documents[&doc].unvouched;
+        assert_eq!(unvouched.len(), QUARANTINE_LIMIT);
+        assert_eq!(
+            unvouched.first().map(|held| held.seq),
+            Some(Seq::<Relay>::new(2)),
+            "the oldest held delta is the one dropped"
         );
     }
 

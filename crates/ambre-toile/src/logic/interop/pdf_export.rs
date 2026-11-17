@@ -77,6 +77,26 @@ pub struct PdfPage {
     pub clip: Option<Rect>,
 }
 
+impl PdfPage {
+    /// The page whose camera centres `center` at `zoom` over `size` page
+    /// points, clipped to `clip`. `derive` culls the board at that camera.
+    /// A raster export frames its page here, so it names no view type.
+    pub(crate) fn framed(
+        center: ambre_draw::Point,
+        zoom: ambre_core::Scale<ambre_core::Board, ambre_core::View>,
+        size: ambre_draw::Size,
+        clip: Option<Rect>,
+        derive: impl FnOnce(crate::message::Viewport) -> DisplayViewport,
+    ) -> Self {
+        let camera = ViewportTransform { center, zoom, size };
+        Self {
+            viewport: derive(camera.to_bus_viewport()),
+            camera,
+            clip,
+        }
+    }
+}
+
 /// A PDF export failure. `Convert` wraps the converter module's refusal; the
 /// walk itself cannot fail (it only emits draw calls).
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -370,8 +390,9 @@ impl DeckRecording {
     ///
     /// The bytes are kept only when they spell a PNG or a JPEG whose header
     /// declares a size, and fit under [`EXPORT_BYTES_CAP`]. Anything else
-    /// leaves the picture to its thumbnail, and the report counts it: never
-    /// a silent fallback, and never a file the PDF module would draw broken.
+    /// leaves the picture to its thumbnail, and the report counts it. The
+    /// fallback is never silent, and the PDF module never gets a file it
+    /// would draw broken.
     pub fn answer(&mut self, id: Seq<Request>, data: Option<Payload<MediaBytes>>) {
         let Some(address) = self.waiting.remove(&id) else {
             return;
@@ -455,10 +476,9 @@ fn pictures_of(pdf_page: &PdfPage) -> impl Iterator<Item = &Validated<ContentHas
         })
 }
 
-/// A stored file as a page draws it, or `None` when the bytes are neither a
+/// A stored file as a page draws it. `None` when the bytes are neither a
 /// PNG nor a JPEG, or when their header declares no size or one past the
-/// import bound. Only the header is
-/// read: a JPEG is walked by `ambre_convert::jpeg`, since Main links no JPEG
+/// import bound. Only the header is read: a JPEG is walked by `ambre_convert::jpeg`, since Main links no JPEG
 /// decoder (`TOILE-IO-131`).
 #[must_use]
 pub fn stored_picture(bytes: Payload<MediaBytes>) -> Option<StoredPicture> {
