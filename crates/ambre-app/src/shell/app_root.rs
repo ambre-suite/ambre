@@ -6,7 +6,7 @@
 use super::super::*;
 use super::call_bar::CallBar;
 use super::prose_status::ProseFigures;
-use super::share::{ShareInviteLink, ShareMembers};
+use super::share::{InviteLink, MurmureInviteLink, ShareInviteLink, ShareMembers};
 use super::sync_badge::SyncBadge;
 use ambre_bus::DocType;
 use ambre_bus::{Authored, Instant};
@@ -40,6 +40,9 @@ pub(crate) fn MurmureShell(
     relay: MurmureRelay,
     /// Carries what the channel list asks of the Logic thread.
     send: Callback<ambre_murmure::message::LogicCommand>,
+    /// The last invite into a space, whose link the toolbar shows
+    /// (`SYNC-245`).
+    invite_link: RwSignal<Option<InviteLink>>,
     /// The shared header.
     children: ChildrenFn,
 ) -> impl IntoView {
@@ -57,6 +60,7 @@ pub(crate) fn MurmureShell(
                     <CallBar pane=pane phase=call_phase relay=relay />
                 </ChannelHeader>
                 <InviteControl relay=relay send=send />
+                <MurmureInviteLink link=invite_link />
                 <MessageSearch relay=relay send=send />
             </Toolbar>
             <Sidebar slot label="Channels">
@@ -684,7 +688,9 @@ pub(crate) fn AppRoot() -> impl IntoView {
     let shell = if boot_is_murmure {
         let send = super::commands::murmure_send(to_logic.clone());
         view! {
-            <MurmureShell relay=murmure_relay send=send>{header.clone()}</MurmureShell>
+            <MurmureShell relay=murmure_relay send=send invite_link=invite_link>
+                {header.clone()}
+            </MurmureShell>
         }
         .into_any()
     } else {

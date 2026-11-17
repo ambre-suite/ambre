@@ -618,21 +618,21 @@ impl Switchboard {
                 inviter,
                 ..
             } => {
-                // A Murmure page binds no document by address, so no link
-                // opens a space and the page shows none.
-                let notice = match self.page {
-                    Page::Document => {
-                        effects.push(Effect::ShowInviteLink {
-                            document_id: *document_id,
-                            inviter: *inviter,
-                        });
-                        format!(
-                            "Invited {}. Send them the invite link the share dialog shows.",
-                            display_name.as_str()
-                        )
-                    }
-                    Page::Murmure => format!("Invited {}.", display_name.as_str()),
+                // A Murmure page binds no document by address: its link is
+                // the page itself, whose pin roots every Murmure open of the
+                // invitee's session (`SYNC-236`). Its toolbar shows it.
+                effects.push(Effect::ShowInviteLink {
+                    document_id: *document_id,
+                    inviter: *inviter,
+                });
+                let shown_in = match self.page {
+                    Page::Document => "the share dialog",
+                    Page::Murmure => "the toolbar",
                 };
+                let notice = format!(
+                    "Invited {}. Send them the invite link {shown_in} shows.",
+                    display_name.as_str()
+                );
                 effects.push(Effect::Notice(Notice::new(ToastKind::Success, notice)));
                 effects.push(Effect::Send(list_members(*document_id)));
             }
@@ -1811,26 +1811,31 @@ mod tests {
         ));
     }
 
-    /// A Murmure page shows no invite link: it opens no document by address,
-    /// so a link would pin nothing.
+    /// A Murmure page shows the invite link too: the invitee's page reads
+    /// the pin off it and roots every Murmure open on it (`SYNC-236`). No
+    /// effect writes the clipboard (`SYNC-245`).
     #[test]
-    fn a_landed_invite_on_a_murmure_page_shows_no_link() {
+    fn a_landed_invite_on_a_murmure_page_shows_its_link() {
+        let pin = FixedBytes::<ambre_core::InviterPin>::from_array([3; 32]);
         let mut switchboard = Switchboard::new(Page::Murmure);
         let ev = rest(RestEvent::InviteSent {
             document_id: Id::<Document>::mint(),
             user_id: Id::<User>::mint(),
             display_name: name("Bob"),
-            inviter: FixedBytes::from_array([3; 32]),
+            inviter: pin,
         });
         let effects = switchboard.service(&ev, on(None), &nobody());
         assert!(
-            !effects
+            effects
                 .iter()
-                .any(|e| matches!(e, Effect::ShowInviteLink { .. }))
+                .any(|e| matches!(e, Effect::ShowInviteLink { inviter, .. } if *inviter == pin))
         );
         assert_eq!(
             effects.iter().find_map(notice),
-            Some((Tone::Success, "Invited Bob."))
+            Some((
+                Tone::Success,
+                "Invited Bob. Send them the invite link the toolbar shows."
+            ))
         );
     }
 
