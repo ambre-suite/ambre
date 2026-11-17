@@ -9,6 +9,7 @@
 use ambre_core::Count;
 use ambre_core::Validated;
 use std::collections::{HashMap, HashSet};
+use std::ops::ControlFlow;
 
 use crate::message::{
     Attachment, ChannelMatches, Deletion, Mention, MentionTarget, MessageAt, MessageDraft,
@@ -286,6 +287,10 @@ pub struct ChannelState {
     threads: HashMap<Id<Message>, threading::Thread>,
     /// The thread documents whose bytes are still arriving.
     threads_pending: HashMap<Id<Document>, threading::Pending>,
+    /// The version of each held segment, and of its amendments, at the last
+    /// walk that looked for the threads its roots name. An unchanged segment
+    /// names no new thread, so a delta that changed nothing walks nothing.
+    threads_scanned: HashMap<Id<Segment>, threading::Scanned>,
     /// The root a reply on a copy looks for, down the older segments.
     seek: Option<threading::Seek>,
     /// The band of the closing segment the channel opened without, until
@@ -467,6 +472,7 @@ impl ChannelState {
             locked: HashSet::new(),
             threads: HashMap::new(),
             threads_pending: HashMap::new(),
+            threads_scanned: HashMap::new(),
             seek: None,
             closing_band: None,
             arrived: None,
@@ -752,8 +758,7 @@ impl ChannelState {
         read: Seq<Relay>,
         me: Id<User>,
     ) -> Result<ambre_core::Count<Unread>, MurmureError> {
-        self.count_in(segment.document_id(), read, me, |_| true)
-            .map(ambre_core::Count::<Unread>::recount)
+        self.counts(segment, read, me).map(|counts| counts.unread)
     }
 
     /// The messages [`ChannelState::unread`] counts that mention `me` or the
@@ -768,7 +773,33 @@ impl ChannelState {
         read: Seq<Relay>,
         me: Id<User>,
     ) -> Result<ambre_core::Count<Mentions>, MurmureError> {
-        self.mentions_in(segment.document_id(), read, me)
+        self.counts(segment, read, me).map(|counts| counts.mentions)
+    }
+
+    /// [`ChannelState::unread`] and [`ChannelState::mentions`] of `segment`,
+    /// read in one walk of its messages.
+    ///
+    /// # Errors
+    /// [`MurmureError::NotHeld`] for a segment the channel does not hold.
+    pub fn counts(
+        &self,
+        segment: Id<Segment>,
+        read: Seq<Relay>,
+        me: Id<User>,
+    ) -> Result<SegmentCounts, MurmureError> {
+        let channel = self.channel_id;
+        let mut counts = SegmentCounts::default();
+        self.each_unread(segment.document_id(), read, me, |_, message| {
+            counts.unread = counts.unread.incremented();
+            // The marks decide, never the summary (`MURMURE-233`).
+            if content_of(message)
+                .is_some_and(|content| mention::names(&mention::read(&content, channel), me))
+            {
+                counts.mentions = counts.mentions.incremented();
+            }
+            ControlFlow::Continue(())
+        })?;
+        Ok(counts)
     }
 
     /// The replies of the held thread `thread` past the cursor `read` that
@@ -786,41 +817,17 @@ impl ChannelState {
         if !self.is_thread(thread) {
             return Err(MurmureError::NotHeld(thread));
         }
-        self.mentions_in(thread, read, me)
-    }
-
-    /// The messages of `document_id` past `read` that mention `me` or the
-    /// channel, read off their marks.
-    fn mentions_in(
-        &self,
-        document_id: Id<Document>,
-        read: Seq<Relay>,
-        me: Id<User>,
-    ) -> Result<ambre_core::Count<Mentions>, MurmureError> {
         let channel = self.channel_id;
-        self.count_in(document_id, read, me, |message| {
-            content_of(message)
+        let mut mentions = ambre_core::Count::<Mentions>::ZERO;
+        self.each_unread(thread, read, me, |_, message| {
+            if content_of(message)
                 .is_some_and(|content| mention::names(&mention::read(&content, channel), me))
-        })
-        .map(ambre_core::Count::<Mentions>::recount)
-    }
-
-    /// The messages of a held segment or thread past `read`, written by
-    /// someone other than `me`, that `counts` keeps.
-    fn count_in(
-        &self,
-        document_id: Id<Document>,
-        read: Seq<Relay>,
-        me: Id<User>,
-        counts: impl Fn(&Fields<MessageKey>) -> bool,
-    ) -> Result<Count<Messages>, MurmureError> {
-        let mut count = Count::<Messages>::ZERO;
-        self.each_unread(document_id, read, me, |_, message| {
-            if counts(message) {
-                count = count.incremented();
+            {
+                mentions = mentions.incremented();
             }
+            ControlFlow::Continue(())
         })?;
-        Ok(count)
+        Ok(mentions)
     }
 
     /// The first message of the held segments, in list order, past the
@@ -842,29 +849,42 @@ impl ChannelState {
                 let mut first = None;
                 let read = read_of(segment);
                 let found = self.each_unread(segment.document_id(), read, me, |id, _| {
-                    first.get_or_insert(id);
+                    first = Some(id);
+                    ControlFlow::Break(())
                 });
                 found.ok().and(first)
             })
     }
 
     /// Hand `each` every message of a held segment or thread past `read`,
-    /// in list order, written by someone other than `me`.
+    /// in list order, written by someone other than `me`, until it breaks.
+    ///
+    /// The walk reads only the author of a message this member wrote. A
+    /// segment of its own messages thus counts at the pace it sends.
     fn each_unread(
         &self,
         document_id: Id<Document>,
         read: Seq<Relay>,
         me: Id<User>,
-        mut each: impl FnMut(Id<Message>, &Fields<MessageKey>),
+        mut each: impl FnMut(Id<Message>, &Fields<MessageKey>) -> ControlFlow<()>,
     ) -> Result<(), MurmureError> {
         let doc = self
             .doc(document_id)
             .ok_or(MurmureError::NotHeld(document_id))?;
         let sequence = self.sequences.get(&document_id);
+        let mine = me.to_string();
+        let mut walk = ControlFlow::Continue(());
         crate::logic::schema::root_list(doc, Root::Messages).for_each(|item| {
+            if walk.is_break() {
+                return;
+            }
             let Some(message) = crate::logic::schema::fields_of(item) else {
                 return;
             };
+            // The spelling this client writes: no parse to learn it is mine.
+            if schema::string(&message, MessageKey::Author).is_none_or(|author| author == mine) {
+                return;
+            }
             let Some((id, author)) = identity_of(&message) else {
                 return;
             };
@@ -876,7 +896,7 @@ impl ChannelState {
                 Position::Unknown => true,
             };
             if past {
-                each(id, &message);
+                walk = each(id, &message);
             }
         });
         Ok(())
@@ -1770,9 +1790,21 @@ impl ChannelState {
             .ok_or(MurmureError::NotHeld(document_id))?;
         delta::verdict(doc, rules, &update, signer)?;
         let created = delta::created_messages(&update).pop();
+        let numbered = delta::created_with_ops(&update);
+        let before = doc.oplog_vv();
         doc.import_json_updates(update)?;
+        // The echo of this member's own delta brings no operation: only its
+        // number is news, and the view already shows every message.
+        let changed = doc.oplog_vv() != before;
         if let (Rules::Segment, Some(message)) = (rules, created) {
             self.arrived = Some((Id::<Segment>::from_document(document_id), message));
+        }
+        let sequence = self.sequences.entry(document_id).or_default();
+        if sequence.number(seq, range.clone(), &numbered) == sequence::Numbered::Done {
+            if !changed {
+                return Ok(Vec::new());
+            }
+            return self.answer(document_id, Matching::Skip, None::<fn(&mut Sequence)>);
         }
         let note = move |sequence: &mut Sequence| sequence.note_range(seq, range);
         self.answer(document_id, Matching::Resolve, Some(note))
@@ -1958,6 +1990,8 @@ impl ChannelState {
         if self.threads_pending.remove(&document_id).is_some() {
             self.sequences.remove(&document_id);
             self.end_seek_of(document_id);
+            // The next walk asks for the thread again.
+            self.threads_scanned.clear();
             return true;
         }
         let segment = Id::<Segment>::from_document(document_id);
@@ -1982,6 +2016,7 @@ impl ChannelState {
             let ready = self.thread_ready(document_id, pending);
             if ready.is_err() {
                 self.sequences.remove(&document_id);
+                self.threads_scanned.clear();
             }
             return ready;
         }
@@ -2176,6 +2211,16 @@ fn identity_of(map: &Fields<MessageKey>) -> Option<(Id<Message>, Id<User>)> {
     let id = Id::<Message>::parse_str(&schema::string(map, MessageKey::Id)?).ok()?;
     let author = Id::<User>::parse_str(&schema::string(map, MessageKey::Author)?).ok()?;
     Some((id, author))
+}
+
+/// The unread messages of one segment, and those of them that name this
+/// member.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SegmentCounts {
+    /// The messages past the cursor, by someone else.
+    pub unread: ambre_core::Count<Unread>,
+    /// The ones of them whose marks name this member or the channel.
+    pub mentions: ambre_core::Count<Mentions>,
 }
 
 /// The body of one message, `None` when it is absent or not a text.

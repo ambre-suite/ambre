@@ -41,6 +41,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 |---|---|---|---|---|---|---|
 | `MURMURE-029` | `POST` | A remote delta MUST pass the authorship check of the messages feature before it is imported. | this spec section 3; `features/ambre-spec-murmure-messages.md` | `ambre_murmure::logic::authorship_tests::a_message_carries_the_author_who_signed_it_and_no_other`; `ambre_murmure::logic::authorship_tests::a_delta_refused_while_the_channel_opens_is_left_out`; `ambre_logic::channels::tests::a_delta_the_authorship_check_refuses_reaches_no_view` -- an open channel and an opening one both check before import | none | verified |
 | `MURMURE-030` | `FRAME` | A refused delta MUST NOT change any document of the channel. | this spec section 3; `AUTHOR-014` | `ambre_murmure::logic::authorship_tests::an_edit_of_another_authors_message_is_refused_and_changes_nothing` -- every document of the channel compares equal across the refusal | none | verified |
+| `MURMURE-673` | `POST` | The echo of a member's own delta MUST number each message the delta created. | this spec section 3; `features/ambre-spec-murmure-unread.md` | `ambre_murmure::logic::unread_tests::the_echo_of_an_own_delta_numbers_its_message_and_answers_nothing` -- two echoes number their two messages exactly | none | verified |
+| `MURMURE-674` | `FRAME` | The echo of a member's own delta MUST NOT hand the view a message list. | this spec section 3 | `ambre_murmure::logic::unread_tests::the_echo_of_an_own_delta_numbers_its_message_and_answers_nothing` -- each echo answers nothing, and the same delta from another member answers with the list | none | verified |
 
 ### 1.4 Log out
 
@@ -55,7 +57,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   JSON check row of `ambre-spec-budgets.md section 1`.
 * **Boundary.** every document here travels sealed through the document pipeline (`ZK-001`). What
   the relay learns of the grouping is `ZK-015`.
-* **Verification.** 17 `verified`. The open is held on both sides of the Logic thread: the engine's
+* **Verification.** 19 `verified`. The open is held on both sides of the Logic thread: the engine's
   staged open, and the dispatcher that drives it over the relay. A close hands each document's copy
   to the local store and releases it to a light subscription. A reopen starts each document from its
   copy.
@@ -142,6 +144,11 @@ delta and its activity summary, and the view a `MurmureEvent::Messages`.
    (`MURMURE-029`). A refusal changes nothing (`MURMURE-030`), and the delta still counts as
    delivered.
 4. The delta is imported, and the view is told which messages changed.
+
+The relay echoes each delta to its author too. That echo brings no operation the copy lacks, only
+its number. So the engine numbers the messages the delta created (`MURMURE-673`), and tells the view
+nothing (`MURMURE-674`). A segment of 5 000 messages would otherwise be read whole and sent to the
+view at each message its member sends.
 
 A segment still opening holds each delta as it arrived, and checks it when the segment is built.
 

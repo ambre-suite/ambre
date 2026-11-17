@@ -1321,7 +1321,6 @@ ambre-logic | src/waiting.rs | crate::waiting | Waiting.reported | field | bool	
 ambre-logic | src/waiting.rs | crate::waiting | Waiting::stalled() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-murmure | src/logic/attachment.rs | crate::logic::attachment | fits() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/logic/channel.rs | crate::logic::channel | ChannelState::cancel_older() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/logic/channel.rs | crate::logic::channel | ChannelState::count_in(counts) | param | impl Fn(&Fields<MessageKey>)->bool	generic	a predicate the caller passes: whether an unread message counts, every one or those that mention the member
 ambre-murmure | src/logic/channel.rs | crate::logic::channel | ChannelState::holds() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/logic/channel.rs | crate::logic::channel | ChannelState::identified() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/logic/channel.rs | crate::logic::channel | ChannelState::is_pending() | ret | bool	generic	state flag/predicate

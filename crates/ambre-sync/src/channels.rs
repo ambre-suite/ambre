@@ -847,7 +847,7 @@ impl SyncState {
     /// unread spec). Each live segment moves to what this worker delivered.
     /// Each final segment no longer changes, so it moves to the relay's last
     /// number.
-    pub(crate) fn handle_mark_read(&self, live: &[Id<Segment>], finals: Vec<Id<Segment>>) {
+    pub(crate) fn handle_mark_read(&mut self, live: &[Id<Segment>], finals: Vec<Id<Segment>>) {
         let cursors: Vec<(Id<Document>, Seq<Relay>)> = live
             .iter()
             .map(Id::<Segment>::document_id)
@@ -857,21 +857,19 @@ impl SyncState {
             crate::log::warning!("Sync: no relay on this transport, the read cursors stay");
             return;
         }
-        let api_base = self.api_base.clone();
-        let url_scheme = self.url_scheme;
+        self.owe_cursors(cursors);
+        if finals.is_empty() {
+            return;
+        }
+        let url = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base)
+            .route("/read-cursors/mark-read");
         let auth = self.auth_context();
         crate::spawn(async move {
-            let base = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base);
-            put_cursors(&base, cursors, auth.clone()).await;
-            if !finals.is_empty() {
-                let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
-                    .route("/read-cursors/mark-read");
-                let body = http::MarkReadRequest {
-                    documents: Some(finals.iter().map(Id::<Segment>::document_id).collect()),
-                };
-                if let Err(e) = http::post_json_auth_ok(&url, &body, auth).await {
-                    crate::log::warning!("Sync: read cursors of the final segments not moved: {e}");
-                }
+            let body = http::MarkReadRequest {
+                documents: Some(finals.iter().map(Id::<Segment>::document_id).collect()),
+            };
+            if let Err(e) = http::post_json_auth_ok(&url, &body, auth).await {
+                crate::log::warning!("Sync: read cursors of the final segments not moved: {e}");
             }
         });
     }
@@ -879,7 +877,7 @@ impl SyncState {
     /// Move each listed cursor to the number Logic chose, back as well as
     /// forward: marking a message unread (the Murmure unread spec). No other
     /// cursor moves.
-    pub(crate) fn handle_move_read_cursors(&self, cursors: Vec<(Id<Segment>, Seq<Relay>)>) {
+    pub(crate) fn handle_move_read_cursors(&mut self, cursors: Vec<(Id<Segment>, Seq<Relay>)>) {
         self.move_cursors(
             cursors
                 .into_iter()
@@ -891,7 +889,7 @@ impl SyncState {
     /// Move the cursor of one thread to what this worker delivered on it
     /// (the Murmure threads spec). A thread not open, empty or holding a
     /// quarantine keeps its cursor, so a reply is never read too far.
-    pub(crate) fn handle_mark_thread_read(&self, thread: Id<Document>) {
+    pub(crate) fn handle_mark_thread_read(&mut self, thread: Id<Document>) {
         match self.read_up_to(thread) {
             Some(seq) => self.move_cursors(vec![(thread, seq)]),
             None => crate::log::warning!(
@@ -900,9 +898,27 @@ impl SyncState {
         }
     }
 
-    fn move_cursors(&self, cursors: Vec<(Id<Document>, Seq<Relay>)>) {
+    fn move_cursors(&mut self, cursors: Vec<(Id<Document>, Seq<Relay>)>) {
         if self.event_tx.is_none() {
             crate::log::warning!("Sync: no relay on this transport, the read cursors stay");
+            return;
+        }
+        self.owe_cursors(cursors);
+    }
+
+    /// Owe the relay `cursors`, and start the period that sends them unless
+    /// one runs (`SYNC-264`).
+    fn owe_cursors(&mut self, cursors: Vec<(Id<Document>, Seq<Relay>)>) {
+        if self.owed_cursors.owe(cursors) == crate::cursors::Period::Idle {
+            self.arm_event_timer(SyncEvent::CursorsDue, crate::cursors::CURSOR_PERIOD);
+        }
+    }
+
+    /// The period of the cursors owed ended: move each, one request per
+    /// document (`SYNC-264`).
+    pub(crate) fn send_owed_cursors(&mut self) {
+        let cursors = self.owed_cursors.take();
+        if cursors.is_empty() {
             return;
         }
         let base = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base);

@@ -241,9 +241,10 @@ fn counts_of(
     let mut count = Counts::default();
     for segment in &held {
         let cursor = cursors.get(&segment.document_id())?;
+        let counted = channel.counts(*segment, cursor.read, me).ok()?;
         count = count.plus(&Counts {
-            unread: channel.unread(*segment, cursor.read, me).ok()?,
-            mentions: channel.mentions(*segment, cursor.read, me).ok()?,
+            unread: counted.unread,
+            mentions: counted.mentions,
         });
     }
     // A held thread counts its mentions alone, from its cursor or from its
@@ -282,21 +283,28 @@ impl<D> Runtime<D> {
     /// Hand the view the count of an open channel, once it is known.
     fn emit_count(&self, channel_id: Id<Channel>) {
         if let Some(mark) = self.counted(channel_id) {
+            let unread = mark.unread;
             self.emit(UiEvent::ChannelActivity {
                 channels: vec![mark],
             });
-            self.emit_first_unread(channel_id);
+            self.emit_counted_first_unread(channel_id, unread);
         }
     }
 
-    /// Hand the view the first unread message of an open channel, once its
-    /// count is known. The line of the message list sits above it.
-    fn emit_first_unread(&self, channel_id: Id<Channel>) {
+    /// Hand the view the first unread message of an open channel the caller
+    /// just counted at `unread`. The line of the message list sits above it.
+    /// A count of zero names no first message, and walks nothing.
+    fn emit_counted_first_unread(
+        &self,
+        channel_id: Id<Channel>,
+        unread: Option<ambre_core::Count<Unread>>,
+    ) {
         let (Some(channel), Some(me)) = (self.channels.get(&channel_id), self.my_user_id) else {
             return;
         };
-        if counts_of(channel, &self.read_cursors, me).is_none() {
-            return;
+        if unread.is_some_and(|count| count.is_zero()) {
+            let event = MurmureEvent::FirstUnread { message: None };
+            return self.emit(UiEvent::Channel { channel_id, event });
         }
         let read_of = |segment: Id<Segment>| {
             self.read_cursors
@@ -1545,7 +1553,9 @@ impl<D> Runtime<D> {
                     cursor.active = ambre_bus::Activity::Quiet;
                 }
                 self.ask(SyncCommand::MarkRead { live, finals });
-                let mark = self.counted(channel_id).unwrap_or(ChannelActivity {
+                let counted = self.counted(channel_id);
+                let known = counted.map(|mark| mark.unread);
+                let mark = counted.unwrap_or(ChannelActivity {
                     channel_id,
                     active: ambre_bus::Activity::Quiet,
                     unread: None,
@@ -1554,7 +1564,9 @@ impl<D> Runtime<D> {
                 self.emit(UiEvent::ChannelActivity {
                     channels: vec![mark],
                 });
-                self.emit_first_unread(channel_id);
+                if let Some(unread) = known {
+                    self.emit_counted_first_unread(channel_id, unread);
+                }
             }
             MurmureCommand::Name { name } => {
                 // Trimmed once, so the sealed name is the name `meta` holds.
@@ -2013,12 +2025,12 @@ impl<D> Runtime<D> {
         for mark in &mut channels {
             if let Some(counted) = self.counted(mark.channel_id) {
                 *mark = counted;
-                counted_now.push(mark.channel_id);
+                counted_now.push((mark.channel_id, mark.unread));
             }
         }
         self.emit(UiEvent::ChannelActivity { channels });
-        for channel_id in counted_now {
-            self.emit_first_unread(channel_id);
+        for (channel_id, unread) in counted_now {
+            self.emit_counted_first_unread(channel_id, unread);
         }
         self.segments_listed(documents);
         self.place_threads();

@@ -34,6 +34,15 @@ pub enum Order {
     Snapshot(Seq<Relay>),
 }
 
+/// What [`Sequence::number`] did with one update.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Numbered {
+    /// Each message the update created took its number.
+    Done,
+    /// An earlier update waits to be matched, so this one waits with it.
+    Waiting,
+}
+
 /// Where one message stands in the relay's order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Position {
@@ -134,6 +143,31 @@ impl Sequence {
         self.passed(seq);
         self.relay(&end);
         self.unresolved.push(Range { seq, start, end });
+    }
+
+    /// Number at `seq` each of `created`, the messages one update created,
+    /// when no earlier update waits to be matched (`MURMURE-673`). A message
+    /// created in the update's range is one whose map the update created, so
+    /// no walk of the segment finds another. [`Numbered::Waiting`] changes
+    /// nothing: the caller notes the range and matches every message.
+    pub(crate) fn number(
+        &mut self,
+        seq: Seq<Relay>,
+        (start, end): (VersionVector, VersionVector),
+        created: &[(Id<Message>, ID)],
+    ) -> Numbered {
+        if !self.unresolved.is_empty() {
+            return Numbered::Waiting;
+        }
+        self.passed(seq);
+        self.relay(&end);
+        let range = Range { seq, start, end };
+        for &(id, op) in created {
+            if range.holds(op) {
+                self.adopt(id, seq);
+            }
+        }
+        Numbered::Done
     }
 
     /// Note one payload of a document that holds no message, an amendments

@@ -14,7 +14,7 @@ use ambre_core::version::{Current, OpenRange, Version, VersionKind};
 use ambre_core::{DeltaBytes, LoroPayload, Payload};
 use loro::json::{JsonOpContent, JsonSchema, ListOp, MapOp};
 use loro::{
-    Container, ContainerID, ContainerType, Index, LoroDoc, LoroValue, ValueOrContainer,
+    Container, ContainerID, ContainerType, ID, Index, LoroDoc, LoroValue, ValueOrContainer,
     VersionVector,
 };
 use serde::Deserialize;
@@ -579,6 +579,29 @@ pub(crate) fn created_messages(update: &JsonSchema) -> Vec<Id<Message>> {
             }) if MessageKey::parse(key) == Some(MessageKey::Id) => {
                 Id::<Message>::parse_str(id).ok()
             }
+            _ => None,
+        })
+        .collect()
+}
+
+/// Each message `update` creates, with the operation that created its map:
+/// the map whose `id` the update writes (`MURMURE-673`). The engine numbers
+/// these alone, with no walk of the segment.
+pub(crate) fn created_with_ops(update: &JsonSchema) -> Vec<(Id<Message>, ID)> {
+    update
+        .changes
+        .iter()
+        .flat_map(|c| &c.ops)
+        .filter_map(|op| match (&op.container, &op.content) {
+            (
+                ContainerID::Normal { peer, counter, .. },
+                JsonOpContent::Map(MapOp::Insert {
+                    key,
+                    value: LoroValue::String(id),
+                }),
+            ) if MessageKey::parse(key) == Some(MessageKey::Id) => Id::<Message>::parse_str(id)
+                .ok()
+                .map(|id| (id, ID::new(*peer, *counter))),
             _ => None,
         })
         .collect()

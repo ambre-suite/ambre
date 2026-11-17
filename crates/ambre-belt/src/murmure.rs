@@ -26,7 +26,12 @@ pub(crate) mod tests {
     /// Serves the build in front of `relay`, signs `name` in and opens
     /// Murmure. Waits for the sidebar's control that creates a space.
     pub(crate) async fn murmure(relay: Arc<Relay>, name: &str) -> Page {
-        let page = Page::home(relay).await;
+        enter(Page::home(relay).await, name).await
+    }
+
+    /// Signs `name` in on `page`, which shows the home screen, and opens
+    /// Murmure. Waits for the sidebar's control that creates a space.
+    pub(crate) async fn enter(page: Page, name: &str) -> Page {
         page.sign_in(name).await;
         page.browser
             .goto(&format!("{}/murmure/{}", page.origin, uuid::Uuid::now_v7()))
@@ -203,25 +208,16 @@ pub(crate) mod tests {
         (coord(0), coord(1))
     }
 
-    /// Presses the composer at the foot of the canvas `selector`, types
-    /// `text` and sends it with Enter. A composer not yet drawn leaves the
-    /// press to its list, so the press is made again until the input pipe
-    /// holds the keyboard. Nothing on the page says the message left, so the
-    /// peer's read is the check.
-    async fn send(page: &Page, selector: &str, text: &str) {
+    /// Presses the composer at the foot of the canvas `selector` until the
+    /// input pipe holds the keyboard. A composer not yet drawn leaves the
+    /// press to its list, so the press is made again.
+    pub(crate) async fn take_keys(page: &Page, selector: &str) {
         let deadline = std::time::Instant::now() + STEP;
         loop {
             let at = reachable(page, selector, true).await;
             page.browser.perform(json!([drag(at, at, 0)])).await;
-            let piped = page
-                .browser
-                .script(
-                    "return document.activeElement?.classList.contains('ambre-input');",
-                    json!([]),
-                )
-                .await;
-            if piped == json!(true) {
-                break;
+            if holds_keys(page).await {
+                return;
             }
             assert!(
                 std::time::Instant::now() < deadline,
@@ -229,9 +225,41 @@ pub(crate) mod tests {
             );
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
-        let keys: Vec<String> = text.chars().map(String::from).collect();
-        press(page, &keys.iter().map(String::as_str).collect::<Vec<_>>()).await;
-        press(page, &[ENTER]).await;
+    }
+
+    /// Whether the input pipe holds the keyboard.
+    pub(crate) async fn holds_keys(page: &Page) -> bool {
+        page.browser
+            .script(
+                "return document.activeElement?.classList.contains('ambre-input');",
+                json!([]),
+            )
+            .await
+            == json!(true)
+    }
+
+    /// The key actions that type `text`, then send it with Enter.
+    pub(crate) fn typed_and_sent(text: &str) -> Vec<Value> {
+        text.chars()
+            .map(String::from)
+            .chain(std::iter::once(ENTER.to_owned()))
+            .flat_map(|k| {
+                [
+                    json!({ "type": "keyDown", "value": k }),
+                    json!({ "type": "keyUp", "value": k }),
+                ]
+            })
+            .collect()
+    }
+
+    /// Presses the composer at the foot of the canvas `selector`, types
+    /// `text` and sends it with Enter. Nothing on the page says the message
+    /// left, so the peer's read is the check.
+    async fn send(page: &Page, selector: &str, text: &str) {
+        take_keys(page, selector).await;
+        page.browser
+            .perform(json!([{ "type": "key", "id": "keyboard", "actions": typed_and_sent(text) }]))
+            .await;
     }
 
     /// Presses the list of the canvas `selector`, then `Up` until the live
@@ -276,7 +304,7 @@ pub(crate) mod tests {
     }
 
     /// The canvas of the channel's message list.
-    const CHANNEL: &str = "canvas.ambre-canvas";
+    pub(crate) const CHANNEL: &str = "canvas.ambre-canvas";
 
     /// `MURMURE-586`: two users in one channel, through the relay. A message
     /// one sends reaches the list the other holds open, said with its author.
@@ -341,7 +369,7 @@ pub(crate) mod tests {
 
     /// Goes back from the shown channel to the channel list, as the control
     /// in the channel's header does. No channel shows then.
-    async fn leave_pane(page: &Page) {
+    pub(crate) async fn leave_pane(page: &Page) {
         page.browser
             .wait_for(
                 "the channel list",
@@ -357,6 +385,16 @@ pub(crate) mod tests {
     /// messages. The relay's mark may show first, until a count replaces it
     /// (`MURMURE-119`, `MURMURE-120`).
     async fn wait_unread(page: &Page, name: &str, count: u32) {
+        wait_unread_within(page, name, count, STEP).await;
+    }
+
+    /// As [`wait_unread`], within `within`.
+    pub(crate) async fn wait_unread_within(
+        page: &Page,
+        name: &str,
+        count: u32,
+        within: std::time::Duration,
+    ) {
         page.browser
             .wait_for(
                 &format!("{count} unread in {name}"),
@@ -366,7 +404,7 @@ pub(crate) mod tests {
                      return !!c && c.textContent === '{count}';",
                     entry_js(name)
                 ),
-                STEP,
+                within,
             )
             .await;
     }

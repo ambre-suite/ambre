@@ -383,6 +383,22 @@ phone-measures page host:
     @echo "on the phone, open http://{{host}}:8000 and keep the screen on"
     NO_HEADLESS=1 WASM_BINDGEN_TEST_ADDRESS=0.0.0.0:8000 {{wasm_test_env}} cargo test --profile wasm-release --target wasm32-unknown-unknown -p ambre-{{page}} --test phone_bench -- --include-ignored --nocapture measure_on_the_phone
 
+# The same seed on the belt's own relay: `count` messages typed as a person types them, which a
+# second member counts unread. No CI job runs it. The services must be up, and the build served
+# as `just test-browser` builds it. It prints one `BELT-SEED` line.
+belt-seed count="5000":
+    SEED_MESSAGES="{{count}}" S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}" cargo test -p ambre-belt -- --ignored --exact --nocapture murmure_seed::tests::seed_the_belt_relay
+
+# The seed of the phone stack (`ambre-spec-murmure-phone-measures.md section 3.2`). No CI
+# job runs it. A headless Chrome opens the stack at `SEED_ORIGIN`, by default
+# `https://localhost:8443`, and signs in as `user`. It fills a new channel with `count`
+# messages, typed as a person types them. A second member, `<user>-watcher`, counts them
+# unread. The phone signs in as `user` and opens the channel of the `PHONE-SEED` line. It
+# runs on the machine that serves the stack, with a Chrome and its chromedriver. The
+# authority of the stack is not trusted there, so Chrome ignores certificate errors.
+phone-seed user count="5000":
+    SEED_ORIGIN="${SEED_ORIGIN:-https://localhost:8443}" SEED_USER="{{user}}" SEED_MESSAGES="{{count}}" BELT_CHROME_ARGS="--ignore-certificate-errors" cargo test -p ambre-belt -- --ignored --exact --nocapture murmure_seed::tests::seed_the_phone_stack
+
 # `cargo test` runs each wasm test module through `wasm-bindgen-test-runner`,
 # named as the target's runner; the pinned nightly + rust-src
 # (rust-toolchain.toml) supply `-Z build-std`. The runner must be the version of

@@ -22,8 +22,9 @@ pub struct Page {
     pub browser: Browser,
     pub origin: String,
     pub downloads: PathBuf,
-    /// Held so the relay outlives every page in front of it.
-    _relay: Arc<Relay>,
+    /// Held so the relay outlives every page in front of it. A page of a
+    /// stack that runs apart holds none.
+    _relay: Option<Arc<Relay>>,
 }
 
 impl Page {
@@ -58,7 +59,23 @@ impl Page {
             browser,
             origin,
             downloads,
-            _relay: relay,
+            _relay: Some(relay),
+        }
+    }
+
+    /// Opens the home screen of a stack that runs apart, served at `origin`
+    /// in front of its own relay, signed out. The phone stack is one
+    /// (`.devcontainer/README.md`).
+    pub async fn at(origin: &str) -> Self {
+        let downloads = std::env::temp_dir().join(format!("belt-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&downloads).expect("a download directory");
+        let browser = Browser::start(&downloads).await;
+        browser.goto(&format!("{origin}/")).await;
+        Self {
+            browser,
+            origin: origin.to_owned(),
+            downloads,
+            _relay: None,
         }
     }
 
@@ -68,13 +85,17 @@ impl Page {
             browser,
             origin,
             downloads,
-            _relay: relay,
+            _relay: Some(relay),
         }
     }
 
     /// The relay this page stands in front of, so a second page can join it.
     pub fn relay(&self) -> Arc<Relay> {
-        Arc::clone(&self._relay)
+        Arc::clone(
+            self._relay
+                .as_ref()
+                .expect("a page served by the belt, in front of its own relay"),
+        )
     }
 
     /// Invites the user `name` to the open document as an editor, through the

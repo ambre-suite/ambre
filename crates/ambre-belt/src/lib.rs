@@ -32,6 +32,8 @@ mod ime;
 #[cfg(test)]
 mod murmure;
 #[cfg(test)]
+mod murmure_seed;
+#[cfg(test)]
 mod page;
 #[cfg(test)]
 mod proof;

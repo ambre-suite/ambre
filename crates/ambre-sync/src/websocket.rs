@@ -714,6 +714,7 @@ impl SyncState {
                 ticket,
             } => self.resend_failed(document_id, ticket),
             SyncEvent::ReplayAskDue { document_id } => self.replay_ask_due(document_id),
+            SyncEvent::CursorsDue => self.send_owed_cursors(),
             SyncEvent::SessionReady {
                 id,
                 user_id,

@@ -248,6 +248,7 @@ impl ChannelState {
         let replaced = self.thread_id(root).filter(|own| *own != thread);
         if replaced.is_some() {
             self.threads.remove(&root);
+            self.threads_scanned.clear();
         }
         let own = self.threads.contains_key(&root);
         let open = own || self.ask_thread(thread, segment, root);
@@ -269,6 +270,7 @@ impl ChannelState {
             .is_some_and(|held| held.held.id == thread && held.held.session.is_none());
         if own {
             self.threads.remove(&root);
+            self.threads_scanned.clear();
         }
         own
     }
@@ -342,10 +344,18 @@ impl ChannelState {
             let Some(doc) = self.doc(segment.document_id()) else {
                 continue;
             };
+            let scanned = Scanned {
+                segment: doc.oplog_vv(),
+                amendments: self.amendments.get(&segment).map(|a| a.doc.oplog_vv()),
+            };
+            if self.threads_scanned.get(&segment) == Some(&scanned) {
+                continue;
+            }
             let mut named = named_threads(doc);
             if let Some(amendments) = self.amendments.get(&segment) {
                 named.extend(amending::recorded_threads(&amendments.doc));
             }
+            self.threads_scanned.insert(segment, scanned);
             for (root, id) in named {
                 if self.threads.contains_key(&root) || !self.ask_thread(id, segment, root) {
                     continue;
@@ -760,17 +770,29 @@ fn header_root(doc: &LoroDoc) -> (Option<Id<Segment>>, Option<Id<Message>>) {
     (segment, root)
 }
 
+/// The version of a held segment and of its amendments at one walk of
+/// [`ChannelState::threads_to_open`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct Scanned {
+    segment: loro::VersionVector,
+    amendments: Option<loro::VersionVector>,
+}
+
 fn named_threads(doc: &LoroDoc) -> Vec<(Id<Message>, Id<Document>)> {
     let mut named = Vec::new();
     crate::logic::schema::root_list(doc, Root::Messages).for_each(|item| {
         let Some(map) = crate::logic::schema::fields_of(item) else {
             return;
         };
-        let root =
-            schema::string(&map, MessageKey::Id).and_then(|s| Id::<Message>::parse_str(&s).ok());
-        let thread = schema::string(&map, MessageKey::Thread)
-            .and_then(|s| Id::<Document>::parse_str(&s).ok());
-        if let (Some(root), Some(thread)) = (root, thread) {
+        // Few messages root a thread: the identifier is read for those alone.
+        let Some(thread) = schema::string(&map, MessageKey::Thread)
+            .and_then(|s| Id::<Document>::parse_str(&s).ok())
+        else {
+            return;
+        };
+        if let Some(root) =
+            schema::string(&map, MessageKey::Id).and_then(|s| Id::<Message>::parse_str(&s).ok())
+        {
             named.push((root, thread));
         }
     });

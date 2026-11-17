@@ -2,7 +2,7 @@
 //! (`features/ambre-spec-murmure-unread.md section 3`).
 
 use crate::Receipt;
-use crate::message::MessageDraft;
+use crate::message::{MessageDraft, MurmureEvent};
 use ambre_bus::{Authored, Instant, Unread};
 use ambre_core::id::{Channel, Id, Segment, User};
 use ambre_core::{Payload, Relay, Seq, SnapshotBytes};
@@ -151,6 +151,53 @@ fn the_authors_own_message_is_numbered_by_its_echo_and_never_counts() {
     assert_eq!(
         alice.position(segment, id),
         Some(Position::Exact(Seq::<Relay>::new(9)))
+    );
+}
+
+/// `MURMURE-673`, `MURMURE-674`: the echo of this member's own delta numbers the message it
+/// created and answers nothing, since the view already shows that message.
+/// The same delta from another member still answers with the list.
+#[test]
+fn the_echo_of_an_own_delta_numbers_its_message_and_answers_nothing() {
+    let (mut alice, mut bob) = pair();
+    let segment = alice.active_id();
+    let me = Id::<User>::mint();
+    let first = alice.send(&draft("one"), me, NOW).expect("send");
+    let second = alice.send(&draft("two"), me, NOW).expect("send");
+    let by = signer(&alice, segment, me);
+    for (seq, sent) in [(1, &first), (2, &second)] {
+        let echoed = alice
+            .apply_signed(
+                segment.document_id(),
+                Seq::<Relay>::new(seq),
+                &sent.delta,
+                by,
+            )
+            .expect("echo");
+        assert!(echoed.is_empty(), "the echo {seq} answered {echoed:?}");
+    }
+    let numbers: Vec<Option<Position>> = alice
+        .messages(segment)
+        .expect("messages")
+        .iter()
+        .map(|message| alice.position(segment, message.id))
+        .collect();
+    assert_eq!(
+        numbers,
+        [1, 2].map(|seq| Some(Position::Exact(Seq::<Relay>::new(seq))))
+    );
+
+    let heard = bob
+        .apply_signed(
+            segment.document_id(),
+            Seq::<Relay>::new(1),
+            &first.delta,
+            by,
+        )
+        .expect("apply");
+    assert!(
+        matches!(heard.as_slice(), [MurmureEvent::Messages { messages, .. }] if messages.len() == 1),
+        "another member's copy answers with the list, got {heard:?}"
     );
 }
 

@@ -188,6 +188,7 @@ mod call_roster;
 mod chain;
 mod channels;
 mod converter;
+mod cursors;
 mod docfile;
 mod documents;
 mod error;
@@ -330,6 +331,9 @@ enum SyncEvent {
         document_id: Id<Document>,
         ticket: ambre_core::Seq<generation::ResendTicket>,
     },
+    /// Fired at the end of the period of the read cursors owed: send them,
+    /// one request per document (`SYNC-264`).
+    CursorsDue,
     /// Fired by the timer armed when a replay ask came inside the relay's
     /// window: send the ask it held (`SYNC-188`).
     ReplayAskDue {
@@ -1430,6 +1434,9 @@ pub struct SyncState {
     /// The stops of each document's replay since the socket last opened.
     /// Cleared on every open (`SYNC-153`, `SYNC-154`).
     replay_stops: HashMap<Id<Document>, websocket::ReplayStops>,
+    /// The read cursors owed the relay, sent together at the end of each
+    /// period (`SYNC-264`).
+    owed_cursors: cursors::OwedCursors,
     /// The last replay of each document this socket asked, and the ask held
     /// past the relay's window. Cleared on every open (`SYNC-188`).
     replay_asks: RefCell<HashMap<Id<Document>, websocket::ReplayAsk>>,
@@ -1573,6 +1580,7 @@ impl SyncState {
             inbound_held: false,
             held_outbox: RefCell::new(Vec::new()),
             replay_stops: HashMap::new(),
+            owed_cursors: cursors::OwedCursors::default(),
             replay_asks: RefCell::new(HashMap::new()),
             replay_ticket: ambre_core::Issuer::default(),
             resend_ticket: ambre_core::Issuer::default(),

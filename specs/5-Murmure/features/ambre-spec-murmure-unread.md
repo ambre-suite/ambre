@@ -132,6 +132,7 @@ truncated frame never imports.
 | the cursor queries | `crates/ambre-server/src/db/read_cursors.rs` |
 | the cursor, activity and mark read routes | `crates/ambre-server/src/routes/read_cursors.rs` |
 | the requests and the last number delivered | `crates/ambre-sync/src/channels.rs` |
+| the cursor moves owed, sent once a period | `crates/ambre-sync/src/cursors.rs` |
 | the number of each delivery | `crates/ambre-sync/src/updates.rs`, `crates/ambre-sync/src/websocket.rs` |
 | the number per message, the snapshot frame | `crates/ambre-murmure/src/logic/sequence.rs` |
 | the count, the first unread message and the segments after one | `crates/ambre-murmure/src/logic/channel.rs` |
@@ -141,6 +142,11 @@ truncated frame never imports.
 **Mark read.** A live segment still grows. Its cursor moves to the last number the Sync worker
 delivered, so a message sequenced and not yet shown stays unread. A final segment no longer changes,
 so the relay moves its cursor to its own last number, and the client need not load it.
+
+**One move a period.** A member who keeps a channel on screen marks it read at each message it
+shows. The Sync worker keeps the latest move of each document, and sends the moves once a period
+(`ambre-spec-sync.md`, `SYNC-264`). A channel that fills at a few messages a second then spends one
+request a second. The requests that carry content keep the rest of the budget of the relay.
 
 ---
 
