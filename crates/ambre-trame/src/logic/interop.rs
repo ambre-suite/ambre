@@ -21,7 +21,7 @@ use ambre_bus::interop::{
     Direction, ExportedFile, FileFormat, InteropAnswer, InteropError, InteropRequest, Occurrences,
     Outcome,
 };
-use ambre_convert::{Conversion, ConvertError, Converted, FileWork};
+use ambre_convert::{Conversion, ConvertError, Converted, CsvRoom, FileWork, FirstRecord};
 use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Len, Pos};
 use ambre_core::{Count, Seq};
@@ -65,9 +65,8 @@ fn conversion_failed(direction: Direction, error: &ambre_convert::ConvertError) 
 /// the module call does not carry.
 pub(super) enum FileJob {
     /// The module reads the records of a CSV import, which land from `start`
-    /// on `target`, past a header row when one is present.
+    /// on `target`. The module dropped a header row already.
     ReadCsv {
-        header: HeaderRow,
         target: Option<Id<Sheet>>,
         start: CellPos,
     },
@@ -154,9 +153,9 @@ impl TrameState {
                     Conversion::ReadCsv {
                         data: import.data,
                         delimiter,
+                        room: csv_room(import.header, import.start_row, import.start_col),
                     },
                     FileJob::ReadCsv {
-                        header: import.header,
                         target: import.target_sheet_id,
                         start: CellPos::new(import.start_row, import.start_col),
                     },
@@ -220,15 +219,11 @@ impl TrameState {
     ) -> Option<TrameOutcome> {
         let job = self.file_jobs.land(ticket)?;
         Some(match job {
-            FileJob::ReadCsv {
-                header,
-                target,
-                start,
-            } => {
+            FileJob::ReadCsv { target, start } => {
                 self.engine.changed.clear();
                 let settled = self.settle_xlsx();
                 self.seal_history();
-                let outcome = self.import_csv(answer, header, target, start);
+                let outcome = self.import_csv(answer, target, start);
                 self.carry_settled(settled, outcome)
             }
             FileJob::ReadWorkbook(file) => {
@@ -312,15 +307,15 @@ impl TrameState {
     fn import_csv(
         &mut self,
         answer: Result<Converted, ConvertError>,
-        header: HeaderRow,
         target_sheet_id: Option<Id<Sheet>>,
         start: CellPos,
     ) -> TrameOutcome {
-        let (mut records, unreadable) = match answer {
+        let (records, unreadable, cut) = match answer {
             Ok(Converted::Records {
                 records,
                 unreadable,
-            }) => (records, unreadable.get()),
+                cut,
+            }) => (records, unreadable.get(), cut),
             Ok(_) => return conversion_failed(Direction::Import, &ConvertError::Malformed),
             Err(error) => return conversion_failed(Direction::Import, &error),
         };
@@ -332,10 +327,12 @@ impl TrameState {
             Outcome::Dropped,
             Count::<Occurrences>::new(unreadable),
         );
-        if header == HeaderRow::Present && !records.is_empty() {
-            records.remove(0);
-        }
-        if records.is_empty() {
+        // The module dropped the header and cut the records at the grid's
+        // edge, from `start` (`TRAME-IO-050`). A file with no record past
+        // the header leaves nothing to cut.
+        let cut_records = cut.records.get();
+        let cut_fields = cut.fields.get();
+        if records.is_empty() && cut_records == 0 {
             let refusal = if unreadable > 0 {
                 ambre_core::FileRefusal::Malformed
             } else {
@@ -343,35 +340,20 @@ impl TrameState {
             };
             return import_failed(InteropError::ParseFailed(refusal));
         }
-        // The grid ends at `LAST_ROW` and `LAST_COL`, and a field past either
-        // would land outside it: cut the records there, and say so
-        // (`TRAME-IO-050`).
-        let room_rows = TOTAL_ROWS.as_end().len_from(start.row).to_usize();
-        let room_cols = TOTAL_COLS.as_end().len_from(start.col).to_usize();
-        let cut_records = records.len().saturating_sub(room_rows);
-        records.truncate(room_rows);
-        let cut_fields: usize = records
-            .iter_mut()
-            .map(|record| {
-                let cut = record.len().saturating_sub(room_cols);
-                record.truncate(room_cols);
-                cut
-            })
-            .sum();
         report.record_count(
             TrameConstruct::RecordPastLastRow,
             Outcome::Dropped,
-            Count::<Occurrences>::of(cut_records),
+            Count::<Occurrences>::new(cut_records),
         );
         report.record_count(
             TrameConstruct::FieldPastLastColumn,
             Outcome::Dropped,
-            Count::<Occurrences>::of(cut_fields),
+            Count::<Occurrences>::new(cut_fields),
         );
         // A start past the edge cuts every field: nothing is left to write,
         // so the document stays untouched, as for an empty file
         // (`TRAME-IO-028`).
-        if records.iter().all(Vec::is_empty) && (cut_records > 0 || cut_fields > 0) {
+        if records.iter().all(|record| record.is_empty()) && (cut_records > 0 || cut_fields > 0) {
             return import_failed(InteropError::Stopped(ambre_core::StopCause::PastBound));
         }
 
@@ -397,8 +379,14 @@ impl TrameState {
         self.active_sheet = sheet_id.clone();
         self.reseed_active_sheet();
 
-        let rows = Count::<Occurrences>::of(records.len());
-        let cols = Count::<Occurrences>::of(records.iter().map(Vec::len).max().unwrap_or(0));
+        let rows = Count::<Occurrences>::new(records.len().get());
+        let cols = Count::<Occurrences>::new(
+            records
+                .iter()
+                .map(|record| record.len().get())
+                .max()
+                .unwrap_or(0),
+        );
         let land = |r: usize, c: usize| {
             CellPos::new(start.row + Len::<Row>::of(r), start.col + Len::<Col>::of(c))
         };
@@ -407,7 +395,7 @@ impl TrameState {
         // `SetCellsBatch`). A `materialize` commit carries the excluded origin,
         // so interleaving it between value commits would split the undo item.
         for (r, record) in records.iter().enumerate() {
-            for (c, value) in record.iter().enumerate() {
+            for (c, value) in record.fields().enumerate() {
                 if !value.is_empty() {
                     let _ = self.materialize(land(r, c));
                 }
@@ -428,10 +416,10 @@ impl TrameState {
                 .push(sheet_id.as_str());
             self.reseed_active_sheet();
         }
-        for (r, record) in records.into_iter().enumerate() {
-            for (c, value) in record.into_iter().enumerate() {
+        for (r, record) in records.iter().enumerate() {
+            for (c, value) in record.fields().enumerate() {
                 if !value.is_empty() {
-                    self.write_cell(land(r, c), &CellText::<SourceForm>::new(value));
+                    self.write_cell(land(r, c), &CellText::<SourceForm>::new(value.to_owned()));
                 }
             }
         }
@@ -614,6 +602,23 @@ fn csv_written(
         },
         report: TrameReport::new(Direction::Export, FileFormat::Csv),
     })])
+}
+
+/// What a CSV read keeps of a file: the rows and the columns the grid holds
+/// from `start_row` and `start_col`. A header row is dropped first when one
+/// is present (`TRAME-IO-036`, `TRAME-IO-092`). The module reads no record past that room, so a file
+/// of short lines at the bound never holds more than the grid
+/// (`ambre-spec-budgets.md section 6`).
+fn csv_room(header: HeaderRow, start_row: Pos<Row>, start_col: Pos<Col>) -> CsvRoom {
+    CsvRoom {
+        first: match header {
+            HeaderRow::Absent => FirstRecord::Kept,
+            HeaderRow::Present => FirstRecord::Dropped,
+        },
+        // The module links no grid type, so the room crosses as its count.
+        records: Len::new(TOTAL_ROWS.as_end().len_from(start_row).get()),
+        fields: Len::new(TOTAL_COLS.as_end().len_from(start_col).get()),
+    }
 }
 
 /// Auto-detect the CSV field separator among the comma, the semicolon and the

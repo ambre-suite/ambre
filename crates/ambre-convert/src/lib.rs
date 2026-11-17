@@ -34,6 +34,8 @@ pub mod images;
 pub mod jpeg;
 pub mod markup;
 pub mod raster;
+pub mod records;
+pub use records::{CsvCut, CsvRecords, CsvRoom, FirstRecord};
 pub mod spelling;
 
 #[cfg(feature = "engine")]
@@ -49,10 +51,13 @@ pub use loader::Converter;
 /// its family, and only that family's module serves it ([`Conversion::family`]).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Conversion {
-    /// Read the records of a CSV file (`trame-import-export`).
+    /// Read the records of a CSV file that fit `room`
+    /// (`trame-import-export`). The read goes on past the room only to
+    /// count what it leaves out.
     ReadCsv {
         data: Payload<FileBytes>,
         delimiter: CsvDelimiter,
+        room: CsvRoom,
     },
     /// Write records as a CSV file (`trame-import-export`).
     WriteCsv {
@@ -241,11 +246,13 @@ impl Conversion {
 /// What a conversion produced.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Converted {
-    /// The records a CSV file holds, in order, each one a list of fields.
+    /// The records of a CSV file that fit the room of the read, in order.
     Records {
-        records: Vec<Vec<String>>,
+        records: CsvRecords,
         /// The records the reader could not read and skipped.
         unreadable: Count<UnreadableRecords>,
+        /// What the read left out past its room.
+        cut: CsvCut,
     },
     /// The bytes of a written file.
     File(Payload<FileBytes>),

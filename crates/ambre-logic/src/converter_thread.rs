@@ -1211,6 +1211,11 @@ mod tests {
             conversion: Conversion::ReadCsv {
                 data: Payload::new(Vec::new()),
                 delimiter: ambre_convert::CsvDelimiter::COMMA,
+                room: ambre_convert::CsvRoom {
+                    first: ambre_convert::FirstRecord::Kept,
+                    records: ambre_core::index::Len::new(1),
+                    fields: ambre_core::index::Len::new(1),
+                },
             },
             ..pdf_job(1)
         };

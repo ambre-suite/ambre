@@ -374,6 +374,15 @@ fn ambre_deadline_tables(converter: &Converter, conversion: &Conversion) -> Conv
     }
 }
 
+/// The room of an import at the first cell of Trame's grid: its 100 000
+/// rows and 1 000 columns. A read parses the records past it, and keeps
+/// none of them.
+const GRID: ambre_convert::CsvRoom = ambre_convert::CsvRoom {
+    first: ambre_convert::FirstRecord::Kept,
+    records: ambre_core::index::Len::new(100_000),
+    fields: ambre_core::index::Len::new(1_000),
+};
+
 /// A CSV file of `bytes` bytes at most, `line` over and over.
 fn csv_file(line: &str, bytes: usize) -> Vec<u8> {
     line.repeat(bytes / line.len()).into_bytes()
@@ -384,6 +393,7 @@ fn csv_read(line: &str, bytes: usize) {
     let conversion = Conversion::ReadCsv {
         data: Payload::new(csv_file(line, bytes)),
         delimiter: ambre_convert::CsvDelimiter::COMMA,
+        room: GRID,
     };
     black_box(ambre_deadline_tables(
         &engine(ConverterFamily::Tables),
@@ -402,9 +412,10 @@ fn csv_read_dense() {
 }
 
 /// A file at the bound of one short field per line, the dearest shape. Each
-/// record costs a record and a field for two bytes of input. On 2026-11-17,
-/// ten short fields a line counted a sixth of it, twenty one-byte fields
-/// two fifths, and twenty empty fields a quarter.
+/// record costs its parse for two bytes of input, and the records of the
+/// grid a copy of their field too. On 2026-11-17, ten short fields a line
+/// counted a sixth of it, twenty one-byte fields two fifths, and twenty
+/// empty fields a quarter. Those figures predate the room of the read.
 fn csv_read_largest() {
     let bound = match usize::try_from(ambre_convert::CSV_MAX_SIZE.get()) {
         Ok(bound) => bound,

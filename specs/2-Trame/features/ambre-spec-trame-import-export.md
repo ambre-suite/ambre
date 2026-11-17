@@ -48,6 +48,8 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-IO-028` | `FRAME` | A file holding no record MUST leave the document untouched: no sheet, no cell, no undo item. | this spec section 3 | `ambre_trame::logic::tests::group12::a_file_with_no_record_leaves_the_document_alone` | none | verified |
 | `TRAME-IO-038` | `FRAME` | An empty field MUST write nothing: an import MUST NOT clear the cell that field covers. | this spec section 3; section 6 | `ambre_trame::logic::tests::group12::an_empty_field_keeps_the_cell_under_it` | none | verified |
 | `TRAME-IO-090` | `FAIL` | A CSV file past the bound of `ambre-spec-budgets.md section 6` MUST fail as too large before any work, and MUST leave the document untouched. | this spec section 3; `ARCH-128` | `ambre_trame::logic::tests::group7::a_csv_file_past_the_bound_is_refused_and_one_at_it_imports` -- a file one byte past the bound fails with no delta and no sheet, and a file at the bound imports | none | verified |
+| `TRAME-IO-091` | `FAIL` | A CSV read of a file at the bound MUST peak under the memory bound of `ambre-spec-budgets.md section 6`. | this spec section 3; `TRAME-IO-090`, `TRAME-IO-092` | `ambre_convert::csv_memory::a_csv_read_at_the_bound_peaks_under_the_ceiling` -- a counting global allocator in a binary of its own reads the peak of the heap over a read at the bound, the file and the request and answer bytes included, for one-byte lines and for ten short fields a line | none | verified |
+| `TRAME-IO-092` | `POST` | A CSV read MUST keep nothing past the edge of the grid, counted from the start cell. | this spec section 3; `TRAME-IO-050` | `ambre_convert::engine::tests::a_read_keeps_its_room_and_counts_what_it_cuts` -- the module keeps two records of two fields at most, and counts the record and the fields past them; `ambre_trame::logic::tests::group7::an_import_past_the_grid_edge_is_cut_and_said` | none | verified |
 | `TRAME-IO-003` | `FAIL` | A malformed or hostile CSV MUST NOT panic. | this spec section 3 | `ambre_trame::logic::tests::group6::csv_import_malformed_never_panics` -- it feeds nine adversarial shapes through six parameter combinations each; `::csv_import_random_bytes_never_panics` -- four hundred pseudo-random buffers; cargo-fuzz -- `fuzz/fuzz_targets/trame_file.rs`, run by the CI `fuzz` job | none | verified |
 | `TRAME-IO-039` | `FAIL` | An import MUST report the records it could not read; it MUST NOT drop them in silence. | this spec section 3; section 6; `INTEROP-003` | `ambre_trame::logic::tests::group7::import_reports_unreadable_records` | none | verified |
 | `TRAME-IO-050` | `FAIL` | An import MUST write no field past the last row or the last column of the grid. It MUST report the records and fields it left out. An import that keeps no field MUST leave the document untouched. | this spec section 3; `INTEROP-003` | `ambre_trame::logic::tests::group7::an_import_past_the_grid_edge_is_cut_and_said` -- one record past the last row, one field past the last column; `::an_import_starting_past_the_grid_edge_writes_nothing` -- a start past the last row, then past the last column | none | verified |
@@ -132,7 +134,7 @@ gesture: the rows above hold Trame's half, and the rows below hold the codec's.
 * **Boundary.** a local file, in both directions, and nothing else. Every conversion stays in the
   Main instance, no plaintext file reaches the server, no round trip and no third-party bridge
   (`TRAME-IO-001`, `TRAME-IO-033`, `TRAME-IO-002`, `TRAME-IO-030`).
-* **Verification.** 67 `verified`, 2 `unimplemented`. The rows hold the round trip of the two
+* **Verification.** 69 `verified`, 2 `unimplemented`. The rows hold the round trip of the two
   gestures and their frame conditions. An import is one undo item, an empty file writes nothing, and
   an export or a save changes nothing. Every refusal answers, and the browser tier reads a file
   picked on a full queue land once it drains. A gate and `deny.toml` keep every conversion in the
@@ -233,11 +235,11 @@ the import stays one undo step (`TRAME-IO-013`).
    bound sets the dearest call of the tables module, and so its answer deadline (`ARCH-128`);
 2. detect the delimiter when the command names none. It is the most frequent of the comma, the
    semicolon and the tab outside quoted fields, in the first kilobyte (`TRAME-IO-035`);
-3. read every record, keeping ragged rows, then drop the first when a header is declared;
+3. read every record in the module, keeping ragged rows, and drop the first when a header is
+   declared. The read keeps what fits the grid from the start cell, laid flat in one text. It only
+   counts the rest (`TRAME-IO-091`, `TRAME-IO-092`);
 4. return with nothing written when no record survives (`TRAME-IO-028`);
-5. cut the records past the last row and the fields past the last column, counted from the start
-   cell, and report the cut. Return with nothing written when the cut keeps no field
-   (`TRAME-IO-050`);
+5. report the cut. Return with nothing written when the cut keeps no field (`TRAME-IO-050`);
 6. open one undo group (`TRAME-IO-025`);
 7. reuse the named sheet, or mint one and make it active;
 8. materialize every target cell, list a minted sheet only then, inside the group, and write the

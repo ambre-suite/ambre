@@ -25,9 +25,9 @@ use ambre_core::{Count, Payload};
     feature = "spell_fr"
 ))]
 use crate::Converted;
-#[cfg(feature = "tables")]
-use crate::CsvDelimiter;
 use crate::{Answer, Conversion, EncodedAnswer, EncodedRequest};
+#[cfg(feature = "tables")]
+use crate::{CsvCut, CsvDelimiter, CsvRecords, CsvRoom, FirstRecord};
 use ambre_core::FileRefusal;
 
 #[cfg(feature = "boards")]
@@ -77,7 +77,11 @@ pub fn run(request: &Payload<EncodedRequest>) -> Payload<EncodedAnswer> {
 pub fn convert(conversion: Conversion) -> Answer {
     match conversion {
         #[cfg(feature = "tables")]
-        Conversion::ReadCsv { data, delimiter } => Ok(read_csv(&data, delimiter)),
+        Conversion::ReadCsv {
+            data,
+            delimiter,
+            room,
+        } => Ok(read_csv(&data, delimiter, room)),
         #[cfg(feature = "tables")]
         Conversion::WriteCsv { records, delimiter } => write_csv(&records, delimiter),
         #[cfg(feature = "pdf")]
@@ -327,24 +331,63 @@ fn write_text(
 }
 
 #[cfg(feature = "tables")]
-/// The records of a CSV file. Records may hold different field counts, as
-/// real exports do. An unreadable record is counted and skipped.
-fn read_csv(data: &Payload<FileBytes>, delimiter: CsvDelimiter) -> Converted {
+/// The records of a CSV file that fit `room`. Records may hold different
+/// field counts, as real exports do. An unreadable record is counted and
+/// skipped.
+///
+/// One record buffer serves every record, and the kept fields land in one
+/// flat text. So the read allocates nothing per record, and a record past
+/// the room costs its parse alone.
+fn read_csv(data: &Payload<FileBytes>, delimiter: CsvDelimiter, room: CsvRoom) -> Converted {
     let mut reader = csv::ReaderBuilder::new()
         .delimiter(delimiter.byte())
-        // The caller skips a header itself, so every record reads alike.
+        // The room drops a header itself, so every record reads alike.
         .has_headers(false)
         .flexible(true)
         .from_reader(data.as_bytes());
+    let mut record = csv::StringRecord::new();
+    let mut records = CsvRecords::default();
+    let mut first = room.first;
     let mut unreadable = 0usize;
-    let records = reader
-        .records()
-        .filter_map(|rec| rec.inspect_err(|_| unreadable += 1).ok())
-        .map(|rec| rec.iter().map(str::to_owned).collect())
-        .collect();
+    let mut cut_records = 0usize;
+    let mut cut_fields = 0usize;
+    let room_fields = room.fields.to_usize();
+    loop {
+        let before = reader.position().byte();
+        match reader.read_record(&mut record) {
+            Ok(false) => break,
+            Ok(true) => {}
+            Err(_) => {
+                unreadable += 1;
+                // A reader over a slice always moves past a bad record. One
+                // that did not would answer the same error for ever.
+                if reader.position().byte() == before {
+                    break;
+                }
+                continue;
+            }
+        }
+        if first == FirstRecord::Dropped {
+            first = FirstRecord::Kept;
+            continue;
+        }
+        if records.len() >= room.records {
+            cut_records += 1;
+            continue;
+        }
+        let kept = record.len().min(room_fields);
+        cut_fields += record.len() - kept;
+        if records.push(record.iter().take(kept)).is_err() {
+            cut_records += 1;
+        }
+    }
     Converted::Records {
         records,
         unreadable: Count::of(unreadable),
+        cut: CsvCut {
+            records: Count::of(cut_records),
+            fields: Count::of(cut_fields),
+        },
     }
 }
 
@@ -375,22 +418,50 @@ mod tests {
         decode_answer(&run(&encode_request(conversion)?))
     }
 
+    /// Room for every record and every field of a small file.
+    const ALL: CsvRoom = CsvRoom {
+        first: FirstRecord::Kept,
+        records: ambre_core::index::Len::new(100),
+        fields: ambre_core::index::Len::new(100),
+    };
+
+    /// The fields of each record of `records`, owned.
+    fn owned(records: &CsvRecords) -> Vec<Vec<String>> {
+        records
+            .iter()
+            .map(|record| record.fields().map(str::to_owned).collect())
+            .collect()
+    }
+
+    /// The records a read of `data` answers, owned, its unreadable count and
+    /// its cut. `None` when the answer holds no records.
+    fn read(
+        data: &[u8],
+        delimiter: CsvDelimiter,
+        room: CsvRoom,
+    ) -> Option<(Vec<Vec<String>>, u32, CsvCut)> {
+        let answer = round_trip(&Conversion::ReadCsv {
+            data: Payload::new(data.to_vec()),
+            delimiter,
+            room,
+        });
+        let Ok(Converted::Records {
+            records,
+            unreadable,
+            cut,
+        }) = answer
+        else {
+            return None;
+        };
+        Some((owned(&records), unreadable.get(), cut))
+    }
+
     #[test]
     fn a_csv_file_reads_back_as_its_records() {
-        let answer = round_trip(&Conversion::ReadCsv {
-            data: Payload::new(b"a;\"b;c\"\n1;2;3\n".to_vec()),
-            delimiter: CsvDelimiter::SEMICOLON,
-        });
-        assert_eq!(
-            answer,
-            Ok(Converted::Records {
-                records: vec![
-                    vec!["a".to_owned(), "b;c".to_owned()],
-                    vec!["1".to_owned(), "2".to_owned(), "3".to_owned()],
-                ],
-                unreadable: Count::ZERO,
-            })
-        );
+        let (records, unreadable, cut) = read(b"a;\"b;c\"\n1;2;3\n", CsvDelimiter::SEMICOLON, ALL)
+            .expect("a read answers records");
+        assert_eq!(records, vec![vec!["a", "b;c"], vec!["1", "2", "3"]]);
+        assert_eq!((unreadable, cut), (0, CsvCut::default()));
     }
 
     #[test]
@@ -405,34 +476,39 @@ mod tests {
         }) else {
             panic!("a write answers a file");
         };
-        let back = round_trip(&Conversion::ReadCsv {
-            data: bytes,
-            delimiter: CsvDelimiter::COMMA,
-        });
-        assert_eq!(
-            back,
-            Ok(Converted::Records {
-                records,
-                unreadable: Count::ZERO,
-            })
-        );
+        let (back, unreadable, _) =
+            read(bytes.as_bytes(), CsvDelimiter::COMMA, ALL).expect("a read answers records");
+        assert_eq!((back, unreadable), (records, 0));
     }
 
     #[test]
     fn invalid_utf8_counts_as_unreadable() {
-        let answer = round_trip(&Conversion::ReadCsv {
-            data: Payload::new(b"ok\n\xff\xfe\nfine\n".to_vec()),
-            delimiter: CsvDelimiter::COMMA,
-        });
-        let Ok(Converted::Records {
-            records,
-            unreadable,
-        }) = answer
-        else {
-            panic!("a read answers records");
-        };
-        assert_eq!(unreadable.get(), 1);
+        let (records, unreadable, _) = read(b"ok\n\xff\xfe\nfine\n", CsvDelimiter::COMMA, ALL)
+            .expect("a read answers records");
+        assert_eq!(unreadable, 1);
         assert_eq!(records.len(), 2);
+    }
+
+    /// The read drops the header and keeps its room. It
+    /// counts the readable records past the last row, and the fields of
+    /// kept records past the last column. A header's own fields count for
+    /// nothing.
+    #[test]
+    fn a_read_keeps_its_room_and_counts_what_it_cuts() {
+        let room = CsvRoom {
+            first: FirstRecord::Dropped,
+            records: ambre_core::index::Len::new(2),
+            fields: ambre_core::index::Len::new(2),
+        };
+        let (records, unreadable, cut) = read(
+            b"h1,h2,h3,h4\na,b,c\nd\n\xff\ne,f,g\nh\n",
+            CsvDelimiter::COMMA,
+            room,
+        )
+        .expect("a read answers records");
+        assert_eq!(records, vec![vec!["a", "b"], vec!["d"]]);
+        assert_eq!(unreadable, 1);
+        assert_eq!((cut.records.get(), cut.fields.get()), (2, 1));
     }
 
     #[test]

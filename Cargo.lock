@@ -261,6 +261,7 @@ dependencies = [
  "ambre-pptx",
  "ambre-prose-form",
  "ambre-xlsx",
+ "cap",
  "criterion",
  "csv",
  "flate2",

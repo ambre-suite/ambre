@@ -3711,7 +3711,12 @@ ambre-convert | src/exports.rs | crate::exports | input_reserve(len) | param | u
 ambre-convert | src/exports.rs | crate::exports | output_len() | ret | u32	foreign-api	a byte length the raw export hands the loader as a JavaScript number
 ambre-convert | src/exports.rs | crate::exports | output_ptr() | ret | u32	foreign-api	an address in the module's memory, the raw export hands the loader as a JavaScript number
 ambre-convert | src/lib.rs | crate | Conversion::WriteCsv.records | field | Vec<Vec<String>>	free-text	the fields of CSV records: text with no rule
-ambre-convert | src/lib.rs | crate | Converted::Records.records | field | Vec<Vec<String>>	free-text	the fields of CSV records: text with no rule
+ambre-convert | src/records.rs | crate::records | CsvRecords.text | field | String	free-text	the fields of CSV records laid end to end: text with no rule
+ambre-convert | src/records.rs | crate::records | FlatRecords.text | field | String	free-text	the fields of CSV records laid end to end, decoded before its offsets are checked: text with no rule
+ambre-convert | src/records.rs | crate::records | CsvRecords::field() | ret | &str	free-text	the text of one CSV field: text with no rule
+ambre-convert | src/records.rs | crate::records | CsvRecord<'a>::fields() | ret | impl Iterator<Item=&'a str>+'a	free-text	the fields of one CSV record: text with no rule
+ambre-convert | src/records.rs | crate::records | CsvRecords::is_empty() | ret | bool	generic	predicate result
+ambre-convert | src/records.rs | crate::records | CsvRecord<'a>::is_empty() | ret | bool	generic	predicate result
 ambre-convert | src/lib.rs | crate | ConvertError::Stopped.0 | field | String	free-text	the browser's words on a module that trapped or did not load
 ambre-convert | src/loader.rs | crate::loader::wasm | Instance::call() | ret | Result<u32,ConvertError>	foreign-api	the JavaScript number a raw export returns: an address or a length
 ambre-convert | src/loader.rs | crate::loader::wasm | Instance::call(name) | param | &str	foreign-api	the export name Reflect::get reads off the instance

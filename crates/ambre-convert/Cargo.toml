@@ -129,6 +129,9 @@ js-sys       = { workspace = true, optional = true }
 # proptest pulls `wait-timeout`, which does not build on wasm32.
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 proptest = { workspace = true }
+# The counting allocator of the CSV memory test (`tests/csv_memory.rs`). Its
+# `stats` feature keeps the peak of the bytes the heap held.
+cap      = { version = "0.1", features = ["stats"] }
 # The JPEG fixtures are written by the encoder of the `image` crate at test
 # time, never downloaded.
 image    = { workspace = true, features = ["jpeg", "gif"] }
