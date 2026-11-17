@@ -56,7 +56,7 @@ BUDGET = 4_000_000
 # since the brotli budget holds a wide margin. A figure rises only through a
 # story row that names the new figure and the cut tried first (`ARCH-095`).
 CEILINGS = {
-    "Main": 10_920_000,
+    "Main": 10_470_000,
     "Sync": 1_270_000,
 }
 

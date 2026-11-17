@@ -339,6 +339,23 @@
 | Office module | 1 457 724 | 394 037 | brotli budget 900 000 | 505 963, 56 % | 0.16 s |
 | Call worker | 107 452 | 37 181 | brotli budget 100 000 | 62 819, 63 % | 0.01 s |
 
+* **The shipped wasm builds `core` and `alloc` for size since 2026-11-17.** The `wasm-release`
+  profile sets the `optimize_for_size` feature of both crates through a profile flag of
+  `.cargo/config.toml`. Each sort then compiles to one small merge sort or heap sort per type.
+  `twiggy monos` had counted about 400 KB of sort code in Main, one driftsort and one ipnsort per
+  sorted type. The cut holds after a merge, since each new sorted type costs the small sort alone.
+  The sorts stay O(n log n), with a slower constant.
+* **The host builds keep the standard library as shipped.** The `build-std-features` key set the
+  feature on every target. Three Trame counts of `just instructions` then rose by about 1 %, over
+  their ceilings. The figures below are `trunk build --release` then `scripts/wasm_size.py` on the
+  session container. The figure before is the branch base `98497c7`.
+
+| Build | Main raw | Main brotli | Sync raw | What |
+|---|---|---|---|---|
+| `98497c7` | 10 721 437 | 2 840 362 | 1 363 501 | before the cut, 0.6 % over the ceiling of 10 660 000 |
+| `build-std-features` with `optimize_for_size` | 10 263 160 | 2 774 220 | 1 331 533 | every target: three host counts fail |
+| the profile flag on `core` and `alloc` | 10 258 960 | 2 773 437 | 1 331 940 | kept; the Main ceiling falls to 10 470 000, 2 % above |
+
 * **The two spelling modules joined on 2026-11-16.** Each holds `spellbook` and one Hunspell
   dictionary, measured as `scripts/converter_build.py` builds them. The English module reads
   830 626 raw and 243 424 brotli, the French one 1 704 676 raw and 363 308 brotli. The dictionary

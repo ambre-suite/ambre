@@ -51,6 +51,8 @@ rustflags = [
 
 [unstable]
 build-std = ["std", "panic_abort"]
+# Lets the `wasm-release` profile below pass a flag to `core` and `alloc` alone.
+profile-rustflags = true
 
 # The addresses of the local stack of `docker-compose.yml`, the same as CI.
 # Cargo gives them to each process it starts, so the db tier and
@@ -63,3 +65,17 @@ build-std = ["std", "panic_abort"]
 DATABASE_URL = { value = "postgres://ambre:ambre@localhost:5432/ambre_dev", force = false }
 REDIS_URL = { value = "redis://localhost:6379", force = false }
 S3_ENDPOINT = { value = "http://localhost:9000", force = false }
+
+# The shipped wasm builds `core` and `alloc` for size: one small sort per type
+# in place of driftsort and ipnsort, and small integer formatting. On
+# 2026-11-17 the cut took 462 KB off the raw Main wasm, 4.3 %
+# (`ambre-spec-budgets.md section 5`). The `build-std-features` key would set
+# it for every target, and the host instruction counts then failed by 1 %. A
+# profile flag scopes it to `wasm-release`: the relay, the host tests and the
+# counts keep the standard library as rustc ships it. `optimize_for_size` is a
+# feature that `core` declares, so the `--cfg` is the one that feature sets.
+[profile.wasm-release.package.core]
+rustflags = ["--cfg", 'feature="optimize_for_size"']
+
+[profile.wasm-release.package.alloc]
+rustflags = ["--cfg", 'feature="optimize_for_size"']
