@@ -74,4 +74,14 @@ pub struct EphemeralPublicData {
     pub key_id: FixedBytes<KeyId>,
     /// Monotonic counter for ordering ephemerals from the same author.
     pub counter: Seq<Ephemerals>,
+    /// The head of the membership log the sender last read (`SYNC-262`).
+    /// Presence flows while nobody writes, so a relay that drops every
+    /// update towards one member still lets this head through. It stays
+    /// public: the sample a hidden rotation brings is sealed under a key
+    /// that member lacks (`SYNC-263`).
+    pub log_head: LogHead,
+    /// The entry `log_head` names, absent on an empty log. A head counts
+    /// only when this entry proves it, as on an update (`SYNC-219`). Boxed
+    /// for the reason the update gives.
+    pub log_entry: Option<Box<MembershipEntry>>,
 }

@@ -1588,11 +1588,21 @@ impl SyncState {
 
             WsServerMsg::Ephemeral(eph) => {
                 let doc_id = eph.public_data.document_id;
+                let author_pk = eph.public_data.pub_key;
+                // The head a sample carries is read before the open. The
+                // sample a hidden rotation brings is under a key this client
+                // lacks (`SYNC-263`). Our own head names nothing new.
+                let authored_by_us = self
+                    .signing_key
+                    .as_ref()
+                    .is_some_and(|sk| sk.verifying_key().to_bytes() == *author_pk.as_array());
+                if !authored_by_us {
+                    self.note_signed_head(crate::withheld::HeadFrame::Ephemeral(&eph));
+                }
                 let Some(doc_state) = self.documents.get_mut(&doc_id) else {
                     return;
                 };
 
-                let author_pk = eph.public_data.pub_key;
                 // Presence is keyed by the sender's canonical `Id<User>`
                 // (`ambre-spec-membership.md`), resolved from the authoring
                 // Ed25519 key before delivery so a peer cannot spoof another
@@ -2112,6 +2122,8 @@ mod tests {
             pub_key: author,
             key_id: doc_key.id(),
             counter: Seq::<ambre_protocol::messages::Ephemerals>::new(1),
+            log_head: ambre_protocol::LogHead::EMPTY,
+            log_entry: None,
         };
         let eph = crate::pipeline::seal_ephemeral(
             &ambre_core::Payload::new(b"cursor@42".to_vec()),
@@ -2165,6 +2177,8 @@ mod tests {
                 pub_key: author,
                 key_id: doc_key.id(),
                 counter: Seq::<ambre_protocol::messages::Ephemerals>::new(counter),
+                log_head: ambre_protocol::LogHead::EMPTY,
+                log_entry: None,
             };
             crate::pipeline::seal_ephemeral(
                 &ambre_core::Payload::new(b"cursor".to_vec()),

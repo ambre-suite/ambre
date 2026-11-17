@@ -99,7 +99,7 @@ impl SyncState {
         // A peer's head past the log this client read asks for the log
         // again (`SYNC-207`). Our own head names nothing new.
         if !authored_by_us {
-            self.note_signed_head(&update);
+            self.note_signed_head(crate::withheld::HeadFrame::Update(&update));
         }
         let doc_state = self.documents.get_mut(&document_id)?;
         if authored_by_us {
@@ -1954,6 +1954,10 @@ impl SyncState {
             pub_key,
             key_id: doc_key.id(),
             counter: doc_state.ephemeral_counter,
+            // Presence flows while nobody writes, so it carries the head an
+            // update would, and the entry that proves it (`SYNC-262`).
+            log_head: doc_state.head_watch.head(),
+            log_entry: doc_state.head_watch.head_entry(),
         };
         match pipeline::ephemeral_frame(&payload, public_data, &doc_key, &signing_key) {
             Ok(frame) => self.ws_send_sealed(&frame),

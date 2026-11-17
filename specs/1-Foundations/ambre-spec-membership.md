@@ -122,7 +122,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-206` | `POST` | Every update MUST carry, under its author's signature, the head of the membership log its author last read. | this spec section 3; `ambre-spec-sealed-envelope.md` | `ambre_sync::withheld::tests::a_log_served_whole_clears_the_check_and_heads_the_next_delta` -- the next delta signs the head of the log the client last read; `ambre_sync::pipeline::tests::a_rewritten_log_head_breaks_the_signature` -- a head rewritten in transit fails the signature, alone and at the open | none | verified |
 | `SYNC-207` | `FAIL` | Given a member's signed head that the log this client read does not pass through, the client MUST read the log again, and MUST warn the user when that log still does not pass through it. | this spec section 3; `ambre-spec-key-rotation.md` | `ambre_sync::withheld::tests::a_peer_detects_a_revoke_the_relay_hid_from_it` -- a relay hides a revoke and its rotation from Bob, Alice's next delta under the new key still proves its head, the log read again lacks the revoke, and Bob is warned once; `::a_log_served_whole_clears_the_check_and_heads_the_next_delta` -- an honest relay serves the entry and nobody is warned; `::a_head_no_member_signed_asks_nothing` -- a key outside the directory, or a broken signature, asks for no log; `::a_head_past_the_log_asks_once_and_a_log_without_it_is_withheld` -- one read at a time, and an answer to a read that left before the head proves nothing; `::a_served_log_holds_each_head_it_passes_through_and_no_other` -- a head past the log or forking from it is not held | none | verified |
 | `SYNC-218` | `POST` | Every update MUST carry, under its author's signature, the last entry of the log its author last read, unless that log is empty. | this spec section 3; `SYNC-206` | `ambre_sync::withheld::tests::a_log_served_whole_clears_the_check_and_heads_the_next_delta` -- the next delta carries the head and the entry it names; `::a_head_names_the_last_entry_served_and_an_empty_log_none` -- the last entry served, valid or not, and none on an empty log; `ambre_sync::pipeline::tests::a_stripped_log_entry_breaks_the_signature` -- an entry stripped or swapped in transit fails the signature; `ambre_protocol::tests::a_log_entry_costs_an_update_at_most_239_bytes` -- the entry on the wire, against its budget row | none | verified |
-| `SYNC-219` | `FAIL` | Given a head whose update carries no entry for it, or an entry no member allowed by this client's log signed, the client MUST NOT read the log again for it, nor warn the user. | this spec section 3; `SYNC-207` | `ambre_sync::withheld::tests::a_head_whose_entry_no_allowed_member_signed_asks_nothing` -- no entry, an editor's revoke of the owner, the owner named under another key, an entry of another head or document, and a self-join each ask nothing, and the owner's entry asks once; `ambre_sync::withheld::tests::a_peer_detects_a_revoke_the_relay_hid_from_it` -- the owner's revoke, proved, still warns | none | verified |
+| `SYNC-219` | `FAIL` | Given a head whose update or presence sample carries no entry for it, or an entry no member allowed by this client's log signed, the client MUST NOT read the log again for it, nor warn the user. | this spec section 3; `SYNC-207`, `SYNC-263` | `ambre_sync::withheld::tests::a_head_whose_entry_no_allowed_member_signed_asks_nothing` -- no entry, an editor's revoke of the owner, the owner named under another key, an entry of another head or document, and a self-join each ask nothing, and the owner's entry asks once; `ambre_sync::withheld::tests::a_peer_detects_a_revoke_the_relay_hid_from_it` -- the owner's revoke, proved, still warns; `::a_forged_presence_entry_asks_nothing` -- a sample with no entry, with an entry no allowed member signed, or rewritten in transit asks for no log, and the sample with the owner's entry asks once | none | verified |
+| `SYNC-262` | `POST` | Every presence sample MUST carry, under its sender's signature, the head of the membership log its sender last read, and the last entry of that log unless the log is empty. | this spec section 3; `SYNC-206`, `SYNC-218`; `ambre-spec-presence.md` | `ambre_sync::withheld::tests::a_relay_that_drops_updates_but_forwards_presence_is_caught` -- each sample Alice sends leaves under the head of the log she last read and the entry it names; `ambre_sync::pipeline::tests::a_rewritten_presence_head_breaks_the_signature` -- a head or an entry rewritten in transit fails the signature; `ambre_protocol::tests::a_log_head_and_entry_cost_an_ephemeral_at_most_282_bytes` -- the two fields on the wire, against their budget row | none | verified |
+| `SYNC-263` | `FAIL` | Given a presence sample whose signed head the log this client read does not pass through, the client MUST read the log again under the proof of `SYNC-219`, and MUST warn the user when that log still does not pass through it. | this spec section 3; `SYNC-207`, `SYNC-219` | `ambre_sync::withheld::tests::a_relay_that_drops_updates_but_forwards_presence_is_caught` -- a scripted relay drops Alice's delta and forwards her cursor, sealed under a key Bob lacks. Bob asks for the log, the log lacks the revoke, and Bob is warned once, and the next sample asks nothing more; `::a_forged_presence_entry_asks_nothing` -- a forged sample asks nothing | none | verified |
 | `SYNC-220` | `FAIL` | Given a signed head this client asked about, or found withheld (`SYNC-207`), the client MUST hold each edit unsealed until a log that passes through the head is served. | this spec section 3; `SYNC-207`; `ambre-spec-key-rotation.md` | `ambre_sync::withheld::tests::a_warned_member_seals_nothing_until_the_log_passes_through_the_head` -- no edit leaves during the ask or once warned, the session stays heavy on an eviction, and each edit leaves in order once a log holds the head; `::a_failed_listing_keeps_the_hold_and_the_next_head_asks_again` -- a failed listing keeps the hold, and the next signed head asks again; `::a_head_under_check_holds_edits_until_a_log_passes_through_it`; `::a_failed_listing_of_another_check_changes_nothing` | none | verified |
 
 ### 1.7 A delta is bound to a writer
@@ -138,7 +140,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 79 `verified`. Every pure transform holds, out of the browser: the wrap, the
+* **Verification.** 81 `verified`. Every pure transform holds, out of the browser: the wrap, the
   weak key, the pin, the invitee, the role and the log walk. What is loose is the branches that only
   run against a live relay.
 ---
@@ -272,15 +274,19 @@ Two rules make the gap visible to the member it is hidden from.
   signature, so the relay can drop it and never rewrite it.
 - Each update also carries the last entry of that log, which the head names (`SYNC-218`). The
   relay stores that entry already, so the entry tells it nothing new.
-- A client reads the head of each update a member of its directory signed. The signature is
-  checked alone, so a frame under a key this client does not hold still counts. That frame is the
-  one a hidden rotation brings.
+- Each presence sample carries the same head and the same entry (`SYNC-262`). Presence flows
+  while nobody writes, so a relay that drops every update still lets a head through. The sample
+  pays about 264 bytes for it (`ambre-spec-budgets.md section 1`).
+- A client reads the head of each update and each sample a member of its directory signed
+  (`SYNC-263`). The signature is checked alone, so a frame under a key this client does not hold
+  still counts. That frame is the one a hidden rotation brings.
 - A head the log this client read does not pass through asks for the log once more. A log that
   still does not pass through it raises a warning (`SYNC-207`). An answer to a read that left
   before the head proves nothing.
-- A head counts only when its entry proves it (`SYNC-219`). The entry sits at the place before
-  the head and hashes to its digest. Its author signed it, under an act the log this client read
-  allows that author. A member thus cannot invent a head and have the relay blamed for it.
+- A head counts only when its entry proves it, on an update and on a sample alike (`SYNC-219`).
+  The entry sits at the place before the head and hashes to its digest. Its author signed it,
+  under an act the log this client read allows that author. A member thus cannot invent a head
+  and have the relay blamed for it.
 - A self-join proves nothing. Any user may sign one, so a self-join could blame the relay for an
   entry its author never sent.
 - From the ask on, each edit of this client waits unsealed (`SYNC-220`). A relay that never
@@ -548,6 +554,8 @@ authority: the role here hides what the relay would refuse anyway.
 | A delta from an unknown signer waits for a listing | refusing it at once | a newcomer's first delta outruns the word that adds them after a reconnect, and refusing it loses that edit on this client until the next open |
 | A head counts when the entry it names checks | the head alone, under the signature of the update | any member could sign a head of no log, and the relay would be blamed for an entry it never had (`SYNC-219`) |
 | Every update carries the entry | the entry on the first update after the head moves alone | the relay would drop those few updates and forward the rest. The member would then read heads that prove nothing, and detect nothing |
+| A presence sample carries the head and its entry | no head on a sample | a relay that drops every update of the up-to-date members towards one member would hide the gap, and presence flows while nobody writes (`SYNC-263`) |
+| A presence sample carries the entry beside the head | the head alone on a sample | a head counts only when its entry proves it (`SYNC-219`), so a sample with the head alone would never ask for the log. A weaker proof for a sample would let any member blame the relay |
 | An invite names the key it wraps | trusting the wrap the relay serves | the relay could hand the invitee another document's key, or an old one, and nothing would tell the two apart |
 
 ---
@@ -592,9 +600,9 @@ authority: the role here hides what the relay would refuse anyway.
   refused until then. An open that runs before the open of its space is refused the same way.
 * **A claim lasts one session.** An open under another type claims its document for the session
   alone (`SYNC-260`). A later session holds no claim until that document opens again under its type.
-* **A relay can withhold the latest entries from every frame of a member.** An update carries the
-  head its author read (`SYNC-207`), and a presence sample carries none. A relay that drops every
-  update of the up-to-date members towards one member partitions it, and no rule detects that.
+* **A relay can withhold the latest entries from every frame of a member.** An update and a
+  presence sample carry the head their author read (`SYNC-207`, `SYNC-263`). A relay that drops
+  every frame of the up-to-date members towards one member partitions it, and no rule detects that.
 * **The author of an entry can still blame the relay.** A member signs an entry its role allows,
   announces it and never sends it. Every member may sign its own removal, so every member can do
   this. The warning then means that the relay withheld the entry or that its author never sent

@@ -655,6 +655,24 @@ pub fn seal_ephemeral(
     })
 }
 
+/// Whether the sender `ephemeral` names signed it, checked alone. A sample
+/// under a key this client lacks proves its sender this way. Its log head
+/// then still counts (`SYNC-263`).
+#[must_use]
+pub fn ephemeral_signed(ephemeral: &Ephemeral) -> bool {
+    aad_of(&ephemeral.public_data).is_ok_and(|aad| {
+        ambre_crypto::signature::verify(
+            &ephemeral.public_data.pub_key,
+            &ephemeral.nonce,
+            &ephemeral.ciphertext,
+            &aad,
+            &ephemeral.commitment_tag,
+            &ephemeral.signature,
+        )
+        .is_ok()
+    })
+}
+
 /// Verifies, decrypts and decompresses an [`Ephemeral`] back to its payload.
 pub fn open_ephemeral(
     ephemeral: &Ephemeral,
@@ -1352,6 +1370,45 @@ mod tests {
         assert!(!update_signed(&update));
     }
 
+    /// `SYNC-262`: the head and the entry a presence sample carries ride
+    /// under its signature. A relay that rewrites either one, or strips
+    /// the entry, breaks the signature, alone and at the open.
+    #[test]
+    fn a_rewritten_presence_head_breaks_the_signature() {
+        use crate::membership_log::tests::{Person, created};
+        let (doc_key, signing, author) = keys();
+        let entries = created(&Person::new(1), &Person::new(2));
+        let public_data = EphemeralPublicData {
+            document_id: Id::<Document>::mint(),
+            pub_key: author,
+            key_id: key_id(),
+            counter: Seq::<Ephemerals>::new(1),
+            log_head: crate::membership_log::ServedHeads::of(&entries).last(),
+            log_entry: entries.last().cloned().map(Box::new),
+        };
+        let sealed = seal_ephemeral(
+            &Payload::new(b"c".to_vec()),
+            public_data,
+            &doc_key,
+            &signing,
+        )
+        .unwrap();
+        assert!(ephemeral_signed(&sealed));
+        let mut head = sealed.clone();
+        head.public_data.log_head = ambre_protocol::LogHead::EMPTY;
+        let mut swapped = sealed.clone();
+        swapped.public_data.log_entry = entries.first().cloned().map(Box::new);
+        let mut stripped = sealed;
+        stripped.public_data.log_entry = None;
+        for forged in [head, swapped, stripped] {
+            assert!(!ephemeral_signed(&forged));
+            assert!(matches!(
+                open_ephemeral(&forged, &doc_key),
+                Err(PipelineError::Crypto(CryptoError::InvalidSignature))
+            ));
+        }
+    }
+
     #[test]
     fn roundtrip_update_small() {
         let (doc_key, signing, author) = keys();
@@ -1681,6 +1738,8 @@ mod tests {
             pub_key: author,
             key_id: key_id(),
             counter: Seq::<Ephemerals>::new(7),
+            log_head: ambre_protocol::LogHead::EMPTY,
+            log_entry: None,
         };
         let eph = seal_ephemeral(&Payload::new(payload.to_vec()), pd, &doc_key, &signing).unwrap();
         assert_eq!(open_ephemeral(&eph, &doc_key).unwrap(), payload);

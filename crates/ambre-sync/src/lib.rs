@@ -2607,6 +2607,8 @@ mod seal_tests {
                 pub_key,
                 key_id,
                 counter: Seq::<Ephemerals>::new(1),
+                log_head: ambre_protocol::LogHead::EMPTY,
+                log_entry: None,
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),

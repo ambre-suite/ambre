@@ -59,8 +59,9 @@ An inbound sample is opened, its author resolved, and the peer set updated for t
   the heaviest of the three overlays. A Trame border or a Prose caret is one quad and a label, drawn
   in a frame pass already charged.
 * **Boundary.** every presence sample leaves the client, and `ZK-005` seals it with the
-  `DocumentKey`: the relay reads `document_id`, `pub_key` and `counter`. The author is resolved to a
-  `Id<User>` in `ambre-sync` first, so no peer paints under another name.
+  `DocumentKey`. The relay reads `document_id`, `pub_key`, `key_id`, `counter`, and the log head
+  and entry its sender read (`SYNC-262`). The author is resolved to a `Id<User>` in `ambre-sync`
+  first, so no peer paints under another name.
 * **Verification.** 15 `verified`, 1 `unimplemented`. A departure travels twice: the relay says it,
   and the client ages a peer out if that word is lost.
 

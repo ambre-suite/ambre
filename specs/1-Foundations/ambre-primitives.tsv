@@ -2152,6 +2152,7 @@ ambre-sync | src/websocket.rs | crate::websocket | SyncState::jitter() | ret | f
 ambre-sync | src/withheld.rs | crate::withheld | HeadWatch::asks() | ret | bool	generic	predicate: does a signed head ask for the log again
 ambre-sync | src/withheld.rs | crate::withheld | HeadWatch::holds_edits() | ret | bool	generic	predicate: does an edit wait while a signed head is under check
 ambre-sync | src/withheld.rs | crate::withheld | HeadWatch::settled() | ret | bool	generic	predicate: does no edit wait on the head check
+ambre-sync | src/withheld.rs | crate::withheld | HeadFrame<'_>::signed() | ret | bool	generic	predicate: did the signer the frame names sign it
 ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | place_web_embed(typed) | param | RwSignal<String>	free-text	text the user is typing
 ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | set_web_link(typed) | param | RwSignal<String>	free-text	text the user is typing
 ambre-toile | src/chrome/comments.rs | crate::chrome::comments | clock_label() | ret | String	free-text	label, message or user text
@@ -3645,6 +3646,7 @@ ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | RE
 ambre-sync | src/pipeline.rs | crate::pipeline | ObjectLayout::byte() | ret | u8	newtype-inner	the layout byte of the version enum, its own wire form, which define_layout_version! writes
 ambre-sync | src/pipeline.rs | crate::pipeline | ObjectLayout::from_byte(byte) | param | u8	newtype-inner	the layout byte of the version enum, its own wire form, which define_layout_version! writes
 ambre-sync | src/pipeline.rs | crate::pipeline | update_signed() | ret | bool	generic	predicate: did the named author sign the update
+ambre-sync | src/pipeline.rs | crate::pipeline | ephemeral_signed() | ret | bool	generic	predicate: did the named sender sign the presence sample
 ambre-toile | src/logic/mod.rs | crate::logic | ByteLen<'a>::new(document) | param | &'a str	newtype-inner	the document text the debug form wraps, its own representation
 ambre-toile | src/logic/state/names.rs | crate::logic::state::names | <BoardKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-toile | src/logic/state/names.rs | crate::logic::state::names | <ConfigKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling

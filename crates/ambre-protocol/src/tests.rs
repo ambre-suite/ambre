@@ -105,6 +105,8 @@ fn ephemeral_roundtrip() {
             pub_key: FixedBytes::from_array([25u8; 32]),
             key_id: FixedBytes::from_array([8u8; 16]),
             counter: Seq::<Ephemerals>::new(26),
+            log_head: crate::LogHead::EMPTY,
+            log_entry: None,
         },
         commitment_tag: FixedBytes::from_array([27u8; 32]),
         signature: FixedBytes::from_array([28u8; 64]),
@@ -379,7 +381,7 @@ fn only_a_newer_wire_version_calls_for_an_update() {
 
 /// The digest of one frame per message variant, frozen under the version
 /// byte it was taken at (`ambre-spec-broadcast.md`, `SRV-166`).
-const FROZEN_LAYOUT: (u8, &str) = (3, "e3911d5118a9d15b18787ba7acb8ff92");
+const FROZEN_LAYOUT: (u8, &str) = (4, "1c0cb16bcd2f2216a2796198096da7b0");
 
 fn sample_update(fill: u8) -> Update {
     Update {
@@ -422,6 +424,10 @@ fn sample_ephemeral(fill: u8) -> Ephemeral {
             pub_key: FixedBytes::from_array([fill + 3; 32]),
             key_id: FixedBytes::from_array([fill + 4; 16]),
             counter: Seq::<Ephemerals>::new(u64::from(fill) + 5),
+            // The head and the entry of the update sample, so the layout of
+            // both on a presence sample is frozen too (`SYNC-262`).
+            log_head: sample_update(fill).public_data.log_head,
+            log_entry: sample_update(fill).public_data.log_entry,
         },
         commitment_tag: FixedBytes::from_array([fill + 6; 32]),
         signature: FixedBytes::from_array([fill + 7; 64]),
@@ -636,6 +642,8 @@ fn the_relay_reads_only_the_listed_fields() {
             pub_key: pk,
             key_id: kid,
             counter: Seq::<Ephemerals>::new(1),
+            log_head: crate::LogHead::EMPTY,
+            log_entry: None,
         },
         commitment_tag: FixedBytes::from_array([6u8; 32]),
         signature: FixedBytes::from_array([7u8; 64]),
@@ -680,17 +688,26 @@ fn the_relay_reads_only_the_listed_fields() {
         commitment_tag: _,
         signature: _,
     } = ephemeral;
-    // An ephemeral shows its document, its sender, its key identifier
-    // and its counter, and nothing else.
+    // An ephemeral shows its document, its sender, its key identifier, its
+    // counter, and the log head and entry its sender read (`SYNC-262`).
     let EphemeralPublicData {
         document_id,
         pub_key,
         key_id,
         counter,
+        log_head,
+        log_entry,
     } = public_data;
     assert_eq!(
-        (document_id, pub_key, key_id, counter),
-        (doc, pk, kid, Seq::<Ephemerals>::new(1))
+        (document_id, pub_key, key_id, counter, log_head, log_entry),
+        (
+            doc,
+            pk,
+            kid,
+            Seq::<Ephemerals>::new(1),
+            crate::LogHead::EMPTY,
+            None
+        )
     );
 }
 
@@ -1012,4 +1029,55 @@ fn a_log_entry_costs_an_update_at_most_239_bytes() {
     assert_eq!(size(Some(entry(127, key))) - without, 230);
     assert_eq!(size(Some(entry(128, key))) - without, 231);
     assert_eq!(size(Some(entry(u64::MAX, key))) - without, 239);
+}
+
+/// `SYNC-262`: the log head and the entry it names on one presence sample,
+/// by postcard. An empty log costs 3 B: the empty head and the absent entry.
+/// The pair costs 264 B below 128 entries, and 282 B at a place of
+/// `u64::MAX`.
+#[test]
+fn a_log_head_and_entry_cost_an_ephemeral_at_most_282_bytes() {
+    let size = |log_head: crate::LogHead, log_entry: Option<crate::MembershipEntry>| {
+        let public_data = EphemeralPublicData {
+            document_id: Id::<Document>::from_bytes([1; 16]),
+            pub_key: FixedBytes::from_array([2; 32]),
+            key_id: FixedBytes::from_array([3; 16]),
+            counter: Seq::<Ephemerals>::new(1),
+            log_head,
+            log_entry: log_entry.map(Box::new),
+        };
+        postcard::to_allocvec(&public_data)
+            .expect("public data encodes")
+            .len()
+    };
+    // Postcard writes a struct as the tuple of its fields, so the four
+    // fields before the head are the sample without the pair.
+    let without = postcard::to_allocvec(&(
+        Id::<Document>::from_bytes([1; 16]),
+        FixedBytes::<ambre_core::PublicKey>::from_array([2; 32]),
+        FixedBytes::<ambre_core::KeyId>::from_array([3; 16]),
+        Seq::<Ephemerals>::new(1),
+    ))
+    .expect("the fields encode")
+    .len();
+    let head = |place: u64| crate::LogHead {
+        position: Seq::new(place),
+        previous: Some(FixedBytes::from_array([4; 32])),
+    };
+    let entry = |place: u64| crate::MembershipEntry {
+        document: Id::<Document>::from_bytes([1; 16]),
+        position: Seq::new(place),
+        member: Id::<User>::from_bytes([5; 16]),
+        member_key: FixedBytes::from_array([6; 32]),
+        member_exchange_key: FixedBytes::from_array([7; 32]),
+        act: crate::MembershipAct::Revoke,
+        role: ambre_core::Role::Editor,
+        key: Some(FixedBytes::from_array([11; 16])),
+        previous: Some(FixedBytes::from_array([8; 32])),
+        author: Id::<User>::from_bytes([9; 16]),
+        signature: FixedBytes::from_array([10; 64]),
+    };
+    assert_eq!(size(crate::LogHead::EMPTY, None) - without, 3);
+    assert_eq!(size(head(127), Some(entry(126))) - without, 264);
+    assert_eq!(size(head(u64::MAX), Some(entry(u64::MAX))) - without, 282);
 }

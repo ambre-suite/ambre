@@ -235,6 +235,8 @@ mod validate_tests {
                 pub_key: FixedBytes::from_array([2u8; 32]),
                 key_id: FixedBytes::from_array([4u8; 16]),
                 counter: Seq::<Ephemerals>::new(counter),
+                log_head: crate::LogHead::EMPTY,
+                log_entry: None,
             },
             commitment_tag: FixedBytes::from_array([0u8; 32]),
             signature: FixedBytes::from_array([0u8; 64]),

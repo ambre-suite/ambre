@@ -10,6 +10,10 @@
 //! entry (`SYNC-219`). A log that still does not pass through the head is a
 //! log the relay withholds, and the user is told.
 //!
+//! Every presence sample carries the same head and entry (`SYNC-262`), and
+//! the same proof decides it (`SYNC-263`). Presence flows while nobody
+//! writes, so a relay that drops every update still lets a head through.
+//!
 //! The warning alone stops nothing: an edit sealed under the old key still
 //! reaches the removed member through the relay. So from the ask on, each
 //! edit waits unsealed, and leaves once a log that passes through the head is
@@ -18,9 +22,9 @@
 
 use ambre_bus::LogicEvent;
 use ambre_bus::sync_warning::SyncWarningCode;
-use ambre_core::Seq;
 use ambre_core::id::{Document, Id};
-use ambre_protocol::{LogHead, MembershipEntry, Update};
+use ambre_core::{FixedBytes, PublicKey, Seq};
+use ambre_protocol::{Ephemeral, LogHead, MembershipEntry, Update};
 
 use crate::generation::Listing;
 use crate::membership_log::ServedHeads;
@@ -179,32 +183,77 @@ impl HeadWatch {
     }
 }
 
+/// A frame that carries a log head and its entry under its author's
+/// signature: an update (`SYNC-206`) or a presence sample (`SYNC-262`).
+#[derive(Clone, Copy)]
+pub(crate) enum HeadFrame<'a> {
+    Update(&'a Update),
+    Ephemeral(&'a Ephemeral),
+}
+
+impl HeadFrame<'_> {
+    fn document_id(self) -> Id<Document> {
+        match self {
+            Self::Update(update) => update.public_data.document_id,
+            Self::Ephemeral(ephemeral) => ephemeral.public_data.document_id,
+        }
+    }
+
+    fn head(self) -> LogHead {
+        match self {
+            Self::Update(update) => update.public_data.log_head,
+            Self::Ephemeral(ephemeral) => ephemeral.public_data.log_head,
+        }
+    }
+
+    fn entry(&self) -> Option<&MembershipEntry> {
+        match self {
+            Self::Update(update) => update.public_data.log_entry.as_deref(),
+            Self::Ephemeral(ephemeral) => ephemeral.public_data.log_entry.as_deref(),
+        }
+    }
+
+    fn signer(self) -> FixedBytes<PublicKey> {
+        match self {
+            Self::Update(update) => update.public_data.pub_key,
+            Self::Ephemeral(ephemeral) => ephemeral.public_data.pub_key,
+        }
+    }
+
+    /// Whether the signer the frame names signed it, checked alone.
+    fn signed(self) -> bool {
+        match self {
+            Self::Update(update) => pipeline::update_signed(update),
+            Self::Ephemeral(ephemeral) => pipeline::ephemeral_signed(ephemeral),
+        }
+    }
+}
+
 impl SyncState {
-    /// Reads the log head `update` carries (`SYNC-207`). A head of a log this
-    /// client has not read asks for the log again. The head counts only when
-    /// a member of the directory signed the frame. The signature is checked
-    /// here, so a frame under a key this client does not hold still counts.
-    /// That frame is the one a hidden rotation brings.
+    /// Reads the log head `frame` carries (`SYNC-207`, `SYNC-263`). A head of
+    /// a log this client has not read asks for the log again. The head counts
+    /// only when a member of the directory signed the frame. The signature is
+    /// checked here, so a frame under a key this client does not hold still
+    /// counts. That frame is the one a hidden rotation brings.
     ///
-    /// The head also counts
-    /// only when the entry it names checks against this client's log
-    /// (`SYNC-219`). A member cannot invent a head and have the relay blamed.
-    pub(crate) fn note_signed_head(&mut self, update: &Update) {
-        let document_id = update.public_data.document_id;
-        let head = update.public_data.log_head;
+    /// The head also counts only when the entry it names checks against this
+    /// client's log (`SYNC-219`), on an update and on a sample alike. A member
+    /// cannot invent a head and have the relay blamed.
+    pub(crate) fn note_signed_head(&mut self, frame: HeadFrame<'_>) {
+        let document_id = frame.document_id();
+        let head = frame.head();
         let Some(doc_state) = self.documents.get(&document_id) else {
             return;
         };
+        // The cheap checks run first: a current head costs one comparison,
+        // and only a head past the log pays for the signature.
         let asks = doc_state.head_watch.asks(head)
-            && doc_state.head_watch.served.vouches(
-                document_id,
-                head,
-                update.public_data.log_entry.as_deref(),
-            )
             && doc_state
-                .signing_keys
-                .contains_key(&update.public_data.pub_key)
-            && pipeline::update_signed(update);
+                .head_watch
+                .served
+                .vouches(document_id, head, frame.entry())
+            && doc_state.signing_keys.contains_key(&frame.signer())
+            && frame.signed();
         if !asks {
             return;
         }
@@ -921,5 +970,174 @@ mod tests {
             ),
         );
         assert_eq!(asked(&state), Seq::nth(1), "the owner's entry asks once");
+    }
+
+    /// A presence sample `author` seals under `key`, announcing `log_head`
+    /// and the entry `log_entry`, at `counter`.
+    fn points(
+        author: &Person,
+        (doc, key): (Id<Document>, &crate::DocumentKey),
+        log_head: LogHead,
+        log_entry: Option<MembershipEntry>,
+        counter: u64,
+    ) -> Ephemeral {
+        let public_data = ambre_protocol::EphemeralPublicData {
+            document_id: doc,
+            pub_key: author.public(),
+            key_id: key.id(),
+            counter: ambre_protocol::messages::Seq::new(counter),
+            log_head,
+            log_entry: log_entry.map(Box::new),
+        };
+        let payload = ambre_core::Payload::new(b"a cursor".to_vec());
+        pipeline::seal_ephemeral(&payload, public_data, key, &author.key).expect("seal")
+    }
+
+    /// The listing Bob last sent for `doc`.
+    fn asked_of(state: &SyncState, doc: Id<Document>) -> Seq<Listing> {
+        state
+            .documents
+            .get(&doc)
+            .expect("open")
+            .directory_asked
+            .latest()
+    }
+
+    /// The relay hides from Bob that Alice revoked Carol and rotated the
+    /// key. A scripted relay then drops each update Alice sends and forwards
+    /// her presence alone. Her cursor carries her head and its entry, so Bob
+    /// reads the log again and is warned once (`SYNC-262`, `SYNC-263`).
+    #[test]
+    fn a_relay_that_drops_updates_but_forwards_presence_is_caught() {
+        let (alice, bob, carol) = (Person::new(1), Person::new(2), Person::new(3));
+        let mut entries = created(&alice, &bob);
+        append(
+            &mut entries,
+            &alice,
+            &carol,
+            MembershipAct::Invite,
+            Role::Editor,
+        );
+        append(
+            &mut entries,
+            &alice,
+            &carol,
+            MembershipAct::Revoke,
+            Role::Editor,
+        );
+        let old_key = crate::DocumentKey::generate();
+        let new_key = crate::DocumentKey::generate();
+        let (mut bob_state, rx, doc, _snapshot) = bob_reads(&alice, &old_key, &entries, 3);
+        // Alice read the whole log and seals under the key of the rotation.
+        let (mut alice_state, _alice_rx, _, _) =
+            bob_reads(&alice, &new_key, &entries, entries.len());
+        alice_state.signing_key = Some(alice.key.clone());
+        alice_state
+            .session_nonces
+            .insert(doc, ambre_core::FixedBytes::from_array([7; 16]));
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        alice_state.set_mock_ws(ws_tx);
+
+        // The relay of the script: each update dies, each sample passes.
+        let relay = |alice_state: &mut SyncState, bob_state: &mut SyncState| {
+            alice_state.handle_send_update(doc, b"after the revoke".to_vec());
+            let sample = ambre_core::Payload::new(b"a cursor".to_vec());
+            alice_state.handle_send_ephemeral(doc, sample);
+            let mut dropped = 0;
+            for wire in ws_rx.try_iter() {
+                match ambre_protocol::ws::decode_client_msg(&wire) {
+                    Ok(ambre_protocol::ws::WsClientMsg::Update(_)) => dropped += 1,
+                    Ok(ambre_protocol::ws::WsClientMsg::Ephemeral(ephemeral)) => {
+                        assert_eq!(
+                            (
+                                ephemeral.public_data.log_head,
+                                ephemeral.public_data.log_entry.as_deref()
+                            ),
+                            (ServedHeads::of(&entries).last(), entries.last()),
+                            "the sample carries the head and the entry Alice read"
+                        );
+                        bob_state.handle_ws_message(ambre_protocol::ws::WsServerMsg::Ephemeral(
+                            ephemeral,
+                        ));
+                    }
+                    _ => {}
+                }
+            }
+            assert_eq!(dropped, 1, "the relay drops Alice's update");
+        };
+
+        relay(&mut alice_state, &mut bob_state);
+        let listing = asked_of(&bob_state, doc);
+        assert_eq!(listing, Seq::nth(1), "the sample asks for the log again");
+        answer(&mut bob_state, doc, &alice, heads(&entries, 3));
+        assert!(codes(&rx).contains(&SyncWarningCode::LogEntryWithheld));
+
+        // The next sample names the same head: no second read or warning.
+        relay(&mut alice_state, &mut bob_state);
+        assert_eq!(asked_of(&bob_state, doc), listing);
+        assert!(!codes(&rx).contains(&SyncWarningCode::LogEntryWithheld));
+    }
+
+    /// A sample with no entry, with an entry no allowed member signed, or
+    /// rewritten in transit asks for no log. The same proof as an update's
+    /// decides it: the honest sample asks once (`SYNC-219`, `SYNC-263`).
+    #[test]
+    fn a_forged_presence_entry_asks_nothing() {
+        use crate::membership_log::{Draft, digest, sign};
+        let (alice, bob, carol) = (Person::new(1), Person::new(2), Person::new(3));
+        let mut entries = created(&alice, &bob);
+        append(
+            &mut entries,
+            &alice,
+            &carol,
+            MembershipAct::Invite,
+            Role::Editor,
+        );
+        let key = crate::DocumentKey::generate();
+        let (mut state, _rx, doc, _snapshot) = bob_reads(&alice, &key, &entries, 3);
+        if let Some(doc_state) = state.documents.get_mut(&doc) {
+            doc_state
+                .set_signing_keys(vec![(alice.public(), alice.id), (carol.public(), carol.id)]);
+        }
+        let next = ServedHeads::of(&entries).last();
+        let past = |entry: &MembershipEntry| next.after(digest(entry).expect("encodes"));
+        let signed = |member: &Person, author: &Person| {
+            let draft = Draft {
+                document: DOC,
+                member: member.id,
+                member_key: member.public(),
+                member_exchange_key: member.exchange(),
+                act: MembershipAct::Revoke,
+                role: Role::Editor,
+                key: None,
+            };
+            sign(draft, next, author.id, &author.key).expect("signs")
+        };
+        let honest = signed(&carol, &alice);
+        let demoted = signed(&alice, &carol);
+        let mut rewritten = points(&carol, (doc, &key), past(&honest), Some(honest.clone()), 3);
+        rewritten.public_data.counter = ambre_protocol::messages::Seq::new(9);
+        let refused = [
+            (
+                "no entry",
+                points(&carol, (doc, &key), past(&honest), None, 1),
+            ),
+            (
+                "an editor revokes the owner",
+                points(&carol, (doc, &key), past(&demoted), Some(demoted), 2),
+            ),
+            ("a sample rewritten in transit", rewritten),
+        ];
+        for (case, sample) in refused {
+            state.handle_ws_message(ambre_protocol::ws::WsServerMsg::Ephemeral(sample));
+            assert_eq!(asked_of(&state, doc), Seq::ZERO, "{case} asks nothing");
+        }
+        let proved = points(&carol, (doc, &key), past(&honest), Some(honest), 4);
+        state.handle_ws_message(ambre_protocol::ws::WsServerMsg::Ephemeral(proved));
+        assert_eq!(
+            asked_of(&state, doc),
+            Seq::nth(1),
+            "the owner's entry asks once"
+        );
     }
 }

@@ -40,7 +40,7 @@ that component's prefix instead.
 | `ZK-036` | `INV` | A refusal under the strength floor MUST carry the weakness that dominated the estimate as its only content. | this spec section 2, the strength floor; `ZK-035` | type-level -- `ambre_bus::AuthFailure::WeakPassphrase` holds an `ambre_core::PassphraseWeakness`, a fieldless enum, so no figure of the estimate is representable; `ambre_crypto::strength::tests::a_known_weak_password_is_refused_with_its_weakness`; `ambre_sync::integration::a_setup_under_the_strength_floor_is_refused_before_any_key_exists` -- the weakness is the one event the worker sends; `ambre_sync::auth::set_up_keys_tests::a_weak_setup_passphrase_draws_its_weakness_alone` -- the same on the setup of a signed-in account | none | verified |
 | `ZK-042` | `INV` | A passphrase change or an account recovery MUST refuse a new passphrase whose strength estimate falls under the floor of `ZK-035`. | this spec section 2, the strength floor; `ZK-035`; `ZK-036` | `ambre_sync::integration::a_passphrase_change_under_the_strength_floor_is_refused`; `::a_recovery_under_the_strength_floor_is_refused` -- the weakness is the one event the worker sends, and no frame leaves; `::a_change_or_a_recovery_above_the_strength_floor_draws_no_refusal` -- a strong passphrase passes the floor | none | verified |
 | `ZK-043` | `INV` | The recovery words MUST spell the Master Seed as 24 BIP39 English words with their checksum, and a recovery MUST refuse a phrase with an unknown word or a bad checksum before it derives any key. | README pillar "Zero-Knowledge"; this spec section 2, the recovery words | `ambre_crypto::keys::recovery::tests::the_recovery_words_match_the_bip39_vectors` -- the official 24-word vectors, both ways; `::any_seed_round_trips_through_its_recovery_words`; `::the_word_list_is_the_bip39_english_list` -- the SHA-256 digest of the list is pinned; `::a_mistyped_recovery_word_is_refused`; `::a_recovery_phrase_with_a_bad_checksum_is_refused`; `::a_recovery_phrase_of_the_wrong_length_is_refused`; `ambre_sync::integration::a_recovery_with_a_mistyped_word_or_a_bad_checksum_is_refused` -- the refusal is the one event the worker sends, and no frame leaves | none | verified |
-| `ZK-013` | `INV` | The relay MUST see no field of an ephemeral beyond `document_id`, `pub_key`, `key_id` and `counter`. | `ambre-spec-broadcast.md`, `SRV-050` | `ambre_protocol::tests::the_relay_reads_only_the_listed_fields` -- the ephemeral public data destructures to exactly these four fields | none | verified |
+| `ZK-013` | `INV` | The relay MUST see no field of an ephemeral beyond `document_id`, `pub_key`, `key_id`, `counter`, the log head and the log entry. | `ambre-spec-broadcast.md`, `SRV-050`; `ambre-spec-membership.md`, `SYNC-262` | `ambre_protocol::tests::the_relay_reads_only_the_listed_fields` -- the ephemeral public data destructures to exactly these six fields | none | verified |
 | `ZK-014` | `INV` | A presigned S3 URL MUST expire within 15 minutes. | `ambre-spec-object-store.md`, `SRV-052` | `ambre_server::s3::tests::a_presigned_url_never_outlives_fifteen_minutes` -- a configured lifetime of one day signs both URLs for 900 s | none | verified |
 | `ZK-015` | `INV` | What the relay learns of a Murmure channel MUST be limited to `{the documents of the channel and their kind, which documents are spaces, the space of the channel, its public flag, the state of each segment with its close time, its finalization time, its finalize lease and the horizon and identifier of its final snapshot, whether a rotation retired its key, the segment each amendments document amends, the identifier of the root message of each thread, the retention duration of the space, the read cursor of each member}`. | this spec section 2; `5-Murmure/ambre-spec-murmure-schema.md` | `ambre_server::db::channels::tests::the_channel_tables_hold_only_what_the_relay_may_learn` -- database tier | none | verified |
 | `ZK-016` | `INV` | What the relay learns for a push notification MUST be limited to `{the push subscription of each device, the notification level of each member per channel, the members or the channel a message names}`. | this spec section 2; `5-Murmure/features/ambre-spec-murmure-notifications.md` | not built | unbuilt -- lands with the `Push notifications` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -112,7 +112,7 @@ that component's prefix instead.
 | Component | Data seen by server | Never seen |
 |-----------|----------------------------|-------------|
 | `ambre-server` | `document_id`, `pub_key` (Ed25519), `clock`, `seq`, `snapshot_id`, `key_id`, `nonce` | CRDT content, Document Key, Master Seed, User Key, passphrase |
-| `ambre-server`, per update | the head of the membership log the author of the update read (`SYNC-207`), and the entry that head names (`SYNC-218`) | anything else about that author's view of the log |
+| `ambre-server`, per update and per ephemeral | the head of the membership log the author of the frame read (`SYNC-207`, `SYNC-263`), and the entry that head names (`SYNC-218`, `SYNC-262`) | anything else about that author's view of the log |
 | `ambre-server`, per key link | the head of the membership log the rotator read (`SYNC-204`) | the key the link seals |
 | `ambre-sfu` | the set of `ZK-021`, each participant under the pseudonyms of `ZK-023`, who shares a screen and when (`ZK-033`), and whose video each receiver chose (`ZK-044`) | the audio and video of a call, every sender key, the channel, the user and the key of a participant |
 
@@ -231,6 +231,9 @@ A scenario row where Mallory acts is an attack. Its outcome column says what sto
   The relay sees the head of the log the author of the update read, and the last entry of that
   log. It stores that log already, so both tell it only how far the author had read when it wrote
   (`SYNC-207`).
+* **Accepted:** the same head and entry on each presence sample (`SYNC-262`). A reader who never
+  writes shows them too, at the pace of presence. The relay serves each client its log, so the
+  pair tells it nothing it did not serve.
 
 **Static verification, mechanised in `deny.toml`.** Each ban lists the crates that may depend
 directly on the banned crate. `ambre-server` is in none of these lists:
@@ -481,6 +484,7 @@ The boundary has no control of its own. What a user meets is what it costs them.
 | The floor counts bits | a minimum length alone | twenty times the same letter passes a length rule and falls to the first guess |
 | A key identifier is accepted in the `ZK-007` set | keeping every key identifier sealed | the relay could then neither refuse an envelope under a stale key nor keep the links of a key chain in order |
 | The log head of an update is public and signed | sealing the head inside the ciphertext | a hidden rotation leaves the member without the new key, so a head sealed under it is the one head that member cannot read (`SYNC-207`) |
+| The log head and entry of a presence sample are public and signed | sealing them, as the cursor is | the same reason: the sample a hidden rotation brings is sealed under the key the member lacks (`SYNC-263`) |
 
 ---
 

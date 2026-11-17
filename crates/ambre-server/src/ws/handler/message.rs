@@ -1007,6 +1007,8 @@ mod postcard_tests {
                 pub_key: FixedBytes::<PublicKey>::from_array([14u8; 32]),
                 key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                 counter: Seq::<Ephemerals>::new(15),
+                log_head: ambre_protocol::LogHead::EMPTY,
+                log_entry: None,
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([16u8; 32]),
             signature: FixedBytes::<Signature>::from_array([17u8; 64]),
@@ -1249,6 +1251,8 @@ mod ephemeral_binding_tests {
                 pub_key,
                 key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                 counter: Seq::<Ephemerals>::new(1),
+                log_head: ambre_protocol::LogHead::EMPTY,
+                log_entry: None,
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),
@@ -1269,6 +1273,8 @@ mod ephemeral_binding_tests {
             pub_key: *pub_key,
             key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
             counter: Seq::<Ephemerals>::new(1),
+            log_head: ambre_protocol::LogHead::EMPTY,
+            log_entry: None,
         };
         let nonce = FixedBytes::<Nonce>::from_array([5u8; 24]);
         let commitment_tag = FixedBytes::<CommitmentTag>::from_array([6u8; 32]);
@@ -2340,6 +2346,8 @@ mod ed25519_tests {
             pub_key: *pubkey,
             key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
             counter: Seq::<Ephemerals>::new(1),
+            log_head: ambre_protocol::LogHead::EMPTY,
+            log_entry: None,
         };
         let nonce = FixedBytes::<Nonce>::from_array([2u8; 24]);
         let commitment_tag = FixedBytes::<CommitmentTag>::from_array([3u8; 32]);
@@ -2393,6 +2401,8 @@ mod ed25519_tests {
                 counter: ambre_protocol::messages::Seq::<ambre_protocol::messages::Ephemerals>::new(
                     1,
                 ),
+                log_head: ambre_protocol::LogHead::EMPTY,
+                log_entry: None,
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),

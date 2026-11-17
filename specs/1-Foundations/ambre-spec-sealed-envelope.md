@@ -87,7 +87,7 @@ metadata and by their transport. The seal and the open are the same code for all
 |---|---|---|---|
 | an update | one CRDT delta | the socket | the document, the author key, the key identifier, the parent snapshot, the clock, the log head (`SYNC-206`), the entry it names (`SYNC-218`) |
 | a snapshot | a full CRDT state | a presigned upload, straight to object storage | the same, plus the parent proof |
-| an ephemeral | a presence sample | the socket | the document, the author key, the key identifier, the counter |
+| an ephemeral | a presence sample | the socket | the document, the author key, the key identifier, the counter, the log head and the entry it names (`SYNC-262`) |
 
 **The seal, in steps.** The output is one message of the three shapes above.
 
