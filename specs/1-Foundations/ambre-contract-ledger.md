@@ -21,14 +21,14 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**4622 rows: 4185 shipped, of which 14 loose. 437 unbuilt.**
+**4691 rows: 4273 shipped, of which 14 loose. 418 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1383 | 562 | 981 | 762 | 483 | 4171 |
+| `verified` | 1417 | 571 | 981 | 788 | 502 | 4259 |
 | `failing` |  |  |  |  |  | 0 |
 | `human-review` | 14 |  |  |  |  | 14 |
-| `unimplemented` | 170 | 43 | 21 | 46 | 157 | 437 |
+| `unimplemented` | 166 | 42 | 21 | 32 | 157 | 418 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -38,9 +38,9 @@
 | :--- | ---: | ---: | ---: | ---: | ---: |
 | `ambre-spec-accessibility.md` | 15 | 14 | 14 |  | 1 |
 | `ambre-spec-adaptive-layout.md` | 9 | 7 | 7 |  | 2 |
-| `ambre-spec-architecture.md` | 128 | 127 | 119 | 8 | 1 |
+| `ambre-spec-architecture.md` | 129 | 128 | 120 | 8 | 1 |
 | `ambre-spec-broadcast.md` | 30 | 30 | 30 |  |  |
-| `ambre-spec-call-media.md` | 123 | 123 | 123 |  |  |
+| `ambre-spec-call-media.md` | 132 | 132 | 132 |  |  |
 | `ambre-spec-call-proofs.md` | 19 | 19 | 19 |  |  |
 | `ambre-spec-chrome.md` | 32 | 31 | 31 |  | 1 |
 | `ambre-spec-clipboard.md` | 20 | 19 | 19 |  | 1 |
@@ -57,10 +57,10 @@
 | `ambre-spec-key-rotation.md` | 35 | 34 | 34 |  | 1 |
 | `ambre-spec-key-verification.md` | 18 | 18 | 18 |  |  |
 | `ambre-spec-kinetic-scroll.md` | 15 | 15 | 15 |  |  |
-| `ambre-spec-launcher.md` | 38 | 34 | 34 |  | 4 |
+| `ambre-spec-launcher.md` | 42 | 42 | 42 |  |  |
 | `ambre-spec-locale.md` | 23 | 23 | 23 |  |  |
 | `ambre-spec-media.md` | 19 | 19 | 19 |  |  |
-| `ambre-spec-membership.md` | 78 | 78 | 78 |  |  |
+| `ambre-spec-membership.md` | 79 | 79 | 79 |  |  |
 | `ambre-spec-message-bus.md` | 46 | 45 | 45 |  | 1 |
 | `ambre-spec-newtypes.md` | 1 | 1 | 1 |  |  |
 | `ambre-spec-object-store.md` | 20 | 19 | 19 |  | 1 |
@@ -72,17 +72,17 @@
 | `ambre-spec-render-assets.md` | 26 | 23 | 23 |  | 3 |
 | `ambre-spec-residency.md` | 28 | 28 | 28 |  |  |
 | `ambre-spec-schema-version.md` | 20 | 20 | 20 |  |  |
-| `ambre-spec-sealed-envelope.md` | 26 | 25 | 25 |  | 1 |
+| `ambre-spec-sealed-envelope.md` | 29 | 28 | 28 |  | 1 |
 | `ambre-spec-sequencer.md` | 77 | 77 | 77 |  |  |
-| `ambre-spec-server.md` | 113 | 107 | 106 | 1 | 6 |
-| `ambre-spec-session.md` | 23 | 23 | 23 |  |  |
-| `ambre-spec-sync.md` | 70 | 69 | 69 |  | 1 |
+| `ambre-spec-server.md` | 116 | 110 | 109 | 1 | 6 |
+| `ambre-spec-session.md` | 25 | 25 | 25 |  |  |
+| `ambre-spec-sync.md` | 76 | 75 | 75 |  | 1 |
 | `ambre-spec-text-editor.md` | 20 | 18 | 18 |  | 2 |
 | `ambre-spec-text-input.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-ui.md` | 23 | 17 | 17 |  | 6 |
 | `ambre-spec-undo.md` | 21 | 21 | 21 |  |  |
-| `ambre-spec-zero-knowledge.md` | 43 | 42 | 41 | 1 | 1 |
-| `ambre-spec-trame-schema.md` | 15 | 15 | 15 |  |  |
+| `ambre-spec-zero-knowledge.md` | 44 | 43 | 42 | 1 | 1 |
+| `ambre-spec-trame-schema.md` | 17 | 17 | 17 |  |  |
 | `ambre-spec-trame-autofill.md` | 11 | 11 | 11 |  |  |
 | `ambre-spec-trame-cell-editing.md` | 42 | 30 | 30 |  | 12 |
 | `ambre-spec-trame-cell-merges.md` | 38 | 38 | 38 |  |  |
@@ -94,9 +94,9 @@
 | `ambre-spec-trame-find-replace.md` | 6 | 6 | 6 |  |  |
 | `ambre-spec-trame-formula-engine.md` | 48 | 48 | 48 |  |  |
 | `ambre-spec-trame-function-library.md` | 37 | 30 | 30 |  | 7 |
-| `ambre-spec-trame-grid-viewport.md` | 20 | 18 | 18 |  | 2 |
+| `ambre-spec-trame-grid-viewport.md` | 24 | 23 | 23 |  | 1 |
 | `ambre-spec-trame-headers.md` | 10 | 9 | 9 |  | 1 |
-| `ambre-spec-trame-import-export.md` | 66 | 64 | 64 |  | 2 |
+| `ambre-spec-trame-import-export.md` | 68 | 66 | 66 |  | 2 |
 | `ambre-spec-trame-named-ranges.md` | 10 | 10 | 10 |  |  |
 | `ambre-spec-trame-number-formats.md` | 14 | 14 | 14 |  |  |
 | `ambre-spec-trame-pdf-export.md` | 17 | 17 | 17 |  |  |
@@ -141,7 +141,7 @@
 | `ambre-spec-toile-viewport.md` | 36 | 34 | 34 |  | 2 |
 | `ambre-spec-toile-z-order.md` | 16 | 16 | 16 |  |  |
 | `ambre-spec-prose-schema.md` | 26 | 26 | 26 |  |  |
-| `ambre-spec-prose-clipboard.md` | 28 | 26 | 26 |  | 2 |
+| `ambre-spec-prose-clipboard.md` | 29 | 28 | 28 |  | 1 |
 | `ambre-spec-prose-comments.md` | 38 | 38 | 38 |  |  |
 | `ambre-spec-prose-cross-references.md` | 16 | 16 | 16 |  |  |
 | `ambre-spec-prose-engine.md` | 45 | 44 | 44 |  | 1 |
@@ -149,7 +149,7 @@
 | `ambre-spec-prose-footnotes.md` | 16 | 16 | 16 |  |  |
 | `ambre-spec-prose-headers-footers.md` | 27 | 27 | 27 |  |  |
 | `ambre-spec-prose-headings.md` | 8 | 8 | 8 |  |  |
-| `ambre-spec-prose-images.md` | 63 | 63 | 63 |  |  |
+| `ambre-spec-prose-images.md` | 69 | 69 | 69 |  |  |
 | `ambre-spec-prose-import-export.md` | 95 | 95 | 95 |  |  |
 | `ambre-spec-prose-inline-styles.md` | 29 | 27 | 27 |  | 2 |
 | `ambre-spec-prose-lists.md` | 17 | 17 | 17 |  |  |
@@ -159,6 +159,7 @@
 | `ambre-spec-prose-ruler.md` | 8 | 8 | 8 |  |  |
 | `ambre-spec-prose-selection.md` | 38 | 38 | 38 |  |  |
 | `ambre-spec-prose-slash-command.md` | 20 | 18 | 18 |  | 2 |
+| `ambre-spec-prose-spell-check.md` | 20 | 18 | 18 |  | 2 |
 | `ambre-spec-prose-table-of-contents.md` | 14 | 14 | 14 |  |  |
 | `ambre-spec-prose-tables.md` | 47 | 47 | 47 |  |  |
 | `ambre-spec-prose-text-editing.md` | 45 | 45 | 45 |  |  |
@@ -169,7 +170,7 @@
 | `ambre-spec-prose-word-count.md` | 14 | 14 | 14 |  |  |
 | `ambre-spec-murmure-schema.md` | 24 | 24 | 24 |  |  |
 | `ambre-spec-murmure-attachments.md` | 19 | 18 | 18 |  | 1 |
-| `ambre-spec-murmure-calls.md` | 47 | 47 | 47 |  |  |
+| `ambre-spec-murmure-calls.md` | 66 | 66 | 66 |  |  |
 | `ambre-spec-murmure-channels.md` | 56 | 41 | 41 |  | 15 |
 | `ambre-spec-murmure-composer.md` | 45 | 45 | 45 |  |  |
 | `ambre-spec-murmure-emoji.md` | 14 | 5 | 5 |  | 9 |
@@ -199,9 +200,9 @@
 | :--- | :--- |
 | `ambre-spec-accessibility.md` | CHROME-006,022..029,065..070 |
 | `ambre-spec-adaptive-layout.md` | CHROME-030..034,056..058,117 |
-| `ambre-spec-architecture.md` | ARCH-001..128 |
+| `ambre-spec-architecture.md` | ARCH-001..129 |
 | `ambre-spec-broadcast.md` | SRV-010,042..051,072..073,087..089,097..099,102,161..162,164,166,183,185..186,237,258,269 |
-| `ambre-spec-call-media.md` | CALL-001..123 |
+| `ambre-spec-call-media.md` | CALL-001..132 |
 | `ambre-spec-call-proofs.md` | PROOF-001..019 |
 | `ambre-spec-chrome.md` | CHROME-001..005,008..015,085..094,105..106,109..115 |
 | `ambre-spec-clipboard.md` | UI-THREAD-006..010,022..025,043..047,053..057,061 |
@@ -218,16 +219,16 @@
 | `ambre-spec-key-rotation.md` | SYNC-041..048,078..081,115..122,126..130,141..143,168,198..199,204,213,223..224 |
 | `ambre-spec-key-verification.md` | CHROME-046..055,071..078 |
 | `ambre-spec-kinetic-scroll.md` | KINETIC-001..015 |
-| `ambre-spec-launcher.md` | CHROME-035..045,079..084,095..101,104,107..108,116,118..127 |
+| `ambre-spec-launcher.md` | CHROME-035..045,079..084,095..101,104,107..108,116,118..131 |
 | `ambre-spec-locale.md` | LOCALE-001..023 |
 | `ambre-spec-machine-access.md` | MACH-001..034 |
 | `ambre-spec-macros.md` | MACRO-001..054 |
 | `ambre-spec-media.md` | SYNC-049..055,074..077,139..140,145..146,174..176,228 |
-| `ambre-spec-membership.md` | SYNC-010,012,014..017,034..040,073,092..094,102..111,123..124,132,150..151,161,172..173,190,197,200..202,205..212,214..215,217..222,225..227,229..247 |
+| `ambre-spec-membership.md` | SYNC-010,012,014..017,034..040,073,092..094,102..111,123..124,132,150..151,161,172..173,190,197,200..202,205..212,214..215,217..222,225..227,229..247,260 |
 | `ambre-spec-message-bus.md` | BUS-001..046 |
 | `ambre-spec-murmure-attachments.md` | MURMURE-128..136,240..242,577..578,626..628,636..637 |
 | `ambre-spec-murmure-bots.md` | MURMURE-387..398 |
-| `ambre-spec-murmure-calls.md` | MURMURE-407..413,591..599,601..625,629..634 |
+| `ambre-spec-murmure-calls.md` | MURMURE-407..413,591..599,601..625,629..634,641..659 |
 | `ambre-spec-murmure-channels.md` | MURMURE-046..061,243..246,251..252,257,262,264,323..335,461..465,467..469,473..475,491,498,500..501,579,589,600 |
 | `ambre-spec-murmure-composer.md` | MURMURE-193..204,210..212,214..217,259,430..434,523..526,530..531,534..535,544,561..564,570..576 |
 | `ambre-spec-murmure-emoji.md` | MURMURE-137..141,374..381,569 |
@@ -262,7 +263,7 @@
 | `ambre-spec-presence.md` | PRESENCE-001..016 |
 | `ambre-spec-profile.md` | PROFILE-001..009 |
 | `ambre-spec-prose-accessibility.md` | PROSE-UI-066..069,077..081 |
-| `ambre-spec-prose-clipboard.md` | PROSE-UI-013,040..044,105..112,219..227,234..235,237..239 |
+| `ambre-spec-prose-clipboard.md` | PROSE-UI-013,040..044,105..112,219..227,234..235,237..240 |
 | `ambre-spec-prose-comments.md` | PROSE-FEAT-001,009,075..081,185..204,279,295..297; PROSE-UI-049..050,144,231..232 |
 | `ambre-spec-prose-cross-references.md` | PROSE-FEAT-014,072..074,128..135; PROSE-UI-048,084..086 |
 | `ambre-spec-prose-engine.md` | PROSE-001,003..004,023..026,043..048,050..063,098,104..106,126,129..132; PROSE-FEAT-005..006; PROSE-IO-042; PROSE-UI-001..002,010,015,149..150 |
@@ -270,7 +271,7 @@
 | `ambre-spec-prose-footnotes.md` | PROSE-FEAT-013,069..071,095..101,280,305..308 |
 | `ambre-spec-prose-headers-footers.md` | PROSE-006; PROSE-FEAT-063..068,160..172,281..285; PROSE-UI-047,133 |
 | `ambre-spec-prose-headings.md` | PROSE-FEAT-029..031,090..094 |
-| `ambre-spec-prose-images.md` | PROSE-FEAT-052..059,205..226,286,314..332; PROSE-IO-007..008,040..041,105..110; PROSE-UI-046,145..146 |
+| `ambre-spec-prose-images.md` | PROSE-FEAT-052..059,205..226,286,314..332; PROSE-IO-007..008,040..041,105..110; PROSE-UI-046,145..146,241..246 |
 | `ambre-spec-prose-import-export.md` | PROSE-IO-001..006,009..014,016..028,043..102,111..120 |
 | `ambre-spec-prose-inline-styles.md` | PROSE-FEAT-007..008,020..025,173..184,287..288,290,298..299,309..311,313 |
 | `ambre-spec-prose-lists.md` | PROSE-005; PROSE-FEAT-002,026..028,136..146,278 |
@@ -281,7 +282,7 @@
 | `ambre-spec-prose-schema.md` | PROSE-002,007..008,027..028,030..032,085..097,118..122 |
 | `ambre-spec-prose-selection.md` | PROSE-UI-008..009,031..039,070..072,151..171,186..187,233 |
 | `ambre-spec-prose-slash-command.md` | PROSE-UI-058..062,087..095,174..175,193..196 |
-| `ambre-spec-prose-spell-check.md` | PROSE-FEAT-019,041..043,102..112 |
+| `ambre-spec-prose-spell-check.md` | PROSE-FEAT-019,041..043,102..112,333..335; PROSE-UI-247..248 |
 | `ambre-spec-prose-table-of-contents.md` | PROSE-FEAT-003,060..062,113..118,291..292; PROSE-UI-082..083 |
 | `ambre-spec-prose-tables.md` | PROSE-009,040; PROSE-FEAT-017,044..051,227..256,293..294; PROSE-UI-147,179..181 |
 | `ambre-spec-prose-text-editing.md` | PROSE-037..039,041..042,101,116,124; PROSE-UI-004..005,027..030,134..143,176..178,182..185,197..204,206,208,213..216 |
@@ -293,11 +294,11 @@
 | `ambre-spec-render-assets.md` | CANVAS-006..007,017..024,051..054,067..069,073,081,084,086..090,097 |
 | `ambre-spec-residency.md` | RESID-001..028 |
 | `ambre-spec-schema-version.md` | SCHEMA-001..020 |
-| `ambre-spec-sealed-envelope.md` | SYNC-001,003..005,008..009,018..023,072,088..091,112..114,125,135,138,144,203,216 |
+| `ambre-spec-sealed-envelope.md` | SYNC-001,003..005,008..009,018..023,072,088..091,112..114,125,135,138,144,203,216,257..259 |
 | `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155,169,184,194..215,259,262..264,274,276..277 |
-| `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165,167..168,170..171,173..182,187..193,216..228,230,238..257,260..261,266,268,270,272..273,275 |
-| `ambre-spec-session.md` | SRV-003,009,022..031,074,090..092,163,172,232,234..236,267 |
-| `ambre-spec-sync.md` | SYNC-002,011,013,056..071,095..100,133..134,136..137,149,152..160,162..167,169..171,177..189,191..196,248..250 |
+| `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165,167..168,170..171,173..182,187..193,216..228,230,238..257,260..261,266,268,270,272..273,275,280..282 |
+| `ambre-spec-session.md` | SRV-003,009,022..031,074,090..092,163,172,232,234..236,267,278..279 |
+| `ambre-spec-sync.md` | SYNC-002,011,013,056..071,095..100,133..134,136..137,149,152..160,162..167,169..171,177..189,191..196,248..256 |
 | `ambre-spec-text-editor.md` | CANVAS-036..042,047..050,077..080,082..083,085; UI-THREAD-014,018 |
 | `ambre-spec-text-input.md` | CHROME-007,016..021,059..064,102..103 |
 | `ambre-spec-toile-auto-layout.md` | TOILE-FEAT-005,009,029..032,038..054,099,102..104 |
@@ -343,15 +344,15 @@
 | `ambre-spec-trame-find-replace.md` | TRAME-UI-077..080,083,138 |
 | `ambre-spec-trame-formula-engine.md` | TRAME-005..009,011..013,021,032..048,208..220,226..230,233,245,252,281 |
 | `ambre-spec-trame-function-library.md` | TRAME-014,049..061,194..207,244,246..247,249..251,253..254,258 |
-| `ambre-spec-trame-grid-viewport.md` | TRAME-UI-004..005,007,012..013,024..029,049,143..149,175 |
+| `ambre-spec-trame-grid-viewport.md` | TRAME-UI-004..005,007,012..013,024..029,049,143..149,175,191..194 |
 | `ambre-spec-trame-headers.md` | TRAME-UI-043..048,121..123,187 |
-| `ambre-spec-trame-import-export.md` | TRAME-IO-001..015,017..019,025..030,033..071,080..082 |
+| `ambre-spec-trame-import-export.md` | TRAME-IO-001..015,017..019,025..030,033..071,080..082,088..089 |
 | `ambre-spec-trame-named-ranges.md` | TRAME-062..069,155..156 |
 | `ambre-spec-trame-number-formats.md` | TRAME-102..110,157..158,223,237..238 |
 | `ambre-spec-trame-pdf-export.md` | TRAME-IO-021..023,031,072..079,083..087 |
 | `ambre-spec-trame-resize.md` | TRAME-UI-036..042,126..128,181 |
 | `ambre-spec-trame-rows-and-columns.md` | TRAME-080..091,170..177,261..269,273..274,276..280,296..297,303..305,307..308 |
-| `ambre-spec-trame-schema.md` | TRAME-003,010,016,025,221..222,242,270..272,275,302,306,309..310 |
+| `ambre-spec-trame-schema.md` | TRAME-003,010,016,025,221..222,242,270..272,275,302,306,309..312 |
 | `ambre-spec-trame-selection.md` | TRAME-UI-019,030..035,129..132,182 |
 | `ambre-spec-trame-shared-filter.md` | TRAME-256..257; TRAME-FEAT-002..009,014..016,025..027,029..046; TRAME-UI-008,154,173 |
 | `ambre-spec-trame-sheets.md` | TRAME-022,070..079,159..165,232,234..236,241 |
@@ -361,5 +362,5 @@
 | `ambre-spec-ui.md` | UI-THREAD-001..005,012..013,015..017,020..021,048..052,058..060,062..064 |
 | `ambre-spec-undo.md` | UNDO-001..021 |
 | `ambre-spec-user-settings.md` | SETTINGS-001..015 |
-| `ambre-spec-zero-knowledge.md` | ZK-001..043 |
+| `ambre-spec-zero-knowledge.md` | ZK-001..044 |
 | `ambre-spec-zoom.md` | ZOOM-001..010 |

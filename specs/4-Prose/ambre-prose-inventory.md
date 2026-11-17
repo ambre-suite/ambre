@@ -21,7 +21,7 @@
 | `prose-footnotes` | A note at the foot of the page, called from a mark in the text. | implemented | 16 |  |
 | `prose-headers-footers` | A band at the top of every page and a band at the bottom, each holding ordinary text. | implemented | 27 |  |
 | `prose-headings` | Six levels of section title. | implemented | 8 |  |
-| `prose-images` | A picture in the document. | implemented | 63 |  |
+| `prose-images` | A picture in the document. | implemented | 69 |  |
 | `prose-import-export` | A user opens a document that came from Word, from a web page or from a Markdown file. | implemented | 95 |  |
 | `prose-lists` | Bulleted, numbered and checkbox lists, nested to any depth. | implemented | 17 |  |
 | `prose-pagination` | A document becomes a sequence of measured pages. | implemented | 55 |  |
@@ -33,15 +33,15 @@
 | `prose-text-editing` | Typing, deleting, splitting and joining paragraphs. | implemented | 45 |  |
 | `prose-undo` | Prose's half of the shared undo model (`ambre-spec-undo.md`): where the caret lands, and what one item is in running text. | implemented | 6 |  |
 | `prose-word-count` | How many words, characters, paragraphs and pages the document holds, shown in the status bar and refreshed as it is written. | implemented | 14 |  |
-| `prose-clipboard` | Copy, cut and paste. | partial | 28 |  |
+| `prose-clipboard` | Copy, cut and paste. | partial | 29 |  |
 | `prose-engine` | An author types a word and every collaborator reads it. | partial | 45 |  |
 | `prose-inline-styles` | Bold, italic, colour, size, links: formatting applied to a range of text, and the paragraph settings underneath it. | partial | 29 |  |
 | `prose-page-rendering` | What a page looks like on the canvas. | partial | 24 |  |
 | `prose-slash-command` | Type a slash at the start of an empty line and a short list appears: a heading, a list, a table, a page break. | partial | 20 |  |
+| `prose-spell-check` | Misspelled words underlined as the document is written, with suggestions, checked on the reader's own machine. | partial | 20 |  |
 | `prose-toolbar` | Select a few words and a small bar appears above them. | partial | 19 |  |
 | `prose-track-changes` | A reviewer edits without changing the document. | partial | 40 |  |
 | `prose-viewport` | A document is a centred column of pages the reader scrolls through and zooms. | partial | 21 |  |
 | `prose-accessibility` | A screen reader must be able to read the document and follow the caret through it. | design-only | 9 |  |
-| `prose-spell-check` | Misspelled words underlined as the document is written, with suggestions, checked on the reader's own machine. | design-only | 15 |  |
 
-**28 features: 18 implemented, 8 partial, 2 design-only. 782 contract rows, 0 loose.**
+**28 features: 18 implemented, 9 partial, 1 design-only. 794 contract rows, 0 loose.**
