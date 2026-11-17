@@ -1156,7 +1156,7 @@ mod postcard_tests {
             document_id: Id::<Document>::from_bytes([0u8; 16]),
         };
         let bytes = encode_client_msg(&msg);
-        assert_eq!(bytes.as_bytes()[0], 0x02);
+        assert_eq!(bytes.as_bytes()[0], ambre_protocol::CURRENT_VERSION.get());
     }
 
     #[test]
