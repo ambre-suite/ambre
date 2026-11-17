@@ -606,13 +606,22 @@ pub async fn get_clock_state(
 /// A batch object goes only once no row names it, so a batch that still holds
 /// an uncovered delta stays (`SRV-154`).
 pub async fn purge_superseded_updates(pool: &PgPool) -> Result<Trim, AppError> {
-    let (rows, documents, touched): (i64, Vec<uuid::Uuid>, Vec<String>) = sqlx::query_as(
+    // Three deletes, one per rule. One statement that joins the rules with
+    // `OR` ran three correlated subqueries per row of `updates`. It was 25
+    // times slower, and the pass runs each period (`SRV-277`).
+    let statements = [
+        // At or below the lowest horizon of the confirmed snapshots.
         "WITH horizon AS (
             SELECT document_id, MIN(covered_seq) AS min_covered
             FROM snapshots
             WHERE status = 'confirmed'
             GROUP BY document_id
-        ), reference AS (
+        )
+        DELETE FROM updates u USING horizon h
+        WHERE u.document_id = h.document_id AND u.seq <= h.min_covered
+        RETURNING u.document_id, u.batch_key",
+        // The author's own deltas under its latest self-confirmed snapshot.
+        "WITH reference AS (
             SELECT DISTINCT ON (document_id) document_id, covered_seq, created_at
             FROM snapshots
             WHERE status = 'confirmed'
@@ -624,32 +633,34 @@ pub async fn purge_superseded_updates(pool: &PgPool) -> Result<Trim, AppError> {
             LEFT JOIN reference r ON r.document_id = s.document_id
             WHERE s.status = 'self' AND (r.created_at IS NULL OR s.created_at > r.created_at)
             ORDER BY s.document_id, s.created_at DESC
-        ), gone AS (
-            DELETE FROM updates u
-            WHERE EXISTS (
-                SELECT 1 FROM horizon h
-                WHERE h.document_id = u.document_id AND u.seq <= h.min_covered
-            ) OR EXISTS (
-                SELECT 1 FROM author_span a
-                WHERE a.document_id = u.document_id AND a.author_pubkey = u.author_pubkey
-                  AND u.seq > a.from_seq AND u.seq <= a.to_seq
-            ) OR EXISTS (
-                SELECT 1 FROM channel_documents c
-                JOIN snapshots f ON f.id = c.final_snapshot AND f.document_id = c.document_id
-                WHERE c.document_id = u.document_id AND c.state = 'final'
-                  AND f.status = 'confirmed' AND u.seq <= f.covered_seq
-            )
-            RETURNING u.document_id, u.batch_key
-        ), touched AS (
-            SELECT DISTINCT document_id, batch_key FROM gone WHERE batch_key IS NOT NULL
         )
-        SELECT (SELECT COUNT(*) FROM gone),
-               ARRAY(SELECT document_id FROM touched ORDER BY batch_key),
-               ARRAY(SELECT batch_key FROM touched ORDER BY batch_key)",
-    )
-    .fetch_one(pool)
-    .await?;
-    // The statement above reads the rows as they were before its delete, so
+        DELETE FROM updates u USING author_span a
+        WHERE a.document_id = u.document_id AND a.author_pubkey = u.author_pubkey
+          AND u.seq > a.from_seq AND u.seq <= a.to_seq
+        RETURNING u.document_id, u.batch_key",
+        // Under the confirmed final snapshot of a final segment.
+        "DELETE FROM updates u
+        USING channel_documents c
+        JOIN snapshots f ON f.id = c.final_snapshot AND f.document_id = c.document_id
+        WHERE c.document_id = u.document_id AND c.state = 'final'
+          AND f.status = 'confirmed' AND u.seq <= f.covered_seq
+        RETURNING u.document_id, u.batch_key",
+    ];
+
+    let mut tx = pool.begin().await?;
+    let mut rows: u64 = 0;
+    let mut touched: Vec<(uuid::Uuid, String)> = Vec::new();
+    for statement in statements {
+        let gone: Vec<(uuid::Uuid, Option<String>)> =
+            sqlx::query_as(statement).fetch_all(&mut *tx).await?;
+        rows = rows.saturating_add(u64::try_from(gone.len()).unwrap_or(u64::MAX));
+        touched.extend(gone.into_iter().filter_map(|(d, k)| k.map(|k| (d, k))));
+    }
+    tx.commit().await?;
+    touched.sort_unstable_by(|a, b| a.1.cmp(&b.1));
+    touched.dedup();
+    let (documents, touched): (Vec<uuid::Uuid>, Vec<String>) = touched.into_iter().unzip();
+    // A key the deletes returned may still name a delta no rule covers, so
     // whether a batch is still named is a second question. A batch belongs to
     // one document, and no index reads `batch_key`, so the question reads the
     // primary key range of that document.
@@ -662,7 +673,7 @@ pub async fn purge_superseded_updates(pool: &PgPool) -> Result<Trim, AppError> {
     .fetch_all(pool)
     .await?;
     Ok(Trim {
-        rows: ambre_core::Count::new(u64::try_from(rows).unwrap_or(0)),
+        rows: ambre_core::Count::new(rows),
         batch_keys: batch_keys
             .into_iter()
             .map(ambre_core::ObjectKey::new)

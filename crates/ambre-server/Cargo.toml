@@ -69,6 +69,8 @@ rsa = { version = "0.9", features = ["getrandom"] }
 # The bound that proves the token signing seed wipes on drop (`SRV-235`). The
 # code itself wipes through `ambre_core::Secret` alone (`ARCH-046`).
 zeroize = { workspace = true }
+# A paused clock drives the compaction loop through its periods (`SRV-277`).
+tokio = { workspace = true, features = ["test-util"] }
 
 [lints]
 workspace = true

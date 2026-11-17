@@ -9,7 +9,8 @@
 //! A fourth bucket records the snapshot each document receives every
 //! `SNAPSHOT_THRESHOLD` deltas, since the delete waits on it. A delta past the
 //! inline size takes `db::insert_update`. No SQL of the relay is copied here,
-//! and the compaction runs every `LOAD_COMPACT_EVERY` seconds, not every hour.
+//! and the compaction runs every `LOAD_COMPACT_EVERY` seconds, not each
+//! `compaction::PASS_PERIOD`.
 //!
 //! The run reads the cluster's write-ahead log (WAL) through `pg_walinspect`.
 //! It tags each record with the step whose window holds it, and each block
@@ -266,7 +267,7 @@ async fn insert_own_object(state: &AppState, doc: &Doc, key: &db::NewUpdate<'_>)
     .expect("an index row");
 }
 
-/// One pass of the relay's hourly compaction, the step that deletes rows.
+/// One pass of the relay's compaction, the step that deletes rows.
 async fn compaction(state: &Arc<AppState>, rec: &mut Recorder) {
     rec.open(state, Step::Delete).await;
     crate::compact_once(state).await;

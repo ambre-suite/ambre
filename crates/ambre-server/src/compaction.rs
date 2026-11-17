@@ -14,7 +14,45 @@ use ambre_core::{Count, Sec, TimeSpan};
 /// new one (`ambre-spec-budgets.md section 6`, the snapshot threshold row).
 pub const SNAPSHOT_THRESHOLD: Count<db::Deltas> = Count::<db::Deltas>::new(500);
 
-/// The snapshots per document the hourly pass keeps, besides the reference and
+/// Deltas one document sends in a second.
+pub enum DeltasPerSecond {}
+
+impl ambre_core::NarrowCount for DeltasPerSecond {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("DeltasPerSecond");
+}
+
+/// The delta rate of an active document that the pass period is sized for
+/// (`ambre-spec-budgets.md section 6`, the design delta rate row).
+pub const DESIGN_DELTA_RATE: Count<DeltasPerSecond> = Count::<DeltasPerSecond>::new(5);
+
+/// The period of the compaction pass: the time a document at the design rate
+/// takes to cross the snapshot threshold (`SRV-277`). So one pass at most
+/// falls between two snapshots, and a document adds one threshold of deltas
+/// between two passes (`ambre-spec-budgets.md section 6`, the pass period row).
+pub const PASS_PERIOD: TimeSpan<Sec> =
+    TimeSpan::<Sec>::new(SNAPSHOT_THRESHOLD.get() / DESIGN_DELTA_RATE.get() as u64);
+
+/// Runs `pass` once each `period`, start to start, for as long as the task
+/// lives. The first pass runs one period after the call. A pass that outlasts
+/// the period delays the next one, and no pass is ever run twice to catch up.
+pub async fn every<F, Fut>(period: TimeSpan<Sec>, mut pass: F)
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = ()>,
+{
+    let period = period.to_duration();
+    let mut ticks = tokio::time::interval(period);
+    ticks.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    // The first tick completes at once: the boot owes no pass.
+    ticks.tick().await;
+    loop {
+        ticks.tick().await;
+        pass().await;
+    }
+}
+
+/// The snapshots per document each pass keeps, besides the reference and
 /// the latest one its author confirmed alone (`SRV-131`, `SRV-264`). The trim
 /// stops at the older of the two. A document keeps the deltas past it
 /// (`ambre-spec-budgets.md section 6`, the delta rows kept row). The older
@@ -152,6 +190,44 @@ mod tests {
             ambre_core::Seq::<ambre_core::Relay>::new(900),
             threshold
         ));
+    }
+
+    /// `SRV-277`: at the design rate, a document adds one snapshot threshold
+    /// of deltas between two passes, and no more.
+    #[test]
+    fn the_pass_period_lets_one_threshold_in_at_the_design_rate() {
+        let rate = u64::from(DESIGN_DELTA_RATE.get());
+        let added = PASS_PERIOD.get() * rate;
+        assert!(added <= SNAPSHOT_THRESHOLD.get(), "{added} deltas a period");
+        assert!(added + rate > SNAPSHOT_THRESHOLD.get());
+    }
+
+    /// `SRV-277`: the loop runs one pass each period, start to start, and the
+    /// first one a period after it starts.
+    #[tokio::test(start_paused = true)]
+    async fn the_loop_runs_one_pass_each_period() {
+        let passes = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+        let counted = std::sync::Arc::clone(&passes);
+        let task = tokio::spawn(every(PASS_PERIOD, move || {
+            let counted = std::sync::Arc::clone(&counted);
+            async move {
+                counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            }
+        }));
+        // Each read falls one second off a tick, so the paused clock never
+        // wakes the test and the loop at the same instant.
+        let period = PASS_PERIOD.to_duration();
+        let second = std::time::Duration::from_secs(1);
+        let read = || passes.load(std::sync::atomic::Ordering::SeqCst);
+        tokio::time::sleep(period - second).await;
+        assert_eq!(read(), 0, "a pass before the first period");
+        for expected in 1..=3 {
+            tokio::time::sleep(2 * second).await;
+            assert_eq!(read(), expected);
+            tokio::time::sleep(period - 2 * second).await;
+            assert_eq!(read(), expected, "a pass inside the period");
+        }
+        task.abort();
     }
 
     /// The bound of the Murmure segments spec: a segment's crossing is seen

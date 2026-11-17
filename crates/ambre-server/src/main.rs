@@ -322,7 +322,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     tokio::spawn(s3::global_s3_flusher(flush_state));
 
-    // Spawn snapshot compaction task (hourly)
+    // The compaction pass, at the period of `compaction::PASS_PERIOD`.
     let compact_state = AppState {
         db: state.db.clone(),
         redis: redis.clone(),
@@ -484,16 +484,16 @@ fn parse_cors_origins(allowed: &str) -> Vec<HeaderValue> {
 
 /// Background task that periodically compacts old snapshots.
 ///
-/// Runs once per Axum instance. Every hour it queries for snapshots
-/// beyond `compaction::SNAPSHOTS_KEPT` per document, and deletes them from S3
-/// and PostgreSQL. Snapshots with most recent `created_at`
-/// are kept. A pass that panics is lost alone, and the next hour runs the
-/// next one (`SRV-101`).
+/// Runs once per Axum instance, one pass each `compaction::PASS_PERIOD`
+/// (`SRV-277`). A pass queries for snapshots beyond
+/// `compaction::SNAPSHOTS_KEPT` per document, and deletes them from S3 and
+/// PostgreSQL. Snapshots with most recent `created_at` are kept. A pass that
+/// panics is lost alone, and the next period runs the next one (`SRV-101`).
 async fn snapshot_compaction_task(state: state::AppState) {
-    loop {
-        tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
+    compaction::every(compaction::PASS_PERIOD, || async {
         supervise::contained("snapshot compaction", compact_once(&state)).await;
-    }
+    })
+    .await;
 }
 
 /// One compaction pass: the old snapshots, the delta index they cover, then

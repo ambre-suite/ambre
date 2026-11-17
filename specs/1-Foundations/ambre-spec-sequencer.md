@@ -80,6 +80,7 @@ sequence has already moved.
 | `SRV-200` | `POST` | A report that drops the final snapshot of a segment MUST clear its finalization in the same transaction, and keep its lock and its horizon. | this spec section 3; `SRV-114`; `5-Murmure/features/ambre-spec-murmure-segments.md` | `ambre_server::routes::channels::tests::a_dropped_final_snapshot_is_finalized_again` -- database tier, another snapshot's drop changes nothing, the final one's grants a lease at the same horizon at once, and the new commit holds | none | verified |
 | `SRV-135` | `FRAME` | Dropping a snapshot MUST NOT drop a delta. | this spec section 3 | `ambre_server::routes::tests::a_signed_report_drops_a_pending_snapshot_alone` -- the three deltas the snapshot covered all stay | none | verified |
 | `SRV-264` | `POST` | A compaction pass MUST keep at most the two most recent snapshots of a document, besides the ones `SRV-131` holds. | this spec section 3; `ambre-spec-budgets.md section 6`; `SRV-083` | `ambre_server::compaction::db_tests::a_pass_keeps_the_deltas_past_the_older_kept_snapshot` -- five snapshots confirmed at the threshold over 2 750 deltas leave the two latest snapshots and the 750 deltas past the older one, under the bound of the budget row, on the database tier, behind the feature the test recipe carries (`ambre-spec-testing.md section 5`) | none | verified |
+| `SRV-277` | `POST` | The compaction pass MUST run once each pass period of `ambre-spec-budgets.md section 6`, start to start: the snapshot threshold over the design delta rate. | this spec section 3; `ambre-spec-budgets.md section 6`; `SRV-264` | `ambre_server::compaction::tests::the_pass_period_lets_one_threshold_in_at_the_design_rate` -- at the design rate, a document adds one threshold of deltas between two passes, and no more; `::the_loop_runs_one_pass_each_period` -- on a paused clock, the loop runs no pass before the first period, then one pass each period over three periods | none | verified |
 
 ### 1.5 A client asks for what it missed
 
@@ -185,7 +186,7 @@ it to every writer that asks.
 * **Boundary.** the relay orders bytes it cannot read. What it learns is the routing set of
   `ZK-007`: which key wrote to which document, at which clock, and how large the delta was.
   `SRV-001` keeps the delta out of the logs.
-* **Verification.** 76 `verified`. The ordering, the storage and the replay hold. So does each step
+* **Verification.** 77 `verified`. The ordering, the storage and the replay hold. So does each step
   of a segment's life, from its close to its fold, and the thread of a root. The recovery paths are
   driven through real failures: a register that refuses inserts, a queue that refuses pushes, an
   index that cannot be read.
@@ -285,7 +286,7 @@ batch key.
 **What reads the primary key instead.** The tail count reads the range of the document past its
 newest batch row. A frame put back later in an older row (`SRV-034`) falls out of that count. The
 trim asks whether a batch is still named within the range of its own document. The idle pass
-reads the whole table, once an hour.
+reads the whole table, once each pass period (`SRV-277`).
 
 **Why half of each page stays free.** Inside the move, the old and the new version of each moved
 row share the page. A frame under about 100 bytes,
@@ -324,7 +325,7 @@ Only a confirmed snapshot is retained, and moves the trim (`SRV-127`). A mismatc
 the pending snapshot and keeps every delta (`SRV-133`, `SRV-135`). The next snapshot comes from
 another member (`SRV-134`). The trim
 removes every delta at or below the lowest horizon of the snapshots the document still keeps
-(`SRV-039`, `SRV-083`). The hourly pass keeps the two most
+(`SRV-039`, `SRV-083`). Each pass keeps the two most
 recent, and never drops the reference nor the latest snapshot its author confirmed alone (`SRV-131`,
 `SRV-264`).
 
@@ -333,6 +334,11 @@ recent, and never drops the reference nor the latest snapshot its author confirm
 confirmed. That open still pages the deltas past the older horizon, and a pass that kept one
 snapshot would trim them under it. So an active document keeps one threshold of deltas, plus the
 ones past its latest snapshot: the delta rows kept row of `ambre-spec-budgets.md section 6`.
+
+**When the pass runs.** Each instance runs one pass each pass period, start to start (`SRV-277`).
+The period is the time a document at the design delta rate takes to cross the snapshot threshold.
+So a document at that rate adds one threshold of deltas between two passes. The pass period row of
+`ambre-spec-budgets.md section 6` gives the figure.
 
 **A dropped snapshot** is announced on the document's topic, with its author and its reporter. A final
 snapshot takes its finalization with it, and the segment keeps its lock and its horizon
@@ -436,7 +442,7 @@ paging: the earlier pages already released the client.
 * `crates/ambre-server/src/db/content.rs` -- the index, the snapshot record and the trim;
 * `crates/ambre-server/src/routes/sync.rs` -- the snapshot record and the delta page over requests;
 * `crates/ambre-server/src/compaction.rs` -- when the relay asks for a snapshot;
-* `crates/ambre-server/src/main.rs` -- the hourly pass.
+* `crates/ambre-server/src/main.rs` -- the compaction pass, at the period of `compaction.rs`.
 
 ---
 
@@ -475,8 +481,10 @@ sees is how long a document takes to open.
 | One flush task per instance, over a marked set | a task per active document | it is a thousand idle tasks on a thousand open documents |
 | One flush task per instance, over a marked set | a keyspace scan every cycle | it costs a scan the store does not owe us, every cycle, whatever was written. A set of unflushed documents is one read |
 | The drain takes a lock per document | letting both instances drain | it is safe until the second instance exists: two instances draining one queue both trim by their own count, which removes entries a client queued in between, so a delta already numbered and already acknowledged would be gone. The write path never takes the lock, so collaboration is untouched |
-| The hourly pass keeps two snapshots per document | ten | no client reads a snapshot past the latest. The trim stops at the oldest kept, so an active document kept about 4 500 rows in the index, 108 MB of heap and 83 MB of indexes for 32 documents on 2026-11-13. The delete then wrote full pages of those cold rows |
-| The hourly pass keeps two snapshots per document | one | an open served the previous snapshot a moment before the pass still pages the deltas past it. The trim would delete them under that replay |
+| Each pass keeps two snapshots per document | ten | no client reads a snapshot past the latest. The trim stops at the oldest kept, so an active document kept about 4 500 rows in the index, 108 MB of heap and 83 MB of indexes for 32 documents on 2026-11-13. The delete then wrote full pages of those cold rows |
+| Each pass keeps two snapshots per document | one | an open served the previous snapshot a moment before the pass still pages the deltas past it. The trim would delete them under that replay |
+| The pass runs once each pass period: the snapshot threshold over the design delta rate | once an hour | an active document adds the deltas of up to one hour between two passes on top of the delta rows kept: 18 000 rows at the design rate of `ambre-spec-budgets.md section 6` |
+| The trim is three deletes, one per rule, in one transaction | one delete that joins the three rules with `OR` | the planner cannot use the key of `updates` under the `OR`: it read every row and ran three correlated subqueries for each. On 2026-11-16, over 2 000 documents of 1 000 rows, it took 10.8 s against 0.42 s, deleting nothing, by `EXPLAIN ANALYZE` on the database tier |
 | The replay is paged, and each page is fetched together | one batch with a hard cap | it silently truncated any client further behind than the cap: it applied the batch, declared itself hydrated and never asked again |
 | The replay is paged, and each page is fetched together | one object fetch at a time | the serial round trip dominated a cold open. Fetching a page's objects together removes it |
 | A replay is throttled per document | no throttle | it makes the cheapest wire message the most expensive request: a request for everything since the first delta is one small message that costs the relay the whole history from object storage. One replay per reconnect is the real need, and a second within the same second is not one |
