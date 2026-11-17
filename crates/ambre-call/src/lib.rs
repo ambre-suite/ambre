@@ -10,9 +10,8 @@
 //! [`CallWorker`] decides, and reads no browser object. So the host tier runs the seal and
 //! the open the browser runs. The wasm entry in `worker.rs` carries the frames and the port.
 
-use ambre_core::index::Pos;
 use ambre_core::{
-    AudioSlots, ClearChunk, KeyIdentifier, Payload, PictureKind, SealedChunk, SenderIndex, Seq,
+    ClearChunk, KeyIdentifier, MediaSlot, Payload, PictureKind, SealedChunk, SenderIndex, Seq,
     SlotSender, Track,
 };
 use ambre_crypto::call::{ChunkError, ChunkSealer, KeyHandoff, ReceiveKeys};
@@ -49,14 +48,14 @@ pub struct Opened {
 /// the next packet (`CALL-047`), so the page learns of each move from here (`CALL-084`).
 #[derive(Debug)]
 pub struct SlotWatch {
-    slot: Pos<AudioSlots>,
+    slot: MediaSlot,
     last: Option<Seq<SenderIndex>>,
 }
 
 impl SlotWatch {
     /// The watch of the slot `slot`, which has opened no chunk yet.
     #[must_use]
-    pub const fn new(slot: Pos<AudioSlots>) -> Self {
+    pub const fn new(slot: MediaSlot) -> Self {
         Self { slot, last: None }
     }
 

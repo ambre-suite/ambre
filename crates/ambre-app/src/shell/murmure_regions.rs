@@ -702,6 +702,105 @@ async fn the_camera_button_names_itself_and_carries_its_pressed_state() {
     phase.set(CallPhase::Idle);
 }
 
+/// The participants button of a call (`MURMURE-654`). A call offers it in the header. It is a
+/// button with an accessible name that takes the focus, and reports whether its list is open.
+/// The list names the member and each other participant, and the tile that counts the others
+/// opens it too.
+#[wasm_bindgen_test]
+async fn the_participants_button_names_itself_and_lists_each_participant() {
+    use ambre_murmure::ui::call_controls::{CallPhase, Microphone};
+    let frame = Frame::new(1025, channel()).await;
+    let phase = crate::call::phase();
+    let (participants, roster) = (
+        crate::call_volumes::participants(),
+        crate::call_stage::roster(),
+    );
+    assert!(
+        frame.query(".murmure-call-roster").is_none(),
+        "no participants button out of a call"
+    );
+    phase.set(CallPhase::InCall(Microphone::Live));
+    participants.set(vec![Id::<User>::mint(), Id::<User>::mint()]);
+    leptos::task::tick().await;
+    let button: web_sys::HtmlElement = frame
+        .query(".murmure-channel-header .murmure-call-roster")
+        .expect("the participants button is in the header")
+        .dyn_into()
+        .unwrap();
+    assert_eq!(button.tag_name(), "BUTTON");
+    button.focus().unwrap();
+    assert_eq!(
+        frame.inner.active_element().as_ref(),
+        Some(button.unchecked_ref::<web_sys::Element>()),
+        "the participants button takes the focus"
+    );
+    let read = |attribute: &str| button.get_attribute(attribute).unwrap_or_default();
+    assert_eq!(read("aria-label"), "Participants");
+    assert_eq!(read("aria-expanded"), "false");
+    assert!(frame.query(".murmure-call-roster-list").is_none());
+    button.click();
+    leptos::task::tick().await;
+    assert_eq!(read("aria-expanded"), "true");
+    assert_eq!(
+        frame.texts(".murmure-call-roster-list li"),
+        ["You", "A participant", "A participant"]
+    );
+    button.click();
+    leptos::task::tick().await;
+    assert!(frame.query(".murmure-call-roster-list").is_none());
+    // A press on the tile that counts the others opens the same list.
+    crate::call_stage::show_roster();
+    leptos::task::tick().await;
+    assert_eq!(read("aria-expanded"), "true");
+    assert!(frame.query(".murmure-call-roster-list").is_some());
+    roster.set(ambre_chrome::Openness::Closed);
+    participants.set(Vec::new());
+    phase.set(CallPhase::Idle);
+}
+
+/// The fill button of a call (`MURMURE-659`, `MURMURE-657`). A call offers it in the header. It
+/// is a button with an accessible name that takes the focus and carries its pressed state, and
+/// the keyboard presses it. A press widens the call, and a second brings back the band.
+#[wasm_bindgen_test]
+async fn the_fill_button_names_itself_and_widens_the_call() {
+    use ambre_murmure::ui::call_controls::{CallPhase, Microphone};
+    use ambre_murmure::ui::call_videos::Fill;
+    let frame = Frame::new(1025, channel()).await;
+    let (phase, fill) = (crate::call::phase(), crate::call_stage::fill());
+    assert!(
+        frame.query(".murmure-call-fill").is_none(),
+        "no fill button out of a call"
+    );
+    phase.set(CallPhase::InCall(Microphone::Live));
+    leptos::task::tick().await;
+    let button: web_sys::HtmlElement = frame
+        .query(".murmure-channel-header .murmure-call-fill")
+        .expect("the fill button is in the header")
+        .dyn_into()
+        .unwrap();
+    assert_eq!(button.tag_name(), "BUTTON");
+    button.focus().unwrap();
+    assert_eq!(
+        frame.inner.active_element().as_ref(),
+        Some(button.unchecked_ref::<web_sys::Element>()),
+        "the fill button takes the focus"
+    );
+    let read = |attribute: &str| button.get_attribute(attribute).unwrap_or_default();
+    assert_eq!(read("aria-label"), "Fill the channel region with the call");
+    assert_eq!(read("aria-pressed"), "false");
+    // A native button: Enter and Space press it, as a click does.
+    button.click();
+    leptos::task::tick().await;
+    assert_eq!(fill.get_untracked(), Fill::Region);
+    assert_eq!(read("aria-label"), "Shrink the call to a band");
+    assert_eq!(read("aria-pressed"), "true");
+    button.click();
+    leptos::task::tick().await;
+    assert_eq!(fill.get_untracked(), Fill::Band);
+    assert_eq!(read("aria-pressed"), "false");
+    phase.set(CallPhase::Idle);
+}
+
 /// The share button of the header (`MURMURE-633`, `MURMURE-634`, `MURMURE-630`). It is a button
 /// with an accessible name that takes the focus and carries its pressed state. A refusal is an
 /// alert that says why, and a take-over is a status that says another member shares. Mute and

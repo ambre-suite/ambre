@@ -61,7 +61,7 @@ mod frame;
 mod pipe;
 mod probe;
 
-pub(crate) use probe::{PageClock, mark};
+pub(crate) use probe::{PageClock, mark, now};
 mod murmure;
 mod prose;
 mod run;
@@ -428,8 +428,8 @@ impl AppView {
                 v.paint_overlay(surface, font_cx, text_cache, stats);
                 // The render runtime draws each video of a call over its tile (`CALL-015`). A
                 // video is screen state, which no primitive of the drawing surface takes.
-                for (slot, tile) in v.video_tiles() {
-                    surface.draw_video(slot, tile);
+                for picture in v.video_tiles() {
+                    surface.draw_video(picture.slot, picture.dest, picture.facing);
                 }
             }
         }

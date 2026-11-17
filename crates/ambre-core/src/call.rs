@@ -245,6 +245,13 @@ impl Bounds for MeterLevel {
     const REFUSAL: Refusal = Refusal::new("a meter level lies in 0..=1, not ", "");
 }
 
+impl Bounded<MeterLevel> {
+    /// The level of a received audio slot from which its member speaks: about -34 dBov. It lies
+    /// above the noise that the echo canceller leaves (`ambre-spec-budgets.md section 1`, call
+    /// speaker).
+    pub const SPEECH: Self = Self::at(0.02);
+}
+
 /// The audio slots of one receiver: `Pos<AudioSlots>` names one. The page numbers each receive
 /// transform it attaches from zero, and names the slot in its options. No slot leaves the client
 /// (`ambre-spec-call-media.md section 3`, the volumes).
@@ -269,47 +276,74 @@ impl Axis for VideoSlots {
 /// video slots, so the page numbers it tenth (`ambre-spec-call-media.md section 3`, the screen).
 pub const SCREEN_SLOT: Pos<VideoSlots> = Pos::new(9);
 
-/// What the call worker tells the page when an audio slot carries a new sender (`CALL-084`). It
-/// names the slot, and the sender index of the key identifier of its first chunk. It carries no
-/// key and no chunk.
+/// The video slot the page gives its own camera, which its own tile draws mirrored. No receiver
+/// carries it: the SFU offers nine video slots and one screen slot (the Murmure calls spec,
+/// section 3, the video region).
+pub const OWN_SLOT: Pos<VideoSlots> = Pos::new(10);
+
+/// The slot of one receive transform: an audio slot or a video slot. The page numbers each kind
+/// apart (`ambre-spec-call-media.md section 3`, the volumes and video on the canvas).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MediaSlot {
+    /// An audio slot, whose element plays at the volume of its member.
+    Audio(Pos<AudioSlots>),
+    /// A video slot, whose picture draws in the tile of its member.
+    Video(Pos<VideoSlots>),
+}
+
+/// What the call worker tells the page when a slot carries a new sender (`CALL-084`). It names
+/// the slot, and the sender index of the key identifier of its first chunk. It carries no key
+/// and no chunk.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SlotSender {
     /// The slot, as the page numbered its receive transform.
-    pub slot: Pos<AudioSlots>,
+    pub slot: MediaSlot,
     /// The sender of the chunks the slot now carries.
     pub sender: Seq<SenderIndex>,
 }
 
 impl SlotSender {
-    /// The 12 bytes the note crosses the worker boundary as: the slot, then the sender, each
-    /// big-endian.
+    /// The 13 bytes the note crosses the worker boundary as: the kind of the slot, the slot,
+    /// then the sender, each big-endian.
     #[must_use]
     pub fn to_bytes(self) -> FixedBytes<SlotSenderBytes> {
-        let mut out = [0; 12];
-        let (slot, sender) = out.split_at_mut(4);
-        slot.copy_from_slice(&self.slot.get().to_be_bytes());
+        let mut out = [0; 13];
+        let (kind, rest) = out.split_at_mut(1);
+        let (slot, sender) = rest.split_at_mut(4);
+        let (byte, number) = match self.slot {
+            MediaSlot::Audio(at) => (0, at.get()),
+            MediaSlot::Video(at) => (1, at.get()),
+        };
+        kind.copy_from_slice(&[byte]);
+        slot.copy_from_slice(&number.to_be_bytes());
         sender.copy_from_slice(&self.sender.get().to_be_bytes());
         FixedBytes::from_array(out)
     }
 
-    /// The note 12 bytes spell.
+    /// The note 13 bytes spell, or `None` when the first byte names no kind of slot.
     #[must_use]
-    pub fn from_bytes(bytes: &FixedBytes<SlotSenderBytes>) -> Self {
-        let [s0, s1, s2, s3, rest @ ..] = *bytes.as_array();
-        Self {
-            slot: Pos::new(u32::from_be_bytes([s0, s1, s2, s3])),
+    pub fn from_bytes(bytes: &FixedBytes<SlotSenderBytes>) -> Option<Self> {
+        let [kind, s0, s1, s2, s3, rest @ ..] = *bytes.as_array();
+        let number = u32::from_be_bytes([s0, s1, s2, s3]);
+        let slot = match kind {
+            0 => MediaSlot::Audio(Pos::new(number)),
+            1 => MediaSlot::Video(Pos::new(number)),
+            _ => return None,
+        };
+        Some(Self {
+            slot,
             sender: Seq::new(u64::from_be_bytes(rest)),
-        }
+        })
     }
 }
 
-/// The role of the 12 bytes a [`SlotSender`] crosses the worker boundary as:
+/// The role of the 13 bytes a [`SlotSender`] crosses the worker boundary as:
 /// `FixedBytes<SlotSenderBytes>`.
 pub enum SlotSenderBytes {}
 
 impl FixedRole for SlotSenderBytes {
     const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("SlotSenderBytes");
-    type Array = [u8; 12];
+    type Array = [u8; 13];
 }
 
 /// The index of one participant session in one call: the second field of a key
@@ -597,11 +631,28 @@ mod tests {
     /// `CALL-084`: the note of a new sender reads back from the bytes that cross to the page.
     #[test]
     fn a_slot_sender_reads_back_from_its_bytes() {
-        let note = super::SlotSender {
-            slot: crate::index::Pos::new(2),
-            sender: Seq::new(0x3FFF),
-        };
-        assert_eq!(super::SlotSender::from_bytes(&note.to_bytes()), note);
+        for slot in [
+            super::MediaSlot::Audio(crate::index::Pos::new(2)),
+            super::MediaSlot::Video(crate::index::Pos::new(7)),
+        ] {
+            let note = super::SlotSender {
+                slot,
+                sender: Seq::new(0x3FFF),
+            };
+            assert_eq!(super::SlotSender::from_bytes(&note.to_bytes()), Some(note));
+        }
+        // A first byte that names no kind of slot reads as no note.
+        let mut bytes = *super::SlotSender {
+            slot: super::MediaSlot::Audio(crate::index::Pos::new(0)),
+            sender: Seq::new(1),
+        }
+        .to_bytes()
+        .as_array();
+        bytes[0] = 2;
+        assert_eq!(
+            super::SlotSender::from_bytes(&crate::FixedBytes::from_array(bytes)),
+            None
+        );
     }
 
     /// Each track reads back from its two bits, and the fourth value names none.

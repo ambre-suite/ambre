@@ -64,6 +64,8 @@ pub(super) fn CallBar(
                 }
                 .into_any(),
                 CallControls::During(microphone) => view! {
+                    <RosterButton relay=relay />
+                    <FillButton />
                     <CameraButton />
                     <ShareButton />
                     <button
@@ -131,6 +133,77 @@ pub(super) fn CallBar(
                 })
             }}
         </span>
+    }
+}
+
+/// The list of the participants of a call (the Murmure calls spec, section 3, the video region).
+/// A button with an accessible name opens it and reports whether it is open. The tile that
+/// counts the others on the canvas opens it too. So each participant the grid has no room for
+/// reaches the page (`CHROME-029`).
+#[component]
+fn RosterButton(
+    /// The members of the spaces, which name each participant.
+    relay: MurmureRelay,
+) -> impl IntoView {
+    let roster = crate::call_stage::roster();
+    let participants = call_volumes::participants();
+    let (expanded, toggled, shown) = (roster.clone(), roster.clone(), roster);
+    let names = move || {
+        participants
+            .get()
+            .into_iter()
+            .map(|member| {
+                let name = relay
+                    .member_name(member)
+                    .map_or_else(|| "A participant".to_owned(), |n| n.as_str().to_owned());
+                view! { <li>{name}</li> }
+            })
+            .collect_view()
+    };
+    view! {
+        <button
+            class="icon murmure-call-roster"
+            title="Participants"
+            aria-label="Participants"
+            aria-expanded=move || expanded.get().aria()
+            on:click=move |_| toggled.set(toggled.get_untracked().toggled())
+        >
+            <Icon icon=icondata::MdiAccountMultiple />
+        </button>
+        {move || (shown.get() == ambre_chrome::Openness::Open).then(|| view! {
+            <ul class="murmure-call-roster-list" aria-label="Participants of the call">
+                <li>"You"</li>
+                {names.clone()}
+            </ul>
+        })}
+    }
+}
+
+/// The fill button of a call (the Murmure calls spec, section 3, the video region). It widens
+/// the call to the whole channel region, and a second press brings back the band. It carries
+/// `MdiFullscreen` while a press widens the call, and `MdiFullscreenExit` while a press shrinks
+/// it. It is a button with an accessible name and its pressed state, which takes the focus.
+#[component]
+fn FillButton() -> impl IntoView {
+    let fill = crate::call_stage::fill();
+    let (titled, named, pressed, icon) = (fill.clone(), fill.clone(), fill.clone(), fill);
+    let widened = move |fill: ambre_murmure::ui::call_videos::Fill| {
+        fill == ambre_murmure::ui::call_videos::Fill::Region
+    };
+    view! {
+        <button
+            class="icon murmure-call-fill"
+            title=move || titled.get().label()
+            aria-label=move || named.get().label()
+            aria-pressed=move || ambre_chrome::Pressed::from_bool(widened(pressed.get())).aria()
+            on:click=move |_| crate::call_stage::toggle_fill()
+        >
+            {move || if widened(icon.get()) {
+                view! { <Icon icon=icondata::MdiFullscreenExit /> }.into_any()
+            } else {
+                view! { <Icon icon=icondata::MdiFullscreen /> }.into_any()
+            }}
+        </button>
     }
 }
 

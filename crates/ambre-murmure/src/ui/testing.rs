@@ -64,7 +64,8 @@ pub fn channel_of(
         take_files: Rc::new(Vec::new),
         save_file: Rc::new(|_, _| {}),
         warn: Rc::new(|_| {}),
-        videos: Rc::new(Vec::new),
+        call: Rc::new(|| None),
+        show_roster: Rc::new(|| {}),
     };
     let (events, from_logic) =
         local(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<8>());

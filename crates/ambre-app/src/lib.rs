@@ -101,6 +101,9 @@ mod call_devices;
 /// The ring of the page: its alert, its tone and its timer.
 #[cfg(target_arch = "wasm32")]
 mod call_ring;
+/// What the video region shows of the call: the participants, their videos and who speaks.
+#[cfg(target_arch = "wasm32")]
+mod call_stage;
 /// The volumes of a call: the volume of each member, the gain and its meter.
 #[cfg(target_arch = "wasm32")]
 mod call_volumes;

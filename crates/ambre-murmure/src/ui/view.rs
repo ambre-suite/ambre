@@ -143,9 +143,12 @@ pub struct PageReads {
     pub save_file: SaveFile,
     /// Warn the user, in a toast: an upload failed (`MURMURE-133`).
     pub warn: Rc<dyn Fn(&str)>,
-    /// The slots whose received video holds a picture now, in the order of their slot. The
-    /// channel region draws each one in its video region (`MURMURE-620`).
-    pub videos: Rc<dyn Fn() -> Vec<Pos<ambre_core::VideoSlots>>>,
+    /// What the video region shows of the call of the page, `None` out of a call. The channel
+    /// region draws it above its composer (`MURMURE-620`, `MURMURE-651`).
+    pub call: Rc<dyn Fn() -> Option<crate::ui::call_videos::CallStage>>,
+    /// Open the list of the participants of the call: a press on the tile that counts the
+    /// others asks for it (`MURMURE-654`).
+    pub show_roster: Rc<dyn Fn()>,
 }
 
 /// What the page does with a file fetched, and its bytes.
@@ -346,8 +349,8 @@ pub struct MurmureView {
     barred: Option<MarkBar>,
     /// The version of the shelf the last plan read.
     shelf_seen: Seq<crate::ui::drafts::ShelfVersion>,
-    /// The videos the video region shows, as the last plan read them (`MURMURE-620`).
-    videos: Vec<Pos<ambre_core::VideoSlots>>,
+    /// What the video region shows of the call, as the last plan read it (`MURMURE-620`).
+    stage: Option<crate::ui::call_videos::CallStage>,
     /// Whether the content changed since the last paint.
     dirty: Repaint,
 }
@@ -452,7 +455,7 @@ impl MurmureView {
             listed: None,
             barred: None,
             shelf_seen: Seq::ZERO,
-            videos: Vec::new(),
+            stage: None,
             dirty: Repaint::Due,
         }
     }
@@ -488,7 +491,7 @@ impl MurmureView {
     /// The height of the video region, between the list and the composer: none while no video
     /// arrives (`MURMURE-620`, `MURMURE-621`).
     fn video_band(&self) -> Px<View> {
-        crate::ui::call_videos::band_height(self.size, &self.videos)
+        crate::ui::call_videos::region_height(self.size, self.composer.band(), self.stage.as_ref())
     }
 
     /// The channel on screen in the channel's region, `None` in the thread's
@@ -1234,26 +1237,31 @@ impl MurmureView {
             self.shelf_seen = shelved;
             self.dirty = Repaint::Due;
         }
-        // The channel region shows the videos of the call on its overlay, and each paint draws
-        // their current picture. So the overlay repaints at each frame while it shows a video,
-        // and once more to clear the last one. The list repaints only when the band comes or
-        // goes, since the band takes its height (`MURMURE-620`, `MURMURE-621`).
-        let videos = match self.region {
-            Region::Channel if shown.0.shown_channel().is_some() => (self.reads.videos)(),
-            Region::Channel | Region::Thread => Vec::new(),
+        // The channel region shows the call on its overlay, and each paint draws the current
+        // picture of each video. So the overlay repaints at each frame while it shows a video.
+        // It repaints once more at each change of the call, a voice or a mute included. The
+        // list repaints only when the band changes its height (`MURMURE-620`, `MURMURE-621`).
+        let stage = match self.region {
+            Region::Channel if shown.0.shown_channel().is_some() => (self.reads.call)(),
+            Region::Channel | Region::Thread => None,
         };
-        let overlay = if videos.is_empty() && self.videos.is_empty() {
+        let shows_video = |stage: &Option<crate::ui::call_videos::CallStage>| {
+            stage.as_ref().is_some_and(|s| {
+                s.screen.is_some()
+                    || s.own.video.is_some()
+                    || s.others.iter().any(|p| p.video.is_some())
+            })
+        };
+        let overlay = if stage == self.stage && !shows_video(&stage) {
             LayerRepaint::Reuse
         } else {
             LayerRepaint::Redraw
         };
-        // A screen changes the height of the band too (`MURMURE-629`).
-        let screen =
-            |slots: &[Pos<ambre_core::VideoSlots>]| slots.contains(&ambre_core::SCREEN_SLOT);
-        if videos.len() != self.videos.len() || screen(&videos) != screen(&self.videos) {
+        let before = self.video_band();
+        self.stage = stage;
+        if self.video_band() != before {
             self.dirty = Repaint::Due;
         }
-        self.videos = videos;
         if let Some(step) = self.kinetic.tick(now)
             && step.y() != Px::<View>::ZERO
         {
@@ -1739,12 +1747,23 @@ impl MurmureView {
     pub fn paint_overlay<S: DrawSurface>(
         &mut self,
         surface: &mut S,
-        _font_cx: &mut FontContext,
-        _text_cache: &mut TextCache,
+        font_cx: &mut FontContext,
+        text_cache: &mut TextCache,
         _stats: &FrameStats,
     ) {
-        // The band of the videos of the call, which the list gave up (`MURMURE-620`).
-        crate::ui::call_videos::paint(surface, &self.videos, self.band(), self.theme.palette());
+        // The band of the call, which the list gave up (`MURMURE-620`).
+        let mut pen = crate::ui::call_videos::Pen {
+            font_cx,
+            cache: text_cache,
+            palette: self.theme.palette(),
+        };
+        crate::ui::call_videos::paint(
+            surface,
+            &mut pen,
+            self.stage.as_ref(),
+            self.band(),
+            &*self.reads.name_of,
+        );
     }
 
     /// Where the video region lies: in the height the list gave up, above the composer.
@@ -1758,8 +1777,23 @@ impl MurmureView {
 
     /// The video of each slot the region shows, in its tile, for the render runtime to draw
     /// over the overlay (`MURMURE-620`, `CALL-015`). Empty while no video arrives.
-    pub fn video_tiles(&self) -> Vec<(Pos<ambre_core::VideoSlots>, Rect)> {
-        crate::ui::call_videos::placed(self.band(), &self.videos)
+    pub fn video_tiles(&self) -> Vec<crate::ui::call_videos::Picture> {
+        self.placed()
+            .map(|placed| crate::ui::call_videos::videos(&placed))
+            .unwrap_or_default()
+    }
+
+    /// Where each tile of the call lies, `None` out of a call.
+    fn placed(&self) -> Option<crate::ui::call_videos::Placed> {
+        let stage = self.stage.as_ref()?;
+        Some(crate::ui::call_videos::place(self.band(), stage))
+    }
+
+    /// Whether `at` falls on the tile that counts the others of the call (`MURMURE-654`).
+    fn on_more(&self, at: Point) -> bool {
+        self.placed()
+            .and_then(|placed| placed.more)
+            .is_some_and(|more| more.frame.contains(at))
     }
 
     /// The region now lays out at `size` logical pixels (`CANVAS-044`).
@@ -1820,6 +1854,11 @@ impl MurmureView {
                 if self.composer.focused() {
                     self.composer.blur();
                     self.dirty = Repaint::Due;
+                }
+                if button == PointerButton::Primary && self.on_more(at) {
+                    // The tile that counts the others opens their list (`MURMURE-654`).
+                    (self.reads.show_roster)();
+                    return Consumed::Yes;
                 }
                 if button == PointerButton::Secondary {
                     // The page's menu event follows, and opens the actions of
@@ -2140,8 +2179,10 @@ mod tests {
         saved: Rc<RefCell<Vec<Saved>>>,
         /// Each warning the view gave the user, oldest first.
         warned: Rc<RefCell<Vec<String>>>,
-        /// The slots whose video the page receives now (`MURMURE-620`).
-        videos: Rc<RefCell<Vec<Pos<ambre_core::VideoSlots>>>>,
+        /// What the page shows of its call now, `None` out of one (`MURMURE-620`).
+        call: Rc<RefCell<Option<crate::ui::call_videos::CallStage>>>,
+        /// How many times the view asked for the list of the participants (`MURMURE-654`).
+        rosters: Rc<Cell<u32>>,
     }
 
     /// A file the view handed the page, and its bytes.
@@ -2208,8 +2249,10 @@ mod tests {
         let saves = Rc::clone(&saved);
         let warned = Rc::new(RefCell::new(Vec::new()));
         let warns = Rc::clone(&warned);
-        let videos = Rc::new(RefCell::new(Vec::new()));
-        let received = Rc::clone(&videos);
+        let call = Rc::new(RefCell::new(None));
+        let received = Rc::clone(&call);
+        let rosters = Rc::new(Cell::new(0));
+        let asked_roster = Rc::clone(&rosters);
         let reads = PageReads {
             pane: Rc::new(move || shown.get()),
             name_of: Rc::new(|_| {
@@ -2284,7 +2327,8 @@ mod tests {
                 saves.borrow_mut().push((file.clone(), data));
             }),
             warn: Rc::new(move |text: &str| warns.borrow_mut().push(text.to_owned())),
-            videos: Rc::new(move || received.borrow().clone()),
+            call: Rc::new(move || received.borrow().clone()),
+            show_roster: Rc::new(move || asked_roster.set(asked_roster.get() + 1)),
         };
         let size = ambre_core::Size::new(ambre_core::Px::new(300), ambre_core::Px::new(400));
         let view = MurmureView::new(
@@ -2319,7 +2363,8 @@ mod tests {
             dropped,
             saved,
             warned,
-            videos,
+            call,
+            rosters,
         }
     }
 
@@ -4404,7 +4449,7 @@ mod tests {
 
     /// What one frame of a page drew. It holds whether its list repainted and whether its
     /// overlay did, then each video the overlay drew, by its slot and its tile.
-    type VideoFrame = (bool, bool, Vec<(Pos<ambre_core::VideoSlots>, Rect)>);
+    type VideoFrame = (bool, bool, Vec<crate::ui::call_videos::Picture>);
 
     /// Plans a frame of `page` and paints each layer the plan asks for into a recording surface,
     /// as the frame loop does.
@@ -4437,6 +4482,58 @@ mod tests {
         (full, overlay, drawn)
     }
 
+    /// A call of `count` other participants, the first `videos` of them each with a video.
+    fn in_call(count: u32, videos: u32) -> crate::ui::call_videos::CallStage {
+        use crate::ui::call_videos::{CallStage, Own, Participant, Voice};
+        CallStage {
+            others: (0..count)
+                .map(|i| Participant {
+                    member: Id::<User>::mint(),
+                    video: (i < videos).then(|| Pos::<ambre_core::VideoSlots>::new(i)),
+                    voice: Voice::Quiet,
+                })
+                .collect(),
+            screen: None,
+            own: Own {
+                member: None,
+                video: None,
+                microphone: crate::ui::call_controls::Microphone::Live,
+            },
+            fill: crate::ui::call_videos::Fill::Band,
+        }
+    }
+
+    /// `MURMURE-657`: a filled call takes the whole height above the composer, the list keeps
+    /// none, and the composer still takes a press. A band gives the list its height back.
+    #[test]
+    fn a_filled_call_leaves_the_list_no_height_and_keeps_the_composer() {
+        use crate::ui::call_videos::Fill;
+        let channel = Id::<Channel>::mint();
+        let mut page = composing(channel);
+        let composer = page.view.composer().band().get();
+        let mut stage = in_call(3, 1);
+        stage.fill = Fill::Region;
+        *page.call.borrow_mut() = Some(stage.clone());
+        let (full, _, drawn) = painted_videos(&mut page);
+        assert!(full, "the list gives up its height");
+        assert_eq!(page.view.list_height().get(), 0.0);
+        for tile in drawn.iter().map(|p| p.dest) {
+            assert!(
+                tile.y1 <= f64::from(400.0 - composer),
+                "{tile:?} over the composer"
+            );
+        }
+        assert!(
+            page.view
+                .in_composer(Px::<View>::new(400.0 - composer / 2.0))
+        );
+        stage.fill = Fill::Band;
+        *page.call.borrow_mut() = Some(stage);
+        let (full, _, _) = painted_videos(&mut page);
+        assert!(full, "the band gives the list its height back");
+        assert!(page.view.list_height().get() > 0.0);
+    }
+
     /// `MURMURE-620`: while the page receives videos, the channel region draws each one in a
     /// band between its list and its composer. Its overlay repaints at each frame. The list
     /// gives up the height of the band, and a press in the band reaches no composer.
@@ -4445,14 +4542,11 @@ mod tests {
         let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         let composer = page.view.composer().band().get();
-        let slots = [
-            Pos::<ambre_core::VideoSlots>::new(0),
-            Pos::<ambre_core::VideoSlots>::new(2),
-        ];
-        page.videos.borrow_mut().extend(slots);
+        let stage = in_call(2, 2);
+        *page.call.borrow_mut() = Some(stage.clone());
         let (full, _, drawn) = painted_videos(&mut page);
         assert!(full, "the band takes its height from the list");
-        let band = crate::ui::call_videos::band_height(page.view.size(), &slots).get();
+        let band = crate::ui::call_videos::band_height(page.view.size(), Some(&stage)).get();
         assert!(band > 0.0);
         assert_eq!(page.view.list_height().get(), 400.0 - composer - band);
         let (top, bottom) = (
@@ -4460,10 +4554,10 @@ mod tests {
             f64::from(400.0 - composer),
         );
         assert_eq!(
-            drawn.iter().map(|(slot, _)| *slot).collect::<Vec<_>>(),
-            slots
+            drawn.iter().map(|p| p.slot).collect::<Vec<_>>(),
+            [Pos::new(0), Pos::new(1)]
         );
-        for (_, tile) in &drawn {
+        for tile in drawn.iter().map(|p| p.dest) {
             assert!(
                 tile.y0 >= top && tile.y1 <= bottom,
                 "{tile:?} outside the band"
@@ -4491,27 +4585,86 @@ mod tests {
         );
     }
 
-    /// `MURMURE-621`: with no video, the channel region draws no video and its list keeps the
-    /// whole height above the composer. A video that stops gives the height back.
+    /// `MURMURE-621`, `MURMURE-651`: out of a call, the channel region shows no video region and
+    /// its list keeps the whole height above the composer. A call with every camera off shows
+    /// its region, which repaints once per change alone. The end of the call gives the height
+    /// back.
     #[test]
     fn no_video_shows_no_video_region() {
         let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         let composer = page.view.composer().band().get();
         let (_, overlay, drawn) = painted_videos(&mut page);
-        assert!(drawn.is_empty() && !overlay, "no video, no overlay");
+        assert!(drawn.is_empty() && !overlay, "no call, no overlay");
         assert_eq!(page.view.list_height().get(), 400.0 - composer);
-        page.videos
-            .borrow_mut()
-            .push(Pos::<ambre_core::VideoSlots>::new(0));
-        assert_eq!(painted_videos(&mut page).2.len(), 1);
-        page.videos.borrow_mut().clear();
+        *page.call.borrow_mut() = Some(in_call(2, 0));
         let (full, overlay, drawn) = painted_videos(&mut page);
-        assert!(full && overlay, "both layers repaint once the video stops");
+        assert!(full && overlay, "a call with no camera takes its band");
+        assert!(drawn.is_empty(), "no picture to draw");
+        assert!(page.view.list_height().get() < 400.0 - composer);
+        let (full, overlay, _) = painted_videos(&mut page);
+        assert!(
+            !full && !overlay,
+            "an unchanged call with no video reuses its paint"
+        );
+        if let Some(stage) = page.call.borrow_mut().as_mut() {
+            stage.own.microphone = crate::ui::call_controls::Microphone::Muted;
+        }
+        let (full, overlay, _) = painted_videos(&mut page);
+        assert!(!full && overlay, "a mute repaints the overlay alone");
+        *page.call.borrow_mut() = None;
+        let (full, overlay, drawn) = painted_videos(&mut page);
+        assert!(full && overlay, "both layers repaint once the call ends");
         assert!(drawn.is_empty());
         assert_eq!(page.view.list_height().get(), 400.0 - composer);
         let (full, overlay, _) = painted_videos(&mut page);
         assert!(!full && !overlay, "an idle region reuses its paint");
+    }
+
+    /// `MURMURE-654`: a press on the tile that counts the others asks the page for their list,
+    /// and a press on another tile asks for nothing.
+    #[test]
+    fn a_press_on_the_count_of_the_others_opens_their_list() {
+        let channel = Id::<Channel>::mint();
+        let mut page = composing(channel);
+        let stage = in_call(12, 0);
+        *page.call.borrow_mut() = Some(stage);
+        painted_videos(&mut page);
+        let placed = page
+            .view
+            .placed()
+            .unwrap_or_else(|| panic!("the call is placed"));
+        let more = placed
+            .more
+            .unwrap_or_else(|| panic!("a tile counts the others"));
+        let press = |at: Point| InputEvent::PointerDown {
+            at: ambre_core::Point::new(Px::<View>::new(at.x as f32), Px::<View>::new(at.y as f32)),
+            button: PointerButton::Primary,
+            mods: ModifierKeys::NONE,
+        };
+        let other = placed.tiles.first().map(|t| t.frame.center());
+        if let Some(other) = other {
+            let _ = page.view.handle_input(&press(other));
+            let _ = page.view.handle_input(&InputEvent::PointerUp {
+                at: ambre_core::Point::new(
+                    Px::<View>::new(other.x as f32),
+                    Px::<View>::new(other.y as f32),
+                ),
+                button: PointerButton::Primary,
+                mods: ModifierKeys::NONE,
+            });
+        }
+        assert_eq!(page.rosters.get(), 0, "a tile of a member opens nothing");
+        while page.commands.try_recv().is_ok() {}
+        assert_eq!(
+            page.view.handle_input(&press(more.frame.center())),
+            Consumed::Yes
+        );
+        assert_eq!(page.rosters.get(), 1);
+        assert!(
+            page.commands.try_recv().is_err(),
+            "the press sends no command to the Logic thread"
+        );
     }
 
     /// The band holds a field and its text, no toolbar, and the list

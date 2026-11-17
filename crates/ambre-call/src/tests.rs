@@ -2,7 +2,7 @@
 
 use ambre_core::index::Pos;
 use ambre_core::{
-    ClearChunk, KeyIdentifier, Payload, PictureKind, SealedChunk, Seq, SlotSender, Track,
+    ClearChunk, KeyIdentifier, MediaSlot, Payload, PictureKind, SealedChunk, Seq, SlotSender, Track,
 };
 use ambre_crypto::call::{AUDIO_CHUNK_SIZE, ChunkSealer, KeyHandoff, SenderKey};
 
@@ -178,7 +178,7 @@ fn a_slot_tells_the_page_of_each_new_sender_once() {
         ChunkSealer::new(key, kid).unwrap_or_else(|e| panic!("{e}"))
     };
     let (mut from_bob, mut from_carol) = (sealer(&bob, 2), sealer(&carol, 3));
-    let mut watch = SlotWatch::new(Pos::new(1));
+    let mut watch = SlotWatch::new(MediaSlot::Audio(Pos::new(1)));
     let mut notes = Vec::new();
     for speaker in [2, 2, 3, 3, 2] {
         let from = if speaker == 2 {
@@ -196,7 +196,7 @@ fn a_slot_tells_the_page_of_each_new_sender_once() {
     }
     let note = |sender| {
         Some(SlotSender {
-            slot: Pos::new(1),
+            slot: MediaSlot::Audio(Pos::new(1)),
             sender: Seq::new(sender),
         })
     };
@@ -239,6 +239,43 @@ fn a_camera_chunk_leaves_sealed_and_opens_on_a_receiver_of_the_camera_alone() {
         .unwrap_or_else(|| panic!("no open"));
     assert_eq!(opened.clear.as_bytes(), keyframe);
     assert_eq!(opened.sender, Seq::new(1));
+}
+
+/// `CALL-084` for a video slot. The first camera chunk of each new sender in a video slot tells
+/// the page that slot and that sender. Its picture then draws in the tile of its member.
+#[test]
+fn a_video_slot_tells_the_page_of_each_new_sender_once() {
+    let (bob, carol) = (SenderKey::generate(), SenderKey::generate());
+    let (mut from_bob, mut from_carol) = (CallWorker::default(), CallWorker::default());
+    from_bob.hand(seal_handoff(2, 0, &bob));
+    from_carol.hand(seal_handoff(3, 0, &carol));
+    let mut ada = CallWorker::default();
+    ada.hand(open_handoff(2, 0, &bob));
+    ada.hand(open_handoff(3, 0, &carol));
+    let keyframe = b"\x50\x2a\x00\x9d\x01\x2a\x00\x05\xd0\x02a face";
+    let mut watch = SlotWatch::new(MediaSlot::Video(Pos::new(4)));
+    let mut notes = Vec::new();
+    for speaker in [2, 2, 3] {
+        let from = if speaker == 2 {
+            &mut from_bob
+        } else {
+            &mut from_carol
+        };
+        let sealed = from
+            .seal_video(Track::Camera, &clear(keyframe), PictureKind::Keyframe)
+            .unwrap_or_else(|e| panic!("{e:?}"));
+        let opened = ada
+            .open(Track::Camera, sealed)
+            .unwrap_or_else(|| panic!("no open"));
+        notes.push(watch.opened(opened.sender));
+    }
+    let note = |sender| {
+        Some(SlotSender {
+            slot: MediaSlot::Video(Pos::new(4)),
+            sender: Seq::new(sender),
+        })
+    };
+    assert_eq!(notes, vec![note(2), None, note(3)]);
 }
 
 fn copy(chunk: &Payload<SealedChunk>) -> Payload<SealedChunk> {

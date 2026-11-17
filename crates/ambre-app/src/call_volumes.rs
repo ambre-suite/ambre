@@ -14,7 +14,7 @@ use std::cell::RefCell;
 use ambre_core::id::{Id, User};
 use ambre_core::index::Pos;
 use ambre_core::{
-    AudioSlots, Bounded, MeterLevel, ParticipantVolume, SenderIndex, Seq, SlotSender,
+    AudioSlots, Bounded, MeterLevel, ParticipantVolume, SenderIndex, Seq, SlotSender, VideoSlots,
 };
 use ambre_murmure::ui::call_volumes::{Gain, Playout, VolumeSupport, Volumes};
 use leptos::prelude::{ArcRwSignal, GetUntracked, Set, Update};
@@ -105,11 +105,21 @@ pub(crate) fn keep_gain(gain: Gain) {
     GAIN.with(|signal| signal.set(gain));
 }
 
-/// Reads a note of the call worker: the slot carries a new sender. Answers the volume the slot
-/// plays at from now on (`CALL-088`).
-pub(crate) fn carried(note: SlotSender) -> Bounded<ParticipantVolume> {
+/// Reads a note of the call worker: the slot carries a new sender. An audio slot answers the
+/// volume it plays at from now on (`CALL-088`). A video slot answers `None`.
+pub(crate) fn carried(note: SlotSender) -> Option<Bounded<ParticipantVolume>> {
     let volumes = VOLUMES.with(GetUntracked::get_untracked);
     PLAYOUT.with(|playout| playout.borrow_mut().carries(note, &volumes))
+}
+
+/// The video slots that carry `member`, lowest first (the Murmure calls spec, section 3, the video region).
+pub(crate) fn videos_of(member: Id<User>) -> Vec<Pos<VideoSlots>> {
+    PLAYOUT.with(|playout| playout.borrow().videos_of(member))
+}
+
+/// The member the audio slot `slot` carries now (the Murmure calls spec, section 3, the video region).
+pub(crate) fn member_in(slot: Pos<AudioSlots>) -> Option<Id<User>> {
+    PLAYOUT.with(|playout| playout.borrow().member_in(slot))
 }
 
 /// The volume the slot `slot` plays at.

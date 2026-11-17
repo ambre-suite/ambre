@@ -51,7 +51,7 @@ use ambre_bus::{CallSignal, LogicEvent, PageDescription, SyncCommand};
 use ambre_core::id::{Call, Channel, Id};
 use ambre_core::index::Pos;
 use ambre_core::{
-    AudioSlots, BitsPerSecond, Bounded, CallWorkerNote, Count, FixedBytes, Opaque,
+    AudioSlots, BitsPerSecond, Bounded, CallWorkerNote, Count, FixedBytes, MediaSlot, Opaque,
     ParticipantVolume, Payload, SCREEN_SLOT, SlotSender, Track, TransformSide, Validated,
     VideoSlots,
 };
@@ -679,9 +679,14 @@ fn seat(
         let worker = worker.clone();
         Closure::<dyn FnMut(web_sys::MessageEvent)>::new(move |e: web_sys::MessageEvent| {
             if let Some(note) = slot_sender(&e.data()) {
-                // The slot carries a new sender: it plays at the volume of its member at once
-                // (`CALL-088`).
-                play_at(note.slot, call_volumes::carried(note));
+                // An audio slot that carries a new sender plays at the volume of its member at
+                // once (`CALL-088`). A video slot moves its picture to the tile of its member
+                // (the Murmure calls spec, section 3, the video region).
+                if let (MediaSlot::Audio(slot), Some(volume)) =
+                    (note.slot, call_volumes::carried(note))
+                {
+                    play_at(slot, volume);
+                }
                 return;
             }
             let note = e
@@ -775,7 +780,7 @@ fn slot_sender(data: &JsValue) -> Option<SlotSender> {
     let bytes = data.dyn_ref::<js_sys::Uint8Array>()?.to_vec();
     FixedBytes::from_slice(&bytes)
         .ok()
-        .map(|bytes| SlotSender::from_bytes(&bytes))
+        .and_then(|bytes| SlotSender::from_bytes(&bytes))
 }
 
 /// Sets the element of the slot `slot` to `volume`, once the element exists.
@@ -823,6 +828,23 @@ fn next_video_slot() -> Option<Pos<VideoSlots>> {
     })
 }
 
+/// The track of the camera, while the camera goes into the call of the page. The member's own
+/// tile draws it (the Murmure calls spec, section 3).
+pub(crate) fn camera_track() -> Option<web_sys::MediaStreamTrack> {
+    SESSION.with(|slot| slot.borrow().as_ref()?.camera.clone())
+}
+
+/// The receiver of each audio slot of the call of the page, with its slot. The video region
+/// reads the level of each to outline who speaks (the Murmure calls spec, section 3).
+pub(crate) fn audio_receivers() -> Vec<(web_sys::RtcRtpReceiver, Pos<AudioSlots>)> {
+    SESSION.with(|slot| {
+        slot.borrow()
+            .as_ref()
+            .map(|session| session.receivers.clone())
+            .unwrap_or_default()
+    })
+}
+
 /// The slot the page gave the receiver `receiver`.
 fn slot_of(receiver: &web_sys::RtcRtpReceiver) -> Option<Pos<AudioSlots>> {
     SESSION.with(|slot| {
@@ -836,18 +858,22 @@ fn slot_of(receiver: &web_sys::RtcRtpReceiver) -> Option<Pos<AudioSlots>> {
 }
 
 /// A transform of the call worker, for one side of the track `track`, and for the slot `slot`
-/// of an audio receiver.
+/// of a receiver. The track tells the call worker the kind of the slot.
 fn transform(
     worker: &web_sys::Worker,
     side: TransformSide,
     track: Track,
-    slot: Option<Pos<AudioSlots>>,
+    slot: Option<MediaSlot>,
 ) -> Option<JsValue> {
     let options = js_sys::Object::new();
     js_sys::Reflect::set(&options, &"side".into(), &side.as_str().into()).ok()?;
     js_sys::Reflect::set(&options, &"track".into(), &track.bits().into()).ok()?;
-    if let Some(slot) = slot {
-        js_sys::Reflect::set(&options, &"slot".into(), &slot.get().into()).ok()?;
+    let number = slot.map(|slot| match slot {
+        MediaSlot::Audio(slot) => slot.get(),
+        MediaSlot::Video(slot) => slot.get(),
+    });
+    if let Some(number) = number {
+        js_sys::Reflect::set(&options, &"slot".into(), &number.into()).ok()?;
     }
     let class = js_sys::Reflect::get(&js_sys::global(), &"RTCRtpScriptTransform".into()).ok()?;
     let class: js_sys::Function = class.dyn_into().ok()?;
@@ -861,7 +887,7 @@ fn attach(
     worker: &web_sys::Worker,
     side: TransformSide,
     track: Track,
-    slot: Option<Pos<AudioSlots>>,
+    slot: Option<MediaSlot>,
 ) -> Option<()> {
     let t = transform(worker, side, track, slot)?;
     js_sys::Reflect::set(target, &"transform".into(), &t)
@@ -1298,7 +1324,7 @@ fn connect(
         worker,
         TransformSide::Receive,
         Track::Audio,
-        first,
+        first.map(MediaSlot::Audio),
     );
     let Some(video) = video_sender(&pc, worker) else {
         tracing::error!("[Call] the video sender did not open: no call is held");
@@ -1360,7 +1386,10 @@ fn connect(
                     } else {
                         Track::Camera
                     };
-                    attach(&receiver, &worker, TransformSide::Receive, track, None);
+                    // The call worker tells the page the sender of the slot. Its picture then
+                    // draws in the tile of its member (the Murmure calls spec, section 3).
+                    let named = Some(MediaSlot::Video(slot));
+                    attach(&receiver, &worker, TransformSide::Receive, track, named);
                     ambre_canvas::video::show(slot, &e.track());
                 }
                 return;
@@ -1374,7 +1403,7 @@ fn connect(
                     &worker,
                     TransformSide::Receive,
                     Track::Audio,
-                    slot,
+                    slot.map(MediaSlot::Audio),
                 );
                 slot
             };
@@ -1615,6 +1644,7 @@ async fn drive(worker: web_sys::Worker, rx: ambre_bus::conduit::Receiver<Drive>)
     CAMERA.with(|camera| camera.set(Camera::Off));
     SHARE.with(|share| share.set(Share::Off));
     call_volumes::forget();
+    crate::call_stage::forget();
     call_devices::forget_fallback();
     PHASE.with(|phase| {
         phase.update(|phase| {

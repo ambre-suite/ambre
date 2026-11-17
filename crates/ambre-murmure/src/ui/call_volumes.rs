@@ -14,8 +14,8 @@
 use ambre_core::id::{Id, User};
 use ambre_core::index::Pos;
 use ambre_core::{
-    AudioSlots, Bounded, MeterLevel, MicrophoneGain, ParticipantVolume, SenderIndex, Seq,
-    SlotSender, StaticKey, StorageKeys,
+    AudioSlots, Bounded, MediaSlot, MeterLevel, MicrophoneGain, ParticipantVolume, SenderIndex,
+    Seq, SlotSender, StaticKey, StorageKeys, VideoSlots,
 };
 
 /// The local storage key of the volume of each member.
@@ -164,25 +164,63 @@ impl Gain {
     }
 }
 
-/// What the page knows of the audio slots of its call. It holds the sender each slot carries,
-/// and the member of each sender index the Sync worker admitted.
+/// What the page knows of the slots of its call. It holds the sender each audio slot and each
+/// video slot carries, and the member of each sender index the Sync worker admitted.
 #[derive(Debug, Default)]
 pub struct Playout {
-    /// The sender of each slot, once per slot. A receiver holds a few slots.
+    /// The sender of each audio slot, once per slot. A receiver holds a few slots.
     slots: Vec<(Pos<AudioSlots>, Seq<SenderIndex>)>,
+    /// The sender of each video slot, once per slot (`MURMURE-651`).
+    videos: Vec<(Pos<VideoSlots>, Seq<SenderIndex>)>,
     /// The member of each sender index in the call, once per index.
     members: Vec<(Seq<SenderIndex>, Id<User>)>,
 }
 
 impl Playout {
-    /// Reads a note of the call worker: the slot carries a new sender (`CALL-084`). Answers the
-    /// volume the slot plays at from now on, the volume of the member of the new sender
-    /// (`CALL-088`). A sender the Sync worker has not named yet plays at the full level, until
-    /// [`Playout::admitted`] names it.
-    pub fn carries(&mut self, note: SlotSender, volumes: &Volumes) -> Bounded<ParticipantVolume> {
-        self.slots.retain(|(slot, _)| *slot != note.slot);
-        self.slots.push((note.slot, note.sender));
-        self.volume_of(note.slot, volumes)
+    /// Reads a note of the call worker: the slot carries a new sender (`CALL-084`). For an audio
+    /// slot, it answers the volume the slot plays at from now on, the volume of the member of the
+    /// new sender (`CALL-088`). A sender the Sync worker has not named yet plays at the full
+    /// level, until [`Playout::admitted`] names it. A video slot plays no sound, so it answers
+    /// `None`: its picture moves to the tile of the new member (`MURMURE-651`).
+    pub fn carries(
+        &mut self,
+        note: SlotSender,
+        volumes: &Volumes,
+    ) -> Option<Bounded<ParticipantVolume>> {
+        match note.slot {
+            MediaSlot::Audio(slot) => {
+                self.slots.retain(|(held, _)| *held != slot);
+                self.slots.push((slot, note.sender));
+                Some(self.volume_of(slot, volumes))
+            }
+            MediaSlot::Video(slot) => {
+                self.videos.retain(|(held, _)| *held != slot);
+                self.videos.push((slot, note.sender));
+                None
+            }
+        }
+    }
+
+    /// The member the audio slot `slot` carries now, once the Sync worker named its sender.
+    #[must_use]
+    pub fn member_in(&self, slot: Pos<AudioSlots>) -> Option<Id<User>> {
+        self.slots
+            .iter()
+            .find(|(s, _)| *s == slot)
+            .and_then(|(_, sender)| self.member_of(*sender))
+    }
+
+    /// The video slots that carry a sender of `member`, lowest first (`MURMURE-651`).
+    #[must_use]
+    pub fn videos_of(&self, member: Id<User>) -> Vec<Pos<VideoSlots>> {
+        let mut slots: Vec<Pos<VideoSlots>> = self
+            .videos
+            .iter()
+            .filter(|(_, sender)| self.member_of(*sender) == Some(member))
+            .map(|(slot, _)| *slot)
+            .collect();
+        slots.sort_unstable();
+        slots
     }
 
     /// The Sync worker admitted `sender`, whose join names `member`. Answers each slot that
@@ -308,7 +346,9 @@ mod tests {
     use super::{Gain, Playout, VolumeSupport, Volumes, level};
     use ambre_core::id::{Id, User};
     use ambre_core::index::Pos;
-    use ambre_core::{Bounded, MeterLevel, MicrophoneGain, ParticipantVolume, Seq, SlotSender};
+    use ambre_core::{
+        Bounded, MediaSlot, MeterLevel, MicrophoneGain, ParticipantVolume, Seq, SlotSender,
+    };
 
     fn volume(value: f32) -> Bounded<ParticipantVolume> {
         Bounded::new(value).unwrap_or_else(|| panic!("a volume of {value}"))
@@ -316,9 +356,48 @@ mod tests {
 
     fn note(slot: u32, sender: u64) -> SlotSender {
         SlotSender {
-            slot: Pos::new(slot),
+            slot: MediaSlot::Audio(Pos::new(slot)),
             sender: Seq::new(sender),
         }
+    }
+
+    fn video(slot: u32, sender: u64) -> SlotSender {
+        SlotSender {
+            slot: MediaSlot::Video(Pos::new(slot)),
+            sender: Seq::new(sender),
+        }
+    }
+
+    /// The volume the audio slot of `note` plays at once it carries the sender of `note`.
+    fn carried(
+        playout: &mut Playout,
+        note: SlotSender,
+        volumes: &Volumes,
+    ) -> Bounded<ParticipantVolume> {
+        playout
+            .carries(note, volumes)
+            .unwrap_or_else(|| panic!("an audio slot answers its volume"))
+    }
+
+    /// `MURMURE-651`: a video slot follows the member of its sender, from sender to sender, and
+    /// plays no sound. A sender the Sync worker has not named is no one's video yet.
+    #[test]
+    fn a_video_slot_follows_the_member_of_its_sender() {
+        let (bob, carol) = (Id::<User>::mint(), Id::<User>::mint());
+        let volumes = Volumes::default();
+        let mut playout = Playout::default();
+        assert_eq!(playout.carries(video(3, 2), &volumes), None);
+        assert!(playout.videos_of(bob).is_empty(), "no member named yet");
+        playout.admitted(Seq::new(2), bob);
+        playout.admitted(Seq::new(4), carol);
+        assert_eq!(playout.videos_of(bob), vec![Pos::new(3)]);
+        playout.carries(video(3, 4), &volumes);
+        playout.carries(video(1, 2), &volumes);
+        assert_eq!(playout.videos_of(bob), vec![Pos::new(1)]);
+        assert_eq!(playout.videos_of(carol), vec![Pos::new(3)]);
+        playout.carries(note(0, 4), &volumes);
+        assert_eq!(playout.member_in(Pos::new(0)), Some(carol));
+        assert_eq!(playout.member_in(Pos::new(2)), None);
     }
 
     /// `CALL-085`, `CALL-086`, `CALL-087`: a member turned down to nothing plays silence in the
@@ -334,14 +413,14 @@ mod tests {
         assert_eq!(playout.admitted(Seq::new(2), bob), Vec::new());
         playout.admitted(Seq::new(3), carol);
         assert_eq!(
-            playout.carries(note(0, 2), &volumes),
+            carried(&mut playout, note(0, 2), &volumes),
             Bounded::<ParticipantVolume>::SILENT
         );
-        assert_eq!(playout.carries(note(1, 3), &volumes), volume(0.5));
+        assert_eq!(carried(&mut playout, note(1, 3), &volumes), volume(0.5));
         // The slots swap their senders.
-        assert_eq!(playout.carries(note(0, 3), &volumes), volume(0.5));
+        assert_eq!(carried(&mut playout, note(0, 3), &volumes), volume(0.5));
         assert_eq!(
-            playout.carries(note(1, 2), &volumes),
+            carried(&mut playout, note(1, 2), &volumes),
             Bounded::<ParticipantVolume>::SILENT
         );
         assert_eq!(playout.slots_of(bob), vec![Pos::new(1)]);
@@ -358,10 +437,10 @@ mod tests {
         volumes.set(bob, Bounded::<ParticipantVolume>::SILENT);
         let mut playout = Playout::default();
         playout.admitted(Seq::new(2), bob);
-        playout.carries(note(0, 2), &volumes);
+        carried(&mut playout, note(0, 2), &volumes);
         playout.departed(Seq::new(2));
         assert_eq!(
-            playout.carries(note(2, 7), &volumes),
+            carried(&mut playout, note(2, 7), &volumes),
             Bounded::<ParticipantVolume>::FULL
         );
         assert_eq!(playout.admitted(Seq::new(7), bob), vec![Pos::new(2)]);
@@ -382,13 +461,13 @@ mod tests {
         let mut playout = Playout::default();
         playout.admitted(Seq::new(2), bob);
         playout.admitted(Seq::new(3), carol);
-        playout.carries(note(0, 2), &volumes);
+        carried(&mut playout, note(0, 2), &volumes);
         assert_eq!(
-            playout.carries(note(0, 3), &volumes),
+            carried(&mut playout, note(0, 3), &volumes),
             Bounded::<ParticipantVolume>::FULL
         );
         assert_eq!(
-            playout.carries(note(0, 2), &volumes),
+            carried(&mut playout, note(0, 2), &volumes),
             Bounded::<ParticipantVolume>::SILENT
         );
     }

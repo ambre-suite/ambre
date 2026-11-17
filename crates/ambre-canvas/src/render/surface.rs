@@ -270,15 +270,18 @@ impl<'r> WgpuSurface<'r> {
     ///
     /// A video is screen state, so it is no primitive of `DrawSurface`: a page export draws
     /// none (`CANVAS-056`).
-    pub fn draw_video(&mut self, slot: Pos<VideoSlots>, dest: Rect) {
+    ///
+    /// `facing` mirrors the own camera of the member, left for right.
+    pub fn draw_video(&mut self, slot: Pos<VideoSlots>, dest: Rect, facing: crate::video::Facing) {
         // The page holds the element of each slot, so a host build draws no video.
         #[cfg(target_arch = "wasm32")]
         {
             let Some((element, size)) = crate::video::frame(slot) else {
                 return;
             };
-            let Some(corners) =
-                crate::video::contain(size, dest).and_then(|fit| self.quad_corners(fit))
+            let Some(corners) = crate::video::contain(size, dest)
+                .and_then(|fit| self.quad_corners(fit))
+                .map(|corners| facing.corners(corners))
             else {
                 return;
             };
@@ -286,7 +289,7 @@ impl<'r> WgpuSurface<'r> {
                 .push_video(self.device, self.queue, slot, (&element, size), corners);
         }
         #[cfg(not(target_arch = "wasm32"))]
-        let _ = (slot, dest);
+        let _ = (slot, dest, facing);
     }
 
     /// The four corners of `dest` on screen, `[tl, tr, br, bl]`, mapped through the active

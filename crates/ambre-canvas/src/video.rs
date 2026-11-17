@@ -17,6 +17,31 @@
 use ambre_core::{Image, Px, Size};
 use ambre_draw::Rect;
 
+/// Which way a picture faces on the canvas.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Facing {
+    /// As the sender captured it: a received video.
+    AsSent,
+    /// Left for right, as a mirror shows a face: the member's own camera.
+    Mirrored,
+}
+
+impl Facing {
+    /// The corners a picture takes on screen, from the corners of its box in the order top
+    /// left, top right, bottom right, bottom left. The texture keeps that order, so a mirrored
+    /// picture swaps its left corners for its right ones.
+    #[must_use]
+    pub fn corners<T: Copy>(self, corners: [T; 4]) -> [T; 4] {
+        match self {
+            Self::AsSent => corners,
+            Self::Mirrored => {
+                let [top_left, top_right, bottom_right, bottom_left] = corners;
+                [top_right, top_left, bottom_left, bottom_right]
+            }
+        }
+    }
+}
+
 /// The box inside `dest` that a picture of `frame` fills with its aspect kept, centred on
 /// the free axis. A picture of no size fills nothing.
 pub fn contain(frame: Size<Px<Image>>, dest: Rect) -> Option<Rect> {
@@ -80,6 +105,22 @@ mod page {
         });
     }
 
+    /// Drops the video of `slot`: the member's own camera stopped.
+    pub fn forget(slot: Pos<VideoSlots>) {
+        let gone: Vec<Video> = VIDEOS.with(|videos| {
+            let mut videos = videos.borrow_mut();
+            let (gone, kept) = std::mem::take(&mut *videos)
+                .into_iter()
+                .partition(|v| v.slot == slot);
+            *videos = kept;
+            gone
+        });
+        for video in gone {
+            let _ = video.element.pause();
+            video.element.set_src_object(None);
+        }
+    }
+
     /// Drops the video of every slot: the call ended.
     pub fn forget_all() {
         let gone = VIDEOS.with(|videos| std::mem::take(&mut *videos.borrow_mut()));
@@ -111,7 +152,7 @@ mod page {
     }
 
     /// Whether the page holds a video under `slot`.
-    pub(crate) fn holds(slot: Pos<VideoSlots>) -> bool {
+    pub fn holds(slot: Pos<VideoSlots>) -> bool {
         VIDEOS.with(|videos| videos.borrow().iter().any(|v| v.slot == slot))
     }
 
@@ -132,9 +173,9 @@ mod page {
 }
 
 #[cfg(target_arch = "wasm32")]
-pub use page::{forget_all, live, show};
+pub(crate) use page::frame;
 #[cfg(target_arch = "wasm32")]
-pub(crate) use page::{frame, holds};
+pub use page::{forget, forget_all, holds, live, show};
 
 /// The slots whose video holds a picture now. A host build holds no video.
 #[cfg(not(target_arch = "wasm32"))]
@@ -148,6 +189,22 @@ mod tests {
 
     fn size(w: u32, h: u32) -> Size<Px<Image>> {
         Size::new(Px::<Image>::new(w), Px::<Image>::new(h))
+    }
+
+    /// A mirrored picture swaps its left corners for its right ones, and a
+    /// received picture keeps its corners.
+    #[test]
+    fn a_mirrored_picture_swaps_its_left_and_right() {
+        let corners = ["top left", "top right", "bottom right", "bottom left"];
+        assert_eq!(Facing::AsSent.corners(corners), corners);
+        assert_eq!(
+            Facing::Mirrored.corners(corners),
+            ["top right", "top left", "bottom left", "bottom right"]
+        );
+        assert_eq!(
+            Facing::Mirrored.corners(Facing::Mirrored.corners(corners)),
+            corners
+        );
     }
 
     /// `CALL-015`: a picture keeps its aspect inside its tile, centred on the free axis, and

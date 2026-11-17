@@ -68,8 +68,9 @@ pub fn page_reads(relay: MurmureRelay, pipe: TextInput, warn: Rc<dyn Fn(&str)>) 
         take_files: Rc::new(move || relay.take_files()),
         save_file: Rc::new(save_file),
         warn,
-        // The render runtime holds the video of each slot, so the page reads the live ones there.
-        videos: Rc::new(ambre_canvas::video::live),
+        // The page holds the call, and the render runtime the video of each slot.
+        call: Rc::new(move || crate::call_stage::stage(relay.me())),
+        show_roster: Rc::new(crate::call_stage::show_roster),
     }
 }
 

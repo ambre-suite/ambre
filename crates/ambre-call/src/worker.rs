@@ -16,8 +16,8 @@ use std::rc::Rc;
 
 use ambre_core::index::Pos;
 use ambre_core::{
-    CallWorkerNote, ClearChunk, Confidential, Payload, PictureKind, Plaintext, SealedChunk,
-    SlotSender, Track, TransformSide,
+    CallWorkerNote, ClearChunk, Confidential, MediaSlot, Payload, PictureKind, Plaintext,
+    SealedChunk, SlotSender, Track, TransformSide,
 };
 use ambre_crypto::call::KeyHandoff;
 use wasm_bindgen::JsCast;
@@ -134,12 +134,20 @@ async fn pump(state: Shared, transformer: JsValue, scope: DedicatedWorkerGlobalS
         .and_then(|track| track.as_f64())
         .filter(|track| track.fract() == 0.0 && (0.0..=f64::from(u8::MAX)).contains(track))
         .map_or(Some(Track::Audio), |track| Track::from_bits(track as u8));
-    // The page numbers each receive transform of audio; a slot it does not name tells nothing.
+    // The page numbers each receive transform, the audio slots apart from the video slots; a
+    // slot it does not name tells nothing.
     let mut watch = options
         .and_then(|options| js_sys::Reflect::get(&options, &"slot".into()).ok())
         .and_then(|slot| slot.as_f64())
         .filter(|slot| slot.fract() == 0.0 && (0.0..=f64::from(u32::MAX)).contains(slot))
-        .map(|slot| SlotWatch::new(Pos::new(slot as u32)));
+        .and_then(|slot| {
+            let at = slot as u32;
+            match track? {
+                Track::Audio => Some(MediaSlot::Audio(Pos::new(at))),
+                Track::Camera | Track::Screen => Some(MediaSlot::Video(Pos::new(at))),
+            }
+        })
+        .map(SlotWatch::new);
     let readable = get("readable").and_then(|r| r.dyn_into::<web_sys::ReadableStream>().ok());
     let writable = get("writable").and_then(|w| w.dyn_into::<web_sys::WritableStream>().ok());
     let (Some(side), Some(track), Some(readable), Some(writable)) =

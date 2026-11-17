@@ -117,7 +117,7 @@ pub(crate) fn surface_px(length: Px<View>) -> Px<Surface> {
 
 /// A coordinate of the surface, as a length of the painter: the inverse of
 /// [`surface_px`]. Only the float narrows.
-fn painter_px(at: Px<Surface>) -> Px<View> {
+pub(crate) fn painter_px(at: Px<Surface>) -> Px<View> {
     at.in_view(Px::<Surface>::ZERO)
 }
 
