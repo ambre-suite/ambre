@@ -118,13 +118,14 @@ lint-wasm:
 #
 # `dev-login` is the one feature read negatively: a build without it refuses
 # the sign-in by a bare name (`ZK-045`). The union leaves it off, so the
-# refusal runs there, and a second line runs the two crates that carry it.
+# refusal runs there. A second line runs the two crates that carry it, their
+# integration tests included: those sign in by a bare name to reach a session.
 
 # native tier: the whole workspace, fixture belts and PDF export included, on
 # native x86_64, in one build.
 test-native:
     cargo test --workspace --features ambre-logic/fixtures,ambre-toile/pdf,ambre-logic/toile-pdf,ambre-pptx/codec,ambre-canvas/tokens
-    cargo test -p ambre-crypto -p ambre-sync --lib --features ambre-sync/dev-login
+    cargo test -p ambre-crypto -p ambre-sync --tests --features ambre-sync/dev-login
     just fixtures-check
     just tokens-check
     just locale-table-check

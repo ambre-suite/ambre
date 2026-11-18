@@ -55,6 +55,8 @@ fn send_rest(state: &mut ambre_sync::SyncState, id: Seq<Request>, cmd: RestComma
 // Session lifecycle
 // -----------------------------------------------------------------------------
 
+// Signs in by a bare name, which only a `dev-login` build holds (`ZK-045`).
+#[cfg(feature = "dev-login")]
 #[test]
 fn dev_login_returns_session_ready() {
     let (mut state, rx, _mock) = setup(false);
@@ -324,6 +326,8 @@ fn a_recovery_with_valid_words_goes_on_to_the_relay() {
     assert!(mock.server_rx.try_recv().is_err(), "no frame left");
 }
 
+// Signs in by a bare name, which only a `dev-login` build holds (`ZK-045`).
+#[cfg(feature = "dev-login")]
 #[test]
 fn logout_returns_logged_out_and_clears_session() {
     let (mut state, rx, _mock) = setup(false);
@@ -514,6 +518,8 @@ fn rename_document_updates_name() {
 // Multi-document lifecycle (open / close)
 // -----------------------------------------------------------------------------
 
+// Signs in by a bare name, which only a `dev-login` build holds (`ZK-045`).
+#[cfg(feature = "dev-login")]
 #[test]
 fn open_document_subscribes_via_mock_ws() {
     let (mut state, rx, mock) = setup(true);
@@ -556,6 +562,8 @@ fn open_document_subscribes_via_mock_ws() {
     }
 }
 
+// Signs in by a bare name, which only a `dev-login` build holds (`ZK-045`).
+#[cfg(feature = "dev-login")]
 #[test]
 fn close_document_unsubscribes_via_mock_ws() {
     let (mut state, rx, mock) = setup(true);
@@ -593,6 +601,8 @@ fn close_document_unsubscribes_via_mock_ws() {
     }
 }
 
+// Signs in by a bare name, which only a `dev-login` build holds (`ZK-045`).
+#[cfg(feature = "dev-login")]
 #[test]
 fn send_update_after_open_document_encrypts_and_sends() {
     let (mut state, rx, mock) = setup(true);
@@ -641,6 +651,8 @@ fn send_update_after_open_document_encrypts_and_sends() {
 // Full session flow (end-to-end smoke test)
 // -----------------------------------------------------------------------------
 
+// Signs in by a bare name, which only a `dev-login` build holds (`ZK-045`).
+#[cfg(feature = "dev-login")]
 #[test]
 fn full_session_flow_sign_in_create_open_close_logout() {
     let (mut state, rx, mock) = setup(true);
