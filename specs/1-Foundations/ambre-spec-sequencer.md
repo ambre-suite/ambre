@@ -70,6 +70,7 @@ sequence has already moved.
 | `SRV-154` | `FRAME` | A trim MUST NOT drop a batch object that still holds a delta no retained snapshot covers. | this spec section 3; `SRV-083` | `ambre_server::hot_tail::db_tests::a_trim_drops_a_batch_only_once_no_row_names_it` -- a snapshot covering seven of ten deltas drops the batch of the first five and keeps the one still naming eight to ten | none | verified |
 | `SRV-038` | `POST` | The relay MUST ask for a snapshot once a document's unfolded history passes its threshold. | this spec section 3; `ambre-spec-delta-order.md`; `ambre-spec-budgets.md section 6` | `ambre_server::compaction::db_tests::the_writer_is_asked_once_past_the_threshold` -- the writer is asked at the first check past the threshold, and not again while the ask stands, on the database tier, behind the feature the test recipe carries (`ambre-spec-testing.md section 5`); `ambre_server::compaction::tests::the_history_past_the_served_snapshot_decides` -- the threshold counts from the served horizon | none | verified |
 | `SRV-126` | `POST` | A snapshot MUST stay pending until another member client confirms it, or until its author confirms it. | this spec section 3; `AUTHOR-016`, `AUTHOR-021` | `ambre_server::routes::tests::a_snapshot_is_served_once_confirmed` -- an upload is pending, its author makes it `self` and another member `confirmed`; `ambre_server::compaction::db_tests::one_author_alone_stands_past_the_reference` -- a second author may not confirm alone past the reference, and another member still may, on the database tier, behind the feature the test recipe carries (`ambre-spec-testing.md section 5`) | none | verified |
+| `SRV-284` | `FAIL` | Given a confirmation whose signature does not verify under the confirmer's key, the relay MUST refuse it and keep the snapshot's standing. | this spec section 3; `AUTHOR-030`, `AUTHOR-031` | `ambre_server::routes::tests::a_confirmation_stands_only_under_its_confirmers_signature` -- a signature by another key, over another horizon, or absent is refused and nothing is served, and the signature kept is served with the snapshot, and with the reference beside a later `self` one, on the database tier, behind the feature the test recipe carries (`ambre-spec-testing.md section 5`) | none | verified |
 | `SRV-127` | `FRAME` | A trim MUST NOT count a pending snapshot. | this spec section 3; `SRV-083` | `ambre_server::compaction::db_tests::a_pending_snapshot_moves_no_trim` -- nothing goes before a confirmation, and the covered deltas go after it, on the database tier, behind the feature the test recipe carries (`ambre-spec-testing.md section 5`) | none | verified |
 | `SRV-128` | `POST` | A cold open MUST be served the latest confirmed snapshot. | this spec section 3; `AUTHOR-015` | `ambre_server::routes::tests::a_snapshot_is_served_once_confirmed` -- a pending snapshot is not served, and one confirmed is, with its standing | none | verified |
 | `SRV-129` | `POST` | A pending snapshot MUST be offered for confirmation to a member client, other than its author, that has the document open. | this spec section 3; `AUTHOR-016` | `ambre_server::routes::tests::a_snapshot_is_served_once_confirmed` -- the document's topic hears the upload with its horizon | none | verified |
@@ -186,7 +187,7 @@ it to every writer that asks.
 * **Boundary.** the relay orders bytes it cannot read. What it learns is the routing set of
   `ZK-007`: which key wrote to which document, at which clock, and how large the delta was.
   `SRV-001` keeps the delta out of the logs.
-* **Verification.** 77 `verified`. The ordering, the storage and the replay hold. So does each step
+* **Verification.** 78 `verified`. The ordering, the storage and the replay hold. So does each step
   of a segment's life, from its close to its fold, and the thread of a root. The recovery paths are
   driven through real failures: a register that refuses inserts, a queue that refuses pushes, an
   index that cannot be read.
@@ -320,6 +321,10 @@ has the document open (`SRV-129`), so two active members confirm within seconds.
 confirm its own snapshot. The relay then keeps the reference snapshot (`SRV-131`) and every delta
 another user signed past it (`SRV-130`), and drops the author's own. So the deltas kept stop
 growing while one author writes alone (`SRV-132`).
+
+A confirmation carries the confirmer's signature over the document, the snapshot, its horizon and
+its author. The relay refuses one that does not verify (`SRV-284`). It keeps another member's
+signature and serves it with the snapshot, since a cold open trusts nothing else (`AUTHOR-030`).
 
 Only a confirmed snapshot is retained, and moves the trim (`SRV-127`). A mismatch report drops
 the pending snapshot and keeps every delta (`SRV-133`, `SRV-135`). The next snapshot comes from

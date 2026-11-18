@@ -1,6 +1,6 @@
 //! The bytes a signature covers.
 //!
-//! A membership entry, a mismatch report and a re-seal are each signed
+//! A membership entry, a mismatch report, a confirmation and a re-seal are each signed
 //! over a transcript: a domain, then the fields the signature binds. The signer and
 //! the verifier build it from the same fields, and neither stores it. With a
 //! bare `Vec<u8>`, any byte string could reach a `verify` call. This type
@@ -8,7 +8,8 @@
 
 /// The bytes one signature covers, built by
 /// [`crate::MembershipEntry::signed_bytes`],
-/// [`crate::snapshot_report::report_transcript`] or
+/// [`crate::snapshot_report::report_transcript`],
+/// [`crate::snapshot_confirm::confirm_transcript`] or
 /// [`crate::master_rotation::rotation_transcript`]. `Debug` prints the length.
 #[derive(Clone, PartialEq, Eq)]
 pub struct SignedTranscript(Vec<u8>);

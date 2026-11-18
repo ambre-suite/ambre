@@ -392,7 +392,17 @@ impl SyncState {
                 self.send_to_logic(LogicEvent::DocumentReady { document_id, role });
                 None
             }
-            SnapshotPurpose::Confirm if passes => Some(Vouch::Confirm),
+            SnapshotPurpose::Confirm if passes => {
+                let signing_key = self.signing_key.as_ref()?;
+                let transcript = ambre_protocol::snapshot_confirm::confirm_transcript(
+                    document_id,
+                    snapshot_id,
+                    check.covered_seq,
+                    &check.author,
+                );
+                let signature = ambre_crypto::signature::sign_message(signing_key, &transcript);
+                Some(Vouch::Confirm(signature))
+            }
             SnapshotPurpose::Confirm if mismatch => {
                 let signing_key = self.signing_key.as_ref()?;
                 let transcript = ambre_protocol::snapshot_report::report_transcript(
@@ -756,6 +766,7 @@ impl SyncState {
         // 404 -> the doc does not exist server-side yet (local-only):
         // generate a fresh key and defer creation to the first update.
         let mut writers = membership_log::Writers::Unchecked;
+        let mut confirmers = membership_log::Confirmers::Unchecked;
         let mut departed = None;
         let mut link_signers = membership_log::LinkSigners::Unchecked;
         let mut named_key = None;
@@ -777,6 +788,7 @@ impl SyncState {
                 ) {
                     Ok(o) => {
                         writers = o.writers;
+                        confirmers = o.confirmers;
                         departed = o.departed;
                         link_signers = o.link_signers;
                         members = o.members;
@@ -904,10 +916,10 @@ impl SyncState {
         // sealed blob, the real snapshot id (to register as a known parent)
         // and the covered seq (to gate the post-open `RequestMissing`).
         //
-        // A snapshot only its author confirmed is not opened from when
-        // another user built it. The open starts from the reference, the
-        // latest one another member confirmed, and holds the latest one
-        // back until the replay is done (`AUTHOR-022`).
+        // A snapshot is opened from whole only under a confirmation another
+        // member signed, or when this user built it (`AUTHOR-030`). Any other
+        // is held back until the replay is done, then checked. The open starts
+        // from a trusted reference, or from the first delta (`AUTHOR-022`).
         let mut held_snapshot = None;
         let (snapshot_payload, downloaded_snapshot_id, covered_seq) = if existence
             == crate::Existence::OnRelay
@@ -918,39 +930,48 @@ impl SyncState {
                 .await
             {
                 Ok(Some(meta)) => {
-                    let others = meta.status == ambre_core::SnapshotStatus::SelfConfirmed
-                        && Some(meta.author_pubkey) != own_key;
-                    let (start_id, start_covered) = match (others, &meta.reference) {
-                        (false, _) => (Some(meta.snapshot_id), meta.covered_seq),
-                        (true, Some(r)) => (Some(r.snapshot_id), r.covered_seq),
-                        (true, None) => (None, Seq::<Relay>::ZERO),
-                    };
-                    if others {
+                    let plan = crate::snapshot_trust::open_start(
+                        doc_id,
+                        &meta,
+                        own_key.as_ref(),
+                        &confirmers,
+                    );
+                    if let Some(held) = plan.held {
                         let blob = http::download_snapshot(
                             url_scheme,
                             &api_base,
                             doc_id,
-                            meta.snapshot_id,
+                            held.snapshot_id,
                             auth.clone(),
                         )
                         .await;
                         held_snapshot = blob.map(|blob| HeldSnapshot {
-                            snapshot_id: meta.snapshot_id,
-                            covered_seq: meta.covered_seq,
+                            snapshot_id: held.snapshot_id,
+                            covered_seq: held.covered_seq,
                             blob,
                         });
                     }
+                    let start_covered = plan.start.map_or(Seq::<Relay>::ZERO, |s| s.covered_seq);
                     // The local copy already folds in the relay's
                     // snapshot: no download, and the replay starts
                     // after the copy's horizon (`RESID-010`).
                     let resumed = resume.filter(|horizon| light::resumes(*horizon, start_covered));
-                    let payload = match (start_id, resumed) {
-                        (Some(id), None) => {
-                            http::download_snapshot(url_scheme, &api_base, doc_id, id, auth).await
-                        }
+                    let payload = match (plan.start, resumed) {
+                        (Some(start), None) => http::download_snapshot(
+                            url_scheme,
+                            &api_base,
+                            doc_id,
+                            start.snapshot_id,
+                            auth,
+                        )
+                        .await
+                        .map(|blob| StartBlob {
+                            blob,
+                            author: start.author,
+                        }),
                         _ => None,
                     };
-                    let snap_id = start_id;
+                    let snap_id = plan.start.map(|s| s.snapshot_id);
                     // Only gate on the covered seq if the blob actually
                     // downloaded; otherwise a failed fetch would skip
                     // history that was never applied (data loss).
@@ -1095,6 +1116,7 @@ impl SyncState {
             role,
             rotation_owed: resp.rotation_owed,
             writers: membership_log::Writers::of(&log),
+            confirmers: membership_log::Confirmers::of(&log),
             departed: log.departed_at(),
             link_signers: log.link_signers(),
             named_key: my_user_id.and_then(|me| log.wraps(me)),
@@ -1997,8 +2019,9 @@ impl SyncState {
 /// What a client tells the relay about another author's pending snapshot.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Vouch {
-    /// The snapshot matches the deltas it covers (`SRV-126`).
-    Confirm,
+    /// The snapshot matches the deltas it covers (`SRV-126`): the signature
+    /// of the confirmation (`AUTHOR-031`).
+    Confirm(FixedBytes<Signature>),
     /// It contradicts them: the signature of the report (`SRV-133`).
     Report(FixedBytes<Signature>),
 }
@@ -2017,8 +2040,10 @@ pub(crate) async fn send_vouch(
     let url = base.route(format!("/documents/{document_id}/snapshots/{snapshot_id}"));
     let post = http::Method::Post;
     match vouch {
-        Vouch::Confirm => {
-            let body = serde_json::json!({});
+        Vouch::Confirm(signature) => {
+            let body = http::ConfirmSnapshotRequest {
+                signature: *signature,
+            };
             let confirmed: http::ConfirmSnapshotResponse =
                 http::post_json_auth_via(transport, &url.join("/confirm"), &body, auth).await?;
             Ok(confirmed.folded)
@@ -2089,13 +2114,14 @@ pub(crate) async fn upload_snapshot(
     .await?;
     let snapshot_id = created.snapshot_id;
     // The author's own confirmation makes it `self` (`AUTHOR-021`).
+    let confirmation = Vouch::Confirm(draft.confirm(snapshot_id));
     if let Err(e) = send_vouch(
         transport,
         auth,
         base,
         document_id,
         snapshot_id,
-        &Vouch::Confirm,
+        &confirmation,
     )
     .await
     {
@@ -2153,6 +2179,9 @@ pub(crate) struct OpenedMembers {
     /// The keys the membership log lets sign a delta or a snapshot
     /// (`SYNC-211`).
     pub writers: membership_log::Writers,
+    /// The keys whose confirmation of a snapshot an open trusts
+    /// (`AUTHOR-030`).
+    pub confirmers: membership_log::Confirmers,
     /// The place of the latest departure the log holds (`SYNC-223`).
     pub departed: Option<Seq<ambre_protocol::LogPlaces>>,
     /// Who may sign a key link, head by head (`SYNC-204`).
@@ -3172,7 +3201,7 @@ mod tests {
         state.handle_sync_event(SyncEvent::OpenDocumentReady {
             document_id: doc,
             doc_key: current.clone(),
-            snapshot_payload: Some(blob),
+            snapshot_payload: Some(started(blob, &sk)),
             snapshot_id,
             covered_seq: Seq::<Relay>::new(3),
             held_snapshot: None,
@@ -3218,6 +3247,14 @@ mod tests {
         pipeline::ServedSnapshot {
             snapshot_id,
             covered_seq: Seq::<Relay>::new(covered),
+        }
+    }
+
+    /// `blob` as the snapshot an open adopts whole, trusted as `author`'s.
+    fn started(blob: Payload<pipeline::FetchedBlob>, author: &SigningKey) -> StartBlob {
+        StartBlob {
+            blob,
+            author: FixedBytes::from_array(author.verifying_key().to_bytes()),
         }
     }
 
@@ -3707,7 +3744,7 @@ mod tests {
         state.handle_sync_event(SyncEvent::OpenDocumentReady {
             document_id: doc,
             doc_key: key,
-            snapshot_payload: Some(blob),
+            snapshot_payload: Some(started(blob, &_sk)),
             snapshot_id,
             covered_seq: Seq::<Relay>::new(1500),
             held_snapshot: None,
@@ -4104,6 +4141,45 @@ mod tests {
         );
     }
 
+    /// `AUTHOR-030`: the snapshot an open adopts whole must verify under the
+    /// author its trust names. A blob another member signed under the same
+    /// identifier and horizon is refused, so a confirmation stands for one
+    /// blob alone. The author's own blob opens.
+    #[test]
+    fn a_start_blob_signed_by_another_author_is_refused() {
+        let impostor = MasterSeed::generate().derive_signing_key();
+        for opens in [false, true] {
+            let (mut state, rx, doc, key, author, _snap) = setup();
+            let signer = if opens { &author } else { &impostor };
+            let snapshot_id = Id::<Snapshot>::mint();
+            let blob = snapshot_blob(doc, served(snapshot_id, 3), b"snap", &key, signer);
+            state.handle_sync_event(SyncEvent::OpenDocumentReady {
+                document_id: doc,
+                doc_key: key,
+                snapshot_payload: Some(started(blob, &author)),
+                snapshot_id,
+                covered_seq: Seq::<Relay>::new(3),
+                held_snapshot: None,
+                doc_type: DocType::Trame,
+                existence: crate::Existence::OnRelay,
+                signing_keys: Vec::new(),
+                role: Role::Owner,
+                rotation_owed: ambre_core::RotationDebt::Settled,
+                links: Vec::new(),
+                writers: Default::default(),
+                departed: None,
+            });
+            let events = drain(&rx);
+            let adopted = events
+                .iter()
+                .any(|e| matches!(e, LogicEvent::RemoteSnapshot { .. }));
+            assert_eq!(adopted, opens, "signed by the named author: {opens}");
+            let replay_from = state.documents[&doc].last_seq;
+            let expected = if opens { 3 } else { 0 };
+            assert_eq!(replay_from, Seq::<Relay>::new(expected));
+        }
+    }
+
     /// A server document opened over a live WS is only fully hydrated once its
     /// post-open catch-up replay (`MissingUpdates`) lands. The snapshot does not
     /// cover deltas committed after it, and a delta-only document has NO snapshot
@@ -4122,7 +4198,7 @@ mod tests {
         state.handle_sync_event(SyncEvent::OpenDocumentReady {
             document_id: doc,
             doc_key: key,
-            snapshot_payload: Some(blob),
+            snapshot_payload: Some(started(blob, &sk)),
             snapshot_id,
             covered_seq: Seq::<Relay>::new(0),
             held_snapshot: None,
@@ -4186,11 +4262,8 @@ mod tests {
         state.handle_sync_event(SyncEvent::OpenDocumentReady {
             document_id: doc,
             doc_key: key.clone(),
-            snapshot_payload: Some(snapshot_blob(
-                doc,
-                served(reference, 3),
-                b"reference",
-                &key,
+            snapshot_payload: Some(started(
+                snapshot_blob(doc, served(reference, 3), b"reference", &key, &sk),
                 &sk,
             )),
             snapshot_id: reference,
@@ -4277,7 +4350,7 @@ mod tests {
         state.handle_sync_event(SyncEvent::OpenDocumentReady {
             document_id: doc,
             doc_key: key.clone(),
-            snapshot_payload: Some(swapped(3)),
+            snapshot_payload: Some(started(swapped(3), &sk)),
             snapshot_id: asked,
             covered_seq: Seq::<Relay>::new(3),
             held_snapshot: Some(HeldSnapshot {
@@ -4377,7 +4450,7 @@ mod tests {
             state.handle_sync_event(SyncEvent::OpenDocumentReady {
                 document_id: doc,
                 doc_key: key.clone(),
-                snapshot_payload: Some(sealed(start)),
+                snapshot_payload: Some(started(sealed(start), &sk)),
                 snapshot_id: start,
                 covered_seq: Seq::<Relay>::new(covered),
                 held_snapshot: Some(HeldSnapshot {
@@ -4713,7 +4786,7 @@ mod tests {
             };
             let vouch = vouch.expect("a checked snapshot is answered");
             let answer = match vouch {
-                Vouch::Confirm => (200, serde_json::json!({ "folded": null })),
+                Vouch::Confirm(_) => (200, serde_json::json!({ "folded": null })),
                 Vouch::Report(_) => (204, serde_json::Value::Null),
             };
             let transport = Scripted::new([Ok(answer)]);
@@ -4724,6 +4797,26 @@ mod tests {
             assert_eq!(folded, None, "no fold settles here");
             let url = format!("{base}/api/documents/{doc}/snapshots/{pending}/{route}");
             assert_eq!(transport.calls(), [(http::Method::Post, url)]);
+            // `AUTHOR-031`: the confirmation signs the document, the
+            // snapshot, its horizon and the key its blob verified under.
+            if let Vouch::Confirm(signature) = vouch {
+                let transcript = ambre_protocol::snapshot_confirm::confirm_transcript(
+                    doc,
+                    pending,
+                    Seq::<Relay>::new(3),
+                    &FixedBytes::<PublicKey>::from_array(author.verifying_key().to_bytes()),
+                );
+                let reporter_key = FixedBytes::from_array(reporter.verifying_key().to_bytes());
+                assert!(
+                    ambre_crypto::signature::verify_message(&reporter_key, &transcript, &signature)
+                        .is_ok()
+                );
+                let sent = transport.sent.borrow();
+                let body: serde_json::Value =
+                    serde_json::from_slice(sent[0].body.as_ref().unwrap().1.as_bytes()).unwrap();
+                let hex = hex::encode(signature.as_array());
+                assert_eq!(body, serde_json::json!({ "signature": hex }));
+            }
             if let Vouch::Report(signature) = vouch {
                 let transcript = ambre_protocol::snapshot_report::report_transcript(
                     doc,
@@ -5982,7 +6075,7 @@ mod tests {
             state.handle_sync_event(SyncEvent::OpenDocumentReady {
                 document_id: doc,
                 doc_key: key,
-                snapshot_payload: blob,
+                snapshot_payload: blob.map(|blob| started(blob, &sk)),
                 snapshot_id: if with_snapshot {
                     snapshot_id
                 } else {
@@ -6843,11 +6936,8 @@ mod tests {
             state.handle_sync_event(SyncEvent::OpenDocumentReady {
                 document_id: doc,
                 doc_key: key.clone(),
-                snapshot_payload: Some(snapshot_blob(
-                    doc,
-                    served(snapshot_id, 3),
-                    b"snap",
-                    &key,
+                snapshot_payload: Some(started(
+                    snapshot_blob(doc, served(snapshot_id, 3), b"snap", &key, &author.key),
                     &author.key,
                 )),
                 snapshot_id,

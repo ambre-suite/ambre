@@ -341,7 +341,9 @@ mod db_tests {
             &state.db,
             &doc,
             &sid,
-            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(BOB),
+            &crate::db::vouched_by(
+                &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(BOB),
+            ),
         )
         .await
         .unwrap();
@@ -367,7 +369,9 @@ mod db_tests {
             &state.db,
             &doc,
             &reference,
-            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(ALICE),
+            &crate::db::vouched_by(
+                &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(ALICE),
+            ),
         )
         .await
         .unwrap();
@@ -376,7 +380,9 @@ mod db_tests {
             &state.db,
             &doc,
             &own,
-            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(ALICE),
+            &crate::db::vouched_by(
+                &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(ALICE),
+            ),
         )
         .await
         .unwrap();
@@ -400,7 +406,9 @@ mod db_tests {
             &state.db,
             &doc,
             &first,
-            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(ALICE),
+            &crate::db::vouched_by(
+                &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(ALICE),
+            ),
         )
         .await
         .unwrap();
@@ -409,7 +417,9 @@ mod db_tests {
             &state.db,
             &doc,
             &second,
-            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(BOB),
+            &crate::db::vouched_by(
+                &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(BOB),
+            ),
         )
         .await
         .unwrap();
@@ -419,7 +429,9 @@ mod db_tests {
             &state.db,
             &doc,
             &second,
-            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(CAROL),
+            &crate::db::vouched_by(
+                &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(CAROL),
+            ),
         )
         .await
         .unwrap();
@@ -437,7 +449,9 @@ mod db_tests {
             &state.db,
             &doc,
             &reference,
-            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(BOB),
+            &crate::db::vouched_by(
+                &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(BOB),
+            ),
         )
         .await
         .unwrap();
@@ -446,7 +460,9 @@ mod db_tests {
             &state.db,
             &doc,
             &own,
-            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(ALICE),
+            &crate::db::vouched_by(
+                &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(ALICE),
+            ),
         )
         .await
         .unwrap();
@@ -478,7 +494,9 @@ mod db_tests {
                     &state.db,
                     &doc,
                     &sid,
-                    &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(BOB),
+                    &crate::db::vouched_by(
+                        &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(BOB),
+                    ),
                 )
                 .await
                 .unwrap();
@@ -548,7 +566,9 @@ mod db_tests {
             &state.db,
             &doc,
             &sid,
-            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(ALICE),
+            &crate::db::vouched_by(
+                &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(ALICE),
+            ),
         )
         .await
         .unwrap();

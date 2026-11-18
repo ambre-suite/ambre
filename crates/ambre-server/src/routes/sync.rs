@@ -29,14 +29,20 @@ pub struct SnapshotResponse {
     /// For a self-confirmed snapshot, the reference snapshot an open starts
     /// from, `None` when no member other than an author confirmed one yet.
     pub reference: Option<ReferenceSnapshot>,
+    /// The confirmation another member signed, which an open checks before
+    /// it trusts the snapshot whole (`SRV-284`).
+    pub confirmation: Option<db::SignedConfirmation>,
 }
 
-/// The reference snapshot named beside a self-confirmed one (`SRV-131`).
+/// The reference snapshot named beside a self-confirmed one (`SRV-131`),
+/// with its author and the confirmation another member signed (`SRV-284`).
 #[derive(serde::Serialize)]
 pub struct ReferenceSnapshot {
     #[serde(with = "ambre_core::serde_id::text")]
     pub snapshot_id: Id<Snapshot>,
     pub covered_seq: ambre_core::Seq<ambre_core::Relay>,
+    pub author_pubkey: FixedBytes<PublicKey>,
+    pub confirmation: Option<db::SignedConfirmation>,
 }
 
 pub async fn get_snapshot_metadata(
@@ -60,6 +66,8 @@ pub async fn get_snapshot_metadata(
             .map(|r| ReferenceSnapshot {
                 snapshot_id: r.id,
                 covered_seq: r.covered_seq,
+                author_pubkey: r.author_pubkey,
+                confirmation: r.confirmation,
             }),
         _ => None,
     };
@@ -71,6 +79,7 @@ pub async fn get_snapshot_metadata(
         status: snap.status,
         author_pubkey: snap.author_pubkey,
         reference,
+        confirmation: snap.confirmation,
     }))
 }
 
@@ -82,9 +91,20 @@ pub struct ConfirmedSnapshotJson {
     pub folded: Option<Id<Document>>,
 }
 
+/// A confirmation: the confirmer's signature over
+/// [`ambre_protocol::snapshot_confirm::confirm_transcript`], hex (`SRV-284`).
+#[derive(serde::Deserialize)]
+pub struct ConfirmSnapshotRequest {
+    pub signature: FixedBytes<ambre_core::Signature>,
+}
+
 /// Records that the caller checked a snapshot and vouches for it (`SRV-126`).
 /// Any member may confirm, since any member holds the deltas. The author's
 /// own confirmation makes it `self`, anyone else's `confirmed`.
+///
+/// The caller signs the document, the snapshot, its horizon and its author.
+/// A signature that does not verify under the caller's key is refused, and
+/// the snapshot keeps its standing (`SRV-284`).
 ///
 /// A `confirmed` snapshot that folds amendments in becomes the final one of
 /// its segment (`SRV-208`), and the snapshots it replaces go (`SRV-209`). The
@@ -94,13 +114,34 @@ pub async fn confirm_snapshot(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
     ids: PathId<(Id<Document>, Id<Snapshot>)>,
+    body: Json<ConfirmSnapshotRequest>,
 ) -> Result<axum::Json<ConfirmedSnapshotJson>, AppError> {
     let (doc_id, snap_id) = ids.into_inner();
+    let req = body.into_inner();
+    use ed25519_dalek::{Signature, VerifyingKey};
     db::get_document_member(&state.db, &doc_id, &auth.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
-    let confirmer = &auth.signing_pubkey;
-    let status = db::confirm_snapshot(&state.db, &doc_id, &snap_id, confirmer)
+    let snap = db::get_snapshot(&state.db, &doc_id, &snap_id)
+        .await?
+        .ok_or(AppError::NotFound {
+            resource: Resource::Snapshot,
+        })?;
+    let transcript = ambre_protocol::snapshot_confirm::confirm_transcript(
+        doc_id,
+        snap_id,
+        snap.covered_seq,
+        &snap.author_pubkey,
+    );
+    let signature = Signature::from_bytes(req.signature.as_array());
+    VerifyingKey::from_bytes(auth.signing_pubkey.as_array())
+        .and_then(|key| key.verify_strict(transcript.as_bytes(), &signature))
+        .map_err(|_| AppError::InvalidSignature)?;
+    let confirmation = db::SignedConfirmation {
+        confirmer: auth.signing_pubkey,
+        signature: req.signature,
+    };
+    let status = db::confirm_snapshot(&state.db, &doc_id, &snap_id, &confirmation)
         .await?
         .ok_or(AppError::NotFound {
             resource: Resource::Snapshot,

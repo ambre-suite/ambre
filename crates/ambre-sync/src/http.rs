@@ -1870,8 +1870,6 @@ pub(crate) struct SnapshotMetadataResponse {
     /// Highest delta `seq` folded into the snapshot: the open path gates its
     /// `RequestMissing` on this to skip the already-replayed history.
     pub covered_seq: Seq<Relay>,
-    /// `confirmed`, or `self` when only its author vouched for it (`SRV-128`).
-    pub status: ambre_core::SnapshotStatus,
     /// The author's signing key, hex. A `self` snapshot of this very user opens
     /// as it is.
     pub author_pubkey: ambre_core::FixedBytes<ambre_core::PublicKey>,
@@ -1879,14 +1877,31 @@ pub(crate) struct SnapshotMetadataResponse {
     /// the open starts from (`SRV-131`, `AUTHOR-022`).
     #[serde(default)]
     pub reference: Option<ReferenceSnapshot>,
+    /// The confirmation another member signed. An open trusts the snapshot
+    /// whole only once it verifies (`AUTHOR-030`).
+    #[serde(default)]
+    pub confirmation: Option<SignedConfirmation>,
 }
 
-/// The reference snapshot named beside a `self` one (`SRV-131`).
+/// The reference snapshot named beside a `self` one (`SRV-131`), with its
+/// author and the confirmation another member signed (`AUTHOR-030`).
 #[derive(Deserialize)]
 pub(crate) struct ReferenceSnapshot {
     #[serde(with = "ambre_core::serde_id::text")]
     pub snapshot_id: Id<Snapshot>,
     pub covered_seq: Seq<Relay>,
+    pub author_pubkey: ambre_core::FixedBytes<ambre_core::PublicKey>,
+    #[serde(default)]
+    pub confirmation: Option<SignedConfirmation>,
+}
+
+pub(crate) use ambre_protocol::snapshot_confirm::SignedConfirmation;
+
+/// Body of `POST /api/documents/{id}/snapshots/{snapshot_id}/confirm`: the
+/// confirmer's signature over the confirmation transcript, hex (`AUTHOR-031`).
+#[derive(Serialize)]
+pub(crate) struct ConfirmSnapshotRequest {
+    pub signature: ambre_core::FixedBytes<ambre_core::Signature>,
 }
 
 /// Body of `POST /api/documents/{id}/snapshots/{snapshot_id}/report`: the

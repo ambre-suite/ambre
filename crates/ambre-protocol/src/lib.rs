@@ -22,6 +22,7 @@ pub mod membership;
 pub mod messages;
 pub mod public_data;
 pub mod signaling;
+pub mod snapshot_confirm;
 pub mod snapshot_report;
 pub mod transcript;
 pub mod version;

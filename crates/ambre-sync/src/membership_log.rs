@@ -170,6 +170,41 @@ impl Writers {
     }
 }
 
+/// The signing keys whose confirmation of a snapshot an open trusts
+/// (`AUTHOR-030`).
+///
+/// The set is every key a valid entry bound to a member, of any role, at any
+/// point. A reader holds the deltas as a writer does, so either may confirm.
+/// The relay cannot sign an entry, so it cannot add a key of its own.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) enum Confirmers {
+    /// No anchored log: a local document, or one older than the log. A
+    /// confirmation then stands on its signature alone.
+    #[default]
+    Unchecked,
+    /// The keys the walk bound to a member.
+    Granted(HashSet<FixedBytes<PublicKey>>),
+}
+
+impl Confirmers {
+    /// What the walked `log` grants.
+    pub(crate) fn of(log: &Log) -> Self {
+        if log.anchored {
+            Self::Granted(log.bound.keys().copied().collect())
+        } else {
+            Self::Unchecked
+        }
+    }
+
+    /// Whether a confirmation `confirmer` signed may stand for a member.
+    pub(crate) fn admits(&self, confirmer: &FixedBytes<PublicKey>) -> bool {
+        match self {
+            Self::Unchecked => true,
+            Self::Granted(keys) => keys.contains(confirmer),
+        }
+    }
+}
+
 /// One stretch of the log where a key held a writing role. It holds every
 /// head from the place `from` up to the place `until`, which it excludes.
 /// An open stretch runs to the end of the walk.

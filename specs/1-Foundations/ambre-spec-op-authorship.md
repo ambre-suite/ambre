@@ -60,6 +60,8 @@ Another member checks it against the signed deltas before anyone opens from it.
 | `AUTHOR-021` | `POST` | A client MUST confirm its own snapshot only when every operation of another user past the reference snapshot comes from a delta that user signed. | this spec section 3; `SRV-126`, `SRV-130` | `ambre_logic::authorship_tests::a_delta_carrying_an_operation_not_its_signers_is_refused_whole` -- no unsigned operation reaches the document a snapshot is built from; `ambre_sync::updates::tests::a_held_snapshot_is_adopted_only_when_its_extras_resolve_to_its_author` -- nor through a snapshot it adopted; `ambre_sync::updates::tests::an_uploaded_snapshot_is_confirmed_by_its_author_once_stored` -- the author confirms under the relay's id, and nothing once a step fails | none | verified |
 | `AUTHOR-022` | `FAIL` | Given a snapshot its author confirmed, whose operations of another user past the reference snapshot differ from the deltas that user signed, the client MUST refuse it and open from the reference snapshot. | this spec section 3; `SRV-131` | `ambre_sync::updates::tests::a_held_snapshot_is_adopted_only_when_its_extras_resolve_to_its_author` -- a mismatch, or an extra signed by another key, leaves the document on its reference; `ambre_logic::snapshot_check::tests::operations_only_the_snapshot_holds_are_named_with_their_entry` -- each extra reaches Sync with its registry entry; `ambre_sync::updates::tests::a_held_snapshot_is_checked_once_the_replay_is_done` -- the held snapshot is checked only once the replay is done | none | verified |
 | `AUTHOR-023` | `POST` | A mismatch report MUST be signed by its reporter, and name the snapshot and its author. | this spec section 3; `SRV-133` | `ambre_server::routes::tests::a_signed_report_drops_a_pending_snapshot_alone` -- the relay refuses a report signed over another author, and acts on one signed over the right one; `ambre_protocol::snapshot_report::tests::the_transcript_names_the_document_the_snapshot_and_the_author` -- what is signed changes with each of the three | none | verified |
+| `AUTHOR-030` | `FAIL` | A client MUST adopt a snapshot whole only when it built it, or when another member signed its confirmation. | this spec section 3; `SRV-284`; audit `N31` | `ambre_sync::snapshot_trust::tests::a_snapshot_the_relay_alone_calls_confirmed_is_held_back` -- a snapshot the relay calls confirmed is held back under no signature, its author's, one over another horizon or one of a key the log never bound; `ambre_sync::snapshot_trust::tests::the_reference_is_the_start_only_under_its_signed_confirmation` -- the reference is the start only under its signed confirmation, and the first delta otherwise; `ambre_sync::updates::tests::a_start_blob_signed_by_another_author_is_refused` -- the blob adopted must verify under the author the confirmation names | none | verified |
+| `AUTHOR-031` | `POST` | A confirmation MUST be signed by its confirmer over the document, the snapshot, the horizon and the author. | this spec section 3; `SRV-284` | `ambre_protocol::snapshot_confirm::tests::the_transcript_names_the_document_the_snapshot_the_horizon_and_the_author` -- each of the four changes the bytes signed; `ambre_sync::updates::tests::a_checked_snapshot_is_confirmed_or_reported_to_the_relay` -- the confirmation posted verifies under the checker's key, over the horizon and the key the blob verified under | none | verified |
 | `AUTHOR-018` | `FRAME` | Checking a snapshot MUST NOT change the document. | this spec section 3 | `ambre_logic::snapshot_check::tests::the_check_leaves_the_document_unchanged` -- the version and the value are unchanged; `ambre_logic::authorship_tests::a_pending_snapshot_is_answered_and_never_imported` -- neither verdict reaches the document | none | verified |
 
 ### 1.5 The operations no session signs
@@ -92,7 +94,7 @@ derive from no key. No delta ever carries them, so every client must write them 
   comparison.
 * **Boundary.** the session nonce rides inside the sealed payload (`AUTHOR-010`), so the relay
   learns nothing beyond the `ZK-007` set. The registry is document content, sealed like the rest.
-* **Verification.** 29 `verified`. Every delta is checked, and every row on it holds by a test.
+* **Verification.** 31 `verified`. Every delta is checked, and every row on it holds by a test.
 
 ---
 
@@ -204,6 +206,21 @@ confirms it (`SRV-126`).
 The next member to open cold is the natural confirmer: it has just replayed the very deltas the
 snapshot covers.
 
+**A confirmation is signed** (`AUTHOR-031`). The confirmer signs the document, the snapshot, its
+horizon and its author. The relay keeps the signature and serves it with the snapshot (`SRV-284`).
+Each field is one the relay already holds, so the relay learns nothing new.
+
+**A cold open trusts a snapshot whole only under that signature** (`AUTHOR-030`, audit `N31`).
+The relay's word that a member confirmed a snapshot proves nothing. The open checks three things:
+
+1. The signature verifies over the snapshot the relay names, its horizon and its author.
+2. The confirmer is a key the membership log bound to a member, and not the author.
+3. The blob it downloads verifies under that author.
+
+A snapshot this user built opens whole on its own word. Any other snapshot is held back and
+checked once the replay is done, as a snapshot its author confirmed alone is. The open then starts
+from a reference whose confirmation holds, or from the first delta.
+
 **A registry entry is signed by its user** (`AUTHOR-019`). The PeerID is a public hash, so anyone
 could write an entry that derives correctly for another user. The signature is what only that user
 can make. A snapshot can therefore attribute an operation only to a user who wrote in the document
@@ -260,6 +277,8 @@ The binding has no control of its own.
 | The registry entry is written at the open | the entry written on the first export | the entry would split the undo group of the first edit, and two edits would undo as two steps |
 | A snapshot is confirmed by another member | trusting the snapshot whole | its author could write any operation under the PeerID of another member, and every cold open would believe it |
 | A snapshot is confirmed by another member | a signature on each operation | it would sign every keystroke, and the delta already carries one signature |
+| A confirmation is signed by its confirmer | the relay's status alone | the relay and one writer would make a forged snapshot read as checked, and every cold open would adopt it (audit `N31`) |
+| The confirmer is a key the log ever bound | a member the log still holds | a snapshot confirmed by a member who left would lose its trust, and every open would replay from the first delta |
 | A registry entry is signed by its user | dating each operation against the membership log | an operation carries no trusted time, and a log position per operation would weigh on every delta |
 | An author alone confirms its own snapshot, checked after the fact | no snapshot until another member confirms | a document shared once and then edited alone would pile up deltas for ever, and replay them all at each open |
 | An author alone confirms its own snapshot, checked after the fact | a purge after a delay, the snapshot marked unverified | a forged snapshot would stay the only record, and a mark does not tell the reader what was forged |

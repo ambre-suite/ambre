@@ -244,9 +244,14 @@ async fn one_delta(state: &Arc<AppState>, doc: &mut Doc, draw: &mut Draw, rec: &
         )
         .await
         .expect("a snapshot row");
-        db::confirm_snapshot(&state.db, &doc.id, &id, &doc.authors[1])
-            .await
-            .expect("a confirmation");
+        db::confirm_snapshot(
+            &state.db,
+            &doc.id,
+            &id,
+            &crate::db::vouched_by(&doc.authors[1]),
+        )
+        .await
+        .expect("a confirmation");
         rec.close(state).await;
     }
 }

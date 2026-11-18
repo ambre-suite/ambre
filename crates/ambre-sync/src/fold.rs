@@ -346,7 +346,7 @@ mod tests {
             &root(),
             document,
             snapshot,
-            &Vouch::Confirm,
+            &Vouch::Confirm(FixedBytes::from_array([0; 64])),
         )
         .await;
         assert_eq!(folded, Ok(Some(amendments)));

@@ -1914,6 +1914,7 @@ ambre-protocol | src/membership.rs | crate::membership | place_after(length) | p
 ambre-protocol | src/membership.rs | crate::membership | LogHead::is_empty() | ret | bool	generic	named predicate of the log head: is the log empty
 ambre-protocol | src/membership.rs | crate::membership | LogHead::is_behind() | ret | bool	generic	predicate: does the other head name a log this head has not reached
 ambre-protocol | src/snapshot_report.rs | crate::snapshot_report | REPORT_DOMAIN | const | &[u8]	generic	domain-separation tag or length constant
+ambre-protocol | src/snapshot_confirm.rs | crate::snapshot_confirm | CONFIRM_DOMAIN | const | &[u8]	generic	domain-separation tag or length constant
 ambre-protocol | src/ws.rs | crate::ws | WireDecodeError::UnsupportedVersion.0 | field | u8	generic	raw unparsed wire version byte, may lie outside Version's range
 ambre-protocol | src/ws.rs | crate::ws | WireDecodeError::is_from_newer_peer() | ret | bool	generic	raw unparsed wire version byte, may lie outside Version's range
 ambre-server | src/compaction.rs | crate::compaction | past_threshold() | ret | bool	generic	predicate result
@@ -2107,6 +2108,7 @@ ambre-sync | src/membership_log.rs | crate::membership_log | LogRule.self_join |
 ambre-sync | src/membership_log.rs | crate::membership_log | SelfJoinRule | alias | fn(&MembershipEntry)->bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | WriterSpan::covers() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | Writers::admits() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-sync | src/membership_log.rs | crate::membership_log | Confirmers::admits() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | Writers::grows_into() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | no_self_join() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | public_channel_self_join() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -2148,6 +2150,7 @@ ambre-sync | src/rekey.rs | crate::rekey | Rekey::owes() | ret | bool	generic	ye
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::pay_now() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::record_sent() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::settled() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-sync | src/snapshot_trust.rs | crate::snapshot_trust | confirmation_holds() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/updates.rs | crate::updates | SyncState::check_held_snapshot() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/updates.rs | crate::updates | SyncState::named_key_holds() | ret | Result<(),(OpenFailure,String)>	free-text	free text: message, label, name or report
 ambre-sync | src/updates.rs | crate::updates | SyncState::opened_from_members() | ret | Result<OpenedMembers,(OpenFailure,String)>	free-text	free text: message, label, name or report

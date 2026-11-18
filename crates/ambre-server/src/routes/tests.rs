@@ -3590,9 +3590,41 @@ mod handler_tests {
     /// The owner of `setup_and_get_auth` uploads a snapshot covering `covered`,
     /// and gets its id back.
     async fn upload_snapshot(app: &Router, owner: &str, doc_id: &str, covered: i64) -> String {
+        upload_snapshot_by(app, owner, doc_id, covered, [3u8; 32]).await
+    }
+
+    /// The body of a confirmation `key` signs: `snap` of `doc_id`, its
+    /// horizon `covered` and its `author` (`SRV-284`).
+    fn confirm_body(
+        key: &ed25519_dalek::SigningKey,
+        doc_id: &str,
+        snap: &str,
+        covered: u64,
+        author: [u8; 32],
+    ) -> serde_json::Value {
+        let transcript = ambre_protocol::snapshot_confirm::confirm_transcript(
+            Id::<Document>::parse_str(doc_id).unwrap(),
+            Id::<Snapshot>::parse_str(snap).unwrap(),
+            ambre_core::Seq::<ambre_core::Relay>::new(covered),
+            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(author),
+        );
+        let signature = ed25519_dalek::Signer::sign(key, transcript.as_bytes());
+        serde_json::json!({ "signature": hex::encode(signature.to_bytes()) })
+    }
+
+    /// The member behind `auth`, whose signing key is `author`, uploads a
+    /// snapshot covering `covered`, and gets its id back.
+    async fn upload_snapshot_by(
+        app: &Router,
+        auth: &str,
+        doc_id: &str,
+        covered: i64,
+        author: [u8; 32],
+    ) -> String {
+        let owner = auth;
         let minted = uuid::Uuid::new_v4();
         let body = serde_json::json!({
-            "author_pubkey": hex::encode([3u8; 32]),
+            "author_pubkey": hex::encode(author),
             "s3_key": format!("dev-ambre/documents/{doc_id}/snapshots/{minted}"),
             "covered_seq": covered,
         });
@@ -3692,9 +3724,12 @@ mod handler_tests {
 
         let state = test_app_state(pool).await;
         let app = build_test_router(state.clone());
-        let owner = setup_and_get_auth(&app).await;
+        let owner_key = ed25519_dalek::SigningKey::from_bytes(&[5u8; 32]);
+        let author = owner_key.verifying_key().to_bytes();
+        let owner = setup_signing(&app, "user@ambre.app", &owner_key).await;
         let doc_id = create_test_doc(&app, &owner).await;
-        let checker = setup_named(&app, "checker@ambre.app", 43).await;
+        let checker_key = ed25519_dalek::SigningKey::from_bytes(&[6u8; 32]);
+        let checker = setup_signing(&app, "checker@ambre.app", &checker_key).await;
         invite(&app, &owner, &doc_id, "checker@ambre.app", "viewer").await;
 
         let listener = crate::test_helpers::connect_test_redis().await.unwrap();
@@ -3702,7 +3737,7 @@ mod handler_tests {
             .ssubscribe(format!("doc:{{{doc_id}}}"))
             .await
             .unwrap();
-        let snap = upload_snapshot(&app, &owner, &doc_id, 0).await;
+        let snap = upload_snapshot_by(&app, &owner, &doc_id, 0, author).await;
         let heard = tokio::time::timeout(std::time::Duration::from_secs(5), stream.next())
             .await
             .expect("the announcement arrives")
@@ -3715,22 +3750,81 @@ mod handler_tests {
         assert!(served_snapshot(&app, &owner, &doc_id).await.is_none());
 
         let confirm = format!("/api/documents/{doc_id}/snapshots/{snap}/confirm");
-        let status = post_json(&app, &owner, confirm.clone(), serde_json::json!({})).await;
+        let by_owner = confirm_body(&owner_key, &doc_id, &snap, 0, author);
+        let status = post_json(&app, &owner, confirm.clone(), by_owner).await;
         assert_eq!(status, StatusCode::OK);
         let served = served_snapshot(&app, &owner, &doc_id).await.unwrap();
         assert_eq!(served["status"], "self");
         assert_eq!(served["snapshot_id"], snap.as_str());
         assert!(served["reference"].is_null());
 
-        let status = post_json(&app, &checker, confirm, serde_json::json!({})).await;
+        let by_checker = confirm_body(&checker_key, &doc_id, &snap, 0, author);
+        let status = post_json(&app, &checker, confirm, by_checker).await;
         assert_eq!(status, StatusCode::OK);
         let served = served_snapshot(&app, &checker, &doc_id).await.unwrap();
         assert_eq!(served["status"], "confirmed");
 
         let outsider = setup_named(&app, "outsider@ambre.app", 44).await;
         let other = format!("/api/documents/{doc_id}/snapshots/{snap}/confirm");
-        let status = post_json(&app, &outsider, other, serde_json::json!({})).await;
+        let by_outsider = confirm_body(&checker_key, &doc_id, &snap, 0, author);
+        let status = post_json(&app, &outsider, other, by_outsider).await;
         assert_eq!(status, StatusCode::FORBIDDEN);
+    }
+
+    /// `SRV-284`: a confirmation by another member stands only under that
+    /// member's signature over the document, the snapshot, its horizon and
+    /// its author. The relay serves it with the snapshot, and with the
+    /// reference named beside a later `self` one. The author's own
+    /// confirmation keeps no signature.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_confirmation_stands_only_under_its_confirmers_signature(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let owner_key = ed25519_dalek::SigningKey::from_bytes(&[5u8; 32]);
+        let author = owner_key.verifying_key().to_bytes();
+        let owner = setup_signing(&app, "user@ambre.app", &owner_key).await;
+        let doc_id = create_test_doc(&app, &owner).await;
+        let checker_key = ed25519_dalek::SigningKey::from_bytes(&[6u8; 32]);
+        let checker = setup_signing(&app, "checker@ambre.app", &checker_key).await;
+        invite(&app, &owner, &doc_id, "checker@ambre.app", "viewer").await;
+        let snap = upload_snapshot_by(&app, &owner, &doc_id, 0, author).await;
+        let confirm = format!("/api/documents/{doc_id}/snapshots/{snap}/confirm");
+
+        // Signed by another key than the caller's, or over another horizon:
+        // refused, and nothing is served yet.
+        for body in [
+            confirm_body(&owner_key, &doc_id, &snap, 0, author),
+            confirm_body(&checker_key, &doc_id, &snap, 1, author),
+            serde_json::json!({}),
+        ] {
+            let status = post_json(&app, &checker, confirm.clone(), body).await;
+            assert!(status.is_client_error(), "{status}");
+        }
+        assert!(served_snapshot(&app, &checker, &doc_id).await.is_none());
+
+        let signed = confirm_body(&checker_key, &doc_id, &snap, 0, author);
+        let status = post_json(&app, &checker, confirm, signed.clone()).await;
+        assert_eq!(status, StatusCode::OK);
+        let served = served_snapshot(&app, &checker, &doc_id).await.unwrap();
+        assert_eq!(served["status"], "confirmed");
+        let confirmation = &served["confirmation"];
+        let checker_pub = hex::encode(checker_key.verifying_key().to_bytes());
+        assert_eq!(confirmation["confirmer"], checker_pub.as_str());
+        assert_eq!(confirmation["signature"], signed["signature"]);
+
+        // A later snapshot its author alone confirmed names this one as its
+        // reference, with the same confirmation, and carries none itself.
+        let later = upload_snapshot_by(&app, &owner, &doc_id, 0, author).await;
+        let own = format!("/api/documents/{doc_id}/snapshots/{later}/confirm");
+        let by_owner = confirm_body(&owner_key, &doc_id, &later, 0, author);
+        assert_eq!(post_json(&app, &owner, own, by_owner).await, StatusCode::OK);
+        let served = served_snapshot(&app, &owner, &doc_id).await.unwrap();
+        assert_eq!(served["status"], "self");
+        assert!(served["confirmation"].is_null());
+        assert_eq!(served["reference"]["snapshot_id"], snap.as_str());
+        assert_eq!(served["reference"]["author_pubkey"], hex::encode(author));
+        assert_eq!(served["reference"]["confirmation"], *confirmation);
     }
 
     /// `SRV-133`, `SRV-134`, `SRV-135`, `AUTHOR-023`: a report signed by its
@@ -3824,7 +3918,11 @@ mod handler_tests {
         // A snapshot the reporter itself confirmed outlives a report.
         let kept = upload_snapshot(&app, &owner, &doc_id, 3).await;
         let confirm = format!("/api/documents/{doc_id}/snapshots/{kept}/confirm");
-        post_json(&app, &reporter, confirm, serde_json::json!({})).await;
+        let signed = confirm_body(&key, &doc_id, &kept, 3, [3u8; 32]);
+        assert_eq!(
+            post_json(&app, &reporter, confirm, signed).await,
+            StatusCode::OK
+        );
         let kept_id = Id::<Snapshot>::parse_str(&kept).unwrap();
         let transcript = report_transcript(
             document,

@@ -338,7 +338,7 @@ mod tests {
             &pool,
             &document_id,
             &sid,
-            &FixedBytes::<ambre_core::PublicKey>::from_array([9u8; 32]),
+            &crate::db::vouched_by(&FixedBytes::<ambre_core::PublicKey>::from_array([9u8; 32])),
         )
         .await
         .expect("confirm snapshot");
@@ -432,7 +432,7 @@ mod tests {
             &pool,
             &document_id,
             &sid,
-            &FixedBytes::<ambre_core::PublicKey>::from_array([9u8; 32]),
+            &crate::db::vouched_by(&FixedBytes::<ambre_core::PublicKey>::from_array([9u8; 32])),
         )
         .await
         .expect("confirm snapshot");
@@ -515,7 +515,7 @@ mod tests {
                 &pool,
                 &document_id,
                 &sid,
-                &FixedBytes::<ambre_core::PublicKey>::from_array([9u8; 32]),
+                &crate::db::vouched_by(&FixedBytes::<ambre_core::PublicKey>::from_array([9u8; 32])),
             )
             .await
             .expect("confirm snapshot");

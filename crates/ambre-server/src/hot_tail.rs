@@ -666,7 +666,9 @@ mod db_tests {
             &state.db,
             &doc,
             &snap,
-            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([9u8; 32]),
+            &crate::db::vouched_by(
+                &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([9u8; 32]),
+            ),
         )
         .await
         .unwrap();

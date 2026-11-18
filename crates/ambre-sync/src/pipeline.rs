@@ -95,6 +95,8 @@ pub enum PipelineError {
     WrongSnapshot,
     #[error("the snapshot seals another horizon than the one the relay served")]
     WrongHorizon,
+    #[error("the snapshot was signed by another key than the author its trust names")]
+    WrongAuthor,
     #[error("a sealed object is shorter than its header")]
     ShortObject,
     #[error("the payload names another key than the one given")]
@@ -921,6 +923,19 @@ impl SnapshotDraft {
     /// metadata names (`SYNC-259`).
     pub const fn covered_seq(&self) -> Seq<Relay> {
         self.public_data.covered_seq
+    }
+
+    /// The author's confirmation of the seal under `snapshot_id`: the
+    /// signature over the document, that identifier, the horizon and the
+    /// author's key (`AUTHOR-031`).
+    pub fn confirm(&self, snapshot_id: Id<ambre_core::id::Snapshot>) -> FixedBytes<Signature> {
+        let transcript = ambre_protocol::snapshot_confirm::confirm_transcript(
+            self.public_data.document_id,
+            snapshot_id,
+            self.public_data.covered_seq,
+            &self.public_data.pub_key,
+        );
+        ambre_crypto::signature::sign_message(&self.signing_key, &transcript)
     }
 
     /// Seals the snapshot under `snapshot_id`, the identifier the relay

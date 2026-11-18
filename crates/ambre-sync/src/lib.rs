@@ -192,6 +192,7 @@ mod pipeline;
 mod rekey;
 mod renewal;
 mod sharing;
+mod snapshot_trust;
 mod space_rotation;
 mod updates;
 mod websocket;
@@ -423,7 +424,9 @@ enum SyncEvent {
     OpenDocumentReady {
         document_id: Id<Document>,
         doc_key: DocumentKey,
-        snapshot_payload: Option<Payload<pipeline::FetchedBlob>>,
+        /// The snapshot the open adopts whole, and the author its trust
+        /// names (`AUTHOR-030`).
+        snapshot_payload: Option<StartBlob>,
         snapshot_id: Id<Snapshot>,
         /// Highest delta `seq` folded into `snapshot_payload`, 0 when no snapshot
         /// was downloaded. The post-open `RequestMissing` starts after this seq,
@@ -1007,6 +1010,14 @@ pub(crate) struct HeldSnapshot {
     pub blob: Payload<pipeline::FetchedBlob>,
 }
 
+/// The snapshot an open adopts whole, still sealed, and the key it must
+/// verify under: the author its confirmation names, or this user
+/// (`AUTHOR-030`).
+pub(crate) struct StartBlob {
+    pub blob: Payload<pipeline::FetchedBlob>,
+    pub author: FixedBytes<PublicKey>,
+}
+
 impl SyncDocumentState {
     fn new(
         document_id: Id<Document>,
@@ -1195,15 +1206,21 @@ impl SyncDocumentState {
         self.signing_keys.get(author_pk).copied()
     }
 
-    /// Opens a snapshot blob with the one key it names: a snapshot sealed
-    /// before a rotation opens with a key the chain recovers (`SYNC-119`).
-    fn open_snapshot_blob(
+    /// Opens the snapshot an open adopts whole, under the one key it names. A
+    /// snapshot sealed before a rotation opens with a key the chain recovers
+    /// (`SYNC-119`). A blob another key signed than the author its trust
+    /// names is refused, so a confirmation stands for one blob alone
+    /// (`AUTHOR-030`).
+    fn open_start_blob(
         &self,
-        blob: &Payload<pipeline::FetchedBlob>,
+        start: &StartBlob,
         served: pipeline::ServedSnapshot,
     ) -> Result<ambre_core::Payload<ambre_core::SnapshotBytes>, pipeline::PipelineError> {
-        self.open_signed_snapshot(blob, served)
-            .map(|(payload, _)| payload)
+        let (payload, signer) = self.open_signed_snapshot(&start.blob, served)?;
+        if signer != start.author {
+            return Err(pipeline::PipelineError::WrongAuthor);
+        }
+        Ok(payload)
     }
 
     /// Opens a snapshot blob, and names the signing key it verified under: the

@@ -16,7 +16,12 @@ pub struct SnapshotRow {
     pub covered_seq: ambre_core::Seq<ambre_core::Relay>,
     /// Who vouched for it (`SRV-126`).
     pub status: SnapshotStatus,
+    /// The confirmation another member signed, `None` until one does
+    /// (`SRV-284`).
+    pub confirmation: Option<SignedConfirmation>,
 }
+
+pub use ambre_protocol::snapshot_confirm::SignedConfirmation;
 
 pub use ambre_core::SnapshotStatus;
 
@@ -27,7 +32,8 @@ fn parse_status(text: &str) -> Result<SnapshotStatus, AppError> {
 }
 
 /// The columns [`snapshot_row`] reads, in one place for every query.
-const SNAPSHOT_COLUMNS: &str = "id, author_pubkey, s3_key, covered_seq, status";
+const SNAPSHOT_COLUMNS: &str =
+    "id, author_pubkey, s3_key, covered_seq, status, confirmer_pubkey, confirm_signature";
 
 /// One `snapshots` row, read from [`SNAPSHOT_COLUMNS`].
 fn snapshot_row(r: &sqlx::postgres::PgRow) -> Result<SnapshotRow, AppError> {
@@ -38,6 +44,25 @@ fn snapshot_row(r: &sqlx::postgres::PgRow) -> Result<SnapshotRow, AppError> {
         s3_key: ambre_core::ObjectKey::new(r.try_get("s3_key")?),
         covered_seq: decode_seq(r.try_get("covered_seq")?)?,
         status: parse_status(&status)?,
+        confirmation: {
+            // The migration sets both columns or neither, so one without the
+            // other reads as a corrupt row.
+            let confirmer: Option<Vec<u8>> = r.try_get("confirmer_pubkey")?;
+            let signature: Option<Vec<u8>> = r.try_get("confirm_signature")?;
+            match (confirmer, signature) {
+                (None, None) => None,
+                (Some(confirmer), Some(signature)) => Some(SignedConfirmation {
+                    confirmer: decode_key(confirmer)?,
+                    signature: FixedBytes::from_slice(&signature)
+                        .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
+                }),
+                _ => {
+                    return Err(AppError::Internal(
+                        "a snapshot confirmation half stored".to_owned(),
+                    ));
+                }
+            }
+        },
     })
 }
 
@@ -197,17 +222,23 @@ pub async fn get_reference_snapshot(
 ///
 /// A snapshot of a locked segment is the final one, and only another member
 /// confirms it (`SRV-118`). Its author's confirmation leaves it pending.
+///
+/// Another member's confirmation keeps the signature it carries, which the
+/// caller has verified (`SRV-284`). The author's keeps none: an open never
+/// trusts a snapshot whole on its author's word.
 pub async fn confirm_snapshot(
     pool: &PgPool,
     document_id: &Id<Document>,
     snapshot_id: &Id<Snapshot>,
-    confirmer: &FixedBytes<ambre_core::PublicKey>,
+    confirmation: &SignedConfirmation,
 ) -> Result<Option<SnapshotStatus>, AppError> {
     let did = id_to_uuid(*document_id);
     let sid = id_to_uuid(*snapshot_id);
     sqlx::query(
         "UPDATE snapshots s
-         SET status = CASE WHEN s.author_pubkey = $3 THEN 'self' ELSE 'confirmed' END
+         SET status = CASE WHEN s.author_pubkey = $3 THEN 'self' ELSE 'confirmed' END,
+             confirmer_pubkey = CASE WHEN s.author_pubkey = $3 THEN NULL ELSE $3 END,
+             confirm_signature = CASE WHEN s.author_pubkey = $3 THEN NULL ELSE $4 END
          WHERE s.id = $1 AND s.document_id = $2 AND (
              (s.author_pubkey <> $3 AND s.status <> 'confirmed')
              OR (s.author_pubkey = $3 AND s.status = 'pending' AND NOT EXISTS (
@@ -224,7 +255,8 @@ pub async fn confirm_snapshot(
     )
     .bind(sid)
     .bind(did)
-    .bind(confirmer.as_slice())
+    .bind(confirmation.confirmer.as_slice())
+    .bind(confirmation.signature.as_slice())
     .execute(pool)
     .await?;
     let status: Option<String> =
@@ -864,4 +896,14 @@ pub async fn delete_snapshot(pool: &PgPool, snapshot_id: &Id<Snapshot>) -> Resul
         .execute(pool)
         .await?;
     Ok(())
+}
+
+/// A confirmation by `confirmer` under a blank signature, for a test of the
+/// database layer, which stores the signature its caller has verified.
+#[cfg(test)]
+pub(crate) fn vouched_by(confirmer: &FixedBytes<ambre_core::PublicKey>) -> SignedConfirmation {
+    SignedConfirmation {
+        confirmer: *confirmer,
+        signature: FixedBytes::from_array([0; 64]),
+    }
 }

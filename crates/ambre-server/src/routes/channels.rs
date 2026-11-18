@@ -4379,7 +4379,7 @@ mod tests {
         let exact = snapshot(&state, segment, 2).await;
         let author = ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([1; 32]);
         assert_eq!(
-            db::confirm_snapshot(&state.db, &segment, &exact, &author)
+            db::confirm_snapshot(&state.db, &segment, &exact, &crate::db::vouched_by(&author))
                 .await
                 .expect("confirm"),
             Some(db::SnapshotStatus::Pending),
@@ -4409,7 +4409,9 @@ mod tests {
                 &state.db,
                 &segment,
                 &exact,
-                &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([2; 32])
+                &crate::db::vouched_by(
+                    &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([2; 32])
+                )
             )
             .await
             .expect("confirm"),
@@ -4475,10 +4477,24 @@ mod tests {
         snapshot_id: Id<Snapshot>,
     ) -> Option<Id<Document>> {
         let document = channel.segment.document_id();
+        let snapshot = db::get_snapshot(&state.db, &document, &snapshot_id)
+            .await
+            .expect("read")
+            .expect("the snapshot");
+        let transcript = ambre_protocol::snapshot_confirm::confirm_transcript(
+            document,
+            snapshot_id,
+            snapshot.covered_seq,
+            &snapshot.author_pubkey,
+        );
+        let signature = ed25519_dalek::Signer::sign(&signing_key(), transcript.as_bytes());
         let axum::Json(answer) = crate::routes::confirm_snapshot(
             State(state.clone()),
             session(who),
             PathId::new((document, snapshot_id)),
+            Json::new(crate::routes::ConfirmSnapshotRequest {
+                signature: ambre_core::FixedBytes::from_array(signature.to_bytes()),
+            }),
         )
         .await
         .expect("confirm");

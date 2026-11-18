@@ -870,7 +870,7 @@ impl SyncState {
                     covered_seq,
                 };
                 let opened =
-                    snapshot_payload.map(|blob| doc_state.open_snapshot_blob(&blob, served));
+                    snapshot_payload.map(|start| doc_state.open_start_blob(&start, served));
                 match opened {
                     Some(Ok(payload)) => {
                         doc_state.current_snapshot_id = snapshot_id;
