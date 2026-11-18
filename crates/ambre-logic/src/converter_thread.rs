@@ -1449,11 +1449,14 @@ mod respawn_tests {
         0x00, 0x02, 0x0a, b'o', b'u', b't', b'p', b'u', b't', b'_', b'l', b'e', b'n', 0x00, 0x03,
     ];
 
-    /// A `run` that does nothing. The answer is four zero bytes at 1 KiB,
-    /// past the request: an empty table, so each job answers `Ok`.
+    /// A `run` that does nothing. The answer is three bytes at 1 KiB, past
+    /// the request, which a data segment writes: `Ok(Converted::File)` of an
+    /// empty file. So each job answers `Ok`, whatever shape a table answer
+    /// takes.
     const ANSWERS: &[u8] = &[
         0x0a, 0x14, 0x04, 0x04, 0x00, 0x41, 0x00, 0x0b, 0x02, 0x00, 0x0b, 0x05, 0x00, 0x41, 0x80,
-        0x08, 0x0b, 0x04, 0x00, 0x41, 0x04, 0x0b,
+        0x08, 0x0b, 0x04, 0x00, 0x41, 0x03, 0x0b, // data: the answer at 1 KiB
+        0x0b, 0x0a, 0x01, 0x00, 0x41, 0x80, 0x08, 0x0b, 0x03, 0x00, 0x01, 0x00,
     ];
 
     /// A `run` that loops for ever: a job that never ends, so its thread
