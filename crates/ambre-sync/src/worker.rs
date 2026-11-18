@@ -62,6 +62,14 @@ pub fn start() {
     // Same-origin worker => its host is the app host (API + WS are proxied
     // same-origin; see the cross-origin isolation note in the spec).
     let api_base = crate::http::Url::<crate::RelayHost>::new(scope.location().host());
+    // The page's own scheme, read where the browser hands it out
+    // (`SYNC-271`).
+    let page_scheme = match scope.location().protocol().as_str() {
+        "https:" => Some(crate::http::UrlScheme::Https),
+        "http:" => Some(crate::http::UrlScheme::Http),
+        _ => None,
+    };
+    let url_scheme = crate::http::UrlScheme::of_page(page_scheme, &api_base);
 
     // Outbound sink: encode each LogicEvent and post it back to Main.
     let sink_scope = scope.clone();
@@ -103,5 +111,7 @@ pub fn start() {
     // `OpenDocument` queued forever behind the loading overlay (`SYNC-057`).
     post_bytes(&scope, &ambre_bus::start::ANNOUNCEMENT);
 
-    crate::spawn(run_wasm(cmd_rx, logic_sink, api_base, call_ports));
+    crate::spawn(run_wasm(
+        cmd_rx, logic_sink, api_base, url_scheme, call_ports,
+    ));
 }

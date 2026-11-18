@@ -40,6 +40,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-057` | `POST` | No command MUST be lost while the worker starts: everything sent before it is listening MUST wait. | this spec section 2 | `ambre_bus::start::tests::no_command_is_posted_before_the_worker_announces_itself` -- commands queued before the announcement are posted after it, in order, and an encoded event never reads as one | none | verified |
 | `SYNC-065` | `POST` | An edit made before the session is ready MUST be held, never dropped. | this spec section 2 | `ambre_sync::updates::tests::an_edit_before_the_session_is_held_then_sent` -- two edits made with no signing key are sent, in order, once the key is set and the replay lands | none | verified |
 | `SYNC-097` | `FRAME` | Commands held during the start MUST NOT be reordered when they are released. | this spec section 2; `ambre-spec-delta-order.md` | `ambre_sync::updates::tests::held_commands_are_released_in_order` -- the held opens subscribe in order, and the held edits leave in order at rising clocks | none | verified |
+| `SYNC-271` | `FRAME` | The worker MUST reach the relay with the scheme of the page that started it, on this machine too. | this spec section 2; `ambre-spec-murmure-phone-measures.md section 2` | `ambre_sync::http::tests::the_scheme_of_the_page_wins_over_the_host` -- a page over TLS on the loopback reaches the relay over TLS, a page in the clear on another host reaches it in the clear, and a page with no scheme falls back to the host rule. The worker start reads the protocol of its own location into that scheme | none | verified |
 
 ### 1.3 The socket connects, and reconnects
 
@@ -149,7 +150,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this worker **is** the client side of the boundary `ambre-spec-zero-knowledge.md`
   draws. `SYNC-002` and `SYNC-095` keep the keys in. `SYNC-060` and `SYNC-061` keep the tokens in,
   and `SYNC-067` seals the one document field that is content rather than routing.
-* **Verification.** 78 `verified`, 1 `unimplemented`. The crate graph holds the keys and the CRDT
+* **Verification.** 79 `verified`, 1 `unimplemented`. The crate graph holds the keys and the CRDT
   apart. Unit tests hold the token redaction and wipe, the refused channel send and the name bound
   to its document. A gate refuses browser storage in the worker. Each gap left is a browser property
   the wasm tier cannot boot, `ambre-spec-testing.md section 9`.
@@ -174,6 +175,11 @@ inbound handler at the end of an asynchronous start, so anything posted before t
 no handler at all. The contract is an announcement. As the last step of its start, the worker
 posts an empty payload. The relay on the Main side holds every command until it sees one. An
 encoded event is never empty, so the announcement is unambiguous (`SYNC-057`).
+
+**The address of the relay.** The relay sits at the origin of the page that started the worker. The
+worker reads its host and its protocol from its own location. A page served over TLS reaches the
+relay over TLS, on the loopback too, since the phone stack serves `https://localhost:8443`. With no
+protocol, a relay on this machine speaks plain HTTP, and any other relay TLS (`SYNC-271`).
 
 **The loop.** One non-blocking wait over two queues: the commands relayed in, and the results of
 the socket and the requests. Both producers live in this worker, so the wait wakes correctly and the

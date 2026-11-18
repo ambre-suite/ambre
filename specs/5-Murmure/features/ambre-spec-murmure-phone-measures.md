@@ -113,6 +113,10 @@ The budgets the pages measure stay rows of `ambre-spec-budgets.md`, and no row h
     ends once that member counts every message unread (`MURMURE-676`).
   * The seed prints one `PHONE-SEED` line of JSON: the origin, the name, the channel, the count and
     the seconds it took.
+  * On 2026-11-18, in a cloud container, `just phone-seed phone 5000` filled a channel of the phone
+    stack at `https://localhost:8443`. The watcher counted 5 000 messages unread after 630 s.
+  * The page reaches the relay with its own scheme (`SYNC-271`). So a seed of the stack on the
+    loopback reaches the relay over TLS, as the phone does.
 
 * **Code.**
 
@@ -153,7 +157,9 @@ The budgets the pages measure stay rows of `ambre-spec-budgets.md`, and no row h
 1. Run `just phone-stack <address of the desktop>` in the dev container. Trust its authority on
    the phone, as `.devcontainer/README.md` states.
 2. On the desktop, run `just phone-seed <name>` once the stack answers. The desktop needs a Chrome,
-   its chromedriver and the toolchain. The seed sends about 6 messages per second.
+   its chromedriver and the toolchain. A seed of 5 000 messages takes about 11 minutes.
+   After a failed seed, wait one minute before the next. Every page of the seed reaches the relay
+   from the loopback, and the relay takes 10 sign-in requests per minute from one address.
 3. On the desktop, open the remote inspector: `chrome://inspect` for Chrome on Android, the Develop
    menu of Safari for an iPhone.
 4. On the phone, sign in with the name of the seed, open Murmure, and post one message that holds an
@@ -212,9 +218,6 @@ The budgets the pages measure stay rows of `ambre-spec-budgets.md`, and no row h
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **A seed of 5 000 messages loses messages past the first 4 000.** On 2026-11-17, in a cloud
-  container, `a_seed_fills_its_channel_to_the_count` held 25, 300, 1 000 and 3 000 messages. A run of
-  5 000 delivered 4 738 to the relay, and the watcher counted 4 501. The cause is not yet known.
 * **No measure marks the cold open in the application.** Section 3.2 reads it from a trace by hand.
 * **The memory of the documents held is an upper bound.** The memory of a page never shrinks.
 * **The 95th percentile is that of means.** A page times samples of many runs, since the clock of a

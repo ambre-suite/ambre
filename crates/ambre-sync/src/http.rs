@@ -152,7 +152,8 @@ impl Url<RelayHost> {
 
 /// The scheme of every relay address: plain HTTP for a relay on this
 /// machine, TLS for any other. The socket follows the same choice, so a
-/// local dev relay never sees a TLS handshake it cannot answer.
+/// local dev relay never sees a TLS handshake it cannot answer. The worker
+/// takes the scheme of its page first (`SYNC-271`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum UrlScheme {
     Http,
@@ -167,6 +168,18 @@ impl UrlScheme {
         } else {
             Self::Https
         }
+    }
+
+    /// The scheme of the page that started the worker, when its protocol
+    /// names one. The relay sits at the origin of that page, so a page served
+    /// over TLS reaches the relay over TLS, even on this machine (`SYNC-271`).
+    /// A page with no scheme falls back to the rule of [`UrlScheme::of`].
+    #[cfg_attr(
+        all(not(test), not(target_arch = "wasm32")),
+        expect(dead_code, reason = "only the wasm worker start and the tests read it")
+    )]
+    pub(crate) fn of_page(page: Option<Self>, host: &Url<RelayHost>) -> Self {
+        page.unwrap_or_else(|| Self::of(host))
     }
 }
 
@@ -2394,6 +2407,30 @@ mod tests {
         let host = Url::<RelayHost>::new("relay.example".to_owned());
         assert!(host == host.clone());
         assert!(host != Url::<RelayHost>::new("other.example".to_owned()));
+    }
+
+    /// `SYNC-271`: the protocol of the page picks the scheme. A stack served
+    /// over TLS on this machine is reached over TLS. A page served in the
+    /// clear on another host is reached in the clear.
+    #[test]
+    fn the_scheme_of_the_page_wins_over_the_host() {
+        let page = |scheme: Option<UrlScheme>, host: &str| {
+            UrlScheme::of_page(scheme, &Url::<RelayHost>::new(host.to_owned()))
+        };
+        assert_eq!(
+            page(Some(UrlScheme::Https), "localhost:8443"),
+            UrlScheme::Https
+        );
+        assert_eq!(
+            page(Some(UrlScheme::Https), "127.0.0.1:8443"),
+            UrlScheme::Https
+        );
+        assert_eq!(
+            page(Some(UrlScheme::Http), "192.168.1.20:8080"),
+            UrlScheme::Http
+        );
+        assert_eq!(page(None, "localhost:3000"), UrlScheme::Http);
+        assert_eq!(page(None, "relay.example"), UrlScheme::Https);
     }
 
     /// An answer body becomes a fetched blob with every byte kept, and each

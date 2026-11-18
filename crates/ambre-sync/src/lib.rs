@@ -2210,10 +2210,12 @@ pub(crate) async fn run_wasm(
     cmd_rx: ambre_bus::conduit::Receiver<SyncCommand>,
     logic_sink: LogicSink,
     api_base: Url<RelayHost>,
+    url_scheme: http::UrlScheme,
     call_ports: call_link::CallPorts,
 ) {
     crate::log::info!("Ambre Sync worker starting (wasm async)");
     let mut state = SyncState::new(logic_sink, api_base);
+    state.url_scheme = url_scheme;
     state.call_ports = call_ports;
     run(cmd_rx, state).await;
     crate::log::info!("Ambre Sync worker exiting (command channel closed)");
