@@ -122,17 +122,35 @@ mod tests {
             (Level::Info, tracing::Level::INFO),
             (Level::Debug, tracing::Level::DEBUG),
         ];
-        let line = tracing::subscriber::with_default(capture.clone(), || {
-            let line = line!() + 2;
-            for (level, _) in levels {
-                emit(level, format_args!("refused {}", 7));
+        let expected = |line: u32| -> Vec<(tracing::Level, String)> {
+            levels
+                .iter()
+                .map(|(_, level)| (*level, format!("{}:{line}: refused 7", file!())))
+                .collect()
+        };
+        tracing::subscriber::with_default(capture.clone(), || {
+            // Another test thread may register a callsite of `emit` before this
+            // capture exists. Preempted between the two steps of its registration, it
+            // stores the interest as never after the capture rebuilt it. A later
+            // rebuild corrects it, so the test emits again after one, a bounded number
+            // of times.
+            let mut seen = Vec::new();
+            for _ in 0..50 {
+                tracing::callsite::rebuild_interest_cache();
+                if let Ok(mut held) = capture.0.lock() {
+                    held.clear();
+                }
+                let line = line!() + 2;
+                for (level, _) in levels {
+                    emit(level, format_args!("refused {}", 7));
+                }
+                seen = capture.0.lock().expect("the capture").clone();
+                if seen == expected(line) {
+                    return;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
             }
-            line
+            panic!("the messages reached tracing as {seen:?}");
         });
-        let expected: Vec<(tracing::Level, String)> = levels
-            .iter()
-            .map(|(_, level)| (*level, format!("{}:{line}: refused 7", file!())))
-            .collect();
-        assert_eq!(*capture.0.lock().expect("the capture"), expected);
     }
 }
