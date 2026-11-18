@@ -574,7 +574,8 @@ impl AuthFailure {
             | Self::SeedNotWrapped
             | Self::Api(_)
             | Self::BadRecoveryWords(_)
-            | Self::ForeignRecoveryWords => PassphraseVerdict::Other,
+            | Self::ForeignRecoveryWords
+            | Self::NoDevSignIn => PassphraseVerdict::Other,
         }
     }
 }
