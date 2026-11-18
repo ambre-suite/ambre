@@ -15,9 +15,9 @@
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
-| `architecture` | How the client is split, and why. | implemented | 129 | 8 |
+| `architecture` | How the client is split, and why. | implemented | 130 | 8 |
 | `broadcast` | One connection per person, carrying every document they have open. | implemented | 30 |  |
-| `call-media` | The audio and video of a call, encrypted end to end. | implemented | 138 |  |
+| `call-media` | The audio and video of a call, encrypted end to end. | implemented | 140 |  |
 | `call-proofs` | The harnesses that measure a call on hardware no CI job runs. | implemented | 19 |  |
 | `commands` | Everything the user can ask for has one name. | implemented | 13 |  |
 | `delta-order` | A change made on one screen appears on another with the changes it was built on, or it waits. | implemented | 22 |  |
@@ -27,15 +27,15 @@
 | `high-density` | A screen with two or more physical pixels per CSS pixel. | implemented | 10 |  |
 | `key-verification` | Before a document is shared with someone, their key is shown as a short readable fingerprint and the user confirms it. | implemented | 18 |  |
 | `kinetic-scroll` | A finger moves the view the same way in every editor. | implemented | 15 |  |
-| `launcher` | The home screen at the root of the site: sign in, then every document you can open, whatever kind it is. | implemented | 46 |  |
+| `launcher` | The home screen at the root of the site: sign in, then every document you can open, whatever kind it is. | implemented | 48 |  |
 | `locale` | A document carries one language tag, so two collaborators on differently configured machines read the same number, the same currency and the same date. | implemented | 23 |  |
 | `media` | A picture in a document travels apart from it. | implemented | 19 |  |
-| `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | implemented | 81 |  |
-| `op-authorship` | Who wrote each operation of a document. | implemented | 29 |  |
+| `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | implemented | 84 |  |
+| `op-authorship` | Who wrote each operation of a document. | implemented | 31 |  |
 | `pdf-export` | A user hands a document to someone who has no Ambre, and the file looks like the screen. | implemented | 20 |  |
 | `residency` | Which documents a client holds, in memory and on disk, and what a document it does not hold still costs. | implemented | 28 |  |
 | `schema-version` | What a document looks like once it reaches the disk, and how a later binary knows it can still read it. | implemented | 20 |  |
-| `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | implemented | 77 |  |
+| `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | implemented | 78 |  |
 | `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 25 |  |
 | `text-input` | A text area that shows nothing, sits under the caret, and is the real keyboard focus of the canvas. | implemented | 15 |  |
 | `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 23 |  |
@@ -56,13 +56,13 @@
 | `render-assets` | What the renderer loads before it can draw anything: the fonts a script needs, the glyphs rasterized from them, the icons, the embedded images. | partial | 26 |  |
 | `sealed-envelope` | Nothing a user writes leaves the browser readable. | partial | 29 |  |
 | `server` | The one process every client talks to. | partial | 117 | 1 |
-| `sync` | The one part of the client that talks to the network. | partial | 77 |  |
+| `sync` | The one part of the client that talks to the network. | partial | 79 |  |
 | `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 20 |  |
 | `ui` | The page's own thread. | partial | 23 |  |
-| `zero-knowledge` | What the relay is allowed to learn, and what it must never be able to learn. | partial | 44 | 1 |
+| `zero-knowledge` | What the relay is allowed to learn, and what it must never be able to learn. | partial | 45 | 1 |
 | `machine-access` | A program reads or writes a sheet, a board, a text or a conversation only as a sealed client. | design-only | 34 |  |
 | `macros` | A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. | design-only | 54 |  |
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**49 features: 24 implemented, 21 partial, 4 design-only. 1614 contract rows, 14 loose.**
+**49 features: 24 implemented, 21 partial, 4 design-only. 1628 contract rows, 14 loose.**

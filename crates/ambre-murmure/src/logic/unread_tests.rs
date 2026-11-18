@@ -154,7 +154,7 @@ fn the_authors_own_message_is_numbered_by_its_echo_and_never_counts() {
     );
 }
 
-/// `MURMURE-673`, `MURMURE-674`: the echo of this member's own delta numbers the message it
+/// `MURMURE-674`, `MURMURE-675`: the echo of this member's own delta numbers the message it
 /// created and answers nothing, since the view already shows that message.
 /// The same delta from another member still answers with the list.
 #[test]

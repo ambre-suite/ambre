@@ -1,5 +1,5 @@
 //! The read cursors this session owes the relay, sent together once a period
-//! (the Murmure unread spec, `SYNC-264`).
+//! (the Murmure unread spec, `SYNC-269`).
 //!
 //! A member who keeps a channel on screen marks it read at every message it
 //! shows. One request per mark spends the REST budget of the relay at a few
@@ -56,7 +56,7 @@ impl OwedCursors {
 mod tests {
     use super::*;
 
-    /// `SYNC-264`: the moves of one period leave as one request per
+    /// `SYNC-269`: the moves of one period leave as one request per
     /// document, at the latest number each named.
     #[test]
     fn the_moves_of_one_period_leave_once_per_document_at_the_latest_number() {
@@ -89,7 +89,7 @@ mod tests {
         );
     }
 
-    /// `SYNC-264`: a move back, as marking a message unread asks, replaces
+    /// `SYNC-269`: a move back, as marking a message unread asks, replaces
     /// a move forward of the same period.
     #[test]
     fn a_move_back_replaces_a_move_forward_of_the_same_period() {

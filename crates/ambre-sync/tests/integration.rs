@@ -645,7 +645,7 @@ fn send_update_after_open_document_encrypts_and_sends() {
 fn full_session_flow_sign_in_create_open_close_logout() {
     let (mut state, rx, mock) = setup(true);
 
-    // 1. Sign in: an offline unlock opens no key (`SYNC-264`).
+    // 1. Sign in: an offline unlock opens no key (`SYNC-270`).
     let id1 = next_request();
     send_rest(
         &mut state,

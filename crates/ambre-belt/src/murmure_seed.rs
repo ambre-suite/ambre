@@ -45,7 +45,7 @@ pub(crate) mod tests {
         format!("seed-{count}-{}", &suffix[..6])
     }
 
-    /// `MURMURE-672`: two seeds of one count name two channels, so the
+    /// `MURMURE-677`: two seeds of one count name two channels, so the
     /// second opens no channel the first filled.
     #[test]
     fn two_seeds_of_one_count_name_two_channels() {
@@ -85,7 +85,7 @@ pub(crate) mod tests {
         channel
     }
 
-    /// `MURMURE-671`: a seed of a small count, on the belt's own relay. The
+    /// `MURMURE-676`: a seed of a small count, on the belt's own relay. The
     /// watcher counts every message unread, so the relay delivered each one.
     #[tokio::test(flavor = "multi_thread")]
     #[cfg_attr(

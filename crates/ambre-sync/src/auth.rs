@@ -9,7 +9,7 @@ impl SyncState {
     /// Open the keys the relay stores for the signed-in account under
     /// `passphrase`. An unlock creates no key: an account that owes its keys
     /// hears that a setup is owed, and `SetUpKeys` alone creates them
-    /// (`SYNC-264`, `SYNC-134`).
+    /// (`SYNC-270`, `SYNC-134`).
     pub(crate) fn handle_unlock(
         &mut self,
         id: Seq<Request>,
@@ -753,7 +753,7 @@ mod provider_tests {
         assert!(no_relay(&rx), "the return");
     }
 
-    /// `SYNC-264`: with no relay, an unlock fails at once and holds no key.
+    /// `SYNC-270`: with no relay, an unlock fails at once and holds no key.
     /// An unlock never mints the keys it did not find.
     #[test]
     fn an_unlock_with_no_relay_creates_no_key() {
@@ -1096,7 +1096,7 @@ enum UnlockFailure {
 }
 
 /// Read the sealed seed of the signed-in account, open it under `passphrase`,
-/// then read the identity of the account (`SYNC-264`).
+/// then read the identity of the account (`SYNC-270`).
 ///
 /// The unlock only reads. An account that owes its keys ends on `SetupOwed`
 /// before any key exists, and nothing is written to the relay.
@@ -1361,7 +1361,7 @@ mod tests {
         ));
     }
 
-    /// `SYNC-264`: an unlock only reads. Stored keys open after two reads; an
+    /// `SYNC-270`: an unlock only reads. Stored keys open after two reads; an
     /// account that owes its keys hears a setup owed after one read. Neither
     /// unlock writes a key to the relay.
     #[tokio::test]

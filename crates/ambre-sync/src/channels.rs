@@ -907,7 +907,7 @@ impl SyncState {
     }
 
     /// Owe the relay `cursors`, and start the period that sends them unless
-    /// one runs (`SYNC-264`).
+    /// one runs (`SYNC-269`).
     fn owe_cursors(&mut self, cursors: Vec<(Id<Document>, Seq<Relay>)>) {
         if self.owed_cursors.owe(cursors) == crate::cursors::Period::Idle {
             self.arm_event_timer(SyncEvent::CursorsDue, crate::cursors::CURSOR_PERIOD);
@@ -915,7 +915,7 @@ impl SyncState {
     }
 
     /// The period of the cursors owed ended: move each, one request per
-    /// document (`SYNC-264`).
+    /// document (`SYNC-269`).
     pub(crate) fn send_owed_cursors(&mut self) {
         let cursors = self.owed_cursors.take();
         if cursors.is_empty() {

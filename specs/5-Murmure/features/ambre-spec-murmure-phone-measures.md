@@ -36,8 +36,8 @@ The budgets the pages measure stay rows of `ambre-spec-budgets.md`, and no row h
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-671` | `POST` | The seed MUST fill a new channel with the count of messages it is given, and the relay MUST deliver each one to another member. | this spec section 2, the seed | `ambre_belt::murmure_seed::tests::a_seed_fills_its_channel_to_the_count` -- browser tier, at 25 messages: a second member counts each one unread | none | verified |
-| `MURMURE-672` | `FRAME` | A seed MUST NOT write into a channel that an earlier seed of the same account made. | this spec section 2, the seed | `ambre_belt::murmure_seed::tests::two_seeds_of_one_count_name_two_channels` -- each seed names a new channel, and opens the sidebar entry of that name alone | none | verified |
+| `MURMURE-676` | `POST` | The seed MUST fill a new channel with the count of messages it is given, and the relay MUST deliver each one to another member. | this spec section 2, the seed | `ambre_belt::murmure_seed::tests::a_seed_fills_its_channel_to_the_count` -- browser tier, at 25 messages: a second member counts each one unread | none | verified |
+| `MURMURE-677` | `FRAME` | A seed MUST NOT write into a channel that an earlier seed of the same account made. | this spec section 2, the seed | `ambre_belt::murmure_seed::tests::two_seeds_of_one_count_name_two_channels` -- each seed names a new channel, and opens the sidebar entry of that name alone | none | verified |
 
 * **Budget.** The pages measure six rows of `ambre-spec-budgets.md` and hold none of them. The six
   are the segment replay, the snapshot import, the authorship check, the inbound open, the space
@@ -110,7 +110,7 @@ The budgets the pages measure stay rows of `ambre-spec-budgets.md`, and no row h
     message as a person types it. Enter only asks to send, and the next paint reads the draft. So
     the seed waits for two paints before the next message, or two messages would join.
   * A second member, `<name>-watcher`, joins the space and goes back from the channel. The seed
-    ends once that member counts every message unread (`MURMURE-671`).
+    ends once that member counts every message unread (`MURMURE-676`).
   * The seed prints one `PHONE-SEED` line of JSON: the origin, the name, the channel, the count and
     the seconds it took.
 

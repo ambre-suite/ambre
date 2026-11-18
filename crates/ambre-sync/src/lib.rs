@@ -332,7 +332,7 @@ enum SyncEvent {
         ticket: ambre_core::Seq<generation::ResendTicket>,
     },
     /// Fired at the end of the period of the read cursors owed: send them,
-    /// one request per document (`SYNC-264`).
+    /// one request per document (`SYNC-269`).
     CursorsDue,
     /// Fired by the timer armed when a replay ask came inside the relay's
     /// window: send the ask it held (`SYNC-188`).
@@ -1435,7 +1435,7 @@ pub struct SyncState {
     /// Cleared on every open (`SYNC-153`, `SYNC-154`).
     replay_stops: HashMap<Id<Document>, websocket::ReplayStops>,
     /// The read cursors owed the relay, sent together at the end of each
-    /// period (`SYNC-264`).
+    /// period (`SYNC-269`).
     owed_cursors: cursors::OwedCursors,
     /// The last replay of each document this socket asked, and the ask held
     /// past the relay's window. Cleared on every open (`SYNC-188`).

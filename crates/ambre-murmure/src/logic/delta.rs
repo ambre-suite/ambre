@@ -585,7 +585,7 @@ pub(crate) fn created_messages(update: &JsonSchema) -> Vec<Id<Message>> {
 }
 
 /// Each message `update` creates, with the operation that created its map:
-/// the map whose `id` the update writes (`MURMURE-673`). The engine numbers
+/// the map whose `id` the update writes (`MURMURE-674`). The engine numbers
 /// these alone, with no walk of the segment.
 pub(crate) fn created_with_ops(update: &JsonSchema) -> Vec<(Id<Message>, ID)> {
     update

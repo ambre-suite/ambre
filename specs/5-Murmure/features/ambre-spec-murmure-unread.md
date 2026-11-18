@@ -145,7 +145,7 @@ so the relay moves its cursor to its own last number, and the client need not lo
 
 **One move a period.** A member who keeps a channel on screen marks it read at each message it
 shows. The Sync worker keeps the latest move of each document, and sends the moves once a period
-(`ambre-spec-sync.md`, `SYNC-264`). A channel that fills at a few messages a second then spends one
+(`ambre-spec-sync.md`, `SYNC-269`). A channel that fills at a few messages a second then spends one
 request a second. The requests that carry content keep the rest of the budget of the relay.
 
 ---

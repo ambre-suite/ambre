@@ -146,7 +146,7 @@ impl Sequence {
     }
 
     /// Number at `seq` each of `created`, the messages one update created,
-    /// when no earlier update waits to be matched (`MURMURE-673`). A message
+    /// when no earlier update waits to be matched (`MURMURE-674`). A message
     /// created in the update's range is one whose map the update created, so
     /// no walk of the segment finds another. [`Numbered::Waiting`] changes
     /// nothing: the caller notes the range and matches every message.
