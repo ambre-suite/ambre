@@ -4249,29 +4249,45 @@ pub(crate) mod tests {
                 std::time::Duration::from_secs(40),
             )
             .await;
-        let first = canvas_shot(&bob_page).await;
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-        let second = canvas_shot(&bob_page).await;
-        let (moved, bounds) = changed(&first, &second);
         let ratio = bob_page
             .browser
             .script("return window.devicePixelRatio || 1;", json!([]))
             .await
             .as_f64()
             .unwrap_or(1.0);
-        screen.check();
-        assert!(moved >= 1_000, "only {moved} pixels moved under a screen");
-        let [_, _, _, bottom] = bounds.expect("a box of moved pixels");
         // A tile of a camera is 164 pixels tall at most: the 180 of its band less two gaps. Its
         // row sits at the bottom of the band. So a thousand moved pixels above the 164 pixels
         // over the lowest moved row lie in no camera tile. The span of a box is no proof: a few
         // pixels of codec noise in a still screen can stretch it.
-        let reach = bottom.saturating_sub((164.0 * ratio) as u32);
-        let above = moved_above(&first, &second, reach);
+        //
+        // One pair of shots is no proof of a still screen either. The fake screen of Chrome
+        // sweeps a disc that comes back to the same angle about every 0.6 s. Two shots a
+        // whole number of turns apart differ by its clock text alone. So each later shot
+        // comes 0.7 s after the one before, and reads against the first. A shot off the
+        // period of the sweep reads the disc at another angle.
+        let first = canvas_shot(&bob_page).await;
+        let mut read = Vec::new();
+        let (moved, above, reach) = loop {
+            tokio::time::sleep(std::time::Duration::from_millis(700)).await;
+            let second = canvas_shot(&bob_page).await;
+            let (moved, bounds) = changed(&first, &second);
+            let [_, _, _, bottom] = bounds.unwrap_or_default();
+            let reach = bottom.saturating_sub((164.0 * ratio) as u32);
+            let above = moved_above(&first, &second, reach);
+            read.push((moved, above, reach));
+            if (moved >= 1_000 && above >= 1_000) || read.len() == 8 {
+                break (moved, above, reach);
+            }
+        };
+        screen.check();
+        assert!(
+            moved >= 1_000,
+            "only {moved} pixels moved under a screen, over {read:?}"
+        );
         assert!(
             above >= 1_000,
             "{above} pixels moved above row {reach}, out of {moved} under a screen: \
-             no tile taller than a camera moved"
+             no tile taller than a camera moved, over {read:?} (moved, above, row)"
         );
         for page in [&ada_page, &bob_page] {
             assert_eq!(
