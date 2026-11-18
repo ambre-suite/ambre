@@ -1683,6 +1683,9 @@ impl SyncState {
     /// lazy-creation POST. In production this flag is set by the async
     /// `OpenDocumentReady` (server returned members) or `DocumentMaterialized`
     /// flows. Neither can complete in a synchronous native test.
+    // Its two callers sign in by a bare name, which only a `dev-login` build
+    // holds, and cargo-mutants builds without it, so it skips the seam.
+    #[cfg_attr(test, mutants::skip)]
     pub fn mark_document_server_created(&mut self, document_id: Id<Document>) {
         if let Some(doc_state) = self.documents.get_mut(&document_id) {
             doc_state.existence = crate::Existence::OnRelay;
