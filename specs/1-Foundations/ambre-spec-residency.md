@@ -59,6 +59,9 @@ prefix is `RESID`, and it belongs to this document alone.
 | `RESID-023` | `POST` | A rotation of a document held as a light subscription MUST give it the new key, and a document watched after under its key the same. | this spec section 3; `RESID-014`; `ambre-spec-key-rotation.md`, `SYNC-080` | `ambre_sync::light::tests::a_rotation_rekeys_a_channel_watched_unopened` -- a mention under the new key counts nothing before the rotation and one after it, the listed key follows, and a segment watched after counts under it | none | verified |
 | `RESID-024` | `POST` | A frame sealed under a key a light subscription lacks MUST ask for the document's current key once per key, and the key taken MUST replay from that frame. | this spec section 3; `RESID-023`; `ambre-spec-key-rotation.md`, `SYNC-080` | `ambre_sync::light::tests::a_frame_under_a_missing_key_fetches_it_and_replays` -- two frames under a missing key mark activity and ask once, the key taken asks from the first again and both mentions count, a key already held replays nothing | none | verified |
 | `RESID-028` | `FRAME` | A light subscription of a document the relay does not hold yet MUST NOT be subscribed on the socket. | this spec section 3; `RESID-004` | `ambre_sync::light::tests::a_local_document_released_is_never_subscribed` -- a local document released keeps its light subscription, and the socket neither replays nor subscribes it | none | verified |
+| `RESID-029` | `POST` | Given a delta whose number passes the next one a light subscription expects, the client MUST ask the relay once for the deltas after its cursor. | this spec section 3; `RESID-014`; `ambre-spec-sequencer.md` | `ambre_sync::light::tests::a_lost_broadcast_is_asked_for_and_counted_once` -- a skipped number asks once after the cursor, a later number and the same one again ask nothing, and the holes kept stay at their bound | none | verified |
+| `RESID-031` | `POST` | A delta that fills a hole of a light subscription MUST advance its counters once. | this spec section 3; `RESID-014`; `RESID-029` | `ambre_sync::light::tests::a_lost_broadcast_is_asked_for_and_counted_once` -- the replay counts each missing delta once and nothing else, and a hole split by a late delta counts each part once | none | verified |
+| `RESID-030` | `FRAME` | A light subscription watched from the head MUST NOT ask for the deltas before its first number. | this spec section 3; `RESID-022`; `RESID-029` | `ambre_sync::light::tests::a_document_watched_from_the_head_asks_for_nothing_before_its_first_delta` -- a first delta at 500 asks nothing and counts, and a later skipped number asks after it | none | verified |
 
 ### 1.5 Meet the browser quota
 
@@ -82,7 +85,7 @@ A row sealed under one session may meet another.
   store, and one light subscription. All three wait on a measure.
 * **Boundary.** the summary rides inside the ciphertext (`SYNC-113`), so the relay learns nothing
   of it. The local store stays on the device, owned by the launcher (`ambre-spec-launcher.md`).
-* **Verification.** 28 `verified`, by host tests on the Logic, Sync and ledger states. The browser
+* **Verification.** 31 `verified`, by host tests on the Logic, Sync and ledger states. The browser
   tier holds the quota refusal and the persistent storage request.
 
 ---
@@ -138,6 +141,15 @@ bound, so the seal checks it again and drops one past the bound.
 The Sync worker reads the summary with no Loro document and advances the counters (`RESID-014`).
 A member can lie in a summary. The lie costs one false badge, and the document corrects it on open
 (`RESID-011`).
+
+**A lost delta.** The relay numbers the deltas of a document one by one, so a light subscription
+reads the number of each delta it receives. A number past the next one leaves a hole. The worker
+asks the relay once for the deltas after the cursor it held before the hole (`RESID-029`).
+
+A delta of the replay that fills the hole counts once, and every other delta of the replay was
+read already (`RESID-031`). The subscription remembers `MAX_LIGHT_HOLES` holes at most, so its
+entry stays within its budget row. A document watched from the head owes nothing before its first
+delta, so that first number leaves no hole (`RESID-030`).
 
 **Leaving memory, in steps.** Memory holds what a view shows, and nothing else (`RESID-001`,
 `RESID-003`). When a view closes:
@@ -230,6 +242,11 @@ Residency has no control of its own.
   Murmure will mark its final segments.
 * **No application writes a summary yet.** Every update counts as activity alone, until an
   application writes summaries with its own messages.
+* **A delta that outruns a replay asks again.** A live delta can arrive before the answer to a
+  replay ask, and leave a hole that replay already covers. The worker asks once more, one replay
+  window later, and the second replay counts nothing new. No budget row bounds that traffic yet.
+* **A hole the relay never fills stays.** A delta lost for good never arrives, and the hole leaves
+  only once `MAX_LIGHT_HOLES` newer holes push it out.
 * **The three budgets are not measured.** The figures in `ambre-spec-budgets.md section 6` are
   estimates, marked as such.
 

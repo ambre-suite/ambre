@@ -10,6 +10,40 @@ use super::*;
 
 use ambre_core::activity::ActivityCounters;
 
+/// How many holes in its numbers a light subscription remembers. Past it the
+/// oldest is forgotten, and a delta that fills it later counts nothing. Eight
+/// holes of two numbers each keep the entry within its budget row
+/// (`ambre-spec-budgets.md` section 6, `RESID-004`).
+const MAX_LIGHT_HOLES: Count<LightHoles> = Count::new(8);
+
+/// The holes a light subscription remembers below its cursor.
+enum LightHoles {}
+
+impl ambre_core::NarrowCount for LightHoles {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("LightHoles");
+}
+
+/// A run of numbers a light subscription skipped: a broadcast it never
+/// received (`RESID-029`, `RESID-031`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Hole {
+    first: Seq<Relay>,
+    last: Seq<Relay>,
+}
+
+/// What a number tells a light subscription about the numbers before it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Arrival {
+    /// Read already, or below a hole it forgot: nothing to count.
+    Read,
+    /// The number after the cursor, or one that fills a hole.
+    Counts,
+    /// A number past the next one: the relay is asked for what follows
+    /// `after`, the cursor before it.
+    Gap { after: Seq<Relay> },
+}
+
 /// What the Sync worker keeps of a document the Logic thread evicted.
 pub(crate) struct LightSubscription {
     /// Opens the summaries. A frame sealed under another key is counted as
@@ -29,6 +63,10 @@ pub(crate) struct LightSubscription {
     /// Whether a reconnect asks for what it missed. One watched from the
     /// head asks for nothing until its first delta gives it a number.
     replays: bool,
+    /// The runs of numbers below `seen` it never received, oldest first, at
+    /// most [`MAX_LIGHT_HOLES`]. A delta that fills one counts once
+    /// (`RESID-031`).
+    holes: Vec<Hole>,
     /// The first number sealed under a key this subscription lacked, since
     /// the last key it took. A new key replays from it (`RESID-024`).
     unopened_from: Option<Seq<Relay>>,
@@ -48,6 +86,7 @@ impl LightSubscription {
             seen,
             counters: ActivityCounters::default(),
             replays: true,
+            holes: Vec::new(),
             unopened_from: None,
             asked: HashSet::new(),
         }
@@ -67,10 +106,61 @@ impl LightSubscription {
         }
     }
 
+    /// Reads the number of a broadcast against the cursor (`RESID-029`). A
+    /// number past the next one leaves a hole and moves the cursor to it. One
+    /// watched from the head takes its first number with no hole: nothing
+    /// before it was ever owed (`RESID-030`). A number inside a hole fills it.
+    fn arrive(&mut self, seq: Seq<Relay>) -> Arrival {
+        if seq <= self.seen {
+            return self.fill(seq);
+        }
+        let after = self.seen;
+        let skipped = self.replays && seq.get() > after.get().saturating_add(1);
+        self.seen = seq;
+        self.replays = true;
+        if !skipped {
+            return Arrival::Counts;
+        }
+        self.holes.push(Hole {
+            first: Seq::<Relay>::new(after.get().saturating_add(1)),
+            last: Seq::<Relay>::new(seq.get().saturating_sub(1)),
+        });
+        if Count::of(self.holes.len()) > MAX_LIGHT_HOLES {
+            self.holes.remove(0);
+        }
+        Arrival::Gap { after }
+    }
+
+    /// Takes `seq` out of the hole that holds it, splitting the hole in two
+    /// when `seq` sits inside it.
+    fn fill(&mut self, seq: Seq<Relay>) -> Arrival {
+        let Some(at) = self
+            .holes
+            .iter()
+            .position(|hole| hole.first <= seq && seq <= hole.last)
+        else {
+            return Arrival::Read;
+        };
+        let hole = self.holes.remove(at);
+        let below = Hole {
+            first: hole.first,
+            last: Seq::<Relay>::new(seq.get().saturating_sub(1)),
+        };
+        let above = Hole {
+            first: Seq::<Relay>::new(seq.get().saturating_add(1)),
+            last: hole.last,
+        };
+        let parts = [below, above]
+            .into_iter()
+            .filter(|part| part.first <= part.last);
+        self.holes.splice(at..at, parts);
+        Arrival::Counts
+    }
+
     /// Counts one update from its summary alone (`RESID-014`, `RESID-015`).
     /// An update that does not open, or carries no summary, marks activity
-    /// and counts nothing. A number already read returns `None`, and so does
-    /// an update `mine` signed, which is nothing new to this user (`RESID-021`).
+    /// and counts nothing. An update `mine` signed returns `None`: it is
+    /// nothing new to this user (`RESID-021`).
     fn count(
         &mut self,
         seq: Seq<Relay>,
@@ -78,11 +168,6 @@ impl LightSubscription {
         me: Option<Id<User>>,
         mine: Option<&FixedBytes<PublicKey>>,
     ) -> Option<(ActivityCounters, Option<ambre_bus::CallCue>)> {
-        if seq.get() <= self.seen.get() {
-            return None;
-        }
-        self.seen = seq;
-        self.replays = true;
         if mine == Some(&update.public_data.pub_key) {
             return None;
         }
@@ -165,7 +250,11 @@ impl SyncState {
         let Some(light) = self.light.get_mut(&document_id) else {
             return false;
         };
-        let counted = light.count(seq, update, me, mine.as_ref());
+        let arrival = light.arrive(seq);
+        let counted = match arrival {
+            Arrival::Read => None,
+            Arrival::Counts | Arrival::Gap { .. } => light.count(seq, update, me, mine.as_ref()),
+        };
         let key_id = update.public_data.key_id;
         let ask = counted.is_some() && key_id != light.doc_key.id() && light.asked.insert(key_id);
         if let Some((counters, cue)) = counted {
@@ -181,6 +270,14 @@ impl SyncState {
         }
         if ask {
             self.fetch_rotated_key(document_id);
+        }
+        // A broadcast lost on the way leaves a hole the relay still holds:
+        // ask once for what follows the cursor before it (`RESID-029`).
+        if let Arrival::Gap { after } = arrival {
+            self.ws_send(&WsClientMsg::RequestMissing {
+                document_id,
+                after_seq: after,
+            });
         }
         true
     }
@@ -1213,5 +1310,132 @@ mod tests {
                 [LogicEvent::ThreadActivity { document_id }] if *document_id == thread),
             "got {events:?}"
         );
+    }
+
+    /// The replay asks a mock socket received, as `(document, after)`.
+    fn asks(
+        ws_rx: &ambre_bus::conduit::Receiver<Payload<ambre_protocol::WireFrame>>,
+    ) -> Vec<(Id<Document>, Seq<Relay>)> {
+        ws_rx
+            .try_iter()
+            .filter_map(|wire| ambre_protocol::ws::decode_client_msg(&wire).ok())
+            .filter_map(|msg| match msg {
+                WsClientMsg::RequestMissing {
+                    document_id,
+                    after_seq,
+                } => Some((document_id, after_seq)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The mention counter of each `LogicEvent::Activity` drained.
+    fn mentions(rx: &ambre_bus::conduit::Receiver<LogicEvent>) -> Vec<u32> {
+        drain(rx)
+            .into_iter()
+            .filter_map(|event| match event {
+                LogicEvent::Activity { counters, .. } => Some(counters.mentions.get()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Holds `RESID-029` and `RESID-031`. A broadcast past the next number asks the relay
+    /// once for what follows the cursor before it. The replay counts each
+    /// missing delta once, and a number already read counts nothing.
+    #[test]
+    fn a_lost_broadcast_is_asked_for_and_counted_once() {
+        let (mut state, rx, document_id, doc_key, snapshot) = released(Seq::<Relay>::new(9));
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        drain(&rx);
+        let deliver = |state: &mut SyncState, seq: u64| {
+            state.receive_update(
+                Seq::<Relay>::new(seq),
+                update(document_id, snapshot, &doc_key, Some(&mention())),
+            );
+        };
+        deliver(&mut state, 10);
+        assert!(asks(&ws_rx).is_empty(), "the next number asked for a gap");
+        deliver(&mut state, 13);
+        assert_eq!(asks(&ws_rx), vec![(document_id, Seq::<Relay>::new(10))]);
+        deliver(&mut state, 14);
+        deliver(&mut state, 13);
+        assert!(asks(&ws_rx).is_empty(), "one gap asked twice");
+        assert_eq!(mentions(&rx), vec![1, 2, 3], "a number read twice counted");
+
+        // The replay the ask brings back fills the hole and nothing else.
+        for seq in [11, 12, 13, 14, 12] {
+            deliver(&mut state, seq);
+        }
+        assert_eq!(
+            mentions(&rx),
+            vec![4, 5],
+            "the hole counted other than once"
+        );
+        assert!(asks(&ws_rx).is_empty(), "the replay asked again");
+
+        // A delta inside a hole splits it, and each part still counts once.
+        deliver(&mut state, 20);
+        state.pass_replay_window();
+        for seq in [17, 16, 17, 15, 18, 19, 20] {
+            deliver(&mut state, seq);
+        }
+        assert_eq!(mentions(&rx), vec![6, 7, 8, 9, 10, 11]);
+
+        // A relay that skips numbers at every delta leaves a bounded entry.
+        for seq in (0..40).map(|n| 30 + 2 * n) {
+            deliver(&mut state, seq);
+        }
+        let held = state.light.get(&document_id).map(|light| light.holes.len());
+        assert_eq!(held.map(Count::<LightHoles>::of), Some(MAX_LIGHT_HOLES));
+    }
+
+    /// Holds `RESID-030`: a document watched from the head takes its first
+    /// number with no ask, and asks for a gap after it.
+    #[test]
+    fn a_document_watched_from_the_head_asks_for_nothing_before_its_first_delta() {
+        let (sink, rx) = LogicSink::channel();
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
+        state.user_id = Some(Id::<User>::from_bytes([7; 16]));
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        let (channel_id, meta, doc_key) = (
+            Id::<Channel>::mint(),
+            Id::<Meta>::mint(),
+            DocumentKey::generate(),
+        );
+        let segment = Id::<Document>::mint();
+        state
+            .listed_keys
+            .insert(channel_id, (meta, doc_key.clone()));
+        state.handle_command(SyncCommand::WatchChannel {
+            channel_id,
+            meta,
+            meta_last: Some(Seq::<Relay>::new(1)),
+            documents: vec![(segment, None)],
+        });
+        let watched = asks(&ws_rx);
+        assert!(
+            watched
+                .iter()
+                .all(|(document_id, _)| *document_id != segment),
+            "a document watched from the head asked for its history"
+        );
+        let snapshot = Id::<Snapshot>::mint();
+        let deliver = |state: &mut SyncState, seq: u64| {
+            state.receive_update(
+                Seq::<Relay>::new(seq),
+                update(segment, snapshot, &doc_key, Some(&mention())),
+            );
+        };
+        deliver(&mut state, 500);
+        assert!(asks(&ws_rx).is_empty(), "the first number asked for a gap");
+        assert_eq!(mentions(&rx), vec![1]);
+        deliver(&mut state, 503);
+        assert_eq!(asks(&ws_rx), vec![(segment, Seq::<Relay>::new(500))]);
     }
 }
