@@ -1225,7 +1225,9 @@ pub fn main() {
             };
             for effect in decisions.service(&ev, shown, &murmure_relay) {
                 match effect {
-                    switchboard::Effect::Notice(notice) => toasts.push(notice.kind, notice.text),
+                    switchboard::Effect::Notice(notice) => {
+                        toasts.raise(notice.kind, notice.voice, notice.text)
+                    }
                     switchboard::Effect::Send(command) => {
                         relay_tx.send(command);
                     }
@@ -1336,7 +1338,7 @@ pub fn main() {
             switchboard::Load::Current
         };
         if let Some(notice) = busy_notice.step(load) {
-            toasts.push(notice.kind, notice.text);
+            toasts.raise(notice.kind, notice.voice, notice.text);
         }
 
         // A launcher command past the outbox's bound did not leave. Say so,

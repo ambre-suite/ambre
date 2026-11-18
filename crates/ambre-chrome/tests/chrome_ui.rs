@@ -23,7 +23,7 @@
 use ambre_chrome::{
     AppShell, CommandStates, ContextMenu, FONT_SIZES, FontSizeSelect, FormatBar, FormatControl,
     FormatToggle, Header, MenuEntry, Openness, PerfChip, PerfDetail, Pressed, Sidebar, StatusBar,
-    ToastHost, ToastKind, Toasts, Toolbar, ZoomChip,
+    ToastHost, ToastKind, ToastVoice, Toasts, Toolbar, ZoomChip,
 };
 use ambre_core::FontSize;
 use ambre_core::{Categories, Commands, StaticKey};
@@ -154,6 +154,39 @@ fn toast_push_renders_message_with_kind_class() {
     let toast = root.query_selector(".ambre-toast").unwrap().unwrap();
     assert!(toast.class_name().contains("error"), "error accent class");
     assert_eq!(toast.text_content().as_deref(), Some("boom"));
+
+    root.remove();
+}
+
+/// `CHROME-136`: a visual toast is hidden from assistive technology, so the
+/// live region does not announce it, while an announced toast stays exposed.
+#[wasm_bindgen_test]
+fn a_visual_toast_is_hidden_from_a_screen_reader() {
+    let owner = Owner::new();
+    owner.set();
+    let toasts = Toasts::new();
+    toasts.raise(ToastKind::Error, ToastVoice::Visual, "refused");
+    toasts.push(ToastKind::Error, "announced");
+    let root = mount_in_container(move || view! { <ToastHost toasts=toasts/> });
+
+    let shown: Vec<_> = (0..2)
+        .map(|at| {
+            let toast = root
+                .query_selector_all(".ambre-toast")
+                .unwrap()
+                .get(at)
+                .unwrap();
+            let toast: web_sys::Element = toast.dyn_into().unwrap();
+            (toast.text_content(), toast.get_attribute("aria-hidden"))
+        })
+        .collect();
+    assert_eq!(
+        shown,
+        vec![
+            (Some("refused".to_owned()), Some("true".to_owned())),
+            (Some("announced".to_owned()), None),
+        ]
+    );
 
     root.remove();
 }

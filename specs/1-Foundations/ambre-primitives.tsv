@@ -854,6 +854,7 @@ ambre-chrome | src/toast.rs | crate::toast | ToastKind::class() | ret | &'static
 ambre-chrome | src/toast.rs | crate::toast | Toasts::error(message) | param | impl Into<String>	free-text	text, label or user content
 ambre-chrome | src/toast.rs | crate::toast | Toasts::info(message) | param | impl Into<String>	free-text	text, label or user content
 ambre-chrome | src/toast.rs | crate::toast | Toasts::push(message) | param | impl Into<String>	free-text	text, label or user content
+ambre-chrome | src/toast.rs | crate::toast | Toasts::raise(message) | param | impl Into<String>	free-text	text, label or user content
 ambre-chrome | src/toast.rs | crate::toast | Toasts::success(message) | param | impl Into<String>	free-text	text, label or user content
 ambre-chrome | src/toast.rs | crate::toast | Toasts::warning(message) | param | impl Into<String>	free-text	text, label or user content
 ambre-commands | src/keybinding.rs | crate::keybinding | Key::from_dom(name) | param | &str	generic	the codec of an enum that carries data: the DOM KeyboardEvent.key name, which the caller reads and this parses into a Key

@@ -19,7 +19,7 @@ use ambre_bus::conduit::{Sender, TrySendError};
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{AuthFailure, DocumentSummary, MemberInfo, RestCommand, RestEvent, Role};
 use ambre_canvas::{PerfPublisher, PerfSnapshot};
-use ambre_chrome::ToastKind;
+use ambre_chrome::{ToastKind, ToastVoice};
 use ambre_core::id::{Channel, Document, Id, User};
 use ambre_core::{
     Authored, Confidential, Credential, DisplayName, ExchangePublicKey, FixedBytes, FracMs,
@@ -374,6 +374,8 @@ pub(crate) struct Notice {
     pub(crate) kind: ToastKind,
     /// The words the user reads.
     pub(crate) text: String,
+    /// Whether a screen reader announces the toast.
+    pub(crate) voice: ToastVoice,
 }
 
 impl Notice {
@@ -381,6 +383,16 @@ impl Notice {
         Self {
             kind,
             text: text.into(),
+            voice: ToastVoice::Announced,
+        }
+    }
+
+    /// A notice whose words a live line of the page already announces, so
+    /// the toast stays visual alone (`CHROME-136`).
+    fn visual(kind: ToastKind, text: impl Into<String>) -> Self {
+        Self {
+            voice: ToastVoice::Visual,
+            ..Self::new(kind, text)
         }
     }
 }
@@ -496,22 +508,24 @@ impl Switchboard {
             // the gate, so a recovery opened from the unlock face reads its
             // refusal on the form (`CHROME-134`). With neither shown, nothing
             // else reads it, so a toast does, in the same words. A refused
-            // passphrase raises that toast beside the face too (`CHROME-136`).
+            // passphrase raises that toast beside the face too, visual alone.
+            // The alert line of the face is its one announcement, so a screen
+            // reader does not read the refusal twice (`CHROME-136`).
             UiEvent::AuthError { cause } => {
                 let face = match (shown.keys, shown.account_form) {
                     (_, AccountForm::Shown) => Some(Effect::Refused(*cause)),
                     (Some(_), AccountForm::Hidden) => Some(Effect::RefuseKeys(*cause)),
                     (None, AccountForm::Hidden) => None,
                 };
-                let toast = face.is_none()
-                    || cause.passphrase_verdict() == ambre_bus::PassphraseVerdict::Refused;
+                let passphrase =
+                    cause.passphrase_verdict() == ambre_bus::PassphraseVerdict::Refused;
+                let toast = match (&face, passphrase) {
+                    (None, _) => Some(Notice::new(ToastKind::Error, cause.to_string())),
+                    (Some(_), true) => Some(Notice::visual(ToastKind::Error, cause.to_string())),
+                    (Some(_), false) => None,
+                };
                 effects.extend(face);
-                if toast {
-                    effects.push(Effect::Notice(Notice::new(
-                        ToastKind::Error,
-                        cause.to_string(),
-                    )));
-                }
+                effects.extend(toast.map(Effect::Notice));
             }
             // Chrome status indicator (`-chrome.md` 2.G): mirror the active
             // document's WebSocket link into the header label. Ignored for a
@@ -944,7 +958,7 @@ mod tests {
     use ambre_bus::{Authored, DirectMember, Instant};
     use ambre_bus::{Confidential, DocType, Plaintext, RestCommand, RestEvent, Role};
     use ambre_canvas::{PerfPublisher, PerfSnapshot};
-    use ambre_chrome::ToastKind;
+    use ambre_chrome::{ToastKind, ToastVoice};
     use ambre_core::id::{Channel, Document, Id, User};
     use ambre_core::{
         Count, Credential, DisplayName, Email, ExchangePublicKey, FixedBytes, KeyFingerprints,
@@ -2213,10 +2227,11 @@ mod tests {
     }
 
     /// `CHROME-136`: a refused passphrase raises an error toast in the words
-    /// of the refusal, beside the face that reads it. A refusal of another
-    /// field reads on its face alone.
+    /// of the refusal, beside the face that reads it. The toast is visual
+    /// alone, so the alert line of the face is the one announcement. A
+    /// refusal of another field reads on its face alone.
     #[test]
-    fn a_refused_passphrase_raises_an_error_toast() {
+    fn a_refused_passphrase_raises_a_toast_no_screen_reader_announces() {
         let mut switchboard = Switchboard::new(Page::Document);
         let gated = Shown {
             keys: Some(KeysFace::Unlock),
@@ -2255,6 +2270,17 @@ mod tests {
                 Vec::new()
             };
             assert_eq!(toasts, expected, "{cause:?}");
+            let voices: Vec<_> = effects
+                .iter()
+                .filter_map(|effect| match effect {
+                    Effect::Notice(notice) => Some(notice.voice),
+                    _ => None,
+                })
+                .collect();
+            assert!(
+                voices.iter().all(|voice| *voice == ToastVoice::Visual),
+                "{cause:?}: a screen reader reads the refusal twice"
+            );
         }
     }
 }

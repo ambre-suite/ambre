@@ -823,6 +823,24 @@ which bind the call, both indexes and both join keys. The handoff port, the vide
 ring cue. The standalone seals, which each bind their document. No plaintext and no key reaches a
 key of the ephemeral store or of the object store.
 
+## ADDENDUM 2026-11-18 -- FIXED FINDINGS OF THE BLIND WORKSPACE PASS
+
+[`security-audit-blind-2026-11-17.md`](security-audit-blind-2026-11-17.md) holds the blind pass and
+its `P` identifiers. A finding of that pass takes a numbered identifier here once it is fixed, so a
+contract row can cite it. `P21` was numbered `N31` already.
+
+### Numbered findings
+
+| ID | Severity | Finding | Answer | Held by |
+| :-- | :-- | :-- | :-- | :-- |
+| N32 | high | A settle, a revoke, an invite or a role change rooted the log on the anchor of a fresh members answer, and ran no check of an open. The relay served a wrap and a log of its own, and the client wrapped the fresh key for keys of the relay. Reported as `P26` | fixed -- a path that writes members or keys walks the log from the anchor the open accepted, or writes nothing | `SYNC-266` |
+| N33 | high | A path that writes members or keys read a served log with no comparison to the head this client walked or signed. The relay served the genuine log cut before the revoke of Eve, and the rotation wrapped the fresh key for her. Reported as `P27` | fixed -- a log that does not pass through the latest head this client walked or signed writes nothing, and a re-key of a channel posts nothing | `SYNC-267`, `SYNC-268` |
+| N34 | high | No `cfg` and no feature removed the development sign-in from a release build. A malicious relay accepted a sign-in whose master seed is a hash of a name, and derived every key. Reported as `P28` | fixed -- a release build holds no development sign-in, and the post-build gate refuses a release wasm that carries its mark | `ZK-045` |
+| N35 | high | A call read the log of its channel at the join, then only on two frames the relay pushes. The relay pushed neither after a revoke, so Eve opened the call to its end. A later read replaced the held log with no comparison. Reported as `P29` | fixed -- a client in a call reads the log again once it signs a revoke, or once a frame carries a signed head past the held log, and keeps the held log against an older one | `CALL-136`, `CALL-137`, `CALL-138` |
+| N36 | high | A receiver dropped the older epoch of a sender only once a chunk opened under the fresh one. A malicious SFU withheld every chunk of the fresh epoch, and forwarded chunks that Eve sealed under the older key. Reported as `P31` | fixed -- a receiver drops a chunk of an older epoch once the switch delay passes, whether a chunk of the newer epoch opened or not | `CALL-135` |
+| N37 | high | The SFU filter read no header on a packet cut before the end of the chunk header, or on a codec other than VP8. Mallory sealed a frame under the identifier of Bob, and an honest SFU forwarded it. Reported as `P30` | fixed -- the SFU forwards no packet of a codec other than Opus or VP8, and no frame start that holds no whole chunk header | `CALL-139`, `CALL-140` |
+| N38 | high | A creator of a public channel left its `meta` as its last member, and an owner removed her from the space. She posted the creation of the `meta` again, and the route registered her as owner. Reported as `P32` | fixed -- a creator gains no member row by creating a document again once its log holds an entry or a channel holds it | `SRV-283` |
+
 ---
 
 ## REMEDIATION ROADMAP

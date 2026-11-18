@@ -78,4 +78,4 @@ pub use passphrase::{
 };
 pub use shortcut::Kbd;
 pub use status::{PerfChip, PerfDetail, StatusLabel, ZoomChip, zoom_presets};
-pub use toast::{ToastHost, ToastKind, Toasts};
+pub use toast::{ToastHost, ToastKind, ToastVoice, Toasts};

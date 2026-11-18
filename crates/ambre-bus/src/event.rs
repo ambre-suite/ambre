@@ -564,8 +564,8 @@ ambre_core::define_flag! {
 
 impl AuthFailure {
     /// Whether the failure refuses the passphrase the person typed: a wrong
-    /// one, or one under the strength floor. The view raises a toast for it
-    /// beside the line of the face that asked (`CHROME-136`).
+    /// one, or one under the strength floor. The view raises a visual toast for
+    /// it beside the line of the face that asked (`CHROME-136`).
     pub fn passphrase_verdict(self) -> PassphraseVerdict {
         match self {
             Self::BadPassphrase | Self::WeakPassphrase(_) => PassphraseVerdict::Refused,

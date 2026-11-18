@@ -3,7 +3,8 @@
 // Toasts -- transient notifications in an ARIA live region
 // (ambre-spec-accessibility.md, CHROME-006). The host is a `position: fixed`
 // container marked `role="status" aria-live="polite"`, so screen readers
-// announce each new toast without stealing focus. Entrance/exit are CSS
+// announce each new toast without stealing focus. A visual toast is hidden
+// from them, because a live line of the page already says its words. Entrance/exit are CSS
 // transform/opacity animations run by the compositor, off the canvas rAF budget:
 // zero millisecond stolen from the frame (ambre-spec-chrome.md).
 //
@@ -45,6 +46,18 @@ impl ToastKind {
     }
 }
 
+/// Whether a screen reader announces a toast. A live line of the page can
+/// already announce the words of a toast. That toast is visual alone, so a
+/// screen reader does not read the words twice (`CHROME-136`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ToastVoice {
+    /// The live region announces the toast (`CHROME-006`).
+    Announced,
+    /// The toast is hidden from assistive technology: another line of the
+    /// page announces the same words.
+    Visual,
+}
+
 /// The number a toast is raised under, so a dismissal names that toast alone.
 pub enum ToastId {}
 
@@ -59,6 +72,7 @@ struct Toast {
     id: Seq<ToastId>,
     message: String,
     kind: ToastKind,
+    voice: ToastVoice,
 }
 
 /// Shared toast store. Cheap to copy (just signals); created inside the Leptos
@@ -96,8 +110,13 @@ impl Toasts {
         self.push(ToastKind::Error, message);
     }
 
-    /// Raise a toast and schedule its auto-dismiss.
+    /// Raise an announced toast and schedule its auto-dismiss.
     pub fn push(self, kind: ToastKind, message: impl Into<String>) {
+        self.raise(kind, ToastVoice::Announced, message);
+    }
+
+    /// Raise a toast under `voice` and schedule its auto-dismiss.
+    pub fn raise(self, kind: ToastKind, voice: ToastVoice, message: impl Into<String>) {
         let id = self.next_id.get_untracked();
         self.next_id.set(id.next());
         self.items.update(|v| {
@@ -105,6 +124,7 @@ impl Toasts {
                 id,
                 message: message.into(),
                 kind,
+                voice,
             })
         });
 
@@ -129,6 +149,7 @@ pub fn ToastHost(toasts: Toasts) -> impl IntoView {
             <For each=move || toasts.items.get() key=|t| t.id let:toast>
                 <div
                     class=format!("ambre-toast {}", toast.kind.class())
+                    aria-hidden=(toast.voice == ToastVoice::Visual).then_some("true")
                     on:click=move |_| toasts.dismiss(toast.id)
                 >
                     {toast.message.clone()}
