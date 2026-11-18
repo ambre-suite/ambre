@@ -140,6 +140,9 @@ struct Net {
     now: Instant,
     sfu: Sfu,
     clients: Vec<Client>,
+    /// The signals of the SFU to a client that has not taken its answer yet. The signalling
+    /// socket carries them after the answer, so they wait for the client.
+    held: Vec<(Seq<Participant>, Signal)>,
 }
 
 fn room(name: &str) -> Validated<Room> {
@@ -153,6 +156,7 @@ impl Net {
             now: Instant::now(),
             sfu: Sfu::new(sfu_addr),
             clients: Vec::new(),
+            held: Vec::new(),
         }
     }
 
@@ -164,6 +168,20 @@ impl Net {
 
     /// Joins a new client to `name` as [`Net::join`] does, with the codecs of `config`.
     fn join_with(&mut self, name: &str, config: str0m::RtcConfig) -> usize {
+        self.join_offering(name, config, |sdp| sdp, Duration::ZERO)
+    }
+
+    /// Joins a new client to `name` as [`Net::join_with`] does. `rewrite` changes the text of
+    /// its offer on the way to the SFU, as the offer of a browser may differ. The client takes
+    /// the answer of the SFU once the network ran for `answered_after`. The answer of a browser
+    /// crosses the signalling and the page first.
+    fn join_offering(
+        &mut self,
+        name: &str,
+        config: str0m::RtcConfig,
+        rewrite: impl FnOnce(String) -> String,
+        answered_after: Duration,
+    ) -> usize {
         let index = self.clients.len();
         let last = u8::try_from(index + 1).expect("a few clients");
         let addr: SocketAddr = (Ipv4Addr::new(10, 0, 0, last), 5000).into();
@@ -176,10 +194,13 @@ impl Net {
         let audio = change.add_media(MediaKind::Audio, Direction::SendOnly, None, None, None);
         let video = change.add_media(MediaKind::Video, Direction::SendOnly, None, None, None);
         let (offer, pending) = change.apply().expect("an offer");
+        let offer = str0m::change::SdpOffer::from_sdp_string(&rewrite(offer.to_sdp_string()))
+            .expect("a rewritten offer");
         let (id, answer) = self
             .sfu
             .join(self.now, room(name), Seq::new(index as u64), offer)
             .expect("the SFU admits the client");
+        self.run(answered_after);
         rtc.sdp_api()
             .accept_answer(pending, answer)
             .expect("the client takes the answer");
@@ -218,12 +239,15 @@ impl Net {
         loop {
             let mut to_clients = Vec::new();
             self.sfu.poll(self.now, |t| to_clients.push(t));
-            while let Some((id, signal)) = self.sfu.poll_signal() {
-                let client = self
-                    .clients
-                    .iter_mut()
-                    .find(|c| c.id == id)
-                    .expect("a client");
+            let mut signals = std::mem::take(&mut self.held);
+            while let Some(signal) = self.sfu.poll_signal() {
+                signals.push(signal);
+            }
+            for (id, signal) in signals {
+                let Some(client) = self.clients.iter_mut().find(|c| c.id == id) else {
+                    self.held.push((id, signal));
+                    continue;
+                };
                 let offer = match signal {
                     Signal::Offer(offer) => offer,
                     Signal::TakenOver => {
@@ -392,6 +416,36 @@ fn a_late_joiner_receives_the_tracks_already_in_the_room() {
     let (audio, video) = burst(&mut net, 0, 10);
     assert_eq!(client(&net, 1).got(MediaKind::Audio), audio);
     assert_eq!(client(&net, 1).got(MediaKind::Video), video);
+}
+
+/// The offer of a browser holds the candidates it gathered by the time the page reads it.
+/// Chrome gathers its TCP candidates first. The SFU still seats a client whose candidates pair
+/// with none of its own: it learns the address of the client from its first check.
+#[test]
+fn an_offer_whose_candidates_pair_with_none_of_the_sfu_still_connects() {
+    let mut net = connected(&["r"]);
+    let late = net.join_offering(
+        "r",
+        Rtc::builder(),
+        |sdp| {
+            sdp.lines()
+                .map(|line| {
+                    if line.starts_with("a=candidate:") {
+                        "a=candidate:1 1 tcp 1518280447 10.0.0.2 9 typ host tcptype active"
+                    } else {
+                        line
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\r\n")
+                + "\r\n"
+        },
+        Duration::from_millis(200),
+    );
+    net.run(Duration::from_secs(2));
+    let (audio, video) = burst(&mut net, late, 10);
+    assert_eq!(client(&net, 0).got(MediaKind::Audio), audio);
+    assert_eq!(client(&net, 0).got(MediaKind::Video), video);
 }
 
 #[test]

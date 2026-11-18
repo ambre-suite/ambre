@@ -104,6 +104,29 @@ impl Rule for Room {
     }
 }
 
+/// `offer` with none of its candidates.
+///
+/// The SFU runs ICE-lite: it answers the checks of each browser and sends none. It learns the
+/// address of a browser from its first check, as a peer-reflexive candidate. So a candidate of
+/// the offer serves it nothing, and one that pairs with no candidate of the SFU ends the seat.
+/// str0m reads such a connection as disconnected at its next timeout, before the first check.
+/// The SFU then drops it.
+///
+/// An offer holds what the browser gathered by the time the page read it.
+/// Chrome gathers its TCP candidates first, and no UDP candidate of the SFU pairs with them.
+///
+/// # Errors
+///
+/// [`RtcError::Sdp`] when the description without its candidates no longer parses.
+fn without_candidates(offer: &SdpOffer) -> Result<SdpOffer, RtcError> {
+    let text = offer.to_sdp_string();
+    let kept: String = text
+        .split_inclusive('\n')
+        .filter(|line| !line.starts_with("a=candidate:"))
+        .collect();
+    SdpOffer::from_sdp_string(&kept).map_err(RtcError::Sdp)
+}
+
 /// Why a join failed.
 #[derive(Debug)]
 pub enum JoinError {
@@ -490,7 +513,7 @@ impl Sfu {
         rtc.add_local_candidate(host);
         let answer = rtc
             .sdp_api()
-            .accept_offer(offer)
+            .accept_offer(without_candidates(&offer).map_err(JoinError::Offer)?)
             .map_err(JoinError::Offer)?;
         let wants_slots = self
             .members
@@ -600,6 +623,7 @@ impl Sfu {
         if member.pending.is_some() {
             return None;
         }
+        let offer = without_candidates(&offer).ok()?;
         let answer = member.rtc.sdp_api().accept_offer(offer).ok()?;
         member.touched = true;
         Some(answer)
