@@ -985,6 +985,18 @@ impl SyncState {
                     }
                 }
             }
+            SyncEvent::FootingAdvanced {
+                document_id,
+                footing,
+            } => {
+                if let Some(doc_state) = self.documents.get_mut(&document_id) {
+                    match &mut doc_state.footing {
+                        Some(held) => held.advance(footing),
+                        None => doc_state.footing = Some(footing),
+                    }
+                    self.log_walked_to(footing);
+                }
+            }
             SyncEvent::ChannelRotated {
                 space_id,
                 channel_id,

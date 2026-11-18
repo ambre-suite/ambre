@@ -16,7 +16,7 @@ use ambre_core::{FixedBytes, KeyId};
 use ambre_crypto::DocumentKey;
 use ambre_protocol::KeyLink;
 
-use crate::membership_log::LinkSigners;
+use crate::membership_log::{LinkSigners, LinkStanding};
 use crate::pipeline;
 
 /// The links of one document, indexed by the key each starts from.
@@ -84,12 +84,50 @@ impl Chain {
 /// the link names (`SYNC-121`, `SYNC-204`). A document older than the log
 /// keeps every link, and its signature still holds under the key its header
 /// names.
+///
+/// A removal from the space closes the stretch of a signer. Such a signer
+/// keeps a link only when a kept link starts from the key it installs
+/// (audit `N29`). No head of the channel marks that removal. So a key such a
+/// signer installs stands once a signer still in force built on it, and
+/// never on its link alone.
 pub(crate) fn signed_by_writers(links: Vec<KeyLink>, signers: &LinkSigners) -> Vec<KeyLink> {
-    links
+    let mut verdicts: Vec<(KeyLink, LinkStanding)> = links
         .into_iter()
-        .filter(|link| {
-            pipeline::object_author(&link.sealed).is_ok_and(|a| signers.signs(&a, link.head))
+        .filter_map(|link| {
+            let author = pipeline::object_author(&link.sealed).ok()?;
+            if !signers.signs(&author, link.head) {
+                return None;
+            }
+            Some((link, signers.standing(&author)))
         })
+        .collect();
+    // Each pass keeps at least one more link or ends, so the loop runs at
+    // most once per link.
+    loop {
+        let built_on: Vec<usize> = verdicts
+            .iter()
+            .enumerate()
+            .filter(|(_, (link, signed))| {
+                *signed == LinkStanding::Closed
+                    && verdicts.iter().any(|(next, kept)| {
+                        *kept == LinkStanding::InForce && next.previous == link.key
+                    })
+            })
+            .map(|(place, _)| place)
+            .collect();
+        if built_on.is_empty() {
+            break;
+        }
+        for place in built_on {
+            if let Some((_, signed)) = verdicts.get_mut(place) {
+                *signed = LinkStanding::InForce;
+            }
+        }
+    }
+    verdicts
+        .into_iter()
+        .filter(|(_, signed)| *signed == LinkStanding::InForce)
+        .map(|(link, _)| link)
         .collect()
 }
 
@@ -312,6 +350,78 @@ mod tests {
         );
         let beyond = heads[3].after(FixedBytes::from_array([9; 32]));
         assert_eq!(kept(link(beyond, &alice)), 0, "a head past the walk");
+    }
+
+    /// Audit `N29`. Alice created the space, made Gov
+    /// an editor of it, then removed him. Carol's channel invited Dave as an
+    /// editor, whom the space removed too. Gov's old link stands once Alice
+    /// built on its key. With the relay, Gov and Dave each sign a link to a
+    /// key of their own at the latest head. Nobody built on it, so it is
+    /// dropped and the chain reaches no key of theirs.
+    #[test]
+    fn a_link_of_a_signer_the_space_removed_stands_only_once_built_on() {
+        use crate::membership_log::tests::{DOC, append, created};
+        use crate::membership_log::{LogRule, SpaceWord, public_channel_self_join};
+        let (alice, gov, carol, dave) = (
+            Person::new(1),
+            Person::new(2),
+            Person::new(3),
+            Person::new(4),
+        );
+        let mut space = created(&alice, &gov);
+        append(
+            &mut space,
+            &alice,
+            &dave,
+            MembershipAct::Invite,
+            Role::Viewer,
+        );
+        for removed in [&gov, &dave] {
+            append(
+                &mut space,
+                &alice,
+                removed,
+                MembershipAct::Revoke,
+                Role::Viewer,
+            );
+        }
+        let space_log = Log::walk(DOC, space.first().and_then(digest), &space, no_self_join);
+        let word = SpaceWord::of(&space_log);
+        let channel = created(&carol, &dave);
+        let rule = LogRule {
+            self_join: public_channel_self_join,
+            space: Some(word),
+        };
+        let log = Log::walk_under(DOC, channel.first().and_then(digest), &channel, &rule);
+        let (first, latest) = (LogHead::EMPTY, log.next());
+        let keys: Vec<_> = (0..3).map(|_| DocumentKey::generate()).collect();
+        let link = |previous: &DocumentKey, next: &DocumentKey, head, by: &Person| {
+            pipeline::seal_link(DOC, previous, next, head, &by.key).unwrap()
+        };
+        let signers = log.link_signers();
+
+        // Gov re-keyed the channel while he wrote in the space; Alice then
+        // built on his key.
+        let history = vec![
+            link(&keys[0], &keys[1], first, &gov),
+            link(&keys[1], &keys[2], latest, &alice),
+        ];
+        assert_eq!(signed_by_writers(history.clone(), &signers), history);
+
+        for removed in [&gov, &dave] {
+            let own = DocumentKey::generate();
+            let mut served = history.clone();
+            served.push(link(&keys[2], &own, latest, removed));
+            let kept = signed_by_writers(served, &signers);
+            assert_eq!(kept, history, "nobody built on the removed signer's key");
+            let chain = Chain::new(DOC, kept);
+            assert!(chain.recover(&own, keys[2].id()).is_none());
+            let alone = vec![link(&keys[0], &own, first, removed)];
+            assert!(signed_by_writers(alone, &signers).is_empty());
+        }
+        // Alice still writes in the space, so her link stands on its own.
+        let fresh = vec![link(&keys[2], &DocumentKey::generate(), latest, &alice)];
+        assert_eq!(signed_by_writers(fresh.clone(), &signers), fresh);
     }
 
     /// Holds `SYNC-204`. The seal binds the head the link names: a link whose

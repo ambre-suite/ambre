@@ -45,6 +45,10 @@ pub(crate) fn public_channel_self_join(entry: &MembershipEntry) -> bool {
 pub(crate) struct SpaceWord {
     /// Every key the space log granted a writing role, at any point.
     pub(crate) writers: HashSet<FixedBytes<PublicKey>>,
+    /// The keys of the members the space holds present with a writing role
+    /// at its latest head. Only these sign a key link of a channel at every
+    /// head of it (audit `N29`).
+    pub(crate) writing: HashSet<FixedBytes<PublicKey>>,
     /// The members a valid entry of the space log removed, and no later one
     /// added back.
     pub(crate) removed: HashSet<Id<User>>,
@@ -67,6 +71,15 @@ impl SpaceWord {
     pub(crate) fn of(log: &Log) -> Self {
         Self {
             writers: log.signers().cloned().unwrap_or_default(),
+            writing: if log.anchored {
+                log.held
+                    .values()
+                    .filter(|held| held.present && writing_rank(held.role).is_some())
+                    .map(|held| held.key)
+                    .collect()
+            } else {
+                HashSet::new()
+            },
             removed: log
                 .held
                 .iter()
@@ -178,7 +191,12 @@ impl WriterSpan {
 /// A link names the head of the log its rotator read. It counts only when
 /// that head is one the valid walk passes through, and its signer held a
 /// writing role there. So a writer the log revoked signs no link past its
-/// revoke. A space writer signs a link of a channel at any head of it.
+/// revoke. A present writer of the space signs a link of a channel at any
+/// head of it.
+///
+/// A removal from the space leaves no entry in the channel log, so no head
+/// of the channel marks it. The stretch of such a signer therefore closes at
+/// the last key a signer still in force built on (audit `N29`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) enum LinkSigners {
     /// No anchored log: a local document, or one older than the log. Its
@@ -196,8 +214,20 @@ pub(crate) struct WriterHistory {
     heads: Vec<LogHead>,
     /// The stretches where each key held a writing role, oldest first.
     spans: HashMap<FixedBytes<PublicKey>, Vec<WriterSpan>>,
-    /// The writers of the space whose word governs this log.
+    /// The present writers of the space whose word governs this log.
     space: HashSet<FixedBytes<PublicKey>>,
+    /// The keys whose stretch a removal from the space closed, and the
+    /// heads where each one signed.
+    closed: HashMap<FixedBytes<PublicKey>, Closed>,
+}
+
+/// Where a signer whose stretch a removal from the space closed signed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Closed {
+    /// A former writer of the space: at every head of the channel.
+    FormerSpaceWriter,
+    /// A writer of this log the space removed: inside its own stretches.
+    RemovedMember,
 }
 
 impl LinkSigners {
@@ -208,6 +238,7 @@ impl LinkSigners {
             Self::Granted(history) => {
                 history.heads.iter().rev().any(|h| *h == head)
                     && (history.space.contains(signer)
+                        || history.closed.get(signer) == Some(&Closed::FormerSpaceWriter)
                         || history
                             .spans
                             .get(signer)
@@ -215,6 +246,26 @@ impl LinkSigners {
             }
         }
     }
+
+    /// Whether `signer` still signs on its own. A removal from the space
+    /// closes the stretch of a signer. Its link then counts only once a link
+    /// still in force starts from the key it installs (audit `N29`).
+    pub(crate) fn standing(&self, signer: &FixedBytes<PublicKey>) -> LinkStanding {
+        match self {
+            Self::Granted(history) if history.closed.contains_key(signer) => LinkStanding::Closed,
+            Self::Unchecked | Self::Granted(_) => LinkStanding::InForce,
+        }
+    }
+}
+
+/// Whether a link a signer of the log signed stands on its own.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum LinkStanding {
+    /// Its signer is still in force, or a link in force built on its key.
+    InForce,
+    /// A removal from the space closed the stretch of its signer, and no
+    /// link in force built on its key yet (audit `N29`).
+    Closed,
 }
 
 /// A document key a writer named in a valid entry, at the place of that
@@ -286,6 +337,12 @@ struct Held {
     present: bool,
     /// The key the entry that added the member wraps (`SYNC-123`).
     wraps: Option<FixedBytes<KeyId>>,
+}
+
+/// The rank of `role` when it is a writing role: editor or above.
+fn writing_rank(role: Role) -> Option<DocumentRank> {
+    role.document_rank()
+        .filter(|rank| *rank >= DocumentRank::Editor)
 }
 
 /// The digest of one entry, as the next entry names it. `None` for an entry
@@ -403,6 +460,8 @@ pub(crate) struct Log {
     creator: Option<FixedBytes<PublicKey>>,
     /// Whether the wrapped key carried an anchor at all.
     anchored: bool,
+    /// The anchor the walk started from.
+    anchor: Option<FixedBytes<EntryDigest>>,
     /// The place and the previous digest the next entry takes.
     next: LogHead,
     /// The heads of every entry served, valid or not.
@@ -432,6 +491,7 @@ impl Log {
             bound: HashMap::new(),
             creator: None,
             anchored: anchor.is_some(),
+            anchor,
             next: LogHead {
                 position: place_after(entries.len()),
                 previous: entries.last().and_then(digest),
@@ -525,11 +585,21 @@ impl Log {
         log.heads = ServedHeads::of(entries);
         if let Some(space) = &rule.space {
             log.signers.extend(space.writers.iter().cloned());
-            log.history.space.extend(space.writers.iter().cloned());
+            // Only a present writer of the space signs at every head. A
+            // former one, and a writer of this log the space removed, keep a
+            // closed stretch (audit `N29`).
+            log.history.space.extend(space.writing.iter().cloned());
             for member in &space.removed {
                 if let Some(held) = log.held.get_mut(member) {
                     held.present = false;
+                    log.history.closed.insert(held.key, Closed::RemovedMember);
                 }
+            }
+            for key in space.writers.difference(&space.writing) {
+                log.history.closed.insert(*key, Closed::FormerSpaceWriter);
+            }
+            for key in &space.writing {
+                log.history.closed.remove(key);
             }
         }
         log
@@ -585,12 +655,7 @@ impl Log {
     fn writer_key(&self, member: Id<User>) -> Option<FixedBytes<PublicKey>> {
         self.held
             .get(&member)
-            .filter(|held| held.present)
-            .filter(|held| {
-                held.role
-                    .document_rank()
-                    .is_some_and(|r| r >= DocumentRank::Editor)
-            })
+            .filter(|held| held.present && writing_rank(held.role).is_some())
             .map(|held| held.key)
     }
 
@@ -779,6 +844,23 @@ impl Log {
             .get(&member)
             .filter(|held| held.present)
             .and_then(|held| held.wraps)
+    }
+
+    /// The anchor the walk started from.
+    pub(crate) fn anchor(&self) -> Option<FixedBytes<EntryDigest>> {
+        self.anchor
+    }
+
+    /// The head after the last valid entry of the walk: the empty head when
+    /// no entry is valid (audit `P27`).
+    pub(crate) fn walked_head(&self) -> LogHead {
+        self.history.heads.last().copied().unwrap_or(LogHead::EMPTY)
+    }
+
+    /// Whether the valid walk passes through `head`: the empty head, or the
+    /// head after one of its valid entries (audit `P27`).
+    pub(crate) fn walked_through(&self, head: LogHead) -> bool {
+        self.history.heads.contains(&head)
     }
 
     /// The place and the previous digest the next entry takes. They follow
@@ -1078,15 +1160,16 @@ pub(crate) mod tests {
         Log::walk(DOC, anchor(log), log, no_self_join)
     }
 
-    /// A space writer signs a key link of a channel at each head the walk
-    /// passes through, at no head past the walk. The empty head before the
-    /// first entry counts as one.
+    /// A present space writer signs a key link of a channel at each head the
+    /// walk passes through, at no head past the walk. The empty head before
+    /// the first entry counts as one.
     #[test]
     fn a_space_writer_signs_a_link_at_each_head_of_the_walk() {
         let (alice, bob, governor) = (Person::new(1), Person::new(2), Person::new(9));
         let entries = created(&alice, &bob);
         let mut word = SpaceWord::default();
         word.writers.insert(governor.public());
+        word.writing.insert(governor.public());
         let rule = LogRule {
             space: Some(word),
             ..LogRule::document()
@@ -1101,6 +1184,11 @@ pub(crate) mod tests {
         };
         assert!(!signers.signs(&governor.public(), past));
         assert!(!signers.signs(&bob.public(), LogHead::EMPTY));
+        assert_eq!(
+            signers.standing(&governor.public()),
+            LinkStanding::InForce,
+            "his stretch is open"
+        );
     }
 
     /// Holds `SYNC-103`: a row counts as verified only when valid entries

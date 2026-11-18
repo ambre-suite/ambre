@@ -485,12 +485,21 @@ enum SyncEvent {
         /// The heads of the log the open read (`SYNC-207`).
         heads: membership_log::ServedHeads,
     },
+    /// A walk this client trusts reached a later head of the log of
+    /// `document_id`: an open, a listing, or a write this client signed. The
+    /// next write stands on it (audits `P26`, `P27`).
+    FootingAdvanced {
+        document_id: Id<Document>,
+        footing: key_vouch::Footing,
+    },
     /// The answer to the rotation of one public channel of a space
     /// (`SyncCommand::RotateSpace`): its new key, sealed for the catalogue.
     ChannelRotated {
         space_id: Id<Space>,
         channel_id: Id<Channel>,
-        result: Result<ambre_bus::SealedChannelKey, http::HttpError>,
+        /// The new entry, and where the log of the channel's `meta` stands
+        /// once the re-key walked it.
+        result: Result<(ambre_bus::SealedChannelKey, key_vouch::Footing), http::HttpError>,
     },
     /// The answer to a channel creation (`SyncCommand::CreateChannel`): the
     /// sealed key for the catalogue of a public channel.
@@ -924,6 +933,11 @@ struct SyncDocumentState {
     /// The heads of the log the relay last served, and the check of a log
     /// head a peer signed past them (`SYNC-207`).
     head_watch: withheld::HeadWatch,
+    /// Where the log the open accepted stands for this client. Each path
+    /// that writes members or keys walks from it, and refuses a log that
+    /// does not pass through its head (audits `P26`, `P27`). `None` until an
+    /// open or a creation accepts the log.
+    footing: Option<key_vouch::Footing>,
     /// This client's own role on this document, resolved from the members
     /// response at open. Carried here rather than emitted straight through
     /// because `DocumentReady` fires from two places: immediately for a
@@ -1036,6 +1050,7 @@ impl SyncDocumentState {
             directory_held: ambre_core::Seq::ZERO,
             word: membership_log::SpaceWord::default(),
             head_watch: withheld::HeadWatch::default(),
+            footing: None,
             role: Role::Owner,
             awaiting_initial_hydration: false,
             rekey: rekey::Rekey::default(),
@@ -1330,6 +1345,12 @@ pub struct SyncState {
     /// The rotations this admin client drives after a leave, per space
     /// document (the Murmure spaces spec).
     space_rotations: HashMap<Id<Document>, space_rotation::SpaceRotation>,
+    /// Where each membership log stands for this client, per log document:
+    /// the `meta` of a channel, or the document itself. Every footing a
+    /// document lands also lands here, and outlives the close of that
+    /// document. So a re-key of a channel this client walked earlier in the
+    /// session stands on the latest head it walked or signed (audit `P27`).
+    log_footings: HashMap<Id<Document>, key_vouch::Footing>,
 
     // -- Single multiplexed WebSocket -----------------------------------------
     ws: Option<WebSocket>,
@@ -1498,6 +1519,7 @@ impl SyncState {
             listing_metas: HashMap::new(),
             creating_public: HashMap::new(),
             space_rotations: HashMap::new(),
+            log_footings: HashMap::new(),
             ws: None,
             _onmessage: None,
             _onclose: None,

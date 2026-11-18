@@ -29,6 +29,7 @@ use ambre_core::id::{Channel, Document, Id, Message, Segment, Space, User};
 use ambre_core::{LocalFailure, Seq};
 
 use crate::http;
+use crate::key_vouch::{AnchoredLog, Footing};
 use crate::membership_log::{self, Draft, Log, LogHead, LogRule};
 use crate::{LogicSink, SyncEvent};
 use ambre_core::{FixedBytes, RefusalCode};
@@ -156,13 +157,23 @@ pub(crate) fn walk_served_under(
 
 /// The entry `draft` makes after `log`, signed by `author`, in request form.
 /// `None` for a document whose log is empty: it predates the log, and no
-/// entry of it could link to a first one.
+/// entry of it could link to a first one. The log stands on the footing of
+/// an open, so the entry follows no log the relay rooted (audit `P26`).
 fn entry_after(
-    log: &Log,
+    log: &AnchoredLog,
     draft: Draft,
     author: &Author,
 ) -> Result<Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>, SyncError> {
-    let next = log.next();
+    entry_at(log.log().next(), draft, author)
+}
+
+/// The entry `draft` makes at `next`, signed by `author`, in request form.
+/// `None` at the empty head, as [`entry_after`] states.
+fn entry_at(
+    next: LogHead,
+    draft: Draft,
+    author: &Author,
+) -> Result<Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>, SyncError> {
     if next.is_empty() {
         return Ok(None);
     }
@@ -231,12 +242,15 @@ pub(crate) fn build_invite_request(
 }
 
 /// Re-wraps `new_doc_key` for every remaining member after a revoke (the rotate
-/// payload), with the log `anchor` sealed beside it (`SYNC-104`).
+/// payload), with the anchor of `anchored` sealed beside it (`SYNC-104`).
 ///
 /// A copy goes to the exchange key a row serves only when a valid entry of
-/// `log` signs that key for that member (`SYNC-198`).
+/// `anchored` signs that key for that member (`SYNC-198`).
 /// So a row the relay adds, or a key it swaps, receives no copy. This
 /// client's own row is the one exception: its key is the local secret's.
+/// That log stands on the footing of an open, so the relay roots none of it
+/// (audit `P26`).
+///
 /// A member whose served key is malformed, unsigned, or refused by the wrap
 /// cannot be re-wrapped for. The rotation goes on for the others, and that member is
 /// returned in the second list so the caller reports it (`SYNC-043`).
@@ -245,14 +259,15 @@ pub(crate) fn build_invite_request(
 pub(crate) fn rotate_entries_for(
     wrapper: &mut KeyWrapper,
     new_doc_key: &DocumentKey,
-    anchor: Option<FixedBytes<EntryDigest>>,
-    log: &Log,
+    anchored: &AnchoredLog,
     members: &[http::DocumentMemberEntry],
 ) -> (
     Vec<http::RotateKeyEntry>,
     Vec<ambre_core::Validated<ambre_core::DisplayName>>,
 ) {
     let own = wrapper.own_public();
+    let anchor = Some(anchored.anchor());
+    let log = anchored.log();
     let mut unwrapped = Vec::new();
     let entries = members
         .iter()
@@ -470,6 +485,19 @@ fn api_error(logic_tx: &LogicSink, request: ApiRequest, failure: ApiFailure) {
     });
 }
 
+/// Tells the Sync loop the footing a write left, so the next write stands
+/// on the head this client signed (audit `P27`).
+fn advanced(
+    event_tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
+    document_id: Id<Document>,
+    footing: Footing,
+) {
+    let _ = event_tx.send(SyncEvent::FootingAdvanced {
+        document_id,
+        footing,
+    });
+}
+
 /// Reports `error` as the failure of `request`.
 fn failed(logic_tx: &LogicSink, request: ApiRequest, error: impl http::Reported) {
     tracing::warn!("Sync: {} failed: {error}", request.as_str());
@@ -495,6 +523,10 @@ pub(crate) struct InviteParams {
     pub expect_exchange_pub_key: FixedBytes<ambre_core::ExchangePublicKey>,
     /// Signs the invitation's entry in the log.
     pub author: Author,
+    /// Where the log the open accepted stands (audit `P26`).
+    pub footing: Footing,
+    /// The rule the log walks under (`SYNC-106`).
+    pub rule: LogRule,
 }
 
 /// Invite orchestration: search the invitee by email, ECDH-wrap the document key
@@ -549,7 +581,12 @@ pub(crate) async fn invite_task<H: ShareHttp>(
                 return api_error(logic_tx, ApiRequest::InviteToDocument, e.failure());
             }
         };
-        let (log, anchor) = served_log(p.document_id, &p.exchange_key, &members);
+        // The log stands on the footing of the open, never on the anchor of
+        // this answer (audit `P26`).
+        let log = match p.footing.walk(&members.log, &p.rule) {
+            Ok(log) => log,
+            Err(e) => return failed(logic_tx, ApiRequest::InviteToDocument, e),
+        };
         let draft = Draft {
             document: p.document_id,
             member: invitee_id,
@@ -567,22 +604,24 @@ pub(crate) async fn invite_task<H: ShareHttp>(
                 invitee_named(&p),
                 &p.doc_key,
                 p.role,
-                anchor,
+                Some(log.anchor()),
                 entry,
             )
         }) {
             Ok(req) => req,
             Err(message) => return failed(logic_tx, ApiRequest::InviteToDocument, message),
         };
+        let footing = log.after(body.entry.as_ref());
         match http
             .post_json::<_, http::InviteResponse>(&invite_url, &body)
             .await
         {
             // Another entry took the place first: read the log again.
             Err(e) if e.is(RefusalCode::LogMoved) && tries < ROTATION_TRIES => {}
-            posted => break posted,
+            posted => break (posted, footing),
         }
     };
+    let (posted, footing) = posted;
     match posted {
         Ok(resp) => {
             let _ = event_tx.send(SyncEvent::InviteSent {
@@ -595,6 +634,7 @@ pub(crate) async fn invite_task<H: ShareHttp>(
                 inviter: ambre_crypto::inviter_pin(&p.author.public()),
                 invitee: ambre_crypto::inviter_pin(&invitee_key),
             });
+            advanced(event_tx, p.document_id, footing);
         }
         // A rotation landed first: the copy wraps a key the relay refuses.
         // Nothing was added, and an invitation sent again wraps the new key.
@@ -783,6 +823,10 @@ pub(crate) struct RevokeParams {
     pub previous: DocumentKey,
     /// Signs the link the revoke leaves, and its entry in the log.
     pub author: Author,
+    /// Where the log the open accepted stands (audit `P26`).
+    pub footing: Footing,
+    /// The rule the log walks under (`SYNC-106`).
+    pub rule: LogRule,
 }
 
 /// Revoke orchestration: fetch the members, generate a fresh `DocumentKey` and
@@ -803,7 +847,7 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
     let revoke_url = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base)
         .route(format!("/documents/{}/revoke", p.document_id));
     let mut tries = ambre_core::Count::<RotationTries>::ZERO;
-    let (unwrapped, link) = loop {
+    let (unwrapped, link, footing) = loop {
         // Bounded by `ROTATION_TRIES`: the loop gives up at that count.
         tries = tries.incremented();
         let resp = match http
@@ -816,14 +860,18 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
                 return api_error(logic_tx, ApiRequest::RevokeFromDocument, e.failure());
             }
         };
-        let (log, anchor) = served_log(p.document_id, &p.exchange_key, &resp);
+        // The log stands on the footing of the open (audits `P26`, `P27`).
+        let log = match p.footing.walk(&resp.log, &p.rule) {
+            Ok(log) => log,
+            Err(e) => return failed(logic_tx, ApiRequest::RevokeFromDocument, e),
+        };
         // The link signs the head this try read, so each try seals its own
         // (`SYNC-204`).
         let link = match link_to(
             p.document_id,
             &p.previous,
             &new_doc_key,
-            log.next(),
+            log.log().next(),
             &p.author.signing_key,
         ) {
             Ok(link) => link,
@@ -864,10 +912,10 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
         let (keys, unwrapped) = rotate_entries_for(
             &mut KeyWrapper::new(&p.exchange_key),
             &new_doc_key,
-            anchor,
             &log,
             &staying,
         );
+        let footing = log.after(entry.as_ref());
         let body = http::RevokeRequest {
             user_id: p.user_id,
             keys,
@@ -880,7 +928,7 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
             .await
             .and_then(|answer| answer.expect(ambre_core::WriteStatus::Revoked))
         {
-            Ok(()) => break (unwrapped, link),
+            Ok(()) => break (unwrapped, link, footing),
             // A member joined between the read and the post, or another
             // entry took the place of this one, and the relay changed
             // nothing. The next try reads them again (`SYNC-143`).
@@ -900,6 +948,7 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
         new_doc_key,
         link: link.0,
     });
+    advanced(event_tx, p.document_id, footing);
     // The rotation went through for everyone else. A member it could not
     // re-wrap for has lost the document; the user who revoked is told who
     // (`SYNC-043`).
@@ -990,7 +1039,9 @@ async fn leave_document<H: ShareHttp>(
             role,
             key: None,
         };
-        let entry = entry_after(&log, draft, author)?;
+        // A departure removes this user alone, and writes no key: it signs
+        // after the served log, which a relay that cut it refuses anyway.
+        let entry = entry_at(log.next(), draft, author)?;
         let body = http::LeaveRequest { entry };
         match http.delete(&url, &body).await {
             Ok(()) => return Ok(()),
@@ -1235,6 +1286,10 @@ pub(crate) struct SettleParams {
     pub previous: DocumentKey,
     /// Signs the link the rotation leaves.
     pub signing_key: SigningKey,
+    /// Where the log the open accepted stands (audits `P26`, `P27`).
+    pub footing: Footing,
+    /// The rule the log walks under (`SYNC-106`).
+    pub rule: LogRule,
 }
 
 /// Inputs for [`role_change_task`].
@@ -1246,9 +1301,12 @@ pub(crate) struct RoleChangeParams {
     pub role: Role,
     pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::Url<crate::http::RelayHost>,
-    pub exchange_key: StaticSecret,
     /// The owner who signs the change's entry.
     pub author: Author,
+    /// Where the log the open accepted stands (audit `P26`).
+    pub footing: Footing,
+    /// The rule the log walks under (`SYNC-106`).
+    pub rule: LogRule,
 }
 
 /// Role-change orchestration: read the log, sign the change's entry and
@@ -1266,7 +1324,7 @@ pub(crate) async fn role_change_task<H: ShareHttp>(
         format!("/documents/{}/members/{}", p.document_id, p.user_id),
     );
     let mut tries = ambre_core::Count::<RotationTries>::ZERO;
-    loop {
+    let footing = loop {
         // Bounded by `ROTATION_TRIES`: the loop gives up at that count.
         tries = tries.incremented();
         let resp = match http
@@ -1279,7 +1337,11 @@ pub(crate) async fn role_change_task<H: ShareHttp>(
                 return api_error(logic_tx, ApiRequest::UpdateDocumentMemberRole, e.failure());
             }
         };
-        let (log, _) = served_log(p.document_id, &p.exchange_key, &resp);
+        // The log stands on the footing of the open (audit `P26`).
+        let log = match p.footing.walk(&resp.log, &p.rule) {
+            Ok(log) => log,
+            Err(e) => return failed(logic_tx, ApiRequest::UpdateDocumentMemberRole, e),
+        };
         let Some(target) = resp.members.iter().find(|m| m.user_id == p.user_id) else {
             return api_error(
                 logic_tx,
@@ -1316,22 +1378,24 @@ pub(crate) async fn role_change_task<H: ShareHttp>(
             Ok(entry) => entry,
             Err(e) => return failed(logic_tx, ApiRequest::UpdateDocumentMemberRole, e),
         };
+        let footing = log.after(entry.as_ref());
         let body = http::RoleChangeRequest {
             role: p.role,
             entry,
         };
         match http.patch(&url, &body).await {
-            Ok(()) => break,
+            Ok(()) => break footing,
             Err(e) if e.is(RefusalCode::LogMoved) && tries < ROTATION_TRIES => {}
             Err(e) => return failed(logic_tx, ApiRequest::UpdateDocumentMemberRole, e),
         }
-    }
+    };
     let _ = event_tx.send(SyncEvent::MemberRoleUpdatedEvent {
         id: p.id,
         document_id: p.document_id,
         user_id: p.user_id,
         role: p.role,
     });
+    advanced(event_tx, p.document_id, footing);
 }
 
 /// The link from `next` back to `previous`, and the text a request carries.
@@ -1391,13 +1455,19 @@ pub(crate) async fn settle_task<H: ShareHttp>(
             let _ = event_tx.send(SyncEvent::DebtGone { document_id });
             return;
         }
-        let (log, anchor) = served_log(document_id, &p.exchange_key, &resp);
+        // The log stands on the footing of the open, never on the anchor
+        // of this answer. It passes through the head this client walked
+        // (audits `P26`, `P27`).
+        let log = match p.footing.walk(&resp.log, &p.rule) {
+            Ok(log) => log,
+            Err(e) => return unsettled(e.to_string()),
+        };
         // The link signs the head this try read (`SYNC-204`).
         let (link, text) = match link_to(
             document_id,
             &p.previous,
             &new_doc_key,
-            log.next(),
+            log.log().next(),
             &p.signing_key,
         ) {
             Ok(link) => link,
@@ -1406,7 +1476,6 @@ pub(crate) async fn settle_task<H: ShareHttp>(
         let (keys, unwrapped) = rotate_entries_for(
             &mut KeyWrapper::new(&p.exchange_key),
             &new_doc_key,
-            anchor,
             &log,
             &resp.members,
         );
@@ -1433,8 +1502,9 @@ pub(crate) async fn settle_task<H: ShareHttp>(
                     document_id,
                     new_doc_key,
                     link,
-                    departed: log.departed_at(),
+                    departed: log.log().departed_at(),
                 });
+                advanced(event_tx, document_id, log.footing());
                 return;
             }
             // A member joined since the read (`SYNC-143`): read them again.
@@ -1461,6 +1531,13 @@ pub(crate) struct RotateChannelParams {
     pub space_key: DocumentKey,
     /// The wrapper every channel of the space rotation shares (`SYNC-264`).
     pub wrapper: Rc<RefCell<KeyWrapper>>,
+    /// The word of the space, as the latest walk of its log said it. The
+    /// walk of meta admits each self-join under it (audit `N30`).
+    pub word: membership_log::SpaceWord,
+    /// Where the log of meta stands for this client, when it walked that log
+    /// earlier in the session. The walk then passes through its head, so a
+    /// log the relay cut before a removal gets no copy (audit `P27`).
+    pub footing: Option<Footing>,
 }
 
 /// Rotates the key of a public channel after a rotation of its space (the
@@ -1485,7 +1562,7 @@ pub(crate) async fn rotate_channel_task<H: ShareHttp>(
 async fn rotate_channel<H: ShareHttp>(
     http: &H,
     p: &RotateChannelParams,
-) -> Result<ambre_bus::SealedChannelKey, http::HttpError> {
+) -> Result<(ambre_bus::SealedChannelKey, Footing), http::HttpError> {
     let base = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base);
     let head = http
         .get_json::<http::JoinHeadResponse>(&base.route(format!("/channels/{}/join", p.channel_id)))
@@ -1496,7 +1573,7 @@ async fn rotate_channel<H: ShareHttp>(
     let rotate_url = base.route(format!("/documents/{meta}/rotate-key"));
     let new_key = DocumentKey::generate();
     let mut tries = ambre_core::Count::<RotationTries>::ZERO;
-    loop {
+    let footing = loop {
         // Bounded by `ROTATION_TRIES`: the loop gives up at that count.
         tries = tries.incremented();
         let resp = http
@@ -1504,24 +1581,37 @@ async fn rotate_channel<H: ShareHttp>(
             .await
             .inspect_err(|e| tracing::warn!("Sync: get members failed: {e}"))?;
         // A space admin may hold no row of meta. The walk starts at the
-        // anchor the catalogue sealed, under the rule of a public channel.
-        let log = walk_served_under(
-            meta,
-            Some(p.anchor),
+        // anchor the catalogue sealed, under the rule of a public channel
+        // and the word of its space. With no word, the walk stops at the
+        // first self-join, and no member past it gets a copy (audit `N30`).
+        // A meta this client walked in the session stands on the head it
+        // walked or signed. A log cut before a removal is then refused
+        // (audit `P27`). A first walk has no earlier head to hold, as a first open.
+        let footing = match p.footing {
+            Some(held) if held.document() == meta => held,
+            Some(_) => return Err(SyncError::LogDiverged.into()),
+            None => Footing::sealed_in_catalogue(meta, p.anchor),
+        };
+        let log = footing.walk(
             &resp.log,
             &LogRule {
                 self_join: membership_log::public_channel_self_join,
-                space: None,
+                space: Some(p.word.clone()),
             },
-        );
+        )?;
         // The link signs the head of meta's log this try read (`SYNC-204`).
-        let (_, text) = link_to(meta, &p.previous, &new_key, log.next(), &p.signing_key)?;
+        let (_, text) = link_to(
+            meta,
+            &p.previous,
+            &new_key,
+            log.log().next(),
+            &p.signing_key,
+        )?;
         // Every channel of one leave wraps through one wrapper, so each
         // member costs one exchange for the whole leave (`SYNC-264`). The
         // borrow ends before the next await, so a refusal never happens.
-        let entries = |wrapper: &mut KeyWrapper| {
-            rotate_entries_for(wrapper, &new_key, Some(p.anchor), &log, &resp.members)
-        };
+        let entries =
+            |wrapper: &mut KeyWrapper| rotate_entries_for(wrapper, &new_key, &log, &resp.members);
         let (keys, unwrapped) = match p.wrapper.try_borrow_mut() {
             Ok(mut held) => entries(&mut held),
             Err(_) => entries(&mut KeyWrapper::new(&p.exchange_key)),
@@ -1541,9 +1631,10 @@ async fn rotate_channel<H: ShareHttp>(
             .post_json::<_, http::RotateKeyResponse>(&rotate_url, &body)
             .await
         {
+            // A re-key appends no entry, so the head it walked stays.
             Ok(http::RotateKeyResponse {
                 status: ambre_core::RotationStatus::Rotated,
-            }) => break,
+            }) => break log.footing(),
             // A member joined since the read (`SYNC-143`): read them again.
             Err(e) if e.is(RefusalCode::MembersChanged) && tries < ROTATION_TRIES => {}
             Err(e) => {
@@ -1551,8 +1642,9 @@ async fn rotate_channel<H: ShareHttp>(
                 return Err(e);
             }
         }
-    }
+    };
     crate::channels::seal_channel_key(p.channel_id, &new_key, &p.space_key, p.anchor)
+        .map(|sealed| (sealed, footing))
         .map_err(http::HttpError::from)
 }
 
@@ -1573,6 +1665,9 @@ pub(crate) struct ListMembersParams {
     /// The document whose log the answer serves: the `meta` of the channel
     /// that groups the document, or the document itself (`SYNC-229`).
     pub log_document: Id<Document>,
+    /// Where the log the open accepted stands. A listing that passes
+    /// through its head moves it on (audit `P27`).
+    pub footing: Option<Footing>,
 }
 
 /// Member-list orchestration: GET the members, map them, emit
@@ -1605,6 +1700,10 @@ pub(crate) async fn list_members_task<H: ShareHttp>(
             let revoked = log.revoked_at();
             let root = p.rule.root_of(&log);
             let rotation_owed = resp.rotation_owed;
+            let footing = p
+                .footing
+                .and_then(|footing| footing.walk(&resp.log, &p.rule).ok())
+                .map(|walked| walked.footing());
             let members = map_members(resp.members, &log);
             let _ = event_tx.send(SyncEvent::DocumentMembersReady {
                 id: p.id,
@@ -1620,6 +1719,9 @@ pub(crate) async fn list_members_task<H: ShareHttp>(
                 revoked,
                 root,
             });
+            if let Some(footing) = footing {
+                advanced(event_tx, p.document_id, footing);
+            }
         }
         Err(e) => match p.id {
             Some(id) => {
@@ -1925,8 +2027,12 @@ mod tests {
         ]);
         let rows = [me(), alice(), bob, mallory];
         let new_key = DocumentKey::generate();
-        let (entries, unwrapped) =
-            rotate_entries_for(&mut KeyWrapper::new(&my_xk), &new_key, None, &log, &rows);
+        let (entries, unwrapped) = rotate_entries_for(
+            &mut KeyWrapper::new(&my_xk),
+            &new_key,
+            &AnchoredLog::assumed(log),
+            &rows,
+        );
         let wrapped: Vec<_> = entries.iter().map(|e| e.user_id).collect();
         assert_eq!(wrapped, [me().user_id, alice().user_id]);
         let names: Vec<_> = unwrapped.iter().map(|n| n.as_str().to_owned()).collect();
@@ -1947,8 +2053,7 @@ mod tests {
         let (entries, unwrapped) = rotate_entries_for(
             &mut KeyWrapper::new(&my_xk),
             &new_key,
-            None,
-            &unanchored,
+            &AnchoredLog::assumed(unanchored),
             &[me(), alice()],
         );
         assert_eq!(
@@ -1987,7 +2092,7 @@ mod tests {
             }
             let log = crate::membership_log::tests::signing(&signed);
             let (entries, unwrapped) =
-                rotate_entries_for(&mut KeyWrapper::new(&my_xk), &DocumentKey::generate(), None, &log, &rows);
+                rotate_entries_for(&mut KeyWrapper::new(&my_xk), &DocumentKey::generate(), &AnchoredLog::assumed(log), &rows);
             let wrapped: Vec<_> = entries.iter().map(|e| e.user_id).collect();
             proptest::prop_assert_eq!(&wrapped, &expected);
             proptest::prop_assert_eq!(wrapped.len() + unwrapped.len(), rows.len());
@@ -2011,8 +2116,12 @@ mod tests {
             member("33333333-3333-3333-3333-333333333333", b_pub),
         ];
         let log = signed_by_the_log(&members);
-        let (entries, unwrapped) =
-            rotate_entries_for(&mut KeyWrapper::new(&my_xk), &new_key, None, &log, &members);
+        let (entries, unwrapped) = rotate_entries_for(
+            &mut KeyWrapper::new(&my_xk),
+            &new_key,
+            &AnchoredLog::assumed(log),
+            &members,
+        );
 
         // The member the wrap refuses is returned for the report; the two
         // valid ones are wrapped (`SYNC-043`).
@@ -2063,8 +2172,7 @@ mod tests {
         let (entries, unwrapped) = rotate_entries_for(
             &mut KeyWrapper::new(&my_xk),
             &new_key,
-            None,
-            &log,
+            &AnchoredLog::assumed(log),
             &answer.members,
         );
         assert_eq!(entries.len(), 1);
@@ -2204,6 +2312,22 @@ mod tests {
         }
     }
 
+    /// The footing of the log `texts` serve for `document_id`, at its last
+    /// valid head, as an open that accepted it holds it.
+    fn footing_of(
+        document_id: Id<Document>,
+        texts: &[ambre_core::Encoded<ambre_core::EncodedLogEntry>],
+    ) -> Footing {
+        let anchor = membership_log::decode(texts)
+            .first()
+            .and_then(membership_log::digest)
+            .unwrap_or(FixedBytes::from_array([0; 32]));
+        Footing::sealed_in_catalogue(document_id, anchor)
+            .walk(texts, &LogRule::document())
+            .expect("a footing at the empty head holds any log")
+            .footing()
+    }
+
     /// The author every task test signs as.
     fn author() -> Author {
         Author {
@@ -2253,9 +2377,10 @@ mod tests {
         my_xk: &StaticSecret,
         expect: FixedBytes<ambre_core::ExchangePublicKey>,
     ) -> InviteParams {
+        let document_id = Id::<Document>::mint();
         InviteParams {
             id: ambre_bus::next_request(),
-            document_id: Id::<Document>::mint(),
+            document_id,
             url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
             invitee_email: Some("invitee@test.local".into()),
@@ -2265,6 +2390,8 @@ mod tests {
             doc_key: DocumentKey::generate(),
             expect_exchange_pub_key: expect,
             author: author(),
+            footing: footing_of(document_id, &[]),
+            rule: LogRule::document(),
         }
     }
 
@@ -2636,15 +2763,18 @@ mod tests {
     }
 
     fn revoke_params(my_xk: &StaticSecret) -> RevokeParams {
+        let document_id = Id::<Document>::mint();
         RevokeParams {
             id: ambre_bus::next_request(),
-            document_id: Id::<Document>::mint(),
+            document_id,
             user_id: Id::<User>::mint(),
             url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
             exchange_key: my_xk.clone(),
             previous: DocumentKey::generate(),
             author: author(),
+            footing: footing_of(document_id, &[]),
+            rule: LogRule::document(),
         }
     }
 
@@ -2685,7 +2815,21 @@ mod tests {
     ) {
         let (enc, first) =
             creation(document_id, &DocumentKey::generate(), owner_xk, owner).unwrap();
-        let mut entries = membership_log::decode(std::slice::from_ref(&first));
+        let own_pub = own_exchange_key(owner_xk);
+        let mut row = member_row(&owner.user_id.to_string(), "Me", &own_pub);
+        row["doc_key_enc"] = serde_json::json!(enc);
+        (inviting_after(document_id, owner, &[first], invited), row)
+    }
+
+    /// The entries of `texts`, then one invite by `owner` of each of
+    /// `invited` as an editor, in request form.
+    fn inviting_after(
+        document_id: Id<Document>,
+        owner: &Author,
+        texts: &[ambre_core::Encoded<ambre_core::EncodedLogEntry>],
+        invited: &[(&str, &FixedBytes<ambre_core::ExchangePublicKey>)],
+    ) -> Vec<ambre_core::Encoded<ambre_core::EncodedLogEntry>> {
+        let mut entries = membership_log::decode(texts);
         for (uid, exchange) in invited {
             let next = LogHead {
                 position: ambre_protocol::place_after(entries.len()),
@@ -2704,14 +2848,10 @@ mod tests {
                 membership_log::sign(draft, next, owner.user_id, &owner.signing_key).unwrap(),
             );
         }
-        let own_pub = own_exchange_key(owner_xk);
-        let mut row = member_row(&owner.user_id.to_string(), "Me", &own_pub);
-        row["doc_key_enc"] = serde_json::json!(enc);
-        let texts = entries
+        entries
             .iter()
             .map(|entry| membership_log::encode(entry).unwrap())
-            .collect();
-        (texts, row)
+            .collect()
     }
 
     /// Holds `SYNC-199` at the revoke. A member row the relay serves with no
@@ -2723,7 +2863,7 @@ mod tests {
         let (_a_xk, a_pub) = keypair(2);
         let (_c_xk, c_pub) = keypair(3);
         let (relay_xk, relay_pub) = keypair(4);
-        let params = revoke_params(&my_xk);
+        let mut params = revoke_params(&my_xk);
         let removed = params.user_id.to_string();
         let a = "11111111-1111-1111-1111-111111111111";
         let (log, own) = log_inviting(
@@ -2732,6 +2872,7 @@ mod tests {
             &my_xk,
             &[(a, &a_pub), (&removed, &c_pub)],
         );
+        params.footing = footing_of(params.document_id, &log);
         let http = FakeHttp::new(vec![
             Ok(serde_json::json!({ "members": [
                 own,
@@ -2780,7 +2921,7 @@ mod tests {
         let (my_xk, _) = keypair(1);
         let (_a_xk, a_pub) = keypair(2);
         let (_c_xk, c_pub) = keypair(3);
-        let params = revoke_params(&my_xk);
+        let mut params = revoke_params(&my_xk);
         let removed = params.user_id.to_string();
         let document_id = params.document_id;
         let previous = params.previous.id();
@@ -2792,7 +2933,7 @@ mod tests {
             &my_xk,
             &[(a, &a_pub), (&removed, &c_pub)],
         );
-
+        params.footing = footing_of(document_id, &log);
         let http = FakeHttp::new(vec![
             Ok(serde_json::json!({ "members": [
                 own,
@@ -2845,7 +2986,7 @@ mod tests {
         let (_a_xk, a_pub) = keypair(2);
         let (_c_xk, c_pub) = keypair(3);
         let (_n_xk, n_pub) = keypair(4);
-        let params = revoke_params(&my_xk);
+        let mut params = revoke_params(&my_xk);
         let removed = params.user_id.to_string();
         let a = "11111111-1111-1111-1111-111111111111";
         let newcomer = "44444444-4444-4444-4444-444444444444";
@@ -2856,12 +2997,15 @@ mod tests {
             &my_xk,
             &[(a, &a_pub), (&removed, &c_pub)],
         );
-        let (log_after, own_after) = log_inviting(
+        // The newcomer's entry extends the log the first try read.
+        let log_after = inviting_after(
             params.document_id,
             &params.author,
-            &my_xk,
-            &[(a, &a_pub), (&removed, &c_pub), (newcomer, &n_pub)],
+            &log,
+            &[(newcomer, &n_pub)],
         );
+        let own_after = own.clone();
+        params.footing = footing_of(params.document_id, &log);
 
         let http = FakeHttp::new(vec![
             Ok(serde_json::json!({ "members": [
@@ -2964,14 +3108,15 @@ mod tests {
         let (_n_xk, n_pub) = keypair(4);
         let me = "11111111-1111-1111-1111-111111111111";
         let newcomer = "44444444-4444-4444-4444-444444444444";
-        let params = settle_params(&my_xk);
+        let mut params = settle_params(&my_xk);
         let owner = Author {
             user_id: Id::<User>::parse_str(me).unwrap(),
             signing_key: params.signing_key.clone(),
         };
         let (log, own) = log_inviting(params.document_id, &owner, &my_xk, &[]);
-        let (log_after, own_after) =
-            log_inviting(params.document_id, &owner, &my_xk, &[(newcomer, &n_pub)]);
+        let log_after = inviting_after(params.document_id, &owner, &log, &[(newcomer, &n_pub)]);
+        let own_after = own.clone();
+        params.footing = footing_of(params.document_id, &log);
         let http = FakeHttp::new(vec![
             Ok(serde_json::json!({ "members": [ own ],
                 "rotation_owed": true, "log": log })),
@@ -3518,13 +3663,16 @@ mod tests {
     }
 
     fn settle_params(my_xk: &StaticSecret) -> SettleParams {
+        let document_id = Id::<Document>::mint();
         SettleParams {
-            document_id: Id::<Document>::mint(),
+            document_id,
             url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
             exchange_key: my_xk.clone(),
             previous: DocumentKey::generate(),
             signing_key: MasterSeed::from_array([9; 32]).derive_signing_key(),
+            footing: footing_of(document_id, &[]),
+            rule: LogRule::document(),
         }
     }
 
@@ -3534,13 +3682,14 @@ mod tests {
     async fn an_owed_rotation_is_paid_for_every_member() {
         let (my_xk, _) = keypair(1);
         let (_a_xk, a_pub) = keypair(2);
-        let params = settle_params(&my_xk);
+        let mut params = settle_params(&my_xk);
         let owner = Author {
             user_id: Id::<User>::mint(),
             signing_key: params.signing_key.clone(),
         };
         let a = "22222222-2222-2222-2222-222222222222";
         let (log, own) = log_inviting(params.document_id, &owner, &my_xk, &[(a, &a_pub)]);
+        params.footing = footing_of(params.document_id, &log);
         let http = FakeHttp::new(vec![
             Ok(serde_json::json!({ "rotation_owed": true, "members": [
                 own,
@@ -3627,12 +3776,14 @@ mod tests {
             anchor,
             space_key: space_key.clone(),
             wrapper: Rc::clone(&wrapper),
+            word: membership_log::SpaceWord::default(),
+            footing: None,
         };
         rotate_channel_task(&http, params, &etx).await;
         let SyncEvent::ChannelRotated {
             space_id: s,
             channel_id: c,
-            result: Ok(sealed),
+            result: Ok((sealed, _)),
         } = erx.try_recv().expect("ChannelRotated")
         else {
             panic!("expected a rotated channel");
@@ -3686,6 +3837,8 @@ mod tests {
             anchor,
             space_key: space_key.clone(),
             wrapper: Rc::clone(&wrapper),
+            word: membership_log::SpaceWord::default(),
+            footing: None,
         };
         rotate_channel_task(&http, params, &etx).await;
         let Ok(SyncEvent::ChannelRotated { result: Ok(_), .. }) = erx.try_recv() else {
@@ -3714,12 +3867,113 @@ mod tests {
             anchor,
             space_key,
             wrapper,
+            word: membership_log::SpaceWord::default(),
+            footing: None,
         };
         rotate_channel_task(&http, params, &etx).await;
         assert!(matches!(
             erx.try_recv(),
             Ok(SyncEvent::ChannelRotated { result: Err(_), .. })
         ));
+    }
+
+    /// Audit `N30`. Two members joined the channel
+    /// alone, past its creation. A space admin re-keys it under the word of
+    /// the space, so each self-joiner gets a copy. With no word, the walk
+    /// stops at the first self-join and only the admin's own copy remains.
+    #[tokio::test]
+    async fn a_channel_rekey_wraps_for_every_self_joiner() {
+        let (my_xk, my_pub) = keypair(1);
+        let meta = Id::<Meta>::mint();
+        let creator = Author {
+            user_id: Id::<User>::mint(),
+            signing_key: MasterSeed::from_array([8; 32]).derive_signing_key(),
+        };
+        let (mut log, _) = log_inviting(meta.document_id(), &creator, &keypair(8).0, &[]);
+        let mut entries = membership_log::decode(&log);
+        let mut rows = vec![member_row(
+            "11111111-1111-1111-1111-111111111111",
+            "Me",
+            &my_pub,
+        )];
+        let mut word = membership_log::SpaceWord::default();
+        for (seed, uid) in [
+            (2, "22222222-2222-2222-2222-222222222222"),
+            (3, "33333333-3333-3333-3333-333333333333"),
+        ] {
+            let (_, exchange) = keypair(seed);
+            let joiner = Author {
+                user_id: Id::<User>::parse_str(uid).unwrap(),
+                signing_key: MasterSeed::from_array([seed; 32]).derive_signing_key(),
+            };
+            let member_key = FixedBytes::from_array(joiner.signing_key.verifying_key().to_bytes());
+            let next = LogHead {
+                position: ambre_protocol::place_after(entries.len()),
+                previous: entries.last().and_then(membership_log::digest),
+            };
+            let draft = Draft {
+                document: meta.document_id(),
+                member: joiner.user_id,
+                member_key,
+                member_exchange_key: exchange,
+                act: MembershipAct::SelfJoin,
+                role: Role::Editor,
+                key: None,
+            };
+            let entry =
+                membership_log::sign(draft, next, joiner.user_id, &joiner.signing_key).unwrap();
+            log.push(membership_log::encode(&entry).unwrap());
+            entries.push(entry);
+            rows.push(member_row(uid, "Joiner", &exchange));
+            let keys = membership_log::MemberKeys {
+                key: member_key,
+                exchange,
+            };
+            word.present.insert(joiner.user_id, keys);
+        }
+        let anchor = entries.first().and_then(membership_log::digest).unwrap();
+        let members = serde_json::json!({ "members": rows, "log": log });
+        let wrapped = |word: membership_log::SpaceWord| {
+            let http = FakeHttp::new(vec![
+                Ok(serde_json::json!({
+                    "meta_id": meta.to_string(), "role": "editor", "length": 1,
+                })),
+                Ok(members.clone()),
+                Ok(serde_json::json!({ "status": "rotated" })),
+            ]);
+            let params = RotateChannelParams {
+                space_id: Id::<Space>::mint(),
+                channel_id: Id::<Channel>::mint(),
+                url_scheme: crate::http::UrlScheme::Https,
+                api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
+                exchange_key: my_xk.clone(),
+                signing_key: MasterSeed::from_array([9; 32]).derive_signing_key(),
+                previous: DocumentKey::generate(),
+                anchor,
+                space_key: DocumentKey::generate(),
+                wrapper: Rc::new(RefCell::new(KeyWrapper::new(&my_xk))),
+                word,
+                footing: None,
+            };
+            async move {
+                let (etx, erx, _sink, _lrx) = channels();
+                rotate_channel_task(&http, params, &etx).await;
+                assert!(matches!(
+                    erx.try_recv(),
+                    Ok(SyncEvent::ChannelRotated { result: Ok(_), .. })
+                ));
+                match &http.calls()[2] {
+                    Call::Post(_, body) => body["keys"].as_array().unwrap().len(),
+                    other => panic!("expected the rotate POST, got {other:?}"),
+                }
+            }
+        };
+        assert_eq!(wrapped(word).await, 3, "the admin and both self-joiners");
+        assert_eq!(
+            wrapped(membership_log::SpaceWord::default()).await,
+            1,
+            "a word that holds no joiner wraps for the admin alone"
+        );
     }
 
     /// `SYNC-143`: a rotation that keeps meeting newcomers ends after its
@@ -3769,6 +4023,8 @@ mod tests {
             anchor: FixedBytes::from_array([5; 32]),
             space_key: DocumentKey::generate(),
             wrapper: Rc::new(RefCell::new(KeyWrapper::new(&my_xk))),
+            word: membership_log::SpaceWord::default(),
+            footing: None,
         };
         let mut script = vec![Ok(head.clone())];
         for _ in 0..ROTATION_TRIES {
@@ -3914,6 +4170,7 @@ mod tests {
             exchange_key: keypair(1).0,
             rule: LogRule::document(),
             log_document: document_id,
+            footing: None,
         }
     }
 
@@ -4139,7 +4396,11 @@ mod tests {
 
     impl Logged {
         fn new(owner: &Peer) -> Self {
-            let document_id = Id::<Document>::mint();
+            Self::of(Id::<Document>::mint(), owner)
+        }
+
+        /// The log `owner` creates for `document_id`.
+        fn of(document_id: Id<Document>, owner: &Peer) -> Self {
             let doc_key = DocumentKey::generate();
             let (enc, entry) = creation(document_id, &doc_key, &owner.xk, &owner.author).unwrap();
             let anchor = membership_log::decode(std::slice::from_ref(&entry))
@@ -4203,7 +4464,7 @@ mod tests {
                 role,
                 key: Some(self.doc_key.id()),
             };
-            let entry = entry_after(&self.walk(&[]), draft, &owner.author)
+            let entry = entry_at(self.walk(&[]).next(), draft, &owner.author)
                 .unwrap()
                 .unwrap();
             self.log.push(entry);
@@ -4211,6 +4472,31 @@ mod tests {
             let enc =
                 wrap_anchored_b64(&owner.xk, &peer_pub, &self.doc_key, Some(self.anchor)).unwrap();
             self.row(peer, enc, role);
+        }
+
+        /// `owner` revokes `peer`: the entry joins the log, and the row of
+        /// `peer` stays, as a relay that keeps it serves it.
+        fn revoke(&mut self, owner: &Peer, peer: &Peer) {
+            let draft = Draft {
+                document: self.document_id,
+                member: peer.author.user_id,
+                member_key: FixedBytes::from_array(
+                    peer.author.signing_key.verifying_key().to_bytes(),
+                ),
+                member_exchange_key: own_exchange_key(&peer.xk),
+                act: MembershipAct::Revoke,
+                role: Role::Editor,
+                key: Some(DocumentKey::generate().id()),
+            };
+            let entry = entry_at(self.walk(&[]).next(), draft, &owner.author)
+                .unwrap()
+                .unwrap();
+            self.log.push(entry);
+        }
+
+        /// The footing an open of this log accepts.
+        fn footing(&self) -> Footing {
+            footing_of(self.document_id, &self.log)
         }
 
         fn answer(&self) -> serde_json::Value {
@@ -4256,6 +4542,7 @@ mod tests {
         params.document_id = logged.document_id;
         params.doc_key = logged.doc_key.clone();
         params.author = same(&owner.author);
+        params.footing = logged.footing();
         let http = FakeHttp::new(vec![
             Ok(user_search_json("invitee@test.local", &invitee_hex)),
             Ok(logged.answer()),
@@ -4299,12 +4586,14 @@ mod tests {
         let owner = Peer::new(1);
         let mut logged = Logged::new(&owner);
         let first = logged.answer();
+        let footing = logged.footing();
         logged.invite(&owner, &Peer::new(3), Role::Viewer);
         let (_invitee_xk, invitee_hex) = keypair(2);
         let mut params = invite_params(&owner.xk, invitee_hex);
         params.document_id = logged.document_id;
         params.doc_key = logged.doc_key.clone();
         params.author = same(&owner.author);
+        params.footing = footing;
         let http = FakeHttp::new(vec![
             Ok(user_search_json("invitee@test.local", &invitee_hex)),
             Ok(first),
@@ -4427,8 +4716,9 @@ mod tests {
             role: Role::Viewer,
             url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
-            exchange_key: owner.xk.clone(),
             author: same(&owner.author),
+            footing: logged.footing(),
+            rule: LogRule::document(),
         };
         let http = FakeHttp::new(vec![
             Ok(logged.answer()),
@@ -4529,8 +4819,9 @@ mod tests {
             role: Role::Viewer,
             url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
-            exchange_key: owner.xk.clone(),
             author: same(&owner.author),
+            footing: logged.footing(),
+            rule: LogRule::document(),
         };
         let mut script = Vec::new();
         for _ in 0..ROTATION_TRIES {
@@ -4604,7 +4895,7 @@ mod tests {
             role: Role::Editor,
             key: Some(logged.doc_key.id()),
         };
-        let entry = entry_after(&logged.walk(&[]), draft, &joiner.author)
+        let entry = entry_at(logged.walk(&[]).next(), draft, &joiner.author)
             .unwrap()
             .unwrap();
         logged.log.push(entry);
@@ -4752,5 +5043,328 @@ mod tests {
         };
         let log = read(rooted).await;
         assert!(log.is_some_and(|log| log.present_key(victim.author.user_id).is_some()));
+    }
+
+    // -- The write paths trust no fresh members answer (audits `P26`, `P27`).
+
+    /// The answer a relay forges for `genuine`: a log of its own for the same
+    /// document. It invites `me` under a copy the relay wrapped, and each of
+    /// `others` beside. The log signs the exchange key of the relay.
+    fn forged(genuine: &Logged, me: &Peer, others: &[&Peer]) -> serde_json::Value {
+        let relay = Peer::new(66);
+        let mut forged = Logged::of(genuine.document_id, &relay);
+        forged.invite(&relay, me, Role::Owner);
+        for other in others {
+            forged.invite(&relay, other, Role::Editor);
+        }
+        forged.answer()
+    }
+
+    /// Whether any call posted or patched a body.
+    fn wrote(http: &FakeHttp) -> bool {
+        http.calls()
+            .iter()
+            .any(|call| matches!(call, Call::Post(..) | Call::Patch(..) | Call::Delete(..)))
+    }
+
+    fn settle_as(me: &Peer, logged: &Logged) -> SettleParams {
+        SettleParams {
+            document_id: logged.document_id,
+            url_scheme: crate::http::UrlScheme::Https,
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
+            exchange_key: me.xk.clone(),
+            previous: logged.doc_key.clone(),
+            signing_key: me.author.signing_key.clone(),
+            footing: logged.footing(),
+            rule: LogRule::document(),
+        }
+    }
+
+    /// Audit `P26` at the settle. The relay names a debt, and serves a log it
+    /// rooted on a copy it wrapped. The settle posts nothing, so no copy of
+    /// the next key reaches an exchange key of the relay.
+    #[tokio::test]
+    async fn a_settle_posts_nothing_on_a_log_the_relay_rooted() {
+        let (me, alice) = (Peer::new(1), Peer::new(2));
+        let mut genuine = Logged::new(&me);
+        genuine.invite(&me, &alice, Role::Editor);
+        let mut answer = forged(&genuine, &me, &[&alice]);
+        answer["rotation_owed"] = serde_json::json!(true);
+        let http = FakeHttp::new(vec![
+            Ok(answer),
+            Ok(serde_json::json!({ "status": "rotated" })),
+        ]);
+        let (etx, erx, _sink, _lrx) = channels();
+        settle_task(&http, settle_as(&me, &genuine), &etx).await;
+        assert!(matches!(
+            erx.try_recv(),
+            Ok(SyncEvent::DebtUnsettled { .. })
+        ));
+        assert!(!wrote(&http), "nothing is posted: {:?}", http.calls());
+    }
+
+    /// Audit `P27` at the settle. Eve was revoked, and this client walked the
+    /// revoke. The relay serves the genuine log cut before it, with her row.
+    /// The settle posts nothing, so Eve receives no copy of the next key.
+    #[tokio::test]
+    async fn a_settle_posts_nothing_on_a_log_cut_before_a_head_it_walked() {
+        let (me, alice, eve) = (Peer::new(1), Peer::new(2), Peer::new(3));
+        let mut genuine = Logged::new(&me);
+        genuine.invite(&me, &alice, Role::Editor);
+        genuine.invite(&me, &eve, Role::Editor);
+        let cut = genuine.log.clone();
+        genuine.revoke(&me, &eve);
+        let answer = serde_json::json!({
+            "rotation_owed": true, "members": genuine.rows, "log": cut,
+        });
+        let http = FakeHttp::new(vec![
+            Ok(answer),
+            Ok(serde_json::json!({ "status": "rotated" })),
+        ]);
+        let (etx, erx, _sink, _lrx) = channels();
+        settle_task(&http, settle_as(&me, &genuine), &etx).await;
+        assert!(matches!(
+            erx.try_recv(),
+            Ok(SyncEvent::DebtUnsettled { .. })
+        ));
+        assert!(!wrote(&http), "nothing is posted: {:?}", http.calls());
+    }
+
+    /// Audit `P27` at the re-key of a channel. Eve was removed from the
+    /// channel and stays in the space, so its word holds her. This client
+    /// walked her removal. The relay serves the log of meta cut before it,
+    /// with her row, and the re-key posts nothing. On the genuine log, the
+    /// re-key wraps for the members it holds, and Eve is not one of them.
+    #[tokio::test]
+    async fn a_channel_rekey_posts_nothing_on_a_log_cut_before_a_head_it_walked() {
+        let (me, alice, eve) = (Peer::new(1), Peer::new(2), Peer::new(3));
+        let meta = Id::<Meta>::mint();
+        let mut genuine = Logged::of(meta.document_id(), &me);
+        genuine.invite(&me, &alice, Role::Editor);
+        genuine.invite(&me, &eve, Role::Editor);
+        let cut = genuine.log.clone();
+        genuine.revoke(&me, &eve);
+        let rekey = |named: Id<Meta>,
+                     log: &[ambre_core::Encoded<ambre_core::EncodedLogEntry>],
+                     footing: Option<Footing>| {
+            let http = FakeHttp::new(vec![
+                Ok(serde_json::json!({
+                    "meta_id": named.to_string(), "role": "editor", "length": 1,
+                })),
+                Ok(serde_json::json!({ "members": genuine.rows, "log": log })),
+                Ok(serde_json::json!({ "status": "rotated" })),
+            ]);
+            let params = RotateChannelParams {
+                space_id: Id::<Space>::mint(),
+                channel_id: Id::<Channel>::mint(),
+                url_scheme: crate::http::UrlScheme::Https,
+                api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
+                exchange_key: me.xk.clone(),
+                signing_key: me.author.signing_key.clone(),
+                previous: genuine.doc_key.clone(),
+                anchor: genuine.anchor,
+                space_key: DocumentKey::generate(),
+                wrapper: Rc::new(RefCell::new(KeyWrapper::new(&me.xk))),
+                word: membership_log::SpaceWord::default(),
+                footing,
+            };
+            async move {
+                let (etx, erx, _sink, _lrx) = channels();
+                rotate_channel_task(&http, params, &etx).await;
+                let Ok(SyncEvent::ChannelRotated { result, .. }) = erx.try_recv() else {
+                    panic!("expected ChannelRotated");
+                };
+                (result.map(|(_, footing)| footing), http)
+            }
+        };
+        let (result, http) = rekey(meta, &cut, Some(genuine.footing())).await;
+        assert!(result.is_err(), "the cut log is refused");
+        assert!(!wrote(&http), "nothing is posted: {:?}", http.calls());
+
+        // The relay names another meta: the held footing is not its own.
+        let (result, http) = rekey(Id::<Meta>::mint(), &cut, Some(genuine.footing())).await;
+        assert!(result.is_err(), "another meta is refused");
+        assert!(!wrote(&http), "nothing is posted: {:?}", http.calls());
+
+        let (result, http) = rekey(meta, &genuine.log, Some(genuine.footing())).await;
+        assert_eq!(result.ok(), Some(genuine.footing()), "the head stays");
+        match &http.calls()[2] {
+            Call::Post(_, body) => {
+                assert_eq!(body["keys"].as_array().unwrap().len(), 2, "me and Alice");
+            }
+            other => panic!("expected the rotate POST, got {other:?}"),
+        }
+
+        // A first re-key holds no head: it stands on the sealed anchor, and
+        // the head it walked becomes the footing of the next one.
+        let (result, _) = rekey(meta, &genuine.log, None).await;
+        assert_eq!(result.ok(), Some(genuine.footing()), "the head it walked");
+        let other = Logged::new(&me).footing().sealed_at(genuine.anchor);
+        assert!(other.is_none(), "another log walks from another anchor");
+    }
+
+    /// Audit `P26` at the revoke. The removal posts nothing on a log the
+    /// relay rooted, and the user reads why.
+    #[tokio::test]
+    async fn a_revoke_posts_nothing_on_a_log_the_relay_rooted() {
+        let (me, alice, carol) = (Peer::new(1), Peer::new(2), Peer::new(3));
+        let mut genuine = Logged::new(&me);
+        genuine.invite(&me, &alice, Role::Editor);
+        genuine.invite(&me, &carol, Role::Editor);
+        let params = RevokeParams {
+            id: ambre_bus::next_request(),
+            document_id: genuine.document_id,
+            user_id: carol.author.user_id,
+            url_scheme: crate::http::UrlScheme::Https,
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
+            exchange_key: me.xk.clone(),
+            previous: genuine.doc_key.clone(),
+            author: same(&me.author),
+            footing: genuine.footing(),
+            rule: LogRule::document(),
+        };
+        let http = FakeHttp::new(vec![
+            Ok(forged(&genuine, &me, &[&alice, &carol])),
+            Ok(serde_json::json!({ "status": "revoked" })),
+        ]);
+        let (etx, erx, sink, lrx) = channels();
+        revoke_task(&http, params, &etx, &sink).await;
+        assert!(erx.try_recv().is_err(), "no revoke completes");
+        assert!(matches!(lrx.try_recv(), Ok(LogicEvent::ApiError { .. })));
+        assert!(!wrote(&http), "nothing is posted: {:?}", http.calls());
+    }
+
+    /// Audit `P26` at the invite. The share posts nothing on a log the relay
+    /// rooted: no entry after the relay's log, and no copy sealing its anchor.
+    #[tokio::test]
+    async fn an_invite_posts_nothing_on_a_log_the_relay_rooted() {
+        let (me, alice) = (Peer::new(1), Peer::new(2));
+        let mut genuine = Logged::new(&me);
+        genuine.invite(&me, &alice, Role::Editor);
+        let (_, invitee_pub) = keypair(7);
+        let mut params = invite_params(&me.xk, invitee_pub);
+        params.document_id = genuine.document_id;
+        params.author = same(&me.author);
+        params.doc_key = genuine.doc_key.clone();
+        params.footing = genuine.footing();
+        let http = FakeHttp::new(vec![
+            Ok(user_search_json("invitee@test.local", &invitee_pub)),
+            Ok(forged(&genuine, &me, &[&alice])),
+            Ok(serde_json::json!({ "user_id": INVITEE, "display_name": "Invitee" })),
+        ]);
+        let (etx, erx, sink, lrx) = channels();
+        invite_task(&http, params, &etx, &sink).await;
+        assert!(erx.try_recv().is_err(), "no invite is sent");
+        assert!(matches!(lrx.try_recv(), Ok(LogicEvent::ApiError { .. })));
+        assert!(!wrote(&http), "nothing is posted: {:?}", http.calls());
+    }
+
+    /// Audit `P26` at a role change. The change patches nothing on a log the
+    /// relay rooted.
+    #[tokio::test]
+    async fn a_role_change_patches_nothing_on_a_log_the_relay_rooted() {
+        let (me, bob) = (Peer::new(1), Peer::new(2));
+        let mut genuine = Logged::new(&me);
+        genuine.invite(&me, &bob, Role::Editor);
+        let params = RoleChangeParams {
+            id: ambre_bus::next_request(),
+            document_id: genuine.document_id,
+            user_id: bob.author.user_id,
+            role: Role::Viewer,
+            url_scheme: crate::http::UrlScheme::Https,
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
+            author: same(&me.author),
+            footing: genuine.footing(),
+            rule: LogRule::document(),
+        };
+        let http = FakeHttp::new(vec![
+            Ok(forged(&genuine, &me, &[&bob])),
+            Ok(serde_json::json!({ "status": "updated" })),
+        ]);
+        let (etx, erx, sink, lrx) = channels();
+        role_change_task(&http, params, &etx, &sink).await;
+        assert!(erx.try_recv().is_err(), "no role changes");
+        assert!(matches!(lrx.try_recv(), Ok(LogicEvent::ApiError { .. })));
+        assert!(!wrote(&http), "nothing is patched: {:?}", http.calls());
+    }
+
+    /// Audit `P27` for a head this client signed. A revoke leaves the footing
+    /// at the head after its own entry. A settle then refuses the log cut
+    /// before that entry, and accepts the log that holds it.
+    #[tokio::test]
+    async fn a_write_stands_on_the_head_this_client_signed() {
+        let (me, alice, eve) = (Peer::new(1), Peer::new(2), Peer::new(3));
+        let mut genuine = Logged::new(&me);
+        genuine.invite(&me, &alice, Role::Editor);
+        genuine.invite(&me, &eve, Role::Editor);
+        let params = RevokeParams {
+            id: ambre_bus::next_request(),
+            document_id: genuine.document_id,
+            user_id: eve.author.user_id,
+            url_scheme: crate::http::UrlScheme::Https,
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
+            exchange_key: me.xk.clone(),
+            previous: genuine.doc_key.clone(),
+            author: same(&me.author),
+            footing: genuine.footing(),
+            rule: LogRule::document(),
+        };
+        let http = FakeHttp::new(vec![
+            Ok(genuine.answer()),
+            Ok(serde_json::json!({ "status": "revoked" })),
+        ]);
+        let (etx, erx, sink, _lrx) = channels();
+        revoke_task(&http, params, &etx, &sink).await;
+        assert!(matches!(
+            erx.try_recv(),
+            Ok(SyncEvent::RevocationComplete { .. })
+        ));
+        let Ok(SyncEvent::FootingAdvanced { footing, .. }) = erx.try_recv() else {
+            panic!("the revoke leaves its footing");
+        };
+        let revoke = match &http.calls()[1] {
+            Call::Post(_, body) => serde_json::from_value(body["entry"].clone()).unwrap(),
+            other => panic!("expected the revoke POST: {other:?}"),
+        };
+        let mut held = genuine.log.clone();
+        held.push(revoke);
+        assert!(footing.walk(&held, &LogRule::document()).is_ok());
+        // The relay serves the log cut before the revoke, with Eve's row.
+        let mut cut = genuine.answer();
+        cut["rotation_owed"] = serde_json::json!(true);
+        let mut settle = settle_as(&me, &genuine);
+        settle.footing = footing;
+        let http = FakeHttp::new(vec![
+            Ok(cut),
+            Ok(serde_json::json!({ "status": "rotated" })),
+        ]);
+        let (etx, erx, _sink, _lrx) = channels();
+        settle_task(&http, settle, &etx).await;
+        assert!(matches!(
+            erx.try_recv(),
+            Ok(SyncEvent::DebtUnsettled { .. })
+        ));
+        assert!(!wrote(&http), "nothing is posted: {:?}", http.calls());
+    }
+
+    /// A footing moves to a later head of its own log alone. An earlier head,
+    /// or a head of a log on another anchor, leaves it as it is.
+    #[test]
+    fn a_footing_moves_forward_on_its_own_log_alone() {
+        let (me, alice) = (Peer::new(1), Peer::new(2));
+        let mut genuine = Logged::new(&me);
+        let early = genuine.footing();
+        genuine.invite(&me, &alice, Role::Editor);
+        let late = genuine.footing();
+        let mut held = early;
+        held.advance(late);
+        assert_eq!(held, late);
+        held.advance(early);
+        assert_eq!(held, late, "an earlier head never rolls it back");
+        let mut other = Logged::of(genuine.document_id, &Peer::new(66));
+        other.invite(&Peer::new(66), &alice, Role::Editor);
+        other.invite(&Peer::new(66), &me, Role::Editor);
+        held.advance(other.footing());
+        assert_eq!(held, late, "a log on another anchor moves nothing");
     }
 }

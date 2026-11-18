@@ -862,7 +862,11 @@ impl SyncState {
             });
             return;
         }
-        match vouch.map(|v| v.check(log_document, &doc_key, &links).map(|()| v.proved())) {
+        let mut footing = None;
+        match vouch.map(|v| {
+            v.accept(log_document, &doc_key, &links)
+                .map(|accepted| (v.proved(), accepted))
+        }) {
             Some(Err(refusal)) => {
                 tracing::warn!("Sync: open of {doc_id:?}: key refused: {refusal:?}");
                 let cause = refusal.open_failure();
@@ -874,7 +878,10 @@ impl SyncState {
             }
             // The members of an accepted log land before the open does, so
             // no open the Logic thread asks after it misses them.
-            Some(Ok(proved)) => {
+            Some(Ok((proved, accepted))) => {
+                // Each write on the log stands on what the open accepted
+                // (audit `P26`).
+                footing = accepted;
                 if let Some(vouched) = roots_vouched(doc_type, members) {
                     let _ = tx.send(vouched);
                 }
@@ -988,6 +995,13 @@ impl SyncState {
             writers,
             departed,
         });
+        // After the open, which made the session the footing lands on.
+        if let Some(footing) = footing {
+            let _ = tx.send(SyncEvent::FootingAdvanced {
+                document_id: doc_id,
+                footing,
+            });
+        }
         // After the open, which made the session the word lands on.
         if let Some((word, heads)) = word {
             let _ = tx.send(SyncEvent::LogWalked {
@@ -1721,11 +1735,14 @@ impl SyncState {
             .documents
             .get(&document_id)
             .and_then(|doc_state| doc_state.sealing_key().ok().cloned());
-        let (Some(tx), Some(exchange_key), Some(signing_key), Some(previous)) = (
+        // The payment walks from the log the open accepted (audits `P26`,
+        // `P27`).
+        let (Some(tx), Some(exchange_key), Some(signing_key), Some(previous), Some(footing)) = (
             self.event_tx.clone(),
             self.exchange_key.clone(),
             self.signing_key.clone(),
             previous,
+            self.footing(document_id),
         ) else {
             if let Some(doc_state) = self.documents.get_mut(&document_id) {
                 doc_state.rekey.payment_failed();
@@ -1739,6 +1756,8 @@ impl SyncState {
             exchange_key,
             previous,
             signing_key,
+            footing,
+            rule: self.log_rule(document_id),
         };
         let http = crate::sharing::GlooHttp {
             auth: self.auth_context(),
@@ -1798,6 +1817,9 @@ impl SyncState {
                     }
                 };
 
+            // This client signed the creation, so its log stands on it
+            // (audit `P26`).
+            let footing = crate::key_vouch::Footing::created(document_id, &entry, &author.public());
             let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route("/documents");
             let body = http::CreateDocumentRequest {
@@ -1810,6 +1832,12 @@ impl SyncState {
             };
             match http::post_json_auth::<_, http::CreateDocumentResponse>(&url, &body, auth).await {
                 Ok(_) => {
+                    if let Some(footing) = footing {
+                        let _ = tx.send(SyncEvent::FootingAdvanced {
+                            document_id,
+                            footing,
+                        });
+                    }
                     let _ = tx.send(SyncEvent::DocumentMaterialized { document_id });
                 }
                 Err(e) => {

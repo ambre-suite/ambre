@@ -50,6 +50,10 @@ pub(crate) enum SyncError {
     /// A catalogue entry carries no anchor of its channel's log.
     #[error("the catalogue entry carries no anchor")]
     Unanchored,
+    /// The served log, walked from the anchor the open accepted, misses the
+    /// head this client walked or signed (audits `P26`, `P27`).
+    #[error("the served log does not extend the log this client holds")]
+    LogDiverged,
     /// An entry this client signed has no digest: it does not encode.
     #[error("an entry of the log does not encode")]
     NoDigest,
@@ -136,6 +140,7 @@ impl SyncError {
             Self::Malformed(_) => LocalFailure::Malformed,
             Self::KeyOutOfReach => LocalFailure::KeyOutOfReach,
             Self::Unanchored => LocalFailure::Unanchored,
+            Self::LogDiverged => LocalFailure::LogDiverged,
             Self::NoDigest => LocalFailure::NoDigest,
             Self::TooManyMembers => LocalFailure::TooManyMembers,
             Self::MemberUnsigned => LocalFailure::MemberUnsigned,

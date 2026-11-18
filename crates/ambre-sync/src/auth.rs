@@ -580,6 +580,7 @@ impl SyncState {
         self._onclose = None;
         self._onerror = None;
         self.documents.clear();
+        self.log_footings.clear();
         self.session_nonces.clear();
         self.light.clear();
         self.master_seed = None;

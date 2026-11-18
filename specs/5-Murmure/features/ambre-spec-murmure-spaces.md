@@ -21,7 +21,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-033` | `INV` | The catalogue MUST hold the key of each public channel it lists, sealed under the key of the space. | this spec section 3; `ambre-spec-murmure-schema.md section 3` | `ambre_murmure::logic::space_tests::a_listed_channel_carries_its_name_topic_category_position_and_key`; `ambre_sync::channels::tests::a_sealed_channel_key_opens_for_its_own_channel_and_space_only`; `ambre_logic::spaces::tests::a_public_channel_is_listed_with_its_sealed_key_once_the_relay_holds_it` | none | verified |
 | `MURMURE-034` | `INV` | A guest of a channel MUST NOT be a member of the space document. | this spec section 3 | `ambre_server::routes::channels::tests::a_self_join_from_outside_the_space_is_refused` -- database tier, a guest holds a row on a channel and none on the space; `ambre_server::routes::channels::tests::a_channel_takes_only_free_documents_of_its_creator` -- database tier, the space document never enters a channel | none | verified |
 | `MURMURE-236` | `INV` | A removal from a channel MUST count as verified when the log of its space holds a signed removal of the same member. | this spec section 3; `SYNC-106` | `ambre_sync::membership_log::tests::a_channel_log_heeds_the_word_of_its_space`; `ambre_sync::channels::tests::a_listed_meta_walks_under_the_word_of_its_open_space` -- the channel log walks under the word of the open space | none | verified |
-| `MURMURE-254` | `INV` | A key link of a public channel MUST count as verified when an admin of its space signed it. | this spec section 3; `SYNC-121`, `SRV-146` | `ambre_sync::membership_log::tests::a_channel_log_heeds_the_word_of_its_space` -- a link a space admin signed counts as verified; `ambre_sync::channels::tests::a_listed_meta_walks_under_the_word_of_its_open_space` | none | verified |
+| `MURMURE-254` | `INV` | A key link of a public channel MUST count as verified when an admin its space still holds signed it. | this spec section 3; `SYNC-121`, `SRV-146` | `ambre_sync::membership_log::tests::a_channel_log_heeds_the_word_of_its_space` -- a link a space admin signed counts as verified; `ambre_sync::channels::tests::a_listed_meta_walks_under_the_word_of_its_open_space` | none | verified |
 | `MURMURE-301` | `INV` | A space with no retention set MUST keep every segment. | this spec section 3 | not built | unbuilt -- lands with the `Space retention` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-302` | `OBS` | The interface MUST state the retention as a range: at least its duration, at most that plus the span of a segment. | this spec section 3 | not built | unbuilt -- lands with the `Space retention` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-583` | `OBS` | The sidebar MUST offer a signed-in user a control that creates a space, and the new space MUST show in the sidebar once created. | this spec section 4 | `ambre_murmure::chrome_relay::a_space_created_from_the_sidebar_shows_in_it` -- wasm tier, a blank name sends nothing, a name sends the creation and the space lists once its catalogue lands | none | verified |
@@ -60,6 +60,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-044` | `POST` | The catalogue MUST hold the rotated key of each public channel once the rotation completes. | this spec section 3 | `ambre_logic::spaces::tests::a_resealed_channel_writes_its_new_key_once`; `ambre_murmure::logic::space_tests::a_reseal_replaces_the_key_and_nothing_else` | none | verified |
 | `MURMURE-045` | `FRAME` | Leaving a space MUST NOT change a channel of the catalogue beyond its key. | this spec section 3 | `ambre_murmure::logic::space_tests::a_reseal_replaces_the_key_and_nothing_else`; `ambre_logic::spaces::tests::a_resealed_channel_writes_its_new_key_once` -- name, topic, category and place stay | none | verified |
 | `MURMURE-671` | `POST` | A space leave MUST derive the pair key of each member who stays once for all the public channels it re-keys. | this spec section 3; `SYNC-264` | `ambre_sync::sharing::tests::a_public_channel_is_rekeyed_under_the_current_space_key` -- a second channel of the same leave wraps for both members and derives no new pair key; `ambre_sync::space_rotation::tests::the_shared_wrapper_drops_once_no_channel_rotates` -- the channel rotations of one leave share one wrapper | none | verified |
+| `MURMURE-672` | `FAIL` | Given a key link of a public channel whose signer the space removed or demoted, the client MUST refuse it unless a link of a signer still in force starts from the key it installs. | audit `N29`; this spec section 3; `MURMURE-254`; `ambre-spec-key-rotation.md`, `SYNC-204` | `ambre_sync::chain::tests::a_link_of_a_signer_the_space_removed_stands_only_once_built_on` -- a former space writer and a channel writer the space removed each sign a link to a key of their own at the latest head: both are dropped. An old link of the former writer stands once a present admin built on its key | none | verified |
+| `MURMURE-673` | `POST` | A space admin who re-keys a public channel MUST wrap the new key for each member who joined the channel alone. | audit `N30`; this spec section 3; `MURMURE-043`; `ambre-spec-membership.md`, `SYNC-227` | `ambre_sync::sharing::tests::a_channel_rekey_wraps_for_every_self_joiner` -- the walk under the word of the space wraps for two self-joiners, and a word that holds neither wraps for the admin alone | none | verified |
 | `MURMURE-234` | `POST` | Leaving a space, or being removed from it, MUST remove the member from every channel of the space, private channels included. | this spec section 3; `SRV-136` | `ambre_server::routes::channels::tests::leaving_a_space_leaves_every_channel_of_it`; `::a_removal_from_a_space_leaves_every_channel_of_it` -- a leave and a removal by an owner, over a public, a shared private and a sole-member private channel | none | verified |
 | `MURMURE-235` | `POST` | Each private channel the member leaves that way MUST owe a rotation. | this spec section 3; `SYNC-127` | `ambre_server::routes::channels::tests::leaving_a_space_leaves_every_channel_of_it` -- the shared private channel owes a rotation, the public one owes none | none | verified |
 | `MURMURE-237` | `FRAME` | Leaving a space MUST NOT remove the member from a direct message or from a channel of another space. | this spec section 3 | `ambre_server::routes::channels::tests::leaving_a_space_keeps_direct_messages_and_other_spaces` -- a direct message and a channel of a second space keep the member | none | verified |
@@ -91,7 +93,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   rotations (`MURMURE-671`).
 * **Boundary.** the catalogue and every key in it are sealed with the space document (`ZK-001`).
   The relay holds the public flag and the space of each channel (`ZK-015`).
-* **Verification.** 34 `verified`, 5 `unimplemented`. The engine, the Logic thread, the Sync worker
+* **Verification.** 36 `verified`, 5 `unimplemented`. The engine, the Logic thread, the Sync worker
   and the relay's database tier hold a new space, the catalogue and a signed self-join. The relay's
   database tier holds the leave and the delete, and the wasm tier the controls of the sidebar. The
   Sync worker and the Logic thread hold the key rotation on a leave. The guest and the retention are
@@ -173,9 +175,22 @@ The channel rotations of one leave share one wrapper, so the pair key of each me
 derived once (`MURMURE-671`). The leave then costs one exchange per member, and one AEAD seal per
 member for each channel.
 
+The re-key walks the log of the channel under the word of the space (`MURMURE-673`). A member who
+joined the channel alone then counts as a member, and receives a copy of the new key. Without that
+word, the walk stops at the first self-join, and every member past it loses the channel.
+
+**A removal from the space closes a link signer.** No entry of the channel marks a removal from the
+space. So the head a link names cannot tell whether its signer still wrote in the space. A writer
+the space holds at its latest entries signs a link at every head of the channel. A signer the space
+removed or demoted keeps a link only once a signer still in force built on its key (`MURMURE-672`).
+A link to a key of its own, which nobody built on, then counts for nothing.
+
+An admin who re-keyed the channel before the removal keeps that history, because the next re-key
+builds on that key.
+
 **The space log speaks from its latest entries.** A removal counts only while no later entry adds
-the member back (`MURMURE-479`). Its writers count at any point of its history. A link seals a key
-its signer already held, and the relay takes a rotation from a current admin alone. The space log
+the member back (`MURMURE-479`). Its writers sign a delta at any point of its history. A link
+counts on its own only while its signer still writes in the space (`MURMURE-672`). The space log
 adds link signers and removals, and never a member of a channel (`MURMURE-480`).
 
 **A sealed entry names its space key.** It starts with the id of the space key that sealed it. An

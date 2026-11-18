@@ -132,6 +132,8 @@ impl SyncState {
             return;
         };
         let keys = space.keyring();
+        // The walk of meta heeds the word of this space (audit `N30`).
+        let word = space.word.clone();
         let prepared =
             unseal_channel_key(channel_id, sealed, &keys).and_then(|(previous, anchor)| {
                 let anchor = anchor.ok_or(crate::error::SyncError::Unanchored)?;
@@ -173,6 +175,10 @@ impl SyncState {
             anchor,
             space_key: keys.current,
             wrapper,
+            word,
+            // The re-key walks through the latest head of meta this client
+            // walked or signed in the session (audit `P27`).
+            footing: self.log_footing_at(anchor),
         };
         let http = crate::sharing::GlooHttp {
             auth: self.auth_context(),
@@ -189,8 +195,12 @@ impl SyncState {
         &mut self,
         space_id: Id<Space>,
         channel_id: Id<Channel>,
-        result: Result<SealedChannelKey, crate::http::HttpError>,
+        result: Result<(SealedChannelKey, crate::key_vouch::Footing), crate::http::HttpError>,
     ) {
+        let result = result.map(|(key, footing)| {
+            self.log_walked_to(footing);
+            key
+        });
         if let Some(rotation) = self.space_rotations.get_mut(&space_id.document_id()) {
             rotation.in_flight.remove(&channel_id);
             if rotation.in_flight.is_empty() {
@@ -263,6 +273,43 @@ mod tests {
         seal_channel_key(channel_id, &DocumentKey::generate(), space_key, anchor).unwrap()
     }
 
+    /// A footing of the `meta` of `channel_id`, as a re-key leaves it.
+    fn walked(channel_id: Id<Channel>) -> crate::key_vouch::Footing {
+        crate::key_vouch::Footing::sealed_in_catalogue(
+            Id::<Document>::mint(),
+            anchor_of(channel_id),
+        )
+    }
+
+    /// An anchor distinct for each channel.
+    fn anchor_of(channel_id: Id<Channel>) -> ambre_core::FixedBytes<EntryDigest> {
+        let mut bytes = [0; 32];
+        bytes[..16].copy_from_slice(channel_id.as_bytes());
+        ambre_core::FixedBytes::from_array(bytes)
+    }
+
+    /// Audit `P27`. The footing a re-key leaves lands on the log of its
+    /// `meta`. The next re-key of that channel in the session then walks
+    /// through the same head. A failure lands nothing, and no other anchor
+    /// finds it.
+    #[test]
+    fn a_rekey_leaves_its_footing_for_the_next_one() {
+        let (key, space_id) = (DocumentKey::generate(), Id::<Space>::mint());
+        let (first, second) = (Id::<Channel>::mint(), Id::<Channel>::mint());
+        let (mut state, _rx) = space(space_id, &key, Role::Owner, Vec::new());
+        let footing = walked(first);
+        state.channel_rotated(space_id, first, Ok((entry(first, &key), footing)));
+        assert_eq!(state.log_footing_at(anchor_of(first)), Some(footing));
+        state.channel_rotated(
+            space_id,
+            second,
+            Err(crate::http::HttpError::Local(
+                ambre_core::LocalFailure::NoRelay,
+            )),
+        );
+        assert_eq!(state.log_footing_at(anchor_of(second)), None);
+    }
+
     /// A debt of the space is paid before any channel, and only a writer of
     /// the space drives anything (the Murmure spaces spec).
     #[test]
@@ -311,7 +358,7 @@ mod tests {
         assert_eq!(state.space_step(document_id), Step::Nothing, "it runs");
 
         let resealed = entry(stale, &new);
-        state.channel_rotated(space_id, stale, Ok(resealed.clone()));
+        state.channel_rotated(space_id, stale, Ok((resealed.clone(), walked(stale))));
         assert_eq!(state.space_step(document_id), Step::Nothing, "it landed");
         match rx.try_recv() {
             Ok(LogicEvent::ChannelKeyResealed {
@@ -354,7 +401,7 @@ mod tests {
         rotation.wrapper = Some(held);
         state.handle_rotate_space(space_id, Vec::new());
 
-        state.channel_rotated(space_id, first, Ok(entry(first, &key)));
+        state.channel_rotated(space_id, first, Ok((entry(first, &key), walked(first))));
         assert!(watch.upgrade().is_some(), "one channel still rotates");
         state.channel_rotated(
             space_id,

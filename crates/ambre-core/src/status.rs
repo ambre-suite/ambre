@@ -403,6 +403,9 @@ pub enum LocalFailure {
     /// The log of the document walks again, or a walk found it rooted
     /// outside its space, so nothing is sealed under its key.
     LogUnsettled,
+    /// The log the relay serves does not extend the log this device checked,
+    /// so nothing is written on it (audits `P26`, `P27`).
+    LogDiverged,
 }
 
 impl fmt::Display for LocalFailure {
@@ -440,6 +443,9 @@ impl fmt::Display for LocalFailure {
             Self::Crypto => f.write_str("a key operation failed"),
             Self::Encode => f.write_str("the request did not encode"),
             Self::UnexpectedAnswer => f.write_str("the relay answered something unexpected"),
+            Self::LogDiverged => {
+                f.write_str("the relay served members that do not extend the ones you checked")
+            }
         }
     }
 }

@@ -51,11 +51,12 @@
 use ambre_core::id::{Document, Id};
 use ambre_core::{ExchangePublicKey, FixedBytes, InviterPin, PublicKey, RotationDebt, Seq};
 use ambre_crypto::DocumentKey;
-use ambre_protocol::{KeyLink, LogPlaces};
+use ambre_protocol::{EntryDigest, KeyLink, LogPlaces};
 
 use crate::chain::Chain;
+use crate::error::SyncError;
 use crate::http;
-use crate::membership_log::{Log, LogRule, NamedKey, Root};
+use crate::membership_log::{self, Log, LogHead, LogRule, NamedKey, Root};
 use crate::pipeline;
 
 /// Why a key a members answer hands this client cannot become current.
@@ -223,6 +224,10 @@ pub(crate) struct KeyVouch {
     /// Whether the members answer says a rotation is owed.
     debt: RotationDebt,
     root: Root,
+    /// The anchor the log walked from, and the head after its last valid
+    /// entry. They become a [`Footing`] once the checks pass.
+    anchor: Option<FixedBytes<EntryDigest>>,
+    walked: LogHead,
 }
 
 impl KeyVouch {
@@ -286,6 +291,8 @@ impl KeyVouch {
             revoked: log.revoked_at(),
             debt,
             root,
+            anchor: log.anchor(),
+            walked: log.walked_head(),
         }
     }
 
@@ -434,6 +441,191 @@ impl KeyVouch {
             return Err(KeyRefusal::RootOutsideSpace);
         }
         Ok(())
+    }
+
+    /// [`KeyVouch::check`], and the footing of the log of `log_document`
+    /// once every check passes (audit `P26`). Each path that writes members
+    /// or keys stands on that footing. `None` when the log carries no anchor.
+    ///
+    /// # Errors
+    ///
+    /// The first [`KeyRefusal`] that applies, as [`KeyVouch::check`] reads.
+    pub(crate) fn accept(
+        &self,
+        log_document: Id<Document>,
+        key: &DocumentKey,
+        links: &[KeyLink],
+    ) -> Result<Option<Footing>, KeyRefusal> {
+        self.check(log_document, key, links)?;
+        Ok(self.anchor.map(|anchor| Footing {
+            document: log_document,
+            anchor,
+            head: self.walked,
+        }))
+    }
+}
+
+/// Where the log of a document stands for this client (audits `P26` and
+/// `P27`). It holds the anchor that the checks of an open accepted, and the
+/// latest valid head this client walked or signed from that anchor.
+///
+/// Only three paths build one: the checks of an open, the creation this
+/// client signed, and the anchor a catalogue seals under a space key. The
+/// relay can forge none of them. The fields stay private to this module.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Footing {
+    /// The document whose log this is: the `meta` of a channel, or the
+    /// document itself (`SYNC-229`).
+    document: Id<Document>,
+    anchor: FixedBytes<EntryDigest>,
+    head: LogHead,
+}
+
+impl Footing {
+    /// The footing of a log this client creates. `entry` is its first entry,
+    /// in request form, and `own` must have signed it as the creator. `None`
+    /// for any other entry.
+    pub(crate) fn created(
+        document: Id<Document>,
+        entry: &ambre_core::Encoded<ambre_core::EncodedLogEntry>,
+        own: &FixedBytes<PublicKey>,
+    ) -> Option<Self> {
+        let entries = membership_log::decode(std::slice::from_ref(entry));
+        let anchor = entries.first().and_then(membership_log::digest)?;
+        let log = Log::walk(
+            document,
+            Some(anchor),
+            &entries,
+            membership_log::no_self_join,
+        );
+        (log.creator() == Some(own)).then(|| Self {
+            document,
+            anchor,
+            head: log.walked_head(),
+        })
+    }
+
+    /// The footing of the `meta` of a channel, from the anchor that a
+    /// catalogue entry seals under a space key. The relay holds no space
+    /// key, so it cannot choose that anchor. No head is known yet.
+    pub(crate) fn sealed_in_catalogue(
+        document: Id<Document>,
+        anchor: FixedBytes<EntryDigest>,
+    ) -> Self {
+        Self {
+            document,
+            anchor,
+            head: LogHead::EMPTY,
+        }
+    }
+
+    /// Walks the `texts` a members answer serves from the anchor of this
+    /// footing, under `rule`.
+    ///
+    /// # Errors
+    ///
+    /// [`SyncError::LogDiverged`] when the valid walk does not pass through
+    /// the head of this footing. The relay rooted another log, or cut this
+    /// one before an entry this client walked or signed.
+    pub(crate) fn walk(
+        &self,
+        texts: &[ambre_core::Encoded<ambre_core::EncodedLogEntry>],
+        rule: &LogRule,
+    ) -> Result<AnchoredLog, SyncError> {
+        let log = Log::walk_under(
+            self.document,
+            Some(self.anchor),
+            &membership_log::decode(texts),
+            rule,
+        );
+        if !log.walked_through(self.head) {
+            return Err(SyncError::LogDiverged);
+        }
+        let footing = Self {
+            head: log.walked_head(),
+            ..*self
+        };
+        Ok(AnchoredLog { log, footing })
+    }
+
+    /// The document whose log this footing walks: the `meta` of a channel,
+    /// or the document itself (`SYNC-229`).
+    pub(crate) fn document(&self) -> Id<Document> {
+        self.document
+    }
+
+    /// This footing when it walks from `anchor`, `None` when it walks from
+    /// another one. A catalogue entry names its channel by that anchor.
+    pub(crate) fn sealed_at(self, anchor: FixedBytes<EntryDigest>) -> Option<Self> {
+        (self.anchor == anchor).then_some(self)
+    }
+
+    /// Keeps the later of this footing and `next`. A footing of another log
+    /// leaves this one as it is.
+    pub(crate) fn advance(&mut self, next: Self) {
+        if next.document == self.document
+            && next.anchor == self.anchor
+            && next.head.position > self.head.position
+        {
+            *self = next;
+        }
+    }
+}
+
+/// A log walked from a [`Footing`], through its head. Every path that
+/// writes members or keys takes one, and only [`Footing::walk`] builds one.
+/// So no such path reads a log the relay rooted or cut (audits `P26`, `P27`).
+pub(crate) struct AnchoredLog {
+    log: Log,
+    /// The footing at the head of this walk.
+    footing: Footing,
+}
+
+impl AnchoredLog {
+    /// The walked log.
+    pub(crate) fn log(&self) -> &Log {
+        &self.log
+    }
+
+    /// The anchor a copy of a key seals beside it (`SYNC-104`).
+    pub(crate) fn anchor(&self) -> FixedBytes<EntryDigest> {
+        self.footing.anchor
+    }
+
+    /// The footing at the head of this walk.
+    pub(crate) fn footing(&self) -> Footing {
+        self.footing
+    }
+
+    /// The footing once `entry` lands, an entry this client signed after
+    /// this log. The relay appends at its own end, so the walk reaches the
+    /// entry only when no refused entry sits before it.
+    pub(crate) fn after(
+        &self,
+        entry: Option<&ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
+    ) -> Footing {
+        entry
+            .and_then(|text| {
+                membership_log::decode(std::slice::from_ref(text))
+                    .first()
+                    .and_then(membership_log::digest)
+            })
+            .filter(|_| self.log.next() == self.footing.head)
+            .map_or(self.footing, |digest| Footing {
+                head: self.footing.head.after(digest),
+                ..self.footing
+            })
+    }
+
+    /// A log no footing roots, for the tests of a pure transform.
+    #[cfg(test)]
+    pub(crate) fn assumed(log: Log) -> Self {
+        let footing = Footing {
+            document: Id::<Document>::from_bytes([0; 16]),
+            anchor: FixedBytes::from_array([0; 32]),
+            head: log.walked_head(),
+        };
+        Self { log, footing }
     }
 }
 

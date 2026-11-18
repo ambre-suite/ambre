@@ -156,7 +156,8 @@ impl SyncState {
             });
             return;
         };
-        let Some(doc_key) = doc_key else {
+        // The invite walks from the log the open accepted (audit `P26`).
+        let (Some(doc_key), Some(footing)) = (doc_key, self.footing(document_id)) else {
             let _ = logic_tx.send(LogicEvent::ApiError {
                 id: None,
                 request: ApiRequest::InviteToDocument,
@@ -180,6 +181,8 @@ impl SyncState {
             doc_key,
             expect_exchange_pub_key,
             author,
+            footing,
+            rule: self.log_rule(document_id),
         };
         let http = sharing::GlooHttp { auth };
         wasm_bindgen_futures::spawn_local(async move {
@@ -272,12 +275,12 @@ impl SyncState {
             return;
         };
         // The revoke seals the current key under the new one, so it runs
-        // from an open document only (`SYNC-116`).
-        let Some(previous) = self
-            .documents
-            .get(&document_id)
-            .map(|doc_state| doc_state.doc_key.clone())
-        else {
+        // from an open document only (`SYNC-116`). It walks from the log the
+        // open accepted (audit `P26`).
+        let Some((previous, footing)) = self.documents.get(&document_id).and_then(|doc_state| {
+            self.footing(document_id)
+                .map(|footing| (doc_state.doc_key.clone(), footing))
+        }) else {
             let _ = logic_tx.send(LogicEvent::ApiError {
                 id: None,
                 request: ApiRequest::RevokeFromDocument,
@@ -298,11 +301,49 @@ impl SyncState {
             exchange_key,
             previous,
             author,
+            footing,
+            rule: self.log_rule(document_id),
         };
         let http = sharing::GlooHttp { auth };
         wasm_bindgen_futures::spawn_local(async move {
             sharing::revoke_task(&http, params, &tx, &logic_tx).await;
         });
+    }
+
+    /// Where the log of `document_id` stands for this client, once an open or
+    /// a creation accepted it (audits `P26`, `P27`).
+    /// The later of the footing the document holds and the one its log
+    /// holds. A head this client walked through another document of the
+    /// same channel, or through a re-key, then counts too.
+    pub(crate) fn footing(&self, document_id: Id<Document>) -> Option<crate::key_vouch::Footing> {
+        let mut footing = self
+            .documents
+            .get(&document_id)
+            .and_then(|doc| doc.footing)?;
+        if let Some(log) = self.log_footings.get(&footing.document()) {
+            footing.advance(*log);
+        }
+        Some(footing)
+    }
+
+    /// Moves the footing of the log `footing` walks on to it, when it is
+    /// later than the one held (audit `P27`).
+    pub(crate) fn log_walked_to(&mut self, footing: crate::key_vouch::Footing) {
+        self.log_footings
+            .entry(footing.document())
+            .and_modify(|held| held.advance(footing))
+            .or_insert(footing);
+    }
+
+    /// The footing of the log a catalogue entry seals `anchor` for, when
+    /// this client walked that log earlier in the session.
+    pub(crate) fn log_footing_at(
+        &self,
+        anchor: ambre_core::FixedBytes<ambre_protocol::EntryDigest>,
+    ) -> Option<crate::key_vouch::Footing> {
+        self.log_footings
+            .values()
+            .find_map(|footing| footing.sealed_at(anchor))
     }
 
     /// The signer of the entries this user appends to a membership log
@@ -376,6 +417,7 @@ impl SyncState {
                 exchange_key,
                 rule: self.log_rule(document_id),
                 log_document: self.log_document(document_id),
+                footing: self.footing(document_id),
             };
             let http = sharing::GlooHttp { auth };
             wasm_bindgen_futures::spawn_local(async move {
@@ -404,12 +446,20 @@ impl SyncState {
     ) {
         let logic_tx = self.logic_tx.clone();
         if let Some(tx) = self.event_tx.clone() {
-            let (Some(author), Some(exchange_key)) = (self.author(), self.exchange_key.clone())
-            else {
+            let Some(author) = self.author() else {
                 let _ = logic_tx.send(LogicEvent::ApiError {
                     id: None,
                     request: ApiRequest::UpdateDocumentMemberRole,
                     failure: ApiFailure::Local(ambre_core::LocalFailure::NotSignedIn),
+                });
+                return;
+            };
+            // The change walks from the log the open accepted (audit `P26`).
+            let Some(footing) = self.footing(document_id) else {
+                let _ = logic_tx.send(LogicEvent::ApiError {
+                    id: None,
+                    request: ApiRequest::UpdateDocumentMemberRole,
+                    failure: ApiFailure::Local(ambre_core::LocalFailure::DocumentNotOpen),
                 });
                 return;
             };
@@ -420,8 +470,9 @@ impl SyncState {
                 role,
                 url_scheme: self.url_scheme,
                 api_base: self.api_base.clone(),
-                exchange_key,
                 author,
+                footing,
+                rule: self.log_rule(document_id),
             };
             let http = sharing::GlooHttp {
                 auth: self.auth_context(),
