@@ -384,14 +384,30 @@ fn ambre_budget_toile_deck_request(
     black_box(recording)
 }
 
+/// The same pass for the larger deck, in a function of its own. Each
+/// operation of `scripts/instructions.py` counts in a symbol no other
+/// operation matches. The call keeps the body apart from the one above, so
+/// the linker merges neither symbol into the other.
+#[cfg(feature = "pdf")]
+#[inline(never)]
+fn ambre_budget_toile_large_deck_request(
+    st: &ToileState,
+    fonts: &mut FontContext,
+) -> ambre_toile::logic::interop::DeckRecording {
+    black_box(ambre_budget_toile_deck_request(st, fonts))
+}
+
 /// The request of the export of a deck of `slides` slides, on the shipped
 /// faces: the "Toile PDF export, one slice" row of
-/// `ambre-spec-budgets.md section 1`.
+/// `ambre-spec-budgets.md section 1`. `request` is the counted function.
 #[cfg(feature = "pdf")]
-fn deck_request_of(slides: usize) {
+fn deck_request_of(
+    slides: usize,
+    request: fn(&ToileState, &mut FontContext) -> ambre_toile::logic::interop::DeckRecording,
+) {
     let st = common::deck(slides);
     let mut fonts = common::shipped_fonts();
-    let recording = ambre_budget_toile_deck_request(&st, &mut fonts);
+    let recording = request(&st, &mut fonts);
     assert!(
         !recording.is_recorded(),
         "the request records the first page, not the last"
@@ -401,7 +417,7 @@ fn deck_request_of(slides: usize) {
 /// The request of the export of the 50-slide deck.
 #[cfg(feature = "pdf")]
 fn deck_request() {
-    deck_request_of(common::SLIDES);
+    deck_request_of(common::SLIDES, ambre_budget_toile_deck_request);
 }
 
 /// The slides of the deck that shows the request flat: four times
@@ -414,7 +430,7 @@ const LARGE_SLIDES: usize = 200;
 /// page leaves out (`TOILE-IO-099`).
 #[cfg(feature = "pdf")]
 fn deck_request_large() {
-    deck_request_of(LARGE_SLIDES);
+    deck_request_of(LARGE_SLIDES, ambre_budget_toile_large_deck_request);
 }
 
 /// Without the export compiled in there is no page to count: the script then
