@@ -1064,6 +1064,13 @@ impl QuadRenderer {
         let Some(video) = self.videos.get(&slot) else {
             return;
         };
+        // The browser decodes a remote video on a thread of its own. Its picture changes size
+        // whenever the sender or the SFU changes its layer. The copy reads the size of the
+        // element a second time, and it may already name the next picture. Validation then
+        // refuses the copy, and the default handler of wgpu would panic the page. The scope
+        // takes that error instead, so this frame draws the texture without the picture. The
+        // next frame reads the new size and makes a texture to fit it.
+        let scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
         queue.copy_external_image_to_texture(
             &wgpu::CopyExternalImageSourceInfo {
                 source: wgpu::ExternalImageSource::HTMLVideoElement(element.clone()),
@@ -1080,6 +1087,9 @@ impl QuadRenderer {
             },
             extent,
         );
+        // The pop takes effect at once. A refused copy only skips one picture, so the page
+        // never reads the error back.
+        drop(scope.pop());
         self.videos_drawn = VideosDrawn::Some;
         self.push_textured(Binding::Video(slot), corners);
     }

@@ -7,7 +7,9 @@
 //! the engine reports them, and reaches no internal state of the SFU.
 //!
 //! The page is a test fixture, not the call client: the client seals each chunk in a worker,
-//! and this page seals nothing.
+//! and this page seals nothing. The SFU forwards a frame start only under a chunk header that
+//! names the seat of its admission (`CALL-116`, `CALL-140`). So the page writes that header,
+//! in the clear, where the receiver reads one, and strips it from what it receives.
 
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
@@ -34,6 +36,39 @@ window.beeps = [];
 window.heard = [];
 window.firstPicture = null;
 window.firstAudio = null;
+// Writes the chunk header of seat 0 into each frame it sends, where the receiver reads one.
+// That is past the clear prefix of a VP8 frame, and at the start of an Opus frame. It strips
+// the header from each frame it receives, so the decoder reads the frame the encoder wrote.
+const framing = URL.createObjectURL(new Blob([`
+onrtctransform = (event) => {
+  const { side, kind } = event.transformer.options;
+  const header = new Uint8Array(9);
+  header[0] = 0xff;
+  header[8] = kind === 'video' ? 1 : 0;
+  event.transformer.readable.pipeThrough(new TransformStream({
+    transform(frame, out) {
+      const data = new Uint8Array(frame.data);
+      const at = kind === 'video' ? (frame.type === 'key' ? 10 : 1) : 0;
+      let framed;
+      if (side === 'send') {
+        framed = new Uint8Array(data.length + 9);
+        framed.set(data.subarray(0, at));
+        framed.set(header, at);
+        framed.set(data.subarray(at), at + 9);
+      } else {
+        if (data.length < at + 9) return;
+        framed = new Uint8Array(data.length - 9);
+        framed.set(data.subarray(0, at));
+        framed.set(data.subarray(at + 9), at);
+      }
+      frame.data = framed.buffer;
+      out.enqueue(frame);
+    },
+  })).pipeTo(event.transformer.writable);
+};
+`], { type: 'text/javascript' }));
+const framer = new Worker(framing);
+const frame = (side, kind) => new RTCRtpScriptTransform(framer, { side, kind });
 // Hears the onset of each tone in a remote audio track, by its peak.
 const listen = (track) => {
   const ac = new AudioContext();
@@ -52,6 +87,7 @@ const listen = (track) => {
   }, 2);
 };
 const onTrack = (e) => {
+  e.receiver.transform = frame('recv', e.track.kind);
   const el = document.createElement(e.track.kind === 'video' ? 'video' : 'audio');
   el.autoplay = true;
   el.muted = true;
@@ -153,7 +189,9 @@ const tone = () => {
     }
     pc = new RTCPeerConnection(config);
     pc.ontrack = onTrack;
-    media.getTracks().forEach((t) => pc.addTrack(t, media));
+    media.getTracks().forEach((t) => {
+      pc.addTrack(t, media).transform = frame('send', t.kind);
+    });
     await pc.setLocalDescription(await pc.createOffer());
     ws.send(JSON.stringify({ offer: pc.localDescription.sdp }));
     window.callState = 'offered';
@@ -281,7 +319,7 @@ impl Sfu {
             participant: ambre_core::FixedBytes::from_array(drawn()),
             // Each admission seats a member of its own, so no join ends another seat.
             member: ambre_core::FixedBytes::from_array(drawn()),
-            // The page sends media it never seals, so no chunk header names a sender.
+            // The page writes this index into the chunk header of each frame it sends.
             sender: ambre_core::Seq::new(0),
             // No relay renews it, so it outlives the longest run of the belt: the SFU ends
             // a seat whose admission expired (audit `N25`).

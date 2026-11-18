@@ -3529,13 +3529,16 @@ pub(crate) mod tests {
 
     /// `CALL-015`, `CALL-100`, `MURMURE-620` to `MURMURE-623` and `MURMURE-625`, in the browser.
     ///
-    /// Ada calls Bob from the header of their channel, and Bob joins from the call message. No
-    /// video arrives, and two readbacks of Bob's canvas read the same. Ada turns her camera on by
-    /// the camera button. Bob's canvas draws her video. Two readbacks two seconds apart differ in
-    /// one band as the fake camera moves, and no video element enters either page. Ada's sender
-    /// took the camera with its transform, set no local description and posted nothing.
+    /// Ada calls Bob from the header of their channel, and Bob joins from the call message. Ada
+    /// mutes, so no outline of a voice moves. No video arrives, and two readbacks of Bob's
+    /// canvas read the same.
     ///
-    /// Ada turns her camera off, and her sender holds no track. Bob's browser refuses his
+    /// Ada turns her camera on by the camera button. Bob's canvas draws her video. Two readbacks
+    /// two seconds apart differ in one band as the fake camera moves, and no video element enters
+    /// either page. Ada's sender took the camera with its transform, set no local description and
+    /// posted nothing.
+    ///
+    /// Ada unmutes and turns her camera off, and her sender holds no track. Bob's browser refuses his
     /// camera: his header says why, and he still hears Ada.
     #[tokio::test(flavor = "multi_thread")]
     #[cfg_attr(
@@ -3571,6 +3574,11 @@ pub(crate) mod tests {
             .browser
             .script("document.activeElement?.blur(); return true;", json!([]))
             .await;
+        // The fake microphone of Chrome beeps, and Bob's canvas outlines Ada's tile at each
+        // beep (`MURMURE-653`). Ada mutes until her video is read, so no pixel moves for her
+        // voice. The 1 s that follows outlasts the hold of the outline.
+        click_header(&ada_page, ".murmure-call-mute").await;
+        mute_pressed(&ada_page, "true").await;
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
         // No video arrives: the canvas holds still (`MURMURE-621`).
@@ -3670,6 +3678,10 @@ pub(crate) mod tests {
             at(0.95),
             at(1.0)
         );
+
+        // Ada speaks again: the video check above read her video alone.
+        click_header(&ada_page, ".murmure-call-mute").await;
+        mute_pressed(&ada_page, "false").await;
 
         // Ada turns her camera off: her sender gives it up, and nothing renegotiates
         // (`MURMURE-622`, `CALL-100`).
