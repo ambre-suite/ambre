@@ -3723,6 +3723,24 @@ mod tests {
         assert_eq!(state.documents[&channel].doc_key.id(), forged.id());
     }
 
+    /// Holds `SYNC-260` from the other side: the refusal of a Murmure open
+    /// binds to a document another open typed. A channel no other open
+    /// named opens as Murmure.
+    #[test]
+    fn a_channel_no_other_open_named_opens_as_murmure() {
+        let (sink, _rx) = LogicSink::channel();
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
+        let channel = Id::<Document>::mint();
+        state.handle_open_document(channel, DocType::Murmure);
+        assert_eq!(
+            state.documents.get(&channel).map(|doc| doc.doc_type),
+            Some(DocType::Murmure)
+        );
+    }
+
     /// Holds `SYNC-260` in the other order. A Murmure open installed a key
     /// first, then the Toile view opens the same document. The key the
     /// Murmure open installed is gone before the Toile open answers, and a

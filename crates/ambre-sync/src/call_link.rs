@@ -1018,6 +1018,27 @@ mod tests {
         assert_eq!(kept, Some(head), "the older log replaced the held one");
     }
 
+    /// `CALL-138`: a log that holds every entry of the one the call holds, and one more,
+    /// replaces it. Eve's revoke then reaches the call.
+    #[test]
+    fn a_newer_log_replaces_the_log_the_call_holds() {
+        let (alice, eve) = (Person::new(1), Person::new(5));
+        let (mut state, _, port) = worker(&alice);
+        state.join_call(TARGET, META, port, Opening::Join);
+        let whole = eve_in_then_out(&alice, &eve);
+        let older = whole.get(..whole.len() - 1).expect("a prefix");
+        state.call_log(META, Some(walk_all(older)));
+        let newer = walk_all(&whole);
+        let head = newer.next();
+        state.call_log(META, Some(newer));
+        let kept = state
+            .call
+            .as_ref()
+            .and_then(|l| l.log.as_ref())
+            .map(Log::next);
+        assert_eq!(kept, Some(head), "the newer log left the held one in place");
+    }
+
     /// `CALL-062`: a join reads the log of the channel first, then opens the call socket with
     /// the token. The admission opens the socket of the SFU with the admission first. The join
     /// is announced, and the key of the session leaves on the port. A second join while

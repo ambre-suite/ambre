@@ -506,6 +506,27 @@ fn a_held_pair_key_wraps_as_a_fresh_exchange_does() {
     assert!(!format!("{wrapper:?}").contains("Secret"));
 }
 
+/// The debug form of a wrapper names its own public key and its count of
+/// recipients, the two fields it may print.
+#[test]
+fn the_debug_form_of_a_wrapper_names_its_public_key_and_recipients() {
+    let alice = MasterSeed::from_array([0x01; 32]).derive_exchange_key();
+    let bob = MasterSeed::from_array([0x02; 32]).derive_exchange_key();
+    let bob_pub = FixedBytes::<ambre_core::ExchangePublicKey>::from_array(
+        x25519_dalek::PublicKey::from(&bob).to_bytes(),
+    );
+    let mut wrapper = ecdh::KeyWrapper::new(&alice);
+    let doc_key = DocumentKey::from_array([0x10; 32]);
+    wrapper.wrap(&bob_pub, &doc_key, None).unwrap();
+    assert_eq!(
+        format!("{wrapper:?}"),
+        format!(
+            "KeyWrapper {{ own_pub: {:?}, recipients: 1, .. }}",
+            wrapper.own_public()
+        )
+    );
+}
+
 /// Holds `SYNC-264` on a refusal. A low-order recipient is refused on each
 /// wrap, and the wrapper holds no key for it.
 #[test]
@@ -1155,7 +1176,6 @@ fn the_chain_hash_and_the_keyless_digests_keep_their_bytes() {
     assert_eq!(hash::file_digest(&file).as_array().to_vec(), headless);
 }
 
-#[cfg(feature = "dev-login")]
 #[test]
 fn the_dev_seed_keeps_its_bytes() {
     let seed: [u8; 32] = golden("31824b2cddf4df243951a9a2e3e4f6ae90373fc78543354bc52f6643631426f2")

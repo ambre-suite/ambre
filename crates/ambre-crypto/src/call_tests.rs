@@ -1105,3 +1105,92 @@ fn an_older_key_after_a_fresh_one_still_closes_at_the_deadline() {
         Err(ChunkError::Retired)
     );
 }
+
+/// `CALL-026` across a switch: the first chunk under a fresh epoch retires the older ones and
+/// keeps the opener it just made. A copy of that chunk the SFU replays is dropped.
+#[test]
+fn a_replayed_chunk_of_a_fresh_epoch_is_dropped() {
+    let old = SenderKey::generate();
+    let fresh = SenderKey::generate();
+    let fresh_epoch = Seq::<KeyGeneration>::ZERO.next_epoch().map_or(0, Seq::get);
+    let mut keys = receiver(1, 0, &old);
+    keys.insert(Seq::new(1), Seq::new(fresh_epoch), fresh.clone(), T0);
+    let mut bob = sealer(&fresh, 1, fresh_epoch);
+    let first = seal(&mut bob, b"switched");
+    assert!(keys.open_audio(copy(&first), T0).is_ok());
+    assert_eq!(
+        keys.open_audio(first, T0).map(|(s, _)| s),
+        Err(ChunkError::Replayed)
+    );
+}
+
+/// `CALL-135`: the first chunk of a fresh epoch spends the deadline that epoch set. A newer
+/// fresh key that arrives after that deadline waits a whole switch delay of its own, so the
+/// current epoch keeps opening until then.
+#[test]
+fn a_fresh_key_after_a_spent_deadline_waits_a_whole_delay() {
+    let old = SenderKey::generate();
+    let fresh = SenderKey::generate();
+    let first = Seq::<KeyGeneration>::ZERO.next_epoch().map_or(0, Seq::get);
+    let second = Seq::<KeyGeneration>::new(first)
+        .next_epoch()
+        .map_or(0, Seq::get);
+    let mut roger = receiver(1, 0, &old);
+    roger.insert(Seq::new(1), Seq::new(first), fresh.clone(), T0);
+    let mut alice = sealer(&fresh, 1, first);
+    assert!(roger.open_audio(seal(&mut alice, b"switched"), T0).is_ok());
+
+    let delay = SWITCH_DELAY.to_fractional();
+    let arrival = T0.after(delay).after(TimeSpan::new(1.0));
+    roger.insert(
+        Seq::new(1),
+        Seq::new(second),
+        SenderKey::generate(),
+        arrival,
+    );
+    let just_before = arrival.after(delay).before(TimeSpan::new(1.0));
+    assert!(
+        roger
+            .open_audio(seal(&mut alice, b"in time"), just_before)
+            .is_ok()
+    );
+    assert_eq!(
+        roger
+            .open_audio(seal(&mut alice, b"late"), arrival.after(delay))
+            .map(|(s, _)| s),
+        Err(ChunkError::Retired)
+    );
+}
+
+/// `CALL-135`: an older key that arrives after the switch sets a deadline again. A chunk of
+/// the current epoch under a fresh step leaves that deadline set. A newer fresh key then
+/// keeps its time, as the sender does.
+#[test]
+fn a_step_of_the_current_epoch_keeps_the_deadline_a_late_key_set() {
+    let old = SenderKey::generate();
+    let fresh = SenderKey::generate();
+    let first = Seq::<KeyGeneration>::ZERO.next_epoch().map_or(0, Seq::get);
+    let second = Seq::<KeyGeneration>::new(first)
+        .next_epoch()
+        .map_or(0, Seq::get);
+    let mut roger = receiver(1, first, &fresh);
+    let mut alice = sealer(&fresh, 1, first);
+    assert!(roger.open_audio(seal(&mut alice, b"switched"), T0).is_ok());
+    roger.insert(Seq::new(1), Seq::ZERO, old, T0);
+    let mut alice_step = sealer(&fresh.ratcheted(), 1, first + 1);
+    assert!(
+        roger
+            .open_audio(seal(&mut alice_step, b"one up"), T0)
+            .is_ok()
+    );
+
+    let later = T0.after(TimeSpan::new(4_000.0));
+    roger.insert(Seq::new(1), Seq::new(second), SenderKey::generate(), later);
+    let due = T0.after(SWITCH_DELAY.to_fractional());
+    assert_eq!(
+        roger
+            .open_audio(seal(&mut alice, b"late"), due)
+            .map(|(s, _)| s),
+        Err(ChunkError::Retired)
+    );
+}

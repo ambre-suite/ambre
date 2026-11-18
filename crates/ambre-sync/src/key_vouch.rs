@@ -973,6 +973,94 @@ mod tests {
         );
     }
 
+    /// Audit `P26`: a key that passes every check stands on the footing of
+    /// its log. The footing names the log's document, the anchor the walk
+    /// started from and the head it reached.
+    #[test]
+    fn an_accepted_key_stands_on_the_anchor_and_head_of_its_log() {
+        let doc = Shared::new();
+        let log = doc.log();
+        let vouch = KeyVouch::of(
+            &log,
+            &LogRule::document(),
+            &doc.bob.exchange(),
+            &doc.rows(&doc.k0, &doc.bob.xk),
+            &pinned(&doc.alice_pin()),
+            RotationDebt::Settled,
+        );
+        let anchor = doc.entries.first().and_then(digest).expect("an anchor");
+        assert_eq!(
+            vouch.accept(doc.document_id, &doc.k0, &[]),
+            Ok(Some(Footing {
+                document: doc.document_id,
+                anchor,
+                head: log.walked_head(),
+            }))
+        );
+    }
+
+    /// Audit `P26`: the footing of a log this client creates stands on its
+    /// first entry, at the head past it, for the creator alone. Another key
+    /// gets no footing from that entry.
+    #[test]
+    fn a_created_log_gives_its_creator_alone_a_footing() {
+        let doc = Shared::new();
+        let create = doc.entries.first().expect("the create");
+        let encoded = membership_log::encode(create).expect("an encoding");
+        let anchor = digest(create).expect("an anchor");
+        assert_eq!(
+            Footing::created(doc.document_id, &encoded, &doc.alice.person.public()),
+            Some(Footing {
+                document: doc.document_id,
+                anchor,
+                head: LogHead::EMPTY.after(anchor),
+            })
+        );
+        assert_eq!(
+            Footing::created(doc.document_id, &encoded, &doc.bob.person.public()),
+            None
+        );
+    }
+
+    /// Audit `P27`: a footing moves on to a later head of its own log alone.
+    /// A head at the same place, another log or another document leaves it.
+    #[test]
+    fn a_footing_moves_on_to_a_later_head_of_its_own_log_alone() {
+        let doc = Shared::new();
+        let anchor = digest(&doc.entries[0]).expect("an anchor");
+        let first = LogHead::EMPTY.after(anchor);
+        let held = Footing {
+            document: doc.document_id,
+            anchor,
+            head: first,
+        };
+        let at = |head| Footing { head, ..held };
+        let second = digest(&doc.entries[1]).expect("a digest");
+        let beside = LogHead {
+            previous: Some(second),
+            ..first
+        };
+        let later = first.after(second);
+        for other in [
+            at(beside),
+            Footing {
+                anchor: second,
+                ..at(later)
+            },
+            Footing {
+                document: Id::<Document>::mint(),
+                ..at(later)
+            },
+        ] {
+            let mut footing = held;
+            footing.advance(other);
+            assert_eq!(footing, held, "{other:?}");
+        }
+        let mut footing = held;
+        footing.advance(at(later));
+        assert_eq!(footing, at(later));
+    }
+
     /// Holds `SYNC-201`. A copy Bob wrapped himself, or one wrapped under the
     /// exchange key the log signs for a verified member, passes. A copy under
     /// any other exchange key is refused, whatever key it carries and

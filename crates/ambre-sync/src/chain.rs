@@ -102,8 +102,9 @@ pub(crate) fn signed_by_writers(links: Vec<KeyLink>, signers: &LinkSigners) -> V
         })
         .collect();
     // Each pass keeps at least one more link or ends, so the loop runs at
-    // most once per link.
-    loop {
+    // most once per link. The bound holds that in the code, not in this
+    // comment: a broken pass ends with a wrong verdict, never a hang.
+    for _ in 0..verdicts.len() {
         let built_on: Vec<usize> = verdicts
             .iter()
             .enumerate()

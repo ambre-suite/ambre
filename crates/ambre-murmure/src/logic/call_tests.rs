@@ -342,3 +342,66 @@ fn a_call_message_shows_who_is_in_it_then_ended_once_the_relay_holds_no_state() 
     });
     assert_eq!(body(&fresh), CALL_ENDED);
 }
+
+// --- The ring (the Murmure calls spec) ---
+
+/// The summary of a start cues a ring of its call. The pages of the other members read it
+/// with no document loaded.
+#[test]
+fn a_start_cues_a_ring_of_its_call_in_the_summary() {
+    let (mut alice, _bob) = pair();
+    let call = Id::<Call>::mint();
+    let sent = alice.post(call);
+    assert_eq!(
+        sent.summary.call,
+        Some(ambre_bus::CallCue {
+            call,
+            kind: ambre_bus::CueKind::Ring,
+            at: NOW,
+        })
+    );
+}
+
+/// A decline writes the end of its member under its own key, as a leave does, and its
+/// summary cues a decline of the call. A second decline of the same member writes nothing.
+#[test]
+fn a_decline_writes_the_end_of_its_member_and_cues_a_decline() {
+    let (mut alice, mut bob) = pair();
+    let call = Id::<Call>::mint();
+    let sent = alice.post(call);
+    bob.receive(&alice, &sent, 1);
+    let declined = bob
+        .state
+        .decline_call(call, bob.user, NOW)
+        .expect("a decline")
+        .expect("the decline writes an end");
+    assert_eq!(
+        declined.summary.call,
+        Some(ambre_bus::CallCue {
+            call,
+            kind: ambre_bus::CueKind::Decline,
+            at: NOW,
+        })
+    );
+    let keys: Vec<String> = ends_map(&bob).keys().map(|k| k.to_string()).collect();
+    assert_eq!(keys, [bob.user.to_string()]);
+    assert!(
+        bob.state
+            .decline_call(call, bob.user, NOW)
+            .expect("a decline")
+            .is_none(),
+        "one end per member"
+    );
+}
+
+/// The segment of a call is the held segment its call message sits in, and no segment for a
+/// call no message names.
+#[test]
+fn the_segment_of_a_call_is_the_one_its_message_sits_in() {
+    let (mut alice, _bob) = pair();
+    let call = Id::<Call>::mint();
+    assert_eq!(alice.state.call_segment(call), None);
+    alice.post(call);
+    assert_eq!(alice.state.call_segment(call), Some(alice.segment()));
+    assert_eq!(alice.state.call_segment(Id::<Call>::mint()), None);
+}

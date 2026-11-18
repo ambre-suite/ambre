@@ -564,6 +564,36 @@ mod tests {
         (state, rx)
     }
 
+    /// Audits `P26`, `P27`: a document stands on the later of the footing
+    /// it holds and the one its log walked to. One no open accepted stands
+    /// on none.
+    #[test]
+    fn a_document_stands_on_the_later_of_its_footing_and_its_logs() {
+        use crate::membership_log::tests::{DOC, Person, created};
+        let (mut state, _rx) = bare_state();
+        let alice = Person::new(1);
+        let entries = created(&alice, &Person::new(2));
+        let anchor = crate::membership_log::digest(&entries[0]).expect("an anchor");
+        state.documents.insert(
+            DOC,
+            SyncDocumentState::new(
+                DOC,
+                DocumentKey::from_array([0x41; 32]),
+                DocType::Prose,
+                crate::Existence::LocalOnly,
+            ),
+        );
+        assert_eq!(state.footing(DOC), None);
+        let held = crate::key_vouch::Footing::sealed_in_catalogue(DOC, anchor);
+        state.documents.get_mut(&DOC).expect("held").footing = Some(held);
+        assert_eq!(state.footing(DOC), Some(held));
+        let encoded = crate::membership_log::encode(&entries[0]).expect("an encoding");
+        let walked = crate::key_vouch::Footing::created(DOC, &encoded, &alice.public())
+            .expect("the creator's footing");
+        state.log_walked_to(walked);
+        assert_eq!(state.footing(DOC), Some(walked));
+    }
+
     /// How the Sync worker ended a waiting invite, if it did.
     #[derive(Debug, PartialEq)]
     enum Ended {

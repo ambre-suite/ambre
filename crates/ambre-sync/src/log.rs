@@ -70,3 +70,69 @@ macro_rules! debug {
 }
 
 pub(crate) use {debug, error, info, warning};
+
+#[cfg(test)]
+mod tests {
+    use super::{Level, emit};
+    use std::sync::{Arc, Mutex};
+
+    /// The level and the message of each event `tracing` receives.
+    #[derive(Clone, Default)]
+    struct Capture(Arc<Mutex<Vec<(tracing::Level, String)>>>);
+
+    /// The `message` field of one event.
+    struct Message(String);
+
+    impl tracing::field::Visit for Message {
+        fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn core::fmt::Debug) {
+            if field.name() == "message" {
+                self.0 = format!("{value:?}");
+            }
+        }
+    }
+
+    impl tracing::Subscriber for Capture {
+        fn enabled(&self, _: &tracing::Metadata<'_>) -> bool {
+            true
+        }
+        fn new_span(&self, _: &tracing::span::Attributes<'_>) -> tracing::span::Id {
+            tracing::span::Id::from_u64(1)
+        }
+        fn record(&self, _: &tracing::span::Id, _: &tracing::span::Record<'_>) {}
+        fn record_follows_from(&self, _: &tracing::span::Id, _: &tracing::span::Id) {}
+        fn event(&self, event: &tracing::Event<'_>) {
+            let mut message = Message(String::new());
+            event.record(&mut message);
+            if let Ok(mut seen) = self.0.lock() {
+                seen.push((*event.metadata().level(), message.0));
+            }
+        }
+        fn enter(&self, _: &tracing::span::Id) {}
+        fn exit(&self, _: &tracing::span::Id) {}
+    }
+
+    /// Each message reaches `tracing` once, at the level it names, prefixed
+    /// with the source line of its caller.
+    #[test]
+    fn a_message_reaches_tracing_at_its_level_with_the_line_of_its_caller() {
+        let capture = Capture::default();
+        let levels = [
+            (Level::Error, tracing::Level::ERROR),
+            (Level::Warn, tracing::Level::WARN),
+            (Level::Info, tracing::Level::INFO),
+            (Level::Debug, tracing::Level::DEBUG),
+        ];
+        let line = tracing::subscriber::with_default(capture.clone(), || {
+            let line = line!() + 2;
+            for (level, _) in levels {
+                emit(level, format_args!("refused {}", 7));
+            }
+            line
+        });
+        let expected: Vec<(tracing::Level, String)> = levels
+            .iter()
+            .map(|(_, level)| (*level, format!("{}:{line}: refused 7", file!())))
+            .collect();
+        assert_eq!(*capture.0.lock().expect("the capture"), expected);
+    }
+}

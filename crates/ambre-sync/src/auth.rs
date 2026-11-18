@@ -76,6 +76,9 @@ impl SyncState {
     /// Behind the `dev-login` feature, which no release build turns on
     /// (`ZK-045`).
     #[cfg(feature = "dev-login")]
+    // The feature twin: the mutation run builds no feature, so it compiles
+    // none of its mutants. `just test-native` runs it with the feature.
+    #[cfg_attr(test, mutants::skip)]
     pub(crate) fn handle_dev_login(
         &mut self,
         id: Option<Seq<Request>>,
@@ -168,6 +171,8 @@ impl SyncState {
     /// The name a development session signed in with, kept for the silent
     /// re-login after a failed refresh. `None` in a provider session.
     #[cfg(feature = "dev-login")]
+    // The feature twin, skipped for the reason `handle_dev_login` gives.
+    #[cfg_attr(test, mutants::skip)]
     pub(crate) fn dev_user(&self) -> Option<ambre_core::Validated<ambre_core::DisplayName>> {
         self.dev_username.clone()
     }
@@ -513,6 +518,9 @@ impl SyncState {
     /// Run a re-seal, then answer request `id` with `done`, or with the
     /// refusal the re-seal met. A recovery and a passphrase change answer
     /// through this one path.
+    // Its whole body is a task spawned on the event loop of the browser.
+    // Only a relay reaches it, and no host test runs one, as for `crate::spawn`.
+    #[cfg_attr(test, mutants::skip)]
     fn spawn_reseal(
         &self,
         id: Seq<Request>,

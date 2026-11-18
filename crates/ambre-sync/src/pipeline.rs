@@ -1694,6 +1694,28 @@ mod tests {
         }
     }
 
+    /// The debug form of a draft prints its measured size alone: no byte of
+    /// the payload, the document key or the signing key.
+    #[test]
+    fn the_debug_form_of_a_draft_prints_its_size_alone() {
+        let (doc_key, signing, author) = keys();
+        let document_id = Id::<Document>::mint();
+        let pd = SnapshotPublicData {
+            document_id,
+            pub_key: author,
+            key_id: key_id(),
+            snapshot_id: Id::<id::Snapshot>::genesis(document_id),
+            covered_seq: Seq::<Relay>::new(7),
+            parent_snapshot_proof: None,
+            parent_snapshot_update_clocks: Vec::new(),
+        };
+        let draft = SnapshotDraft::new(Payload::new(vec![0x5A; 64]), pd, doc_key, signing).unwrap();
+        assert_eq!(
+            format!("{draft:?}"),
+            format!("SnapshotDraft({} bytes)", draft.size().get())
+        );
+    }
+
     /// What the upload sends holds no byte run of the plaintext. It opens
     /// back to it, a snapshot blob and a media blob alike (`SYNC-049`,
     /// `ZK-001`).

@@ -112,6 +112,13 @@ exclude_re = [
     # browser path alone, and the browser tier holds them.
     'replace SyncState::(handle_mark_read|handle_move_read_cursors|handle_mark_thread_read|move_cursors|handle_mark_all_read|handle_fetch_activity|fetch_activity|handle_list_space_channels) with \(\)',
     'replace put_cursors with \(\)',
+    # The send of the cursors owed: the requests leave in a task of the
+    # browser path, which no host test runs. `cursors.rs` holds the period.
+    'replace SyncState::send_owed_cursors with \(\)',
+    # Equivalent on the host: the native event timer is a no-op, so whether
+    # a period arms it changes nothing. The cursors owed are the same either
+    # way, and the browser tier holds the timer.
+    'replace == with != in SyncState::owe_cursors',
     'delete ! in SyncState::handle_mark_read',
     # The same host path for snapshots and the lazy create: with no relay
     # each only seals or logs, and changes no state a test reads.

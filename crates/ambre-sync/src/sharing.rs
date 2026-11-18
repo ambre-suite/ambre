@@ -3885,6 +3885,54 @@ mod tests {
         ));
     }
 
+    /// Audit `P27`: a footing held for another document than meta ends the
+    /// re-key before any write. It never stands in for meta's own anchor.
+    #[tokio::test]
+    async fn a_footing_of_another_document_ends_the_rekey() {
+        let (my_xk, my_pub) = keypair(1);
+        let meta = Id::<Meta>::mint();
+        let creator = Author {
+            user_id: Id::<User>::mint(),
+            signing_key: MasterSeed::from_array([8; 32]).derive_signing_key(),
+        };
+        let (log, _) = log_inviting(meta.document_id(), &creator, &keypair(8).0, &[]);
+        let anchor = membership_log::decode(&log[..1])
+            .first()
+            .and_then(membership_log::digest)
+            .unwrap();
+        let http = FakeHttp::new(vec![
+            Ok(serde_json::json!({
+                "meta_id": meta.to_string(), "role": "editor", "length": 1,
+            })),
+            Ok(serde_json::json!({ "members": [
+                member_row("11111111-1111-1111-1111-111111111111", "Me", &my_pub),
+            ], "log": log })),
+            Ok(serde_json::json!({ "status": "rotated" })),
+        ]);
+        let (etx, erx, _sink, _lrx) = channels();
+        let other = Footing::sealed_in_catalogue(Id::<Document>::mint(), anchor);
+        let params = RotateChannelParams {
+            space_id: Id::<Space>::mint(),
+            channel_id: Id::<Channel>::mint(),
+            url_scheme: crate::http::UrlScheme::Https,
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
+            exchange_key: my_xk.clone(),
+            signing_key: MasterSeed::from_array([9; 32]).derive_signing_key(),
+            previous: DocumentKey::generate(),
+            anchor,
+            space_key: DocumentKey::generate(),
+            wrapper: Rc::new(RefCell::new(KeyWrapper::new(&my_xk))),
+            word: membership_log::SpaceWord::default(),
+            footing: Some(other),
+        };
+        rotate_channel_task(&http, params, &etx).await;
+        assert!(matches!(
+            erx.try_recv(),
+            Ok(SyncEvent::ChannelRotated { result: Err(_), .. })
+        ));
+        assert_eq!(http.calls().len(), 2, "no write after the members read");
+    }
+
     /// Audit `N30`. Two members joined the channel
     /// alone, past its creation. A space admin re-keys it under the word of
     /// the space, so each self-joiner gets a copy. With no word, the walk

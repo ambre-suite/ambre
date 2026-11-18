@@ -145,15 +145,17 @@ fn length_prefixed(head: Head<'_>, tail: Tail<'_>) -> [u8; HASH_LEN] {
 /// Domain-separation tag of the dev-login seed. The post-build hook reads
 /// these bytes in a release wasm as the mark of the development sign-in
 /// (`ZK-045`), so a rename moves `scripts/trunk_post_build.py` too.
-#[cfg(feature = "dev-login")]
+#[cfg(any(test, feature = "dev-login"))]
 const DEV_SEED_DOMAIN: &[u8] = b"ambre-dev-seed";
 
 /// The seed a dev login derives from a username. The same username always
 /// yields the same keys, so a refresh re-derives the identity with no
 /// server-side key storage. Dev login only; a real account draws its seed
 /// from the CSPRNG. Behind the `dev-login` feature, which no release build
-/// turns on (`ZK-045`).
-#[cfg(feature = "dev-login")]
+/// turns on (`ZK-045`). The unit tests of this crate compile it too: the
+/// mutation run builds no feature, and still reaches its golden test.
+/// `cfg(test)` never holds in a build that depends on this crate.
+#[cfg(any(test, feature = "dev-login"))]
 pub fn dev_seed(
     username: &ambre_core::Validated<ambre_core::DisplayName>,
 ) -> crate::keys::MasterSeed {

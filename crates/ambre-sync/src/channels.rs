@@ -2486,6 +2486,31 @@ pub(crate) mod tests {
         (state, rx)
     }
 
+    /// `SYNC-269`: with a relay, a move of the read cursors waits in the
+    /// cursors owed until its period ends. Each document waits at the latest
+    /// number it asked.
+    #[test]
+    fn a_move_of_the_read_cursors_waits_for_its_period() {
+        let (mut state, _rx) = bare_state();
+        let (tx, _events) = ambre_bus::conduit::unbounded::<SyncEvent>();
+        state.set_event_tx(tx);
+        let (one, two) = (Id::<Segment>::mint(), Id::<Segment>::mint());
+        state.handle_move_read_cursors(vec![(one, Seq::<Relay>::new(3))]);
+        state.handle_move_read_cursors(vec![
+            (one, Seq::<Relay>::new(5)),
+            (two, Seq::<Relay>::new(2)),
+        ]);
+        let mut owed = state.owed_cursors.take();
+        owed.sort_by_key(|(_, seq)| *seq);
+        assert_eq!(
+            owed,
+            vec![
+                (two.document_id(), Seq::<Relay>::new(2)),
+                (one.document_id(), Seq::<Relay>::new(5)),
+            ]
+        );
+    }
+
     /// `SYNC-186`: a request for a new document of a channel answers its
     /// failure at once when no relay is there to take it.
     #[test]

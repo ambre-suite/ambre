@@ -1195,6 +1195,21 @@ pub(crate) mod tests {
         Log::walk(DOC, anchor(log), log, no_self_join)
     }
 
+    /// `AUTHOR-030`: an anchored log grants the confirmation of a snapshot
+    /// to the keys it bound to a member, and to no other key. A log with no
+    /// anchor checks no confirmer.
+    #[test]
+    fn an_anchored_log_grants_confirmation_to_its_members_alone() {
+        let (alice, bob, stranger) = (Person::new(1), Person::new(2), Person::new(9));
+        let entries = created(&alice, &bob);
+        let granted = Confirmers::of(&walk(&entries));
+        assert!(granted.admits(&alice.public()));
+        assert!(granted.admits(&bob.public()));
+        assert!(!granted.admits(&stranger.public()));
+        let unanchored = Confirmers::of(&Log::walk(DOC, None, &entries, no_self_join));
+        assert_eq!(unanchored, Confirmers::Unchecked);
+    }
+
     /// A present space writer signs a key link of a channel at each head the
     /// walk passes through, at no head past the walk. The empty head before
     /// the first entry counts as one.

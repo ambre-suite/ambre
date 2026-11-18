@@ -5,7 +5,7 @@ use crate::Receipt;
 use crate::message::{MessageDraft, MurmureEvent};
 use ambre_bus::{Authored, Instant, Unread};
 use ambre_core::id::{Channel, Id, Segment, User};
-use ambre_core::{Payload, Relay, Seq, SnapshotBytes};
+use ambre_core::{DeltaBytes, LoroPayloadRef, Payload, Relay, Seq, SnapshotBytes};
 use loro::{Container, ValueOrContainer};
 
 use crate::logic::schema::{MessageKey, Root};
@@ -198,6 +198,37 @@ fn the_echo_of_an_own_delta_numbers_its_message_and_answers_nothing() {
     assert!(
         matches!(heard.as_slice(), [MurmureEvent::Messages { messages, .. }] if messages.len() == 1),
         "another member's copy answers with the list, got {heard:?}"
+    );
+}
+
+/// `MURMURE-113`: the relay delivers an update in Loro's own form, with its number. It
+/// numbers the message it created, as the JSON form of a segment delta does.
+#[test]
+fn a_numbered_update_in_loro_form_numbers_the_message_it_created() {
+    let (mut alice, mut bob) = pair();
+    let segment = alice.active_id();
+    let before = alice
+        .doc(segment.document_id())
+        .expect("segment")
+        .oplog_vv();
+    alice
+        .send(&draft("one"), Id::<User>::mint(), NOW)
+        .expect("send");
+    let doc = alice.doc(segment.document_id()).expect("segment");
+    let update = Payload::<DeltaBytes>::new(
+        doc.export(loro::ExportMode::updates(&before))
+            .expect("export"),
+    );
+    bob.apply_remote_at(
+        segment.document_id(),
+        Some(Order::Update(Seq::<Relay>::new(4))),
+        LoroPayloadRef::Delta(&update),
+    )
+    .expect("apply");
+    let id = bob.messages(segment).expect("messages")[0].id;
+    assert_eq!(
+        bob.position(segment, id),
+        Some(Position::Exact(Seq::<Relay>::new(4)))
     );
 }
 
