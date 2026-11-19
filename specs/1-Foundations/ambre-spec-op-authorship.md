@@ -46,6 +46,8 @@ prefix is `AUTHOR`, and it belongs to this document alone.
 | `AUTHOR-012` | `FAIL` | Given a delta that carries an operation whose PeerID does not derive from its signer and nonce, the client MUST refuse the whole delta before import. | this spec section 3 | `ambre_logic::authorship_tests::a_delta_carrying_an_operation_not_its_signers_is_refused_whole` -- a forged and a mixed delta, alone and in a batch, never land; `ambre_logic::authorship_tests::a_delta_its_signer_wrote_reaches_the_document` -- the honest delta lands, and a batch drops only the forged one | none | verified |
 | `AUTHOR-013` | `POST` | An accepted delta MUST reach the Logic thread with the user identity of its signer. | this spec section 3; `SYNC-014` | `ambre_sync::updates::tests::an_opened_update_reaches_logic_with_its_nonce_its_peer_and_its_signer` -- the delta carries the member its signer resolves to, and a stranger's carries none | none | verified |
 | `AUTHOR-014` | `FRAME` | Refusing a delta MUST NOT change the document, its registry or its export cursor. | this spec section 3 | `ambre_logic::authorship_tests::a_delta_carrying_an_operation_not_its_signers_is_refused_whole` -- the document's version vector is unchanged, nothing is sent, and the next edit carries this session alone | none | verified |
+| `AUTHOR-032` | `FAIL` | Given a delta of a Trame, Toile or Prose document whose PeerID carries a registry entry that the session of that PeerID wrote under another nonce, the client MUST refuse the whole delta before import. | this spec section 3, the margin of a PeerID; section 6 | `ambre_logic::authorship_tests::a_peer_id_another_session_registered_is_refused` -- a delta under Alice's PeerID with another nonce leaves the document as it was, live and in a replay; `::a_replay_keeps_a_peer_id_for_its_first_session` -- inside one replay, the first session keeps the PeerID and a free PeerID lands; `::an_entry_planted_by_another_peer_claims_nothing` -- an entry Mallory writes under Alice's PeerID does not refuse Alice | none | verified |
+| `AUTHOR-033` | `FAIL` | Given a delta of a Murmure channel or space document whose PeerID carries a registry entry that the session of that PeerID wrote under another nonce, the client MUST refuse the whole delta before import. | this spec section 3, the margin of a PeerID; `AUTHOR-032` | not built | unbuilt -- lands with the `A PeerID is never shared by two accounts` Story (`ambre-roadmap.md` MVP). The Murmure engine runs its own check on a channel and a space, and that check does not read the registry yet | unimplemented |
 
 ### 1.4 Open from a snapshot
 
@@ -105,6 +107,7 @@ derive from no key. No delta ever carries them, so every client must write them 
 | sends a message | nothing | one message, under the PeerID of Alice's session | the message, by Alice | none |
 | nothing | signs a delta that edits Alice's message under the PeerID of Alice's session | unchanged: every client refuses the delta (`AUTHOR-012`) | the message as Alice wrote it | `ambre_logic::authorship_tests::a_delta_carrying_an_operation_not_its_signers_is_refused_whole` |
 | opens the document on a second device | nothing | a second PeerID and registry entry for Alice | both sessions resolve to Alice | none |
+| writes under a PeerID her session registered | searches a nonce that derives the same PeerID from her own key, and signs a delta under it | unchanged: every client refuses the delta (`AUTHOR-032`) | Alice's operations stay Alice's | `ambre_logic::authorship_tests::a_peer_id_another_session_registered_is_refused` |
 | nothing | writes a registry entry that maps a PeerID of Mallory to Alice | the entry is present and resolves to nobody (`AUTHOR-005`, `AUTHOR-020`) | Mallory's operations stay Mallory's | `ambre_crypto::peer::tests::an_entry_resolves_to_the_user_who_signed_it_alone` |
 
 ---
@@ -236,9 +239,22 @@ compares them with the deltas that user signed. A difference is a forgery: the r
 snapshot and opens from the reference (`AUTHOR-022`). The deltas kept are only what others wrote,
 so they stop growing while one author writes alone (`SRV-132`).
 
-**Why the check is deterministic.** It reads the delta, its signer and its nonce, and nothing
-else: no arrival order, no local state. So every peer reaches the same verdict on the same delta
-(`AUTHOR-007`).
+**Why the check is deterministic.** It reads the delta, its signer and its nonce, and the
+registry as the deltas before it left the document. It reads no arrival order of its own: the relay
+numbers every delta, and each peer applies them in that order. So every peer reaches the same
+verdict on the same delta (`AUTHOR-007`).
+
+**The margin of a PeerID.** A PeerID is 64 bits, because Loro holds a PeerID in a `u64`. A writer
+who knows a PeerID of another member can search a nonce that derives it from the writer's own key.
+The search costs 2^64 BLAKE2b blocks, divided by the number of PeerIDs the target holds. The
+attacker of `ambre-spec-zero-knowledge.md` section 2, 100 GPUs for one year, computes about that
+many. So the derivation alone does not bind a PeerID to one author.
+
+The registry binds it: the first session that registers a PeerID keeps it. A delta under that
+PeerID from another nonce is refused (`AUTHOR-032`). Only an entry the session of that PeerID wrote
+counts, so an entry another writer planted claims nothing. A collision search buys a refused delta,
+and no operation under the PeerID of another member. The relay cannot hold this check: the nonce
+and the PeerID ride sealed (`AUTHOR-010`).
 
 **Code.**
 
@@ -270,6 +286,8 @@ The binding has no control of its own.
 | :--- | :--- | :--- |
 | A PeerID derives from a key and a nonce | a PeerID equal to a hash of the signing key alone | two sessions of one user, on two devices or two tabs, would write under one PeerID, and a Loro document forbids two concurrent writers on one PeerID |
 | A PeerID derives from a key and a nonce | a PeerID bound on first sight, with no derivation | the binding would depend on which delta a client receives first, and two clients could disagree |
+| The registry binds a PeerID to its first session | the relay refuses a PeerID that another user registered | the relay would read the PeerID and the nonce, which ride sealed (`AUTHOR-010`, `ZK-007`), and would learn which sessions write together |
+| The registry binds a PeerID to its first session | a PeerID wider than 64 bits | Loro holds a PeerID in a `u64`, so a wider hash is truncated back to 64 bits before any operation carries it |
 | The registry is document content | a registry held and signed by the relay | the relay would become the authority on who wrote what, which the key model per member refuses |
 | A forged delta is refused before import | an import followed by a filter at display | the filter detects and prevents nothing: a last-writer-wins value is already overwritten when the display reads it |
 | One check per delta | a signature on each operation | a signature per operation multiplies the cost by the operation count, and the delta signature already covers every operation it carries |
@@ -286,6 +304,11 @@ The binding has no control of its own.
 ---
 
 ## 6. NOT BUILT, AND NOT YET RULED
+
+* **A PeerID holds 64 bits of margin, and no more.** Section 3 states why the registry binds it
+  and the derivation does not. A delta can wait on an operation, and its PeerID's first entry with
+  it. The next delta under that PeerID is then checked against the registry the peer holds. A Murmure
+  channel and a Murmure space do not hold the check yet (`AUTHOR-033`).
 
 * **A local restore is not checked.** It imports with no check, so whoever wrote the local store
   can still place any operation in it. A snapshot from the relay is checked (section 1.4).

@@ -33,6 +33,11 @@ pub enum CryptoError {
     #[error("AEAD encryption failed")]
     EncryptionFailed,
 
+    /// A versioned sealed seed came with no account to bind, or opened to a
+    /// seed that derives another signing key than the account it names.
+    #[error("sealed seed bound to another account")]
+    UnboundSeed,
+
     /// The X25519 shared secret was non-contributory (peer sent a low-order
     /// public key), yielding a predictable all-zero secret. Rejected.
     #[error("weak public key")]

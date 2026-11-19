@@ -1165,6 +1165,12 @@ ambre-crypto | src/keys.rs | crate::keys | EXCH_DOMAIN | const | &[u8]	generic	g
 ambre-crypto | src/keys.rs | crate::keys | FILE_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/keys.rs | crate::keys | FileKey::as_bytes() | ret | &[u8;32]	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/keys.rs | crate::keys | KEY_ID_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
+ambre-crypto | src/keys.rs | crate::keys | LEGACY_SEED_AAD | const | &[u8]	generic	the fixed associated data of a seed sealed before the version byte, read alone; Aad::of takes the bytes
+ambre-crypto | src/keys.rs | crate::keys | SEED_AAD_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
+ambre-crypto | src/keys.rs | crate::keys | SEED_LEGACY_LEN | const | usize	generic	crate-internal length of the sealed-seed layout before its version byte, which open_from_storage matches a length against; Encoded<WrappedMasterKey>::LENGTHS holds the same two lengths for other crates
+ambre-crypto | src/keys.rs | crate::keys | SEED_V1_LEN | const | usize	generic	crate-internal length of the versioned sealed-seed layout, which open_from_storage matches a length against; Encoded<WrappedMasterKey>::LENGTHS holds the same two lengths for other crates
+ambre-crypto | src/keys.rs | crate::keys | SeedVersion::byte() | ret | u8	newtype-inner	the byte a fieldless enum spells its version with, the first byte of a sealed seed
+ambre-crypto | src/keys.rs | crate::keys | SeedVersion::from_byte(byte) | param | u8	newtype-inner	the first byte of a sealed seed a fieldless enum reads its version from
 ambre-crypto | src/keys.rs | crate::keys | MasterSeed::from_array(bytes) | param | [u8;32]	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/keys.rs | crate::keys | SIGN_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/keys.rs | crate::keys | STORE_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
@@ -1255,6 +1261,7 @@ ambre-logic | src/dispatch.rs | crate::dispatch | LogicState::murmure_remote() |
 ambre-logic | src/dispatch.rs | crate::dispatch | LogicState::murmure_replay() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/dispatch.rs | crate::dispatch | LogicState::murmure_signed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/data.rs | crate::data | LogicState::has_pending_work() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-logic | src/data.rs | crate::data | LogicState::peer_unclaimed() | ret | bool	generic	yes/no fact or predicate answer: whether no other session holds the PeerID of a delta, selects no mode
 ambre-logic | src/data.rs | crate::data | LogicState::resolve_pending_seal() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/data.rs | crate::data | LogicState::restore_local() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-murmure | src/logic/runtime/direct.rs | crate::logic::runtime::direct | Runtime<D>::announce_before_invite() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -1287,6 +1294,7 @@ ambre-logic | src/lib.rs | crate | Owed.layout | field | bool	generic	yes/no fac
 ambre-logic | src/lib.rs | crate | Owed.snapshot | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/lib.rs | crate | PersistWrite<S,D>::is_write() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/lib.rs | crate | authored_by() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-logic | src/lib.rs | crate | peer_unclaimed() | ret | bool	generic	yes/no fact or predicate answer: whether the registry leaves a PeerID free for a session, selects no mode
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::open() | ret | oneshot::Receiver<Result<Self,String>>	free-text	free text: message, label, name or report
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::open_named() | ret | oneshot::Receiver<Result<Self,String>>	free-text	free text: message, label, name or report
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::open_at() | ret | oneshot::Receiver<Result<Self,String>>	free-text	free text: message, label, name or report

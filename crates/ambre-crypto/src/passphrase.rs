@@ -1,8 +1,10 @@
 //! Argon2id passphrase-based key derivation.
 //!
 //! Derives the user key that unwraps the server-stored master key at login. The
-//! parameters are explicit and versioned so they can evolve without breaking
-//! existing accounts (the salt and version travel with the stored key material).
+//! parameters are explicit. The sealed seed carries the version of the cost
+//! that sealed it, and its additional data binds that version and the salt
+//! (`crate::keys::SeedVersion`, `ZK-046`). A second cost thus takes a new
+//! version, and an account sealed under the first still opens.
 //!
 //! The same work factor derives the key of a passphrase-sealed file
 //! ([`crate::keys::FileKey::from_passphrase`]). That is the other place a
@@ -19,8 +21,9 @@ use crate::strength::ChosenPassphrase;
 pub const USER_KEY_LEN: usize = 32;
 
 /// The Argon2id work factor of one parameter version: its memory, its passes,
-/// its lanes and its output length. The salt and the version travel with the
-/// stored key material, so a version never changes once an account uses it.
+/// its lanes and its output length. The sealed seed names its version in its
+/// first byte, under the seal, so a version never changes once an account
+/// uses it (`ZK-046`).
 #[derive(Debug, Clone)]
 struct Argon2Cost(Params);
 
@@ -32,8 +35,8 @@ impl Argon2Cost {
     /// The single lane is deliberate: the KDF runs in a single-threaded WASM
     /// Sync worker, where p > 1 adds sequential work and no speedup. Argon2's
     /// memory-hardness is set by the total memory, not by the lane count.
-    /// Parameters are versioned, so the lane count can be raised without
-    /// breaking existing accounts if a threaded target lands.
+    /// A threaded target that raises the lane count adds a second version.
+    /// The version byte of each sealed seed picks the cost that opens it.
     ///
     /// The match runs at compile time, so a refused parameter is a build error.
     const V1: Self = match Params::new(64 * 1024, 3, 1, Some(USER_KEY_LEN)) {

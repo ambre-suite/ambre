@@ -866,10 +866,14 @@ fn open_stored_seed(
     })?;
     // The seed opens straight into its wrapper, so no bare copy of it is left
     // on this path (`ZK-019`).
+    // The seal binds the salt and the signing key the relay names for the
+    // account. So a seed served for another account does not open
+    // (`ZK-046`). A seed sealed before that binding opens without it.
     MasterSeed::open_from_storage(
         master_key_enc,
         &user_key,
-        &ambre_core::Aad::of(b"ambre-master-seed"),
+        salt,
+        stored.signing_pubkey.as_ref(),
     )
     .map_err(|e| match e {
         // Almost always the wrong passphrase; a tampered row reads the same.
@@ -904,7 +908,7 @@ fn seal_seed(
             AuthFailure::SeedNotWrapped
         })?;
     let master_key_enc = master_seed
-        .wrap_for_storage(&sealing_key, &ambre_core::Aad::of(b"ambre-master-seed"))
+        .wrap_for_storage(&sealing_key, &master_key_salt)
         .map_err(|e| {
             crate::log::warning!("Sync: master-seed wrap failed: {e}");
             AuthFailure::SeedNotWrapped
@@ -1253,8 +1257,10 @@ mod tests {
         assert_proves(&body, &seed, &serde_json::json!(stored_salt()));
 
         // The unlock reads the stored material through `open_stored_seed`.
-        let resealed: http::MasterKeyResponse =
-            serde_json::from_value(body["sealed"].clone()).expect("material");
+        let resealed = http::MasterKeyResponse {
+            signing_pubkey: Some(signing_pubkey(&seed)),
+            ..serde_json::from_value(body["sealed"].clone()).expect("material")
+        };
 
         let opened = open_stored_seed(&resealed, &new_passphrase()).expect("the unlock opens");
         assert_eq!(signing_pubkey(&opened), signing_pubkey(&seed));
@@ -1359,8 +1365,10 @@ mod tests {
         assert_proves(&body, &seed, &before["master_key_salt"]);
 
         // The unlock reads the stored material through `open_stored_seed`.
-        let resealed: http::MasterKeyResponse =
-            serde_json::from_value(body["sealed"].clone()).expect("material");
+        let resealed = http::MasterKeyResponse {
+            signing_pubkey: Some(signing_pubkey(&seed)),
+            ..serde_json::from_value(body["sealed"].clone()).expect("material")
+        };
         let opened = open_stored_seed(&resealed, &new_passphrase()).expect("the unlock opens");
         assert_eq!(signing_pubkey(&opened), signing_pubkey(&seed));
         assert!(matches!(

@@ -157,7 +157,7 @@ signing key, which only the seed derives. The proof covers three values after it
 |---|---|
 | the salt of the seal the client read | each seal draws a fresh salt, so the salt names one seal |
 | the new salt | the relay stores the pair, and a swap of either part fails the proof |
-| the new sealed seed | a fixed length, so no two inputs share a transcript |
+| the new sealed seed | last, after two fixed widths, so no two inputs share a transcript |
 
 The relay verifies the proof under the signing key the account registered, and refuses a proof
 another key signed (`SRV-278`). It then writes only while it still holds the named seal, in one

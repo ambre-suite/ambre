@@ -54,8 +54,13 @@ const WRAPPED_DOC_KEY_LENGTHS: &[usize] = &[
     NONCE_LEN + KEY_LEN + TAG_LEN,
     NONCE_LEN + KEY_LEN + ANCHOR_LEN + TAG_LEN,
 ];
-/// The one length of a wrapped master key.
-const WRAPPED_MASTER_KEY_LENGTHS: &[usize] = &[NONCE_LEN + KEY_LEN + TAG_LEN];
+/// The lengths of a wrapped master key. The first is the layout before the
+/// version byte, which an old account still holds. The second is the
+/// versioned layout every seal writes now (`ZK-046`).
+const WRAPPED_MASTER_KEY_LENGTHS: &[usize] = &[
+    NONCE_LEN + KEY_LEN + TAG_LEN,
+    1 + NONCE_LEN + KEY_LEN + TAG_LEN,
+];
 /// The longest name a sealed name holds, in characters.
 const SEALED_NAME_MAX_CHARS: usize = crate::NAME_MAX_CHARS;
 /// The most bytes a sealed name holds: its overhead and the longest name.
@@ -262,7 +267,8 @@ impl Encoded<SealedName> {
 }
 
 /// The role of an account's master seed wrapped under the key its passphrase
-/// derives: `nonce || ciphertext`. `Encoded<WrappedMasterKey>`.
+/// derives: `version || nonce || ciphertext`, or `nonce || ciphertext` for a
+/// seed sealed before the version byte. `Encoded<WrappedMasterKey>`.
 pub enum WrappedMasterKey {}
 
 impl EncodedKind for WrappedMasterKey {
@@ -271,7 +277,7 @@ impl EncodedKind for WrappedMasterKey {
 }
 
 impl Encoded<WrappedMasterKey> {
-    /// The one length the layout of a wrapped master key allows.
+    /// The lengths the two layouts of a wrapped master key allow.
     pub const LENGTHS: &'static [usize] = WRAPPED_MASTER_KEY_LENGTHS;
 }
 
@@ -372,7 +378,7 @@ mod tests {
         only::<WrappedDocKey>(Encoded::<WrappedDocKey>::LENGTHS);
         only::<WrappedMasterKey>(Encoded::<WrappedMasterKey>::LENGTHS);
         assert_eq!(Encoded::<WrappedDocKey>::LENGTHS, [72, 104]);
-        assert_eq!(Encoded::<WrappedMasterKey>::LENGTHS, [72]);
+        assert_eq!(Encoded::<WrappedMasterKey>::LENGTHS, [72, 73]);
         assert!(reads::<SealedName>(0) && reads::<SealedName>(Encoded::<SealedName>::MAX_LEN));
     }
 
