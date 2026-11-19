@@ -2,9 +2,13 @@
 # Start the Ambre Blind Relay server (ambre-server).
 #
 # The server requires PostgreSQL, Redis, and S3 (Garage) to be running.
-# Run `docker compose up -d` first to provision these services.
+# Run `just services-up` first: it starts the three services and creates the
+# Garage layout, key and bucket, which `docker compose up -d` alone does not.
 #
-# Environment variables are read from .env if present.
+# The script starts the relay against the local stack, so it sets DEV_MODE=1
+# unless the shell or .env sets it: the relay then takes the database password
+# and the Garage key of the local stack, and `.cargo/config.toml` gives it the
+# addresses. No .env is needed; one, if present, overrides any of them.
 # Prerequisites: cargo, docker
 
 set -e
@@ -17,5 +21,7 @@ if [ -f "$DIR/.env" ]; then
     . "$DIR/.env"
     set +a
 fi
+
+export DEV_MODE="${DEV_MODE:-1}"
 
 cargo run -p ambre-server

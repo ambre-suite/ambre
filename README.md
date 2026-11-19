@@ -219,8 +219,11 @@ trunk build --release
 ./run_server.sh
 ```
 
-The script loads an optional `.env` and runs `cargo run -p ambre-server`. Bring the backing services up first
-with `docker compose up -d`. Set `DEV_MODE=1` in `.env` for the local stack. Outside development
+The script runs `cargo run -p ambre-server` against the local stack. Bring the backing services up
+first with `just services-up`: it also creates the Garage layout, key and bucket, which
+`docker compose up -d` alone does not. The script sets `DEV_MODE=1` unless the shell sets it, and
+`.cargo/config.toml` gives the addresses, so no `.env` is needed; an optional `.env` overrides
+them. Outside development
 mode, the server needs its signing seeds, its database address and its object store keys. The server starts on `http://localhost:3000`. The frontend is served
 by `./trunk_serve.sh` (default port `8080`).
 
