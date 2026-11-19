@@ -22,6 +22,7 @@ eight kinds and the status values are normative in `ambre-spec-template.md`.
 | `TRAME-029` | `CONC` | Every peer MUST hide the same set of cells, computed from the merges and the cell contents alone. | this spec section 2, row 1 | `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` -- a proptest whose op stream draws merges and unmerges, over an asserted grid carrying each cell's displayed text, so two peers hiding different cells fail the case | none | verified |
 | `TRAME-126` | `CONC` | Two overlapping merges MUST resolve to the same single merge on every peer. | this spec section 5 | `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` -- a proptest whose op stream draws 2x2 merges at arbitrary anchors, so overlapping pairs occur, over a compared window carrying each cell's merge span | none | verified |
 | `TRAME-144` | `CONC` | The surviving merge MUST be the one whose master key sorts first. | this spec section 5 | `ambre_trame::logic::tests::group3::overlapping_merges_resolve_to_the_lowest_master_key` -- it derives the expected winner from the two master keys, so it asserts the order and not the positions of one run | none | verified |
+| `TRAME-315` | `INV` | The merges of one sheet MUST be read within a bound on their entries and on the cells they cover, in master-key order, so that no entry a peer writes lists more cells than that bound. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_trame::logic::tests::group11::a_merge_entry_past_the_area_bound_lists_no_cell` -- a peer's entry over 360 000 cells places nothing and lists none, and a merge beside it places; `::a_local_merge_past_the_area_bound_writes_no_entry`; `::merge_entries_past_the_entry_bound_are_skipped` | none | verified |
 | `TRAME-127` | `INV` | A merge MUST cover the same cells after a row insert above it. | this spec section 2, row 3 | `ambre_trame::logic::tests::group3::merge_follows_structural_insert` | none | verified |
 | `TRAME-028` | `OBS` | A cell hidden by a merge MUST show nothing while the merge lasts. | this spec section 2, row 1 | `ambre_trame::logic::tests::group3::concurrent_value_under_merge_is_masked_then_restored`; `ambre_trame::ui::renderer::tests::draw_cells_renders_merge_master_over_its_span` | none | verified |
 | `TRAME-UI-112` | `OBS` | The fill handle MUST sit on the bottom-right corner of the merged block. | this spec section 4 | `ambre_trame::ui::grid::tests::group1::fill_handle_sits_on_merge_extent_corner` | none | verified |
@@ -98,7 +99,7 @@ one cell to both.
   `ambre-spec-budgets.md` budgets no merge operation.
 * **Boundary.** none of its own: the merge is a document write, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 38 `verified`. Each frame condition is isolated. A merge reads its neighbours
+* **Verification.** 39 `verified`. Each frame condition is isolated. A merge reads its neighbours
   back, a fill reads its source back, and a selection move writes nothing (`TRAME-131`, `TRAME-142`,
   `TRAME-UI-115`). Each guard is driven down the path it refuses (`TRAME-137`, `TRAME-143`,
   `TRAME-148`), and the fill's tiles, styles and formulas are read back cell by cell.
@@ -154,7 +155,10 @@ DisplayCell { is_merged: true, merge_span: None, display_text: String::new() }
 **Steps, on every merge change:**
 
 1. resolve the sheet's entries into the merges that survive: ascending master key, skipping any
-   rectangle that intersects one already placed;
+   rectangle that intersects one already placed. Only the first entries in that order are read,
+   and an entry that would take the covered cells past their bound is skipped. Both bounds are
+   rows of `1-Foundations/ambre-spec-budgets.md section 6`, and the local merge command writes no
+   entry the second would skip (`TRAME-315`);
 2. for each covered cell that still carries raw text, add its key to `masked_cells` and emit one
    conflict event;
 3. feed the dependency graph and the formula cache from the cells outside that set;
@@ -232,6 +236,7 @@ canvas ignores them, the chrome relay turns each into a notice (`trame-engine`).
 | Detecting a conflict writes nothing back | emitting a delete or a move for the covered value | a corrective write is itself an operation, so it can conflict and start a second round. |
 | An overlap resolves by ascending master key | asking the user | an overlap is discovered on merge, on every peer independently, so a prompt fires once per peer for one conflict and each answer is a new write. |
 | An overlap resolves by ascending master key | refusing both merges | it drops two intents to resolve one collision, and leaves the document in a state neither user asked for. The master key is stable and every peer derives the order from the document alone, so no coordination is needed: one function, `resolved_merges`, is read by the display caches and by the formula feed alike, where a second copy would let a masked cell differ from the block the grid draws. |
+| A merge past the area bound is skipped, in key order | listing the covered cells of every entry | a peer writes the entry, so one entry over a whole sheet would list its cells into two sets on every peer at open, past the heap of the Logic thread. Two merges overlap when two rectangles do, which needs no list (`TRAME-315`) |
 | A fill from a uniform merged source tiles whole blocks | filling cell by cell and leaving the destination unmerged | a per-cell fill from a merged source produces blocks the user did not ask for. |
 
 ---

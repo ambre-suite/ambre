@@ -283,7 +283,7 @@ impl<'a> EvalContext<'a> {
                     // result ("x#REF!") instead of surfacing as the cell's error.
                     stack.push(match first_error(&a, &b) {
                         Some(e) => e,
-                        None => CellValue::Text(a.to_display() + &b.to_display()),
+                        None => concat_bounded(&a, &b),
                     });
                 }
                 Op::Neg => {
@@ -380,6 +380,20 @@ impl<'a> EvalContext<'a> {
             (Ok(x), Ok(y)) => stack.push(finite(f(x, y))),
             (Err(e), _) | (_, Err(e)) => stack.push(CellValue::Error(e)),
         }
+    }
+}
+
+/// `a & b`, or `#TYPE!` when the text would pass its bound. A chain of
+/// cells that each double the text before them then stops at the bound,
+/// and no cell allocates past it (`TRAME-313`).
+fn concat_bounded(a: &CellValue, b: &CellValue) -> CellValue {
+    let mut text = super::text::BoundedText::new();
+    match text
+        .push(&a.to_display())
+        .and_then(|()| text.push(&b.to_display()))
+    {
+        Ok(()) => text.into_value(),
+        Err(e) => CellValue::Error(e.into()),
     }
 }
 
@@ -846,5 +860,46 @@ mod tests {
     fn precedence() {
         assert_eq!(eval_formula("2+3*4").to_display(), "14");
         assert_eq!(eval_formula("(2+3)*4").to_display(), "20");
+    }
+
+    /// A text a formula would build past the bound reads `#TYPE!`, whatever
+    /// builds it: `REPT`, `&`, `CONCAT`, `TEXTJOIN` or `SUBSTITUTE`. A text at
+    /// the bound is still built whole (`TRAME-313`, audit `P33`).
+    #[test]
+    fn a_text_past_the_bound_reads_an_error_and_allocates_nothing() {
+        assert_eq!(
+            eval_formula(r#"REPT("x",3000000000)"#).to_display(),
+            "#TYPE!"
+        );
+        assert_eq!(eval_formula(r#"REPT("xy",16384)"#).to_display(), "#TYPE!");
+        let at_bound = eval_formula(r#"REPT("x",32767)"#).to_display();
+        assert_eq!(
+            ambre_core::char_len(&at_bound),
+            super::super::text::TEXT_MAX_CHARS
+        );
+        assert_eq!(eval_formula(r#"REPT("",3000000000)"#).to_display(), "");
+
+        // A1 holds 20 000 chars: one copy fits, two do not.
+        let long = || {
+            let mut cache = HashMap::default();
+            cache.insert(cell(0, 0), CellValue::Text("y".repeat(20_000)));
+            cache
+        };
+        assert_eq!(eval_with_cells("A1&A1", 1, long()), "#TYPE!");
+        assert_eq!(eval_with_cells("CONCAT(A1,A1)", 1, long()), "#TYPE!");
+        assert_eq!(
+            eval_with_cells(r#"TEXTJOIN(",",TRUE,A1,A1)"#, 1, long()),
+            "#TYPE!"
+        );
+        assert_eq!(
+            eval_with_cells(r#"SUBSTITUTE(A1,"y","yy")"#, 1, long()),
+            "#TYPE!"
+        );
+        assert_eq!(eval_with_cells("A1&\"z\"", 1, long()).len(), 20_001);
+        assert_eq!(
+            eval_with_cells(r#"SUBSTITUTE(A1,"y","z")"#, 1, long()),
+            "z".repeat(20_000),
+            "a replacement that does not grow the text is never refused"
+        );
     }
 }

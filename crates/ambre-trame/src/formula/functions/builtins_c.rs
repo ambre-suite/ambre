@@ -601,13 +601,27 @@ pub(crate) fn textjoin(args: &[CellValue]) -> CellValue {
     }
     let delim = arg(args, Pos::<Arg>::new(0)).to_display();
     let ignore_empty = is_truthy(arg(args, Pos::<Arg>::new(1)));
-    let parts: Vec<String> = flatten_all(rest_from(args, Pos::<Arg>::new(2)))
+    // Built piece by piece under the text bound: a delimiter repeated over a
+    // whole range allocates nothing past it (`TRAME-313`).
+    let mut joined = crate::formula::text::BoundedText::new();
+    let mut first = true;
+    for part in flatten_all(rest_from(args, Pos::<Arg>::new(2)))
         .iter()
         .filter(|v| !(ignore_empty && matches!(v, CellValue::Empty)))
         .map(|v| v.to_display())
         .filter(|s| !(ignore_empty && s.is_empty()))
-        .collect();
-    CellValue::Text(parts.join(&delim))
+    {
+        let pushed = if first {
+            joined.push(&part)
+        } else {
+            joined.push(&delim).and_then(|()| joined.push(&part))
+        };
+        if let Err(e) = pushed {
+            return CellValue::Error(e.into());
+        }
+        first = false;
+    }
+    joined.into_value()
 }
 
 /// CHAR(number) -- the character for a Unicode code point (1..=0x10FFFF).

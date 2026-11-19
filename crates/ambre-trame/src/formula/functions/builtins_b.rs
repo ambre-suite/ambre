@@ -3,6 +3,7 @@
 // resolve through the module glob mesh.
 
 use super::*;
+use crate::formula::text::{TEXT_MAX_CHARS, TextTooLong};
 use crate::formula::types::{Arg, Value};
 use ambre_core::index::{Axis, Len, MapsTo, MeasuresAs, Pos};
 
@@ -48,7 +49,21 @@ pub(crate) fn substitute(args: &[CellValue]) -> CellValue {
         .and_then(|v| v.as_number().ok())
         .map(|n| n as usize);
     let result = match instance {
-        None => text.replace(&old, &new),
+        None => {
+            // Each replacement may grow the text, so the size of the result
+            // is known before any allocation. One past the bound is `#TYPE!`
+            // (`TRAME-313`). Matches never overlap, so they take no more
+            // chars than the text holds.
+            let chars = |s: &str| u64::from(ambre_core::char_len(s).get());
+            let hits = u64::try_from(text.matches(old.as_str()).count()).unwrap_or(u64::MAX);
+            let grown = chars(&text)
+                .saturating_sub(hits.saturating_mul(chars(&old)))
+                .saturating_add(hits.saturating_mul(chars(&new)));
+            if grown > u64::from(TEXT_MAX_CHARS.get()) {
+                return CellValue::Error(TextTooLong.into());
+            }
+            text.replace(&old, &new)
+        }
         Some(target) if target >= 1 => {
             let mut out = String::new();
             let mut rest = text.as_str();
@@ -72,16 +87,25 @@ pub(crate) fn substitute(args: &[CellValue]) -> CellValue {
 }
 
 /// REPT(text, count) -- repeat `text` `count` times.
+///
+/// The size of the result is known before any allocation. A result past
+/// [`TEXT_MAX_CHARS`] is `#TYPE!` and allocates nothing (`TRAME-313`).
 pub(crate) fn rept(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
     let n = match arg(args, Pos::<Arg>::new(1)).as_number() {
-        Ok(n) if n >= 0.0 => n as usize,
+        Ok(n) if n >= 0.0 && n.is_finite() => n.trunc(),
         Ok(_) => return CellValue::Error(FormulaError::NumError),
         Err(e) => return CellValue::Error(e),
     };
-    CellValue::Text(arg(args, Pos::<Arg>::new(0)).to_display().repeat(n))
+    let text = arg(args, Pos::<Arg>::new(0)).to_display();
+    let unit = f64::from(ambre_core::char_len(&text).get());
+    if unit * n > f64::from(TEXT_MAX_CHARS.get()) {
+        return CellValue::Error(TextTooLong.into());
+    }
+    // Under the bound, so the count fits a `usize`.
+    CellValue::Text(text.repeat(n as usize))
 }
 
 /// FIND(find_text, within_text, [start]) -- 1-based, case-sensitive position of
@@ -514,15 +538,18 @@ pub(crate) fn date_part(args: &[CellValue], pick: fn(DateParts) -> i64) -> CellV
     }
 }
 
-/// Flatten a value (including nested ranges) into a string builder.
-pub(crate) fn push_display(value: &CellValue, out: &mut String) {
+/// Flatten a value (a range read cell by cell) into a bounded text builder.
+///
+/// # Errors
+///
+/// [`TextTooLong`] once the text would pass its bound (`TRAME-313`).
+pub(crate) fn push_display(
+    value: &CellValue,
+    out: &mut crate::formula::text::BoundedText,
+) -> Result<(), TextTooLong> {
     match value {
-        CellValue::Range(r) => {
-            for v in &r.values {
-                push_display(v, out);
-            }
-        }
-        other => out.push_str(&other.to_display()),
+        CellValue::Range(r) => r.values.iter().try_for_each(|v| out.push(&v.to_display())),
+        other => out.push(&other.to_display()),
     }
 }
 

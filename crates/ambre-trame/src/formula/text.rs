@@ -50,3 +50,60 @@ pub(crate) fn fold_char_simple(ch: char) -> char {
         _ => ch,
     }
 }
+
+/// The longest text a formula yields, in characters: the cell bound a
+/// spreadsheet holds (`TRAME-313`, `ambre-spec-budgets.md section 6`). A
+/// peer writes the formula, and each peer evaluates it on its Logic thread.
+/// A text with no bound lets one signed delta allocate past the heap there.
+pub(crate) const TEXT_MAX_CHARS: ambre_core::index::Len<ambre_core::Char> =
+    ambre_core::index::Len::<ambre_core::Char>::new(32_767);
+
+/// A text a formula would build past [`TEXT_MAX_CHARS`]. The cell shows
+/// `#TYPE!`, as a spreadsheet shows `#VALUE!` there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct TextTooLong;
+
+impl From<TextTooLong> for super::types::FormulaError {
+    fn from(_: TextTooLong) -> Self {
+        Self::TypeError
+    }
+}
+
+/// A formula text under construction. It refuses a piece that would take it
+/// past [`TEXT_MAX_CHARS`], before any allocation for that piece. So no
+/// formula allocates past the bound, whatever its arguments (`TRAME-313`).
+pub(crate) struct BoundedText {
+    text: String,
+    chars: ambre_core::index::Len<ambre_core::Char>,
+}
+
+impl BoundedText {
+    /// An empty text.
+    pub(crate) fn new() -> Self {
+        Self {
+            text: String::new(),
+            chars: ambre_core::index::Len::ZERO,
+        }
+    }
+
+    /// Append `piece`.
+    ///
+    /// # Errors
+    ///
+    /// [`TextTooLong`] when the text would pass the bound. Nothing is then
+    /// appended.
+    pub(crate) fn push(&mut self, piece: &str) -> Result<(), TextTooLong> {
+        let chars = self.chars + ambre_core::char_len(piece);
+        if chars > TEXT_MAX_CHARS {
+            return Err(TextTooLong);
+        }
+        self.text.push_str(piece);
+        self.chars = chars;
+        Ok(())
+    }
+
+    /// The text as the value of a cell.
+    pub(crate) fn into_value(self) -> super::types::CellValue {
+        super::types::CellValue::Text(self.text)
+    }
+}
