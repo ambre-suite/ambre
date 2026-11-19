@@ -57,6 +57,21 @@ fn grant_range(rows: Len<Row>, cols: Len<Col>, left: &mut Count<Cells>) -> Optio
     Some(RangeGrant(cells))
 }
 
+/// The cells in progress past which an evaluation settles what it reads with
+/// a stack of its own (`TRAME-314`). Each evaluation in progress holds a few
+/// frames of the call stack. So a chain of any length takes some tens of
+/// kilobytes of the call stack at most.
+const SETTLE_DEPTH: Count<Cells> = Count::<Cells>::new(32);
+
+/// One step of [`EvalContext::settle`].
+#[derive(Debug, Clone, Copy)]
+enum Settle {
+    /// Enter the cell, and settle the cells it reads before it.
+    Open(CellId),
+    /// Every cell it reads is settled or in progress: execute it.
+    Close(CellId),
+}
+
 /// Holds the mutable evaluation state shared across all cell evaluations in a
 /// single recomputation pass (`compute_all_dirty`).
 pub struct EvalContext<'a> {
@@ -140,17 +155,144 @@ impl<'a> EvalContext<'a> {
     /// meets first never replaces it. Each cell on a loop and each cell
     /// downstream of one then shows the same error in every pass order, on
     /// every peer (`TRAME-281`).
+    ///
+    /// A range edge sits outside the cell graph, so the pass order does not
+    /// see it. A cell may then read a chain of cells no pass evaluated yet.
+    /// Past [`SETTLE_DEPTH`] cells in progress, the cells this one reads are
+    /// settled first by [`Self::settle`], which walks with a stack of its own.
+    /// The call stack then holds at most that many evaluations, whatever the
+    /// length of the chain (`TRAME-314`).
     pub fn eval_cell(&mut self, cell: CellId) -> CellValue {
         if self.eval_stack.contains(&cell) {
             self.met_loop = MetLoop::Yes;
             return CellValue::Error(FormulaError::CircularReference);
         }
-        if let Some(v) = self.resolved.get(&cell) {
-            if self.looped.contains(&cell) {
-                self.met_loop = MetLoop::Yes;
-            }
-            return v.clone();
+        if self.resolved.contains_key(&cell) {
+            return self.resolved_value(cell);
         }
+        if Count::<Cells>::of(self.eval_stack.len()) >= SETTLE_DEPTH {
+            self.settle(cell);
+            return self.resolved_value(cell);
+        }
+        self.eval_one(cell)
+    }
+
+    /// The value this pass resolved for `cell`. A cell that met a loop
+    /// passes the loop on to the cell that reads it (`TRAME-281`).
+    fn resolved_value(&mut self, cell: CellId) -> CellValue {
+        if self.looped.contains(&cell) {
+            self.met_loop = MetLoop::Yes;
+        }
+        self.resolved
+            .get(&cell)
+            .cloned()
+            .unwrap_or(CellValue::Error(FormulaError::CircularReference))
+    }
+
+    /// Evaluate `cell` and every formula cell it reads, deepest first, with a
+    /// stack of frames on the heap instead of the call stack.
+    ///
+    /// Each cell enters the evaluation stack as the recursion would enter it,
+    /// and is executed once every cell it reads is resolved or in progress. A
+    /// read of a cell in progress meets the loop as the recursion meets it.
+    /// So this walk finds the values and the loops of [`Self::eval_one`]
+    /// alone (`TRAME-281`, `TRAME-314`).
+    fn settle(&mut self, cell: CellId) {
+        let bc = self.bc;
+        let mut frames = vec![Settle::Open(cell)];
+        while let Some(frame) = frames.pop() {
+            match frame {
+                Settle::Open(at) => {
+                    if self.resolved.contains_key(&at) || self.eval_stack.contains(&at) {
+                        continue;
+                    }
+                    let Some(code) = bc.get(&at) else {
+                        // A plain cell reads nothing: it resolves at once.
+                        self.eval_one(at);
+                        continue;
+                    };
+                    self.eval_stack.insert(at);
+                    frames.push(Settle::Close(at));
+                    let mut reads = self.reads_of(code);
+                    // Reversed, so the first read is the first executed, as
+                    // the recursion takes them.
+                    reads.reverse();
+                    frames.extend(
+                        reads
+                            .into_iter()
+                            .filter(|read| {
+                                !self.resolved.contains_key(read) && !self.eval_stack.contains(read)
+                            })
+                            .map(Settle::Open),
+                    );
+                }
+                Settle::Close(at) => {
+                    self.eval_stack.remove(&at);
+                    self.eval_one(at);
+                }
+            }
+        }
+    }
+
+    /// The formula cells `code` reads, in the order it reads them, in their
+    /// bound form. A range over the caps reads no cell, as
+    /// [`Self::eval_range`] reads none. A read this list misses still
+    /// evaluates, through the recursion, so the list bounds the depth and not
+    /// the answer.
+    fn reads_of(&self, code: &super::types::CellBytecode) -> Vec<CellId> {
+        let mut reads = Vec::new();
+        for op in &code.ops {
+            match op {
+                Op::PushCell(r) => reads.extend(self.bound_cell(*r)),
+                Op::EvalRange(dep) => self.range_reads(dep, &mut reads),
+                _ => {}
+            }
+        }
+        reads
+    }
+
+    /// The bound form of the cell `r` names, `None` for a reference that
+    /// reads `#REF!` or an empty cell past the used range.
+    fn bound_cell(&self, r: CellId) -> Option<CellId> {
+        let idx = self.indices.get(&r.sheet)?;
+        let (row, col) = (r.row.pos(idx)?, r.col.pos(idx)?);
+        Some(CellId::bound(r.sheet, idx.row_id(row)?, idx.col_id(col)?))
+    }
+
+    /// Push onto `out` each formula cell of the range `dep`, when the range
+    /// fits the caps the pass still holds. Nothing is debited: the
+    /// evaluation of the range debits it.
+    fn range_reads(&self, dep: &RangeId, out: &mut Vec<CellId>) {
+        let Some(idx) = self.indices.get(&dep.sheet) else {
+            return;
+        };
+        let (Some((rs, re)), Some((cs, ce))) = (dep.row_range(idx), dep.col_range(idx)) else {
+            return;
+        };
+        if re < rs || ce < cs {
+            return;
+        }
+        let rows = re.len_from(rs) + Len::<Row>::ONE;
+        let cols = ce.len_from(cs) + Len::<Col>::ONE;
+        let mut left = self.range_cells_left;
+        if grant_range(rows, cols, &mut left).is_none() {
+            return;
+        }
+        for rp in rs.through(re) {
+            for cp in cs.through(ce) {
+                if let (Some(row), Some(col)) = (idx.row_id(rp), idx.col_id(cp)) {
+                    let at = CellId::bound(dep.sheet, row, col);
+                    if self.bc.get(&at).is_some() {
+                        out.push(at);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Evaluate `cell`, not yet resolved and not in progress, by recursion
+    /// into the cells it reads.
+    fn eval_one(&mut self, cell: CellId) -> CellValue {
         self.eval_stack.insert(cell);
         let outer = std::mem::replace(&mut self.met_loop, MetLoop::No);
         let prev = (self.current_row, self.current_col);
@@ -901,5 +1043,70 @@ mod tests {
             "z".repeat(20_000),
             "a replacement that does not grow the text is never refused"
         );
+    }
+
+    /// A chain of `rows` cells down column A. The first holds 1. Each other
+    /// one is a `SUM` over a range of the one cell above it. A range
+    /// edge is no edge of the cell graph, so nothing orders the chain.
+    fn range_chain(
+        rows: u32,
+    ) -> (
+        HashMap<Pos<EngineSheet>, SheetIndex>,
+        BytecodeCache,
+        HashMap<CellId, CellValue>,
+    ) {
+        let indices = indices_with(rows as usize, 1);
+        let mut bcc = BytecodeCache::new();
+        for row in 1..rows {
+            let src = format!("SUM(A{row}:A{row})");
+            bcc.insert(
+                cell(row, 0),
+                compile(&parse_formula(&src).unwrap(), &indices),
+            );
+        }
+        let mut cache = HashMap::default();
+        cache.insert(cell(0, 0), CellValue::Number(1.0));
+        (indices, bcc, cache)
+    }
+
+    /// Ten thousand cells, each a `SUM` over the cell before it, evaluate on a
+    /// call stack of 1 MiB. The recursion took one evaluation per cell and
+    /// overflowed the stack of the Logic thread (`TRAME-314`, audit `P34`).
+    #[test]
+    fn a_chain_of_ranges_ten_thousand_deep_evaluates_on_a_small_stack() {
+        let worker = std::thread::Builder::new()
+            .stack_size(1024 * 1024)
+            .spawn(|| {
+                let (indices, bcc, cache) = range_chain(10_000);
+                let mut ctx =
+                    EvalContext::new(&bcc, &cache, &indices, Instant::<SheetDateTime>::new(0.0));
+                ctx.eval_cell(cell(9_999, 0)).to_display()
+            })
+            .expect("a thread");
+        assert_eq!(worker.join().expect("no overflow"), "1");
+    }
+
+    /// A loop past the settle depth still shows `#CIRCULAR!` on each of its
+    /// cells, from whichever cell the pass enters (`TRAME-281`, `TRAME-314`).
+    #[test]
+    fn a_deep_loop_through_ranges_shows_circular_on_each_cell() {
+        let (indices, mut bcc, cache) = range_chain(200);
+        // The first cell now reads the last one, which closes the loop.
+        bcc.insert(
+            cell(0, 0),
+            compile(&parse_formula("SUM(A200:A200)").unwrap(), &indices),
+        );
+        for entry in [0, 199, 100] {
+            let mut ctx =
+                EvalContext::new(&bcc, &cache, &indices, Instant::<SheetDateTime>::new(0.0));
+            ctx.eval_cell(cell(entry, 0));
+            for row in 0..200 {
+                assert_eq!(
+                    ctx.eval_cell(cell(row, 0)).to_display(),
+                    "#CIRCULAR!",
+                    "row {row}, entered at {entry}"
+                );
+            }
+        }
     }
 }

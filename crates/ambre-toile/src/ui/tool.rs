@@ -1006,16 +1006,6 @@ pub(crate) fn element_bounds(display: &DisplayViewport, id: &Id<Element>) -> Opt
     selection_bounds(std::slice::from_ref(id), display)
 }
 
-/// The immediate enclosing group of `id` in the current display, if any (the
-/// `DisplayElement.group` edge,). `None` for a top-level element or
-/// an id absent from the culled frame.
-fn enclosing_group_of(id: &Id<Element>, display: &DisplayViewport) -> Option<Id<Element>> {
-    display.nodes.iter().find_map(|n| match n {
-        DisplayNode::Element(e) if &e.id == id => e.group.clone(),
-        _ => None,
-    })
-}
-
 /// Whether `id` names a group node in the current display (its geometry is the
 /// derived member union; it paints nothing,).
 pub(crate) fn is_group(id: &Id<Element>, display: &DisplayViewport) -> bool {
@@ -1037,12 +1027,25 @@ pub(crate) fn resolve_group_target(
     display: &DisplayViewport,
     scope: Option<&Id<Element>>,
 ) -> Id<Element> {
+    // The group of each element, read once. A peer writes the nesting, and
+    // nothing bounds its depth. So each step of the walk costs one lookup,
+    // never a scan of the display or of the chain (`TOILE-306`).
+    let group_of: ambre_core::hash::HashMap<&Id<Element>, &Id<Element>> = display
+        .nodes
+        .iter()
+        .filter_map(|n| match n {
+            DisplayNode::Element(e) => e.group.as_ref().map(|g| (&e.id, g)),
+            _ => None,
+        })
+        .collect();
     let mut chain = vec![hit.clone()];
+    let mut seen: ambre_core::hash::HashSet<Id<Element>> = ambre_core::hash::HashSet::default();
+    seen.insert(hit.clone());
     let mut cur = hit;
     // A peer can write a group into its own subtree. The walk stops at the
     // first group already in the chain, so a cycle ends it (`TOILE-UI-398`).
-    while let Some(g) = enclosing_group_of(&cur, display) {
-        if chain.contains(&g) {
+    while let Some(g) = group_of.get(&cur).map(|g| (*g).clone()) {
+        if !seen.insert(g.clone()) {
             break;
         }
         chain.push(g.clone());
@@ -1496,6 +1499,28 @@ mod tests {
         let target =
             resolve_group_target(Id::<Element>::from_text("m".into()), &disp, Some(&scope));
         assert_eq!(target, Id::<Element>::from_text("m".into()));
+    }
+
+    /// `TOILE-306`: a click on the leaf of fifty thousand nested groups picks
+    /// the top group, and a scoped click the level below the scope. Each step
+    /// once scanned the whole display and the whole chain.
+    #[test]
+    fn a_click_into_a_deep_nesting_picks_the_top_group() {
+        let depth = 50_000;
+        let unit = Rect::new(0.0, 0.0, 100.0, 100.0);
+        let name = |level: usize| format!("g{level}");
+        let mut nodes = vec![member_elem("m", unit, &name(0))];
+        for level in 0..depth {
+            let parent = (level + 1 < depth).then(|| name(level + 1));
+            nodes.push(group_node(&name(level), unit, parent.as_deref()));
+        }
+        let disp = viewport(nodes);
+        let leaf = Id::<Element>::from_text("m".into());
+        let target = resolve_group_target(leaf.clone(), &disp, None);
+        assert_eq!(target, Id::<Element>::from_text(name(depth - 1)));
+        let scope = Id::<Element>::from_text(name(10));
+        let target = resolve_group_target(leaf, &disp, Some(&scope));
+        assert_eq!(target, Id::<Element>::from_text(name(9)));
     }
 
     #[test]

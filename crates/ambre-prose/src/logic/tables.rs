@@ -142,26 +142,31 @@ pub(super) fn next_stamp(document: &LoroDoc) -> ambre_core::LamportStamp {
     ambre_core::LamportStamp::from_i64(next)
 }
 
+/// The blocks under `block`, depth first, children in order: the document
+/// flow inside it. A peer writes the tree and nothing bounds its depth, so
+/// the walk holds its own stack, never the call stack (`PROSE-140`).
+fn descendants<'t>(tree: &'t LoroTree, block: &TreeID) -> impl Iterator<Item = TreeID> + 't {
+    let mut pending: Vec<TreeID> = doc::children_of(tree, Some(*block));
+    pending.reverse();
+    std::iter::from_fn(move || {
+        let next = pending.pop()?;
+        pending.extend(doc::children_of(tree, Some(next)).into_iter().rev());
+        Some(next)
+    })
+}
+
 /// Whether any text block under `block` holds a character.
 fn holds_text(document: &LoroDoc, tree: &LoroTree, block: &TreeID) -> bool {
-    doc::children_of(tree, Some(*block)).iter().any(|child| {
-        let has_body = doc::block_type_of(tree, child).is_some_and(|t| t.has_body());
-        (has_body && !doc::get_block_text(document, child).is_empty())
-            || holds_text(document, tree, child)
+    descendants(tree, block).any(|child| {
+        doc::block_type_of(tree, &child).is_some_and(|t| t.has_body())
+            && !doc::get_block_text(document, &child).is_empty()
     })
 }
 
 /// The first text block of a cell, where a caret entering it lands.
 fn first_text_block(tree: &LoroTree, block: &TreeID) -> Option<TreeID> {
-    doc::children_of(tree, Some(*block))
-        .into_iter()
-        .find_map(|child| {
-            if doc::block_type_of(tree, &child).is_some_and(|t| t.has_body()) {
-                Some(child)
-            } else {
-                first_text_block(tree, &child)
-            }
-        })
+    descendants(tree, block)
+        .find(|child| doc::block_type_of(tree, child).is_some_and(|t| t.has_body()))
 }
 
 /// A width or a padding the format holds: finite, and not negative. A column
@@ -1594,5 +1599,38 @@ pub(crate) mod tests {
             .expect("the record lands");
         state.validate_tables();
         assert_eq!(state.regions_of(&table), [first], "the earlier stamp drops");
+    }
+
+    /// A cell holds one text block under ten thousand blocks without a body.
+    /// It finds that block, and reads its text, on a stack of 1 MiB. Both
+    /// reads recursed once per level (`PROSE-140`, audit `P36`).
+    #[test]
+    fn a_deep_cell_finds_its_text_on_a_small_stack() {
+        let found = std::thread::Builder::new()
+            .stack_size(1024 * 1024)
+            .spawn(|| {
+                let document = LoroDoc::new();
+                let cell = doc::create_block(&document, None, BlockType::TableCell);
+                let mut parent = cell;
+                for _ in 0..10_000 {
+                    parent = doc::create_block(&document, parent, BlockType::HRule);
+                }
+                let text = doc::create_block(&document, parent, BlockType::Paragraph);
+                if let Some(id) = &text {
+                    doc::get_block_text(&document, id)
+                        .insert(0, "deep")
+                        .expect("the text");
+                }
+                let tree = doc::blocks(&document);
+                let cell = cell.expect("the cell");
+                (
+                    first_text_block(&tree, &cell) == text,
+                    holds_text(&document, &tree, &cell),
+                )
+            })
+            .expect("a thread")
+            .join()
+            .expect("no stack overflow");
+        assert_eq!(found, (true, true));
     }
 }

@@ -467,6 +467,7 @@ pub(crate) fn measure_band(
         notes: &NotePlan::default(),
         keep: None,
         consumed: std::cell::Cell::new(Px::<Doc>::ZERO),
+        place: Place::Flow,
     };
     measure_one(measurer, &scope, id, BlockType::Paragraph)
 }
@@ -536,6 +537,7 @@ pub(crate) fn measure_document_with(
         notes,
         keep,
         consumed: std::cell::Cell::new(Px::<Doc>::ZERO),
+        place: Place::Flow,
     };
     for root in doc::roots(&tree) {
         walk(measurer, &scope, &root, &mut measured);
@@ -578,6 +580,7 @@ pub(crate) fn reshape(
         notes,
         keep: None,
         consumed: std::cell::Cell::new(Px::<Doc>::ZERO),
+        place: Place::Flow,
     };
     ids.iter()
         .filter_map(|id| {
@@ -649,44 +652,64 @@ struct Walk<'a> {
     /// The content measured so far, each block counted at most one body:
     /// a floor on the pages the blocks before take.
     consumed: std::cell::Cell<Px<Doc>>,
+    /// Where the blocks of this walk sit.
+    place: Place,
 }
 
-/// Measure one block and then its children, in that order.
+/// Where a walk measures its blocks.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Place {
+    /// The flow of the document.
+    Flow,
+    /// A cell of a table. A table there breaks the nesting rules, so it
+    /// measures as nothing. A peer may still write one, and measuring it
+    /// would recurse once per table nested in it (`PROSE-140`).
+    Cell,
+}
+
+/// Measure one block and then its children, in that order: the depth-first
+/// pre-order of the tree, which is the document flow.
 ///
 /// A table is the one subtree the walk does not descend into. Its rows are
 /// the boundaries it breaks at (`PROSE-071`), so it is measured whole and
 /// placed as one block.
+///
+/// A peer writes the tree, and nothing bounds its depth. So the walk keeps
+/// the blocks still to measure on a stack of its own, never on the call
+/// stack (`PROSE-140`).
 fn walk(measurer: &mut Measurer, scope: &Walk<'_>, id: &TreeID, out: &mut Vec<MeasuredBlock>) {
-    // A block measured before keeps its type, so only an edited one is
-    // looked up in the tree.
-    let block_type = match scope.cached.get(id) {
-        Some(block) => {
-            out.push((*block).clone());
-            block.block_type
-        }
-        None => {
-            let Some(block_type) = doc::block_type_of(scope.tree, id) else {
-                return;
-            };
-            let mut block = measure_one(measurer, scope, id, block_type);
-            if let Some(keep) = scope.keep {
-                let consumed = scope.consumed.get();
-                if !keep.keeps(id, consumed) {
-                    block.run = None;
-                }
-                scope
-                    .consumed
-                    .set(consumed + block.height.min(keep.body_height));
+    let mut pending = vec![*id];
+    while let Some(id) = pending.pop() {
+        // A block measured before keeps its type, so only an edited one is
+        // looked up in the tree.
+        let block_type = match scope.cached.get(&id) {
+            Some(block) => {
+                out.push((*block).clone());
+                block.block_type
             }
-            out.push(block);
-            block_type
+            None => {
+                let Some(block_type) = doc::block_type_of(scope.tree, &id) else {
+                    continue;
+                };
+                let mut block = measure_one(measurer, scope, &id, block_type);
+                if let Some(keep) = scope.keep {
+                    let consumed = scope.consumed.get();
+                    if !keep.keeps(&id, consumed) {
+                        block.run = None;
+                    }
+                    scope
+                        .consumed
+                        .set(consumed + block.height.min(keep.body_height));
+                }
+                out.push(block);
+                block_type
+            }
+        };
+        if block_type == BlockType::Table {
+            continue;
         }
-    };
-    if block_type == BlockType::Table {
-        return;
-    }
-    for child in doc::children_of(scope.tree, Some(*id)) {
-        walk(measurer, scope, &child, out);
+        // Reversed, so the first child is the next block measured.
+        pending.extend(doc::children_of(scope.tree, Some(id)).into_iter().rev());
     }
 }
 
@@ -724,6 +747,7 @@ fn measure_one(
             picture = Some(Arc::new(shape));
             (height, None)
         }
+        BlockType::Table if scope.place == Place::Cell => (Px::<Doc>::ZERO, None),
         BlockType::Table => {
             let (rows, shape) =
                 table_metrics(measurer, document, tree, defaults, id, content_width);
@@ -1074,6 +1098,7 @@ fn cell_blocks(
         notes: &NotePlan::default(),
         keep: None,
         consumed: std::cell::Cell::new(Px::<Doc>::ZERO),
+        place: Place::Cell,
     };
     for child in doc::children_of(tree, Some(*cell)) {
         walk(measurer, &scope, &child, &mut stacked);
@@ -1280,5 +1305,60 @@ mod tests {
         for page in layout.page_count.span() {
             let _ = layout.blocks_on_page(page).count();
         }
+    }
+
+    /// Run `work` on a thread whose call stack holds 1 MiB, far less than
+    /// one frame per level of the trees below needs.
+    fn on_small_stack<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> T {
+        std::thread::Builder::new()
+            .stack_size(1024 * 1024)
+            .spawn(work)
+            .expect("a thread")
+            .join()
+            .expect("no stack overflow")
+    }
+
+    /// Ten thousand blocks, each one the child of the block before, measure
+    /// and count on a small stack. The walk recursed once per level and
+    /// overflowed the stack of the Logic thread (`PROSE-140`, audit `P36`).
+    #[test]
+    fn a_chain_of_ten_thousand_nested_blocks_measures_on_a_small_stack() {
+        let (measured, paragraphs) = on_small_stack(|| {
+            let document = LoroDoc::new();
+            let mut parent = None;
+            for _ in 0..10_000 {
+                parent = doc::create_block(&document, parent, BlockType::Paragraph);
+                if let Some(id) = &parent {
+                    write_text(&document, id, "a");
+                }
+            }
+            let mut measurer = crate::layout::measure::shipped_measurer();
+            let measured = measure_document(&mut measurer, &document, Px::<Doc>::new(400.0));
+            let count = crate::count::compute_word_count(&document);
+            (measured.len(), count.paragraphs)
+        });
+        assert_eq!(measured, 10_000);
+        assert_eq!(paragraphs.get(), 10_000);
+    }
+
+    /// A table inside a cell breaks the nesting rules, and a peer may write
+    /// one anyway, two thousand deep. The outer table still measures on a
+    /// small stack, and each nested table measures as nothing (`PROSE-140`).
+    #[test]
+    fn tables_nested_in_cells_measure_on_a_small_stack() {
+        let measured = on_small_stack(|| {
+            let document = LoroDoc::new();
+            let mut parent = None;
+            for _ in 0..2_000 {
+                let table = doc::create_block(&document, parent, BlockType::Table);
+                let row =
+                    table.and_then(|t| doc::create_block(&document, Some(t), BlockType::TableRow));
+                parent =
+                    row.and_then(|r| doc::create_block(&document, Some(r), BlockType::TableCell));
+            }
+            let mut measurer = crate::layout::measure::shipped_measurer();
+            measure_document(&mut measurer, &document, Px::<Doc>::new(400.0)).len()
+        });
+        assert_eq!(measured, 1, "the outer table is one block of the flow");
     }
 }
