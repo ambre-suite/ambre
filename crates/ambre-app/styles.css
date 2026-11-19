@@ -1955,6 +1955,23 @@ input[type="radio"] {
     filter: brightness(1.1);
 }
 
+/* The secondary action beside New document: the same size, outlined instead
+   of filled, so the primary action stays the one that stands out. The padding
+   gives back the width of the border, so both buttons share one height. */
+.ambre-open-file {
+    padding: calc(var(--space-4) - 1px) calc(var(--space-8) - 1px);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--accent);
+    font-size: var(--font-body);
+    cursor: pointer;
+}
+
+.ambre-open-file:hover {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
 /* New-document type picker (ambre-spec-launcher.md, CHROME-038): the trigger
    anchors a dropdown menu listing one entry per creatable DocType. */
 .ambre-new-doc-picker {
