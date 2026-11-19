@@ -3,8 +3,9 @@
 > An addendum to [`security-audit.md`](security-audit.md), which holds the numbered findings and
 > the earlier passes. Each `N` and `P` identifier below 26 is declared there.
 
-This addendum starts the A security pre-audit of the whole workspace Story (`ambre-roadmap.md`
-MVP). It is an audit alone: this pass fixes nothing, and ticks no box. The Story stays open, and a
+This addendum starts the security pre-audit of the workspace, which the roadmap now holds as
+two MVP Stories: A security pre-audit of the workspace outside the call path, and A security
+pre-audit of the call path. It is an audit alone: this pass fixes nothing, and ticks no box. The Story stays open, and a
 delta pass follows the last batch of the milestone.
 
 **Method.** Five AI reviewers worked apart, each on one scope, read-only. None read
