@@ -622,6 +622,18 @@ pub(crate) async fn invite_task<H: ShareHttp>(
             Ok(log) => log,
             Err(e) => return failed(logic_tx, ApiRequest::InviteToDocument, e),
         };
+        // A signing key the log binds to another member binds nobody else:
+        // every walk would stop at the entry (audit `P58`).
+        if log.log().binds_elsewhere(invitee_id, &invitee_key) {
+            crate::log::warning!(
+                "Sync: the invitee's signing key is another member's; invite refused"
+            );
+            return api_error(
+                logic_tx,
+                ApiRequest::InviteToDocument,
+                ApiFailure::Local(LocalFailure::PinMismatch(p.invitee)),
+            );
+        }
         let draft = Draft {
             document: p.document_id,
             member: invitee_id,
@@ -2910,7 +2922,9 @@ mod tests {
             let draft = Draft {
                 document: document_id,
                 member: Id::<User>::parse_str(uid).unwrap(),
-                member_key: FixedBytes::from_array([0; 32]),
+                // A key binds one member alone (audit `P58`): each takes
+                // the bytes of its own exchange key.
+                member_key: FixedBytes::from_array(*exchange.as_array()),
                 member_exchange_key: **exchange,
                 act: MembershipAct::Invite,
                 role: Role::Editor,

@@ -66,6 +66,15 @@ pub(crate) struct MemberKeys {
 }
 
 impl SpaceWord {
+    /// Whether `exchange` is the exchange key of a member the space holds
+    /// present with a writing role at its latest head. Only such a member
+    /// re-keys a channel it is no member of (audit `P57`).
+    pub(crate) fn writes_under(&self, exchange: &FixedBytes<ExchangePublicKey>) -> bool {
+        self.present
+            .values()
+            .any(|keys| keys.exchange == *exchange && self.writing.contains(&keys.key))
+    }
+
     /// What the walked log of a space says. An unanchored log verifies
     /// nobody, so it grants no writer.
     pub(crate) fn of(log: &Log) -> Self {
@@ -925,6 +934,13 @@ impl Log {
             .and_then(|held| held.wraps)
     }
 
+    /// Whether the log binds `key` to a member other than `member`. An
+    /// invite of `member` under that key is refused, since no valid entry
+    /// could carry it (audit `P58`).
+    pub(crate) fn binds_elsewhere(&self, member: Id<User>, key: &FixedBytes<PublicKey>) -> bool {
+        key_held_elsewhere(&self.held, member, key)
+    }
+
     /// The anchor the walk started from.
     pub(crate) fn anchor(&self) -> Option<FixedBytes<EntryDigest>> {
         self.anchor
@@ -996,6 +1012,17 @@ fn proves(
     })
 }
 
+/// Whether a member other than `member`, among `held`, holds `key` (audit
+/// `P58`).
+fn key_held_elsewhere(
+    held: &HashMap<Id<User>, Held>,
+    member: Id<User>,
+    key: &FixedBytes<PublicKey>,
+) -> bool {
+    held.iter()
+        .any(|(user, other)| *user != member && other.key == *key)
+}
+
 /// Whether `held`, the members a walk holds, allows `entry`, and its author
 /// signed it.
 fn allowed(
@@ -1038,11 +1065,16 @@ fn allowed(
                 && self_join(entry)
         }
     };
+    // A key binds one member alone. An entry that binds the key of another
+    // member would make the latest binding win, and drop that member's
+    // deltas from the directory (audit `P58`).
+    let binds = matches!(entry.act, MembershipAct::Invite | MembershipAct::SelfJoin);
+    let taken = binds && key_held_elsewhere(held, entry.member, &entry.member_key);
     let key = match entry.act {
         MembershipAct::SelfJoin => Some(&entry.member_key),
         _ => author.map(|held| &held.key),
     };
-    permitted && key.is_some_and(|key| signed_by(entry, key))
+    permitted && !taken && key.is_some_and(|key| signed_by(entry, key))
 }
 
 /// Whether `key` signed `entry`.
@@ -1179,15 +1211,16 @@ pub(crate) mod tests {
         let owner = Person::new(99);
         let mut log = Vec::new();
         append(&mut log, &owner, &owner, MembershipAct::Create, Role::Owner);
-        for (member, exchange) in members {
+        for (seed, (member, exchange)) in (100u8..).zip(members) {
             let next = LogHead {
                 position: place_after(log.len()),
                 previous: log.last().and_then(digest),
             };
+            // A key binds one member alone (audit `P58`).
             let draft = Draft {
                 document: DOC,
                 member: *member,
-                member_key: owner.public(),
+                member_key: Person::new(seed).public(),
                 member_exchange_key: *exchange,
                 act: MembershipAct::Invite,
                 role: Role::Editor,
@@ -1255,6 +1288,52 @@ pub(crate) mod tests {
         assert!(!granted.admits(&stranger.public(), &author));
         let unanchored = Confirmers::of(&Log::walk(DOC, None, &entries, no_self_join));
         assert_eq!(unanchored, Confirmers::Unchecked);
+    }
+
+    /// `SYNC-282`, audit `P58`: an editor signs an invite of a third user
+    /// under the signing key of Alice. The walk stops at the entry, so
+    /// Alice's key stays bound to Alice, and an invite under a key of its
+    /// own still walks.
+    #[test]
+    fn a_key_bound_to_one_member_binds_no_other() {
+        let (alice, bob, carol) = (Person::new(1), Person::new(2), Person::new(3));
+        let entries = created(&alice, &bob);
+        let mut stolen = entries.clone();
+        let next = LogHead {
+            position: place_after(stolen.len()),
+            previous: stolen.last().and_then(digest),
+        };
+        let draft = Draft {
+            document: DOC,
+            member: carol.id,
+            member_key: alice.public(),
+            member_exchange_key: FixedBytes::from_array([3; 32]),
+            act: MembershipAct::Invite,
+            role: Role::Viewer,
+            key: None,
+        };
+        stolen.push(sign(draft, next, bob.id, &bob.key).unwrap());
+        let log = walk(&stolen);
+        assert_eq!(
+            log.walked_head(),
+            walk(&entries).walked_head(),
+            "the walk stops"
+        );
+        assert!(log.binds_elsewhere(carol.id, &alice.public()));
+        assert!(!log.binds_elsewhere(alice.id, &alice.public()));
+        let mut honest = entries;
+        append(
+            &mut honest,
+            &bob,
+            &carol,
+            MembershipAct::Invite,
+            Role::Viewer,
+        );
+        assert_ne!(
+            walk(&honest).walked_head(),
+            log.walked_head(),
+            "carol's own key walks"
+        );
     }
 
     /// `AUTHOR-032`, audit `W203`: Mallory, an editor, invites a second

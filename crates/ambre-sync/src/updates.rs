@@ -1106,6 +1106,10 @@ impl SyncState {
     ///    with Poly1305 tag).
     /// 4. Calls [`ambre_crypto::ecdh::unwrap_document_key`] to perform the
     ///    ECDH shared-secret derivation, KEK derivation, and AEAD decryption.
+    ///
+    /// It runs no check of an open, so no product path calls it: a path that
+    /// unwraps a key calls [`checked_members_key`] (audit `P45`).
+    #[cfg(test)]
     pub(crate) fn unwrap_document_key(
         exchange_key: &x25519_dalek::StaticSecret,
         members: &[http::MemberEntry],
@@ -2220,6 +2224,72 @@ pub(crate) async fn upload_snapshot(
         crate::log::warning!("Sync: SendSnapshot self-confirm failed for {document_id:?}: {e}");
     }
     Ok(snapshot_id)
+}
+
+/// What a path that unwraps a key outside an open holds to run the checks of
+/// an open (audit `P45`).
+pub(crate) struct KeyCheck {
+    /// The document whose members answer serves the key.
+    pub document_id: Id<Document>,
+    /// The document whose log and links vouch for the key (`SYNC-229`).
+    pub log_document: Id<Document>,
+    pub exchange_key: StaticSecret,
+    pub my_user_id: Option<Id<User>>,
+    pub rule: membership_log::LogRule,
+    pub roots: crate::key_vouch::Roots,
+    /// The footing the session holds for the log, if any (audit `W200`).
+    pub held: Option<crate::key_vouch::Footing>,
+    pub url_scheme: crate::http::UrlScheme,
+    pub api_base: crate::http::Url<crate::http::RelayHost>,
+    pub auth: http::AuthContext,
+}
+
+/// The key `resp` hands this client, once the checks of an open pass on it.
+/// They read the log, the wrapper, the pin or the roots, the links and the
+/// chain (`SYNC-200` to `SYNC-202`, audit `P45`). A rename of a document not open
+/// seals its name under this key alone.
+///
+/// # Errors
+///
+/// The failure of [`crate::error::SyncError::KeyOutOfReach`] when any check
+/// refuses the key, or a failure to read the key links.
+pub(crate) async fn checked_members_key(
+    check: KeyCheck,
+    resp: &http::MembersResponse,
+) -> Result<DocumentKey, crate::http::Failed> {
+    use crate::http::Reported as _;
+    let refused = |step: &str| crate::error::SyncError::KeyOutOfReach.at(step);
+    let opened = SyncState::opened_from_members(
+        resp,
+        check.log_document,
+        &check.exchange_key,
+        check.my_user_id,
+        &check.rule,
+        &check.roots,
+        check.held,
+    )
+    .map_err(|_| refused("the members answer"))?;
+    let links = http::try_fetch_key_links(
+        check.url_scheme,
+        &check.api_base,
+        check.document_id,
+        check.auth,
+    )
+    .await
+    .map_err(|e| e.at("the key links"))?;
+    let links = crate::chain::signed_by_writers(links, &opened.link_signers);
+    SyncState::named_key_holds(
+        check.log_document,
+        &opened.doc_key,
+        opened.named_key,
+        &links,
+    )
+    .map_err(|_| refused("the named key"))?;
+    opened
+        .vouch
+        .check(check.log_document, &opened.doc_key, &links)
+        .map_err(|_| refused("the checks of an open"))?;
+    Ok(opened.doc_key)
 }
 
 /// Whether a 404 on the members of a document may open it local-only. The
