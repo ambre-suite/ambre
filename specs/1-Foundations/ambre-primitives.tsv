@@ -1424,6 +1424,9 @@ ambre-murmure | src/logic/delta.rs | crate::logic::delta | thread_set() | ret | 
 ambre-murmure | src/logic/delta.rs | crate::logic::delta | ThreadField::read(stored) | param | Option<String>	generic	enum<->stored string codec at the CRDT boundary: the raw string the Loro thread field stores, parsed into the enum here
 ambre-murmure | src/logic/delta.rs | crate::logic::delta | ThreadField::takes() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/logic/delta.rs | crate::logic::delta | check(call_ends) | param | impl Fn(&ContainerID)->bool	generic	a predicate the caller passes: whether a container is the call_end map of a message
+ambre-murmure | src/logic/delta.rs | crate::logic::delta | creates() | ret | bool	generic	state flag/predicate: whether a container is the one its operation creates
+ambre-murmure | src/logic/delta.rs | crate::logic::delta | held_elsewhere() | ret | bool	generic	state flag/predicate: whether another message map holds an identifier
+ambre-murmure | src/logic/delta.rs | crate::logic::delta | Held.elsewhere | field | &'a dyn Fn(Id<Message>,&ContainerID)->bool	generic	a predicate the caller passes: whether another message map holds an identifier
 ambre-murmure | src/ui/drafts.rs | crate::ui::drafts | Row.text | field | String	free-text	text, label or user content
 ambre-murmure | src/ui/drafts.rs | crate::ui::drafts | SEPARATOR | const | char	generic	the char that parts the user, the channel and the thread root in the spelling of a DraftKey
 ambre-murmure | src/ui/emoji.rs | crate::ui::emoji | EmojiEntry.name | field | &'static str	free-text	the English name of an emoji, shown as is
