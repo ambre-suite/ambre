@@ -36,7 +36,7 @@ pub fn parse(text: &str) -> Option<Instant<Authored>> {
         .get(..3)
         .and_then(|digits| digits.parse().ok())
         .unwrap_or(0);
-    let seconds = days_from_civil(date)
+    let seconds = days_from_civil(date)?
         .get()
         .checked_mul(SECONDS_PER_DAY)?
         .checked_add(hour * 3600 + minute * 60 + second)?
@@ -114,7 +114,12 @@ fn split_offset(rest: &str) -> Option<(&str, i64)> {
                 .unwrap_or((offset.get(1..)?, "0"));
             let hours: i64 = hours.parse().ok()?;
             let minutes: i64 = minutes.parse().ok()?;
-            Some((clock, sign * (hours * 3600 + minutes * 60)))
+            // An offset the file spells past the width reads as no date,
+            // never as a wrapped one (`W306`).
+            let seconds = hours
+                .checked_mul(3600)?
+                .checked_add(minutes.checked_mul(60)?)?;
+            Some((clock, seconds.checked_mul(sign)?))
         }
         None => Some((rest, 0)),
     }
@@ -128,21 +133,26 @@ struct CivilDate {
 }
 
 /// The days from 1970-01-01 to a civil date: Howard Hinnant's
-/// `days_from_civil`, exact over the proleptic Gregorian calendar.
-fn days_from_civil(date: CivilDate) -> TimeSpan<Day> {
+/// `days_from_civil`, exact over the proleptic Gregorian calendar. A year
+/// near the top of the width answers `None`, never a wrapped count (`W306`).
+fn days_from_civil(date: CivilDate) -> Option<TimeSpan<Day>> {
     let month = i64::from(date.month.get());
     let year = if month <= 2 {
-        date.year.get() - 1
+        date.year.get().checked_sub(1)?
     } else {
         date.year.get()
     };
     let era = year.div_euclid(400);
-    let year_of_era = year - era * 400;
+    let year_of_era = year.rem_euclid(400);
     let day_of_year = (153 * (if month > 2 { month - 3 } else { month + 9 }) + 2) / 5
         + i64::from(date.day.get())
         - 1;
     let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
-    TimeSpan::new(era * 146_097 + day_of_era - 719_468)
+    let days = era
+        .checked_mul(146_097)?
+        .checked_add(day_of_era)?
+        .checked_sub(719_468)?;
+    Some(TimeSpan::new(days))
 }
 
 /// The civil date of a day count from 1970-01-01, the inverse of
@@ -226,6 +236,12 @@ mod tests {
             "1969-12-31T23:59:59Z",
             "2009-13-01T00:00:00Z",
             "2009-07-24T25:00:00Z",
+            // `W306`: numbers past the width read as no date, in a debug
+            // build as in a release one.
+            "2009-07-24T15:05:00-9999999999999999:00",
+            "2009-07-24T15:05:00+00:9999999999999999",
+            "9223372036854775807-07-24T15:05:00Z",
+            "-9223372036854775808-01-24T15:05:00Z",
         ] {
             assert_eq!(parse(text), None, "{text}");
         }

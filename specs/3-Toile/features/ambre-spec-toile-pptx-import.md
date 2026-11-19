@@ -55,6 +55,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `TOILE-IO
 | `TOILE-IO-161` | `FAIL` | Given a file the reader cannot read, the import MUST create nothing and leave the board as it was. | this spec section 3; `TOILE-IO-073` | `ambre_toile::logic::state::import::pptx_tests::a_broken_file_imports_nothing`; `ambre_pptx::read::tests::bytes_that_are_no_package_are_refused`; `::a_package_of_another_document_is_refused`; `::a_presentation_of_no_slide_is_refused` | none | verified |
 | `TOILE-IO-163` | `FAIL` | Given a part that declares a document type or nests past the bound, the reader MUST refuse the file whole. | this spec section 3; `INTEROP-002` | `ambre_pptx::read::tests::a_part_that_declares_a_document_type_is_refused`; `::a_part_nested_past_the_bound_is_refused`; `::malformed_parts_read_to_an_error` | none | verified |
 | `TOILE-IO-162` | `FAIL` | Given a deck whose masters, flattened onto every slide, pass the bound of the reader or of the board, the import MUST refuse the file whole. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_pptx::read::tests::a_master_that_flattens_past_the_item_bound_is_refused`; `ambre_toile::logic::interop::deck_import::tests::a_deck_past_the_element_bound_is_refused_whole` | none | verified |
+| `TOILE-IO-193` | `FAIL` | Given a part that builds a tree past its node or attribute bound, the reader MUST refuse the file whole. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_pptx::read::tests::a_part_past_the_node_bound_is_refused` | none | verified |
+| `TOILE-IO-194` | `FAIL` | Given a deck whose text, flattened onto every slide, passes the text bound, the reader MUST refuse the file whole. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_pptx::read::tests::a_master_text_that_flattens_past_the_text_bound_is_refused` | none | verified |
+| `TOILE-IO-195` | `POST` | The reader MUST match each placeholder, relationship and chart category by a lookup, never by a scan per item. | this spec section 3 | `ambre_pptx::read::tests::many_placeholders_match_their_layout_by_lookup` | none | verified |
 | `TOILE-IO-179` | `FAIL` | Given an OpenDocument package of another document, of no page, with a part that declares a document type or nests past the bound, or whose master pages flatten past the bound, the reader MUST refuse the file whole. | this spec section 3; `INTEROP-002` | `ambre_pptx::read::odp::tests::bytes_that_are_no_package_are_refused`; `::a_package_of_another_document_is_refused`; `::a_presentation_of_no_page_is_refused`; `::a_part_that_declares_a_document_type_is_refused`; `::a_part_nested_past_the_bound_is_refused`; `::a_master_that_flattens_past_the_item_bound_is_refused` | none | verified |
 | `TOILE-IO-171` | `FRAME` | An import of a deck MUST NOT change an element, or a slide of the deck, the board already held. | this spec section 3; `TOILE-IO-071` | `ambre_toile::logic::state::import::pptx_tests::a_deck_leaves_the_board_it_lands_on_alone` | none | verified |
 
@@ -133,11 +136,14 @@ pub fn import_deck(read: &ImportedDeck, thumbs: &[Option<Pixels>], format: FileF
 **Steps, on an import:**
 
 1. the Office module opens the package under the bounds of `ambre-opc`, and reads the slide list
-   of the presentation part;
+   of the presentation part. Each part builds its tree under the tree row of
+   `ambre-spec-budgets.md section 6` (`TOILE-IO-193`);
 2. per slide, it follows the layout, then the master, then the theme. It resolves each colour
    through the colour map of the master and the scheme of the theme;
 3. it lays the shapes of the master, then of the layout, then of the slide, unless one of them hides
-   the master's. A placeholder takes each property from the first level of its chain that sets it;
+   the master's. A placeholder takes each property from the first level of its chain that sets it.
+   The flattened deck holds its items, its pictures and its text under three bounds
+   (`TOILE-IO-162`, `TOILE-IO-194`);
 4. it reads the notes page, and records each construct the deck cannot hold. It decodes the
    thumbnail of each JPEG picture, since the Main instance links no JPEG decoder (`ARCH-078`);
 5. an OpenDocument presentation takes the same steps over its own index: the master page of each

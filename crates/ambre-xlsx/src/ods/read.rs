@@ -485,6 +485,9 @@ fn read_content(
 ) -> Result<(Vec<Sheet>, Vec<crate::model::CellStyle>), ContentError> {
     let mut reader = Reader::from_str(xml::utf8(data)?);
     let mut declared: Vec<Node> = Vec::new();
+    // One budget for every subtree of the part, so many style blocks meet
+    // one bound (`W72`).
+    let mut budget = ambre_opc::TreeBudget::default();
     let mut layout = Layout::default();
     let mut styles: Option<Styles> = None;
     let mut sheets: Vec<Sheet> = Vec::new();
@@ -502,7 +505,7 @@ fn read_content(
                 let empty = matches!(event, Event::Empty(_));
                 let name = xml::local_name(e);
                 if !empty && matches!(name.as_str(), "automatic-styles" | "font-face-decls") {
-                    let node = subtree(&mut reader, e)?;
+                    let node = subtree(&mut reader, e, &mut budget)?;
                     for n in node.walk() {
                         layout.declare(n);
                     }
@@ -702,6 +705,7 @@ fn read_content(
                     push_reference(c, r)?;
                 }
             }
+            Event::DocType(_) => return Err(xml::document_type().into()),
             Event::Eof => break,
             _ => {}
         }
@@ -877,15 +881,19 @@ fn finish_row(table: &mut Table, cells_read: &mut u64) -> Result<(), ContentErro
 
 /// The style a cell of `table` at `col` takes when it names none: its row's,
 /// else its column's, else the default.
+///
+/// The column runs follow one another, each past the one before. So a
+/// binary search finds the run of `col`, not a scan per cell (`W305`).
 fn inherited_style(table: &Table, col: u64) -> String {
     table
         .row_style
         .clone()
         .or_else(|| {
+            let at = table.columns.partition_point(|r| r.last < col);
             table
                 .columns
-                .iter()
-                .find(|r| r.first <= col && col <= r.last)
+                .get(at)
+                .filter(|r| r.first <= col)
                 .and_then(|r| r.style.clone())
         })
         .unwrap_or_else(|| DEFAULT.to_owned())
@@ -909,14 +917,17 @@ fn finish_cell(cell: PendingCell, table: &mut Table, styles: &mut Styles, report
     let cached = cell.value();
     let mut content = Content::Value(cached.clone());
     if let Some(attribute) = &cell.formula {
+        // A span the file spells near the top of the width overflows: it
+        // reads as no range, never as a wrapped one (`W306`).
         let array = (cell.matrix != (1, 1))
             .then(|| {
-                position(Spot {
-                    row: table.row + cell.matrix.1 - 1,
-                    col: cell.col + cell.matrix.0 - 1,
+                Some(Spot {
+                    row: table.row.checked_add(cell.matrix.1)?.checked_sub(1)?,
+                    col: cell.col.checked_add(cell.matrix.0)?.checked_sub(1)?,
                 })
             })
             .flatten()
+            .and_then(position)
             .map(|end| CellRange::spanning(at, end));
         match formula::excel_of(attribute) {
             Some(excel) => {

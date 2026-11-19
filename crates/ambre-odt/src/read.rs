@@ -10,6 +10,10 @@
 
 use std::collections::BTreeMap;
 
+use ambre_core::{Count, Octets};
+use ambre_opc::MAX_TREE_NODES;
+use ambre_opc::tree::TreeNodes;
+
 use ambre_core::{
     Authored, Bounded, FontSize, Instant, LinkUrl, Payload, PrintLength, Pt, Rgb, Slant,
     Strikethrough, Underline, Weight,
@@ -34,6 +38,46 @@ const MAX_REPEAT: u32 = 1024;
 
 /// The most a run of `text:s` writes, for the same reason.
 const MAX_SPACES: u32 = 1024;
+
+/// The most nodes the walk may visit for one document: twice the node bound
+/// of a tree. A walk visits each node of the body and of the bands once.
+/// So only the copies of a repeated row or cell pass it (`W302`).
+const MAX_WALK: Count<TreeNodes> = MAX_TREE_NODES.plus(MAX_TREE_NODES);
+
+/// The most bytes of text the walk may write for one document: the bound of
+/// the parts read together. The spaces of `text:s` count, so a file of
+/// short space marks meets it as a file of long text does (`W302`).
+const MAX_TEXT: Count<Octets> = ambre_opc::MAX_INFLATED;
+
+/// What the walk built so far for one document. The tree bounds what one
+/// part holds; this bounds what the walk makes of it, copies included.
+#[derive(Default)]
+struct Built {
+    steps: Count<TreeNodes>,
+    text: Count<Octets>,
+}
+
+impl Built {
+    /// Charge one node visited.
+    fn step(&mut self) -> Result<(), OdtError> {
+        let steps = self.steps.incremented();
+        if steps > MAX_WALK {
+            return Err(OdtError::TooLarge);
+        }
+        self.steps = steps;
+        Ok(())
+    }
+
+    /// Charge `len` bytes of text, about to join a run.
+    fn text(&mut self, len: Count<Octets>) -> Result<(), OdtError> {
+        let bytes = self.text.plus(len);
+        if bytes > MAX_TEXT {
+            return Err(OdtError::TooLarge);
+        }
+        self.text = bytes;
+        Ok(())
+    }
+}
 
 /// The parsed parts a reader reads. `content` is the root of `content.xml`,
 /// and the other two are absent when the package carries none.
@@ -246,8 +290,20 @@ struct Change {
     id: WordId<RevisionMarker>,
     author: String,
     date: Option<WordDate>,
-    /// The paragraphs a deletion removed.
+    /// The paragraphs a deletion removed. The walk takes them at the first
+    /// mark that names the deletion.
     removed: Vec<Element>,
+    /// Whether a mark already named the deletion. A second mark expands
+    /// nothing. So a deletion that names itself ends, and a region is
+    /// copied once whatever the count of its marks (`W300`, `W301`).
+    expansion: Expansion,
+}
+
+/// Whether the walk expanded a deletion yet.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Expansion {
+    Pending,
+    Done,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -281,6 +337,7 @@ struct Reader {
     last_list: Option<WordId<ListInstance>>,
     /// The list each `xml:id` names, for a list that continues it.
     list_ids: BTreeMap<String, WordId<ListInstance>>,
+    built: Built,
 }
 
 impl Reader {
@@ -395,12 +452,13 @@ impl Reader {
                         .and_then(|i| i.child(Ns::DublinCore, "date"))
                         .and_then(|d| odf_date(&d.text())),
                     removed,
+                    expansion: Expansion::Pending,
                 },
             );
         }
     }
 
-    fn revision(&self, change: &Change) -> Revision {
+    fn revision(change: &Change) -> Revision {
         Revision {
             kind: match change.kind {
                 ChangeKind::Deletion => RevisionKind::Deletion,
@@ -433,6 +491,7 @@ impl Reader {
         out: &mut Vec<Block>,
     ) -> Result<(), OdtError> {
         for element in parent.elements() {
+            self.built.step()?;
             match (element.ns, element.name()) {
                 (Ns::Text, "p" | "h") => {
                     let paragraph = self.paragraph(element, scope, pictures)?;
@@ -681,10 +740,11 @@ impl Reader {
         out: &mut Vec<Inline>,
     ) -> Result<(), OdtError> {
         for node in &parent.children {
+            self.built.step()?;
             let element = match node {
                 Node::Text(text) => {
                     let text = state.collapse(text);
-                    self.push_text(&text, state, out);
+                    self.push_text(&text, state, out)?;
                     continue;
                 }
                 Node::Element(element) => element,
@@ -726,7 +786,7 @@ impl Reader {
                         .unwrap_or(1)
                         .min(MAX_SPACES);
                     let spaces: String = " ".repeat(usize::try_from(count).unwrap_or(1));
-                    self.push_text(&spaces, state, out);
+                    self.push_text(&spaces, state, out)?;
                     state.space = false;
                 }
                 (Ns::Text, "tab") => {
@@ -819,10 +879,21 @@ impl Reader {
 
     /// Append `text` as a run in the format, the revision and the link in
     /// force. A run of the same format and revision grows instead.
-    fn push_text(&mut self, text: &str, state: &mut InlineState, out: &mut Vec<Inline>) {
+    ///
+    /// # Errors
+    ///
+    /// [`OdtError::TooLarge`] once the text of the document passes
+    /// [`MAX_TEXT`].
+    fn push_text(
+        &mut self,
+        text: &str,
+        state: &mut InlineState,
+        out: &mut Vec<Inline>,
+    ) -> Result<(), OdtError> {
         if text.is_empty() {
-            return;
+            return Ok(());
         }
+        self.built.text(Count::of(text.len()))?;
         self.effects(&state.format);
         let run = Run {
             text: text.to_owned(),
@@ -837,10 +908,10 @@ impl Reader {
                     && last.revision == run.revision
                 {
                     last.text.push_str(&run.text);
-                    return;
+                    return Ok(());
                 }
                 out.push(Inline::Run(run));
-                return;
+                return Ok(());
             }
         };
         match runs.last_mut() {
@@ -849,6 +920,7 @@ impl Reader {
             }
             _ => runs.push(run),
         }
+        Ok(())
     }
 
     /// Name each run effect the model has no form for, as the Word reader
@@ -904,7 +976,7 @@ impl Reader {
             ChangeKind::Insertion | ChangeKind::Deletion => {
                 self.report
                     .record(WordConstruct::TrackedChange, Outcome::Carried);
-                self.insertion = Some(self.revision(change));
+                self.insertion = Some(Self::revision(change));
             }
         }
     }
@@ -917,15 +989,21 @@ impl Reader {
     ) -> Result<Vec<Paragraph>, OdtError> {
         let Some(change) = element
             .attr(Ns::Text, "change-id")
-            .and_then(|name| self.changes.get(name))
+            .and_then(|name| self.changes.get_mut(name))
         else {
             return Ok(Vec::new());
         };
         if change.kind != ChangeKind::Deletion {
             return Ok(Vec::new());
         }
-        let revision = self.revision(change);
-        let removed = change.removed.clone();
+        if change.expansion == Expansion::Done {
+            self.report
+                .record(WordConstruct::TrackedChange, Outcome::Dropped);
+            return Ok(Vec::new());
+        }
+        change.expansion = Expansion::Done;
+        let removed = std::mem::take(&mut change.removed);
+        let revision = Self::revision(change);
         self.report
             .record(WordConstruct::TrackedChange, Outcome::Carried);
         if removed.len() > 1 {
@@ -1152,6 +1230,7 @@ impl Reader {
         pictures: &mut dyn Pictures,
     ) -> Result<(), OdtError> {
         for part in parent.elements() {
+            self.built.step()?;
             match (part.ns, part.name()) {
                 (Ns::Table, "table-column") => {
                     let width = self
@@ -1180,6 +1259,8 @@ impl Reader {
                         if table.rows.len() >= usize::try_from(MAX_REPEAT).unwrap_or(0) {
                             break;
                         }
+                        // Each copy is a walk of its own, charged as one.
+                        self.built.step()?;
                         let row = self.row(part, role, grid, pictures)?;
                         table.rows.push(row);
                     }
@@ -1215,6 +1296,7 @@ impl Reader {
                 continue;
             }
             for _ in 0..repeat(cell.attr(Ns::Table, "number-columns-repeated")) {
+                self.built.step()?;
                 if covered {
                     if skip > 0 {
                         skip -= 1;

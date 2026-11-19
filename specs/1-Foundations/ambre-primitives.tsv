@@ -196,6 +196,7 @@ ambre-docx | src/model.rs | crate::model | WordDocument.title | field | Option<S
 ambre-docx | src/model.rs | crate::model | WordId.0 | field | u32	newtype-inner	the decimal w:id of WordprocessingML a Word id wraps
 ambre-docx | src/model.rs | crate::model | WordId<K>::get() | ret | u32	newtype-inner	the decimal w:id of WordprocessingML a Word id wraps
 ambre-docx | src/model.rs | crate::model | WordId<K>::new(value) | param | u32	newtype-inner	the decimal w:id of WordprocessingML a Word id wraps
+ambre-docx | src/read.rs | crate::read | Fields::in_instruction() | ret | bool	generic	predicate
 ambre-docx | src/read.rs | crate::read | EMU_PER_PT | const | f32	math	a scalar multiplier: the English Metric Units in one point
 ambre-docx | src/read.rs | crate::read | PartContext::part(id) | param | &str	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
 ambre-docx | src/read.rs | crate::read | PartContext::rel(id) | param | &str	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
@@ -4659,6 +4660,9 @@ ambre-pptx | src/pml.rs | crate::pml | JPEG_SIGNATURE | const | [u8;3]	generic	t
 ambre-pptx | src/read/mod.rs | crate::read | EMU_PER_PT | const | f32	math	the factor between a point and an English Metric Unit
 ambre-pptx | src/read/mod.rs | crate::read | Placeholder.index | field | Option<String>	foreign-api	the index of a placeholder as the file spells it, which the reader matches against its layout and never parses
 ambre-pptx | src/read/mod.rs | crate::read | Placeholder.spelled | field | String	foreign-api	the type of a placeholder as the file spells it, which the master matches; the reader folds it into PlaceholderKind beside it
+ambre-pptx | src/read/mod.rs | crate::read | Placeholders.by_index | field | BTreeMap<String,Pos<TreeChildren>>	foreign-api	the index of a placeholder as the file spells it, matched and never parsed, to the place of its shape
+ambre-pptx | src/read/mod.rs | crate::read | Placeholders.by_master_type | field | BTreeMap<String,Pos<TreeChildren>>	foreign-api	the type of a placeholder as a master matches it, as the file spells it, to the place of its shape
+ambre-pptx | src/read/mod.rs | crate::read | Placeholders.by_type | field | BTreeMap<String,Pos<TreeChildren>>	foreign-api	the type of a placeholder as the file spells it, matched and never parsed, to the place of its shape
 ambre-pptx | src/read/mod.rs | crate::read | Reader<'_>::notes() | ret | Result<String,PptxError>	free-text	the speaker notes of a slide, as the user typed them
 ambre-pptx | src/read/mod.rs | crate::read | SlideOut.ids | field | Vec<(String,Pos<SlideItems>)>	foreign-api	the shape id a connector of the file names its end by, as the file spells it, matched and never parsed
 ambre-pptx | src/read/mod.rs | crate::read | SlideOut.title | field | Option<String>	free-text	the title of a slide, as the user typed it

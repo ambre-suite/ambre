@@ -63,7 +63,7 @@ pub fn read(bytes: &[u8]) -> Result<Decoded, DocxError> {
         styles: BTreeMap::new(),
         numbering: BTreeMap::new(),
         comments_started: BTreeSet::new(),
-        fields: Vec::new(),
+        fields: Fields::default(),
         pending_starts: Vec::new(),
     };
     reader.note_macros(&mut package)?;
@@ -203,6 +203,55 @@ enum FieldPhase {
     Result,
 }
 
+/// The fields open in an instruction, counted.
+enum InstructionFields {}
+
+impl ambre_core::NarrowCount for InstructionFields {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("InstructionFieldCount");
+}
+
+/// The open fields, the innermost last, and how many of them stand in
+/// their instruction. A run asks the count, so a file of fields opened and
+/// never ended costs no scan of the stack per run (`W305`).
+#[derive(Default)]
+struct Fields {
+    stack: Vec<FieldPhase>,
+    instructions: ambre_core::Count<InstructionFields>,
+}
+
+impl Fields {
+    fn begin(&mut self) {
+        self.stack.push(FieldPhase::Instruction);
+        self.instructions = self.instructions.incremented();
+    }
+
+    fn separate(&mut self) {
+        if let Some(top) = self.stack.last_mut()
+            && *top == FieldPhase::Instruction
+        {
+            *top = FieldPhase::Result;
+            self.instructions = self.instructions.minus(ambre_core::Count::new(1));
+        }
+    }
+
+    fn end(&mut self) {
+        if self.stack.pop() == Some(FieldPhase::Instruction) {
+            self.instructions = self.instructions.minus(ambre_core::Count::new(1));
+        }
+    }
+
+    fn clear(&mut self) {
+        self.stack.clear();
+        self.instructions = ambre_core::Count::ZERO;
+    }
+
+    /// Whether the walk stands in the instruction of an open field.
+    fn in_instruction(&self) -> bool {
+        !self.instructions.is_zero()
+    }
+}
+
 struct Reader {
     report: WordReport,
     styles: BTreeMap<String, StyleDef>,
@@ -211,7 +260,7 @@ struct Reader {
     /// reads as an anchor on its own position.
     comments_started: BTreeSet<WordId<CommentMarker>>,
     /// The open fields, the innermost last. A field may span paragraphs.
-    fields: Vec<FieldPhase>,
+    fields: Fields,
     /// Comment starts met between blocks, for the next paragraph.
     pending_starts: Vec<Inline>,
 }
@@ -880,22 +929,16 @@ impl Reader {
                     Some("begin") => {
                         self.report
                             .record(WordConstruct::Field, Outcome::Approximated);
-                        self.fields.push(FieldPhase::Instruction);
+                        self.fields.begin();
                     }
-                    Some("separate") => {
-                        if let Some(top) = self.fields.last_mut() {
-                            *top = FieldPhase::Result;
-                        }
-                    }
-                    Some("end") => {
-                        self.fields.pop();
-                    }
+                    Some("separate") => self.fields.separate(),
+                    Some("end") => self.fields.end(),
                     _ => {}
                 }
                 continue;
             }
             // The instruction of a field is no text the user reads.
-            if self.fields.contains(&FieldPhase::Instruction) {
+            if self.fields.in_instruction() {
                 continue;
             }
             match child.name() {

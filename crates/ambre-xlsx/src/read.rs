@@ -206,14 +206,26 @@ fn related(rels: &[Relationship], last_segment: &str) -> Option<PartName> {
 
 /// The distinct styles of `by_xf`, the default first, and the style each
 /// cell format index names.
+///
+/// A style finds its twin by its postcard bytes in a map, not by a scan of
+/// the styles before it. So a part of many distinct formats costs no
+/// quadratic walk (`W305`). Two styles equal under `PartialEq` write the
+/// same bytes, save a zero and a negative zero, which stay two styles.
 fn dedupe_styles(by_xf: Vec<CellStyle>) -> (Vec<CellStyle>, Vec<StyleId>) {
     let mut styles: Vec<CellStyle> = Vec::with_capacity(by_xf.len());
+    let mut seen: std::collections::HashMap<Vec<u8>, usize> = std::collections::HashMap::new();
     let ids = by_xf
         .into_iter()
         .map(|style| {
-            let at = styles.iter().position(|s| *s == style).unwrap_or_else(|| {
+            let key = postcard::to_allocvec(&style).ok();
+            let held = key.as_ref().and_then(|key| seen.get(key).copied());
+            let at = held.unwrap_or_else(|| {
                 styles.push(style);
-                styles.len() - 1
+                let at = styles.len() - 1;
+                if let Some(key) = key {
+                    seen.insert(key, at);
+                }
+                at
             });
             StyleId::at(Pos::from_usize(at))
         })
@@ -265,9 +277,12 @@ fn read_workbook_extras(root: &Element, rels: &[Relationship], report: &mut Repo
 }
 
 /// The strings of the shared-string part. A string item whose runs carry
-/// formatting is read as its text, and reported.
+/// formatting is read as its text, and reported. Each item is charged to a
+/// tree budget as one node: an empty item costs four bytes of XML and a
+/// string record (`W72`).
 fn read_shared_strings(data: &[u8], report: &mut Report) -> Result<Vec<String>, XmlError> {
     let mut reader = Reader::from_str(xml::utf8(data)?);
+    let mut budget = ambre_opc::TreeBudget::default();
     let mut strings = Vec::new();
     let mut current = String::new();
     let mut state = TextState::default();
@@ -282,13 +297,17 @@ fn read_shared_strings(data: &[u8], report: &mut Report) -> Result<Vec<String>, 
                 "rPr" => rich = true,
                 name => state.open(name),
             },
-            Event::Empty(e) if e.local_name().as_ref() == "si" => strings.push(String::new()),
+            Event::Empty(e) if e.local_name().as_ref() == "si" => {
+                budget.node()?;
+                strings.push(String::new());
+            }
             Event::Empty(e) if e.local_name().as_ref() == "rPr" => rich = true,
             Event::End(e) => match e.local_name().as_ref() {
                 "si" => {
                     if rich {
                         report.record(XlsxConstruct::RichText, Outcome::Dropped);
                     }
+                    budget.node()?;
                     strings.push(xml::decode_ooxml_escapes(&current).into_owned());
                 }
                 name => state.close(name),
@@ -300,6 +319,7 @@ fn read_shared_strings(data: &[u8], report: &mut Report) -> Result<Vec<String>, 
                 current.push_str(&t.xml10_content());
             }
             Event::GeneralRef(r) if state.is_text() => xml::push_reference(&mut current, &r)?,
+            Event::DocType(_) => return Err(xml::document_type()),
             Event::Eof => return Ok(strings),
             _ => {}
         }
@@ -563,6 +583,7 @@ fn read_sheet(
                 xml::push_reference(&mut text, r)?;
                 push_cell_text(&cursor, &mut cell, &text);
             }
+            Event::DocType(_) => return Err(xml::document_type().into()),
             Event::Eof => break,
             _ => {}
         }
@@ -754,8 +775,13 @@ fn finish_cell(
             }
             FormulaKind::Shared => match (f.shared_index, f.text.is_empty()) {
                 (Some(index), false) => {
-                    masters.insert(index, (f.text.clone(), at));
                     set_formula(&mut out, &f.text, None, report);
+                    // A master past the formula cap reads as no formula.
+                    // It is never stored, so no cell that names it lexes
+                    // the whole text again (`W305`).
+                    if matches!(out.content, Content::Formula { .. }) {
+                        masters.insert(index, (f.text, at));
+                    }
                 }
                 (Some(index), true) => match masters.get(&index) {
                     Some((master, origin)) => {
@@ -958,14 +984,23 @@ pub(crate) fn iso_to_serial(text: &str) -> Option<Instant<SheetDateTime>> {
     if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
         return None;
     }
-    // Days from 1970-01-01, by the civil-from-days inverse.
-    let y = if month <= 2 { year - 1 } else { year };
+    // Days from 1970-01-01, by the civil-from-days inverse. A year the file
+    // spells near the top of the width overflows: it reads as no date, never
+    // as a wrapped one (`W306`).
+    let y = if month <= 2 {
+        year.checked_sub(1)?
+    } else {
+        year
+    };
     let era = y.div_euclid(400);
-    let yoe = y - era * 400;
+    let yoe = y.rem_euclid(400);
     let mp = (month + 9) % 12;
     let doy = (153 * mp + 2) / 5 + day - 1;
     let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    let unix_days = era * 146_097 + doe - 719_468;
+    let unix_days = era
+        .checked_mul(146_097)?
+        .checked_add(doe)?
+        .checked_sub(719_468)?;
     // 1970-01-01 is serial 25569; Excel counts the phantom 1900-02-29.
     let mut serial = unix_days as f64 + 25_569.0;
     if serial < 61.0 {
@@ -1023,6 +1058,100 @@ mod tests {
         );
         assert_eq!(iso_to_serial("1900-01-01").map(Instant::get), Some(1.0));
         assert_eq!(iso_to_serial("2024-13-01"), None);
+        // `W306`: a year near the top of the width reads as no date, in a
+        // debug build as in a release one.
+        assert_eq!(iso_to_serial("9223372036854775807-07-01"), None);
+        assert_eq!(iso_to_serial("-9223372036854775808-01-01"), None);
+    }
+
+    fn sheet_context() -> SheetContext<'static> {
+        SheetContext {
+            strings: &[],
+            xf_to_style: &[],
+            styles: &[],
+            dates: DateSystem::From1900,
+        }
+    }
+
+    fn empty_sheet() -> Sheet {
+        let Ok(name) = Validated::<crate::model::SheetName>::parse("S".to_owned()) else {
+            panic!("a sheet name");
+        };
+        Sheet::named(name)
+    }
+
+    /// `W307`: a worksheet that declares a document type is refused, as the
+    /// four other codecs refuse it.
+    #[test]
+    fn a_sheet_that_declares_a_document_type_is_refused() {
+        let xml = b"<?xml version='1.0'?><!DOCTYPE w [<!ENTITY e 'x'>]>\
+            <worksheet><sheetData/></worksheet>";
+        let mut sheet = empty_sheet();
+        let mut report = Report::default();
+        let read = read_sheet(xml, &sheet_context(), MAX_CELLS, &mut sheet, &mut report);
+        assert!(matches!(read, Err(SheetError::Xml(_))));
+    }
+
+    /// `W307` and `W72`: a shared-string part that declares a document type
+    /// is refused, and so is one of more empty items than the node bound.
+    #[test]
+    fn a_hostile_shared_string_part_is_refused() {
+        let mut report = Report::default();
+        let typed = b"<!DOCTYPE s [<!ENTITY e 'x'>]><sst><si><t>a</t></si></sst>";
+        assert!(read_shared_strings(typed, &mut report).is_err());
+        let past = usize::try_from(ambre_opc::MAX_TREE_NODES.get()).expect("fits") + 1;
+        let wide = format!("<sst>{}</sst>", "<si/>".repeat(past));
+        assert!(read_shared_strings(wide.as_bytes(), &mut report).is_err());
+    }
+
+    /// `W305`: a shared formula master past the formula cap is never
+    /// stored, so a cell that names it lexes nothing and stays a value.
+    #[test]
+    fn a_shared_master_past_the_formula_cap_is_never_stored() {
+        let master = "1+".repeat(5_000) + "1";
+        let xml = format!(
+            "<worksheet><sheetData><row r=\"1\">\
+             <c r=\"A1\"><f t=\"shared\" si=\"0\" ref=\"A1:A2\">{master}</f><v>1</v></c>\
+             <c r=\"A2\"><f t=\"shared\" si=\"0\"/><v>2</v></c>\
+             </row></sheetData></worksheet>"
+        );
+        let mut sheet = empty_sheet();
+        let mut report = Report::default();
+        let read = read_sheet(
+            xml.as_bytes(),
+            &sheet_context(),
+            MAX_CELLS,
+            &mut sheet,
+            &mut report,
+        );
+        assert!(read.is_ok());
+        assert!(
+            sheet
+                .cells
+                .iter()
+                .all(|cell| matches!(cell.content, Content::Value(_)))
+        );
+    }
+
+    /// `W305`: many distinct styles and their twins dedupe by a lookup, each
+    /// twin to the style it equals.
+    #[test]
+    fn many_styles_dedupe_to_their_first_twin() {
+        let count = 20_000;
+        let styles: Vec<CellStyle> = (0..count)
+            .map(|at| CellStyle {
+                fg: Some(ambre_core::Rgb::from_channels(
+                    u8::try_from(at % 256).expect("fits"),
+                    u8::try_from(at / 256 % 256).expect("fits"),
+                    0,
+                )),
+                ..CellStyle::default()
+            })
+            .collect();
+        let twice: Vec<CellStyle> = styles.iter().chain(styles.iter()).cloned().collect();
+        let (distinct, ids) = dedupe_styles(twice);
+        assert_eq!(distinct.len(), count);
+        assert_eq!(ids.get(..count), ids.get(count..));
     }
 
     #[test]

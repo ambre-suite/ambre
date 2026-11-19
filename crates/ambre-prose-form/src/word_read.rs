@@ -12,7 +12,7 @@
 //! A tracked change becomes a suggestion and a comment becomes a thread,
 //! each on the runs it covers, never plain text (`PROSE-IO-060`).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use ambre_core::Bounded;
 use ambre_core::index::Pos;
@@ -36,6 +36,21 @@ use crate::{
     StoredLevel, Subscript, SuggestionKind, Superscript, UnsupportedFeature,
 };
 use ambre_core::Flag as _;
+use ambre_core::{Count, NarrowCount};
+
+/// The comment threads open at one place of the walk, counted.
+enum OpenThreads {}
+
+impl NarrowCount for OpenThreads {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("OpenThreadCount");
+}
+
+/// The most threads open at once. Each run carries the threads open over
+/// it. A file that opens many threads and closes none would copy them all
+/// into every run (`W304`). Word nests a handful. A start past the bound
+/// leaves its thread without an anchor, and the report names it.
+const MAX_OPEN_THREADS: Count<OpenThreads> = Count::new(16);
 
 /// Map a Word model onto the form, and report what the reader and the
 /// mapping lost.
@@ -120,6 +135,36 @@ struct Reader<'a> {
     open: Vec<Pos<IrThread>>,
 }
 
+/// The first ancestor of `id`, each comment on the way remembered in
+/// `known`. A parent the document does not hold ends the climb. A loop of
+/// parents ends at the first comment met twice, so each comment climbs once.
+fn climb(
+    parents: &BTreeMap<WordId<CommentMarker>, Option<WordId<CommentMarker>>>,
+    known: &mut BTreeMap<WordId<CommentMarker>, WordId<CommentMarker>>,
+    id: WordId<CommentMarker>,
+) -> WordId<CommentMarker> {
+    let mut path: Vec<WordId<CommentMarker>> = Vec::new();
+    let mut seen: BTreeSet<WordId<CommentMarker>> = BTreeSet::new();
+    let mut at = id;
+    let root = loop {
+        if let Some(root) = known.get(&at) {
+            break *root;
+        }
+        if !seen.insert(at) {
+            break at;
+        }
+        path.push(at);
+        match parents.get(&at).copied().flatten() {
+            Some(parent) if parents.contains_key(&parent) => at = parent,
+            _ => break at,
+        }
+    };
+    for step in path {
+        known.insert(step, root);
+    }
+    root
+}
+
 /// A note kind as a map key: the model's kind derives no order.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum NoteKindKey {
@@ -166,20 +211,13 @@ impl Reader<'_> {
             .iter()
             .map(|comment| (comment.id, comment.parent))
             .collect();
-        let root_of = |mut id: WordId<CommentMarker>| {
-            // A chain longer than the comments it could visit is a loop.
-            for _ in 0..=parents.len() {
-                match parents.get(&id).copied().flatten() {
-                    Some(parent) if parents.contains_key(&parent) => id = parent,
-                    _ => return id,
-                }
-            }
-            id
-        };
+        // The root each comment met so far climbs to. A chain of replies is
+        // climbed once, not once per reply (`W305`).
+        let mut root_of: BTreeMap<WordId<CommentMarker>, WordId<CommentMarker>> = BTreeMap::new();
         let mut threads: Vec<IrComment> = Vec::new();
         let mut roots: BTreeMap<WordId<CommentMarker>, Pos<IrThread>> = BTreeMap::new();
         for comment in &document.comments {
-            let root = root_of(comment.id);
+            let root = climb(&parents, &mut root_of, comment.id);
             let at = *roots.entry(root).or_insert_with(|| {
                 threads.push(IrComment {
                     resolved: ThreadState::Open,
@@ -390,7 +428,11 @@ impl Reader<'_> {
                     if let Some(at) = self.threads.get(id).copied()
                         && !self.open.contains(&at)
                     {
-                        self.open.push(at);
+                        if Count::<OpenThreads>::of(self.open.len()) < MAX_OPEN_THREADS {
+                            self.open.push(at);
+                        } else {
+                            self.warnings.approximated(UnsupportedFeature::Comment);
+                        }
                     }
                 }
                 Inline::CommentEnd(id) => {
@@ -589,4 +631,98 @@ fn paragraph_text(paragraph: &Paragraph) -> String {
 /// one past the rule, is no name.
 fn display_name(author: &str) -> Option<Validated<ambre_core::DisplayName>> {
     Validated::<ambre_core::DisplayName>::parse(author).ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ambre_docx::model::Comment;
+
+    fn comment(id: u32, parent: Option<u32>) -> Comment {
+        Comment {
+            id: WordId::new(id),
+            author: String::new(),
+            date: None,
+            paragraphs: Vec::new(),
+            parent: parent.map(WordId::new),
+            state: CommentState::Open,
+        }
+    }
+
+    fn text(text: &str) -> Inline {
+        Inline::Run(Run {
+            text: text.to_owned(),
+            ..Run::default()
+        })
+    }
+
+    /// `W304`: thousands of threads are opened and never closed. Each run
+    /// holds at most the bound of open threads, and the report names the
+    /// starts past it.
+    #[test]
+    fn threads_left_open_are_bounded_per_run() {
+        let threads: u32 = 2_000;
+        let mut inlines: Vec<Inline> = (0..threads)
+            .map(|id| Inline::CommentStart(WordId::new(id)))
+            .collect();
+        inlines.extend((0..2_000).map(|_| text("a")));
+        let document = WordDocument {
+            body: vec![Block::Paragraph(Paragraph {
+                inlines,
+                ..Paragraph::default()
+            })],
+            comments: (0..threads).map(|id| comment(id, None)).collect(),
+            ..WordDocument::default()
+        };
+        let (ir, report) = read_document(&document, &WordReport::default(), &Zone::utc());
+        let bound = usize::try_from(MAX_OPEN_THREADS.get()).expect("fits");
+        let Some(IrBlock::Paragraph { runs, .. }) = ir.blocks.first() else {
+            panic!("a paragraph");
+        };
+        assert!(!runs.is_empty());
+        assert!(runs.iter().all(|run| run.comments.len() <= bound));
+        assert_eq!(
+            report
+                .count(
+                    FormConstruct::Feature(UnsupportedFeature::Comment),
+                    FormOutcome::Approximated
+                )
+                .get(),
+            threads - MAX_OPEN_THREADS.get()
+        );
+    }
+
+    /// `W305`: a chain of replies, each the child of the one before, joins
+    /// one thread, each comment climbed once.
+    #[test]
+    fn a_long_chain_of_replies_joins_one_thread() {
+        let length: u32 = 100_000;
+        let document = WordDocument {
+            comments: (0..length)
+                .map(|id| comment(id, id.checked_sub(1)))
+                .collect(),
+            ..WordDocument::default()
+        };
+        let (ir, _) = read_document(&document, &WordReport::default(), &Zone::utc());
+        assert_eq!(ir.comments.len(), 1);
+        assert_eq!(
+            ir.comments.first().map(|thread| thread.replies.len()),
+            Some(usize::try_from(length).expect("fits"))
+        );
+    }
+
+    /// A loop of parents still ends, and opens one thread.
+    #[test]
+    fn a_loop_of_parents_opens_one_thread() {
+        let document = WordDocument {
+            comments: vec![
+                comment(0, Some(2)),
+                comment(1, Some(0)),
+                comment(2, Some(1)),
+            ],
+            ..WordDocument::default()
+        };
+        let (ir, _) = read_document(&document, &WordReport::default(), &Zone::utc());
+        assert_eq!(ir.comments.len(), 1);
+    }
 }

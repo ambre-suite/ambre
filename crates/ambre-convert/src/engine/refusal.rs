@@ -26,6 +26,7 @@ pub(super) const fn docx(error: ambre_docx::DocxError) -> FileRefusal {
     use ambre_docx::DocxError;
     match error {
         DocxError::Package(error) => opc(error),
+        DocxError::Xml(ambre_docx::XmlError::TooLarge) => FileRefusal::PastBound,
         DocxError::Xml(_) => FileRefusal::Malformed,
         DocxError::NoMainPart | DocxError::MissingPart(_) => FileRefusal::PartMissing,
         DocxError::NotWord => FileRefusal::OtherDocument,
@@ -38,6 +39,9 @@ pub(super) const fn odt(error: ambre_odt::OdtError) -> FileRefusal {
     use ambre_odt::OdtError;
     match error {
         OdtError::Package(error) => opc(error),
+        OdtError::Xml(ambre_odt::xml::XmlError::TooLarge) | OdtError::TooLarge => {
+            FileRefusal::PastBound
+        }
         OdtError::Xml(_) => FileRefusal::Malformed,
         OdtError::NotText => FileRefusal::OtherDocument,
         OdtError::MissingPart(_) => FileRefusal::PartMissing,
