@@ -420,7 +420,7 @@ impl DeckRecording {
             }
             self.approximated.insert(hash.clone());
             if let Some(thumb) = self.thumbs.remove(hash)
-                && let Some(image) = decode_thumbnail(&thumb)
+                && let Some(image) = super::raster::decode_thumbnail(&thumb)
             {
                 self.images.insert(hash.clone(), image);
             }
