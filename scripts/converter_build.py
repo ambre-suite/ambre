@@ -93,7 +93,10 @@ def main() -> int:
     env = build_env(dict(os.environ))
     # One after the other: each build writes the same cargo output, which is
     # copied out before the next one starts.
-    for family in FAMILIES:
+    for index, family in enumerate(FAMILIES, start=1):
+        # The build runs `--quiet`, so this line is all Trunk shows while a
+        # cold build of the modules takes minutes.
+        print(f"converter_build: {family} ({index}/{len(FAMILIES)})", file=sys.stderr, flush=True)
         result = subprocess.run(command(family), cwd=ROOT, env=env, check=False)
         if result.returncode != 0:
             print(f"converter_build: the {family} module did not build", file=sys.stderr)
