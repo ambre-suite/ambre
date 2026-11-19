@@ -591,6 +591,139 @@ pub fn embed_at(display: &DisplayViewport, world: Point) -> Option<&DisplayEleme
         })
 }
 
+// -- Consent to load a web page (`TOILE-299` to `TOILE-305`) ----------------
+// A frame that loads its page tells the site who watches the board, and when.
+// So no frame loads until this user said so for that site. The decision is
+// pure and lives here; the DOM prompt and the device store live in the shell.
+
+/// The rule of a site a web page loads from: the host of a
+/// [`WebAddress`], in lower case, with no port and no user part. A
+/// `Validated<SiteHost>` keys the choice a user made for every page of that
+/// site, on this device alone (`TOILE-301`). `Debug` prints its length alone:
+/// the host names what the board holds.
+pub enum SiteHost {}
+
+/// Why a text is not a site.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SiteError {
+    /// The text is empty, or holds a character no host holds.
+    NoHost,
+}
+
+impl std::fmt::Display for SiteError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("not a site")
+    }
+}
+
+impl ambre_core::Rule for SiteHost {
+    type Error = SiteError;
+
+    fn admit(text: String) -> Result<String, SiteError> {
+        let host = text.to_ascii_lowercase();
+        let shaped = !host.is_empty()
+            && host
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '[' | ']' | ':'));
+        if shaped {
+            Ok(host)
+        } else {
+            Err(SiteError::NoHost)
+        }
+    }
+}
+
+/// The site `url` loads from. `None` for an address with no host, which
+/// the rule of [`WebAddress`] already refuses: a frame never reaches here
+/// without one.
+#[must_use]
+pub fn site_of(url: &Validated<WebAddress>) -> Option<Validated<SiteHost>> {
+    let rest = url.as_str().strip_prefix("https://")?;
+    let authority = rest.split(['/', '?', '#']).next()?;
+    let host_port = authority.rsplit('@').next()?;
+    // An IPv6 literal keeps its brackets; any other host drops its port.
+    let host = match host_port.strip_prefix('[') {
+        Some(inner) => {
+            let end = inner.find(']')?;
+            host_port.get(..end + 2)?
+        }
+        None => host_port.split(':').next()?,
+    };
+    Validated::<SiteHost>::parse(host).ok()
+}
+
+/// What this user chose for every page of one site, on this device
+/// (`TOILE-301`). The board never stores it and never sends it: a choice is
+/// no part of the document, and a peer never learns it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+pub enum SiteChoice {
+    /// No choice yet: each embed of the site asks before it loads.
+    #[default]
+    Ask,
+    /// Every page of the site loads once its embed shows.
+    Always,
+    /// No page of the site loads, and no embed of it asks.
+    Never,
+}
+
+impl SiteChoice {
+    /// The word the device store keeps, `None` for [`Self::Ask`]: the
+    /// absence of a word is the default, so asking again clears the entry.
+    #[must_use]
+    pub fn stored(self) -> Option<&'static str> {
+        match self {
+            Self::Ask => None,
+            Self::Always => Some("always"),
+            Self::Never => Some("never"),
+        }
+    }
+
+    /// The choice the device store holds. A missing, unreadable or unknown
+    /// word reads as [`Self::Ask`], so a store that fails never loads a page
+    /// (`TOILE-302`).
+    #[must_use]
+    pub fn from_stored(text: Option<&str>) -> Self {
+        match text {
+            Some("always") => Self::Always,
+            Some("never") => Self::Never,
+            _ => Self::Ask,
+        }
+    }
+}
+
+/// Whether the user asked to load one embed's page for this session alone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum LoadOnce {
+    /// No such answer for this embed.
+    #[default]
+    NotGiven,
+    /// The user pressed "Load once" on this embed.
+    Given,
+}
+
+/// What the shell does for one visible web embed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FrameLoad {
+    /// Mount the frame and point it at the page.
+    Load,
+    /// Mount no frame, and ask the user over the placeholder.
+    Ask,
+    /// Mount no frame, and say the site is refused on this device.
+    Refused,
+}
+
+/// The decision for one embed, from the choice its site holds and the
+/// answer its embed got this session (`TOILE-299`, `TOILE-300`). Only an
+/// answer of the user loads a page: a pan that shows an embed never does.
+#[must_use]
+pub fn frame_load(choice: SiteChoice, once: LoadOnce) -> FrameLoad {
+    match (choice, once) {
+        (SiteChoice::Always, _) | (SiteChoice::Ask, LoadOnce::Given) => FrameLoad::Load,
+        (SiteChoice::Ask, LoadOnce::NotGiven) => FrameLoad::Ask,
+        (SiteChoice::Never, _) => FrameLoad::Refused,
+    }
+}
+
 // -- Tests (host tier) -------------------------------------------------------
 // Pure geometry + the session debounce. No GPU, no DOM: `ToileView` itself is
 // not natively constructible, since it wants a `TextInput` and leptos signals.
@@ -1629,5 +1762,91 @@ mod placement_tests {
         let centre = cam.screen_to_world() * Point::new(100.0, 50.0);
         assert_eq!(at, centre - (size.to_vec2() / 2.0));
         assert!(matches!(content, InitContent::Embed(u) if u == url));
+    }
+}
+
+#[cfg(test)]
+mod consent_tests {
+    use super::{FrameLoad, LoadOnce, SiteChoice, SiteHost, WebAddress, frame_load, site_of};
+    use ambre_core::Validated;
+
+    fn site(url: &str) -> Option<String> {
+        let address = Validated::<WebAddress>::parse(url).expect("a safe address");
+        site_of(&address).map(|site| site.as_str().to_owned())
+    }
+
+    /// `TOILE-299`: only an answer of the user loads a page. A site with no
+    /// choice asks, whatever pass shows the embed; a load once or an
+    /// "Always" loads it.
+    #[test]
+    fn only_an_answer_loads_a_page() {
+        assert_eq!(
+            frame_load(SiteChoice::Ask, LoadOnce::NotGiven),
+            FrameLoad::Ask
+        );
+        assert_eq!(
+            frame_load(SiteChoice::Ask, LoadOnce::Given),
+            FrameLoad::Load
+        );
+        assert_eq!(
+            frame_load(SiteChoice::Always, LoadOnce::NotGiven),
+            FrameLoad::Load
+        );
+        assert_eq!(
+            frame_load(SiteChoice::Always, LoadOnce::Given),
+            FrameLoad::Load
+        );
+    }
+
+    /// `TOILE-303`: a refused site loads nothing, even for an embed the user
+    /// loaded once before refusing it.
+    #[test]
+    fn a_refused_site_loads_nothing() {
+        assert_eq!(
+            frame_load(SiteChoice::Never, LoadOnce::NotGiven),
+            FrameLoad::Refused
+        );
+        assert_eq!(
+            frame_load(SiteChoice::Never, LoadOnce::Given),
+            FrameLoad::Refused
+        );
+    }
+
+    /// `TOILE-301`: a choice is keyed by the host alone. Two pages of one
+    /// site share it. The path, the port, the user part and the case do not
+    /// split it. Another host does not share it.
+    #[test]
+    fn a_choice_is_keyed_by_the_host_alone() {
+        assert_eq!(
+            site("https://Example.com/a?b#c").as_deref(),
+            Some("example.com")
+        );
+        assert_eq!(
+            site("https://example.com:8443/x").as_deref(),
+            Some("example.com")
+        );
+        assert_eq!(
+            site("https://user@example.com/").as_deref(),
+            Some("example.com")
+        );
+        assert_eq!(site("example.com").as_deref(), Some("example.com"));
+        assert_eq!(site("https://[::1]:8443/").as_deref(), Some("[::1]"));
+        assert_ne!(site("https://example.org"), site("https://example.com"));
+        assert!(Validated::<SiteHost>::parse("").is_err());
+        assert!(Validated::<SiteHost>::parse("a/b").is_err());
+    }
+
+    /// `TOILE-302`: a word the store does not hold, or holds unknown, reads
+    /// as asking. Each choice reads back as itself, and asking is the
+    /// absence of a word.
+    #[test]
+    fn an_unreadable_choice_asks() {
+        assert_eq!(SiteChoice::from_stored(None), SiteChoice::Ask);
+        assert_eq!(SiteChoice::from_stored(Some("")), SiteChoice::Ask);
+        assert_eq!(SiteChoice::from_stored(Some("ALWAYS")), SiteChoice::Ask);
+        for choice in [SiteChoice::Ask, SiteChoice::Always, SiteChoice::Never] {
+            assert_eq!(SiteChoice::from_stored(choice.stored()), choice);
+        }
+        assert_eq!(SiteChoice::Ask.stored(), None);
     }
 }

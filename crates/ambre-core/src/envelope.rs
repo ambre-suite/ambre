@@ -96,6 +96,17 @@ impl FixedRole for ChainHash {
     type Array = [u8; 32];
 }
 
+/// The role of the digest of one sealed snapshot blob, header to last byte:
+/// `FixedBytes<SnapshotDigest>`. A confirmation signs it. So the confirmation
+/// holds for the blob its confirmer checked, and for no other blob filed
+/// under the same snapshot identifier (`AUTHOR-031`, audit `W101`).
+pub enum SnapshotDigest {}
+
+impl FixedRole for SnapshotDigest {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("SnapshotDigest");
+    type Array = [u8; 32];
+}
+
 /// The role of the digest of one membership-log entry, which the next entry
 /// names: `FixedBytes<EntryDigest>`. A wrapped document key also seals the
 /// digest of the first entry, as the anchor of the log (`SYNC-104`).

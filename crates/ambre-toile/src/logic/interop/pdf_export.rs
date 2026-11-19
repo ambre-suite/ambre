@@ -420,7 +420,7 @@ impl DeckRecording {
             }
             self.approximated.insert(hash.clone());
             if let Some(thumb) = self.thumbs.remove(hash)
-                && let Some(image) = decode_thumbnail(&thumb)
+                && let Some(image) = super::raster::decode_thumbnail(&thumb)
             {
                 self.images.insert(hash.clone(), image);
             }
@@ -624,21 +624,6 @@ impl DeckSource {
             Self::AtRequest(_) => live,
         }
     }
-}
-
-/// The pixels of a stored thumbnail, or `None` when its bytes do not decode.
-pub(crate) fn decode_thumbnail(
-    thumb: &ambre_core::Payload<ambre_core::ThumbnailPng>,
-) -> Option<DecodedImage> {
-    let rgba = image::load_from_memory(thumb.as_bytes()).ok()?.to_rgba8();
-    let size = ambre_core::Size::new(
-        ambre_core::Px::new(rgba.width()),
-        ambre_core::Px::new(rgba.height()),
-    );
-    Some(DecodedImage {
-        pixels: rgba.into_raw().into(),
-        size,
-    })
 }
 
 /// Paint one page onto any surface: the board background, then the screen's

@@ -17,27 +17,37 @@ use ambre_core::{Instant, Ms, Sec, TimeSpan, UnixMs};
 /// Replaces the fixed-window `INCR`/`EXPIRE` pair. That pair allowed a 2x burst
 /// across the window boundary, and could leave a TTL-less key if the process
 /// crashed between the two commands. One sorted set per limiter key holds the
-/// timestamps of recent requests. Each call prunes entries older than the window,
-/// records the current request, counts the survivors, and refreshes the key TTL.
-/// It does all that atomically, so there is no boundary burst and no partial
-/// state.
+/// timestamps of recent requests. Each call prunes entries older than the window
+/// and counts the survivors. It records the current request and refreshes the
+/// key TTL only when the request fits. It does all that atomically, so there is
+/// no boundary burst and no partial state.
+///
+/// A refused request records nothing (`SRV-286`). A flood past the limit
+/// therefore never grows the set. A caller that keeps retrying regains its
+/// quota once its allowed requests leave the window.
 ///
 /// - `KEYS[1]` = `rate:{prefix}:user:{id}` or `rate:{prefix}:ip:{addr}`
 ///   (sorted set: member -> request time ms)
 /// - `ARGV[1]` = now (ms)
 /// - `ARGV[2]` = window (ms)
 /// - `ARGV[3]` = unique member for this request
+/// - `ARGV[4]` = the most requests the window allows
 ///
-/// Returns the number of requests in the current sliding window (this one
-/// included).
+/// Returns the number of requests in the current sliding window with this one
+/// counted, whether or not it was recorded. A number above `ARGV[4]` is a
+/// refusal.
 const SLIDING_WINDOW_LUA: &str = r#"
 local now    = tonumber(ARGV[1])
 local window = tonumber(ARGV[2])
+local max    = tonumber(ARGV[4])
 redis.call('ZREMRANGEBYSCORE', KEYS[1], 0, now - window)
-redis.call('ZADD', KEYS[1], now, ARGV[3])
 local count = redis.call('ZCARD', KEYS[1])
+if count >= max then
+  return count + 1
+end
+redis.call('ZADD', KEYS[1], now, ARGV[3])
 redis.call('PEXPIRE', KEYS[1], window)
-return count
+return count + 1
 "#;
 
 /// Process-local monotonic counter, appended to each sorted-set member. Two
@@ -133,9 +143,9 @@ impl std::fmt::Display for Peer {
 /// Prefers the authenticated user id (verified statelessly from the
 /// `Authorization: Bearer <jwt>` access token), falling back to the client IP
 /// address (`SRV-019`, `SRV-094`). No Redis lookup: the JWT carries the user id
-/// in its claims. `X-Forwarded-For` is read only when `trust_proxy` says a
-/// proxy overwrites it. Otherwise it is the caller's to forge, so the socket
-/// peer decides.
+/// in its claims. `X-Forwarded-For` is read only when `trust_proxy` declares
+/// the proxies in front of the relay. Otherwise it is the caller's to forge,
+/// so the socket peer decides.
 fn request_bucket(jwt: &crate::jwt::JwtKeys, trust_proxy: ProxyTrust, req: &Request) -> RateBucket {
     let header = |name: &str| req.headers().get(name).and_then(|v| v.to_str().ok());
     if let Some(token) = header("authorization").and_then(|h| h.strip_prefix("Bearer "))
@@ -145,31 +155,73 @@ fn request_bucket(jwt: &crate::jwt::JwtKeys, trust_proxy: ProxyTrust, req: &Requ
     {
         return RateBucket::User(claims.sub);
     }
-    let x_forwarded_for =
-        header("x-forwarded-for").filter(|_| trust_proxy == ProxyTrust::BehindProxy);
+    RateBucket::Peer(request_peer(trust_proxy, req))
+}
+
+/// The peer a request comes from, whatever token it carries.
+fn request_peer(trust_proxy: ProxyTrust, req: &Request) -> Peer {
+    let forwarded = req
+        .headers()
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok());
     let remote = req
         .extensions()
         .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
         .map_or(Peer::Unknown, |a| Peer::of(a.0.ip()));
-    RateBucket::Peer(client_peer(x_forwarded_for, remote))
+    client_peer(trust_proxy, forwarded, remote)
 }
 
-/// The peer of a request: the first entry of `X-Forwarded-For` when a trusted
-/// proxy wrote one, the socket peer `remote` otherwise.
+/// The bucket a request of `category` counts against.
+///
+/// The sign-in tier counts by peer alone. Each account a caller sets up
+/// brings a token. A bucket per token would grow the rate of new accounts
+/// from one address with their count (`SRV-304`). The other tiers
+/// count a signed-in caller by its account (`SRV-019`).
+fn bucket_for(
+    category: &RateLimitCategory,
+    jwt: &crate::jwt::JwtKeys,
+    trust_proxy: ProxyTrust,
+    req: &Request,
+) -> RateBucket {
+    match category {
+        RateLimitCategory::Auth => RateBucket::Peer(request_peer(trust_proxy, req)),
+        RateLimitCategory::Api | RateLimitCategory::WebSocket => {
+            request_bucket(jwt, trust_proxy, req)
+        }
+    }
+}
+
+/// The peer of a request: the `X-Forwarded-For` entry `hops` places from the
+/// right when `trust` declares `hops` proxies, the socket peer `remote`
+/// otherwise (`SRV-285`).
+///
+/// Each proxy appends the address of its own peer, so the entries a caller
+/// writes sit left of the ones the proxies wrote. The leftmost entry is
+/// therefore the caller's choice, and a fresh one per request would open a
+/// fresh window.
 ///
 /// An entry that parses neither as an address nor as a socket address is
-/// [`Peer::Unknown`]. It is never the socket peer: behind a proxy, the socket
-/// peer is the proxy itself.
-fn client_peer(x_forwarded_for: Option<&str>, remote: Peer) -> Peer {
-    let first = x_forwarded_for.and_then(|fwd| {
-        fwd.split(',')
-            .map(str::trim)
-            .find(|entry| !entry.is_empty())
-    });
-    match first {
-        Some(entry) => Peer::forwarded(entry),
-        None => remote,
+/// [`Peer::Unknown`], and so is a header shorter than the chain. It is never
+/// the socket peer: behind a proxy, the socket peer is the proxy itself.
+fn client_peer(trust: ProxyTrust, x_forwarded_for: Option<&str>, remote: Peer) -> Peer {
+    let ProxyTrust::BehindProxy { hops } = trust else {
+        return remote;
+    };
+    let Some(header) = x_forwarded_for else {
+        return remote;
+    };
+    let mut entries = header
+        .rsplit(',')
+        .map(str::trim)
+        .filter(|entry| !entry.is_empty())
+        .peekable();
+    if entries.peek().is_none() {
+        return remote;
     }
+    let skipped = usize::try_from(hops.get())
+        .unwrap_or(usize::MAX)
+        .saturating_sub(1);
+    entries.nth(skipped).map_or(Peer::Unknown, Peer::forwarded)
 }
 
 /// A number of requests in one sliding window: a limit, a count or what
@@ -232,9 +284,16 @@ impl RateLimitCategory {
     }
 
     /// Determines the rate-limit category from the request path and method.
+    ///
+    /// The provider configuration needs no session and proves nothing, so it
+    /// counts in the API tier. In the sign-in tier, one client behind a shared
+    /// address would spend the budget of everyone behind it (`SRV-287`).
     fn classify(path: &str, _method: &axum::http::Method) -> Self {
         if path.ends_with("/ws") {
             return RateLimitCategory::WebSocket;
+        }
+        if path == "/api/auth/config" {
+            return RateLimitCategory::Api;
         }
         if path.starts_with("/api/auth/") {
             return RateLimitCategory::Auth;
@@ -268,7 +327,12 @@ pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) ->
         window,
     } = category.limits();
 
-    let bucket = request_bucket(&state.jwt, state.config.trust_proxy_headers, &req);
+    let bucket = bucket_for(
+        &category,
+        &state.jwt,
+        state.config.trust_proxy_headers,
+        &req,
+    );
 
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -339,10 +403,10 @@ enum Verdict {
     Refused,
 }
 
-/// Records the current request in the sliding window of `bucket` under
-/// `category`, and says whether it is allowed, with the quota left.
+/// Says whether the current request fits the sliding window of `bucket` under
+/// `category`, with the quota left, and records it only when it fits.
 ///
-/// Runs `SLIDING_WINDOW_LUA` atomically: prune-add-count-expire in one round
+/// Runs `SLIDING_WINDOW_LUA` atomically: prune-count-add-expire in one round
 /// trip, so there is no boundary burst and no TTL-less key window.
 async fn check_sliding_window(
     state: &AppState,
@@ -364,7 +428,12 @@ async fn check_sliding_window(
         .eval(
             SLIDING_WINDOW_LUA,
             [key.as_str()],
-            [now.get().to_string(), window.get().to_string(), member],
+            [
+                now.get().to_string(),
+                window.get().to_string(),
+                member,
+                max_requests.get().to_string(),
+            ],
         )
         .await
         .map_err(|e| AppError::Redis(format!("rate limit sliding-window eval: {e}")))?;
@@ -408,32 +477,80 @@ mod tests {
         Peer::Addr(text.parse().unwrap())
     }
 
+    /// A chain of `hops` trusted proxies.
+    fn proxies(hops: u32) -> ProxyTrust {
+        ProxyTrust::BehindProxy {
+            hops: Count::new(hops),
+        }
+    }
+
+    /// The peer behind one trusted proxy.
+    fn behind_one(x_forwarded_for: Option<&str>, remote: Peer) -> Peer {
+        client_peer(proxies(1), x_forwarded_for, remote)
+    }
+
     #[test]
     fn client_ip_from_forwarded_header() {
         assert_eq!(
-            client_peer(Some("10.0.0.1, 10.0.0.2"), addr("127.0.0.1")),
-            addr("10.0.0.1")
+            behind_one(Some("10.0.0.1, 10.0.0.2"), addr("127.0.0.1")),
+            addr("10.0.0.2")
         );
     }
 
     #[test]
     fn client_ip_falls_back_to_remote() {
-        assert_eq!(client_peer(None, addr("192.168.1.1")), addr("192.168.1.1"));
-        assert_eq!(client_peer(None, Peer::Unknown), Peer::Unknown);
+        assert_eq!(behind_one(None, addr("192.168.1.1")), addr("192.168.1.1"));
+        assert_eq!(behind_one(None, Peer::Unknown), Peer::Unknown);
+        assert_eq!(
+            client_peer(ProxyTrust::Direct, Some("1.2.3.4"), addr("10.0.0.7")),
+            addr("10.0.0.7")
+        );
     }
 
     #[test]
     fn client_ip_ignores_empty_forwarded() {
-        assert_eq!(client_peer(Some(""), addr("10.0.0.7")), addr("10.0.0.7"));
-        assert_eq!(client_peer(Some(" , "), addr("10.0.0.7")), addr("10.0.0.7"));
+        assert_eq!(behind_one(Some(""), addr("10.0.0.7")), addr("10.0.0.7"));
+        assert_eq!(behind_one(Some(" , "), addr("10.0.0.7")), addr("10.0.0.7"));
     }
 
     #[test]
     fn client_ip_trims_forwarded() {
         assert_eq!(
-            client_peer(Some("  1.2.3.4  , 5.6.7.8"), addr("10.0.0.7")),
-            addr("1.2.3.4")
+            behind_one(Some("  1.2.3.4  , 5.6.7.8 "), addr("10.0.0.7")),
+            addr("5.6.7.8")
         );
+    }
+
+    /// `SRV-285`: behind `n` proxies, the client is the entry `n` places
+    /// from the right. Whatever the caller writes left of it changes no
+    /// bucket, and a header shorter than the chain is the unknown window.
+    #[test]
+    fn the_client_is_read_from_the_right_of_the_forwarded_chain() {
+        for forged in ["", "6.6.6.6, ", "6.6.6.6, 7.7.7.7, ", "not-an-ip, "] {
+            let one = format!("{forged}1.2.3.4");
+            assert_eq!(behind_one(Some(&one), addr("10.0.0.7")), addr("1.2.3.4"));
+            let two = format!("{forged}1.2.3.4, 10.0.0.5");
+            assert_eq!(
+                client_peer(proxies(2), Some(&two), addr("10.0.0.7")),
+                addr("1.2.3.4")
+            );
+        }
+        assert_eq!(
+            client_peer(proxies(3), Some("1.2.3.4, 10.0.0.5"), addr("10.0.0.7")),
+            Peer::Unknown
+        );
+    }
+
+    /// `SRV-285`: the setting names the number of proxies, `true` names one,
+    /// and anything else is no proxy.
+    #[test]
+    fn the_proxy_setting_names_the_length_of_the_chain() {
+        assert_eq!(ProxyTrust::from_setting(Some("true")), proxies(1));
+        assert_eq!(ProxyTrust::from_setting(Some("1")), proxies(1));
+        assert_eq!(ProxyTrust::from_setting(Some(" 2 ")), proxies(2));
+        for off in [None, Some("0"), Some("false"), Some("-1"), Some("")] {
+            assert_eq!(ProxyTrust::from_setting(off), ProxyTrust::Direct);
+        }
     }
 
     /// A forwarded entry that is no address shares the unknown window. It
@@ -441,7 +558,7 @@ mod tests {
     #[test]
     fn a_forwarded_entry_that_is_no_address_is_unknown() {
         assert_eq!(
-            client_peer(Some("not-an-ip, 1.2.3.4"), addr("10.0.0.7")),
+            behind_one(Some("1.2.3.4, not-an-ip"), addr("10.0.0.7")),
             Peer::Unknown
         );
     }
@@ -461,13 +578,13 @@ mod tests {
         ] {
             assert_eq!(RateBucket::Peer(addr(text)).to_string(), key);
             assert_eq!(
-                RateBucket::Peer(client_peer(Some(text), Peer::Unknown)).to_string(),
+                RateBucket::Peer(behind_one(Some(text), Peer::Unknown)).to_string(),
                 key
             );
         }
         assert_eq!(RateBucket::Peer(Peer::Unknown).to_string(), "ip:{unknown}");
         assert_eq!(
-            client_peer(Some("2001:DB8:0::1"), Peer::Unknown),
+            behind_one(Some("2001:DB8:0::1"), Peer::Unknown),
             addr("2001:db8::1")
         );
     }
@@ -479,12 +596,12 @@ mod tests {
         for (entry, peer) in [
             ("1.2.3.4:5678", "1.2.3.4"),
             ("[::1]:443", "::1"),
-            ("[2001:db8::1]:8080, 1.2.3.4", "2001:db8::1"),
+            ("1.2.3.4, [2001:db8::1]:8080", "2001:db8::1"),
         ] {
-            assert_eq!(client_peer(Some(entry), addr("10.0.0.7")), addr(peer));
+            assert_eq!(behind_one(Some(entry), addr("10.0.0.7")), addr(peer));
         }
         assert_eq!(
-            client_peer(Some("1.2.3.4:port"), addr("10.0.0.7")),
+            behind_one(Some("1.2.3.4:port"), addr("10.0.0.7")),
             Peer::Unknown
         );
     }
@@ -495,7 +612,7 @@ mod tests {
     #[test]
     fn an_ipv4_mapped_address_shares_the_ipv4_window() {
         for entry in ["::ffff:1.2.3.4", "[::ffff:1.2.3.4]:80"] {
-            let peer = client_peer(Some(entry), Peer::Unknown);
+            let peer = behind_one(Some(entry), Peer::Unknown);
             assert_eq!(peer, addr("1.2.3.4"));
             assert_eq!(RateBucket::Peer(peer).to_string(), "ip:{1.2.3.4}");
         }
@@ -574,9 +691,29 @@ mod tests {
             RateBucket::Peer(addr("10.0.0.1"))
         );
         assert_eq!(
-            request_bucket(&jwt, ProxyTrust::BehindProxy, &req),
+            request_bucket(&jwt, proxies(1), &req),
             RateBucket::Peer(addr("203.0.113.9"))
         );
+    }
+
+    /// `SRV-304`, audit `P55`: the sign-in tier counts a request by its peer,
+    /// whatever token it carries, so each account set up brings no fresh
+    /// bucket. The other tiers count the signed-in caller.
+    #[test]
+    fn the_sign_in_tier_counts_by_peer_whatever_the_token() {
+        let jwt = crate::jwt::JwtKeys::from_seed(&crate::jwt::JwtSeed::from_array([5u8; 32]));
+        let (user, bearer) = bearer_for(&jwt);
+        let req = request_from([10, 0, 0, 1], &[("authorization", &bearer)]);
+        assert_eq!(
+            bucket_for(&RateLimitCategory::Auth, &jwt, ProxyTrust::Direct, &req),
+            RateBucket::Peer(addr("10.0.0.1"))
+        );
+        for category in [RateLimitCategory::Api, RateLimitCategory::WebSocket] {
+            assert_eq!(
+                bucket_for(&category, &jwt, ProxyTrust::Direct, &req),
+                RateBucket::User(user)
+            );
+        }
     }
 
     /// A bucket names its store key by kind, so a user id and a peer address
@@ -619,6 +756,41 @@ mod tests {
         }
     }
 
+    // -- SLIDING_WINDOW_LUA -------------------------------------------------
+
+    /// `SRV-286`: a refused request adds nothing to its bucket. Past the
+    /// limit, the script answers a count above it and the set keeps the
+    /// allowed requests alone, however many refusals follow.
+    #[tokio::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
+    async fn a_refused_request_adds_nothing_to_its_bucket() {
+        use rustis::commands::{GenericCommands, SortedSetCommands};
+        let redis = crate::test_helpers::connect_test_redis().await.unwrap();
+        let key = format!("rate:test:ip:{{{}}}", uuid::Uuid::new_v4());
+        let now: u64 = 1_700_000_000_000;
+        let mut answers = Vec::new();
+        for nonce in 0..8u32 {
+            let count: i64 = redis
+                .eval(
+                    SLIDING_WINDOW_LUA,
+                    [key.as_str()],
+                    [
+                        now.to_string(),
+                        "60000".to_owned(),
+                        format!("member-{nonce}"),
+                        "3".to_owned(),
+                    ],
+                )
+                .await
+                .unwrap();
+            answers.push(count);
+        }
+        assert_eq!(answers, vec![1, 2, 3, 4, 4, 4, 4, 4]);
+        let recorded: usize = redis.zcard(&key).await.unwrap();
+        assert_eq!(recorded, 3);
+        let _: usize = redis.del(&key).await.unwrap();
+    }
+
     // -- RateLimitCategory --------------------------------------------------
 
     #[test]
@@ -630,6 +802,16 @@ mod tests {
     #[test]
     fn classify_auth_setup() {
         let category = RateLimitCategory::classify("/api/auth/setup", &axum::http::Method::POST);
+        assert!(matches!(category, RateLimitCategory::Auth));
+    }
+
+    /// `SRV-287`: the provider configuration counts in the API tier, so it
+    /// spends nothing of the sign-in budget of a shared address.
+    #[test]
+    fn the_provider_configuration_counts_in_the_api_tier() {
+        let category = RateLimitCategory::classify("/api/auth/config", &axum::http::Method::GET);
+        assert!(matches!(category, RateLimitCategory::Api));
+        let category = RateLimitCategory::classify("/api/auth/refresh", &axum::http::Method::POST);
         assert!(matches!(category, RateLimitCategory::Auth));
     }
 

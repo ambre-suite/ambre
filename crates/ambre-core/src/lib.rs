@@ -148,7 +148,8 @@ pub use encoded::{
     MasterKeySalt, SealedName, SealedShare, WrappedDocKey, WrappedMasterKey,
 };
 pub use envelope::{
-    Aad, ChainHash, Ciphertext, CommitmentTag, EntryDigest, Nonce, Signature, Transcript,
+    Aad, ChainHash, Ciphertext, CommitmentTag, EntryDigest, Nonce, Signature, SnapshotDigest,
+    Transcript,
 };
 pub use error::{DocTypeError, Error, UuidError, VersionError};
 pub use fingerprint::{InviterPin, KeyFingerprints};
@@ -175,13 +176,14 @@ pub use media::{
 };
 pub use member_count::Members;
 pub use mode::{
-    AfterDrop, Availability, CaseMatch, Creation, DocumentScope, FinalizeEnd, HistoryStep,
-    LinkState, PasteForm, RotationDebt, StepDirection, ThreadState, Toggle, Visibility, WordMatch,
+    AfterDrop, Availability, CaseMatch, Creation, DocumentScope, EmailProof, FinalizeEnd,
+    HistoryStep, LinkState, PasteForm, RotationDebt, StepDirection, ThreadState, Toggle,
+    Visibility, WordMatch,
 };
 pub use name::{
     DisplayName, InvalidDisplayName, NAME_MAX_CHARS, NAME_TOO_LONG, Name, NameTooLong,
-    cut_display_name_to_fit, cut_name_to_fit, display_handle, name_fits, name_is_empty,
-    name_plaintext, trimmed_name,
+    attributed_label, cut_display_name_to_fit, cut_name_to_fit, display_handle, name_fits,
+    name_is_empty, name_plaintext, trimmed_name,
 };
 pub use object_key::ObjectKey;
 pub use opaque::{Opaque, OpaqueKind, OpaqueLength, SealedAtRest, WireOpaque};

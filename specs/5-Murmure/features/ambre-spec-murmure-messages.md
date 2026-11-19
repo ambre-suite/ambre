@@ -59,6 +59,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-255` | `POST` | The check MUST accept a delta that sets the absent `thread` field of another author's message, and nothing else of it. | this spec section 3; `MURMURE-107` | `ambre_murmure::logic::thread_tests::the_check_lets_another_member_set_an_absent_thread_field_alone` -- a second value, another field, or a field set on a reply are refused; `::a_reply_takes_no_thread_field_from_another_member` -- a reply of a thread takes no `thread` field | none | verified |
 | `MURMURE-228` | `FAIL` | Given a JSON update of a schema version the client does not compile, the client MUST refuse it and ask the user to update. | this spec section 3; `MURMURE-019` | `ambre_murmure::logic::authorship_tests::a_json_update_of_another_version_is_refused_and_asks_an_update`; `ambre_logic::channels::tests::a_delta_from_a_newer_build_asks_the_user_to_update` -- the view gets `UpdateRequired` | none | verified |
 | `MURMURE-226` | `FRAME` | Checking a delta MUST NOT copy its document. | this spec section 3; `ambre-spec-budgets.md section 1` | type-level -- `delta::check` takes the JSON update, a registry lookup and a reactions lookup, never a document | none | verified |
+| `MURMURE-678` | `FAIL` | Given a delta that gives a message an identifier another message of the document holds, or writes an identifier on a message it did not create, every client MUST refuse the delta. | this spec section 3; `MURMURE-002` | `ambre_murmure::logic::authorship_tests::a_message_identifier_another_message_holds_is_refused` -- a new message under a held identifier, an identifier rewritten later, and one identifier on two new messages are each refused, and the echo passes; `ambre_murmure::logic::delta::tests::an_identifier_held_twice_names_no_author` -- an identifier held twice names no author for an amendment | none | verified |
+| `MURMURE-679` | `FAIL` | Given a delta that writes the header or the schema version of a document after the delta that created it, or writes a root its kind does not hold, every client MUST refuse the delta. | this spec section 3; `MURMURE-001`; `MURMURE-020` | `ambre_murmure::logic::authorship_tests::a_write_to_the_header_or_another_root_of_a_segment_is_refused`; `ambre_murmure::logic::amending_tests::a_write_to_the_header_of_amendments_is_refused` -- a changed channel, a deleted kind or segment, a new version and an unknown root are each refused and change nothing | none | verified |
+| `MURMURE-680` | `FAIL` | Given a delta the check accepts and Loro refuses, a client that opens the document MUST leave the delta out and open the rest. | this spec section 3; `MURMURE-030` | `ambre_murmure::logic::authorship_tests::a_delta_loro_refuses_is_left_out_of_an_opening_document` -- a container named inside a plain value is left out, and the document opens unchanged | none | verified |
+| `MURMURE-681` | `FAIL` | Given a delta whose new message or new `reactions` map names a container its own operation does not create, every client MUST refuse the delta. | this spec section 3; `MURMURE-094` | `ambre_murmure::logic::authorship_tests::a_created_container_that_names_another_operation_is_refused` -- a message and a `reactions` map that name a held message are each refused | none | verified |
 
 ### 1.6 Open a link
 
@@ -71,7 +75,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   `ambre-spec-budgets.md section 1`. A delta weighs about 1.4 times its binary form on the wire.
 * **Boundary.** a message is sealed like any delta (`ZK-001`), and its kind rides in the sealed
   summary (`SYNC-113`). The relay never learns whether a delta is a message, an edit or a delete.
-* **Verification.** 26 `verified`. The send, the authorship check, the edit and the delete are
+* **Verification.** 30 `verified`. The send, the authorship check, the edit and the delete are
   built, live and as amendments. So is the `thread` field another member sets once. The list draws
   the styles of a body, and a click on a link opens it.
 
@@ -95,7 +99,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 **Every rule reads the delta alone.** A Loro container identifier carries the PeerID that created
 it. The `author` of a message and the key of a reaction are values inside the operation. So the
-check needs the operations of the delta, and never the state of the segment.
+check needs the operations of the delta, and never a copy of the segment. Two rules also read
+lookups of the segment: whether it holds a header, and which map holds an `id`.
 
 **A delta travels as a Loro JSON update** (`MURMURE-223`). A binary update opens only by an import
 into a document, and a copy of the segment costs 52 ms at 5000 messages. The JSON form reads with
@@ -115,8 +120,17 @@ no document, in microseconds.
    map is the one container of a message that others write, entry by entry. It comes with its
    message, and a delta that replaces it later is refused.
 6. On an amendments document, read the message in its locked segment. Refuse the delta when the
-   segment does not hold it, or when its `author` is another user (`MURMURE-013`, `MURMURE-253`).
-7. Import otherwise, from the update the check read (`MURMURE-225`).
+   segment does not hold it, holds it twice, or when its `author` is another user (`MURMURE-013`,
+   `MURMURE-253`, `MURMURE-678`).
+7. Refuse it when it writes an `id` on a map it did not create, or an `id` another message holds
+   (`MURMURE-678`). An amendment and a fold name a message by its `id`, so one map alone holds it.
+8. Refuse it when it writes the `header` or the `meta` root after the creating delta, or another
+   root (`MURMURE-679`). The creating delta writes both roots once, on a document that holds
+   neither. An operation the document holds already is an echo, and passes.
+9. Refuse it when a new message or a new `reactions` map names a container its own operation does
+   not create (`MURMURE-681`). Loro refuses such an update, and the check reaches the same verdict.
+10. Import otherwise, from the update the check read (`MURMURE-225`). When a document opens, a
+    delta Loro refuses all the same is left out, and the rest opens (`MURMURE-680`).
 
 An amendment names its message by identifier, in a document its author did not create. So the
 check reads the author from the locked segment itself, which is immutable and cheap to load again.

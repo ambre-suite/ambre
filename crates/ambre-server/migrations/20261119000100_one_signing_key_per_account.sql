@@ -1,0 +1,13 @@
+-- One signing key belongs to one account (`SRV-293`, audit `W69`).
+--
+-- A member list and the public key route show every member's signing key.
+-- Without this index an outsider set up an account under a member's key and
+-- an exchange key of their own. Once invited, the outsider's membership entry
+-- bound the member's key, so the member's edits read as no one's or as the
+-- outsider's. The signing key never moves once stored (`SRV-030`), so the
+-- first account to register a key keeps it.
+--
+-- An account that owes its keys holds no signing key, and any number of
+-- such rows may coexist: a unique index holds no two equal values, and NULL
+-- equals nothing.
+CREATE UNIQUE INDEX users_signing_pubkey_unique ON users (signing_pubkey);

@@ -931,24 +931,45 @@ pub(crate) async fn sweep_revoked(
             Err(AppError::Forbidden) => {
                 let _ =
                     redis_ops::doc_session_close(&state.redis, &doc_id, &conn.signing_pubkey).await;
-                let channel = conn.channel_of(&doc_id);
-                handle_unsubscribe(conn, doc_id);
-                state
-                    .pubsub
-                    .unsubscribe(Topic::document(&doc_id), connection_id.clone())
-                    .await;
-                if let Some(channel) = channel
-                    && !conn.watches_channel(&channel)
-                {
-                    state
-                        .pubsub
-                        .unsubscribe(Topic::channel(&channel), connection_id.clone())
-                        .await;
-                }
+                conn.doc_subscriptions.remove(&doc_id);
+                drop_lost_routes(state, conn, doc_id, connection_id).await;
             }
             // A log line at the warning level names no document (`ZK-030`).
             Err(e) => tracing::warn!("membership sweep: a store read failed: {e}"),
         }
+    }
+}
+
+/// Drops the hub routes of `doc_id` once this connection no longer watches it.
+///
+/// A frame whose membership check fails drops the subscription of its
+/// document, and the socket loop then calls this. Without it the hub kept
+/// the route, and the sweep, which reads the subscriptions alone, never saw
+/// the document again. The removed member then heard every broadcast while
+/// its socket stayed open (`SRV-301`, audit `P39`). A document still watched
+/// keeps its routes.
+pub(crate) async fn drop_lost_routes(
+    state: &Arc<AppState>,
+    conn: &mut WsConnectionState,
+    doc_id: Id<Document>,
+    connection_id: &ConnectionId,
+) {
+    if conn.doc_subscriptions.contains(&doc_id) {
+        return;
+    }
+    let channel = conn.channel_of(&doc_id);
+    handle_unsubscribe(conn, doc_id);
+    state
+        .pubsub
+        .unsubscribe(Topic::document(&doc_id), connection_id.clone())
+        .await;
+    if let Some(channel) = channel
+        && !conn.watches_channel(&channel)
+    {
+        state
+            .pubsub
+            .unsubscribe(Topic::channel(&channel), connection_id.clone())
+            .await;
     }
 }
 
@@ -2042,6 +2063,54 @@ mod access_tests {
         broadcast().await;
         assert!(
             tokio::time::timeout(Duration::from_millis(500), rx.recv())
+                .await
+                .ok()
+                .flatten()
+                .is_none(),
+            "a removed member still hears the document"
+        );
+    }
+
+    /// `SRV-301`, audit `P39`: a removed member whose own frame is refused
+    /// loses the hub route with the subscription. It hears no later
+    /// broadcast, though the sweep never sees the document again.
+    #[sqlx::test]
+    #[cfg_attr(
+        not(feature = "db"),
+        ignore = "needs postgres+redis; run with --features db"
+    )]
+    async fn a_refused_frame_drops_the_route_with_the_subscription(pool: sqlx::PgPool) {
+        let state = state_on(pool.clone()).await;
+        let (doc_id, editor) = shared_document(&pool).await;
+        let key = FixedBytes::<PublicKey>::from_array([35u8; 32]);
+        let mut conn = conn_of(editor, key, doc_id, MEMBERSHIP_RECHECK_TTL);
+        let connection = ConnectionId::new();
+        let (route, mut heard) = mpsc::channel::<StoredPayload>(8);
+        state
+            .pubsub
+            .subscribe(Topic::document(&doc_id), connection.clone(), route)
+            .await
+            .expect("the hub routes the topic");
+        db::remove_document_member(
+            &pool,
+            &doc_id,
+            &editor,
+            None,
+            ambre_core::Instant::<ambre_core::UnixSec>::new(0),
+        )
+        .await
+        .unwrap();
+
+        let (tx, _rx) = mpsc::channel::<StoredPayload>(8);
+        handle_update(&state, &mut conn, update_for(key, doc_id), &tx).await;
+        assert!(!conn.doc_subscriptions.contains(&doc_id));
+        drop_lost_routes(&state, &mut conn, doc_id, &connection).await;
+        sweep_revoked(&state, &mut conn, &connection).await;
+        redis_ops::doc_broadcast(&state.redis, &doc_id, &StoredPayload::new(b"f".to_vec()))
+            .await
+            .expect("publish");
+        assert!(
+            tokio::time::timeout(Duration::from_millis(500), heard.recv())
                 .await
                 .ok()
                 .flatten()

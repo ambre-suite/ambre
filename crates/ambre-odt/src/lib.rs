@@ -48,6 +48,10 @@ pub enum OdtError {
     NotText,
     #[error("a required part is missing: {0}")]
     MissingPart(&'static str),
+    /// The walk of the document visits more nodes or writes more text than
+    /// its bound: copies of a repeated row, cell or space mark.
+    #[error("the document builds past its bound")]
+    TooLarge,
 }
 
 /// A document read, and what the reading carried and lost.

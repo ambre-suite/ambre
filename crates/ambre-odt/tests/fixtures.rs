@@ -551,3 +551,160 @@ fn an_unknown_element_is_reported_and_its_text_kept() {
         1
     );
 }
+
+/// A content part whose text body is `body`, under the namespaces the
+/// hostile files below use.
+fn body(body: &str) -> String {
+    format!(
+        concat!(
+            r#"<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" "#,
+            r#"xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" "#,
+            r#"xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0">"#,
+            r#"<office:body><office:text>{}</office:text></office:body>"#,
+            r#"</office:document-content>"#
+        ),
+        body
+    )
+}
+
+/// The text of every run of `blocks`, cells included, in order.
+fn all_text(blocks: &[Block]) -> String {
+    let mut out = String::new();
+    for block in blocks {
+        match block {
+            Block::Paragraph(paragraph) => {
+                for inline in &paragraph.inlines {
+                    if let Inline::Run(run) = inline {
+                        out.push_str(&run.text);
+                    }
+                }
+            }
+            Block::Table(table) => {
+                for row in &table.rows {
+                    for cell in &row.cells {
+                        out.push_str(&all_text(&cell.blocks));
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+/// A deletion region whose removed paragraph holds `inner`.
+fn deletion(inner: &str) -> String {
+    format!(
+        concat!(
+            r#"<text:tracked-changes><text:changed-region text:id="x"><text:deletion>"#,
+            r#"<office:change-info/><text:p>{}</text:p>"#,
+            r#"</text:deletion></text:changed-region></text:tracked-changes>"#
+        ),
+        inner
+    )
+}
+
+/// `W300`: a tracked deletion whose removed paragraph names the deletion
+/// itself ends: the mark expands once, and the read answers.
+#[test]
+fn a_deletion_that_names_itself_reads_once() {
+    let content = body(&format!(
+        r#"{}<text:p><text:change text:change-id="x"/></text:p>"#,
+        deletion(r#"gone<text:change text:change-id="x"/>"#)
+    ));
+    let decoded = ambre_odt::read(&package(&content, &[])).expect("the text reads");
+    assert_eq!(all_text(&decoded.document.body), "gone");
+}
+
+/// `W301`: a deleted region is copied at its first mark alone, whatever the
+/// count of marks that name it.
+#[test]
+fn a_deleted_region_is_copied_once_whatever_its_marks() {
+    let marks = r#"<text:change text:change-id="x"/>"#.repeat(10_000);
+    let content = body(&format!(
+        "{}<text:p>{marks}</text:p>",
+        deletion(&"d".repeat(1024 * 1024))
+    ));
+    let decoded = ambre_odt::read(&package(&content, &[])).expect("the text reads");
+    assert_eq!(all_text(&decoded.document.body).len(), 1024 * 1024);
+}
+
+/// `W302`: repeated rows of repeated cells nest a table in the cell. They
+/// pass the walk bound of a document and fail typed, before they hold the
+/// cells they ask for.
+#[test]
+fn nested_repeats_of_a_table_fail_typed() {
+    let mut cell = "<text:p>a</text:p>".to_owned();
+    for _ in 0..3 {
+        cell = format!(
+            concat!(
+                r#"<table:table><table:table-row table:number-rows-repeated="1024">"#,
+                r#"<table:table-cell table:number-columns-repeated="1024">{}</table:table-cell>"#,
+                r#"</table:table-row></table:table>"#
+            ),
+            cell
+        );
+    }
+    let content = body(&cell);
+    assert!(content.len() < 2048, "the hostile body is small");
+    assert_eq!(
+        ambre_odt::read(&package(&content, &[])).map(|_| ()),
+        Err(ambre_odt::OdtError::TooLarge)
+    );
+}
+
+/// `W302`: space marks each under the repeat bound write past the text bound
+/// of a document together, and fail typed.
+#[test]
+fn space_marks_past_the_text_bound_fail_typed() {
+    let marks = r#"<text:s text:c="1024"/>"#.repeat(70_000);
+    let content = body(&format!("<text:p>{marks}</text:p>"));
+    assert_eq!(
+        ambre_odt::read(&package(&content, &[])).map(|_| ()),
+        Err(ambre_odt::OdtError::TooLarge)
+    );
+}
+
+/// `W72`: a content part of empty elements past the node bound of a tree
+/// fails typed, though it reads under the bound of a part.
+#[test]
+fn a_part_past_the_node_bound_fails_typed() {
+    let past = usize::try_from(ambre_opc::MAX_TREE_NODES.get()).expect("fits");
+    let content = body(&"<text:soft-page-break/>".repeat(past));
+    assert_eq!(
+        ambre_odt::read(&package(&content, &[])).map(|_| ()),
+        Err(ambre_odt::OdtError::Xml(ambre_odt::xml::XmlError::TooLarge))
+    );
+}
+
+/// `P66`: ten thousand paragraph styles form one chain of parents, and each
+/// paragraph names its last style. A chain stops at its bound, so no
+/// paragraph walks every style, and the text reads in time.
+#[test]
+fn a_long_chain_of_styles_reads_within_its_bound() {
+    let count = 10_000;
+    let styles: String = (0..count)
+        .map(|n| {
+            let parent = if n == 0 {
+                String::new()
+            } else {
+                format!(r#" style:parent-style-name="s{}""#, n - 1)
+            };
+            format!(r#"<style:style style:name="s{n}" style:family="paragraph"{parent}/>"#)
+        })
+        .collect();
+    let paragraphs =
+        format!(r#"<text:p text:style-name="s{}">x</text:p>"#, count - 1).repeat(count);
+    let content = format!(
+        concat!(
+            r#"<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" "#,
+            r#"xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" "#,
+            r#"xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">"#,
+            r#"<office:automatic-styles>{}</office:automatic-styles>"#,
+            r#"<office:body><office:text>{}</office:text></office:body>"#,
+            r#"</office:document-content>"#
+        ),
+        styles, paragraphs
+    );
+    let decoded = ambre_odt::read(&package(&content, &[])).expect("the text reads");
+    assert_eq!(all_text(&decoded.document.body).len(), count);
+}

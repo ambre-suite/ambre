@@ -12,7 +12,7 @@
 //! paragraph a new document opens on counts nothing (`PROSE-FEAT-122`).
 
 use ambre_core::Count;
-use loro::{LoroDoc, LoroTree, TreeID};
+use loro::LoroDoc;
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::doc;
@@ -29,27 +29,16 @@ pub fn compute_word_count(document: &LoroDoc) -> WordCount {
     let Some(tree) = doc::blocks_read(document) else {
         return count;
     };
-    let mut flow = Vec::new();
-    // The flow starts at the body roots, so a band is never counted.
-    for root in doc::roots(&tree) {
-        flow.push(root);
-        collect(&tree, Some(root), &mut flow);
-    }
-    for id in flow {
+    // The flow starts at the body roots, so a band is never counted. It is
+    // walked with a stack of its own, whatever the depth a peer gave the
+    // tree (`PROSE-140`).
+    for id in doc::flow(&tree) {
         let has_body = doc::block_type_of(&tree, &id).is_some_and(|t| t.has_body());
         if has_body {
             add_block(&doc::get_block_text(document, &id).to_string(), &mut count);
         }
     }
     count
-}
-
-/// Every live block under `parent`, depth first, which is the document flow.
-fn collect(tree: &LoroTree, parent: Option<TreeID>, out: &mut Vec<TreeID>) {
-    for id in doc::children_of(tree, parent) {
-        out.push(id);
-        collect(tree, Some(id), out);
-    }
 }
 
 /// Add one block's text to the running counts.

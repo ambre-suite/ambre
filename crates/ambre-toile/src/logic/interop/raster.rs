@@ -201,6 +201,43 @@ fn mime_of(format: ImageFormat) -> ambre_core::MediaType {
     })
 }
 
+/// The pixels of a stored thumbnail, or `None` when its bytes do not decode,
+/// or when it is larger than a thumbnail.
+///
+/// A peer writes the thumbnail, and a small PNG may declare a huge picture.
+/// So the header is read first, and a side past the thumbnail edge decodes
+/// nothing. The decoder carries the same bound, against a header that lies
+/// (`TOILE-307`, `ambre-spec-budgets.md section 6`).
+pub(crate) fn decode_thumbnail(
+    thumb: &ambre_core::Payload<ambre_core::ThumbnailPng>,
+) -> Option<crate::ui::walk::DecodedImage> {
+    let edge = ambre_convert::images::THUMB_EDGE.get();
+    let reader = || {
+        image::ImageReader::with_format(
+            std::io::Cursor::new(thumb.as_bytes()),
+            image::ImageFormat::Png,
+        )
+    };
+    let (width, height) = reader().into_dimensions().ok()?;
+    if width > edge || height > edge {
+        return None;
+    }
+    let mut bound = image::Limits::default();
+    bound.max_image_width = Some(edge);
+    bound.max_image_height = Some(edge);
+    let mut decoder = reader();
+    decoder.limits(bound);
+    let rgba = decoder.decode().ok()?.to_rgba8();
+    let size = ambre_core::Size::new(
+        ambre_core::Px::new(rgba.width()),
+        ambre_core::Px::new(rgba.height()),
+    );
+    Some(crate::ui::walk::DecodedImage {
+        pixels: rgba.into_raw().into(),
+        size,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -33,6 +33,15 @@ pub enum XmlError {
     Malformed,
     DocumentType,
     TooDeep,
+    /// The tree of a part holds more nodes or attribute bytes than
+    /// `ambre_opc::TreeBudget` admits.
+    TooLarge,
+}
+
+impl From<ambre_opc::TreeTooLarge> for XmlError {
+    fn from(_: ambre_opc::TreeTooLarge) -> Self {
+        Self::TooLarge
+    }
 }
 
 /// The namespaces the reader follows. A name in any other namespace reads as
@@ -249,14 +258,17 @@ fn keeps_whitespace(parent: &Element) -> bool {
 ///
 /// # Errors
 ///
-/// [`XmlError::Malformed`] for bytes that are not well-formed UTF-8 XML,
-/// [`XmlError::DocumentType`] for a part that declares a document type, and
-/// [`XmlError::TooDeep`] past [`MAX_DEPTH`].
+/// * [`XmlError::Malformed`] for bytes that are not well-formed UTF-8 XML;
+/// * [`XmlError::DocumentType`] for a part that declares a document type;
+/// * [`XmlError::TooDeep`] past [`MAX_DEPTH`];
+/// * [`XmlError::TooLarge`] for a tree past the node or attribute bound of
+///   `ambre_opc::TreeBudget`.
 pub fn parse(part: &Payload<PartBytes>) -> Result<Element, XmlError> {
     let mut reader = NsReader::from_reader(part.as_bytes());
     reader.config_mut().check_end_names = true;
     let mut buf = Vec::new();
     let mut names = Names::default();
+    let mut budget = ambre_opc::TreeBudget::default();
     // The open elements, the innermost last. The root's parent is a
     // sentinel that collects the root.
     let mut stack: Vec<Element> = vec![Element {
@@ -277,13 +289,13 @@ pub fn parse(part: &Payload<PartBytes>) -> Result<Element, XmlError> {
                 if stack.len() > MAX_DEPTH {
                     return Err(XmlError::TooDeep);
                 }
-                stack.push(open(&reader, &mut names, ns, &start)?);
+                stack.push(open(&reader, &mut names, &mut budget, ns, &start)?);
             }
             Event::Empty(start) => {
                 if stack.len() > MAX_DEPTH {
                     return Err(XmlError::TooDeep);
                 }
-                let element = open(&reader, &mut names, ns, &start)?;
+                let element = open(&reader, &mut names, &mut budget, ns, &start)?;
                 if element.binds {
                     names.prefixes.clear();
                 }
@@ -296,8 +308,8 @@ pub fn parse(part: &Payload<PartBytes>) -> Result<Element, XmlError> {
                 }
                 push_child(&mut stack, Node::Element(element))?;
             }
-            Event::Text(text) => push_text(&mut stack, &text.xml10_content())?,
-            Event::CData(data) => push_text(&mut stack, &data.xml10_content())?,
+            Event::Text(text) => push_text(&mut stack, &mut budget, &text.xml10_content())?,
+            Event::CData(data) => push_text(&mut stack, &mut budget, &data.xml10_content())?,
             Event::GeneralRef(reference) => {
                 let resolved = match reference.resolve_char_ref() {
                     Ok(Some(ch)) => ch,
@@ -307,7 +319,7 @@ pub fn parse(part: &Payload<PartBytes>) -> Result<Element, XmlError> {
                     Err(_) => return Err(XmlError::Malformed),
                 };
                 let mut utf8 = [0_u8; 4];
-                push_text(&mut stack, resolved.encode_utf8(&mut utf8))?;
+                push_text(&mut stack, &mut budget, resolved.encode_utf8(&mut utf8))?;
             }
             Event::DocType(_) => return Err(XmlError::DocumentType),
             Event::Decl(_) | Event::PI(_) | Event::Comment(_) => {}
@@ -374,12 +386,16 @@ impl Names {
     }
 }
 
+/// The element `start` opens, charged to `budget` with each attribute it
+/// keeps before the tree holds it.
 fn open(
     reader: &NsReader<&[u8]>,
     names: &mut Names,
+    budget: &mut ambre_opc::TreeBudget,
     ns: Ns,
     start: &quick_xml::events::BytesStart<'_>,
 ) -> Result<Element, XmlError> {
+    budget.node()?;
     let name = names.get(start.local_name().as_ref());
     let binds = start
         .attributes()
@@ -400,6 +416,7 @@ fn open(
             .normalized_value(quick_xml::XmlVersion::Implicit1_0)
             .map_err(|_| XmlError::Malformed)?
             .into_owned();
+        budget.attr(ambre_core::Count::of(value.len()))?;
         attrs.push(Attr {
             ns: attr_ns,
             name: names.get(attr.key.local_name().as_ref()),
@@ -424,7 +441,11 @@ fn push_child(stack: &mut [Element], node: Node) -> Result<(), XmlError> {
     Ok(())
 }
 
-fn push_text(stack: &mut [Element], text: &str) -> Result<(), XmlError> {
+fn push_text(
+    stack: &mut [Element],
+    budget: &mut ambre_opc::TreeBudget,
+    text: &str,
+) -> Result<(), XmlError> {
     let parent = stack.last_mut().ok_or(XmlError::Malformed)?;
     if text.trim().is_empty() && !keeps_whitespace(parent) {
         return Ok(());
@@ -433,6 +454,7 @@ fn push_text(stack: &mut [Element], text: &str) -> Result<(), XmlError> {
     if let Some(Node::Text(previous)) = parent.children.last_mut() {
         previous.push_str(text);
     } else {
+        budget.node()?;
         parent.children.push(Node::Text(text.to_owned()));
     }
     Ok(())

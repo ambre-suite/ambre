@@ -168,11 +168,16 @@ impl ToileState {
             }
             stack.extend(self.parents_of(&id).iter().cloned());
         }
-        // A chain of n groups settles in n + 1 passes. The cap ends the loop
-        // when a box never compares equal to itself, as a NaN box does
-        // (`TOILE-275`).
+        // Children before parents, so one pass settles a nesting of any
+        // depth, and the next one finds nothing changed. A loop of groups,
+        // which a peer can write, gets a third. The cap ends the loop then,
+        // and when a box never compares equal to itself, as a NaN box does
+        // (`TOILE-275`, `TOILE-306`).
+        let groups = super::groups::bottom_up(&groups, |g| {
+            self.members.get(g).map_or(&[][..], Vec::as_slice)
+        });
         let mut changed = true;
-        let mut passes = 0..=groups.len();
+        let mut passes = 0..3;
         while changed && passes.next().is_some() {
             changed = false;
             for g in &groups {

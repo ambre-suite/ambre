@@ -46,6 +46,8 @@ prefix is `AUTHOR`, and it belongs to this document alone.
 | `AUTHOR-012` | `FAIL` | Given a delta that carries an operation whose PeerID does not derive from its signer and nonce, the client MUST refuse the whole delta before import. | this spec section 3 | `ambre_logic::authorship_tests::a_delta_carrying_an_operation_not_its_signers_is_refused_whole` -- a forged and a mixed delta, alone and in a batch, never land; `ambre_logic::authorship_tests::a_delta_its_signer_wrote_reaches_the_document` -- the honest delta lands, and a batch drops only the forged one | none | verified |
 | `AUTHOR-013` | `POST` | An accepted delta MUST reach the Logic thread with the user identity of its signer. | this spec section 3; `SYNC-014` | `ambre_sync::updates::tests::an_opened_update_reaches_logic_with_its_nonce_its_peer_and_its_signer` -- the delta carries the member its signer resolves to, and a stranger's carries none | none | verified |
 | `AUTHOR-014` | `FRAME` | Refusing a delta MUST NOT change the document, its registry or its export cursor. | this spec section 3 | `ambre_logic::authorship_tests::a_delta_carrying_an_operation_not_its_signers_is_refused_whole` -- the document's version vector is unchanged, nothing is sent, and the next edit carries this session alone | none | verified |
+| `AUTHOR-032` | `FAIL` | Given a delta of a Trame, Toile or Prose document whose PeerID carries a registry entry that the session of that PeerID wrote under another nonce, the client MUST refuse the whole delta before import. | this spec section 3, the margin of a PeerID; section 6 | `ambre_logic::authorship_tests::a_peer_id_another_session_registered_is_refused` -- a delta under Alice's PeerID with another nonce leaves the document as it was, live and in a replay; `::a_replay_keeps_a_peer_id_for_its_first_session` -- inside one replay, the first session keeps the PeerID and a free PeerID lands; `::an_entry_planted_by_another_peer_claims_nothing` -- an entry Mallory writes under Alice's PeerID does not refuse Alice | none | verified |
+| `AUTHOR-033` | `FAIL` | Given a delta of a Murmure channel or space document whose PeerID carries a registry entry that the session of that PeerID wrote under another nonce, the client MUST refuse the whole delta before import. | this spec section 3, the margin of a PeerID; `AUTHOR-032` | not built | unbuilt -- lands with the `A PeerID is never shared by two accounts` Story (`ambre-roadmap.md` MVP). The Murmure engine runs its own check on a channel and a space, and that check does not read the registry yet | unimplemented |
 
 ### 1.4 Open from a snapshot
 
@@ -60,8 +62,9 @@ Another member checks it against the signed deltas before anyone opens from it.
 | `AUTHOR-021` | `POST` | A client MUST confirm its own snapshot only when every operation of another user past the reference snapshot comes from a delta that user signed. | this spec section 3; `SRV-126`, `SRV-130` | `ambre_logic::authorship_tests::a_delta_carrying_an_operation_not_its_signers_is_refused_whole` -- no unsigned operation reaches the document a snapshot is built from; `ambre_sync::updates::tests::a_held_snapshot_is_adopted_only_when_its_extras_resolve_to_its_author` -- nor through a snapshot it adopted; `ambre_sync::updates::tests::an_uploaded_snapshot_is_confirmed_by_its_author_once_stored` -- the author confirms under the relay's id, and nothing once a step fails | none | verified |
 | `AUTHOR-022` | `FAIL` | Given a snapshot its author confirmed, whose operations of another user past the reference snapshot differ from the deltas that user signed, the client MUST refuse it and open from the reference snapshot. | this spec section 3; `SRV-131` | `ambre_sync::updates::tests::a_held_snapshot_is_adopted_only_when_its_extras_resolve_to_its_author` -- a mismatch, or an extra signed by another key, leaves the document on its reference; `ambre_logic::snapshot_check::tests::operations_only_the_snapshot_holds_are_named_with_their_entry` -- each extra reaches Sync with its registry entry; `ambre_sync::updates::tests::a_held_snapshot_is_checked_once_the_replay_is_done` -- the held snapshot is checked only once the replay is done | none | verified |
 | `AUTHOR-023` | `POST` | A mismatch report MUST be signed by its reporter, and name the snapshot and its author. | this spec section 3; `SRV-133` | `ambre_server::routes::tests::a_signed_report_drops_a_pending_snapshot_alone` -- the relay refuses a report signed over another author, and acts on one signed over the right one; `ambre_protocol::snapshot_report::tests::the_transcript_names_the_document_the_snapshot_and_the_author` -- what is signed changes with each of the three | none | verified |
-| `AUTHOR-030` | `FAIL` | A client MUST adopt a snapshot whole only when it built it, or when another member signed its confirmation. | this spec section 3; `SRV-284`; audit `N31` | `ambre_sync::snapshot_trust::tests::a_snapshot_the_relay_alone_calls_confirmed_is_held_back` -- a snapshot the relay calls confirmed is held back under no signature, its author's, one over another horizon or one of a key the log never bound; `ambre_sync::snapshot_trust::tests::the_reference_is_the_start_only_under_its_signed_confirmation` -- the reference is the start only under its signed confirmation, and the first delta otherwise; `ambre_sync::updates::tests::a_start_blob_signed_by_another_author_is_refused` -- the blob adopted must verify under the author the confirmation names; `ambre_sync::membership_log::tests::an_anchored_log_grants_confirmation_to_its_members_alone` -- the keys an anchored log grants | none | verified |
-| `AUTHOR-031` | `POST` | A confirmation MUST be signed by its confirmer over the document, the snapshot, the horizon and the author. | this spec section 3; `SRV-284` | `ambre_protocol::snapshot_confirm::tests::the_transcript_names_the_document_the_snapshot_the_horizon_and_the_author` -- each of the four changes the bytes signed; `ambre_sync::updates::tests::a_checked_snapshot_is_confirmed_or_reported_to_the_relay` -- the confirmation posted verifies under the checker's key, over the horizon and the key the blob verified under | none | verified |
+| `AUTHOR-030` | `FAIL` | A client MUST adopt a snapshot whole only when it built it, or when another member signed a confirmation of the very blob it downloaded. | this spec section 3; `SRV-284`; audit `N31` | `ambre_sync::snapshot_trust::tests::a_snapshot_the_relay_alone_calls_confirmed_is_held_back` -- a snapshot the relay calls confirmed is held back under no signature, its author's, one over another horizon or one of a key the log never bound; `ambre_sync::snapshot_trust::tests::a_confirmation_holds_for_the_blob_it_names_alone` -- a genuine confirmation served beside another blob under the same identifier and horizon trusts nothing, and the blob it names is adopted; `ambre_sync::snapshot_trust::tests::the_reference_is_the_start_only_under_its_signed_confirmation` -- the reference is the start only under its signed confirmation, and the first delta otherwise; `ambre_sync::updates::tests::a_start_blob_signed_by_another_author_is_refused` -- the blob adopted must verify under the author the confirmation names; `ambre_sync::membership_log::tests::an_anchored_log_grants_confirmation_to_its_members_alone` -- the keys an anchored log grants | none | verified |
+| `AUTHOR-031` | `POST` | A confirmation MUST be signed by its confirmer over the document, the snapshot, the horizon, the author and the digest of the sealed blob it checked. | this spec section 3; `SRV-284` | `ambre_protocol::snapshot_confirm::tests::the_transcript_names_the_document_the_snapshot_the_horizon_the_author_and_the_blob` -- each of the five changes the bytes signed; `ambre_sync::updates::tests::a_checked_snapshot_is_confirmed_or_reported_to_the_relay` -- the confirmation posted verifies under the checker's key, over the horizon, the key the blob verified under and the digest of the blob checked, and the request carries that digest; `ambre_sync::snapshot_trust::tests::a_confirmation_holds_for_the_blob_it_names_alone` -- a genuine confirmation served with another blob under the same identifier and horizon is not adopted | none | verified |
+| `AUTHOR-034` | `FAIL` | Given a confirmation whose confirmer's key the snapshot's author bound to a member, a client MUST NOT adopt the snapshot whole on it. | this spec section 3; `AUTHOR-030` | `ambre_sync::membership_log::tests::a_confirmer_the_author_bound_does_not_count_for_that_author` -- the key of an account an editor invited counts for no snapshot of that editor, and still counts for another author; `ambre_sync::snapshot_trust::tests::a_confirmer_the_author_bound_does_not_make_a_snapshot_trusted` -- such a confirmation leaves the snapshot held back, and the same confirmer makes a snapshot of another author the start | none | verified |
 | `AUTHOR-018` | `FRAME` | Checking a snapshot MUST NOT change the document. | this spec section 3 | `ambre_logic::snapshot_check::tests::the_check_leaves_the_document_unchanged` -- the version and the value are unchanged; `ambre_logic::authorship_tests::a_pending_snapshot_is_answered_and_never_imported` -- neither verdict reaches the document | none | verified |
 
 ### 1.5 The operations no session signs
@@ -94,7 +97,8 @@ derive from no key. No delta ever carries them, so every client must write them 
   comparison.
 * **Boundary.** the session nonce rides inside the sealed payload (`AUTHOR-010`), so the relay
   learns nothing beyond the `ZK-007` set. The registry is document content, sealed like the rest.
-* **Verification.** 31 `verified`. Every delta is checked, and every row on it holds by a test.
+* **Verification.** 33 `verified`, 1 `unimplemented`. Every delta is checked, and every row on it
+  holds by a test.
 
 ---
 
@@ -105,6 +109,7 @@ derive from no key. No delta ever carries them, so every client must write them 
 | sends a message | nothing | one message, under the PeerID of Alice's session | the message, by Alice | none |
 | nothing | signs a delta that edits Alice's message under the PeerID of Alice's session | unchanged: every client refuses the delta (`AUTHOR-012`) | the message as Alice wrote it | `ambre_logic::authorship_tests::a_delta_carrying_an_operation_not_its_signers_is_refused_whole` |
 | opens the document on a second device | nothing | a second PeerID and registry entry for Alice | both sessions resolve to Alice | none |
+| writes under a PeerID her session registered | searches a nonce that derives the same PeerID from her own key, and signs a delta under it | unchanged: every client refuses the delta (`AUTHOR-032`) | Alice's operations stay Alice's | `ambre_logic::authorship_tests::a_peer_id_another_session_registered_is_refused` |
 | nothing | writes a registry entry that maps a PeerID of Mallory to Alice | the entry is present and resolves to nobody (`AUTHOR-005`, `AUTHOR-020`) | Mallory's operations stay Mallory's | `ambre_crypto::peer::tests::an_entry_resolves_to_the_user_who_signed_it_alone` |
 
 ---
@@ -207,15 +212,25 @@ The next member to open cold is the natural confirmer: it has just replayed the 
 snapshot covers.
 
 **A confirmation is signed** (`AUTHOR-031`). The confirmer signs the document, the snapshot, its
-horizon and its author. The relay keeps the signature and serves it with the snapshot (`SRV-284`).
-Each field is one the relay already holds, so the relay learns nothing new.
+horizon, its author and the digest of the sealed blob it checked. The relay keeps the signature and
+serves it with the snapshot (`SRV-284`). The relay sees every byte of the blob, so it learns nothing
+new. The digest binds the signature to one blob. A writer who seals a second blob under the same
+identifier and horizon carries no confirmation over to it (audit `W101`).
 
 **A cold open trusts a snapshot whole only under that signature** (`AUTHOR-030`, audit `N31`).
-The relay's word that a member confirmed a snapshot proves nothing. The open checks three things:
+The relay's word that a member confirmed a snapshot proves nothing. The open checks four things:
 
-1. The signature verifies over the snapshot the relay names, its horizon and its author.
-2. The confirmer is a key the membership log bound to a member, and not the author.
-3. The blob it downloads verifies under that author.
+1. The confirmer is a key the membership log bound to a member, and not the author.
+2. The author signed no binding of the confirmer's key (`AUTHOR-034`).
+3. The signature verifies over the snapshot the relay names, its horizon, its author and the
+   digest of the blob the open downloads.
+4. That blob verifies under that author.
+
+An editor may invite a second account of their own. A confirmation by that account would let the
+editor vouch for their own snapshot, so the open does not count it (audit `W203`). The rule reads
+every binding: a member the author ever bound counts for none of that author's snapshots. So an
+owner who invited every member gets no confirmation of the snapshots they author. An open checks
+those after the replay, as a snapshot its author confirmed alone is.
 
 A snapshot this user built opens whole on its own word. Any other snapshot is held back and
 checked once the replay is done, as a snapshot its author confirmed alone is. The open then starts
@@ -236,9 +251,22 @@ compares them with the deltas that user signed. A difference is a forgery: the r
 snapshot and opens from the reference (`AUTHOR-022`). The deltas kept are only what others wrote,
 so they stop growing while one author writes alone (`SRV-132`).
 
-**Why the check is deterministic.** It reads the delta, its signer and its nonce, and nothing
-else: no arrival order, no local state. So every peer reaches the same verdict on the same delta
-(`AUTHOR-007`).
+**Why the check is deterministic.** It reads the delta, its signer and its nonce, and the
+registry as the deltas before it left the document. It reads no arrival order of its own: the relay
+numbers every delta, and each peer applies them in that order. So every peer reaches the same
+verdict on the same delta (`AUTHOR-007`).
+
+**The margin of a PeerID.** A PeerID is 64 bits, because Loro holds a PeerID in a `u64`. A writer
+who knows a PeerID of another member can search a nonce that derives it from the writer's own key.
+The search costs 2^64 BLAKE2b blocks, divided by the number of PeerIDs the target holds. The
+attacker of `ambre-spec-zero-knowledge.md` section 2, 100 GPUs for one year, computes about that
+many. So the derivation alone does not bind a PeerID to one author.
+
+The registry binds it: the first session that registers a PeerID keeps it. A delta under that
+PeerID from another nonce is refused (`AUTHOR-032`). Only an entry the session of that PeerID wrote
+counts, so an entry another writer planted claims nothing. A collision search buys a refused delta,
+and no operation under the PeerID of another member. The relay cannot hold this check: the nonce
+and the PeerID ride sealed (`AUTHOR-010`).
 
 **Code.**
 
@@ -270,6 +298,8 @@ The binding has no control of its own.
 | :--- | :--- | :--- |
 | A PeerID derives from a key and a nonce | a PeerID equal to a hash of the signing key alone | two sessions of one user, on two devices or two tabs, would write under one PeerID, and a Loro document forbids two concurrent writers on one PeerID |
 | A PeerID derives from a key and a nonce | a PeerID bound on first sight, with no derivation | the binding would depend on which delta a client receives first, and two clients could disagree |
+| The registry binds a PeerID to its first session | the relay refuses a PeerID that another user registered | the relay would read the PeerID and the nonce, which ride sealed (`AUTHOR-010`, `ZK-007`), and would learn which sessions write together |
+| The registry binds a PeerID to its first session | a PeerID wider than 64 bits | Loro holds a PeerID in a `u64`, so a wider hash is truncated back to 64 bits before any operation carries it |
 | The registry is document content | a registry held and signed by the relay | the relay would become the authority on who wrote what, which the key model per member refuses |
 | A forged delta is refused before import | an import followed by a filter at display | the filter detects and prevents nothing: a last-writer-wins value is already overwritten when the display reads it |
 | One check per delta | a signature on each operation | a signature per operation multiplies the cost by the operation count, and the delta signature already covers every operation it carries |
@@ -278,6 +308,8 @@ The binding has no control of its own.
 | A snapshot is confirmed by another member | trusting the snapshot whole | its author could write any operation under the PeerID of another member, and every cold open would believe it |
 | A snapshot is confirmed by another member | a signature on each operation | it would sign every keystroke, and the delta already carries one signature |
 | A confirmation is signed by its confirmer | the relay's status alone | the relay and one writer would make a forged snapshot read as checked, and every cold open would adopt it (audit `N31`) |
+| The confirmer is one the author did not bind | any key the log bound | an editor would invite a second account and confirm their own snapshot with it (audit `W203`) |
+| The confirmation signs a digest of the blob | the identifier and the horizon alone | a writer would seal a second blob under the same identifier, and a genuine confirmation would vouch for it (audit `W101`) |
 | The confirmer is a key the log ever bound | a member the log still holds | a snapshot confirmed by a member who left would lose its trust, and every open would replay from the first delta |
 | A registry entry is signed by its user | dating each operation against the membership log | an operation carries no trusted time, and a log position per operation would weigh on every delta |
 | An author alone confirms its own snapshot, checked after the fact | no snapshot until another member confirms | a document shared once and then edited alone would pile up deltas for ever, and replay them all at each open |
@@ -286,6 +318,11 @@ The binding has no control of its own.
 ---
 
 ## 6. NOT BUILT, AND NOT YET RULED
+
+* **A PeerID holds 64 bits of margin, and no more.** Section 3 states why the registry binds it
+  and the derivation does not. A delta can wait on an operation, and its PeerID's first entry with
+  it. The next delta under that PeerID is then checked against the registry the peer holds. A Murmure
+  channel and a Murmure space do not hold the check yet (`AUTHOR-033`).
 
 * **A local restore is not checked.** It imports with no check, so whoever wrote the local store
   can still place any operation in it. A snapshot from the relay is checked (section 1.4).

@@ -116,6 +116,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-066` | `POST` | A sign-out MUST close the socket and clear every key. | `ambre-spec-zero-knowledge.md`, `ZK-002` | `ambre_sync::websocket::tests::a_sign_out_closes_the_socket_and_clears_every_key` -- the transport is disconnected, the seed, both keys, the tokens and every document are gone, and a later drop reopens nothing | none | verified |
 | `SYNC-100` | `FRAME` | A sign-out MUST leave no token behind it. | `ZK-006`; `ambre-spec-session.md`, `SRV-026` | `ambre_sync::websocket::tests::session_tokens_wipe_on_drop` -- both tokens are held in an `ambre_core::Secret`, wiped when the last owner drops it, so ending the session clears them | none | verified |
 | `SYNC-177` | `POST` | A sign-out MUST ask the relay to revoke the refresh token the session holds. | `ambre-spec-session.md`, `SRV-026` | `ambre_sync::http::tests::a_sign_out_revokes_the_refresh_token_it_holds` -- one request under the access token carries the refresh token, a refused access token makes it carry the token the renewal handed out, and a refusal is reported | none | verified |
+| `SYNC-275` | `POST` | A sign-out MUST drop every key, root, pin, log and buffered delta of the session. | this spec section 2; `SYNC-235`, `SYNC-237` | `ambre_sync::run_tests::a_sign_out_leaves_nothing_of_the_session_in_the_worker` -- the roots, the pins, the listed channel keys, the typed opens and the plaintext deltas buffered before an open are gone | none | verified |
+| `SYNC-281` | `FAIL` | Given a request the session spawned before its sign-out, its answer MUST NOT reach the session that follows. | this spec section 2; `SYNC-275` | `ambre_sync::run_tests::a_sign_out_leaves_nothing_of_the_session_in_the_worker` -- a sender a task of the ended session holds reaches the queue of that session alone, and the next session reads another queue | none | verified |
+| `SYNC-277` | `FAIL` | Given an answer body or a socket frame past its ceiling in `ambre-spec-budgets.md`, the Sync worker MUST refuse it. | this spec section 2; `ambre-spec-budgets.md` section 1 | `ambre_sync::http::tests::a_body_meter_refuses_the_chunk_past_its_ceiling` -- the meter takes bytes up to the ceiling and refuses the chunk past it; `ambre_sync::http::tests::an_answer_past_its_ceiling_is_no_answer` -- a relay answer past its ceiling is no answer, and an object request holds the larger ceiling; `ambre_sync::websocket::tests::a_socket_frame_past_its_ceiling_is_not_read` -- a frame past its ceiling is not read | none | verified |
+| `SYNC-278` | `FAIL` | Given a body whose stated length or whose bytes read so far pass its ceiling, the Sync worker MUST stop reading it. | this spec section 2; `SYNC-277` | none | unheld -- the metered read of a browser `fetch` runs only in a worker; a wasm-tier test lands with the `A sign-out leaves nothing of the session in the worker` Story (`ambre-roadmap.md` MVP) | failing |
 
 ### 1.7 An account is recovered
 
@@ -150,10 +154,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this worker **is** the client side of the boundary `ambre-spec-zero-knowledge.md`
   draws. `SYNC-002` and `SYNC-095` keep the keys in. `SYNC-060` and `SYNC-061` keep the tokens in,
   and `SYNC-067` seals the one document field that is content rather than routing.
-* **Verification.** 79 `verified`, 1 `unimplemented`. The crate graph holds the keys and the CRDT
-  apart. Unit tests hold the token redaction and wipe, the refused channel send and the name bound
-  to its document. A gate refuses browser storage in the worker. Each gap left is a browser property
-  the wasm tier cannot boot, `ambre-spec-testing.md section 9`.
+* **Verification.** 82 `verified`, 1 `failing`, 1 `unimplemented`. The crate graph holds the keys
+  and the CRDT apart. Unit tests hold the token redaction and wipe, the refused channel send and the
+  name bound to its document. A gate refuses browser storage in the worker. Each gap left is a
+  browser property the wasm tier cannot boot, `ambre-spec-testing.md section 9`.
 ---
 
 ## 2. MODEL
@@ -194,6 +198,16 @@ spawned tasks on that free loop.
 | the access and refresh tokens | the same | dropped, and not wiped -- section 5 |
 | one socket, and the callbacks attached to it | the same | on sign-out |
 | one state per open document: its key, its counters, its cursor and its quarantine | from open to close | on drop |
+| the roots, the pins, the listed channel keys, the logs, the footings and the deltas buffered before an open | from sign-in to sign-out | on sign-out (`SYNC-275`) |
+
+**A sign-out ends the session's event queue.** Each task the session spawned holds a sender of
+that queue. The worker starts a fresh queue at the sign-out and drops the old one unread. So a task
+in flight, an open or a fetched rotation, puts no key back into the next session (`SYNC-281`).
+
+**Every byte the worker reads has a ceiling.** A relay answer, an object of the store and a socket
+frame each have one, a row of `ambre-spec-budgets.md` section 1. The worker refuses a body past
+it (`SYNC-277`). It stops reading at a stated length past it, or at the chunk that passes it
+(`SYNC-278`). It checks a frame before the copy into its memory, which never shrinks.
 
 **Three planes cross the boundary.** They are declared in
 `ambre-spec-message-bus.md` and never restated here. A request expects one answer and carries an

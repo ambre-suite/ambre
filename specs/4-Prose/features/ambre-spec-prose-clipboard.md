@@ -55,6 +55,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-042` | `POST` | A paste MUST take the richest half the clipboard holds: this application's own payload, then the HTML half, then the plain-text mirror. | this spec section 3 | `ambre_prose::logic::clipboard::tests::the_richest_half_the_clipboard_holds_wins`; `::foreign_bytes_paste_as_plain_text` -- the plain-text leg | none | verified |
 | `PROSE-UI-043` | `POST` | The kept payload MUST be used only while the system clipboard carries this tab's token; otherwise the pasted content MUST come from the system clipboard (`UI-THREAD-007`). | this spec section 3 | `ambre_prose::input_tests::the_kept_payload_serves_only_its_own_copy` | none | verified |
 | `PROSE-UI-221` | `FAIL` | HTML nested deeper than the reader's depth cap MUST paste as its plain-text mirror, and MUST NOT be built into a tree. | this spec section 3 | `ambre_prose::logic::clipboard::html_paste::a_tree_nested_past_the_cap_reads_as_nothing` | none | verified |
+| `PROSE-UI-249` | `FAIL` | The depth count MUST count each level the tree builder keeps open, a misnested formatting element and a stray ruby element included. | this spec section 3; `PROSE-UI-221` | `ambre_convert::engine::html::tests::a_misnested_formatting_run_is_too_deep`; `::a_run_of_ruby_elements_counts_outside_a_ruby_alone`; `::the_cap_holds_on_plain_nesting` | none | verified |
 | `PROSE-UI-223` | `POST` | A paste of several blocks, or of one typed block, into an empty paragraph MUST give that paragraph the type of the first pasted block. | this spec section 3 | `ambre_prose::logic::clipboard::tests::the_html_half_alone_pastes_what_the_rich_half_does` | none | verified |
 | `PROSE-UI-227` | `POST` | The paste-as-plain-text chord and its context-menu entry MUST insert the plain-text mirror alone, whatever richer half the clipboard holds. | this spec section 4 | `ambre_prose::input_tests::a_plain_paste_carries_the_text_alone`; `ambre_prose::commands::tests::the_context_menu_entries_are_declared_and_left_unbound` | none | verified |
 | `PROSE-UI-112` | `FRAME` | A paste MUST NOT change a block outside the range it replaces, and MUST NOT reformat the text that surrounds it. | derived | `ambre_prose::logic::clipboard::tests::a_paste_mid_paragraph_leaves_the_neighbours_alone` | none | verified |
@@ -74,7 +75,7 @@ status values are normative in `ambre-spec-template.md`.
   It carries the user's own selection, already plaintext on their machine; nothing is encrypted,
   nothing is sent, and the host performs the write (`PROSE-UI-041`). The browser's own handling is
   outside Ambre's control, and gates the mirror (`ambre-spec-clipboard.md`).
-* **Verification.** 28 `verified`, 1 `unimplemented`. The Logic rows are host tests over a real
+* **Verification.** 29 `verified`, 1 `unimplemented`. The Logic rows are host tests over a real
   document, a round trip included; the view rows drive the input queue with a recording sender.
   `PROSE-UI-041`, `PROSE-UI-105` and `PROSE-UI-106` are held by where the types live.
 

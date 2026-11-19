@@ -148,14 +148,19 @@ pub async fn make_sweeps_due(pool: &PgPool) {
 }
 
 /// Creates a test user directly in the database (bypasses OIDC flow).
+///
+/// The signing key is the SHA-256 of the address: one account holds one key
+/// (`SRV-293`), so two users of one test never share it.
 pub async fn create_test_user(pool: &PgPool, email: &str) -> Id<User> {
+    use sha2::Digest as _;
+    let signing: [u8; 32] = sha2::Sha256::digest(email.as_bytes()).into();
     let user = db::create_user(
         pool,
         &ambre_core::Email::from(email),
         &ambre_core::Validated::<ambre_core::DisplayName>::parse("Test User").unwrap(),
         &ambre_core::Encoded::new([1u8; 32].to_vec()),
         &ambre_core::FixedBytes::<ambre_core::MasterKeySalt>::from_array([2u8; 32]),
-        &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([3u8; 32]),
+        &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(signing),
         &ambre_core::FixedBytes::<ambre_core::ExchangePublicKey>::from_array([4u8; 32]),
     )
     .await
@@ -259,8 +264,8 @@ struct StubStore {
 }
 
 /// An in-process object store over path-style requests. It answers the calls
-/// the relay makes: `PutObject`, `GetObject`, `DeleteObject`, `ListObjectsV2`
-/// and `DeleteObjects`.
+/// the relay makes: `PutObject`, `GetObject`, `HeadObject`, `DeleteObject`,
+/// `ListObjectsV2` and `DeleteObjects`.
 pub struct S3Stub {
     store: Arc<std::sync::Mutex<StubStore>>,
     pub endpoint: String,
@@ -322,6 +327,16 @@ impl S3Stub {
         if method == Method::PUT && !key.is_empty() {
             store.objects.insert(key, body);
             return StatusCode::OK.into_response();
+        }
+        if method == Method::HEAD && !key.is_empty() {
+            return match store.objects.get(&key) {
+                Some(bytes) => (
+                    StatusCode::OK,
+                    [("content-length", bytes.len().to_string())],
+                )
+                    .into_response(),
+                None => StatusCode::NOT_FOUND.into_response(),
+            };
         }
         if method == Method::GET && !key.is_empty() {
             *store.gets.entry(key.clone()).or_default() += 1;

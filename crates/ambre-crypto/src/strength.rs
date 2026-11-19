@@ -11,11 +11,13 @@
 //! the patterns a guess tool tries first, and a length model. It credits a
 //! word with the bits of a draw from a list of 8 192 words, whatever its
 //! length. So it never credits a phrase with more than a word-list attack
-//! needs, and its errors fall on the side of a refusal.
+//! needs, and its errors fall on the side of a refusal. A run of letters
+//! reads as random only when it holds no vowel at all.
 //!
 //! The estimate never leaves this crate. A refusal names the weakness that
-//! dominated it, and nothing else. The one copy of the passphrase the
-//! estimator makes is a [`Secret`], wiped when the estimate ends.
+//! dominated it, and nothing else. Each copy of the passphrase the estimator
+//! makes is a [`Secret`], wiped when the estimate ends. Each one takes its
+//! size before its first character, so it never moves.
 
 use ambre_core::{Confidential, Count, NarrowCount, Passphrase, PassphraseWeakness, Secret};
 
@@ -87,12 +89,16 @@ const COMMON: &str = concat!(
     "daniel thomas robert matrix zaq abc",
 );
 
-/// The rows a guess tool walks, one space between two: the alphabet, the
-/// digits and the keyboard rows of the QWERTY, AZERTY and QWERTZ layouts. A
-/// run of three or more of one, in either direction, is a sequence.
+/// The rows a guess tool walks, one space between two. They are the
+/// alphabet, the digits, and the keyboard rows of the QWERTY, AZERTY and
+/// QWERTZ layouts. The last three are the columns of each layout, read top
+/// to bottom, then left to right. A row reads as a ring, in either
+/// direction, so a walk longer than its row still follows it. A walk is
+/// three characters or more.
 const SEQUENCES: &str = concat!(
-    "abcdefghijklmnopqrstuvwxyz qwertyuiop asdfghjkl zxcvbnm azertyuiop qsdfghjklm ",
-    "wxcvbn qwertzuiop yxcvbnm 01234567890",
+    "abcdefghijklmnopqrstuvwxyz 0123456789 qwertyuiop asdfghjkl zxcvbnm ",
+    "azertyuiop qsdfghjklm wxcvbn qwertzuiop yxcvbnm ",
+    "qazwsxedcrfvtgbyhnujmikolp aqwzsxedcrfvtgbyhnujikolpm qaywsxedcrfvtgbzhnujmikolp",
 );
 
 /// A new passphrase that the strength floor admits. Only [`Self::check`]
@@ -161,30 +167,101 @@ impl Estimate {
     }
 }
 
-/// The estimate of `passphrase`: the lower of the text read as typed and the
-/// text with its substitutions folded back to letters. A digit or a symbol
-/// folds only beside a letter, so a run of digits keeps its digits.
+/// The estimate of `passphrase`: the lowest of three readings.
+/// 1. The text as typed.
+/// 2. The text with its substitutions folded back to letters, for one bit
+///    more. A digit or a symbol folds only beside a letter.
+/// 3. The text with its separators taken out, when the rest is a pattern.
+///
+/// A passphrase of digits alone stays under the floor (`Chars::capped`).
 fn estimate(passphrase: &Confidential<Passphrase>) -> Estimate {
     let typed = Chars::of(passphrase);
-    let as_typed = typed.estimate();
+    let mut best = typed.estimate();
     let folded = typed.folded();
-    if folded.0.expose() == typed.0.expose() {
-        return as_typed;
+    if folded.0.expose() != typed.0.expose() {
+        best = lower(best, folded.estimate().plus(Estimate::plain(ONE_BIT)));
     }
-    let as_folded = folded.estimate().plus(Estimate::plain(ONE_BIT));
-    if as_folded.bits < as_typed.bits {
-        as_folded
-    } else {
-        as_typed
+    if let Some(joined) = typed.joined() {
+        best = lower(best, joined);
     }
+    typed.capped(best)
+}
+
+/// `low` when it costs fewer bits than `kept`, else `kept`: a tie keeps the
+/// reading the caller holds.
+fn lower(kept: Estimate, low: Estimate) -> Estimate {
+    if low.bits < kept.bits { low } else { kept }
 }
 
 /// The characters of a passphrase, in a buffer that wipes itself on drop.
 struct Chars(Secret<Vec<char>>);
 
 impl Chars {
+    /// The buffer takes its whole size before the first character, since a
+    /// text holds no more characters than bytes. So it never moves: a move
+    /// would free a buffer that holds a prefix of the passphrase, unwiped
+    /// (audit `W104`).
     fn of(passphrase: &Confidential<Passphrase>) -> Self {
-        Self(Secret::new(passphrase.secret().expose().chars().collect()))
+        let text = passphrase.secret().expose();
+        Self(Secret::filled(|chars: &mut Vec<char>| {
+            chars.reserve_exact(text.len());
+            chars.extend(text.chars());
+        }))
+    }
+
+    /// The estimate of the text with its separators taken out. It counts when
+    /// the rest is one class and reads as a pattern: a common password, a
+    /// repetition or a walk. The alphabet spelled one letter at a time is
+    /// such a pattern. The separator costs its first choice. `None` when the
+    /// text holds no separator, or the rest reads as words. A phrase of words
+    /// joined reads as fewer words than it holds.
+    fn joined(&self) -> Option<Estimate> {
+        let text = self.0.expose();
+        if !text.iter().any(|&c| Class::of(c) == Class::Separator) {
+            return None;
+        }
+        // Sized once, as in `Chars::of`, so no prefix is left behind.
+        let kept = Self(Secret::filled(|kept: &mut Vec<char>| {
+            kept.reserve_exact(text.len());
+            kept.extend(
+                text.iter()
+                    .copied()
+                    .filter(|&c| Class::of(c) != Class::Separator),
+            );
+        }));
+        let chars = kept.0.expose();
+        let class = Class::of(*chars.first()?);
+        if chars.iter().any(|&c| Class::of(c) != class) {
+            return None;
+        }
+        let run = Run {
+            class,
+            chars,
+            standing: Standing::Alone,
+        };
+        let pattern = run.estimate();
+        pattern
+            .met
+            .map(|_| pattern.plus(Estimate::plain(NEW_SEPARATOR)))
+    }
+
+    /// `estimate`, held under the floor when the text is digits alone, its
+    /// separators aside. Such a text is a PIN, a phone number or a run of
+    /// dates, and a guess list walks those whole, whatever their length.
+    fn capped(&self, estimate: Estimate) -> Estimate {
+        let text = self.0.expose();
+        let digits_alone = text.iter().any(char::is_ascii_digit)
+            && text
+                .iter()
+                .all(|&c| matches!(Class::of(c), Class::Digit | Class::Separator));
+        if digits_alone && estimate.bits >= FLOOR {
+            Estimate {
+                bits: Count::new(FLOOR.get().saturating_sub(1)),
+                ..estimate
+            }
+        } else {
+            estimate
+        }
     }
 
     /// The characters with each substitution folded back to its letter
@@ -289,11 +366,10 @@ enum Standing {
     Alone,
 }
 
-/// What a run of letters is, for its cost.
+/// What a run is, for its cost, before its pieces are read.
 enum Shape {
     Common(Count<Draws>),
     SameChar,
-    Sequence,
     Words,
     Random,
 }
@@ -329,54 +405,37 @@ impl Run<'_> {
         }
     }
 
-    /// What the run is, in the order a guess tool tries the shapes:
+    /// What the run is as a whole, in the order a guess tool tries the
+    /// shapes:
     /// 1. a common password;
     /// 2. one character said again;
-    /// 3. a row of [`SEQUENCES`], forward or backward;
-    /// 4. words;
-    /// 5. random letters.
+    /// 3. words;
+    /// 4. random letters.
     ///
-    /// A run reads as words when it holds a vowel in four letters and no
-    /// five consonants in a row. A run of one or two letters reads as a word
-    /// when it stands alone. A letter outside ASCII counts as a vowel, so a
-    /// script with no vowel reads as words: the cheaper reading.
+    /// A run reads as words when it holds a vowel. Only a run with no vowel
+    /// reads as random letters. So a dictionary word or a keyboard walk never
+    /// reads as random (audit `W100`). A run of one or two
+    /// letters reads as a word when it stands alone. A letter outside ASCII
+    /// counts as a vowel, so a script with no vowel reads as words: the
+    /// cheaper reading.
     fn shape(&self) -> Shape {
         let len = self.chars.len();
-        let is = |c: &char, b: u8| c.to_ascii_lowercase() == char::from(b);
         let spells = |word: &str| {
-            len == word.len() && self.chars.iter().zip(word.bytes()).all(|(c, b)| is(c, b))
+            len == word.len()
+                && self
+                    .chars
+                    .iter()
+                    .zip(word.bytes())
+                    .all(|(c, b)| c.to_ascii_lowercase() == char::from(b))
         };
-        let along = |window: &[u8], direction: Direction| {
-            window.iter().enumerate().all(|(i, &b)| {
-                let at = match direction {
-                    Direction::Forward => Some(i),
-                    Direction::Backward => len.checked_sub(i + 1),
-                };
-                at.and_then(|at| self.chars.get(at))
-                    .is_some_and(|c| is(c, b))
-            })
-        };
-        let in_a_row = len >= 3
-            && SEQUENCES.split(' ').any(|row| {
-                row.as_bytes().windows(len).any(|window| {
-                    along(window, Direction::Forward) || along(window, Direction::Backward)
-                })
-            });
         let vowel = |c: &char| {
             !c.is_ascii() || matches!(c.to_ascii_lowercase(), 'a' | 'e' | 'i' | 'o' | 'u' | 'y')
         };
-        let vowels = self.chars.iter().filter(|c| vowel(c)).count();
-        let longest_consonants = self
-            .chars
-            .split(vowel)
-            .map(<[char]>::len)
-            .max()
-            .unwrap_or(0);
         let words = self.class == Class::Letter
             && if len < 3 {
                 self.standing == Standing::Alone
             } else {
-                vowels * 4 >= len && longest_consonants < 5
+                self.chars.iter().any(vowel)
             };
         let one_char = len > 1
             && self
@@ -387,13 +446,117 @@ impl Run<'_> {
             Shape::Common(Count::of(rank + 1))
         } else if one_char {
             Shape::SameChar
-        } else if in_a_row {
-            Shape::Sequence
         } else if words {
             Shape::Words
         } else {
             Shape::Random
         }
+    }
+
+    /// The run as one unit said again, when it is one. It costs the unit, the
+    /// log of the count, and one bit. The unit is the shortest that spells
+    /// the run when said again, twice at least. A last unit cut short still
+    /// counts as one.
+    fn repeated(&self) -> Option<Estimate> {
+        let len = self.chars.len();
+        let period = (2..=len / 2).find(|&period| {
+            self.chars
+                .iter()
+                .zip(self.chars.iter().skip(period))
+                .all(|(a, b)| a.eq_ignore_ascii_case(b))
+        })?;
+        let unit = Run {
+            class: self.class,
+            chars: self.chars.get(..period)?,
+            standing: self.standing,
+        };
+        let count = Count::<Draws>::of(len.div_ceil(period));
+        Some(
+            unit.estimate()
+                .plus(Estimate::plain(log2(count).plus(ONE_BIT)))
+                .with(PassphraseWeakness::Repetition),
+        )
+    }
+
+    /// The cheapest reading of the run as a chain of pieces. A piece is a
+    /// common password, a walk of three characters or more along a row of
+    /// [`SEQUENCES`], or one character at `filler`. A guess tool chains
+    /// patterns this way. So two keyboard rows joined cost the two walks and
+    /// no more (audit `W100`). `first` is the cost of the character a walk
+    /// starts on.
+    ///
+    /// The walk from each start is the longest along any row, as a ring and
+    /// either way. Every shorter walk from that start follows the same row,
+    /// so the chain tries each length up to it.
+    fn segmented(&self, first: Count<Centibits>, filler: Count<Centibits>) -> Estimate {
+        let chars = self.chars;
+        let len = chars.len();
+        let same = |c: char, b: u8| c.to_ascii_lowercase() == char::from(b);
+        let rows: Vec<&[u8]> = SEQUENCES
+            .split(' ')
+            .map(str::as_bytes)
+            .filter(|row| !row.is_empty())
+            .collect();
+        let walk_from = |start: usize| {
+            let rest = chars.get(start..).unwrap_or_default();
+            rows.iter()
+                .flat_map(|row| {
+                    let ring = row.len();
+                    (0..ring)
+                        .flat_map(|at| [Direction::Forward, Direction::Backward].map(|d| (at, d)))
+                        .map(move |(at, direction)| {
+                            rest.iter()
+                                .enumerate()
+                                .take_while(|&(step, &c)| {
+                                    let i = match direction {
+                                        Direction::Forward => (at + step) % ring,
+                                        Direction::Backward => (at + ring - step % ring) % ring,
+                                    };
+                                    row.get(i).is_some_and(|&b| same(c, b))
+                                })
+                                .count()
+                        })
+                })
+                .max()
+                .unwrap_or(0)
+        };
+        let mut best: Vec<Option<Estimate>> = vec![None; len + 1];
+        if let Some(origin) = best.first_mut() {
+            *origin = Some(Estimate::NOTHING);
+        }
+        for start in 0..len {
+            let Some(Some(so_far)) = best.get(start).copied() else {
+                continue;
+            };
+            let mut offer = |end: usize, piece: Estimate| {
+                if let Some(slot) = best.get_mut(end) {
+                    let next = so_far.plus(piece);
+                    if (*slot).is_none_or(|held| next.bits < held.bits) {
+                        *slot = Some(next);
+                    }
+                }
+            };
+            offer(start + 1, Estimate::plain(filler));
+            for walk in 3..=walk_from(start) {
+                offer(start + walk, sequence(first, Count::of(walk)));
+            }
+            if self.class != Class::Letter {
+                continue;
+            }
+            for (rank, word) in COMMON.split(' ').enumerate() {
+                let hit = chars
+                    .get(start..start + word.len())
+                    .is_some_and(|piece| piece.iter().zip(word.bytes()).all(|(&c, b)| same(c, b)));
+                if hit {
+                    offer(
+                        start + word.len(),
+                        Estimate::plain(log2(Count::<Draws>::of(rank + 1)).plus(ONE_BIT))
+                            .with(PassphraseWeakness::CommonPassword),
+                    );
+                }
+            }
+        }
+        best.last().copied().flatten().unwrap_or(Estimate::NOTHING)
     }
 
     /// The bits of the case of a run. Lower case costs none. A capital first
@@ -411,6 +574,9 @@ impl Run<'_> {
         }
     }
 
+    /// A run of letters: a common password, one letter said again, a unit
+    /// said again, or the lower of its whole reading and its pieces. Its case
+    /// costs on top, except for a unit said again, whose unit carries it.
     fn letters(&self) -> Estimate {
         let len = self.len();
         let base = match self.shape() {
@@ -418,35 +584,54 @@ impl Run<'_> {
                 Estimate::plain(log2(rank).plus(ONE_BIT)).with(PassphraseWeakness::CommonPassword)
             }
             Shape::SameChar => same_char(LETTER, len),
-            Shape::Sequence => sequence(LETTER, len),
-            Shape::Words => {
-                let words = Count::<Characters>::new((len.get() / WORD_LEN.get()).max(1));
-                Estimate::plain(WORD_CHAR.times(len).min(WORD.times(words)))
+            shape => {
+                if let Some(repeated) = self.repeated() {
+                    return repeated;
+                }
+                let (whole, filler) = if matches!(shape, Shape::Words) {
+                    let words = Count::<Characters>::new((len.get() / WORD_LEN.get()).max(1));
+                    (WORD_CHAR.times(len).min(WORD.times(words)), WORD_CHAR)
+                } else {
+                    (LETTER.times(len), LETTER)
+                };
+                lower(Estimate::plain(whole), self.segmented(LETTER, filler))
             }
-            Shape::Random => Estimate::plain(LETTER.times(len)),
         };
         base.plus(Estimate::plain(self.case()))
     }
 
+    /// A run of digits: one digit said again, or a unit said again. Else the
+    /// lower of the run read whole and its pieces. Read whole, it is a year,
+    /// a date or random digits.
     fn digits(&self) -> Estimate {
         let len = self.len();
+        if matches!(self.shape(), Shape::SameChar) {
+            return same_char(DIGIT, len);
+        }
+        if let Some(repeated) = self.repeated() {
+            return repeated;
+        }
         let first_two = (self.chars.first(), self.chars.get(1));
         let a_year = matches!(first_two, (Some('1'), Some('9')) | (Some('2'), Some('0')));
-        match self.shape() {
-            Shape::SameChar => same_char(DIGIT, len),
-            Shape::Sequence => sequence(DIGIT, len),
-            _ if len.get() == 4 && a_year => Estimate::plain(YEAR),
-            _ if matches!(len.get(), 6 | 8) => Estimate::plain(DATE.min(DIGIT.times(len))),
-            _ => Estimate::plain(DIGIT.times(len)),
-        }
+        let whole = if len.get() == 4 && a_year {
+            YEAR
+        } else if matches!(len.get(), 6 | 8) {
+            DATE.min(DIGIT.times(len))
+        } else {
+            DIGIT.times(len)
+        };
+        lower(Estimate::plain(whole), self.segmented(DIGIT, DIGIT))
     }
 
+    /// A run of symbols: one symbol said again, a unit said again, or
+    /// random symbols. No row holds a symbol, so a run has no walk.
     fn symbols(&self) -> Estimate {
         let len = self.len();
-        match self.shape() {
-            Shape::SameChar => same_char(SYMBOL, len),
-            _ => Estimate::plain(SYMBOL.times(len)),
+        if matches!(self.shape(), Shape::SameChar) {
+            return same_char(SYMBOL, len);
         }
+        self.repeated()
+            .unwrap_or(Estimate::plain(SYMBOL.times(len)))
     }
 }
 
@@ -478,7 +663,8 @@ fn same_char(first: Count<Centibits>, len: Count<Characters>) -> Estimate {
     Estimate::plain(first.plus(log2(len))).with(PassphraseWeakness::Repetition)
 }
 
-/// A run that a row of [`SEQUENCES`] holds.
+/// A walk of `len` characters along a row of [`SEQUENCES`]: its first
+/// character, the log of its length, and one bit for its direction.
 fn sequence(first: Count<Centibits>, len: Count<Characters>) -> Estimate {
     Estimate::plain(first.plus(log2(len)).plus(ONE_BIT)).with(PassphraseWeakness::Sequence)
 }
@@ -514,8 +700,20 @@ mod tests {
             ("Summer2024!", PassphraseWeakness::CommonPassword),
             ("correct horse", PassphraseWeakness::TooShort),
             ("x7#kQ2", PassphraseWeakness::TooShort),
-            ("m0nk3yf00tb4ll", PassphraseWeakness::TooShort),
+            ("m0nk3yf00tb4ll", PassphraseWeakness::CommonPassword),
             ("", PassphraseWeakness::TooShort),
+            // Audit `W100`: each input the estimator once admitted.
+            ("christchurch", PassphraseWeakness::TooShort),
+            ("qazwsxedcrfv", PassphraseWeakness::Sequence),
+            ("qwertyasdfgh", PassphraseWeakness::CommonPassword),
+            ("qwertyuiopasdfgh", PassphraseWeakness::TooShort),
+            ("123456789012345", PassphraseWeakness::Sequence),
+            ("123123123123123", PassphraseWeakness::Repetition),
+            ("strengths12", PassphraseWeakness::TooShort),
+            (
+                "a b c d e f g h i j k l m n o p q r s",
+                PassphraseWeakness::Sequence,
+            ),
         ];
         for (text, weakness) in cases {
             assert_eq!(refusal(text), Some(weakness), "{text}");
@@ -688,10 +886,119 @@ mod tests {
         assert_eq!(bits("tqk"), Count::new(1_410));
     }
 
+    /// Audit `W100`: a run that holds a vowel reads as words, however its
+    /// consonants cluster. Only a run with no vowel reads as random letters.
     #[test]
-    fn five_consonants_in_a_row_read_as_random_letters() {
-        assert_eq!(bits("strngaeiou"), Count::new(4_700));
+    fn a_run_with_a_vowel_reads_as_words_and_one_without_as_random() {
+        assert_eq!(bits("strngaeiou"), Count::new(1_300));
         assert_eq!(bits("strnaeiou"), Count::new(1_300));
+        assert_eq!(bits("christchurch"), Count::new(1_300));
+        assert_eq!(bits("qxzvbnwkrtplmhgj"), Count::new(6_410));
+    }
+
+    /// Audit `W100`: the estimator refuses each shape a guess tool builds
+    /// first, whatever its length.
+    /// * a keyboard walk across rows or down columns;
+    /// * a row walked past its end;
+    /// * a unit said again inside one run;
+    /// * a dictionary word with an affix;
+    /// * patterns chained in one run.
+    #[test]
+    fn each_shape_a_guess_tool_builds_first_is_refused() {
+        let shapes = [
+            // Keyboard walks: rows joined, columns, a layout other than QWERTY.
+            "qwertyuiopasdfghjklzxcvbnm",
+            "qazwsxedcrfvtgbyhnujm",
+            "aqwzsxedcrfvtgbyhnuj",
+            "mnbvcxzlkjhgfdsapoiuytrewq",
+            // A row walked past its end, as a ring.
+            "12345678901234567890",
+            "abcdefghijklmnopqrstuvwxyzabcdefgh",
+            // Repeats inside one run.
+            "abcabcabcabcabcabc",
+            "blueblueblueblueblue",
+            "passwordpasswordpassword",
+            "1212121212121212",
+            "!@!@!@!@!@!@!@!@",
+            // Dictionary words with affixes.
+            "sunflower2024!",
+            "Elephant1987$",
+            "xxchristchurchxx",
+            // Patterns chained in one run.
+            "qwertypasswordasdfghdragon",
+            "passwordqwertyuiopsunshine",
+        ];
+        for shape in shapes {
+            assert!(refusal(shape).is_some(), "{shape}");
+        }
+    }
+
+    /// Audit `W100`: a passphrase of digits alone stays under the floor,
+    /// however many digits it holds, with or without separators.
+    #[test]
+    fn a_passphrase_of_digits_alone_stays_under_the_floor() {
+        for digits in [
+            "583920174652839",
+            "58392017465283917364",
+            "5839 2017 4652 8391 7364",
+            "06-12-48-93-27-15-84",
+        ] {
+            assert_eq!(
+                refusal(digits),
+                Some(PassphraseWeakness::TooShort),
+                "{digits}"
+            );
+        }
+    }
+
+    /// Audit `W104`: the buffer of the characters takes its whole size before
+    /// the first one, so it never moves and leaves no freed prefix behind.
+    /// A buffer that grew by reallocation would hold another capacity.
+    #[test]
+    fn the_character_buffer_is_sized_once_and_never_moves() {
+        for text in [
+            "anchovy glider ruckus tadpole",
+            "x",
+            "a passphrase of exactly forty-one chars!!",
+        ] {
+            let chars = Chars::of(&pass(text));
+            assert_eq!(chars.0.expose().capacity(), text.len(), "{text}");
+            assert_eq!(chars.0.expose().len(), text.chars().count(), "{text}");
+        }
+        // A text outside ASCII holds fewer characters than bytes, so the
+        // buffer still never grows.
+        let accented = "\u{e9}t\u{e9} \u{e0} la plage";
+        let chars = Chars::of(&pass(accented));
+        assert!(chars.0.expose().capacity() >= chars.0.expose().len());
+        assert_eq!(chars.0.expose().capacity(), accented.len());
+    }
+
+    proptest::proptest! {
+        /// Audit `W100`: a chain of four fragments at most never reaches the
+        /// floor. A fragment is a common password or a part of a row. A
+        /// separator, or nothing, joins two fragments.
+        #[test]
+        fn no_chain_of_common_or_row_fragments_reaches_the_floor(
+            picks in proptest::collection::vec((0_usize..1_000, 0_usize..1_000, 3_usize..12), 1..=4),
+            separator in proptest::sample::select(vec!["", " ", "-", "_", "."]),
+        ) {
+            let common: Vec<&str> = COMMON.split(' ').collect();
+            let rows: Vec<&str> = SEQUENCES.split(' ').collect();
+            let fragments: Vec<String> = picks
+                .iter()
+                .map(|&(which, at, len)| {
+                    if which % 2 == 0 {
+                        common.get(at % common.len()).copied().unwrap_or("abc").to_owned()
+                    } else {
+                        let row = rows.get(at % rows.len()).copied().unwrap_or("abc");
+                        let start = (at / rows.len()) % row.len();
+                        row.chars().cycle().skip(start).take(len).collect()
+                    }
+                })
+                .collect();
+            let text = fragments.join(separator);
+            proptest::prop_assert!(refusal(&text).is_some(), "{}", text);
+        }
     }
 
     #[test]

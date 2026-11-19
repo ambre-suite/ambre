@@ -297,16 +297,17 @@ pub fn laser_alpha(
     ambre_core::Bounded::<ambre_core::Opacity>::clamped((1.0 - age / LASER_FADE) as f32)
 }
 
-/// What a peer's chip reads: the display name their sample carried, or a short
-/// handle derived from the id when it carried none (`TOILE-UI-076`). A blank
-/// name is no name: the sample's decode drops it, as it would paint an empty
-/// chip.
+/// What a peer's chip reads (`TOILE-UI-076`). It is the display name their
+/// sample carried, then the short handle of the id the transport resolved.
+/// A sample with no name reads the handle alone. The sender writes
+/// the name, so the handle keeps two peers under one name apart
+/// (`PRESENCE-017`). A blank name is no name: the sample's decode drops it,
+/// as it would paint an empty chip.
 pub fn peer_label(
     user_id: &Id<User>,
     name: Option<&Validated<DisplayName>>,
 ) -> Validated<DisplayName> {
-    name.cloned()
-        .unwrap_or_else(|| ambre_core::display_handle(user_id))
+    ambre_core::attributed_label(user_id, name)
 }
 
 /// Draw the pointer arrow and a name chip next to it, both in the peer colour.
@@ -758,7 +759,10 @@ mod tests {
     fn the_label_is_the_name_the_sample_carried() {
         let id = user(42);
         let ada = Validated::<DisplayName>::parse("Ada").unwrap();
-        assert_eq!(peer_label(&id, Some(&ada)).as_str(), "Ada");
+        assert_eq!(
+            peer_label(&id, Some(&ada)).as_str(),
+            format!("Ada ({})", ambre_core::display_handle(&id).as_str())
+        );
         assert_eq!(peer_label(&id, None), ambre_core::display_handle(&id));
         assert_eq!(ambre_core::display_handle(&id).as_str().len(), 8);
     }

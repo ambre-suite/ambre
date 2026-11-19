@@ -978,6 +978,22 @@ input[type="radio"] {
     pointer-events: none;
 }
 
+/* The prompt over a web embed whose site holds no choice (TOILE-300). It sits
+   where the frame would, and only its buttons take the pointer. */
+.ambre-web-embed-ask {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    overflow: hidden;
+    font-size: var(--font-ui);
+    text-align: center;
+    color: var(--text);
+}
+
 /* Document-loading overlay (ambre-spec-launcher.md): full-viewport spinner shown while a
    freshly opened document hydrates, reusing the boot loader's look (index.html).
    z-index sits above the canvas/popovers but below modal dialogs (z 1000+) and

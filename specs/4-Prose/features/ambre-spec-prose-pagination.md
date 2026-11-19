@@ -52,6 +52,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-110` | `OBS` | A layout MUST name every script the document uses that had no face when it was measured. | this spec section 2 | `ambre_prose::layout::reflow::convergence::a_latin_document_names_no_missing_script`; `ambre_prose::layout::reflow::convergence::a_script_with_no_face_is_named_in_the_layout` | none | verified |
 | `PROSE-115` | `INV` | A document MUST be paginated on every face the application has loaded, whether the document was opened before that face arrived or after it. | this spec section 2; `1-Foundations/ambre-spec-render-assets.md`, `CANVAS-067` | `ambre_logic::dispatch::tests::every_prose_document_takes_the_faces_whenever_it_was_opened` -- it opens one document before the delivery and one after, and reads the face count back off both | none | verified |
 | `PROSE-112` | `INV` | A page number that leaves the screen -- a comment anchor, a cross reference, a table-of-contents entry, an exported file -- MUST NOT be taken from a layout that names a missing script. | this spec section 2 | `ambre_prose::logic::print::tests::a_layout_missing_a_script_exports_no_file` -- the PDF export refuses with its reason and writes no file; structural -- the PDF is the one output that carries a page number off the screen: the intermediate form the other writers read holds a table of contents and a reference with no page | none | verified |
+| `PROSE-140` | `INV` | A walk of the block tree MUST hold a bounded depth of the call stack, whatever depth a peer gave the tree, and a table inside a cell MUST measure as nothing. | this spec section 2; `ambre-spec-prose-schema.md section 4` | `ambre_prose::layout::pass::tests::a_chain_of_ten_thousand_nested_blocks_measures_on_a_small_stack` -- the layout and the word count of ten thousand nested blocks on a stack of 1 MiB; `::tables_nested_in_cells_measure_on_a_small_stack` -- two thousand nested tables; `ambre_prose::logic::tables::tests::a_deep_cell_finds_its_text_on_a_small_stack` | none | verified |
 
 ### 1.2 Lay the whole document out again
 
@@ -109,7 +110,7 @@ status values are normative in `ambre-spec-template.md`.
   section 4 says why.
 * **Boundary.** none: pagination runs on the Logic thread, reads the document and returns a value.
   `PROSE-025` (`features/ambre-spec-prose-engine.md section 1`) bans a network call from this crate.
-* **Verification.** 55 `verified`. The five footnote rows run
+* **Verification.** 56 `verified`. The five footnote rows run
   through the engine, since a note is written by its command. Termination rests on `PROSE-078` and
   `PROSE-017`, which a property over generated documents holds together. Two bans are structural,
   held by a test that reads the module's own source. The schema holds `PROSE-065`.
@@ -368,6 +369,9 @@ one to store (`PROSE-112`).
 **Code:** `crates/ambre-prose/src/layout/`. `geometry` reads the page box and `fonts` resolves a
 family label to a shipped face. `measure` shapes one block and reports its line heights, `pass`
 walks the tree, and `place` is pass 2. `reflow` holds the layout between edits.
+
+**A deep tree.** A peer writes the tree, and nothing bounds its depth. Each walk of the tree keeps
+its own stack, and a table inside a cell measures as nothing (`PROSE-140`).
 `ambre_prose::logic::ProseState::paginate` is the one way in, so the document is measured where it
 lives.
 

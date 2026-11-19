@@ -233,6 +233,25 @@ pub(crate) fn root_list(doc: &LoroDoc, root: Root) -> LoroList {
     doc.get_list(root.as_str())
 }
 
+/// The list root `root` of `doc` when the document holds it. A lookup:
+/// unlike [`root_list`], it creates no root, so a check that reads a document
+/// leaves its value as it found it (`MURMURE-226`).
+pub(crate) fn held_root_list(doc: &LoroDoc, root: Root) -> Option<LoroList> {
+    match doc.get_by_str_path(root.as_str())? {
+        ValueOrContainer::Container(loro::Container::List(list)) => Some(list),
+        _ => None,
+    }
+}
+
+/// The map root named `name` of `doc` when the document holds it. A lookup,
+/// as [`held_root_list`] is.
+pub(crate) fn held_root_map(doc: &LoroDoc, name: &str) -> Option<LoroMap> {
+    match doc.get_by_str_path(name)? {
+        ValueOrContainer::Container(loro::Container::Map(map)) => Some(map),
+        _ => None,
+    }
+}
+
 /// The `header` of `doc`.
 pub(crate) fn header(doc: &LoroDoc) -> Fields<HeaderKey> {
     Fields::new(root_map(doc, Root::Header))

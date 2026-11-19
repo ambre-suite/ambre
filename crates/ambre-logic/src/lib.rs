@@ -546,6 +546,37 @@ fn authored_by(
     }
 }
 
+/// Whether the registry of `doc` leaves `peer` free for the session that
+/// opened with `nonce` (`AUTHOR-032`).
+///
+/// A PeerID is 64 bits, so a writer can search a key and a nonce that derive
+/// the PeerID of another member (`ambre-spec-op-authorship.md` section 6).
+/// The first session that registers a PeerID keeps it: an entry that session
+/// wrote under its own PeerID, with another nonce, refuses the delta. An
+/// entry another peer wrote claims nothing, since no session may write the
+/// entry of another (`AUTHOR-011`), so a planted entry stalls no one.
+///
+/// The verdict reads the document as the deltas before this one left it. So
+/// two peers given the same deltas in one order agree (`AUTHOR-007`).
+fn peer_unclaimed(
+    doc: &loro::LoroDoc,
+    peer: ambre_core::PeerId,
+    nonce: &FixedBytes<SessionNonce>,
+) -> bool {
+    use ambre_core::crdt::CrdtName as _;
+    let registry = doc.get_map(ambre_core::crdt::FoundationRoot::Peers.as_str());
+    let key = ambre_core::PeerKey::of(peer);
+    if registry.get_last_editor(key.as_str()) != Some(peer.get()) {
+        return true;
+    }
+    match registry.get(key.as_str()) {
+        Some(loro::ValueOrContainer::Value(loro::LoroValue::Binary(bytes))) => {
+            ambre_core::PeerEntry::from_bytes(&bytes).is_none_or(|entry| entry.nonce == *nonce)
+        }
+        _ => true,
+    }
+}
+
 /// How a document's window gives up what it holds.
 #[derive(Debug, Clone, Copy)]
 enum WindowEnd {
@@ -2940,6 +2971,131 @@ mod authorship_tests {
         assert!(
             held.get(&MALLORY.get()).is_none(),
             "the forged delta landed"
+        );
+    }
+
+    /// Two deltas one session writing under `peer` sends, the second after
+    /// the first: the second carries operations the first does not.
+    fn two_by(peer: ambre_core::PeerId) -> [ambre_core::Payload<ambre_core::DeltaBytes>; 2] {
+        let mut author = TrameState::new();
+        assert!(author.adopt_session(peer, crate::test_entry(peer)));
+        ["first", "second"].map(|text| {
+            author
+                .handle_command(TrameCommand::SetCellText {
+                    row: Pos::<Row>::new(0),
+                    col: Pos::<Col>::new(0),
+                    text: text.to_owned(),
+                })
+                .update
+                .expect("an edit writes a delta")
+        })
+    }
+
+    /// `signed`, with the nonce of a session other than the one `test_entry`
+    /// registers: the shape of a second preimage of its PeerID.
+    fn colliding(
+        payload: ambre_core::Payload<ambre_core::DeltaBytes>,
+        peer: ambre_core::PeerId,
+    ) -> SignedDelta {
+        SignedDelta {
+            nonce: FixedBytes::from_array([9; 16]),
+            ..signed(payload, peer)
+        }
+    }
+
+    /// `AUTHOR-032`: once Alice's session registered its PeerID, a delta under
+    /// that PeerID with another nonce is refused. It is refused live and in a
+    /// replay, and the document stays as it was.
+    #[test]
+    fn a_peer_id_another_session_registered_is_refused() {
+        let mut rig = rig();
+        let [hers, forged] = two_by(ALICE);
+        rig.state.handle_logic_event(LogicEvent::RemoteUpdate {
+            document_id: rig.document_id,
+            delta: signed(hers, ALICE),
+        });
+        let before = held(&rig);
+        assert!(
+            before.get(&ALICE.get()).is_some(),
+            "the honest delta was dropped"
+        );
+        rig.state.handle_logic_event(LogicEvent::RemoteUpdate {
+            document_id: rig.document_id,
+            delta: colliding(forged.clone(), ALICE),
+        });
+        rig.state.handle_logic_event(LogicEvent::RemoteUpdateBatch {
+            document_id: rig.document_id,
+            deltas: vec![colliding(forged, ALICE)],
+        });
+        assert_eq!(held(&rig), before, "a delta under a held PeerID landed");
+    }
+
+    /// `AUTHOR-032`: inside one replay, the first session of a PeerID keeps it
+    /// before the registry holds its entry, and a free PeerID still lands.
+    #[test]
+    fn a_replay_keeps_a_peer_id_for_its_first_session() {
+        let mut rig = rig();
+        let other = ambre_core::PeerId::new(ALICE.get() + 7);
+        let [hers, forged] = two_by(ALICE);
+        let alone = {
+            let doc = LoroDoc::new();
+            doc.import(TrameState::new().export_snapshot().as_bytes())
+                .expect("the scaffolding");
+            doc.import(hers.as_bytes()).expect("a delta");
+            doc.oplog_vv().get(&ALICE.get()).copied()
+        };
+        rig.state.handle_logic_event(LogicEvent::RemoteUpdateBatch {
+            document_id: rig.document_id,
+            deltas: vec![
+                signed(hers, ALICE),
+                colliding(forged, ALICE),
+                colliding(written_by(other, "theirs"), other),
+            ],
+        });
+        let held = held(&rig);
+        assert_eq!(
+            held.get(&ALICE.get()).copied(),
+            alone,
+            "the second session of the PeerID landed, or the first was dropped"
+        );
+        assert!(
+            held.get(&other.get()).is_some(),
+            "a free PeerID was refused"
+        );
+    }
+
+    /// `AUTHOR-032`: an entry that another peer wrote under Alice's PeerID
+    /// claims nothing, so Alice's own delta still lands.
+    #[test]
+    fn an_entry_planted_by_another_peer_claims_nothing() {
+        let mut rig = rig();
+        let planter = LoroDoc::new();
+        planter
+            .import(TrameState::new().export_snapshot().as_bytes())
+            .expect("the scaffolding");
+        planter.set_peer_id(MALLORY.get()).expect("a PeerID");
+        let base = planter.oplog_vv();
+        let mut planted = crate::test_entry(ALICE);
+        planted.nonce = FixedBytes::from_array([7; 16]);
+        planter
+            .get_map(ambre_core::crdt::FoundationRoot::Peers.as_str())
+            .insert(ambre_core::PeerKey::of(ALICE).as_str(), planted.to_bytes())
+            .expect("a planted entry");
+        let planting: ambre_core::Payload<ambre_core::DeltaBytes> = planter
+            .export(ExportMode::updates(&base))
+            .expect("an export")
+            .into();
+        rig.state.handle_logic_event(LogicEvent::RemoteUpdate {
+            document_id: rig.document_id,
+            delta: signed(planting, MALLORY),
+        });
+        rig.state.handle_logic_event(LogicEvent::RemoteUpdate {
+            document_id: rig.document_id,
+            delta: signed(written_by(ALICE, "hers"), ALICE),
+        });
+        assert!(
+            held(&rig).get(&ALICE.get()).is_some(),
+            "a planted entry stalled Alice"
         );
     }
 

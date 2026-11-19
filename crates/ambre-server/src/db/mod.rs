@@ -459,6 +459,118 @@ mod tests {
         assert_eq!(seqs, vec![7, 8, 9, 10], "only the uncovered tail survives");
     }
 
+    /// `SRV-288`, `SRV-300`: the trim removed every delta of a document, and
+    /// the ephemeral store was reset. The rebuild seeds the counter and each
+    /// author's clock past what the trim removed. The next delta takes the
+    /// number after the horizon, and a returning author keeps its clock. A
+    /// document that holds a snapshot horizon alone still seeds its counter.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_trimmed_document_reseeds_past_its_horizon(pool: PgPool) {
+        use rustis::commands::GenericCommands;
+        let key = |byte: u8| FixedBytes::<ambre_core::PublicKey>::from_array([byte; 32]);
+        let clock = ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::new;
+        let relay = ambre_core::Seq::<ambre_core::Relay>::new;
+        let user = create_user(
+            &pool,
+            &ambre_core::Email::from("reseed@test.dev"),
+            &ambre_core::Validated::<ambre_core::DisplayName>::parse("Reseed").unwrap(),
+            &ambre_core::Encoded::new([1u8; 32].to_vec()),
+            &FixedBytes::<ambre_core::MasterKeySalt>::from_array([2u8; 32]),
+            &key(3),
+            &FixedBytes::<ambre_core::ExchangePublicKey>::from_array([4u8; 32]),
+        )
+        .await
+        .expect("create user");
+        let (doc, _) = create_document(&pool, &user.id, ambre_core::DocType::Prose, None, None)
+            .await
+            .expect("create document");
+        let document_id = doc.id;
+        for seq in 1..=3u64 {
+            insert_update(
+                &pool,
+                &document_id,
+                &key(5),
+                &Id::<Snapshot>::mint(),
+                clock(seq),
+                relay(seq),
+                &ambre_core::ObjectKey::new(format!("k{seq}")),
+            )
+            .await
+            .expect("insert update");
+        }
+        let sid = create_snapshot(
+            &pool,
+            &document_id,
+            Id::<Snapshot>::mint(),
+            &key(5),
+            &ambre_core::ObjectKey::from("s3/snap"),
+            relay(3),
+        )
+        .await
+        .expect("create snapshot");
+        confirm_snapshot(&pool, &document_id, &sid, &crate::db::vouched_by(&key(9)))
+            .await
+            .expect("confirm snapshot");
+        let trimmed = purge_superseded_updates(&pool).await.expect("purge");
+        assert_eq!(trimmed.rows.get(), 3, "every delta is under the horizon");
+
+        let state = get_clock_state(&pool, &document_id).await.expect("state");
+        assert_eq!(state.max_seq, relay(3));
+        assert_eq!(state.author_clocks, vec![(key(5), clock(3))]);
+
+        let redis = crate::test_helpers::connect_test_redis().await.unwrap();
+        crate::redis_ops::seed_clock_state(
+            &redis,
+            &document_id,
+            state.max_seq,
+            &state.author_clocks,
+        )
+        .await
+        .expect("seed");
+        let first =
+            crate::redis_ops::verify_clock_and_assign_seq(&redis, &document_id, &key(6), clock(1))
+                .await
+                .expect("a new author starts at clock 1");
+        assert_eq!(first, relay(4), "no number at or below the horizon again");
+        let back =
+            crate::redis_ops::verify_clock_and_assign_seq(&redis, &document_id, &key(5), clock(4))
+                .await
+                .expect("the trimmed author keeps its clock");
+        assert_eq!(back, relay(5));
+
+        // A document that holds a horizon and no delta row at all.
+        let (bare, _) = create_document(&pool, &user.id, ambre_core::DocType::Prose, None, None)
+            .await
+            .expect("create document");
+        create_snapshot(
+            &pool,
+            &bare.id,
+            Id::<Snapshot>::mint(),
+            &key(5),
+            &ambre_core::ObjectKey::from("s3/bare"),
+            relay(7),
+        )
+        .await
+        .expect("create snapshot");
+        let state = get_clock_state(&pool, &bare.id).await.expect("state");
+        assert_eq!(state.max_seq, relay(7));
+        crate::redis_ops::seed_clock_state(&redis, &bare.id, state.max_seq, &state.author_clocks)
+            .await
+            .expect("seed");
+        assert_eq!(
+            crate::redis_ops::current_seq(&redis, &bare.id)
+                .await
+                .expect("seq"),
+            relay(7)
+        );
+
+        for document in [document_id, bare.id] {
+            let keys = crate::redis_keys::DocumentStateKeys::of(&document);
+            let _: usize = redis.del(keys.texts()).await.expect("del");
+        }
+    }
+
     /// F1: the purge horizon is the MIN `covered_seq` across the RETAINED
     /// snapshots. An update still needed by the oldest retained snapshot for
     /// incremental catch-up is never deleted.

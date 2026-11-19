@@ -36,6 +36,16 @@ pub enum XmlError {
     DocumentType,
     #[error("a part nests elements deeper than {MAX_DEPTH} levels")]
     TooDeep,
+    /// The tree of a part holds more nodes or attribute bytes than
+    /// `ambre_opc::TreeBudget` admits.
+    #[error("a part builds a tree past its bound")]
+    TooLarge,
+}
+
+impl From<ambre_opc::TreeTooLarge> for XmlError {
+    fn from(_: ambre_opc::TreeTooLarge) -> Self {
+        Self::TooLarge
+    }
 }
 
 /// The namespaces the codec reads. A name in any other namespace reads as
@@ -218,9 +228,11 @@ fn keeps_whitespace(parent: &Element) -> bool {
 ///
 /// # Errors
 ///
-/// [`XmlError::Malformed`] for bytes that are not well-formed UTF-8 XML,
-/// [`XmlError::DocumentType`] for a part that declares a document type, and
-/// [`XmlError::TooDeep`] past [`MAX_DEPTH`].
+/// * [`XmlError::Malformed`] for bytes that are not well-formed UTF-8 XML;
+/// * [`XmlError::DocumentType`] for a part that declares a document type;
+/// * [`XmlError::TooDeep`] past [`MAX_DEPTH`];
+/// * [`XmlError::TooLarge`] for a tree past the node or attribute bound of
+///   `ambre_opc::TreeBudget`.
 pub fn parse(part: &Payload<PartBytes>) -> Result<Element, XmlError> {
     let mut reader = NsReader::from_reader(part.as_bytes());
     reader.config_mut().check_end_names = true;
@@ -228,6 +240,7 @@ pub fn parse(part: &Payload<PartBytes>) -> Result<Element, XmlError> {
     // The open elements, the innermost last. The root's parent is a
     // sentinel that collects the root.
     let mut names = Names::default();
+    let mut budget = ambre_opc::TreeBudget::default();
     let mut stack: Vec<Element> = vec![Element {
         ns: Ns::Other,
         name: Rc::from(""),
@@ -246,13 +259,13 @@ pub fn parse(part: &Payload<PartBytes>) -> Result<Element, XmlError> {
                 if stack.len() > MAX_DEPTH {
                     return Err(XmlError::TooDeep);
                 }
-                stack.push(open(&reader, &mut names, ns, &start)?);
+                stack.push(open(&reader, &mut names, &mut budget, ns, &start)?);
             }
             Event::Empty(start) => {
                 if stack.len() > MAX_DEPTH {
                     return Err(XmlError::TooDeep);
                 }
-                let element = open(&reader, &mut names, ns, &start)?;
+                let element = open(&reader, &mut names, &mut budget, ns, &start)?;
                 if element.binds {
                     names.prefixes.clear();
                 }
@@ -267,11 +280,11 @@ pub fn parse(part: &Payload<PartBytes>) -> Result<Element, XmlError> {
             }
             Event::Text(text) => {
                 let text = text.xml10_content();
-                push_text(&mut stack, &normalize_eols(&text))?;
+                push_text(&mut stack, &mut budget, &normalize_eols(&text))?;
             }
             Event::CData(data) => {
                 let text = data.xml10_content();
-                push_text(&mut stack, &normalize_eols(&text))?;
+                push_text(&mut stack, &mut budget, &normalize_eols(&text))?;
             }
             Event::GeneralRef(reference) => {
                 let resolved = match reference.resolve_char_ref() {
@@ -283,7 +296,7 @@ pub fn parse(part: &Payload<PartBytes>) -> Result<Element, XmlError> {
                     Err(_) => return Err(XmlError::Malformed),
                 };
                 let mut utf8 = [0_u8; 4];
-                push_text(&mut stack, resolved.encode_utf8(&mut utf8))?;
+                push_text(&mut stack, &mut budget, resolved.encode_utf8(&mut utf8))?;
             }
             Event::DocType(_) => return Err(XmlError::DocumentType),
             Event::Decl(_) | Event::PI(_) | Event::Comment(_) => {}
@@ -366,12 +379,16 @@ fn is_session_id(ns: Ns, local: &str) -> bool {
     ns == Ns::W && local.starts_with("rsid")
 }
 
+/// The element `start` opens, charged to `budget` with each attribute it
+/// keeps before the tree holds it.
 fn open(
     reader: &NsReader<&[u8]>,
     names: &mut Names,
+    budget: &mut ambre_opc::TreeBudget,
     ns: Ns,
     start: &quick_xml::events::BytesStart<'_>,
 ) -> Result<Element, XmlError> {
+    budget.node()?;
     let name = names.get(start.local_name().as_ref());
     let mut attrs = Vec::new();
     let binds = start
@@ -396,6 +413,7 @@ fn open(
             .normalized_value(quick_xml::XmlVersion::Implicit1_0)
             .map_err(|_| XmlError::Malformed)?
             .into_owned();
+        budget.attr(ambre_core::Count::of(value.len()))?;
         attrs.push(Attr {
             ns: attr_ns,
             name: names.get(local.as_ref()),
@@ -420,7 +438,11 @@ fn push_child(stack: &mut [Element], node: Node) -> Result<(), XmlError> {
     Ok(())
 }
 
-fn push_text(stack: &mut [Element], text: &str) -> Result<(), XmlError> {
+fn push_text(
+    stack: &mut [Element],
+    budget: &mut ambre_opc::TreeBudget,
+    text: &str,
+) -> Result<(), XmlError> {
     let parent = stack.last_mut().ok_or(XmlError::Malformed)?;
     if text.trim().is_empty() && !keeps_whitespace(parent) {
         return Ok(());
@@ -429,6 +451,7 @@ fn push_text(stack: &mut [Element], text: &str) -> Result<(), XmlError> {
     if let Some(Node::Text(previous)) = parent.children.last_mut() {
         previous.push_str(text);
     } else {
+        budget.node()?;
         parent.children.push(Node::Text(text.to_owned()));
     }
     Ok(())
@@ -562,6 +585,27 @@ mod tests {
         let depth = 100_000;
         let part = format!("{}{}", "<a>".repeat(depth), "</a>".repeat(depth));
         assert_eq!(parse_bytes(part.as_bytes()), Err(XmlError::TooDeep));
+    }
+
+    /// `W72`: a part of empty elements under the part bound, past the node
+    /// bound, is refused before its tree holds them all.
+    #[test]
+    fn a_part_past_the_node_bound_is_refused() {
+        let past = usize::try_from(ambre_opc::MAX_TREE_NODES.get()).expect("fits");
+        let part = format!("<r>{}</r>", "<a/>".repeat(past));
+        assert_eq!(parse_bytes(part.as_bytes()), Err(XmlError::TooLarge));
+    }
+
+    /// `W72`: short attributes meet the attribute bound by their records.
+    #[test]
+    fn a_part_past_the_attribute_bound_is_refused() {
+        let records = ambre_opc::MAX_ATTR_BYTES.get() / ambre_opc::tree::ATTR_RECORD.get();
+        let elements = usize::try_from(records / 8).expect("fits") + 1;
+        let part = format!(
+            "<r>{}</r>",
+            "<a b='' c='' d='' e='' f='' g='' h='' i=''/>".repeat(elements)
+        );
+        assert_eq!(parse_bytes(part.as_bytes()), Err(XmlError::TooLarge));
     }
 
     #[test]

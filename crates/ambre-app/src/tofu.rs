@@ -21,6 +21,9 @@ pub(crate) enum Purpose {
     Invite {
         document_id: Id<Document>,
         email: ambre_bus::Email,
+        /// Whether a provider proved `email`. An asserted address may belong
+        /// to whoever set up the account first (`CHROME-138`).
+        email_proof: ambre_core::EmailProof,
     },
     /// The direct message of this user and the recipient alone (the Murmure
     /// members spec). `channel_id` names the request.
@@ -69,6 +72,20 @@ pub(crate) enum KeyContact {
 }
 
 impl TofuPrompt {
+    /// Whether the prompt invites an address no provider proved. The modal
+    /// then warns that the address may be a squat before any key is wrapped
+    /// (`CHROME-138`).
+    #[cfg(any(test, target_arch = "wasm32"))]
+    pub(crate) fn unproven(&self) -> bool {
+        matches!(
+            self.purpose,
+            Purpose::Invite {
+                email_proof: ambre_core::EmailProof::Asserted,
+                ..
+            }
+        )
+    }
+
     /// The email the prompt shows under the name, for an invitation alone.
     #[cfg(target_arch = "wasm32")]
     fn email(&self) -> Option<&ambre_bus::Email> {
@@ -134,7 +151,9 @@ pub(crate) fn confirm(
 /// clock, so the decision runs on the host.
 fn request(prompt: &TofuPrompt, role: Role, now: Instant<Authored>) -> LogicCommand {
     match &prompt.purpose {
-        Purpose::Invite { document_id, email } => LogicCommand::Rest {
+        Purpose::Invite {
+            document_id, email, ..
+        } => LogicCommand::Rest {
             id: ambre_bus::next_request(),
             cmd: RestCommand::InviteToDocument {
                 document_id: *document_id,
@@ -200,6 +219,7 @@ pub(crate) fn TofuDialog(
                     .map(|p| {
                         let contact = p.contact;
                         let direct = matches!(p.purpose, Purpose::Direct { .. });
+                        let unproven = p.unproven();
                         // The address leaves its type only at the text node.
                         let email = p.email().map(ToString::to_string);
                         let fp_copy = p.fingerprint.clone();
@@ -219,6 +239,17 @@ pub(crate) fn TofuDialog(
                                             view! { <span class="ambre-tofu-email">{email}</span> }
                                         })}
                                 </p>
+                                {unproven
+                                    .then(|| {
+                                        view! {
+                                            <p class="ambre-tofu-warning ambre-tofu-unproven" role="alert">
+                                                "No provider has proven this address. Whoever set up \
+                                                 the account first holds it, and may not be the person \
+                                                 you mean. Compare the fingerprint with them before you \
+                                                 invite."
+                                            </p>
+                                        }
+                                    })}
                                 {(contact == KeyContact::Changed)
                                     .then(|| {
                                         view! {
@@ -267,6 +298,9 @@ pub(crate) fn TofuDialog(
                                     >
                                         {match (contact, direct) {
                                             (KeyContact::Changed, false) => "Re-pin and invite",
+                                            (KeyContact::New, false) if unproven => {
+                                                "Invite the unproven address"
+                                            }
                                             (KeyContact::New, false) => "Confirm and invite",
                                             (KeyContact::Changed, true) => "Re-pin and message",
                                             (KeyContact::New, true) => "Confirm and message",
@@ -300,6 +334,7 @@ mod tests {
             purpose: Purpose::Invite {
                 document_id: Id::<Document>::mint(),
                 email: ambre_core::Email::from("bob@test.local"),
+                email_proof: ambre_core::EmailProof::Verified,
             },
             user_id: Id::<User>::mint(),
             display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Bob").ok(),
@@ -572,6 +607,33 @@ mod tests {
             );
             m.root.remove();
         }
+    }
+
+    /// `CHROME-138`: an invitation to an address no provider proved warns
+    /// that the address may be a squat. Its confirming action names the
+    /// address as unproven. A proven address shows no such warning.
+    #[wasm_bindgen_test]
+    async fn an_unproven_address_is_named_before_the_invitation_wraps() {
+        let proven = mount(fetched(4)).await;
+        assert!(
+            proven
+                .root
+                .query_selector(".ambre-tofu-unproven")
+                .unwrap()
+                .is_none()
+        );
+        proven.root.remove();
+
+        let mut prompt = fetched(4);
+        if let Purpose::Invite { email_proof, .. } = &mut prompt.purpose {
+            *email_proof = ambre_core::EmailProof::Asserted;
+        }
+        let m = mount(prompt).await;
+        let warning = find(&m, ".ambre-tofu-unproven").text_content().unwrap();
+        assert!(warning.contains("No provider has proven"), "{warning}");
+        let confirm = find(&m, ".ambre-tofu-confirm").text_content().unwrap();
+        assert_eq!(confirm, "Invite the unproven address");
+        m.root.remove();
     }
 
     /// A prompt for a direct message names the member without an email, and

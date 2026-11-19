@@ -38,8 +38,10 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-044` | `INV` | A range too large to hold in memory MUST read `#REF!`. | this spec section 3 | `ambre_trame::formula::vm::tests::eval_range_over_cell_cap_yields_ref_error` | none | verified |
 | `TRAME-209` | `INV` | A range over that cap MUST NOT be materialized. | this spec section 3 | type-level -- the range buffer is sized by a `RangeGrant`, which only `grant_range` makes, after both caps; `ambre_trame::formula::vm::tests::a_range_over_the_cap_is_granted_nothing` | none | verified |
 | `TRAME-210` | `INV` | The cells a single recompute materializes for ranges MUST be bounded across the whole pass, not one range at a time. | this spec section 6 | `ambre_trame::formula::vm::tests::ranges_of_one_pass_share_one_budget` | none | verified |
+| `TRAME-313` | `INV` | A text a formula yields MUST hold at most the characters of the text bound, and a formula that would pass it MUST read `#TYPE!` without allocating past it. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_trame::formula::vm::tests::a_text_past_the_bound_reads_an_error_and_allocates_nothing` -- `REPT`, `&`, `CONCAT`, `TEXTJOIN` and `SUBSTITUTE` past the bound, a text at the bound built whole | none | verified |
+| `TRAME-314` | `INV` | Evaluating a chain of cells joined by ranges MUST hold a bounded depth of the call stack, whatever the length of the chain. | this spec section 3; `ambre-spec-budgets.md section 6`; `TRAME-281` | `ambre_trame::formula::vm::tests::a_chain_of_ranges_ten_thousand_deep_evaluates_on_a_small_stack` -- ten thousand cells on a stack of 1 MiB; `::a_deep_loop_through_ranges_shows_circular_on_each_cell` -- a loop past the depth bound still shows `#CIRCULAR!` from each entry | none | verified |
 | `TRAME-042` | `INV` | A loop closed through a range, a name or another sheet MUST be caught while evaluating. | this spec section 3 | `ambre_trame::logic::tests::group8::a_whole_column_range_over_itself_is_a_cycle` -- the loop runs through a range, so the graph holds no edge for it and the evaluation stack catches it. A name and a qualifier become a range or a cell before the graph sees them | none | verified |
-| `TRAME-281` | `INV` | Each cell on a loop closed through a range, a name or another sheet, and each cell downstream of one, MUST show `#CIRCULAR!`, whatever order the evaluation takes. | this spec section 3; `TRAME-042` | `ambre_trame::formula::engine::tests::a_loop_through_a_range_shows_circular_in_every_order` -- two pass orders over a loop whose range also holds `#DIV/0!`, and a cell outside the loop that keeps its own error; `ambre_trame::logic::structural_tests::a_carried_engine_equals_a_full_rebuild` -- the carried and the reseeded engine evaluate in different orders and match on every value | none | verified |
+| `TRAME-281` | `INV` | Each cell on a loop closed through a range, a name or another sheet, and each cell downstream of one, MUST show `#CIRCULAR!`, whatever order the evaluation takes. | this spec section 3; `TRAME-042` | `ambre_trame::formula::engine::tests::a_loop_through_a_range_shows_circular_in_every_order` -- two pass orders over a loop whose range also holds `#DIV/0!`, and a cell outside the loop that keeps its own error; `ambre_trame::logic::structural_tests::a_carried_engine_equals_a_full_rebuild` -- the carried and the reseeded engine evaluate in different orders and match on every value; `ambre_trame::formula::vm::tests::a_deep_loop_through_ranges_shows_circular_on_each_cell` -- a loop past the settle depth shows `#CIRCULAR!` on each cell, whichever cell the pass enters | none | verified |
 | `TRAME-048` | `INV` | A whole-column or whole-row range MUST cover the used part of its axis. | this spec section 6 | `ambre_trame::logic::tests::group8::a_whole_column_range_reads_the_used_rows` -- a row written past the old end and a row inserted above are summed; `ambre_trame::logic::tests::group8::a_whole_row_range_reads_the_used_columns`; `ambre_trame::logic::tests::group8::a_column_edit_carries_a_whole_column_range`; `ambre_trame::formula::identity::tests::whole_lines_store_their_lines_and_read_back_as_typed`; `ambre_trame::formula::shift::tests::whole_lines_shift_along_their_own_axis` | none | verified |
 | `TRAME-033` | `OBS` | A formula shown back to its author MUST carry only the parentheses its meaning needs. | this spec section 4 | `ambre_trame::formula::render::tests::precedence_minimal_parens`; `::pow_right_associative` | none | verified |
 | `TRAME-045` | `OBS` | Every evaluation failure MUST show a named error, never a blank and never a number. | this spec section 4 | `ambre_trame::formula::vm::tests::division_by_zero`; `ambre_trame::formula::engine::tests::division_by_zero_displayed`; `ambre_trame::formula::types::tests::cell_value_display` | none | verified |
@@ -94,7 +96,7 @@ status values are normative in `ambre-spec-template.md`.
   **None of the four has a mechanism**: no recipe runs a Trame benchmark.
 * **Boundary.** none of its own. `TRAME-010` keeps computed values out of the document, so only
   the raw source travels, and `ZK-001` seals it before it leaves the client.
-* **Verification.** 48 `verified`. What holds is the graph and its recompute, the best-covered
+* **Verification.** 50 `verified`. What holds is the graph and its recompute, the best-covered
   engine of the workspace, and the stored form a structural edit carries. A range buffer is sized by
   a grant that only the caps make, so a range over them allocates nothing.
 
@@ -215,6 +217,10 @@ compiler already knows about.
 **Evaluating one cell**, in order. A cell already on the evaluation stack returns a
 circular-reference error (`TRAME-042`). A cell already resolved returns its memo. Otherwise it is
 pushed, executed, popped and memoised. This is the only guard against a loop the cell graph cannot see.
+
+**Two bounds a peer cannot pass.** Past a few dozen cells in progress, an evaluation settles what it
+reads with a stack of its own (`TRAME-314`). A text past the cell bound reads `#TYPE!`, refused
+before it is allocated (`TRAME-313`).
 
 **A loop shows one error.** A cell whose evaluation meets the stack, itself or through any cell it
 reads, evaluates to `#CIRCULAR!`, and the pass records it. A later read of a recorded cell meets

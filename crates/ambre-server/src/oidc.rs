@@ -157,13 +157,31 @@ pub async fn start_oidc_clients(
     }
 }
 
+/// How long one request to the identity provider may take: the discovery,
+/// the code exchange or the key fetch (`ambre-spec-budgets.md` section 8).
+const PROVIDER_DEADLINE: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// The client every request to the identity provider goes through
+/// (`SRV-296`).
+///
+/// A request past `deadline` fails, so a stalled provider holds no sign-in
+/// open. A redirect is never followed, as the provider crate asks. So an
+/// answer cannot send the relay's code or secret to another host.
+fn provider_client(deadline: std::time::Duration) -> Result<reqwest::Client, AppError> {
+    reqwest::Client::builder()
+        .timeout(deadline)
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|e| AppError::Oidc(format!("provider client: {e}")))
+}
+
 /// Discovers the `google` provider's metadata at its issuer and initializes
 /// an `OidcClient`.
 ///
 /// The resulting `OidcClients` map is stored in `AppState` and used by
 /// the `/auth/{provider}/login` and `/auth/{provider}/callback` routes.
 async fn init_oidc_clients(google: &OidcRegistration) -> Result<OidcClients, AppError> {
-    let http_client = reqwest::Client::new();
+    let http_client = provider_client(PROVIDER_DEADLINE)?;
 
     let provider_metadata =
         CoreProviderMetadata::discover_async(google.issuer.clone(), &http_client)
@@ -483,6 +501,37 @@ mod tests {
     /// its issuer.
     async fn spawn_provider() -> String {
         StubProvider::spawn().await.issuer
+    }
+
+    /// `SRV-296`: the provider client follows no redirect and gives up past
+    /// its deadline. A provider that answers with a redirect is answered as
+    /// that redirect, and one that stalls fails the request.
+    #[tokio::test]
+    async fn the_provider_client_follows_no_redirect_and_keeps_a_deadline() {
+        let app = axum::Router::new()
+            .route(
+                "/moved",
+                axum::routing::get(|| async {
+                    (axum::http::StatusCode::FOUND, [("location", "/elsewhere")])
+                }),
+            )
+            .route("/elsewhere", axum::routing::get(|| async { "followed" }))
+            .route(
+                "/stalled",
+                axum::routing::get(|| async {
+                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                    "late"
+                }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(listener, app).await });
+        let client = provider_client(std::time::Duration::from_millis(300)).unwrap();
+
+        let moved = client.get(format!("{base}/moved")).send().await.unwrap();
+        assert_eq!(moved.status(), reqwest::StatusCode::FOUND, "not followed");
+        let stalled = client.get(format!("{base}/stalled")).send().await;
+        assert!(stalled.is_err_and(|e| e.is_timeout()), "the deadline holds");
     }
 
     /// The client secret every test configures.

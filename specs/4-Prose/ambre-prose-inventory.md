@@ -22,9 +22,9 @@
 | `prose-headers-footers` | A band at the top of every page and a band at the bottom, each holding ordinary text. | implemented | 27 |  |
 | `prose-headings` | Six levels of section title. | implemented | 8 |  |
 | `prose-images` | A picture in the document. | implemented | 69 |  |
-| `prose-import-export` | A user opens a document that came from Word, from a web page or from a Markdown file. | implemented | 95 |  |
+| `prose-import-export` | A user opens a document that came from Word, from a web page or from a Markdown file. | implemented | 104 |  |
 | `prose-lists` | Bulleted, numbered and checkbox lists, nested to any depth. | implemented | 17 |  |
-| `prose-pagination` | A document becomes a sequence of measured pages. | implemented | 55 |  |
+| `prose-pagination` | A document becomes a sequence of measured pages. | implemented | 56 |  |
 | `prose-pdf-export` | Prose's half of the shared PDF export (`ambre-spec-pdf-export.md`): the pagination the file reuses, the links it carries, and the language it declares. | implemented | 10 |  |
 | `prose-ruler` | A horizontal scale above the page, carrying three handles. | implemented | 8 |  |
 | `prose-selection` | Where the caret is, where it goes, and what a drag selects. | implemented | 38 |  |
@@ -33,7 +33,7 @@
 | `prose-text-editing` | Typing, deleting, splitting and joining paragraphs. | implemented | 45 |  |
 | `prose-undo` | Prose's half of the shared undo model (`ambre-spec-undo.md`): where the caret lands, and what one item is in running text. | implemented | 6 |  |
 | `prose-word-count` | How many words, characters, paragraphs and pages the document holds, shown in the status bar and refreshed as it is written. | implemented | 14 |  |
-| `prose-clipboard` | Copy, cut and paste. | partial | 29 |  |
+| `prose-clipboard` | Copy, cut and paste. | partial | 30 |  |
 | `prose-engine` | An author types a word and every collaborator reads it. | partial | 45 |  |
 | `prose-inline-styles` | Bold, italic, colour, size, links: formatting applied to a range of text, and the paragraph settings underneath it. | partial | 29 |  |
 | `prose-page-rendering` | What a page looks like on the canvas. | partial | 24 |  |
@@ -44,4 +44,4 @@
 | `prose-viewport` | A document is a centred column of pages the reader scrolls through and zooms. | partial | 21 |  |
 | `prose-accessibility` | A screen reader must be able to read the document and follow the caret through it. | design-only | 9 |  |
 
-**28 features: 18 implemented, 9 partial, 1 design-only. 794 contract rows, 0 loose.**
+**28 features: 18 implemented, 9 partial, 1 design-only. 805 contract rows, 0 loose.**

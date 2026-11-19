@@ -571,6 +571,18 @@ impl AuthContext {
 /// forever (the browser `fetch` has no default timeout).
 const REQUEST_TIMEOUT: TimeSpan<Ms> = TimeSpan::<Ms>::new(30_000);
 
+/// The ceiling of the body of a relay answer. A members answer with its log
+/// is the largest one, and stays far under it (`SYNC-277`, audit `W206`,
+/// `ambre-spec-budgets.md` section 1).
+const ANSWER_CEILING: ambre_core::Count<ambre_core::Octets> =
+    ambre_core::Count::new(16 * 1024 * 1024);
+
+/// The ceiling of an object the store serves: a snapshot or a media blob.
+/// It sits above the largest object the relay lets a client upload
+/// (`SYNC-277`, `ambre-spec-budgets.md` section 1).
+const OBJECT_CEILING: ambre_core::Count<ambre_core::Octets> =
+    ambre_core::Count::new(128 * 1024 * 1024);
+
 /// The method of one request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Method {
@@ -638,11 +650,14 @@ pub(crate) struct Outgoing {
     pub body: Option<(ContentType, Payload<HttpBody>)>,
     /// How long the transport waits before it aborts the request.
     pub timeout: TimeSpan<Ms>,
+    /// The most bytes the answer's body may hold. The transport stops
+    /// reading past it (`SYNC-277`).
+    pub ceiling: ambre_core::Count<ambre_core::Octets>,
 }
 
 impl Outgoing {
     /// A request with no body and no credential, under the per-request
-    /// timeout.
+    /// timeout and the ceiling of a relay answer.
     fn new(method: Method, url: Target) -> Self {
         Self {
             method,
@@ -650,6 +665,7 @@ impl Outgoing {
             bearer: None,
             body: None,
             timeout: REQUEST_TIMEOUT,
+            ceiling: ANSWER_CEILING,
         }
     }
 
@@ -715,6 +731,44 @@ pub(crate) enum TransportError {
     Truncated(String),
     /// No answer arrived within the request's deadline (`SYNC-071`).
     Deadline(TimeSpan<Ms>),
+    /// The body passed the ceiling of its request, which the transport
+    /// stopped reading at (`SYNC-277`, audit `W206`).
+    Oversized(ambre_core::Count<ambre_core::Octets>),
+}
+
+/// Counts the bytes of a body as they arrive. It refuses the bytes past the
+/// ceiling of the request before they are kept (`SYNC-277`, audit `W206`).
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct BodyMeter {
+    ceiling: ambre_core::Count<ambre_core::Octets>,
+    read: ambre_core::Count<ambre_core::Octets>,
+}
+
+impl BodyMeter {
+    /// A meter with nothing read, under `ceiling`.
+    pub(crate) fn new(ceiling: ambre_core::Count<ambre_core::Octets>) -> Self {
+        Self {
+            ceiling,
+            read: ambre_core::Count::new(0),
+        }
+    }
+
+    /// Takes `more` bytes of the body.
+    ///
+    /// # Errors
+    ///
+    /// [`TransportError::Oversized`] when the body would pass the ceiling.
+    pub(crate) fn take(
+        &mut self,
+        more: ambre_core::Count<ambre_core::Octets>,
+    ) -> Result<(), TransportError> {
+        let read = self.read.plus(more);
+        if read > self.ceiling {
+            return Err(TransportError::Oversized(self.ceiling));
+        }
+        self.read = read;
+        Ok(())
+    }
 }
 
 impl std::fmt::Display for TransportError {
@@ -724,12 +778,55 @@ impl std::fmt::Display for TransportError {
             Self::Fetch(reason) => f.write_str(reason),
             Self::Truncated(reason) => write!(f, "binary error: {reason}"),
             Self::Deadline(span) => write!(f, "no answer within {} ms", span.get()),
+            Self::Oversized(ceiling) => {
+                write!(
+                    f,
+                    "the answer passes its ceiling of {} bytes",
+                    ceiling.get()
+                )
+            }
         }
     }
 }
 
 /// The browser's `fetch`, the transport of the running worker.
 pub(crate) struct Fetch;
+
+/// Reads `stream` chunk by chunk under `meter`. A length header can lie or be
+/// absent, so the count runs while the body arrives. The read stops at the
+/// chunk that passes the ceiling (`SYNC-278`, audit `W206`).
+async fn read_metered(
+    stream: web_sys::ReadableStream,
+    mut meter: BodyMeter,
+) -> Result<Vec<u8>, TransportError> {
+    use wasm_bindgen::JsCast;
+
+    let truncated = |e: wasm_bindgen::JsValue| TransportError::Truncated(format!("{e:?}"));
+    let reader: web_sys::ReadableStreamDefaultReader = stream.get_reader().unchecked_into();
+    let mut body = Vec::new();
+    loop {
+        let chunk = wasm_bindgen_futures::JsFuture::from(reader.read())
+            .await
+            .map_err(truncated)?;
+        let done = js_sys::Reflect::get(&chunk, &wasm_bindgen::JsValue::from_str("done"))
+            .map_err(truncated)?
+            .as_bool()
+            .unwrap_or(true);
+        if done {
+            return Ok(body);
+        }
+        let value: js_sys::Uint8Array =
+            js_sys::Reflect::get(&chunk, &wasm_bindgen::JsValue::from_str("value"))
+                .map_err(truncated)?
+                .unchecked_into();
+        if let Err(oversized) = meter.take(ambre_core::Count::new(u64::from(value.length()))) {
+            // The rest of the body is never read.
+            let _ = reader.cancel();
+            return Err(oversized);
+        }
+        body.extend(value.to_vec());
+    }
+}
 
 impl Method {
     /// The same method, as gloo-net names it.
@@ -777,10 +874,21 @@ impl Transport for Fetch {
             None => builder.send().await,
         };
         let resp = sent.map_err(|e| TransportError::Fetch(e.to_string()))?;
-        let body = resp
-            .binary()
-            .await
-            .map_err(|e| TransportError::Truncated(e.to_string()))?;
+        let mut meter = BodyMeter::new(request.ceiling);
+        // A length the answer states past the ceiling is refused before any
+        // byte is read (`SYNC-277`).
+        if let Some(stated) = resp
+            .headers()
+            .get("content-length")
+            .and_then(|text| text.trim().parse::<u64>().ok())
+        {
+            meter.take(ambre_core::Count::new(stated))?;
+            meter = BodyMeter::new(request.ceiling);
+        }
+        let body = match resp.body() {
+            Some(stream) => read_metered(stream, meter).await?,
+            None => Vec::new(),
+        };
         Ok(Incoming {
             status: HttpStatus::new(resp.status()),
             body: Payload::<HttpBody>::new(body),
@@ -1074,6 +1182,13 @@ async fn exchange(transport: &impl Transport, request: &Outgoing) -> Result<Inco
         Either::Left((answer, _)) => answer,
         Either::Right(((), _)) => Err(TransportError::Deadline(request.timeout)),
     };
+    // Every transport answers under the ceiling: a body past it is no
+    // answer, whatever transport read it (`SYNC-277`).
+    let answer = answer.and_then(|incoming| {
+        BodyMeter::new(request.ceiling)
+            .take(incoming.body.len())
+            .map(|()| incoming)
+    });
     answer.map_err(|reason| HttpError::NoAnswer {
         method: request.method,
         url: request.url.shown(),
@@ -1311,10 +1426,15 @@ pub(crate) async fn post_json_auth_ok<T: Serialize>(
     send_json_auth_via(&Fetch, Method::Post, url, body, &auth).await
 }
 
+/// Downloads an object from the store under a presigned link: a snapshot or
+/// a media blob. The body stops at the ceiling of an object (`SYNC-277`).
 pub(crate) async fn fetch_bytes(
     url: &ambre_core::Credential<ambre_core::PresignedUrl>,
 ) -> Result<Payload<crate::pipeline::FetchedBlob>, HttpError> {
-    let request = Outgoing::new(Method::Get, url.into());
+    let request = Outgoing {
+        ceiling: OBJECT_CEILING,
+        ..Outgoing::new(Method::Get, url.into())
+    };
     let resp = exchange(&Fetch, &request).await?;
     expect_ok(&request, &resp)?;
     Ok(resp.body.into_role())
@@ -1935,10 +2055,12 @@ pub(crate) struct ReferenceSnapshot {
 pub(crate) use ambre_protocol::snapshot_confirm::SignedConfirmation;
 
 /// Body of `POST /api/documents/{id}/snapshots/{snapshot_id}/confirm`: the
-/// confirmer's signature over the confirmation transcript, hex (`AUTHOR-031`).
+/// confirmer's signature over the confirmation transcript, and the digest of
+/// the blob the transcript names, hex (`AUTHOR-031`).
 #[derive(Serialize)]
 pub(crate) struct ConfirmSnapshotRequest {
     pub signature: ambre_core::FixedBytes<ambre_core::Signature>,
+    pub blob: ambre_core::FixedBytes<ambre_core::SnapshotDigest>,
 }
 
 /// Body of `POST /api/documents/{id}/snapshots/{snapshot_id}/report`: the
@@ -1999,6 +2121,10 @@ pub(crate) struct UserInfoEntry {
     #[serde(with = "ambre_core::serde_id::text")]
     pub id: Id<User>,
     pub email: ambre_core::Email,
+    /// Whether a provider proved the address. A relay that sends no flag
+    /// reads as an unproven address, the safer side (`CHROME-138`).
+    #[serde(rename = "email_verified", default)]
+    pub email_proof: ambre_core::EmailProof,
     pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
     /// The key an invitation's entry names for the invitee (`SYNC-132`).
     pub signing_pubkey: ambre_core::FixedBytes<ambre_core::PublicKey>,
@@ -2383,6 +2509,48 @@ mod tests {
             Failed::local(ambre_core::LocalFailure::NoRelay).to_string(),
             "no relay is reachable from this session"
         );
+    }
+
+    /// `SYNC-277`, audit `W206`: a meter takes bytes up to its ceiling, and
+    /// refuses the chunk that passes it, before the chunk is kept.
+    #[test]
+    fn a_body_meter_refuses_the_chunk_past_its_ceiling() {
+        let ceiling = ambre_core::Count::<ambre_core::Octets>::new(10);
+        let mut meter = BodyMeter::new(ceiling);
+        assert!(meter.take(ambre_core::Count::new(6)).is_ok());
+        assert!(
+            meter.take(ambre_core::Count::new(4)).is_ok(),
+            "the ceiling itself"
+        );
+        assert!(matches!(
+            meter.take(ambre_core::Count::new(1)),
+            Err(TransportError::Oversized(c)) if c == ceiling
+        ));
+    }
+
+    /// `SYNC-277`, audit `W206`: an answer whose body passes the ceiling of
+    /// its request is no answer, whatever transport read it. An object
+    /// request holds a larger ceiling than a relay answer.
+    #[tokio::test]
+    async fn an_answer_past_its_ceiling_is_no_answer() {
+        let large = "a".repeat(17 * 1024 * 1024);
+        let transport = Scripted::new([
+            Ok((200, serde_json::json!(large.clone()))),
+            Ok((200, serde_json::json!(large))),
+        ]);
+        let answer = Outgoing::new(Method::Get, Target::relay("https://relay.test/api/x"));
+        assert!(matches!(
+            exchange(&transport, &answer).await,
+            Err(HttpError::NoAnswer {
+                reason: TransportError::Oversized(_),
+                ..
+            })
+        ));
+        let object = Outgoing {
+            ceiling: OBJECT_CEILING,
+            ..answer
+        };
+        assert!(exchange(&transport, &object).await.is_ok());
     }
 
     /// The refusal of a `GET` or a `POST`, as the relay's answer builds it.

@@ -21,13 +21,34 @@ use ambre_core::FileRefusal;
 /// anyway, and the decoder must not allocate for it first.
 pub(super) const MAX_EDGE: Px<Image> = Px::new(8_192);
 
+/// The longest edge of the pixels the module answers. A lossless WebP of
+/// [`MAX_EDGE`] a side weighs a few hundred bytes and decodes to 256 MiB,
+/// which the Main instance would copy twice. A larger picture is scaled
+/// down to it before it leaves the module, as the other decoders answer at
+/// the size asked (`P65`, `ambre-spec-budgets.md section 6`).
+pub(super) const ANSWER_EDGE: Px<Image> = Px::new(2_048);
+
+/// The size `size` takes once its longest edge fits [`ANSWER_EDGE`], its
+/// ratio kept and each edge at least one pixel.
+fn answer_size(size: Size<Px<Image>>) -> Size<Px<Image>> {
+    let longest = size.width.get().max(size.height.get());
+    if longest <= ANSWER_EDGE.get() {
+        return size;
+    }
+    let fit = |edge: u32| {
+        let scaled = u64::from(edge) * u64::from(ANSWER_EDGE.get()) / u64::from(longest);
+        Px::new(u32::try_from(scaled).unwrap_or(ANSWER_EDGE.get()).max(1))
+    };
+    Size::new(fit(size.width.get()), fit(size.height.get()))
+}
+
 /// The pixels of the WebP picture `file`, four bytes a pixel.
 ///
 /// # Errors
 ///
 /// [`FileRefusal::Malformed`] when the decoder refuses `file`, and
 /// [`FileRefusal::PastBound`] when the header declares an edge past
-/// [`MAX_EDGE`].
+/// [`MAX_EDGE`]. A picture past [`ANSWER_EDGE`] answers scaled down to it.
 pub(super) fn decode(file: &Payload<FileBytes>) -> Result<Pixels, FileRefusal> {
     if !crate::is_webp(file) {
         return Err(FileRefusal::OtherDocument);
@@ -57,8 +78,15 @@ pub(super) fn decode(file: &Payload<FileBytes>) -> Result<Pixels, FileRefusal> {
             .flat_map(|&[r, g, b]| [r, g, b, u8::MAX])
             .collect()
     };
+    let size = Size::new(Px::new(width), Px::new(height));
+    let answer = answer_size(size);
+    let rgba = if answer == size {
+        rgba
+    } else {
+        super::picture::scale::<4>(&rgba, size, answer)
+    };
     Ok(Pixels {
-        size: Size::new(Px::new(width), Px::new(height)),
+        size: answer,
         rgba: Payload::new(rgba),
     })
 }
@@ -120,6 +148,30 @@ pub(crate) mod tests {
         assert_eq!(at(&pixels, 4, 2), [160, 160, 7, 255]);
         let pixels = decode(&Payload::new(small_webp(true))).expect("the picture decodes");
         assert_eq!(at(&pixels, 1, 1), [40, 80, 7, 200]);
+    }
+
+    /// `P65`: a picture past the answer edge leaves the module scaled down
+    /// to it, its ratio kept, never at its stored size.
+    #[test]
+    fn a_large_picture_answers_at_the_answer_edge() {
+        let (width, height) = (4_096u32, 64u32);
+        let samples = vec![90u8; usize::try_from(width * height * 3).expect("fits")];
+        let mut file = Vec::new();
+        image_webp::WebPEncoder::new(&mut file)
+            .encode(&samples, width, height, image_webp::ColorType::Rgb8)
+            .expect("the lossless encoder writes a picture");
+        let pixels = decode(&Payload::new(file)).expect("the picture decodes");
+        assert_eq!(pixels.size, Size::new(ANSWER_EDGE, Px::new(32)));
+        assert_eq!(pixels.rgba.as_bytes().len(), 2_048 * 32 * 4);
+    }
+
+    #[test]
+    fn the_answer_size_fits_the_edge_and_keeps_its_ratio() {
+        let size = |w, h| Size::new(Px::new(w), Px::new(h));
+        assert_eq!(answer_size(size(5, 3)), size(5, 3));
+        assert_eq!(answer_size(size(8_192, 8_192)), size(2_048, 2_048));
+        assert_eq!(answer_size(size(8_192, 1)), size(2_048, 1));
+        assert_eq!(answer_size(size(3, 8_192)), size(1, 2_048));
     }
 
     #[test]

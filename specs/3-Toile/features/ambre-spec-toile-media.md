@@ -36,6 +36,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TOILE-IO-052` | `PRE` | The caller MUST hand over bytes whose decoded form fits in memory. | this spec section 3 | `ambre_toile::logic::interop::raster::tests::an_oversized_picture_is_refused_off_its_header` -- a whole header over a body that is not there, refused by the bound rather than by the decoder, which proves nothing was expanded; `ambre_toile::logic::interop::raster::tests::oversized_image_aborts_atomically` -- the same refusal on a whole file | none | verified |
 | `TOILE-IO-130` | `POST` | A WebP picture MUST land on the board as PNG, decoded in the images converter module and never in the Main instance. | this spec section 2; `ambre-spec-architecture.md section 2`, the converter modules | `ambre_toile::logic::state::import::tests::a_webp_picture_lands_as_the_png_the_images_module_writes`; `::a_webp_picture_without_its_module_fails_and_changes_nothing`; `ambre_logic::dispatch::tests::a_webp_picture_waits_on_the_images_module`; `ambre_convert::engine::webp::tests::a_webp_picture_decodes_to_its_rgba_pixels`; ci-gate -- `scripts/converter_boundary.py` refuses `image-webp` in either instance | none | verified |
+| `TOILE-IO-196` | `POST` | A WebP picture past the answer edge MUST leave the images module scaled down to it, its ratio kept. | this spec section 2; `ambre-spec-budgets.md section 6` | `ambre_convert::engine::webp::tests::a_large_picture_answers_at_the_answer_edge`; `::the_answer_size_fits_the_edge_and_keeps_its_ratio` | none | verified |
 | `TOILE-IO-131` | `POST` | A JPEG picture dropped on the board MUST wait for its thumbnail from the converter thread, with nothing applied, then land at its drop point holding its file as it came and its native size. | this spec section 3; `ambre-spec-architecture.md section 2`, the converter thread | `ambre_toile::logic::state::import::tests::a_jpeg_waits_for_its_thumbnail_then_lands_where_it_was_dropped`; `ambre_belt::converter::tests::a_jpeg_drop_lands_through_the_converter_thread` -- run by `just test-browser`, the picture on screen; `ambre_logic::dispatch::tests::a_jpeg_decodes_on_the_converter_thread_and_the_logic_thread_never_waits`; `ambre_convert::engine::picture::jpeg::tests::a_jpeg_scales_down_to_the_size_asked_its_halves_kept`; ci-gate -- `scripts/converter_boundary.py` refuses `zune-jpeg` in either instance | none | verified |
 | `TOILE-IO-132` | `FAIL` | A JPEG drop whose images module did not load, offline on a first use included, MUST fail with the reason and leave the board untouched. The next drop MUST ask for the module again. | this spec section 3; `ARCH-081` | `ambre_toile::logic::state::import::tests::a_jpeg_whose_module_did_not_load_fails_and_changes_nothing`; `ambre_logic::dispatch::tests::a_refused_images_module_fails_each_waiting_jpeg_and_the_next_asks_again` | none | verified |
 | `TOILE-IO-053` | `POST` | An import MUST yield one picture element sized to the decoded resolution and one plaintext blob it names. | this spec section 3 | `ambre_toile::logic::interop::raster::tests::imports_one_image_with_thumbnail` -- the element kind, its size, the blob dimensions, the type and the address they share | none | verified |
@@ -69,6 +70,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-IO-067` | `POST` | A cache MUST have room for one blob however it was sized: a capacity of zero MUST be raised to one. | this spec section 3 | `ambre_toile::logic::interop::media::tests::capacity_zero_coerced_to_one` | none | verified |
 | `TOILE-IO-007` | `FRAME` | Eviction MUST NOT take a slot whose download is in flight. | this spec section 3 | `ambre_toile::logic::interop::media::tests::loading_entries_are_never_evicted` -- it fills a cache of one with two in-flight slots and reads both back | none | verified |
 | `TOILE-IO-103` | `FAIL` | Given a picture address the board does not carry, a request MUST answer nothing. | this spec section 3 | `ambre_toile::logic::state::export::media_request_tests::an_unknown_address_is_answered_with_nothing` -- the request answers no display event | none | verified |
+| `TOILE-307` | `FAIL` | Given a stored thumbnail whose header declares a side past the thumbnail edge, a request MUST answer nothing and MUST NOT decode its pixels. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_toile::logic::state::export::media_request_tests::a_thumbnail_past_the_edge_decodes_nothing` -- one past the edge answers nothing, one at the edge decodes; `::a_thumbnail_header_declaring_a_huge_picture_decodes_nothing` -- a PNG of a few bytes that declares 11 000 by 11 000 pixels | none | verified |
 | `TOILE-IO-105` | `POST` | A picture already asked for and still pending MUST NOT be asked for again on a later frame. | this spec section 4 | `ambre_toile::ui::render::tests::a_pending_request_is_not_repeated` -- a hash in the pending set yields no request, and the same list with nothing pending asks for it | none | verified |
 
 * **Budget.** the first paint of a picture under 15 ms and no refetch on a revisit, two rows of
@@ -78,7 +80,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** this document owns Toile's only outbound flow of user content: media blobs, sealed
   by the Sync thread before they leave (`TOILE-IO-013`). No board geometry and no pixel leaves in
   plaintext.
-* **Verification.** 34 `verified`, 1 `unimplemented`. The upload half holds: the address dedups, and
+* **Verification.** 36 `verified`, 1 `unimplemented`. The upload half holds: the address dedups, and
   a failed upload takes the import with it. An undo takes the entry back, and no placeholder becomes
   a key. A decoded picture stays out of the document. The thumbnail shown during a download is not
   built (`TOILE-IO-035`), because no paint downloads yet.
@@ -150,7 +152,8 @@ pub enum RequestOutcome { Fetch, CacheHit(MediaState) }
 1. ask the cache for the address; a first ask creates the slot and orders a download, a repeat asks
    for nothing (`TOILE-IO-006`);
 2. paint the thumbnail meanwhile, and the placeholder box when there is not even one
-   (`TOILE-IO-035`, `TOILE-UI-013`);
+   (`TOILE-IO-035`, `TOILE-UI-013`). A peer writes the thumbnail, so its header is read first,
+   and a side past the thumbnail edge decodes nothing: the placeholder stays (`TOILE-307`);
 3. resolve the slot with the decoded pixels when the download lands, and repaint;
 4. mark the slot failed on an error, so the request is not re-issued in a loop;
 5. evict the least recently used resolved slot when the cache is over capacity, and never a slot in

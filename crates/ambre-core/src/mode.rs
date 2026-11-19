@@ -187,6 +187,18 @@ crate::define_flag! {
         Enabled,
     }
 
+    /// Whether a provider proved an account's address, or the account only
+    /// asserted it at setup. An asserted address may be a squat. Whoever
+    /// claimed it first receives what is shared with it. So a share shows it
+    /// unproven before it wraps a key (`CHROME-138`). Its serde form is the
+    /// `email_verified` bool of the relay's answers.
+    pub enum EmailProof {
+        /// Self-asserted: a provider sign-in may reclaim it.
+        Asserted,
+        /// Proven by a provider: it wins any collision.
+        Verified,
+    }
+
     /// Whether a request made the record it answers, or found one an earlier
     /// request made. A race that lost answers `Existing`, with the winner's
     /// record.

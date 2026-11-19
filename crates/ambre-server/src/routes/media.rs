@@ -125,7 +125,8 @@ pub async fn media_download_url(
 
 /// Confirmation that an upload completed. The server inserts a `media` row
 /// linking the content hash to the S3 object. It names no media type
-/// (`SYNC-053`).
+/// (`SYNC-053`). An address the document does not hold yet is refused with a
+/// 404 while no object fills it (`SRV-292`).
 #[derive(serde::Deserialize)]
 pub struct ConfirmUploadRequest {
     pub content_hash: ambre_core::Validated<ambre_core::ContentHash>,
@@ -164,6 +165,17 @@ pub async fn media_confirm_upload(
         )));
     }
     let key = s3::format_s3_media_key(&state.config.s3_env_prefix, &doc_id, &req.content_hash);
+    // A held address takes a second claim without a put (`SYNC-228`). Any
+    // other address is recorded only once its object exists. A row with no
+    // object would refuse the address to every member for good (`SRV-271`,
+    // `SRV-292`).
+    if !db::document_holds_media(&state.db, &doc_id, &req.content_hash).await?
+        && !s3::holds_object(&state.s3, &state.s3_bucket, &key).await?
+    {
+        return Err(AppError::NotFound {
+            resource: Resource::Media,
+        });
+    }
     db::insert_media(
         &state.db,
         &doc_id,
@@ -215,7 +227,7 @@ pub async fn media_erase(
                 .key(&s3_key)
                 .send()
                 .await
-                .map_err(|e| AppError::S3(format!("delete {s3_key}: {e}")))?;
+                .map_err(|e| AppError::S3(format!("delete a media object: {e}")))?;
         }
     }
     tx.commit().await?;

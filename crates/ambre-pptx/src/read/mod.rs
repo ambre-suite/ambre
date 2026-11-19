@@ -47,7 +47,7 @@ use crate::model::{
     PathSegment, Picture, PictureBytes, PictureFormat, Placement, Route, Shape, Site, Slide,
     SlideItems, SlidePoint, SlideSize, TextAlign, TextAnchor, TextBody,
 };
-use crate::opc::{Package, PartBytes, PartName, RelKind, RelTarget, Relationship};
+use crate::opc::{Package, PartBytes, PartName, RelId, RelKind, RelTarget, Relationship};
 use crate::report::{DeckConstruct, DeckOutcome, DeckReport};
 use style::{ColourMap, Palette, RunStyle, Theme};
 use xml::{Element, Ns};
@@ -64,6 +64,53 @@ const MAX_ITEMS: Count<DeckItems> = Count::new(100_000);
 /// logo on the master is copied onto every slide. The package bound of
 /// `ambre-opc`, 64 MiB.
 const MAX_PICTURE_BYTES: Count<Octets> = Count::new(64 * 1024 * 1024);
+
+/// The most bytes the names, the texts and the paths of a flattened deck
+/// may hold together. The text of a master is copied onto every slide, as
+/// its logo is, so the bound is read on the flattened deck (`W303`). The
+/// package bound of `ambre-opc`, 64 MiB, as for the pictures.
+const MAX_TEXT_BYTES: Count<Octets> = Count::new(64 * 1024 * 1024);
+
+/// The bytes `item` holds beside its fixed record: its name, its text, its
+/// typeface and the segments of its path.
+fn weight(item: &Item) -> Count<Octets> {
+    let bytes = match item {
+        Item::Shape(shape) => {
+            let text = shape
+                .text
+                .as_ref()
+                .map_or(0, |body| body.text.len() + body.typeface.len());
+            let path = match &shape.geometry {
+                Geometry::Freeform(segments) => segments.len() * std::mem::size_of::<PathSegment>(),
+                _ => 0,
+            };
+            shape.name.len() + text + path
+        }
+        Item::Picture(picture) => picture.name.len(),
+        Item::Connector(connector) => connector.name.len(),
+    };
+    Count::of(bytes)
+}
+
+/// The weight of the last item of `out`, and one item, charged to `items`
+/// and `text`.
+///
+/// # Errors
+///
+/// [`PptxError::TooLarge`] past [`MAX_ITEMS`] or [`MAX_TEXT_BYTES`].
+fn charge(
+    items: &mut Count<DeckItems>,
+    text: &mut Count<Octets>,
+    out: &SlideOut,
+) -> Result<(), PptxError> {
+    *items = items.incremented();
+    *text = text.plus(out.items.last().map_or(Count::ZERO, weight));
+    if *items > MAX_ITEMS || *text > MAX_TEXT_BYTES {
+        Err(PptxError::TooLarge)
+    } else {
+        Ok(())
+    }
+}
 
 /// The items of a deck, counted against [`MAX_ITEMS`].
 pub enum DeckItems {}
@@ -111,6 +158,7 @@ pub fn read(bytes: &[u8]) -> Result<ImportedDeck, PptxError> {
         report: DeckReport::default(),
         items: Count::ZERO,
         picture_bytes: Count::ZERO,
+        text_bytes: Count::ZERO,
     };
     let presentation = reader
         .package
@@ -126,7 +174,7 @@ pub fn read(bytes: &[u8]) -> Result<ImportedDeck, PptxError> {
     let root = reader.tree(&presentation)?;
     let size = slide_size(&root);
     let defaults = root.child(Ns::P, "defaultTextStyle").cloned();
-    let rels = reader.package.relationships(&presentation)?;
+    let rels = targets(&reader.package.relationships(&presentation)?);
     let slide_parts: Vec<PartName> = root
         .child(Ns::P, "sldIdLst")
         .map(|list| {
@@ -149,14 +197,36 @@ pub fn read(bytes: &[u8]) -> Result<ImportedDeck, PptxError> {
     })
 }
 
-/// The part a relationship id names among `rels`.
-fn target(rels: &[Relationship], id: &str) -> Option<PartName> {
-    rels.iter()
-        .find(|rel| rel.id.as_str() == id)
-        .and_then(|rel| match &rel.target {
-            RelTarget::Part(name) => Some(name.clone()),
-            RelTarget::External(_) => None,
-        })
+/// The error of a part that does not read as a tree. A tree past its
+/// bound makes the deck too large. Any other error makes it unreadable.
+pub(super) const fn unreadable(error: xml::XmlError) -> PptxError {
+    match error {
+        xml::XmlError::TooLarge => PptxError::TooLarge,
+        xml::XmlError::Malformed | xml::XmlError::DocumentType | xml::XmlError::TooDeep => {
+            PptxError::Unreadable
+        }
+    }
+}
+
+/// The part each relationship id of `rels` names. The first relationship
+/// of an id wins, as a scan of the list finds it. A lookup reads the map,
+/// so a part of many references to many relationships costs no scan per
+/// reference (`W305`).
+fn targets(rels: &[Relationship]) -> BTreeMap<RelId, Option<PartName>> {
+    let mut out = BTreeMap::new();
+    for rel in rels {
+        out.entry(rel.id.clone())
+            .or_insert_with(|| match &rel.target {
+                RelTarget::Part(name) => Some(name.clone()),
+                RelTarget::External(_) => None,
+            });
+    }
+    out
+}
+
+/// The part a relationship id names among `targets`.
+fn target(targets: &BTreeMap<RelId, Option<PartName>>, id: &str) -> Option<PartName> {
+    targets.get(&RelId::new(id)).cloned().flatten()
 }
 
 /// The slide size `p:sldSz` declares, held to the bounds a presentation
@@ -184,10 +254,98 @@ fn length(element: &Element, name: &str) -> Option<PrintLength<Pt>> {
         .map(PrintLength::<Pt>::new)
 }
 
-/// One part, read, with the relationships it holds.
+/// One part, read, with the relationships it holds, indexed once.
 struct Part {
     root: Element,
     rels: Vec<Relationship>,
+    /// The part each relationship id names, read by [`target`].
+    targets: BTreeMap<RelId, Option<PartName>>,
+    placeholders: Placeholders,
+}
+
+impl Part {
+    fn new(root: Element, rels: Vec<Relationship>) -> Self {
+        let targets = targets(&rels);
+        let placeholders = Placeholders::of(&root);
+        Self {
+            root,
+            rels,
+            targets,
+            placeholders,
+        }
+    }
+}
+
+/// The placeholders of the shape tree of one part, by the keys a slide
+/// matches them by. Each value is the place of the shape among the children
+/// of `p:spTree`, the first of a key kept, as a scan finds it. A slide of
+/// many placeholders thus reads its layout and its master by lookups, never
+/// by a scan per placeholder (`W305`).
+#[derive(Default)]
+struct Placeholders {
+    by_index: BTreeMap<String, Pos<TreeChildren>>,
+    by_type: BTreeMap<String, Pos<TreeChildren>>,
+    by_master_type: BTreeMap<String, Pos<TreeChildren>>,
+}
+
+/// The children of a shape tree, `p:spTree`, as a part holds them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum TreeChildren {}
+
+impl ambre_core::index::Axis for TreeChildren {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("TreeChild");
+}
+
+impl Placeholders {
+    fn of(root: &Element) -> Self {
+        let mut out = Self::default();
+        let Some(tree) = root
+            .child(Ns::P, "cSld")
+            .and_then(|c| c.child(Ns::P, "spTree"))
+        else {
+            return out;
+        };
+        for (at, node) in tree.children.iter().enumerate() {
+            let at = Pos::<TreeChildren>::from_usize(at);
+            let xml::Node::Element(sp) = node else {
+                continue;
+            };
+            if !sp.is(Ns::P, "sp") {
+                continue;
+            }
+            let Some(ph) = placeholder(sp) else {
+                continue;
+            };
+            if let Some(index) = ph.index {
+                out.by_index.entry(index).or_insert(at);
+            }
+            out.by_master_type
+                .entry(master_type(&ph.spelled).to_owned())
+                .or_insert(at);
+            out.by_type.entry(ph.spelled).or_insert(at);
+        }
+        out
+    }
+}
+
+/// The shape at `at` among the children of the shape tree of `part`, with
+/// the placeholder it is.
+fn placeholder_at<'p>(
+    part: &'p Part,
+    at: Option<&Pos<TreeChildren>>,
+) -> Option<(Placeholder, &'p Element)> {
+    let sp = match part
+        .root
+        .child(Ns::P, "cSld")?
+        .child(Ns::P, "spTree")?
+        .children
+        .get(at?.to_usize())?
+    {
+        xml::Node::Element(sp) => sp,
+        xml::Node::Text(_) => return None,
+    };
+    Some((placeholder(sp)?, sp))
 }
 
 /// The walk of one package: the parts read so far, each read once, and the
@@ -202,6 +360,8 @@ struct Reader<'a> {
     items: Count<DeckItems>,
     /// The picture bytes the deck holds so far, against [`MAX_PICTURE_BYTES`].
     picture_bytes: Count<Octets>,
+    /// The text bytes the deck holds so far, against [`MAX_TEXT_BYTES`].
+    text_bytes: Count<Octets>,
 }
 
 /// The parts one slide inherits from, its own first.
@@ -215,7 +375,7 @@ impl Reader<'_> {
     /// The tree of the part `name`.
     fn tree(&mut self, name: &PartName) -> Result<Element, PptxError> {
         let bytes = self.package.part(name)?.ok_or(PptxError::NoPresentation)?;
-        xml::parse(&bytes).map_err(|_| PptxError::Unreadable)
+        xml::parse(&bytes).map_err(unreadable)
     }
 
     /// The part `name` with its relationships, read once.
@@ -223,10 +383,10 @@ impl Reader<'_> {
         if let Some(part) = self.parts.get(name) {
             return Ok(std::rc::Rc::clone(part));
         }
-        let part = std::rc::Rc::new(Part {
-            root: self.tree(name)?,
-            rels: self.package.relationships(name)?,
-        });
+        let part = std::rc::Rc::new(Part::new(
+            self.tree(name)?,
+            self.package.relationships(name)?,
+        ));
         self.parts.insert(name.clone(), std::rc::Rc::clone(&part));
         Ok(part)
     }
@@ -249,10 +409,10 @@ impl Reader<'_> {
 
     /// The slide `part`, with what its layout and its master draw.
     fn slide(&mut self, part: &PartName, defaults: Option<&Element>) -> Result<Slide, PptxError> {
-        let slide = std::rc::Rc::new(Part {
-            root: self.tree(part)?,
-            rels: self.package.relationships(part)?,
-        });
+        let slide = std::rc::Rc::new(Part::new(
+            self.tree(part)?,
+            self.package.relationships(part)?,
+        ));
         let layout = self.related(&slide, rel!("slideLayout"))?;
         let master = match &layout {
             Some(layout) => self.related(layout, rel!("slideMaster"))?,
@@ -561,7 +721,7 @@ impl Reader<'_> {
             line,
             text,
         }));
-        self.count()?;
+        self.count(out)?;
         if context.inherited == Inherited::Own
             && let Some(id) = id
         {
@@ -641,26 +801,29 @@ impl Reader<'_> {
         let level_name = style::level_name(level);
         // The level elements of the chain, highest first. The paragraph's
         // own comes first, then the list styles of the shape, the layout and
-        // the master, then the defaults and the master's text styles.
-        let list_level = |b: &Element| -> Option<Element> {
-            b.child(Ns::A, "lstStyle")?
-                .child(Ns::A, level_name)
-                .cloned()
-        };
-        let mut levels: Vec<Element> = Vec::new();
+        // the master, then the defaults and the master's text styles. Each
+        // is borrowed from its part: a master's level is read per shape and
+        // never copied (`W305`).
+        let mut levels: Vec<&Element> = Vec::new();
         if let Some(own) = first_paragraph.and_then(|p| p.child(Ns::A, "pPr")) {
-            levels.push(own.clone());
+            levels.push(own);
         }
-        levels.extend(list_level(body));
+        levels.extend(
+            body.child(Ns::A, "lstStyle")
+                .and_then(|l| l.child(Ns::A, level_name)),
+        );
         for s in inherited {
             if let Some(b) = s.child(Ns::P, "txBody") {
-                levels.extend(list_level(b));
+                levels.extend(
+                    b.child(Ns::A, "lstStyle")
+                        .and_then(|l| l.child(Ns::A, level_name)),
+                );
             }
         }
         if ph.is_none()
             && let Some(defaults) = context.defaults.and_then(|d| d.child(Ns::A, level_name))
         {
-            levels.push(defaults.clone());
+            levels.push(defaults);
         }
         let master_style = context.chain.master.as_ref().and_then(|m| {
             let styles = m.root.child(Ns::P, "txStyles")?;
@@ -669,10 +832,7 @@ impl Reader<'_> {
                 Some(PlaceholderKind::Body | PlaceholderKind::Other) => "bodyStyle",
                 None => "otherStyle",
             };
-            styles
-                .child(Ns::P, which)?
-                .child(Ns::A, level_name)
-                .cloned()
+            styles.child(Ns::P, which)?.child(Ns::A, level_name)
         });
         levels.extend(master_style);
         let mut chain_style = RunStyle::default();
@@ -789,7 +949,7 @@ impl Reader<'_> {
             .child(Ns::P, "blipFill")
             .and_then(|b| b.child(Ns::A, "blip"))
             .and_then(|b| b.attr_in(Ns::R, "embed"));
-        let picture = match embed.and_then(|id| target(&context.part.rels, id)) {
+        let picture = match embed.and_then(|id| target(&context.part.targets, id)) {
             Some(name) => self.package.part(&name)?,
             None => None,
         };
@@ -817,7 +977,7 @@ impl Reader<'_> {
             format,
             bytes: bytes.into_role(),
         }));
-        self.count()
+        self.count(out)
     }
 
     /// A graphic frame: a table, a chart, a SmartArt or an embedded object.
@@ -968,17 +1128,13 @@ impl Reader<'_> {
             end_cap: cap("tailEnd"),
         };
         let _ = out.push(Item::Connector(connector));
-        self.count()
+        self.count(out)
     }
 
-    /// Count one more item in the deck, against [`MAX_ITEMS`].
-    fn count(&mut self) -> Result<(), PptxError> {
-        self.items = self.items.incremented();
-        if self.items > MAX_ITEMS {
-            Err(PptxError::TooLarge)
-        } else {
-            Ok(())
-        }
+    /// Count the last item of `out` in the deck, against [`MAX_ITEMS`] and
+    /// [`MAX_TEXT_BYTES`].
+    fn count(&mut self, out: &SlideOut) -> Result<(), PptxError> {
+        charge(&mut self.items, &mut self.text_bytes, out)
     }
 }
 
@@ -1192,41 +1348,27 @@ impl Chain {
         let mut out = Vec::new();
         let mut layout_type = None;
         if let Some(layout) = &self.layout {
-            let candidates = placeholder_shapes(layout);
-            let found = candidates
-                .iter()
-                .find(|(c, _)| ph.index.is_some() && c.index == ph.index)
-                .or_else(|| candidates.iter().find(|(c, _)| c.spelled == ph.spelled));
+            let index = &layout.placeholders;
+            let found = ph
+                .index
+                .as_ref()
+                .and_then(|wanted| placeholder_at(layout, index.by_index.get(wanted)))
+                .or_else(|| placeholder_at(layout, index.by_type.get(&ph.spelled)));
             if let Some((c, sp)) = found {
-                layout_type = Some(c.spelled.clone());
-                out.push(*sp);
+                layout_type = Some(c.spelled);
+                out.push(sp);
             }
         }
         if let Some(master) = &self.master {
             let wanted = master_type(layout_type.as_deref().unwrap_or(&ph.spelled));
-            if let Some((_, sp)) = placeholder_shapes(master)
-                .into_iter()
-                .find(|(c, _)| master_type(&c.spelled) == wanted)
+            if let Some((_, sp)) =
+                placeholder_at(master, master.placeholders.by_master_type.get(wanted))
             {
                 out.push(sp);
             }
         }
         out
     }
-}
-
-/// Every placeholder of the shape tree of `part`, with its shape.
-fn placeholder_shapes(part: &Part) -> Vec<(Placeholder, &Element)> {
-    part.root
-        .child(Ns::P, "cSld")
-        .and_then(|c| c.child(Ns::P, "spTree"))
-        .map(|tree| {
-            tree.elements()
-                .filter(|e| e.is(Ns::P, "sp"))
-                .filter_map(|sp| Some((placeholder(sp)?, sp)))
-                .collect()
-        })
-        .unwrap_or_default()
 }
 
 /// The type a master matches a placeholder by: a centred title is a title,

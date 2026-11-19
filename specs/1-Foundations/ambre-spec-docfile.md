@@ -61,6 +61,7 @@ migrates or refuses before an application sees a payload.
 | `DOCFILE-004` | `FRAME` | No error path MUST mutate the bytes it was handed. | this spec section 3 | `ambre_client_core::docfile::tests::every_error_path_leaves_the_input_untouched`; `ambre_trame::logic::docfile::tests::a_rejected_file_leaves_both_the_input_and_the_state_alone` | none | verified |
 | `DOCFILE-013` | `FAIL` | A version newer than the binary's MUST be refused cleanly. | this spec section 3 | `ambre_client_core::docfile::tests::a_newer_version_is_refused_and_an_older_one_is_attempted`; `::migrating_from_a_newer_version_is_refused` | none | verified |
 | `DOCFILE-005` | `FAIL` | A malformed file MUST produce a typed error, never a panic. | this spec section 3 | `ambre_client_core::docfile::tests::truncated_header_is_rejected_at_every_length`; `::bad_magic_is_rejected`; `ambre_trame::logic::docfile::tests::a_corrupt_payload_under_a_valid_header_is_typed_not_a_panic`; cargo-fuzz -- `fuzz/fuzz_targets/docfile.rs`, run by the CI `fuzz` job | none | verified |
+| `DOCFILE-021` | `FRAME` | Opening a `.ambre` file MUST land it as a new document, and MUST NOT write the local state of the document its header names. | this spec section 4 | `ambre_app::platform::tests::an_opened_file_never_lands_on_the_document_its_header_names` -- the header names a document, and the landing takes another identifier with the type and the payload of the file; `::two_opens_of_one_file_land_as_two_documents` | none | verified |
 
 ### 1.3 Seal a `.ambre` file, and open one back
 
@@ -77,7 +78,7 @@ the cipher never leave the Sync worker (`DOCFILE-014`).
 * **Boundary.** the container holds no key (`DOCFILE-006`), and it keeps the bytes it produces on a
   local disk (`DOCFILE-011`). The seal is the one place a key appears, in the Sync worker for one
   call, and no application links against a cipher (`DOCFILE-014`, `ARCH-004`).
-* **Verification.** 20 `verified`. This is pure byte handling on the host tier, so a test reaches
+* **Verification.** 21 `verified`. This is pure byte handling on the host tier, so a test reaches
   every rule the container makes about bytes. What the wire must not carry is held one crate away,
   at the single seam that hands a snapshot to Sync. The fixtures gate refuses a superseded version
   with no frozen artifact, and a history gate reads the commit that froze it.
@@ -391,7 +392,7 @@ seal and in `src/landing.rs` for an open.
 | save a document to a file | the current state is written at the current version, whatever version it was opened from |
 | export a document whose title holds a separator, a control character or a deceptive character | the file is named from the title without them, and a title of dots alone takes the application's own stem. A joiner or a tag character stays (`DOCFILE-019`) |
 | save a file another user sent, under a name with a path, a control character or a deceptive character | the file keeps the last step of the name without them, and its extension when that is letters and digits. A joiner or a tag character stays (`DOCFILE-019`, `DOCFILE-020`) |
-| open a file | the header decides the application, then that application fills an empty state |
+| open a file | the header decides the application, then that application fills an empty state under a new document identifier. The identifier the header names is signed by nobody, so the file never replaces the local copy of a document this user holds, nor drops its unsent edits (`DOCFILE-021`) |
 | open a file another application wrote | the bytes are routed to that application, with no prompt and no conversion |
 | open a file no application claims | one error naming the type byte, and no partial document |
 | open a file of a type no engine renders yet | one error naming the kind, and nothing is opened: the launcher offers a file the same predicate its new-document picker uses (`DocType::creatable`), so the two cannot disagree |

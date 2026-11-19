@@ -503,12 +503,17 @@ pub(crate) fn is_truthy(value: &CellValue) -> bool {
     }
 }
 
+/// CONCAT(value, ...) -- the display texts of the arguments, a range read
+/// cell by cell. A result past the text bound is `#TYPE!`, refused before the
+/// piece that passes it is copied (`TRAME-313`).
 pub(crate) fn concat_fn(args: &[CellValue]) -> CellValue {
-    let mut result = String::new();
+    let mut result = crate::formula::text::BoundedText::new();
     for arg in args {
-        push_display(arg, &mut result);
+        if let Err(e) = push_display(arg, &mut result) {
+            return CellValue::Error(e.into());
+        }
     }
-    CellValue::Text(result)
+    result.into_value()
 }
 
 /// Resolve the optional character-count argument shared by `LEFT`/`RIGHT`.

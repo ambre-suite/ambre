@@ -58,6 +58,7 @@ over an opaque blob.
 | `SRV-065` | `POST` | A release MUST require the quorum the organization declared. | audit `N1`; this spec section 3 | not built | unbuilt -- lands with the `Split-secret organization recovery` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `SRV-077` | `FRAME` | A release MUST NOT change the subject's key material. | this spec section 3, the escrow as designed; derived | `ambre_server::routes::orgs::tests::integration::every_release_is_recorded_and_changes_no_key` -- the subject's whole account row reads the same after each release, database tier | none | verified |
 | `SRV-063` | `FAIL` | Only an owner MUST be able to release a member's escrowed key. | this spec section 3; `SRV-062` | `ambre_server::routes::orgs::tests::integration::recovery_requires_auth` -- the caller with no session; `::only_an_owner_releases_an_escrowed_key` -- an administrator and a member are refused, and an owner passes the gate | none | verified |
+| `SRV-305` | `FAIL` | Given a release asked by an owner of an organization, the relay MUST NOT answer a copy the member escrowed for another organization. | this spec section 3; `SRV-063` | `ambre_server::routes::orgs::tests::integration::an_escrow_is_released_by_its_own_organization_alone` -- database tier: the owner of a second organization that adds the member reads nothing, and the owner of the first reads the copy | none | verified |
 
 * **Budget.** none. Nothing here is on a hot path: an organization is read when a person opens their
   settings, and a release is a rare deliberate act. No row of `ambre-spec-budgets.md` names one.
@@ -65,7 +66,7 @@ over an opaque blob.
   narrows what a **person** can reach, never what the **relay** can. The escrowed key is sealed
   to the organization's own public key, stored opaque and handed to an owner who decrypts it
   elsewhere (`SRV-067`). `SRV-066` keeps the relay unable to combine anything.
-* **Verification.** 12 `verified`, 2 `unimplemented`. What holds is the membership: the last owner,
+* **Verification.** 13 `verified`, 2 `unimplemented`. What holds is the membership: the last owner,
   the grant and role clamps, the removal clamp, who may ask for a release, and its record. What is
   loose is the deposit, which no route performs.
 ---

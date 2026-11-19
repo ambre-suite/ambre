@@ -120,6 +120,12 @@ gesture: the rows above hold Trame's half, and the rows below hold the codec's.
 | `TRAME-IO-060` | `FAIL` | Every construct the codec approximates or drops MUST be an entry of its report, counted. | this spec section 3; `TRAME-IO-012`, `INTEROP-003` | `ambre_xlsx::fixtures::every_construct_trame_lacks_is_reported_never_dropped_in_silence`; `ambre_xlsx::fixtures::every_copied_file_reads_as_its_expected_dump` -- the report of each copied file, held against its dump; `ambre_xlsx::report::tests::the_same_construct_twice_is_one_entry_with_its_count` | none | verified |
 | `TRAME-IO-061` | `FAIL` | A malformed or hostile file MUST fail as a typed error, never as a panic, and a part past its size cap MUST be refused before it inflates. | this spec section 3 | `ambre_xlsx::model_props::random_bytes_never_panic_the_reader`; `::a_corrupted_workbook_never_panics_the_reader`; `::a_malformed_package_fails_as_a_typed_error`; `ambre_opc::tests::a_part_that_inflates_past_its_bound_is_refused_while_it_inflates`; `::parts_that_inflate_past_the_package_bound_are_refused` | none | verified |
 | `TRAME-IO-062` | `FAIL` | A legacy or password-protected Excel file MUST be refused with that reason. | this spec section 3 | `ambre_xlsx::fixtures::a_password_protected_workbook_is_refused_with_its_reason` | none | verified |
+| `TRAME-IO-093` | `FAIL` | Given a part that declares a document type, the xlsx and the OpenDocument readers MUST refuse the file. | this spec section 3; `TRAME-IO-061` | `ambre_xlsx::xml::tests::a_part_that_declares_a_document_type_is_refused`; `ambre_xlsx::read::tests::a_sheet_that_declares_a_document_type_is_refused`; `::a_hostile_shared_string_part_is_refused`; `ambre_xlsx::hostile::a_content_part_that_declares_a_document_type_is_refused` | none | verified |
+| `TRAME-IO-094` | `FAIL` | Given a tree or a shared-string part past the node or attribute bound, the readers MUST refuse the file. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_xlsx::xml::tests::a_part_past_the_node_bound_is_refused`; `ambre_xlsx::read::tests::a_hostile_shared_string_part_is_refused` | none | verified |
+| `TRAME-IO-095` | `POST` | The readers MUST find a style twin, a column run and a shared master without a scan per cell. | this spec section 3 | `ambre_xlsx::read::tests::many_styles_dedupe_to_their_first_twin`; `::a_shared_master_past_the_formula_cap_is_never_stored`; `ambre_xlsx::hostile::many_column_runs_read_their_styles_by_search`; `::many_distinct_cell_styles_dedupe_by_lookup` | none | verified |
+| `TRAME-IO-096` | `FAIL` | Given a date or a matrix span past the width of the reader, the readers MUST read no date and no range. | this spec section 3 | `ambre_xlsx::read::tests::an_iso_date_reads_as_its_1900_serial`; `ambre_xlsx::hostile::a_matrix_span_at_the_top_of_the_width_reads_as_no_range` | none | verified |
+| `TRAME-IO-097` | `FAIL` | Given a workbook that lists more sheets than the sheet bound, the readers and the import MUST refuse it whole. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_xlsx::hostile::a_content_part_past_the_sheet_bound_is_refused`; `ambre_trame::logic::xlsx_tests::a_workbook_past_the_sheet_bound_is_refused_whole` | none | verified |
+| `TRAME-IO-098` | `FAIL` | Given cells whose text, each copy counted, passes the text bound, the readers MUST refuse the file. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_xlsx::read::tests::a_shared_string_copied_past_the_text_room_is_refused`; `ambre_xlsx::hostile::a_repeated_row_of_long_text_past_the_text_bound_is_refused` | none | verified |
 
 ### 1.9 Write a workbook with the xlsx codec
 
@@ -134,7 +140,7 @@ gesture: the rows above hold Trame's half, and the rows below hold the codec's.
 * **Boundary.** a local file, in both directions, and nothing else. Every conversion stays in the
   Main instance, no plaintext file reaches the server, no round trip and no third-party bridge
   (`TRAME-IO-001`, `TRAME-IO-033`, `TRAME-IO-002`, `TRAME-IO-030`).
-* **Verification.** 69 `verified`, 2 `unimplemented`. The rows hold the round trip of the two
+* **Verification.** 75 `verified`, 2 `unimplemented`. The rows hold the round trip of the two
   gestures and their frame conditions. An import is one undo item, an empty file writes nothing, and
   an export or a save changes nothing. Every refusal answers, and the browser tier reads a file
   picked on a full queue land once it drains. A gate and `deny.toml` keep every conversion in the
@@ -354,6 +360,11 @@ browser binding and no thread protocol. The package layer is `ambre-opc`, which 
 codecs share. It holds the archive, the content types, the relationships, and one set of bounds
 under the client memory budget (`ambre-spec-budgets.md section 6`). A part inflates only when the reader asks
 for it, and the sheets read under the bound of one part, 32 MiB.
+
+A part read whole as a tree, and the shared strings, hold the tree row of the same section
+(`TRAME-IO-094`). Every part that
+declares a document type is refused, as the three other office codecs refuse one (`TRAME-IO-093`).
+A shared formula master past the formula cap is never stored (`TRAME-IO-095`).
 
 The model speaks Trame's vocabulary: the font, alignment and colour types of `ambre-core`, and a
 mirror of the Trame cell style. So the reader does every approximation, and the map from the

@@ -76,9 +76,13 @@ impl SyncState {
         // update authored by THIS client is treated as a high-water-mark, and
         // `local_clock` is advanced past it. The next `seal_update` then
         // continues from the right value.
+        //
+        // The relay can forge a frame that names this client's key. An echo
+        // moves the clock, confirms a sent delta and settles a release, so it
+        // counts only under a signature that verifies (audit `W207`).
         let authored_by_us = self.signing_key.as_ref().is_some_and(|sk| {
             sk.verifying_key().to_bytes() == *update.public_data.pub_key.as_array()
-        });
+        }) && pipeline::update_signed(&update);
         // An evicted document counts the update and loads nothing
         // (`RESID-014`, `RESID-016`).
         if self.count_light(seq, &update) {
@@ -148,9 +152,10 @@ impl SyncState {
         None
     }
 
-    /// Keep a document's quarantine within [`QUARANTINE_LIMIT`]. Request the
-    /// missing history at the soft threshold, and drop the oldest update (by
-    /// `clock`) past the hard cap, raising a `SyncWarning`.
+    /// Keep a document's quarantine within [`QUARANTINE_LIMIT`] and
+    /// [`QUARANTINE_BYTES`]. Request the missing history at the soft
+    /// threshold, and drop the oldest update (by `clock`) past either hard
+    /// cap, raising a `SyncWarning` (`SYNC-276`).
     pub(crate) fn enforce_quarantine_bounds(&mut self, document_id: Id<Document>) {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             return;
@@ -171,7 +176,9 @@ impl SyncState {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             return;
         };
-        if doc_state.quarantine_len() >= QUARANTINE_LIMIT {
+        let mut dropped = false;
+        // One large update may take several old ones out (audit `W206`).
+        while doc_state.quarantine_overflows() {
             // Drop the globally oldest quarantined update (smallest clock).
             let oldest = doc_state
                 .quarantine
@@ -185,21 +192,25 @@ impl SyncState {
                 })
                 .min_by_key(|&(_, _, clock)| clock);
 
-            if let Some((snap, idx, clock)) = oldest {
-                if let Some(updates) = doc_state.quarantine.get_mut(&snap) {
-                    updates.remove(idx);
-                    if updates.is_empty() {
-                        doc_state.quarantine.remove(&snap);
-                    }
+            let Some((snap, idx, clock)) = oldest else {
+                break;
+            };
+            if let Some(updates) = doc_state.quarantine.get_mut(&snap) {
+                updates.remove(idx);
+                if updates.is_empty() {
+                    doc_state.quarantine.remove(&snap);
                 }
-                crate::log::warning!(
-                    "Sync: quarantine overflow on {document_id:?}, dropped oldest update (clock {clock})"
-                );
-                self.send_to_logic(LogicEvent::SyncWarning {
-                    document_id,
-                    code: SyncWarningCode::QuarantineOverflow,
-                });
             }
+            crate::log::warning!(
+                "Sync: quarantine overflow on {document_id:?}, dropped oldest update (clock {clock})"
+            );
+            dropped = true;
+        }
+        if dropped {
+            self.send_to_logic(LogicEvent::SyncWarning {
+                document_id,
+                code: SyncWarningCode::QuarantineOverflow,
+            });
         }
     }
 
@@ -286,16 +297,20 @@ impl SyncState {
                         covered_seq,
                     },
                 )
+                // The digest of the blob this client checks, which its
+                // confirmation names (audit `W101`).
+                .map(|(payload, author)| (payload, author, pipeline::blob_digest(&blob)))
                 .map_err(Some),
             None => Err(None),
         };
         match opened {
-            Ok((payload, author)) => {
+            Ok((payload, author, digest)) => {
                 doc_state.checks.insert(
                     snapshot_id,
                     PendingCheck {
                         author,
                         covered_seq,
+                        blob: digest,
                         payload: None,
                     },
                 );
@@ -398,14 +413,19 @@ impl SyncState {
             }
             SnapshotPurpose::Confirm if passes => {
                 let signing_key = self.signing_key.as_ref()?;
-                let transcript = ambre_protocol::snapshot_confirm::confirm_transcript(
-                    document_id,
-                    snapshot_id,
-                    check.covered_seq,
-                    &check.author,
-                );
-                let signature = ambre_crypto::signature::sign_message(signing_key, &transcript);
-                Some(Vouch::Confirm(signature))
+                // The confirmation names the blob this client checked, so
+                // it holds for no other blob under the same identifier
+                // (audit `W101`).
+                Some(Vouch::Confirm(pipeline::sign_confirmation(
+                    signing_key,
+                    ambre_protocol::snapshot_confirm::Confirmed {
+                        document_id,
+                        snapshot_id,
+                        covered_seq: check.covered_seq,
+                        author: &check.author,
+                        blob: &check.blob,
+                    },
+                )))
             }
             SnapshotPurpose::Confirm if mismatch => {
                 let signing_key = self.signing_key.as_ref()?;
@@ -483,6 +503,7 @@ impl SyncState {
                     PendingCheck {
                         author,
                         covered_seq: held.covered_seq,
+                        blob: pipeline::blob_digest(&held.blob),
                         payload: Some(payload.clone()),
                     },
                 );
@@ -713,6 +734,9 @@ impl SyncState {
             // opens as it is (`AUTHOR-022` reads another user's).
             let own_key = self.author_pub_key();
             let roots = self.roots(document_id, doc_type);
+            // A footing outlives the close of its document, so a reopen in
+            // the same session stands on it (audit `W200`).
+            let held = self.log_footings.get(&log_document).copied();
             crate::spawn(Self::open_from_relay(
                 RelayOpen {
                     api_base,
@@ -727,6 +751,7 @@ impl SyncState {
                     own_key,
                     resume,
                     roots,
+                    held,
                     logic_tx: self.logic_tx.clone(),
                 },
                 tx,
@@ -765,6 +790,7 @@ impl SyncState {
             own_key,
             resume,
             roots,
+            held,
             logic_tx,
         } = open;
         let members_url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
@@ -791,6 +817,7 @@ impl SyncState {
                     my_user_id,
                     &rule,
                     &roots,
+                    held,
                 ) {
                     Ok(o) => {
                         writers = o.writers;
@@ -827,6 +854,18 @@ impl SyncState {
                     return;
                 }
             },
+            // A document an invite link pinned exists on the relay: its
+            // inviter signed a log there. A 404 for it is the relay's word
+            // alone, so the open fails instead of minting a local copy
+            // (audit `W208`).
+            MembersAnswer::Absent if !absent_opens_local(&roots) => {
+                crate::log::warning!("Sync: open of {doc_id:?}: a pinned document reads absent");
+                let _ = tx.send(SyncEvent::OpenDocumentFailed {
+                    document_id: doc_id,
+                    cause: OpenFailure::KeyNotReceived,
+                });
+                return;
+            }
             // Not found: the document is local-only. No members response
             // means no directory: a local-only doc has no peers to resolve
             // presence for anyway, and its creator owns it.
@@ -936,12 +975,8 @@ impl SyncState {
                 .await
             {
                 Ok(Some(meta)) => {
-                    let plan = crate::snapshot_trust::open_start(
-                        doc_id,
-                        &meta,
-                        own_key.as_ref(),
-                        &confirmers,
-                    );
+                    let plan =
+                        crate::snapshot_trust::open_start(&meta, own_key.as_ref(), &confirmers);
                     if let Some(held) = plan.held {
                         let blob = http::download_snapshot(
                             url_scheme,
@@ -957,27 +992,51 @@ impl SyncState {
                             blob,
                         });
                     }
-                    let start_covered = plan.start.map_or(Seq::<Relay>::ZERO, |s| s.covered_seq);
+                    let start_covered = plan
+                        .start
+                        .map_or(Seq::<Relay>::ZERO, |s| s.named.covered_seq);
                     // The local copy already folds in the relay's
                     // snapshot: no download, and the replay starts
                     // after the copy's horizon (`RESID-010`).
                     let resumed = resume.filter(|horizon| light::resumes(*horizon, start_covered));
                     let payload = match (plan.start, resumed) {
-                        (Some(start), None) => http::download_snapshot(
+                        (Some(start), None) => match http::download_snapshot(
                             url_scheme,
                             &api_base,
                             doc_id,
-                            start.snapshot_id,
+                            start.named.snapshot_id,
                             auth,
                         )
                         .await
-                        .map(|blob| StartBlob {
-                            blob,
-                            author: start.author,
-                        }),
+                        {
+                            // The confirmation names the blob downloaded
+                            // (`AUTHOR-031`, audit `W101`).
+                            Some(blob) if start.holds(doc_id, &blob) => Some(StartBlob {
+                                blob,
+                                author: start.named.author,
+                            }),
+                            // A confirmation over another blob trusts
+                            // nothing. The open replays from the first
+                            // delta, and a latest snapshot is checked once
+                            // the replay is done (`AUTHOR-022`).
+                            Some(blob) => {
+                                crate::log::warning!(
+                                    "Sync: open of {doc_id:?}: the confirmation names another blob"
+                                );
+                                if plan.held.is_none() {
+                                    held_snapshot = Some(HeldSnapshot {
+                                        snapshot_id: start.named.snapshot_id,
+                                        covered_seq: start.named.covered_seq,
+                                        blob,
+                                    });
+                                }
+                                None
+                            }
+                            None => None,
+                        },
                         _ => None,
                     };
-                    let snap_id = plan.start.map(|s| s.snapshot_id);
+                    let snap_id = plan.start.map(|s| s.named.snapshot_id);
                     // Only gate on the covered seq if the blob actually
                     // downloaded; otherwise a failed fetch would skip
                     // history that was never applied (data loss).
@@ -1047,6 +1106,10 @@ impl SyncState {
     ///    with Poly1305 tag).
     /// 4. Calls [`ambre_crypto::ecdh::unwrap_document_key`] to perform the
     ///    ECDH shared-secret derivation, KEK derivation, and AEAD decryption.
+    ///
+    /// It runs no check of an open, so no product path calls it: a path that
+    /// unwraps a key calls [`checked_members_key`] (audit `P45`).
+    #[cfg(test)]
     pub(crate) fn unwrap_document_key(
         exchange_key: &x25519_dalek::StaticSecret,
         members: &[http::MemberEntry],
@@ -1091,12 +1154,16 @@ impl SyncState {
     /// `roots` is what this client holds out of band for the open. It holds
     /// the inviter the invite link pinned (`SYNC-205`), the roots of the
     /// session for a Murmure open (`SYNC-235`), and this client's own key
-    /// (`SYNC-210`).
+    /// (`SYNC-210`). `held` is the footing the session holds for that log:
+    /// a reopen walks from it, never from the anchor of the served wrap
+    /// (audit `W200`).
     ///
     /// # Errors
     ///
     /// No wrap opens under `exchange_key`: the key has not reached this
-    /// device (`SYNC-173`).
+    /// device (`SYNC-173`). Or the served log does not extend `held`: the
+    /// relay cut it or rooted another one, which is
+    /// [`OpenFailure::KeyUnsigned`], a fault of the relay.
     pub(crate) fn opened_from_members(
         resp: &http::MembersResponse,
         document_id: Id<Document>,
@@ -1104,10 +1171,13 @@ impl SyncState {
         my_user_id: Option<Id<User>>,
         rule: &membership_log::LogRule,
         roots: &crate::key_vouch::Roots,
+        held: Option<crate::key_vouch::Footing>,
     ) -> Result<OpenedMembers, (OpenFailure, String)> {
         let (doc_key, anchor) = Self::unwrap_anchored(exchange_key, &resp.members)
             .map_err(|error| (OpenFailure::KeyNotReceived, error.to_string()))?;
-        let log = crate::sharing::walk_served_under(document_id, anchor, &resp.log, rule);
+        let (log, _) =
+            crate::sharing::walk_from_footing(held, document_id, anchor, &resp.log, rule)
+                .map_err(|error| (OpenFailure::KeyUnsigned, error.to_string()))?;
         let role =
             crate::sharing::own_role(resp.members.iter().map(|m| (m.user_id, m.role)), my_user_id);
         let signing_keys = crate::sharing::presence_directory_under(
@@ -2007,6 +2077,13 @@ impl SyncState {
         let Ok(doc_key) = doc_state.sealing_key().cloned() else {
             return;
         };
+        // An edit waits while a rotation is owed or a head is under check.
+        // A member who left, or one a hidden revoke removed, holds the
+        // current key. A sample sealed under it would still reach them, so
+        // it is dropped (`SYNC-274`, audit `W205`).
+        if doc_state.rekey.owes() || doc_state.head_watch.holds_edits() {
+            return;
+        }
         // A wrapped counter would read as a replay to every peer, so an
         // exhausted counter drops the ephemeral instead.
         let Some(next) = doc_state.ephemeral_counter.get().checked_add(1) else {
@@ -2038,8 +2115,8 @@ impl SyncState {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Vouch {
     /// The snapshot matches the deltas it covers (`SRV-126`): the signature
-    /// of the confirmation (`AUTHOR-031`).
-    Confirm(FixedBytes<Signature>),
+    /// of the confirmation and the digest of the blob it names (`AUTHOR-031`).
+    Confirm(pipeline::BlobConfirmation),
     /// It contradicts them: the signature of the report (`SRV-133`).
     Report(FixedBytes<Signature>),
 }
@@ -2058,9 +2135,10 @@ pub(crate) async fn send_vouch(
     let url = base.route(format!("/documents/{document_id}/snapshots/{snapshot_id}"));
     let post = http::Method::Post;
     match vouch {
-        Vouch::Confirm(signature) => {
+        Vouch::Confirm(confirmation) => {
             let body = http::ConfirmSnapshotRequest {
-                signature: *signature,
+                signature: confirmation.signature,
+                blob: confirmation.blob,
             };
             let confirmed: http::ConfirmSnapshotResponse =
                 http::post_json_auth_via(transport, &url.join("/confirm"), &body, auth).await?;
@@ -2132,7 +2210,7 @@ pub(crate) async fn upload_snapshot(
     .await?;
     let snapshot_id = created.snapshot_id;
     // The author's own confirmation makes it `self` (`AUTHOR-021`).
-    let confirmation = Vouch::Confirm(draft.confirm(snapshot_id));
+    let confirmation = Vouch::Confirm(draft.confirm(snapshot_id, &blob));
     if let Err(e) = send_vouch(
         transport,
         auth,
@@ -2146,6 +2224,79 @@ pub(crate) async fn upload_snapshot(
         crate::log::warning!("Sync: SendSnapshot self-confirm failed for {document_id:?}: {e}");
     }
     Ok(snapshot_id)
+}
+
+/// What a path that unwraps a key outside an open holds to run the checks of
+/// an open (audit `P45`).
+pub(crate) struct KeyCheck {
+    /// The document whose members answer serves the key.
+    pub document_id: Id<Document>,
+    /// The document whose log and links vouch for the key (`SYNC-229`).
+    pub log_document: Id<Document>,
+    pub exchange_key: StaticSecret,
+    pub my_user_id: Option<Id<User>>,
+    pub rule: membership_log::LogRule,
+    pub roots: crate::key_vouch::Roots,
+    /// The footing the session holds for the log, if any (audit `W200`).
+    pub held: Option<crate::key_vouch::Footing>,
+    pub url_scheme: crate::http::UrlScheme,
+    pub api_base: crate::http::Url<crate::http::RelayHost>,
+    pub auth: http::AuthContext,
+}
+
+/// The key `resp` hands this client, once the checks of an open pass on it.
+/// They read the log, the wrapper, the pin or the roots, the links and the
+/// chain (`SYNC-200` to `SYNC-202`, audit `P45`). A rename of a document not open
+/// seals its name under this key alone.
+///
+/// # Errors
+///
+/// The failure of [`crate::error::SyncError::KeyOutOfReach`] when any check
+/// refuses the key, or a failure to read the key links.
+pub(crate) async fn checked_members_key(
+    check: KeyCheck,
+    resp: &http::MembersResponse,
+) -> Result<DocumentKey, crate::http::Failed> {
+    use crate::http::Reported as _;
+    let refused = |step: &str| crate::error::SyncError::KeyOutOfReach.at(step);
+    let opened = SyncState::opened_from_members(
+        resp,
+        check.log_document,
+        &check.exchange_key,
+        check.my_user_id,
+        &check.rule,
+        &check.roots,
+        check.held,
+    )
+    .map_err(|_| refused("the members answer"))?;
+    let links = http::try_fetch_key_links(
+        check.url_scheme,
+        &check.api_base,
+        check.document_id,
+        check.auth,
+    )
+    .await
+    .map_err(|e| e.at("the key links"))?;
+    let links = crate::chain::signed_by_writers(links, &opened.link_signers);
+    SyncState::named_key_holds(
+        check.log_document,
+        &opened.doc_key,
+        opened.named_key,
+        &links,
+    )
+    .map_err(|_| refused("the named key"))?;
+    opened
+        .vouch
+        .check(check.log_document, &opened.doc_key, &links)
+        .map_err(|_| refused("the checks of an open"))?;
+    Ok(opened.doc_key)
+}
+
+/// Whether a 404 on the members of a document may open it local-only. The
+/// inviter of a document an invite link pinned signed a log on the relay. So
+/// a 404 for that document fails the open (`SYNC-279`, audit `W208`).
+fn absent_opens_local(roots: &crate::key_vouch::Roots) -> bool {
+    roots.pin.is_none()
 }
 
 /// What an open whose log passed adds to the roots of the session: the
@@ -2183,6 +2334,9 @@ struct RelayOpen {
     /// What this client holds out of band to root the log on (`SYNC-205`,
     /// `SYNC-210`, `SYNC-235`).
     roots: crate::key_vouch::Roots,
+    /// Where the session left the log of `log_document`, when it walked it
+    /// before: a reopen walks from there (audit `W200`).
+    held: Option<crate::key_vouch::Footing>,
     /// The Logic thread, which takes the pin the log proved to the local
     /// store (`SYNC-238`).
     logic_tx: LogicSink,
@@ -2409,6 +2563,7 @@ mod tests {
             Some(me),
             &membership_log::LogRule::document(),
             &crate::key_vouch::Roots::default(),
+            None,
         )
         .unwrap();
         assert!(opened.doc_key.id() == doc_key.id());
@@ -2448,6 +2603,7 @@ mod tests {
             Some(me),
             &membership_log::LogRule::document(),
             &crate::key_vouch::Roots::default(),
+            None,
         );
         // The open fails as a key that has not reached this device
         // (`SYNC-173`).
@@ -2561,6 +2717,7 @@ mod tests {
                     pin: Some(alice_pin),
                     ..Default::default()
                 },
+                None,
             )
             .unwrap();
             SyncState::named_key_holds(document_id, &opened.doc_key, opened.named_key, &[])
@@ -2707,6 +2864,7 @@ mod tests {
                     signer: None,
                     ..Default::default()
                 },
+                None,
             )
             .unwrap();
             SyncState::named_key_holds(document_id, &opened.doc_key, opened.named_key, links)
@@ -2830,6 +2988,7 @@ mod tests {
                 Some(bob.id),
                 &membership_log::LogRule::document(),
                 &roots,
+                None,
             )
             .unwrap();
             let links = crate::chain::signed_by_writers(vec![link.clone()], &opened.link_signers);
@@ -3079,6 +3238,7 @@ mod tests {
                     session: Vec::new(),
                     signer: Some(bob.public()),
                 },
+                None,
             )
             .unwrap();
             SyncState::named_key_holds(document_id, &opened.doc_key, opened.named_key, &[])
@@ -3488,6 +3648,33 @@ mod tests {
         ));
     }
 
+    /// `SYNC-279`, audit `W208`: a 404 opens a document local-only only when
+    /// no invite link pinned its inviter.
+    #[test]
+    fn a_pinned_document_never_opens_local_on_a_404() {
+        assert!(absent_opens_local(&crate::key_vouch::Roots::default()));
+        let pinned = crate::key_vouch::Roots {
+            pin: Some(FixedBytes::from_array([3; 32])),
+            ..Default::default()
+        };
+        assert!(!absent_opens_local(&pinned));
+    }
+
+    /// Audit `W207`: a frame that names this client's key moves the clock
+    /// only under a signature that verifies. The relay can forge the rest.
+    #[test]
+    fn an_echo_moves_the_clock_only_under_its_signature() {
+        let (mut state, _rx, doc, key, sk, snap) = setup();
+        state.signing_key = Some(sk.clone());
+        let mut forged = make_update(doc, snap, Seq::<DeltaAuthor>::new(40), b"x", &key, &sk);
+        forged.signature = FixedBytes::from_array([0; 64]);
+        state.receive_update(Seq::<Relay>::new(1), forged);
+        assert_eq!(state.documents[&doc].local_clock.get(), 0, "a forged echo");
+        let echo = make_update(doc, snap, Seq::<DeltaAuthor>::new(7), b"x", &key, &sk);
+        state.receive_update(Seq::<Relay>::new(2), echo);
+        assert_eq!(state.documents[&doc].local_clock.get(), 7, "a signed echo");
+    }
+
     #[test]
     fn update_with_unknown_snapshot_quarantined() {
         let (mut state, rx, doc, key, sk, _snap) = setup();
@@ -3595,6 +3782,33 @@ mod tests {
             state.documents[&doc].quarantine_len().get() as usize,
             QUARANTINE_LIMIT - 1
         );
+    }
+
+    /// `SYNC-276`, audit `W206`: the quarantine is bounded in bytes too.
+    /// Three updates of 12 MiB pass the cap of 32 MiB, far under the count
+    /// cap. The oldest is dropped, and one warning is raised.
+    #[test]
+    fn a_quarantine_past_its_bytes_drops_the_oldest() {
+        let (mut state, rx, doc, key, sk, _snap) = setup();
+        let parent = Id::<Snapshot>::mint();
+        for clock in 1..=3u64 {
+            let mut update =
+                make_update(doc, parent, Seq::<DeltaAuthor>::new(clock), b"x", &key, &sk);
+            update.ciphertext = Payload::new(vec![0; 12 * 1024 * 1024]);
+            state.receive_update(Seq::<Relay>::new(clock), update);
+        }
+        let warnings = drain(&rx)
+            .into_iter()
+            .filter(|e| matches!(e, LogicEvent::SyncWarning { code, .. } if *code == SyncWarningCode::QuarantineOverflow))
+            .count();
+        assert_eq!(warnings, 1);
+        let held: std::collections::BTreeSet<u64> = state.documents[&doc]
+            .quarantine
+            .values()
+            .flatten()
+            .map(|(_, u)| u.public_data.clock.get())
+            .collect();
+        assert_eq!(held, std::collections::BTreeSet::from([2, 3]));
     }
 
     /// `SYNC-007`: the overflow drops the update with the lowest clock, across
@@ -4806,6 +5020,7 @@ mod tests {
             state.signing_key = Some(reporter.clone());
             let pending = Id::<Snapshot>::mint();
             let blob = snapshot_blob(doc, served(pending, 3), b"base", &key, &author);
+            let digest = crate::pipeline::blob_digest(&blob);
             state.adopt_fetched_snapshot(doc, pending, Seq::<Relay>::new(3), Some(blob));
             drain(&rx);
             let expected = match verdict {
@@ -4838,24 +5053,37 @@ mod tests {
             let url = format!("{base}/api/documents/{doc}/snapshots/{pending}/{route}");
             assert_eq!(transport.calls(), [(http::Method::Post, url)]);
             // `AUTHOR-031`: the confirmation signs the document, the
-            // snapshot, its horizon and the key its blob verified under.
-            if let Vouch::Confirm(signature) = vouch {
+            // snapshot, its horizon and the key its blob verified under. It
+            // signs the digest of the blob this client checked too (audit
+            // `W101`).
+            if let Vouch::Confirm(confirmation) = vouch {
+                assert_eq!(confirmation.blob, digest, "the blob this client checked");
                 let transcript = ambre_protocol::snapshot_confirm::confirm_transcript(
-                    doc,
-                    pending,
-                    Seq::<Relay>::new(3),
-                    &FixedBytes::<PublicKey>::from_array(author.verifying_key().to_bytes()),
+                    ambre_protocol::snapshot_confirm::Confirmed {
+                        document_id: doc,
+                        snapshot_id: pending,
+                        covered_seq: Seq::<Relay>::new(3),
+                        author: &FixedBytes::<PublicKey>::from_array(
+                            author.verifying_key().to_bytes(),
+                        ),
+                        blob: &digest,
+                    },
                 );
                 let reporter_key = FixedBytes::from_array(reporter.verifying_key().to_bytes());
                 assert!(
-                    ambre_crypto::signature::verify_message(&reporter_key, &transcript, &signature)
-                        .is_ok()
+                    ambre_crypto::signature::verify_message(
+                        &reporter_key,
+                        &transcript,
+                        &confirmation.signature
+                    )
+                    .is_ok()
                 );
                 let sent = transport.sent.borrow();
                 let body: serde_json::Value =
                     serde_json::from_slice(sent[0].body.as_ref().unwrap().1.as_bytes()).unwrap();
-                let hex = hex::encode(signature.as_array());
-                assert_eq!(body, serde_json::json!({ "signature": hex }));
+                let hex = hex::encode(confirmation.signature.as_array());
+                let blob = hex::encode(digest.as_array());
+                assert_eq!(body, serde_json::json!({ "signature": hex, "blob": blob }));
             }
             if let Vouch::Report(signature) = vouch {
                 let transcript = ambre_protocol::snapshot_report::report_transcript(

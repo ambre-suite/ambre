@@ -69,6 +69,21 @@ pub fn authenticate_account(
     })
 }
 
+/// How long the access token `token` stays valid after `now`: zero once it
+/// expired. A socket the token opened ends there, so a stolen token opens
+/// no socket that outlives it (`SRV-303`).
+pub fn token_left(
+    state: &AppState,
+    token: &Credential<AccessToken>,
+    now: ambre_core::Instant<ambre_core::UnixSec>,
+) -> Result<ambre_core::TimeSpan<ambre_core::Sec>, AppError> {
+    let claims = state
+        .jwt
+        .verify(token)
+        .map_err(|_| AppError::Unauthorized)?;
+    Ok(claims.exp.since(now))
+}
+
 /// Verify an access token and resolve the identity it carries. A session
 /// without a signing key is refused with [`AppError::SetupRequired`].
 pub fn authenticate_token(

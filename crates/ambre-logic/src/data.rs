@@ -1155,11 +1155,20 @@ impl LogicState {
         {
             return;
         }
-        let accepted = authored_by(&delta.payload, delta.peer);
-        self.record_seq(document_id, delta.seq, accepted.then_some(&delta.payload));
-        if !accepted {
+        let own = authored_by(&delta.payload, delta.peer);
+        let unclaimed = own && self.peer_unclaimed(document_id, delta, None);
+        self.record_seq(document_id, delta.seq, unclaimed.then_some(&delta.payload));
+        if !own {
             tracing::warn!(
                 "Logic: refused a delta on doc {document_id}: an operation is not its signer's \
+                 (user {:?})",
+                delta.user
+            );
+            return;
+        }
+        if !unclaimed {
+            tracing::warn!(
+                "Logic: refused a delta on doc {document_id}: another session holds its PeerID \
                  (user {:?})",
                 delta.user
             );
@@ -1171,6 +1180,24 @@ impl LogicState {
             LoroPayloadRef::Delta(&delta.payload),
         );
         self.track_waiting(document_id, &[(delta.seq, &delta.payload)]);
+    }
+
+    /// Whether no other session holds the PeerID of `delta` in the document
+    /// (`AUTHOR-032`). `in_batch` is the nonce an earlier delta of the same
+    /// replay registered under that PeerID, which the document does not hold
+    /// yet. A document this thread does not hold is the Murmure engine's.
+    fn peer_unclaimed(
+        &self,
+        document_id: Id<Document>,
+        delta: &SignedDelta,
+        in_batch: Option<&FixedBytes<SessionNonce>>,
+    ) -> bool {
+        if let Some(nonce) = in_batch {
+            return *nonce == delta.nonce;
+        }
+        self.docs
+            .get(&document_id)
+            .is_none_or(|doc| crate::peer_unclaimed(doc.state.crdt(), delta.peer, &delta.nonce))
     }
 
     /// Note what the deltas just applied wait on, and drop what the document
@@ -1239,17 +1266,26 @@ impl LogicState {
         if !self.docs.contains_key(&document_id) && self.murmure_signed(document_id, &deltas) {
             return;
         }
+        // The nonce of the first session each PeerID of the batch accepted: a
+        // later delta of the batch reads it before the registry holds it.
+        let mut batch_nonces: HashMap<ambre_core::PeerId, FixedBytes<SessionNonce>> =
+            HashMap::new();
         let accepted: Vec<(Seq<Relay>, ambre_core::Payload<ambre_core::DeltaBytes>)> = deltas
             .into_iter()
             .filter_map(|delta| {
-                let accepted = authored_by(&delta.payload, delta.peer);
-                self.record_seq(document_id, delta.seq, accepted.then_some(&delta.payload));
-                if accepted {
+                let own = authored_by(&delta.payload, delta.peer);
+                let unclaimed =
+                    own && self.peer_unclaimed(document_id, &delta, batch_nonces.get(&delta.peer));
+                self.record_seq(document_id, delta.seq, unclaimed.then_some(&delta.payload));
+                if unclaimed {
+                    batch_nonces
+                        .entry(delta.peer)
+                        .or_insert_with(|| delta.nonce);
                     Some((delta.seq, delta.payload))
                 } else {
                     tracing::warn!(
                         "Logic: refused a replayed delta on doc {document_id}: an operation is \
-                         not its signer's (user {:?})",
+                         not its signer's, or another session holds its PeerID (user {:?})",
                         delta.user
                     );
                     None

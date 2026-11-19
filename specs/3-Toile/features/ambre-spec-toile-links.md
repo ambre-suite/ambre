@@ -41,6 +41,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-112` | `PRE` | Following MUST be asked for by a gesture of its own -- a modified click, the link glyph, or a plain click where editing is off -- so a plain click with the select tool selects instead. | this spec section 4 | `ambre_toile::ui::link::tests::a_plain_click_never_follows_while_editing` -- it holds the rule as a function of the two inputs; `ambre_toile::ui::view::view_tests::a_plain_click_selects_a_linked_element_and_a_modified_click_follows` -- the view routes the click by it | none | verified |
 | `TOILE-113` | `POST` | Following a link to a frame MUST fit the camera to that frame's box. | this spec section 3 | `ambre_toile::ui::link::tests::each_target_means_one_navigation` -- it holds that a frame target resolves to a jump and to nothing else; `ambre_toile::ui::view::view_tests::a_jump_fits_the_camera_to_the_frames_box` | none | verified |
 | `TOILE-065` | `POST` | A web address MUST be opened by the shell, in a sandboxed tab. | this spec section 4; `ambre-spec-zero-knowledge.md` | `ambre_toile::ui::link::tests::only_the_outbound_halves_reach_the_shell` -- it holds that the board hands the address out rather than acting on it; `ambre_app::shell::app_root::tests::a_web_address_opens_in_a_fresh_tab_with_no_opener_and_no_referrer` | none | verified |
+| `TOILE-308` | `FAIL` | Given a link register a peer wrote with an address that is not an `https` web address, the element MUST read as unlinked, and the shell MUST NOT open that address. | this spec section 4; `TOILE-267` | `ambre_toile::logic::convergence_tests::a_peers_unsafe_link_address_reads_as_no_link` -- a `javascript:`, `file:`, external-handler, `data:`, `http` and empty address written past the chooser read as no link on the reader, and a safe one reads back; `ambre_app::shell::app_root::tests::an_address_that_is_no_web_address_opens_nothing` -- the shell's guard | none | verified |
 | `TOILE-114` | `POST` | A link to another Ambre document MUST be opened by the shell, never by the board. | this spec section 4 | `ambre_toile::ui::link::tests::only_the_outbound_halves_reach_the_shell` -- a document target leaves the board as a value; `::each_target_means_one_navigation` -- it resolves to that one arm; `ambre_app::shell::app_root::tests::a_document_link_is_opened_by_the_shells_router` | none | verified |
 | `TOILE-063` | `FRAME` | Following a link MUST NOT write to the document. | this spec section 3 | structural -- the types are the proof: following resolves to a `LinkAction`, whose three arms are a camera request, an address and a document reference. The one board command it can produce is `RequestSelectionStats`, which the engine answers without a commit | none | verified |
 | `TOILE-115` | `FRAME` | Following a link MUST NOT enter the undo history: a `Ctrl+Z` after a jump MUST revert the last edit, not the jump. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_jump_is_not_an_undo_item` -- the Logic half; `ambre_toile::ui::view::view_tests::an_undo_after_a_jump_reverts_the_edit_and_not_the_jump` -- the view half | none | verified |
@@ -54,7 +55,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** the one board feature that names an outbound path: the view hands a web address to
   the shell, which opens it in a sandboxed tab. The board never fetches it, and the address is
   document data, sealed like the rest (`TOILE-065`).
-* **Verification.** 16 `verified`, 2 `unimplemented`. Host tests read the register off the painted
+* **Verification.** 17 `verified`, 2 `unimplemented`. Host tests read the register off the painted
   element and drive the view through each follow. Browser tests hold the shell's two outbound opens.
   The fetch ban is an audit, because the view hands a value out rather than acting on it
   (`TOILE-110`).
@@ -148,6 +149,12 @@ refusal, and it knows the documents this user may open. The frame list is the de
 holds every frame on the board -- including the off-screen ones a link exists to reach. The shell
 hands the board a target that is already well formed, and the embed entries take the same inversion
 (`features/ambre-spec-toile-embeds.md`).
+
+**What a peer writes is checked where it is read.** The chooser checks what this user types, and a
+peer writes the register past it. So the one decode of the register puts a web address through the
+same rule. An address that fails it reads as no link: no badge, and nothing to follow. The shell
+opens a web address alone, whatever reaches it, so a scheme that runs a script or starts another
+program never opens (`TOILE-308`).
 
 **What a linked element looks like.** A small badge outside its top-right corner, painted in screen
 space so it keeps its size through the zoom. Always painted, not shown on hover: nobody follows a

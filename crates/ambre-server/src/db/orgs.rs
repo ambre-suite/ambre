@@ -487,17 +487,25 @@ pub async fn log_org_recovery(
     Ok(())
 }
 
-/// Fetches the organization master key for a specific user (encrypted with org pubkey).
-pub async fn get_user_org_master_key_enc(
+/// Fetches the master key `user_id` escrowed for the organization `org_id`
+/// (encrypted with the organization's public key).
+///
+/// The copy sits on the membership it was made for. An owner of another
+/// organization who adds the user reads nothing of it (`SRV-305`).
+pub async fn get_member_escrowed_key(
     pool: &PgPool,
+    org_id: &Id<Org>,
     user_id: &Id<User>,
 ) -> Result<Option<ambre_core::Encoded<ambre_core::EscrowedKey>>, AppError> {
-    let row = sqlx::query("SELECT org_master_key_enc FROM users WHERE id = $1")
-        .bind(id_to_uuid(*user_id))
-        .fetch_optional(pool)
-        .await?;
+    let row = sqlx::query(
+        "SELECT master_key_enc FROM organization_members WHERE org_id = $1 AND user_id = $2",
+    )
+    .bind(id_to_uuid(*org_id))
+    .bind(id_to_uuid(*user_id))
+    .fetch_optional(pool)
+    .await?;
     Ok(row.and_then(|r| {
-        r.try_get::<Option<Vec<u8>>, _>("org_master_key_enc")
+        r.try_get::<Option<Vec<u8>>, _>("master_key_enc")
             .ok()
             .flatten()
             .map(ambre_core::Encoded::new)

@@ -36,8 +36,8 @@ use ambre_core::{PrintLength, Pt, Radians, Rgba, Slant, Strikethrough, Underline
 use super::style::RunStyle;
 use super::xml::{Element, Ns};
 use super::{
-    DEFAULT_INSET, DEFAULT_TEXT_SIZE, DeckItems, EMU_PER_PT, Flip, Frame, MAX_ITEMS,
-    MAX_PICTURE_BYTES, Mirror, SlideOut, picture_format, same_look,
+    DEFAULT_INSET, DEFAULT_TEXT_SIZE, DeckItems, EMU_PER_PT, Flip, Frame, MAX_PICTURE_BYTES,
+    Mirror, SlideOut, charge, picture_format, same_look, unreadable,
 };
 use crate::PptxError;
 use crate::model::{
@@ -85,6 +85,7 @@ pub fn read_odp(bytes: &[u8]) -> Result<ImportedDeck, PptxError> {
         report: DeckReport::default(),
         items: Count::ZERO,
         picture_bytes: Count::ZERO,
+        text_bytes: Count::ZERO,
     };
     let mut slides = Vec::with_capacity(pages.len());
     for page in pages {
@@ -101,9 +102,7 @@ fn tree(package: &mut OdfPackage<'_>, name: &PartName) -> Result<Option<Element>
     let Some(bytes) = package.part(name)? else {
         return Ok(None);
     };
-    super::xml::parse(&bytes)
-        .map(Some)
-        .map_err(|_| PptxError::Unreadable)
+    super::xml::parse(&bytes).map(Some).map_err(unreadable)
 }
 
 /// The document a style name is looked up in: an automatic style of the
@@ -360,10 +359,13 @@ struct OdpReader<'p, 'a> {
     package: OdfPackage<'p>,
     index: StyleIndex<'a>,
     report: DeckReport,
-    /// The items the deck holds so far, against [`MAX_ITEMS`].
+    /// The items the deck holds so far, against [`super::MAX_ITEMS`].
     items: Count<DeckItems>,
     /// The picture bytes the deck holds so far, against [`MAX_PICTURE_BYTES`].
     picture_bytes: Count<Octets>,
+    /// The text bytes the deck holds so far, against the text bound of a
+    /// flattened deck (`W303`).
+    text_bytes: Count<Octets>,
 }
 
 /// Whether a frame landed a picture.
@@ -608,7 +610,7 @@ impl OdpReader<'_, '_> {
             line,
             text,
         }));
-        self.count()?;
+        self.count(out)?;
         if context.owner == Owner::Own
             && let Some(id) = item_id(shape)
         {
@@ -1056,7 +1058,7 @@ impl OdpReader<'_, '_> {
                 format,
                 bytes: bytes.into_role(),
             }));
-            self.count()?;
+            self.count(out)?;
             return Ok(Landed::Picture);
         }
         Ok(Landed::Nothing)
@@ -1132,17 +1134,13 @@ impl OdpReader<'_, '_> {
             end_cap: cap("marker-end"),
         };
         let _ = out.push(Item::Connector(connector));
-        self.count()
+        self.count(out)
     }
 
-    /// Count one more item in the deck, against [`MAX_ITEMS`].
-    fn count(&mut self) -> Result<(), PptxError> {
-        self.items = self.items.incremented();
-        if self.items > MAX_ITEMS {
-            Err(PptxError::TooLarge)
-        } else {
-            Ok(())
-        }
+    /// Count the last item of `out` in the deck, against the item and the
+    /// text bounds of a flattened deck.
+    fn count(&mut self, out: &SlideOut) -> Result<(), PptxError> {
+        charge(&mut self.items, &mut self.text_bytes, out)
     }
 }
 

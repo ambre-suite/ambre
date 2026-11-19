@@ -780,6 +780,38 @@ fn a_hostile_nesting_fails_typed() {
     );
 }
 
+/// `W72`: a body of empty elements past the node bound of a tree fails
+/// typed, though it reads under the bound of a part.
+#[test]
+fn a_body_past_the_node_bound_fails_typed() {
+    let past = usize::try_from(ambre_docx::opc::MAX_TREE_NODES.get()).expect("fits");
+    let body = "<w:p/>".repeat(past);
+    assert_eq!(
+        read(&package_with(&body, |_| {})).err(),
+        Some(DocxError::Xml(XmlError::TooLarge))
+    );
+}
+
+/// `W305`: fields opened and separated, never ended, leave each run of
+/// their result to read in time: a run asks a count, not the stack.
+#[test]
+fn fields_left_open_cost_no_scan_per_run() {
+    let fields = 100_000;
+    let body = format!(
+        "<w:p>{}{}</w:p>",
+        "<w:r><w:fldChar w:fldCharType=\"begin\"/><w:fldChar w:fldCharType=\"separate\"/></w:r>"
+            .repeat(fields),
+        "<w:r><w:t>a</w:t></w:r>".repeat(fields)
+    );
+    let document = read(&package_with(&body, |_| {})).expect("reads").document;
+    let paragraph = paragraphs(&document.body);
+    assert_eq!(
+        paragraph.first().map(|p| text(p).len()),
+        Some(fields),
+        "the result of each field is kept"
+    );
+}
+
 /// `PROSE-IO-072`: every prefix of a real file fails typed or reads.
 #[test]
 fn a_truncated_file_fails_typed() {
