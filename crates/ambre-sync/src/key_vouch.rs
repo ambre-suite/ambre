@@ -587,6 +587,11 @@ impl AnchoredLog {
         &self.log
     }
 
+    /// The walked log, which outlives its footing.
+    pub(crate) fn into_log(self) -> Log {
+        self.log
+    }
+
     /// The anchor a copy of a key seals beside it (`SYNC-104`).
     pub(crate) fn anchor(&self) -> FixedBytes<EntryDigest> {
         self.footing.anchor

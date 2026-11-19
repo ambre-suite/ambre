@@ -372,7 +372,7 @@ impl SyncState {
     /// Ends the call for this session: both sockets close, and the relay reads the close as
     /// the leave. The sockets close here, and no destructor runs on the way out
     /// (`ARCH-015`).
-    fn end_call(&mut self) {
+    pub(crate) fn end_call(&mut self) {
         if let Some(joining) = self.call_joining.take() {
             (joining.port.0)(KeyHandoff::End);
         }

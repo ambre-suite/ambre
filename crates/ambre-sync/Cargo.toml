@@ -58,6 +58,8 @@ web-sys      = { workspace = true, features = [
     "DedicatedWorkerGlobalScope", "MessageEvent", "WorkerLocation",
     # The port of the call worker, which a join of a call brings (`call_link.rs`).
     "MessagePort",
+    # The body of an answer, read chunk by chunk under its ceiling (`SYNC-277`).
+    "ReadableStream", "ReadableStreamDefaultReader",
 ] }
 futures-util = { workspace = true }
 

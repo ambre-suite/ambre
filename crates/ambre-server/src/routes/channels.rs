@@ -4481,11 +4481,15 @@ mod tests {
             .await
             .expect("read")
             .expect("the snapshot");
+        let blob = ambre_core::FixedBytes::from_array([6; 32]);
         let transcript = ambre_protocol::snapshot_confirm::confirm_transcript(
-            document,
-            snapshot_id,
-            snapshot.covered_seq,
-            &snapshot.author_pubkey,
+            ambre_protocol::snapshot_confirm::Confirmed {
+                document_id: document,
+                snapshot_id,
+                covered_seq: snapshot.covered_seq,
+                author: &snapshot.author_pubkey,
+                blob: &blob,
+            },
         );
         let signature = ed25519_dalek::Signer::sign(&signing_key(), transcript.as_bytes());
         let axum::Json(answer) = crate::routes::confirm_snapshot(
@@ -4494,6 +4498,7 @@ mod tests {
             PathId::new((document, snapshot_id)),
             Json::new(crate::routes::ConfirmSnapshotRequest {
                 signature: ambre_core::FixedBytes::from_array(signature.to_bytes()),
+                blob,
             }),
         )
         .await

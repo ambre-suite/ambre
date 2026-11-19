@@ -322,9 +322,12 @@ confirm its own snapshot. The relay then keeps the reference snapshot (`SRV-131`
 another user signed past it (`SRV-130`), and drops the author's own. So the deltas kept stop
 growing while one author writes alone (`SRV-132`).
 
-A confirmation carries the confirmer's signature over the document, the snapshot, its horizon and
-its author. The relay refuses one that does not verify (`SRV-284`). It keeps another member's
-signature and serves it with the snapshot, since a cold open trusts nothing else (`AUTHOR-030`).
+A confirmation carries the confirmer's signature and the digest of the blob checked. The
+signature covers the document, the snapshot, its horizon, its author and that digest. The relay refuses one that
+does not verify (`SRV-284`). It keeps another member's signature and serves it with the snapshot,
+since a cold open trusts nothing else (`AUTHOR-030`). The relay keeps no digest. A cold open
+computes it again from the blob it downloads, so a digest of another blob fails there (audit
+`W101`).
 
 Only a confirmed snapshot is retained, and moves the trim (`SRV-127`). A mismatch report drops
 the pending snapshot and keeps every delta (`SRV-133`, `SRV-135`). The next snapshot comes from

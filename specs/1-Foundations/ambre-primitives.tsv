@@ -1157,6 +1157,7 @@ ambre-crypto | src/hash.rs | crate::hash | ENTRY_DIGEST_DOMAIN | const | &[u8]	g
 ambre-crypto | src/hash.rs | crate::hash | FINGERPRINT_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/hash.rs | crate::hash | FINGERPRINT_LEN | const | usize	generic	generic byte/text API or codec
 ambre-crypto | src/hash.rs | crate::hash | HASH_LEN | const | usize	generic	generic byte/text API or codec
+ambre-crypto | src/hash.rs | crate::hash | SNAPSHOT_DIGEST_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/hash.rs | crate::hash | prefix() | ret | [u8;N]	generic	generic byte/text API or codec
 ambre-crypto | src/hash.rs | crate::hash | prefix(digest) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/keys.rs | crate::keys | DocumentKey::as_bytes() | ret | &[u8;32]	newtype-inner	newtype field, constructor or accessor
@@ -4629,6 +4630,7 @@ ambre-prose | src/logic/fuzz.rs | crate::logic::fuzz | Seen.text | field | Strin
 ambre-core | src/static_key.rs | crate::static_key | <LabelValues as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
 ambre-core | src/static_key.rs | crate::static_key | <MetricNames as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
 ambre-crypto | src/hash.rs | crate::hash | INVITER_PIN_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
+ambre-crypto | src/hash.rs | crate::hash | snapshot_digest(object) | param | &[u8]	generic	the opaque bytes of a sealed snapshot blob, read in two roles: SealedBlob and Payload<FetchedBlob>; ambre-sync types the call through its StoredObject trait
 ambre-metrics | src/lib.rs | crate | <Events as CountKind>::Repr | assoc | u64	newtype-inner	the number a count of this kind holds, the inside of Count
 ambre-metrics | src/lib.rs | crate | Counter.cells | field | Vec<AtomicU64>	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock, one per series
 ambre-metrics | src/lib.rs | crate | Gauge.cells | field | Vec<AtomicU64>	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock, one per series

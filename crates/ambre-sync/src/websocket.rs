@@ -73,6 +73,20 @@ pub(crate) struct ReplayStops {
     ticket: ambre_core::Seq<crate::generation::ReplayTicket>,
 }
 
+/// Whether a socket frame of `len` bytes is read at all, checked before the
+/// frame is copied into the worker's memory (`SYNC-277`, audit `W206`). The
+/// ceiling is a row of `ambre-spec-budgets.md` section 1. A replay page of
+/// the relay is one frame, so the ceiling sits far above one delta.
+#[cfg_attr(
+    not(any(test, target_arch = "wasm32")),
+    expect(dead_code, reason = "only the wasm socket callback reads a frame")
+)]
+pub(crate) fn frame_fits(len: ambre_core::Count<ambre_core::Octets>) -> bool {
+    const FRAME_CEILING: ambre_core::Count<ambre_core::Octets> =
+        ambre_core::Count::new(128 * 1024 * 1024);
+    len <= FRAME_CEILING
+}
+
 impl SyncState {
     /// Sends the access token as the socket's first frame. The relay reads
     /// nothing else until this frame opens the session (`SRV-031`).
@@ -194,6 +208,18 @@ impl SyncState {
                     Ok(a) => a,
                     Err(_) => return,
                 };
+                // The copy into the worker's memory comes after the check:
+                // that memory never shrinks (`SYNC-277`, audit `W206`).
+                let len = ambre_core::Count::<ambre_core::Octets>::new(u64::from(
+                    array_buf.byte_length(),
+                ));
+                if !frame_fits(len) {
+                    crate::log::error!(
+                        "Sync: a socket frame of {} bytes passes its ceiling",
+                        len.get()
+                    );
+                    return;
+                }
                 let frame = ambre_core::Payload::<WireFrame>::new(
                     js_sys::Uint8Array::new(&array_buf).to_vec(),
                 );
@@ -1926,6 +1952,9 @@ impl SyncState {
             .get(&document_id)
             .and_then(|doc| doc.departed);
         let roots = doc_type.map(|doc_type| self.roots(document_id, doc_type));
+        // The footing the session holds for the log. The served log walks
+        // from it, never from the anchor of the served wrap (audit `W200`).
+        let held = self.footing(document_id);
         crate::spawn(async move {
             let members_url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route(format!("/documents/{document_id}/members"));
@@ -1967,7 +1996,25 @@ impl SyncState {
                         return;
                     }
                 };
-            let log = crate::sharing::walk_served_under(log_document, anchor, &resp.log, &rule);
+            // A log cut before a revoke this client walked, or rooted
+            // elsewhere, installs no key (audit `W200`).
+            let (log, footing) = match crate::sharing::walk_from_footing(
+                held,
+                log_document,
+                anchor,
+                &resp.log,
+                &rule,
+            ) {
+                Ok(walked) => walked,
+                Err(e) => {
+                    crate::log::error!("Sync: KeyRotationRequired log refused: {e}");
+                    let _ = tx.send(SyncEvent::DebtUnsettled {
+                        document_id,
+                        message: format!("the served log was refused: {e}"),
+                    });
+                    return;
+                }
+            };
             let links = crate::chain::signed_by_writers(links, &log.link_signers());
             // The new key passes the checks of an open before it becomes
             // current (`SYNC-200`, `SYNC-201`, `SYNC-202`).
@@ -1999,6 +2046,12 @@ impl SyncState {
                 links,
                 departed: vouch.departed(),
             });
+            if let Some(footing) = footing {
+                let _ = tx.send(SyncEvent::FootingAdvanced {
+                    document_id,
+                    footing,
+                });
+            }
         });
     }
 
@@ -2029,7 +2082,7 @@ impl SyncState {
 
 #[cfg(test)]
 mod tests {
-    use super::{REPLAY_RETRY_LIMIT, replay_retry_delay};
+    use super::{REPLAY_RETRY_LIMIT, frame_fits, replay_retry_delay};
     use crate::http::{AccessToken, Credential, TokenPair};
     use crate::{LogicEvent, LogicSink, SyncDocumentState, SyncEvent, SyncState};
     use ambre_bus::DocType;
@@ -2039,6 +2092,16 @@ mod tests {
     use ambre_crypto::{DocumentKey, MasterSeed};
     use ambre_protocol::ws::{CloseCode, RelayClose};
     use ambre_protocol::ws::{WsClientMsg, WsServerMsg, decode_client_msg};
+
+    /// `SYNC-277`, audit `W206`: a frame up to its ceiling is read, and one
+    /// past it is not copied at all.
+    #[test]
+    fn a_socket_frame_past_its_ceiling_is_not_read() {
+        let mib = |n: u64| ambre_core::Count::<ambre_core::Octets>::new(n * 1024 * 1024);
+        assert!(frame_fits(mib(4)));
+        assert!(frame_fits(mib(128)));
+        assert!(!frame_fits(mib(128).plus(ambre_core::Count::new(1))));
+    }
 
     /// A worker holding one open document, and the queue of what it tells Logic.
     fn with_open_document() -> (SyncState, ambre_bus::conduit::Receiver<LogicEvent>) {

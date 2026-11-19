@@ -236,6 +236,12 @@ const QUARANTINE_ALERT: Count<Quarantined> = Count::new(900);
 /// shared heap, and a `SyncWarning` is raised.
 const QUARANTINE_LIMIT: Count<Quarantined> = Count::new(1000);
 
+/// Hard cap in bytes: past this many ciphertext bytes quarantined for one
+/// document, the oldest update is dropped as past [`QUARANTINE_LIMIT`]. A
+/// thousand slots of the relay's largest delta would otherwise hold
+/// gigabytes (`SYNC-276`, audit `W206`, `ambre-spec-budgets.md` section 1).
+const QUARANTINE_BYTES: Count<ambre_core::Octets> = Count::new(32 * 1024 * 1024);
+
 /// The updates a document holds in quarantine, waiting for their parent.
 pub(crate) enum Quarantined {}
 
@@ -1011,6 +1017,9 @@ struct PendingCheck {
     /// The signing key its sealed blob verified under: who built it.
     author: FixedBytes<PublicKey>,
     covered_seq: Seq<Relay>,
+    /// The digest of the sealed blob under check, which a confirmation
+    /// names (`AUTHOR-031`, audit `W101`).
+    blob: FixedBytes<ambre_core::SnapshotDigest>,
     /// The opened snapshot, kept on open only: a match adopts it.
     payload: Option<ambre_core::Payload<ambre_core::SnapshotBytes>>,
 }
@@ -1105,6 +1114,23 @@ impl SyncDocumentState {
             self.ingested.pop_first();
         }
         true
+    }
+
+    /// The ciphertext bytes quarantined across all parent snapshots.
+    fn quarantine_bytes(&self) -> Count<ambre_core::Octets> {
+        Count::of(
+            self.quarantine
+                .values()
+                .flatten()
+                .map(|(_, update)| update.ciphertext.as_bytes().len())
+                .sum(),
+        )
+    }
+
+    /// Whether the quarantine passes one of its two caps: the count or the
+    /// bytes.
+    fn quarantine_overflows(&self) -> bool {
+        self.quarantine_len() >= QUARANTINE_LIMIT || self.quarantine_bytes() > QUARANTINE_BYTES
     }
 
     /// Total number of quarantined updates across all parent snapshots.
@@ -1484,6 +1510,10 @@ pub struct SyncState {
     // -- Internal event queue (carries WS frames + HTTP results into the     --
     // -- non-blocking select loop; producer and consumer are the same worker)  --
     event_tx: Option<ambre_bus::conduit::UnboundedSender<SyncEvent>>,
+    /// The event queue of the next session, once a sign-out ended this one.
+    /// The loop reads it from then on and drops the queue that ended, so a
+    /// task of the ended session answers into nothing (audit `W204`).
+    next_events: Option<ambre_bus::conduit::Receiver<SyncEvent>>,
 
     // -- Per-document sync sessions --------------------------------------------
     documents: HashMap<Id<Document>, SyncDocumentState>,
@@ -1598,6 +1628,7 @@ impl SyncState {
             roster_asks: Vec::new(),
             mock_ws_tx: None,
             event_tx: None,
+            next_events: None,
             documents: HashMap::new(),
             doc_metadata: HashMap::new(),
             pending_opens: Vec::new(),
@@ -2237,10 +2268,15 @@ pub(crate) async fn run_wasm(
 async fn run(cmd_rx: ambre_bus::conduit::Receiver<SyncCommand>, mut state: SyncState) {
     use futures_util::future::FutureExt;
 
-    let (event_tx, event_rx) = ambre_bus::conduit::unbounded::<SyncEvent>();
+    let (event_tx, mut event_rx) = ambre_bus::conduit::unbounded::<SyncEvent>();
     state.set_event_tx(event_tx);
 
     loop {
+        // A sign-out started the queue of the next session: the queue of
+        // the session that ended is dropped unread (audit `W204`).
+        if let Some(next) = state.next_events.take() {
+            event_rx = next;
+        }
         futures_util::select! {
             cmd = cmd_rx.recv().fuse() => match cmd {
                 Ok(cmd) => state.handle_command(cmd),
@@ -2282,6 +2318,60 @@ mod run_tests {
         let held = state.event_tx.clone().expect("the sender is kept");
         assert!(held.send(SyncEvent::CallTick).is_ok());
         assert!(matches!(event_rx.try_recv(), Ok(SyncEvent::CallTick)));
+    }
+
+    /// `SYNC-275`, audit `W204`: a sign-out drops the roots, the pins, the
+    /// listed channel keys and the plaintext deltas buffered before an
+    /// open. A task the ended session spawned answers into the queue of
+    /// that session, which the next one does not read.
+    #[test]
+    fn a_sign_out_leaves_nothing_of_the_session_in_the_worker() {
+        let (sink, _logic_rx) = LogicSink::channel();
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
+        let (event_tx, _ended) = ambre_bus::conduit::unbounded::<SyncEvent>();
+        state.set_event_tx(event_tx);
+        let in_flight = state.event_tx.clone().expect("the sender a task holds");
+        let doc = Id::<Document>::mint();
+        state.user_id = Some(Id::<User>::mint());
+        state.murmure_roots.insert(FixedBytes::from_array([1; 32]));
+        state
+            .pinned_inviters
+            .insert(doc, FixedBytes::from_array([2; 32]));
+        state.listed_keys.insert(
+            Id::<Channel>::mint(),
+            (Id::<Meta>::mint(), DocumentKey::generate()),
+        );
+        state.typed_opens.insert(doc);
+        state
+            .pending_pre_session_updates
+            .push((doc, Payload::new(b"plaintext".to_vec()), None));
+
+        state.handle_logout();
+
+        assert!(state.user_id.is_none());
+        assert!(state.murmure_roots.is_empty());
+        assert!(state.pinned_inviters.is_empty());
+        assert!(state.listed_keys.is_empty());
+        assert!(state.typed_opens.is_empty());
+        assert!(state.pending_pre_session_updates.is_empty());
+        let next = state
+            .next_events
+            .take()
+            .expect("the queue of the next session");
+        let _ = in_flight.send(SyncEvent::CallTick);
+        assert!(
+            next.try_recv().is_err(),
+            "a task of the ended session reaches nothing"
+        );
+        let current = state
+            .event_tx
+            .clone()
+            .expect("the sender of the next session");
+        assert!(current.send(SyncEvent::CallTick).is_ok());
+        assert!(matches!(next.try_recv(), Ok(SyncEvent::CallTick)));
     }
 
     /// `SYNC-058`: the loop waits without holding the thread. A task beside

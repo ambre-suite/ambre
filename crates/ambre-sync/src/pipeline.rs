@@ -925,17 +925,25 @@ impl SnapshotDraft {
         self.public_data.covered_seq
     }
 
-    /// The author's confirmation of the seal under `snapshot_id`: the
-    /// signature over the document, that identifier, the horizon and the
-    /// author's key (`AUTHOR-031`).
-    pub fn confirm(&self, snapshot_id: Id<ambre_core::id::Snapshot>) -> FixedBytes<Signature> {
-        let transcript = ambre_protocol::snapshot_confirm::confirm_transcript(
-            self.public_data.document_id,
-            snapshot_id,
-            self.public_data.covered_seq,
-            &self.public_data.pub_key,
-        );
-        ambre_crypto::signature::sign_message(&self.signing_key, &transcript)
+    /// The author's confirmation of `sealed`, the seal under `snapshot_id`.
+    /// It signs the document, that identifier, the horizon, the author's key
+    /// and the digest of the sealed blob (`AUTHOR-031`).
+    pub fn confirm(
+        &self,
+        snapshot_id: Id<ambre_core::id::Snapshot>,
+        sealed: &SealedBlob,
+    ) -> BlobConfirmation {
+        let blob = blob_digest(sealed);
+        sign_confirmation(
+            &self.signing_key,
+            ambre_protocol::snapshot_confirm::Confirmed {
+                document_id: self.public_data.document_id,
+                snapshot_id,
+                covered_seq: self.public_data.covered_seq,
+                author: &self.public_data.pub_key,
+                blob: &blob,
+            },
+        )
     }
 
     /// Seals the snapshot under `snapshot_id`, the identifier the relay
@@ -953,6 +961,36 @@ impl SnapshotDraft {
             ..self.public_data.clone()
         };
         snapshot_blob(&self.payload, public_data, &self.doc_key, &self.signing_key)
+    }
+}
+
+/// The digest of a sealed snapshot blob, header to last byte, which a
+/// confirmation signs (`AUTHOR-031`, audit `W101`). A blob sealed here and the
+/// same bytes downloaded give the same digest.
+pub fn blob_digest(blob: &impl StoredObject) -> FixedBytes<ambre_core::SnapshotDigest> {
+    ambre_crypto::hash::snapshot_digest(blob.object())
+}
+
+/// One confirmation of one sealed blob: the signature over the transcript,
+/// and the digest of the blob the transcript names (`AUTHOR-031`). The relay
+/// takes both, and keeps the signature alone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BlobConfirmation {
+    /// The signature over the confirmation transcript.
+    pub signature: FixedBytes<Signature>,
+    /// The digest of the blob the confirmer checked.
+    pub blob: FixedBytes<ambre_core::SnapshotDigest>,
+}
+
+/// Signs the confirmation of `confirmed` under `signing_key`.
+pub fn sign_confirmation(
+    signing_key: &SigningKey,
+    confirmed: ambre_protocol::snapshot_confirm::Confirmed<'_>,
+) -> BlobConfirmation {
+    let transcript = ambre_protocol::snapshot_confirm::confirm_transcript(confirmed);
+    BlobConfirmation {
+        signature: ambre_crypto::signature::sign_message(signing_key, &transcript),
+        blob: *confirmed.blob,
     }
 }
 

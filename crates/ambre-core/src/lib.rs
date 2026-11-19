@@ -148,7 +148,8 @@ pub use encoded::{
     MasterKeySalt, SealedName, SealedShare, WrappedDocKey, WrappedMasterKey,
 };
 pub use envelope::{
-    Aad, ChainHash, Ciphertext, CommitmentTag, EntryDigest, Nonce, Signature, Transcript,
+    Aad, ChainHash, Ciphertext, CommitmentTag, EntryDigest, Nonce, Signature, SnapshotDigest,
+    Transcript,
 };
 pub use error::{DocTypeError, Error, UuidError, VersionError};
 pub use fingerprint::{InviterPin, KeyFingerprints};

@@ -155,6 +155,41 @@ pub(crate) fn walk_served_under(
     Log::walk_under(document_id, anchor, &entries, rule)
 }
 
+/// Walks the log a members answer serves before a key from that answer may
+/// become current: a fetched rotation and an open (audit `W200`).
+///
+/// A log the session holds `held` for walks from that footing, through its
+/// head, and the served wrap must seal the same anchor. Any other log walks
+/// from `anchor`, the anchor the served wrap seals, as a first open does.
+/// Returns the walked log, and the footing at its head when one was held.
+///
+/// # Errors
+///
+/// [`SyncError::LogDiverged`] in three cases. `held` is a footing of another
+/// log. The valid walk does not pass through its head. The served wrap seals
+/// another anchor. The relay rooted another log, or cut this one before an
+/// entry this client walked, such as a revoke.
+pub(crate) fn walk_from_footing(
+    held: Option<Footing>,
+    log_document: Id<Document>,
+    anchor: Option<FixedBytes<EntryDigest>>,
+    texts: &[ambre_core::Encoded<ambre_core::EncodedLogEntry>],
+    rule: &LogRule,
+) -> Result<(Log, Option<Footing>), SyncError> {
+    let Some(held) = held else {
+        return Ok((walk_served_under(log_document, anchor, texts, rule), None));
+    };
+    if held.document() != log_document {
+        return Err(SyncError::LogDiverged);
+    }
+    let walked = held.walk(texts, rule)?;
+    if anchor != Some(walked.anchor()) {
+        return Err(SyncError::LogDiverged);
+    }
+    let footing = walked.footing();
+    Ok((walked.into_log(), Some(footing)))
+}
+
 /// The entry `draft` makes after `log`, signed by `author`, in request form.
 /// `None` for a document whose log is empty: it predates the log, and no
 /// entry of it could link to a first one. The log stands on the footing of
@@ -1676,6 +1711,9 @@ pub(crate) struct ListMembersParams {
 
 /// Member-list orchestration: GET the members, map them, emit
 /// `SyncEvent::DocumentMembersReady`; on failure emit `SyncEvent::HttpError`.
+/// A log that does not extend the footing the session holds is a failure
+/// too: it emits `SyncEvent::DocumentMembersFailed` and changes nothing
+/// (audit `W201`).
 pub(crate) async fn list_members_task<H: ShareHttp>(
     http: &H,
     p: ListMembersParams,
@@ -1689,8 +1727,38 @@ pub(crate) async fn list_members_task<H: ShareHttp>(
             // (`ambre-spec-membership.md`). Membership just changed often enough to ask
             // for the list. This is where a new member becomes resolvable and a revoked
             // one stops resolving, with no extra round-trip.
-            // Each row carries what the log says of it (`SYNC-108`).
-            let (log, _) = served_log_under(p.log_document, &p.exchange_key, &resp, &p.rule);
+            // Each row carries what the log says of it (`SYNC-108`). A
+            // document the session holds a footing for walks from it, never
+            // from the anchor this answer serves. A log the relay rooted or
+            // cut changes nothing: directory, writers, word, heads, departure
+            // and revoke stay as they are (audit `W201`).
+            let walked = match p.footing {
+                Some(footing) => match footing.walk(&resp.log, &p.rule) {
+                    Ok(walked) => Some(walked),
+                    Err(e) => {
+                        crate::log::warning!(
+                            "[Sync] doc={}: a member listing walked a log that does not extend the one this session holds",
+                            p.document_id
+                        );
+                        if let Some(id) = p.id {
+                            let _ = event_tx.send(SyncEvent::http_error(id, e));
+                        }
+                        // A head under check hears of it, as of a failed read
+                        // (`SYNC-220`): its edits keep waiting.
+                        let _ = event_tx.send(SyncEvent::DocumentMembersFailed {
+                            document_id: p.document_id,
+                            asked: p.asked,
+                        });
+                        return;
+                    }
+                },
+                None => None,
+            };
+            let footing = walked.as_ref().map(AnchoredLog::footing);
+            let log = match walked {
+                Some(walked) => walked.into_log(),
+                None => served_log_under(p.log_document, &p.exchange_key, &resp, &p.rule).0,
+            };
             let signing_keys = presence_directory_under(
                 &log,
                 resp.members
@@ -1704,10 +1772,6 @@ pub(crate) async fn list_members_task<H: ShareHttp>(
             let revoked = log.revoked_at();
             let root = p.rule.root_of(&log);
             let rotation_owed = resp.rotation_owed;
-            let footing = p
-                .footing
-                .and_then(|footing| footing.walk(&resp.log, &p.rule).ok())
-                .map(|walked| walked.footing());
             let members = map_members(resp.members, &log);
             let _ = event_tx.send(SyncEvent::DocumentMembersReady {
                 id: p.id,
@@ -5422,5 +5486,124 @@ mod tests {
         other.invite(&Peer::new(66), &me, Role::Editor);
         held.advance(other.footing());
         assert_eq!(held, late, "a log on another anchor moves nothing");
+    }
+
+    // -- Every read of the members walks from the footing (audits `W200`, `W201`).
+
+    /// Alice owns a document, Bob and Eve edit it, and Alice revokes Eve.
+    /// Returns the log, the log cut before the revoke, and Bob's footing,
+    /// which stands past the revoke.
+    fn revoked_eve() -> (
+        Peer,
+        Logged,
+        Vec<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
+        Footing,
+    ) {
+        let (alice, bob, eve) = (Peer::new(1), Peer::new(2), Peer::new(3));
+        let mut logged = Logged::new(&alice);
+        logged.invite(&alice, &bob, Role::Editor);
+        logged.invite(&alice, &eve, Role::Editor);
+        let cut = logged.log.clone();
+        logged.revoke(&alice, &eve);
+        let held = logged.footing();
+        (bob, logged, cut, held)
+    }
+
+    /// Audit `W200`: a fetched rotation and a reopen walk from the footing
+    /// the session holds. A log cut before a revoke this client walked is
+    /// refused, and so is a wrap that seals another anchor. A log that
+    /// extends the footing walks, and a first open walks from the wrap.
+    #[test]
+    fn a_key_read_refuses_a_log_cut_before_a_revoke_the_session_walked() {
+        let (_bob, logged, cut, held) = revoked_eve();
+        let rule = LogRule::document();
+        let doc = logged.document_id;
+        let anchor = Some(logged.anchor);
+
+        let refused = walk_from_footing(Some(held), doc, anchor, &cut, &rule);
+        assert!(matches!(refused, Err(SyncError::LogDiverged)), "a cut log");
+
+        let elsewhere = Some(FixedBytes::from_array([9; 32]));
+        let refused = walk_from_footing(Some(held), doc, elsewhere, &logged.log, &rule);
+        assert!(
+            matches!(refused, Err(SyncError::LogDiverged)),
+            "another anchor"
+        );
+
+        let other = Footing::sealed_in_catalogue(Id::<Document>::mint(), logged.anchor);
+        let refused = walk_from_footing(Some(other), doc, anchor, &logged.log, &rule);
+        assert!(
+            matches!(refused, Err(SyncError::LogDiverged)),
+            "another log"
+        );
+
+        let (log, footing) =
+            walk_from_footing(Some(held), doc, anchor, &logged.log, &rule).expect("extends");
+        assert_eq!(footing, Some(held));
+        assert!(log.revoked_at().is_some(), "the revoke stands");
+
+        let (first, footing) =
+            walk_from_footing(None, doc, anchor, &cut, &rule).expect("a first open");
+        assert_eq!(footing, None);
+        assert!(first.revoked_at().is_none());
+    }
+
+    /// Audit `W201`: a members refresh walks from the footing the session
+    /// holds. A log cut before a revoke lands no directory, no writers and no
+    /// heads. A head under check hears of a failed read.
+    #[tokio::test]
+    async fn a_members_refresh_on_a_cut_log_changes_nothing() {
+        let (bob, logged, cut, held) = revoked_eve();
+        let served = serde_json::json!({ "members": logged.rows, "log": cut });
+        let http = FakeHttp::new(vec![Ok(served)]);
+        let (etx, erx, _sink, _lrx) = channels();
+        let params = ListMembersParams {
+            id: None,
+            document_id: logged.document_id,
+            log_document: logged.document_id,
+            exchange_key: bob.xk.clone(),
+            footing: Some(held),
+            ..list_params()
+        };
+        list_members_task(&http, params, &etx).await;
+
+        let events: Vec<SyncEvent> = erx.try_iter().collect();
+        assert_eq!(events.len(), 1, "one event, and no footing moves");
+        assert!(matches!(
+            events.first(),
+            Some(SyncEvent::DocumentMembersFailed { document_id, .. })
+                if *document_id == logged.document_id
+        ));
+    }
+
+    /// Audit `W201`: a refresh that extends the footing lands as before, and
+    /// moves the footing on.
+    #[tokio::test]
+    async fn a_members_refresh_that_extends_the_footing_lands() {
+        let (bob, logged, _cut, held) = revoked_eve();
+        let http = FakeHttp::new(vec![Ok(logged.answer())]);
+        let (etx, erx, _sink, _lrx) = channels();
+        let params = ListMembersParams {
+            id: None,
+            document_id: logged.document_id,
+            log_document: logged.document_id,
+            exchange_key: bob.xk.clone(),
+            footing: Some(held),
+            ..list_params()
+        };
+        list_members_task(&http, params, &etx).await;
+
+        let events: Vec<SyncEvent> = erx.try_iter().collect();
+        assert!(matches!(
+            events.first(),
+            Some(SyncEvent::DocumentMembersReady {
+                revoked: Some(_),
+                ..
+            })
+        ));
+        assert!(matches!(
+            events.get(1),
+            Some(SyncEvent::FootingAdvanced { footing, .. }) if *footing == held
+        ));
     }
 }

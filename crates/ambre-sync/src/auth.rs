@@ -552,16 +552,66 @@ impl SyncState {
         self._onmessage = None;
         self._onclose = None;
         self._onerror = None;
-        self.documents.clear();
-        self.log_footings.clear();
-        self.session_nonces.clear();
-        self.light.clear();
+        self._onopen = None;
+        self._reconnect_timer = None;
+        self.lifecycle.reset();
+        // A call of the session ends with it, and the call worker drops its
+        // keys (`CALL-029`).
+        self.end_call();
+        self.forget_session();
         self.master_seed = None;
         self.signing_key = None;
         self.exchange_key = None;
         *self.tokens.borrow_mut() = None;
         self.renewal.cancel();
+        // The event queue is the generation of the session. Each task the
+        // session spawned holds a sender of the queue that ends here. What
+        // it answers after the sign-out lands nowhere, so no document key
+        // comes back (`SYNC-281`, audit `W204`).
+        if self.event_tx.is_some() {
+            let (tx, rx) = ambre_bus::conduit::unbounded();
+            self.event_tx = Some(tx);
+            self.next_events = Some(rx);
+        }
         crate::log::info!("Sync: logged out, all keys zeroized");
+    }
+
+    /// Drops every map that holds something of the session. That is the
+    /// document keys, the roots and pins it vouched, and the plaintext deltas
+    /// buffered before an open. It is the logs, footings and names too
+    /// (`SYNC-275`, audit `W204`). A sign-in that follows starts from none.
+    fn forget_session(&mut self) {
+        self.user_id = None;
+        self.setup_owed = false;
+        self.documents.clear();
+        self.doc_metadata.clear();
+        self.log_footings.clear();
+        self.session_nonces.clear();
+        self.light.clear();
+        self.self_join_logs.clear();
+        self.channel_metas.clear();
+        self.listed_channels.clear();
+        self.listing_metas.clear();
+        self.listed_keys.clear();
+        self.creating_public.clear();
+        self.space_rotations.clear();
+        self.new_spaces.clear();
+        self.held_creations.clear();
+        self.roster_logs.clear();
+        self.roster_asks.clear();
+        self.pending_opens.clear();
+        self.pinned_inviters.clear();
+        self.murmure_roots.clear();
+        self.typed_opens.clear();
+        self.pending_pre_session_updates.clear();
+        self.held_outbox.borrow_mut().clear();
+        self.replay_stops.clear();
+        self.replay_asks.borrow_mut().clear();
+        self.owed_cursors = crate::cursors::OwedCursors::default();
+        #[cfg(feature = "dev-login")]
+        {
+            self.dev_username = None;
+        }
     }
 
     /// A sign-out the user asked for. The session ends on the worker at once,

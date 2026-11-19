@@ -92,19 +92,25 @@ pub struct ConfirmedSnapshotJson {
 }
 
 /// A confirmation: the confirmer's signature over
-/// [`ambre_protocol::snapshot_confirm::confirm_transcript`], hex (`SRV-284`).
+/// [`ambre_protocol::snapshot_confirm::confirm_transcript`], hex, and the
+/// digest of the sealed blob it names (`SRV-284`). The relay keeps no
+/// digest. An opener computes it again from the blob it downloads. So a
+/// digest that names another blob only fails that opener's check (audit
+/// `W101`).
 #[derive(serde::Deserialize)]
 pub struct ConfirmSnapshotRequest {
     pub signature: FixedBytes<ambre_core::Signature>,
+    pub blob: FixedBytes<ambre_core::SnapshotDigest>,
 }
 
 /// Records that the caller checked a snapshot and vouches for it (`SRV-126`).
 /// Any member may confirm, since any member holds the deltas. The author's
 /// own confirmation makes it `self`, anyone else's `confirmed`.
 ///
-/// The caller signs the document, the snapshot, its horizon and its author.
-/// A signature that does not verify under the caller's key is refused, and
-/// the snapshot keeps its standing (`SRV-284`).
+/// The caller signs the document, the snapshot, its horizon, its author and
+/// the digest of the blob it checked. A signature that does not verify under
+/// the caller's key is refused, and the snapshot keeps its standing
+/// (`SRV-284`).
 ///
 /// A `confirmed` snapshot that folds amendments in becomes the final one of
 /// its segment (`SRV-208`), and the snapshots it replaces go (`SRV-209`). The
@@ -128,10 +134,13 @@ pub async fn confirm_snapshot(
             resource: Resource::Snapshot,
         })?;
     let transcript = ambre_protocol::snapshot_confirm::confirm_transcript(
-        doc_id,
-        snap_id,
-        snap.covered_seq,
-        &snap.author_pubkey,
+        ambre_protocol::snapshot_confirm::Confirmed {
+            document_id: doc_id,
+            snapshot_id: snap_id,
+            covered_seq: snap.covered_seq,
+            author: &snap.author_pubkey,
+            blob: &req.blob,
+        },
     );
     let signature = Signature::from_bytes(req.signature.as_array());
     VerifyingKey::from_bytes(auth.signing_pubkey.as_array())

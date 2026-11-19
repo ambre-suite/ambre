@@ -3594,7 +3594,7 @@ mod handler_tests {
     }
 
     /// The body of a confirmation `key` signs: `snap` of `doc_id`, its
-    /// horizon `covered` and its `author` (`SRV-284`).
+    /// horizon `covered`, its `author` and the digest of a blob (`SRV-284`).
     fn confirm_body(
         key: &ed25519_dalek::SigningKey,
         doc_id: &str,
@@ -3602,14 +3602,21 @@ mod handler_tests {
         covered: u64,
         author: [u8; 32],
     ) -> serde_json::Value {
+        let blob = ambre_core::FixedBytes::<ambre_core::SnapshotDigest>::from_array([6; 32]);
         let transcript = ambre_protocol::snapshot_confirm::confirm_transcript(
-            Id::<Document>::parse_str(doc_id).unwrap(),
-            Id::<Snapshot>::parse_str(snap).unwrap(),
-            ambre_core::Seq::<ambre_core::Relay>::new(covered),
-            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(author),
+            ambre_protocol::snapshot_confirm::Confirmed {
+                document_id: Id::<Document>::parse_str(doc_id).unwrap(),
+                snapshot_id: Id::<Snapshot>::parse_str(snap).unwrap(),
+                covered_seq: ambre_core::Seq::<ambre_core::Relay>::new(covered),
+                author: &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(author),
+                blob: &blob,
+            },
         );
         let signature = ed25519_dalek::Signer::sign(key, transcript.as_bytes());
-        serde_json::json!({ "signature": hex::encode(signature.to_bytes()) })
+        serde_json::json!({
+            "signature": hex::encode(signature.to_bytes()),
+            "blob": hex::encode(blob.as_array()),
+        })
     }
 
     /// The member behind `auth`, whose signing key is `author`, uploads a

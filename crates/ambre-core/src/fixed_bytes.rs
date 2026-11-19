@@ -42,6 +42,7 @@ mod sealed {
     impl SealedRole for crate::Signature {}
     impl SealedRole for crate::ChainHash {}
     impl SealedRole for crate::EntryDigest {}
+    impl SealedRole for crate::SnapshotDigest {}
     impl SealedRole for crate::InviterPin {}
     impl SealedRole for crate::KeyId {}
     impl SealedRole for crate::KeyIdentifierBytes {}

@@ -103,11 +103,12 @@ impl HeadWatch {
         self.served.last_entry().cloned().map(Box::new)
     }
 
-    /// Whether a signed `head` asks for the log again. A head the log passes
-    /// through asks nothing. While one listing is out, no other leaves, and a
-    /// head already found withheld does not ask twice.
+    /// Whether a signed `head` asks for the log again. A head the valid walk
+    /// passes through asks nothing: a served entry the walk refused proves
+    /// nothing (audit `W202`). While one listing is out, no other leaves, and
+    /// a head already found withheld does not ask twice.
     pub(crate) fn asks(&self, head: LogHead) -> bool {
-        !self.served.holds(head)
+        !self.served.walked_through(head)
             && match self.check {
                 HeadCheck::Clear | HeadCheck::Unanswered { .. } => true,
                 HeadCheck::Asked { .. } => false,
@@ -159,6 +160,8 @@ impl HeadWatch {
     /// A fresh members answer to `listing`, which served `served`. A head
     /// asked about is withheld when an answer that left after the ask still
     /// does not pass through it. A withheld head clears once a log holds it.
+    /// Only the heads of the valid walk clear a head: the relay can serve a
+    /// refused entry before the true one (audit `W202`).
     pub(crate) fn served(&mut self, listing: Seq<Listing>, served: ServedHeads) -> Verdict {
         self.served = served;
         match self.check {
@@ -166,7 +169,7 @@ impl HeadWatch {
             | HeadCheck::Unanswered { head, listing: ask }
                 if listing >= ask =>
             {
-                if self.served.holds(head) {
+                if self.served.walked_through(head) {
                     self.check = HeadCheck::Clear;
                     Verdict::Nothing
                 } else {
@@ -174,7 +177,7 @@ impl HeadWatch {
                     Verdict::Withheld
                 }
             }
-            HeadCheck::Withheld(head) if self.served.holds(head) => {
+            HeadCheck::Withheld(head) if self.served.walked_through(head) => {
                 self.check = HeadCheck::Clear;
                 Verdict::Nothing
             }
@@ -323,7 +326,7 @@ mod tests {
 
     /// The heads of the first `n` entries of a log.
     fn heads(entries: &[ambre_protocol::MembershipEntry], n: usize) -> ServedHeads {
-        ServedHeads::of(entries.get(..n).unwrap_or(entries))
+        walk(entries.get(..n).unwrap_or(entries)).heads()
     }
 
     #[test]
@@ -338,7 +341,7 @@ mod tests {
             MembershipAct::Revoke,
             Role::Viewer,
         );
-        let all = ServedHeads::of(&entries);
+        let all = walk(&entries).heads();
         let short = heads(&entries, entries.len() - 1);
         // Every head of the shorter log is held by the longer one.
         assert!(all.holds(short.last()));
@@ -368,7 +371,7 @@ mod tests {
             Role::Viewer,
         );
         let hidden = heads(&entries, entries.len() - 1);
-        let signed = ServedHeads::of(&entries).last();
+        let signed = walk(&entries).heads().last();
 
         let mut watch = HeadWatch::default();
         watch.read(hidden.clone());
@@ -387,7 +390,7 @@ mod tests {
         assert!(watch.holds_edits(), "the head stays withheld");
         // A later log that holds the head clears the check.
         assert_eq!(
-            watch.served(Seq::nth(5), ServedHeads::of(&entries)),
+            watch.served(Seq::nth(5), walk(&entries).heads()),
             Verdict::Nothing
         );
         assert!(!watch.asks(signed));
@@ -408,13 +411,48 @@ mod tests {
         );
         let mut watch = HeadWatch::default();
         watch.read(heads(&entries, entries.len() - 1));
-        let signed = ServedHeads::of(&entries).last();
+        let signed = walk(&entries).heads().last();
         watch.asked(signed, Seq::nth(1));
         assert_eq!(
-            watch.served(Seq::nth(1), ServedHeads::of(&entries)),
+            watch.served(Seq::nth(1), walk(&entries).heads()),
             Verdict::Nothing
         );
         assert!(!watch.asks(signed));
+    }
+
+    /// The relay serves an entry the walk refuses, then the entry the signed
+    /// head names. The served heads hold that head and the valid walk does
+    /// not, so the check does not clear (audit `W202`).
+    #[test]
+    fn a_served_entry_the_walk_refuses_clears_no_head_under_check() {
+        let (alice, bob, carol) = (Person::new(1), Person::new(2), Person::new(3));
+        let mut entries = created(&alice, &bob);
+        // Carol is no member, so the walk refuses her invite and stops.
+        append(
+            &mut entries,
+            &carol,
+            &carol,
+            MembershipAct::Invite,
+            Role::Editor,
+        );
+        append(
+            &mut entries,
+            &alice,
+            &bob,
+            MembershipAct::Revoke,
+            Role::Viewer,
+        );
+        let served = walk(&entries).heads();
+        let signed = served.last();
+        assert!(served.holds(signed), "the served heads hold the head");
+        assert!(!served.walked_through(signed), "the valid walk does not");
+
+        let mut watch = HeadWatch::default();
+        watch.read(served.clone());
+        assert!(watch.asks(signed), "a refused entry proves no head");
+        watch.asked(signed, Seq::nth(1));
+        assert_eq!(watch.served(Seq::nth(1), served), Verdict::Withheld);
+        assert!(watch.holds_edits(), "the edits keep waiting");
     }
 
     /// Bob's Sync worker, a reader of a shared document. It holds `key`,
@@ -467,7 +505,7 @@ mod tests {
             alice,
             (doc, snapshot),
             key,
-            ServedHeads::of(entries).last(),
+            walk(entries).heads().last(),
             entries.last().cloned(),
         )
     }
@@ -619,7 +657,7 @@ mod tests {
             ambre_core::Seq::nth(1),
             alice_writes(&alice, doc, snapshot, &key, &entries),
         );
-        answer(&mut state, doc, &alice, ServedHeads::of(&entries));
+        answer(&mut state, doc, &alice, walk(&entries).heads());
         assert!(codes(&rx).is_empty());
 
         state.handle_send_update(doc, b"bob".to_vec());
@@ -637,7 +675,7 @@ mod tests {
         // The head, and the entry it names as its proof (`SYNC-218`).
         assert_eq!(
             heads,
-            vec![(ServedHeads::of(&entries).last(), entries.last().cloned())]
+            vec![(walk(&entries).heads().last(), entries.last().cloned())]
         );
     }
 
@@ -680,7 +718,7 @@ mod tests {
             Role::Viewer,
         );
         let hidden = heads(&entries, entries.len() - 1);
-        let signed = ServedHeads::of(&entries).last();
+        let signed = walk(&entries).heads().last();
         let edit = |byte: u8| UpdateFrame::from_bytes(vec![byte]);
 
         let mut watch = HeadWatch::default();
@@ -701,7 +739,7 @@ mod tests {
         assert!(watch.release().is_empty(), "a withheld head holds");
         // A log that passes through the head lets every edit go, in order.
         assert_eq!(
-            watch.served(Seq::nth(3), ServedHeads::of(&entries)),
+            watch.served(Seq::nth(3), walk(&entries).heads()),
             Verdict::Nothing
         );
         assert!(!watch.holds_edits());
@@ -721,7 +759,7 @@ mod tests {
             MembershipAct::Revoke,
             Role::Viewer,
         );
-        let signed = ServedHeads::of(&entries).last();
+        let signed = walk(&entries).heads().last();
         let mut watch = HeadWatch::default();
         watch.read(heads(&entries, entries.len() - 1));
         watch.asked(signed, Seq::nth(2));
@@ -802,7 +840,7 @@ mod tests {
 
         // A later listing, such as the member panel's, serves the revoke.
         state.handle_list_document_members(None, doc);
-        answer(&mut state, doc, &alice, ServedHeads::of(&entries));
+        answer(&mut state, doc, &alice, walk(&entries).heads());
         assert!(codes(&rx).is_empty());
         assert_eq!(
             sent_clocks(&ws_rx),
@@ -857,7 +895,7 @@ mod tests {
             .directory_asked
             .latest();
         assert_eq!(asked, Seq::nth(2), "the next signed head asks again");
-        answer(&mut state, doc, &alice, ServedHeads::of(&entries));
+        answer(&mut state, doc, &alice, walk(&entries).heads());
         assert_eq!(sent_clocks(&ws_rx), vec![Seq::nth(1)]);
     }
 
@@ -869,7 +907,7 @@ mod tests {
         assert_eq!(watch.head(), LogHead::EMPTY);
         assert_eq!(watch.head_entry(), None);
         let entries = created(&Person::new(1), &Person::new(2));
-        watch.read(ServedHeads::of(&entries));
+        watch.read(walk(&entries).heads());
         assert_eq!(watch.head_entry().as_deref(), entries.last());
         assert_eq!(
             watch.head().previous,
@@ -904,7 +942,7 @@ mod tests {
             doc_state
                 .set_signing_keys(vec![(alice.public(), alice.id), (carol.public(), carol.id)]);
         }
-        let next = ServedHeads::of(&entries).last();
+        let next = walk(&entries).heads().last();
         let past = |entry: &MembershipEntry| next.after(digest(entry).expect("encodes"));
         let asked = |state: &SyncState| {
             state
@@ -1005,6 +1043,58 @@ mod tests {
             .latest()
     }
 
+    /// `SYNC-274`, audit `W205`: while a head is under check, or a rotation
+    /// is owed, Bob's presence samples are dropped, as his edits wait. Once
+    /// the check clears, they leave again.
+    #[test]
+    fn presence_is_dropped_while_an_edit_would_wait() {
+        let (alice, bob, carol) = (Person::new(1), Person::new(2), Person::new(3));
+        let mut entries = created(&alice, &bob);
+        append(
+            &mut entries,
+            &alice,
+            &carol,
+            MembershipAct::Invite,
+            Role::Editor,
+        );
+        let key = crate::DocumentKey::generate();
+        let (mut state, _rx, doc, snapshot) = bob_reads(&alice, &key, &entries, 2);
+        state.signing_key = Some(bob.key.clone());
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        let samples = |state: &mut SyncState| {
+            state.handle_send_ephemeral(doc, ambre_core::Payload::new(b"a cursor".to_vec()));
+            ws_rx
+                .try_iter()
+                .filter(|wire| {
+                    matches!(
+                        ambre_protocol::ws::decode_client_msg(wire),
+                        Ok(ambre_protocol::ws::WsClientMsg::Ephemeral(_))
+                    )
+                })
+                .count()
+        };
+        assert_eq!(samples(&mut state), 1, "control: a clear check sends");
+
+        // Alice signs a head past Bob's log: the check starts.
+        state.receive_update(
+            ambre_core::Seq::nth(1),
+            alice_writes(&alice, doc, snapshot, &key, &entries),
+        );
+        assert_eq!(
+            samples(&mut state),
+            0,
+            "a head under check drops the sample"
+        );
+        answer(&mut state, doc, &alice, walk(&entries).heads());
+        assert_eq!(samples(&mut state), 1, "a cleared check sends again");
+
+        if let Some(doc_state) = state.documents.get_mut(&doc) {
+            doc_state.rekey.found_debt();
+        }
+        assert_eq!(samples(&mut state), 0, "an owed rotation drops the sample");
+    }
+
     /// The relay hides from Bob that Alice revoked Carol and rotated the
     /// key. A scripted relay then drops each update Alice sends and forwards
     /// her presence alone. Her cursor carries her head and its entry, so Bob
@@ -1055,7 +1145,7 @@ mod tests {
                                 ephemeral.public_data.log_head,
                                 ephemeral.public_data.log_entry.as_deref()
                             ),
-                            (ServedHeads::of(&entries).last(), entries.last()),
+                            (walk(&entries).heads().last(), entries.last()),
                             "the sample carries the head and the entry Alice read"
                         );
                         bob_state.handle_ws_message(ambre_protocol::ws::WsServerMsg::Ephemeral(
@@ -1101,7 +1191,7 @@ mod tests {
             doc_state
                 .set_signing_keys(vec![(alice.public(), alice.id), (carol.public(), carol.id)]);
         }
-        let next = ServedHeads::of(&entries).last();
+        let next = walk(&entries).heads().last();
         let past = |entry: &MembershipEntry| next.after(digest(entry).expect("encodes"));
         let signed = |member: &Person, author: &Person| {
             let draft = Draft {
