@@ -102,7 +102,6 @@ zeroize = { version = "1.7" }
 # Constant-time equality for `ambre_core::Secret`. Pure Rust, already in the tree
 # through the RustCrypto stack (`ambre-spec-zero-knowledge.md` section 2).
 subtle = { version = "2.6", default-features = false }
-async-trait = "0.1"
 
 # Crypto
 chacha20poly1305 = { version = "0.10" }
