@@ -591,7 +591,7 @@ fn read_content(
                             let pending = PendingCell::open(e, t.col)?;
                             t.col = t.col.saturating_add(pending.repeat);
                             if empty {
-                                finish_cell(pending, t, styles, report);
+                                finish_cell(pending, t, styles, report, &mut text_read)?;
                             } else {
                                 cell = Some(pending);
                                 hidden = 0;
