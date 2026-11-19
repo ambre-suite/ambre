@@ -6,6 +6,7 @@
 services:
   postgres:
     image: postgres:16.15-alpine@sha256:aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139
+    container_name: ambre-postgres
     environment:
       POSTGRES_USER: ambre
       POSTGRES_PASSWORD: ambre
@@ -21,6 +22,7 @@ services:
 
   redis:
     image: redis:8.10.3-alpine@sha256:71885d8cc6e42f2bc0aa2eb853bfc4be200b5108a46ac50e117ae1df0531fb80
+    container_name: ambre-redis
     ports:
       - "6379:6379"
     healthcheck:
@@ -34,18 +36,21 @@ services:
   # them and joins them; the profile keeps them out of `docker compose up`.
   redis-cluster-1:
     image: redis:8.10.3-alpine@sha256:71885d8cc6e42f2bc0aa2eb853bfc4be200b5108a46ac50e117ae1df0531fb80
+    container_name: ambre-redis-cluster-1
     profiles: ["cluster"]
     network_mode: host
     command: ["redis-server", "--port", "7001", "--cluster-enabled", "yes", "--cluster-config-file", "nodes-7001.conf", "--cluster-announce-ip", "127.0.0.1", "--save", "", "--appendonly", "no"]
 
   redis-cluster-2:
     image: redis:8.10.3-alpine@sha256:71885d8cc6e42f2bc0aa2eb853bfc4be200b5108a46ac50e117ae1df0531fb80
+    container_name: ambre-redis-cluster-2
     profiles: ["cluster"]
     network_mode: host
     command: ["redis-server", "--port", "7002", "--cluster-enabled", "yes", "--cluster-config-file", "nodes-7002.conf", "--cluster-announce-ip", "127.0.0.1", "--save", "", "--appendonly", "no"]
 
   redis-cluster-3:
     image: redis:8.10.3-alpine@sha256:71885d8cc6e42f2bc0aa2eb853bfc4be200b5108a46ac50e117ae1df0531fb80
+    container_name: ambre-redis-cluster-3
     profiles: ["cluster"]
     network_mode: host
     command: ["redis-server", "--port", "7003", "--cluster-enabled", "yes", "--cluster-config-file", "nodes-7003.conf", "--cluster-announce-ip", "127.0.0.1", "--save", "", "--appendonly", "no"]
@@ -70,6 +75,7 @@ services:
 
   pgadmin:
     image: dpage/pgadmin4:9.19.0@sha256:3591b3d02910dcd817dec6fcaa681c278ba6966945283dd0ea0042731c330c83
+    container_name: ambre-pgadmin
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@ambre.dev
       PGADMIN_DEFAULT_PASSWORD: admin
