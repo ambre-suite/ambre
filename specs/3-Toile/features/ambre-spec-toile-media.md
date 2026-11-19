@@ -69,6 +69,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-IO-067` | `POST` | A cache MUST have room for one blob however it was sized: a capacity of zero MUST be raised to one. | this spec section 3 | `ambre_toile::logic::interop::media::tests::capacity_zero_coerced_to_one` | none | verified |
 | `TOILE-IO-007` | `FRAME` | Eviction MUST NOT take a slot whose download is in flight. | this spec section 3 | `ambre_toile::logic::interop::media::tests::loading_entries_are_never_evicted` -- it fills a cache of one with two in-flight slots and reads both back | none | verified |
 | `TOILE-IO-103` | `FAIL` | Given a picture address the board does not carry, a request MUST answer nothing. | this spec section 3 | `ambre_toile::logic::state::export::media_request_tests::an_unknown_address_is_answered_with_nothing` -- the request answers no display event | none | verified |
+| `TOILE-307` | `FAIL` | Given a stored thumbnail whose header declares a side past the thumbnail edge, a request MUST answer nothing and MUST NOT decode its pixels. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_toile::logic::state::export::media_request_tests::a_thumbnail_past_the_edge_decodes_nothing` -- one past the edge answers nothing, one at the edge decodes; `::a_thumbnail_header_declaring_a_huge_picture_decodes_nothing` -- a PNG of a few bytes that declares 11 000 by 11 000 pixels | none | verified |
 | `TOILE-IO-105` | `POST` | A picture already asked for and still pending MUST NOT be asked for again on a later frame. | this spec section 4 | `ambre_toile::ui::render::tests::a_pending_request_is_not_repeated` -- a hash in the pending set yields no request, and the same list with nothing pending asks for it | none | verified |
 
 * **Budget.** the first paint of a picture under 15 ms and no refetch on a revisit, two rows of
@@ -78,7 +79,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** this document owns Toile's only outbound flow of user content: media blobs, sealed
   by the Sync thread before they leave (`TOILE-IO-013`). No board geometry and no pixel leaves in
   plaintext.
-* **Verification.** 34 `verified`, 1 `unimplemented`. The upload half holds: the address dedups, and
+* **Verification.** 35 `verified`, 1 `unimplemented`. The upload half holds: the address dedups, and
   a failed upload takes the import with it. An undo takes the entry back, and no placeholder becomes
   a key. A decoded picture stays out of the document. The thumbnail shown during a download is not
   built (`TOILE-IO-035`), because no paint downloads yet.
@@ -150,7 +151,8 @@ pub enum RequestOutcome { Fetch, CacheHit(MediaState) }
 1. ask the cache for the address; a first ask creates the slot and orders a download, a repeat asks
    for nothing (`TOILE-IO-006`);
 2. paint the thumbnail meanwhile, and the placeholder box when there is not even one
-   (`TOILE-IO-035`, `TOILE-UI-013`);
+   (`TOILE-IO-035`, `TOILE-UI-013`). A peer writes the thumbnail, so its header is read first,
+   and a side past the thumbnail edge decodes nothing: the placeholder stays (`TOILE-307`);
 3. resolve the slot with the decoded pixels when the download lands, and repaint;
 4. mark the slot failed on an error, so the request is not re-issued in a loop;
 5. evict the least recently used resolved slot when the cache is over capacity, and never a slot in

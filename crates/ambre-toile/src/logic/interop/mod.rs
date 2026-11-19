@@ -50,18 +50,19 @@ pub use media::{
 };
 #[cfg(feature = "pdf")]
 pub(crate) use pdf_export::DeckPages;
+#[cfg(all(test, feature = "pdf"))]
+pub(crate) use pdf_export::paint_page;
 #[cfg(feature = "pdf")]
 pub use pdf_export::{
     DeckRecording, DeckStage, EXPORT_BYTES_CAP, PageSize, PdfExportError, PdfPage, PdfPagePlan,
     Thumbnails, export_pdf, record_pdf, stored_picture, write_pdf,
 };
-#[cfg(all(test, feature = "pdf"))]
-pub(crate) use pdf_export::{decode_thumbnail, paint_page};
 #[cfg(feature = "pdf")]
 pub use png_export::{PNG_ZOOM, PngExportError, PngPage, PngRequest};
 #[cfg(feature = "pdf")]
 pub(crate) use png_export::{board_region, png_page};
 pub use pptx_export::{PptxConnector, PptxElement, PptxExport, PptxSlideSource, export_pptx};
+pub(crate) use raster::decode_thumbnail;
 pub use raster::{import_raster, jpeg_blob, png_of, raster_batch};
 pub use showcase::showcase_page;
 pub use svg_export::{SvgExport, export_svg};

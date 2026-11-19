@@ -63,13 +63,14 @@ that component's prefix instead.
 | `ZK-040` | `INV` | The page a deployment serves MUST be the build whose client digest the release of its commit publishes. | this spec section 2, the code the relay serves; `ZK-039` | human-review -- `b2sum -l 256 -c ambre-client.manifest` over a copy of the files the deployment serves | unheld -- `deployment` -- a browser runs whatever the origin serves and compares it with no digest. A relay can serve another page to one user alone, and an audit of the page it serves to everyone else never reads it | human-review |
 | `ZK-045` | `INV` | A release build of the client MUST NOT hold the development sign-in: no seed derived from a name, no `DevLogin` request, and no read of `?user=` or of a stored name. | this spec section 2, the development sign-in; `ZK-038`; audit `N34` | ci-gate -- `scripts/trunk_post_build.py` refuses a release whose wasm carries a mark of the `dev-login` feature, and the CI `size` and `reproducible` jobs build the release through it. `scripts/test_trunk_post_build.py` feeds it each mark, checks that its source still spells it, and checks that no variable opens the gate; `ambre_sync::auth::provider_tests::a_build_without_the_dev_sign_in_derives_no_key_from_a_name` -- the worker of a build without the feature refuses `DevLogin` and derives no key | none | verified |
 | `ZK-044` | `INV` | What the SFU learns of a choice of videos MUST be limited to `{the senders each receiver chose, by their sender index, the one it marks large, the instant of each choice}`. | this spec section 2, the choice of videos of a call; `ambre-spec-call-media.md section 3`, the choice of videos; `ZK-021` | type-level -- `ambre_protocol::signaling::VideoChoice` holds the sender indexes and the large one alone, and the SFU reads it on its own socket; `ambre_sync::call_link::tests::a_choice_of_videos_reaches_the_sfu_alone_and_never_the_relay` -- the relay reads none of it | none | verified |
+| `ZK-046` | `INV` | What a host that a document names learns of a client MUST be limited to `{the address of the client, the page asked, the instant of each request}`, and only after the user of that client chose to load pages of that host. | this spec section 2, a web page on a board; `3-Toile/features/ambre-spec-toile-embeds.md`, `TOILE-299`, `TOILE-301` | `ambre_app::host::web_embed::tests::no_page_loads_before_its_site_is_chosen` -- no frame with an address before the answer, and the choice in the storage of the browser alone; `ambre_toile::ui::embed::consent_tests::only_an_answer_loads_a_page`; structural -- the frame carries no referrer, no permission and an opaque origin (`TOILE-088`), so the request names neither the board nor the user | none | verified |
 
 * **Budget.** the four crypto rows of `ambre-spec-budgets.md section 1`: the outbound seal, the
   inbound open, the full round trip and the snapshot compression. `criterion` measures all four in
   `ambre-crypto/benches`, which no CI job runs.
 * **Boundary.** this document **is** the boundary. Every other document either refines one of these
   rows on its own side, or answers `none` and says why.
-* **Verification.** 43 `verified`, 1 `human-review`, 1 `unimplemented`. Every row is an `INV`. This
+* **Verification.** 44 `verified`, 1 `human-review`, 1 `unimplemented`. Every row is an `INV`. This
   document owns no gesture, so it declares no operation table, and each rule binds the boundary at
   every instant.
 
@@ -87,6 +88,8 @@ that component's prefix instead.
   one plaintext exit, answers the download path and no frame (`ZK-037`).
 
   A release derives no key from a bare name (`ZK-045`).
+
+  A web page a board names loads only on the word of the user who watches it (`ZK-046`).
 
   No payload reaches a log line. The client's envelope prints no byte (`ZK-017`), and a wire
   message prints each ciphertext as its length. The relay holds every payload in a type a log
@@ -118,6 +121,10 @@ that component's prefix instead.
 | `ambre-server`, per update and per ephemeral | the head of the membership log the author of the frame read (`SYNC-207`, `SYNC-263`), and the entry that head names (`SYNC-218`, `SYNC-262`) | anything else about that author's view of the log |
 | `ambre-server`, per key link | the head of the membership log the rotator read (`SYNC-204`) | the key the link seals |
 | `ambre-sfu` | the set of `ZK-021`, each participant under the pseudonyms of `ZK-023`, who shares a screen and when (`ZK-033`), and whose video each receiver chose (`ZK-044`) | the audio and video of a call, every sender key, the channel, the user and the key of a participant |
+| a host a web embed names, never the relay | the address of the client, the page and the instant it loads, once this user chose to load pages of that host (`ZK-046`) | the board, the document, every key, the user, the choice itself |
+
+**A web page on a board.** A frame tells its host the address of the client. So no frame loads
+before its user chose that host (`ZK-046`).
 
 **The showcase bundle.** A board exported as a showcase page leaves the boundary in the clear,
 for anyone who holds the file. It is the one path out of an application that carries content

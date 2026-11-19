@@ -89,7 +89,15 @@ pub use run::run_with;
 /// Open a web address in a fresh tab with `noopener,noreferrer`. The page can
 /// neither reach back into this window nor learn where it came from. A
 /// followed Toile link and a clicked Murmure link both open through it.
+///
+/// A peer wrote the address, and each application checks it at its read.
+/// The host still opens a web address alone. Any other scheme could run a
+/// script or start another program, so it opens nothing (`TOILE-308`).
 pub(crate) fn open_address(url: &ambre_core::LinkUrl) {
+    if !is_web_address(url) {
+        tracing::warn!("Ambre: a link that is no web address was not opened");
+        return;
+    }
     if let Some(window) = web_sys::window() {
         let _ = window.open_with_url_and_target_and_features(
             url.as_str(),
@@ -97,6 +105,18 @@ pub(crate) fn open_address(url: &ambre_core::LinkUrl) {
             "noopener,noreferrer",
         );
     }
+}
+
+/// Whether `url` is a web address a tab may open: `http` or `https`, with a
+/// host, and no blank or control character anywhere in it.
+fn is_web_address(url: &ambre_core::LinkUrl) -> bool {
+    let text = url.as_str();
+    let lower = text.to_ascii_lowercase();
+    let rest = lower
+        .strip_prefix("https://")
+        .or_else(|| lower.strip_prefix("http://"));
+    rest.is_some_and(|rest| !rest.is_empty())
+        && !text.chars().any(|c| c.is_whitespace() || c.is_control())
 }
 
 /// The clipboard types Ambre reads and writes, one variant each

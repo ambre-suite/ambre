@@ -30,6 +30,7 @@ ambre-app | src/host/mod.rs | crate::host | base64_encode() | ret | String	gener
 ambre-app | src/host/mod.rs | crate::host | desktop() | ret | bool	generic	predicate result
 ambre-app | src/host/mod.rs | crate::host | desktop_in() | ret | bool	generic	predicate result
 ambre-app | src/host/mod.rs | crate::host | is_other_editable() | ret | bool	generic	predicate result
+ambre-app | src/host/mod.rs | crate::host | is_web_address() | ret | bool	generic	predicate result
 ambre-app | src/host/mod.rs | crate::host | ClipboardFormat::mime() | ret | &'static str	newtype-inner	the enum's own MIME name, unwrapped at the clipboard API call
 ambre-app | src/host/mod.rs | crate::host | clipboard_item(entries) | param | &[(ClipboardFormat,Option<&str>)]	foreign-api	each value is the string the ClipboardItem record takes; its type is already a ClipboardFormat
 ambre-app | src/host/mod.rs | crate::host | publish_item(build) | param | impl Fn(&[(ClipboardFormat,Option<&str>)])->Option<T>	foreign-api	the pairs clipboard_item hands the ClipboardItem record; its type is already a ClipboardFormat
@@ -1047,6 +1048,8 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | <ChannelTopic as Rule>::a
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <ChannelTopic as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-toile | src/message/mod.rs | crate::message | <WebAddress as Rule>::admit() | ret | Result<String,AddressError>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-toile | src/message/mod.rs | crate::message | <WebAddress as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-toile | src/ui/embed.rs | crate::ui::embed | <SiteHost as Rule>::admit() | ret | Result<String,SiteError>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-toile | src/ui/embed.rs | crate::ui::embed | <SiteHost as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-trame | src/message/command.rs | crate::message::command | <DefinedName as Rule>::admit() | ret | Result<String,InvalidDefinedName>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-trame | src/message/command.rs | crate::message::command | <DefinedName as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-server | src/db/orgs.rs | crate::db::orgs | <OrgName as ambre_core::Rule>::admit() | ret | Result<String,InvalidOrgName>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
@@ -2349,6 +2352,8 @@ ambre-toile | src/ui/embed.rs | crate::ui::embed | EmbedFocus::retain_if() | ret
 ambre-toile | src/ui/embed.rs | crate::ui::embed | EmbedSessions::is_open() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/embed.rs | crate::ui::embed | references() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/embed.rs | crate::ui::embed | routes_to_child() | ret | bool	generic	predicate or handled-flag result
+ambre-toile | src/ui/embed.rs | crate::ui::embed | SiteChoice::from_stored(text) | param | Option<&str>	newtype-inner	SiteChoice spelling: the word the browser storage of this device keeps for a site, read back
+ambre-toile | src/ui/embed.rs | crate::ui::embed | SiteChoice::stored() | ret | Option<&'static str>	newtype-inner	SiteChoice spelling: the word the browser storage of this device keeps for a site, none for ask
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | FloatBar::multi() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/hit.rs | crate::ui::hit | ellipse_contains() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/hit.rs | crate::ui::hit | exact_hit() | ret | bool	generic	predicate or handled-flag result

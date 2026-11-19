@@ -28,6 +28,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PRESENCE-005` | `INV` | The peer set MUST be keyed by `Id<User>`: one collaborator on two devices MUST NOT render as two. | this spec section 3 | `ambre_toile::logic::convergence_tests::apply_ephemeral_keys_presence_by_user_id_without_touching_history` -- on the assertions that a second peer is tracked under its own identity and neither displaces the other | none | verified |
 | `PRESENCE-006` | `INV` | A peer's colour MUST be derived from that `Id<User>` by the shared cross-app helper. | this spec section 3; this spec section 5 | `ambre_draw::peer::tests::stable_and_pure`; `::distinct_seeds_usually_differ`; `::opaque` | none | verified |
 | `PRESENCE-004` | `INV` | A peer's display name MUST be cosmetic: it MUST NOT decide identity, colour or permission. | this spec section 3 | `ambre_toile::ui::presence::tests::a_peer_name_decides_neither_identity_nor_colour` -- two peers under one name paint two cursors in their own colours, and a renamed peer keeps its colour | none | verified |
+| `PRESENCE-017` | `INV` | A peer's label MUST end on the handle derived from the `Id<User>` the Sync thread resolved, so two members never read one label, whatever names their samples carry. | this spec section 3; `PRESENCE-003` | `ambre_core::name::tests::two_members_under_one_name_read_two_labels`; `ambre_toile::ui::presence::tests::the_label_is_the_name_the_sample_carried` -- the board; `ambre_prose::logic::presence::tests::a_peer_named_like_another_reads_its_own_handle` -- the text | none | verified |
 | `PRESENCE-007` | `INV` | A presence anchor MUST name identities that survive a structural edit, never positions. | this spec section 3 | `ambre_toile::ui::presence::tests::a_selection_anchor_survives_a_structural_edit` -- a peer's selection ghost follows its element through a deletion, an insertion before it and a move | none | verified |
 
 ### 1.2 Send a presence sample
@@ -62,7 +63,7 @@ An inbound sample is opened, its author resolved, and the peer set updated for t
   `DocumentKey`. The relay reads `document_id`, `pub_key`, `key_id`, `counter`, and the log head
   and entry its sender read (`SYNC-262`). The author is resolved to a `Id<User>` in `ambre-sync`
   first, so no peer paints under another name.
-* **Verification.** 15 `verified`, 1 `unimplemented`. A departure travels twice: the relay says it,
+* **Verification.** 16 `verified`, 1 `unimplemented`. A departure travels twice: the relay says it,
   and the client ages a peer out if that word is lost.
 
 ---
@@ -77,7 +78,7 @@ Two peers over one document. The third column never changes, because the absence
 | selects a range | watches | nothing | the range tinted in Alice's colour | `ambre_toile::ui::presence::tests::selection_ghosts_outline_visible_elements_only` |
 | opens the same document on a second device | watches | nothing | one collaborator in one colour, not two | `ambre_draw::peer::tests::stable_and_pure` |
 | moves onto content Bob has not received yet | inserts that content | Bob's insert | nothing for Alice's position, then her position once the delta lands | none -- `PRESENCE-008` |
-| sends a sample naming herself "Bob" | edits | Bob's edit | the position attributed to Alice, the sender Sync resolved | none -- `PRESENCE-004` |
+| sends a sample naming herself "Bob" | edits | Bob's edit | the position attributed to Alice, the sender Sync resolved, under "Bob" and the handle of Alice | `ambre_core::name::tests::two_members_under_one_name_read_two_labels` -- `PRESENCE-004`, `PRESENCE-017` |
 | jumps to the far end of the document | watches | nothing | her position disappear and reappear there, with no slide between | none -- `PRESENCE-010` |
 | inserts a row, a shape or a paragraph above Bob's position | watches | Alice's insert | Bob's position still on the same cell, shape or word | none -- `PRESENCE-007` |
 | closes the document | watches | nothing | Alice's position off Bob's screen | `ambre_toile::logic::convergence_tests::a_departure_message_drops_the_peer_at_once` |
@@ -106,6 +107,10 @@ one arrives out of band, on `LogicEvent::RemoteEphemeral { from_user_id }`, reso
 from the key that signed the envelope (`PRESENCE-003`). The name inside the payload labels a position
 and decides nothing (`PRESENCE-004`). So a peer who writes another member's name into the payload
 relabels their own cursor, and nothing else.
+
+The label still ends on a short handle of the resolved
+`Id<User>`, which no sender writes. So that cursor never reads as the cursor of the other member
+(`PRESENCE-017`).
 
 **The four steps of an inbound sample:**
 

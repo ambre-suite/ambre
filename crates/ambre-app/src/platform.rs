@@ -887,7 +887,12 @@ pub(crate) fn open_plaintext_container(
     toasts: Toasts,
     vault: crate::vault::Vault,
 ) {
-    let Some((document_id, doc_type, payload)) = read_container(&container, toasts) else {
+    let Some(Landing {
+        document_id,
+        doc_type,
+        payload,
+    }) = read_container(&container, toasts)
+    else {
         return;
     };
     // The payload lands as every copy does, sealed under the session's key.
@@ -908,16 +913,38 @@ pub(crate) fn open_plaintext_container(
     );
 }
 
-/// The container's document, its type and its payload, once this build
-/// can render it. A refusal reaches the user by name.
+/// Where an opened file lands: a document of its own, of the type the header
+/// names, holding the payload.
+#[derive(Debug)]
+struct Landing {
+    /// A fresh identifier, never the one the header names (`DOCFILE-021`).
+    document_id: Id<Document>,
+    doc_type: ambre_bus::DocType,
+    payload: ambre_core::Payload<ambre_core::SnapshotBytes>,
+}
+
+/// The document a parsed file lands as.
+///
+/// A plaintext header is signed by nobody, and a sealed file proves only
+/// that its opener knew the passphrase. So the identifier the header names
+/// is never trusted. A file naming a document this user holds would replace
+/// its local copy and drop its unsent deltas (audit `P50`). The file always
+/// lands as a new document, a copy the user can read and share apart
+/// (`DOCFILE-021`).
+fn landing_of(header: ambre_client_core::docfile::AmbreHeader) -> Landing {
+    Landing {
+        document_id: Id::<Document>::mint(),
+        doc_type: header.doc_type,
+        payload: header.payload,
+    }
+}
+
+/// Where the container lands, once this build can render it. A refusal
+/// reaches the user by name.
 fn read_container(
     container: &ambre_core::Payload<ambre_core::PlaintextContainer>,
     toasts: Toasts,
-) -> Option<(
-    Id<Document>,
-    ambre_bus::DocType,
-    ambre_core::Payload<ambre_core::SnapshotBytes>,
-)> {
+) -> Option<Landing> {
     let header = match ambre_client_core::docfile::read_ambre_plaintext(container) {
         Ok(header) => header,
         Err(e) => {
@@ -935,7 +962,7 @@ fn read_container(
         ));
         return None;
     }
-    Some((header.document_id, header.doc_type, header.payload))
+    Some(landing_of(header))
 }
 
 /// Store a container's sealed payload as the document's copy, and navigate
@@ -971,6 +998,42 @@ async fn store_container(
 mod tests {
     use super::*;
     use wasm_bindgen_test::wasm_bindgen_test;
+
+    /// A parsed container naming `document_id`, of a Prose document.
+    fn header_naming(document_id: Id<Document>) -> ambre_client_core::docfile::AmbreHeader {
+        let payload = ambre_core::Payload::<ambre_core::SnapshotBytes>::new(vec![1, 2, 3]);
+        let file = ambre_client_core::docfile::write_ambre_plaintext(
+            ambre_bus::DocType::Prose,
+            document_id,
+            &payload,
+        );
+        ambre_client_core::docfile::read_ambre_plaintext(&file).expect("the file reads")
+    }
+
+    /// An opened file never lands on the document its header names, so it
+    /// replaces no local copy and drops no local delta (`DOCFILE-021`,
+    /// audit `P50`). The type and the payload stay the file's.
+    #[wasm_bindgen_test]
+    fn an_opened_file_never_lands_on_the_document_its_header_names() {
+        let held = Id::<Document>::mint();
+        let landing = landing_of(header_naming(held));
+        assert_ne!(
+            landing.document_id, held,
+            "the header names a held document"
+        );
+        assert_eq!(landing.doc_type, ambre_bus::DocType::Prose);
+        assert_eq!(landing.payload.as_bytes(), &[1, 2, 3]);
+    }
+
+    /// Two opens of one file land as two documents, so the second open
+    /// cannot replace what the first one landed either (`DOCFILE-021`).
+    #[wasm_bindgen_test]
+    fn two_opens_of_one_file_land_as_two_documents() {
+        let named = Id::<Document>::mint();
+        let first = landing_of(header_naming(named));
+        let second = landing_of(header_naming(named));
+        assert_ne!(first.document_id, second.document_id);
+    }
 
     /// The page point at `(x, y)`, in CSS px.
     fn css_point(x: f32, y: f32) -> ambre_core::Point<ambre_core::Px<ambre_core::Css>> {

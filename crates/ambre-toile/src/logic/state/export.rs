@@ -17,7 +17,6 @@ use ambre_bus::interop::{
     Direction, ExportedFile, FileFormat, InteropAnswer, Occurrences, Outcome,
 };
 use ambre_core::Count;
-use ambre_core::Px;
 use ambre_core::id::{Element, Id};
 
 use super::ToileState;
@@ -37,28 +36,14 @@ impl ToileState {
     /// The thumbnail is every pixel this thread holds. The full blob is
     /// ciphertext on the relay, and no path here fetches it. Both the screen and
     /// an exported page therefore get this resolution (`TOILE-IO-100`).
+    ///
+    /// A thumbnail larger than the thumbnail edge decodes nothing: its header
+    /// is read before any pixel (`TOILE-307`).
     pub(super) fn decoded_thumbnail(
         &self,
         hash: &ambre_core::Validated<ambre_core::ContentHash>,
     ) -> Option<crate::ui::render::DecodedImage> {
-        let loro::LoroValue::Map(entries) = self.doc.get_map(Root::Media.as_str()).get_deep_value()
-        else {
-            return None;
-        };
-        let loro::LoroValue::Map(fields) = entries.get(hash.as_str())? else {
-            return None;
-        };
-        let loro::LoroValue::Binary(thumb) =
-            FieldValues::<MediaKey>::new(fields).get(MediaKey::Thumb)?
-        else {
-            return None;
-        };
-        let rgba = image::load_from_memory(thumb).ok()?.to_rgba8();
-        let size = ambre_core::Size::new(Px::new(rgba.width()), Px::new(rgba.height()));
-        Some(crate::ui::render::DecodedImage {
-            pixels: rgba.into_raw().into(),
-            size,
-        })
+        crate::logic::interop::decode_thumbnail(&self.thumbnail_png(hash)?)
     }
 
     /// The PNG bytes stored as one media address's thumbnail, if the document
@@ -1025,6 +1010,69 @@ mod media_request_tests {
             answer.2,
             ambre_core::Count::<ambre_core::Octets>::new(4 * 2 * 4)
         );
+    }
+
+    /// `TOILE-307`, audit `P37`: a thumbnail past the thumbnail edge decodes
+    /// nothing, and the request is answered with nothing, so the element keeps
+    /// its placeholder. One at the edge still decodes.
+    #[test]
+    fn a_thumbnail_past_the_edge_decodes_nothing() {
+        let edge = ambre_convert::images::THUMB_EDGE.get();
+        let ask = |st: &mut ToileState| {
+            st.handle_command(ToileCommand::RequestMedia {
+                hashes: vec![Validated::<ContentHash>::parse(IMG).expect("a hash")],
+            })
+        };
+        let mut over = board_with_media(IMG, edge + 1, 2);
+        assert!(
+            ask(&mut over).display.is_empty(),
+            "a wide thumbnail decoded"
+        );
+        let mut at = board_with_media(IMG, edge, edge);
+        assert!(
+            ask(&mut at)
+                .display
+                .iter()
+                .any(|e| matches!(e, ToileEvent::MediaDecoded { .. })),
+            "a thumbnail at the edge decodes"
+        );
+    }
+
+    /// The CRC-32 of a PNG chunk, over its type and its data.
+    fn png_crc(bytes: &[u8]) -> u32 {
+        let mut crc = 0xFFFF_FFFF_u32;
+        for byte in bytes {
+            crc ^= u32::from(*byte);
+            for _ in 0..8 {
+                crc = if crc & 1 == 1 {
+                    (crc >> 1) ^ 0xEDB8_8320
+                } else {
+                    crc >> 1
+                };
+            }
+        }
+        !crc
+    }
+
+    /// `TOILE-307`, audit `P37`: a PNG of a few bytes whose header declares
+    /// 11 000 by 11 000 pixels decodes nothing. A whole decode would ask for
+    /// some 480 MiB on the Logic thread.
+    #[test]
+    fn a_thumbnail_header_declaring_a_huge_picture_decodes_nothing() {
+        let img = image::RgbaImage::from_pixel(1, 1, image::Rgba([9, 8, 7, 255]));
+        let mut png = Vec::new();
+        image::DynamicImage::ImageRgba8(img)
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .unwrap();
+        // The IHDR chunk follows the 8-byte signature: length, type, then the
+        // width and the height, then its CRC over the type and the data.
+        let side = 11_000_u32.to_be_bytes();
+        png[16..20].copy_from_slice(&side);
+        png[20..24].copy_from_slice(&side);
+        let crc = png_crc(&png[12..29]).to_be_bytes();
+        png[29..33].copy_from_slice(&crc);
+        let thumb = ambre_core::Payload::<ambre_core::ThumbnailPng>::new(png);
+        assert!(crate::logic::interop::decode_thumbnail(&thumb).is_none());
     }
 
     /// `TOILE-IO-103`: the board answers an address it does not carry with nothing. The element

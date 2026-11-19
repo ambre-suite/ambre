@@ -180,8 +180,8 @@ pub use mode::{
 };
 pub use name::{
     DisplayName, InvalidDisplayName, NAME_MAX_CHARS, NAME_TOO_LONG, Name, NameTooLong,
-    cut_display_name_to_fit, cut_name_to_fit, display_handle, name_fits, name_is_empty,
-    name_plaintext, trimmed_name,
+    attributed_label, cut_display_name_to_fit, cut_name_to_fit, display_handle, name_fits,
+    name_is_empty, name_plaintext, trimmed_name,
 };
 pub use object_key::ObjectKey;
 pub use opaque::{Opaque, OpaqueKind, OpaqueLength, SealedAtRest, WireOpaque};
