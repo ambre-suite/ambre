@@ -3024,7 +3024,7 @@ mod handler_tests {
             crate::s3::format_s3_media_key(
                 &env,
                 &Id::<Document>::parse_str(doc).unwrap(),
-                &ambre_core::Validated::<ambre_core::ContentHash>::parse(hash).expect("a hash"),
+                &ambre_core::Validated::<ambre_core::ContentHash>::parse(*hash).expect("a hash"),
             )
             .as_str()
             .to_owned()
@@ -3464,7 +3464,7 @@ mod handler_tests {
     async fn issuing_a_link_never_touches_the_object(pool: sqlx::PgPool) {
         let state = test_app_state_with_s3(pool, offline_s3(Some("http://127.0.0.1:1"))).await;
         let setup = build_test_router(state.clone());
-        let app = shipped_router(state);
+        let app = shipped_router(state.clone());
         let owner = setup_and_get_auth(&setup).await;
         let doc_id = create_test_doc(&setup, &owner).await;
         let hash = "e".repeat(64);
