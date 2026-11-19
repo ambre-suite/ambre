@@ -453,7 +453,6 @@ fn draw_run<S: DrawSurface>(
         // A line shaped in a later segment is moved down to its place
         // (`PROSE-128`).
         let origin = placed.origin + (0.0, f64::from(shift.get()));
-        let transform = Affine::translate(origin.to_vec2());
         let mut items = line.items().enumerate();
         for at in on_line {
             let Some((_, PositionedLayoutItem::GlyphRun(glyphs))) =
@@ -466,7 +465,7 @@ fn draw_run<S: DrawSurface>(
                 .filter(|cut| cut.line == at.line)
                 .peekable();
             if cuts.peek().is_none() {
-                surface.draw_glyphs(&glyphs, text, &brush, transform);
+                surface.draw_glyphs(&glyphs, text, &brush, run_at(&glyphs, origin));
                 draw_lines(surface, &glyphs, origin, color);
                 continue;
             }
@@ -477,7 +476,7 @@ fn draw_run<S: DrawSurface>(
                 let right = origin.x + to + shift;
                 surface.push_clip(Rect::new(left, -band, right, band));
                 let moved = origin + (shift, 0.0);
-                surface.draw_glyphs(&glyphs, text, &brush, Affine::translate(moved.to_vec2()));
+                surface.draw_glyphs(&glyphs, text, &brush, run_at(&glyphs, moved));
                 draw_lines(surface, &glyphs, moved, color);
                 surface.pop_clip();
             };
@@ -492,6 +491,14 @@ fn draw_run<S: DrawSurface>(
             slice(surface, from, band, shift);
         }
     }
+}
+
+/// Where a glyph run is drawn from: its line's `origin`, moved along the line
+/// to the run and down to its baseline. `draw_glyphs` places each glyph from
+/// that point, so a line top would draw the glyphs above their line.
+fn run_at(glyphs: &parley::GlyphRun<'_, ambre_draw::ParleyBrush>, origin: Point) -> Affine {
+    let at = origin + (f64::from(glyphs.offset()), f64::from(glyphs.baseline()));
+    Affine::translate(at.to_vec2())
 }
 
 /// Draw the underline and the strike-through a glyph run carries, at the
@@ -549,10 +556,9 @@ pub(crate) fn draw_shape<S: DrawSurface>(
         };
         let text = data.line_text(index).unwrap_or(LayoutText::none());
         let origin = at + (0.0, f64::from(shift.get()));
-        let transform = Affine::translate(origin.to_vec2());
         for item in line.items() {
             if let PositionedLayoutItem::GlyphRun(glyphs) = item {
-                surface.draw_glyphs(&glyphs, text, &brush, transform);
+                surface.draw_glyphs(&glyphs, text, &brush, run_at(&glyphs, origin));
                 draw_lines(surface, &glyphs, origin, color);
             }
         }

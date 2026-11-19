@@ -864,6 +864,40 @@ mod tests {
         surface
     }
 
+    /// A glyph run is handed to the surface at its baseline, which sits
+    /// inside the line its fragment clips to. Handed the top of its line,
+    /// every glyph is drawn above the clip and only its descender shows.
+    #[test]
+    fn a_glyph_run_is_drawn_at_its_baseline_inside_its_clip() {
+        let mut state =
+            ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document is built");
+        state.load_faces(&crate::layout::fonts::shipped_faces());
+        append(&mut state, BlockInit::Paragraph, "Hello world");
+        let mut ui = view_of(&mut state);
+        let surface = paint(&mut ui);
+        let mut clips = Vec::new();
+        let mut runs = 0;
+        for op in surface.ops() {
+            match op {
+                DrawOp::PushClip { rect } => clips.push(*rect),
+                DrawOp::PopClip => {
+                    clips.pop();
+                }
+                DrawOp::Glyphs { transform, .. } => {
+                    let clip = clips.last().expect("a run is drawn inside its clip");
+                    let y = transform.translation().y;
+                    assert!(
+                        clip.y0 < y && y < clip.y1,
+                        "the baseline {y} lies inside the clip {clip:?}"
+                    );
+                    runs += 1;
+                }
+                _ => {}
+            }
+        }
+        assert!(runs > 0, "the paragraph is drawn");
+    }
+
     /// A page drawn by the screen's own walk and written as a PDF reads back
     /// as its text (`PDF-005`). The paragraph is edited after its first
     /// layout, so the walk draws lines of a run re-shaped in part. A
