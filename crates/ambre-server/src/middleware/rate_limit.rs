@@ -155,11 +155,40 @@ fn request_bucket(jwt: &crate::jwt::JwtKeys, trust_proxy: ProxyTrust, req: &Requ
     {
         return RateBucket::User(claims.sub);
     }
+    RateBucket::Peer(request_peer(trust_proxy, req))
+}
+
+/// The peer a request comes from, whatever token it carries.
+fn request_peer(trust_proxy: ProxyTrust, req: &Request) -> Peer {
+    let forwarded = req
+        .headers()
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok());
     let remote = req
         .extensions()
         .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
         .map_or(Peer::Unknown, |a| Peer::of(a.0.ip()));
-    RateBucket::Peer(client_peer(trust_proxy, header("x-forwarded-for"), remote))
+    client_peer(trust_proxy, forwarded, remote)
+}
+
+/// The bucket a request of `category` counts against.
+///
+/// The sign-in tier counts by peer alone. Each account a caller sets up
+/// brings a token. A bucket per token would grow the rate of new accounts
+/// from one address with their count (`SRV-304`). The other tiers
+/// count a signed-in caller by its account (`SRV-019`).
+fn bucket_for(
+    category: &RateLimitCategory,
+    jwt: &crate::jwt::JwtKeys,
+    trust_proxy: ProxyTrust,
+    req: &Request,
+) -> RateBucket {
+    match category {
+        RateLimitCategory::Auth => RateBucket::Peer(request_peer(trust_proxy, req)),
+        RateLimitCategory::Api | RateLimitCategory::WebSocket => {
+            request_bucket(jwt, trust_proxy, req)
+        }
+    }
 }
 
 /// The peer of a request: the `X-Forwarded-For` entry `hops` places from the
@@ -298,7 +327,12 @@ pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) ->
         window,
     } = category.limits();
 
-    let bucket = request_bucket(&state.jwt, state.config.trust_proxy_headers, &req);
+    let bucket = bucket_for(
+        &category,
+        &state.jwt,
+        state.config.trust_proxy_headers,
+        &req,
+    );
 
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -660,6 +694,26 @@ mod tests {
             request_bucket(&jwt, proxies(1), &req),
             RateBucket::Peer(addr("203.0.113.9"))
         );
+    }
+
+    /// `SRV-304`, audit `P55`: the sign-in tier counts a request by its peer,
+    /// whatever token it carries, so each account set up brings no fresh
+    /// bucket. The other tiers count the signed-in caller.
+    #[test]
+    fn the_sign_in_tier_counts_by_peer_whatever_the_token() {
+        let jwt = crate::jwt::JwtKeys::from_seed(&crate::jwt::JwtSeed::from_array([5u8; 32]));
+        let (user, bearer) = bearer_for(&jwt);
+        let req = request_from([10, 0, 0, 1], &[("authorization", &bearer)]);
+        assert_eq!(
+            bucket_for(&RateLimitCategory::Auth, &jwt, ProxyTrust::Direct, &req),
+            RateBucket::Peer(addr("10.0.0.1"))
+        );
+        for category in [RateLimitCategory::Api, RateLimitCategory::WebSocket] {
+            assert_eq!(
+                bucket_for(&category, &jwt, ProxyTrust::Direct, &req),
+                RateBucket::User(user)
+            );
+        }
     }
 
     /// A bucket names its store key by kind, so a user id and a peer address

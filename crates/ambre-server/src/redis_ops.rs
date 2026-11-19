@@ -861,6 +861,18 @@ impl CallOpening {
     }
 }
 
+/// The most seats one signing key holds in one call at once: the devices of
+/// one member (`SRV-306`). Past it, the
+/// member reads the call as full, and the other members keep their seats.
+const MEMBER_SEAT_CAP: ambre_core::Count<ambre_protocol::signaling::CallParticipants> =
+    ambre_core::Count::new(4);
+
+/// The most sender indexes one signing key takes in one call. An index is
+/// never given back, so a member who joins and leaves in a loop would spend
+/// every index of the call. Past it, the member reads the call as exhausted
+/// (`SRV-306`).
+const MEMBER_JOIN_CAP: ambre_core::Seq<ambre_core::SenderIndex> = ambre_core::Seq::new(256);
+
 /// Takes a seat of `call` for the session of `key`, in one script (`SRV-248`).
 ///
 /// A start creates the state of the call in `channel`, under the room pseudonym `room`, which
@@ -870,8 +882,9 @@ impl CallOpening {
 ///
 /// The script takes the seat and the index at once. So two joins never both take the
 /// last seat under the cap (`CALL-021`), nor one sender index (`CALL-056`). The counter of the
-/// call only grows, and a leave gives no index back. Every key, and the field of the seat,
-/// take the time to live `ttl`.
+/// call only grows, and a leave gives no index back. One key holds at most
+/// [`MEMBER_SEAT_CAP`] seats and takes at most [`MEMBER_JOIN_CAP`] indexes (`SRV-306`). Every
+/// key, and the field of the seat, take the time to live `ttl`.
 ///
 /// # Errors
 /// A store error, or an answer the script does not write.
@@ -895,9 +908,17 @@ end
 local state = redis.call('HMGET', KEYS[1], 'channel', 'room', 'next')
 if state[1] ~= ARGV[1] then return {'channel'} end
 if #redis.call('HKEYS', KEYS[2]) >= tonumber(ARGV[4]) then return {'full'} end
+local held = 0
+for _, holder in ipairs(redis.call('HVALS', KEYS[2])) do
+    if holder == ARGV[3] then held = held + 1 end
+end
+if held >= tonumber(ARGV[8]) then return {'full'} end
+local taken = tonumber(redis.call('HGET', KEYS[1], 'taken:' .. ARGV[3])) or 0
+if taken >= tonumber(ARGV[9]) then return {'exhausted'} end
 local sender = tonumber(state[3])
 if sender >= tonumber(ARGV[5]) then return {'exhausted'} end
 redis.call('HSET', KEYS[1], 'next', sender + 1)
+redis.call('HINCRBY', KEYS[1], 'taken:' .. ARGV[3], 1)
 redis.call('HSET', KEYS[2], tostring(sender), ARGV[3])
 redis.call('HEXPIRE', KEYS[2], ARGV[6], 'FIELDS', 1, tostring(sender))
 redis.call('SADD', KEYS[4], tostring(sender))
@@ -917,6 +938,8 @@ return {'admitted', state[2], tostring(sender)}
                 ambre_core::SENDER_INDEX_LIMIT.get().to_string(),
                 ttl.get().to_string(),
                 opening.word().to_owned(),
+                MEMBER_SEAT_CAP.get().to_string(),
+                MEMBER_JOIN_CAP.get().to_string(),
             ],
         )
         .await

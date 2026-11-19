@@ -2832,6 +2832,50 @@ mod handler_tests {
             .unwrap()
     }
 
+    /// `SRV-303`, audit `P54`: a socket ends when the token that opened it
+    /// expires. It stays open before, and the relay drops it after.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_socket_ends_when_its_token_expires(pool: sqlx::PgPool) {
+        use futures_util::{SinkExt, StreamExt};
+        use tokio_tungstenite::tungstenite::Message;
+
+        let state = test_app_state(pool).await;
+        let now = crate::s3::unix_now();
+        let claims = crate::jwt::Claims {
+            sub: Id::<User>::mint(),
+            spk: Some(ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(
+                [3u8; 32],
+            )),
+            iat: now,
+            exp: now.plus(TimeSpan::<Sec>::new(2)),
+        };
+        let token = state.jwt.mint(&claims).unwrap();
+        let mut socket = open_socket(state, "").await;
+        socket
+            .send(Message::Binary(
+                authenticate(token.secret().expose()).into(),
+            ))
+            .await
+            .unwrap();
+        let early =
+            tokio::time::timeout(std::time::Duration::from_millis(500), socket.next()).await;
+        assert!(
+            early.is_err(),
+            "the socket is open before the expiry: {early:?}"
+        );
+        let ended = tokio::time::timeout(std::time::Duration::from_secs(6), async {
+            loop {
+                match socket.next().await {
+                    None | Some(Err(_)) | Some(Ok(Message::Close(_))) => return,
+                    Some(Ok(_)) => continue,
+                }
+            }
+        })
+        .await;
+        assert!(ended.is_ok(), "the socket outlived its token");
+    }
+
     /// Opens the socket, authenticates with `token`, and returns the code of
     /// the close frame the server sends first.
     async fn first_close_code(state: Arc<AppState>, token: &str) -> Option<Bounded<CloseCode>> {
@@ -2941,7 +2985,8 @@ mod handler_tests {
         let viewer_email = "viewer@ambre.app";
         let viewer = setup_named(&app, viewer_email, 5).await;
         invite(&app, &owner, &doc_id, viewer_email, "viewer").await;
-        let (_store, held) = media_store(&pool, &[(doc_id.as_str(), "a".repeat(64).as_str())]).await;
+        let (_store, held) =
+            media_store(&pool, &[(doc_id.as_str(), "a".repeat(64).as_str())]).await;
         let app = build_test_router(held);
 
         let body = serde_json::json!({
@@ -2988,7 +3033,8 @@ mod handler_tests {
         let app = build_test_router(state.clone());
         let owner = setup_and_get_auth(&app).await;
         let doc_id = create_test_doc(&app, &owner).await;
-        let (_store, held) = media_store(&pool, &[(doc_id.as_str(), "b".repeat(64).as_str())]).await;
+        let (_store, held) =
+            media_store(&pool, &[(doc_id.as_str(), "b".repeat(64).as_str())]).await;
         let app = build_test_router(held);
 
         let body = serde_json::json!({
@@ -3113,7 +3159,14 @@ mod handler_tests {
         let doc_a = create_test_doc(&setup, &owner).await;
         let doc_b = create_test_doc(&setup, &owner).await;
         let held = "c".repeat(64);
-        let (_store, filled) = media_store(&pool, &[(doc_a.as_str(), held.as_str()), (doc_b.as_str(), held.as_str())]).await;
+        let (_store, filled) = media_store(
+            &pool,
+            &[
+                (doc_a.as_str(), held.as_str()),
+                (doc_b.as_str(), held.as_str()),
+            ],
+        )
+        .await;
         let app = shipped_router(filled);
         let never = "d".repeat(64);
         let link = |doc: &str, hash: &str| {

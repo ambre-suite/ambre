@@ -404,7 +404,6 @@ mod tests {
                 "id",
                 "master_key_enc",
                 "master_key_salt",
-                "org_master_key_enc",
             ]
             .into_iter()
             .collect()

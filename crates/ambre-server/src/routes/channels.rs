@@ -3328,6 +3328,57 @@ mod tests {
         assert_eq!(member_ids(&state, public.meta.document_id()).await, [alice]);
     }
 
+    /// `SRV-302`, audit `P38`: a member leaves a private channel. The debt
+    /// of `meta` is the debt of its segment, in the register and in the
+    /// store. So the relay refuses each frame of the segment under the key
+    /// the member keeps.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_leave_of_a_private_channel_owes_its_segment_a_rotation(pool: sqlx::PgPool) {
+        use rustis::commands::GenericCommands;
+        let (state, _stub) = with_store(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let space = space(&state, alice, &[(bob, Role::Editor)]).await;
+        let [_, shared, _] = bobs_channels(&state, alice, bob, space).await;
+        let left = crate::routes::share::revoke_from_document(
+            State(state.clone()),
+            session(bob),
+            PathId::new((shared.meta.document_id(), bob)),
+            None,
+        )
+        .await;
+        assert_eq!(status(left), StatusCode::OK);
+
+        let segment = shared.segment.document_id();
+        assert!(owes(&state, &shared).await);
+        assert!(
+            db::rotation_owed(&state.db, &segment).await.expect("query"),
+            "the segment owes what its meta owes"
+        );
+        let mirrored: usize = state
+            .redis
+            .exists(
+                crate::redis_keys::DocKey::<crate::redis_keys::RotationOwed>::of(&segment).as_str(),
+            )
+            .await
+            .expect("exists");
+        assert_eq!(mirrored, 1, "the store mirrors the debt of the segment");
+        let refused = crate::redis_ops::verify_clock_and_assign_seq(
+            &state.redis,
+            &segment,
+            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([9; 32]),
+            ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::new(1),
+        )
+        .await;
+        assert!(
+            matches!(refused, Err(AppError::RotationOwed)),
+            "{refused:?}"
+        );
+        let keys = crate::redis_keys::DocumentStateKeys::of(&segment);
+        let _: usize = state.redis.del(keys.texts()).await.expect("del");
+    }
+
     /// `SRV-136`: the owner who removes a member from a space with its
     /// rotation takes them out of every channel of it too.
     #[sqlx::test]

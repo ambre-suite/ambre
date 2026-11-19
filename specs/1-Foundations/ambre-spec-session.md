@@ -40,6 +40,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 |---|---|---|---|---|---|---|
 | `SRV-003` | `POST` | A route that needs a caller MUST verify the access token, its signature and its expiry. | this spec section 3 | `ambre_server::jwt::tests::expired_token_is_rejected` -- the refusal on the expiry; `::wrong_key_is_rejected` -- the refusal on the signature; `::mint_then_verify_roundtrips` -- the accepted case carries the identity through; `routes::tests::handler_tests::unauth_endpoints_return_401` -- one route's refusal end to end, one route and not the surface | none | verified |
 | `SRV-090` | `FRAME` | The token check MUST NOT read a store: it is a local signature check and nothing else. | this spec section 3; `ambre-spec-budgets.md section 3` | `ambre_server::auth::tests::the_token_check_reads_no_store` -- both stores are closed before the extractor runs, and the session still resolves. The check is a function that cannot wait on a store | none | verified |
+| `SRV-303` | `FAIL` | A socket MUST end when the access token that opened it expires. | this spec section 3; `SRV-090` | `ambre_server::routes::tests::handler_tests::a_socket_ends_when_its_token_expires` -- database tier: a socket opened by a token of two seconds stays open before its expiry and is dropped after it | none | verified |
 
 ### 1.3 A person signs in, and sets up their account
 
@@ -74,7 +75,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   and sees none of the three secrets behind them (`ZK-003`, `SRV-091`). What it mints is its own
   token, and `SRV-012` refuses it every other cryptographic act. The socket takes its token in its
   first frame, so no address carries one (`SRV-031`).
-* **Verification.** 28 `verified`, 2 `unimplemented`. What holds is what a request test can drive:
+* **Verification.** 29 `verified`, 2 `unimplemented`. What holds is what a request test can drive:
   the token gate, the address namespace, the one-shot key write and the refresh race. A provider
   exchange runs against a stub that signs its own identity tokens. A real provider never runs under
   a test.

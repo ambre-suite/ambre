@@ -582,12 +582,20 @@ pub async fn document_key_links(
 }
 
 /// Whether the document owes a rotation (`SRV-122`).
+///
+/// A document of a channel is sealed under the key of its `meta`, so it owes
+/// the rotation its `meta` owes. A removal marks the `meta` alone, and the
+/// relay then refuses each frame of the segment under the key the removed
+/// member holds (`SRV-302`).
 pub async fn rotation_owed(pool: &PgPool, document_id: &Id<Document>) -> Result<bool, AppError> {
-    let owed: Option<bool> =
-        sqlx::query_scalar("SELECT rotation_owed FROM documents WHERE id = $1")
-            .bind(id_to_uuid(*document_id))
-            .fetch_optional(pool)
-            .await?;
+    let owed: Option<bool> = sqlx::query_scalar(concat!(
+        "SELECT d.rotation_owed OR a.rotation_owed FROM documents d, documents a \
+         WHERE d.id = $1 AND a.id = ",
+        access_document!()
+    ))
+    .bind(id_to_uuid(*document_id))
+    .fetch_optional(pool)
+    .await?;
     Ok(owed.unwrap_or(false))
 }
 

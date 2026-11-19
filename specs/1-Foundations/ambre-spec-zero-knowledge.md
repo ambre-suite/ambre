@@ -98,8 +98,7 @@ that component's prefix instead.
   works with whom out of the boundary this document rules. A metric label names no document, no
   user, no call and no connection (`ZK-029`). A log line at the info level names none of them
   either (`ZK-030`), and no client address appears whole (`ZK-031`).
-  The debug level names them, so a relay outside development mode starts at info, and debug
-  takes an explicit filter (`ZK-046`).
+  Outside development mode, the relay starts at info (`ZK-046`).
 
   Two release builds of one commit give one client digest, and a tag publishes it (`ZK-038`,
   `ZK-039`). Whether a deployment serves that build stays a check by hand (`ZK-040`).
@@ -315,8 +314,8 @@ The relay takes `ed25519-dalek` directly, for signatures alone (`SRV-012`). Ever
 `deny.toml` admits a third dependant, `ambre-logic`, for one hash of its host-only fixtures. That
 use holds no cipher and no key.
 
-**The key hierarchy.** The four Postgres columns it ends in -- `master_key_enc`, `master_key_salt`,
-`doc_key_enc` and `org_master_key_enc` -- are opaque blobs to the relay (`ambre-spec-server.md`,
+**The key hierarchy.** Four Postgres columns are opaque blobs to the relay: `master_key_salt`,
+`doc_key_enc`, and the `master_key_enc` of an account and of a membership (`ambre-spec-server.md`,
 `ambre-spec-session.md`, `ambre-spec-organizations.md`).
 
 ```mermaid
