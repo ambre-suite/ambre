@@ -35,6 +35,9 @@ move together or neither moves.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SRV-032` | `POST` | An ordering state the ephemeral store has lost MUST be rebuilt from the durable history before any delta is validated. | this spec section 3 | `ambre_server::redis_ops::redis_integration_tests::seed_clock_state_unblocks_the_next_update_after_a_redis_reset` -- the author's next delta is accepted after a reset that would otherwise refuse it for ever, the rebuild raising and never lowering, so a live writer cannot be undone by it | none | verified |
+| `SRV-288` | `POST` | A rebuilt ordering state MUST number the next delta past every delta the trim removed and past every snapshot horizon. | this spec section 3; `SRV-032`; `SRV-127` | `ambre_server::db::tests::a_trimmed_document_reseeds_past_its_horizon` -- database tier: once every delta is trimmed under a confirmed horizon, the rebuild numbers the next delta past it, and a document holding a horizon alone seeds its counter | none | verified |
+| `SRV-300` | `POST` | A rebuilt ordering state MUST keep the clock of each author whose deltas the trim removed. | this spec section 3; `SRV-032`; `SRV-288` | `ambre_server::db::tests::a_trimmed_document_reseeds_past_its_horizon` -- database tier: the author whose every delta was trimmed sends its next clock, and the rebuilt state accepts it | none | verified |
+| `SRV-289` | `FAIL` | Given a snapshot whose horizon is past the last delta number the ephemeral store holds, the relay MUST refuse it, a lost counter included. | this spec section 3; `SRV-288` | `ambre_server::routes::tests::handler_tests::a_cold_counter_refuses_every_horizon_past_zero` -- database tier: a horizon past a lost counter is refused, and lands once the counter is rebuilt | none | verified |
 | `SRV-080` | `POST` | The clock check and the number MUST be one indivisible step. | this spec section 3; `SRV-006` | `ambre_server::redis_ops::redis_integration_tests::one_clock_sent_at_once_is_numbered_once` -- one author's clock sent at once over sixteen connections is numbered once and refused fifteen times, and the counter moves by one | none | verified |
 | `SRV-037` | `FAIL` | A refused clock MUST reach its author as a typed conflict, naming the document and the refused delta, and carrying the expected and the received value. | `ambre-spec-server.md`, `SRV-020`; `ambre-spec-delta-order.md`, `SYNC-147` | `ambre_server::redis_ops::tests::the_script_refusal_becomes_the_typed_conflict`; `ambre_server::ws::handler::message::refusal_tests::a_refused_clock_carries_the_expected_and_the_received_value` -- the script refusal is parsed into the typed conflict, and the refusal carries the document, the signature and both values | none | verified |
 | `SRV-169` | `FRAME` | After a clock refusal, the relay MUST NOT number a later delta of that document on that socket until the author answers the refused delta. | this spec section 3; `SRV-037`; `ambre-spec-delta-order.md`, `SYNC-147` | `ambre_server::ws::handler::message::refusal_tests::a_refused_clock_fences_the_socket_until_its_answer` -- the fence holds one document, an answer naming another delta lifts nothing, and the answer lifts it, as does forgetting the document; `ambre_server::ws::handler::message::hot_tail_tests::a_delta_behind_a_refused_clock_waits_for_the_answer` -- of two sockets of one key, the refused one drops its next delta unanswered and unnumbered, and numbers it after the answer, on the database tier, behind the feature the test recipe carries (`ambre-spec-testing.md section 5`) | none | verified |
@@ -123,6 +126,7 @@ snapshot, and the relay arbitrates who writes it.
 |---|---|---|---|---|---|---|
 | `SRV-113` | `POST` | The relay MUST grant the finalize lease of a segment to one client at a time. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | `ambre_server::routes::channels::tests::a_lease_waits_out_the_grace_then_goes_to_one_writer_at_a_time` -- database tier, a second writer is answered the time left on the live lease; `::a_lease_needs_a_writer_and_a_closing_segment` -- a viewer and the active segment take none | none | verified |
 | `SRV-114` | `POST` | Granting a finalize lease MUST lock the segment against deltas for good. | this spec section 3 | `ambre_server::routes::channels::tests::a_lease_waits_out_the_grace_then_goes_to_one_writer_at_a_time` -- database tier, the register records the lock at the last delta number, and the store mirrors it; `ambre_server::redis_ops::lua_tests::a_locked_segment_refuses_every_later_delta` -- a pending delta holds the lock back | none | verified |
+| `SRV-290` | `POST` | The horizon a lock records MUST NOT be lower than the highest delta number the durable store holds for the segment. | this spec section 3; `SRV-114`; `SRV-288` | `ambre_server::routes::channels::tests::a_lease_after_a_store_reset_takes_its_horizon_from_the_register` -- database tier: after the ephemeral store loses the counter of a segment of five deltas, the finalize lease and the register both hold horizon 5 | none | verified |
 | `SRV-115` | `FAIL` | Given a delta for a locked segment, the relay MUST refuse it with an answer that names the lock. | this spec section 3 | `ambre_server::redis_ops::lua_tests::a_locked_segment_refuses_every_later_delta` -- database tier, the delta takes no number and consumes no clock; `ambre_server::ws::handler::message::refusal_tests::a_delta_for_a_locked_segment_is_refused_with_the_lock` -- the refusal names the delta and the lock's code | none | verified |
 | `SRV-116` | `FAIL` | Given a finalize commit from a client that holds no live lease, the relay MUST refuse it. | this spec section 3 | `ambre_server::routes::channels::tests::a_commit_needs_the_live_lease_and_a_snapshot_of_the_horizon` -- database tier, another lease and a snapshot off the horizon or of another document are refused; `::an_expired_lease_goes_to_another_writer` -- an expired lease commits nothing | none | verified |
 | `SRV-117` | `POST` | An accepted finalization MUST record the finalization time of the segment. | this spec section 3; `ZK-015` | `ambre_server::routes::channels::tests::a_commit_needs_the_live_lease_and_a_snapshot_of_the_horizon` -- database tier, the segment is `final` with its time, and a retry is answered alike | none | verified |
@@ -187,7 +191,7 @@ it to every writer that asks.
 * **Boundary.** the relay orders bytes it cannot read. What it learns is the routing set of
   `ZK-007`: which key wrote to which document, at which clock, and how large the delta was.
   `SRV-001` keeps the delta out of the logs.
-* **Verification.** 78 `verified`. The ordering, the storage and the replay hold. So does each step
+* **Verification.** 82 `verified`. The ordering, the storage and the replay hold. So does each step
   of a segment's life, from its close to its fold, and the thread of a root. The recovery paths are
   driven through real failures: a register that refuses inserts, a queue that refuses pushes, an
   index that cannot be read.
@@ -242,6 +246,12 @@ author's deltas out of order.
 bounded by the document's members. Expiring it would reset an author to zero, and a returning client
 holding its own advanced clock would then be refused for ever. Removing one entry would reopen the
 replay window the clock exists to close. The bound is the membership, and that is accepted.
+
+**What survives a trim.** A rebuild reads the durable history, and the trim removes part of it. So
+each delete of the trim raises a high-water mark per author of the rows it removes: the highest
+clock and the highest number. A rebuild takes the larger of the rows and the marks (`SRV-300`), and
+the counter also reaches the highest snapshot horizon (`SRV-288`). Until a subscribe rebuilds a lost counter,
+it reads 0, and the relay refuses every horizon past it (`SRV-289`).
 
 **What happens to an accepted delta**, in order. Each step's failure has its own answer, and none of
 them un-assigns the number.
@@ -372,8 +382,9 @@ registers, and the other is answered the winner (`SRV-195`). A close while a seg
    wait until the grace period has passed since the close and since the latest delta (`SRV-199`).
 2. The first lease locks the segment for good, once no delta of it waits to be flushed. The lock
    is set in the ephemeral store first, then recorded with the last delta number, the horizon
-   (`SRV-114`). A later delta is refused with an answer that names the lock, so the client sends
-   the edit elsewhere (`SRV-115`).
+   (`SRV-114`). The horizon is never under the highest number the register holds, since a reset
+   of the ephemeral store loses its counter (`SRV-290`). A later delta is refused with an answer
+   that names the lock, so the client sends the edit elsewhere (`SRV-115`).
 3. The relay grants the lease to one client at a time (`SRV-113`), and answers another the time
    the live lease has left. A lease that expires gives way to the next one asked (`SRV-119`).
 4. The client uploads the final snapshot, covering exactly the horizon, and commits it under the

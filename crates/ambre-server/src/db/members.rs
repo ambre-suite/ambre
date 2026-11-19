@@ -394,7 +394,7 @@ pub async fn list_document_members(
             Ok(MemberWithUserRow {
                 user_id: r.try_get::<PgId, _>("user_id")?.into(),
                 email: ambre_core::Email::new(r.try_get("email")?),
-                email_verified: r.try_get("email_verified")?,
+                email_verified: ambre_core::Flag::from_bool(r.try_get("email_verified")?),
                 display_name: decode_display_name(r.try_get("display_name")?)?,
                 role: decode_role(r.try_get("role")?)?,
                 signing_pubkey: decode_key(r.try_get("signing_pubkey")?)?,
@@ -737,6 +737,7 @@ pub struct Rotation<'a> {
 /// `members` are the members the rotation read before it wrapped. A member
 /// outside them joined since and holds no copy of the new key. It would keep
 /// the one the relay now refuses, so the rotation is refused whole (`SRV-167`).
+/// So is a rotation whose `keys` leave out a current member (`SRV-299`).
 async fn rewrap_members(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     document_id: Id<Document>,
@@ -763,6 +764,16 @@ async fn rewrap_members(
         members.iter().map(|m| id_to_uuid(*m)).collect();
     if current.iter().any(|m| !read.contains(m)) {
         return Err(AppError::MembersChanged);
+    }
+    // Each member who stays takes a copy of the new key. A member left out
+    // keeps a copy of the retired key alone, and loses the document from this
+    // rotation on. The debt would still read settled (`SRV-299`).
+    let copied: std::collections::HashSet<uuid::Uuid> =
+        keys.iter().map(|(user, _)| id_to_uuid(*user)).collect();
+    if current.iter().any(|m| !copied.contains(m)) {
+        return Err(AppError::BadRequest(
+            "a rotation carries a copy for every member".into(),
+        ));
     }
     append_link(tx, document_id, link).await?;
     // The rotator re-wrapped every key with ITS exchange key, so it becomes the

@@ -1999,6 +1999,10 @@ pub(crate) struct UserInfoEntry {
     #[serde(with = "ambre_core::serde_id::text")]
     pub id: Id<User>,
     pub email: ambre_core::Email,
+    /// Whether a provider proved the address. A relay that sends no flag
+    /// reads as an unproven address, the safer side (`CHROME-138`).
+    #[serde(rename = "email_verified", default)]
+    pub email_proof: ambre_core::EmailProof,
     pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
     /// The key an invitation's entry names for the invitee (`SYNC-132`).
     pub signing_pubkey: ambre_core::FixedBytes<ambre_core::PublicKey>,

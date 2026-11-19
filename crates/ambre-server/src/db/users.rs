@@ -35,18 +35,9 @@ pub struct UserInfoRow {
     pub exchange_pubkey: FixedBytes<ambre_core::ExchangePublicKey>,
 }
 
-ambre_core::define_flag! {
-    /// Whether a user's email was proven by a provider (OIDC or dev) or only
-    /// asserted at `/auth/setup`. The `users.email_verified` column and the
-    /// `email_verified` member of the JSON answers keep their `bool`.
-    pub enum EmailProof {
-        /// Self-asserted: an OIDC login may reclaim it (#3).
-        Asserted,
-        /// Proven by a provider: it wins any collision.
-        Verified,
-    }
-}
-ambre_core::define_flag!(@sqlx EmailProof);
+/// Whether a provider proved an address. The type lives in `ambre-core`, so
+/// the client reads the same flag the relay writes; the column stays a `bool`.
+pub use ambre_core::EmailProof;
 
 /// Fetches a user by their typed `Id<User>`.
 pub async fn get_user(pool: &PgPool, user_id: &Id<User>) -> Result<Option<UserRow>, AppError> {
@@ -62,7 +53,7 @@ pub async fn get_user(pool: &PgPool, user_id: &Id<User>) -> Result<Option<UserRo
         Some(r) => Ok(Some(UserRow {
             id: r.try_get::<PgId, _>("id")?.into(),
             email: ambre_core::Email::new(r.try_get("email")?),
-            email_verified: r.try_get("email_verified")?,
+            email_verified: ambre_core::Flag::from_bool(r.try_get("email_verified")?),
             display_name: decode_display_name(r.try_get("display_name")?)?,
             master_key_enc: r
                 .try_get::<Option<Vec<u8>>, _>("master_key_enc")?
@@ -79,15 +70,25 @@ pub async fn get_user(pool: &PgPool, user_id: &Id<User>) -> Result<Option<UserRo
 }
 
 /// Maps a unique violation on `users_email_lower_unique` to a 409 Conflict
-/// (N5 policy: the email namespace is global and first-claimant-wins). Any
-/// other error stays an infrastructure-level `Database` error (500).
-fn map_email_conflict(e: sqlx::Error) -> AppError {
+/// (N5 policy: the email namespace is global and first-claimant-wins). So does
+/// one on `users_signing_pubkey_unique`: a signing key belongs to the first
+/// account that registers it (`SRV-293`). Any other error stays an
+/// infrastructure-level `Database` error (500).
+pub(crate) fn map_email_conflict(e: sqlx::Error) -> AppError {
     match &e {
         sqlx::Error::Database(db)
             if db.is_unique_violation() && db.constraint() == Some("users_email_lower_unique") =>
         {
             AppError::Conflict {
                 detail: "email already registered".into(),
+            }
+        }
+        sqlx::Error::Database(db)
+            if db.is_unique_violation()
+                && db.constraint() == Some("users_signing_pubkey_unique") =>
+        {
+            AppError::Conflict {
+                detail: "signing key already registered".into(),
             }
         }
         _ => AppError::Database(e),
@@ -111,7 +112,7 @@ pub async fn get_user_by_email(
         Some(r) => Ok(Some(UserRow {
             id: r.try_get::<PgId, _>("id")?.into(),
             email: ambre_core::Email::new(r.try_get("email")?),
-            email_verified: r.try_get("email_verified")?,
+            email_verified: ambre_core::Flag::from_bool(r.try_get("email_verified")?),
             display_name: decode_display_name(r.try_get("display_name")?)?,
             master_key_enc: r
                 .try_get::<Option<Vec<u8>>, _>("master_key_enc")?
@@ -158,7 +159,7 @@ pub async fn create_user(
     Ok(UserRow {
         id: row.try_get::<PgId, _>("id")?.into(),
         email: ambre_core::Email::new(row.try_get("email")?),
-        email_verified: row.try_get("email_verified")?,
+        email_verified: ambre_core::Flag::from_bool(row.try_get("email_verified")?),
         display_name: decode_display_name(row.try_get("display_name")?)?,
         master_key_enc: row
             .try_get::<Option<Vec<u8>>, _>("master_key_enc")?
@@ -232,7 +233,7 @@ pub async fn upsert_user_from_oidc(
     let user = UserRow {
         id: row.try_get::<PgId, _>("id")?.into(),
         email: ambre_core::Email::new(row.try_get("email")?),
-        email_verified: row.try_get("email_verified")?,
+        email_verified: ambre_core::Flag::from_bool(row.try_get("email_verified")?),
         display_name: decode_display_name(row.try_get("display_name")?)?,
         master_key_enc: row
             .try_get::<Option<Vec<u8>>, _>("master_key_enc")?
@@ -290,7 +291,7 @@ pub async fn dev_upsert_user(
     Ok(UserRow {
         id: row.try_get::<PgId, _>("id")?.into(),
         email: ambre_core::Email::new(row.try_get("email")?),
-        email_verified: row.try_get("email_verified")?,
+        email_verified: ambre_core::Flag::from_bool(row.try_get("email_verified")?),
         display_name: decode_display_name(row.try_get("display_name")?)?,
         master_key_enc: row
             .try_get::<Option<Vec<u8>>, _>("master_key_enc")?
@@ -329,7 +330,7 @@ pub async fn search_users(
             Ok(UserInfoRow {
                 id: r.try_get::<PgId, _>("id")?.into(),
                 email: ambre_core::Email::new(r.try_get("email")?),
-                email_verified: r.try_get("email_verified")?,
+                email_verified: ambre_core::Flag::from_bool(r.try_get("email_verified")?),
                 display_name: decode_display_name(r.try_get("display_name")?)?,
                 signing_pubkey: decode_key(r.try_get("signing_pubkey")?)?,
                 exchange_pubkey: decode_exchange_key(r.try_get("exchange_pubkey")?)?,

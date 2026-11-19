@@ -472,6 +472,9 @@ pub enum RestEvent {
         user_id: Id<User>,
         display_name: ambre_core::Validated<ambre_core::DisplayName>,
         email: ambre_core::Email,
+        /// Whether a provider proved `email`. An asserted one may be a squat,
+        /// so the prompt says so before any key is wrapped (`CHROME-138`).
+        email_proof: ambre_core::EmailProof,
         exchange_pub_key: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
         fingerprint: ambre_core::Opaque<ambre_core::KeyFingerprints>,
     },

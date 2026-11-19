@@ -41,6 +41,25 @@ pub async fn contained<F: Future>(task: &'static str, work: F) -> Option<F::Outp
     }
 }
 
+/// Replaces the panic hook of the standard library with one that logs where
+/// a panic happened and never what it said (`SRV-297`).
+///
+/// The default hook writes the message to stderr before [`contained`] or
+/// [`catch_panics`] can catch the unwind. A message may quote a value the
+/// relay handles, so it reached the log stream that `ZK-006` keeps clean.
+pub fn install_panic_hook() {
+    std::panic::set_hook(Box::new(|info| log_panic(info.location())));
+}
+
+/// Logs a panic at `location`. It is handed the location alone, so no
+/// message and no payload can reach the line.
+fn log_panic(location: Option<&std::panic::Location<'_>>) {
+    match location {
+        Some(at) => tracing::error!(file = at.file(), line = at.line(), "a panic"),
+        None => tracing::error!("a panic at an unknown place"),
+    }
+}
+
 /// The answer to a request whose handler panicked: the generic `500` of any
 /// infrastructure failure, so the caller learns nothing of the cause
 /// (`SRV-096`).
@@ -70,6 +89,39 @@ mod tests {
         let hit = contained("test", async { panic!("forced by a test") }).await;
         assert_eq!(hit, None::<()>);
         assert_eq!(contained("test", async { 7 }).await, Some(7));
+    }
+
+    /// A writer that keeps every byte a test subscriber writes.
+    #[derive(Clone, Default)]
+    struct Captured(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+    impl std::io::Write for Captured {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// `SRV-297`: the line of a panic names its file and its line, and the
+    /// hook hands it nothing else, so no message can reach it.
+    #[test]
+    fn a_panic_logs_its_place_alone() {
+        let captured = Captured::default();
+        let writer = captured.clone();
+        let subscriber = tracing_subscriber::fmt()
+            .with_ansi(false)
+            .with_writer(move || writer.clone())
+            .finish();
+        let here = std::panic::Location::caller();
+        tracing::subscriber::with_default(subscriber, || log_panic(Some(here)));
+        let line = String::from_utf8(captured.0.lock().unwrap().clone()).unwrap();
+        assert!(line.contains("a panic"), "{line}");
+        assert!(line.contains(here.file()), "{line}");
+        assert!(line.contains(&here.line().to_string()), "{line}");
     }
 
     /// A handler that panics with a cause the answer must not carry.

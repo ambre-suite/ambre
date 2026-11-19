@@ -307,10 +307,11 @@ pub async fn create_snapshot(
 
     // A snapshot cannot fold in a delta the relay never numbered. A horizon past
     // the counter would stop the relay asking for snapshots of the document.
-    // A cold counter reads 0 and bounds nothing.
+    // A cold counter reads 0, so it refuses every horizon past 0 until a
+    // subscribe reseeds it from the durable store (`SRV-289`).
     let last = crate::redis_ops::current_seq(&state.redis, &doc_id).await?;
     let covered = req.covered_seq;
-    if last > ambre_core::Seq::<ambre_core::Relay>::new(0) && covered > last {
+    if covered > last {
         return Err(AppError::BadRequest(
             "covered_seq past the last delta".into(),
         ));

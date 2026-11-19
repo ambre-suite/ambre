@@ -123,7 +123,9 @@ pub async fn move_to_batch(
         .body(body.into_body())
         .send()
         .await
-        .map_err(|e| AppError::S3(format!("batch put {key}: {e}")))?;
+        // The key names the document, and the caller logs this error at warn,
+        // so the text carries the store's cause alone (`ZK-030`, `SRV-298`).
+        .map_err(|e| AppError::S3(format!("batch put: {e}")))?;
     let seqs: Vec<ambre_core::Seq<ambre_core::Relay>> = moved.iter().map(|(seq, _)| *seq).collect();
     crate::db::point_rows_at_batch(&mut tx, document_id, &seqs, &key).await?;
     tx.commit().await?;
@@ -424,6 +426,27 @@ mod db_tests {
         };
         assert_eq!(left(doc).await, 0, "a plain delete left delta rows");
         assert_eq!(left(other).await, 1, "another document lost its rows");
+    }
+
+    /// `SRV-298`, audit `W404`: the store refuses a batch put. The error text
+    /// names no object key, so the warn line that logs it names no document.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_refused_batch_put_names_no_object_key(pool: sqlx::PgPool) {
+        let base = test_app_state(pool.clone()).await;
+        let state = with_s3(&base, offline_s3(Some("http://127.0.0.1:1")));
+        let owner = create_test_user(&pool, "refused@ambre.app").await;
+        let doc = create_test_document(&pool, owner, "prose").await;
+        assert!(matches!(
+            inline(&state, &doc, 1, &frame(1), INLINE_CAP).await,
+            InlineInsert::Stored { .. }
+        ));
+        let refused = move_to_batch(&state, &doc, Some(Count::ZERO))
+            .await
+            .expect_err("the store refuses every connection");
+        let text = refused.to_string();
+        assert!(matches!(refused, AppError::S3(_)), "{text}");
+        assert!(!text.contains(&doc.to_string()), "{text}");
     }
 
     /// `SRV-150`: a tail at its cap, in deltas or in bytes, takes no more, and

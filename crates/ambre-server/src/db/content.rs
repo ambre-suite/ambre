@@ -592,32 +592,83 @@ pub struct ClockState {
     )>,
 }
 
-/// Reads the durable clock/seq high-water marks for a document from the `updates`
-/// index. A cold Redis can then be reseeded to a state consistent with the
-/// history clients have already replayed (see [`ClockState`]).
+/// Reads the durable clock/seq high-water marks for a document. A cold Redis
+/// can then be reseeded to a state consistent with the history clients have
+/// already replayed (see [`ClockState`]).
+///
+/// The marks come from the `updates` rows and from what the trim kept of the
+/// rows it removed (`SRV-300`). The counter also reaches the highest snapshot
+/// horizon. So a trimmed document never numbers a delta at or below a horizon
+/// again (`SRV-288`).
 pub async fn get_clock_state(
     pool: &PgPool,
     document_id: &Id<Document>,
 ) -> Result<ClockState, AppError> {
     let did = id_to_uuid(*document_id);
     let rows = sqlx::query(
-        "SELECT author_pubkey, MAX(clock) AS max_clock, MAX(seq) AS max_seq
-         FROM updates WHERE document_id = $1 GROUP BY author_pubkey",
+        "SELECT author_pubkey, MAX(clock) AS max_clock FROM (
+             SELECT author_pubkey, clock FROM updates WHERE document_id = $1
+             UNION ALL
+             SELECT author_pubkey, max_clock FROM trimmed_high_water WHERE document_id = $1
+         ) marks GROUP BY author_pubkey",
     )
     .bind(did)
     .fetch_all(pool)
     .await?;
 
-    let mut state = ClockState::default();
+    let mut state = ClockState {
+        max_seq: durable_seq(pool, document_id).await?,
+        author_clocks: Vec::with_capacity(rows.len()),
+    };
     for r in &rows {
         let author = decode_key(r.try_get("author_pubkey")?)?;
         let max_clock = decode_clock(r.try_get("max_clock")?)?;
-        let max_seq = decode_seq(r.try_get("max_seq")?)?;
-        state.max_seq = state.max_seq.max(max_seq);
         state.author_clocks.push((author, max_clock));
     }
     Ok(state)
 }
+
+/// The highest delta number the durable store knows for a document. It reads
+/// the `updates` rows, what the trim kept of the rows it removed, and the
+/// snapshot horizons. Zero for a document with none of them.
+///
+/// A reset of the ephemeral store may leave its counter lower. So a number
+/// the relay records for good takes the larger of the two (`SRV-288`,
+/// `SRV-290`).
+pub async fn durable_seq<'e, E>(
+    executor: E,
+    document_id: &Id<Document>,
+) -> Result<ambre_core::Seq<ambre_core::Relay>, AppError>
+where
+    E: sqlx::PgExecutor<'e>,
+{
+    let max: i64 = sqlx::query_scalar(
+        "SELECT GREATEST(
+             (SELECT MAX(seq) FROM updates WHERE document_id = $1),
+             (SELECT MAX(max_seq) FROM trimmed_high_water WHERE document_id = $1),
+             (SELECT MAX(covered_seq) FROM snapshots WHERE document_id = $1),
+             0)::BIGINT",
+    )
+    .bind(id_to_uuid(*document_id))
+    .fetch_one(executor)
+    .await?;
+    Ok(decode_seq(max)?)
+}
+
+/// What each delete of [`purge_superseded_updates`] returns of a trimmed row.
+const GONE: &str = "u.document_id, u.batch_key, u.author_pubkey, u.clock, u.seq";
+
+/// The tail of each delete of [`purge_superseded_updates`]. It raises the
+/// high-water marks of the trimmed authors and never lowers one. It answers
+/// the document and the batch of each trimmed row.
+const KEEP_HIGH_WATER: &str = ", kept AS (
+        INSERT INTO trimmed_high_water (document_id, author_pubkey, max_clock, max_seq)
+        SELECT document_id, author_pubkey, MAX(clock), MAX(seq) FROM gone
+        GROUP BY document_id, author_pubkey
+        ON CONFLICT (document_id, author_pubkey) DO UPDATE SET
+            max_clock = GREATEST(trimmed_high_water.max_clock, EXCLUDED.max_clock),
+            max_seq = GREATEST(trimmed_high_water.max_seq, EXCLUDED.max_seq))
+        SELECT document_id, batch_key FROM gone";
 
 /// Trims the delta index of every `updates` row that all retained snapshots have
 /// already folded in, returning the number of rows deleted.
@@ -649,19 +700,27 @@ pub async fn purge_superseded_updates(pool: &PgPool) -> Result<Trim, AppError> {
     // Three deletes, one per rule. One statement that joins the rules with
     // `OR` ran three correlated subqueries per row of `updates`. It was 25
     // times slower, and the pass runs each period (`SRV-277`).
+    //
+    // Each delete raises the high-water marks of the authors it trims, in the
+    // same statement. A cold store then reseeds each author's clock and the
+    // counter past every delta the trim removed (`SRV-288`).
     let statements = [
         // At or below the lowest horizon of the confirmed snapshots.
-        "WITH horizon AS (
+        format!(
+            "WITH horizon AS (
             SELECT document_id, MIN(covered_seq) AS min_covered
             FROM snapshots
             WHERE status = 'confirmed'
             GROUP BY document_id
-        )
+        ), gone AS (
         DELETE FROM updates u USING horizon h
         WHERE u.document_id = h.document_id AND u.seq <= h.min_covered
-        RETURNING u.document_id, u.batch_key",
+        RETURNING {GONE})
+        {KEEP_HIGH_WATER}"
+        ),
         // The author's own deltas under its latest self-confirmed snapshot.
-        "WITH reference AS (
+        format!(
+            "WITH reference AS (
             SELECT DISTINCT ON (document_id) document_id, covered_seq, created_at
             FROM snapshots
             WHERE status = 'confirmed'
@@ -673,24 +732,30 @@ pub async fn purge_superseded_updates(pool: &PgPool) -> Result<Trim, AppError> {
             LEFT JOIN reference r ON r.document_id = s.document_id
             WHERE s.status = 'self' AND (r.created_at IS NULL OR s.created_at > r.created_at)
             ORDER BY s.document_id, s.created_at DESC
-        )
+        ), gone AS (
         DELETE FROM updates u USING author_span a
         WHERE a.document_id = u.document_id AND a.author_pubkey = u.author_pubkey
           AND u.seq > a.from_seq AND u.seq <= a.to_seq
-        RETURNING u.document_id, u.batch_key",
+        RETURNING {GONE})
+        {KEEP_HIGH_WATER}"
+        ),
         // Under the confirmed final snapshot of a final segment.
-        "DELETE FROM updates u
+        format!(
+            "WITH gone AS (
+        DELETE FROM updates u
         USING channel_documents c
         JOIN snapshots f ON f.id = c.final_snapshot AND f.document_id = c.document_id
         WHERE c.document_id = u.document_id AND c.state = 'final'
           AND f.status = 'confirmed' AND u.seq <= f.covered_seq
-        RETURNING u.document_id, u.batch_key",
+        RETURNING {GONE})
+        {KEEP_HIGH_WATER}"
+        ),
     ];
 
     let mut tx = pool.begin().await?;
     let mut rows: u64 = 0;
     let mut touched: Vec<(uuid::Uuid, String)> = Vec::new();
-    for statement in statements {
+    for statement in &statements {
         let gone: Vec<(uuid::Uuid, Option<String>)> =
             sqlx::query_as(statement).fetch_all(&mut *tx).await?;
         rows = rows.saturating_add(u64::try_from(gone.len()).unwrap_or(u64::MAX));

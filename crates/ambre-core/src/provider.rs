@@ -15,6 +15,19 @@ pub enum OidcProvider {
 }
 
 impl OidcProvider {
+    /// Every provider, for a check that must read them all.
+    pub const ALL: [Self; 1] = [Self::Google];
+
+    /// The host the provider's authorization endpoint lives on. The sign-in
+    /// follows an address the relay names only on one of these hosts. So a
+    /// relay cannot show a page of its choice where the user expects a
+    /// password prompt (`CHROME-139`).
+    pub const fn authorization_host(self) -> &'static str {
+        match self {
+            Self::Google => "accounts.google.com",
+        }
+    }
+
     /// The provider a path segment or a stored word names, or `None` for a
     /// word that names no provider.
     pub fn parse(word: &str) -> Option<Self> {
@@ -54,5 +67,15 @@ mod tests {
         for bad in ["", "Google", "../keys/master", "google/x", "dev", "gitlab"] {
             assert_eq!(OidcProvider::parse(bad), None, "{bad:?} was accepted");
         }
+    }
+
+    /// `CHROME-139`: each provider names the one host of its authorization
+    /// endpoint, the host its discovery document publishes.
+    #[test]
+    fn each_provider_pins_the_host_of_its_authorization_endpoint() {
+        assert_eq!(
+            OidcProvider::ALL.map(OidcProvider::authorization_host),
+            ["accounts.google.com"]
+        );
     }
 }

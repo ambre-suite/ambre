@@ -1091,6 +1091,7 @@ A duration a rule waits on before it acts. Each figure is a first estimate, to m
 | Duration | Target | Why this order of size | Method |
 |---|---|---|---|
 | Grace period before a closing Murmure segment is finalized | 24 h | a typo fix lands within minutes, so a day keeps every recent edit out of a sealed segment | `FINALIZE_GRACE` in `ambre_server::routes::channels`, counted from the close and from the latest delta (`SRV-199`) |
+| Deadline of one request of the relay to the identity provider | 10 s | a provider answers a discovery, a code exchange or a key fetch in well under a second, so ten seconds admits a slow network and holds no sign-in open for long (`SRV-296`) | `PROVIDER_DEADLINE` in `ambre_server::oidc` |
 | Murmure message grouping span | 5 min | consecutive messages of one author inside the span share one header, as every chat product groups them | `GROUP_SPAN` in `ambre_murmure::list` (`MURMURE-183`) |
 | Refresh period of the presence in a space or a channel | 60 s | a member list needs a state per minute, and the relay then writes one entry per member per minute (`MURMURE-445`, `MURMURE-126`) | `REFRESH_PERIOD` in `ambre_murmure::members` |
 | Presence expiry in a space or a channel | 180 s | three refresh periods: one for the tick that dates a sample, one for a lost sample, one for two timers drifting apart (`MURMURE-445`, `MURMURE-126`) | `PRESENCE_EXPIRY` in `ambre_murmure::members` |

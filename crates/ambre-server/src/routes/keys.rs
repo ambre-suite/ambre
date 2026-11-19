@@ -58,7 +58,8 @@ pub async fn store_master_keys(
     .bind(spk.as_slice())
     .bind(epk.as_slice())
     .execute(&state.db)
-    .await?;
+    .await
+    .map_err(db::map_email_conflict)?;
     if result.rows_affected() == 0 {
         // The row already holds master key material (or does not exist): this is a
         // re-store, not the first-time upload. Reject rather than clobber the

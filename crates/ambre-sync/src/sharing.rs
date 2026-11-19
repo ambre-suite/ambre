@@ -758,6 +758,7 @@ pub(crate) async fn fetch_invitee_key_task<H: ShareHttp>(
         user_id: invitee.id,
         display_name: invitee.display_name.clone(),
         email: invitee.email.clone(),
+        email_proof: invitee.email_proof,
         exchange_pub_key,
         fingerprint,
     });
@@ -2684,6 +2685,31 @@ mod tests {
         assert!(lrx.try_recv().is_err(), "no ApiError on success");
         // Phase 1 only searches: no wrapping, no share POST.
         assert_eq!(http.calls().len(), 1);
+    }
+
+    /// `CHROME-138`: phase 1 carries whether a provider proved the address.
+    /// A relay that sends no flag reads as an unproven address.
+    #[tokio::test]
+    async fn fetch_invitee_key_carries_the_proof_of_the_address() {
+        let (_invitee_xk, invitee_pub_hex) = keypair(2);
+        let mut verified = user_search_json("invitee@test.local", &invitee_pub_hex);
+        verified["users"][0]["email_verified"] = serde_json::json!(true);
+        let mut asserted = verified.clone();
+        asserted["users"][0]["email_verified"] = serde_json::json!(false);
+        let unsent = user_search_json("invitee@test.local", &invitee_pub_hex);
+        for (answer, proof) in [
+            (verified, ambre_core::EmailProof::Verified),
+            (asserted, ambre_core::EmailProof::Asserted),
+            (unsent, ambre_core::EmailProof::Asserted),
+        ] {
+            let http = FakeHttp::new(vec![Ok(answer)]);
+            let (etx, erx, sink, _lrx) = channels();
+            fetch_invitee_key_task(&http, fetch_key_params(), &etx, &sink).await;
+            match erx.try_recv().expect("InviteeKeyReady emitted") {
+                SyncEvent::InviteeKeyReady { email_proof, .. } => assert_eq!(email_proof, proof),
+                _ => panic!("unexpected event (want InviteeKeyReady)"),
+            }
+        }
     }
 
     fn member_key_params(user_id: Id<User>) -> FetchMemberKeyParams {

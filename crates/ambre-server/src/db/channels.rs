@@ -448,20 +448,27 @@ pub async fn retired_unlocked_segments(
 }
 
 /// Record the lock of `segment` at its delta `horizon`, unless a lock holds
-/// it already: a lock is set once.
+/// it already: a lock is set once. Answers the horizon it records, which is
+/// never under the highest delta number of the durable store.
 pub async fn record_lock(
     pool: &PgPool,
     segment: &Id<Document>,
     horizon: ambre_core::Seq<ambre_core::Relay>,
-) -> Result<(), AppError> {
+) -> Result<ambre_core::Seq<ambre_core::Relay>, AppError> {
+    // A reset of the ephemeral store leaves its counter at 0, while the
+    // register holds every delta. So the horizon takes the larger of the two
+    // (`SRV-290`).
+    let mut tx = pool.begin().await?;
+    let horizon = horizon.max(super::durable_seq(&mut *tx, segment).await?);
     sqlx::query(
         "UPDATE channel_documents SET horizon = $2 WHERE document_id = $1 AND horizon IS NULL",
     )
     .bind(id_to_uuid(*segment))
     .bind(horizon.to_i64_saturating())
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
-    Ok(())
+    tx.commit().await?;
+    Ok(horizon)
 }
 
 /// Register `amendments` as the one amendments document of the locked
@@ -612,9 +619,12 @@ pub enum FinalizeLease {
 /// since its latest delta (`SRV-199`). Then `lock` locks it in the store and
 /// answers the last delta number it holds, or `None` while a delta still
 /// waits to be flushed. The register then records the lock and its horizon
-/// for good (`SRV-114`). A live lease answers its time left. An expired one
-/// gives way to a new lease (`SRV-119`). A segment that is not closing, or
-/// not of the channel, is refused with a 409.
+/// for good (`SRV-114`). The horizon is the larger of that number and the
+/// highest one the durable store holds (`SRV-290`).
+///
+/// A live lease answers its time left. An expired one gives way to a new
+/// lease (`SRV-119`). A segment that is not closing, or not of the channel,
+/// is refused with a 409.
 pub async fn take_finalize_lease(
     pool: &PgPool,
     channel_id: &Id<Channel>,
@@ -662,6 +672,11 @@ pub async fn take_finalize_lease(
                     retry_in: terms.pending_retry,
                 });
             };
+            // A reset of the ephemeral store leaves its counter at 0 until a
+            // subscribe reseeds it, while the register still holds every
+            // delta. The horizon is recorded for good, so it takes the
+            // larger of the two, as the fold lease does (`SRV-290`).
+            let seq = seq.max(super::durable_seq(&mut *tx, &segment.document_id()).await?);
             let stored = i64::try_from(seq.get())
                 .map_err(|_| AppError::Internal("delta number out of range".into()))?;
             sqlx::query("UPDATE channel_documents SET horizon = $2 WHERE document_id = $1")

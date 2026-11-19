@@ -1242,6 +1242,7 @@ impl SyncState {
                 user_id,
                 display_name,
                 email,
+                email_proof,
                 exchange_pub_key,
                 fingerprint,
             } => {
@@ -1252,6 +1253,7 @@ impl SyncState {
                         user_id,
                         display_name,
                         email,
+                        email_proof,
                         exchange_pub_key,
                         fingerprint,
                     },

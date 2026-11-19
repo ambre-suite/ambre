@@ -210,13 +210,17 @@ pub async fn clock_state_is_cold(
 /// Reseeds the Redis clock/seq state from the durable per-author high-water marks
 /// (see [`REHYDRATE_CLOCK_LUA`]). `author_clocks` are `(pub_key_hex, max_clock)`.
 /// A no-op when there is no durable history (a brand-new document).
+///
+/// The counter is seeded even with no author clock. A document whose deltas
+/// the trim removed still holds its snapshot horizons. A counter left at 0
+/// would number the next delta under them (`SRV-288`).
 pub async fn seed_clock_state(
     redis: &Client,
     document_id: &Id<Document>,
     max_seq: ambre_core::Seq<ambre_core::Relay>,
     author_clocks: &[(FixedBytes<PublicKey>, Seq<DeltaAuthor>)],
 ) -> Result<(), AppError> {
-    if author_clocks.is_empty() {
+    if author_clocks.is_empty() && max_seq == ambre_core::Seq::<ambre_core::Relay>::new(0) {
         return Ok(());
     }
     let clocks_key = DocKey::<Clocks>::of(document_id);
@@ -639,6 +643,19 @@ pub async fn refresh_get(
     }))
 }
 
+/// Writes the fields of a hash and its lifetime in one script, so no record
+/// ever exists without its lifetime (`SRV-291`). Two commands left a window: a
+/// relay that died between them kept the record for good.
+///
+/// - `KEYS[1]` = the record
+/// - `ARGV[1]` = the lifetime, in seconds
+/// - `ARGV[2..]` = field, value pairs
+const HASH_WITH_TTL_LUA: &str = r#"
+redis.call('HSET', KEYS[1], unpack(ARGV, 2))
+redis.call('EXPIRE', KEYS[1], ARGV[1])
+return 1
+"#;
+
 /// Creates a refresh-token record in Redis with the configured TTL.
 pub async fn refresh_create(
     redis: &Client,
@@ -646,23 +663,18 @@ pub async fn refresh_create(
     data: &RefreshData,
     ttl: TimeSpan<Sec>,
 ) -> Result<(), AppError> {
-    let ttl_secs = ttl.get();
-
+    let ttl_secs = ttl.get().to_string();
     let user_id = data.user_id.to_string();
     let signing_pubkey_hex = data.signing_pubkey.as_ref().map(FixedBytes::to_hex);
-    let mut fields = vec![("user_id", user_id.as_str())];
+    let mut args = vec![ttl_secs.as_str(), "user_id", user_id.as_str()];
     if let Some(hex) = &signing_pubkey_hex {
-        fields.push(("signing_pubkey_hex", hex.as_str()));
+        args.extend(["signing_pubkey_hex", hex.as_str()]);
     }
-    // Both commands take their copy of the key before either is sent.
-    let (set, expire) = crate::secrets::token::refresh_key(token, |key| {
-        (redis.hset(key, fields), redis.expire(key, ttl_secs, None))
-    });
-    set.await
-        .map_err(|e| AppError::Redis(format!("refresh create hset: {e}")))?;
-    expire
-        .await
-        .map_err(|e| AppError::Redis(format!("refresh create expire: {e}")))?;
+    crate::secrets::token::refresh_key(token, |key| {
+        redis.eval::<i64>(HASH_WITH_TTL_LUA, [key], args)
+    })
+    .await
+    .map_err(|e| AppError::Redis(format!("refresh create: {e}")))?;
     Ok(())
 }
 
@@ -1497,25 +1509,26 @@ pub async fn oidc_state_set(
     csrf_state: &ambre_core::Credential<ambre_core::OidcState>,
     auth_state: &OidcAuthState,
 ) -> Result<(), AppError> {
-    // Both commands take their copy of the key, and the first its copy of the
-    // verifier, before either is sent.
-    let (set, expire) = crate::secrets::token::oidc_state_key(csrf_state, |key| {
-        let set = auth_state.pkce_verifier_secret.present_stored(|verifier| {
-            redis.hset(
-                key,
+    // The script takes its copy of the key and of the verifier before it is
+    // sent. The record and its lifetime are one script, as for a refresh
+    // record (`SRV-291`).
+    crate::secrets::token::oidc_state_key(csrf_state, |key| {
+        auth_state.pkce_verifier_secret.present_stored(|verifier| {
+            redis.eval::<i64>(
+                HASH_WITH_TTL_LUA,
+                [key],
                 [
-                    ("pkce_verifier", verifier),
-                    ("nonce", auth_state.nonce.secret().as_str()),
+                    "600",
+                    "pkce_verifier",
+                    verifier,
+                    "nonce",
+                    auth_state.nonce.secret().as_str(),
                 ],
             )
-        });
-        (set, redis.expire(key, 600, None))
-    });
-    set.await
-        .map_err(|e| AppError::Redis(format!("oidc state set: {e}")))?;
-    expire
-        .await
-        .map_err(|e| AppError::Redis(format!("oidc state expire: {e}")))?;
+        })
+    })
+    .await
+    .map_err(|e| AppError::Redis(format!("oidc state set: {e}")))?;
     Ok(())
 }
 
@@ -2690,6 +2703,38 @@ mod redis_integration_tests {
             .await
             .expect("refresh create");
         token
+    }
+
+    /// `SRV-291`: a refresh record and a sign-in state carry their lifetime
+    /// from the one script that writes them, with every field readable back.
+    #[tokio::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
+    async fn a_record_is_written_with_its_lifetime() {
+        let redis = connect_redis().await;
+        let token = seed_refresh(&redis).await;
+        let ttl: i64 = crate::secrets::token::refresh_key(&token, |key| redis.ttl(key))
+            .await
+            .unwrap();
+        assert!((1..=60).contains(&ttl), "the record expires: {ttl}");
+        let data = refresh_get(&redis, &token).await.unwrap().expect("record");
+        assert_eq!(
+            data.signing_pubkey,
+            Some(FixedBytes::<PublicKey>::from_array([3u8; 32]))
+        );
+
+        let csrf =
+            ambre_core::Credential::<ambre_core::OidcState>::new(uuid::Uuid::new_v4().to_string());
+        let kept = OidcAuthState {
+            pkce_verifier_secret: ambre_core::Confidential::<OidcSecret>::new("v".to_owned()),
+            nonce: openidconnect::Nonce::new("n".to_owned()),
+        };
+        oidc_state_set(&redis, &csrf, &kept).await.unwrap();
+        let ttl: i64 = crate::secrets::token::oidc_state_key(&csrf, |key| redis.ttl(key))
+            .await
+            .unwrap();
+        assert!((1..=600).contains(&ttl), "the sign-in state expires: {ttl}");
+        let _ = refresh_delete(&redis, &token).await;
+        let _ = oidc_state_take(&redis, &csrf).await;
     }
 
     /// Reproduces the rotation race: two requests bearing the same token both

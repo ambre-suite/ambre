@@ -32,6 +32,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-031` | `INV` | An access token MUST NOT reach a log, a proxy record or a browser history. | `ZK-006`; audit `M15` | `ambre_server::routes::tests::handler_tests::a_token_in_the_socket_address_opens_no_session`; `::a_token_in_the_first_frame_opens_the_session` -- the socket takes its token in its first frame and never reads its address; `ambre_sync::websocket::tests::the_socket_address_carries_no_token`; `ambre_sync::websocket::tests::an_opened_socket_authenticates_before_it_subscribes` -- the client sends it before any subscription | none | verified |
 | `SRV-234` | `INV` | A display name the relay stores MUST be trimmed, non-blank and at most the cap of `ambre-spec-budgets.md section 6`. A provider's name past the cap MUST be cut to it, and a development sign-in under a name that does not fit MUST be refused. | this spec section 3; `SRV-023` | `ambre_server::routes::tests::handler_tests::a_dev_sign_in_stores_a_display_name_that_fits` -- a padded name is stored trimmed, and one past the cap is refused with no row; `ambre_server::routes::documents::tests::a_setup_body_with_a_bad_display_name_does_not_decode` -- a setup body whose name is blank or past the cap; `ambre_server::routes::auth::tests::a_provider_name_is_trimmed_and_cut_to_the_cap` -- the provider's claims, a name past the cap among them | none | verified |
 | `SRV-267` | `INV` | The ephemeral store MUST hold no refresh token and no sign-in state in the clear, only its SHA-256. | audit `N10`; this spec section 3 | `ambre_server::secrets::tests::a_store_key_holds_the_hash_of_the_token_and_never_the_token` -- the store key of each is its prefix and the hash, and the two keys are the only door to the store (`ARCH-049`) | none | verified |
+| `SRV-291` | `INV` | The ephemeral store MUST NOT hold a refresh record or a sign-in state without its lifetime, at any instant. | this spec section 3; `SRV-267` | `ambre_server::redis_ops::redis_integration_tests::a_record_is_written_with_its_lifetime` -- database tier: one script writes each record and its lifetime, and both read back with a lifetime | none | verified |
 
 ### 1.2 A request is authenticated
 
@@ -47,12 +48,16 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-091` | `FRAME` | A sign-in MUST NOT carry a passphrase, nor anything the relay could derive a key from. | `ZK-003`; this spec section 3 | cargo-deny -- `argon2` is granted to `ambre-crypto` alone, and `ambre-server` declares neither, so the relay has no way to turn a secret into a key: what it stores is the sealed master material and the sealed salt, and it opens neither | none | verified |
 | `SRV-023` | `FAIL` | The development sign-in MUST be refused unless the deployment enables it. | this spec section 3 | `ambre_server::routes::tests::handler_tests::dev_login_rejected_when_dev_mode_off` -- the refusal; `::dev_login_creates_user_and_returns_token` -- the enabled case still works, so neither end can rot into the other | none | verified |
 | `SRV-030` | `FAIL` | The sealed master material MUST be written once; a later write MUST be refused. | this spec section 3 | `ambre_server::routes::tests::handler_tests::store_master_keys_is_first_time_only` -- the first upload succeeds and the second answers a conflict rather than overwriting, and the re-seal route is the passphrase path and touches neither public key | none | verified |
+| `SRV-293` | `FAIL` | Given an account setup or a first key store under a signing key another account registered, the relay MUST refuse it and write nothing. | this spec section 3; `SRV-030`; `SYNC-215` | `ambre_server::routes::tests::handler_tests::a_signing_key_belongs_to_one_account` -- database tier: a setup and a first key store under a registered key each answer 409, and the setup writes no row | none | verified |
+| `SRV-294` | `FAIL` | Given an account setup or a first key store that the signing key it registers does not sign, the relay MUST refuse it and write nothing. | this spec section 3; `SRV-293` | not built | unbuilt -- lands with the `One signing key belongs to one account` Story (`ambre-roadmap.md` MVP). The client signs nothing at setup yet, and every test fixture registers a key no seed derives | unimplemented |
 | `SRV-278` | `FAIL` | Given a re-seal of the master material that the account's signing key does not sign, the relay MUST refuse it and write nothing. | this spec section 3; `SRV-030` | `ambre_server::routes::tests::handler_tests::a_re_seal_the_account_key_does_not_sign_is_refused_and_writes_nothing` -- a proof signed by another key, and one signed over another sealed seed than the body carries, answer `INVALID_SIGNATURE`, a body with no proof is refused, and the stored seal stays each time, while the proof of the account's key lands, database tier; `ambre_protocol::master_rotation::tests::the_transcript_names_the_replaced_salt_and_the_new_sealed_seed` -- the signature covers the domain, the replaced salt and the new sealed seed | none | verified |
 | `SRV-279` | `FAIL` | Given a re-seal whose proof names a sealed seed the relay no longer holds, the relay MUST refuse it and write nothing. | this spec section 3; `SRV-278` | `ambre_server::routes::tests::handler_tests::a_re_seal_over_a_replaced_seal_is_refused_and_writes_nothing` -- two re-seals over one seal race and one lands, then the other and a replay of the winner answer `CONFLICT`, and the winner's seal stays, database tier | none | verified |
 | `SRV-232` | `FAIL` | Given an account setup, a development sign-in or a key registration with a public key that is not 32 bytes, the relay MUST refuse it and write no row. | this spec section 3; `SRV-231` | `ambre_server::routes::tests::handler_tests::a_public_key_of_the_wrong_length_is_refused_and_written_nowhere` -- a short signing key and a short exchange key each refuse the setup, the sign-in and the registration, and no account or key material is written, database tier | none | verified |
 | `SRV-172` | `POST` | A sign-in with an identity provider MUST be sent to that provider's authorization endpoint, under the configured client. | this spec section 3 | `ambre_server::routes::tests::handler_tests::a_provider_route_reaches_its_provider` -- the shipped router hands the provider in the path to the handler, which names an unconfigured one in its refusal; `ambre_server::oidc::tests::a_sign_in_is_sent_to_the_configured_provider` -- a provider stub is discovered, and the sign-in goes to its authorization endpoint under the configured client | none | verified |
 | `SRV-022` | `POST` | A provider's return MUST exchange its code for an identity token the relay verifies, and sign the user in. | this spec section 3 | `ambre_server::oidc::tests::a_provider_code_is_exchanged_for_a_verified_identity` -- a stub provider signs an identity token with a key it publishes, and the code is exchanged under the kept verifier for its claims; `::an_identity_the_relay_cannot_verify_is_refused` -- a foreign key and a wrong one-time value fail the verification, and a wrong verifier fails the exchange; `ambre_server::routes::tests::handler_tests::a_provider_return_signs_the_person_in` -- through the shipped router, the return opens a session that `/auth/me` answers as that person, and it is not taken twice | none | verified |
 | `SRV-074` | `FAIL` | A configured provider the relay cannot reach at startup MUST stop the start, never disable sign-in in silence. | audit `M7`; this spec section 3 | `ambre_server::oidc::tests::a_configured_provider_that_does_not_answer_stops_the_start` -- the start decision against an issuer nothing listens on is an error, which `main` returns. With no client id nothing is discovered and sign-in is off | none | verified |
+| `SRV-296` | `FRAME` | A request of the relay to the identity provider MUST NOT follow a redirect, and MUST end at its deadline. | this spec section 3; `SRV-022`; `ambre-spec-budgets.md` section 8 | `ambre_server::oidc::tests::the_provider_client_follows_no_redirect_and_keeps_a_deadline` -- a redirect comes back as itself, and a provider that stalls fails the request at the deadline | none | verified |
+| `SRV-295` | `POST` | A reclaim of an address MUST tell each member who invited the account that held it. | this spec section 3; `SRV-029` | not built | unbuilt -- lands with the `A share never wraps a key for an unproven address without a warning` Story (`ambre-roadmap.md` MVP). The reclaim renames the address and leaves every member row and wrapped key of the account that held it | unimplemented |
 
 ### 1.4 A session ends
 
@@ -69,9 +74,13 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   and sees none of the three secrets behind them (`ZK-003`, `SRV-091`). What it mints is its own
   token, and `SRV-012` refuses it every other cryptographic act. The socket takes its token in its
   first frame, so no address carries one (`SRV-031`).
-* **Verification.** 25 `verified`. What holds is what a request test can drive: the token gate, the
-  address namespace, the one-shot key write and the refresh race. A provider exchange runs against a
-  stub that signs its own identity tokens. A real provider never runs under a test.
+* **Verification.** 28 `verified`, 2 `unimplemented`. What holds is what a request test can drive:
+  the token gate, the address namespace, the one-shot key write and the refresh race. A provider
+  exchange runs against a stub that signs its own identity tokens. A real provider never runs under
+  a test.
+
+  Two rows are the gaps. The caller does not prove it holds the key it registers (`SRV-294`). A
+  reclaim tells no inviter of the account that held the address (`SRV-295`).
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -147,6 +156,11 @@ the capabilities `ZK-004` bans.
 The master material is written once and refused afterwards. Overwriting the public keys would
 leave every document key already sealed to the previous exchange key unopenable (`SRV-030`).
 A passphrase change re-seals the material alone and moves neither public key.
+
+**One signing key, one account.** A member list shows every member's signing key. An outsider who
+registered a member's key under an account of their own would, once invited, take that member's
+edits from attribution. So the register refuses a second account under a registered key, at the
+setup and at the first key store alike (`SRV-293`).
 
 **A re-seal proves the seal it replaces.** A passphrase change and a recovery each replace the
 sealed master material. A session alone does not authorize the write: a stolen session would

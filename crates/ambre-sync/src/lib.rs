@@ -666,6 +666,8 @@ enum SyncEvent {
         user_id: Id<User>,
         display_name: ambre_core::Validated<ambre_core::DisplayName>,
         email: ambre_core::Email,
+        /// Whether a provider proved the address the invite names.
+        email_proof: ambre_core::EmailProof,
         exchange_pub_key: FixedBytes<ambre_core::ExchangePublicKey>,
         fingerprint: ambre_core::Opaque<ambre_core::KeyFingerprints>,
     },

@@ -1073,6 +1073,7 @@ ambre-core | src/object_key.rs | crate::object_key | ObjectKey::into_inner() | r
 ambre-core | src/object_key.rs | crate::object_key | ObjectKey::new(value) | param | String	newtype-inner	the constructor of the ObjectKey newtype
 ambre-core | src/payload.rs | crate::payload | LoroPayload::as_bytes() | ret | &[u8]	generic	Loro import bytes: a delta or a snapshot alike, for the engine that imports either
 ambre-core | src/payload.rs | crate::payload | LoroPayloadRef<'a>::as_bytes() | ret | &'a[u8]	generic	Loro import bytes: a delta or a snapshot alike, for the engine that imports either
+ambre-core | src/provider.rs | crate::provider | OidcProvider::authorization_host() | ret | &'static str	generic	the host of a provider's authorization endpoint, which the sign-in compares the host of a relay's address against; a host name has no type in the workspace, and web_sys hands the compared host as text
 ambre-core | src/provider.rs | crate::provider | OidcProvider::as_str() | ret | &'static str	newtype-inner	closed-set enum word codec
 ambre-core | src/provider.rs | crate::provider | OidcProvider::parse(word) | param | &str	newtype-inner	closed-set enum word codec
 ambre-core | src/residency.rs | crate::residency | Residency<K>::holds() | ret | bool	generic	residency fact flag or its setter; named field, no mode switch
@@ -1925,6 +1926,8 @@ ambre-server | src/db/channels.rs | crate::db::channels | decode_kind(word) | pa
 ambre-server | src/db/channels.rs | crate::db::channels | finalizable() | ret | bool	generic	predicate result
 ambre-server | src/db/channels.rs | crate::db::channels | segment_locked() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/db/content.rs | crate::db::content | SNAPSHOT_COLUMNS | const | &str	free-text	SQL column list
+ambre-server | src/db/content.rs | crate::db::content | KEEP_HIGH_WATER | const | &str	free-text	SQL query fragment
+ambre-server | src/db/content.rs | crate::db::content | GONE | const | &str	free-text	SQL column list a trim returns
 ambre-server | src/db/content.rs | crate::db::content | attach_wire() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/db/content.rs | crate::db::content | document_holds_media() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/db/content.rs | crate::db::content | parse_status(text) | param | &str	generic	generic codec/parser/bytes API
@@ -1980,12 +1983,13 @@ ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | Ra
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | RateLimitCategory::fail_closed() | ret | bool	generic	predicate result
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | RateLimitCategory::prefix() | ret | &'static str	newtype-inner	the enum's own word, the prefix of the Redis key its counter is stored and read under
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | SLIDING_WINDOW_LUA | const | &str	free-text	Lua script text
-ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | client_peer(x_forwarded_for) | param | Option<&str>	generic	the X-Forwarded-For header text before its parse: client_peer reads its first entry into an IpAddr at once
+ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | client_peer(x_forwarded_for) | param | Option<&str>	generic	the X-Forwarded-For header text before its parse: client_peer reads the entry of the first trusted proxy into an IpAddr at once
 ambre-server | src/payload.rs | crate::payload | StoredPayload.0 | field | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/payload.rs | crate::payload | StoredPayload::expose_bytes() | ret | &[u8]	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/payload.rs | crate::payload | StoredPayload::len() | ret | usize	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/payload.rs | crate::payload | StoredPayload::new(bytes) | param | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/redis_ops.rs | crate::redis_ops | CLOCK_AND_SEQ_LUA | const | &str	free-text	Lua script text
+ambre-server | src/redis_ops.rs | crate::redis_ops | HASH_WITH_TTL_LUA | const | &str	free-text	Lua script text
 ambre-server | src/redis_ops.rs | crate::redis_ops | DOCUMENT_GONE | const | &str	generic	refusal word shared with the Lua script text
 ambre-server | src/redis_ops.rs | crate::redis_ops | LockToken.0 | field | String	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/redis_ops.rs | crate::redis_ops | LockToken::as_str() | ret | &str	newtype-inner	newtype inner, accessor or constructor
@@ -3315,9 +3319,11 @@ ambre-server | src/redis_keys.rs | crate::redis_keys | <DocKey<S> as PartialEq>:
 ambre-server | src/redis_keys.rs | crate::redis_keys | DocKey.text | field | String	newtype-inner	the key text DocKey wraps, doc:{id}:{slot}
 ambre-server | src/redis_keys.rs | crate::redis_keys | DocKey<S>::as_str() | ret | &str	newtype-inner	the key text, as a store command takes it
 ambre-server | src/s3.rs | crate::s3 | <StoreText<K> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
+ambre-server | src/s3.rs | crate::s3 | holds_object() | ret | bool	generic	predicate result
 ambre-server | src/s3.rs | crate::s3 | StoreText.text | field | String	newtype-inner	the text StoreText wraps: a bucket, a deployment prefix or a key prefix
 ambre-server | src/s3.rs | crate::s3 | StoreText<K>::as_str() | ret | &str	newtype-inner	the text, as the object store's client takes it
 ambre-server | src/s3.rs | crate::s3 | StoreText<K>::new(text) | param | String	newtype-inner	the text StoreText wraps, read from the environment; no kind carries a rule
+ambre-server | src/state.rs | crate::state | ProxyTrust::from_setting(setting) | param | Option<&str>	generic	the TRUST_PROXY_HEADERS text before its parse into a ProxyTrust: a count of proxies or `true`; no family types an environment text before its parse
 ambre-server | src/state.rs | crate::state | limit_from_env(value) | param | u64	generic	the 64-bit value an environment variable parses to, refused past 32 bits
 ambre-prose-form | src/kinds.rs | crate::kinds | <HeadingLevelCode as Refuses>::Raw | assoc | u8	generic	the refused value the error echoes
 ambre-prose | src/message/mod.rs | crate::message | <LineSpacingRatio as Refuses>::Raw | assoc | f32	generic	the refused value the error echoes
@@ -4527,6 +4533,7 @@ ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | Slider(value) | par
 ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | Slider(on_input) | param | Callback<String>	generic	the value text of a range input, which volume_from_slider or gain_from_slider parses
 ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | SliderOf::class() | ret | &'static str	newtype-inner	the CSS class of each slider kind, a fieldless enum's own spelling the stylesheet reads
 ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | SliderOf::max() | ret | String	generic	the value text of the highest percent of a range input, which slider_of_volume or slider_of_gain spells
+ambre-app | src/tofu.rs | crate::tofu | TofuPrompt::unproven() | ret | bool	generic	predicate result
 ambre-convert | src/engine/html.rs | crate::engine::html | read_bounded(html) | param | &str	free-text	the HTML an imported file holds
 ambre-convert | src/engine/prose/html_doc.rs | crate::engine::prose::html_doc | color(text) | param | &str	generic	a colour mark value of a pasted run, the input of its parse into an Rgba
 ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | Reader::note(tag) | param | &str	foreign-api	an element's local name as the tree builder spells it, matched against the allowlist and the losses

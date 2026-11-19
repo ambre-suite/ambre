@@ -41,6 +41,7 @@ refusals are the same set whichever way the bytes will travel, so the two share 
 | `SRV-054` | `FAIL` | An object name a caller supplies MUST resolve inside the document the caller named. | audit `C4`, `C5`; this spec section 3 | `ambre_server::s3::tests::snapshot_key_validation_scopes_to_document` -- a foreign prefix, a traversal, an empty name and a nested one; `::content_hash_validation` -- everything that is not sixty-four lowercase hexadecimal characters | none | verified |
 | `SRV-055` | `FAIL` | A blob MUST NOT exceed the cap its kind declares. | this spec section 3 | `ambre_server::routes::tests::handler_tests::a_blob_above_its_kind_cap_is_refused` -- media is refused above its cap on the link and on the confirmation, a snapshot on the link. Each upload link signs the declared length, so storage refuses a longer body. The inline delta half is `SRV-010` | none | verified |
 | `SRV-271` | `FAIL` | An upload link MUST be refused for an address the document already holds. | audit `N26`; this spec section 3; `SRV-138` | `ambre_server::routes::tests::handler_tests::an_upload_link_is_refused_for_an_address_the_document_holds` -- once an address is confirmed, an editor and the uploader are each refused a link to it, database tier. A fresh address and the same address in another document still get one, and a second claim still confirms | none | verified |
+| `SRV-292` | `FAIL` | A media confirmation MUST be refused for an address the document does not hold and no object fills. | this spec section 3; `SRV-271` | `ambre_server::routes::tests::handler_tests::a_confirmation_names_only_an_address_an_upload_filled` -- database tier: a confirmation with no object is refused and leaves the address open for an upload link, and the same confirmation lands once the object is there | none | verified |
 | `SRV-058` | `FAIL` | A download link MUST be refused for an object the document does not hold. | this spec section 3 | `ambre_server::routes::tests::handler_tests::a_download_link_names_an_object_the_document_holds` -- the link is signed only after the media index shows the document holds that address | none | verified |
 
 ### 1.3 Delete a document
@@ -70,7 +71,7 @@ A member takes back a file they uploaded, such as the attachment of a message th
 * **Boundary.** every object here is sealed by the client and opaque to the relay (`ZK-001`), which
   reads only a name and a size. A picture's name is keyed by the document key (`SRV-059`); the
   bytes never enter this process.
-* **Verification.** 19 `verified`, 1 `unimplemented`. What holds is the name: the scoping, the
+* **Verification.** 20 `verified`, 1 `unimplemented`. What holds is the name: the scoping, the
   shapes refused, the size bound into an upload link, and who may hold a link. What is loose is a
   link that touches no object, and the cap per blob kind.
 ---
