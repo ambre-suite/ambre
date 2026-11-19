@@ -675,3 +675,36 @@ fn a_part_past_the_node_bound_fails_typed() {
         Err(ambre_odt::OdtError::Xml(ambre_odt::xml::XmlError::TooLarge))
     );
 }
+
+/// `P66`: ten thousand paragraph styles form one chain of parents, and each
+/// paragraph names its last style. A chain stops at its bound, so no
+/// paragraph walks every style, and the text reads in time.
+#[test]
+fn a_long_chain_of_styles_reads_within_its_bound() {
+    let count = 10_000;
+    let styles: String = (0..count)
+        .map(|n| {
+            let parent = if n == 0 {
+                String::new()
+            } else {
+                format!(r#" style:parent-style-name="s{}""#, n - 1)
+            };
+            format!(r#"<style:style style:name="s{n}" style:family="paragraph"{parent}/>"#)
+        })
+        .collect();
+    let paragraphs =
+        format!(r#"<text:p text:style-name="s{}">x</text:p>"#, count - 1).repeat(count);
+    let content = format!(
+        concat!(
+            r#"<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" "#,
+            r#"xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" "#,
+            r#"xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">"#,
+            r#"<office:automatic-styles>{}</office:automatic-styles>"#,
+            r#"<office:body><office:text>{}</office:text></office:body>"#,
+            r#"</office:document-content>"#
+        ),
+        styles, paragraphs
+    );
+    let decoded = ambre_odt::read(&package(&content, &[])).expect("the text reads");
+    assert_eq!(all_text(&decoded.document.body).len(), count);
+}

@@ -369,6 +369,7 @@ ambre-odt | src/read.rs | crate::read | InlineState.space | field | bool	local	a
 ambre-odt | src/read.rs | crate::read | InlineState::collapse() | ret | String	free-text	the text of a run, which a person wrote
 ambre-odt | src/read.rs | crate::read | InlineState::collapse(text) | param | &str	free-text	the text of a run, which a person wrote
 ambre-odt | src/read.rs | crate::read | ListLevel.exact | field | bool	local	a flag of the reader or the writer, private to its walk
+ambre-odt | src/read.rs | crate::read | MAX_CHAIN | const | usize	generic	a bound of the reader, compared against the length of a chain of style parents
 ambre-odt | src/read.rs | crate::read | MAX_REPEAT | const | u32	generic	a bound of the reader, compared against what the file asks for
 ambre-odt | src/read.rs | crate::read | MAX_SPACES | const | u32	generic	a bound of the reader, compared against what the file asks for
 ambre-odt | src/read.rs | crate::read | Pictures::picture(path) | param | &str	foreign-api	a part path of the OpenDocument package, as the file spells it
@@ -4417,6 +4418,7 @@ ambre-xlsx | src/ods/styles.rs | crate::ods::styles | DEFAULT | const | &str	gen
 ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Definition.parent | field | Option<String>	generic	a style name the document declares, which the style tables key
 ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Props.data_style | field | Option<String>	generic	a style name the document declares, which the style tables key
 ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Props.font | field | Option<String>	generic	a font name as the style spells it, resolved through the font declarations
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Styles.by_bytes | field | HashMap<Vec<u8>,StyleId>	local	the postcard bytes of each distinct style, the key its twin is found by, private to the dedupe of the reader
 ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Styles.cells | field | HashMap<String,Definition>	generic	a style name the document declares, which the style tables key
 ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Styles.fonts | field | HashMap<String,String>	generic	each declared font name and its family, as the part spells them
 ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Styles.numbers | field | HashMap<String,String>	generic	each number style name and the format code its elements spell

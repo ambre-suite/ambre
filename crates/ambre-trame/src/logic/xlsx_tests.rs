@@ -1178,3 +1178,31 @@ fn an_excel_export_owes_its_write_to_the_converter_thread() {
         .expect("A1 leaves");
     assert_eq!(cell.content, num(41.0));
 }
+
+/// `P51`: a workbook lists more sheets than the bound. It is refused whole
+/// as past its bound, and the document keeps the one sheet it held.
+#[test]
+fn a_workbook_past_the_sheet_bound_is_refused_whole() {
+    let past = usize::try_from(ambre_xlsx::MAX_SHEETS.get()).expect("fits") + 1;
+    let sheets = (0..past)
+        .map(|n| sheet(&format!("S{n}"), Vec::new()))
+        .collect();
+    let mut state = TrameState::new();
+    let before = state.all_sheet_ids();
+    let out = state.convert_in_place(
+        TrameCommand::Interop(InteropRequest::Import(TrameImport::Xlsx(WorkbookImport {
+            data: file(&workbook(sheets)),
+        }))),
+        &office(),
+    );
+    use ambre_bus::interop::InteropError;
+    let refused = out.display.iter().any(|e| {
+        matches!(
+            e,
+            TrameEvent::Interop(InteropAnswer::Failed(failure))
+                if failure.error == InteropError::ParseFailed(ambre_core::FileRefusal::PastBound)
+        )
+    });
+    assert!(refused, "the import is refused as past its bound");
+    assert_eq!(state.all_sheet_ids(), before);
+}

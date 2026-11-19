@@ -384,6 +384,17 @@ impl TrameState {
                 InteropError::ParseFailed(ambre_core::FileRefusal::Empty),
             );
         }
+        // The module refuses a workbook past the sheet bound. The answer is
+        // checked again here, before a name search per sheet walks every
+        // sheet the document holds (`P51`).
+        if ambre_core::Count::<ambre_xlsx::WorkbookSheets>::of(workbook.sheets.len())
+            > ambre_xlsx::MAX_SHEETS
+        {
+            return failed(
+                Direction::Import,
+                InteropError::ParseFailed(ambre_core::FileRefusal::PastBound),
+            );
+        }
         // One sheet id per sheet, minted before anything is written, so a
         // spent counter refuses the import with the document untouched
         // (`TRAME-243`).

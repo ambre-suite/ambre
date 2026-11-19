@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use ambre_client_core::FileBytes;
 use ambre_core::index::{Delta, Len, Pos};
 use ambre_core::{
-    Cells, Count, Doc, FracDay, Instant, Payload, Px, SheetDateTime, TimeSpan, Validated,
+    Cells, Count, Doc, FracDay, Instant, Octets, Payload, Px, SheetDateTime, TimeSpan, Validated,
 };
 use quick_xml::Reader;
 use quick_xml::events::{BytesStart, Event};
@@ -24,7 +24,7 @@ use crate::opc::{self, Package, PartBytes, PartName, RelKind, RelTarget, Relatio
 use crate::report::{Outcome, Report, XlsxConstruct};
 use crate::styles::{self, Palette, Theme};
 use crate::xml::{self, Element, XmlError};
-use crate::{Imported, MAX_CELLS, XlsxError};
+use crate::{Imported, MAX_CELLS, MAX_SHEETS, MAX_TEXT_BYTES, XlsxError};
 
 /// The first bytes of an OLE compound file: a legacy `.xls`, or an Excel
 /// file under a password.
@@ -93,15 +93,24 @@ pub(crate) fn read(bytes: &Payload<FileBytes>) -> Result<Imported, XlsxError> {
     };
     let mut sheets = Vec::new();
     let mut cells_read: Count<Cells> = Count::ZERO;
+    let mut text_read: Count<Octets> = Count::ZERO;
     let listed = root
         .child("sheets")
         .map(|s| s.children("sheet").collect::<Vec<_>>())
         .unwrap_or_default();
+    // A sheet is listed in a few bytes: the count is refused before any
+    // sheet is read (`P51`).
+    if Count::<crate::WorkbookSheets>::of(listed.len()) > MAX_SHEETS {
+        return Err(XlsxError::TooManySheets(MAX_SHEETS));
+    }
+    // Each relationship by its id, the first of an id kept, so a long list
+    // of sheets costs no scan of the relationships per sheet.
+    let mut by_id: BTreeMap<&str, &Relationship> = BTreeMap::new();
+    for rel in &rels {
+        by_id.entry(rel.id.as_str()).or_insert(rel);
+    }
     for (n, entry) in listed.into_iter().enumerate() {
-        let Some(rel) = entry
-            .attr("id")
-            .and_then(|id| rels.iter().find(|r| r.id.as_str() == id))
-        else {
+        let Some(rel) = entry.attr("id").and_then(|id| by_id.get(id).copied()) else {
             continue;
         };
         let RelTarget::Part(sheet_part) = &rel.target else {
@@ -135,14 +144,19 @@ pub(crate) fn read(bytes: &Payload<FileBytes>) -> Result<Imported, XlsxError> {
             }
             _ => Visibility::Visible,
         };
-        let room = Count::new(MAX_CELLS.get().saturating_sub(cells_read.get()));
+        let room = Room {
+            cells: MAX_CELLS.minus(cells_read),
+            text: MAX_TEXT_BYTES.minus(text_read),
+        };
         read_sheet(data.as_bytes(), &context, room, &mut sheet, &mut report).map_err(
             |e| match e {
                 SheetError::Xml(e) => malformed(sheet_part, e),
                 SheetError::TooManyCells => XlsxError::TooManyCells(MAX_CELLS),
+                SheetError::TooMuchText => XlsxError::TooMuchText(MAX_TEXT_BYTES),
             },
         )?;
         cells_read = cells_read.plus(Count::of(sheet.cells.len()));
+        text_read = text_read.plus(sheet.cells.iter().map(Cell::text_bytes).sum());
         read_sheet_parts(&mut package, sheet_part, &mut report)?;
         sheets.push(sheet);
     }
@@ -462,6 +476,26 @@ enum SheetError {
     Xml(XmlError),
     /// The sheet holds more cells than the room the workbook left it.
     TooManyCells,
+    /// The cells of the sheet hold more text than the room left.
+    TooMuchText,
+}
+
+/// What the workbook leaves a sheet still to read: cells, and bytes of
+/// text in its values and formulas.
+#[derive(Clone, Copy)]
+struct Room {
+    cells: Count<Cells>,
+    text: Count<Octets>,
+}
+
+/// The text the cells of `sheet` past `counted` hold, added to `text`, and
+/// `counted` moved to the end. Each cell is counted once, as it lands.
+fn count_text(sheet: &Sheet, counted: &mut Count<Cells>, text: &mut Count<Octets>) {
+    let from = usize::try_from(counted.get()).unwrap_or(usize::MAX);
+    for cell in sheet.cells.iter().skip(from) {
+        *text = text.plus(cell.text_bytes());
+    }
+    *counted = Count::of(sheet.cells.len());
 }
 
 impl From<XmlError> for SheetError {
@@ -476,12 +510,12 @@ impl From<quick_xml::Error> for SheetError {
     }
 }
 
-/// Read the worksheet part `data` into `sheet`, refusing it past `room`
-/// cells before the next one is read.
+/// Read the worksheet part `data` into `sheet`, refusing it past the cells
+/// or the text of `room` before the next cell is read.
 fn read_sheet(
     data: &[u8],
     context: &SheetContext<'_>,
-    room: Count<Cells>,
+    room: Room,
     sheet: &mut Sheet,
     report: &mut Report,
 ) -> Result<(), SheetError> {
@@ -490,9 +524,15 @@ fn read_sheet(
     let mut cell = PendingCell::default();
     let mut masters: BTreeMap<u32, (String, CellRef)> = BTreeMap::new();
     let mut deferred: Vec<Deferred> = Vec::new();
+    let mut counted: Count<Cells> = Count::ZERO;
+    let mut text: Count<Octets> = Count::ZERO;
     loop {
-        if Count::<Cells>::of(sheet.cells.len()) > room {
+        if Count::<Cells>::of(sheet.cells.len()) > room.cells {
             return Err(SheetError::TooManyCells);
+        }
+        count_text(sheet, &mut counted, &mut text);
+        if text > room.text {
+            return Err(SheetError::TooMuchText);
         }
         let event = reader.read_event()?;
         match event {
@@ -588,14 +628,23 @@ fn read_sheet(
             _ => {}
         }
     }
+    count_text(sheet, &mut counted, &mut text);
+    if text > room.text {
+        return Err(SheetError::TooMuchText);
+    }
     for d in deferred {
         let Some((master, origin)) = masters.get(&d.index) else {
             continue;
         };
         if let Some(target) = sheet.cells.get_mut(d.cell) {
-            let text = shifted(master, *origin, target.at);
-            set_formula(target, &text, None, report);
+            let before = target.text_bytes();
+            let formula = shifted(master, *origin, target.at);
+            set_formula(target, &formula, None, report);
             report.record(XlsxConstruct::SharedFormula, Outcome::Carried);
+            text = text.plus(target.text_bytes()).minus(before);
+            if text > room.text {
+                return Err(SheetError::TooMuchText);
+            }
         }
     }
     sheet.cells.sort_by_key(|c| c.at);
@@ -1038,10 +1087,14 @@ mod tests {
         };
         let mut sheet = Sheet::named(name);
         let mut report = Report::default();
-        let read = read_sheet(xml, &context, Count::new(2), &mut sheet, &mut report);
+        let room = |cells| Room {
+            cells: Count::new(cells),
+            text: MAX_TEXT_BYTES,
+        };
+        let read = read_sheet(xml, &context, room(2), &mut sheet, &mut report);
         assert!(matches!(read, Err(SheetError::TooManyCells)));
         let mut sheet = Sheet::named(sheet.name.clone());
-        let read = read_sheet(xml, &context, Count::new(3), &mut sheet, &mut report);
+        let read = read_sheet(xml, &context, room(3), &mut sheet, &mut report);
         assert!(read.is_ok());
         assert_eq!(sheet.cells.len(), 3);
     }
@@ -1064,6 +1117,12 @@ mod tests {
         assert_eq!(iso_to_serial("-9223372036854775808-01-01"), None);
     }
 
+    /// The room of a workbook that read nothing yet.
+    const WHOLE: Room = Room {
+        cells: MAX_CELLS,
+        text: MAX_TEXT_BYTES,
+    };
+
     fn sheet_context() -> SheetContext<'static> {
         SheetContext {
             strings: &[],
@@ -1080,6 +1139,37 @@ mod tests {
         Sheet::named(name)
     }
 
+    /// `P53`: one shared string named by many cells is copied into each.
+    /// The sheet is refused once the copies pass the text room, before the
+    /// next cell is read.
+    #[test]
+    fn a_shared_string_copied_past_the_text_room_is_refused() {
+        let strings = vec!["x".repeat(1_000)];
+        let context = SheetContext {
+            strings: &strings,
+            xf_to_style: &[],
+            styles: &[],
+            dates: DateSystem::From1900,
+        };
+        let rows: String = (1..=20)
+            .map(|r| format!("<row r=\"{r}\"><c r=\"A{r}\" t=\"s\"><v>0</v></c></row>"))
+            .collect();
+        let xml = format!("<worksheet><sheetData>{rows}</sheetData></worksheet>");
+        let mut report = Report::default();
+        let mut sheet = empty_sheet();
+        let tight = Room {
+            cells: MAX_CELLS,
+            text: Count::new(10_000),
+        };
+        let read = read_sheet(xml.as_bytes(), &context, tight, &mut sheet, &mut report);
+        assert!(matches!(read, Err(SheetError::TooMuchText)));
+        assert!(sheet.cells.len() <= 11);
+        let mut sheet = empty_sheet();
+        let read = read_sheet(xml.as_bytes(), &context, WHOLE, &mut sheet, &mut report);
+        assert!(read.is_ok());
+        assert_eq!(sheet.cells.len(), 20);
+    }
+
     /// `W307`: a worksheet that declares a document type is refused, as the
     /// four other codecs refuse it.
     #[test]
@@ -1088,7 +1178,7 @@ mod tests {
             <worksheet><sheetData/></worksheet>";
         let mut sheet = empty_sheet();
         let mut report = Report::default();
-        let read = read_sheet(xml, &sheet_context(), MAX_CELLS, &mut sheet, &mut report);
+        let read = read_sheet(xml, &sheet_context(), WHOLE, &mut sheet, &mut report);
         assert!(matches!(read, Err(SheetError::Xml(_))));
     }
 
@@ -1120,7 +1210,7 @@ mod tests {
         let read = read_sheet(
             xml.as_bytes(),
             &sheet_context(),
-            MAX_CELLS,
+            WHOLE,
             &mut sheet,
             &mut report,
         );

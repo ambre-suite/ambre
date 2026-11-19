@@ -43,7 +43,7 @@ const DEPTH_MAX: usize = 128;
 
 /// The elements the tree builder closes on its own, and the void ones: none
 /// of them deepens the tree.
-const UNCOUNTED: [LocalName; 31] = [
+const UNCOUNTED: [LocalName; 28] = [
     local_name!("p"),
     local_name!("li"),
     local_name!("dt"),
@@ -56,9 +56,6 @@ const UNCOUNTED: [LocalName; 31] = [
     local_name!("tfoot"),
     local_name!("option"),
     local_name!("optgroup"),
-    local_name!("rb"),
-    local_name!("rt"),
-    local_name!("rp"),
     local_name!("colgroup"),
     local_name!("caption"),
     local_name!("area"),
@@ -75,6 +72,35 @@ const UNCOUNTED: [LocalName; 31] = [
     local_name!("source"),
     local_name!("track"),
     local_name!("wbr"),
+];
+
+/// The elements the tree builder closes by its adoption agency. An end tag
+/// that names one under another element closes it alone. The elements above
+/// it stay open (`P52`).
+const FORMATTING: [LocalName; 14] = [
+    local_name!("a"),
+    local_name!("b"),
+    local_name!("big"),
+    local_name!("code"),
+    local_name!("em"),
+    local_name!("font"),
+    local_name!("i"),
+    local_name!("nobr"),
+    local_name!("s"),
+    local_name!("small"),
+    local_name!("strike"),
+    local_name!("strong"),
+    local_name!("tt"),
+    local_name!("u"),
+];
+
+/// The ruby elements. Each closes the one before it inside a `ruby` alone:
+/// outside one, a run of them nests, so they count (`P52`).
+const RUBY: [LocalName; 4] = [
+    local_name!("rb"),
+    local_name!("rt"),
+    local_name!("rp"),
+    local_name!("rtc"),
 ];
 
 /// Counts the nesting of `html` in one pass of the tokenizer, which is
@@ -121,6 +147,13 @@ impl TokenSink for Depth {
                     .iter()
                     .any(|n| *n == local_name!("svg") || *n == local_name!("math"));
                 let closed = tag.self_closing && foreign;
+                // Inside a `ruby`, a ruby element closes the ruby elements
+                // open above it, as the tree builder does.
+                if RUBY.contains(&tag.name) && open.contains(&local_name!("ruby")) {
+                    while open.last().is_some_and(|top| RUBY.contains(top)) {
+                        open.pop();
+                    }
+                }
                 if raw.is_none() && !closed && !UNCOUNTED.contains(&tag.name) {
                     if open.len() >= DEPTH_MAX {
                         self.reach.set(Reach::Exceeded);
@@ -133,8 +166,15 @@ impl TokenSink for Depth {
                 }
             }
             TagKind::EndTag => {
+                // A formatting element closed under another element closes
+                // alone: `<b><div></b>` leaves the `div` open. Any other end
+                // tag closes the elements above it too.
                 if let Some(at) = open.iter().rposition(|n| *n == tag.name) {
-                    open.truncate(at);
+                    if FORMATTING.contains(&tag.name) {
+                        open.remove(at);
+                    } else {
+                        open.truncate(at);
+                    }
                 }
             }
         }
@@ -149,4 +189,43 @@ fn too_deep(html: &str) -> bool {
     let _ = tokenizer.feed(&input);
     tokenizer.end();
     tokenizer.sink.reach.get() == Reach::Exceeded
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn run(unit: &str, count: usize) -> String {
+        unit.repeat(count)
+    }
+
+    /// `P52`: a misnested formatting element closes alone, so a run of
+    /// `<b><div></b>` deepens the count as it deepens the tree.
+    #[test]
+    fn a_misnested_formatting_run_is_too_deep() {
+        assert!(too_deep(&run("<b><div></b>", 50_000)));
+        assert!(!too_deep(&run("<b><i>x</i></b>", 50_000)));
+    }
+
+    /// `P52`: ruby elements outside a `ruby` nest and count; inside one each
+    /// closes the one before.
+    #[test]
+    fn a_run_of_ruby_elements_counts_outside_a_ruby_alone() {
+        assert!(too_deep(&run("<rt>", 50_000)));
+        let ruby = format!("<ruby>{}</ruby>", run("a<rt>b<rp>c", 50_000));
+        assert!(!too_deep(&ruby));
+    }
+
+    /// A nesting under the cap reads whole, and one past it is refused.
+    #[test]
+    fn the_cap_holds_on_plain_nesting() {
+        let shallow = format!("{}x{}", run("<div>", DEPTH_MAX), run("</div>", DEPTH_MAX));
+        assert!(!too_deep(&shallow));
+        let deep = format!(
+            "{}x{}",
+            run("<div>", DEPTH_MAX + 1),
+            run("</div>", DEPTH_MAX + 1)
+        );
+        assert!(too_deep(&deep));
+    }
 }

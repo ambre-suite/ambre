@@ -78,3 +78,77 @@ fn many_column_runs_read_their_styles_by_search() {
     let imported = ambre_xlsx::read_ods(&ods("", &tables)).expect("the sheet reads");
     assert_eq!(imported.workbook.sheets.len(), 1);
 }
+
+/// `P66`: many distinct cell styles, each named by one cell, dedupe by a
+/// lookup, and the sheet reads.
+#[test]
+fn many_distinct_cell_styles_dedupe_by_lookup() {
+    let count = 20_000;
+    let styles: String = (0..count)
+        .map(|n| {
+            format!(
+                r#"<style:style style:name="c{n}" style:family="table-cell"><style:text-properties fo:font-size="{}pt"/></style:style>"#,
+                n % 400 + 1
+            )
+        })
+        .collect();
+    let cells: String = (0..count)
+        .map(|n| {
+            format!(
+                r#"<table:table-row><table:table-cell table:style-name="c{n}" office:value-type="float" office:value="1"/></table:table-row>"#
+            )
+        })
+        .collect();
+    let content = format!(
+        concat!(
+            r#"<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" "#,
+            r#"xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" "#,
+            r#"xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" "#,
+            r#"xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0">"#,
+            r#"<office:automatic-styles>{}</office:automatic-styles>"#,
+            r#"<office:body><office:spreadsheet><table:table table:name="S">{}</table:table>"#,
+            r#"</office:spreadsheet></office:body></office:document-content>"#
+        ),
+        styles, cells
+    );
+    let mut writer = OdfWriter::new(OdfType::SPREADSHEET);
+    writer.part(
+        PartName::new("content.xml").expect("a part name"),
+        OdfType::XML,
+        Payload::new(content.into_bytes()),
+    );
+    let file = writer.finish().expect("the archive").into_role();
+    let imported = ambre_xlsx::read_ods(&file).expect("the sheet reads");
+    assert!(imported.workbook.styles.len() <= 401);
+}
+
+/// `P51`: a content part of more tables than the sheet bound is refused
+/// before the next table is read.
+#[test]
+fn a_content_part_past_the_sheet_bound_is_refused() {
+    let past = usize::try_from(ambre_xlsx::MAX_SHEETS.get()).expect("fits") + 1;
+    let tables = r#"<table:table table:name="S"/>"#.repeat(past);
+    assert!(matches!(
+        ambre_xlsx::read_ods(&ods("", &tables)),
+        Err(ambre_xlsx::XlsxError::TooManySheets(_))
+    ));
+}
+
+/// `P53`: a repeated row of one long text copies it past the text bound of
+/// a workbook. The file is refused before it holds the copies.
+#[test]
+fn a_repeated_row_of_long_text_past_the_text_bound_is_refused() {
+    let tables = format!(
+        concat!(
+            r#"<table:table table:name="S">"#,
+            r#"<table:table-row table:number-rows-repeated="100000">"#,
+            r#"<table:table-cell office:value-type="string"><text:p>{}</text:p></table:table-cell>"#,
+            r#"</table:table-row></table:table>"#
+        ),
+        "x".repeat(1024)
+    );
+    assert!(matches!(
+        ambre_xlsx::read_ods(&ods("", &tables)),
+        Err(ambre_xlsx::XlsxError::TooMuchText(_))
+    ));
+}

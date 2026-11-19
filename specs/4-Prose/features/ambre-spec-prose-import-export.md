@@ -170,6 +170,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-125` | `FAIL` | An OpenDocument text whose part builds a tree past its node or attribute bound MUST fail as a typed error. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_odt::xml::tests::a_part_past_the_node_bound_is_refused`; `::a_part_past_the_attribute_bound_is_refused`; `ambre_odt::fixtures::a_part_past_the_node_bound_fails_typed` | none | verified |
 | `PROSE-IO-126` | `FAIL` | Given repeats or space marks whose copies pass the walk bound of a document, the reader MUST fail as a typed error. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_odt::fixtures::nested_repeats_of_a_table_fail_typed`; `::space_marks_past_the_text_bound_fail_typed` | none | verified |
 | `PROSE-IO-127` | `POST` | The OpenDocument reader MUST expand a tracked deletion at its first mark alone, and report each later mark dropped. | this spec section 3 | `ambre_odt::fixtures::a_deletion_that_names_itself_reads_once`; `::a_deleted_region_is_copied_once_whatever_its_marks` | none | verified |
+| `PROSE-IO-129` | `POST` | The OpenDocument reader MUST read at most the chain bound of style parents for one style. | this spec section 3 | `ambre_odt::fixtures::a_long_chain_of_styles_reads_within_its_bound` | none | verified |
 
 ### 1.12 Export to OpenDocument
 

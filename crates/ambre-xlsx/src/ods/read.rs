@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 
 use ambre_client_core::FileBytes;
 use ambre_core::index::{Len, Pos};
-use ambre_core::{Count, Doc, Payload, Px, Validated};
+use ambre_core::{Count, Doc, Octets, Payload, Px, Validated};
 use quick_xml::Reader;
 use quick_xml::events::{BytesStart, Event};
 
@@ -89,6 +89,8 @@ pub(crate) fn read(bytes: &Payload<FileBytes>) -> Result<Imported, XlsxError> {
         |e| match e {
             ContentError::Xml(e) => malformed(&name, e),
             ContentError::TooManyCells => XlsxError::TooManyCells(MAX_CELLS),
+            ContentError::TooManySheets => XlsxError::TooManySheets(crate::MAX_SHEETS),
+            ContentError::TooMuchText => XlsxError::TooMuchText(crate::MAX_TEXT_BYTES),
         },
     )?;
     let (mut sheets, styles) = sheets;
@@ -190,6 +192,11 @@ fn frozen_panes(settings: &Node) -> Vec<(Validated<SheetName>, FrozenPane)> {
 enum ContentError {
     Xml(XmlError),
     TooManyCells,
+    /// The part holds more tables than a read keeps (`P51`).
+    TooManySheets,
+    /// The cells hold more text than a read keeps, copies of a repeated
+    /// row or cell included (`P53`).
+    TooMuchText,
 }
 
 impl From<XmlError> for ContentError {
@@ -498,6 +505,7 @@ fn read_content(
     let mut hidden: usize = 0;
     let mut drawing = Drawing::default();
     let mut cells_read: u64 = 0;
+    let mut text_read: Count<Octets> = Count::ZERO;
     loop {
         let event = reader.read_event()?;
         match event {
@@ -528,6 +536,11 @@ fn read_content(
                 }
                 match name.as_str() {
                     "table" => {
+                        // A table is a few bytes: the count is refused before
+                        // the next one is read (`P51`).
+                        if Count::<crate::WorkbookSheets>::of(sheets.len()) >= crate::MAX_SHEETS {
+                            return Err(ContentError::TooManySheets);
+                        }
                         let attrs = attributes(e)?;
                         let n = sheets.len() + 1;
                         let sheet_name = get(&attrs, "name")
@@ -569,7 +582,7 @@ fn read_content(
                         if let Some(t) = table.as_mut() {
                             start_row(e, t, &layout, report)?;
                             if empty {
-                                finish_row(t, &mut cells_read)?;
+                                finish_row(t, &mut cells_read, &mut text_read)?;
                             }
                         }
                     }
@@ -674,12 +687,12 @@ fn read_content(
                         if let (Some(t), Some(c), Some(s)) =
                             (table.as_mut(), cell.take(), styles.as_mut())
                         {
-                            finish_cell(c, t, s, report);
+                            finish_cell(c, t, s, report, &mut text_read)?;
                         }
                     }
                     "table-row" => {
                         if let Some(t) = table.as_mut() {
-                            finish_row(t, &mut cells_read)?;
+                            finish_row(t, &mut cells_read, &mut text_read)?;
                         }
                     }
                     "table" => {
@@ -850,8 +863,14 @@ fn start_row(
     Ok(())
 }
 
-/// Close a row: its cells land once per row it repeats over.
-fn finish_row(table: &mut Table, cells_read: &mut u64) -> Result<(), ContentError> {
+/// Close a row: its cells land once per row it repeats over. The cells
+/// were charged to `text_read` once as they were read; each further copy is
+/// charged here, before it is made (`P53`).
+fn finish_row(
+    table: &mut Table,
+    cells_read: &mut u64,
+    text_read: &mut Count<Octets>,
+) -> Result<(), ContentError> {
     let cells = std::mem::take(&mut table.row_cells);
     let copies = table.row_repeat;
     let room = MAX_CELLS.get();
@@ -860,6 +879,12 @@ fn finish_row(table: &mut Table, cells_read: &mut u64) -> Result<(), ContentErro
         *cells_read = cells_read.saturating_add(total);
         if *cells_read > room {
             return Err(ContentError::TooManyCells);
+        }
+        let row_text: Count<Octets> = cells.iter().map(Cell::text_bytes).sum();
+        let more = row_text.get().saturating_mul(copies.saturating_sub(1));
+        *text_read = text_read.plus(Count::new(more));
+        if *text_read > crate::MAX_TEXT_BYTES {
+            return Err(ContentError::TooMuchText);
         }
         for k in 0..copies {
             for c in &cells {
@@ -899,7 +924,15 @@ fn inherited_style(table: &Table, col: u64) -> String {
         .unwrap_or_else(|| DEFAULT.to_owned())
 }
 
-fn finish_cell(cell: PendingCell, table: &mut Table, styles: &mut Styles, report: &mut Report) {
+/// Close a cell: it lands once per column it repeats over, each copy
+/// charged to `text_read` before it is made (`P53`).
+fn finish_cell(
+    cell: PendingCell,
+    table: &mut Table,
+    styles: &mut Styles,
+    report: &mut Report,
+    text_read: &mut Count<Octets>,
+) -> Result<(), ContentError> {
     let style_name = cell
         .style
         .clone()
@@ -909,7 +942,7 @@ fn finish_cell(cell: PendingCell, table: &mut Table, styles: &mut Styles, report
         row: table.row,
         col: cell.col,
     }) else {
-        return;
+        return Ok(());
     };
     if cell.rich {
         report.record(XlsxConstruct::RichText, Outcome::Dropped);
@@ -955,11 +988,11 @@ fn finish_cell(cell: PendingCell, table: &mut Table, styles: &mut Styles, report
     }
     let empty = matches!(content, Content::Value(Value::Empty));
     if empty && style == StyleId::DEFAULT {
-        return;
+        return Ok(());
     }
     if empty && cell.repeat.saturating_mul(table.row_repeat) > MAX_STYLED_RUN {
         report.record(XlsxConstruct::Style, Outcome::Dropped);
-        return;
+        return Ok(());
     }
     for k in 0..cell.repeat {
         let Some(at) = position(Spot {
@@ -968,12 +1001,18 @@ fn finish_cell(cell: PendingCell, table: &mut Table, styles: &mut Styles, report
         }) else {
             break;
         };
-        table.row_cells.push(Cell {
+        let copy = Cell {
             at,
             content: content.clone(),
             style,
-        });
+        };
+        *text_read = text_read.plus(copy.text_bytes());
+        if *text_read > crate::MAX_TEXT_BYTES {
+            return Err(ContentError::TooMuchText);
+        }
+        table.row_cells.push(copy);
     }
+    Ok(())
 }
 
 /// A place a table names as it counts its rows and columns, which a

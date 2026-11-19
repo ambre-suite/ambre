@@ -59,7 +59,9 @@ pub(super) fn xlsx(error: &ambre_xlsx::XlsxError) -> FileRefusal {
         XlsxError::MissingPart(_) => FileRefusal::PartMissing,
         XlsxError::Malformed(..) | XlsxError::DuplicateSheetName(_) => FileRefusal::Malformed,
         XlsxError::NoSheet => FileRefusal::Empty,
-        XlsxError::TooManyCells(_) => FileRefusal::PastBound,
+        XlsxError::TooManyCells(_) | XlsxError::TooManySheets(_) | XlsxError::TooMuchText(_) => {
+            FileRefusal::PastBound
+        }
     }
 }
 

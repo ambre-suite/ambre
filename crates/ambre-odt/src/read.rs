@@ -39,6 +39,10 @@ const MAX_REPEAT: u32 = 1024;
 /// The most a run of `text:s` writes, for the same reason.
 const MAX_SPACES: u32 = 1024;
 
+/// The most styles one chain of parents reads, the style itself included.
+/// LibreOffice derives a few levels; the ODP reader stops at the same count.
+const MAX_CHAIN: usize = 32;
+
 /// The most nodes the walk may visit for one document: twice the node bound
 /// of a tree. A walk visits each node of the body and of the bands once.
 /// So only the copies of a repeated row or cell pass it (`W302`).
@@ -399,11 +403,16 @@ impl Reader {
     }
 
     /// The style `name` of `family`, then each style it derives from. A
-    /// loop stops at the first style met twice.
+    /// loop stops at the first style met twice. A chain stops at
+    /// [`MAX_CHAIN`] styles, so the check of a loop scans a short list. A
+    /// chain read per paragraph thus costs no walk of every style (`P66`).
     fn chain(&self, family: Family, name: Option<&str>) -> Vec<&StyleDef> {
         let mut out: Vec<&StyleDef> = Vec::new();
         let mut next = name.map(str::to_owned);
         while let Some(name) = next.take() {
+            if out.len() >= MAX_CHAIN {
+                break;
+            }
             let Some(def) = self.styles.get(&(family, name)) else {
                 break;
             };

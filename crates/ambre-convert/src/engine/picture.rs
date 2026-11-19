@@ -58,7 +58,11 @@ fn exif_orientation(tiff: &[u8]) -> Orientation {
 /// triangle filter as wide as the scale: the filter `image` names `Triangle`.
 /// Each channel scales apart, alpha included, as `image` scales RGBA. The
 /// rows are scaled first, so the pass between holds `to.width` columns.
-fn scale<const C: usize>(samples: &[u8], from: Size<Px<Image>>, to: Size<Px<Image>>) -> Vec<u8> {
+pub(super) fn scale<const C: usize>(
+    samples: &[u8],
+    from: Size<Px<Image>>,
+    to: Size<Px<Image>>,
+) -> Vec<u8> {
     let (sw, sh) = (as_index(from.width), as_index(from.height));
     let (dw, dh) = (as_index(to.width), as_index(to.height));
     let (across_first, across) = weights(sw, dw);
