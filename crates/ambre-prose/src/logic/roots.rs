@@ -197,6 +197,87 @@ mod tests {
         );
     }
 
+    /// A reader of the tree, named so a failure names the reader.
+    type Reader = (&'static str, fn(&LoroDoc, &Roots));
+
+    /// Every reader that walks the block tree, beyond [`read_all`]: the
+    /// blocks a thread or a suggestion sits in, the footnote calls and the
+    /// references, the links, and the tables of contents.
+    const TREE_READERS: [Reader; 12] = [
+        ("comment::text_blocks", |document, roots| {
+            assert!(crate::comment::text_blocks(document, roots).is_empty());
+        }),
+        ("suggest::text_blocks", |document, roots| {
+            assert!(crate::suggest::text_blocks(document, roots).is_empty());
+        }),
+        ("doc::anchors", |document, roots| {
+            let read = |root| doc::anchors(document, roots, root, |value| Some(value.to_owned()));
+            assert!(read(crate::mark::MarkRoot::Footnote).is_empty());
+            assert!(read(crate::mark::MarkRoot::CrossRef).is_empty());
+        }),
+        ("note::footnote_calls", |document, roots| {
+            assert!(crate::note::footnote_calls(document, roots).is_empty());
+        }),
+        ("note::ordinals", |document, roots| {
+            assert!(crate::note::ordinals(document, roots).is_empty());
+        }),
+        ("comment::threads", |document, roots| {
+            assert!(crate::comment::threads(document, roots).is_empty());
+        }),
+        ("suggest::pending", |document, roots| {
+            assert!(crate::suggest::pending(document, roots).is_empty());
+        }),
+        ("link::links", |document, roots| {
+            assert!(crate::link::links(document, roots).is_empty());
+        }),
+        ("xref::resolve", |document, roots| {
+            let kind = crate::events::CrossRefKind::HeadingNumber;
+            let target = loro::TreeID::new(1, 0);
+            assert!(crate::xref::resolve(document, roots, None, &target, &kind).is_none());
+        }),
+        ("xref::resolve_all", |document, roots| {
+            assert!(crate::xref::resolve_all(document, roots, None).is_empty());
+        }),
+        ("toc::all", |document, roots| {
+            assert!(crate::toc::all(document, roots, &[]).is_empty());
+        }),
+        ("toc::one", |document, roots| {
+            let toc = loro::TreeID::new(1, 0);
+            assert!(crate::toc::one(document, roots, &[], &toc).is_none());
+        }),
+    ];
+
+    /// `PROSE-142`: each reader of the tree, alone, on a document that holds
+    /// operations and no tree. The frontiers, the pending operations, the
+    /// roots of the state and the encoded bytes stay as they were.
+    #[test]
+    fn each_tree_reader_leaves_a_document_with_no_tree_as_it_was() {
+        for (name, read) in TREE_READERS {
+            let document = annotations_alone();
+            let roots = Roots::watch(&document);
+            doc::annots(&document)
+                .insert("pending", 2)
+                .expect("the map takes a value");
+            let frontiers = document.state_frontiers();
+            let pending = document.get_pending_txn_len();
+            read(&document, &roots);
+            assert_eq!(document.state_frontiers(), frontiers, "{name}");
+            assert_eq!(document.get_pending_txn_len(), pending, "{name}");
+
+            let settled = annotations_alone();
+            let roots = Roots::watch(&settled);
+            let names = root_names(&settled);
+            let snapshot = settled.export(ExportMode::Snapshot).expect("a snapshot");
+            read(&settled, &roots);
+            assert_eq!(root_names(&settled), names, "{name}");
+            assert_eq!(
+                settled.export(ExportMode::Snapshot).ok(),
+                Some(snapshot),
+                "{name}"
+            );
+        }
+    }
+
     /// A document a peer seeded and wrote to, imported into a watched copy:
     /// the tree and `meta`, and no operation in `annots` or `styles`.
     fn text_alone() -> (LoroDoc, Roots) {

@@ -184,8 +184,10 @@ pub(crate) fn spans(
 /// Every block a suggestion may sit in, in document order. The bands are left
 /// out, since suggestion mode refuses to write there.
 #[must_use]
-pub(crate) fn text_blocks(document: &LoroDoc) -> Vec<TreeID> {
-    doc::flow(&doc::blocks(document))
+pub(crate) fn text_blocks(document: &LoroDoc, roots: &Roots) -> Vec<TreeID> {
+    // A document without the tree has no block, and the read attaches
+    // nothing (`PROSE-142`).
+    doc::blocks_read(document, roots).map_or_else(Vec::new, |tree| doc::flow(&tree))
 }
 
 /// Every pending suggestion: an entry with at least one live span, in the
@@ -194,7 +196,7 @@ pub(crate) fn text_blocks(document: &LoroDoc) -> Vec<TreeID> {
 #[must_use]
 pub fn pending(document: &LoroDoc, roots: &Roots) -> Vec<Suggestion> {
     let mut out: Vec<Suggestion> = Vec::new();
-    for (id, kind, block, start, end) in spans(document, &text_blocks(document)) {
+    for (id, kind, block, start, end) in spans(document, &text_blocks(document, roots)) {
         let span = SuggestionSpan {
             block_id: block_id(block),
             start,

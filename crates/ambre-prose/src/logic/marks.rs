@@ -71,7 +71,7 @@ impl ProseState {
             return Vec::new();
         }
         vec![ProseEvent::LinksUpdated {
-            links: crate::link::links(&self.doc),
+            links: crate::link::links(&self.doc, &self.roots),
         }]
     }
 

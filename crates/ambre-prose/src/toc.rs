@@ -15,8 +15,9 @@ use std::collections::HashMap;
 use loro::{LoroDoc, LoroTree, TreeID, TreeParentId};
 
 use crate::doc;
-use crate::events::{Page, TableOfContents, TocEntry, block_id};
+use crate::events::{BlockType, Page, TableOfContents, TocEntry, block_id};
 use crate::layout::place::BlockLayout;
+use crate::logic::Roots;
 use crate::numbering;
 
 /// The entries one table of contents lists (`PROSE-FEAT-003`).
@@ -55,6 +56,42 @@ pub fn build(
         max_level,
         numbered,
     })
+}
+
+/// Every table of contents of the document, in tree order, with the entries
+/// it lists against `blocks`, the placed blocks of a layout.
+///
+/// A document without the tree holds none, and the read attaches nothing
+/// (`PROSE-142`).
+#[must_use]
+pub(crate) fn all(
+    document: &LoroDoc,
+    roots: &Roots,
+    blocks: &[BlockLayout],
+) -> Vec<(TreeID, TableOfContents)> {
+    let Some(tree) = doc::blocks_read(document, roots) else {
+        return Vec::new();
+    };
+    let pages = heading_pages(&tree, blocks);
+    tree.nodes()
+        .into_iter()
+        .filter(|id| doc::block_type_of(&tree, id) == Some(BlockType::Toc))
+        .filter_map(|id| Some((id, build(document, &tree, &id, &pages)?)))
+        .collect()
+}
+
+/// The entries the table of contents `toc` lists against `blocks`, or `None`
+/// when `toc` names none. A document without the tree reads `None`, and the
+/// read attaches nothing (`PROSE-142`).
+#[must_use]
+pub(crate) fn one(
+    document: &LoroDoc,
+    roots: &Roots,
+    blocks: &[BlockLayout],
+    toc: &TreeID,
+) -> Option<TableOfContents> {
+    let tree = doc::blocks_read(document, roots)?;
+    build(document, &tree, toc, &heading_pages(&tree, blocks))
 }
 
 /// The page every heading starts on in a layout (`PROSE-FEAT-060`).

@@ -66,8 +66,8 @@ pub(crate) fn all(document: &LoroDoc, roots: &Roots) -> Vec<Id<Footnote>> {
 /// Every footnote call of the document, in document order, with the note it
 /// names. A call whose value names no note id is left out.
 #[must_use]
-pub(crate) fn footnote_calls(document: &LoroDoc) -> Vec<doc::Anchor<Id<Footnote>>> {
-    doc::anchors(document, crate::mark::MarkRoot::Footnote, |value| {
+pub(crate) fn footnote_calls(document: &LoroDoc, roots: &Roots) -> Vec<doc::Anchor<Id<Footnote>>> {
+    doc::anchors(document, roots, crate::mark::MarkRoot::Footnote, |value| {
         Id::<Footnote>::parse_str(value).ok()
     })
 }
@@ -82,7 +82,7 @@ pub(crate) fn footnote_calls(document: &LoroDoc) -> Vec<doc::Anchor<Id<Footnote>
 pub fn ordinals(document: &LoroDoc, roots: &Roots) -> Vec<(Id<Footnote>, Ordinal<FootnoteCall>)> {
     let mut seen = HashSet::new();
     let mut out = Vec::new();
-    for anchor in footnote_calls(document) {
+    for anchor in footnote_calls(document, roots) {
         let id = anchor.value;
         if seen.contains(&id) || entry(document, roots, &id).is_none() {
             continue;

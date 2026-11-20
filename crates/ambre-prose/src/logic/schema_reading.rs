@@ -651,7 +651,7 @@ fn mark_reading(
             None => "calls no note".to_owned(),
         }
     } else if mark == crate::mark::MarkRoot::CrossRef.as_str() {
-        let resolved = crate::xref::resolve_all(&reader.doc, reader.full_layout());
+        let resolved = crate::xref::resolve_all(&reader.doc, &reader.roots, reader.full_layout());
         match resolved.into_iter().find(|r| {
             crate::events::tree_id(r.block_id) == *block && r.offset == Pos::<DocChar>::new(at)
         }) {

@@ -285,10 +285,11 @@ impl ProseState {
         id: &Id<Suggestion>,
         verdict: Verdict,
     ) -> Result<Settled, doc::WriteError> {
-        let spans: Vec<_> = suggest::spans(&self.doc, &suggest::text_blocks(&self.doc))
-            .into_iter()
-            .filter(|(other, ..)| other == id)
-            .collect();
+        let spans: Vec<_> =
+            suggest::spans(&self.doc, &suggest::text_blocks(&self.doc, &self.roots))
+                .into_iter()
+                .filter(|(other, ..)| other == id)
+                .collect();
         let entry = suggest::entry(&self.doc, &self.roots, id);
         if spans.is_empty() && entry.is_none() {
             return Ok(Settled::Gone);

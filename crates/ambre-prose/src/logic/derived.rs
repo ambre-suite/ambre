@@ -50,7 +50,8 @@ impl ProseState {
         max_level: HeadingLevel,
         numbered: TocNumbering,
     ) -> ProseOutcome {
-        if doc::block_type_of(&doc::blocks(&self.doc), id) != Some(BlockType::Toc) {
+        let tree = doc::blocks_read(&self.doc, &self.roots);
+        if tree.and_then(|tree| doc::block_type_of(&tree, id)) != Some(BlockType::Toc) {
             return Self::err_no_block(id);
         }
         self.write_toc_settings(id, max_level, numbered)
@@ -101,20 +102,14 @@ impl ProseState {
             let _ = paginator.settle_toc(&self.doc, &self.roots);
         }
         self.stamp_pages();
-        let tree = doc::blocks(&self.doc);
-        let pages = match self.paginator.as_ref() {
-            Some(paginator) => toc::heading_pages(&tree, &paginator.layout().blocks),
-            None => return Vec::new(),
+        let Some(paginator) = self.paginator.as_ref() else {
+            return Vec::new();
         };
-        tree.nodes()
+        toc::all(&self.doc, &self.roots, &paginator.layout().blocks)
             .into_iter()
-            .filter(|id| doc::block_type_of(&tree, id) == Some(BlockType::Toc))
-            .filter_map(|id| {
-                let built = toc::build(&self.doc, &tree, &id, &pages)?;
-                Some(ProseEvent::TocUpdated {
-                    block_id: block_id(id),
-                    toc: built,
-                })
+            .map(|(id, built)| ProseEvent::TocUpdated {
+                block_id: block_id(id),
+                toc: built,
             })
             .collect()
     }
@@ -123,14 +118,12 @@ impl ProseState {
     /// test and for the view's own reads (`PROSE-FEAT-003`).
     #[must_use]
     pub fn table_of_contents(&self, id: &crate::events::BlockId) -> Option<TableOfContents> {
-        let tree = doc::blocks(&self.doc);
         let blocks = self
             .paginator
             .as_ref()
             .map(|paginator| paginator.layout().blocks.as_slice())
             .unwrap_or_default();
-        let pages = toc::heading_pages(&tree, blocks);
-        toc::build(&self.doc, &tree, &crate::events::tree_id(*id), &pages)
+        toc::one(&self.doc, &self.roots, blocks, &crate::events::tree_id(*id))
     }
 
     /// Recount the four text counts and answer the five figures
@@ -157,7 +150,7 @@ impl ProseState {
         display.push(self.cross_refs_event());
         display.push(self.suggestions_event());
         display.push(ProseEvent::LinksUpdated {
-            links: crate::link::links(&self.doc),
+            links: crate::link::links(&self.doc, &self.roots),
         });
         ProseOutcome::display_only(display)
     }

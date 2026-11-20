@@ -214,7 +214,7 @@ impl ProseState {
             .iter()
             .any(|id| !spans.contains_key(id) && !self.orphans.contains(id));
         if lost {
-            spans = comment::live_spans(&self.doc, &comment::text_blocks(&self.doc));
+            spans = comment::live_spans(&self.doc, &comment::text_blocks(&self.doc, &self.roots));
             self.orphans = ids
                 .iter()
                 .filter(|id| !spans.contains_key(id))
@@ -330,7 +330,7 @@ impl ProseState {
     /// Take thread `id`'s mark off every run it covers, then its entry.
     fn remove_thread(&self, id: &Id<Comment>) -> Result<(), doc::WriteError> {
         let key = comment::mark_key(id);
-        let runs = comment::runs(&self.doc, &comment::text_blocks(&self.doc));
+        let runs = comment::runs(&self.doc, &comment::text_blocks(&self.doc, &self.roots));
         for (_, span) in runs.iter().filter(|(thread, _)| thread == id) {
             doc::get_block_text(&self.doc, &span.block)
                 .unmark(span.start.to_usize()..span.end.to_usize(), key.as_str())?;
@@ -467,11 +467,12 @@ mod tests {
     fn a_thread_marks_its_range_and_no_character_outside_it() {
         let (mut state, block) = document(ambre_core::PeerId::new(1), ALICE, "Hello brave world");
         let id = open(&mut state, block, (6, 11), "Why brave?");
-        let runs: Vec<(u32, u32)> = comment::runs(&state.doc, &comment::text_blocks(&state.doc))
-            .into_iter()
-            .filter(|(thread, _)| *thread == id)
-            .map(|(_, s)| (s.start.get(), s.end.get()))
-            .collect();
+        let runs: Vec<(u32, u32)> =
+            comment::runs(&state.doc, &comment::text_blocks(&state.doc, &state.roots))
+                .into_iter()
+                .filter(|(thread, _)| *thread == id)
+                .map(|(_, s)| (s.start.get(), s.end.get()))
+                .collect();
         assert_eq!(runs, vec![(6, 11)]);
         assert_eq!(comment::all(&state.doc, &state.roots), vec![id]);
         let t = thread(&state, id);
@@ -731,7 +732,9 @@ mod tests {
             reply_id: head,
         });
         assert!(state.comments().is_empty());
-        assert!(comment::runs(&state.doc, &comment::text_blocks(&state.doc)).is_empty());
+        assert!(
+            comment::runs(&state.doc, &comment::text_blocks(&state.doc, &state.roots)).is_empty()
+        );
     }
 
     /// Deleting a thread removes its entry and its mark, leaves the text, and
@@ -751,7 +754,7 @@ mod tests {
         );
         assert_eq!(state.text_of(&block).as_deref(), Some("Hello brave world"));
         assert!(
-            comment::runs(&state.doc, &comment::text_blocks(&state.doc))
+            comment::runs(&state.doc, &comment::text_blocks(&state.doc, &state.roots))
                 .iter()
                 .all(|(thread, _)| *thread == kept)
         );

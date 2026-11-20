@@ -99,7 +99,7 @@ impl ProseState {
         if note::entry(&self.doc, &self.roots, id).is_none() {
             return ProseOutcome::refused(ProseRefusal::NoSuchFootnote(*id));
         }
-        let calls: Vec<doc::Anchor<Id<Footnote>>> = note::footnote_calls(&self.doc)
+        let calls: Vec<doc::Anchor<Id<Footnote>>> = note::footnote_calls(&self.doc, &self.roots)
             .into_iter()
             .filter(|anchor| anchor.value == *id)
             .collect();
@@ -264,9 +264,12 @@ mod tests {
         body.insert(0, "\u{fffc}").expect("the carrier lands");
         body.mark(0..1, MarkRoot::Footnote.as_str(), upper)
             .expect("the call lands");
-        assert_eq!(note::footnote_calls(state.document()).len(), 2);
+        assert_eq!(
+            note::footnote_calls(state.document(), state.roots()).len(),
+            2
+        );
         state.handle_command(ProseCommand::DeleteFootnote { footnote_id: id });
-        assert!(note::footnote_calls(state.document()).is_empty());
+        assert!(note::footnote_calls(state.document(), state.roots()).is_empty());
         assert_eq!(state.text_of(&ids[0]).as_deref(), Some("Hello world"));
     }
 
@@ -279,7 +282,7 @@ mod tests {
             Some("Hello\u{fffc} world"),
             "the block holds the call and none of the note's text"
         );
-        let calls = note::footnote_calls(state.document());
+        let calls = note::footnote_calls(state.document(), state.roots());
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].offset, Pos::<DocChar>::new(5));
         assert_eq!(calls[0].value, id);

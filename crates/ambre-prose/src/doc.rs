@@ -1738,15 +1738,19 @@ pub(crate) struct Anchor<V> {
 /// Every character carrying the mark `root`, in document order, with its
 /// value as `parse` reads it. The mark is a footnote call or a cross
 /// reference, whose key is its root alone. A value `parse` refuses names
-/// nothing, and its character is left out.
+/// nothing, and its character is left out. A document without the tree holds
+/// no anchor, and the read attaches nothing (`PROSE-142`).
 #[must_use]
 pub(crate) fn anchors<V: Clone>(
     document: &LoroDoc,
+    roots: &Roots,
     root: crate::mark::MarkRoot,
     parse: impl Fn(&str) -> Option<V>,
 ) -> Vec<Anchor<V>> {
     let key = root.as_str();
-    let tree = blocks(document);
+    let Some(tree) = blocks_read(document, roots) else {
+        return Vec::new();
+    };
     let mut out = Vec::new();
     for id in flow(&tree) {
         if !block_type_of(&tree, &id).is_some_and(BlockType::has_body) {

@@ -216,15 +216,17 @@ fn spans_of(runs: &[(Id<Comment>, Span)]) -> HashMap<Id<Comment>, Span> {
 /// Every live block, in document order. The bands are left out: a thread is
 /// never opened there.
 #[must_use]
-pub(crate) fn text_blocks(document: &LoroDoc) -> Vec<TreeID> {
-    doc::flow(&doc::blocks(document))
+pub(crate) fn text_blocks(document: &LoroDoc, roots: &Roots) -> Vec<TreeID> {
+    // A document without the tree has no block, and the read attaches
+    // nothing (`PROSE-142`).
+    doc::blocks_read(document, roots).map_or_else(Vec::new, |tree| doc::flow(&tree))
 }
 
 /// Every thread as the view lists it: the marked ones in the order their
 /// anchors appear, then the orphans, kept for review (`PROSE-FEAT-202`).
 #[must_use]
 pub fn threads(document: &LoroDoc, roots: &Roots) -> Vec<CommentThread> {
-    let runs = runs(document, &text_blocks(document));
+    let runs = runs(document, &text_blocks(document, roots));
     let spans = spans_of(&runs);
     let mut order: Vec<Id<Comment>> = Vec::new();
     for (thread, _) in &runs {

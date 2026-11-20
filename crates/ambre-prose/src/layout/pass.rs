@@ -278,7 +278,7 @@ impl NotePlan {
             reason = "the axis argument of the index family lengthens a tuple shape that predates it"
         )]
         let mut calls: HashMap<TreeID, Vec<(Pos<DocChar>, Id<Footnote>)>> = HashMap::new();
-        for anchor in note::footnote_calls(document) {
+        for anchor in note::footnote_calls(document, roots) {
             let id = anchor.value;
             if notes.contains_key(&id) {
                 calls
