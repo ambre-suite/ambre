@@ -4984,6 +4984,7 @@ mod tests {
         );
         let (entries, unwrapped) = rotate_entries_for(
             &mut KeyWrapper::new(&owner.xk),
+            logged.document_id,
             &DocumentKey::generate(),
             &before,
             &rows,
@@ -5005,11 +5006,13 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            unwrap_b64(&new_xk, &owner_pub, &enc).unwrap().id(),
+            unwrap_b64(&new_xk, &owner_pub, logged.document_id, &enc)
+                .unwrap()
+                .id(),
             logged.doc_key.id(),
             "the copy of the re-invite opens under the new key"
         );
-        assert!(unwrap_b64(&bob.xk, &owner_pub, &enc).is_err());
+        assert!(unwrap_b64(&bob.xk, &owner_pub, logged.document_id, &enc).is_err());
 
         let text = body["entry"].as_str().unwrap();
         logged
@@ -5022,20 +5025,25 @@ mod tests {
             (MemberStanding::Verified, Some(Role::Editor))
         );
         let next_key = DocumentKey::generate();
-        let (entries, unwrapped) =
-            rotate_entries_for(&mut KeyWrapper::new(&owner.xk), &next_key, &after, &rows);
+        let (entries, unwrapped) = rotate_entries_for(
+            &mut KeyWrapper::new(&owner.xk),
+            logged.document_id,
+            &next_key,
+            &after,
+            &rows,
+        );
         assert!(unwrapped.is_empty(), "nobody is left out");
         let copy = entries
             .iter()
             .find(|e| e.user_id == bob.author.user_id)
             .expect("the rotation wraps for Bob");
         assert_eq!(
-            unwrap_b64(&new_xk, &owner_pub, &copy.doc_key_enc)
+            unwrap_b64(&new_xk, &owner_pub, logged.document_id, &copy.doc_key_enc)
                 .unwrap()
                 .id(),
             next_key.id()
         );
-        assert!(unwrap_b64(&bob.xk, &owner_pub, &copy.doc_key_enc).is_err());
+        assert!(unwrap_b64(&bob.xk, &owner_pub, logged.document_id, &copy.doc_key_enc).is_err());
     }
 
     /// Holds `SYNC-286`. Carol holds a row that no entry of the log signs,
@@ -5057,6 +5065,7 @@ mod tests {
         let before = logged.footing().walk(&logged.log, &rule).unwrap();
         let (entries, unwrapped) = rotate_entries_for(
             &mut KeyWrapper::new(&owner.xk),
+            logged.document_id,
             &DocumentKey::generate(),
             &before,
             &rows,
@@ -5073,7 +5082,8 @@ mod tests {
                 body["doc_key_enc"].clone(),
             )
             .unwrap();
-            let (key, anchor) = unwrap_anchor_b64(secret, &owner_pub, &enc).unwrap();
+            let (key, anchor) =
+                unwrap_anchor_b64(secret, &owner_pub, logged.document_id, &enc).unwrap();
             assert_eq!(key.id(), logged.doc_key.id(), "the key in force comes back");
             assert_eq!(anchor, Some(logged.anchor));
             let text = body["entry"].as_str().unwrap();
@@ -5089,8 +5099,13 @@ mod tests {
             );
         }
         let next_key = DocumentKey::generate();
-        let (entries, unwrapped) =
-            rotate_entries_for(&mut KeyWrapper::new(&owner.xk), &next_key, &after, &rows);
+        let (entries, unwrapped) = rotate_entries_for(
+            &mut KeyWrapper::new(&owner.xk),
+            logged.document_id,
+            &next_key,
+            &after,
+            &rows,
+        );
         assert!(unwrapped.is_empty(), "nobody is left out");
         for (peer, secret) in [(&carol, &carol.xk), (&dave, &dave_pub.0)] {
             let copy = entries
@@ -5098,7 +5113,7 @@ mod tests {
                 .find(|e| e.user_id == peer.author.user_id)
                 .expect("the rotation wraps for each member invited back");
             assert_eq!(
-                unwrap_b64(secret, &owner_pub, &copy.doc_key_enc)
+                unwrap_b64(secret, &owner_pub, logged.document_id, &copy.doc_key_enc)
                     .unwrap()
                     .id(),
                 next_key.id()

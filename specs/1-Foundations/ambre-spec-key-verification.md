@@ -71,9 +71,9 @@ Escape, the backdrop and the refusing action are three routes to one outcome.
 * **Boundary.** this is the boundary. The confirmed key is stored on the client and never sent, and
   the fingerprint is public by construction. The invitation carries the expected key so the wrapping
   thread can refuse. The keys never leave the Sync thread (`ambre-spec-zero-knowledge.md`).
-* **Verification.** 19 `verified`. The two phases run over a scripted relay. The classification and
-  the confirmation are pure, and the prompt is mounted in the browser tier. A scan holds who
-  hashes a key and who builds an invitation.
+* **Verification.** 20 `verified`, 1 `unimplemented`. The two phases run over a scripted relay. The
+  classification and the confirmation are pure, and the prompt is mounted in the browser tier. A
+  scan holds who hashes a key and who builds an invitation.
 
 ---
 

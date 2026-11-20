@@ -21,14 +21,14 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**4844 rows: 4419 shipped, of which 15 loose. 425 unbuilt.**
+**4849 rows: 4421 shipped, of which 14 loose. 428 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1503 | 583 | 995 | 799 | 524 | 4404 |
-| `failing` | 1 |  |  |  |  | 1 |
+| `verified` | 1506 | 583 | 995 | 799 | 524 | 4407 |
+| `failing` |  |  |  |  |  | 0 |
 | `human-review` | 14 |  |  |  |  | 14 |
-| `unimplemented` | 173 | 42 | 21 | 32 | 157 | 425 |
+| `unimplemented` | 176 | 42 | 21 | 32 | 157 | 428 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -55,12 +55,12 @@
 | `ambre-spec-high-density.md` | 10 | 10 | 10 |  |  |
 | `ambre-spec-interop.md` | 26 | 25 | 23 | 2 | 1 |
 | `ambre-spec-key-rotation.md` | 39 | 38 | 38 |  | 1 |
-| `ambre-spec-key-verification.md` | 19 | 19 | 19 |  |  |
+| `ambre-spec-key-verification.md` | 21 | 20 | 20 |  | 1 |
 | `ambre-spec-kinetic-scroll.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-launcher.md` | 49 | 49 | 49 |  |  |
 | `ambre-spec-locale.md` | 23 | 23 | 23 |  |  |
 | `ambre-spec-media.md` | 20 | 20 | 20 |  |  |
-| `ambre-spec-membership.md` | 92 | 92 | 91 | 1 |  |
+| `ambre-spec-membership.md` | 95 | 93 | 93 |  | 2 |
 | `ambre-spec-message-bus.md` | 46 | 45 | 45 |  | 1 |
 | `ambre-spec-newtypes.md` | 1 | 1 | 1 |  |  |
 | `ambre-spec-object-store.md` | 21 | 20 | 20 |  | 1 |
@@ -218,14 +218,14 @@
 | `ambre-spec-high-density.md` | CANVAS-031..035,043..046,071 |
 | `ambre-spec-interop.md` | INTEROP-001..026 |
 | `ambre-spec-key-rotation.md` | SYNC-041..048,078..081,115..122,126..130,141..143,168,198..199,204,213,223..224,264..265,280,286 |
-| `ambre-spec-key-verification.md` | CHROME-046..055,071..078,138 |
+| `ambre-spec-key-verification.md` | CHROME-046..055,071..078,138,140..141 |
 | `ambre-spec-kinetic-scroll.md` | KINETIC-001..015 |
 | `ambre-spec-launcher.md` | CHROME-035..045,079..084,095..101,104,107..108,116,118..137,139 |
 | `ambre-spec-locale.md` | LOCALE-001..023 |
 | `ambre-spec-machine-access.md` | MACH-001..034 |
 | `ambre-spec-macros.md` | MACRO-001..054 |
 | `ambre-spec-media.md` | SYNC-049..055,074..077,139..140,145..146,174..176,228,288 |
-| `ambre-spec-membership.md` | SYNC-010,012,014..017,034..040,073,092..094,102..111,123..124,132,150..151,161,172..173,190,197,200..202,205..212,214..215,217..222,225..227,229..247,260,262..263,266..268,272..274,279,282..285 |
+| `ambre-spec-membership.md` | SYNC-010,012,014..017,034..040,073,092..094,102..111,123..124,132,150..151,161,172..173,190,197,200..202,205..212,214..215,217..222,225..227,229..247,260,262..263,266..268,272..274,279,282..285,289..291 |
 | `ambre-spec-message-bus.md` | BUS-001..046 |
 | `ambre-spec-murmure-attachments.md` | MURMURE-128..136,240..242,577..578,626..628,636..637 |
 | `ambre-spec-murmure-bots.md` | MURMURE-387..398 |

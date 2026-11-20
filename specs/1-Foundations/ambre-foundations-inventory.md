@@ -24,12 +24,10 @@
 | `docfile` | The file a user saves a document into, and opens back. | implemented | 21 |  |
 | `fixtures` | Ambre documents in known states, built from a seed instead of by hand. | implemented | 37 |  |
 | `high-density` | A screen with two or more physical pixels per CSS pixel. | implemented | 10 |  |
-| `key-verification` | Before a document is shared with someone, their key is shown as a short readable fingerprint and the user confirms it. | implemented | 19 |  |
 | `kinetic-scroll` | A finger moves the view the same way in every editor. | implemented | 15 |  |
 | `launcher` | The home screen at the root of the site: sign in, then every document you can open, whatever kind it is. | implemented | 49 |  |
 | `locale` | A document carries one language tag, so two collaborators on differently configured machines read the same number, the same currency and the same date. | implemented | 23 |  |
 | `media` | A picture in a document travels apart from it. | implemented | 20 |  |
-| `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | implemented | 92 | 1 |
 | `pdf-export` | A user hands a document to someone who has no Ambre, and the file looks like the screen. | implemented | 20 |  |
 | `residency` | Which documents a client holds, in memory and on disk, and what a document it does not hold still costs. | implemented | 32 |  |
 | `schema-version` | What a document looks like once it reaches the disk, and how a later binary knows it can still read it. | implemented | 20 |  |
@@ -45,6 +43,8 @@
 | `frame` | One frame, from the browser's tick to the pixels on the screen. | partial | 25 | 2 |
 | `interop` | A user brings a file in, or takes a document out, and reads the conversion report: what the file kept and what it lost. | partial | 26 | 2 |
 | `key-rotation` | Taking someone off a document means they cannot read what is written after it. | partial | 39 |  |
+| `key-verification` | Before a document is shared with someone, their key is shown as a short readable fingerprint and the user confirms it. | partial | 21 |  |
+| `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | partial | 95 |  |
 | `message-bus` | The contract the three threads talk over. | partial | 46 |  |
 | `object-store` | Everything too large for a wire message lives in object storage, sealed. | partial | 21 |  |
 | `op-authorship` | Who wrote each operation of a document. | partial | 36 |  |
@@ -65,4 +65,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**49 features: 20 implemented, 25 partial, 4 design-only. 1690 contract rows, 15 loose.**
+**49 features: 18 implemented, 27 partial, 4 design-only. 1695 contract rows, 14 loose.**
