@@ -106,6 +106,14 @@ impl Session {
                     .insert(sender, generation, key, Instant::<PageLoad>::default());
             }
             KeyHandoff::Forget { sender } => self.receive.forget(sender),
+            // The receiver clock of this model stays at zero, as for each `Open`.
+            KeyHandoff::Close {
+                sender,
+                generation,
+                within,
+            } => self
+                .receive
+                .close(sender, generation, within, Instant::<PageLoad>::default()),
             // A curious member keeps every key it held past the end of the call.
             KeyHandoff::End => {}
         }
@@ -289,9 +297,12 @@ impl World {
                 "a wrap reached actor {to}, who is not in the call"
             );
             if let Some((session, _)) = self.sessions.get_mut(&to) {
-                let handoff = session.keys.receive(from_index, &wrap.wrapped);
-                let handoff = handoff.unwrap_or_else(|e| panic!("a wrap does not open: {e:?}"));
-                session.hand(handoff);
+                let now = Instant::<UnixMs>::new(self.now);
+                let handoffs = session.keys.receive(from_index, &wrap.wrapped, now);
+                let handoffs = handoffs.unwrap_or_else(|e| panic!("a wrap does not open: {e:?}"));
+                for handoff in handoffs {
+                    session.hand(handoff);
+                }
             }
         }
     }
@@ -824,4 +835,184 @@ fn a_join_claiming_another_exchange_key_evicts_nobody() {
         admit_of(&mut world, 0, &genuine),
         Some(Err(Refusal::Replayed))
     );
+}
+
+/// The keys of the session `sender` of member `actor`, joined at the time of `world`.
+fn session_of(world: &World, actor: usize, sender: u64) -> CallKeys {
+    let person = &world.people[actor];
+    let (keys, _) = CallKeys::start(
+        &person.key,
+        Joining {
+            call: CALL,
+            channel: CHANNEL,
+            member: person.id,
+            sender: Seq::new(sender),
+            at: Instant::<Authored>::new(world.now),
+        },
+    )
+    .unwrap_or_else(|e| panic!("{e:?}"));
+    keys
+}
+
+/// The moves of `keys` as it admits each of `others`, already in the call.
+fn admit_each(keys: &mut CallKeys, others: &[&CallKeys], log: &Log) -> Vec<Moves> {
+    others
+        .iter()
+        .map(|other| {
+            keys.admit(other.join(), log, Arrival::Present)
+                .unwrap_or_else(|e| panic!("{e:?}"))
+        })
+        .collect()
+}
+
+/// The log of `world` once its owner revoked `actor`.
+fn revoked(world: &World, actor: usize) -> Log {
+    let mut entries = world.entries.clone();
+    append(
+        &mut entries,
+        &world.owner,
+        &world.people[actor],
+        MembershipAct::Revoke,
+        Role::Editor,
+    );
+    walk(&entries)
+}
+
+/// `CALL-158`: Eve sits in the call from two sessions. The log removes her, and Alice heeds it.
+/// Both sessions of Eve depart before Alice wraps a fresh key. The one fresh key goes to
+/// Roger alone, never to the second session of Eve.
+#[test]
+fn a_removal_departs_every_session_of_the_member_before_a_fresh_key() {
+    let world = World::new();
+    let mut alice = session_of(&world, 0, 1);
+    let roger = session_of(&world, 1, 2);
+    let eve_laptop = session_of(&world, 2, 3);
+    let eve_phone = session_of(&world, 2, 4);
+    admit_each(&mut alice, &[&roger, &eve_laptop, &eve_phone], &world.log);
+
+    let now = Instant::<UnixMs>::new(world.now);
+    let moves = alice
+        .heed(&revoked(&world, 2), now)
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    let to: Vec<_> = moves.wraps.iter().map(|wrap| wrap.to).collect();
+    assert_eq!(to, [roger.own()], "a fresh key reached a session of Eve");
+    let forgotten: BTreeSet<_> = moves
+        .handoffs
+        .iter()
+        .filter_map(|handoff| match handoff {
+            KeyHandoff::Forget { sender } => Some(*sender),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        forgotten,
+        BTreeSet::from([eve_laptop.own(), eve_phone.own()])
+    );
+}
+
+/// `CALL-157`: Eve is removed, and a malicious relay withholds from Roger the wrap of the fresh
+/// key of Alice. Roger hands the call worker the close of the older key of Alice anyway. Past
+/// the switch delay, no chunk Eve seals under that key opens, and a replayed wrap of it is
+/// refused. The fresh key of Alice still opens when its wrap arrives late.
+#[test]
+fn a_removal_closes_the_older_key_of_a_sender_whose_fresh_wrap_is_withheld() {
+    let world = World::new();
+    let mut alice = session_of(&world, 0, 1);
+    let mut roger = session_of(&world, 1, 2);
+    let mut eve = session_of(&world, 2, 3);
+    let to_others = admit_each(&mut alice, &[&roger, &eve], &world.log);
+    admit_each(&mut roger, &[&alice, &eve], &world.log);
+    admit_each(&mut eve, &[&alice, &roger], &world.log);
+    let start = Instant::<UnixMs>::new(world.now);
+    let wrap_to = |moves: &[Moves], to: Seq<SenderIndex>| {
+        moves
+            .iter()
+            .flat_map(|m| &m.wraps)
+            .find(|wrap| wrap.to == to)
+            .map(|wrap| wrap.wrapped.clone())
+            .unwrap_or_else(|| panic!("no wrap to {to:?}"))
+    };
+    let old_to_roger = wrap_to(&to_others, roger.own());
+    let old_to_eve = wrap_to(&to_others, eve.own());
+
+    // The call worker of Roger, on its own monotonic clock.
+    let mut worker = ReceiveKeys::default();
+    let t0 = Instant::<PageLoad>::new(0.0);
+    for handoff in roger
+        .receive(alice.own(), &old_to_roger, start)
+        .unwrap_or_else(|e| panic!("{e:?}"))
+    {
+        if let KeyHandoff::Open {
+            sender,
+            generation,
+            key,
+        } = handoff
+        {
+            worker.insert(sender, generation, key, t0);
+        }
+    }
+    let eve_key = eve
+        .receive(alice.own(), &old_to_eve, start)
+        .unwrap_or_else(|e| panic!("{e:?}"))
+        .into_iter()
+        .find_map(|handoff| match handoff {
+            KeyHandoff::Open { key, .. } => Some(key),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("Eve opened no key of Alice"));
+
+    let log = revoked(&world, 2);
+    let fresh = alice.heed(&log, start).unwrap_or_else(|e| panic!("{e:?}"));
+    let closes: Vec<_> = roger
+        .heed(&log, start)
+        .unwrap_or_else(|e| panic!("{e:?}"))
+        .handoffs
+        .into_iter()
+        .filter(|handoff| matches!(handoff, KeyHandoff::Close { .. }))
+        .collect();
+    let [
+        KeyHandoff::Close {
+            sender,
+            generation,
+            within,
+        },
+    ] = closes.as_slice()
+    else {
+        panic!("the removal closed {closes:?}");
+    };
+    assert_eq!((*sender, *generation), (alice.own(), Seq::ZERO));
+    worker.close(*sender, *generation, *within, t0);
+
+    // The wrap of the fresh key never reaches Roger. Eve seals under the older key of Alice.
+    let kid = KeyIdentifier {
+        track: Track::Audio,
+        sender: alice.own(),
+        generation: Seq::ZERO,
+    };
+    let mut forger = ChunkSealer::new(&eve_key, kid).unwrap_or_else(|e| panic!("{e:?}"));
+    let mut forged = |text: &[u8]| {
+        forger
+            .seal(&Payload::new(text.to_vec()))
+            .unwrap_or_else(|e| panic!("{e:?}"))
+    };
+    let delay = SWITCH_DELAY.to_fractional();
+    let just_before = t0.after(delay).before(ambre_core::TimeSpan::new(1.0));
+    assert!(worker.open_audio(forged(b"in time"), just_before).is_ok());
+    let due = t0.after(delay);
+    assert!(worker.open_audio(forged(b"forged"), due).is_err());
+
+    // A replay of the older wrap past the delay hands no key.
+    let past = start.plus(SWITCH_DELAY);
+    assert_eq!(
+        roger
+            .receive(alice.own(), &old_to_roger, past)
+            .map(|h| h.len()),
+        Err(Refusal::Retired)
+    );
+    // The wrap of the fresh key, delivered late, opens with no close.
+    let fresh_to_roger = wrap_to(&[fresh], roger.own());
+    let handoffs = roger
+        .receive(alice.own(), &fresh_to_roger, past)
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    assert!(matches!(handoffs.as_slice(), [KeyHandoff::Open { .. }]));
 }

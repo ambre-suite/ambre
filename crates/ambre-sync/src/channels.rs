@@ -145,7 +145,7 @@ impl SyncState {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             return;
         };
-        doc_state.writers = crate::membership_log::Writers::Granted(Default::default());
+        doc_state.writers = crate::membership_log::Writers::granted(Default::default());
         doc_state.unvouched.clear();
         doc_state.refused.clear();
         doc_state.gate.end();
@@ -261,7 +261,47 @@ impl SyncState {
                 DocType::Trame | DocType::Toile | DocType::Prose => Vec::new(),
             },
             signer: self.author_pub_key(),
+            catalogue: self.catalogue_pin(document_id),
         }
+    }
+
+    /// The channel key the catalogue pins for the channel whose `meta` logs
+    /// `document_id`, if a catalogue lists it (`SYNC-299`).
+    fn catalogue_pin(&self, document_id: Id<Document>) -> Option<crate::key_vouch::CataloguePin> {
+        let meta = self.log_document(document_id);
+        self.listing_metas
+            .iter()
+            .find(|(_, listed)| **listed == meta)
+            .and_then(|(channel_id, _)| self.catalogue_pins.get(channel_id))
+            .copied()
+    }
+
+    /// Pins the channel key that `listed`, the catalogue entry of `channel_id`
+    /// in its space, holds (`SYNC-299`). The entry unseals under a key of the
+    /// space. One that does not unseal pins no key, so every open of the
+    /// channel fails closed. A channel no catalogue lists drops its pin.
+    pub(crate) fn pin_catalogue(
+        &mut self,
+        channel_id: Id<Channel>,
+        listed: Option<(Id<Space>, &SealedChannelKey)>,
+    ) {
+        let Some((space_id, sealed)) = listed else {
+            self.catalogue_pins.remove(&channel_id);
+            return;
+        };
+        let pin = self
+            .space_keys(space_id)
+            .and_then(|(keys, _)| unseal_channel_key(channel_id, sealed, &keys))
+            .map_or_else(
+                |error| {
+                    crate::log::warning!(
+                        "Sync: the catalogue entry of channel {channel_id} does not unseal: {error}"
+                    );
+                    crate::key_vouch::CataloguePin::Unreadable
+                },
+                |(key, _)| crate::key_vouch::CataloguePin::Key(key.id()),
+            );
+        self.catalogue_pins.insert(channel_id, pin);
     }
 
     /// The answer to a channel creation or a self-join, on the Sync loop.
@@ -1030,6 +1070,11 @@ impl SyncState {
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
         let exchange_key = self.exchange_key.clone();
+        // A listed name opens under the key the walked or kept log of its
+        // meta accepted alone (`SYNC-291`), from an author it admits
+        // (`SYNC-135`).
+        let kept = self.kept_keys();
+        let authors = self.name_authors();
         crate::spawn(async move {
             let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route("/channels");
@@ -1038,9 +1083,7 @@ impl SyncState {
                 {
                     Ok(answer) => {
                         let names = match exchange_key.as_ref() {
-                            Some(key) => {
-                                open_channel_names(&answer, key, url_scheme, &api_base, &auth).await
-                            }
+                            Some(key) => open_channel_names(&answer, &authors, key, &kept),
                             None => Vec::new(),
                         };
                         let keys = exchange_key
@@ -1143,14 +1186,15 @@ fn listed_keys(
 }
 
 /// The names sealed beside each meta of `answer`, opened with the user's
-/// wrapped key of that meta (`SYNC-171`). A name that does not open is
-/// none, and so is an empty one: a rename clears a name that way.
-async fn open_channel_names(
+/// wrapped key of that meta (`SYNC-171`). A name opens only under the key
+/// `kept` holds for it (`SYNC-291`), from an author `authors` admits
+/// (`SYNC-135`). A name that does not open is none, and so is an empty one:
+/// a rename clears a name that way.
+fn open_channel_names(
     answer: &http::MemberChannelsResponse,
+    authors: &crate::documents::NameAuthors,
     exchange_key: &StaticSecret,
-    url_scheme: crate::http::UrlScheme,
-    api_base: &crate::http::Url<crate::http::RelayHost>,
-    auth: &http::AuthContext,
+    kept: &HashMap<Id<Document>, FixedBytes<KeyId>>,
 ) -> Vec<ChannelName> {
     let mut names = Vec::new();
     for entry in &answer.channels {
@@ -1162,8 +1206,10 @@ async fn open_channel_names(
             doc_key_enc: &entry.doc_key_enc,
             wrapper_exchange_pub_key: entry.wrapper_exchange_pub_key.as_ref(),
             name_enc,
+            kept: kept.get(&entry.meta_id.document_id()).copied(),
+            authors,
         };
-        match listed.open(exchange_key, url_scheme, api_base, auth).await {
+        match listed.open(exchange_key) {
             Some(name) if !ambre_core::name_is_empty(&name) => names.push(ChannelName {
                 channel_id: entry.channel_id,
                 name,
@@ -1867,6 +1913,56 @@ pub(crate) mod tests {
         );
     }
 
+    /// Holds `SYNC-299` at the worker: an open of a listed channel pins the
+    /// channel key its catalogue entry holds. The roots of each open of its
+    /// `meta` carry the pin. An entry that does not unseal pins no key,
+    /// and a channel no catalogue lists pins nothing.
+    #[test]
+    fn a_listed_channel_open_pins_the_key_its_catalogue_holds() {
+        let mut state = SyncState::new(
+            LogicSink::channel().0,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
+        state.exchange_key = Some(exchange_key(1));
+        let (space_id, space_key) = (Id::<Space>::mint(), DocumentKey::generate());
+        state.documents.insert(
+            space_id.document_id(),
+            crate::SyncDocumentState::new(
+                space_id.document_id(),
+                space_key.clone(),
+                DocType::Murmure,
+                crate::Existence::OnRelay,
+            ),
+        );
+        let (channel_id, meta) = (Id::<Channel>::mint(), Id::<Meta>::mint());
+        let (sealed, own) = new_channel_key(channel_id, &space_key, &exchange_key(1));
+        let channel_key = unwrap_own(&exchange_key(1), &own).expect("own wrap");
+        let open = |state: &mut SyncState, listed: Option<SealedChannelKey>| {
+            state.handle_command(SyncCommand::OpenChannel {
+                channel_id,
+                listed_in: Some(space_id),
+                catalogue_key: listed,
+            });
+            let documents = vec![ambre_bus::ChannelDocument {
+                document_id: meta.document_id(),
+                kind: ChannelDocumentKind::Meta,
+            }];
+            state.channel_listed(channel_id, Some(space_id), Ok(documents));
+            state.roots(meta.document_id(), DocType::Murmure).catalogue
+        };
+
+        assert_eq!(
+            open(&mut state, Some(sealed)),
+            Some(crate::key_vouch::CataloguePin::Key(channel_key.id()))
+        );
+        let foreign = new_channel_key(channel_id, &DocumentKey::generate(), &exchange_key(1)).0;
+        assert_eq!(
+            open(&mut state, Some(foreign)),
+            Some(crate::key_vouch::CataloguePin::Unreadable)
+        );
+        assert_eq!(open(&mut state, None), None);
+    }
+
     /// The sealed key opens under the space key of its own channel only: a
     /// wrong space key, or an entry moved under another channel, fails.
     #[test]
@@ -2362,15 +2458,22 @@ pub(crate) mod tests {
             ],
             spaces: Vec::new(),
         };
-        let auth = state.auth_context();
-        let names = open_channel_names(
-            &answer,
-            &own,
-            crate::http::UrlScheme::Http,
-            &crate::http::Url::<crate::http::RelayHost>::new(String::new()),
-            &auth,
-        )
-        .await;
+        // Every meta's log accepted `key` at an open (`SYNC-291`).
+        let kept: HashMap<Id<Document>, FixedBytes<KeyId>> = [named, elsewhere, cleared, bare]
+            .into_iter()
+            .map(|meta| (meta.document_id(), key.id()))
+            .collect();
+        // No log of a listed meta was walked: no name shows (`SYNC-135`).
+        let unwalked = open_channel_names(&answer, &state.name_authors(), &own, &kept);
+        assert!(unwalked.is_empty(), "{unwalked:?}");
+        for meta in [named, elsewhere, cleared] {
+            state.walked_writers.insert(
+                meta.document_id(),
+                crate::membership_log::Writers::Unchecked,
+            );
+        }
+        let authors = state.name_authors();
+        let names = open_channel_names(&answer, &authors, &own, &kept);
         assert_eq!(
             names,
             vec![ChannelName {
@@ -2378,6 +2481,13 @@ pub(crate) mod tests {
                 name: ambre_core::Validated::<ambre_core::Name>::parse("Design").unwrap(),
             }]
         );
+        // `SYNC-291`: a meta this client never walked shows no name, nor
+        // one whose log accepted another key. The relay can wrap a key of
+        // its own, so the copy alone names nothing.
+        assert!(open_channel_names(&answer, &authors, &own, &HashMap::new()).is_empty());
+        let moved: HashMap<Id<Document>, FixedBytes<KeyId>> =
+            [(named.document_id(), DocumentKey::generate().id())].into();
+        assert!(open_channel_names(&answer, &authors, &own, &moved).is_empty());
         // Each key opens, and one that does not is left out.
         // Each keeps the last number of its meta, none where none is listed.
         let mut answer = answer;
@@ -2415,8 +2525,15 @@ pub(crate) mod tests {
         let sealed = state.seal_channel_name(meta, &key, &design).unwrap();
         let bytes = sealed.as_bytes().to_vec();
         assert!(!bytes.windows(6).any(|w| w == b"Design"));
-        let open =
-            |document_id| crate::documents::open_name(document_id, &key, &sealed, Vec::new());
+        let open = |document_id| {
+            crate::documents::open_name(
+                document_id,
+                &key,
+                &sealed,
+                Vec::new(),
+                &crate::documents::NameAuthors::unchecked(document_id),
+            )
+        };
         assert_eq!(
             open(meta.document_id())
                 .as_ref()

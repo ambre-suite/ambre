@@ -86,6 +86,7 @@ impl PersistLink {
         let store_slot = Rc::clone(&link.store);
         let gone = Rc::clone(&link.gone);
         let full_tx = link.to_logic.clone();
+        let logs_tx = link.to_logic.clone();
         let session_seen = Rc::clone(&link.session_seen);
         let opened = Rc::clone(&link.opened);
         wasm_bindgen_futures::spawn_local(async move {
@@ -114,7 +115,7 @@ impl PersistLink {
             // Before a session names the user, the sign-in reads them
             // (`SYNC-244`).
             if let Some(user) = kept_read.user() {
-                kept_read.read(user, store.load_inviters(user).await.unwrap_or_default());
+                read_kept(&store, user, &kept_read, &logs_tx).await;
             }
             keeper.store_opened(store.clone());
             let local = LocalStore::open(store, full_tx, vault, boot_doc).await;
@@ -145,6 +146,10 @@ impl PersistLink {
                 .try_iter()
                 .filter(|(document_id, write)| match write {
                     PersistWrite::KeepInviter(pin) => kept.keep(*document_id, *pin) == Proof::Fresh,
+                    PersistWrite::KeepLog(log) => {
+                        kept.keep_log(*document_id, *log);
+                        true
+                    }
                     _ => true,
                 }),
         );
@@ -184,13 +189,43 @@ impl PersistLink {
                 self.kept.read(user, Vec::new());
             } else if let Some(store) = self.opened.borrow().clone() {
                 let kept = self.kept.clone();
+                let to_logic = self.to_logic.clone();
                 wasm_bindgen_futures::spawn_local(async move {
-                    kept.read(user, store.load_inviters(user).await.unwrap_or_default());
+                    read_kept(&store, user, &kept, &to_logic).await;
                 });
             }
+        } else {
+            // The same user signs in again on this page: the worker forgot
+            // the session's logs, and memory holds them (`SYNC-290`).
+            send_kept_logs(&self.kept, &self.to_logic);
         }
         if let Some(local) = self.store.borrow().as_ref() {
             local.signed_in(user);
         }
+    }
+}
+
+/// Reads the kept logs, then the kept pins, of `user`. Each log goes to the
+/// Sync worker before the pins release any open. Every open of the session
+/// then walks from the head an earlier session kept (`SYNC-240`,
+/// `SYNC-290`).
+async fn read_kept(
+    store: &PersistenceStore,
+    user: Id<User>,
+    kept: &KeptInviters,
+    to_logic: &ShellOutbox,
+) {
+    kept.read_logs(user, store.load_kept_logs(user).await.unwrap_or_default());
+    send_kept_logs(kept, to_logic);
+    kept.read(user, store.load_inviters(user).await.unwrap_or_default());
+}
+
+/// Sends every kept log of the session's user to the Sync worker.
+fn send_kept_logs(kept: &KeptInviters, to_logic: &ShellOutbox) {
+    for (document_id, log) in kept.logs() {
+        to_logic.send(LogicCommand::KeepLog {
+            document_id,
+            kept: log,
+        });
     }
 }

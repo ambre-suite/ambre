@@ -964,6 +964,11 @@ struct SyncDocumentState {
     /// The keys whose deltas and snapshots this document takes, from the
     /// latest walk of its log (`SYNC-211`).
     writers: membership_log::Writers,
+    /// The highest clock of each author's deltas this document applied, and
+    /// the clocks each snapshot it opened folds (`SYNC-300`). A revoke caps
+    /// its member at the clock held here. A cell: the opens that read it
+    /// borrow the document shared.
+    applied_clocks: std::cell::RefCell<HashMap<FixedBytes<PublicKey>, Seq<DeltaAuthor>>>,
     /// The latest departure the current key was checked against, or found
     /// owed for. A walk that holds a later one leaves the current key in
     /// the leaver's hands, so a writer owes a rotation (`SYNC-223`).
@@ -1113,6 +1118,7 @@ impl SyncDocumentState {
             ephemeral_remote_counters: HashMap::new(),
             signing_keys: HashMap::new(),
             writers: membership_log::Writers::Unchecked,
+            applied_clocks: std::cell::RefCell::new(HashMap::new()),
             departed: None,
             unvouched: Vec::new(),
             refused: Vec::new(),
@@ -1332,14 +1338,54 @@ impl SyncDocumentState {
         let snapshot = pipeline::decode_snapshot_blob(blob, self.document_id, served)?;
         // A snapshot its author could not have written as a delta is refused
         // whole (`SYNC-211`).
-        if !self.writers.admits(&snapshot.public_data.pub_key) {
+        // A capped writer's snapshot names no clock, so its deltas replay
+        // under the cap instead (`SYNC-300`).
+        if !self.writers.admits_snapshot(&snapshot.public_data.pub_key) {
             return Err(pipeline::PipelineError::NotAWriter);
         }
         let key = self
             .key_named(snapshot.public_data.key_id)
             .ok_or(pipeline::PipelineError::WrongKey)?;
         let payload = pipeline::open_snapshot(&snapshot, &key)?;
+        // What the snapshot folds counts as applied, so a revoke caps a
+        // writer at the deltas the snapshot holds too (`SYNC-300`).
+        for (author, clock) in &snapshot.public_data.parent_snapshot_update_clocks {
+            self.note_applied(author, *clock);
+        }
         Ok((payload, snapshot.public_data.pub_key))
+    }
+
+    /// Notes that a delta `author` signed at `clock` reached the document,
+    /// alone or folded in a snapshot (`SYNC-300`).
+    fn note_applied(&self, author: &FixedBytes<PublicKey>, clock: Seq<DeltaAuthor>) {
+        self.applied_clocks
+            .borrow_mut()
+            .entry(*author)
+            .and_modify(|held| *held = (*held).max(clock))
+            .or_insert(clock);
+    }
+
+    /// The highest clock of `author`'s deltas this document applied, the
+    /// cap a revoke of that author names (`SYNC-300`). Zero for an author
+    /// none of whose deltas reached it. The revoke reads the whole map, so
+    /// only a test reads one author.
+    #[cfg(test)]
+    pub(crate) fn applied_clock(&self, author: &FixedBytes<PublicKey>) -> Seq<DeltaAuthor> {
+        self.applied_clocks
+            .borrow()
+            .get(author)
+            .copied()
+            .unwrap_or(Seq::<DeltaAuthor>::new(0))
+    }
+
+    /// Whether a delta this document applied lies past a cap `writers`
+    /// sets. The state then holds a write the log refuses, and is read again
+    /// from the relay (`SYNC-300`).
+    pub(crate) fn applied_past_cap(&self, writers: &membership_log::Writers) -> bool {
+        self.applied_clocks
+            .borrow()
+            .iter()
+            .any(|(author, clock)| writers.cap(author).is_some_and(|cap| *clock > cap))
     }
 
     /// Opens an update with the one key it names, and with no other
@@ -1365,11 +1411,13 @@ impl SyncDocumentState {
     ) -> Result<SignedDelta, pipeline::PipelineError> {
         let signer = &update.public_data.pub_key;
         // A signer the log never granted a writing role writes nothing, though
-        // it holds a key the cache or the chain reaches (`SYNC-211`).
-        if !self.writers.admits(signer) {
+        // it holds a key the cache or the chain reaches (`SYNC-211`). A revoked
+        // writer writes nothing past the cap of its revoke (`SYNC-300`).
+        if !self.writers.admits_delta(signer, update.public_data.clock) {
             return Err(pipeline::PipelineError::NotAWriter);
         }
         let body = pipeline::split_update_body(self.open_update_named(update)?)?;
+        self.note_applied(signer, update.public_data.clock);
         Ok(SignedDelta {
             seq,
             peer: ambre_crypto::peer::derive_peer_id(signer, &body.nonce),
@@ -1456,6 +1504,11 @@ pub struct SyncState {
     /// it (audit `P44`). An invite of that user refuses another signing key
     /// beside the exchange key the user confirmed.
     shown_identities: HashMap<Id<User>, ambre_crypto::IdentityKeys>,
+    /// Where each log stood when this client last accepted a key of it, by
+    /// the log's document. It holds this session and the kept ones before it
+    /// (`SYNC-290`). A listed name opens under the key it names alone
+    /// (`SYNC-291`).
+    kept_logs: HashMap<Id<Document>, ambre_bus::KeptLog>,
 
     // -- Single multiplexed WebSocket -----------------------------------------
     ws: Option<WebSocket>,
@@ -1523,6 +1576,13 @@ pub struct SyncState {
     /// user. A channel never opened is watched under it (the Murmure
     /// notifications spec).
     listed_keys: HashMap<Id<Channel>, (Id<Meta>, DocumentKey)>,
+    /// The writers of the last log this client walked, by log document. It
+    /// outlives the close of the document, until sign-out. A listed name is
+    /// checked against it (`SYNC-135`).
+    walked_writers: HashMap<Id<Document>, membership_log::Writers>,
+    /// The channel key the catalogue entry of each listed channel holds,
+    /// which every open of the channel trusts (`SYNC-299`).
+    catalogue_pins: HashMap<Id<Channel>, key_vouch::CataloguePin>,
     /// The documents of spaces this client created and the relay does not
     /// hold yet. Their lazy creation marks them spaces (`SYNC-170`).
     new_spaces: HashSet<Id<Document>>,
@@ -1633,6 +1693,7 @@ impl SyncState {
             space_rotations: HashMap::new(),
             log_footings: HashMap::new(),
             shown_identities: HashMap::new(),
+            kept_logs: HashMap::new(),
             ws: None,
             _onmessage: None,
             _onclose: None,
@@ -1658,6 +1719,8 @@ impl SyncState {
             socket_opens: Count::ZERO,
             member_channels_asked: ambre_core::Issuer::default(),
             listed_keys: HashMap::new(),
+            walked_writers: HashMap::new(),
+            catalogue_pins: HashMap::new(),
             new_spaces: HashSet::new(),
             held_creations: HashMap::new(),
             call: None,
@@ -1889,6 +1952,7 @@ impl SyncState {
             } => {
                 self.pinned_inviters.insert(document_id, inviter);
             }
+            SyncCommand::KeepLog { document_id, kept } => self.hold_kept_log(document_id, kept),
             SyncCommand::PinMurmureInviter { inviter } => {
                 self.murmure_roots.insert(inviter);
             }
@@ -1956,17 +2020,23 @@ impl SyncState {
             SyncCommand::OpenChannel {
                 channel_id,
                 listed_in,
+                catalogue_key,
             } => {
                 match listed_in {
                     Some(space_id) => self.listed_channels.insert(channel_id, space_id),
                     None => self.listed_channels.remove(&channel_id),
                 };
+                self.pin_catalogue(channel_id, listed_in.zip(catalogue_key.as_ref()));
                 self.handle_open_channel(channel_id, listed_in);
             }
             SyncCommand::MarkChannelListed {
                 channel_id,
                 space_id,
-            } => self.mark_channel_listed(channel_id, space_id),
+                catalogue_key,
+            } => {
+                self.pin_catalogue(channel_id, Some((space_id, &catalogue_key)));
+                self.mark_channel_listed(channel_id, space_id);
+            }
             SyncCommand::RotateSpace { space_id, channels } => {
                 self.handle_rotate_space(space_id, channels);
             }

@@ -345,9 +345,14 @@ fn the_worker_closes_an_older_epoch_at_the_switch_delay() {
     let arrival = Instant::<PageLoad>::new(2_000.0);
     roger.hand(open_handoff(1, fresh_epoch, &fresh), arrival);
     let due = arrival.after(SWITCH_DELAY.to_fractional());
+    // One step up, so the forged chunk below carries a counter its key never saw.
     assert!(
         roger
-            .open(Track::Audio, sealed_by(&old, 1, 0, b"in time"), arrival)
+            .open(
+                Track::Audio,
+                sealed_by(&old.ratcheted(), 1, 1, b"in time"),
+                arrival
+            )
             .is_some()
     );
     assert!(
@@ -355,6 +360,52 @@ fn the_worker_closes_an_older_epoch_at_the_switch_delay() {
             .open(Track::Audio, sealed_by(&old, 1, 0, b"forged"), due)
             .is_none()
     );
+    assert!(
+        roger
+            .open(
+                Track::Audio,
+                sealed_by(&fresh, 1, fresh_epoch, b"fresh"),
+                due
+            )
+            .is_some()
+    );
+}
+
+/// `CALL-157`: Eve is removed, and the relay withholds the fresh key of Alice from Roger. The
+/// Sync worker of Roger hands the close of the removal alone. Past its delay, no chunk Eve
+/// seals under the older key of Alice reaches the decoder, and the fresh key still opens once
+/// it arrives.
+#[test]
+fn the_worker_closes_an_older_epoch_at_a_removal_with_no_fresh_key() {
+    let old = SenderKey::generate();
+    let mut roger = CallWorker::default();
+    roger.hand(open_handoff(1, 0, &old), T0);
+    let removal = Instant::<PageLoad>::new(2_000.0);
+    let close = KeyHandoff::Close {
+        sender: Seq::new(1),
+        generation: Seq::ZERO,
+        within: SWITCH_DELAY,
+    };
+    assert_eq!(roger.hand(close, removal), Handled::Kept);
+    let due = removal.after(SWITCH_DELAY.to_fractional());
+    // One step up, so the forged chunk below carries a counter its key never saw.
+    assert!(
+        roger
+            .open(
+                Track::Audio,
+                sealed_by(&old.ratcheted(), 1, 1, b"in time"),
+                removal
+            )
+            .is_some()
+    );
+    assert!(
+        roger
+            .open(Track::Audio, sealed_by(&old, 1, 0, b"forged"), due)
+            .is_none()
+    );
+    let fresh = SenderKey::generate();
+    let fresh_epoch = Seq::<KeyGeneration>::ZERO.next_epoch().map_or(0, Seq::get);
+    roger.hand(open_handoff(1, fresh_epoch, &fresh), due);
     assert!(
         roger
             .open(

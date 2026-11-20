@@ -806,6 +806,83 @@ pub(crate) mod tests {
             .await;
     }
 
+    /// The ICE username fragment of the local description that `stats` read.
+    fn local_ufrag(stats: &Value) -> Option<String> {
+        stats["sdp"]
+            .as_str()?
+            .lines()
+            .find_map(|line| line.trim().strip_prefix("a=ice-ufrag:").map(str::to_owned))
+    }
+
+    /// `CALL-156`, audit `P60`, in the browser: Ada and Bob join one call of the application.
+    /// Its SFU hands TURN credentials of 30 s, renewed 15 s before their expiry. The
+    /// relay renews each seat every heartbeat, and the SFU answers a fresh credential near
+    /// the expiry. The page of each restarts ICE with it, and both still decode each other
+    /// past the expiry of the first credential.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build, the SFU, coturn, a driver and the services; run just test-browser"
+    )]
+    async fn the_page_restarts_ice_with_each_fresh_turn_credential() {
+        let turn = crate::call::Turn::start(std::time::Duration::from_millis(5)).await;
+        let lifetime = std::time::Duration::from_secs(30);
+        let sfu =
+            crate::call::Sfu::start_lasting(&turn, lifetime, std::time::Duration::from_secs(15))
+                .await;
+        let relay = Arc::new(Relay::start_with(&sfu.relay_env()).await);
+        let (ada, bob) = (user(), user());
+        let ada_page = murmure(Arc::clone(&relay), &ada).await;
+        let bob_page = murmure(Arc::clone(&relay), &bob).await;
+        space_with_channel(&ada_page, "Belt", "general", &bob, &bob_page).await;
+        open(&bob_page, "general").await;
+        let channel = last_channel();
+        let pages = [&ada_page, &bob_page];
+        for page in pages {
+            page.browser.script(RECORD, json!([])).await;
+        }
+        let call = start_call(&ada_page, &channel).await;
+        read_until(&bob_page, "a live call", |h| h.contains(LIVE), ROSTER_WAIT).await;
+        let joined = bob_page
+            .browser
+            .script(
+                "window.wasmBindings.join_call(arguments[0], arguments[1]); return true;",
+                json!([call, channel]),
+            )
+            .await;
+        assert_eq!(joined, json!(true), "the page has no join");
+        let started = std::time::Instant::now();
+        let first = decoded_past(&pages, &[0.0; 2], 48_000.0).await;
+        let ufrags: Vec<Option<String>> = first.iter().map(local_ufrag).collect();
+        assert!(
+            ufrags.iter().all(Option::is_some),
+            "no local fragment: {first:#?}"
+        );
+
+        // Heartbeats every 20 s: the beat past the start of the margin brings a fresh
+        // credential before the first one expires. The test reads the pages past that expiry.
+        let past = started + lifetime + std::time::Duration::from_secs(15);
+        tokio::time::sleep_until(past.into()).await;
+        let mut now = Vec::new();
+        for page in pages {
+            now.push(call_stats(page).await);
+        }
+        for (stats, before) in now.iter().zip(&ufrags) {
+            assert_eq!(stats["pcs"], json!(1), "one peer connection: {stats:#}");
+            assert_ne!(
+                local_ufrag(stats),
+                *before,
+                "the page restarted no ICE with the fresh credential: {stats:#}"
+            );
+        }
+        let base: Vec<f64> = now
+            .iter()
+            .map(|s| s["decoded"].as_f64().unwrap_or(0.0))
+            .collect();
+        decoded_past(&pages, &base, 48_000.0).await;
+        drop(turn);
+    }
+
     /// Makes every receive transform of the page fail to attach. From now on, it also records
     /// each track the peer connection hands the page, and each media element the page plays.
     const NO_RECEIVE_TRANSFORM: &str = "window.beltPlayed = []; window.beltReceived = []; \

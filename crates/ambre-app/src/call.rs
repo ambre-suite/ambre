@@ -1284,6 +1284,19 @@ fn camera_refusal_of(error: &JsValue) -> CameraRefusal {
 /// The peer connection to the SFU, under the TURN servers `servers`. Its one sender takes
 /// the transform of the call worker, then the microphone (`CALL-011`). Each receiver the SFU
 /// adds takes the open transform as it arrives, and plays in an audio element of its own.
+/// The configuration of a peer connection that gathers through `servers`, the TURN servers the
+/// SFU minted a credential for.
+fn configuration(
+    servers: &[ambre_protocol::signaling::IceServer],
+) -> Option<web_sys::RtcConfiguration> {
+    let config = web_sys::RtcConfiguration::new();
+    let servers = serde_json::to_string(servers)
+        .ok()
+        .and_then(|text| js_sys::JSON::parse(&text).ok())?;
+    config.set_ice_servers(&servers);
+    Some(config)
+}
+
 fn connect(
     worker: &web_sys::Worker,
     servers: &[ambre_protocol::signaling::IceServer],
@@ -1297,11 +1310,7 @@ fn connect(
     if let Some(track) = track.as_ref() {
         mic.add_track(track);
     }
-    let config = web_sys::RtcConfiguration::new();
-    let servers = serde_json::to_string(servers)
-        .ok()
-        .and_then(|text| js_sys::JSON::parse(&text).ok())?;
-    config.set_ice_servers(&servers);
+    let config = configuration(servers)?;
     let pc = web_sys::RtcPeerConnection::new_with_configuration(&config).ok()?;
     let init = web_sys::RtcRtpTransceiverInit::new();
     init.set_direction(web_sys::RtcRtpTransceiverDirection::Sendrecv);
@@ -1549,6 +1558,35 @@ async fn local(
     Validated::parse(sdp).ok()
 }
 
+/// Where the page stands with an ICE restart under a fresh TURN credential (`CALL-156`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Restart {
+    /// No restart is owed.
+    Settled,
+    /// A fresh credential came: the next offer restarts ICE.
+    Due,
+    /// The offer that restarts ICE left, and waits for its answer.
+    Offered,
+}
+
+/// Offers with an ICE restart when one is due and no offer is in flight. The fresh
+/// credential of the configuration then opens the new allocation, so a relayed call holds
+/// past the expiry of its first credential (audit `P60`).
+async fn offer_restart(pc: &web_sys::RtcPeerConnection, restart: &mut Restart) {
+    if *restart != Restart::Due || pc.signaling_state() != web_sys::RtcSignalingState::Stable {
+        return;
+    }
+    let options = web_sys::RtcOfferOptions::new();
+    options.set_ice_restart(true);
+    if let Some(offer) = local(pc, pc.create_offer_with_rtc_offer_options(&options)).await {
+        *restart = Restart::Offered;
+        to_sync(
+            &SyncCommand::CallDescription(PageDescription::Offer(offer)),
+            None,
+        );
+    }
+}
+
 /// What drives the call. It is a signal of the Sync worker, or an ask of the page to offer again
 /// once it added the screen transceiver (`CALL-112`).
 enum Drive {
@@ -1580,8 +1618,13 @@ async fn offer_screen(pc: &web_sys::RtcPeerConnection) {
 /// session description of the SFU in turn. The first share offers again once (`CALL-112`). An
 /// offer of the SFU that crosses it rolls it back: the page answers, then offers again. The end
 /// of the call closes it.
+///
+/// A later credential of the SFU replaces the TURN servers of the configuration, then the
+/// page offers with an ICE restart (`CALL-156`). An offer of the SFU that crosses it rolls it
+/// back, so the page offers it again once it answered.
 async fn drive(worker: web_sys::Worker, rx: ambre_bus::conduit::Receiver<Drive>) {
     let mut pc: Option<web_sys::RtcPeerConnection> = None;
+    let mut restart = Restart::Settled;
     while let Ok(drive) = rx.recv().await {
         let signal = match drive {
             Drive::Signal(signal) => signal,
@@ -1604,8 +1647,19 @@ async fn drive(worker: web_sys::Worker, rx: ambre_bus::conduit::Receiver<Drive>)
                     );
                 }
             }
+            (CallSignal::Ice(servers), Some(pc)) => {
+                if let Some(config) = configuration(&servers)
+                    && pc.set_configuration_with_configuration(&config).is_ok()
+                {
+                    restart = Restart::Due;
+                }
+                offer_restart(pc, &mut restart).await;
+            }
             (CallSignal::Offer(sdp), Some(pc)) => {
                 // An offer of the page still in flight rolls back here: the SFU dropped it.
+                if restart == Restart::Offered {
+                    restart = Restart::Due;
+                }
                 if remote(pc, web_sys::RtcSdpType::Offer, &sdp).await.is_some()
                     && let Some(answer) = local(pc, pc.create_answer()).await
                 {
@@ -1614,10 +1668,18 @@ async fn drive(worker: web_sys::Worker, rx: ambre_bus::conduit::Receiver<Drive>)
                         None,
                     );
                 }
+                offer_restart(pc, &mut restart).await;
                 offer_screen(pc).await;
             }
             (CallSignal::Answer(sdp), Some(pc)) => {
-                remote(pc, web_sys::RtcSdpType::Answer, &sdp).await;
+                if remote(pc, web_sys::RtcSdpType::Answer, &sdp)
+                    .await
+                    .is_some()
+                    && restart == Restart::Offered
+                {
+                    restart = Restart::Settled;
+                }
+                offer_restart(pc, &mut restart).await;
                 offer_screen(pc).await;
             }
             (CallSignal::Ended, _) => break,
@@ -1633,7 +1695,7 @@ async fn drive(worker: web_sys::Worker, rx: ambre_bus::conduit::Receiver<Drive>)
             // (`CALL-107`).
             (CallSignal::ShareTakenOver, _) => another_screen(),
             // A signal out of turn: the SFU sends none.
-            (CallSignal::Ice(_) | CallSignal::Offer(_) | CallSignal::Answer(_), _) => {}
+            (CallSignal::Offer(_) | CallSignal::Answer(_), None) => {}
         }
     }
     if let Some(pc) = pc {

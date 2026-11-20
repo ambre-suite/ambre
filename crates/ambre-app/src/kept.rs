@@ -12,6 +12,11 @@
 //! A Murmure page names no document, so the Main thread cannot tell which
 //! opens its session asks for. Its boot waits for the store too, and every
 //! kept pin goes ahead of it (`SYNC-243`).
+//!
+//! The store keeps, per user and log, where the log stood when the Sync
+//! worker last accepted a key of it (`SYNC-290`). The Main thread reads them
+//! with the pins and sends each one ahead of every open of the session. A
+//! sign-in of the same user on the page sends them again from memory.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -31,6 +36,9 @@ struct Held {
     /// The user the session names, `None` before a session.
     user: Option<Id<User>>,
     kept: Kept,
+    /// The logs the store answered for that user, and each one the Sync
+    /// worker moved since, by the log's document (`SYNC-290`).
+    logs: HashMap<Id<Document>, ambre_bus::KeptLog>,
 }
 
 /// Whether the store answered yet, for the signed-in user.
@@ -91,8 +99,38 @@ impl KeptInviters {
         *held = Held {
             user: Some(user),
             kept: Kept::Reading,
+            logs: HashMap::new(),
         };
         Load::Needed
+    }
+
+    /// The store answered with `logs` for `user`. A log the worker moved on
+    /// this page already stays. An answer for another user is dropped.
+    pub(crate) fn read_logs(&self, user: Id<User>, logs: Vec<(Id<Document>, ambre_bus::KeptLog)>) {
+        let mut held = self.0.borrow_mut();
+        if held.user != Some(user) {
+            return;
+        }
+        for (document_id, kept) in logs {
+            held.logs.entry(document_id).or_insert(kept);
+        }
+    }
+
+    /// The Sync worker moved the log of `document_id` to `kept`, which the
+    /// store writes too (`SYNC-290`).
+    pub(crate) fn keep_log(&self, document_id: Id<Document>, kept: ambre_bus::KeptLog) {
+        self.0.borrow_mut().logs.insert(document_id, kept);
+    }
+
+    /// Every kept log of the session's user, each sent to the Sync worker
+    /// ahead of the opens of a session (`SYNC-290`).
+    pub(crate) fn logs(&self) -> Vec<(Id<Document>, ambre_bus::KeptLog)> {
+        self.0
+            .borrow()
+            .logs
+            .iter()
+            .map(|(document_id, kept)| (*document_id, *kept))
+            .collect()
     }
 
     /// The user the session names, `None` before a session.
@@ -256,5 +294,39 @@ mod tests {
         assert_eq!(kept.pin(doc, Some(pin(3))), OpenPin::Ready(Some(pin(3))));
         assert_eq!(kept.pin(proved, None), OpenPin::Ready(None));
         assert_eq!(kept.every(), KeptPins::Ready(Vec::new()));
+    }
+
+    /// A kept log whose key names `byte`.
+    fn log(byte: u8) -> ambre_bus::KeptLog {
+        ambre_bus::KeptLog {
+            anchor: FixedBytes::from_array([1; 32]),
+            head: ambre_bus::LogHead {
+                position: ambre_core::Seq::new(2),
+                previous: Some(FixedBytes::from_array([2; 32])),
+            },
+            key: FixedBytes::from_array([byte; 16]),
+        }
+    }
+
+    /// Holds `SYNC-290` on the Main thread. The kept logs of the session's
+    /// user are held for its opens. A log the worker moved on this page wins
+    /// over the store's older answer. A second account takes none of the
+    /// first account's logs.
+    #[test]
+    fn the_kept_logs_of_a_user_go_ahead_of_its_opens_alone() {
+        let kept = KeptInviters::default();
+        let (doc, moved) = (Id::<Document>::mint(), Id::<Document>::mint());
+        kept.read_logs(user(1), vec![(doc, log(3))]);
+        assert!(kept.logs().is_empty(), "no session names the user yet");
+        kept.signed_in(user(1));
+        kept.keep_log(moved, log(5));
+        kept.read_logs(user(1), vec![(doc, log(3)), (moved, log(4))]);
+        let mut logs = kept.logs();
+        logs.sort_by_key(|(id, _)| *id.as_bytes());
+        let mut expected = vec![(doc, log(3)), (moved, log(5))];
+        expected.sort_by_key(|(id, _)| *id.as_bytes());
+        assert_eq!(logs, expected);
+        assert_eq!(kept.signed_in(user(5)), Load::Needed);
+        assert!(kept.logs().is_empty(), "a second account holds none");
     }
 }

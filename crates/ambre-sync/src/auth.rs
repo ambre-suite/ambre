@@ -574,6 +574,7 @@ impl SyncState {
         self.doc_metadata.clear();
         self.log_footings.clear();
         self.shown_identities.clear();
+        self.kept_logs.clear();
         self.session_nonces.clear();
         self.light.clear();
         self.self_join_logs.clear();
@@ -581,6 +582,8 @@ impl SyncState {
         self.listed_channels.clear();
         self.listing_metas.clear();
         self.listed_keys.clear();
+        self.walked_writers.clear();
+        self.catalogue_pins.clear();
         self.creating_public.clear();
         self.space_rotations.clear();
         self.new_spaces.clear();

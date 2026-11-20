@@ -50,7 +50,7 @@ impl ProseState {
     /// The bands as the view needs them.
     #[must_use]
     pub fn bands(&self) -> BandSet {
-        let bands = doc::read_bands(&self.doc);
+        let bands = doc::read_bands(&self.doc, &self.roots);
         BandSet {
             header: bands.header.block.map(block_id),
             footer: bands.footer.block.map(block_id),
@@ -102,7 +102,7 @@ impl ProseState {
         target: HfTarget,
         pos: Pos<DocChar>,
     ) -> ProseOutcome {
-        let bands = doc::read_bands(&self.doc);
+        let bands = doc::read_bands(&self.doc, &self.roots);
         if target == HfTarget::FirstPage && bands.different_first_page == FirstPage::SameAsRest {
             return ProseOutcome::refused(ProseRefusal::FirstPageBandOff);
         }
@@ -134,7 +134,7 @@ impl ProseState {
         let Some(band_align) = doc::BandAlign::of(align) else {
             return ProseOutcome::refused(ProseRefusal::BandJustified);
         };
-        let Some(register) = doc::read_bands(&self.doc).register_of(id) else {
+        let Some(register) = doc::read_bands(&self.doc, &self.roots).register_of(id) else {
             return Self::err_no_block(id);
         };
         let written = self
@@ -177,7 +177,7 @@ impl ProseState {
         &mut self,
         locale: &ambre_client_core::DocumentLocale,
     ) -> ProseOutcome {
-        if doc::read_locale(&self.doc).as_ref() == locale.tag() {
+        if doc::read_locale(&self.doc, &self.roots).as_ref() == locale.tag() {
             return ProseOutcome::nothing();
         }
         let meta = doc::meta(&self.doc);
@@ -214,7 +214,7 @@ impl ProseState {
     }
 
     fn ensure_band(&mut self, register: doc::MetaKey) -> Result<TreeID, ProseOutcome> {
-        let bands = doc::read_bands(&self.doc);
+        let bands = doc::read_bands(&self.doc, &self.roots);
         let named = match register {
             doc::MetaKey::Header => bands.header.block,
             doc::MetaKey::Footer => bands.footer.block,
@@ -366,7 +366,7 @@ pub(crate) mod tests {
         assert!(dump.contains(&crate::events::tree_id(header).to_string()));
         assert!(dump.contains("enabled") && dump.contains(doc::BandKey::Block.as_str()));
         assert!(!dump.contains("Secret title"));
-        let bands = doc::read_bands(state.document());
+        let bands = doc::read_bands(state.document(), state.roots());
         assert_eq!(bands.header.align, Align::Left);
     }
 
@@ -567,7 +567,7 @@ pub(crate) mod tests {
             block_id: header,
             align: Align::Right,
         });
-        let bands = doc::read_bands(state.document());
+        let bands = doc::read_bands(state.document(), state.roots());
         assert_eq!(bands.header.align, Align::Right);
         assert_eq!(bands.footer.align, Align::Left);
         assert_eq!(bands.header_first.align, Align::Left);
@@ -593,7 +593,7 @@ pub(crate) mod tests {
         });
         assert!(stamped.update.is_some());
         assert_eq!(
-            doc::read_updated_at(state.document()),
+            doc::read_updated_at(state.document(), state.roots()),
             Some(Instant::<Authored>::new(42))
         );
         let again = state.handle_command(ProseCommand::StampModified {
@@ -603,7 +603,7 @@ pub(crate) mod tests {
         state.handle_command(ProseCommand::Undo);
         assert_eq!(state.text_of(&header).as_deref(), Some(""));
         assert_eq!(
-            doc::read_updated_at(state.document()),
+            doc::read_updated_at(state.document(), state.roots()),
             Some(Instant::<Authored>::new(42))
         );
     }
@@ -673,12 +673,18 @@ pub(crate) mod tests {
         let header = crate::events::tree_id(alice.bands().header.expect("the header"));
         let seen_by_alice = crate::band::resolve(
             alice.document(),
+            alice.roots(),
             &header,
             Pos::<Page>::ZERO,
             Len::<Page>::ONE,
         );
-        let seen_by_bob =
-            crate::band::resolve(bob.document(), &header, Pos::<Page>::ZERO, Len::<Page>::ONE);
+        let seen_by_bob = crate::band::resolve(
+            bob.document(),
+            bob.roots(),
+            &header,
+            Pos::<Page>::ZERO,
+            Len::<Page>::ONE,
+        );
         assert_eq!(seen_by_alice, "2026-03-05");
         assert_eq!(seen_by_bob, seen_by_alice);
     }
@@ -699,6 +705,7 @@ pub(crate) mod tests {
         // form rather than a fixed language (`LOCALE-013`).
         let seeded = crate::band::resolve(
             state.document(),
+            state.roots(),
             &header,
             Pos::<Page>::ZERO,
             Len::<Page>::ONE,
@@ -707,6 +714,7 @@ pub(crate) mod tests {
         let _ = doc::meta(state.document()).insert(doc::MetaKey::Locale, "en");
         let english = crate::band::resolve(
             state.document(),
+            state.roots(),
             &header,
             Pos::<Page>::ZERO,
             Len::<Page>::ONE,
@@ -715,6 +723,7 @@ pub(crate) mod tests {
         let _ = doc::meta(state.document()).insert(doc::MetaKey::Locale, "fr");
         let french = crate::band::resolve(
             state.document(),
+            state.roots(),
             &header,
             Pos::<Page>::ZERO,
             Len::<Page>::ONE,
@@ -724,6 +733,7 @@ pub(crate) mod tests {
         let _ = doc::meta(state.document()).insert(doc::MetaKey::Locale, "fr_FR");
         let unnamed = crate::band::resolve(
             state.document(),
+            state.roots(),
             &header,
             Pos::<Page>::ZERO,
             Len::<Page>::ONE,
@@ -745,7 +755,7 @@ pub(crate) mod tests {
             now: Instant::<Authored>::new(1_772_712_000_000),
         });
         let header = crate::events::tree_id(header);
-        let before = crate::doc::read_bands(state.document());
+        let before = crate::doc::read_bands(state.document(), state.roots());
         let out = state.handle_command(ProseCommand::SetDocumentLocale {
             locale: ambre_client_core::DocumentLocale::parse("fr").unwrap(),
         });
@@ -758,12 +768,16 @@ pub(crate) mod tests {
         );
         let drawn = crate::band::resolve(
             state.document(),
+            state.roots(),
             &header,
             Pos::<Page>::ZERO,
             Len::<Page>::ONE,
         );
         assert_eq!(drawn, "5 mars 2026");
-        assert_eq!(crate::doc::read_bands(state.document()), before);
+        assert_eq!(
+            crate::doc::read_bands(state.document(), state.roots()),
+            before
+        );
         let again = state.handle_command(ProseCommand::SetDocumentLocale {
             locale: ambre_client_core::DocumentLocale::parse("fr").unwrap(),
         });
@@ -793,6 +807,7 @@ pub(crate) mod tests {
             .map(|page| {
                 crate::band::resolve(
                     state.document(),
+                    state.roots(),
                     &header,
                     Pos::<crate::events::Page>::new(page),
                     Len::<crate::events::Page>::new(3),

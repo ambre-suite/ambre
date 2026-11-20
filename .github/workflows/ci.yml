@@ -231,7 +231,7 @@ jobs:
         with:
           persist-credentials: false
       - name: System deps
-        run: sudo apt-get update -qq && sudo apt-get install -y ocaml-nox ocaml-findlib
+        run: sudo apt-get update -qq && sudo apt-get install -y ocaml ocaml-findlib
       - name: Build ProVerif 2.05
         working-directory: ${{ runner.temp }}
         run: |

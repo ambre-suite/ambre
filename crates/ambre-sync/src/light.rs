@@ -1555,7 +1555,7 @@ mod tests {
 
         // The signer of `update` is seed 2. The walk grants another key.
         let other = MasterSeed::from_array([3; 32]).derive_signing_key();
-        let granted = membership_log::Writers::Granted(HashSet::from([FixedBytes::from_array(
+        let granted = membership_log::Writers::granted(HashSet::from([FixedBytes::from_array(
             other.verifying_key().to_bytes(),
         )]));
         state.light_walked(m, &granted);
@@ -1563,7 +1563,7 @@ mod tests {
         assert!(counted(&rx).is_empty(), "a non-writer's summary counted");
 
         let writer = MasterSeed::from_array([2; 32]).derive_signing_key();
-        let granted = membership_log::Writers::Granted(HashSet::from([FixedBytes::from_array(
+        let granted = membership_log::Writers::granted(HashSet::from([FixedBytes::from_array(
             writer.verifying_key().to_bytes(),
         )]));
         state.light.get_mut(&m).expect("watched").writers = LightWriters::Walked(granted);

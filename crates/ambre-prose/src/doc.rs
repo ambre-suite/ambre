@@ -23,6 +23,7 @@ use loro::{
     LoroDoc, LoroMap, LoroMovableList, LoroText, LoroTree, LoroValue, TreeID, TreeParentId,
 };
 
+use crate::logic::Roots;
 use crate::message::{
     Align, BandState, BlockType, DocChar, FirstPage, HeadingLevel, KeepTogether, KeepWithNext,
     LineHeight, LineHeightMode, LineSpacingMultiple, ListStyle, OrderedStyle, ParagraphStyle,
@@ -963,43 +964,42 @@ pub(crate) fn movable_list_at<K: FieldKey>(parent: &Fields<K>, key: K) -> Option
     }
 }
 
-/// The `meta` register, or `None` while the document holds no operation yet.
+/// The `meta` register, or `None` while no operation of the document reached
+/// it.
 ///
-/// A reader never takes [`meta`] on a blank document: Loro would attach the
-/// root it did not find. Laying the document out writes nothing to it
-/// (`PROSE-079`). Past the first operation, every Prose document holds its
-/// version in `meta` (`PROSE-028`), so taking it attaches nothing.
+/// A reader never takes [`meta`] on a document without the register: Loro
+/// would attach the root it did not find. Laying the document out writes
+/// nothing to it (`PROSE-079`). `roots` answers the presence without opening
+/// the root (`PROSE-142`).
 ///
 /// The root is taken by its typed identifier, never looked up by name. Before
 /// Loro picks a root by name, it builds the value of each root of that name.
 /// A tree a peer nested ten thousand deep under the name `meta` overflowed the
 /// stack of the Logic thread (`PROSE-143`).
 #[must_use]
-pub(crate) fn meta_read(doc: &LoroDoc) -> Option<Fields<MetaKey>> {
-    let blank = doc.get_pending_txn_len() == 0 && doc.state_frontiers().is_empty();
-    (!blank).then(|| meta(doc))
+pub(crate) fn meta_read(doc: &LoroDoc, roots: &Roots) -> Option<Fields<MetaKey>> {
+    roots.holds(Root::Meta).then(|| meta(doc))
 }
 
-/// The block tree, or `None` when the document state holds no operation yet.
+/// The block tree, or `None` while no operation of the document reached it.
 ///
-/// A reader never takes [`blocks`] on a blank document: Loro would attach the
-/// root it did not find. Laying the document out writes nothing to it
-/// (`PROSE-079`). Past the first operation, every Prose document holds its
-/// tree (`PROSE-027`), so taking it attaches nothing. A state that breaks that
-/// rule gets an empty tree in its local state. Its frontiers and its pending
-/// operations stay as they were (`PROSE-141`). Loro 1.13 reads no presence of
-/// a root without attaching it or building its value, so the empty tree stays
-/// (`PROSE-142`).
+/// A reader never takes [`blocks`] on a document without the tree: Loro would
+/// attach the root it did not find. Laying the document out writes nothing to
+/// it (`PROSE-079`). Past the first operation, every Prose document holds its
+/// tree (`PROSE-027`). A state that breaks that rule reads as no block. Its
+/// frontiers, its pending operations and its encoded bytes stay as they were
+/// (`PROSE-141`, `PROSE-142`). `roots` answers the presence without
+/// opening the root, since Loro 1.13 reads it only by attaching the root or
+/// by building its value.
 ///
-/// The lookup by path [`meta_read`] takes is closed to the tree. Before Loro
-/// picks a root by name, it builds the value of each candidate. The value of a
-/// tree nests one call per level. A chain of nested blocks a peer wrote thus
-/// overflowed the stack of the Logic thread. The lookup also cost the size of
-/// the whole tree on every read (`PROSE-140`).
+/// The lookup by path [`meta_read`] once took is closed to the tree. Before
+/// Loro picks a root by name, it builds the value of each candidate. The value
+/// of a tree nests one call per level. A chain of nested blocks a peer wrote
+/// thus overflowed the stack of the Logic thread. The lookup also cost the
+/// size of the whole tree on every read (`PROSE-140`).
 #[must_use]
-pub(crate) fn blocks_read(doc: &LoroDoc) -> Option<LoroTree> {
-    let blank = doc.get_pending_txn_len() == 0 && doc.state_frontiers().is_empty();
-    (!blank).then(|| blocks(doc))
+pub(crate) fn blocks_read(doc: &LoroDoc, roots: &Roots) -> Option<LoroTree> {
+    roots.holds(Root::Blocks).then(|| blocks(doc))
 }
 
 /// The map a key already holds, or `None` when the key is empty.
@@ -1237,9 +1237,9 @@ impl Default for DocDefaults {
 /// back for that key alone. A size of zero would measure every block as a
 /// zero-height one, and place a whole document on one page.
 #[must_use]
-pub fn read_defaults(doc: &LoroDoc) -> DocDefaults {
+pub fn read_defaults(doc: &LoroDoc, roots: &Roots) -> DocDefaults {
     let fallback = DocDefaults::default();
-    let Some(defaults) = meta_read(doc)
+    let Some(defaults) = meta_read(doc, roots)
         .and_then(|meta| map_read(&meta, MetaKey::Defaults))
         .map(Fields::<DefaultsKey>::new)
     else {
@@ -1269,9 +1269,9 @@ pub fn read_defaults(doc: &LoroDoc) -> DocDefaults {
 /// to the default for that key alone. A document with one bad margin lays out
 /// on the right sheet rather than on none.
 #[must_use]
-pub fn read_page_format(doc: &LoroDoc) -> PageFormat {
+pub fn read_page_format(doc: &LoroDoc, roots: &Roots) -> PageFormat {
     let fallback = PageFormat::default();
-    let Some(page) = meta_read(doc)
+    let Some(page) = meta_read(doc, roots)
         .and_then(|meta| map_read(&meta, MetaKey::Page))
         .map(Fields::<PageKey>::new)
     else {
@@ -1557,8 +1557,8 @@ fn read_band(meta: &Fields<MetaKey>, key: MetaKey) -> Band {
 /// The bands as the document holds them. A document written before them
 /// reads as two hidden sides and no block (`PROSE-FEAT-064`).
 #[must_use]
-pub fn read_bands(doc: &LoroDoc) -> Bands {
-    let Some(meta) = meta_read(doc) else {
+pub fn read_bands(doc: &LoroDoc, roots: &Roots) -> Bands {
+    let Some(meta) = meta_read(doc, roots) else {
         return Bands::default();
     };
     let enabled = |key: MetaKey| {
@@ -1567,7 +1567,7 @@ pub fn read_bands(doc: &LoroDoc) -> Bands {
                 .is_some_and(|map| read_bool(&Fields::new(map), BandKey::Enabled) == Some(true)),
         )
     };
-    let tree = blocks_read(doc);
+    let tree = blocks_read(doc, roots);
     let live = |band: Band| Band {
         block: band.block.filter(|id| {
             tree.as_ref()
@@ -1613,16 +1613,16 @@ pub(crate) fn is_aside(tree: &LoroTree, id: &TreeID) -> bool {
 
 /// The last-modified stamp, or `None` before any peer wrote one.
 #[must_use]
-pub fn read_updated_at(doc: &LoroDoc) -> Option<Instant<Authored>> {
-    meta_read(doc)
+pub fn read_updated_at(doc: &LoroDoc, roots: &Roots) -> Option<Instant<Authored>> {
+    meta_read(doc, roots)
         .and_then(|meta| read_i64(&meta, MetaKey::UpdatedAt))
         .map(Instant::<Authored>::from_i64)
 }
 
 /// The document title, empty when none was set.
 #[must_use]
-pub fn read_title(doc: &LoroDoc) -> String {
-    meta_read(doc)
+pub fn read_title(doc: &LoroDoc, roots: &Roots) -> String {
+    meta_read(doc, roots)
         .and_then(|meta| read_string(&meta, MetaKey::Title))
         .unwrap_or_default()
 }
@@ -1631,8 +1631,8 @@ pub fn read_title(doc: &LoroDoc) -> String {
 /// well-formed tag. A peer may have written any string there; a malformed one
 /// reads as no language rather than as a fixed one.
 #[must_use]
-pub fn read_locale(doc: &LoroDoc) -> Option<Validated<LangTag>> {
-    meta_read(doc)
+pub fn read_locale(doc: &LoroDoc, roots: &Roots) -> Option<Validated<LangTag>> {
+    meta_read(doc, roots)
         .and_then(|meta| read_string(&meta, MetaKey::Locale))
         .and_then(|text| Validated::parse(text).ok())
 }
@@ -1793,14 +1793,15 @@ mod tests {
             .insert("committed", 1)
             .expect("the map takes a value");
         doc.commit();
+        let roots = crate::logic::Roots::watch(&doc);
         root_map(&doc, Root::Annots)
             .insert("pending", 2)
             .expect("the map takes a value");
         let frontiers = doc.state_frontiers();
         let pending = doc.get_pending_txn_len();
         assert!(pending > 0, "one write waits in the transaction");
-        let _tree = blocks_read(&doc);
-        let _bands = read_bands(&doc);
+        let _tree = blocks_read(&doc, &roots);
+        let _bands = read_bands(&doc, &roots);
         assert_eq!(doc.state_frontiers(), frontiers);
         assert_eq!(doc.get_pending_txn_len(), pending);
     }
@@ -1809,13 +1810,15 @@ mod tests {
     fn a_seeded_document_reads_back_the_a4_format_it_was_written_with() {
         let doc = LoroDoc::new();
         seed(&doc);
-        assert_eq!(read_page_format(&doc), PageFormat::default());
+        let roots = crate::logic::Roots::watch(&doc);
+        assert_eq!(read_page_format(&doc, &roots), PageFormat::default());
     }
 
     #[test]
     fn a_document_with_no_page_register_reads_the_default_format() {
         let doc = LoroDoc::new();
-        assert_eq!(read_page_format(&doc), PageFormat::default());
+        let roots = crate::logic::Roots::watch(&doc);
+        assert_eq!(read_page_format(&doc, &roots), PageFormat::default());
     }
 
     #[test]
@@ -1829,7 +1832,8 @@ mod tests {
             .expect("the register takes a double");
         page.insert(PageKey::MarginLeftMm, 5.0)
             .expect("the register takes a double");
-        let format = read_page_format(&doc);
+        let roots = crate::logic::Roots::watch(&doc);
+        let format = read_page_format(&doc, &roots);
         assert_eq!(format.width, PageFormat::default().width);
         assert_eq!(format.margin_left, PrintLength::<Mm>::new(5.0));
     }
@@ -1846,7 +1850,11 @@ mod tests {
         defaults
             .insert(DefaultsKey::FontSizePt, 1.0e6)
             .expect("the register takes a double");
-        assert_eq!(read_defaults(&doc).font_size, crate::mark::FONT_SIZE_MAX);
+        let roots = crate::logic::Roots::watch(&doc);
+        assert_eq!(
+            read_defaults(&doc, &roots).font_size,
+            crate::mark::FONT_SIZE_MAX
+        );
     }
 
     #[test]
@@ -2113,7 +2121,8 @@ mod tests {
                 let _ = meta(&doc).insert(MetaKey::Title, "deep");
                 deep_tree_named(&doc, Root::Meta.as_str());
                 doc.commit();
-                meta_read(&doc)
+                let roots = crate::logic::Roots::watch(&doc);
+                meta_read(&doc, &roots)
                     .and_then(|meta| meta.get(MetaKey::Title))
                     .and_then(|title| title.into_value().ok())
             })

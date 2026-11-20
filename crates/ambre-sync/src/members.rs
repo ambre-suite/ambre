@@ -310,6 +310,11 @@ impl SyncState {
             author,
             footing,
             rule: self.log_rule(document_id),
+            applied: self
+                .documents
+                .get(&document_id)
+                .map(|doc| doc.applied_clocks.borrow().clone())
+                .unwrap_or_default(),
         };
         let http = sharing::GlooHttp { auth };
         crate::spawn(async move {
@@ -351,6 +356,49 @@ impl SyncState {
         self.log_footings
             .values()
             .find_map(|footing| footing.sealed_at(anchor))
+    }
+
+    /// Holds `kept`, where the log of `log_document` stood in an earlier
+    /// session (`SYNC-290`). Its footing roots every later walk of that log
+    /// in the session. A log the relay cut before an entry walked then
+    /// installs no key. A footing this session holds already moves on to it
+    /// only when it is later.
+    pub(crate) fn hold_kept_log(&mut self, log_document: Id<Document>, kept: ambre_bus::KeptLog) {
+        self.log_walked_to(crate::key_vouch::Footing::kept(log_document, &kept));
+        self.kept_logs.entry(log_document).or_insert(kept);
+    }
+
+    /// Records where the log of `document_id` stands now, with the key the
+    /// document holds, and hands it to the local store when it moved
+    /// (`SYNC-290`). It is a no-op before a footing or a key exists.
+    pub(crate) fn keep_log(&mut self, document_id: Id<Document>) {
+        let (Some(footing), Some(key)) = (
+            self.footing(document_id),
+            self.documents.get(&document_id).map(|doc| doc.doc_key.id()),
+        ) else {
+            return;
+        };
+        let kept = footing.to_kept(key);
+        let log_document = footing.document();
+        if self.kept_logs.get(&log_document) == Some(&kept) {
+            return;
+        }
+        self.kept_logs.insert(log_document, kept);
+        self.send_to_logic(LogicEvent::LogKept {
+            document_id: log_document,
+            kept,
+        });
+    }
+
+    /// The key id each log accepted last, by the log's document, for a
+    /// listing task that outlives the borrow (`SYNC-291`).
+    pub(crate) fn kept_keys(
+        &self,
+    ) -> HashMap<Id<Document>, ambre_core::FixedBytes<ambre_core::KeyId>> {
+        self.kept_logs
+            .iter()
+            .map(|(document, kept)| (*document, kept.key))
+            .collect()
     }
 
     /// The signer of the entries this user appends to a membership log
@@ -602,6 +650,75 @@ mod tests {
             .expect("the creator's footing");
         state.log_walked_to(walked);
         assert_eq!(state.footing(DOC), Some(walked));
+    }
+
+    /// Holds `SYNC-290` in the worker. A footing this session walks goes to
+    /// the local store with its key, once, and again only when it moves. The
+    /// kept log the store hands the next session roots its walks. A log the
+    /// relay cut before the kept head diverges, and the whole log walks.
+    #[test]
+    fn a_log_head_outlives_the_session_through_the_local_store() {
+        use crate::key_vouch::Footing;
+        use crate::membership_log::tests::{DOC, Person, append, created};
+        use crate::membership_log::{LogRule, digest, encode};
+        let (mut state, rx) = bare_state();
+        let alice = Person::new(1);
+        let mut entries = created(&alice, &Person::new(2));
+        append(
+            &mut entries,
+            &alice,
+            &Person::new(3),
+            ambre_protocol::MembershipAct::Invite,
+            Role::Editor,
+        );
+        let texts: Vec<_> = entries.iter().map(|e| encode(e).unwrap()).collect();
+        let anchor = digest(&entries[0]).expect("an anchor");
+        let key = DocumentKey::from_array([0x41; 32]);
+        state.documents.insert(
+            DOC,
+            SyncDocumentState::new(
+                DOC,
+                key.clone(),
+                DocType::Prose,
+                crate::Existence::LocalOnly,
+            ),
+        );
+        let walked = Footing::sealed_in_catalogue(DOC, anchor)
+            .walk(&texts, &LogRule::document())
+            .expect("the whole log walks")
+            .footing();
+        for _ in 0..2 {
+            state.handle_sync_event(SyncEvent::FootingAdvanced {
+                document_id: DOC,
+                footing: walked,
+            });
+        }
+        let kept: Vec<_> = rx
+            .try_iter()
+            .filter_map(|event| match event {
+                LogicEvent::LogKept { document_id, kept } => Some((document_id, kept)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(kept, [(DOC, walked.to_kept(key.id()))]);
+
+        // The next session: the store hands the kept log back first.
+        let (mut next, _rx) = bare_state();
+        next.handle_command(SyncCommand::KeepLog {
+            document_id: DOC,
+            kept: kept[0].1,
+        });
+        let held = next.log_footings.get(&DOC).copied();
+        assert_eq!(held, Some(walked));
+        assert_eq!(next.kept_keys().get(&DOC), Some(&key.id()));
+        let walk = |served: &[ambre_core::Encoded<ambre_core::EncodedLogEntry>]| {
+            crate::sharing::walk_from_footing(held, DOC, Some(anchor), served, &LogRule::document())
+        };
+        assert!(
+            matches!(walk(&texts[..2]), Err(crate::error::SyncError::LogDiverged)),
+            "a log cut before the kept head installs nothing"
+        );
+        assert!(walk(&texts).is_ok());
     }
 
     /// `SYNC-292`: a user search with no relay logs that it ran, and never

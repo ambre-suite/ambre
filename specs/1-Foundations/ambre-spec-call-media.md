@@ -55,6 +55,8 @@ this document alone.
 | `CALL-040` | `INV` | The sequence numbers of a video track forwarded to one receiver MUST stay continuous across a layer switch. | this spec section 3, the SFU; `CALL-032` | `ambre_sfu::sim::tests::the_sequence_numbers_stay_continuous_across_a_layer_switch` | none | verified |
 | `CALL-041` | `INV` | The SFU MUST fill the video slots that the choice of a receiver leaves with the most recent speakers, up to the count of `ambre-spec-budgets.md section 1`. | this spec section 3, the SFU; `CALL-126` | `ambre_sfu::sim::tests::a_receiver_gets_the_video_of_the_most_recent_speakers_alone` -- a receiver of no choice; `ambre_sfu::sim::tests::the_most_recent_speakers_fill_the_slots_a_choice_leaves` -- a choice of two leaves seven slots to the speakers | none | verified |
 | `CALL-042` | `OBS` | A browser whose network opens TCP on port 443 alone MUST decode the audio and the video of the call through the TURN relay within the delay of `ambre-spec-budgets.md section 1`. | this spec section 3, the stack | `ambre_belt::call::tests::a_browser_on_tcp_443_alone_decodes_the_call_through_turn` -- browser tier, coturn over TCP behind port 443 at 150 ms of round trip | none | verified |
+| `CALL-154` | `INV` | A TURN credential MUST expire within the TURN lifetime of `ambre-spec-budgets.md section 1`. A renewal that keeps its seat while the last credential of the seat expires within the margin of that row MUST bring a fresh credential under the same pseudonym. Any other renewal MUST bring none. | `security-audit-blind-2026-11-17.md`, finding `P60`; this spec section 3, the TURN credential; `CALL-120` | `ambre_sfu::turn::tests::a_credential_expires_one_turn_lifetime_after_it_is_minted`; `ambre_sfu::turn::tests::a_renewal_mints_a_fresh_credential_within_the_margin_alone` -- at the production lifetime and at a short one; `ambre_sfu::serve::tests::a_renewal_near_the_expiry_of_the_credential_answers_a_fresh_one` -- over the socket: a renewal before the margin, a renewal of another seat in the margin and a renewal right after a fresh credential read nothing | none | verified |
+| `CALL-155` | `OBS` | A browser relayed through TURN MUST keep decoding the audio and the video of the call past the expiry of its first credential. | `security-audit-blind-2026-11-17.md`, finding `P60`; this spec section 3, the TURN credential; `CALL-042` | `ambre_belt::call::tests::a_relayed_call_flows_past_the_expiry_of_its_first_credential` -- browser tier, coturn over TCP alone, a credential of 30 s renewed 10 s before its expiry: the page restarts ICE onto a new relay allocation, and both pages decode more past the expiry; `ambre_sfu::forward::tests::an_ice_restart_moves_the_connection_to_its_fresh_fragment` -- the audio flows across the restart, and a check of the new allocation reaches its connection | none | verified |
 | `CALL-045` | `INV` | The SFU MUST send each receiver the media of a call over the fixed count of audio and video slots of `ambre-spec-budgets.md section 1`. | this spec section 3, the SFU | `ambre_sfu::sim::tests::a_receiver_holds_a_fixed_count_of_slots` -- a call of twelve | none | verified |
 | `CALL-047` | `INV` | The SFU MUST forward a receiver the audio of the most recent speakers alone, up to the count of `ambre-spec-budgets.md section 1`. | this spec section 3, the SFU | `ambre_sfu::sim::tests::a_receiver_gets_the_audio_of_the_three_most_recent_speakers_alone` | none | verified |
 | `CALL-048` | `INV` | The sequence numbers of a slot MUST stay continuous when the slot moves to another sender. | this spec section 3, the SFU; `CALL-040` | `ambre_sfu::sim::tests::the_sequence_numbers_of_a_slot_stay_continuous_across_a_change_of_sender` | none | verified |
@@ -102,6 +104,7 @@ this document alone.
 | `CALL-120` | `FAIL` | Given a renewal that names another room, participant, member or sender index than its seat, the SFU MUST NOT keep the seat past its last admission. The token of a renewal MUST seat no second connection while it is valid. | audit `N25`; this spec section 3, the SFU seats; `CALL-117` | `ambre_sfu::serve::tests::a_renewal_keeps_its_own_seat_alone` -- a renewal of the same seat keeps it past its first expiry, a renewal that changes the participant, the member or the sender index ends the seat at its first expiry, and the token of a renewal seats nothing | none | verified |
 | `CALL-121` | `POST` | A join under an admission whose member holds a seat in the room MUST end that older seat, so a member holds one seat of a room. | audit `N25`; this spec section 3, the SFU seats | `ambre_sfu::serve::tests::a_join_of_a_member_ends_its_older_seat` -- the older seat of a member closes at its second join, and the seat of another member stays | none | verified |
 | `CALL-122` | `POST` | Each heartbeat of a seat whose member is in the channel MUST send the client a renewed admission that names the room, the participant, the member and the sender index of the first. A heartbeat that finds the member out of the channel MUST send no renewal and end the seat. The client MUST hand each renewal to the SFU. | audit `N25`; this spec section 3, signalling; `SRV-248` | `ambre_server::ws::handler::call::tests::a_heartbeat_renews_the_admission_of_a_member_in_the_channel_alone` -- database tier: a renewal names the seat of the first admission, and once the member leaves the channel, the socket closes and the seat leaves the roster; `ambre_sync::call_link::tests::a_renewal_from_the_relay_reaches_the_sfu_as_an_admission` -- a seated client hands each renewal to the SFU, and a renewal before the seat reaches nothing | none | verified |
+| `CALL-156` | `POST` | Each fresh TURN credential the SFU sends during a call MUST reach the page, and the page MUST restart ICE under it. | `security-audit-blind-2026-11-17.md`, finding `P60`; this spec section 3, a join from the page; `CALL-154` | `ambre_sync::call_link::tests::a_fresh_credential_from_the_sfu_reaches_the_page_each_time`; `ambre_belt::murmure::tests::the_page_restarts_ice_with_each_fresh_turn_credential` -- browser tier: two pages of the application on credentials of 30 s, renewed by the heartbeats of the relay, each take a fresh ICE fragment and still decode each other past the first expiry | none | verified |
 | `CALL-068` | `FAIL` | Given a join that starts no call, for a call whose state the relay holds none of, the relay MUST refuse the join with a notice that the call ended. | this spec section 3, signalling; `SRV-249` | `ambre_server::ws::handler::call::tests::a_join_of_a_call_the_relay_holds_no_state_of_is_refused_as_ended` -- database tier; `ambre_server::ws::handler::call::tests::a_call_whose_state_is_lost_ends` -- database tier: a rejoin of a lost call is refused | none | verified |
 | `CALL-076` | `FAIL` | Given a microphone that the browser refuses or does not have, a client MUST send no start and no join of a call. | this spec section 3, a join from the page; `5-Murmure/features/ambre-spec-murmure-calls.md section 3` (`MURMURE-601`) | `ambre_belt::murmure::tests::a_refused_microphone_starts_no_call_and_says_why` -- browser tier, under Chrome and under Firefox: no call worker, no peer connection and no call socket follow a refusal | none | verified |
 
@@ -120,6 +123,7 @@ this document alone.
 | `CALL-026` | `FAIL` | Given a chunk whose counter falls outside the replay window of its key, the receiver MUST drop it. | this spec section 3, the chunk steps | `ambre_crypto::call::tests::a_chunk_outside_the_replay_window_is_dropped`; `::the_replay_window_agrees_with_a_model_of_the_counters_opened` -- against a model of the counters opened; `::a_chunk_of_a_dropped_generation_does_not_open_again` -- the window of a dropped opener; `::a_replayed_chunk_of_a_fresh_epoch_is_dropped` -- the opener a fresh epoch made survives the retirement it starts | none | verified |
 | `CALL-125` | `FAIL` | Given a chunk of a sender whose epoch is older than one a chunk of that sender opened under, the receiver MUST drop it. | this spec section 3, the chunk steps; `CALL-026`, `CALL-116` | `ambre_crypto::call::tests::a_chunk_of_an_older_epoch_does_not_open_once_a_newer_one_opened` -- after the first chunk under the fresh key, a late chunk of the sender and three chunks a removed participant seals under the older key reach no decoder: the same step, a step up and a camera chunk. The older epoch opens until then | none | verified |
 | `CALL-135` | `FAIL` | Given a chunk of a sender whose epoch is older than a key of that sender held for the switch delay of `ambre-spec-budgets.md section 1`, the receiver MUST drop it, whether a chunk of the newer epoch opened or not. | this spec section 3, the chunk steps; `CALL-125`, `CALL-027`; audit `N36` | `ambre_crypto::call::tests::an_older_epoch_closes_at_the_switch_delay_with_no_fresh_chunk` -- no chunk of the fresh epoch reaches the receiver, and three chunks a removed participant seals under the older key open before the deadline alone: the same step, a step up and a camera chunk; `::a_second_fresh_key_keeps_the_deadline_of_the_first`; `::an_older_key_after_a_fresh_one_still_closes_at_the_deadline`; `ambre_call::tests::the_worker_closes_an_older_epoch_at_the_switch_delay` -- through the handoffs of the call worker; `::a_fresh_key_after_a_spent_deadline_waits_a_whole_delay` -- the first chunk of a fresh epoch spends its deadline; `::a_step_of_the_current_epoch_keeps_the_deadline_a_late_key_set` | none | verified |
+| `CALL-157` | `FAIL` | Given a chunk under a key that its sender drew before a removal the receiver heeded, the receiver MUST drop it once the switch delay of `ambre-spec-budgets.md section 1` passed after the removal, whether a fresh key of that sender arrived or not. | this spec section 3, the chunk steps and the leave steps; `CALL-135`, `CALL-028` | `proverif` -- `crates/ambre-crypto/proofs/call_sender_keys.pv`, the correspondence on `AcceptedLate` and the witness that reaches it; `ambre_sync::call::tests::a_removal_closes_the_older_key_of_a_sender_whose_fresh_wrap_is_withheld` -- the relay withholds the fresh wrap: the removal alone closes the older key, a replayed wrap of it is refused, and the late fresh wrap opens; `ambre_crypto::call::tests::a_removal_closes_the_older_epochs_with_no_fresh_key` -- the same step, a step up and a camera chunk; `::a_second_removal_keeps_the_time_of_the_first_close`; `::the_departures_keep_the_newest_indexes`; `ambre_call::tests::the_worker_closes_an_older_epoch_at_a_removal_with_no_fresh_key` -- through the handoffs of the call worker | none | verified |
 | `CALL-100` | `FRAME` | Turning the camera on or off during a call MUST NOT renegotiate the session or replace the transform of the video sender. | this spec section 3, a camera during a call; `CALL-011` | `ambre_belt::murmure::tests::a_member_draws_the_video_of_another_on_its_canvas` -- browser tier, under Chrome and under Firefox: Ada's video sender takes her camera, then gives it up, under its first transform, and her page sets no local description | none | verified |
 
 ### 1.4 Leave a call
@@ -133,6 +137,7 @@ A participant leaves, or the channel removes a member who is in the call.
 | `CALL-028` | `POST` | A removal entry in the membership log of the channel MUST move each remaining participant to a fresh sender key. | this spec section 3, the leave steps; `SYNC-132` | `ambre_sync::call::tests::each_member_opens_exactly_what_it_should` -- a revoke entry of the owner, read from the walked log, switches every remaining sender | none | verified |
 | `CALL-029` | `POST` | Leaving a call MUST erase every sender key of that call from the call worker. | this spec section 3, the leave steps | `ambre_call::tests::the_end_of_a_call_erases_every_key_of_it`; `ambre_sync::call_link::tests::a_join_command_seats_the_call_it_names_and_hands_the_keys_on_its_port` -- a leave hands the call worker the end of the call; `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier: the call worker of a member who leaves tells the page it erased its keys | none | verified |
 | `CALL-030` | `FRAME` | A leave MUST NOT send a fresh sender key to the participant who left. | this spec section 3, the leave steps | `ambre_sync::call::tests::each_member_opens_exactly_what_it_should` -- no wrap reaches a member out of the call, and a member who left keeps every key and opens nothing after the switch | none | verified |
+| `CALL-158` | `FRAME` | A removal MUST depart every session of the removed member before the client wraps a fresh sender key. | this spec section 3, the leave steps; `CALL-028`, `CALL-030` | `ambre_sync::call::tests::a_removal_departs_every_session_of_the_member_before_a_fresh_key` -- Eve sits in the call from two sessions, and the one fresh key reaches Roger alone; `proverif` -- `crates/ambre-crypto/proofs/call_sender_keys.pv`, phase 1 wraps one fresh key to the members of the log alone, and the query on `chunk_after` holds | none | verified |
 | `CALL-060` | `POST` | A client in a call MUST read the membership log of the channel again when the members of the channel change, and switch its key away from a member the log no longer holds. | this spec section 3, the leave steps; `CALL-028` | `ambre_sync::call_link::tests::a_change_of_the_members_of_the_channel_reads_the_log_again` -- a change of the members, or a rotation of the key, of the channel reads the log; `ambre_sync::call_client::tests::a_member_removed_from_the_channel_holds_no_key_of_the_next_generation` -- the relay still carries the removed member's socket, and it opens nothing sealed after the switch, under any key it held or a ratchet of one; `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier: a member leaves the channel during the call, through the relay. Past the switch, the SFU still forwards her the audio of the others, and she decodes none of it | none | verified |
 | `CALL-136` | `POST` | A client in a call MUST read the membership log of the channel again once it signs a revoke on that channel. | this spec section 3, the client of a call; `CALL-060`, `CALL-028`; audit `N35` | `ambre_sync::call_link::tests::a_revoke_this_client_signs_reads_the_log_of_the_call_again` -- the relay pushes neither a change of the members nor a rotation | none | verified |
 | `CALL-137` | `POST` | A client in a call MUST read the membership log of the channel again when a frame of the channel carries a head past the held log, and a member that log allows signed the entry the head names. | this spec section 3, the client of a call; `CALL-060`; `ambre-spec-membership.md`, `SYNC-219`; audit `N35` | `ambre_sync::call_link::tests::a_signed_head_past_the_log_of_the_call_reads_it_again` -- the owner's revoke on a presence sample reads the log, while a held head and an entry Eve signs read nothing | none | verified |
@@ -263,7 +268,7 @@ A participant sends a screen or a window into the call, and stops it.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 152 `verified`, 1 `unimplemented`. The relay admits under the cap, and the SFU
+* **Verification.** 157 `verified`, 1 `unimplemented`. The relay admits under the cap, and the SFU
   mints the TURN credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography, forwards RTP
   and reaches a browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`, `CALL-050` to
   `CALL-052`). Each receiver holds fixed slots, and a seed gives one path (`CALL-045` to
@@ -391,6 +396,15 @@ is empty. The Call crypto review Story (`ambre-roadmap.md` E5) reads it, with
   deadline: the switch delay of the budget row, on the monotonic clock of the call worker. At
   the deadline the receiver drops the older epochs of that sender, chunk or not (`CALL-135`). A
   second fresh key inside the delay keeps the deadline of the first, as the sender does.
+* A malicious relay may also withhold the wrap of the fresh key, so no deadline starts. A
+  removal therefore sets a deadline of its own: the switch delay, from the removal the
+  receiver heeds. At it, the receiver drops each key a sender drew before the removal, fresh
+  key or not (`CALL-157`). That sender goes silent rather than open chunks Eve can forge.
+* Each wrap names the sessions its sender had departed when it drew the key: its departures.
+  A key that names a removed session as departed was drawn after the removal. A key that
+  names none was drawn before it, and the Sync worker hands its close with it. Past the
+  delay, the Sync worker refuses the wrap of such a key. A participant who joins after the
+  removal is spared: its own log chose whom it wraps to.
 
 **The join and the wrap, byte by byte.**
 
@@ -398,7 +412,7 @@ is empty. The Call crypto review Story (`ambre-roadmap.md` E5) reads it, with
 |---|---|
 | the signed transcript of a join | `ambre-call-join-v1`, the call, the channel, the member, the Ed25519 identity, the time in ms and the sender index as big-endian `u64`, the X25519 key of the join |
 | the key that wraps | HKDF-SHA256 over the X25519 secret of the two join keys, under `ambre-call-wrap-v1`, the call, the two sender indexes and the two join keys |
-| a wrap | a 24-byte nonce, then the generation as a big-endian `u64` and the 32-byte key, under XChaCha20-Poly1305 with `ambre-call-wrap-v1` as additional data: 80 bytes |
+| a wrap | a 24-byte nonce, then the generation as a big-endian `u64`, the 32-byte key, the count of departures in one byte and 16 slots of a big-endian `u64` sender index, under XChaCha20-Poly1305 with `ambre-call-wrap-v1` as additional data: 209 bytes. The slots hold the 16 newest departures, then zeros |
 
 **A join, in steps.** The Sync worker holds the identity; the call worker receives symmetric keys
 alone (`CALL-004`).
@@ -414,9 +428,14 @@ alone (`CALL-004`).
 
 **A leave, in steps.** A leave or a signed removal starts the same switch (`CALL-028`).
 
-1. Each remaining participant draws a fresh sender key.
-2. It wraps the key to each other remaining participant, never to the one who left (`CALL-030`).
-3. It seals with the fresh key once the switch delay of the budget row has passed (`CALL-027`).
+1. Each remaining participant departs the session that left. A removal departs every session
+   of the removed member at once, before any fresh key (`CALL-158`).
+2. Each remaining participant draws one fresh sender key, which names every session departed
+   so far.
+3. It wraps the key to each other remaining participant, never to the one who left (`CALL-030`).
+4. It seals with the fresh key once the switch delay of the budget row has passed (`CALL-027`).
+5. On a removal, it closes each key of another participant drawn before the removal, at the end
+   of the same delay (`CALL-157`).
 
 The fresh key takes the next epoch above the current key and any key still waiting. A second leave
 inside the delay draws another key and keeps the time of the first, so each leave switches in time.
@@ -441,7 +460,8 @@ relay keeps the roster of a call and forwards the wraps; it orders nothing and s
 5. The client opens the socket of the SFU and sends the admission as the first frame. The SFU
    verifies it with the relay's public key alone.
 6. The SFU answers the TURN servers, with a credential under the participant's pseudonym, then
-   reads the offer.
+   reads the offer. A renewal near the expiry of that credential brings a fresh one
+   (`CALL-154`).
 7. The client signs its join under that index and announces it. The relay hands that signed join,
    unchanged, to every other participant (`CALL-057`). It forwards each opaque wrap to the
    session of its sender index alone (`CALL-058`), and announces each leave. A closed call
@@ -803,10 +823,23 @@ One socket holds a bounded share of the SFU (audit `N39`):
 * A socket spends its admission before the SFU mints its TURN credential. A second socket
   under the same admission reads nothing, so one admission mints one credential (`CALL-152`).
 
-The credential still lives for the TURN lifetime of the SFU, past a removal. The blind pass
-reports it as `P60`.
-coturn ends an allocation when its credential expires, so a shorter credential needs a
-renewal that restarts ICE. No story builds that renewal yet.
+**The lifetime of a TURN credential** is the TURN row of `ambre-spec-budgets.md section 1`
+(audit `P60`). coturn reads the expiry when an allocation first authenticates. It then keeps the
+key of the allocation for each refresh, so an allocation outlives its credential. Read on
+2026-11-20 in the coturn source of that day, `ns_turn_server.c`, `check_stun_auth`.
+
+So the lifetime bounds when a credential opens a new allocation, never how long one lasts:
+
+* A member removed from the call opens no allocation once its last credential expired.
+* A page that opens an allocation later, at an ICE restart, needs a credential still valid.
+
+A renewal of the seat that the SFU keeps brings a fresh credential, once the last one expires
+within the margin (`CALL-154`). The margin holds three heartbeats, so one late beat still
+brings it in time. The page sets it on its peer connection and restarts ICE under it
+(`CALL-156`). The fresh allocation carries the call past the first expiry (`CALL-155`).
+
+An offer that restarts ICE gives the connection on the SFU a fresh fragment. The SFU indexes
+the connection under it, and the old fragment names nothing (`CALL-155`).
 
 **The routes of the SFU.** One task reads every datagram, so a datagram costs that task
 little (audit `N41`):

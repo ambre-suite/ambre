@@ -216,7 +216,8 @@ impl StoreLedger {
             SealedWrite::Erase => self.forget(id),
             SealedWrite::ForgetSession { .. }
             | SealedWrite::ReadBack { .. }
-            | SealedWrite::KeepInviter(_) => {}
+            | SealedWrite::KeepInviter(_)
+            | SealedWrite::KeepLog(_) => {}
         }
         // The delta bytes alone change at every keystroke: a reload counts
         // them from the last row, which the next snapshot corrects.

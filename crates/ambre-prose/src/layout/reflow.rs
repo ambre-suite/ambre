@@ -12,6 +12,7 @@
 //! gave. Then [`Paginator::settle_toc`] is the bounded pass that brings the two
 //! into step, off the keystroke path (`PROSE-019`, `PROSE-084`).
 
+use crate::logic::Roots;
 use crate::message::{BlockType, Page};
 use ambre_core::Ordinal;
 use ambre_core::id::{Footnote, Id};
@@ -380,18 +381,19 @@ impl Paginator {
     ///
     /// The path a page-box change, a band change, a default change, a snapshot
     /// import and a footnote edit all take (`PROSE-082`, `PROSE-035`).
-    pub fn full(&mut self, document: &LoroDoc) -> &PageLayout {
-        let page_box = PageBox::read(document);
-        self.defaults = doc::read_defaults(document);
+    pub fn full(&mut self, document: &LoroDoc, roots: &Roots) -> &PageLayout {
+        let page_box = PageBox::read(document, roots);
+        self.defaults = doc::read_defaults(document, roots);
         // Every block is about to be shaped again, so what an earlier run was
         // missing says nothing about this one (`PROSE-110`).
         self.measurer.forget_missing();
         // The bands first: they decide the height every page leaves the body
         // (`PROSE-076`).
         self.bands =
-            pass::BandHeights::measure(&mut self.measurer, document, page_box.content_width);
+            pass::BandHeights::measure(&mut self.measurer, document, roots, page_box.content_width);
         // Every note numbered before the first block is placed (`PROSE-117`).
-        self.notes = pass::NotePlan::read(&mut self.measurer, document, page_box.content_width);
+        self.notes =
+            pass::NotePlan::read(&mut self.measurer, document, roots, page_box.content_width);
         let body_height = self.bands.body_height(&page_box);
         let near = widened(self.near);
         let near_last = near.last().unwrap_or(near.start);
@@ -404,7 +406,7 @@ impl Paginator {
         };
         let measured = pass::measure_document_with(
             &mut self.measurer,
-            document,
+            (document, roots),
             (page_box.content_width, &self.defaults),
             (&HashMap::new(), &HashMap::new()),
             &self.toc_pages,
@@ -422,32 +424,32 @@ impl Paginator {
     /// A block not named keeps the measurement it already had, so it is never
     /// shaped twice (`PROSE-083`). A page-box change is not an edit this path
     /// takes: it falls back to a full recomputation (`PROSE-082`).
-    pub fn reflow(&mut self, document: &LoroDoc, dirty: &[TreeID]) -> &PageLayout {
-        let page_box = PageBox::read(document);
+    pub fn reflow(&mut self, document: &LoroDoc, roots: &Roots, dirty: &[TreeID]) -> &PageLayout {
+        let page_box = PageBox::read(document, roots);
         // A band is out of the flow, so no dirty set names it. Measuring the
         // four again is a few short paragraphs, and a band that moved changes
         // every page's body height: that is a full recomputation.
         let bands =
-            pass::BandHeights::measure(&mut self.measurer, document, page_box.content_width);
+            pass::BandHeights::measure(&mut self.measurer, document, roots, page_box.content_width);
         if page_box != self.page_box
             || bands != self.bands
-            || doc::read_defaults(document) != self.defaults
+            || doc::read_defaults(document, roots) != self.defaults
             || self.measured.is_empty()
             || self.measurer.coverage_grew(self.layout.missing_scripts)
             // A call added or removed renumbers every later note, and a note
             // edited changes its reservation: no cached block answers for
             // either (`PROSE-035`).
-            || pass::NotePlan::key_of(document) != self.notes.key
+            || pass::NotePlan::key_of(document, roots) != self.notes.key
         {
             // A face that arrived since the last run re-shapes every block of
             // its script, wherever they sit, so no tail survives
             // (`PROSE-111`).
-            return self.full(document);
+            return self.full(document, roots);
         }
         // Same heights, and perhaps new text: the view draws the runs just
         // shaped.
         self.bands = bands;
-        let measured = self.remeasure(document, page_box, dirty);
+        let measured = self.remeasure(document, roots, page_box, dirty);
         let from = first_difference(&self.measured, &measured);
         let Some(from) = from else {
             // Nothing moved: the layout already on hand is the answer. A
@@ -471,17 +473,22 @@ impl Paginator {
     /// went. So the page box, the defaults, the note plan and the bands hold
     /// as they were. A dirty band, note or call holder is the exception: it
     /// takes [`Paginator::reflow`], which reads them all on every edit.
-    pub fn reflow_text(&mut self, document: &LoroDoc, dirty: &[TreeID]) -> &PageLayout {
+    pub fn reflow_text(
+        &mut self,
+        document: &LoroDoc,
+        roots: &Roots,
+        dirty: &[TreeID],
+    ) -> &PageLayout {
         let still = !self.measured.is_empty()
             && !self.measurer.coverage_grew(self.layout.missing_scripts)
             && !dirty
                 .iter()
                 .any(|block| self.notes.touches(block) || self.bands.bands.holds(block));
         if !still {
-            return self.reflow(document, dirty);
+            return self.reflow(document, roots, dirty);
         }
         let page_box = self.page_box;
-        let measured = self.remeasure(document, page_box, dirty);
+        let measured = self.remeasure(document, roots, page_box, dirty);
         let Some(from) = first_difference(&self.measured, &measured) else {
             self.measured = measured;
             self.version = self.version.next();
@@ -502,12 +509,12 @@ impl Paginator {
     /// once no page moved, or after [`TOC_SETTLE_PASSES`] layouts, and answers
     /// how many it ran. No reflow calls it: a keystroke never pays for it
     /// (`PROSE-084`).
-    pub fn settle_toc(&mut self, document: &LoroDoc) -> Count<Passes> {
-        let Some(tree) = doc::blocks_read(document) else {
+    pub fn settle_toc(&mut self, document: &LoroDoc, roots: &Roots) -> Count<Passes> {
+        let Some(tree) = doc::blocks_read(document, roots) else {
             return Count::<Passes>::ZERO;
         };
         if self.measured.is_empty() {
-            let _ = self.full(document);
+            let _ = self.full(document, roots);
         }
         let mut passes = Count::<Passes>::ZERO;
         while passes < TOC_SETTLE_PASSES {
@@ -516,7 +523,7 @@ impl Paginator {
                 break;
             }
             self.toc_pages = pages;
-            let _ = self.reflow(document, &[]);
+            let _ = self.reflow(document, roots, &[]);
             passes = passes.incremented();
         }
         passes
@@ -535,6 +542,7 @@ impl Paginator {
     fn remeasure(
         &mut self,
         document: &LoroDoc,
+        roots: &Roots,
         page_box: PageBox,
         dirty: &[TreeID],
     ) -> Vec<MeasuredBlock> {
@@ -553,7 +561,7 @@ impl Paginator {
             .collect();
         pass::measure_document_with(
             &mut self.measurer,
-            document,
+            (document, roots),
             (page_box.content_width, &self.defaults),
             (&cached, &previous),
             &self.toc_pages,
@@ -737,15 +745,17 @@ mod tests {
 
     fn full_layout(document: &LoroDoc) -> PageLayout {
         let mut fresh = super::shipped_paginator();
-        fresh.full(document).clone()
+        let roots = crate::logic::Roots::watch(document);
+        fresh.full(document, &roots).clone()
     }
 
     #[test]
     fn a_reflow_of_an_untouched_document_moves_nothing() {
         let (document, _) = document_of(8);
         let mut paginator = super::shipped_paginator();
-        let before = paginator.full(&document).clone();
-        let after = paginator.reflow(&document, &[]);
+        let roots = crate::logic::Roots::watch(&document);
+        let before = paginator.full(&document, &roots).clone();
+        let after = paginator.reflow(&document, &roots, &[]);
         assert_eq!(after.blocks, before.blocks);
         // Nothing moved, so there is no page to repaint (`PROSE-067`).
         assert_eq!(after.first_dirty_page, None);
@@ -755,13 +765,14 @@ mod tests {
     fn a_reflow_produces_what_a_full_recomputation_would_have() {
         let (document, ids) = document_of(40);
         let mut paginator = super::shipped_paginator();
-        let _ = paginator.full(&document);
+        let roots = crate::logic::Roots::watch(&document);
+        let _ = paginator.full(&document, &roots);
         let Some(edited) = ids.get(12) else {
             return;
         };
         grow(&document, edited, 30);
         let reflowed = paginator
-            .reflow(&document, std::slice::from_ref(edited))
+            .reflow(&document, &roots, std::slice::from_ref(edited))
             .clone();
         let full = full_layout(&document);
         // `PROSE-080`: the incremental path and the full one agree, entry for
@@ -774,13 +785,14 @@ mod tests {
     fn a_reflow_does_not_shape_a_block_it_was_not_told_about() {
         let (document, ids) = document_of(20);
         let mut paginator = super::shipped_paginator();
-        let _ = paginator.full(&document);
+        let roots = crate::logic::Roots::watch(&document);
+        let _ = paginator.full(&document, &roots);
         let after_full = paginator.shaped();
         let Some(edited) = ids.get(5) else {
             return;
         };
         grow(&document, edited, 2);
-        let _ = paginator.reflow(&document, std::slice::from_ref(edited));
+        let _ = paginator.reflow(&document, &roots, std::slice::from_ref(edited));
         // `PROSE-083`: one block was named, so one run was shaped.
         assert_eq!(paginator.shaped(), after_full.incremented());
     }
@@ -789,14 +801,15 @@ mod tests {
     fn a_document_default_change_forces_a_full_recomputation() {
         let (document, ids) = document_of(10);
         let mut paginator = super::shipped_paginator();
-        let _ = paginator.full(&document);
+        let roots = crate::logic::Roots::watch(&document);
+        let _ = paginator.full(&document, &roots);
         let after_full = paginator.shaped();
         let meta = crate::doc::meta(&document);
         let Some(defaults) = crate::doc::map_at(&meta, crate::doc::MetaKey::Defaults) else {
             return;
         };
         let _ = crate::doc::Fields::new(defaults).insert(crate::doc::DefaultsKey::FontSizePt, 24.0);
-        let _ = paginator.reflow(&document, &[]);
+        let _ = paginator.reflow(&document, &roots, &[]);
         // `PROSE-082`: the inherited size moved, so every block is re-styled
         // and shaped again, even though no block was named dirty.
         assert_eq!(
@@ -809,14 +822,15 @@ mod tests {
     fn a_page_box_change_forces_a_full_recomputation() {
         let (document, ids) = document_of(10);
         let mut paginator = super::shipped_paginator();
-        let _ = paginator.full(&document);
+        let roots = crate::logic::Roots::watch(&document);
+        let _ = paginator.full(&document, &roots);
         let after_full = paginator.shaped();
         let meta = crate::doc::meta(&document);
         let Some(page) = crate::doc::map_at(&meta, crate::doc::MetaKey::Page) else {
             return;
         };
         let _ = crate::doc::Fields::new(page).insert(crate::doc::PageKey::WidthMm, 100.0);
-        let _ = paginator.reflow(&document, &[]);
+        let _ = paginator.reflow(&document, &roots, &[]);
         // `PROSE-082`: the width moved, so every block is shaped again.
         assert_eq!(
             paginator.shaped(),
@@ -828,13 +842,14 @@ mod tests {
     fn the_layout_names_the_first_page_it_changed() {
         let (document, ids) = document_of(60);
         let mut paginator = super::shipped_paginator();
-        let before = paginator.full(&document).clone();
+        let roots = crate::logic::Roots::watch(&document);
+        let before = paginator.full(&document, &roots).clone();
         assert!(before.page_count.get() > 1);
         let Some(edited) = ids.last() else {
             return;
         };
         grow(&document, edited, 40);
-        let after = paginator.reflow(&document, std::slice::from_ref(edited));
+        let after = paginator.reflow(&document, &roots, std::slice::from_ref(edited));
         let Some(dirty) = after.first_dirty_page else {
             panic!("a layout that replaced another names a page");
         };
@@ -846,7 +861,8 @@ mod tests {
     fn a_block_inserted_in_the_middle_reflows_the_whole_tail() {
         let (document, ids) = document_of(12);
         let mut paginator = super::shipped_paginator();
-        let _ = paginator.full(&document);
+        let roots = crate::logic::Roots::watch(&document);
+        let _ = paginator.full(&document, &roots);
         let Some(anchor) = ids.get(4) else {
             return;
         };
@@ -856,7 +872,7 @@ mod tests {
         };
         let body = crate::doc::get_block_text(&document, &added);
         let _ = body.insert(0, "a paragraph that was not there before");
-        let reflowed = paginator.reflow(&document, &[added]).clone();
+        let reflowed = paginator.reflow(&document, &roots, &[added]).clone();
         assert_eq!(reflowed.blocks, full_layout(&document).blocks);
     }
 
@@ -899,8 +915,9 @@ mod tests {
     fn settling_stops_once_the_pages_hold_and_never_runs_past_its_bound() {
         let (document, headings) = outline(40);
         let mut paginator = super::shipped_paginator();
-        let _ = paginator.full(&document);
-        let passes = paginator.settle_toc(&document);
+        let roots = crate::logic::Roots::watch(&document);
+        let _ = paginator.full(&document, &roots);
+        let passes = paginator.settle_toc(&document, &roots);
         // `PROSE-019`: at least one pass, since the first layout measured the
         // entries on no page at all, and never more than the bound.
         assert!(
@@ -912,15 +929,19 @@ mod tests {
         assert_eq!(&pages, paginator.toc_pages());
         assert_eq!(pages.len(), headings.len());
         // Settled, a second call finds nothing to move.
-        assert_eq!(paginator.settle_toc(&document), Count::<Passes>::ZERO);
+        assert_eq!(
+            paginator.settle_toc(&document, &roots),
+            Count::<Passes>::ZERO
+        );
     }
 
     #[test]
     fn a_reflow_does_not_settle_the_table_of_contents() {
         let (document, headings) = outline(20);
         let mut paginator = super::shipped_paginator();
-        let _ = paginator.full(&document);
-        let _ = paginator.settle_toc(&document);
+        let roots = crate::logic::Roots::watch(&document);
+        let _ = paginator.full(&document, &roots);
+        let _ = paginator.settle_toc(&document, &roots);
         let settled = paginator.toc_pages().clone();
         let Some(first) = headings.first() else {
             return;
@@ -932,7 +953,7 @@ mod tests {
             return;
         };
         let _ = crate::doc::blocks(&document).mov_before(page_break, *first);
-        let _ = paginator.reflow(&document, &[page_break]);
+        let _ = paginator.reflow(&document, &roots, &[page_break]);
         // `PROSE-084`: the keystroke path laid the document out and left the
         // entries on the pages they had.
         assert_eq!(paginator.toc_pages(), &settled);
@@ -1019,8 +1040,9 @@ mod convergence {
                 "NotoSansArabic-Regular.ttf",
                 "NotoSansDevanagari-Regular.ttf",
             ]);
-            let here = one.full(&document).clone();
-            let there = other.full(&document).clone();
+            let roots = crate::logic::Roots::watch(&document);
+            let here = one.full(&document, &roots).clone();
+            let there = other.full(&document, &roots).clone();
             prop_assert_eq!(here.page_count, there.page_count);
             prop_assert_eq!(here.blocks, there.blocks);
         }
@@ -1031,7 +1053,8 @@ mod convergence {
     fn a_latin_document_names_no_missing_script() {
         let document = document_of(&["a plain latin paragraph".to_owned()]);
         let mut paginator = paginator_with(&[]);
-        assert!(paginator.full(&document).missing_scripts.is_empty());
+        let roots = crate::logic::Roots::watch(&document);
+        assert!(paginator.full(&document, &roots).missing_scripts.is_empty());
     }
 
     /// A measurement short of a face says which script it was short of
@@ -1040,7 +1063,8 @@ mod convergence {
     fn a_script_with_no_face_is_named_in_the_layout() {
         let document = document_of(&["\u{4e00}\u{4e8c}\u{4e09}".repeat(40)]);
         let mut paginator = paginator_with(&[]);
-        let layout = paginator.full(&document);
+        let roots = crate::logic::Roots::watch(&document);
+        let layout = paginator.full(&document, &roots);
         assert!(layout.missing_scripts.contains(LazyFont::Cjk.as_set()));
     }
 
@@ -1056,8 +1080,9 @@ mod convergence {
             .collect();
         let document = document_of(&paragraphs);
         let mut paginator = paginator_with(&[]);
+        let roots = crate::logic::Roots::watch(&document);
         let after_full = {
-            let layout = paginator.full(&document);
+            let layout = paginator.full(&document, &roots);
             assert!(layout.missing_scripts.contains(LazyFont::Cjk.as_set()));
             paginator.shaped()
         };
@@ -1067,7 +1092,7 @@ mod convergence {
         paginator.register_faces(&ambre_draw::FontFace::new(ambre_core::Payload::<
             ambre_core::FontBytes,
         >::new(bytes)));
-        let layout = paginator.reflow(&document, &[]).clone();
+        let layout = paginator.reflow(&document, &roots, &[]).clone();
         assert_eq!(
             paginator.shaped(),
             after_full.plus(Count::<ShapedRuns>::of(paragraphs.len()))
@@ -1133,7 +1158,8 @@ mod held {
     fn a_long_document_holds_the_runs_of_the_pages_shown_alone() {
         let (document, _) = novel(480);
         let mut paginator = shipped_paginator();
-        let _ = paginator.full(&document);
+        let roots = crate::logic::Roots::watch(&document);
+        let _ = paginator.full(&document, &roots);
         let pages = paginator.layout().page_count.to_usize();
         assert!(pages > 30, "{pages} pages");
         for shown in start_middle_end(&paginator) {
@@ -1176,12 +1202,13 @@ mod held {
     fn a_full_recomputation_keeps_the_runs_near_the_pages_shown_alone() {
         let (document, _) = novel(480);
         let mut paginator = shipped_paginator();
-        let _ = paginator.full(&document);
+        let roots = crate::logic::Roots::watch(&document);
+        let _ = paginator.full(&document, &roots);
         let floor = HELD_MARGIN + ambre_core::index::Len::<Page>::new(3);
         runs_lie_between(&paginator, Pos::<Page>::ZERO, Pos::<Page>::ZERO + floor);
         let [_, middle, _] = start_middle_end(&paginator);
         let _ = paginator.hold(&document, middle);
-        let _ = paginator.full(&document);
+        let _ = paginator.full(&document, &roots);
         let middle = paginator.clamp(middle);
         let (first, last) = (middle.start, middle.last().expect("a page"));
         runs_lie_between(&paginator, first - HELD_MARGIN, last + floor);
@@ -1194,7 +1221,8 @@ mod held {
     fn a_run_dropped_then_shaped_again_draws_as_the_one_it_replaces() {
         let (document, ids) = novel(480);
         let mut paginator = shipped_paginator();
-        let _ = paginator.full(&document);
+        let roots = crate::logic::Roots::watch(&document);
+        let _ = paginator.full(&document, &roots);
         let [start, _, end] = start_middle_end(&paginator);
         let first = ids.first().expect("a block");
         let index = |paginator: &Paginator| paginator.order[first].to_usize();
@@ -1221,7 +1249,8 @@ mod held {
     fn holding_pages_shapes_again_only_the_runs_it_dropped() {
         let (document, _) = novel(480);
         let mut paginator = shipped_paginator();
-        let _ = paginator.full(&document);
+        let roots = crate::logic::Roots::watch(&document);
+        let _ = paginator.full(&document, &roots);
         let [start, _, end] = start_middle_end(&paginator);
         // The runs of the start were kept by the full pass: nothing to shape.
         assert_eq!(paginator.hold(&document, start), Count::<ShapedRuns>::ZERO);

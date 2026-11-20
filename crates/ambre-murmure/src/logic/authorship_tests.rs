@@ -103,14 +103,23 @@ impl Member {
         message
     }
 
-    /// Every document of the channel, as it reads now.
-    fn everything(&self) -> Vec<LoroValue> {
+    /// Every document of the channel, as it reads now: its operations and its
+    /// value. A root a read attached holds no operation, so no update carries
+    /// it, and it stays out of the value.
+    fn everything(&self) -> Vec<(loro::VersionVector, LoroValue)> {
         self.state
             .document_ids()
             .into_iter()
-            .filter_map(|id| self.state.doc(id).map(LoroDoc::get_deep_value))
+            .filter_map(|id| self.state.doc(id).map(written))
             .collect()
     }
+}
+
+/// What `doc` holds that an update would carry: its operations, and its value
+/// without the empty roots a read attaches with no operation.
+fn written(doc: &LoroDoc) -> (loro::VersionVector, LoroValue) {
+    doc.set_hide_empty_root_containers(true);
+    (doc.oplog_vv(), doc.get_deep_value())
 }
 
 /// A channel just created by a member of its own.
@@ -1008,7 +1017,7 @@ fn a_delta_loro_refuses_is_left_out_of_an_opening_document() {
     let doc = LoroDoc::new();
     doc.import(&bob.doc().export(ExportMode::Snapshot).expect("export"))
         .expect("import");
-    let was = doc.get_deep_value();
+    let was = written(&doc);
     crate::logic::delta::import_arrivals(
         &doc,
         vec![crate::logic::delta::Arrival::Signed {
@@ -1019,5 +1028,5 @@ fn a_delta_loro_refuses_is_left_out_of_an_opening_document() {
         crate::logic::delta::Rules::Segment,
     )
     .expect("the document opens");
-    assert_eq!(doc.get_deep_value(), was);
+    assert_eq!(written(&doc), was);
 }

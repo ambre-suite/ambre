@@ -316,6 +316,10 @@ impl LogicState {
             LogicCommand::PinMurmureInviter { inviter } => {
                 self.send_to_sync(SyncCommand::PinMurmureInviter { inviter })
             }
+            // The kept log is the Sync worker's to hold (`SYNC-290`).
+            LogicCommand::KeepLog { document_id, kept } => {
+                self.send_to_sync(SyncCommand::KeepLog { document_id, kept });
+            }
             LogicCommand::OpenDocument {
                 document_id,
                 doc_type,
@@ -673,6 +677,11 @@ impl LogicState {
                 inviter,
             } => self.send_to_persist(document_id, PersistWrite::KeepInviter(inviter)),
 
+            // The local store keeps where the log stands (`SYNC-290`).
+            LogicEvent::LogKept { document_id, kept } => {
+                self.send_to_persist(document_id, PersistWrite::KeepLog(kept));
+            }
+
             // Initial hydration complete: any snapshot was applied by the
             // preceding RemoteSnapshot arm (queue order is preserved), so the
             // UI can dismiss its loading overlay.
@@ -835,6 +844,9 @@ impl LogicState {
                 self.route(|m| m.document_gone(document_id))
             }
             LogicEvent::KeyRotated { document_id } => self.route(|m| m.key_rotated(document_id)),
+            // A revoke capped a writer below a delta the document applied
+            // (`SYNC-300`).
+            LogicEvent::DocumentReread { document_id } => self.reread(document_id),
             LogicEvent::ConverterFetched { family, module } => {
                 self.converter_fetched(family, module);
             }
@@ -1822,6 +1834,84 @@ mod tests {
             persist_rx.try_iter().collect::<Vec<_>>(),
             [(document_id, PersistWrite::KeepInviter(pin))]
         );
+    }
+
+    /// Holds `SYNC-290` on the Logic side. A kept log goes to the local store
+    /// as a row of its document. One the store hands back reaches the Sync
+    /// worker unchanged.
+    #[test]
+    fn a_kept_log_goes_to_the_store_and_back_to_sync() {
+        let (to_ui, _ui) = test_link();
+        let (to_sync, sync_rx) = test_link();
+        let (to_persist, persist_rx) = test_link();
+        let mut state = LogicState::new(to_ui, to_sync, to_persist);
+        let document_id = Id::<Document>::mint();
+        let kept = ambre_bus::KeptLog {
+            anchor: ambre_core::FixedBytes::from_array([1; 32]),
+            head: ambre_bus::LogHead {
+                position: ambre_core::Seq::new(4),
+                previous: Some(ambre_core::FixedBytes::from_array([2; 32])),
+            },
+            key: ambre_core::FixedBytes::from_array([3; 16]),
+        };
+        state.handle_logic_event(LogicEvent::LogKept { document_id, kept });
+        assert_eq!(
+            persist_rx.try_iter().collect::<Vec<_>>(),
+            [(document_id, PersistWrite::KeepLog(kept))]
+        );
+        state.handle_logic_command(LogicCommand::KeepLog { document_id, kept });
+        let sent: Vec<SyncCommand> = std::iter::from_fn(|| sync_rx.try_recv().ok()).collect();
+        assert!(
+            sent.iter().any(|cmd| matches!(
+                cmd,
+                SyncCommand::KeepLog { document_id: d, kept: k } if *d == document_id && *k == kept
+            )),
+            "{sent:?}"
+        );
+    }
+
+    /// Holds `SYNC-300` on the Logic side. A document read again loses its
+    /// state and its local copy, then closes and opens again in Sync. The
+    /// relay replays it under the cap. One this thread does not hold
+    /// reads nothing.
+    #[test]
+    fn a_document_read_again_drops_its_copy_and_opens_anew() {
+        let (to_ui, _ui) = test_link();
+        let (to_sync, sync_rx) = test_link();
+        let (to_persist, persist_rx) = test_link();
+        let mut state = LogicState::new(to_ui, to_sync, to_persist);
+        let document_id = Id::<Document>::mint();
+        state.handle_logic_command(LogicCommand::OpenDocument {
+            document_id,
+            doc_type: DocType::Prose,
+        });
+        let _ = std::iter::from_fn(|| sync_rx.try_recv().ok()).count();
+        let _ = persist_rx.try_iter().count();
+
+        state.handle_logic_event(LogicEvent::DocumentReread { document_id });
+        let written: Vec<_> = persist_rx.try_iter().collect();
+        assert!(
+            written.contains(&(document_id, PersistWrite::Erase)),
+            "{written:?}"
+        );
+        let sent: Vec<SyncCommand> = std::iter::from_fn(|| sync_rx.try_recv().ok()).collect();
+        let closed = sent.iter().position(
+            |cmd| matches!(cmd, SyncCommand::CloseDocument { document_id: d } if *d == document_id),
+        );
+        let opened = sent.iter().position(
+            |cmd| matches!(cmd, SyncCommand::OpenDocument { document_id: d, .. } if *d == document_id),
+        );
+        assert!(
+            closed.is_some_and(|c| opened.is_some_and(|o| c < o)),
+            "{sent:?}"
+        );
+
+        let stranger = Id::<Document>::mint();
+        state.handle_logic_event(LogicEvent::DocumentReread {
+            document_id: stranger,
+        });
+        assert!(persist_rx.try_iter().next().is_none());
+        assert!(sync_rx.try_recv().is_err());
     }
 
     /// Holds `SYNC-209` on the Logic side: a pin reaches the Sync worker

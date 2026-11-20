@@ -188,6 +188,20 @@ pub enum LogicEvent {
         inviter: ambre_core::FixedBytes<ambre_core::InviterPin>,
     },
 
+    /// The log capped a writer below a delta the document applied: the state
+    /// holds a write the log refuses (`SYNC-300`). The Logic thread drops the
+    /// document and its local copy, and reads it again from the relay, where
+    /// the cap holds from the start.
+    DocumentReread { document_id: Id<Document> },
+
+    /// Where the membership log of `document_id` stands for this client
+    /// moved: the local store keeps it for the sessions after (`SYNC-290`).
+    /// `document_id` names the log's document, the `meta` of a channel.
+    LogKept {
+        document_id: Id<Document>,
+        kept: KeptLog,
+    },
+
     /// Initial hydration of a freshly opened document is complete. The Sync thread has
     /// fetched members and the latest snapshot (if any), and emitted it ahead of this
     /// event. Fires exactly once per open, for both the snapshot and the empty/brand-new
@@ -868,6 +882,49 @@ pub enum Successor {
     Fetched,
     /// This client registered it: the channel holds it at once.
     Created,
+}
+
+/// Where the membership log of one document stood when this client last
+/// accepted it (`SYNC-290`, `SYNC-291`). The anchor and the head are the
+/// footing of the checks of an open. The key is the document key that open
+/// or the rotation after it accepted. The Sync worker builds it, the local
+/// store keeps it, and nothing else reads it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KeptLog {
+    /// The digest of the first entry the walk started from.
+    pub anchor: ambre_core::FixedBytes<ambre_core::EntryDigest>,
+    /// The latest valid head this client walked or signed.
+    pub head: ambre_protocol::LogHead,
+    /// The id of the document key the checks accepted last.
+    pub key: ambre_core::FixedBytes<ambre_core::KeyId>,
+}
+
+/// The role of a [`KeptLog`] as the local store holds it: its postcard
+/// encoding. `Payload<KeptLogRow>`.
+pub enum KeptLogRow {}
+
+impl ambre_core::PayloadKind for KeptLogRow {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("KeptLogRow");
+}
+
+impl KeptLog {
+    /// The row the local store keeps.
+    ///
+    /// # Errors
+    ///
+    /// The encoder's error, which a value of fixed fields never reaches.
+    pub fn to_row(&self) -> Result<ambre_core::Payload<KeptLogRow>, postcard::Error> {
+        postcard::to_allocvec(self).map(ambre_core::Payload::new)
+    }
+
+    /// The kept log a row holds, `None` for bytes that are not one: a row a
+    /// later build wrote, or a damaged one. The store then holds no head for
+    /// that log, and the next open walks from its served anchor.
+    #[must_use]
+    pub fn from_row(row: &ambre_core::Payload<KeptLogRow>) -> Option<Self> {
+        postcard::from_bytes(row.as_bytes()).ok()
+    }
 }
 
 #[cfg(test)]

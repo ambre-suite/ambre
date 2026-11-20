@@ -688,10 +688,10 @@ impl ProseState {
         let tree = doc::blocks(&self.doc);
         let (comments, suggestions, mut maps) = self.walk_annotations();
         maps.notes = crate::note::ordinals(&self.doc).into_iter().collect();
-        let bands = doc::read_bands(&self.doc);
+        let bands = doc::read_bands(&self.doc, &self.roots);
         let mut footnotes = Vec::new();
         for (id, ordinal) in crate::note::ordinals(&self.doc) {
-            if let Some(body) = crate::note::body(&self.doc, &id) {
+            if let Some(body) = crate::note::body(&self.doc, &self.roots, &id) {
                 let runs = marked_runs(&body, body_span(&body))
                     .into_iter()
                     .map(|run| ir_run(run, &maps))
@@ -699,7 +699,7 @@ impl ProseState {
                 footnotes.push(IrFootnote { ordinal, runs });
             }
         }
-        let title = doc::read_title(&self.doc);
+        let title = doc::read_title(&self.doc, &self.roots);
         let roots = doc::roots(&tree);
         Walk {
             ir: ProseIr {
