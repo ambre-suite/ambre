@@ -501,8 +501,8 @@ class DevLoginGate(unittest.TestCase):
 
     def test_the_proofs_build_under_the_profile_of_the_release(self) -> None:
         # The proofs measure the shipped wasm, so they take the cargo profile
-        # of the release. The gate guards that build (`ZK-049`), so the
-        # development sign-in it carries fails the build.
+        # of the release. They sign in through the provider of the belt, so
+        # the build carries no development sign-in (`ZK-050`).
         repo = Path(__file__).resolve().parent.parent
         page = (repo / "crates" / "ambre-app" / "index.html").read_text(encoding="utf-8")
         profiles = set(re.findall(r'data-cargo-profile-release="([^"]+)"', page))
@@ -513,7 +513,8 @@ class DevLoginGate(unittest.TestCase):
         self.assertEqual(trunk[:2], ["trunk", "build"])
         self.assertNotIn("--release", trunk)
         self.assertIn(f"--cargo-profile={profiles.pop()}", trunk)
-        self.assertIn("dev-login", trunk)
+        self.assertNotIn("dev-login", trunk)
+        self.assertNotIn("dev-login", recipe.group(1))
 
     def test_the_hook_refuses_a_release_before_it_writes_a_copy(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

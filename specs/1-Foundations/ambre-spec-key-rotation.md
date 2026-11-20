@@ -94,11 +94,11 @@ A member who leaves cannot choose the key the others keep. The rotation is owed 
 * **Budget.** one elliptic-curve operation per remaining member, charged to the crypto rows of
   `ambre-spec-budgets.md section 1`, which a full snapshot seal joins (`SYNC-048`). A space
   leave pays it once per member (`SYNC-264`). The cache of previous keys and the unconfirmed updates
-  are rows of `ambre-spec-budgets.md section 6`. A step back along the chain costs one small open
-  and one signature check.
+  are rows of `ambre-spec-budgets.md section 6`. A step back along the chain costs one open and
+  one signature check.
 * **Boundary.** every wrapped copy crosses the relay and the relay can open none of them
-  (`SYNC-010`). What it learns is that a document was re-keyed and by whom, which is the membership
-  metadata `ambre-spec-zero-knowledge.md` accepts. It holds each link too, and opens none.
+  (`SYNC-010`). What it learns is that a document was re-keyed and by whom: the membership metadata
+  `ambre-spec-zero-knowledge.md` accepts. It holds each link and opens none.
 * **Verification.** 39 `verified`. The relay half holds, as do the key wipe, the open by name, the
   one-request revoke, the departure's debt and the chain. The notice follows the stored copies. Each
   rotation this client makes reaches Logic, and a snapshot under the new key follows it.
