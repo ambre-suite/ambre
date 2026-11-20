@@ -120,6 +120,7 @@ this document alone.
 | `CALL-026` | `FAIL` | Given a chunk whose counter falls outside the replay window of its key, the receiver MUST drop it. | this spec section 3, the chunk steps | `ambre_crypto::call::tests::a_chunk_outside_the_replay_window_is_dropped`; `::the_replay_window_agrees_with_a_model_of_the_counters_opened` -- against a model of the counters opened; `::a_chunk_of_a_dropped_generation_does_not_open_again` -- the window of a dropped opener; `::a_replayed_chunk_of_a_fresh_epoch_is_dropped` -- the opener a fresh epoch made survives the retirement it starts | none | verified |
 | `CALL-125` | `FAIL` | Given a chunk of a sender whose epoch is older than one a chunk of that sender opened under, the receiver MUST drop it. | this spec section 3, the chunk steps; `CALL-026`, `CALL-116` | `ambre_crypto::call::tests::a_chunk_of_an_older_epoch_does_not_open_once_a_newer_one_opened` -- after the first chunk under the fresh key, a late chunk of the sender and three chunks a removed participant seals under the older key reach no decoder: the same step, a step up and a camera chunk. The older epoch opens until then | none | verified |
 | `CALL-135` | `FAIL` | Given a chunk of a sender whose epoch is older than a key of that sender held for the switch delay of `ambre-spec-budgets.md section 1`, the receiver MUST drop it, whether a chunk of the newer epoch opened or not. | this spec section 3, the chunk steps; `CALL-125`, `CALL-027`; audit `N36` | `ambre_crypto::call::tests::an_older_epoch_closes_at_the_switch_delay_with_no_fresh_chunk` -- no chunk of the fresh epoch reaches the receiver, and three chunks a removed participant seals under the older key open before the deadline alone: the same step, a step up and a camera chunk; `::a_second_fresh_key_keeps_the_deadline_of_the_first`; `::an_older_key_after_a_fresh_one_still_closes_at_the_deadline`; `ambre_call::tests::the_worker_closes_an_older_epoch_at_the_switch_delay` -- through the handoffs of the call worker; `::a_fresh_key_after_a_spent_deadline_waits_a_whole_delay` -- the first chunk of a fresh epoch spends its deadline; `::a_step_of_the_current_epoch_keeps_the_deadline_a_late_key_set` | none | verified |
+| `CALL-154` | `FAIL` | Given a chunk under a key that its sender drew before a removal the receiver heeded, the receiver MUST drop it once the switch delay of `ambre-spec-budgets.md section 1` passed after the removal, whether a fresh key of that sender arrived or not. | this spec section 3, the chunk steps and the leave steps; `CALL-135`, `CALL-028` | `proverif` -- `crates/ambre-crypto/proofs/call_sender_keys.pv`, the correspondence on `AcceptedLate` and the witness that reaches it; `ambre_sync::call::tests::a_removal_closes_the_older_key_of_a_sender_whose_fresh_wrap_is_withheld` -- the relay withholds the fresh wrap: the removal alone closes the older key, a replayed wrap of it is refused, and the late fresh wrap opens; `ambre_crypto::call::tests::a_removal_closes_the_older_epochs_with_no_fresh_key` -- the same step, a step up and a camera chunk; `::a_second_removal_keeps_the_time_of_the_first_close`; `::the_departures_keep_the_newest_indexes`; `ambre_call::tests::the_worker_closes_an_older_epoch_at_a_removal_with_no_fresh_key` -- through the handoffs of the call worker | none | verified |
 | `CALL-100` | `FRAME` | Turning the camera on or off during a call MUST NOT renegotiate the session or replace the transform of the video sender. | this spec section 3, a camera during a call; `CALL-011` | `ambre_belt::murmure::tests::a_member_draws_the_video_of_another_on_its_canvas` -- browser tier, under Chrome and under Firefox: Ada's video sender takes her camera, then gives it up, under its first transform, and her page sets no local description | none | verified |
 
 ### 1.4 Leave a call
@@ -133,6 +134,7 @@ A participant leaves, or the channel removes a member who is in the call.
 | `CALL-028` | `POST` | A removal entry in the membership log of the channel MUST move each remaining participant to a fresh sender key. | this spec section 3, the leave steps; `SYNC-132` | `ambre_sync::call::tests::each_member_opens_exactly_what_it_should` -- a revoke entry of the owner, read from the walked log, switches every remaining sender | none | verified |
 | `CALL-029` | `POST` | Leaving a call MUST erase every sender key of that call from the call worker. | this spec section 3, the leave steps | `ambre_call::tests::the_end_of_a_call_erases_every_key_of_it`; `ambre_sync::call_link::tests::a_join_command_seats_the_call_it_names_and_hands_the_keys_on_its_port` -- a leave hands the call worker the end of the call; `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier: the call worker of a member who leaves tells the page it erased its keys | none | verified |
 | `CALL-030` | `FRAME` | A leave MUST NOT send a fresh sender key to the participant who left. | this spec section 3, the leave steps | `ambre_sync::call::tests::each_member_opens_exactly_what_it_should` -- no wrap reaches a member out of the call, and a member who left keeps every key and opens nothing after the switch | none | verified |
+| `CALL-155` | `FRAME` | A removal MUST depart every session of the removed member before the client wraps a fresh sender key. | this spec section 3, the leave steps; `CALL-028`, `CALL-030` | `ambre_sync::call::tests::a_removal_departs_every_session_of_the_member_before_a_fresh_key` -- Eve sits in the call from two sessions, and the one fresh key reaches Roger alone; `proverif` -- `crates/ambre-crypto/proofs/call_sender_keys.pv`, phase 1 wraps one fresh key to the members of the log alone, and the query on `chunk_after` holds | none | verified |
 | `CALL-060` | `POST` | A client in a call MUST read the membership log of the channel again when the members of the channel change, and switch its key away from a member the log no longer holds. | this spec section 3, the leave steps; `CALL-028` | `ambre_sync::call_link::tests::a_change_of_the_members_of_the_channel_reads_the_log_again` -- a change of the members, or a rotation of the key, of the channel reads the log; `ambre_sync::call_client::tests::a_member_removed_from_the_channel_holds_no_key_of_the_next_generation` -- the relay still carries the removed member's socket, and it opens nothing sealed after the switch, under any key it held or a ratchet of one; `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier: a member leaves the channel during the call, through the relay. Past the switch, the SFU still forwards her the audio of the others, and she decodes none of it | none | verified |
 | `CALL-136` | `POST` | A client in a call MUST read the membership log of the channel again once it signs a revoke on that channel. | this spec section 3, the client of a call; `CALL-060`, `CALL-028`; audit `N35` | `ambre_sync::call_link::tests::a_revoke_this_client_signs_reads_the_log_of_the_call_again` -- the relay pushes neither a change of the members nor a rotation | none | verified |
 | `CALL-137` | `POST` | A client in a call MUST read the membership log of the channel again when a frame of the channel carries a head past the held log, and a member that log allows signed the entry the head names. | this spec section 3, the client of a call; `CALL-060`; `ambre-spec-membership.md`, `SYNC-219`; audit `N35` | `ambre_sync::call_link::tests::a_signed_head_past_the_log_of_the_call_reads_it_again` -- the owner's revoke on a presence sample reads the log, while a held head and an entry Eve signs read nothing | none | verified |
@@ -391,6 +393,15 @@ is empty. The Call crypto review Story (`ambre-roadmap.md` E5) reads it, with
   deadline: the switch delay of the budget row, on the monotonic clock of the call worker. At
   the deadline the receiver drops the older epochs of that sender, chunk or not (`CALL-135`). A
   second fresh key inside the delay keeps the deadline of the first, as the sender does.
+* A malicious relay may also withhold the wrap of the fresh key, so no deadline starts. A
+  removal therefore sets a deadline of its own: the switch delay, from the removal the
+  receiver heeds. At it, the receiver drops each key a sender drew before the removal, fresh
+  key or not (`CALL-154`). That sender goes silent rather than open chunks Eve can forge.
+* Each wrap names the sessions its sender had departed when it drew the key: its departures.
+  A key that names a removed session as departed was drawn after the removal. A key that
+  names none was drawn before it, and the Sync worker hands its close with it. Past the
+  delay, the Sync worker refuses the wrap of such a key. A participant who joins after the
+  removal is spared: its own log chose whom it wraps to.
 
 **The join and the wrap, byte by byte.**
 
@@ -398,7 +409,7 @@ is empty. The Call crypto review Story (`ambre-roadmap.md` E5) reads it, with
 |---|---|
 | the signed transcript of a join | `ambre-call-join-v1`, the call, the channel, the member, the Ed25519 identity, the time in ms and the sender index as big-endian `u64`, the X25519 key of the join |
 | the key that wraps | HKDF-SHA256 over the X25519 secret of the two join keys, under `ambre-call-wrap-v1`, the call, the two sender indexes and the two join keys |
-| a wrap | a 24-byte nonce, then the generation as a big-endian `u64` and the 32-byte key, under XChaCha20-Poly1305 with `ambre-call-wrap-v1` as additional data: 80 bytes |
+| a wrap | a 24-byte nonce, then the generation as a big-endian `u64`, the 32-byte key, the count of departures in one byte and 16 slots of a big-endian `u64` sender index, under XChaCha20-Poly1305 with `ambre-call-wrap-v1` as additional data: 209 bytes. The slots hold the 16 newest departures, then zeros |
 
 **A join, in steps.** The Sync worker holds the identity; the call worker receives symmetric keys
 alone (`CALL-004`).
@@ -414,9 +425,14 @@ alone (`CALL-004`).
 
 **A leave, in steps.** A leave or a signed removal starts the same switch (`CALL-028`).
 
-1. Each remaining participant draws a fresh sender key.
-2. It wraps the key to each other remaining participant, never to the one who left (`CALL-030`).
-3. It seals with the fresh key once the switch delay of the budget row has passed (`CALL-027`).
+1. Each remaining participant departs the session that left. A removal departs every session
+   of the removed member at once, before any fresh key (`CALL-155`).
+2. Each remaining participant draws one fresh sender key, which names every session departed
+   so far.
+3. It wraps the key to each other remaining participant, never to the one who left (`CALL-030`).
+4. It seals with the fresh key once the switch delay of the budget row has passed (`CALL-027`).
+5. On a removal, it closes each key of another participant drawn before the removal, at the end
+   of the same delay (`CALL-154`).
 
 The fresh key takes the next epoch above the current key and any key still waiting. A second leave
 inside the delay draws another key and keeps the time of the first, so each leave switches in time.

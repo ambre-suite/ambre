@@ -70,6 +70,14 @@ impl Worker {
                     .insert(sender, generation, key, Instant::<PageLoad>::default());
             }
             KeyHandoff::Forget { sender } => self.receive.forget(sender),
+            // The receiver clock of this model stays at zero, as for each `Open`.
+            KeyHandoff::Close {
+                sender,
+                generation,
+                within,
+            } => self
+                .receive
+                .close(sender, generation, within, Instant::<PageLoad>::default()),
             // A curious member keeps every key it held past the end of the call.
             KeyHandoff::End => {}
         }

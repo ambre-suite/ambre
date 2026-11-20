@@ -65,7 +65,8 @@ const MAX_RATCHETS: ambre_core::Count<ambre_core::Ratchets> = ambre_core::Count:
 /// The delay between a leave and the fresh key in use: the target of the call sender key
 /// switch row of `ambre-spec-budgets.md section 1`. A sender seals under its fresh key once the
 /// delay passed after it drew the key (`CALL-027`). A receiver retires the older epochs of that
-/// sender once the delay passed after the fresh key reached it (`CALL-135`).
+/// sender once the delay passed after the fresh key reached it (`CALL-135`), and once the
+/// delay passed after a removal, whether a fresh key reached it or not (`CALL-154`).
 pub const SWITCH_DELAY: TimeSpan<Ms> = TimeSpan::new(5_000);
 /// The most openers a receiver keeps per sender, the newest ones.
 const OPENERS_PER_SENDER: ambre_core::Count<Openers> = ambre_core::Count::new(8);
@@ -99,9 +100,14 @@ const WRAP_DOMAIN: &[u8] = b"ambre-call-wrap-v1";
 /// member take 16 bytes each, and the identity 32. The time and the sender index take 8 each.
 /// The exchange key takes 32, then the signature 64.
 const SIGNED_JOIN_LEN: usize = 16 * 3 + 32 + 8 + 8 + 32 + 64;
-/// The length of a wrap on the wire: the 24-byte nonce, the 8-byte generation and the 32-byte
-/// key, then the 16-byte tag.
-const WRAP_LEN: usize = 24 + 8 + 32 + 16;
+/// The most departed sender indexes a wrap carries, the newest ones (`CALL-154`).
+const DEPARTURE_SLOTS: usize = 16;
+/// The length of a wrap on the wire: the 24-byte nonce, the 8-byte generation, the 32-byte
+/// key, the count of departures and their slots, then the 16-byte tag. Every wrap has one
+/// size, whatever the count.
+const WRAP_LEN: usize = 24 + WRAP_PLAIN_LEN + 16;
+/// The plaintext of a wrap: the generation, the key, the count, then each slot.
+const WRAP_PLAIN_LEN: usize = 8 + 32 + 1 + 8 * DEPARTURE_SLOTS;
 
 /// Why a chunk was not sealed or not opened. The receiver drops a chunk on any of them,
 /// and tells no sender which.
@@ -545,6 +551,9 @@ struct Received {
     /// The retirement a fresh key set: the epochs below `epoch` close at `at`, whether a chunk
     /// of the fresh epoch arrives or not (`CALL-135`).
     deadline: Option<Retirement>,
+    /// The retirement a removal set: the epochs below `epoch` close at `at`, whether a fresh
+    /// key of the sender arrives or not (`CALL-154`).
+    removal: Option<Retirement>,
 }
 
 /// The epochs of one sender that close at one time on the receiver's monotonic clock.
@@ -575,6 +584,38 @@ impl ReceiveKeys {
         received.retire_due(now);
         received.keys.insert(generation, key);
         received.schedule(now);
+    }
+
+    /// Closes every epoch of `sender` up to the epoch of `generation` once `within` passed
+    /// after `now` (`CALL-154`). The sender drew those keys before it departed a removed
+    /// session, so the closure holds whether its fresh key arrives or not. A second close
+    /// inside the delay keeps the earlier time, and moves to the newer epoch.
+    pub fn close(
+        &mut self,
+        sender: Seq<SenderIndex>,
+        generation: Seq<KeyGeneration>,
+        within: TimeSpan<Ms>,
+        now: Instant<PageLoad>,
+    ) {
+        let received = self.senders.entry(sender).or_default();
+        received.retire_due(now);
+        let at = now.after(within.to_fractional());
+        // Past the last epoch, no epoch above it exists: the closure drops every key.
+        let epoch = generation.next_epoch();
+        let closure = match (received.removal, epoch) {
+            (Some(held), Some(epoch)) => Some(Retirement {
+                epoch: held.epoch.max(epoch),
+                at: if held.at < at { held.at } else { at },
+            }),
+            (None, Some(epoch)) => Some(Retirement { epoch, at }),
+            (_, None) => None,
+        };
+        match closure {
+            Some(closure) => received.removal = Some(closure),
+            // A key identifier carries no epoch past the last one, so nothing the sender
+            // seals later opens either: the receiver forgets it now, ahead of the delay.
+            None => self.forget(sender),
+        }
     }
 
     /// Drops every key of `sender`.
@@ -712,14 +753,17 @@ impl Received {
         if self.deadline.is_some_and(|d| d.epoch <= epoch) {
             self.deadline = None;
         }
+        if self.removal.is_some_and(|d| d.epoch <= epoch) {
+            self.removal = None;
+        }
     }
 
-    /// Closes the epochs a deadline names once `now` reached it (`CALL-135`).
+    /// Closes the epochs a deadline names once `now` reached it (`CALL-135`, `CALL-154`).
     fn retire_due(&mut self, now: Instant<PageLoad>) {
-        if let Some(due) = self.deadline
-            && now >= due.at
-        {
-            self.retire_below(due.epoch);
+        for due in [self.deadline, self.removal].into_iter().flatten() {
+            if now >= due.at {
+                self.retire_below(due.epoch);
+            }
         }
     }
 
@@ -780,6 +824,14 @@ pub enum KeyHandoff {
     },
     /// Drop every key of `sender`, who left the call.
     Forget { sender: Seq<SenderIndex> },
+    /// Close every epoch of `sender` up to the epoch of `generation` once `within` passed.
+    /// A removal sends it: the sender drew those keys before it departed the removed
+    /// sessions, so they reached one of them (`CALL-154`).
+    Close {
+        sender: Seq<SenderIndex>,
+        generation: Seq<KeyGeneration>,
+        within: TimeSpan<Ms>,
+    },
     /// The call ended for this session: drop every key of it (`CALL-029`).
     End,
 }
@@ -791,6 +843,7 @@ enum HandoffKind {
     Open = 1,
     Forget = 2,
     End = 3,
+    Close = 4,
 }
 
 impl HandoffKind {
@@ -801,6 +854,7 @@ impl HandoffKind {
             1 => Some(Self::Open),
             2 => Some(Self::Forget),
             3 => Some(Self::End),
+            4 => Some(Self::Close),
             _ => None,
         }
     }
@@ -809,28 +863,45 @@ impl HandoffKind {
 impl KeyHandoff {
     /// The bytes of the handoff for the port between the Sync worker and the call worker.
     /// They hold the key in the clear, so they stay in a [`Confidential`] that wipes them.
+    /// A close writes its delay in milliseconds where a key goes, then zeros.
     #[must_use]
     pub fn to_port(&self) -> Confidential<Plaintext> {
         let none = Seq::<SenderIndex>::ZERO;
-        let (kind, sender, generation, key) = match self {
+        let (kind, sender, generation, key, within) = match self {
             Self::Seal {
                 sender,
                 generation,
                 key,
-            } => (HandoffKind::Seal, *sender, *generation, Some(key)),
+            } => (HandoffKind::Seal, *sender, *generation, Some(key), None),
             Self::Open {
                 sender,
                 generation,
                 key,
-            } => (HandoffKind::Open, *sender, *generation, Some(key)),
-            Self::Forget { sender } => (HandoffKind::Forget, *sender, Seq::ZERO, None),
-            Self::End => (HandoffKind::End, none, Seq::ZERO, None),
+            } => (HandoffKind::Open, *sender, *generation, Some(key), None),
+            Self::Forget { sender } => (HandoffKind::Forget, *sender, Seq::ZERO, None, None),
+            Self::End => (HandoffKind::End, none, Seq::ZERO, None, None),
+            Self::Close {
+                sender,
+                generation,
+                within,
+            } => (
+                HandoffKind::Close,
+                *sender,
+                *generation,
+                None,
+                Some(*within),
+            ),
         };
         let mut bytes = Vec::with_capacity(HANDOFF_LEN);
         bytes.push(kind as u8);
         bytes.extend_from_slice(&sender.get().to_be_bytes());
         bytes.extend_from_slice(&generation.get().to_be_bytes());
-        bytes.extend_from_slice(key.map_or(&[0u8; 32], |key| key.bytes()));
+        if let Some(key) = key {
+            bytes.extend_from_slice(key.bytes());
+        } else if let Some(within) = within {
+            bytes.extend_from_slice(&within.get().to_be_bytes());
+        }
+        bytes.resize(HANDOFF_LEN, 0);
         Confidential::<Plaintext>::new(bytes)
     }
 
@@ -850,14 +921,14 @@ impl KeyHandoff {
             let (sender, rest) = rest
                 .split_first_chunk::<8>()
                 .ok_or(CryptoError::InvalidKeyLength)?;
-            let (generation, key) = rest
+            let (generation, slot) = rest
                 .split_first_chunk::<8>()
                 .ok_or(CryptoError::InvalidKeyLength)?;
             let sender = Seq::<SenderIndex>::new(u64::from_be_bytes(*sender));
             let generation = Seq::<KeyGeneration>::new(u64::from_be_bytes(*generation));
             let key = || {
                 Secret::try_filled(|out: &mut [u8; 32]| {
-                    out.copy_from_slice(key.get(..32).ok_or(CryptoError::InvalidKeyLength)?);
+                    out.copy_from_slice(slot.get(..32).ok_or(CryptoError::InvalidKeyLength)?);
                     Ok::<(), CryptoError>(())
                 })
                 .map(|secret| SenderKey(Arc::new(secret)))
@@ -875,6 +946,16 @@ impl KeyHandoff {
                 },
                 HandoffKind::Forget => Self::Forget { sender },
                 HandoffKind::End => Self::End,
+                HandoffKind::Close => {
+                    let within = slot
+                        .first_chunk::<8>()
+                        .ok_or(CryptoError::InvalidKeyLength)?;
+                    Self::Close {
+                        sender,
+                        generation,
+                        within: TimeSpan::new(u64::from_be_bytes(*within)),
+                    }
+                }
             })
         })
     }
@@ -1133,8 +1214,74 @@ fn wrap_key(
     DocumentKey::from_secret(expand_32(shared.as_bytes(), &info))
 }
 
+/// The sender indexes a participant had departed when it drew a key: the sessions that key
+/// was never wrapped to. The wrap carries them, so a receiver tells a key drawn after a
+/// removal from one drawn before it, without the fresh wrap (`CALL-154`).
+///
+/// It keeps the [`DEPARTURE_SLOTS`] newest indexes. A receiver reads an index that fell out
+/// as one the sender did not depart, so a long call fails toward silence, never toward an
+/// older key.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Departures(Vec<Seq<SenderIndex>>);
+
+impl Departures {
+    /// Adds `sender`, which the participant departed. The oldest index falls out past the
+    /// slots of a wrap.
+    pub fn depart(&mut self, sender: Seq<SenderIndex>) {
+        if self.0.contains(&sender) {
+            return;
+        }
+        if self.0.len() >= DEPARTURE_SLOTS {
+            self.0.remove(0);
+        }
+        self.0.push(sender);
+    }
+
+    /// Whether the participant had departed one of `sessions` when it drew the key.
+    #[must_use]
+    pub fn names_any(&self, sessions: &[Seq<SenderIndex>]) -> bool {
+        sessions.iter().any(|s| self.0.contains(s))
+    }
+
+    /// The count byte, then each slot as a big-endian `u64`, zeros past the count.
+    fn write(&self, out: &mut Vec<u8>) {
+        let count = self.0.len().min(DEPARTURE_SLOTS);
+        out.push(u8::try_from(count).unwrap_or(0));
+        for slot in 0..DEPARTURE_SLOTS {
+            let index = self.0.get(slot).map_or(0, |index| index.get());
+            out.extend_from_slice(&index.to_be_bytes());
+        }
+    }
+
+    /// Reads back what [`Departures::write`] wrote, or `None` for a count past the slots.
+    fn read(bytes: &[u8]) -> Option<Self> {
+        let (&count, slots) = bytes.split_first()?;
+        let count = usize::from(count);
+        if count > DEPARTURE_SLOTS || slots.len() != 8 * DEPARTURE_SLOTS {
+            return None;
+        }
+        let (slots, _) = slots.as_chunks::<8>();
+        let indexes = slots
+            .iter()
+            .take(count)
+            .map(|slot| Seq::new(u64::from_be_bytes(*slot)))
+            .collect();
+        Some(Self(indexes))
+    }
+}
+
+/// What a wrap opens to: the generation, the departures of the sender when it drew the key,
+/// and the key.
+#[derive(Debug)]
+pub struct OpenedWrap {
+    pub generation: Seq<KeyGeneration>,
+    pub departures: Departures,
+    pub key: SenderKey,
+}
+
 /// Wraps `key` at `generation` from the holder of `own` to the holder of `recipient`
-/// alone (`CALL-016`).
+/// alone (`CALL-016`), with the `departures` of the sender when it drew the key
+/// (`CALL-154`).
 ///
 /// # Errors
 ///
@@ -1145,14 +1292,16 @@ pub fn wrap_sender_key(
     recipient: &FixedBytes<ExchangePublicKey>,
     binding: WrapBinding,
     generation: Seq<KeyGeneration>,
+    departures: &Departures,
     key: &SenderKey,
 ) -> Result<WrappedSenderKey, CryptoError> {
     let shared = crate::ecdh::shared_secret(&own.0, recipient)?;
     let kek = wrap_key(&shared, binding, &own.public(), recipient);
     let plaintext = Secret::filled(|plain: &mut Vec<u8>| {
-        plain.reserve_exact(40);
+        plain.reserve_exact(WRAP_PLAIN_LEN);
         plain.extend_from_slice(&generation.get().to_be_bytes());
         plain.extend_from_slice(key.bytes());
+        departures.write(plain);
     });
     let (nonce, ciphertext) =
         crate::aead::seal(plaintext.expose(), &ambre_core::Aad::of(WRAP_DOMAIN), &kek)?;
@@ -1165,13 +1314,14 @@ pub fn wrap_sender_key(
 ///
 /// [`CryptoError::WeakPublicKey`] for a low-order `sender`, [`CryptoError::AeadFailed`]
 /// for a wrap made for another binding or another recipient, and
-/// [`CryptoError::InvalidKeyLength`] for a plaintext of another size.
+/// [`CryptoError::InvalidKeyLength`] for a plaintext of another size or a count of
+/// departures past the slots.
 pub fn unwrap_sender_key(
     own: &CallExchangeKey,
     sender: &FixedBytes<ExchangePublicKey>,
     binding: WrapBinding,
     wrapped: &WrappedSenderKey,
-) -> Result<(Seq<KeyGeneration>, SenderKey), CryptoError> {
+) -> Result<OpenedWrap, CryptoError> {
     let shared = crate::ecdh::shared_secret(&own.0, sender)?;
     let kek = wrap_key(&shared, binding, sender, &own.public());
     let opened = crate::aead::open(
@@ -1181,18 +1331,25 @@ pub fn unwrap_sender_key(
         &kek,
     )?;
     let plain = opened.secret().expose();
-    let (generation, key) = plain
+    if plain.len() != WRAP_PLAIN_LEN {
+        return Err(CryptoError::InvalidKeyLength);
+    }
+    let (generation, rest) = plain
         .split_first_chunk::<8>()
-        .filter(|(_, key)| key.len() == 32)
         .ok_or(CryptoError::InvalidKeyLength)?;
+    let (key, departures) = rest
+        .split_first_chunk::<32>()
+        .ok_or(CryptoError::InvalidKeyLength)?;
+    let departures = Departures::read(departures).ok_or(CryptoError::InvalidKeyLength)?;
     let key = Secret::try_filled(|out: &mut [u8; 32]| {
         out.copy_from_slice(key);
         Ok::<(), CryptoError>(())
     })?;
-    Ok((
-        Seq::new(u64::from_be_bytes(*generation)),
-        SenderKey(Arc::new(key)),
-    ))
+    Ok(OpenedWrap {
+        generation: Seq::new(u64::from_be_bytes(*generation)),
+        departures,
+        key: SenderKey(Arc::new(key)),
+    })
 }
 
 #[cfg(test)]
