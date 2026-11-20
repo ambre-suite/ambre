@@ -461,6 +461,26 @@ struct RefreshRequest {
     refresh_token: Credential<RefreshToken>,
 }
 
+/// Renews the refresh token a device kept into a pair, through `transport`
+/// to the relay at `api` (`SRV-323`). The page just booted, so no pair is
+/// held, and no gate orders the renewal. The relay honours the token once
+/// (`SRV-009`).
+#[cfg_attr(
+    all(not(target_arch = "wasm32"), not(test)),
+    expect(dead_code, reason = "only the worker resumes a kept session")
+)]
+pub(crate) async fn redeem_via(
+    transport: &impl Transport,
+    api: &Url<ApiRoot>,
+    refresh_token: &Credential<RefreshToken>,
+) -> Result<TokenPair, HttpError> {
+    let url = api.route("/auth/refresh");
+    let body = RefreshRequest {
+        refresh_token: refresh_token.clone(),
+    };
+    post_json_via::<_, TokenPair>(transport, &url, &body).await
+}
+
 impl AuthContext {
     /// The root of the relay routes this session talks to.
     pub(crate) fn api_root(&self) -> Url<ApiRoot> {

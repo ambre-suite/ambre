@@ -25,7 +25,7 @@ const STRONG: &str = "violet-harbor-quietly-folds-ninety-kites";
 const SETUP: std::time::Duration = std::time::Duration::from_secs(90);
 
 /// Clicks the development link `selector` once the panel shows it.
-async fn follow(page: &Page, selector: &str) {
+pub(crate) async fn follow(page: &Page, selector: &str) {
     page.browser
         .wait_for(
             selector,
@@ -132,6 +132,12 @@ async fn provider_return(page: &Page, name: &str) {
 /// owes, and returns the 24 recovery words the page shows once.
 async fn set_up(page: &Page, name: &str) -> String {
     provider_return(page, name).await;
+    set_up_keys(page).await
+}
+
+/// Sets up the keys the account of a provider return owes, once the page shows
+/// the setup face. Returns the 24 recovery words the page shows once.
+pub(crate) async fn set_up_keys(page: &Page) -> String {
     page.browser
         .wait_for(
             "the setup face",
@@ -161,7 +167,7 @@ async fn set_up(page: &Page, name: &str) -> String {
 }
 
 /// Waits until the document list shows under the user `name`.
-async fn wait_list(page: &Page, name: &str) {
+pub(crate) async fn wait_list(page: &Page, name: &str) {
     page.browser
         .wait_for(
             "the document list of the user",
@@ -191,10 +197,13 @@ mod tests {
     /// `CHROME-099`, `CHROME-128`, `CHROME-130`: the setup shows the 24 recovery words
     /// once. The confirmation takes them off the page, and neither the page,
     /// a reload nor the web storage reads them afterwards. The recovery form
-    /// then reads them back. The Sync worker refuses a mistyped word, a wrong
-    /// count and a bad checksum, each in its own words. It reads the words
-    /// the setup showed as a seed. Signed out, the panel offers no recovery
-    /// (`CHROME-135`), so the recovery runs from the unlock face.
+    /// then reads them back.
+    ///
+    /// The Sync worker refuses a mistyped word, a wrong count and a bad
+    /// checksum, each in its own words. It reads the words the setup showed
+    /// as a seed. Signed out, the panel offers no recovery
+    /// (`CHROME-135`), so the recovery runs from the unlock face. A reload
+    /// before the sign-out resumes the session and shows no word either.
     #[tokio::test(flavor = "multi_thread")]
     #[cfg_attr(
         not(feature = "browser"),
@@ -225,9 +234,17 @@ mod tests {
             .wait_for("the words gone from the page", &gone, STEP)
             .await;
 
-        // A reload shows the sign-in panel, and no word. Signed out, the
-        // panel links to no recovery: the form would fail as not signed in.
+        // A reload resumes the session the device kept (`SRV-323`), and
+        // shows no word. A sign-out then shows the sign-in panel. Signed out,
+        // the panel links to no recovery: the form would fail as not signed in.
         page.browser.goto(&format!("{}/", page.origin)).await;
+        wait_list(&page, &name).await;
+        assert_eq!(
+            page.browser.script(&gone, json!([])).await,
+            Value::Bool(true),
+            "the words are readable after a reload"
+        );
+        follow(&page, ".ambre-sign-out").await;
         page.browser
             .wait_for(
                 "the sign-in panel with no recovery link",

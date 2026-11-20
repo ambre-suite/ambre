@@ -50,6 +50,7 @@ impl SyncState {
                         exchange_key: master_seed.derive_exchange_key(),
                         master_seed,
                         tokens,
+                        kept: crate::kept::Keeping::Under(crate::kept::DeviceKey::Fresh),
                     });
                 }
                 // The same answer as a request the relay refused for a setup
@@ -127,6 +128,9 @@ impl SyncState {
                             signing_key,
                             exchange_key,
                             tokens: resp.tokens,
+                            // The name derives the session again at the
+                            // next boot, so the device keeps nothing.
+                            kept: crate::kept::Keeping::Nothing,
                         });
                     }
                     Err(e) => {
@@ -573,6 +577,7 @@ impl SyncState {
     /// (`SYNC-275`, audit `W204`). A sign-in that follows starts from none.
     fn forget_session(&mut self) {
         self.user_id = None;
+        self.forget_kept_profile();
         self.setup_owed = false;
         self.documents.clear();
         self.doc_metadata.clear();
@@ -616,6 +621,9 @@ impl SyncState {
     /// does `LoggedOut` answer. A failed revocation still signs out: the keys
     /// are gone already, and the token expires on its own.
     pub(crate) fn handle_sign_out(&mut self, id: Seq<Request>) {
+        // The kept session goes first, so a reload during the revocation
+        // finds nothing to resume (`SRV-324`).
+        self.erase_kept();
         let held = self.tokens.borrow_mut().take();
         self.handle_logout();
         let (Some(tokens), Some(_)) = (held, self.event_tx.as_ref()) else {
@@ -2209,6 +2217,7 @@ mod set_up_keys_tests {
                     Credential::new("refresh-3".to_owned()),
                     ambre_core::TimeSpan::<ambre_core::Sec>::new(900),
                 ),
+                kept: crate::kept::Keeping::Nothing,
             });
             let told: Vec<LogicEvent> = rx
                 .try_iter()

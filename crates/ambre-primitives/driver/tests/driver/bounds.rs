@@ -2,7 +2,7 @@
 //! scan of the text lets through: an alias, a re-export or an item a macro
 //! writes. The driver refuses it (`ARCH-001`, `ARCH-005`, `ARCH-006`,
 //! `ARCH-011`, `ARCH-018`, `ARCH-121`, `BUS-021`, `BUS-032`, `CANVAS-028`, `CANVAS-031`,
-//! `CANVAS-090`, `SYNC-054`, `UI-THREAD-064`).
+//! `CANVAS-090`, `SYNC-054`, `SYNC-060`, `UI-THREAD-064`).
 
 use crate::harness::{Build, Workspace, of};
 
@@ -22,6 +22,7 @@ const WEB_SYS: &str = "pub struct Window;\n\
         pub fn local_storage(&self) -> Option<Storage> { None }\n\
     }\n\
     pub struct Storage;\n\
+    pub struct IdbFactory;\n\
     pub struct WebSocket;\n\
     impl WebSocket { pub fn new(_: &str) -> Self { WebSocket } }\n\
     pub struct Worker;\n\
@@ -149,6 +150,43 @@ fn browser_storage_under_a_foreign_name_is_refused_in_the_worker() {
     assert_eq!(sync.len(), 1, "{sync:#?}");
     assert!(
         sync[0].starts_with("crates/ambre-sync/src/lib.rs:1: the Sync worker reaches browser"),
+        "{sync:#?}"
+    );
+}
+
+// The kept session alone reaches the browser database in the worker, and
+// web storage stays refused there too (`SYNC-060`).
+#[test]
+fn the_kept_session_alone_reaches_the_browser_database_in_the_worker() {
+    let ws = browser("kept");
+    ws.file(
+        "crates/ambre-sync/src/lib.rs",
+        "pub mod kept;\n\
+         pub fn other(_: Option<web_sys::IdbFactory>) {}\n",
+    );
+    ws.file(
+        "crates/ambre-sync/src/kept.rs",
+        "pub fn keep(_: Option<web_sys::IdbFactory>) {}\n\
+         pub fn plain(_: Option<helpers::Store>) {}\n",
+    );
+    let sync = ws.compile(
+        "ambre_sync",
+        "ambre-sync",
+        &["web_sys", "helpers"],
+        Build::Shipped,
+    );
+    let sync = refused(&sync);
+    assert_eq!(sync.len(), 2, "{sync:#?}");
+    assert!(
+        sync.iter()
+            .any(|r| r
+                .starts_with("crates/ambre-sync/src/kept.rs:2: the kept session reaches browser")),
+        "{sync:#?}"
+    );
+    assert!(
+        sync.iter()
+            .any(|r| r
+                .starts_with("crates/ambre-sync/src/lib.rs:2: the Sync worker reaches browser")),
         "{sync:#?}"
     );
 }

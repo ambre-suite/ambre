@@ -198,6 +198,7 @@ mod fold;
 pub mod fuzz;
 mod generation;
 mod http;
+mod kept;
 mod key_vouch;
 mod lifecycle;
 mod light;
@@ -415,6 +416,8 @@ enum SyncEvent {
         signing_key: SigningKey,
         exchange_key: StaticSecret,
         tokens: http::TokenPair,
+        /// What the device keeps of the session (`SRV-323`, `SRV-328`).
+        kept: kept::Keeping,
     },
     /// A provider return was exchanged: the session's tokens, and whether the
     /// account holds its keys. No key is held yet, so no socket opens.
@@ -1591,6 +1594,8 @@ pub struct SyncState {
     /// Access + refresh tokens returned by login/setup and rotated by HTTP 401
     /// retry helpers. Kept in worker memory only.
     tokens: http::TokenStore,
+    /// The session this device keeps across a page reload (`SRV-323`).
+    kept: kept::KeptSession,
     /// Authenticated user id, set after a sign-in, an unlock or a key setup.
     user_id: Option<Id<User>>,
 
@@ -1842,6 +1847,7 @@ impl SyncState {
             lifecycle: lifecycle::Lifecycle::default(),
             clock: lifecycle::system_clock(),
             renewal: renewal::Renewal::default(),
+            kept: kept::KeptSession::default(),
             renewing: Rc::new(futures_util::lock::Mutex::new(())),
             #[cfg(not(target_arch = "wasm32"))]
             renewals_ahead: Vec::new(),
@@ -2374,6 +2380,7 @@ impl SyncState {
                 self.handle_recover_account(id, recovery_words, new_passphrase);
             }
             RestCommand::Logout => self.handle_sign_out(id),
+            RestCommand::ResumeSession => self.handle_resume(id),
 
             // -- Document CRUD -------------------------------------------------
             RestCommand::ListDocuments => self.handle_list_documents(id),

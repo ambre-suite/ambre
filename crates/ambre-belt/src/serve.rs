@@ -10,7 +10,8 @@
 //! its policy (`SRV-282`).
 //!
 //! The server also stands in for the exchange of an identity provider return,
-//! which a development relay cannot answer (`provider_exchange`).
+//! which a development relay cannot answer (`provider_exchange`). It steps
+//! aside for a relay configured with the belt's provider (`crate::provider`).
 
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -20,6 +21,8 @@ use axum::body::Body;
 use axum::extract::Request;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::http::{HeaderName, HeaderValue, Response, StatusCode, Uri, header};
+
+use crate::relay::Exchange;
 
 /// The headers file the post-build hook writes beside the page
 /// (`scripts/trunk_post_build.py`), in the format Netlify and Cloudflare Pages
@@ -372,8 +375,9 @@ pub fn asked() -> Vec<String> {
 
 /// Serves `root` on a free local port, for as long as the test runs, and
 /// answers the origin. Every `/api` path goes to the relay at `relay`, from
-/// an address of its own.
-pub async fn spawn(root: PathBuf, relay: String) -> String {
+/// an address of its own. Under [`Exchange::StandIn`] the server answers the
+/// exchange of a provider return itself.
+pub async fn spawn(root: PathBuf, relay: String, exchange: Exchange) -> String {
     assert!(
         root.join("index.html").is_file(),
         "no build in {}: run `trunk build` first (just test-browser)",
@@ -414,7 +418,7 @@ pub async fn spawn(root: PathBuf, relay: String) -> String {
             let peer = peer.clone();
             async move {
                 let path = req.uri().path().to_owned();
-                if path == PROVIDER_EXCHANGE {
+                if path == PROVIDER_EXCHANGE && exchange == Exchange::StandIn {
                     record(&path);
                     provider_exchange(relay, peer, req).await
                 } else if path.starts_with("/api/") {

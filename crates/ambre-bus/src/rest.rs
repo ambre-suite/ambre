@@ -397,6 +397,10 @@ pub enum RestCommand {
         code: ambre_core::Credential<ambre_core::OidcCode>,
         state: ambre_core::Credential<ambre_core::OidcState>,
     },
+    /// Open the session this device kept from an earlier page, if any
+    /// (`SRV-323`). The page sends it at boot, when no provider return and no
+    /// development name signs it in. -> `SessionReady`, or `NoKeptSession`.
+    ResumeSession,
 }
 
 // -----------------------------------------------------------------------------
@@ -599,4 +603,8 @@ pub enum RestEvent {
     /// to; the launcher names the reclaim (`CHROME-146`). Appended last, so
     /// the tags of the variants above do not move.
     AddressReclaimed,
+    /// The device keeps no session that opens, or the relay refused the one it
+    /// kept, which is then erased (`SRV-323`, `SRV-326`). The page stays on
+    /// the sign-in screen.
+    NoKeptSession,
 }

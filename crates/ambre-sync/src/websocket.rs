@@ -750,6 +750,7 @@ impl SyncState {
                 signing_key,
                 exchange_key,
                 tokens,
+                kept,
             } => {
                 self.user_id = Some(user_id);
                 self.master_seed = Some(master_seed);
@@ -757,6 +758,13 @@ impl SyncState {
                 self.exchange_key = Some(exchange_key);
                 self.hold_tokens(tokens);
                 self.setup_owed = false;
+                self.adopt_kept(
+                    kept,
+                    crate::kept::KeptProfile {
+                        display_name: display_name.clone(),
+                        email: email.clone(),
+                    },
+                );
                 self.open_websocket();
                 self.flush_pending_opens();
                 self.announce_session(
@@ -806,6 +814,13 @@ impl SyncState {
             } => {
                 self.user_id = Some(user_id);
                 self.adopt_new_keys(master_seed, signing_key, exchange_key, tokens);
+                self.adopt_kept(
+                    crate::kept::Keeping::Under(crate::kept::DeviceKey::Fresh),
+                    crate::kept::KeptProfile {
+                        display_name: display_name.clone(),
+                        email: email.clone(),
+                    },
+                );
                 // The words first, then the session: the page shows the words
                 // before the list (`CHROME-099`).
                 self.reply(id, RestEvent::AccountCreated { recovery_words });
@@ -839,6 +854,13 @@ impl SyncState {
                 }
                 self.user_id = Some(user_id);
                 self.adopt_new_keys(master_seed, signing_key, exchange_key, tokens);
+                self.adopt_kept(
+                    crate::kept::Keeping::Under(crate::kept::DeviceKey::Fresh),
+                    crate::kept::KeptProfile {
+                        display_name: display_name.clone(),
+                        email: email.clone(),
+                    },
+                );
                 // The form closes on the answer, then the list replaces the
                 // gate: no second unlock under the new passphrase (`SYNC-293`).
                 self.announce_session(

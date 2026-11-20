@@ -151,14 +151,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             )
             .map_err(|e| format!("OIDC initialization failed: invalid redirect URI: {e}"))?;
             let secret = std::env::var("OIDC_GOOGLE_CLIENT_SECRET").unwrap_or_default();
-            Some(
-                oidc::OidcRegistration::google(
-                    openidconnect::ClientId::new(client_id),
-                    ambre_core::Confidential::<oidc::OidcSecret>::new(secret),
-                    redirect_uri,
-                )
-                .map_err(|e| format!("OIDC initialization failed: {e}"))?,
-            )
+            // Unset or empty, the issuer is Google's own (`SRV-322`).
+            let configured = std::env::var("OIDC_GOOGLE_ISSUER")
+                .ok()
+                .filter(|text| !text.is_empty())
+                .map(openidconnect::IssuerUrl::new)
+                .transpose()
+                .map_err(|e| format!("OIDC initialization failed: invalid issuer: {e}"))?;
+            let issuer = oidc::google_issuer(configured)
+                .map_err(|e| format!("OIDC initialization failed: {e}"))?;
+            Some(oidc::OidcRegistration::google(
+                issuer,
+                openidconnect::ClientId::new(client_id),
+                ambre_core::Confidential::<oidc::OidcSecret>::new(secret),
+                redirect_uri,
+            ))
         }
         _ => None,
     };

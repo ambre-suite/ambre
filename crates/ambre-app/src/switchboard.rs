@@ -649,6 +649,9 @@ impl Switchboard {
             // (`ambre-spec-murmure-composer.md`). Once that write has landed, the page boots
             // home afresh and holds nothing of the session (`CHROME-108`).
             RestEvent::LoggedOut => effects.push(Effect::LeaveSession),
+            // The device keeps no session that opens: the page stays on the
+            // sign-in screen it shows already (`SRV-326`).
+            RestEvent::NoKeptSession => {}
             // The provider's address: send the browser there (`CHROME-095`).
             RestEvent::ProviderAddress { url, state } => {
                 effects.push(Effect::FollowProvider { url, state });

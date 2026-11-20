@@ -59,6 +59,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-022` | `POST` | A provider's return MUST exchange its code for an identity token the relay verifies, and sign the user in. | this spec section 3 | `ambre_server::oidc::tests::a_provider_code_is_exchanged_for_a_verified_identity` -- a stub provider signs an identity token with a key it publishes, and the code is exchanged under the kept verifier for its claims; `::an_identity_the_relay_cannot_verify_is_refused` -- a foreign key and a wrong one-time value fail the verification, and a wrong verifier fails the exchange; `ambre_server::routes::tests::handler_tests::a_provider_return_signs_the_person_in` -- through the shipped router, the return opens a session that `/auth/me` answers as that person, and it is not taken twice | none | verified |
 | `SRV-074` | `FAIL` | A configured provider the relay cannot reach at startup MUST stop the start, never disable sign-in in silence. | audit `M7`; this spec section 3 | `ambre_server::oidc::tests::a_configured_provider_that_does_not_answer_stops_the_start` -- the start decision against an issuer nothing listens on is an error, which `main` returns. With no client id nothing is discovered and sign-in is off | none | verified |
 | `SRV-296` | `FRAME` | A request of the relay to the identity provider MUST NOT follow a redirect, and MUST end at its deadline. | this spec section 3; `SRV-022`; `ambre-spec-budgets.md` section 8 | `ambre_server::oidc::tests::the_provider_client_follows_no_redirect_and_keeps_a_deadline` -- a redirect comes back as itself, and a provider that stalls fails the request at the deadline | none | verified |
+| `SRV-322` | `PRE` | The relay MUST discover its provider at the issuer the deployment configures, or at the provider's own issuer when none is configured. It MUST refuse to start on a plain `http` issuer off the loopback. | this spec section 3; `SRV-074` | `ambre_server::oidc::tests::the_configured_issuer_is_https_or_a_loopback_provider` -- no issuer names Google's, a provider stub on the loopback is discovered and a sign-in goes there, and a plain `http` issuer on another host is refused | none | verified |
 | `SRV-295` | `POST` | A reclaim of an address MUST tell each member who invited the account that held it. | this spec section 3; `SRV-029` | `ambre_server::routes::tests::handler_tests::a_reclaim_tells_each_inviter_of_the_account_that_held_the_address` -- database tier: the sign-in that reclaims names the one inviter per document, the inviter's topic hears `AddressReclaimed` for that document and member, and a second sign-in owes no notice | none | verified |
 | `SRV-321` | `POST` | The account answer MUST say whether a provider sign-in reclaimed the address of the account. | this spec section 3; `SRV-029`; `ambre-spec-launcher.md`, `CHROME-146` | `ambre_server::routes::tests::handler_tests::the_account_answer_names_a_reclaim_of_its_address` -- database tier: the account answer reads no reclaim, then a reclaim once a provider sign-in took the address, and the account of the inviter reads none; `ambre_server::db::users::tests::oidc_login_reclaims_email_from_unverified_squatter` -- database tier: the stand-in a reclaim writes reads as a reclaim, and neither live address does | none | verified |
 
@@ -71,6 +72,17 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-092` | `FRAME` | A sign-out MUST NOT revoke a token it did not issue to this caller. | this spec section 3 | `ambre_server::routes::tests::handler_tests::a_sign_out_revokes_no_token_of_another_caller` -- a foreign refresh token survives, and the caller's own is revoked | none | verified |
 | `SRV-320` | `POST` | A renewal of a session minted before the keys MUST carry the signing key the account registered since. | this spec section 3; `SRV-027`; `ambre-spec-sync.md`, `SYNC-296` | `ambre_server::routes::tests::handler_tests::a_renewal_after_the_key_store_carries_the_registered_key` -- database tier: of two keyless pairs, one stores the keys, and the refresh of the other mints a token under the stored key | none | verified |
 
+### 1.5 A session survives a page reload
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SRV-323` | `POST` | A page reload of a provider session MUST sign the same person in again with no provider round trip, by one renewal of the refresh token the device kept. | this spec section 3, the kept session; `SRV-009`; `ambre-spec-zero-knowledge.md`, `ZK-051` | `ambre_sync::kept::tests::a_kept_record_opens_as_the_same_person_token_and_seed`; `::a_kept_session_resumes_with_the_renewed_pair` -- the one request is the renewal, with the kept token alone; `::a_session_is_kept_and_a_sign_out_erases_it`; `ambre_belt::provider::tests::a_reload_resumes_the_session_with_no_provider_round_trip` -- browser tier: the reload renews the kept token, asks no provider route, and shows the list of the same person | none | verified |
+| `SRV-324` | `POST` | A sign-out MUST erase the kept session from the device, its key with it, so nothing left on the device opens a session. | this spec section 3, the kept session; `SRV-026` | `ambre_sync::kept::tests::a_session_is_kept_and_a_sign_out_erases_it` -- the record is gone, and a late renewal keeps nothing again; `ambre_belt::provider::tests::a_sign_out_leaves_nothing_that_opens` -- browser tier: the record is erased, and a copy taken before the sign-out opens no session after it | none | verified |
+| `SRV-325` | `FRAME` | A sign-in MUST keep its session under a key generated for it, in place of the session of any other account on the device. | this spec section 3, the kept session; `ambre-spec-zero-knowledge.md`, `ZK-051` | `ambre_sync::kept::tests::another_account_keeps_its_session_under_a_fresh_key` -- the second account replaces the record of the first, under a fresh key | none | verified |
+| `SRV-326` | `FAIL` | Given a kept refresh token the relay refuses at boot, the client MUST erase the kept session and stay on the sign-in screen. | this spec section 3, the kept session | `ambre_sync::kept::tests::a_refused_or_unreadable_record_is_erased_and_resumes_nothing` -- a refusal and a record that does not open are erased, and a relay that does not answer keeps the record; `::a_resume_with_no_relay_answers_no_kept_session`; `ambre_belt::provider::tests::a_sign_out_leaves_nothing_that_opens` -- browser tier: the revoked token put back is refused at boot, the record erased, and the sign-in screen stays | none | verified |
+| `SRV-327` | `POST` | Each renewal of a kept session MUST keep the refresh token it received. | this spec section 3, the kept session; `SRV-009` | `ambre_sync::kept::tests::a_renewal_keeps_the_next_refresh_token` -- the record holds the next token, under the key held | none | verified |
+| `SRV-328` | `FRAME` | A development session MUST NOT be kept on the device. | this spec section 3, the kept session; `SRV-023` | `ambre_sync::kept::tests::a_development_session_keeps_nothing` -- neither the session nor a renewal writes a record | none | verified |
+
 * **Budget.** the provider callback of `ambre-spec-budgets.md section 3`, under 200 ms, which
   reads **none exists**. The token verification carries no budget: it is a local signature check on
   every request, and no row measures it.
@@ -78,7 +90,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   and sees none of the three secrets behind them (`ZK-003`, `SRV-091`). What it mints is its own
   token, and `SRV-012` refuses it every other cryptographic act. The socket takes its token in its
   first frame, so no address carries one (`SRV-031`).
-* **Verification.** 34 `verified`. What holds is what a request test can drive: the token gate, the
+* **Verification.** 41 `verified`. What holds is what a request test can drive: the token gate, the
   address namespace, the one-shot key write and the refresh race. A provider exchange runs against a
   stub that signs its own identity tokens. A real provider never runs under a test.
 ---
@@ -114,6 +126,29 @@ an account no provider vouched for. It is retired: no route and no client comman
 account (`SRV-319`). Accounts it created remain, so the reclaim rule still holds for them
 (`SRV-029`). A development sign-in with no key stands in for a provider account that owes its keys.
 The development tiers reach the key setup through it.
+
+**The kept session.** A page reload starts the three threads again, and the Sync worker holds the
+session in memory alone. So the worker keeps one record on the device, in the IndexedDB of the
+origin. The record holds the refresh token, the seed and the profile of the person. The worker seals
+it under an AES-GCM key of WebCrypto, which it generates as non-extractable
+(`ambre-spec-zero-knowledge.md`, `ZK-051`).
+
+| Event | What the device keeps |
+|---|---|
+| a provider sign-in, a key setup or a recovery opens a session | the record, under a key generated for it, in place of any other (`SRV-325`) |
+| a renewal | the record again, with the refresh token it received (`SRV-327`) |
+| the page boots with no provider return | the record is opened, and its refresh token renewed once (`SRV-323`) |
+| the relay refuses that renewal, or the record does not open | nothing: the record is erased, and the sign-in screen stays (`SRV-326`) |
+| a sign-out | nothing: the record and its key are erased first, then the token is revoked (`SRV-324`) |
+| a development session | nothing: its name derives it again (`SRV-328`) |
+
+The relay sees a renewal like any other, and the token is still honoured once (`SRV-009`). A
+sign-out revokes the kept token too, so a copy of the record taken before it opens nothing.
+
+**Where a provider is discovered.** The deployment may name the issuer of its provider, and Google's
+own issuer is the default. An issuer is `https`, or plain `http` on the loopback, where a test runs
+its provider (`SRV-322`). A relay that names another issuer still sends no browser there: the client
+follows the authorization host of the provider alone (`ambre-spec-launcher.md`, `CHROME-139`).
 
 **The handshake with a provider.** The relay mints the state value and the one-time value. It keeps
 them in the ephemeral store for ten minutes, and consumes them on the way back. A callback whose
@@ -226,7 +261,8 @@ code of its own, so a client renews rather than backs off (`ambre-spec-broadcast
 * `crates/ambre-server/src/auth.rs` -- the extractors, and the one place a pair is minted;
 * `crates/ambre-server/src/jwt.rs` -- the signing key, the claims and the verification;
 * `crates/ambre-server/src/routes/keys.rs` -- the one-shot key write and the re-seal;
-* `crates/ambre-server/src/db/users.rs` -- the address namespace and the reclaim rule.
+* `crates/ambre-server/src/db/users.rs` -- the address namespace and the reclaim rule;
+* `crates/ambre-sync/src/kept.rs` -- the session the device keeps across a reload.
 
 ---
 
@@ -241,7 +277,8 @@ code of its own, so a client renews rather than backs off (`ambre-spec-broadcast
 | an access token nears the end of its announced lifetime | the client renews the pair ahead of the expiry, once (`ambre-spec-sync.md`, `SYNC-183`, `SYNC-184`) |
 | a request is refused for an expired token | the client renews once, as the fallback, and replays it (`ambre-spec-sync.md`, `SYNC-062`) |
 | the socket is refused on authentication | the client renews and reopens, with no action from the person (`SYNC-063`) |
-| a person signs out | the refresh token is revoked, and the access token dies at its own expiry |
+| a person signs out | the device erases the kept session, the refresh token is revoked, and the access token dies at its own expiry (`SRV-324`) |
+| the page reloads | the client renews the token the device kept, and the same person is signed in with no provider round trip (`SRV-323`) |
 
 What a person sees of all this is a sign-in screen and a session that survives a page reload. The
 third thing is an authentication error asking them to sign in again. `ambre-spec-launcher.md` says
@@ -266,10 +303,16 @@ where each of those is drawn.
 | The proof signs the account | a challenge the relay mints and keeps | the account already names one registration, and a challenge adds a round trip and a record to expire. A proof over another account fails, so a proof read on the wire registers nothing (`SRV-294`) |
 | A renewal of a keyless pair reads the register | a keyless pair stays keyless until a sign-in | a page reloaded during the setup holds a keyless pair while its first store lands. The socket refuses that pair, and its renewal would never carry the key. Only a keyless pair reads the register, so the renewal of a set-up account stays free of a query (`SRV-320`) |
 | The development sign-in derives its keys from the name | a fixture account with a stored passphrase | it is a secret to store and keep in step for an account whose only requirement is to be the same on every run. Deriving from the name gives that with nothing stored, and the switch that enables it is off by default |
+| The kept session is sealed under a WebCrypto key that cannot be exported | the refresh token in `localStorage`, in the clear | any script of the origin reads it whole, and a copy of the profile directory carries it away. A key that cannot be exported keeps the bytes of the seal key out of every script, so a copy of the storage alone opens nothing |
+| The device keeps the seed beside the refresh token | a passphrase prompt at every reload, to open the sealed seed the relay stores | the call proofs and every reload would wait on a person. The owner chose a session that survives a reload, sealed on the device (`SRV-323`) |
 
 ---
 
 ## 6. NOT BUILT, AND NOT YET RULED
+
+* **Two tabs share one kept refresh token.** A second tab resumes with the kept token, and the
+  relay honours it once. The first tab then holds a token the relay refuses at its next renewal,
+  and its session ends there. Nothing yet hands the first tab the token the second one kept.
 
 * **One provider is configured, and the corpus names four.** The deployment reads the credentials of
   a single provider.

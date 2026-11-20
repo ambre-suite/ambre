@@ -17,7 +17,7 @@
 | :--- | :--- | :--- | ---: | ---: |
 | `architecture` | How the client is split, and why. | implemented | 132 | 8 |
 | `broadcast` | One connection per person, carrying every document they have open. | implemented | 31 |  |
-| `call-proofs` | The harnesses that measure a call on hardware no CI job runs. | implemented | 19 |  |
+| `call-proofs` | The harnesses that measure a call on hardware no CI job runs. | implemented | 20 |  |
 | `commands` | Everything the user can ask for has one name. | implemented | 13 |  |
 | `delta-order` | A change made on one screen appears on another with the changes it was built on, or it waits. | implemented | 23 |  |
 | `design-tokens` | The interface is drawn twice, once by the browser and once by the graphics card. | implemented | 6 |  |
@@ -34,7 +34,7 @@
 | `residency` | Which documents a client holds, in memory and on disk, and what a document it does not hold still costs. | implemented | 32 |  |
 | `schema-version` | What a document looks like once it reaches the disk, and how a later binary knows it can still read it. | implemented | 20 |  |
 | `sealed-envelope` | Nothing a user writes leaves the browser readable. | implemented | 31 |  |
-| `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 34 |  |
+| `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 41 |  |
 | `text-input` | A text area that shows nothing, sits under the caret, and is the real keyboard focus of the canvas. | implemented | 15 |  |
 | `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 23 |  |
 | `accessibility` | What a screen reader and a keyboard reach. | partial | 15 |  |
@@ -56,13 +56,13 @@
 | `render-assets` | What the renderer loads before it can draw anything: the fonts a script needs, the glyphs rasterized from them, the icons, the embedded images. | partial | 26 |  |
 | `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | partial | 83 |  |
 | `server` | The one process every client talks to. | partial | 134 | 1 |
-| `sync` | The one part of the client that talks to the network. | partial | 89 |  |
+| `sync` | The one part of the client that talks to the network. | partial | 90 |  |
 | `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 20 |  |
 | `ui` | The page's own thread. | partial | 23 |  |
-| `zero-knowledge` | What the relay is allowed to learn, and what it must never be able to learn. | partial | 49 | 1 |
+| `zero-knowledge` | What the relay is allowed to learn, and what it must never be able to learn. | partial | 52 | 1 |
 | `machine-access` | A program reads or writes a sheet, a board, a text or a conversation only as a sealed client. | design-only | 34 |  |
 | `macros` | A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. | design-only | 54 |  |
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**49 features: 22 implemented, 23 partial, 4 design-only. 1747 contract rows, 14 loose.**
+**49 features: 22 implemented, 23 partial, 4 design-only. 1759 contract rows, 14 loose.**

@@ -33,6 +33,13 @@ pub(crate) mod tests {
     /// Murmure. Waits for the sidebar's control that creates a space.
     pub(crate) async fn enter(page: Page, name: &str) -> Page {
         page.sign_in(name).await;
+        open_murmure(&page).await;
+        page
+    }
+
+    /// Opens Murmure on `page`, which holds a session. Waits for the
+    /// sidebar's control that creates a space.
+    pub(crate) async fn open_murmure(page: &Page) {
         page.browser
             .goto(&format!("{}/murmure/{}", page.origin, uuid::Uuid::now_v7()))
             .await;
@@ -43,7 +50,6 @@ pub(crate) mod tests {
                 BOOT,
             )
             .await;
-        page
     }
 
     /// Fills the prompt control whose form has the class `class`, found
