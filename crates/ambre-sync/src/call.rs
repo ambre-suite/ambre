@@ -10,7 +10,7 @@
 //! Nothing here sends a byte: the caller carries each wrap to the relay route, and each
 //! handoff to the call worker.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use ambre_core::id::{Call, Channel, Id, User};
 use ambre_core::{
@@ -18,8 +18,8 @@ use ambre_core::{
     SENDER_INDEX_LIMIT, SenderIndex, Seq, TimeSpan, UnixMs,
 };
 use ambre_crypto::call::{
-    CallExchangeKey, JoinClaim, KeyHandoff, SenderKey, SignedJoin, WrapBinding, WrappedSenderKey,
-    unwrap_sender_key, wrap_sender_key,
+    CallExchangeKey, Departures, JoinClaim, KeyHandoff, SenderKey, SignedJoin, WrapBinding,
+    WrappedSenderKey, unwrap_sender_key, wrap_sender_key,
 };
 use ed25519_dalek::SigningKey;
 
@@ -64,6 +64,9 @@ pub(crate) enum Refusal {
     UnknownSender,
     /// The sender index or the generation is past the width of a key identifier.
     Exhausted,
+    /// The wrap carries a key its sender drew before a removal, and the switch delay of that
+    /// removal passed. A removed session holds that key (`CALL-154`).
+    Retired,
 }
 
 /// A wrap for one participant, which the relay route forwards.
@@ -83,11 +86,13 @@ pub(crate) struct Moves {
     pub(crate) handoffs: Vec<KeyHandoff>,
 }
 
-/// One generation of the sender key of this participant.
+/// One generation of the sender key of this participant, and the sessions it had departed
+/// when it drew the key of that epoch (`CALL-154`).
 #[derive(Clone)]
 struct Held {
     generation: Seq<KeyGeneration>,
     key: SenderKey,
+    departures: Departures,
 }
 
 impl Held {
@@ -95,7 +100,43 @@ impl Held {
         Some(Self {
             generation: self.generation.ratcheted()?,
             key: self.key.ratcheted(),
+            departures: self.departures.clone(),
         })
+    }
+}
+
+/// A removal this client heeded: the sessions it departed, the participants it still held,
+/// and the end of its switch delay.
+struct RemovalMark {
+    sessions: Vec<Seq<SenderIndex>>,
+    /// The participants this client held at the removal. A later joiner drew its keys after
+    /// this client heeded the removal, and its own log chose whom it wraps to: the mark
+    /// spares it.
+    held: HashSet<Seq<SenderIndex>>,
+    at: Instant<UnixMs>,
+    /// For each sender, the oldest epoch of a key drawn after the removal. Every epoch of that
+    /// sender from it up was drawn after, since the departures of a sender only grow.
+    cleared: HashMap<Seq<SenderIndex>, Seq<KeyGeneration>>,
+}
+
+impl RemovalMark {
+    /// Whether `sender` drew the key of `epoch`, which carries `departures`, after this
+    /// removal. A key that names a removed session as departed was never wrapped to one.
+    fn clears(
+        &mut self,
+        sender: Seq<SenderIndex>,
+        epoch: Seq<KeyGeneration>,
+        departures: &Departures,
+    ) -> bool {
+        if !self.held.contains(&sender) {
+            return true;
+        }
+        if departures.names_any(&self.sessions) {
+            let oldest = self.cleared.entry(sender).or_insert(epoch);
+            *oldest = (*oldest).min(epoch);
+            return true;
+        }
+        self.cleared.get(&sender).is_some_and(|&from| from <= epoch)
     }
 }
 
@@ -110,6 +151,8 @@ struct Peer {
     member: Id<User>,
     identity: FixedBytes<PublicKey>,
     exchange: FixedBytes<ExchangePublicKey>,
+    /// The departures each epoch of its key carried, by the first generation of the epoch.
+    epochs: BTreeMap<Seq<KeyGeneration>, Departures>,
 }
 
 /// The sender keys of this participant in one call, and what it knows of the others.
@@ -124,6 +167,10 @@ pub(crate) struct CallKeys {
     current: Held,
     pending: Option<Pending>,
     peers: HashMap<Seq<SenderIndex>, Peer>,
+    /// Every session this participant departed, the newest kept. A key it draws carries them.
+    departed: Departures,
+    /// Every removal this client heeded in the call (`CALL-154`).
+    removals: Vec<RemovalMark>,
     /// Every exchange key, under the identity that signed it, and every sender index of a
     /// join this client admitted. A refused join marks nothing, so a join that claims the
     /// key or the index of another and fails a check evicts no one (`CALL-133`).
@@ -169,6 +216,7 @@ impl CallKeys {
         let current = Held {
             generation: Seq::ZERO,
             key: SenderKey::generate(),
+            departures: Departures::default(),
         };
         let handoff = KeyHandoff::Seal {
             sender: joining.sender,
@@ -187,6 +235,8 @@ impl CallKeys {
             current,
             pending: None,
             peers: HashMap::new(),
+            departed: Departures::default(),
+            removals: Vec::new(),
         };
         Ok((keys, handoff))
     }
@@ -258,6 +308,7 @@ impl CallKeys {
                 member: claim.member,
                 identity: claim.identity,
                 exchange: claim.exchange,
+                epochs: BTreeMap::new(),
             },
         );
         let held = std::iter::once(&self.current).chain(self.pending.as_ref().map(|p| &p.held));
@@ -269,30 +320,56 @@ impl CallKeys {
         Ok(moves)
     }
 
-    /// Opens a wrap a participant this client admitted made for it.
+    /// Opens a wrap a participant this client admitted made for it, at `now`.
+    ///
+    /// A key the sender drew before a removal this client heeded reached a removed session.
+    /// Inside the switch delay of that removal, the handoff to open it comes with a close at
+    /// the end of the delay. Past it, the wrap is refused (`CALL-154`).
     ///
     /// # Errors
     ///
     /// [`Refusal::UnknownSender`] for a wrap from no admitted participant, or one that
-    /// does not open.
+    /// does not open, and [`Refusal::Retired`] for a key a removal closed.
     pub(crate) fn receive(
-        &self,
+        &mut self,
         from: Seq<SenderIndex>,
         wrapped: &WrappedSenderKey,
-    ) -> Result<KeyHandoff, Refusal> {
-        let peer = self.peers.get(&from).ok_or(Refusal::UnknownSender)?;
+        now: Instant<UnixMs>,
+    ) -> Result<Vec<KeyHandoff>, Refusal> {
+        let peer = self.peers.get_mut(&from).ok_or(Refusal::UnknownSender)?;
         let binding = WrapBinding {
             call: self.call,
             sender: from,
             recipient: self.own,
         };
-        let (generation, key) = unwrap_sender_key(&self.exchange, &peer.exchange, binding, wrapped)
+        let opened = unwrap_sender_key(&self.exchange, &peer.exchange, binding, wrapped)
             .map_err(|_| Refusal::UnknownSender)?;
-        Ok(KeyHandoff::Open {
+        let epoch = opened.generation.epoch_start();
+        let mut within: Option<TimeSpan<Ms>> = None;
+        for mark in &mut self.removals {
+            if mark.clears(from, epoch, &opened.departures) {
+                continue;
+            }
+            if now >= mark.at {
+                return Err(Refusal::Retired);
+            }
+            let left = mark.at.since(now);
+            within = Some(within.map_or(left, |w| w.min(left)));
+        }
+        peer.epochs.insert(epoch, opened.departures);
+        let mut handoffs = vec![KeyHandoff::Open {
             sender: from,
-            generation,
-            key,
-        })
+            generation: opened.generation,
+            key: opened.key,
+        }];
+        if let Some(within) = within {
+            handoffs.push(KeyHandoff::Close {
+                sender: from,
+                generation: opened.generation,
+                within,
+            });
+        }
+        Ok(handoffs)
     }
 
     /// A participant left at `now`: forgets it, draws a fresh key, and wraps that key to
@@ -308,11 +385,28 @@ impl CallKeys {
         sender: Seq<SenderIndex>,
         now: Instant<UnixMs>,
     ) -> Result<Moves, Refusal> {
+        self.depart_all(&[sender], now)
+    }
+
+    /// The sessions `senders` left at `now`, all at once: forgets each, then draws one fresh
+    /// key and wraps it to each remaining participant alone. No fresh key is wrapped while one
+    /// of `senders` is still held, so none reaches a second session of a removed member
+    /// (`CALL-155`).
+    fn depart_all(
+        &mut self,
+        senders: &[Seq<SenderIndex>],
+        now: Instant<UnixMs>,
+    ) -> Result<Moves, Refusal> {
         let mut moves = Moves::default();
-        if self.peers.remove(&sender).is_none() {
+        for &sender in senders {
+            if self.peers.remove(&sender).is_some() {
+                self.departed.depart(sender);
+                moves.handoffs.push(KeyHandoff::Forget { sender });
+            }
+        }
+        if moves.handoffs.is_empty() {
             return Ok(moves);
         }
-        moves.handoffs.push(KeyHandoff::Forget { sender });
         let top = self
             .pending
             .as_ref()
@@ -320,6 +414,7 @@ impl CallKeys {
         let held = Held {
             generation: top.next_epoch().ok_or(Refusal::Exhausted)?,
             key: SenderKey::generate(),
+            departures: self.departed.clone(),
         };
         let at = self
             .pending
@@ -337,8 +432,13 @@ impl CallKeys {
         Ok(moves)
     }
 
-    /// Reads a new state of the membership log of the channel: each participant it no
-    /// longer holds under its identity departs at `now` (`CALL-028`).
+    /// Reads a new state of the membership log of the channel: every session of a member it
+    /// no longer holds under its identity departs at `now`, all at once (`CALL-028`,
+    /// `CALL-155`).
+    ///
+    /// Each key a remaining participant drew before the removal reached a removed session.
+    /// So each one closes once the switch delay passed, whether the fresh key of that
+    /// participant arrives or not (`CALL-154`).
     ///
     /// # Errors
     ///
@@ -350,12 +450,34 @@ impl CallKeys {
             .filter(|(_, peer)| log.present_key(peer.member) != Some(peer.identity))
             .map(|(&index, _)| index)
             .collect();
-        let mut moves = Moves::default();
-        for index in removed {
-            let more = self.depart(index, now)?;
-            moves.wraps.extend(more.wraps);
-            moves.handoffs.extend(more.handoffs);
+        if removed.is_empty() {
+            return Ok(Moves::default());
         }
+        let mut moves = self.depart_all(&removed, now)?;
+        let mut mark = RemovalMark {
+            sessions: removed,
+            held: self.peers.keys().copied().collect(),
+            at: now.plus(SWITCH_DELAY),
+            cleared: HashMap::new(),
+        };
+        for (&index, peer) in &self.peers {
+            let mut before = None;
+            for (&epoch, departures) in &peer.epochs {
+                if !mark.clears(index, epoch, departures) {
+                    before = Some(epoch);
+                }
+            }
+            if let Some(epoch) = before {
+                // The close names the epoch: each step of it the receiver ratchets to closes
+                // with it.
+                moves.handoffs.push(KeyHandoff::Close {
+                    sender: index,
+                    generation: epoch,
+                    within: SWITCH_DELAY,
+                });
+            }
+        }
+        self.removals.push(mark);
         Ok(moves)
     }
 
@@ -393,6 +515,7 @@ impl CallKeys {
             exchange,
             binding,
             held.generation,
+            &held.departures,
             &held.key,
         )
         .map_err(|_| Refusal::UnknownSender)?;
