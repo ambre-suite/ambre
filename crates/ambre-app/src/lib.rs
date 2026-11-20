@@ -289,6 +289,9 @@ struct Wiring {
     /// The five figures of the open Prose document, for the status bar slot
     /// (`PROSE-FEAT-040`). Published by the Prose view.
     prose_figures: RwSignal<Option<ambre_prose::ui::StatusFigures>>,
+    /// The page zoom of the open Prose document, for the zoom chip of the
+    /// status bar slot (`CHROME-147`). The chip writes it, the view applies it.
+    prose_zoom: RwSignal<Scale<Doc, View>>,
     /// The comment panel and the suggestion popover of the open Prose
     /// document (`PROSE-UI-050`, `PROSE-UI-052`). Published by the Prose view.
     prose_signals: host::ProseSignals,
@@ -791,6 +794,8 @@ pub fn main() {
     let boot_is_murmure = booted == ambre_bus::DocType::Murmure;
     // The status bar slot the Prose view fills with its five figures.
     let prose_figures = RwSignal::new(None::<ambre_prose::ui::StatusFigures>);
+    // The page zoom the Prose chip and the Prose view share. Defaults to 100%.
+    let prose_zoom = RwSignal::new(Scale::<Doc, View>::ONE);
     let prose_signals = host::ProseSignals::new();
     match booted {
         ambre_bus::DocType::Toile => toile_chrome::bind_keys(&mut keymap),
@@ -944,6 +949,7 @@ pub fn main() {
             commands: Rc::clone(&commands_slot),
         },
         prose_figures,
+        prose_zoom,
         prose_signals,
         tofu_prompt,
         tofu_confirm,
@@ -1548,6 +1554,7 @@ pub fn main() {
                         text_input,
                         theme_ctl,
                         figures: prose_figures,
+                        zoom: prose_zoom,
                         annotations: prose_signals,
                         busy_pub: busy_pub.clone(),
                         notices: notice_pub.clone(),

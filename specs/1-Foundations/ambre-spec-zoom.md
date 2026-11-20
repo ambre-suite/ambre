@@ -137,8 +137,9 @@ every editor.
   (`3-Toile/features/ambre-spec-toile-menus.md`). Nothing yet reads the shared ladder.
 * **Trame zooms its render alone.** The grid scales, but no keyboard, wheel or pinch gesture reaches
   it, and there is no zoom-to-selection (`2-Trame/features/ambre-spec-trame-grid-viewport.md`).
-* **Prose has no zoom.** The page column is drawn at one factor; the zoom the reader expects lands
-  with this model (`4-Prose/features/ambre-spec-prose-viewport.md`).
+* **Prose zooms alone too.** The page zooms on its own ladder, through the chip and the keys, and
+  keeps the top of the canvas in place. The pinch and the anchor on the caret wait for this
+  model (`4-Prose/features/ambre-spec-prose-viewport.md`).
 * **Touch is not ruled.** Pinch is named here as a trigger; the touch pipeline that raises it is not
   specified in any application yet.
 

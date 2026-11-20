@@ -22,6 +22,7 @@ pub mod ruler;
 pub mod slash;
 pub mod toolbar;
 pub mod walk;
+pub mod zoom;
 
 use ambre_core::index::{Len, Pos, Span};
 use std::collections::HashMap;

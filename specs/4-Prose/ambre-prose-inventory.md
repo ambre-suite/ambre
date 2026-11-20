@@ -41,7 +41,7 @@
 | `prose-spell-check` | Misspelled words underlined as the document is written, with suggestions, checked on the reader's own machine. | partial | 20 |  |
 | `prose-toolbar` | Select a few words and a small bar appears above them. | partial | 19 |  |
 | `prose-track-changes` | A reviewer edits without changing the document. | partial | 40 |  |
-| `prose-viewport` | A document is a centred column of pages the reader scrolls through and zooms. | partial | 21 |  |
+| `prose-viewport` | A document is a centred column of pages the reader scrolls through and zooms. | partial | 22 |  |
 | `prose-accessibility` | A screen reader must be able to read the document and follow the caret through it. | design-only | 9 |  |
 
-**28 features: 18 implemented, 9 partial, 1 design-only. 805 contract rows, 0 loose.**
+**28 features: 18 implemented, 9 partial, 1 design-only. 806 contract rows, 0 loose.**

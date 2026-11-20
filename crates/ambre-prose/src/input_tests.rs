@@ -3150,3 +3150,48 @@ fn a_side_drag_sends_one_free_resize_of_that_side() {
         Some(size)
     );
 }
+
+/// `PROSE-UI-129`, `PROSE-UI-250`: `Ctrl` with `=`, `-` and `0` step the zoom
+/// and leave the caret, the selection and the document alone.
+#[test]
+fn a_zoom_key_steps_the_zoom_and_moves_nothing_else() {
+    use crate::view::zoom::{ZOOM_PRESETS, ZoomStep};
+    use ambre_commands::{Key, KeyChar};
+
+    let ctrl = ambre_commands::ModifierKeys::PRIMARY;
+    for (c, step) in [
+        ('=', ZoomStep::In),
+        ('+', ZoomStep::In),
+        ('-', ZoomStep::Out),
+        ('0', ZoomStep::Reset),
+    ] {
+        assert_eq!(
+            ProseKey::from_key(Key::Char(KeyChar::new(c)), ctrl),
+            Some(ProseKey::Zoom(step))
+        );
+    }
+    assert_eq!(
+        ProseKey::from_key(Key::Char(KeyChar::new('=')), ModifierKeys::NONE),
+        None,
+        "a plain `=` is typed text"
+    );
+
+    let mut rig = Rig::new(&["hello world"]);
+    let block = rig.blocks()[0];
+    rig.press(rig.point_of(block, 2), false, Instant::<PageLoad>::new(0.0));
+    rig.key(ProseKey::Right, true, false);
+    let (caret, selection) = (rig.caret(), rig.ui.selection());
+    let sent = rig.sent.len();
+    let zoom = |rig: &mut Rig, step| rig.key(ProseKey::Zoom(step), false, true);
+    assert!(zoom(&mut rig, ZoomStep::In));
+    assert_eq!(rig.ui.viewport.zoom, ZOOM_PRESETS[4]);
+    assert!(zoom(&mut rig, ZoomStep::Out));
+    assert!(zoom(&mut rig, ZoomStep::Out));
+    assert_eq!(rig.ui.viewport.zoom, ZOOM_PRESETS[2]);
+    assert!(zoom(&mut rig, ZoomStep::Reset));
+    assert_eq!(rig.ui.viewport.zoom.get(), 1.0);
+    assert_eq!(rig.caret(), caret);
+    assert_eq!(rig.ui.selection(), selection);
+    assert_eq!(rig.sent.len(), sent, "a zoom sent {:?}", &rig.sent[sent..]);
+    assert!(rig.outbox.is_empty());
+}

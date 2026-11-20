@@ -37,7 +37,7 @@ the DOM side produces.
 | `CHROME-142` | `INV` | Every surface of the chrome MUST render in the chrome family, a surface mounted outside the shell included. | this spec section 2 | `ambre_canvas::theme::stylesheet_tests::every_family_the_chrome_names_is_the_chrome_family_or_a_monospace_one` -- the body carries the chrome family, and no declaration names a family the page does not load | none | verified |
 | `CHROME-143` | `OBS` | The format bar MUST show the frame of a floating bar, and its controls MUST NOT show the native button of the browser. | this spec section 2; `CHROME-105` | `ambre_canvas::theme::stylesheet_tests::the_format_bar_has_the_frame_of_a_floating_bar` -- the bar sets a ground, a border, a radius and a shadow, and a control drops the native look | none | verified |
 | `CHROME-144` | `OBS` | The header of a document page MUST name the open document. | this spec section 2; `CHROME-080` | `ambre_app::shell::app_root::tests::the_header_links_home_and_names_the_open_document` -- wasm tier, the name the list holds shows once a document is open, and no name shows without one | none | verified |
-| `CHROME-147` | `OBS` | An application that zooms MUST show its zoom in the status bar, at the end of the band, and in no other bar. | this spec section 2; `ambre-spec-zoom.md` | `ambre_toile::tests::chrome_ui::the_zoom_chip_closes_the_status_bar` -- wasm tier, the board band ends on the zoom chip; `ambre_trame::tests::chrome_ui::the_zoom_chip_closes_the_status_bar` -- the same read over the grid band; `ambre_toile::tests::chrome_ui::the_view_menu_reports_zoom_in_and_the_bar_holds_no_zoom_control` -- the menu bar holds no zoom control | none | verified |
+| `CHROME-147` | `OBS` | An application that zooms MUST show its zoom in the status bar, at the end of the band, and in no other bar. | this spec section 2; `ambre-spec-zoom.md` | `ambre_toile::tests::chrome_ui::the_zoom_chip_closes_the_status_bar` -- wasm tier, the board band ends on the zoom chip; `ambre_trame::tests::chrome_ui::the_zoom_chip_closes_the_status_bar` -- the same read over the grid band; `ambre_app::host::prose::tests::the_zoom_chip_closes_the_band_and_zooms_the_page` -- the same read over the page band; `ambre_toile::tests::chrome_ui::the_view_menu_reports_zoom_in_and_the_bar_holds_no_zoom_control` -- the menu bar holds no zoom control | none | verified |
 
 ### 1.2 A floating menu is placed
 
@@ -129,8 +129,8 @@ Murmure, puts one canvas in each cell of the row. Each canvas is sized by its ow
 
 Each application declares the optional rows it lays out, and an absent row renders no element
 (`CHROME-140`). The formula bar and the tab strip are Trame's alone. A Toile board docks its menus
-in the command bar (`CHROME-141`), and shows its zoom at the end of the status bar alone
-(`CHROME-147`). A Prose page formats from the bar over its selection, so it
+in the command bar (`CHROME-141`). Trame, Toile and Prose show their zoom at the end of the
+status bar alone (`CHROME-147`). A Prose page formats from the bar over its selection, so it
 lays out no command bar.
 
 **What the toolkit ships.**

@@ -21,14 +21,14 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**4841 rows: 4421 shipped, of which 16 loose. 420 unbuilt.**
+**4842 rows: 4426 shipped, of which 16 loose. 416 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1504 | 583 | 995 | 799 | 524 | 4405 |
+| `verified` | 1504 | 583 | 995 | 804 | 524 | 4410 |
 | `failing` | 2 |  |  |  |  | 2 |
 | `human-review` | 14 |  |  |  |  | 14 |
-| `unimplemented` | 168 | 42 | 21 | 32 | 157 | 420 |
+| `unimplemented` | 168 | 42 | 21 | 28 | 157 | 416 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -166,7 +166,7 @@
 | `ambre-spec-prose-toolbar.md` | 19 | 15 | 15 |  | 4 |
 | `ambre-spec-prose-track-changes.md` | 40 | 38 | 38 |  | 2 |
 | `ambre-spec-prose-undo.md` | 6 | 6 | 6 |  |  |
-| `ambre-spec-prose-viewport.md` | 21 | 14 | 14 |  | 7 |
+| `ambre-spec-prose-viewport.md` | 22 | 19 | 19 |  | 3 |
 | `ambre-spec-prose-word-count.md` | 14 | 14 | 14 |  |  |
 | `ambre-spec-murmure-schema.md` | 24 | 24 | 24 |  |  |
 | `ambre-spec-murmure-attachments.md` | 19 | 18 | 18 |  | 1 |
@@ -291,7 +291,7 @@
 | `ambre-spec-prose-toolbar.md` | PROSE-UI-053..057,096..104,188..192 |
 | `ambre-spec-prose-track-changes.md` | PROSE-FEAT-004,010..011,082..089,257..277,300..304; PROSE-UI-051..052,148 |
 | `ambre-spec-prose-undo.md` | PROSE-133..135; PROSE-UI-045,073..074 |
-| `ambre-spec-prose-viewport.md` | PROSE-UI-007,021..026,123..132,211..212,217..218 |
+| `ambre-spec-prose-viewport.md` | PROSE-UI-007,021..026,123..132,211..212,217..218,250 |
 | `ambre-spec-prose-word-count.md` | PROSE-FEAT-018,038..040,119..127,312 |
 | `ambre-spec-render-assets.md` | CANVAS-006..007,017..024,051..054,067..069,073,081,084,086..090,097 |
 | `ambre-spec-residency.md` | RESID-001..031 |

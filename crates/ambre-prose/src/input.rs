@@ -19,6 +19,7 @@ use crate::events::{BlockInit, CursorPosition, ProseCommand, TextEdit};
 use crate::layout::run::Affinity;
 use crate::ui::{BlockWait, ProseUiState, SendResult, SyncHold};
 use crate::view::caret::{Direction, SelectUnit, Spot};
+use crate::view::zoom::ZoomStep;
 use ambre_core::{FracMs, Instant, PageLoad, TimeSpan};
 
 /// Two presses closer than this in time, and in place, count as one gesture.
@@ -55,6 +56,9 @@ pub enum ProseKey {
     /// The context-menu key, alone or with `Shift`, or `Shift+F10`: the page
     /// menu opens at the caret (`PROSE-UI-237`).
     Menu,
+    /// `Ctrl` with `=`, `-` or `0`: the zoom steps one preset, or returns to
+    /// a hundred per cent (`PROSE-UI-250`).
+    Zoom(ZoomStep),
 }
 
 impl ProseKey {
@@ -86,6 +90,10 @@ impl ProseKey {
             Key::Char(KeyChar::A) if ctrl => Self::SelectAll,
             Key::Char(KeyChar::Z) if ctrl => Self::Undo,
             Key::Char(KeyChar::Y) if ctrl => Self::Redo,
+            // `+` is the same key as `=` with Shift on most layouts.
+            Key::Char(c) if ctrl && matches!(c.get(), '=' | '+') => Self::Zoom(ZoomStep::In),
+            Key::Char(c) if ctrl && c.get() == '-' => Self::Zoom(ZoomStep::Out),
+            Key::Char(c) if ctrl && c.get() == '0' => Self::Zoom(ZoomStep::Reset),
             _ => return None,
         })
     }
@@ -286,6 +294,16 @@ impl ProseUiState {
         } = input
         {
             self.open_menu_from_keys();
+            return Consumed::Yes;
+        }
+        // A zoom key reads no document and writes none either, so it waits
+        // for no held input (`PROSE-UI-129`).
+        if let ProseInput::Key {
+            key: ProseKey::Zoom(step),
+            ..
+        } = input
+        {
+            let _ = self.step_zoom(*step);
             return Consumed::Yes;
         }
         if self.waiting() {
@@ -844,7 +862,9 @@ impl ProseUiState {
             }
             // Taken above, before the caret is asked for, and the menu key
             // before any input is held.
-            ProseKey::Undo | ProseKey::Redo | ProseKey::Menu => return Consumed::Yes,
+            ProseKey::Undo | ProseKey::Redo | ProseKey::Menu | ProseKey::Zoom(_) => {
+                return Consumed::Yes;
+            }
         };
         self.move_cursor(direction, SelectionMode::from_mods(mods));
         Consumed::Yes

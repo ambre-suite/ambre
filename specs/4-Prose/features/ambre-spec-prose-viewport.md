@@ -26,10 +26,10 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-022` | `INV` | Every document position inside the column MUST resolve to a page; only a layout with no page at all MUST resolve to none. | this spec section 2 | `ambre_prose::view::column::tests::every_position_resolves_to_a_page_unless_there_is_none`; `ambre_prose::view::column::tests::a_layout_with_no_page_resolves_nothing` | none | verified |
 | `PROSE-UI-124` | `INV` | A position falling in a gutter MUST resolve to the nearer of the two page edges it lies between. | this spec section 2 | `ambre_prose::view::column::tests::a_position_in_a_gutter_goes_to_the_nearer_page_edge` | none | verified |
 | `PROSE-UI-023` | `INV` | A document point and a screen point MUST map to each other exactly: converting one to the other and back MUST return the point it started from. | this spec section 2 | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8) | unimplemented |
-| `PROSE-UI-024` | `INV` | Zoom MUST stay inside a quarter to four times, whatever the input. | this spec section 2 | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `PROSE-UI-024` | `INV` | Zoom MUST stay inside a quarter to four times, whatever the input. | this spec section 2 | `ambre_prose::view::zoom::tests::a_zoom_stays_in_range_and_keeps_the_offset_in_the_column` -- any factor asked, a NaN, an infinity and zero included | none | verified |
 | `PROSE-UI-025` | `INV` | The scroll offset MUST stay between the top of the column and its last scrollable position, after a scroll, a zoom, a relayout or an autoscroll tick. | this spec section 2 | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8) | unimplemented |
-| `PROSE-UI-026` | `INV` | The page column MUST stay centred at every zoom and every viewport width. | this spec section 2 | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8) | unimplemented |
-| `PROSE-UI-125` | `INV` | The left edge of the column MUST NOT go negative: a page wider than the viewport MUST pin the column to the left edge instead. | this spec section 2 | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `PROSE-UI-026` | `INV` | The page column MUST stay centred at every zoom and every viewport width. | this spec section 2 | `ambre_prose::view::zoom::tests::the_column_stays_centred_or_pinned_at_every_zoom` | none | verified |
+| `PROSE-UI-125` | `INV` | The left edge of the column MUST NOT go negative: a page wider than the viewport MUST pin the column to the left edge instead. | this spec section 2 | `ambre_prose::view::zoom::tests::the_column_stays_centred_or_pinned_at_every_zoom` | none | verified |
 
 ### 1.2 Scroll the column
 
@@ -42,12 +42,13 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-218` | `FRAME` | A press, a key, a new scroll or a new finger MUST stop the motion a flick left, and the motion MUST NOT write to the document. A layout that arrives MUST NOT stop it: the pages a scroll asks for would. | derived | `ambre_prose::input_tests::a_press_stops_a_flick_and_the_motion_writes_nothing` | none | verified |
 | `PROSE-UI-212` | `POST` | Revealing a block the layout in force does not carry MUST ask for its pages, then scroll to it once a layout carries it. | this spec section 2 | `ambre_prose::view::tests::revealing_a_block_not_carried_asks_for_it_then_shows_it` | none | verified |
 
-### 1.3 Zoom about a point
+### 1.3 Zoom the page
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-UI-128` | `POST` | A zoom about a point MUST leave the document point that was under it there: the anchor MUST keep its screen position. | this spec section 2 | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8) | unimplemented |
-| `PROSE-UI-129` | `FRAME` | A zoom MUST NOT move the caret, MUST NOT change the selection and MUST NOT write to the document: the factor, the column's left edge and the scroll offset are all it moves. | this spec section 2 | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `PROSE-UI-129` | `FRAME` | A zoom MUST NOT move the caret, MUST NOT change the selection and MUST NOT write to the document: the factor, the column's left edge and the scroll offset are all it moves. | this spec section 2 | `ambre_prose::input_tests::a_zoom_key_steps_the_zoom_and_moves_nothing_else` -- the caret, the selection and the commands sent, across four zoom keys | none | verified |
+| `PROSE-UI-250` | `POST` | A preset picked on the zoom chip MUST zoom the page to it. A zoom key MUST move the zoom to the next preset above or below it, or back to a hundred per cent. | this spec section 3; `1-Foundations/ambre-spec-chrome.md` | `ambre_prose::view::zoom::tests::a_step_moves_one_preset_and_stops_at_the_ends` -- each step and both ends of the ladder; `ambre_app::host::prose::tests::the_zoom_chip_closes_the_band_and_zooms_the_page` -- wasm tier, a preset picked zooms the page, and a key moves the chip | none | verified |
 
 ### 1.4 Resize the canvas
 
@@ -67,11 +68,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the scroll offset and the zoom are view state on the UI thread, where
   `UI-THREAD-004` bans a network, crypto or persistence path. `PROSE-UI-010`
   (`features/ambre-spec-prose-engine.md section 1`) keeps both out of the document.
-* **Verification.** 14 `verified`, 7 `unimplemented`. The state rows are property tests over the
+* **Verification.** 19 `verified`, 3 `unimplemented`. The state rows are property tests over the
   column in `crates/ambre-prose`, being arithmetic over three numbers; the others are host tests of
-  the view. `PROSE-UI-025` and the zoom rows wait on the
-  `One zoom model` Story (`ambre-roadmap.md` E8). The flick rows drive the ticks by hand, as the
-  host does once a frame.
+  the view. Three zoom rows wait on the
+  `One zoom model` Story (`ambre-roadmap.md` E8). The flick rows drive the ticks by hand, as the host does once a frame.
 
 ---
 
@@ -160,7 +160,10 @@ A block revealed off the window is asked for by its id, and the view scrolls to 
 once a layout carries it (`PROSE-UI-212`). The flow order and the two ends of the text stay
 global, so a selection of the whole document holds without its blocks.
 
-**Zoom.** A zoom multiplies the factor and clamps it (`PROSE-UI-024`). It recomputes the column's
+**Zoom.** The chip and the keys pick a factor on a ladder of nine presets, from a quarter to four
+times (`PROSE-UI-250`). A key and the chip keep the line at the top of the canvas in place.
+
+A zoom multiplies the factor and clamps it (`PROSE-UI-024`). It recomputes the column's
 left margin so the column stays centred (`PROSE-UI-026`). It solves the scroll offset that keeps
 the anchor -- the caret, or the focus of a pinch -- under the same screen point (`PROSE-UI-023`).
 It writes nothing to the document.
@@ -168,6 +171,13 @@ It writes nothing to the document.
 ```rust
 /// Zoom by a factor about a screen point.
 pub fn apply_zoom(state: &mut ProseUiState, factor: Scale<Doc, View>, focus: Point<Px<View>>);
+
+impl ProseUiState {
+    /// Show the pages at a factor, clamped to the ladder, the top of the canvas kept.
+    pub fn zoom_to(&mut self, zoom: Scale<Doc, View>) -> ZoomChange;
+    /// One preset up or down, or back to a hundred per cent (`PROSE-UI-250`).
+    pub fn step_zoom(&mut self, step: ZoomStep) -> ZoomChange;
+}
 ```
 
 **Scroll.** Every path that moves the scroll offset clamps it to the column's own range afterwards
@@ -176,7 +186,8 @@ has to reveal, and a relayout that shortened the document. A relayout is the cas
 Deleting the last twenty pages leaves an offset past the end of a column that no longer has one.
 
 **Code:** `crates/ambre-prose/src/view/column.rs` holds the column and the viewport;
-`view/mod.rs` the scroll, the resize and the layout that rebuilds the column.
+`view/mod.rs` the scroll, the resize and the layout that rebuilds the column. `view/zoom.rs` holds
+the ladder, the clamp and the step.
 
 ---
 
@@ -188,7 +199,8 @@ Deleting the last twenty pages leaves an offset past the end of a column that no
 | a finger dragged on the page | scrolls the column, and a flick keeps it moving (`PROSE-UI-217`), on the shared model of `1-Foundations/ambre-spec-kinetic-scroll.md`; a finger that barely moves is a tap |
 | a drag past the top or bottom edge | scrolls while the drag continues (`features/ambre-spec-prose-selection.md`) |
 | a caret move that leaves the viewport | scrolls the minimum needed to bring the caret back, with a margin |
-| `Ctrl` with `=`, `-` or `0` | zooms in, zooms out, returns to a hundred per cent |
+| `Ctrl` with `=`, `-` or `0` | zooms in, zooms out, returns to a hundred per cent (`PROSE-UI-250`) |
+| a preset of the zoom chip, at the end of the status bar | zooms to that preset (`PROSE-UI-250`, `CHROME-147`) |
 | `Ctrl` with the wheel, a trackpad pinch | zooms about the pointer |
 | a canvas resize | keeps the offset and the zoom, recentres the column, re-culls |
 | a layout that changed the page count | rebuilds the column, then clamps the offset (`PROSE-UI-025`) |
@@ -219,6 +231,9 @@ The zoom control itself is chrome, not canvas, and lives with the rest of the ap
   centring are specified here. The `One zoom model` Story (`ambre-roadmap.md` E8) exists to make
   them one implementation across the applications. Until it lands, the spreadsheet has no keyboard
   zoom at all.
+* **The pinch and the anchor on the caret are not built.** A key and the chip anchor on the top
+  of the canvas. `Ctrl` with the wheel still scrolls, and the zoom about a point (`PROSE-UI-128`)
+  lands with the `One zoom model` Story (`ambre-roadmap.md` E8).
 * **The zoom does not survive a reload.** It is view state and nothing writes it anywhere. A
   reader who zooms to a hundred and fifty per cent does it again on the next visit.
 * **A page wider than the viewport has no horizontal scroll.** The column pins to the left edge
