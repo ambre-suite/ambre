@@ -381,7 +381,7 @@ fn only_a_newer_wire_version_calls_for_an_update() {
 
 /// The digest of one frame per message variant, frozen under the version
 /// byte it was taken at (`ambre-spec-broadcast.md`, `SRV-166`).
-const FROZEN_LAYOUT: (u8, &str) = (4, "1c0cb16bcd2f2216a2796198096da7b0");
+const FROZEN_LAYOUT: (u8, &str) = (5, "19272405ee1116959338ed0dcf9f28cb");
 
 fn sample_update(fill: u8) -> Update {
     Update {
@@ -932,12 +932,13 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
             // Version 2 of the link names the log head its rotator read
             // (`SYNC-204`), and no stored link of version 1 counts.
             ("key link", "adb8ebdc49084e76c0772f81c413eaad".to_owned()),
-            // Version 2 of the entry signs the member's exchange key
-            // (`SYNC-197`), and no stored entry of version 1 verifies.
-            ("entry", "eed7c641dd20c31f4f986497fea8a5ef".to_owned()),
+            // Version 3 of the entry signs the cap of a revoke (`SYNC-300`),
+            // after version 2 signed the member's exchange key (`SYNC-197`).
+            // No stored entry of an older version verifies.
+            ("entry", "3dea743cbcbdb6dc370690e050f24d65".to_owned()),
             (
                 "entry signed",
-                "8b8f32786d543bb8fd94db15f61ad07f".to_owned()
+                "5e3add2dbf24171c8d70a30e7a0d901c".to_owned()
             ),
             ("report", "d58f6df5ac304352e01488b1981f97be".to_owned()),
             // The admission carries the sender index and the member pseudonym of the
@@ -996,10 +997,11 @@ fn a_log_head_costs_an_update_at_most_43_bytes() {
 }
 
 /// `SYNC-218`: the last log entry an update carries beside its head, by
-/// postcard. An empty log costs the one byte of an absent option. The field
-/// costs 230 B below 128 entries, and 239 B at a place of `u64::MAX`.
+/// postcard. An empty log costs the one byte of an absent option. A revoke
+/// carries its cap. The field costs 232 B below 128 entries and clocks, and
+/// 250 B at a place and a cap of `u64::MAX`.
 #[test]
-fn a_log_entry_costs_an_update_at_most_239_bytes() {
+fn a_log_entry_costs_an_update_at_most_250_bytes() {
     let size = |log_entry: Option<crate::MembershipEntry>| {
         let public_data = UpdatePublicData {
             document_id: Id::<Document>::from_bytes([1; 16]),
@@ -1014,36 +1016,41 @@ fn a_log_entry_costs_an_update_at_most_239_bytes() {
             .expect("public data encodes")
             .len()
     };
-    let entry = |place: u64, key: Option<FixedBytes<ambre_core::KeyId>>| crate::MembershipEntry {
-        document: Id::<Document>::from_bytes([1; 16]),
-        position: Seq::new(place),
-        member: Id::<User>::from_bytes([5; 16]),
-        member_key: FixedBytes::from_array([6; 32]),
-        member_exchange_key: FixedBytes::from_array([7; 32]),
-        act: crate::MembershipAct::Revoke,
-        role: ambre_core::Role::Editor,
-        key,
-        previous: Some(FixedBytes::from_array([8; 32])),
-        author: Id::<User>::from_bytes([9; 16]),
-        cap: None,
-        signature: FixedBytes::from_array([10; 64]),
+    let entry = |place: u64, key: Option<FixedBytes<ambre_core::KeyId>>, cap: Option<u64>| {
+        crate::MembershipEntry {
+            document: Id::<Document>::from_bytes([1; 16]),
+            position: Seq::new(place),
+            member: Id::<User>::from_bytes([5; 16]),
+            member_key: FixedBytes::from_array([6; 32]),
+            member_exchange_key: FixedBytes::from_array([7; 32]),
+            act: crate::MembershipAct::Revoke,
+            role: ambre_core::Role::Editor,
+            key,
+            previous: Some(FixedBytes::from_array([8; 32])),
+            author: Id::<User>::from_bytes([9; 16]),
+            cap: cap.map(Seq::new),
+            signature: FixedBytes::from_array([10; 64]),
+        }
     };
     // The public data with no field at all: the absent option is its last byte.
     let without = size(None) - 1;
     let key = Some(FixedBytes::from_array([11; 16]));
     assert_eq!(size(None) - without, 1);
-    assert_eq!(size(Some(entry(1, None))) - without, 214);
-    assert_eq!(size(Some(entry(127, key))) - without, 230);
-    assert_eq!(size(Some(entry(128, key))) - without, 231);
-    assert_eq!(size(Some(entry(u64::MAX, key))) - without, 239);
+    assert_eq!(size(Some(entry(1, None, None))) - without, 215);
+    assert_eq!(size(Some(entry(127, key, Some(127)))) - without, 232);
+    assert_eq!(size(Some(entry(128, key, Some(128)))) - without, 234);
+    assert_eq!(
+        size(Some(entry(u64::MAX, key, Some(u64::MAX)))) - without,
+        250
+    );
 }
 
 /// `SYNC-262`: the log head and the entry it names on one presence sample,
 /// by postcard. An empty log costs 3 B: the empty head and the absent entry.
-/// The pair costs 264 B below 128 entries, and 282 B at a place of
-/// `u64::MAX`.
+/// The pair costs 266 B below 128 entries and clocks, and 293 B at a place
+/// and a cap of `u64::MAX`.
 #[test]
-fn a_log_head_and_entry_cost_an_ephemeral_at_most_282_bytes() {
+fn a_log_head_and_entry_cost_an_ephemeral_at_most_293_bytes() {
     let size = |log_head: crate::LogHead, log_entry: Option<crate::MembershipEntry>| {
         let public_data = EphemeralPublicData {
             document_id: Id::<Document>::from_bytes([1; 16]),
@@ -1071,7 +1078,7 @@ fn a_log_head_and_entry_cost_an_ephemeral_at_most_282_bytes() {
         position: Seq::new(place),
         previous: Some(FixedBytes::from_array([4; 32])),
     };
-    let entry = |place: u64| crate::MembershipEntry {
+    let entry = |place: u64, cap: u64| crate::MembershipEntry {
         document: Id::<Document>::from_bytes([1; 16]),
         position: Seq::new(place),
         member: Id::<User>::from_bytes([5; 16]),
@@ -1082,10 +1089,13 @@ fn a_log_head_and_entry_cost_an_ephemeral_at_most_282_bytes() {
         key: Some(FixedBytes::from_array([11; 16])),
         previous: Some(FixedBytes::from_array([8; 32])),
         author: Id::<User>::from_bytes([9; 16]),
-        cap: None,
+        cap: Some(Seq::new(cap)),
         signature: FixedBytes::from_array([10; 64]),
     };
     assert_eq!(size(crate::LogHead::EMPTY, None) - without, 3);
-    assert_eq!(size(head(127), Some(entry(126))) - without, 264);
-    assert_eq!(size(head(u64::MAX), Some(entry(u64::MAX))) - without, 282);
+    assert_eq!(size(head(127), Some(entry(126, 127))) - without, 266);
+    assert_eq!(
+        size(head(u64::MAX), Some(entry(u64::MAX, u64::MAX))) - without,
+        293
+    );
 }
