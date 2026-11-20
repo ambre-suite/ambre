@@ -47,7 +47,7 @@ fn document(texts: &[String]) -> (ProseState, Vec<BlockId>) {
 }
 
 fn add(state: &mut ProseState, block: BlockId, pos: Pos<DocChar>, text: &str) -> Id<Footnote> {
-    let before: Vec<Id<Footnote>> = note::ordinals(state.document())
+    let before: Vec<Id<Footnote>> = note::ordinals(state.document(), state.roots())
         .into_iter()
         .map(|(id, _)| id)
         .collect();
@@ -56,7 +56,7 @@ fn add(state: &mut ProseState, block: BlockId, pos: Pos<DocChar>, text: &str) ->
         pos,
         note_text: text.to_owned(),
     });
-    note::all(state.document())
+    note::all(state.document(), state.roots())
         .into_iter()
         .find(|id| !before.contains(id))
         .expect("a new note")
@@ -133,7 +133,7 @@ fn every_note_is_numbered_from_its_call_before_any_block_is_placed() {
     let ordinals: Vec<(Id<Footnote>, u32)> =
         placed(&layout).iter().map(|(id, n, _)| (*id, *n)).collect();
     assert_eq!(ordinals, vec![(earlier, 1), (later, 2)]);
-    let counted: Vec<(Id<Footnote>, u32)> = note::ordinals(state.document())
+    let counted: Vec<(Id<Footnote>, u32)> = note::ordinals(state.document(), state.roots())
         .into_iter()
         .map(|(id, n)| (id, n.get()))
         .collect();

@@ -152,7 +152,7 @@ impl ProseState {
             notes: crate::note::entries(&self.doc, &self.roots),
         });
         display.push(ProseEvent::CommentsUpdated {
-            threads: crate::comment::threads(&self.doc),
+            threads: crate::comment::threads(&self.doc, &self.roots),
         });
         display.push(self.cross_refs_event());
         display.push(self.suggestions_event());

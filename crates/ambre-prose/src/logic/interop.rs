@@ -687,10 +687,12 @@ impl ProseState {
     pub(super) fn walk_start(&self) -> Walk {
         let tree = doc::blocks(&self.doc);
         let (comments, suggestions, mut maps) = self.walk_annotations();
-        maps.notes = crate::note::ordinals(&self.doc).into_iter().collect();
+        maps.notes = crate::note::ordinals(&self.doc, &self.roots)
+            .into_iter()
+            .collect();
         let bands = doc::read_bands(&self.doc, &self.roots);
         let mut footnotes = Vec::new();
-        for (id, ordinal) in crate::note::ordinals(&self.doc) {
+        for (id, ordinal) in crate::note::ordinals(&self.doc, &self.roots) {
             if let Some(body) = crate::note::body(&self.doc, &self.roots, &id) {
                 let runs = marked_runs(&body, body_span(&body))
                     .into_iter()
@@ -746,7 +748,7 @@ impl ProseState {
     /// anchors on no text, so no format could place it.
     fn walk_annotations(&self) -> (Vec<IrComment>, Vec<IrSuggestion>, WalkMaps) {
         let mut maps = WalkMaps::default();
-        let comments = comment::threads(&self.doc)
+        let comments = comment::threads(&self.doc, &self.roots)
             .into_iter()
             .filter(|thread| thread.orphaned == AnchorState::Anchored)
             .enumerate()
@@ -767,7 +769,7 @@ impl ProseState {
                 }
             })
             .collect();
-        let suggestions = suggest::pending(&self.doc)
+        let suggestions = suggest::pending(&self.doc, &self.roots)
             .into_iter()
             .enumerate()
             .map(|(at, suggestion)| {
@@ -1779,7 +1781,7 @@ mod tests {
         fn a_word_comment_and_tracked_change_land_as_a_thread_and_a_suggestion() {
             let mut state = signed_in();
             let report = import(&mut state, reviewed());
-            let threads = comment::threads(&state.doc);
+            let threads = comment::threads(&state.doc, &state.roots);
             let [thread] = threads.as_slice() else {
                 panic!("one thread, got {}", threads.len());
             };
@@ -1803,7 +1805,7 @@ mod tests {
                 5,
                 "the thread anchors on `world`"
             );
-            let suggestions = suggest::pending(&state.doc);
+            let suggestions = suggest::pending(&state.doc, &state.roots);
             let kinds: Vec<(SuggestionKind, Option<&str>)> = suggestions
                 .iter()
                 .map(|s| (s.kind, s.author.as_ref().map(|a| a.as_str())))
@@ -1839,16 +1841,16 @@ mod tests {
             append(&mut state, BlockInit::Paragraph, "kept");
             let before = texts(&state);
             let _ = import(&mut state, reviewed());
-            let [thread] = comment::threads(&state.doc)
+            let [thread] = comment::threads(&state.doc, &state.roots)
                 .try_into()
                 .unwrap_or_else(|t: Vec<_>| panic!("one thread, got {}", t.len()));
             assert_eq!(thread.replies.len(), 2);
             state.handle_command(ProseCommand::Undo);
             assert_eq!(texts(&state), before);
-            assert!(comment::threads(&state.doc).is_empty());
-            assert!(suggest::pending(&state.doc).is_empty());
+            assert!(comment::threads(&state.doc, &state.roots).is_empty());
+            assert!(suggest::pending(&state.doc, &state.roots).is_empty());
             state.handle_command(ProseCommand::Redo);
-            let threads = comment::threads(&state.doc);
+            let threads = comment::threads(&state.doc, &state.roots);
             assert_eq!(
                 threads.iter().map(|t| t.replies.len()).collect::<Vec<_>>(),
                 [2]
@@ -1920,8 +1922,8 @@ mod tests {
             assert_eq!(author.shape(), before);
             assert_eq!(peer.shape(), before, "the peer received the withdrawal");
             for state in [&author, &peer] {
-                assert!(comment::threads(&state.doc).is_empty());
-                assert!(suggest::pending(&state.doc).is_empty());
+                assert!(comment::threads(&state.doc, &state.roots).is_empty());
+                assert!(suggest::pending(&state.doc, &state.roots).is_empty());
             }
             assert_eq!(
                 author.history.can_redo(),
@@ -1968,7 +1970,7 @@ mod tests {
                     .expect("the model writes")
                     .into_bytes(),
             );
-            let threads = comment::threads(&state.doc);
+            let threads = comment::threads(&state.doc, &state.roots);
             assert_eq!(threads[0].replies[0].created_at, IMPORTED_AT);
         }
 
@@ -2027,7 +2029,7 @@ mod tests {
             let bytes = std::fs::read(path).unwrap_or_else(|e| panic!("{path}: {e}"));
             let mut state = signed_in();
             import(&mut state, bytes);
-            let threads = comment::threads(&state.doc);
+            let threads = comment::threads(&state.doc, &state.roots);
             assert!(!threads.is_empty());
             assert!(
                 threads
@@ -2042,8 +2044,8 @@ mod tests {
         fn without_an_identity_annotations_are_reported_and_their_text_kept() {
             let mut state = document();
             let report = import(&mut state, reviewed());
-            assert!(comment::threads(&state.doc).is_empty());
-            assert!(suggest::pending(&state.doc).is_empty());
+            assert!(comment::threads(&state.doc, &state.roots).is_empty());
+            assert!(suggest::pending(&state.doc, &state.roots).is_empty());
             assert_eq!(texts(&state).concat(), "Hello world new old");
             assert!(
                 !report

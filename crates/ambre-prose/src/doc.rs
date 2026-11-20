@@ -455,10 +455,28 @@ pub(crate) fn meta(doc: &LoroDoc) -> Fields<MetaKey> {
 }
 
 /// The `annots` dictionary, keyed by the annotation's id. Each entry is a map
-/// keyed by [`AnnotKey`].
+/// keyed by [`AnnotKey`]. Attached when the document has none, so a writer
+/// alone takes it. A reader takes [`annots_read`] instead.
 #[must_use]
 pub(crate) fn annots(doc: &LoroDoc) -> LoroMap {
     root_map(doc, Root::Annots)
+}
+
+/// The map root `root`, or `None` while no operation of the document reached
+/// it. A reader of `meta`, `styles` or `annots` takes it, so a document
+/// without the root reads as empty and gets nothing attached (`PROSE-142`).
+/// The tree is no map, so `root` naming it reads `None`: its reader is
+/// [`blocks_read`].
+#[must_use]
+pub(crate) fn root_map_read(doc: &LoroDoc, roots: &Roots, root: Root) -> Option<LoroMap> {
+    (root.kind() == loro::ContainerType::Map && roots.holds(root)).then(|| root_map(doc, root))
+}
+
+/// The `annots` dictionary, or `None` while no operation of the document
+/// reached it (`PROSE-142`).
+#[must_use]
+pub(crate) fn annots_read(doc: &LoroDoc, roots: &Roots) -> Option<LoroMap> {
+    root_map_read(doc, roots, Root::Annots)
 }
 
 /// The map a stored entry holds, read as a map of the schema `K`, or `None`

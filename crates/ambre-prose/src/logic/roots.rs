@@ -115,6 +115,7 @@ impl Root {
 #[cfg(test)]
 mod tests {
     use ambre_core::crdt::CrdtName as _;
+    use ambre_core::id::{Comment, Footnote, Id, Suggestion};
     use loro::{ExportMode, LoroDoc, LoroValue};
 
     use super::Roots;
@@ -190,6 +191,99 @@ mod tests {
             settled.export(ExportMode::all_updates()).ok(),
             Some(updates)
         );
+    }
+
+    /// A document a peer seeded and wrote to, imported into a watched copy:
+    /// the tree and `meta`, and no operation in `annots` or `styles`.
+    fn text_alone() -> (LoroDoc, Roots) {
+        let author = LoroDoc::new();
+        let paragraph = doc::seed(&author).expect("the scaffolding");
+        let _ = doc::get_block_text(&author, &paragraph).insert(0, "one two");
+        author.commit();
+        let reader = LoroDoc::new();
+        let roots = Roots::watch(&reader);
+        reader
+            .import(
+                &author
+                    .export(ExportMode::all_updates())
+                    .expect("the updates"),
+            )
+            .expect("the import");
+        (reader, roots)
+    }
+
+    /// Every reader that opens `annots` or `styles`, once each.
+    fn read_annotations(document: &LoroDoc, roots: &Roots) {
+        assert!(doc::annots_read(document, roots).is_none());
+        assert!(doc::root_map_read(document, roots, Root::Styles).is_none());
+        let note = Id::<Footnote>::mint();
+        assert!(crate::note::entry(document, roots, &note).is_none());
+        assert!(crate::note::block(document, roots, &note).is_none());
+        assert!(crate::note::body(document, roots, &note).is_none());
+        assert!(crate::note::all(document, roots).is_empty());
+        assert!(crate::note::ordinals(document, roots).is_empty());
+        assert!(crate::note::entries(document, roots).is_empty());
+        let thread = Id::<Comment>::mint();
+        assert!(crate::comment::entry(document, roots, &thread).is_none());
+        assert!(crate::comment::all(document, roots).is_empty());
+        assert!(crate::comment::threads(document, roots).is_empty());
+        let suggestion = Id::<Suggestion>::mint();
+        assert!(crate::suggest::entry(document, roots, &suggestion).is_none());
+        assert!(crate::suggest::pending(document, roots).is_empty());
+    }
+
+    /// `PROSE-142`: a read of the annotations and the styles of a document
+    /// that holds neither root attaches neither. The frontiers, the pending
+    /// operations, the roots of the state and the encoded bytes stay as they
+    /// were.
+    #[test]
+    fn a_read_of_a_document_with_no_annotations_attaches_no_root() {
+        let (document, roots) = text_alone();
+        assert!(roots.holds(Root::Blocks));
+        assert!(!roots.holds(Root::Annots));
+        assert!(!roots.holds(Root::Styles));
+        // A write still in its transaction: the reads must leave it there.
+        doc::root_map(&document, Root::Meta)
+            .insert("pending", 2)
+            .expect("the map takes a value");
+        let frontiers = document.state_frontiers();
+        let pending = document.get_pending_txn_len();
+        assert!(pending > 0, "one write waits in the transaction");
+        read_annotations(&document, &roots);
+        assert_eq!(document.state_frontiers(), frontiers);
+        assert_eq!(document.get_pending_txn_len(), pending);
+
+        // The export commits, so the bytes are compared on a second copy
+        // with nothing pending.
+        let (settled, roots) = text_alone();
+        let names = root_names(&settled);
+        let snapshot = settled.export(ExportMode::Snapshot).expect("a snapshot");
+        let updates = settled
+            .export(ExportMode::all_updates())
+            .expect("the updates");
+        read_annotations(&settled, &roots);
+        assert_eq!(root_names(&settled), names);
+        assert!(!names.iter().any(|name| name == Root::Annots.as_str()));
+        assert!(!names.iter().any(|name| name == Root::Styles.as_str()));
+        assert_eq!(settled.export(ExportMode::Snapshot).ok(), Some(snapshot));
+        assert_eq!(
+            settled.export(ExportMode::all_updates()).ok(),
+            Some(updates)
+        );
+    }
+
+    /// `PROSE-142`: once an operation reaches `annots`, its readers open it,
+    /// and the tree's name under another kind never reads as a map root.
+    #[test]
+    fn a_written_annotation_reads_through_the_roots() {
+        let document = annotations_alone();
+        let roots = Roots::watch(&document);
+        assert!(roots.holds(Root::Annots));
+        let annots = doc::annots_read(&document, &roots).expect("the dictionary");
+        assert_eq!(annots.len(), 1);
+        let (text, roots) = text_alone();
+        assert!(roots.holds(Root::Blocks));
+        assert!(doc::root_map_read(&text, &roots, Root::Blocks).is_none());
     }
 
     /// `PROSE-142`: the set follows an import that adds the tree and `meta`,

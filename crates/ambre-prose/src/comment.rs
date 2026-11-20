@@ -16,6 +16,7 @@ use ambre_core::id::{Comment, Id, Reply, User};
 use loro::{Container, LoroDoc, LoroList, TreeID, ValueOrContainer};
 
 use crate::doc::{self, AnnotKey, Fields, ReplyKey};
+use crate::logic::Roots;
 use ambre_core::ThreadState;
 
 use crate::events::{AnchorState, CommentReply, CommentThread, block_id};
@@ -53,8 +54,12 @@ pub(crate) struct Span {
 
 /// The entry of thread `id`, when `annots` holds one of that kind.
 #[must_use]
-pub(crate) fn entry(document: &LoroDoc, id: &Id<Comment>) -> Option<Fields<AnnotKey>> {
-    let annots = doc::annots(document);
+pub(crate) fn entry(
+    document: &LoroDoc,
+    roots: &Roots,
+    id: &Id<Comment>,
+) -> Option<Fields<AnnotKey>> {
+    let annots = doc::annots_read(document, roots)?;
     let Some(ValueOrContainer::Container(Container::Map(map))) = annots.get(&id.to_hyphenated())
     else {
         return None;
@@ -129,12 +134,14 @@ pub(crate) fn replies(entry: &Fields<AnnotKey>) -> Vec<CommentReply> {
 
 /// Every thread the document holds, marked or not.
 #[must_use]
-pub(crate) fn all(document: &LoroDoc) -> Vec<Id<Comment>> {
-    let annots = doc::annots(document);
+pub(crate) fn all(document: &LoroDoc, roots: &Roots) -> Vec<Id<Comment>> {
+    let Some(annots) = doc::annots_read(document, roots) else {
+        return Vec::new();
+    };
     let mut ids: Vec<Id<Comment>> = annots
         .keys()
         .filter_map(|key| Id::<Comment>::parse_str(&key).ok())
-        .filter(|id| entry(document, id).is_some())
+        .filter(|id| entry(document, roots, id).is_some())
         .collect();
     ambre_core::order::sort_by_id(&mut ids, |id| *id);
     ids
@@ -216,7 +223,7 @@ pub(crate) fn text_blocks(document: &LoroDoc) -> Vec<TreeID> {
 /// Every thread as the view lists it: the marked ones in the order their
 /// anchors appear, then the orphans, kept for review (`PROSE-FEAT-202`).
 #[must_use]
-pub fn threads(document: &LoroDoc) -> Vec<CommentThread> {
+pub fn threads(document: &LoroDoc, roots: &Roots) -> Vec<CommentThread> {
     let runs = runs(document, &text_blocks(document));
     let spans = spans_of(&runs);
     let mut order: Vec<Id<Comment>> = Vec::new();
@@ -225,13 +232,13 @@ pub fn threads(document: &LoroDoc) -> Vec<CommentThread> {
             order.push(*thread);
         }
     }
-    let ids = all(document);
+    let ids = all(document, roots);
     let marked = order.iter().filter(|id| ids.contains(id)).copied();
     let orphans = ids.iter().filter(|id| !spans.contains_key(id)).copied();
     marked
         .chain(orphans)
         .filter_map(|id| {
-            let entry = entry(document, &id)?;
+            let entry = entry(document, roots, &id)?;
             let live = spans.get(&id).copied();
             let anchor = live.or_else(|| cached(&entry));
             Some(CommentThread {
