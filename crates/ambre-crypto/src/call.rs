@@ -232,6 +232,18 @@ impl ChunkKey {
     }
 }
 
+#[cfg(test)]
+impl ChunkKey {
+    /// A key and a salt given whole, as an AEAD test vector names them. At counter 0 the
+    /// nonce is the salt itself.
+    fn from_parts(key: [u8; 32], salt: [u8; SALT_LEN]) -> Self {
+        Self(Secret::filled(|(k, s): &mut ([u8; 32], [u8; SALT_LEN])| {
+            *k = key;
+            *s = salt;
+        }))
+    }
+}
+
 /// The header of a chunk: what the SFU and the receiver read before any key.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ChunkHeader {

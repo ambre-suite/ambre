@@ -365,3 +365,50 @@ fn the_worker_closes_an_older_epoch_at_the_switch_delay() {
             .is_some()
     );
 }
+
+/// `CALL-147`: a `Seal` at the generation the worker seals under, or below it, restarts no
+/// counter. The worker keeps its sealer, so the next chunk carries the next counter. A higher
+/// generation then takes over from counter 1, under its own key identifier.
+#[test]
+fn a_seal_at_or_below_the_held_generation_restarts_no_counter() {
+    let key = SenderKey::generate();
+    let mut alice = CallWorker::default();
+    assert_eq!(alice.hand(seal_handoff(4, 3, &key), T0), Handled::Kept);
+    let header = |sealed: &Payload<SealedChunk>| {
+        ambre_crypto::call::ChunkHeader::read_audio(sealed).unwrap_or_else(|e| panic!("{e}"))
+    };
+    let first = alice
+        .seal(&clear(b"one"))
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    assert_eq!(header(&first).counter, Seq::new(1));
+    // The same key again, then an older generation: neither is taken.
+    assert_eq!(alice.hand(seal_handoff(4, 3, &key), T0), Handled::Refused);
+    assert_eq!(alice.hand(seal_handoff(4, 2, &key), T0), Handled::Refused);
+    let second = alice
+        .seal(&clear(b"two"))
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    assert_eq!(header(&second).kid, header(&first).kid);
+    assert_eq!(
+        header(&second).counter,
+        Seq::new(2),
+        "a counter started again"
+    );
+    // A generation past the width of the header seals nothing, and a later `Seal` of the
+    // generation sealed under before is still refused.
+    let wide = 1u64 << 48;
+    alice.hand(seal_handoff(4, wide, &key), T0);
+    assert_eq!(alice.seal(&clear(b"none")), Err(Unsealed::NoKey));
+    assert_eq!(alice.hand(seal_handoff(4, 3, &key), T0), Handled::Refused);
+    // The next generation seals from counter 1 under its own key identifier.
+    let mut fresh = CallWorker::default();
+    fresh.hand(seal_handoff(4, 3, &key), T0);
+    assert_eq!(
+        fresh.hand(seal_handoff(4, 4, &key.ratcheted()), T0),
+        Handled::Kept
+    );
+    let next = fresh
+        .seal(&clear(b"three"))
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    assert_eq!(header(&next).kid.generation, Seq::new(4));
+    assert_eq!(header(&next).counter, Seq::new(1));
+}

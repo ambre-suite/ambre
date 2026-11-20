@@ -966,3 +966,114 @@ fn a_camera_in_a_codec_other_than_vp8_never_leaves_the_sfu() {
         );
     }
 }
+
+/// Whether `bytes` read as a STUN message: the two top bits clear, and the magic cookie.
+fn is_stun(bytes: &[u8]) -> bool {
+    bytes.first().is_some_and(|b| b & 0xC0 == 0)
+        && bytes.get(4..8) == Some(&[0x21, 0x12, 0xA4, 0x42][..])
+}
+
+/// The next ICE check client `c` sends the SFU, held back from the SFU. The clock of the
+/// client alone moves, half a second a step, until its consent check leaves.
+fn check_of(net: &mut Net, c: usize) -> Vec<u8> {
+    let client = net.clients.get_mut(c).expect("a client");
+    let mut at = net.now;
+    for _ in 0..40 {
+        at += Duration::from_millis(500);
+        client
+            .rtc
+            .handle_input(Input::Timeout(at))
+            .expect("timeout");
+        loop {
+            match client.rtc.poll_output().expect("poll") {
+                Output::Timeout(_) => break,
+                Output::Transmit(t) if is_stun(&t.contents[..]) => return t.contents.to_vec(),
+                Output::Transmit(_) | Output::Event(_) => {}
+            }
+        }
+    }
+    panic!("the client sent no check within 20 s")
+}
+
+/// The datagrams that reached a connection of the SFU and wait for its next poll.
+fn waiting(net: &Net) -> usize {
+    net.sfu.members.iter().map(|m| m.inbox.len()).sum()
+}
+
+/// `CALL-144`, audit `N41`: a datagram that is no ICE check reaches no connection from a
+/// source the SFU does not know, and leaves no route. A check of a participant replayed from a
+/// new source reaches the connection its username fragment names, and that one alone.
+#[test]
+fn a_new_source_reaches_a_connection_by_its_check_alone() {
+    let mut net = connected(&["r", "r", "r"]);
+    let stranger: SocketAddr = (Ipv4Addr::new(10, 0, 1, 1), 6000).into();
+    let routes = net.sfu.routes.len();
+    let before = waiting(&net);
+    let mut rtp = vec![0x80, 0x6F, 0, 1, 0, 0, 0, 1, 0, 0, 0, 2];
+    rtp.extend([0; 40]);
+    net.sfu.receive(net.now, stranger, Payload::new(rtp));
+    assert_eq!(
+        waiting(&net),
+        before,
+        "a datagram of a new source reached a connection"
+    );
+    assert_eq!(
+        net.sfu.routes.len(),
+        routes,
+        "a datagram of a new source left a route"
+    );
+
+    let check = check_of(&mut net, 1);
+    let named = super::named_ufrag(&Payload::new(check.clone())).expect("a check names a fragment");
+    let owner = net.sfu.ufrags.get(&named).copied();
+    assert_eq!(
+        owner,
+        Some(client(&net, 1).id),
+        "the fragment names the connection of its client"
+    );
+    net.sfu.receive(net.now, stranger, Payload::new(check));
+    let member = net
+        .sfu
+        .members
+        .iter()
+        .find(|m| m.id == client(&net, 1).id)
+        .expect("a member");
+    assert_eq!(member.inbox.len(), 1, "the check missed its connection");
+    assert_eq!(
+        waiting(&net),
+        before + 1,
+        "the check reached another connection"
+    );
+    assert_eq!(net.sfu.routes.get(&stranger), Some(&client(&net, 1).id));
+}
+
+/// `CALL-145`, audit `N41`: a participant that checks from many sources holds no more routes
+/// than the cap. The newest source routes, and the oldest ones are forgotten.
+#[test]
+fn a_participant_holds_no_more_routes_than_the_cap() {
+    let mut net = connected(&["r", "r"]);
+    let id = client(&net, 0).id;
+    let check = check_of(&mut net, 0);
+    let sources: Vec<SocketAddr> = (1..=20u8)
+        .map(|n| (Ipv4Addr::new(10, 0, 2, n), 7000).into())
+        .collect();
+    for source in &sources {
+        net.sfu
+            .receive(net.now, *source, Payload::new(check.clone()));
+    }
+    assert_eq!(net.sfu.routes_of(id), super::ROUTES_PER_PARTICIPANT);
+    let newest = sources.last().expect("a source");
+    let oldest = sources.first().expect("a source");
+    assert_eq!(
+        net.sfu.routes.get(newest),
+        Some(&id),
+        "the newest source lost its route"
+    );
+    assert_eq!(
+        net.sfu.routes.get(oldest),
+        None,
+        "the oldest source kept its route"
+    );
+    // The other participant keeps its own routes.
+    assert!(net.sfu.routes_of(client(&net, 1).id) > ambre_core::Count::new(0));
+}

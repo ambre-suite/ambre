@@ -6,6 +6,10 @@ through a committed script, has its row in `fixtures/AUTHORED.md` instead. A fil
 in memory has no row. The rules are `ambre-spec-interop.md section 1.4`, and
 `just fixture-provenance` holds them.
 
+One file is a cut of its upstream file, never an edit of it: the Wycheproof vectors keep 87
+vectors of the upstream group, unchanged, under the cap of a fixture. The rustdoc of
+`WYCHEPROOF` in `crates/ambre-crypto/src/call_tests.rs` states which.
+
 | Path in Ambre | Upstream repository | Upstream commit | Upstream path | Licence | Copyright |
 |---|---|---|---|---|---|
 | `crates/ambre-xlsx/tests/fixtures/calamine/absolute_shared_formula.xlsx` | https://github.com/tafia/calamine | `57011cf6b1430785d0c47e5ad6eb76081d7c0e22` | `tests/absolute_shared_formula.xlsx` | MIT | Copyright (c) 2016 Johann Tuffe |
@@ -43,3 +47,4 @@ in memory has no row. The rules are `ambre-spec-interop.md section 1.4`, and
 | `crates/ambre-docx/tests/fixtures/pandoc/track_changes_scrubbed_metadata.docx` | https://github.com/jgm/pandoc | `e07fd5c33a0f63a6241115e341c9efda72bf155d` | `test/docx/track_changes_scrubbed_metadata.docx` | GPL-2.0-or-later | Copyright (C) 2006-2024 John MacFarlane |
 | `crates/ambre-docx/tests/fixtures/open-xml-sdk/Comment004.docx` | https://github.com/dotnet/Open-XML-SDK | `431ab05cf160248cc3885a4a766026d4f8243792` | `test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment004.docx` | MIT | Copyright (c) .NET Foundation and Contributors |
 | `crates/ambre-docx/tests/fixtures/open-xml-sdk/strict-numbering.docx` | https://github.com/dotnet/Open-XML-SDK | `431ab05cf160248cc3885a4a766026d4f8243792` | `test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/numFmt-Numbering Format-val-decimalEnclosedFullstop.docx` | MIT | Copyright (c) .NET Foundation and Contributors |
+| `crates/ambre-crypto/tests/fixtures/wycheproof/chacha20_poly1305_test.json` | https://github.com/C2SP/wycheproof | `65ca494727a52944c204441c860b039e6786b99b` | `testvectors_v1/chacha20_poly1305_test.json` | Apache-2.0 | Copyright 2016 Google Inc. |
