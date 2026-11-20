@@ -1390,6 +1390,12 @@ impl SyncState {
                 revoked,
                 root,
             } => {
+                // The `meta` of a channel never opened walked its log: its
+                // light subscriptions count the summaries of its writers
+                // alone from now on (`RESID-032`).
+                if !self.documents.contains_key(&document_id) {
+                    self.light_walked(document_id, &writers);
+                }
                 // Keep presence resolvable as membership evolves. A document that
                 // is not open locally has no session to refresh -- the next open
                 // rebuilds the directory from scratch. An answer older than the
