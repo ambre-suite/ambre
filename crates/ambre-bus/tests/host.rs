@@ -247,6 +247,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
         LogicEvent::MembersChanged { .. } => "MembersChanged",
         LogicEvent::InviterProven { .. } => "InviterProven",
         LogicEvent::LogKept { .. } => "LogKept",
+        LogicEvent::DocumentReread { .. } => "DocumentReread",
         LogicEvent::DocumentReady { .. } => "DocumentReady",
         LogicEvent::ConnectionStatus { .. } => "ConnectionStatus",
         LogicEvent::Activity { .. } => "Activity",
@@ -627,6 +628,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             document_id: doc,
             kept: kept_log(),
         },
+        LogicEvent::DocumentReread { document_id: doc },
         LogicEvent::DocumentReady {
             document_id: doc,
             role: Role::Viewer,

@@ -310,6 +310,11 @@ impl SyncState {
             author,
             footing,
             rule: self.log_rule(document_id),
+            applied: self
+                .documents
+                .get(&document_id)
+                .map(|doc| doc.applied_clocks.borrow().clone())
+                .unwrap_or_default(),
         };
         let http = sharing::GlooHttp { auth };
         crate::spawn(async move {

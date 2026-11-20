@@ -145,7 +145,7 @@ impl SyncState {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             return;
         };
-        doc_state.writers = crate::membership_log::Writers::Granted(Default::default());
+        doc_state.writers = crate::membership_log::Writers::granted(Default::default());
         doc_state.unvouched.clear();
         doc_state.refused.clear();
         doc_state.gate.end();

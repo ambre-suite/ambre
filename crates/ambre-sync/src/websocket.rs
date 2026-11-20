@@ -1447,6 +1447,7 @@ impl SyncState {
                 // rebuilds the directory from scratch. An answer older than the
                 // directory held changes nothing (`SYNC-037`).
                 let mut word_changed = false;
+                let mut reread = false;
                 let fresh = match self.documents.get_mut(&document_id) {
                     Some(doc_state) if asked > doc_state.directory_held => {
                         doc_state.directory_held = asked;
@@ -1455,6 +1456,13 @@ impl SyncState {
                         // the log the open checked: its word changes nothing
                         // (`SYNC-214`).
                         if doc_state.writers.grows_into(&writers) {
+                            // A revoke that caps a writer below a delta this
+                            // document applied leaves a write the log refuses
+                            // in its state: the document is read again
+                            // (`SYNC-297`).
+                            if doc_state.applied_past_cap(&writers) {
+                                reread = true;
+                            }
                             doc_state.set_writers(writers);
                             word_changed = doc_state.word != word;
                             doc_state.word = word;
@@ -1514,6 +1522,12 @@ impl SyncState {
                 }
                 if word_changed {
                     self.space_word_changed(document_id);
+                }
+                if reread {
+                    crate::log::warning!(
+                        "[Sync] doc={document_id}: a revoke capped a writer below a delta applied; reading the document again"
+                    );
+                    self.send_to_logic(LogicEvent::DocumentReread { document_id });
                 }
                 match id {
                     Some(id) => self.reply(

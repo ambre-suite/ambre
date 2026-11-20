@@ -14,6 +14,7 @@ use ambre_core::id::{Document, Id, User};
 use ambre_core::{DocumentRank, ExchangePublicKey, FixedBytes, KeyId, PublicKey, Role, Seq};
 use ambre_protocol::error::SerializationError;
 use ambre_protocol::membership::ENTRY_SIGNATURE_LEN;
+use ambre_protocol::messages::DeltaAuthor;
 use ambre_protocol::{
     EntryDigest, LogPlaces, MembershipAct, MembershipEntry, Signature, place_after,
 };
@@ -128,21 +129,39 @@ impl SpaceWord {
 /// point. The set only grows, so peers that hold one log give one delta one
 /// verdict (`AUTHOR-007`). A demotion thus never erases history that one
 /// peer applied before it.
+///
+/// A writer another member revoked keeps its place, under the cap its revoke
+/// names: a delta of it past that clock counts nowhere (`SYNC-297`). The cap
+/// is in the log, so every peer that holds the log gives a delta one verdict.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) enum Writers {
     /// No anchored log: a local document, or one older than the log. Its
     /// deltas stand on their seal alone, as its links do (`SYNC-121`).
     #[default]
     Unchecked,
-    /// The keys the walk granted a writing role.
-    Granted(HashSet<FixedBytes<PublicKey>>),
+    /// The keys the walk granted a writing role, and the cap a revoke set on
+    /// each key it ended.
+    Granted {
+        keys: HashSet<FixedBytes<PublicKey>>,
+        caps: HashMap<FixedBytes<PublicKey>, Seq<DeltaAuthor>>,
+    },
 }
 
 impl Writers {
     /// What the walked `log` grants.
     pub(crate) fn of(log: &Log) -> Self {
-        log.signers()
-            .map_or(Self::Unchecked, |keys| Self::Granted(keys.clone()))
+        log.signers().map_or(Self::Unchecked, |keys| Self::Granted {
+            keys: keys.clone(),
+            caps: log.caps.clone(),
+        })
+    }
+
+    /// The writers `keys`, none of them capped.
+    pub(crate) fn granted(keys: HashSet<FixedBytes<PublicKey>>) -> Self {
+        Self::Granted {
+            keys,
+            caps: HashMap::new(),
+        }
     }
 
     /// What the walked `log` grants under `rule`. A log a space lists, and
@@ -151,19 +170,47 @@ impl Writers {
     /// not walked yet, and decides nothing.
     pub(crate) fn under(log: &Log, rule: &LogRule) -> Self {
         match Self::of(log) {
-            Self::Granted(_) if rule.root_of(log) == Root::Stranger => {
-                Self::Granted(HashSet::new())
+            Self::Granted { .. } if rule.root_of(log) == Root::Stranger => {
+                Self::granted(HashSet::new())
             }
             writers => writers,
         }
     }
 
-    /// Whether a delta or a snapshot `signer` signed may reach the document.
+    /// Whether a delta or a snapshot `signer` signed may reach the document,
+    /// whatever its clock. A capped writer passes here, and
+    /// [`Self::admits_delta`] reads its clock.
     pub(crate) fn admits(&self, signer: &FixedBytes<PublicKey>) -> bool {
         match self {
             Self::Unchecked => true,
-            Self::Granted(keys) => keys.contains(signer),
+            Self::Granted { keys, .. } => keys.contains(signer),
         }
+    }
+
+    /// Whether a delta `signer` signed at `clock` may reach the document: the
+    /// log granted the signer a writing role, and no revoke capped it below
+    /// `clock` (`SYNC-297`).
+    pub(crate) fn admits_delta(
+        &self,
+        signer: &FixedBytes<PublicKey>,
+        clock: Seq<DeltaAuthor>,
+    ) -> bool {
+        self.admits(signer) && self.cap(signer).is_none_or(|cap| clock <= cap)
+    }
+
+    /// The cap a revoke set on `signer`, if any (`SYNC-297`).
+    pub(crate) fn cap(&self, signer: &FixedBytes<PublicKey>) -> Option<Seq<DeltaAuthor>> {
+        match self {
+            Self::Unchecked => None,
+            Self::Granted { caps, .. } => caps.get(signer).copied(),
+        }
+    }
+
+    /// Whether a snapshot `signer` signed may stand. A capped writer's
+    /// snapshot names no clock, so it is refused whole, and its deltas
+    /// replay under the cap instead (`SYNC-297`).
+    pub(crate) fn admits_snapshot(&self, signer: &FixedBytes<PublicKey>) -> bool {
+        self.admits(signer) && self.cap(signer).is_none()
     }
 
     /// Whether the writers `later`, which a refresh of the members walked,
@@ -173,8 +220,10 @@ impl Writers {
     pub(crate) fn grows_into(&self, later: &Self) -> bool {
         match (self, later) {
             (Self::Unchecked, _) => true,
-            (Self::Granted(_), Self::Unchecked) => false,
-            (Self::Granted(held), Self::Granted(walked)) => held.is_subset(walked),
+            (Self::Granted { .. }, Self::Unchecked) => false,
+            (Self::Granted { keys: held, .. }, Self::Granted { keys: walked, .. }) => {
+                held.is_subset(walked)
+            }
         }
     }
 }
@@ -568,6 +617,10 @@ pub(crate) struct Log {
     /// The keys that signed a binding of each key, every binding kept
     /// (`AUTHOR-034`).
     binders: HashMap<FixedBytes<PublicKey>, HashSet<FixedBytes<PublicKey>>>,
+    /// The cap the latest revoke another member signed set on each key,
+    /// until a later entry grants that key a writing role again
+    /// (`SYNC-297`).
+    caps: HashMap<FixedBytes<PublicKey>, Seq<DeltaAuthor>>,
     /// The key that signed the valid first entry, the creation.
     creator: Option<FixedBytes<PublicKey>>,
     /// Whether the wrapped key carried an anchor at all.
@@ -602,6 +655,7 @@ impl Log {
             authors: HashSet::new(),
             bound: HashMap::new(),
             binders: HashMap::new(),
+            caps: HashMap::new(),
             creator: None,
             anchored: anchor.is_some(),
             anchor,
@@ -784,8 +838,25 @@ impl Log {
     /// effect at the head after the entry (`SYNC-204`).
     fn apply(&mut self, entry: &MembershipEntry) {
         let before = self.writer_key(entry.member);
+        // A revoke another member signed caps the key it ends, at the clock
+        // its author named (`SYNC-297`). A departure is signed by its own
+        // member, whose word caps nothing.
+        let capped = (entry.act == MembershipAct::Revoke && entry.author != entry.member)
+            .then(|| self.held.get(&entry.member).map(|held| held.key))
+            .flatten()
+            .zip(entry.cap);
         self.apply_act(entry);
         let after = self.writer_key(entry.member);
+        if let Some((key, cap)) = capped {
+            self.caps
+                .entry(key)
+                .and_modify(|held| *held = (*held).min(cap))
+                .or_insert(cap);
+        }
+        // A later grant of a writing role lifts the cap.
+        if let Some(key) = after {
+            self.caps.remove(&key);
+        }
         if before != after {
             let place = entry.position.next();
             if let Some(span) = before
@@ -1140,6 +1211,22 @@ pub(crate) fn sign(
     author: Id<User>,
     signing_key: &SigningKey,
 ) -> Result<MembershipEntry, SerializationError> {
+    sign_capped(draft, None, next, author, signing_key)
+}
+
+/// Signs `draft` as [`sign`] does, with `cap`, the highest clock of the
+/// revoked member's deltas the author applied, on a revoke (`SYNC-297`).
+///
+/// # Errors
+///
+/// The encoder's error, which a well-formed entry never reaches.
+pub(crate) fn sign_capped(
+    draft: Draft,
+    cap: Option<Seq<DeltaAuthor>>,
+    next: LogHead,
+    author: Id<User>,
+    signing_key: &SigningKey,
+) -> Result<MembershipEntry, SerializationError> {
     let mut entry = MembershipEntry {
         document: draft.document,
         position: next.position,
@@ -1151,6 +1238,7 @@ pub(crate) fn sign(
         key: draft.key,
         previous: next.previous,
         author,
+        cap,
         signature: FixedBytes::<Signature>::from_array([0; ENTRY_SIGNATURE_LEN]),
     };
     let bytes = entry.signed_bytes()?;
@@ -1272,8 +1360,8 @@ pub(crate) mod tests {
         log
     }
 
-    /// The bytes one entry signs, and its signature, as version 2 of the
-    /// entry writes them, the exchange key included. A change of either
+    /// The bytes one entry signs, and its signature, as version 3 of the
+    /// entry writes them, the exchange key and the cap included. A change of either
     /// breaks every log a relay stores.
     #[test]
     fn the_signed_bytes_and_the_signature_of_an_entry_stay_pinned() {
@@ -1283,16 +1371,16 @@ pub(crate) mod tests {
         let transcript = first.signed_bytes().unwrap();
         assert_eq!(
             hex::encode(transcript.as_bytes()),
-            "616d6272652d6d656d626572736869702d656e7472792d763207070707070707\
+            "616d6272652d6d656d626572736869702d656e7472792d763307070707070707\
              07070707070707070700010101010101010101010101010101018a88e3dd7409\
              f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5ca4e09292b651\
              c278b9772c569f5fa9bb13d906b46ab68c9df9dc2b4409f8a209000001000000\
-             000000000000000000000000000001010101010101010101010101010101"
+             00000000000000000000000000000101010101010101010101010101010100"
         );
         assert_eq!(
             hex::encode(first.signature.as_slice()),
-            "be4f90107725d2c45ad60ef727944ab4a44ead9ce176abefb301d8830ce95d64\
-             4c58fb5ad6745b6c9afb19616b16cd40f031afde1f900b720e10f74e4df8b305"
+            "311ea066eea57e245c1fe970aca14e488d29cb279e2684b26d6beac9728a0019\
+             cb95d5cf65e7be8419d1aaa8afa6551c66545db4fc43b998f75d19dbdcfc0703"
         );
         assert!(signed_by(first, &alice.public()));
     }
@@ -1800,6 +1888,63 @@ pub(crate) mod tests {
             entry.member_exchange_key = carol.exchange();
         }
         assert_eq!(walk(&swapped).exchange_key(bob.id), None);
+    }
+
+    /// The entry `by` signs revoking `member`, capped at `cap`.
+    fn revoke_capped(log: &mut Vec<MembershipEntry>, by: &Person, member: &Person, cap: u64) {
+        let next = LogHead {
+            position: place_after(log.len()),
+            previous: log.last().and_then(digest),
+        };
+        let draft = Draft {
+            document: DOC,
+            member: member.id,
+            member_key: member.public(),
+            member_exchange_key: member.exchange(),
+            act: MembershipAct::Revoke,
+            role: Role::Editor,
+            key: Some(FixedBytes::from_array([log.len() as u8; 16])),
+        };
+        let cap = Some(Seq::<DeltaAuthor>::new(cap));
+        log.push(sign_capped(draft, cap, next, by.id, &by.key).unwrap());
+    }
+
+    /// Holds `SYNC-297` at the walk. A revoke another member signed caps the
+    /// key it ends: a delta of it at the cap counts, one past it does not,
+    /// and a snapshot of it counts nowhere. A later invite lifts the cap. A
+    /// departure its own member signed caps nothing, whatever it names.
+    #[test]
+    fn a_revoke_caps_the_clock_of_the_writer_it_ends() {
+        let (alice, bob, carol) = (Person::new(1), Person::new(2), Person::new(3));
+        let mut log = created(&alice, &bob);
+        append(
+            &mut log,
+            &alice,
+            &carol,
+            MembershipAct::Invite,
+            Role::Editor,
+        );
+        revoke_capped(&mut log, &alice, &bob, 4);
+        let writers = Writers::of(&walk(&log));
+        let at = Seq::<DeltaAuthor>::new;
+        assert!(writers.admits_delta(&bob.public(), at(4)), "at the cap");
+        assert!(!writers.admits_delta(&bob.public(), at(5)), "past the cap");
+        assert!(!writers.admits_snapshot(&bob.public()));
+        assert!(
+            writers.admits_delta(&alice.public(), at(99)),
+            "no cap on Alice"
+        );
+        assert!(writers.admits_snapshot(&alice.public()));
+
+        // Carol leaves on her own and names a cap: it binds nobody.
+        revoke_capped(&mut log, &carol, &carol, 0);
+        assert!(Writers::of(&walk(&log)).admits_delta(&carol.public(), at(7)));
+
+        // Bob is invited back: his deltas count again.
+        append(&mut log, &alice, &bob, MembershipAct::Invite, Role::Editor);
+        let back = Writers::of(&walk(&log));
+        assert!(back.admits_delta(&bob.public(), at(9)));
+        assert_eq!(back.cap(&bob.public()), None);
     }
 
     /// Holds `SYNC-211` at the walk: the writers are the keys a valid entry

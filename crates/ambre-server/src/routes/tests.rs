@@ -1179,6 +1179,7 @@ mod handler_tests {
                 ),
             ),
             author,
+            cap: None,
             signature: ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array([0; 64]),
         }
     }

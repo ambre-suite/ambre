@@ -16,6 +16,7 @@ use std::rc::Rc;
 
 use ambre_crypto::DocumentKey;
 use ambre_crypto::ecdh::KeyWrapper;
+use ambre_protocol::messages::DeltaAuthor;
 use ambre_protocol::{EntryDigest, MembershipAct};
 use ed25519_dalek::SigningKey;
 use serde::Serialize;
@@ -210,10 +211,20 @@ fn entry_at(
     draft: Draft,
     author: &Author,
 ) -> Result<Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>, SyncError> {
+    entry_at_capped(next, draft, None, author)
+}
+
+/// [`entry_at`], with the cap a revoke names (`SYNC-297`).
+fn entry_at_capped(
+    next: LogHead,
+    draft: Draft,
+    cap: Option<Seq<DeltaAuthor>>,
+    author: &Author,
+) -> Result<Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>, SyncError> {
     if next.is_empty() {
         return Ok(None);
     }
-    let entry = membership_log::sign(draft, next, author.user_id, &author.signing_key)?;
+    let entry = membership_log::sign_capped(draft, cap, next, author.user_id, &author.signing_key)?;
     Ok(Some(membership_log::encode(&entry)?))
 }
 
@@ -900,6 +911,9 @@ pub(crate) struct RevokeParams {
     pub footing: Footing,
     /// The rule the log walks under (`SYNC-106`).
     pub rule: LogRule,
+    /// The highest clock of each author's deltas the document applied. The
+    /// revoke caps its member at its own (`SYNC-297`).
+    pub applied: std::collections::HashMap<FixedBytes<ambre_core::PublicKey>, Seq<DeltaAuthor>>,
 }
 
 /// Revoke orchestration: fetch the members, generate a fresh `DocumentKey` and
@@ -975,7 +989,14 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
                 role: m.role,
                 key: Some(new_doc_key.id()),
             };
-            entry_after(&log, draft, &p.author)
+            // The cap is the member's latest delta this client applied,
+            // under the key the log holds for them (`SYNC-297`).
+            let cap = log
+                .log()
+                .present_key(p.user_id)
+                .and_then(|key| p.applied.get(&key).copied())
+                .unwrap_or(Seq::<DeltaAuthor>::new(0));
+            entry_at_capped(log.log().next(), draft, Some(cap), &p.author)
         }) {
             Some(Ok(entry)) => entry,
             // No row for the member: the relay refuses the removal itself.
@@ -2980,6 +3001,7 @@ mod tests {
             author: author(),
             footing: footing_of(document_id, &[]),
             rule: LogRule::document(),
+            applied: HashMap::new(),
         }
     }
 
@@ -5102,7 +5124,9 @@ mod tests {
     }
 
     /// Holds `SYNC-132` at the revoke: the request carries the entry that
-    /// removes the member and names the key the rotation installs.
+    /// removes the member and names the key the rotation installs. Holds
+    /// `SYNC-297` there too: the entry caps the member at the latest of
+    /// their deltas this client applied, under the key the log holds.
     #[tokio::test]
     async fn a_revoke_posts_the_entry_that_removes_the_member() {
         let owner = Peer::new(1);
@@ -5114,6 +5138,10 @@ mod tests {
         params.user_id = carol.author.user_id;
         params.previous = logged.doc_key.clone();
         params.author = same(&owner.author);
+        params.applied = HashMap::from([
+            (carol.author.public(), Seq::<DeltaAuthor>::new(6)),
+            (owner.author.public(), Seq::<DeltaAuthor>::new(9)),
+        ]);
         let http = FakeHttp::new(vec![
             Ok(logged.answer()),
             Ok(serde_json::json!({ "status": "revoked" })),
@@ -5130,6 +5158,7 @@ mod tests {
         let entry = posted_entry(body);
         assert_eq!(entry.act, MembershipAct::Revoke);
         assert_eq!(entry.key, Some(new_doc_key.id()));
+        assert_eq!(entry.cap, Some(Seq::<DeltaAuthor>::new(6)));
         let text = body["entry"].as_str().unwrap();
         let log = logged.walk(&[text]);
         assert_eq!(
@@ -5667,6 +5696,7 @@ mod tests {
             author: same(&me.author),
             footing: genuine.footing(),
             rule: LogRule::document(),
+            applied: HashMap::new(),
         };
         let http = FakeHttp::new(vec![
             Ok(forged(&genuine, &me, &[&alice, &carol])),
@@ -5753,6 +5783,7 @@ mod tests {
             author: same(&me.author),
             footing: genuine.footing(),
             rule: LogRule::document(),
+            applied: HashMap::new(),
         };
         let http = FakeHttp::new(vec![
             Ok(genuine.answer()),

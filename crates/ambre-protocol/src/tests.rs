@@ -407,6 +407,7 @@ fn sample_update(fill: u8) -> Update {
                 key: Some(FixedBytes::from_array([fill + 12; 16])),
                 previous: None,
                 author: Id::<User>::from_bytes([fill + 9; 16]),
+                cap: None,
                 signature: FixedBytes::from_array([fill + 13; 64]),
             })),
         },
@@ -809,6 +810,7 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
         key: Some(FixedBytes::from_array([4; 16])),
         previous: Some(FixedBytes::from_array([5; 32])),
         author: Id::<User>::from_bytes([6; 16]),
+        cap: None,
         signature: FixedBytes::from_array([7; ENTRY_SIGNATURE_LEN]),
     };
     let transcript = report_transcript(
@@ -1023,6 +1025,7 @@ fn a_log_entry_costs_an_update_at_most_239_bytes() {
         key,
         previous: Some(FixedBytes::from_array([8; 32])),
         author: Id::<User>::from_bytes([9; 16]),
+        cap: None,
         signature: FixedBytes::from_array([10; 64]),
     };
     // The public data with no field at all: the absent option is its last byte.
@@ -1079,6 +1082,7 @@ fn a_log_head_and_entry_cost_an_ephemeral_at_most_282_bytes() {
         key: Some(FixedBytes::from_array([11; 16])),
         previous: Some(FixedBytes::from_array([8; 32])),
         author: Id::<User>::from_bytes([9; 16]),
+        cap: None,
         signature: FixedBytes::from_array([10; 64]),
     };
     assert_eq!(size(crate::LogHead::EMPTY, None) - without, 3);

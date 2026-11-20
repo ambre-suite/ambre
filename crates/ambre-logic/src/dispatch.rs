@@ -844,6 +844,9 @@ impl LogicState {
                 self.route(|m| m.document_gone(document_id))
             }
             LogicEvent::KeyRotated { document_id } => self.route(|m| m.key_rotated(document_id)),
+            // A revoke capped a writer below a delta the document applied
+            // (`SYNC-297`).
+            LogicEvent::DocumentReread { document_id } => self.reread(document_id),
             LogicEvent::ConverterFetched { family, module } => {
                 self.converter_fetched(family, module);
             }
@@ -1865,6 +1868,50 @@ mod tests {
             )),
             "{sent:?}"
         );
+    }
+
+    /// Holds `SYNC-297` on the Logic side: a document read again loses its
+    /// state and its local copy, then closes and opens again in Sync, so
+    /// the relay replays it under the cap. One this thread does not hold
+    /// reads nothing.
+    #[test]
+    fn a_document_read_again_drops_its_copy_and_opens_anew() {
+        let (to_ui, _ui) = test_link();
+        let (to_sync, sync_rx) = test_link();
+        let (to_persist, persist_rx) = test_link();
+        let mut state = LogicState::new(to_ui, to_sync, to_persist);
+        let document_id = Id::<Document>::mint();
+        state.handle_logic_command(LogicCommand::OpenDocument {
+            document_id,
+            doc_type: DocType::Prose,
+        });
+        let _ = std::iter::from_fn(|| sync_rx.try_recv().ok()).count();
+        let _ = persist_rx.try_iter().count();
+
+        state.handle_logic_event(LogicEvent::DocumentReread { document_id });
+        let written: Vec<_> = persist_rx.try_iter().collect();
+        assert!(
+            written.contains(&(document_id, PersistWrite::Erase)),
+            "{written:?}"
+        );
+        let sent: Vec<SyncCommand> = std::iter::from_fn(|| sync_rx.try_recv().ok()).collect();
+        let closed = sent.iter().position(
+            |cmd| matches!(cmd, SyncCommand::CloseDocument { document_id: d } if *d == document_id),
+        );
+        let opened = sent.iter().position(
+            |cmd| matches!(cmd, SyncCommand::OpenDocument { document_id: d, .. } if *d == document_id),
+        );
+        assert!(
+            closed.is_some_and(|c| opened.is_some_and(|o| c < o)),
+            "{sent:?}"
+        );
+
+        let stranger = Id::<Document>::mint();
+        state.handle_logic_event(LogicEvent::DocumentReread {
+            document_id: stranger,
+        });
+        assert!(persist_rx.try_iter().next().is_none());
+        assert!(sync_rx.try_recv().is_err());
     }
 
     /// Holds `SYNC-209` on the Logic side: a pin reaches the Sync worker

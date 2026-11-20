@@ -7349,6 +7349,68 @@ mod tests {
         }
     }
 
+    /// Holds `SYNC-297` at the delta. Bob writes at clocks 1 and 2, and a
+    /// revoke caps him at 1. A document that applied his clock 2 before the
+    /// cap reached it is read again. Read again under the cap, his clock 1
+    /// lands and his clock 2 reaches no document, so both peers converge.
+    #[test]
+    fn a_revoked_writer_writes_nothing_past_the_cap_of_its_revoke() {
+        use crate::membership_log::Writers;
+        use crate::membership_log::tests::Person;
+        let bob = Person::new(0x52);
+        let keys = HashSet::from([bob.public()]);
+        let capped = Writers::Granted {
+            keys: keys.clone(),
+            caps: HashMap::from([(bob.public(), Seq::<DeltaAuthor>::new(1))]),
+        };
+        let send =
+            |state: &mut SyncState, doc: Id<Document>, snap: Id<Snapshot>, key: &DocumentKey| {
+                for (clock, body) in [(1, b"one"), (2, b"two")] {
+                    state.handle_ws_message(WsServerMsg::Update {
+                        seq: Seq::<Relay>::new(clock),
+                        update: make_update(
+                            doc,
+                            snap,
+                            Seq::<DeltaAuthor>::new(clock),
+                            body,
+                            key,
+                            &bob.key,
+                        ),
+                    });
+                }
+            };
+
+        // Before the revoke reaches this peer, both deltas land.
+        let (mut state, rx, doc, key, _sk, snap) = setup();
+        state.documents.get_mut(&doc).unwrap().writers = Writers::granted(keys);
+        send(&mut state, doc, snap, &key);
+        let (applied, _) = applied_and_warned(&drain(&rx));
+        assert_eq!(applied, [b"one".to_vec(), b"two".to_vec()]);
+        assert_eq!(
+            state.documents[&doc].applied_clock(&bob.public()),
+            Seq::<DeltaAuthor>::new(2)
+        );
+        state.handle_sync_event(listing(doc, 1, capped.clone()));
+        assert!(
+            drain(&rx).iter().any(
+                |e| matches!(e, LogicEvent::DocumentReread { document_id } if *document_id == doc)
+            ),
+            "a delta past the cap reads the document again"
+        );
+
+        // Read again, and on any peer that holds the revoke: the cap holds.
+        let (mut fresh, rx, doc, key, _sk, snap) = setup();
+        fresh.documents.get_mut(&doc).unwrap().writers = capped;
+        send(&mut fresh, doc, snap, &key);
+        let (applied, warned) = applied_and_warned(&drain(&rx));
+        assert_eq!(applied, [b"one".to_vec()]);
+        assert!(
+            !warned.is_empty(),
+            "the delta past the cap is refused aloud"
+        );
+        assert!(!fresh.documents[&doc].applied_past_cap(&fresh.documents[&doc].writers));
+    }
+
     /// Audit `N16`, at the delta. A space document checks its writers
     /// against its own log, as any document does. A viewer of the space who
     /// writes a catalogue entry, forwarded by the relay, reaches no document;
@@ -7669,7 +7731,7 @@ mod tests {
             state.documents[&doc].directory_asked.latest(),
             ambre_core::Seq::nth(3)
         );
-        assert_eq!(walk(&state), Writers::Granted(HashSet::new()));
+        assert_eq!(walk(&state), Writers::granted(HashSet::new()));
     }
 
     /// Holds `SYNC-231`, fail closed. Mallory forges the log of a channel
@@ -7971,7 +8033,7 @@ mod tests {
         ));
 
         // An answer to the first listing, late, decides nothing.
-        state.handle_sync_event(listing(doc, 1, Writers::Granted(HashSet::new())));
+        state.handle_sync_event(listing(doc, 1, Writers::granted(HashSet::new())));
         assert!(applied_and_warned(&drain(&rx)).0.is_empty());
 
         let rule = state.log_rule(doc);

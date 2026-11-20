@@ -188,6 +188,12 @@ pub enum LogicEvent {
         inviter: ambre_core::FixedBytes<ambre_core::InviterPin>,
     },
 
+    /// The log capped a writer below a delta the document applied: the state
+    /// holds a write the log refuses (`SYNC-297`). The Logic thread drops the
+    /// document and its local copy, and reads it again from the relay, where
+    /// the cap holds from the start.
+    DocumentReread { document_id: Id<Document> },
+
     /// Where the membership log of `document_id` stands for this client
     /// moved: the local store keeps it for the sessions after (`SYNC-290`).
     /// `document_id` names the log's document, the `meta` of a channel.
