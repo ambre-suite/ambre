@@ -105,7 +105,7 @@ pub struct InviteResponse {
     pub user_id: Id<User>,
     pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
     /// Whether the invitee's email was provider-verified (OIDC) rather than
-    /// self-asserted at `/auth/setup` (#3). The document key is wrapped to the
+    /// self-asserted at the retired account setup (#3). The document key is wrapped to the
     /// invitee's exchange key here. An unverified recipient is a squat candidate,
     /// so the client should surface the TOFU out-of-band key check before trusting
     /// the wrap. Additive field; older clients ignore it.

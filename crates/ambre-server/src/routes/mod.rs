@@ -41,7 +41,6 @@ pub fn api_router(
             "/auth/{provider}/callback",
             axum::routing::post(oidc_callback),
         )
-        .route("/auth/setup", axum::routing::post(setup_account))
         .route("/auth/dev/login", axum::routing::post(dev_login))
         .route("/auth/config", axum::routing::get(auth_config))
         .route("/auth/refresh", axum::routing::post(refresh))

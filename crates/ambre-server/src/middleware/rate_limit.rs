@@ -800,8 +800,9 @@ mod tests {
     }
 
     #[test]
-    fn classify_auth_setup() {
-        let category = RateLimitCategory::classify("/api/auth/setup", &axum::http::Method::POST);
+    fn classify_dev_sign_in() {
+        let category =
+            RateLimitCategory::classify("/api/auth/dev/login", &axum::http::Method::POST);
         assert!(matches!(category, RateLimitCategory::Auth));
     }
 

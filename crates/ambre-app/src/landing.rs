@@ -730,15 +730,7 @@ fn sign_in_panel(
                         "Private collaborative office suite. End-to-end encrypted."
                     </p>
                     {crate::dev_login::sign_in_field(to_logic.clone())}
-                    // A development relay answers the setup with no provider,
-                    // so these two reach the keys faces a provider sign-in
-                    // reaches in a deployment (`CHROME-098`).
-                    <button
-                        class="ambre-signin-link ambre-signin-setup"
-                        on:click=move |_| keys.open(crate::account::KeysFace::Setup)
-                    >
-                        "Set up an account with a passphrase"
-                    </button>
+                    // No setup link: no anonymous account exists (`SRV-308`).
                     // No recovery link: signed out, the form fails as not
                     // signed in (`CHROME-135`).
                 </div>
@@ -1198,10 +1190,17 @@ mod tests {
             |c: &web_sys::Element| c.query_selector(".ambre-signin-recover").unwrap().is_some();
         assert!(
             container
-                .query_selector(".ambre-signin-setup")
+                .query_selector(".ambre-signin-input")
                 .unwrap()
                 .is_some(),
-            "the setup link shows signed out"
+            "the sign-in field shows signed out"
+        );
+        assert!(
+            container
+                .query_selector(".ambre-signin-setup")
+                .unwrap()
+                .is_none(),
+            "a link to an anonymous account setup"
         );
         assert!(!link(&container), "a recovery link signed out");
 

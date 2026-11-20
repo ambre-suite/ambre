@@ -19,7 +19,10 @@ mod handler_tests {
 
     fn build_test_router(state: Arc<AppState>) -> Router {
         let api_router = Router::new()
-            .route("/auth/setup", axum::routing::post(routes::setup_account))
+            .route(
+                crate::test_helpers::ACCOUNT_FIXTURE,
+                axum::routing::post(crate::test_helpers::create_account),
+            )
             .route("/auth/dev/login", axum::routing::post(routes::dev_login))
             .route("/auth/me", axum::routing::get(routes::me))
             .route("/auth/logout", axum::routing::post(routes::logout))
@@ -109,68 +112,6 @@ mod handler_tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
-    }
-
-    #[sqlx::test]
-    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
-    async fn setup_account_creates_user_and_returns_token(pool: sqlx::PgPool) {
-        let state = test_app_state(pool).await;
-        let app = build_test_router(state);
-
-        let body = serde_json::json!({
-            "email": "user@ambre.app",
-            "display_name": "Test User",
-            "master_key_enc": base64_encode(&[1u8; 72]),
-            "master_key_salt": hex::encode([2u8; 32]),
-            "signing_pubkey": hex::encode([3u8; 32]),
-            "exchange_pubkey": hex::encode([4u8; 32]),
-        });
-
-        let resp = app
-            .oneshot(
-                Request::post("/api/auth/setup")
-                    .header("content-type", "application/json")
-                    .body(Body::from(serde_json::to_string(&body).unwrap()))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(resp.status(), StatusCode::OK);
-        assert!(!access_token_of(resp).await.is_empty());
-    }
-
-    /// N5 guard: a second setup claiming an already-registered email (even with
-    /// a different case) is rejected with 409, not a 500 from the raw insert.
-    #[sqlx::test]
-    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
-    async fn setup_account_duplicate_email_returns_409(pool: sqlx::PgPool) {
-        let state = test_app_state(pool).await;
-        let app = build_test_router(state);
-
-        let _first = setup_and_get_auth(&app).await;
-
-        // setup_and_get_auth registered "user@ambre.app"; re-claim it with a
-        // case variant and fresh key material.
-        let body = serde_json::json!({
-            "email": "User@Ambre.App",
-            "display_name": "Impostor",
-            "master_key_enc": base64_encode(&[9u8; 72]),
-            "master_key_salt": hex::encode([8u8; 32]),
-            "signing_pubkey": hex::encode([7u8; 32]),
-            "exchange_pubkey": hex::encode([6u8; 32]),
-        });
-        let resp = app
-            .oneshot(
-                Request::post("/api/auth/setup")
-                    .header("content-type", "application/json")
-                    .body(Body::from(serde_json::to_string(&body).unwrap()))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(resp.status(), StatusCode::CONFLICT);
     }
 
     #[sqlx::test]
@@ -1181,7 +1122,7 @@ mod handler_tests {
         let resp = app
             .clone()
             .oneshot(
-                Request::post("/api/auth/setup")
+                Request::post("/api/test/account")
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_string(&body).unwrap()))
                     .unwrap(),
@@ -1821,27 +1762,92 @@ mod handler_tests {
         assert_eq!(rows, 1, "the refused name wrote no row");
     }
 
-    fn store_master_keys_body() -> serde_json::Value {
+    /// The signing key of the first key stores of these tests.
+    fn store_key() -> ed25519_dalek::SigningKey {
+        ed25519_dalek::SigningKey::from_bytes(&[3u8; 32])
+    }
+
+    /// A first key store of `account` that registers the key `key`, with the
+    /// proof `key` signs over the account and the two keys (`SRV-294`).
+    fn store_body_signed_by(
+        key: &ed25519_dalek::SigningKey,
+        account: Id<User>,
+    ) -> serde_json::Value {
+        use ed25519_dalek::Signer;
+        let signing = ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(
+            key.verifying_key().to_bytes(),
+        );
+        let exchange =
+            ambre_core::FixedBytes::<ambre_core::ExchangePublicKey>::from_array([4u8; 32]);
+        let transcript = ambre_protocol::key_registration::registration_transcript(
+            &account, &signing, &exchange,
+        );
         serde_json::json!({
             "master_key_enc": base64_encode(&[1u8; 72]),
             "master_key_salt": hex::encode([2u8; 32]),
-            "signing_pubkey": hex::encode([3u8; 32]),
-            "exchange_pubkey": hex::encode([4u8; 32]),
+            "signing_pubkey": hex::encode(signing.as_slice()),
+            "exchange_pubkey": hex::encode(exchange.as_slice()),
+            "signature": hex::encode(key.sign(transcript.as_bytes()).to_bytes()),
         })
     }
 
-    async fn put_master_keys(app: &Router, auth: &str) -> StatusCode {
+    /// A first key store of `account` under [`store_key`].
+    fn store_master_keys_body(account: Id<User>) -> serde_json::Value {
+        store_body_signed_by(&store_key(), account)
+    }
+
+    async fn put_body(app: &Router, auth: &str, body: &serde_json::Value) -> StatusCode {
         app.clone()
             .oneshot(
                 Request::put("/api/keys/master")
                     .header("content-type", "application/json")
                     .header("authorization", auth)
-                    .body(Body::from(store_master_keys_body().to_string()))
+                    .body(Body::from(body.to_string()))
                     .unwrap(),
             )
             .await
             .unwrap()
             .status()
+    }
+
+    async fn put_master_keys(app: &Router, auth: &str, account: Id<User>) -> StatusCode {
+        put_body(app, auth, &store_master_keys_body(account)).await
+    }
+
+    /// Signs in through the development path as `username`, with `keys` or
+    /// with none. Returns the `Authorization` header and the account.
+    async fn dev_sign_in(app: &Router, username: &str, keys: DevSignInKeys) -> (String, Id<User>) {
+        let mut body = dev_login_body(username);
+        if matches!(keys, DevSignInKeys::None) {
+            body = serde_json::json!({ "username": username });
+        }
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::post("/api/auth/dev/login")
+                    .header("content-type", "application/json")
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(resp.into_body(), 4096).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let user = Id::<User>::parse_str(json["user_id"].as_str().unwrap()).unwrap();
+        (
+            format!("Bearer {}", json["access_token"].as_str().unwrap()),
+            user,
+        )
+    }
+
+    /// Whether a development sign-in of a test carries the two keys.
+    #[derive(Clone, Copy)]
+    enum DevSignInKeys {
+        /// The keys of `dev_login_body`.
+        Derived,
+        /// No key: the account owes its key setup.
+        None,
     }
 
     /// `store_master_keys` is the one-shot first-time upload path (an OIDC/dev
@@ -1857,74 +1863,257 @@ mod handler_tests {
         let app = build_test_router(state);
 
         // dev-login creates a user whose master_key_enc is still NULL.
-        let resp = app
-            .clone()
-            .oneshot(
-                Request::post("/api/auth/dev/login")
-                    .header("content-type", "application/json")
-                    .body(Body::from(dev_login_body("alice").to_string()))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(resp.status(), StatusCode::OK);
-        let auth = format!("Bearer {}", access_token_of(resp).await);
+        let (auth, alice) = dev_sign_in(&app, "alice", DevSignInKeys::Derived).await;
 
         // First upload succeeds; the re-store is rejected, not silently applied.
-        assert_eq!(put_master_keys(&app, &auth).await, StatusCode::OK);
-        assert_eq!(put_master_keys(&app, &auth).await, StatusCode::CONFLICT);
+        assert_eq!(put_master_keys(&app, &auth, alice).await, StatusCode::OK);
+        assert_eq!(
+            put_master_keys(&app, &auth, alice).await,
+            StatusCode::CONFLICT
+        );
     }
 
     /// `SRV-293`, audit `W69`: one signing key belongs to one account. A
-    /// setup under a key another account registered is refused with 409 and
-    /// writes no row, and so is a first key store under it.
+    /// first key store under a key another account registered is refused with
+    /// 409, even with the proof of that key, and writes nothing.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn a_signing_key_belongs_to_one_account(pool: sqlx::PgPool) {
         let state = test_app_state_dev(pool.clone()).await;
         let app = build_test_router(state);
-        let _alice = setup_and_get_auth(&app).await;
+        let _alice = setup_signing(&app, "alice@ambre.app", &store_key()).await;
+
+        let (bob, bob_id) = dev_sign_in(&app, "bob", DevSignInKeys::None).await;
+        assert_eq!(
+            put_master_keys(&app, &bob, bob_id).await,
+            StatusCode::CONFLICT,
+            "a first key store under a registered key"
+        );
+        let stored: Option<Vec<u8>> =
+            sqlx::query_scalar("SELECT master_key_enc FROM users WHERE email = 'bob@dev.local'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(stored, None, "the refused store wrote nothing");
+    }
+
+    /// `SRV-294`, audit `W69`: a first key store proves that the caller holds
+    /// the key it registers. A proof another key signed, a proof over another
+    /// account and a body with no proof are refused, and write nothing. The
+    /// proof of the key it registers lands.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_key_store_the_registered_key_does_not_sign_is_refused_and_writes_nothing(
+        pool: sqlx::PgPool,
+    ) {
+        let state = test_app_state_dev(pool.clone()).await;
+        let app = build_test_router(state);
+        let (auth, account) = dev_sign_in(&app, "carol", DevSignInKeys::None).await;
+        let unsigned = || async {
+            sqlx::query_scalar::<_, Option<Vec<u8>>>(
+                "SELECT signing_pubkey FROM users WHERE email = 'carol@dev.local'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+            .is_none()
+        };
+
+        // The body names the key of `store_key`, but another key signs it.
+        let mut forged = store_master_keys_body(account);
+        let other = ed25519_dalek::SigningKey::from_bytes(&[5u8; 32]);
+        forged["signature"] = store_body_signed_by(&other, account)["signature"].clone();
+        let (status, code) = status_and_code(
+            &app,
+            Request::put("/api/keys/master")
+                .header("content-type", "application/json")
+                .header("authorization", &auth)
+                .body(Body::from(forged.to_string()))
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(
+            (status, code.as_str()),
+            (StatusCode::UNPROCESSABLE_ENTITY, "INVALID_SIGNATURE"),
+            "a proof of another key"
+        );
+        assert!(unsigned().await);
+
+        // The proof of the key over another account registers it nowhere.
+        let elsewhere = store_master_keys_body(Id::<User>::mint());
+        assert_ne!(put_body(&app, &auth, &elsewhere).await, StatusCode::OK);
+        assert!(unsigned().await, "a proof over another account");
+
+        let mut bare = store_master_keys_body(account);
+        bare.as_object_mut().unwrap().remove("signature");
+        assert_ne!(put_body(&app, &auth, &bare).await, StatusCode::OK);
+        assert!(unsigned().await, "a body with no proof");
+
+        assert_eq!(put_master_keys(&app, &auth, account).await, StatusCode::OK);
+        assert!(!unsigned().await, "the proof of the key lands");
+    }
+
+    /// `SRV-307`: a session minted before the keys renews under the key the
+    /// account registered since. Another tab or a page before a reload may
+    /// have stored the keys: the renewal reads the register.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_renewal_after_the_key_store_carries_the_registered_key(pool: sqlx::PgPool) {
+        let state = test_app_state_dev(pool).await;
+        let app = build_test_router(state.clone());
+        let user = crate::db::upsert_user_from_oidc(
+            &state.db,
+            ambre_core::OidcProvider::Google,
+            &openidconnect::SubjectIdentifier::new("sub-renew".to_owned()),
+            &ambre_core::Email::from("renew@example.com"),
+            &ambre_core::Validated::<ambre_core::DisplayName>::parse("Renew").unwrap(),
+        )
+        .await
+        .unwrap();
+        // Two keyless pairs: one stores the keys, the other renews after it.
+        let storer = crate::auth::issue_session(&state, user.id, None)
+            .await
+            .unwrap();
+        let stale = crate::auth::issue_session(&state, user.id, None)
+            .await
+            .unwrap();
+        let storer = format!("Bearer {}", storer.access_token.secret().expose());
+        assert_eq!(
+            put_master_keys(&app, &storer, user.id).await,
+            StatusCode::OK
+        );
+
+        let resp = shipped_router(state.clone())
+            .oneshot(with_peer(
+                Request::post("/api/auth/refresh")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::json!({ "refresh_token": stale.refresh_token }).to_string(),
+                    ))
+                    .unwrap(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let renewed = access_token_of(resp).await;
+        let session =
+            crate::auth::authenticate_token(&state, &ambre_protocol::ws::Credential::new(renewed))
+                .expect("the renewal carries a key");
+        assert_eq!(
+            session.signing_pubkey.as_slice(),
+            store_key().verifying_key().to_bytes().as_slice()
+        );
+    }
+
+    /// `SRV-295`, audit `W67`: a provider sign-in that reclaims an address
+    /// names each inviter of the account that held it, per document. The
+    /// inviter hears it on its own topic, and the member it names is the one
+    /// that lost the address. A member that invited nobody hears nothing.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_reclaim_tells_each_inviter_of_the_account_that_held_the_address(pool: sqlx::PgPool) {
+        use futures_util::StreamExt;
+        use rustis::commands::PubSubCommands;
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let owner = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &owner).await;
+        let squatter_email = "victim@example.com";
+        let _squatter = setup_named(&app, squatter_email, 5).await;
+        invite(&app, &owner, &doc_id, squatter_email, "editor").await;
+        let owner_id = Id::<User>::parse_str(&doc_user_id(&state, "user@ambre.app").await).unwrap();
+        let squatter_id =
+            Id::<User>::parse_str(&doc_user_id(&state, squatter_email).await).unwrap();
+        let document = Id::<Document>::parse_str(&doc_id).unwrap();
+
+        let listener = crate::test_helpers::connect_test_redis()
+            .await
+            .expect("redis");
+        let mut stream = listener
+            .ssubscribe(format!("user:{{{owner_id}}}"))
+            .await
+            .expect("subscribe");
+        let signed_in = crate::db::sign_in_from_oidc(
+            &state.db,
+            ambre_core::OidcProvider::Google,
+            &openidconnect::SubjectIdentifier::new("sub-victim".to_owned()),
+            &ambre_core::Email::from(squatter_email),
+            &ambre_core::Validated::<ambre_core::DisplayName>::parse("Victim").unwrap(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            signed_in.reclaims,
+            [crate::db::ReclaimNotice {
+                document,
+                inviter: owner_id,
+                member: squatter_id,
+            }],
+            "the one inviter of the reclaimed account"
+        );
+        crate::routes::auth::tell_reclaims(&state, &signed_in.reclaims).await;
+
+        let heard = tokio::time::timeout(std::time::Duration::from_secs(5), stream.next())
+            .await
+            .expect("the notice arrives")
+            .expect("a message")
+            .expect("readable");
+        let notice = ambre_protocol::ws::decode_server_msg(&ambre_core::Payload::new(
+            heard.payload().to_vec(),
+        ))
+        .expect("decodes");
+        assert!(
+            matches!(
+                notice,
+                WsServerMsg::AddressReclaimed { document_id, member }
+                    if document_id == document && member == squatter_id
+            ),
+            "heard {notice:?}"
+        );
+
+        // A second sign-in reclaims nothing more, and owes no notice.
+        let again = crate::db::sign_in_from_oidc(
+            &state.db,
+            ambre_core::OidcProvider::Google,
+            &openidconnect::SubjectIdentifier::new("sub-victim".to_owned()),
+            &ambre_core::Email::from(squatter_email),
+            &ambre_core::Validated::<ambre_core::DisplayName>::parse("Victim").unwrap(),
+        )
+        .await
+        .unwrap();
+        assert!(again.reclaims.is_empty());
+    }
+
+    /// `SRV-308`: the relay serves no anonymous account setup. An account
+    /// comes from a provider, or from the development sign-in where the
+    /// deployment enables it.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn the_relay_serves_no_anonymous_account_setup(pool: sqlx::PgPool) {
+        let state = test_app_state_dev(pool.clone()).await;
         let body = serde_json::json!({
-            "email": "mallory@ambre.app",
-            "display_name": "Mallory",
-            "master_key_enc": base64_encode(&[9u8; 72]),
-            "master_key_salt": hex::encode([8u8; 32]),
+            "email": "anon@ambre.app",
+            "display_name": "Anon",
+            "master_key_enc": base64_encode(&[1u8; 72]),
+            "master_key_salt": hex::encode([2u8; 32]),
             "signing_pubkey": hex::encode([3u8; 32]),
-            "exchange_pubkey": hex::encode([6u8; 32]),
+            "exchange_pubkey": hex::encode([4u8; 32]),
         });
-        let resp = app
-            .clone()
-            .oneshot(
+        let resp = shipped_router(state)
+            .oneshot(with_peer(
                 Request::post("/api/auth/setup")
                     .header("content-type", "application/json")
                     .body(Body::from(body.to_string()))
                     .unwrap(),
-            )
+            ))
             .await
             .unwrap();
-        assert_eq!(resp.status(), StatusCode::CONFLICT);
+        assert!(!resp.status().is_success(), "{}", resp.status());
         let rows: i64 = sqlx::query_scalar("SELECT count(*) FROM users")
             .fetch_one(&pool)
             .await
             .unwrap();
-        assert_eq!(rows, 1, "the refused setup wrote no row");
-
-        let resp = app
-            .clone()
-            .oneshot(
-                Request::post("/api/auth/dev/login")
-                    .header("content-type", "application/json")
-                    .body(Body::from(dev_login_body("bob").to_string()))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        let bob = format!("Bearer {}", access_token_of(resp).await);
-        assert_eq!(
-            put_master_keys(&app, &bob).await,
-            StatusCode::CONFLICT,
-            "a first key store under a registered key"
-        );
+        assert_eq!(rows, 0, "no account was created");
     }
 
     /// A re-seal to the sealed seed `enc` salted `salt`, over the seal salted
@@ -2038,19 +2227,18 @@ mod handler_tests {
     }
 
     /// `SRV-232`: a public key of the wrong length is refused before any row
-    /// is written. So is it at the account setup, the dev sign-in and the key
-    /// registration, for the signing key and for the exchange key.
+    /// is written. So is it at the dev sign-in and the key registration, for
+    /// the signing key and for the exchange key.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn a_public_key_of_the_wrong_length_is_refused_and_written_nowhere(pool: sqlx::PgPool) {
         let state = test_app_state_dev(pool).await;
         let app = build_test_router(state.clone());
-        let post = |uri: &str, body: serde_json::Value, auth: Option<&str>| {
-            let mut req = Request::post(uri).header("content-type", "application/json");
-            if let Some(auth) = auth {
-                req = req.header("authorization", auth);
-            }
-            req.body(Body::from(body.to_string())).unwrap()
+        let post = |uri: &str, body: serde_json::Value| {
+            Request::post(uri)
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap()
         };
         let short = hex::encode([5u8; 31]);
         let users = || async {
@@ -2059,54 +2247,23 @@ mod handler_tests {
                 .await
                 .unwrap()
         };
-        for key in ["signing_pubkey", "exchange_pubkey"] {
-            let mut body = serde_json::json!({
-                "email": "short@ambre.app",
-                "display_name": "Short",
-                "master_key_enc": base64_encode(&[1u8; 72]),
-                "master_key_salt": hex::encode([2u8; 32]),
-                "signing_pubkey": hex::encode([3u8; 32]),
-                "exchange_pubkey": hex::encode([4u8; 32]),
-            });
-            body[key] = serde_json::json!(short);
-            let resp = app
-                .clone()
-                .oneshot(post("/api/auth/setup", body, None))
-                .await;
-            assert_eq!(resp.unwrap().status(), StatusCode::CONFLICT, "setup {key}");
-        }
         for key in ["signing_pub_key", "exchange_pub_key"] {
             let mut body = dev_login_body("shorty");
             body[key] = serde_json::json!(short);
-            let resp = app
-                .clone()
-                .oneshot(post("/api/auth/dev/login", body, None))
-                .await;
+            let resp = app.clone().oneshot(post("/api/auth/dev/login", body)).await;
             assert_eq!(resp.unwrap().status(), StatusCode::CONFLICT, "dev {key}");
         }
         assert_eq!(users().await, 0, "no account was created");
 
-        let resp = app
-            .clone()
-            .oneshot(post("/api/auth/dev/login", dev_login_body("alice"), None))
-            .await
-            .unwrap();
-        let auth = format!("Bearer {}", access_token_of(resp).await);
+        let (auth, alice) = dev_sign_in(&app, "alice", DevSignInKeys::Derived).await;
         for key in ["signing_pubkey", "exchange_pubkey"] {
-            let mut body = store_master_keys_body();
+            let mut body = store_master_keys_body(alice);
             body[key] = serde_json::json!(short);
-            let resp = app
-                .clone()
-                .oneshot(
-                    Request::put("/api/keys/master")
-                        .header("content-type", "application/json")
-                        .header("authorization", &auth)
-                        .body(Body::from(body.to_string()))
-                        .unwrap(),
-                )
-                .await
-                .unwrap();
-            assert_eq!(resp.status(), StatusCode::CONFLICT, "store {key}");
+            assert_eq!(
+                put_body(&app, &auth, &body).await,
+                StatusCode::CONFLICT,
+                "store {key}"
+            );
         }
         let stored: Option<Vec<u8>> =
             sqlx::query_scalar("SELECT master_key_enc FROM users WHERE email = 'alice@dev.local'")
@@ -2114,7 +2271,7 @@ mod handler_tests {
                 .await
                 .unwrap();
         assert_eq!(stored, None, "no key material was written");
-        assert_eq!(put_master_keys(&app, &auth).await, StatusCode::OK);
+        assert_eq!(put_master_keys(&app, &auth, alice).await, StatusCode::OK);
     }
 
     async fn status_and_code(app: &Router, req: Request<Body>) -> (StatusCode, String) {
@@ -2146,8 +2303,9 @@ mod handler_tests {
     }
 
     /// `SRV-027`: a provider account created before its keys holds a session
-    /// with no signing key. Only the setup routes take it, and a refresh keeps
-    /// it keyless. Registering the keys returns a session under the real key.
+    /// with no signing key. Only the setup routes take it, and a refresh before
+    /// the key store keeps it keyless. Registering the keys returns a session
+    /// under the real key.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn a_session_before_key_setup_carries_no_key(pool: sqlx::PgPool) {
@@ -2180,7 +2338,8 @@ mod handler_tests {
         let (keys, _) = status_and_code(&app, get_with("/api/keys/master", &setup)).await;
         assert_eq!(keys, StatusCode::OK);
 
-        // The refresh of a keyless session is keyless too.
+        // The refresh of a keyless session is keyless too, while the account
+        // registers no key.
         let refreshed = app
             .clone()
             .oneshot(with_peer(
@@ -2205,7 +2364,7 @@ mod handler_tests {
                 Request::put("/api/keys/master")
                     .header("content-type", "application/json")
                     .header("authorization", &renewed)
-                    .body(Body::from(store_master_keys_body().to_string()))
+                    .body(Body::from(store_master_keys_body(user.id).to_string()))
                     .unwrap(),
             ))
             .await
@@ -2219,7 +2378,9 @@ mod handler_tests {
         .unwrap();
         assert_eq!(
             session.signing_pubkey,
-            ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([3u8; 32])
+            ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(
+                store_key().verifying_key().to_bytes()
+            )
         );
         let (listed, _) =
             status_and_code(&app, get_with("/api/documents", &format!("Bearer {token}"))).await;
@@ -2913,7 +3074,7 @@ mod handler_tests {
         let resp = app
             .clone()
             .oneshot(
-                Request::post("/api/auth/setup")
+                Request::post("/api/test/account")
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_string(&body).unwrap()))
                     .unwrap(),
@@ -2938,7 +3099,7 @@ mod handler_tests {
         let resp = app
             .clone()
             .oneshot(
-                Request::post("/api/auth/setup")
+                Request::post("/api/test/account")
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_string(&body).unwrap()))
                     .unwrap(),
@@ -3822,7 +3983,7 @@ mod handler_tests {
         let resp = app
             .clone()
             .oneshot(
-                Request::post("/api/auth/setup")
+                Request::post("/api/test/account")
                     .header("content-type", "application/json")
                     .body(Body::from(body.to_string()))
                     .unwrap(),

@@ -518,7 +518,7 @@ group needs a token.
 
 | Group | Routes | Owner |
 |---|---|---|
-| sign-in | the provider handshake, the account setup, the development sign-in, the renewal, the sign-out, the caller's own profile | `ambre-spec-session.md` |
+| sign-in | the provider handshake, the development sign-in, the renewal, the sign-out, the caller's own profile | `ambre-spec-session.md` |
 | keys | storing the caller's sealed master material, and re-sealing it under a new passphrase | `ambre-spec-session.md` |
 | users | the search by address, and one user's public keys | this document, and `ambre-spec-key-verification.md` for what a client does with them |
 | documents | create, list, read, rename, delete | this document |
