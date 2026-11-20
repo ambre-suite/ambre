@@ -726,7 +726,6 @@ fn check_kind(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_core::crdt::CrdtName as _;
     use ambre_core::crdt::FoundationRoot;
 
     /// Runs `work` on a stack of 1 MiB, the size the tests of a deep walk use.
