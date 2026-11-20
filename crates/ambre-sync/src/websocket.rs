@@ -1334,8 +1334,10 @@ impl SyncState {
                 link,
             } => {
                 // A revoke by an owner is no departure (`SYNC-223`).
+                let key = new_doc_key.id();
                 self.install_key(document_id, new_doc_key, [link], None);
                 self.send_to_logic(LogicEvent::KeyRotated { document_id });
+                self.snapshot_after_rotation(document_id, key);
                 self.reply(id, RestEvent::RevocationComplete { document_id });
                 // The relay may push no frame of the removal: the call of the channel reads
                 // the log this client just signed into (`CALL-136`).
@@ -1361,8 +1363,10 @@ impl SyncState {
                 link,
                 departed,
             } => {
+                let key = new_doc_key.id();
                 self.install_key(document_id, new_doc_key, [link], departed);
                 self.send_to_logic(LogicEvent::KeyRotated { document_id });
+                self.snapshot_after_rotation(document_id, key);
             }
             SyncEvent::DebtGone { document_id } => self.fetch_rotated_key(document_id),
             SyncEvent::DebtUnsettled {

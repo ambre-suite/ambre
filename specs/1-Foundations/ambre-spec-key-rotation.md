@@ -42,7 +42,7 @@ and every copy in one request, so the revoke lands whole or not at all.
 | `SYNC-042` | `POST` | A rotation MUST leave everything sealed before it openable by every member who stays. | this spec section 3; `SYNC-119`, `SYNC-125` | `ambre_sync::documents::tests::a_name_sealed_before_a_rotation_opens_through_the_chain` -- a name sealed three rotations back opens with the current key and the chain, and not without it; `ambre_sync::media::tests::a_blob_sealed_before_a_rotation_opens_through_the_chain` -- so does a picture | none | verified |
 | `SYNC-046` | `POST` | Whoever rotates MUST become the wrapper of record, so a later unwrap resolves against their key. | this spec section 3; `ambre-spec-membership.md`, `SYNC-034` | `ambre_server::routes::tests::revoke_then_rotate_replaces_owner_key` -- it reads the wrapper recorded after the rotation and fails when the inviter is still named | none | verified |
 | `SYNC-047` | `POST` | The rotation notice MUST reach the other clients only after the new keys are stored. | this spec section 3; `ambre-spec-server.md` | `ambre_server::routes::tests::handler_tests::the_rotation_notice_follows_the_stored_copies` -- a revoke the store refuses publishes no notice, and a member hearing the notice of one that lands already reads the new copy, database tier | none | verified |
-| `SYNC-048` | `POST` | A rotation MUST seal a fresh snapshot under the new key, so the state after it stands on its own. | this spec section 3 | not built | unbuilt -- lands with the `A snapshot follows each rotation` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SYNC-048` | `POST` | A rotation MUST seal a fresh snapshot under the new key, so the state after it stands on its own. | this spec section 3 | `ambre_sync::updates::tests::a_rotation_this_client_makes_asks_for_a_snapshot_under_the_new_key` -- a revoke and an owed rotation paid each ask Logic for one snapshot, which seals under the new key, and a refused rotation asks for none; `ambre_logic::dispatch::tests::snapshot_required_triggers_send_snapshot` -- Logic answers the ask with the state | none | verified |
 | `SYNC-198` | `POST` | A rotation MUST wrap the new key for a member only under the exchange key a valid entry of the membership log signs for that member, or under this client's own key. | this spec section 3; `ambre-spec-membership.md`, `SYNC-197`, `SYNC-103` | `ambre_sync::sharing::tests::a_rotation_wraps_for_no_exchange_key_the_log_does_not_sign` -- a signed row gets a copy and the own row needs no entry; `ambre_sync::sharing::tests::a_copy_goes_to_a_signed_key_alone` -- a property over any mix of signed, injected, swapped and own rows; `ambre_sync::sharing::tests::a_revoke_posts_the_removal_and_the_copies_in_one_request`; `::an_owed_rotation_is_paid_for_every_member`; `::a_public_channel_is_rekeyed_under_the_current_space_key` -- the revoke, the payment of a debt and a channel's rotation each read the log first | none | verified |
 | `SYNC-199` | `FAIL` | Given a member row whose served exchange key no valid entry of the log signs, a rotation MUST give that row no copy and MUST report its member. | this spec section 3; `SYNC-198`, `SYNC-043` | `ambre_sync::sharing::tests::a_row_the_relay_injects_receives_no_key_at_a_revoke` -- a row the relay adds gets no copy, no posted copy opens under the relay's key, and the revoke reports the row by name; `ambre_sync::sharing::tests::a_rotation_wraps_for_no_exchange_key_the_log_does_not_sign` -- a row whose key the relay swapped gets no copy, and neither the relay's key nor the signed one opens any copy | none | verified |
 | `SYNC-079` | `FRAME` | A revoke MUST NOT change the document's content. | this spec section 3, the opening of the model | `ambre_sync::updates::tests::a_revoke_changes_no_content` -- across a completed revoke no frame leaves, no remote change reaches the engine, and a frame sealed before it still opens | none | verified |
@@ -91,16 +91,16 @@ A member who leaves cannot choose the key the others keep. The rotation is owed 
 | `SYNC-142` | `FRAME` | The sharing screen MUST NOT offer an owner a departure. | this spec section 3 | `ambre_app::shell::share::tests::an_owner_is_offered_no_departure` -- the owner's own row carries no departure; `ambre_app::shell::share::tests::each_row_offers_the_action_its_owner_may_take` -- the owner's row offers nothing | none | verified |
 
 * **Budget.** one elliptic-curve operation per remaining member, charged to the crypto rows of
-  `ambre-spec-budgets.md section 1`, which a full snapshot seal joins once `SYNC-048` lands. A space
+  `ambre-spec-budgets.md section 1`, which a full snapshot seal joins (`SYNC-048`). A space
   leave pays it once per member (`SYNC-264`). The cache of previous keys and the unconfirmed updates
   are rows of `ambre-spec-budgets.md section 6`. A step back along the chain costs one small open
   and one signature check.
 * **Boundary.** every wrapped copy crosses the relay and the relay can open none of them
   (`SYNC-010`). What it learns is that a document was re-keyed and by whom, which is the membership
   metadata `ambre-spec-zero-knowledge.md` accepts. It holds each link too, and opens none.
-* **Verification.** 37 `verified`, 1 `unimplemented`. The relay half holds, as do the key wipe, the
-  open by name, the one-request revoke, the departure's debt and the chain. The notice follows the
-  stored copies, and each rotation this client makes reaches Logic.
+* **Verification.** 38 `verified`. The relay half holds, as do the key wipe, the open by name, the
+  one-request revoke, the departure's debt and the chain. The notice follows the stored copies.
+  Each rotation this client makes reaches Logic, and a snapshot under the new key follows it.
 
 ---
 
@@ -153,7 +153,9 @@ key never leaves the Sync worker.
    The request names every member the client read. A member invited since is in none of them, so
    the relay refuses the whole request and the client starts again at step 1 (`SYNC-143`);
 5. move the previous key into the cache, install the new one, and report the revoke done;
-6. seal a fresh snapshot under the new key (`SYNC-048`).
+6. ask the Logic thread for the state, and seal it as a fresh snapshot under the new key
+   (`SYNC-048`). The owed rotation a writer pays takes the same step. A rotation the worker refuses
+   to install asks for nothing.
 
 **A pair key serves many wraps.** A wrap seals the key under a pair key, which HKDF derives from
 the exchange between the wrapper and the recipient. The pair key depends on the two exchange keys
@@ -341,8 +343,6 @@ is for the members who stay, and it reports no departure (`SYNC-081`).
   (`SRV-123`). The client refuses a delta whose signer the log never granted a writing role, under
   any key (`SYNC-211`). A writer removed still passes, under the keys before the removal
   (`ambre-spec-membership.md section 6`).
-* **No snapshot follows a rotation.** The state after the removal is never sealed on its own, so the
-  document's history stays a chain of deltas across the key change (`SYNC-048`).
 * **The relay can withhold a link.** It cannot forge one, and a link it drops ends the walk there: the
   history before it reads as closed, not as wrong. Nothing tells the user it was withheld.
 * **A revoke runs from an open document only.** It seals the current key under the new one, and the
