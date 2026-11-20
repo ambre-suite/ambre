@@ -267,7 +267,7 @@ impl ambre_core::NarrowCount for Ingested {
 }
 
 /// The open a presence sample comes from: its author's signing key and the
-/// session nonce its sealed body carries (`SYNC-285`). One author holds one
+/// session nonce its sealed body carries (`SYNC-287`). One author holds one
 /// key for every open, so the key alone cannot tell two opens apart.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct SampleSource {
@@ -935,7 +935,7 @@ struct SyncDocumentState {
     chain: chain::Chain,
     /// Per-open ephemeral anti-replay counter. Keyed by the author's Ed25519
     /// verifying key and by the session nonce of the open the sample names.
-    /// A sender counts from 1 at each open (`SYNC-285`, audit `P22`). An inbound
+    /// A sender counts from 1 at each open (`SYNC-287`, audit `P22`). An inbound
     /// ephemeral whose counter is <= the stored value is silently dropped.
     ephemeral_remote_counters: HashMap<SampleSource, Seq<Ephemerals>>,
     /// Directory of this document's members' Ed25519 signing keys, mapping an
@@ -1199,7 +1199,7 @@ impl SyncDocumentState {
     /// passes the last value seen for `author_pk` in the open `session` names,
     /// and records it. Returns `false` for a replay, which the caller drops.
     /// A reopened author names a new session, so a peer that stayed open
-    /// takes its samples from counter 1 again (`SYNC-285`, audit `P22`).
+    /// takes its samples from counter 1 again (`SYNC-287`, audit `P22`).
     ///
     /// The counter map is bounded by [`MAX_EPHEMERAL_REMOTE_AUTHORS`]: when a new
     /// author would exceed the cap, the least-active entry (lowest counter) is
@@ -2597,7 +2597,7 @@ mod ephemeral_tests {
         assert!(d.accept_ephemeral_counter(&author, &SESSION, Seq::<Ephemerals>::new(3)));
     }
 
-    /// `SYNC-285`, audit `P22`: Alice reopens the document, and her new
+    /// `SYNC-287`, audit `P22`: Alice reopens the document, and her new
     /// open counts from 1 again. A peer that stayed open takes it, and still
     /// refuses a replay of her former open. Before the fix, the guard read
     /// her key alone and dropped her samples until the new counter passed

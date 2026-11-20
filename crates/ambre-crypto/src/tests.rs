@@ -902,7 +902,7 @@ fn a_media_address_needs_the_document_key() {
     assert_ne!(address.as_array()[..], plain[..32]);
 }
 
-/// `SYNC-286`, audit `P20`: two documents under one key give one picture
+/// `SYNC-288`, audit `P20`: two documents under one key give one picture
 /// two addresses, so the relay cannot tell that both hold it. Before the
 /// fix, the address read the key and the bytes alone.
 #[test]

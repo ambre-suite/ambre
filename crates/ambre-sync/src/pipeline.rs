@@ -297,7 +297,7 @@ fn split_frame(body: &[u8]) -> Result<UpdateBody, PipelineError> {
 
 /// The body of a presence sample: the session nonce of its sender's open,
 /// then the sample. It is the payload the seal encrypts, so the relay never
-/// reads the nonce (`SYNC-285`, audit `P22`). The nonce tells two opens of
+/// reads the nonce (`SYNC-287`, audit `P22`). The nonce tells two opens of
 /// one author apart, and each open counts its samples from 1.
 #[must_use]
 pub fn presence_body(

@@ -2085,7 +2085,7 @@ impl SyncState {
             return;
         }
         // The sample names this open, and each open counts from 1, so a peer
-        // that stayed open takes it after a reopen (`SYNC-285`). A document
+        // that stayed open takes it after a reopen (`SYNC-287`). A document
         // opened with no identity sends no presence.
         let Some(session) = self.session_nonces.get(&document_id).copied() else {
             return;

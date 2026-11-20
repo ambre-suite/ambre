@@ -1676,7 +1676,7 @@ impl SyncState {
                     .and_then(|body| crate::pipeline::split_presence_body(&body));
                 // Anti-replay: reject ephemerals with a non-monotonic counter for
                 // the same open of the same author. The sealed body names the
-                // open, so a reopened author counts from 1 again (`SYNC-285`).
+                // open, so a reopened author counts from 1 again (`SYNC-287`).
                 // The counter map is bounded (see `accept_ephemeral_counter` /
                 // `MAX_EPHEMERAL_REMOTE_AUTHORS`). Only a sample whose signature
                 // verified moves the counter, so a forged one cannot silence its

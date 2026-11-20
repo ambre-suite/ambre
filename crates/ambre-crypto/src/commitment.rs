@@ -64,12 +64,12 @@ pub fn commitment_tag(
 
 /// Domain-separation tag of the media-address subkey. The subkey keeps the
 /// address apart from the commitment tag, which takes the document key
-/// directly. Version 2 binds the document (`SYNC-286`, audit `P20`).
+/// directly. Version 2 binds the document (`SYNC-288`, audit `P20`).
 const MEDIA_ADDRESS_DOMAIN: &[u8] = b"ambre-media-address-v2";
 
 /// The address of a media blob of `document_id`:
 /// `HMAC(HMAC(key, domain || document_id), plaintext)` (`ambre-spec-media.md`,
-/// `SYNC-050`, `SYNC-286`).
+/// `SYNC-050`, `SYNC-288`).
 ///
 /// Equal bytes under one document key in one document yield one address, so
 /// a picture used ten times is one object. Without the key, nobody can

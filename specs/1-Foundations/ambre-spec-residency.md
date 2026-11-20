@@ -143,6 +143,11 @@ The Sync worker reads the summary with no Loro document and advances the counter
 A member can lie in a summary. The lie costs one false badge, and the document corrects it on open
 (`RESID-011`).
 
+**A summary counts from a writer alone** (`RESID-032`, audit `P23`). A light subscription keeps
+the writers its last walk of the log granted. A viewer and the relay therefore inflate no mention
+and ring no call. A channel never opened walks the log of its `meta` first. Until that walk
+answers, a summary marks its document active and counts nothing else.
+
 **A lost delta.** The relay numbers the deltas of a document one by one, so a light subscription
 reads the number of each delta it receives. A number past the next one leaves a hole. The worker
 asks the relay once for the deltas after the cursor it held before the hole (`RESID-029`).

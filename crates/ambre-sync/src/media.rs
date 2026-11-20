@@ -544,7 +544,7 @@ mod tests {
 
     /// The address the worker answers with is keyed by the document key, and
     /// binds the document. The same bytes in two documents under one key get
-    /// two addresses (`SYNC-050`, `SYNC-286`, audit `P20`).
+    /// two addresses (`SYNC-050`, `SYNC-288`, audit `P20`).
     #[test]
     fn an_upload_is_addressed_under_the_document_key() {
         let (sink, rx) = LogicSink::channel();
