@@ -59,6 +59,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-022` | `POST` | A provider's return MUST exchange its code for an identity token the relay verifies, and sign the user in. | this spec section 3 | `ambre_server::oidc::tests::a_provider_code_is_exchanged_for_a_verified_identity` -- a stub provider signs an identity token with a key it publishes, and the code is exchanged under the kept verifier for its claims; `::an_identity_the_relay_cannot_verify_is_refused` -- a foreign key and a wrong one-time value fail the verification, and a wrong verifier fails the exchange; `ambre_server::routes::tests::handler_tests::a_provider_return_signs_the_person_in` -- through the shipped router, the return opens a session that `/auth/me` answers as that person, and it is not taken twice | none | verified |
 | `SRV-074` | `FAIL` | A configured provider the relay cannot reach at startup MUST stop the start, never disable sign-in in silence. | audit `M7`; this spec section 3 | `ambre_server::oidc::tests::a_configured_provider_that_does_not_answer_stops_the_start` -- the start decision against an issuer nothing listens on is an error, which `main` returns. With no client id nothing is discovered and sign-in is off | none | verified |
 | `SRV-296` | `FRAME` | A request of the relay to the identity provider MUST NOT follow a redirect, and MUST end at its deadline. | this spec section 3; `SRV-022`; `ambre-spec-budgets.md` section 8 | `ambre_server::oidc::tests::the_provider_client_follows_no_redirect_and_keeps_a_deadline` -- a redirect comes back as itself, and a provider that stalls fails the request at the deadline | none | verified |
+| `SRV-321` | `PRE` | The relay MUST discover its provider at the issuer the deployment configures, or at the provider's own issuer when none is configured. It MUST refuse to start on a plain `http` issuer off the loopback. | this spec section 3; `SRV-074` | `ambre_server::oidc::tests::the_configured_issuer_is_https_or_a_loopback_provider` -- no issuer names Google's, a provider stub on the loopback is discovered and a sign-in goes there, and a plain `http` issuer on another host is refused | none | verified |
 | `SRV-295` | `POST` | A reclaim of an address MUST tell each member who invited the account that held it. | this spec section 3; `SRV-029` | `ambre_server::routes::tests::handler_tests::a_reclaim_tells_each_inviter_of_the_account_that_held_the_address` -- database tier: the sign-in that reclaims names the one inviter per document, the inviter's topic hears `AddressReclaimed` for that document and member, and a second sign-in owes no notice | none | verified |
 
 ### 1.4 A session ends
@@ -114,6 +115,11 @@ an account no provider vouched for. It is retired: no route and no client comman
 account (`SRV-319`). Accounts it created remain, so the reclaim rule still holds for them
 (`SRV-029`). A development sign-in with no key stands in for a provider account that owes its keys.
 The development tiers reach the key setup through it.
+
+**Where a provider is discovered.** The deployment may name the issuer of its provider, and Google's
+own issuer is the default. An issuer is `https`, or plain `http` on the loopback, where a test runs
+its provider (`SRV-321`). A relay that names another issuer still sends no browser there: the client
+follows the authorization host of the provider alone (`ambre-spec-launcher.md`, `CHROME-139`).
 
 **The handshake with a provider.** The relay mints the state value and the one-time value. It keeps
 them in the ephemeral store for ten minutes, and consumes them on the way back. A callback whose

@@ -124,25 +124,49 @@ pub struct OidcRegistration {
 }
 
 impl OidcRegistration {
-    /// The registration with the `google` provider.
+    /// The registration with the `google` provider, discovered at `issuer`.
     pub fn google(
+        issuer: IssuerUrl,
         client_id: ClientId,
         client_secret: ambre_core::Confidential<OidcSecret>,
         redirect_uri: RedirectUrl,
-    ) -> Result<Self, AppError> {
-        Ok(Self {
-            issuer: google_issuer()?,
+    ) -> Self {
+        Self {
+            issuer,
             client_id,
             client_secret,
             redirect_uri,
-        })
+        }
     }
 }
 
-/// The issuer the `google` provider is discovered at.
-fn google_issuer() -> Result<IssuerUrl, AppError> {
-    IssuerUrl::new("https://accounts.google.com".to_owned())
-        .map_err(|e| AppError::Oidc(format!("invalid google issuer URL: {e}")))
+/// The issuer the `google` provider is discovered at (`SRV-321`).
+///
+/// No issuer names Google's own. Any other is the issuer the deployment
+/// configured. It must be `https`, or plain `http` on a loopback host, which
+/// no other machine reaches. A test runs its provider there. A plain `http`
+/// issuer on another host is refused, so the start stops: a network attacker
+/// could answer its discovery and its keys.
+pub fn google_issuer(configured: Option<IssuerUrl>) -> Result<IssuerUrl, AppError> {
+    let issuer = match configured {
+        Some(issuer) => issuer,
+        None => IssuerUrl::new("https://accounts.google.com".to_owned())
+            .map_err(|e| AppError::Oidc(format!("invalid google issuer URL: {e}")))?,
+    };
+    let url = issuer.url();
+    let loopback = match url.host() {
+        Some(url::Host::Ipv4(ip)) => ip.is_loopback(),
+        Some(url::Host::Ipv6(ip)) => ip.is_loopback(),
+        Some(url::Host::Domain(name)) => name == "localhost",
+        None => false,
+    };
+    match url.scheme() {
+        "https" => Ok(issuer),
+        "http" if loopback => Ok(issuer),
+        _ => Err(AppError::Oidc(
+            "the google issuer must be https, or http on a loopback host".to_owned(),
+        )),
+    }
 }
 
 /// The provider clients the relay starts with. No registration means
@@ -620,6 +644,51 @@ mod tests {
             exchange_code(provider, &code, &kept).await,
             "id token verification failed",
         );
+    }
+
+    /// `SRV-321`: no configured issuer names Google's. A loopback provider is
+    /// accepted over plain `http`, and a sign-in is sent there. A plain `http`
+    /// issuer on another host, and another scheme, are refused.
+    #[tokio::test]
+    async fn the_configured_issuer_is_https_or_a_loopback_provider() {
+        assert_eq!(
+            google_issuer(None).unwrap().as_str(),
+            "https://accounts.google.com"
+        );
+        let configured = |text: &str| google_issuer(Some(IssuerUrl::new(text.to_owned()).unwrap()));
+        let stub = StubProvider::spawn().await;
+        let issuer = configured(&stub.issuer).unwrap();
+        let registration = OidcRegistration::google(
+            issuer,
+            ClientId::new(CLIENT_ID.to_owned()),
+            secret(),
+            RedirectUrl::new("https://app/cb".to_owned()).unwrap(),
+        );
+        let clients = start_oidc_clients(Some(&registration)).await.unwrap();
+        let (login, _) = login_url(&clients[&ambre_core::OidcProvider::Google])
+            .await
+            .unwrap();
+        assert!(
+            login
+                .url
+                .as_str()
+                .starts_with(&format!("{}/authorize?", stub.issuer)),
+            "{}",
+            login.url.as_str()
+        );
+        for local in ["http://localhost:8080", "http://[::1]:8080"] {
+            assert!(configured(local).is_ok(), "{local}");
+        }
+        for refused in [
+            "http://accounts.example.org",
+            "http://192.168.1.10:8080",
+            "ftp://127.0.0.1",
+        ] {
+            assert!(
+                matches!(configured(refused), Err(AppError::Oidc(_))),
+                "{refused}"
+            );
+        }
     }
 
     /// `SRV-074`: a configured provider that does not answer stops the start.

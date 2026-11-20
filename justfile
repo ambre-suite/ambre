@@ -336,9 +336,10 @@ test-browser-firefox *filter:
 # (`just services-up`). The senders capture at 30 fps. The build takes the cargo profile of
 # the release, `wasm-release`, so each wasm compiles as the shipped one. The senders sign in by
 # a bare name, so the build adds the development sign-in. The hook refuses that sign-in in
-# every optimised build (`ZK-049`, audit `W209`), so this recipe fails until the proofs sign in
-# another way. Trunk runs no wasm-opt and minifies nothing in either mode. The hook writes no
-# brotli copy here, and the proof host never serves one.
+# every optimised build (`ZK-049`, audit `W209`), so this recipe fails. The belt's identity
+# provider (`crates/ambre-belt/src/provider.rs`) replaces that sign-in once a provider session
+# outlives a page reload (`ZK-050`). Trunk runs no wasm-opt and minifies nothing in either mode.
+# The hook writes no brotli copy here, and the proof host never serves one.
 proof_build := 'trunk build --cargo-profile=wasm-release --features dev-login --dist target/proof-dist && cargo build -p ambre-server && cargo build --release -p ambre-sfu'
 proof_env := 'BELT_DIST="$PWD/target/proof-dist" BELT_SFU="$PWD/target/release/ambre-sfu" S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}"'
 proof_senders := '--use-fake-device-for-media-stream=fps=30'

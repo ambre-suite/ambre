@@ -40,6 +40,8 @@ mod proof;
 #[cfg(test)]
 mod prose;
 #[cfg(test)]
+mod provider;
+#[cfg(test)]
 mod relay;
 #[cfg(test)]
 mod serve;

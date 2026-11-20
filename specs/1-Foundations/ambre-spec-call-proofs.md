@@ -59,6 +59,12 @@ this document alone. These rows hold the harnesses. The budgets the harnesses me
 | `PROOF-018` | `FAIL` | Given a received video whose browser counts no freeze, or no received video at all, the stall proof MUST fail. | this spec section 2, the stall proof | `ambre_sfu::sim::browsers::tests::a_video_with_no_freeze_counter_or_no_video_at_all_holds_nothing` | none | verified |
 | `PROOF-019` | `FRAME` | Judging the stall MUST NOT count a video that decoded under 30 pictures in the run. | this spec section 2, the stall proof | `ambre_sfu::sim::browsers::tests::a_video_with_no_freeze_counter_or_no_video_at_all_holds_nothing` -- a video of 10 pictures is not counted | none | verified |
 
+### 1.6 Sign a participant in
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROOF-020` | `POST` | The identity provider of the belt MUST sign each person in under an identity token the relay verifies, for the code and the verifier of that person's own authorization alone. | this spec section 2, the sign-in; `ambre-spec-session.md`, `SRV-321`; `ambre-spec-zero-knowledge.md`, `ZK-050` | `ambre_belt::provider::tests::each_person_signs_in_at_the_provider_under_a_verified_identity` -- two people at once, each token verified for its own subject, address and name, a code refused a second time and under another verifier; `ambre_belt::provider::tests::a_page_signs_in_through_the_provider_of_the_belt` -- browser tier: a relay configured with the provider signs a page in, which sets up its keys | none | verified |
+
 * **Budget.** The proofs measure four rows of `ambre-spec-budgets.md section 1`, and hold none of
   them. The four are the call chunk, the call worker load, the call video paint and the stall.
 * **Boundary.** none: the proof host forwards the relay and the SFU unchanged. The probe and the
@@ -95,6 +101,17 @@ this document alone. These rows hold the harnesses. The budgets the harnesses me
 in through the relay and joins one channel. Each joins one video call with a fake camera at 30 fps,
 and seals through its own call worker. The receiver then opens real sealed chunks. Eight senders
 stay muted, so the top size stays on the video of the ninth.
+
+**The sign-in.** The belt runs an identity provider on the loopback, and a relay started with its
+variables discovers it as its provider (`SRV-321`). The provider signs an identity token for each
+person it authorizes (`PROOF-020`). A page never follows its address, because the client follows
+the host of Google alone. The belt asks the relay for the address and takes the code at the
+provider. It then opens the return on the page, which runs the exchange of a release build. The
+belt links the provider crate, an RSA key and a clock for it, and the relay already links all three.
+
+The proofs still sign in by a bare name, through the development sign-in (`ZK-050`). A session
+from a provider ends at a page reload. A sender opens Murmure and follows an invite link by a
+reload, so a sender signed in by the provider would lose its session there.
 
 **The probe.** The host injects one script at the head of the page (`PROOF-001`). It runs before
 the application boots, and every 2 s it reports to the host:
@@ -165,6 +182,7 @@ Section 3 gives the procedure a person follows for each.
 | `crates/ambre-belt/src/proof.rs` | the figures, the verdicts, the plan and the proof host |
 | `crates/ambre-belt/src/proof/run.rs` | the run: the services, the senders, the receiver and the phases |
 | `crates/ambre-belt/src/proof/probe.js`, `crates/ambre-belt/src/proof/call_shim.js` | the probe and the timer |
+| `crates/ambre-belt/src/provider.rs` | the identity provider of the belt, and the sign-in of a page through it |
 | `crates/ambre-sfu/src/sim/load.rs`, `crates/ambre-sfu/src/sim/browsers.rs` | the stall run, its remote browsers and its verdict |
 | `scripts/call_stall_receivers.sh` | the netem and the WebDriver servers of the receivers' machine |
 
@@ -259,6 +277,10 @@ on exit.
 * **The held share bounds the load from above.** A share over 25 % does not prove a load over 25 %.
   A profile of the phone through the remote inspector of its browser then decides.
 * **The battery and the crackle have no mechanism.** Section 3.2 is the procedure.
+* **The proofs hold the development sign-in.** Their optimised build fails the gate of
+  `ZK-049` until each participant signs in through the provider of the belt. That waits for a
+  provider session that outlives a page reload (`ZK-050`, the
+  `The relay and the sign-in hold their outbound and logging hygiene` Story (`ambre-roadmap.md` MVP)).
 * **No proof chooses the receiver's network.** A phone on a busy network can lose pictures the SFU
   sent. The run prints the freezes of each video, so a reader sees it.
 

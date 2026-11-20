@@ -25,7 +25,7 @@ const STRONG: &str = "violet-harbor-quietly-folds-ninety-kites";
 const SETUP: std::time::Duration = std::time::Duration::from_secs(90);
 
 /// Clicks the development link `selector` once the panel shows it.
-async fn follow(page: &Page, selector: &str) {
+pub(crate) async fn follow(page: &Page, selector: &str) {
     page.browser
         .wait_for(
             selector,
@@ -132,6 +132,12 @@ async fn provider_return(page: &Page, name: &str) {
 /// owes, and returns the 24 recovery words the page shows once.
 async fn set_up(page: &Page, name: &str) -> String {
     provider_return(page, name).await;
+    set_up_keys(page).await
+}
+
+/// Sets up the keys the account of a provider return owes, once the page shows
+/// the setup face. Returns the 24 recovery words the page shows once.
+pub(crate) async fn set_up_keys(page: &Page) -> String {
     page.browser
         .wait_for(
             "the setup face",
@@ -161,7 +167,7 @@ async fn set_up(page: &Page, name: &str) -> String {
 }
 
 /// Waits until the document list shows under the user `name`.
-async fn wait_list(page: &Page, name: &str) {
+pub(crate) async fn wait_list(page: &Page, name: &str) {
     page.browser
         .wait_for(
             "the document list of the user",

@@ -43,6 +43,12 @@ tokio-tungstenite = "0.29"
 # (`src/proof.rs`). The crate and its ring provider are those reqwest already links.
 tokio-rustls      = { version = "0.26", default-features = false, features = ["ring"] }
 uuid              = { workspace = true, features = ["v4"] }
+# The identity provider the belt runs for the relay (`src/provider.rs`,
+# `ambre-spec-call-proofs.md` section 2). Each crate is already in the tree
+# through the relay: the provider crate, its RSA key and the clock of a claim.
+openidconnect     = { workspace = true }
+rsa               = { version = "0.9", features = ["getrandom"] }
+chrono            = { workspace = true }
 
 [lints]
 workspace = true
