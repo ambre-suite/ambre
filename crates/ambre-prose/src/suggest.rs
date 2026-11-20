@@ -15,6 +15,7 @@ use loro::{Container, LoroDoc, LoroText, TreeID, ValueOrContainer};
 
 use crate::doc;
 use crate::events::{Suggestion, SuggestionKind, SuggestionSpan, block_id};
+use crate::logic::Roots;
 use crate::mark::MarkRoot;
 use crate::message::MarkKey;
 
@@ -44,9 +45,10 @@ pub(crate) fn of_key(key: &str) -> Option<(SuggestionKind, Id<id::Suggestion>)> 
 #[must_use]
 pub(crate) fn entry(
     document: &LoroDoc,
+    roots: &Roots,
     id: &Id<id::Suggestion>,
 ) -> Option<doc::Fields<doc::AnnotKey>> {
-    let annots = doc::annots(document);
+    let annots = doc::annots_read(document, roots)?;
     let Some(ValueOrContainer::Container(Container::Map(map))) = annots.get(&id.to_hyphenated())
     else {
         return None;
@@ -190,7 +192,7 @@ pub(crate) fn text_blocks(document: &LoroDoc) -> Vec<TreeID> {
 /// order of its first span. Derived each time, never stored
 /// (`PROSE-FEAT-261`).
 #[must_use]
-pub fn pending(document: &LoroDoc) -> Vec<Suggestion> {
+pub fn pending(document: &LoroDoc, roots: &Roots) -> Vec<Suggestion> {
     let mut out: Vec<Suggestion> = Vec::new();
     for (id, kind, block, start, end) in spans(document, &text_blocks(document)) {
         let span = SuggestionSpan {
@@ -202,7 +204,7 @@ pub fn pending(document: &LoroDoc) -> Vec<Suggestion> {
             known.spans.push(span);
             continue;
         }
-        let Some(entry) = entry(document, &id) else {
+        let Some(entry) = entry(document, roots, &id) else {
             continue;
         };
         let Some(user_id) = owner(&entry) else {

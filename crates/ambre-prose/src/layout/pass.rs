@@ -209,7 +209,7 @@ impl NotePlan {
         if doc::blocks_read(document, roots).is_none() {
             return Vec::new();
         }
-        note::ordinals(document)
+        note::ordinals(document, roots)
             .into_iter()
             .map(|(id, ordinal)| {
                 let (text, marks) = note::body(document, roots, &id)

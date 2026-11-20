@@ -18,8 +18,12 @@ use crate::logic::Roots;
 
 /// The entry of footnote `id`, when `annots` holds one of that kind.
 #[must_use]
-pub(crate) fn entry(document: &LoroDoc, id: &Id<Footnote>) -> Option<doc::Fields<doc::AnnotKey>> {
-    let annots = doc::annots(document);
+pub(crate) fn entry(
+    document: &LoroDoc,
+    roots: &Roots,
+    id: &Id<Footnote>,
+) -> Option<doc::Fields<doc::AnnotKey>> {
+    let annots = doc::annots_read(document, roots)?;
     let Some(ValueOrContainer::Container(Container::Map(map))) = annots.get(&id.to_hyphenated())
     else {
         return None;
@@ -32,7 +36,7 @@ pub(crate) fn entry(document: &LoroDoc, id: &Id<Footnote>) -> Option<doc::Fields
 /// one (`PROSE-FEAT-305`).
 #[must_use]
 pub(crate) fn block(document: &LoroDoc, roots: &Roots, id: &Id<Footnote>) -> Option<TreeID> {
-    let named = doc::read_string(&entry(document, id)?, doc::AnnotKey::NoteBlock)?;
+    let named = doc::read_string(&entry(document, roots, id)?, doc::AnnotKey::NoteBlock)?;
     let block = TreeID::try_from(named.as_str()).ok()?;
     let tree = doc::blocks_read(document, roots)?;
     doc::is_note(&tree, &block).then_some(block)
@@ -46,12 +50,14 @@ pub(crate) fn body(document: &LoroDoc, roots: &Roots, id: &Id<Footnote>) -> Opti
 
 /// Every footnote the document holds, whether a call reaches it or not.
 #[must_use]
-pub(crate) fn all(document: &LoroDoc) -> Vec<Id<Footnote>> {
-    let annots = doc::annots(document);
+pub(crate) fn all(document: &LoroDoc, roots: &Roots) -> Vec<Id<Footnote>> {
+    let Some(annots) = doc::annots_read(document, roots) else {
+        return Vec::new();
+    };
     let mut ids: Vec<Id<Footnote>> = annots
         .keys()
         .filter_map(|key| Id::<Footnote>::parse_str(&key).ok())
-        .filter(|id| entry(document, id).is_some())
+        .filter(|id| entry(document, roots, id).is_some())
         .collect();
     ambre_core::order::sort_by_id(&mut ids, |id| *id);
     ids
@@ -73,12 +79,12 @@ pub(crate) fn footnote_calls(document: &LoroDoc) -> Vec<doc::Anchor<Id<Footnote>
 /// A call whose note is gone counts for nothing. Two peers holding one text
 /// therefore count one set of numbers (`PROSE-FEAT-097`).
 #[must_use]
-pub fn ordinals(document: &LoroDoc) -> Vec<(Id<Footnote>, Ordinal<FootnoteCall>)> {
+pub fn ordinals(document: &LoroDoc, roots: &Roots) -> Vec<(Id<Footnote>, Ordinal<FootnoteCall>)> {
     let mut seen = HashSet::new();
     let mut out = Vec::new();
     for anchor in footnote_calls(document) {
         let id = anchor.value;
-        if seen.contains(&id) || entry(document, &id).is_none() {
+        if seen.contains(&id) || entry(document, roots, &id).is_none() {
             continue;
         }
         seen.insert(id);
@@ -91,7 +97,7 @@ pub fn ordinals(document: &LoroDoc) -> Vec<(Id<Footnote>, Ordinal<FootnoteCall>)
 /// orphans no call reaches, kept for review (`PROSE-FEAT-098`).
 #[must_use]
 pub fn entries(document: &LoroDoc, roots: &Roots) -> Vec<FootnoteEntry> {
-    let numbered = ordinals(document);
+    let numbered = ordinals(document, roots);
     let text_of = |id: &Id<Footnote>| {
         body(document, roots, id)
             .map(|t| t.to_string())
@@ -107,7 +113,7 @@ pub fn entries(document: &LoroDoc, roots: &Roots) -> Vec<FootnoteEntry> {
         })
         .collect();
     out.extend(
-        all(document)
+        all(document, roots)
             .into_iter()
             .filter(|id| !reached.contains(id))
             .map(|id| FootnoteEntry {

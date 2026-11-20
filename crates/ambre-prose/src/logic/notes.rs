@@ -96,7 +96,7 @@ impl ProseState {
     /// (`PROSE-FEAT-101`). The calls are removed from the last one back, so an
     /// earlier offset still names its character.
     pub(super) fn delete_footnote(&mut self, id: &Id<Footnote>) -> ProseOutcome {
-        if note::entry(&self.doc, id).is_none() {
+        if note::entry(&self.doc, &self.roots, id).is_none() {
             return ProseOutcome::refused(ProseRefusal::NoSuchFootnote(*id));
         }
         let calls: Vec<doc::Anchor<Id<Footnote>>> = note::footnote_calls(&self.doc)
@@ -417,7 +417,7 @@ mod tests {
         let kept = add(&mut state, ids[0], Pos::<DocChar>::new(5), "kept");
         let kept_body = note::body(state.document(), state.roots(), &kept).map(|t| t.to_string());
         let outcome = state.handle_command(ProseCommand::DeleteFootnote { footnote_id: gone });
-        assert!(note::entry(state.document(), &gone).is_none());
+        assert!(note::entry(state.document(), state.roots(), &gone).is_none());
         assert_eq!(state.text_of(&ids[0]).as_deref(), Some("abcd\u{fffc}ef"));
         assert_eq!(
             listed(&outcome),
@@ -478,7 +478,7 @@ mod tests {
             .insert(doc::AnnotKey::NoteBlock, "a comment")
             .expect("a block name");
         state.document().commit();
-        assert_eq!(note::all(state.document()), vec![real]);
+        assert_eq!(note::all(state.document(), state.roots()), vec![real]);
     }
 
     #[test]
