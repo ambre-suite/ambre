@@ -21,14 +21,14 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**4831 rows: 4411 shipped, of which 16 loose. 420 unbuilt.**
+**4836 rows: 4411 shipped, of which 16 loose. 425 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
 | `verified` | 1494 | 583 | 995 | 799 | 524 | 4395 |
 | `failing` | 2 |  |  |  |  | 2 |
 | `human-review` | 14 |  |  |  |  | 14 |
-| `unimplemented` | 168 | 42 | 21 | 32 | 157 | 420 |
+| `unimplemented` | 173 | 42 | 21 | 32 | 157 | 425 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -40,7 +40,7 @@
 | `ambre-spec-adaptive-layout.md` | 9 | 7 | 7 |  | 2 |
 | `ambre-spec-architecture.md` | 130 | 130 | 122 | 8 |  |
 | `ambre-spec-broadcast.md` | 31 | 31 | 31 |  |  |
-| `ambre-spec-call-media.md` | 140 | 140 | 140 |  |  |
+| `ambre-spec-call-media.md` | 141 | 140 | 140 |  | 1 |
 | `ambre-spec-call-proofs.md` | 19 | 19 | 19 |  |  |
 | `ambre-spec-chrome.md` | 32 | 31 | 31 |  | 1 |
 | `ambre-spec-clipboard.md` | 20 | 19 | 19 |  | 1 |
@@ -73,8 +73,8 @@
 | `ambre-spec-residency.md` | 31 | 31 | 31 |  |  |
 | `ambre-spec-schema-version.md` | 20 | 20 | 20 |  |  |
 | `ambre-spec-sealed-envelope.md` | 29 | 28 | 28 |  | 1 |
-| `ambre-spec-sequencer.md` | 82 | 82 | 82 |  |  |
-| `ambre-spec-server.md` | 126 | 120 | 119 | 1 | 6 |
+| `ambre-spec-sequencer.md` | 83 | 82 | 82 |  | 1 |
+| `ambre-spec-server.md` | 129 | 120 | 119 | 1 | 9 |
 | `ambre-spec-session.md` | 31 | 29 | 29 |  | 2 |
 | `ambre-spec-sync.md` | 84 | 83 | 82 | 1 | 1 |
 | `ambre-spec-text-editor.md` | 20 | 18 | 18 |  | 2 |
@@ -203,7 +203,7 @@
 | `ambre-spec-adaptive-layout.md` | CHROME-030..034,056..058,117 |
 | `ambre-spec-architecture.md` | ARCH-001..130 |
 | `ambre-spec-broadcast.md` | SRV-010,042..051,072..073,087..089,097..099,102,161..162,164,166,183,185..186,237,258,269,301 |
-| `ambre-spec-call-media.md` | CALL-001..140 |
+| `ambre-spec-call-media.md` | CALL-001..141 |
 | `ambre-spec-call-proofs.md` | PROOF-001..019 |
 | `ambre-spec-chrome.md` | CHROME-001..005,008..015,085..094,105..106,109..115 |
 | `ambre-spec-clipboard.md` | UI-THREAD-006..010,022..025,043..047,053..057,061 |
@@ -297,8 +297,8 @@
 | `ambre-spec-residency.md` | RESID-001..031 |
 | `ambre-spec-schema-version.md` | SCHEMA-001..020 |
 | `ambre-spec-sealed-envelope.md` | SYNC-001,003..005,008..009,018..023,072,088..091,112..114,125,135,138,144,203,216,257..259 |
-| `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155,169,184,194..215,259,262..264,274,276..277,284,288..290,300 |
-| `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165,167..168,170..171,173..182,187..193,216..228,230,238..257,260..261,266,268,270,272..273,275,280..283,285..287,297..299,302,304,306 |
+| `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155,169,184,194..215,259,262..264,274,276..277,284,288..290,300,307 |
+| `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165,167..168,170..171,173..182,187..193,216..228,230,238..257,260..261,266,268,270,272..273,275,280..283,285..287,297..299,302,304,306,308..310 |
 | `ambre-spec-session.md` | SRV-003,009,022..031,074,090..092,163,172,232,234..236,267,278..279,291,293..296,303 |
 | `ambre-spec-sync.md` | SYNC-002,011,013,056..071,095..100,133..134,136..137,149,152..160,162..167,169..171,177..189,191..196,248..256,261,269..271,275,277..278,281 |
 | `ambre-spec-text-editor.md` | CANVAS-036..042,047..050,077..080,082..083,085; UI-THREAD-014,018 |
