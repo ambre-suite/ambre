@@ -818,6 +818,27 @@ fixture-provenance:
 deny:
     cargo deny check --deny unused-wrapper
 
+# ProVerif over the model of the call sender keys (`CALL-142`). The model sits beside
+# the code it models, and `tests/call_model_labels.rs` of that crate ties its labels
+# to the code. A query ProVerif cannot prove reads `is false` or `cannot be proved`,
+# so the recipe fails unless every result line reads `is true`. A model that does
+# not parse exits non-zero and fails too. CI builds ProVerif 2.05 from its tarball.
+
+# ProVerif: every query of the call sender keys model is true.
+proverif model="crates/ambre-crypto/proofs/call_sender_keys.pv":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    out="$(proverif "{{model}}")"
+    results="$(printf '%s\n' "$out" | grep '^RESULT' || true)"
+    printf '%s\n' "$results"
+    total="$(printf '%s\n' "$results" | grep -c '^RESULT' || true)"
+    proved="$(printf '%s\n' "$results" | grep -c ' is true\.$' || true)"
+    if [ "$total" -eq 0 ] || [ "$total" -ne "$proved" ]; then
+        printf '%s\n' "$out" >&2
+        echo "proverif: $proved of $total queries proved" >&2
+        exit 1
+    fi
+
 # cargo-fuzz: each untrusted reader, for `seconds` apiece (`ambre-spec-testing.md
 # section 2`). The targets live in `fuzz/`, a workspace of its own, so the
 # sanitizer flags never reach the main build. A crash stops the run and leaves
