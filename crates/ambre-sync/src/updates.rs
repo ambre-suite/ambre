@@ -136,6 +136,11 @@ impl SyncState {
                 update.public_data.clock.get(),
                 opened.as_ref().map_or(0, |d| d.payload.len().get()),
             );
+            // A writer behind the log is read off a delta that opened alone:
+            // its signature and its writer are checked (`SYNC-298`).
+            if opened.is_ok() {
+                self.note_writer_behind(seq, &update);
+            }
             return Some(opened);
         }
 
@@ -1840,6 +1845,25 @@ impl SyncState {
         self.drive_space_rotation(document_id);
     }
 
+    /// Asks the Logic thread for a snapshot once a rotation this client made
+    /// installed `key` (`SYNC-048`). Logic answers with `SendSnapshot`, which
+    /// seals under the current key. So the state after the rotation opens
+    /// under the new key alone, with no chain of older deltas before it. A
+    /// rotation [`Self::install_key`] refused asks for nothing.
+    pub(crate) fn snapshot_after_rotation(
+        &self,
+        document_id: Id<Document>,
+        key: FixedBytes<ambre_core::KeyId>,
+    ) {
+        if self
+            .documents
+            .get(&document_id)
+            .is_some_and(|doc_state| doc_state.doc_key.id() == key)
+        {
+            self.send_to_logic(LogicEvent::SnapshotNeeded { document_id });
+        }
+    }
+
     /// Pays the rotation a document owes, in a spawned task (`SYNC-128`).
     pub(crate) fn start_settle(&mut self, document_id: Id<Document>) {
         // The payment links the key the walk of the log settled to the new
@@ -3439,6 +3463,7 @@ mod tests {
                     pin: pin.copied(),
                     session: Vec::new(),
                     signer: Some(bob.public()),
+                    catalogue: None,
                 },
                 None,
             )
@@ -6865,6 +6890,63 @@ mod tests {
         assert_eq!(rotated(&rx), 1, "an owed rotation paid");
     }
 
+    /// Holds `SYNC-048`: a revoke and an owed rotation paid each ask the
+    /// Logic thread for one snapshot. The snapshot it hands back seals under
+    /// the new key alone. A rotation that names a key the current one
+    /// replaced installs nothing and asks for nothing.
+    #[test]
+    fn a_rotation_this_client_makes_asks_for_a_snapshot_under_the_new_key() {
+        let (mut state, rx, doc, k1, sk, snap) = setup();
+        state.signing_key = Some(sk.clone());
+        let asked = |rx: &ambre_bus::conduit::Receiver<LogicEvent>| {
+            drain(rx)
+                .into_iter()
+                .filter(|e| {
+                    matches!(e, LogicEvent::SnapshotNeeded { document_id } if *document_id == doc)
+                })
+                .count()
+        };
+        let sealed_under = |state: &SyncState| {
+            let upload = state
+                .snapshot_upload(doc, &b"state".to_vec().into(), Seq::<Relay>::new(0))
+                .unwrap();
+            let blob = upload.draft.seal(snap).unwrap();
+            let snapshot: ambre_protocol::Snapshot = postcard::from_bytes(blob.as_bytes()).unwrap();
+            snapshot.public_data.key_id
+        };
+
+        let k2 = DocumentKey::generate();
+        state.handle_sync_event(SyncEvent::RevocationComplete {
+            id: ambre_bus::next_request(),
+            document_id: doc,
+            new_doc_key: k2.clone(),
+            link: pipeline::seal_link(doc, &k1, &k2, ambre_protocol::LogHead::EMPTY, &sk).unwrap(),
+        });
+        assert_eq!(asked(&rx), 1, "a revoke");
+        assert_eq!(sealed_under(&state), k2.id());
+
+        let k3 = DocumentKey::generate();
+        state.handle_sync_event(SyncEvent::DebtSettled {
+            document_id: doc,
+            new_doc_key: k3.clone(),
+            link: pipeline::seal_link(doc, &k2, &k3, ambre_protocol::LogHead::EMPTY, &sk).unwrap(),
+            departed: None,
+        });
+        assert_eq!(asked(&rx), 1, "an owed rotation paid");
+        assert_eq!(sealed_under(&state), k3.id());
+
+        // The relay serves the rotation to `k2` again: the current key
+        // replaced it, so nothing is installed and no snapshot is asked.
+        state.handle_sync_event(SyncEvent::DebtSettled {
+            document_id: doc,
+            new_doc_key: k2.clone(),
+            link: pipeline::seal_link(doc, &k1, &k2, ambre_protocol::LogHead::EMPTY, &sk).unwrap(),
+            departed: None,
+        });
+        assert_eq!(asked(&rx), 0, "a refused rotation");
+        assert_eq!(sealed_under(&state), k3.id());
+    }
+
     /// Holds `SYNC-205` for the session: the pin a link hands over stays the
     /// one a later open of the document reads, past a close.
     #[test]
@@ -7568,6 +7650,7 @@ mod tests {
         state.handle_command(ambre_bus::SyncCommand::OpenChannel {
             channel_id,
             listed_in: None,
+            catalogue_key: None,
         });
         state.channel_listed(channel_id, None, Ok(documents));
         drain(&rx);
@@ -7629,6 +7712,7 @@ mod tests {
         state.handle_command(ambre_bus::SyncCommand::MarkChannelListed {
             channel_id,
             space_id,
+            catalogue_key: ambre_bus::SealedChannelKey::from_bytes(Vec::new()),
         });
         assert_eq!(
             state.documents[&doc].directory_asked.latest(),
@@ -7651,6 +7735,7 @@ mod tests {
         state.handle_command(ambre_bus::SyncCommand::MarkChannelListed {
             channel_id,
             space_id,
+            catalogue_key: ambre_bus::SealedChannelKey::from_bytes(Vec::new()),
         });
         assert_eq!(
             state.documents[&doc].directory_asked.latest(),
@@ -7709,6 +7794,7 @@ mod tests {
         state.handle_command(ambre_bus::SyncCommand::OpenChannel {
             channel_id,
             listed_in: None,
+            catalogue_key: None,
         });
         state.channel_listed(
             channel_id,
@@ -7764,6 +7850,7 @@ mod tests {
         state.handle_command(ambre_bus::SyncCommand::MarkChannelListed {
             channel_id,
             space_id,
+            catalogue_key: ambre_bus::SealedChannelKey::from_bytes(Vec::new()),
         });
         let second = walk(&state);
         assert_eq!(second.1, Root::Stranger);
@@ -7830,6 +7917,7 @@ mod tests {
         state.handle_command(ambre_bus::SyncCommand::OpenChannel {
             channel_id,
             listed_in: None,
+            catalogue_key: None,
         });
         state.channel_listed(
             channel_id,
@@ -7874,6 +7962,7 @@ mod tests {
         state.handle_command(ambre_bus::SyncCommand::MarkChannelListed {
             channel_id,
             space_id,
+            catalogue_key: ambre_bus::SealedChannelKey::from_bytes(Vec::new()),
         });
         drain(&rx);
         drain_ws(&ws_rx);

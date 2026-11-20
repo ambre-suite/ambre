@@ -1523,6 +1523,13 @@ pub struct SyncState {
     /// user. A channel never opened is watched under it (the Murmure
     /// notifications spec).
     listed_keys: HashMap<Id<Channel>, (Id<Meta>, DocumentKey)>,
+    /// The writers of the last log this client walked, by log document. It
+    /// outlives the close of the document, until sign-out. A listed name is
+    /// checked against it (`SYNC-135`).
+    walked_writers: HashMap<Id<Document>, membership_log::Writers>,
+    /// The channel key the catalogue entry of each listed channel holds,
+    /// which every open of the channel trusts (`SYNC-299`).
+    catalogue_pins: HashMap<Id<Channel>, key_vouch::CataloguePin>,
     /// The documents of spaces this client created and the relay does not
     /// hold yet. Their lazy creation marks them spaces (`SYNC-170`).
     new_spaces: HashSet<Id<Document>>,
@@ -1658,6 +1665,8 @@ impl SyncState {
             socket_opens: Count::ZERO,
             member_channels_asked: ambre_core::Issuer::default(),
             listed_keys: HashMap::new(),
+            walked_writers: HashMap::new(),
+            catalogue_pins: HashMap::new(),
             new_spaces: HashSet::new(),
             held_creations: HashMap::new(),
             call: None,
@@ -1956,17 +1965,23 @@ impl SyncState {
             SyncCommand::OpenChannel {
                 channel_id,
                 listed_in,
+                catalogue_key,
             } => {
                 match listed_in {
                     Some(space_id) => self.listed_channels.insert(channel_id, space_id),
                     None => self.listed_channels.remove(&channel_id),
                 };
+                self.pin_catalogue(channel_id, listed_in.zip(catalogue_key.as_ref()));
                 self.handle_open_channel(channel_id, listed_in);
             }
             SyncCommand::MarkChannelListed {
                 channel_id,
                 space_id,
-            } => self.mark_channel_listed(channel_id, space_id),
+                catalogue_key,
+            } => {
+                self.pin_catalogue(channel_id, Some((space_id, &catalogue_key)));
+                self.mark_channel_listed(channel_id, space_id);
+            }
             SyncCommand::RotateSpace { space_id, channels } => {
                 self.handle_rotate_space(space_id, channels);
             }

@@ -21,14 +21,14 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**4889 rows: 4461 shipped, of which 14 loose. 428 unbuilt.**
+**4892 rows: 4466 shipped, of which 14 loose. 426 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1542 | 583 | 995 | 801 | 526 | 4447 |
+| `verified` | 1547 | 583 | 995 | 801 | 526 | 4452 |
 | `failing` |  |  |  |  |  | 0 |
 | `human-review` | 14 |  |  |  |  | 14 |
-| `unimplemented` | 175 | 42 | 21 | 33 | 157 | 428 |
+| `unimplemented` | 173 | 42 | 21 | 33 | 157 | 426 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -54,13 +54,13 @@
 | `ambre-spec-frame.md` | 25 | 24 | 22 | 2 | 1 |
 | `ambre-spec-high-density.md` | 10 | 10 | 10 |  |  |
 | `ambre-spec-interop.md` | 26 | 25 | 23 | 2 | 1 |
-| `ambre-spec-key-rotation.md` | 39 | 38 | 38 |  | 1 |
+| `ambre-spec-key-rotation.md` | 39 | 39 | 39 |  |  |
 | `ambre-spec-key-verification.md` | 21 | 20 | 20 |  | 1 |
 | `ambre-spec-kinetic-scroll.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-launcher.md` | 53 | 53 | 53 |  |  |
 | `ambre-spec-locale.md` | 23 | 23 | 23 |  |  |
 | `ambre-spec-media.md` | 20 | 20 | 20 |  |  |
-| `ambre-spec-membership.md` | 95 | 93 | 93 |  | 2 |
+| `ambre-spec-membership.md` | 97 | 95 | 95 |  | 2 |
 | `ambre-spec-message-bus.md` | 46 | 45 | 45 |  | 1 |
 | `ambre-spec-newtypes.md` | 1 | 1 | 1 |  |  |
 | `ambre-spec-object-store.md` | 24 | 22 | 22 |  | 2 |
@@ -72,7 +72,7 @@
 | `ambre-spec-render-assets.md` | 26 | 23 | 23 |  | 3 |
 | `ambre-spec-residency.md` | 32 | 32 | 32 |  |  |
 | `ambre-spec-schema-version.md` | 20 | 20 | 20 |  |  |
-| `ambre-spec-sealed-envelope.md` | 30 | 29 | 29 |  | 1 |
+| `ambre-spec-sealed-envelope.md` | 31 | 31 | 31 |  |  |
 | `ambre-spec-sequencer.md` | 83 | 82 | 82 |  | 1 |
 | `ambre-spec-server.md` | 134 | 125 | 124 | 1 | 9 |
 | `ambre-spec-session.md` | 33 | 33 | 33 |  |  |
@@ -225,7 +225,7 @@
 | `ambre-spec-machine-access.md` | MACH-001..034 |
 | `ambre-spec-macros.md` | MACRO-001..054 |
 | `ambre-spec-media.md` | SYNC-049..055,074..077,139..140,145..146,174..176,228,288 |
-| `ambre-spec-membership.md` | SYNC-010,012,014..017,034..040,073,092..094,102..111,123..124,132,150..151,161,172..173,190,197,200..202,205..212,214..215,217..222,225..227,229..247,260,262..263,266..268,272..274,279,282..285,289..291 |
+| `ambre-spec-membership.md` | SYNC-010,012,014..017,034..040,073,092..094,102..111,123..124,132,150..151,161,172..173,190,197,200..202,205..212,214..215,217..222,225..227,229..247,260,262..263,266..268,272..274,279,282..285,289..291,298..299 |
 | `ambre-spec-message-bus.md` | BUS-001..046 |
 | `ambre-spec-murmure-attachments.md` | MURMURE-128..136,240..242,577..578,626..628,636..637 |
 | `ambre-spec-murmure-bots.md` | MURMURE-387..398 |
@@ -296,7 +296,7 @@
 | `ambre-spec-render-assets.md` | CANVAS-006..007,017..024,051..054,067..069,073,081,084,086..090,097 |
 | `ambre-spec-residency.md` | RESID-001..032 |
 | `ambre-spec-schema-version.md` | SCHEMA-001..020 |
-| `ambre-spec-sealed-envelope.md` | SYNC-001,003..005,008..009,018..023,072,088..091,112..114,125,135,138,144,203,216,257..259,287 |
+| `ambre-spec-sealed-envelope.md` | SYNC-001,003..005,008..009,018..023,072,088..091,112..114,125,135,138,144,203,216,257..259,287,297 |
 | `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155,169,184,194..215,259,262..264,274,276..277,284,288..290,300,307 |
 | `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165,167..168,170..171,173..182,187..193,216..228,230,238..257,260..261,266,268,270,272..273,275,280..283,285..287,297..299,302,304,306,308..312,316..318 |
 | `ambre-spec-session.md` | SRV-003,009,022..031,074,090..092,163,172,232,234..236,267,278..279,291,293..296,303,319..320 |
