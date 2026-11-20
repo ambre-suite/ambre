@@ -816,6 +816,10 @@ fn sync_warning_message(code: SyncWarningCode) -> &'static str {
         SyncWarningCode::EditRefused => {
             "The server refused a change. Reopen the document before editing it again."
         }
+        SyncWarningCode::WriterBehindLog => {
+            "A member is still writing as if a removal had not happened. A person \
+             removed from this document may read those changes."
+        }
         SyncWarningCode::LogEntryWithheld => {
             "The server may be hiding a change of members from this device. Your new \
              changes stay on this device until the member list shows that change."

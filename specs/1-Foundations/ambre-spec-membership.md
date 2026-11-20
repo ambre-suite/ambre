@@ -129,6 +129,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-111` | `FRAME` | Checking a member list MUST NOT block the open of the document, beyond the checks of its key. | this spec section 3 | `ambre_sync::updates::tests::a_key_the_invitation_does_not_name_is_refused` -- the open reads the log and still completes, the check deciding only which key it holds | none | verified |
 | `SYNC-206` | `POST` | Every update MUST carry, under its author's signature, the head of the membership log its author last read. | this spec section 3; `ambre-spec-sealed-envelope.md` | `ambre_sync::withheld::tests::a_log_served_whole_clears_the_check_and_heads_the_next_delta` -- the next delta signs the head of the log the client last read; `ambre_sync::pipeline::tests::a_rewritten_log_head_breaks_the_signature` -- a head rewritten in transit fails the signature, alone and at the open | none | verified |
 | `SYNC-207` | `FAIL` | Given a member's signed head that the log this client read does not pass through, the client MUST read the log again, and MUST warn the user when that log still does not pass through it. | this spec section 3; `ambre-spec-key-rotation.md` | `ambre_sync::withheld::tests::a_peer_detects_a_revoke_the_relay_hid_from_it` -- a relay hides a revoke and its rotation from Bob, Alice's next delta under the new key still proves its head, the log read again lacks the revoke, and Bob is warned once; `::a_log_served_whole_clears_the_check_and_heads_the_next_delta` -- an honest relay serves the entry and nobody is warned; `::a_head_no_member_signed_asks_nothing` -- a key outside the directory, or a broken signature, asks for no log; `::a_head_past_the_log_asks_once_and_a_log_without_it_is_withheld` -- one read at a time, and an answer to a read that left before the head proves nothing; `::a_served_log_holds_each_head_it_passes_through_and_no_other` -- a head past the log or forking from it is not held | none | verified |
+| `SYNC-286` | `FAIL` | Given a member's delta that opens under a key other than the current one, numbered by the relay after a delta under the current key, whose signed head the valid walk passes through short of the head this client read, the client MUST warn the user once for that member. | this spec section 3; `SYNC-206`, `SYNC-207`; `ambre-spec-key-rotation.md` | `ambre_sync::withheld::tests::a_member_writing_behind_the_log_is_seen_by_a_peer` -- a relay hides a revoke from Bob, and his delta under the retired key with the head before the revoke warns Alice once, while history numbered before her delta under the current key, a delta in flight before the rotation, and a stale delta whose head holds the revoke warn nobody | none | verified |
 | `SYNC-218` | `POST` | Every update MUST carry, under its author's signature, the last entry of the log its author last read, unless that log is empty. | this spec section 3; `SYNC-206` | `ambre_sync::withheld::tests::a_log_served_whole_clears_the_check_and_heads_the_next_delta` -- the next delta carries the head and the entry it names; `::a_head_names_the_last_entry_served_and_an_empty_log_none` -- the last entry served, valid or not, and none on an empty log; `ambre_sync::pipeline::tests::a_stripped_log_entry_breaks_the_signature` -- an entry stripped or swapped in transit fails the signature; `ambre_protocol::tests::a_log_entry_costs_an_update_at_most_239_bytes` -- the entry on the wire, against its budget row | none | verified |
 | `SYNC-219` | `FAIL` | Given a head whose update or presence sample carries no entry for it, or an entry no member allowed by this client's log signed, the client MUST NOT read the log again for it, nor warn the user. | this spec section 3; `SYNC-207`, `SYNC-263` | `ambre_sync::withheld::tests::a_head_whose_entry_no_allowed_member_signed_asks_nothing` -- no entry, an editor's revoke of the owner, the owner named under another key, an entry of another head or document, and a self-join each ask nothing, and the owner's entry asks once; `ambre_sync::withheld::tests::a_peer_detects_a_revoke_the_relay_hid_from_it` -- the owner's revoke, proved, still warns; `::a_forged_presence_entry_asks_nothing` -- a sample with no entry, with an entry no allowed member signed, or rewritten in transit asks for no log, and the sample with the owner's entry asks once | none | verified |
 | `SYNC-262` | `POST` | Every presence sample MUST carry, under its sender's signature, the head of the membership log its sender last read, and the last entry of that log unless the log is empty. | this spec section 3; `SYNC-206`, `SYNC-218`; `ambre-spec-presence.md` | `ambre_sync::withheld::tests::a_relay_that_drops_updates_but_forwards_presence_is_caught` -- each sample Alice sends leaves under the head of the log she last read and the entry it names; `ambre_sync::pipeline::tests::a_rewritten_presence_head_breaks_the_signature` -- a head or an entry rewritten in transit fails the signature; `ambre_protocol::tests::a_log_head_and_entry_cost_an_ephemeral_at_most_282_bytes` -- the two fields on the wire, against their budget row | none | verified |
@@ -150,7 +151,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 90 `verified`, 1 `failing`. Every pure transform holds, out of the browser: the
+* **Verification.** 91 `verified`, 1 `failing`. Every pure transform holds, out of the browser: the
   wrap, the weak key, the pin, the invitee, the role and the log walk. What is loose is the branches
   that only run against a live relay.
 ---
@@ -309,6 +310,21 @@ Two rules make the gap visible to the member it is hidden from.
 
 The detection needs one frame of an up-to-date member to reach the member. A relay that hides
 every such frame partitions the member, and nothing in the document tells it apart from silence.
+
+**A member writing behind the log, seen by a peer.** The member who read the removal sees the same
+gap from the other side (`SYNC-286`).
+
+- A peer's delta opens under a key other than the current one, from the cache or the chain.
+- The relay numbered it after a delta under the current key, this client's own echo included. So
+  the delta did not leave before the rotation: history and a delta in flight carry lower numbers.
+- Its signed head is one the valid walk passes through, short of the head this client read. The
+  removal that the rotation answered is past it.
+
+The client then warns the user, once per member. Either the relay withholds the removal from that
+member, or the member has not read it yet: the two read alike from here. The member who left may
+read that delta. The relay does not refuse a retired key once the debt is paid (`SRV-123`), so an
+honest relay also lets a short lag through. A delta held in quarantine and released later is not
+read for it.
 
 **How an entry is appended.** The relay checks the signature against the author's registered key.
 It appends at the entry's position alone, under the document lock. Two writers racing for one

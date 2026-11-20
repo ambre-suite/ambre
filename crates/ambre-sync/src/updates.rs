@@ -136,6 +136,11 @@ impl SyncState {
                 update.public_data.clock.get(),
                 opened.as_ref().map_or(0, |d| d.payload.len().get()),
             );
+            // A writer behind the log is read off a delta that opened alone:
+            // its signature and its writer are checked (`SYNC-286`).
+            if opened.is_ok() {
+                self.note_writer_behind(seq, &update);
+            }
             return Some(opened);
         }
 

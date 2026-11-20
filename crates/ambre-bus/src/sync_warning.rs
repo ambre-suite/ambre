@@ -65,4 +65,10 @@ pub enum SyncWarningCode {
     /// membership log never granted a writing role, and was dropped
     /// (`SYNC-211`).
     WriterRefused = 10,
+    /// A member's delta opened under a key a rotation retired. The relay
+    /// numbered it after a delta under the current key. Its log head comes
+    /// before the removal that rotation answered. Either the relay withholds
+    /// that removal from the member, or the member has not read it yet. The
+    /// member who left may read that delta (`SYNC-286`).
+    WriterBehindLog = 11,
 }
