@@ -77,9 +77,10 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 FROM toolchain AS web-build
 # The trunk that `scripts/client_digest.py` pins: another trunk writes another page.
 ARG TRUNK_VERSION=0.22.1
+# In /src, where `rust-toolchain.toml` names the toolchain: rustup has no default.
+WORKDIR /src
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     cargo install --locked trunk --version "${TRUNK_VERSION}"
-WORKDIR /src
 COPY . .
 ARG DEV_LOGIN=
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
