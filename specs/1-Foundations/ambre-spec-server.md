@@ -470,6 +470,11 @@ takes a public address with no load balancer in front (`CALL-141`). The relay ne
 later (`SRV-241`), an S3-compatible object store and its metrics port kept private (`SRV-257`). The
 configuration of one hosting provider lives outside this repository.
 
+**One address serves the page and TURN.** A host with one address has one port 443, and TURN over
+TCP needs that port on networks that open nothing else (`CALL-042`). The compose file puts one TLS
+front before both, and the front routes each connection by its server name. A second address for
+TURN is rare on a self-hosted server.
+
 **A deployment names its own credentials** (`SRV-256`). The local stack of `docker-compose.yml`
 has a database password and an object store key that guard nothing. The relay falls back to them
 in development mode alone, and announces each fallback at start-up. Outside it, an unset variable
