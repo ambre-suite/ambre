@@ -805,6 +805,62 @@ mod tests {
         assert!(!state.rt().closed_channels().any(|c| c == channel_id));
     }
 
+    /// Holds `SYNC-300` for a channel, fail closed. A revoke caps a writer
+    /// below a delta the active segment applied. The whole channel ends:
+    /// each document closes in Sync and its local copy leaves the store.
+    /// The channel then opens again from the relay, which replays each
+    /// document under the cap. A document no channel holds reads nothing
+    /// here.
+    #[test]
+    fn a_channel_read_again_drops_each_copy_and_opens_anew() {
+        let (mut state, _ui, sync, store) = harness_with_store();
+        let (channel_id, stored) = stored_channel();
+        let meta = stored.meta_id().document_id();
+        let active = stored.active_id().document_id();
+        state.handle_logic_command(LogicCommand::OpenChannel { channel_id });
+        state.handle_logic_event(LogicEvent::ChannelDocuments {
+            channel_id,
+            documents: listing(&stored),
+        });
+        serve(&mut state, &stored, meta);
+        serve(&mut state, &stored, active);
+        drain(&sync);
+        drain(&store);
+        assert!(state.rt().channels().contains_key(&channel_id));
+
+        state.handle_logic_event(LogicEvent::DocumentReread {
+            document_id: active,
+        });
+        let erased: HashSet<Id<Document>> = drain(&store)
+            .into_iter()
+            .filter_map(|(id, write)| matches!(write, PersistWrite::Erase).then_some(id))
+            .collect();
+        assert_eq!(erased, HashSet::from([meta, active]), "each copy leaves");
+        let sent = sent(&sync);
+        let closed: HashSet<Id<Document>> = sent
+            .iter()
+            .filter_map(|s| match s {
+                Sent::Close(id) => Some(*id),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(closed, HashSet::from([meta, active]), "{sent:?}");
+        assert_eq!(
+            sent.last(),
+            Some(&Sent::List(channel_id)),
+            "the channel opens again after each close: {sent:?}"
+        );
+        assert!(!state.rt().channels().contains_key(&channel_id));
+        assert!(state.rt().opening().contains_key(&channel_id));
+
+        let stranger = Id::<Document>::mint();
+        state.handle_logic_event(LogicEvent::DocumentReread {
+            document_id: stranger,
+        });
+        assert!(drain(&store).is_empty());
+        assert!(drain(&sync).is_empty());
+    }
+
     /// The relay serves a document: its snapshot, then its ready signal.
     fn serve(state: &mut LogicState, stored: &ChannelState, document_id: Id<Document>) {
         state.handle_logic_event(LogicEvent::RemoteSnapshot {

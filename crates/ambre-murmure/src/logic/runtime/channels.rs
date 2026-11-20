@@ -999,25 +999,7 @@ impl<D> Runtime<D> {
     /// that failed to open (`SYNC-231`). A document no channel holds any more
     /// belongs to a channel an earlier failure already ended.
     fn end_rooted_outside(&mut self, document_id: Id<Document>) {
-        let channel_id = self
-            .channels
-            .iter()
-            .find(|(_, c)| c.holds(document_id))
-            .map(|(id, _)| *id)
-            .or_else(|| {
-                self.opening.iter().find_map(|(id, o)| {
-                    o.as_ref()
-                        .is_some_and(|o| o.expects(document_id))
-                        .then_some(*id)
-                })
-            })
-            .or_else(|| {
-                self.closed_channels
-                    .iter()
-                    .find(|(_, c)| c.documents.contains(&document_id))
-                    .map(|(id, _)| *id)
-            });
-        let Some(channel_id) = channel_id else {
+        let Some(channel_id) = self.channel_anywhere(document_id) else {
             tracing::warn!(
                 "Logic: {document_id} starts outside its space, and no channel holds it"
             );
@@ -1033,6 +1015,47 @@ impl<D> Runtime<D> {
         for document_id in copies {
             self.store(document_id, StoreWrite::Erase);
         }
+    }
+
+    /// The channel that holds `document_id`, whether it is open, opening or
+    /// closed.
+    fn channel_anywhere(&self, document_id: Id<Document>) -> Option<Id<Channel>> {
+        self.channels
+            .iter()
+            .find(|(_, c)| c.holds(document_id))
+            .map(|(id, _)| *id)
+            .or_else(|| {
+                self.opening.iter().find_map(|(id, o)| {
+                    o.as_ref()
+                        .is_some_and(|o| o.expects(document_id))
+                        .then_some(*id)
+                })
+            })
+            .or_else(|| {
+                self.closed_channels
+                    .iter()
+                    .find(|(_, c)| c.documents.contains(&document_id))
+                    .map(|(id, _)| *id)
+            })
+    }
+
+    /// A revoke capped a writer below a delta `document_id` applied, so the
+    /// state of its channel holds a write the log refuses (`SYNC-300`). A
+    /// merge cannot take that write out. The whole channel ends, each local
+    /// copy of its documents leaves the store, and the channel opens again
+    /// from the relay, which replays each document under the cap. Returns
+    /// `false` when no channel holds the document.
+    pub fn channel_reread(&mut self, document_id: Id<Document>) -> bool {
+        let Some(channel_id) = self.channel_anywhere(document_id) else {
+            return false;
+        };
+        let copies = self.documents_anywhere(channel_id);
+        self.end_channel(channel_id);
+        for document_id in copies {
+            self.store(document_id, StoreWrite::Erase);
+        }
+        self.open_channel(channel_id);
+        true
     }
 
     /// Every document of `channel_id` this thread knows, whether the channel

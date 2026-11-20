@@ -845,8 +845,13 @@ impl LogicState {
             }
             LogicEvent::KeyRotated { document_id } => self.route(|m| m.key_rotated(document_id)),
             // A revoke capped a writer below a delta the document applied
-            // (`SYNC-300`).
-            LogicEvent::DocumentReread { document_id } => self.reread(document_id),
+            // (`SYNC-300`). A document of a channel reads its whole channel
+            // again in the Murmure runtime, and any other reads alone.
+            LogicEvent::DocumentReread { document_id } => {
+                if !self.route(|m| m.channel_reread(document_id)) {
+                    self.reread(document_id);
+                }
+            }
             LogicEvent::ConverterFetched { family, module } => {
                 self.converter_fetched(family, module);
             }

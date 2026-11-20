@@ -313,7 +313,7 @@ impl SyncState {
             applied: self
                 .documents
                 .get(&document_id)
-                .map(|doc| doc.applied_clocks.borrow().clone())
+                .map(SyncDocumentState::applied_clocks)
                 .unwrap_or_default(),
         };
         let http = sharing::GlooHttp { auth };
@@ -380,6 +380,7 @@ impl SyncState {
         };
         let kept = footing.to_kept(key);
         let log_document = footing.document();
+        self.keep_chain(document_id);
         if self.kept_logs.get(&log_document) == Some(&kept) {
             return;
         }
@@ -388,6 +389,32 @@ impl SyncState {
             document_id: log_document,
             kept,
         });
+    }
+
+    /// Keeps the links `document_id` holds as the chain of its log, which a
+    /// listed name walks with no request (`SYNC-302`). The open kept only
+    /// the links a writer of the log signed (`SYNC-121`, `SYNC-204`).
+    pub(crate) fn keep_chain(&mut self, document_id: Id<Document>) {
+        let log_document = self.log_document(document_id);
+        if let Some(doc) = self.documents.get(&document_id) {
+            self.kept_chains.insert(log_document, doc.chain.clone());
+        }
+    }
+
+    /// The chain of links each log kept, by the log's document (`SYNC-302`).
+    #[cfg(test)]
+    pub(crate) fn kept_chains(&self) -> &HashMap<Id<Document>, crate::chain::Chain> {
+        &self.kept_chains
+    }
+
+    /// What a listed name opens under, for a listing task that outlives the
+    /// borrow: the key each log accepted last (`SYNC-291`) and the chain
+    /// each log kept (`SYNC-302`).
+    pub(crate) fn kept_names(&self) -> crate::documents::KeptNames {
+        crate::documents::KeptNames {
+            keys: self.kept_keys(),
+            chains: self.kept_chains.clone(),
+        }
     }
 
     /// The key id each log accepted last, by the log's document, for a

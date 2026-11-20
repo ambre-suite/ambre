@@ -964,11 +964,11 @@ struct SyncDocumentState {
     /// The keys whose deltas and snapshots this document takes, from the
     /// latest walk of its log (`SYNC-211`).
     writers: membership_log::Writers,
-    /// The highest clock of each author's deltas this document applied, and
-    /// the clocks each snapshot it opened folds (`SYNC-300`). A revoke caps
-    /// its member at the clock held here. A cell: the opens that read it
-    /// borrow the document shared.
-    applied_clocks: std::cell::RefCell<HashMap<FixedBytes<PublicKey>, Seq<DeltaAuthor>>>,
+    /// What this document applied of each author: the highest clock of
+    /// their deltas and of what each snapshot it opened folds, and the
+    /// heads their deltas signed (`SYNC-300`, `SYNC-301`). A cell: the opens
+    /// that read it borrow the document shared.
+    applied: std::cell::RefCell<Applied>,
     /// The latest departure the current key was checked against, or found
     /// owed for. A walk that holds a later one leaves the current key in
     /// the leaver's hands, so a writer owes a rotation (`SYNC-223`).
@@ -1075,6 +1075,106 @@ pub(crate) struct HeldSnapshot {
     pub blob: Payload<pipeline::FetchedBlob>,
 }
 
+/// The most distinct log heads one author's applied deltas are kept under.
+/// Past it, the heads merge into the empty head, which no readmission
+/// passes: the bound fails closed (`SYNC-301`).
+const APPLIED_HEADS_PER_AUTHOR: Count<AppliedHeads> = Count::new(64);
+
+/// The distinct log heads kept for one author's applied deltas.
+enum AppliedHeads {}
+
+impl ambre_core::NarrowCount for AppliedHeads {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("AppliedHeads");
+}
+
+/// What a document applied of each author's deltas (`SYNC-300`,
+/// `SYNC-301`).
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Applied {
+    /// The highest clock of each author's deltas, alone or folded in a
+    /// snapshot. A revoke caps its member at the clock held here.
+    pub(crate) clocks: HashMap<FixedBytes<PublicKey>, Seq<DeltaAuthor>>,
+    /// The highest clock of each author's deltas under each log head they
+    /// signed, for the deltas that reached the document alone. A snapshot
+    /// names no head, so it adds nothing here.
+    heads: HashMap<FixedBytes<PublicKey>, Vec<(ambre_protocol::LogHead, Seq<DeltaAuthor>)>>,
+}
+
+impl Applied {
+    /// Notes a delta `author` signed at `clock`, alone or folded.
+    fn note(&mut self, author: &FixedBytes<PublicKey>, clock: Seq<DeltaAuthor>) {
+        self.clocks
+            .entry(*author)
+            .and_modify(|held| *held = (*held).max(clock))
+            .or_insert(clock);
+    }
+
+    /// Notes a delta `author` signed at `clock` under `head`, which reached
+    /// the document alone.
+    fn note_signed(
+        &mut self,
+        author: &FixedBytes<PublicKey>,
+        head: ambre_protocol::LogHead,
+        clock: Seq<DeltaAuthor>,
+    ) {
+        self.note(author, clock);
+        let heads = self.heads.entry(*author).or_default();
+        if let Some(held) = heads.iter_mut().find(|(h, _)| *h == head) {
+            held.1 = held.1.max(clock);
+            return;
+        }
+        if Count::<AppliedHeads>::of(heads.len()) < APPLIED_HEADS_PER_AUTHOR {
+            heads.push((head, clock));
+            return;
+        }
+        // Past the bound, the clock counts under the empty head, which no
+        // readmission passes.
+        let empty = ambre_protocol::LogHead::EMPTY;
+        match heads.iter_mut().find(|(h, _)| *h == empty) {
+            Some(held) => held.1 = held.1.max(clock),
+            None => {
+                if let Some(slot) = heads.last_mut() {
+                    *slot = (empty, slot.1.max(clock));
+                }
+            }
+        }
+    }
+
+    /// Takes in what `other` applied: a reopen resumes from a local copy
+    /// that folds it.
+    fn merge(&mut self, other: Self) {
+        for (author, clock) in other.clocks {
+            self.note(&author, clock);
+        }
+        for (author, heads) in other.heads {
+            for (head, clock) in heads {
+                self.note_signed(&author, head, clock);
+            }
+        }
+    }
+
+    /// Whether nothing was applied.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.clocks.is_empty()
+    }
+
+    /// Whether a delta applied lies past a cap `writers` sets, or past a cap
+    /// a later grant lifted under a head before that grant.
+    fn past_cap(&self, writers: &membership_log::Writers) -> bool {
+        let capped = self
+            .clocks
+            .iter()
+            .any(|(author, clock)| writers.cap(author).is_some_and(|cap| *clock > cap));
+        let excluded = self.heads.iter().any(|(author, heads)| {
+            heads
+                .iter()
+                .any(|(head, clock)| !writers.readmits(author, *clock, *head))
+        });
+        capped || excluded
+    }
+}
+
 /// The snapshot an open adopts whole, still sealed, and the key it must
 /// verify under: the author its confirmation names, or this user
 /// (`AUTHOR-030`).
@@ -1118,7 +1218,7 @@ impl SyncDocumentState {
             ephemeral_remote_counters: HashMap::new(),
             signing_keys: HashMap::new(),
             writers: membership_log::Writers::Unchecked,
-            applied_clocks: std::cell::RefCell::new(HashMap::new()),
+            applied: std::cell::RefCell::new(Applied::default()),
             departed: None,
             unvouched: Vec::new(),
             refused: Vec::new(),
@@ -1343,13 +1443,23 @@ impl SyncDocumentState {
         if !self.writers.admits_snapshot(&snapshot.public_data.pub_key) {
             return Err(pipeline::PipelineError::NotAWriter);
         }
+        // A snapshot that folds a delta past the cap of its writer holds a
+        // write the log refuses, whoever signed it. It is refused whole, and
+        // the deltas replay one by one under the cap (`SYNC-300`).
+        let folded = &snapshot.public_data.parent_snapshot_update_clocks;
+        if folded
+            .iter()
+            .any(|(author, clock)| self.writers.cap(author).is_some_and(|cap| *clock > cap))
+        {
+            return Err(pipeline::PipelineError::PastCap);
+        }
         let key = self
             .key_named(snapshot.public_data.key_id)
             .ok_or(pipeline::PipelineError::WrongKey)?;
         let payload = pipeline::open_snapshot(&snapshot, &key)?;
         // What the snapshot folds counts as applied, so a revoke caps a
         // writer at the deltas the snapshot holds too (`SYNC-300`).
-        for (author, clock) in &snapshot.public_data.parent_snapshot_update_clocks {
+        for (author, clock) in folded {
             self.note_applied(author, *clock);
         }
         Ok((payload, snapshot.public_data.pub_key))
@@ -1358,11 +1468,7 @@ impl SyncDocumentState {
     /// Notes that a delta `author` signed at `clock` reached the document,
     /// alone or folded in a snapshot (`SYNC-300`).
     fn note_applied(&self, author: &FixedBytes<PublicKey>, clock: Seq<DeltaAuthor>) {
-        self.applied_clocks
-            .borrow_mut()
-            .entry(*author)
-            .and_modify(|held| *held = (*held).max(clock))
-            .or_insert(clock);
+        self.applied.borrow_mut().note(author, clock);
     }
 
     /// The highest clock of `author`'s deltas this document applied, the
@@ -1371,21 +1477,38 @@ impl SyncDocumentState {
     /// only a test reads one author.
     #[cfg(test)]
     pub(crate) fn applied_clock(&self, author: &FixedBytes<PublicKey>) -> Seq<DeltaAuthor> {
-        self.applied_clocks
+        self.applied
             .borrow()
+            .clocks
             .get(author)
             .copied()
             .unwrap_or(Seq::<DeltaAuthor>::new(0))
     }
 
+    /// What this document applied, which an eviction keeps for the reopen
+    /// (`SYNC-300`).
+    pub(crate) fn take_applied(&self) -> Applied {
+        self.applied.take()
+    }
+
+    /// The highest clock of each author's deltas this document applied, the
+    /// caps a revoke names (`SYNC-300`).
+    pub(crate) fn applied_clocks(&self) -> HashMap<FixedBytes<PublicKey>, Seq<DeltaAuthor>> {
+        self.applied.borrow().clocks.clone()
+    }
+
+    /// Notes what `applied` holds as applied: a reopen resumes from a local
+    /// copy that folds it (`SYNC-300`, `RESID-010`).
+    pub(crate) fn resume_applied(&self, applied: Applied) {
+        self.applied.borrow_mut().merge(applied);
+    }
+
     /// Whether a delta this document applied lies past a cap `writers`
-    /// sets. The state then holds a write the log refuses, and is read again
-    /// from the relay (`SYNC-300`).
+    /// sets, or past a cap a later grant lifted under a head before that
+    /// grant. The state then holds a write the log refuses, and is read
+    /// again from the relay (`SYNC-300`, `SYNC-301`).
     pub(crate) fn applied_past_cap(&self, writers: &membership_log::Writers) -> bool {
-        self.applied_clocks
-            .borrow()
-            .iter()
-            .any(|(author, clock)| writers.cap(author).is_some_and(|cap| *clock > cap))
+        self.applied.borrow().past_cap(writers)
     }
 
     /// Opens an update with the one key it names, and with no other
@@ -1412,12 +1535,15 @@ impl SyncDocumentState {
         let signer = &update.public_data.pub_key;
         // A signer the log never granted a writing role writes nothing, though
         // it holds a key the cache or the chain reaches (`SYNC-211`). A revoked
-        // writer writes nothing past the cap of its revoke (`SYNC-300`).
-        if !self.writers.admits_delta(signer, update.public_data.clock) {
+        // writer writes nothing past the cap of its revoke (`SYNC-300`), and a
+        // readmitted one nothing it signed while it stood excluded
+        // (`SYNC-301`).
+        let (clock, head) = (update.public_data.clock, update.public_data.log_head);
+        if !self.writers.admits_delta(signer, clock, head) {
             return Err(pipeline::PipelineError::NotAWriter);
         }
         let body = pipeline::split_update_body(self.open_update_named(update)?)?;
-        self.note_applied(signer, update.public_data.clock);
+        self.applied.borrow_mut().note_signed(signer, head, clock);
         Ok(SignedDelta {
             seq,
             peer: ambre_crypto::peer::derive_peer_id(signer, &body.nonce),
@@ -1509,6 +1635,10 @@ pub struct SyncState {
     /// (`SYNC-290`). A listed name opens under the key it names alone
     /// (`SYNC-291`).
     kept_logs: HashMap<Id<Document>, ambre_bus::KeptLog>,
+    /// The links each log's latest open or rotation in this session held,
+    /// by the log's document. A listed name sealed before the last rotation
+    /// opens through them, with no request (`SYNC-302`).
+    kept_chains: HashMap<Id<Document>, chain::Chain>,
 
     // -- Single multiplexed WebSocket -----------------------------------------
     ws: Option<WebSocket>,
@@ -1664,6 +1794,10 @@ pub struct SyncState {
     /// subscription (`RESID-004`).
     light: HashMap<Id<Document>, light::LightSubscription>,
 
+    /// The clocks a reopen of an evicted document resumes with: what its
+    /// local copy folds, until its open lands (`SYNC-300`, `RESID-010`).
+    resumed_clocks: HashMap<Id<Document>, Applied>,
+
     /// Last dev username seen on `DevLogin`, kept so the WS reauth path can
     /// silently re-login if the refresh token is also dead. That happens when
     /// the server restarts with a fresh JWT key and an empty Redis. `None` in a
@@ -1694,6 +1828,7 @@ impl SyncState {
             log_footings: HashMap::new(),
             shown_identities: HashMap::new(),
             kept_logs: HashMap::new(),
+            kept_chains: HashMap::new(),
             ws: None,
             _onmessage: None,
             _onclose: None,
@@ -1741,6 +1876,7 @@ impl SyncState {
             pending_pre_session_updates: Vec::new(),
             session_nonces: HashMap::new(),
             light: HashMap::new(),
+            resumed_clocks: HashMap::new(),
             #[cfg(feature = "dev-login")]
             dev_username: None,
         }

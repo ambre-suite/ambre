@@ -113,6 +113,8 @@ pub enum PipelineError {
     NotAWriter,
     #[error("the log of the document walks again, or roots outside its space")]
     LogUnsettled,
+    #[error("the snapshot folds a delta past the cap a revoke set on its writer")]
+    PastCap,
 }
 
 impl PipelineError {
@@ -124,7 +126,7 @@ impl PipelineError {
         match self {
             Self::Crypto(CryptoError::InvalidSignature) => SyncWarningCode::SignatureRefused,
             Self::WrongKey => SyncWarningCode::KeyNotHeld,
-            Self::NotAWriter => SyncWarningCode::WriterRefused,
+            Self::NotAWriter | Self::PastCap => SyncWarningCode::WriterRefused,
             _ => SyncWarningCode::DecryptFailed,
         }
     }
