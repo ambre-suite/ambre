@@ -540,6 +540,14 @@ impl AuthContext {
         Ok(())
     }
 
+    /// Renews the pair the store holds now, through `transport`. A key store
+    /// that finds the keys stored already renews its keyless pair, and the
+    /// relay mints the next one under the registered key (`SRV-307`).
+    pub(crate) async fn renew_held_via(&self, transport: &impl Transport) -> Result<(), HttpError> {
+        let stale = self.access_token()?;
+        self.renew_via(transport, &stale).await
+    }
+
     /// Revokes the session's refresh token at the relay over the browser's
     /// `fetch` (`SRV-026`).
     pub(crate) async fn revoke(&self) -> Result<(), HttpError> {
@@ -1469,31 +1477,6 @@ pub(crate) async fn fetch_bytes(
     Ok(resp.body.into_role())
 }
 
-/// Account-setup payload. Zero-Knowledge invariant (N4): the passphrase NEVER
-/// leaves the client. The server only receives the wrapped master key and the
-/// Argon2 salt needed to re-derive the unwrap key locally on future unlocks.
-#[derive(Serialize)]
-pub(crate) struct SetupAccountRequest {
-    pub email: ambre_core::Email,
-    pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
-    pub master_key_enc: ambre_core::Encoded<ambre_core::WrappedMasterKey>,
-    pub master_key_salt: ambre_core::FixedBytes<ambre_core::MasterKeySalt>,
-    pub signing_pubkey: ambre_core::FixedBytes<ambre_core::PublicKey>,
-    pub exchange_pubkey: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
-}
-
-/// The relay's answer to an account setup: the user it assigned, and the
-/// session's tokens. The worker announces the session with that user
-/// (`SYNC-261`).
-#[derive(Deserialize)]
-pub(crate) struct SetupAccountResponse {
-    #[serde(with = "ambre_core::serde_id::text")]
-    pub user_id: Id<User>,
-    /// The pair, with the lifetime of its access token.
-    #[serde(flatten)]
-    pub tokens: TokenPair,
-}
-
 #[cfg(feature = "dev-login")]
 #[derive(Serialize)]
 pub(crate) struct DevLoginRequest {
@@ -1550,14 +1533,18 @@ pub(crate) struct MasterKeyResponse {
 }
 
 /// The first key store of a signed-in account (`PUT /api/keys/master`). It
-/// holds the sealed seed, its salt and the two public keys the seed derives.
-/// No seed, word or passphrase is representable here (`SYNC-256`).
+/// holds the sealed seed, its salt, the two public keys the seed derives and
+/// the proof of the signing key. No seed, word or passphrase is representable
+/// here (`SYNC-256`).
 #[derive(Serialize)]
 pub(crate) struct StoreMasterKeysRequest {
     pub master_key_enc: ambre_core::Encoded<ambre_core::WrappedMasterKey>,
     pub master_key_salt: ambre_core::FixedBytes<ambre_core::MasterKeySalt>,
     pub signing_pubkey: ambre_core::FixedBytes<ambre_core::PublicKey>,
     pub exchange_pubkey: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
+    /// The signature of the signing key over the account and the two keys
+    /// (`ambre_protocol::key_registration`, `SRV-294`).
+    pub signature: ambre_core::FixedBytes<ambre_core::Signature>,
 }
 
 /// The relay's answer to a first key store: a fresh pair, bound to the new

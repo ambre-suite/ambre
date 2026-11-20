@@ -2712,11 +2712,6 @@ mod tests {
             RestCommand::Unlock {
                 passphrase: typed(),
             },
-            RestCommand::SetupAccount {
-                passphrase: typed(),
-                email: ambre_core::Email::from("a@b.c"),
-                display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("A").unwrap(),
-            },
             RestCommand::SetUpKeys {
                 passphrase: typed(),
             },
@@ -2829,7 +2824,6 @@ mod tests {
             let removes = match cmd {
                 RestCommand::Logout | RestCommand::DeleteDocument { .. } => true,
                 RestCommand::Unlock { .. }
-                | RestCommand::SetupAccount { .. }
                 | RestCommand::SetUpKeys { .. }
                 | RestCommand::DevLogin { .. }
                 | RestCommand::ChangePassphrase { .. }

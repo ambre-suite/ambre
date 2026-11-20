@@ -12,93 +12,6 @@ use crate::extract::{Json, PathId};
 use crate::redis_ops;
 use crate::state::AppState;
 use ambre_core::Flag as _;
-use ambre_core::{Sec, TimeSpan};
-
-// -- Setup Account -------------------------------------------------
-
-/// Request body for first-time account creation.
-///
-/// Contains the encrypted master key, Argon2 salt, and public keys
-/// derived from the master seed (Ed25519 for signing, X25519 for exchange).
-/// Zero-Knowledge invariant (N4): the passphrase is NOT part of this payload
-/// and must never be; the server only stores the wrapped key and the salt.
-#[derive(serde::Deserialize)]
-pub struct SetupAccountRequest {
-    /// User-supplied login handle. Recorded verbatim (N3) and resolved by other
-    /// members when sharing a document (`get_user_by_email`).
-    pub email: ambre_core::Email,
-    /// User-supplied display name (N3). A body whose name breaks the rule
-    /// does not decode (`SRV-234`).
-    pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
-    pub master_key_enc: ambre_core::Encoded<ambre_core::WrappedMasterKey>,
-    pub master_key_salt: ambre_core::FixedBytes<ambre_core::MasterKeySalt>,
-    /// A key that is not 32 bytes of hexadecimal refuses the body when it is
-    /// read, before any row is written (`SRV-232`, `SRV-242`).
-    pub signing_pubkey: ambre_core::FixedBytes<ambre_core::PublicKey>,
-    pub exchange_pubkey: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
-}
-
-/// Bounds the client-supplied email: syntactically plausible and
-/// length-bounded. Full email verification is out of scope; this only rejects
-/// obvious garbage and unbounded input. The display name needs no check here:
-/// a `Validated<DisplayName>` holds its rule.
-fn validate_email(email: &ambre_core::Email) -> Result<(), AppError> {
-    let email = email.as_str().trim();
-    let email_ok = (3..=254).contains(&email.len())
-        && email.contains('@')
-        && !email.starts_with('@')
-        && !email.ends_with('@');
-    if email_ok {
-        Ok(())
-    } else {
-        Err(AppError::BadRequest("invalid email".into()))
-    }
-}
-/// Response after successful account setup. Carries the freshly minted token
-/// pair (kept in client memory) and the newly assigned user ID.
-#[derive(serde::Serialize)]
-pub struct SetupAccountResponse {
-    #[serde(with = "ambre_core::serde_id::text")]
-    pub user_id: Id<User>,
-    pub access_token: ambre_protocol::ws::Credential<ambre_protocol::ws::AccessToken>,
-    pub refresh_token: ambre_protocol::ws::Credential<ambre_protocol::ws::RefreshToken>,
-    pub access_expires_in: TimeSpan<Sec>,
-}
-
-pub async fn setup_account(
-    State(state): State<Arc<AppState>>,
-    body: Json<SetupAccountRequest>,
-) -> Result<impl IntoResponse, AppError> {
-    let req = body.into_inner();
-    validate_email(&req.email)?;
-    let display_name = req.display_name;
-    let mk_enc = req.master_key_enc;
-    let mk_salt = req.master_key_salt;
-    let (spk, epk) = (req.signing_pubkey, req.exchange_pubkey);
-
-    let user = db::create_user(
-        &state.db,
-        &ambre_core::Email::from(req.email.as_str().trim()),
-        &display_name,
-        &mk_enc,
-        &mk_salt,
-        &spk,
-        &epk,
-    )
-    .await?;
-    let user_id = user.id;
-    let signing_pubkey = spk;
-
-    let tokens = auth::issue_session(&state, user_id, Some(signing_pubkey)).await?;
-    tracing::debug!(user_id = %user_id, provider = "setup", "login");
-
-    Ok(axum::Json(SetupAccountResponse {
-        user_id,
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
-        access_expires_in: tokens.access_expires_in,
-    }))
-}
 
 // -- Me ------------------------------------------------------------
 
@@ -464,7 +377,7 @@ pub struct UserInfoJson {
     pub id: Id<User>,
     pub email: ambre_core::Email,
     /// Whether the email was provider-verified (OIDC) vs self-asserted at
-    /// `/auth/setup` (#3). The share UI should flag an unverified recipient for
+    /// the retired account setup (#3). The share UI should flag an unverified recipient for
     /// the TOFU out-of-band key check. Additive field; older clients ignore it.
     pub email_verified: crate::db::EmailProof,
     pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
@@ -684,49 +597,4 @@ pub async fn update_document_member_role(
     tracing::debug!(document_id = %doc_id, target_user = %target, role = %role, by = %s.user_id, "member role updated");
     super::share::members_changed(&state, &doc_id).await;
     Ok(super::Done::json(ambre_core::WriteStatus::RoleUpdated))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // -- Identity validation (N3) -------------------------------------------
-
-    #[test]
-    fn validate_email_accepts_plausible_input() {
-        assert!(validate_email(&ambre_core::Email::from("alice@example.com")).is_ok());
-        assert!(validate_email(&ambre_core::Email::from("  bob@ambre.app  ")).is_ok());
-    }
-
-    #[test]
-    fn validate_email_rejects_bad_email() {
-        assert!(validate_email(&ambre_core::Email::from("no-at-sign")).is_err());
-        assert!(validate_email(&ambre_core::Email::from("@example.com")).is_err());
-        assert!(validate_email(&ambre_core::Email::from("alice@")).is_err());
-        assert!(validate_email(&ambre_core::Email::from("")).is_err());
-        let long = format!("{}@x.com", "a".repeat(300));
-        assert!(validate_email(&ambre_core::Email::from(long.as_str())).is_err());
-    }
-
-    /// A setup body whose display name is blank or past the cap does not
-    /// decode, so no route reads it (`SRV-234`).
-    #[test]
-    fn a_setup_body_with_a_bad_display_name_does_not_decode() {
-        let body = |name: &str| {
-            serde_json::json!({
-                "email": "alice@example.com",
-                "display_name": name,
-                "master_key_enc": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB",
-                "master_key_salt": hex::encode([2u8; 32]),
-                "signing_pubkey": hex::encode([3u8; 32]),
-                "exchange_pubkey": hex::encode([4u8; 32]),
-            })
-        };
-        let decode = |name: &str| serde_json::from_value::<SetupAccountRequest>(body(name));
-        let padded = decode("  Bob  ").expect("a padded name decodes");
-        assert_eq!(padded.display_name.as_str(), "Bob");
-        assert!(decode("").is_err());
-        assert!(decode("   ").is_err());
-        assert!(decode(&"x".repeat(129)).is_err());
-    }
 }

@@ -653,7 +653,10 @@ mod tests {
 
         fn build_org_router(state: std::sync::Arc<crate::state::AppState>) -> axum::Router {
             let api_router = Router::new()
-                .route("/auth/setup", axum::routing::post(routes::setup_account))
+                .route(
+                    crate::test_helpers::ACCOUNT_FIXTURE,
+                    axum::routing::post(crate::test_helpers::create_account),
+                )
                 .route(
                     "/organizations",
                     axum::routing::get(routes::list_orgs).post(routes::create_org),
@@ -764,7 +767,7 @@ mod tests {
             let resp = app
                 .clone()
                 .oneshot(
-                    Request::post("/api/auth/setup")
+                    Request::post("/api/test/account")
                         .header("content-type", "application/json")
                         .body(Body::from(body.to_string()))
                         .unwrap(),

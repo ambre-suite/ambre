@@ -1413,7 +1413,7 @@ pub struct SyncState {
     /// Access + refresh tokens returned by login/setup and rotated by HTTP 401
     /// retry helpers. Kept in worker memory only.
     tokens: http::TokenStore,
-    /// Authenticated user id, set after Unlock/SetupAccount.
+    /// Authenticated user id, set after a sign-in, an unlock or a key setup.
     user_id: Option<Id<User>>,
 
     // -- Session-level crypto (derived once at Unlock, zeroized at Logout) ----
@@ -2125,11 +2125,6 @@ impl SyncState {
         match cmd {
             // -- Session -------------------------------------------------------
             RestCommand::Unlock { passphrase } => self.handle_unlock(id, passphrase),
-            RestCommand::SetupAccount {
-                passphrase,
-                email,
-                display_name,
-            } => self.handle_setup_account(id, passphrase, email, display_name),
             RestCommand::SetUpKeys { passphrase } => self.handle_set_up_keys(id, passphrase),
             RestCommand::DevLogin { username } => self.handle_dev_login(Some(id), username),
             RestCommand::ProviderSignIn { provider } => self.handle_provider_sign_in(id, provider),
