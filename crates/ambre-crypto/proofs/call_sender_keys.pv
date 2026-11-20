@@ -269,6 +269,7 @@ let participant(sk: sskey, uid: bitstring) =
     | (! seal_chunks(sk, idx, next(g_new), ratchet(k_new)))
     | (! seal_secret(sk, idx, g_new, k_new))
     | (! seal_secret(sk, idx, next(g_new), ratchet(k_new)))
+      )
     )
   ).
 
