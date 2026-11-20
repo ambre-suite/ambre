@@ -206,8 +206,8 @@ impl PersistLink {
 }
 
 /// Reads the kept logs, then the kept pins, of `user`. Each log goes to the
-/// Sync worker before the pins release any open, so every open of the
-/// session walks from the head an earlier session kept (`SYNC-240`,
+/// Sync worker before the pins release any open. Every open of the session
+/// then walks from the head an earlier session kept (`SYNC-240`,
 /// `SYNC-290`).
 async fn read_kept(
     store: &PersistenceStore,

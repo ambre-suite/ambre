@@ -387,11 +387,11 @@ impl ListedName<'_> {
     /// The plaintext name, or `None`: the launcher then shows its neutral
     /// label.
     ///
-    /// The relay names the wrapper of the copy, so it can wrap a key of its
-    /// own and seal a name of its choosing under it. The name opens only
-    /// under the key the checks of an open accepted last for this log, kept
-    /// across sessions, and only when it was sealed under that key
-    /// (`SYNC-291`), from an author the walked log admits (`SYNC-135`). A
+    /// The relay names the wrapper of the copy. It can wrap a key of its own
+    /// and seal a name of its choosing under it. The name opens only under
+    /// the key the checks of an open accepted last for this log, kept across
+    /// sessions. It must be sealed under that key (`SYNC-291`), by an author
+    /// the walked log admits (`SYNC-135`). A
     /// listing sends no request of its own, so a name sealed before the last
     /// rotation, or a document never walked, shows none.
     pub(crate) fn open(

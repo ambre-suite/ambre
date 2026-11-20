@@ -308,9 +308,9 @@ mod tests {
         }
     }
 
-    /// Holds `SYNC-290` on the Main thread: the kept logs of the session's
-    /// user are held for its opens, a log the worker moved on this page wins
-    /// over the store's older answer, and a second account takes none of the
+    /// Holds `SYNC-290` on the Main thread. The kept logs of the session's
+    /// user are held for its opens. A log the worker moved on this page wins
+    /// over the store's older answer. A second account takes none of the
     /// first account's logs.
     #[test]
     fn the_kept_logs_of_a_user_go_ahead_of_its_opens_alone() {

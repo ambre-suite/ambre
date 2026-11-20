@@ -1379,8 +1379,8 @@ impl SyncDocumentState {
     }
 
     /// Whether a delta this document applied lies past a cap `writers`
-    /// sets: the state then holds a write the log refuses, and is read
-    /// again from the relay (`SYNC-300`).
+    /// sets. The state then holds a write the log refuses, and is read again
+    /// from the relay (`SYNC-300`).
     pub(crate) fn applied_past_cap(&self, writers: &membership_log::Writers) -> bool {
         self.applied_clocks
             .borrow()
@@ -1505,7 +1505,7 @@ pub struct SyncState {
     /// beside the exchange key the user confirmed.
     shown_identities: HashMap<Id<User>, ambre_crypto::IdentityKeys>,
     /// Where each log stood when this client last accepted a key of it, by
-    /// the log's document, this session and the kept ones before it
+    /// the log's document. It holds this session and the kept ones before it
     /// (`SYNC-290`). A listed name opens under the key it names alone
     /// (`SYNC-291`).
     kept_logs: HashMap<Id<Document>, ambre_bus::KeptLog>,

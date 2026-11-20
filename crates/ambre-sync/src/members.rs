@@ -360,7 +360,7 @@ impl SyncState {
 
     /// Holds `kept`, where the log of `log_document` stood in an earlier
     /// session (`SYNC-290`). Its footing roots every later walk of that log
-    /// in the session, so a log the relay cut before an entry walked then
+    /// in the session. A log the relay cut before an entry walked then
     /// installs no key. A footing this session holds already moves on to it
     /// only when it is later.
     pub(crate) fn hold_kept_log(&mut self, log_document: Id<Document>, kept: ambre_bus::KeptLog) {
@@ -654,7 +654,7 @@ mod tests {
 
     /// Holds `SYNC-290` in the worker. A footing this session walks goes to
     /// the local store with its key, once, and again only when it moves. The
-    /// kept log the store hands the next session roots its walks: a log the
+    /// kept log the store hands the next session roots its walks. A log the
     /// relay cut before the kept head diverges, and the whole log walks.
     #[test]
     fn a_log_head_outlives_the_session_through_the_local_store() {

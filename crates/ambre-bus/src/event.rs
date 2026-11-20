@@ -886,7 +886,7 @@ pub enum Successor {
 
 /// Where the membership log of one document stood when this client last
 /// accepted it (`SYNC-290`, `SYNC-291`). The anchor and the head are the
-/// footing of the checks of an open; the key is the document key that open
+/// footing of the checks of an open. The key is the document key that open
 /// or the rotation after it accepted. The Sync worker builds it, the local
 /// store keeps it, and nothing else reads it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

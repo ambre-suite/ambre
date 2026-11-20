@@ -1836,9 +1836,9 @@ mod tests {
         );
     }
 
-    /// Holds `SYNC-290` on the Logic side: a kept log goes to the local store
-    /// as a row of its document, and one the store hands back reaches the
-    /// Sync worker unchanged.
+    /// Holds `SYNC-290` on the Logic side. A kept log goes to the local store
+    /// as a row of its document. One the store hands back reaches the Sync
+    /// worker unchanged.
     #[test]
     fn a_kept_log_goes_to_the_store_and_back_to_sync() {
         let (to_ui, _ui) = test_link();
@@ -1870,9 +1870,9 @@ mod tests {
         );
     }
 
-    /// Holds `SYNC-300` on the Logic side: a document read again loses its
-    /// state and its local copy, then closes and opens again in Sync, so
-    /// the relay replays it under the cap. One this thread does not hold
+    /// Holds `SYNC-300` on the Logic side. A document read again loses its
+    /// state and its local copy, then closes and opens again in Sync. The
+    /// relay replays it under the cap. One this thread does not hold
     /// reads nothing.
     #[test]
     fn a_document_read_again_drops_its_copy_and_opens_anew() {

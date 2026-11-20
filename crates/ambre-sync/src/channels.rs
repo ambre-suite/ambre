@@ -1186,9 +1186,10 @@ fn listed_keys(
 }
 
 /// The names sealed beside each meta of `answer`, opened with the user's
-/// wrapped key of that meta (`SYNC-171`), only under the key `kept` holds
-/// for it (`SYNC-291`), and from an author `authors` admits (`SYNC-135`). A name that does not open is none, and so is
-/// an empty one: a rename clears a name that way.
+/// wrapped key of that meta (`SYNC-171`). A name opens only under the key
+/// `kept` holds for it (`SYNC-291`), from an author `authors` admits
+/// (`SYNC-135`). A name that does not open is none, and so is an empty one:
+/// a rename clears a name that way.
 fn open_channel_names(
     answer: &http::MemberChannelsResponse,
     authors: &crate::documents::NameAuthors,

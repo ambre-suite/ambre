@@ -515,9 +515,10 @@ impl KeyVouch {
 /// `P27`). It holds the anchor that the checks of an open accepted, and the
 /// latest valid head this client walked or signed from that anchor.
 ///
-/// Only four paths build one: the checks of an open, the creation this
-/// client signed, the anchor a catalogue seals under a space key, and the
-/// footing an earlier session of this client kept (`SYNC-290`). The relay
+/// Only four paths build one. They are the checks of an open, the creation
+/// this client signed, and the anchor a catalogue seals under a space key.
+/// The fourth is the footing an earlier session of this client kept
+/// (`SYNC-290`). The relay
 /// can forge none of them. The fields stay private to this module.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Footing {

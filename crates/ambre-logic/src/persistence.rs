@@ -1499,7 +1499,7 @@ mod wasm_tests {
     }
 
     /// Holds `SYNC-290` at rest. A kept log reads back for its user alone,
-    /// a later head replaces the row, and no pin of the same user reads as a
+    /// and a later head replaces the row. No pin of the same user reads as a
     /// log.
     #[wasm_bindgen_test]
     async fn a_kept_log_reads_back_for_its_user_and_a_later_head_replaces_it() {

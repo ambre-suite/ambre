@@ -187,9 +187,9 @@ impl Writers {
         }
     }
 
-    /// Whether a delta `signer` signed at `clock` may reach the document: the
-    /// log granted the signer a writing role, and no revoke capped it below
-    /// `clock` (`SYNC-300`).
+    /// Whether a delta `signer` signed at `clock` may reach the document. The
+    /// log must grant the signer a writing role, and no revoke may cap it
+    /// below `clock` (`SYNC-300`).
     pub(crate) fn admits_delta(
         &self,
         signer: &FixedBytes<PublicKey>,
@@ -1910,8 +1910,8 @@ pub(crate) mod tests {
     }
 
     /// Holds `SYNC-300` at the walk. A revoke another member signed caps the
-    /// key it ends: a delta of it at the cap counts, one past it does not,
-    /// and a snapshot of it counts nowhere. A later invite lifts the cap. A
+    /// key it ends. A delta of it at the cap counts and one past it does not.
+    /// A snapshot of it counts nowhere. A later invite lifts the cap. A
     /// departure its own member signed caps nothing, whatever it names.
     #[test]
     fn a_revoke_caps_the_clock_of_the_writer_it_ends() {

@@ -1465,7 +1465,7 @@ impl SyncState {
                         if doc_state.writers.grows_into(&writers) {
                             // A revoke that caps a writer below a delta this
                             // document applied leaves a write the log refuses
-                            // in its state: the document is read again
+                            // in its state. The document is read again
                             // (`SYNC-300`).
                             if doc_state.applied_past_cap(&writers) {
                                 reread = true;
