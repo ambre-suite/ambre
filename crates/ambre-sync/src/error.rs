@@ -99,8 +99,6 @@ pub(crate) enum Part {
     SigningKey,
     /// A member's X25519 exchange key, as the relay served it.
     ExchangeKey,
-    /// A wrapped copy of a document key.
-    WrappedKey,
     /// A channel key sealed for a space's catalogue.
     SealedChannelKey,
     /// The join head of a public channel, which names no last entry.
@@ -112,7 +110,6 @@ impl std::fmt::Display for Part {
         f.write_str(match self {
             Self::SigningKey => "the signing key",
             Self::ExchangeKey => "the exchange key",
-            Self::WrappedKey => "the wrapped key",
             Self::SealedChannelKey => "the sealed channel key",
             Self::JoinHead => "the join head",
         })
@@ -184,7 +181,6 @@ mod tests {
     fn a_malformed_answer_names_its_part() {
         for (part, text) in [
             (Part::SigningKey, "the signing key"),
-            (Part::WrappedKey, "the wrapped key"),
             (Part::SealedChannelKey, "the sealed channel key"),
             (Part::JoinHead, "the join head"),
         ] {
@@ -215,7 +211,7 @@ mod tests {
             ApiFailure::Local(LocalFailure::SessionLocked)
         );
         assert_eq!(
-            HttpError::from(SyncError::Malformed(Part::WrappedKey)).failure(),
+            HttpError::from(SyncError::Malformed(Part::JoinHead)).failure(),
             ApiFailure::Local(LocalFailure::Malformed)
         );
     }

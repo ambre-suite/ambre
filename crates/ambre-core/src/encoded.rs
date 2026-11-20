@@ -48,19 +48,20 @@ const OBJECT_HEADER_LEN: usize = crate::Count::<crate::Octets>::new(1)
 /// The most bytes one character takes in UTF-8.
 const UTF8_MAX_LEN: usize = 4;
 
-/// The lengths of a wrapped document key: the key sealed alone, or beside
-/// the anchor of its log.
+/// The version byte a wrapped document key and a wrapped master key open
+/// with (audit `P59`, `ZK-047`).
+const VERSION_LEN: usize = 1;
+/// The lengths of a wrapped document key: its version byte, then the key
+/// sealed alone, or beside the anchor of its log. No layout without the
+/// version byte is read (audit `P59`).
 const WRAPPED_DOC_KEY_LENGTHS: &[usize] = &[
-    NONCE_LEN + KEY_LEN + TAG_LEN,
-    NONCE_LEN + KEY_LEN + ANCHOR_LEN + TAG_LEN,
+    VERSION_LEN + NONCE_LEN + KEY_LEN + TAG_LEN,
+    VERSION_LEN + NONCE_LEN + KEY_LEN + ANCHOR_LEN + TAG_LEN,
 ];
-/// The lengths of a wrapped master key. The first is the layout before the
-/// version byte, which an old account still holds. The second is the
-/// versioned layout every seal writes now (`ZK-047`).
-const WRAPPED_MASTER_KEY_LENGTHS: &[usize] = &[
-    NONCE_LEN + KEY_LEN + TAG_LEN,
-    1 + NONCE_LEN + KEY_LEN + TAG_LEN,
-];
+/// The length of a wrapped master key: the versioned layout every seal
+/// writes (`ZK-047`). MVP has not shipped, so no account holds the layout
+/// before the version byte, and none is read.
+const WRAPPED_MASTER_KEY_LENGTHS: &[usize] = &[VERSION_LEN + NONCE_LEN + KEY_LEN + TAG_LEN];
 /// The longest name a sealed name holds, in characters.
 const SEALED_NAME_MAX_CHARS: usize = crate::NAME_MAX_CHARS;
 /// The most bytes a sealed name holds: its overhead and the longest name.
@@ -206,8 +207,9 @@ impl<'de, K: EncodedKind> Deserialize<'de> for Encoded<K> {
     }
 }
 
-/// The role of a document key wrapped to one member: `nonce || ciphertext`,
-/// the key sealed alone or beside the anchor of its log.
+/// The role of a document key wrapped to one member:
+/// `version || nonce || ciphertext`, the key sealed alone or beside the
+/// anchor of its log. `ambre_crypto::ecdh` writes and reads the layout.
 /// `Encoded<WrappedDocKey>`.
 pub enum WrappedDocKey {}
 
@@ -220,30 +222,6 @@ impl Encoded<WrappedDocKey> {
     /// The lengths the layout of a wrapped key allows; a read refuses any
     /// other.
     pub const LENGTHS: &'static [usize] = WRAPPED_DOC_KEY_LENGTHS;
-
-    /// The wire form of a wrapped key: its nonce, then its ciphertext. The
-    /// parts fix the length; nothing checks it against [`Self::LENGTHS`] here.
-    #[must_use]
-    pub fn from_parts(
-        nonce: &FixedBytes<Nonce>,
-        ciphertext: &crate::Payload<crate::Ciphertext>,
-    ) -> Self {
-        let mut bytes = Vec::with_capacity(NONCE_LEN + ciphertext.as_bytes().len());
-        nonce.push_to(&mut bytes);
-        bytes.extend_from_slice(ciphertext.as_bytes());
-        Self::new(bytes)
-    }
-
-    /// The nonce and the ciphertext [`Self::from_parts`] joined. `None` when
-    /// the bytes are shorter than a nonce.
-    #[must_use]
-    pub fn parts(&self) -> Option<(FixedBytes<Nonce>, crate::Payload<crate::Ciphertext>)> {
-        let (nonce, ciphertext) = FixedBytes::<Nonce>::split_from(&self.bytes)?;
-        Some((
-            nonce,
-            crate::Payload::<crate::Ciphertext>::new(ciphertext.to_vec()),
-        ))
-    }
 }
 
 /// The role of a document or channel name sealed under its document key: the
@@ -267,8 +245,7 @@ impl Encoded<SealedName> {
 }
 
 /// The role of an account's master seed wrapped under the key its passphrase
-/// derives: `version || nonce || ciphertext`, or `nonce || ciphertext` for a
-/// seed sealed before the version byte. `Encoded<WrappedMasterKey>`.
+/// derives: `version || nonce || ciphertext`. `Encoded<WrappedMasterKey>`.
 pub enum WrappedMasterKey {}
 
 impl EncodedKind for WrappedMasterKey {
@@ -277,7 +254,7 @@ impl EncodedKind for WrappedMasterKey {
 }
 
 impl Encoded<WrappedMasterKey> {
-    /// The lengths the two layouts of a wrapped master key allow.
+    /// The length the one layout of a wrapped master key allows.
     pub const LENGTHS: &'static [usize] = WRAPPED_MASTER_KEY_LENGTHS;
 }
 
@@ -336,8 +313,8 @@ impl EncodedKind for EncodedKeyLink {
 #[cfg(test)]
 mod tests {
     use super::{
-        Encoded, EncodedKind, FixedBytes, KEY_LEN, MASTER_KEY_SALT_LEN, MasterKeySalt, NONCE_LEN,
-        SealedName, TAG_LEN, WrappedDocKey, WrappedMasterKey,
+        Encoded, EncodedKind, FixedBytes, MASTER_KEY_SALT_LEN, MasterKeySalt, SealedName,
+        WrappedDocKey, WrappedMasterKey,
     };
 
     fn wire(len: usize) -> String {
@@ -378,25 +355,14 @@ mod tests {
         }
         only::<WrappedDocKey>(Encoded::<WrappedDocKey>::LENGTHS);
         only::<WrappedMasterKey>(Encoded::<WrappedMasterKey>::LENGTHS);
-        assert_eq!(Encoded::<WrappedDocKey>::LENGTHS, [72, 104]);
-        assert_eq!(Encoded::<WrappedMasterKey>::LENGTHS, [72, 73]);
+        // Audit `P59`: no unversioned layout of either is read.
+        assert_eq!(Encoded::<WrappedDocKey>::LENGTHS, [73, 105]);
+        assert_eq!(Encoded::<WrappedMasterKey>::LENGTHS, [73]);
+        for unversioned in [72, 104] {
+            assert!(!reads::<WrappedDocKey>(unversioned), "{unversioned}");
+        }
+        assert!(!reads::<WrappedMasterKey>(72));
         assert!(reads::<SealedName>(0) && reads::<SealedName>(Encoded::<SealedName>::MAX_LEN));
-    }
-
-    /// A wrapped key joins its nonce and its ciphertext in that order, at a
-    /// length the wire reads back. It splits back into the same parts, and
-    /// bytes shorter than a nonce have none.
-    #[test]
-    fn a_wrapped_key_is_its_nonce_then_its_ciphertext() {
-        let nonce = FixedBytes::<crate::Nonce>::from_array([1; NONCE_LEN]);
-        let ciphertext = crate::Payload::<crate::Ciphertext>::new(vec![2; KEY_LEN + TAG_LEN]);
-        let key = Encoded::<WrappedDocKey>::from_parts(&nonce, &ciphertext);
-        assert_eq!(&key.as_bytes()[..NONCE_LEN], &[1; NONCE_LEN]);
-        assert_eq!(&key.as_bytes()[NONCE_LEN..], ciphertext.as_bytes());
-        assert!(Encoded::<WrappedDocKey>::LENGTHS.contains(&key.as_bytes().len()));
-        assert_eq!(key.parts(), Some((nonce, ciphertext)));
-        let short = Encoded::<WrappedDocKey>::new(vec![0; NONCE_LEN - 1]);
-        assert_eq!(short.parts(), None);
     }
 
     /// A salt of any width but its own is refused when it is built, from a

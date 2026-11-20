@@ -1108,19 +1108,23 @@ impl SyncState {
     ///    ECDH shared-secret derivation, KEK derivation, and AEAD decryption.
     ///
     /// It runs no check of an open, so no product path calls it: a path that
-    /// unwraps a key calls [`checked_members_key`] (audit `P45`).
+    /// unwraps a key calls [`members_key_via`] (audit `P45`).
     #[cfg(test)]
     pub(crate) fn unwrap_document_key(
         exchange_key: &x25519_dalek::StaticSecret,
+        document: Id<Document>,
         members: &[http::MemberEntry],
     ) -> Result<DocumentKey, crate::error::SyncError> {
-        Self::unwrap_anchored(exchange_key, members).map(|(key, _)| key)
+        Self::unwrap_anchored(exchange_key, document, members).map(|(key, _)| key)
     }
 
     /// Unwraps our own copy of the key, and the anchor of the membership log
-    /// sealed beside it (`SYNC-104`).
+    /// sealed beside it (`SYNC-104`). The copy must be a wrap for `document`.
+    /// That is the document whose rows the answer serves, the `meta` of a
+    /// document of a channel (`SRV-272`, audit `P59`).
     pub(crate) fn unwrap_anchored(
         exchange_key: &x25519_dalek::StaticSecret,
+        document: Id<Document>,
         members: &[http::MemberEntry],
     ) -> Result<
         (DocumentKey, Option<FixedBytes<ambre_protocol::EntryDigest>>),
@@ -1128,6 +1132,7 @@ impl SyncState {
     > {
         crate::sharing::unwrap_own(
             exchange_key,
+            document,
             // A row whose exchange key does not parse is no row of ours.
             members.iter().filter_map(|m| {
                 Some((
@@ -1173,7 +1178,7 @@ impl SyncState {
         roots: &crate::key_vouch::Roots,
         held: Option<crate::key_vouch::Footing>,
     ) -> Result<OpenedMembers, (OpenFailure, String)> {
-        let (doc_key, anchor) = Self::unwrap_anchored(exchange_key, &resp.members)
+        let (doc_key, anchor) = Self::unwrap_anchored(exchange_key, document_id, &resp.members)
             .map_err(|error| (OpenFailure::KeyNotReceived, error.to_string()))?;
         let (log, _) =
             crate::sharing::walk_from_footing(held, document_id, anchor, &resp.log, rule)
@@ -2244,16 +2249,35 @@ pub(crate) struct KeyCheck {
     pub auth: http::AuthContext,
 }
 
-/// The key `resp` hands this client, once the checks of an open pass on it.
-/// They read the log, the wrapper, the pin or the roots, the links and the
-/// chain (`SYNC-200` to `SYNC-202`, audit `P45`). A rename of a document not open
-/// seals its name under this key alone.
+/// The key a document not open seals under: the members answer the relay
+/// serves now, once the checks of an open pass on it. They read the log,
+/// the wrapper, the pin or the roots, the links and the chain (`SYNC-200` to
+/// `SYNC-202`). A rename of such a document seals its name under this key
+/// alone (`SYNC-284`, audit `P45`). `transport` is the browser's `fetch`, or
+/// a script in a host test.
 ///
 /// # Errors
 ///
-/// The failure of [`crate::error::SyncError::KeyOutOfReach`] when any check
-/// refuses the key, or a failure to read the key links.
-pub(crate) async fn checked_members_key(
+/// The failure to read the members or the key links, and the failure of
+/// [`crate::error::SyncError::KeyOutOfReach`] when any check refuses the key.
+pub(crate) async fn members_key_via(
+    transport: &impl http::Transport,
+    check: KeyCheck,
+) -> Result<DocumentKey, crate::http::Failed> {
+    use crate::http::Reported as _;
+    let members_url =
+        crate::http::Url::<crate::http::ApiRoot>::of(check.url_scheme, &check.api_base)
+            .route(format!("/documents/{}/members", check.document_id));
+    let resp =
+        http::get_json_auth_via::<http::MembersResponse>(transport, &members_url, &check.auth)
+            .await
+            .map_err(|e| e.at("the members answer"))?;
+    checked_members_key_via(transport, check, &resp).await
+}
+
+/// The checks of [`members_key_via`] on the members answer `resp`.
+async fn checked_members_key_via(
+    transport: &impl http::Transport,
     check: KeyCheck,
     resp: &http::MembersResponse,
 ) -> Result<DocumentKey, crate::http::Failed> {
@@ -2269,11 +2293,12 @@ pub(crate) async fn checked_members_key(
         check.held,
     )
     .map_err(|_| refused("the members answer"))?;
-    let links = http::try_fetch_key_links(
+    let links = http::try_fetch_key_links_via(
+        transport,
         check.url_scheme,
         &check.api_base,
         check.document_id,
-        check.auth,
+        &check.auth,
     )
     .await
     .map_err(|e| e.at("the key links"))?;
@@ -2518,7 +2543,11 @@ mod tests {
         assert_eq!(members_failure_cause(&lost), OpenFailure::Transient);
     }
 
-    /// One members row for `uid`, its key wrapped by `wrapper` for `holder`.
+    /// The document whose rows [`member_row`] wraps a key for.
+    const ROWS_DOC: Id<Document> = Id::<Document>::from_bytes([0x6a; 16]);
+
+    /// One members row of [`ROWS_DOC`] for `uid`, its key wrapped by
+    /// `wrapper` for `holder`.
     fn member_row(
         uid: Id<User>,
         holder: &x25519_dalek::StaticSecret,
@@ -2532,8 +2561,14 @@ mod tests {
             user_id: uid,
             signing_pub_key: http::ServedKey::of(FixedBytes::from_array([uid.as_bytes()[0]; 32])),
             exchange_pub_key: http::ServedKey::of(holder_pub),
-            doc_key_enc: crate::sharing::wrap_anchored_b64(wrapper, &holder_pub, doc_key, None)
-                .unwrap(),
+            doc_key_enc: crate::sharing::wrap_anchored_b64(
+                wrapper,
+                &holder_pub,
+                ROWS_DOC,
+                doc_key,
+                None,
+            )
+            .unwrap(),
             role,
             wrapper_exchange_pub_key: http::ServedKey::of(wrapper_pub),
         }
@@ -2558,7 +2593,7 @@ mod tests {
         };
         let opened = SyncState::opened_from_members(
             &resp,
-            Id::<Document>::mint(),
+            ROWS_DOC,
             &my_xk,
             Some(me),
             &membership_log::LogRule::document(),
@@ -2598,7 +2633,7 @@ mod tests {
         };
         let refused = SyncState::opened_from_members(
             &resp,
-            Id::<Document>::mint(),
+            ROWS_DOC,
             &my_xk,
             Some(me),
             &membership_log::LogRule::document(),
@@ -2635,6 +2670,147 @@ mod tests {
         let swapped = held(&DocumentKey::generate(), &[link]);
         assert!(matches!(swapped, Err((OpenFailure::KeyNotReceived, _))));
         assert!(SyncState::named_key_holds(document_id, &rotated, None, &[]).is_ok());
+    }
+
+    /// Holds `SYNC-284`. A rename of a document not open reads the members and
+    /// the key links over its transport. It takes the key only once the checks
+    /// of an open pass (audit `P45`). The key Alice named opens. The relay then
+    /// wraps a key for Bob under an exchange key of its own, beside the genuine
+    /// log. That key is refused, so no name is sealed under it.
+    #[tokio::test]
+    async fn a_rename_of_a_document_not_open_takes_a_checked_key_alone() {
+        use crate::membership_log::tests::Person;
+        use crate::membership_log::{Draft, LogHead, digest, sign};
+        let document_id = Id::<Document>::mint();
+        let (alice, bob) = (Person::new(0x41), Person::new(0x42));
+        let alice_xk = ambre_crypto::MasterSeed::from_array([0x41; 32]).derive_exchange_key();
+        let bob_xk = ambre_crypto::MasterSeed::from_array([0x42; 32]).derive_exchange_key();
+        let relay_xk = ambre_crypto::MasterSeed::from_array([0x66; 32]).derive_exchange_key();
+        let k0 = DocumentKey::generate();
+        let draft = |member: &Person, xk: &x25519_dalek::StaticSecret, act, role| Draft {
+            document: document_id,
+            member: member.id,
+            member_key: member.public(),
+            member_exchange_key: crate::sharing::own_exchange_key(xk),
+            act,
+            role,
+            key: Some(k0.id()),
+        };
+        let create = sign(
+            draft(
+                &alice,
+                &alice_xk,
+                ambre_protocol::MembershipAct::Create,
+                Role::Owner,
+            ),
+            LogHead::EMPTY,
+            alice.id,
+            &alice.key,
+        )
+        .unwrap();
+        let anchor = digest(&create).unwrap();
+        let invite = sign(
+            draft(
+                &bob,
+                &bob_xk,
+                ambre_protocol::MembershipAct::Invite,
+                Role::Editor,
+            ),
+            LogHead::EMPTY.after(anchor),
+            alice.id,
+            &alice.key,
+        )
+        .unwrap();
+        let log: Vec<_> = [&create, &invite]
+            .iter()
+            .map(|entry| membership_log::encode(entry).unwrap())
+            .collect();
+        let row = |who: &Person,
+                   holder: &x25519_dalek::StaticSecret,
+                   wrapper: &x25519_dalek::StaticSecret,
+                   key: &DocumentKey| {
+            let holder_pub = crate::sharing::own_exchange_key(holder);
+            let wrapped = crate::sharing::wrap_anchored_b64(
+                wrapper,
+                &holder_pub,
+                document_id,
+                key,
+                Some(anchor),
+            )
+            .unwrap();
+            serde_json::json!({
+                "user_id": who.id.to_string(),
+                "signing_pub_key": who.public().to_hex(),
+                "exchange_pub_key": holder_pub.to_hex(),
+                "doc_key_enc": wrapped,
+                "role": "editor",
+                "wrapper_exchange_pub_key": crate::sharing::own_exchange_key(wrapper).to_hex(),
+            })
+        };
+        let answer = |rows: Vec<serde_json::Value>| serde_json::json!({ "members": rows, "rotation_owed": false, "log": log });
+        // Bob renames from the launcher, the document closed, and holds the
+        // pin of the link Alice sent him (`SYNC-205`).
+        let check = || KeyCheck {
+            document_id,
+            log_document: document_id,
+            exchange_key: bob_xk.clone(),
+            my_user_id: Some(bob.id),
+            rule: membership_log::LogRule::document(),
+            roots: crate::key_vouch::Roots {
+                pin: Some(ambre_crypto::inviter_pin(&alice.public())),
+                ..Default::default()
+            },
+            held: None,
+            url_scheme: crate::http::UrlScheme::Https,
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("relay.test".to_owned()),
+            auth: session("access-1", "refresh-1"),
+        };
+        let no_links = serde_json::json!({ "links": [] });
+
+        let honest = Scripted::new([
+            Ok((
+                200,
+                answer(vec![
+                    row(&alice, &alice_xk, &alice_xk, &k0),
+                    row(&bob, &bob_xk, &alice_xk, &k0),
+                ]),
+            )),
+            Ok((200, no_links.clone())),
+        ]);
+        let key = members_key_via(&honest, check())
+            .await
+            .unwrap_or_else(|_| panic!("the key Alice named passes the checks"));
+        assert_eq!(key.id(), k0.id());
+        let base = format!("https://relay.test/api/documents/{document_id}");
+        assert_eq!(
+            honest.calls(),
+            [
+                (http::Method::Get, format!("{base}/members")),
+                (http::Method::Get, format!("{base}/key-links")),
+            ]
+        );
+
+        // The relay wraps a key of its own for Bob, under its own exchange
+        // key. The unwrap succeeds, and the checks refuse the key.
+        let chosen = DocumentKey::generate();
+        let forged = Scripted::new([
+            Ok((
+                200,
+                answer(vec![
+                    row(&alice, &alice_xk, &alice_xk, &k0),
+                    row(&bob, &bob_xk, &relay_xk, &chosen),
+                ]),
+            )),
+            Ok((200, no_links)),
+        ]);
+        let refused = members_key_via(&forged, check()).await;
+        assert!(
+            refused.err().map(|failed| failed.failure)
+                == Some(crate::http::Reported::failure(
+                    &crate::error::SyncError::KeyOutOfReach
+                )),
+            "the relay's key is refused as out of reach"
+        );
     }
 
     /// Holds `SYNC-200` and `SYNC-201` at the open. A relay wraps a key of its
@@ -2694,6 +2870,7 @@ mod tests {
                 doc_key_enc: crate::sharing::wrap_anchored_b64(
                     wrapper,
                     &holder_pub,
+                    document_id,
                     key,
                     Some(anchor),
                 )
@@ -2833,6 +3010,7 @@ mod tests {
                 doc_key_enc: crate::sharing::wrap_anchored_b64(
                     alice_xk,
                     &holder_pub,
+                    document_id,
                     key,
                     Some(anchor),
                 )
@@ -2952,6 +3130,7 @@ mod tests {
                 doc_key_enc: crate::sharing::wrap_anchored_b64(
                     wrapper,
                     &holder_pub,
+                    meta.document_id(),
                     key,
                     Some(anchor),
                 )
@@ -2990,7 +3169,9 @@ mod tests {
                 &roots,
                 None,
             )
-            .unwrap();
+            // A copy bound to the meta does not unwrap as one of the
+            // segment (audit `P59`).
+            .map_err(|(cause, _)| cause)?;
             let links = crate::chain::signed_by_writers(vec![link.clone()], &opened.link_signers);
             SyncState::named_key_holds(log_document, &opened.doc_key, opened.named_key, &links)
                 .map_err(|(cause, _)| cause)?;
@@ -3205,6 +3386,7 @@ mod tests {
                     doc_key_enc: crate::sharing::wrap_anchored_b64(
                         &creator_xk,
                         &holder_pub,
+                        document_id,
                         &key,
                         Some(anchor),
                     )
@@ -6209,7 +6391,7 @@ mod tests {
                 if let Some(named) = named {
                     row.wrapper_exchange_pub_key = http::ServedKey::of(named);
                 }
-                SyncState::unwrap_document_key(&my_xk, &[row])
+                SyncState::unwrap_document_key(&my_xk, ROWS_DOC, &[row])
                     .map(|key| key.id())
                     .ok()
             };

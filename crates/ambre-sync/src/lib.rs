@@ -675,6 +675,9 @@ enum SyncEvent {
         /// Whether a provider proved the address the invite names.
         email_proof: ambre_core::EmailProof,
         exchange_pub_key: FixedBytes<ambre_core::ExchangePublicKey>,
+        /// The signing key the relay served beside it, which the fingerprint
+        /// covers and the invite binds (audit `P44`).
+        signing_pub_key: FixedBytes<ambre_core::PublicKey>,
         fingerprint: ambre_core::Opaque<ambre_core::KeyFingerprints>,
     },
     /// The key a user the client named is served with, and its fingerprint.
@@ -683,6 +686,8 @@ enum SyncEvent {
         id: Seq<Request>,
         user_id: Id<User>,
         exchange_pub_key: FixedBytes<ambre_core::ExchangePublicKey>,
+        /// The signing key the relay served beside it (audit `P44`).
+        signing_pub_key: FixedBytes<ambre_core::PublicKey>,
         fingerprint: ambre_core::Opaque<ambre_core::KeyFingerprints>,
     },
     /// Invite completed: the invitee's DocumentKey was wrapped via ECDH and the
@@ -1419,6 +1424,10 @@ pub struct SyncState {
     /// document. So a re-key of a channel this client walked earlier in the
     /// session stands on the latest head it walked or signed (audit `P27`).
     log_footings: HashMap<Id<Document>, key_vouch::Footing>,
+    /// The keys each user's fingerprint covered when this session last showed
+    /// it (audit `P44`). An invite of that user refuses another signing key
+    /// beside the exchange key the user confirmed.
+    shown_identities: HashMap<Id<User>, ambre_crypto::IdentityKeys>,
 
     // -- Single multiplexed WebSocket -----------------------------------------
     ws: Option<WebSocket>,
@@ -1595,6 +1604,7 @@ impl SyncState {
             creating_public: HashMap::new(),
             space_rotations: HashMap::new(),
             log_footings: HashMap::new(),
+            shown_identities: HashMap::new(),
             ws: None,
             _onmessage: None,
             _onclose: None,

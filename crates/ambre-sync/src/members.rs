@@ -180,6 +180,13 @@ impl SyncState {
             exchange_key,
             doc_key,
             expect_exchange_pub_key,
+            // The signing key the confirmed fingerprint covered, when this
+            // session showed it for that very exchange key (audit `P44`).
+            expect_signing_pub_key: self
+                .shown_identities
+                .get(&invitee)
+                .filter(|shown| shown.exchange == expect_exchange_pub_key)
+                .map(|shown| shown.signing),
             author,
             footing,
             rule: self.log_rule(document_id),
