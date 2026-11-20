@@ -1379,7 +1379,7 @@ mod handler_tests {
         );
     }
 
-    /// Holds `SRV-307`. The relay refuses an entry whose exchange key is not
+    /// Holds `SRV-311`. The relay refuses an entry whose exchange key is not
     /// the one its member registered. That holds at the creation, the invite,
     /// the role change and the revoke, and the log keeps nothing of it. The
     /// same entries under the registered key land.

@@ -151,7 +151,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 90 `verified`, 1 `failing`. Every pure transform holds, out of the browser: the
+* **Verification.** 91 `verified`, 1 `failing`. Every pure transform holds, out of the browser: the
   wrap, the weak key, the pin, the invitee, the role and the log walk. What is loose is the branches
   that only run against a live relay.
 ---
@@ -246,7 +246,7 @@ client check what the relay serves.
 - A member who changes keys, on a new device or after a recovery, gets no copy until an entry
   names the new key. An owner re-invites that member under the confirmed key: the entry replaces
   both keys, and the next rotation wraps for the new one (`SYNC-217`, `SYNC-285`). The relay
-  refuses an entry under any key but the registered one (`SRV-307`).
+  refuses an entry under any key but the registered one (`SRV-311`).
 - A new member learns the first entry from its inviter, inside the sealed wrap (`SYNC-104`). So a
   relay cannot hand a new member a log rooted at a creator of its own, unless it wraps the copy
   itself (section 6).
@@ -316,7 +316,7 @@ The detection needs one frame of an up-to-date member to reach the member. A rel
 every such frame partitions the member, and nothing in the document tells it apart from silence.
 
 **How an entry is appended.** The relay checks the signature against the author's registered key.
-It checks that the entry names the two keys its member registered (`SRV-104`, `SRV-307`).
+It checks that the entry names the two keys its member registered (`SRV-104`, `SRV-311`).
 It appends at the entry's position alone, under the document lock. Two writers racing for one
 position cannot fork the log: the loser is answered `LOG_MOVED`, and signs again after the winner.
 

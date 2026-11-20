@@ -28,7 +28,7 @@ pub(crate) struct Expected {
 /// Decodes and checks the signed membership entry a request carries
 /// (`SRV-104`). The entry must record the change the route makes, about
 /// the member it names and under the two keys that member registered
-/// (`SRV-307`). The caller must have signed it with their own key. The
+/// (`SRV-311`). The caller must have signed it with their own key. The
 /// relay checks the signature and nothing past it: the digests are the
 /// clients' to walk.
 pub(crate) async fn checked_entry(

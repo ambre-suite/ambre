@@ -99,7 +99,7 @@ A member who leaves cannot choose the key the others keep. The rotation is owed 
 * **Boundary.** every wrapped copy crosses the relay and the relay can open none of them
   (`SYNC-010`). What it learns is that a document was re-keyed and by whom, which is the membership
   metadata `ambre-spec-zero-knowledge.md` accepts. It holds each link too, and opens none.
-* **Verification.** 37 `verified`, 1 `unimplemented`. The relay half holds, as do the key wipe, the
+* **Verification.** 38 `verified`, 1 `unimplemented`. The relay half holds, as do the key wipe, the
   open by name, the one-request revoke, the departure's debt and the chain. The notice follows the
   stored copies, and each rotation this client makes reaches Logic.
 
