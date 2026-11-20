@@ -415,17 +415,23 @@ impl From<&ambre_core::Credential<ambre_core::PresignedUrl>> for Target {
     }
 }
 
+/// A target shows its address without its query. A relay query carries what a
+/// user typed, a searched address among it, and a log line keeps none of it
+/// (`SYNC-285`). An object link's query is its credential.
 impl std::fmt::Display for Target {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Relay(url) => url.fmt(f),
+            Self::Relay(url) => {
+                let text = url.as_str();
+                f.write_str(text.split_once('?').map_or(text, |(path, _)| path))
+            }
             Self::Object(link) => f.write_str(link.object_address()),
         }
     }
 }
 
-/// A [`Target`] as a log and an error show it: a relay route whole, an
-/// object link without its query. It holds no credential, so an error that
+/// A [`Target`] as a log and an error show it: a relay route or an object
+/// link, each without its query. It holds no credential, so an error that
 /// keeps it compares and clones freely.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ShownTarget(String);
@@ -2728,6 +2734,26 @@ mod tests {
             url.as_str(),
             "https://relay.test/api/users/search?query=a%26b%3Dc%23d%2Be%25f%20g%40h-%C3%A9~"
         );
+    }
+
+    /// `SYNC-285`: an error on a search shows the route, never the address
+    /// the query searched, encoded or not.
+    #[test]
+    fn an_error_on_a_search_shows_no_searched_address() {
+        let url = Url::<ApiRoot>::of(
+            UrlScheme::Https,
+            &Url::<RelayHost>::new("relay.test".to_owned()),
+        )
+        .route("/users/search")
+        .query(QueryKey::Query, "ada@example.org");
+        let target = Target::from(&url);
+        let refused = HttpError::refused(Method::Get, &target, HttpStatus::new(500), None);
+        for shown in [refused.to_string(), target.shown().to_string()] {
+            assert!(shown.contains("/api/users/search"), "{shown}");
+            for leak in ["ada", "example.org", "%40", "query="] {
+                assert!(!shown.contains(leak), "{shown} shows {leak}");
+            }
+        }
     }
 
     fn is_setup_refusal(error: &HttpError) -> bool {

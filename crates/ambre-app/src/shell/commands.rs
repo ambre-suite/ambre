@@ -128,6 +128,9 @@ pub(crate) struct CommandPath {
     pub(crate) palette_open: RwSignal<ambre_chrome::Openness>,
     /// The passphrase prompt of a sealed save, a shell overlay.
     pub(crate) seal_open: RwSignal<ambre_chrome::Openness>,
+    /// The weakness the Sync worker named for the last sealed save, which the
+    /// prompt shows when it opens again (`DOCFILE-022`).
+    pub(crate) seal_refusal: RwSignal<Option<ambre_core::PassphraseWeakness>>,
 }
 
 impl CommandPath {
@@ -150,6 +153,13 @@ impl CommandPath {
                 true
             }
         }
+    }
+
+    /// The Sync worker refused the passphrase of a sealed save as weak: the
+    /// prompt opens again and says why (`DOCFILE-022`).
+    pub(crate) fn refuse_seal(&self, weakness: ambre_core::PassphraseWeakness) {
+        self.seal_open.set(ambre_chrome::Openness::Open);
+        self.seal_refusal.set(Some(weakness));
     }
 
     /// End the sealed save with the passphrase the prompt collected.

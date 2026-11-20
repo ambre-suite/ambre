@@ -1263,6 +1263,11 @@ pub fn main() {
                         gate.refusal.set(None);
                         gate.face.set(Some(face));
                     }
+                    switchboard::Effect::Identify {
+                        display_name,
+                        email,
+                    } => gate.identify(display_name.clone(), email.clone()),
+                    switchboard::Effect::RefuseSeal(weakness) => commands.refuse_seal(weakness),
                     switchboard::Effect::RefuseKeys(cause) => {
                         gate.refusal
                             .set(Some(keys_gate::GateRefusal::Worker(cause)));

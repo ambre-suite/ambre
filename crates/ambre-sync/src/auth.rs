@@ -490,14 +490,56 @@ impl SyncState {
         let Some((auth, api)) = self.reseal_target() else {
             return;
         };
-        self.spawn_reseal(id, RestEvent::AccountRecovered, async move {
+        self.spawn_recovery(id, auth, api, master_seed, new_passphrase);
+    }
+
+    /// Run the re-seal of a recovery, then open the session on the seed it
+    /// stored (`SYNC-287`). A refusal answers as a re-seal refusal does.
+    // Its whole body is a task spawned on the event loop of the browser, as
+    // for `spawn_reseal`. `recover_session` holds its steps on host.
+    #[cfg_attr(test, mutants::skip)]
+    fn spawn_recovery(
+        &self,
+        id: Seq<Request>,
+        auth: http::AuthContext,
+        api: crate::http::Url<crate::http::ApiRoot>,
+        master_seed: MasterSeed,
+        new_passphrase: ambre_crypto::strength::ChosenPassphrase,
+    ) {
+        let Some(tx) = self.event_tx.clone() else {
+            return;
+        };
+        let logic_tx = self.logic_tx.clone();
+        crate::spawn(async move {
             let outcome =
-                reseal_recovered_seed(&http::Fetch, &auth, &api, &master_seed, &new_passphrase)
-                    .await;
-            // The seed and the passphrase wipe their bytes here (H4). The
-            // user unlocks under the new passphrase to open the session.
-            drop((master_seed, new_passphrase));
-            outcome
+                recover_session(&http::Fetch, &auth, &api, &master_seed, &new_passphrase).await;
+            // The passphrase wipes its bytes here (H4). The seed moves into
+            // the session, or drops with the refusal.
+            drop(new_passphrase);
+            let me = match outcome {
+                Ok(me) => me,
+                Err(failure) => {
+                    let _ = logic_tx.send(reseal_refused(failure));
+                    return;
+                }
+            };
+            let tokens = match session_tokens(&auth.tokens) {
+                Ok(tokens) => tokens,
+                Err(failure) => {
+                    let _ = logic_tx.send(*failure);
+                    return;
+                }
+            };
+            let _ = tx.send(SyncEvent::AccountRecovered {
+                id,
+                signing_key: master_seed.derive_signing_key(),
+                exchange_key: master_seed.derive_exchange_key(),
+                master_seed,
+                tokens,
+                user_id: me.user_id,
+                display_name: me.display_name,
+                email: me.email,
+            });
         });
     }
 
@@ -534,8 +576,7 @@ impl SyncState {
                     id: Some(id),
                     evt: done,
                 },
-                Err(KeyWriteFailure::Auth(cause)) => LogicEvent::AuthError { cause },
-                Err(KeyWriteFailure::Http(e)) => auth_failed(e),
+                Err(failure) => reseal_refused(failure),
             };
             let _ = logic_tx.send(evt);
         });
@@ -671,6 +712,16 @@ fn account_set_up(
         user_id: resp.user_id,
         display_name: sent.display_name,
         email: sent.email,
+    }
+}
+
+/// The event a refused re-seal raises. A refusal of the worker or a stale
+/// seal keeps its own kind (`SYNC-286`); a failed request reads as its
+/// failure.
+fn reseal_refused(failure: KeyWriteFailure) -> LogicEvent {
+    match failure {
+        KeyWriteFailure::Auth(cause) => LogicEvent::AuthError { cause },
+        KeyWriteFailure::Http(e) => auth_failed(e),
     }
 }
 
@@ -1012,6 +1063,23 @@ async fn reseal_recovered_seed(
     .await
 }
 
+/// Re-seal the seed a recovery read back, then read who the account is, so
+/// the session opens on that seed (`SYNC-287`). The identity is read under
+/// the pair the session holds: the re-seal moves no key, so the pair stays
+/// valid.
+async fn recover_session(
+    transport: &impl http::Transport,
+    auth: &http::AuthContext,
+    api: &crate::http::Url<crate::http::ApiRoot>,
+    master_seed: &MasterSeed,
+    new_passphrase: &ambre_crypto::strength::ChosenPassphrase,
+) -> Result<http::AuthMeResponse, KeyWriteFailure> {
+    reseal_recovered_seed(transport, auth, api, master_seed, new_passphrase).await?;
+    http::get_json_auth_via(transport, &api.route("/auth/me"), auth)
+        .await
+        .map_err(KeyWriteFailure::Http)
+}
+
 /// Store the seed sealed under a new passphrase, in place of the seal under
 /// the current one.
 ///
@@ -1065,6 +1133,11 @@ fn prove_rotation(
 }
 
 /// Send the one write of a re-seal.
+///
+/// A bare `CONFLICT` says the relay no longer holds the seal the proof
+/// replaces: another device re-sealed it after the read (`SRV-279`). That
+/// refusal is its own, so the view asks for a new try rather than showing an
+/// HTTP failure (`SYNC-286`).
 async fn send_rotation(
     transport: &impl http::Transport,
     auth: &http::AuthContext,
@@ -1079,7 +1152,13 @@ async fn send_rotation(
         auth,
     )
     .await
-    .map_err(KeyWriteFailure::Http)
+    .map_err(|e| {
+        if e.is_conflict() {
+            KeyWriteFailure::Auth(AuthFailure::StaleReseal)
+        } else {
+            KeyWriteFailure::Http(e)
+        }
+    })
 }
 
 /// What the first store of a signed-in account leaves the worker. That is the
@@ -1350,6 +1429,105 @@ mod tests {
                 )]
             );
         }
+    }
+
+    /// `SYNC-287`: a recovery re-seals, then reads who the account is under
+    /// the pair the session holds, so the session opens on the recovered seed.
+    /// A refused re-seal reads no identity.
+    #[tokio::test]
+    async fn a_recovery_reads_the_identity_its_session_opens_with() {
+        let seed = recovered_seed();
+        let user = "77777777-7777-7777-7777-777777777777";
+        let transport = Scripted::new([
+            Ok((200, stored(Some(signing_pubkey(&seed))))),
+            Ok((200, serde_json::json!({ "status": "rotated" }))),
+            Ok((
+                200,
+                serde_json::json!({
+                    "user_id": user,
+                    "display_name": "Ada",
+                    "email": "ada@example.org",
+                }),
+            )),
+        ]);
+        let auth = session("access-1", "refresh-1");
+        let chosen =
+            ambre_crypto::strength::ChosenPassphrase::check(new_passphrase()).expect("strong");
+        let Ok(me) = recover_session(&transport, &auth, &root(), &seed, &chosen).await else {
+            panic!("the recovery read no identity");
+        };
+        assert_eq!(me.user_id.to_string(), user);
+        assert_eq!(me.display_name.as_str(), "Ada");
+        let calls: Vec<String> = transport.calls().into_iter().map(|(_, url)| url).collect();
+        assert_eq!(
+            calls,
+            [
+                "https://relay.test/api/keys/master",
+                "https://relay.test/api/keys/master/rotate",
+                "https://relay.test/api/auth/me",
+            ]
+        );
+
+        let transport = Scripted::new([
+            Ok((200, stored(Some(signing_pubkey(&seed))))),
+            Ok((409, serde_json::json!({ "code": "CONFLICT" }))),
+        ]);
+        let outcome = recover_session(&transport, &auth, &root(), &seed, &chosen).await;
+        assert!(matches!(
+            outcome,
+            Err(KeyWriteFailure::Auth(AuthFailure::StaleReseal))
+        ));
+        assert_eq!(transport.calls().len(), 2, "a refused re-seal read on");
+    }
+
+    /// `SYNC-286`: a re-seal the relay refuses as stale, after a recovery or
+    /// a passphrase change, draws a refusal of its own on the bus. Another
+    /// refusal of the write stays an HTTP failure.
+    #[tokio::test]
+    async fn a_stale_re_seal_is_refused_as_stale() {
+        let chosen =
+            ambre_crypto::strength::ChosenPassphrase::check(new_passphrase()).expect("strong");
+        let auth = session("access-1", "refresh-1");
+        let conflict = || -> Result<(u16, serde_json::Value), String> {
+            Ok((409, serde_json::json!({ "code": "CONFLICT" })))
+        };
+
+        let seed = recovered_seed();
+        let transport = Scripted::new([Ok((200, stored(Some(signing_pubkey(&seed))))), conflict()]);
+        let recovered = reseal_recovered_seed(&transport, &auth, &root(), &seed, &chosen).await;
+
+        let seed = MasterSeed::generate();
+        let transport = Scripted::new([Ok((200, sealed_under_current(&seed))), conflict()]);
+        let changed =
+            reseal_changed_passphrase(&transport, &auth, &root(), &current_passphrase(), &chosen)
+                .await;
+
+        for outcome in [recovered, changed] {
+            let Err(failure) = outcome else {
+                panic!("a stale re-seal succeeded");
+            };
+            assert!(matches!(
+                reseal_refused(failure),
+                LogicEvent::AuthError {
+                    cause: AuthFailure::StaleReseal
+                }
+            ));
+        }
+        assert_eq!(
+            AuthFailure::StaleReseal.passphrase_verdict(),
+            ambre_bus::PassphraseVerdict::Other,
+            "a stale seal blames the passphrase"
+        );
+        assert!(AuthFailure::StaleReseal.to_string().contains("Try again"));
+
+        let transport = Scripted::new([
+            Ok((200, sealed_under_current(&seed))),
+            Ok((500, serde_json::json!({ "code": "INTERNAL_ERROR" }))),
+        ]);
+        let failed =
+            reseal_changed_passphrase(&transport, &auth, &root(), &current_passphrase(), &chosen)
+                .await;
+        assert!(matches!(failed, Err(KeyWriteFailure::Http(_))));
     }
 
     const CURRENT_PASSPHRASE: &str = "pelican harbor voltage minnow";
@@ -1725,6 +1903,92 @@ mod set_up_keys_tests {
                         evt: RestEvent::SessionReady { user_id: ready, display_name, .. },
                     },
                 ] if *answered == id && *ready == user_id && display_name.as_str() == "Ada"
+            ),
+            "told {told:?}"
+        );
+    }
+
+    /// `SYNC-287`, `SYNC-288`: a recovery answered by the relay opens the
+    /// session on the recovered keys. Logic hears the recovery, then the
+    /// session, and no second unlock is asked. A session that holds keys
+    /// already keeps them and its socket, and hears the recovery alone.
+    #[test]
+    fn a_recovery_ends_on_the_session_of_the_recovered_keys() {
+        let recovered = |state: &mut SyncState, seed: MasterSeed, user_id: Id<User>| {
+            let id = ambre_bus::next_request();
+            state.handle_sync_event(SyncEvent::AccountRecovered {
+                id,
+                signing_key: seed.derive_signing_key(),
+                exchange_key: seed.derive_exchange_key(),
+                master_seed: seed,
+                tokens: TokenPair::new(
+                    Credential::new("access-1".to_owned()),
+                    Credential::new("refresh-1".to_owned()),
+                    ambre_core::TimeSpan::<ambre_core::Sec>::new(900),
+                ),
+                user_id,
+                display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada")
+                    .unwrap(),
+                email: "ada@example.org".into(),
+            });
+            id
+        };
+        let (mut state, rx) = worker();
+        let seed = MasterSeed::generate();
+        let signing = seed.derive_signing_key().verifying_key().to_bytes();
+        let user_id = Id::<User>::mint();
+        let id = recovered(&mut state, seed, user_id);
+
+        assert_eq!(state.user_id, Some(user_id));
+        assert_eq!(state.socket_opens.get(), 1);
+        let held = state
+            .signing_key
+            .as_ref()
+            .expect("the recovered keys are held");
+        assert_eq!(held.verifying_key().to_bytes(), signing);
+        let told: Vec<LogicEvent> = rx
+            .try_iter()
+            .filter(|e| matches!(e, LogicEvent::Rest { .. }))
+            .collect();
+        assert!(
+            matches!(
+                told.as_slice(),
+                [
+                    LogicEvent::Rest {
+                        id: Some(answered),
+                        evt: RestEvent::AccountRecovered,
+                    },
+                    LogicEvent::Rest {
+                        id: None,
+                        evt: RestEvent::SessionReady { user_id: ready, .. },
+                    },
+                ] if *answered == id && *ready == user_id
+            ),
+            "told {told:?}"
+        );
+
+        // The same seed again, over the session it opened.
+        let again = recovered(&mut state, MasterSeed::generate(), user_id);
+        assert_eq!(state.socket_opens.get(), 1, "a second socket opened");
+        assert_eq!(
+            state
+                .signing_key
+                .as_ref()
+                .map(|key| key.verifying_key().to_bytes()),
+            Some(signing),
+            "the held keys moved"
+        );
+        let told: Vec<LogicEvent> = rx
+            .try_iter()
+            .filter(|e| matches!(e, LogicEvent::Rest { .. }))
+            .collect();
+        assert!(
+            matches!(
+                told.as_slice(),
+                [LogicEvent::Rest {
+                    id: Some(answered),
+                    evt: RestEvent::AccountRecovered,
+                }] if *answered == again
             ),
             "told {told:?}"
         );

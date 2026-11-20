@@ -353,7 +353,7 @@ pub enum RestCommand {
     // opens their own files (`ambre-spec-docfile.md section 5`).
     //
     /// Seal a plaintext `.ambre` under `passphrase`. -> `DocFileSealed`
-    /// / `DocFileSealFailed`.
+    /// / `DocFileSealFailed` / `DocFileSealRefused`.
     SealDocFile {
         /// A whole plaintext container, header included.
         plaintext: Confidential<Plaintext>,
@@ -542,6 +542,12 @@ pub enum RestEvent {
     /// failures reach here: a key derivation out of memory, and a document past
     /// the AEAD size limit. The user acts on neither differently.
     DocFileSealFailed,
+    /// The passphrase falls under the strength floor, for the reason it names,
+    /// so nothing was derived or sealed (`DOCFILE-022`). The prompt shows the
+    /// reason and asks again.
+    DocFileSealRefused {
+        weakness: ambre_core::PassphraseWeakness,
+    },
     /// The plaintext container the sealed file held. The caller reads its
     /// header as it would a file off the disk: the seal changes nothing about
     /// dispatch, version recovery or the schema gate.

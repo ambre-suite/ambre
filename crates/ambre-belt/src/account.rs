@@ -150,26 +150,6 @@ async fn wait_list(page: &Page, name: &str) {
         .await;
 }
 
-/// Types `passphrase` into the unlock face, once it shows, and submits it.
-async fn unlock(page: &Page, passphrase: &str) {
-    page.browser
-        .wait_for(
-            "the unlock face",
-            &format!(
-                "const field = document.querySelector('.ambre-keys-passphrase'); \
-                 const button = document.querySelector('.ambre-signin-btn'); \
-                 if (!field || !button || button.disabled \
-                   || !document.querySelector('.ambre-keys-recover')) return false; \
-                 field.value = {}; \
-                 button.click(); \
-                 return true;",
-                Value::String(passphrase.to_owned())
-            ),
-            SETUP,
-        )
-        .await;
-}
-
 /// The words of a refusal of the recovery words, as `AuthFailure` spells them.
 const UNKNOWN_WORD: &str =
     "Recovery failed: a word is not one of the recovery words. Check its spelling.";
@@ -330,10 +310,10 @@ mod tests {
             .await;
     }
 
-    /// `CHROME-133`, `CHROME-134`: the unlock face of a provider account links
-    /// to the recovery form. A recovery there re-seals the account under a new
-    /// passphrase. The unlock face then refuses the old passphrase and opens
-    /// the list under the new one.
+    /// `CHROME-133`, `CHROME-134`, `SYNC-287`: the unlock face of a provider
+    /// account links to the recovery form. A recovery there re-seals the
+    /// account under a new passphrase and opens the list on the recovered
+    /// keys, with no second unlock.
     #[tokio::test(flavor = "multi_thread")]
     #[cfg_attr(
         not(feature = "browser"),
@@ -374,25 +354,7 @@ mod tests {
             ]),
         )
         .await;
-        page.browser
-            .wait_for(
-                "the unlock face after the recovery",
-                "return !document.querySelector('.ambre-keys-words-field') \
-                   && !!document.querySelector('.ambre-keys-recover');",
-                SETUP,
-            )
-            .await;
-
-        unlock(&page, STRONG).await;
-        page.browser
-            .wait_for(
-                "the old passphrase refused",
-                "const line = document.querySelector('.ambre-keys-refusal'); \
-                 return !!line && line.textContent.length > 0;",
-                SETUP,
-            )
-            .await;
-        unlock(&page, RECOVERED).await;
+        // The list shows, and no gate asks the new passphrase again.
         wait_list(&page, "Ada").await;
     }
 }

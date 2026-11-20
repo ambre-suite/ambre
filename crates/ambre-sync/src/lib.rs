@@ -445,6 +445,20 @@ enum SyncEvent {
         display_name: ambre_core::Validated<ambre_core::DisplayName>,
         email: ambre_core::Email,
     },
+    /// A recovery re-sealed the seed its words spell under the new passphrase
+    /// (`SYNC-248`). It carries that seed, the pair the session holds and who
+    /// the account is, so the session opens on the recovered keys
+    /// (`SYNC-287`).
+    AccountRecovered {
+        id: Seq<Request>,
+        master_seed: MasterSeed,
+        signing_key: SigningKey,
+        exchange_key: StaticSecret,
+        tokens: http::TokenPair,
+        user_id: Id<User>,
+        display_name: ambre_core::Validated<ambre_core::DisplayName>,
+        email: ambre_core::Email,
+    },
     DocumentList {
         id: Seq<Request>,
         documents: Vec<DocumentSummary>,

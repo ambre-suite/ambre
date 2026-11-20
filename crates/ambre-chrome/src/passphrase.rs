@@ -75,11 +75,29 @@ impl PassphraseRefusal {
     }
 }
 
+/// The line under the fields: the prompt's own refusal, else the weakness
+/// the Sync worker named for the last passphrase, else nothing.
+///
+/// The prompt's own refusal wins, because it answers what is typed now. The
+/// worker's refusal answers the passphrase already sent (`DOCFILE-022`).
+pub fn prompt_line(
+    own: Option<PassphraseRefusal>,
+    worker: Option<ambre_core::PassphraseWeakness>,
+) -> &'static str {
+    match (own, worker) {
+        (Some(refusal), _) => refusal.message(),
+        (None, Some(weakness)) => weakness.message(),
+        (None, None) => "",
+    }
+}
+
 /// A modal that asks for one passphrase.
 ///
 /// Submitting hands the text to `on_submit` and closes; cancelling (Escape, the
 /// backdrop, the button) closes and emits nothing. Both clear the fields, so a
-/// reopened dialog never shows the last one's text.
+/// reopened dialog never shows the last one's text. The Sync worker may
+/// refuse a passphrase. A caller that reopens the prompt then sets
+/// `weakness`, and the line says why until the person types or cancels.
 #[component]
 pub fn PassphraseDialog(
     /// Visibility, owned by the caller (the command that opens it).
@@ -90,16 +108,26 @@ pub fn PassphraseDialog(
     /// The passphrase the user settled on. Fired once per submission.
     #[prop(into)]
     on_submit: Callback<Confidential<Passphrase>>,
+    /// The weakness the Sync worker named for the last passphrase sent, if
+    /// the caller tracks one (`DOCFILE-022`).
+    #[prop(optional)]
+    weakness: Option<RwSignal<Option<ambre_core::PassphraseWeakness>>>,
 ) -> impl IntoView {
     let first = RwSignal::new(String::new());
     let second = RwSignal::new(String::new());
     let error = RwSignal::new(None::<PassphraseRefusal>);
     let sealing = intent == PassphraseIntent::Seal;
+    let forget_weakness = move || {
+        if let Some(weakness) = weakness {
+            weakness.set(None);
+        }
+    };
 
     let clear = move || {
         first.set(String::new());
         second.set(String::new());
         error.set(None);
+        forget_weakness();
     };
 
     let submit = move || {
@@ -147,6 +175,7 @@ pub fn PassphraseDialog(
                     on:input=move |ev| {
                         first.set(event_target_value(&ev));
                         error.set(None);
+                        forget_weakness();
                     }
                     on:keydown=on_key
                 />
@@ -159,12 +188,13 @@ pub fn PassphraseDialog(
                         on:input=move |ev| {
                             second.set(event_target_value(&ev));
                             error.set(None);
+                            forget_weakness();
                         }
                         on:keydown=on_key
                     />
                 </Show>
                 <p class="ambre-passphrase-error" aria-live="polite">
-                    {move || error.get().map_or("", PassphraseRefusal::message)}
+                    {move || prompt_line(error.get(), weakness.and_then(|w| w.get()))}
                 </p>
                 <div class="ambre-dialog-actions">
                     <button on:click=move |_| {
@@ -222,6 +252,21 @@ mod tests {
         assert_eq!(
             vetted("correct horse", "stale", PassphraseIntent::Open),
             Ok(())
+        );
+    }
+
+    /// `DOCFILE-022`: the weakness the Sync worker named reads on the prompt
+    /// in the words of the floor, its reason included. The prompt's own
+    /// refusal of what is typed now comes first.
+    #[test]
+    fn the_prompt_shows_the_weakness_the_worker_named() {
+        use ambre_core::PassphraseWeakness::{CommonPassword, TooShort};
+        assert_eq!(prompt_line(None, None), "");
+        assert_eq!(prompt_line(None, Some(TooShort)), TooShort.message());
+        assert!(prompt_line(None, Some(CommonPassword)).contains("common password"));
+        assert_eq!(
+            prompt_line(Some(PassphraseRefusal::Mismatch), Some(TooShort)),
+            PassphraseRefusal::Mismatch.message()
         );
     }
 

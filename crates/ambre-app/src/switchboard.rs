@@ -22,9 +22,9 @@ use ambre_canvas::{PerfPublisher, PerfSnapshot};
 use ambre_chrome::{ToastKind, ToastVoice};
 use ambre_core::id::{Channel, Document, Id, User};
 use ambre_core::{
-    Authored, Confidential, Credential, DisplayName, ExchangePublicKey, FixedBytes, FracMs,
-    Instant, InviterPin, OidcState, Opaque, PageLoad, Payload, PlaintextContainer, ProviderUrls,
-    RecoveryWords, TimeSpan, Validated,
+    Authored, Confidential, Credential, DisplayName, Email, ExchangePublicKey, FixedBytes, FracMs,
+    Instant, InviterPin, OidcState, Opaque, PageLoad, PassphraseWeakness, Payload,
+    PlaintextContainer, ProviderUrls, RecoveryWords, TimeSpan, Validated,
 };
 use ambre_logic::app::{LogicCommand, UiEvent};
 
@@ -443,6 +443,12 @@ pub(crate) enum Effect<'e> {
     /// Show the keys gate on this face: the account's keys are still to open
     /// or to set up (`CHROME-097`, `CHROME-098`).
     AskKeys(KeysFace),
+    /// Show on the keys gate who the provider signed in, so the setup asks
+    /// nothing the provider already gave (`CHROME-140`).
+    Identify {
+        display_name: &'e Validated<DisplayName>,
+        email: &'e Email,
+    },
     /// Say on the keys gate why the worker refused its passphrase
     /// (`CHROME-131`).
     RefuseKeys(AuthFailure),
@@ -454,6 +460,9 @@ pub(crate) enum Effect<'e> {
     Refused(AuthFailure),
     /// The recovery is done: close the keys face.
     CloseKeys,
+    /// The Sync worker refused the passphrase of a sealed save as weak: the
+    /// prompt opens again and says why (`DOCFILE-022`).
+    RefuseSeal(PassphraseWeakness),
 }
 
 /// The switchboard's own state across frames: the page it runs on, and whether it
@@ -643,14 +652,40 @@ impl Switchboard {
             }
             // Signed in with the provider: the Sync worker holds the tokens,
             // and the keys are still to open or to set up (`CHROME-096`).
-            RestEvent::ProviderSignedIn { keys_stored, .. } => {
+            // The gate names the account the provider vouched for, so a
+            // person who signed in with the wrong one sees it (`CHROME-140`).
+            RestEvent::ProviderSignedIn {
+                display_name,
+                email,
+                keys_stored,
+                ..
+            } => {
+                effects.push(Effect::Identify {
+                    display_name,
+                    email,
+                });
                 effects.push(Effect::AskKeys(KeysFace::after_sign_in(*keys_stored)));
             }
             // The words are shown once, and kept nowhere else (`CHROME-099`).
             RestEvent::AccountCreated { recovery_words } => {
                 effects.push(Effect::ShowWords(recovery_words));
             }
+            // The form closes; the session of the recovered keys follows
+            // and replaces the gate (`SYNC-287`, `CHROME-133`).
             RestEvent::AccountRecovered => effects.push(Effect::CloseKeys),
+            // The change form closes and says the new passphrase holds.
+            RestEvent::PassphraseChanged => {
+                effects.push(Effect::CloseKeys);
+                effects.push(Effect::Notice(Notice::new(
+                    ToastKind::Success,
+                    "Passphrase changed. Unlock with the new one from now on.",
+                )));
+            }
+            // A seal refused as weak reopens its prompt, which says why
+            // (`DOCFILE-022`).
+            RestEvent::DocFileSealRefused { weakness } => {
+                effects.push(Effect::RefuseSeal(*weakness));
+            }
             RestEvent::DocumentList { documents } => effects.push(Effect::ShowDocuments(documents)),
             // A document was renamed or deleted (possibly from the launcher):
             // re-list so the card reflects the new name / disappears. Delete is
@@ -2200,7 +2235,7 @@ mod tests {
             let ev = signed_in(keys);
             let effects = switchboard.service(&ev, on(None), &nobody());
             assert_eq!(asked(&effects), [face]);
-            assert_eq!(effects.len(), 1, "a sign-in lists nothing before the keys");
+            assert_eq!(effects.len(), 2, "a sign-in lists nothing before the keys");
         }
         let effects = switchboard.service(&UiEvent::SetupRequired, on(None), &nobody());
         assert_eq!(asked(&effects), [KeysFace::SetUp]);
@@ -2208,6 +2243,77 @@ mod tests {
             effects.iter().all(|e| notice(e).is_none()),
             "an error showed"
         );
+    }
+
+    /// `CHROME-140`: a provider sign-in hands the gate the name and the
+    /// address the provider gave, before the face, so the setup asks for
+    /// neither again.
+    #[test]
+    fn a_provider_sign_in_names_its_account_on_the_gate() {
+        let ev = rest(RestEvent::ProviderSignedIn {
+            user_id: Id::<User>::mint(),
+            display_name: name("Ada"),
+            email: Email::from("ada@test.local"),
+            keys_stored: ambre_bus::KeySetup::Absent,
+        });
+        let effects = Switchboard::new(Page::Document).service(&ev, on(None), &nobody());
+        match effects.as_slice() {
+            [
+                Effect::Identify {
+                    display_name,
+                    email,
+                },
+                Effect::AskKeys(KeysFace::SetUp),
+            ] => {
+                assert_eq!(display_name.as_str(), "Ada");
+                assert_eq!(**email, Email::from("ada@test.local"));
+            }
+            _ => panic!("the gate was not handed the provider identity"),
+        }
+    }
+
+    /// `CHROME-141`, `CHROME-143`: a passphrase change the worker answered
+    /// closes its form and says so. A refusal of the change reads on the
+    /// form, in the words of the refusal, a stale re-seal included.
+    #[test]
+    fn a_passphrase_change_closes_its_form_or_reads_its_refusal() {
+        let mut switchboard = Switchboard::new(Page::Document);
+        let changed = rest(RestEvent::PassphraseChanged);
+        let effects = switchboard.service(&changed, on(None), &nobody());
+        assert!(matches!(effects.first(), Some(Effect::CloseKeys)));
+        assert!(matches!(
+            effects.get(1).and_then(notice),
+            Some((Tone::Success, _))
+        ));
+        let form = Shown {
+            account_form: AccountForm::Shown,
+            ..on(None)
+        };
+        for cause in [
+            AuthFailure::BadPassphrase,
+            AuthFailure::WeakPassphrase(ambre_core::PassphraseWeakness::Sequence),
+            AuthFailure::StaleReseal,
+        ] {
+            let ev = UiEvent::AuthError { cause };
+            let effects = switchboard.service(&ev, form, &nobody());
+            assert!(
+                matches!(effects.first(), Some(Effect::Refused(shown)) if *shown == cause),
+                "{cause}"
+            );
+        }
+    }
+
+    /// `DOCFILE-022`: a seal the worker refused as weak reopens its prompt
+    /// with the weakness, and raises no toast of its own.
+    #[test]
+    fn a_weak_seal_passphrase_reopens_its_prompt() {
+        let weakness = ambre_core::PassphraseWeakness::CommonPassword;
+        let ev = rest(RestEvent::DocFileSealRefused { weakness });
+        let effects = Switchboard::new(Page::Document).service(&ev, on(None), &nobody());
+        assert!(matches!(
+            effects.as_slice(),
+            [Effect::RefuseSeal(named)] if *named == weakness
+        ));
     }
 
     /// `CHROME-131`: a refused passphrase reads on the gate that asked for it,

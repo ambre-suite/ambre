@@ -1659,6 +1659,44 @@ mod tests {
         }
     }
 
+    /// `DOCFILE-022`: a seal the Sync worker refused for a weak passphrase
+    /// reaches the UI as that refusal, so the prompt asks again. The
+    /// application raises no failure and no file, and the seal waits no more.
+    #[test]
+    fn a_weak_seal_passphrase_reaches_the_prompt_and_no_file() {
+        for doc_type in [DocType::Trame, DocType::Toile] {
+            let (mut state, ui, id, _plaintext) = sealing(doc_type);
+            let weakness = ambre_core::PassphraseWeakness::TooShort;
+            state.handle_logic_event(LogicEvent::Rest {
+                id: Some(id),
+                evt: RestEvent::DocFileSealRefused { weakness },
+            });
+            let events: Vec<UiEvent> = std::iter::from_fn(|| ui.try_recv().ok()).collect();
+            assert!(
+                events.iter().any(|e| matches!(
+                    e,
+                    UiEvent::Rest {
+                        evt: RestEvent::DocFileSealRefused { weakness: named },
+                        ..
+                    } if *named == weakness
+                )),
+                "{doc_type:?}: the refusal did not reach the UI",
+            );
+            assert!(
+                !events.iter().any(|e| matches!(
+                    e,
+                    UiEvent::Viewport { event, .. }
+                        if event.interop_failure().is_some() || event.exported_file().is_some()
+                )),
+                "{doc_type:?}: a refused seal raised a failure or a file",
+            );
+            assert!(
+                state.pending_seals.is_empty(),
+                "{doc_type:?}: the seal still waits"
+            );
+        }
+    }
+
     /// The passphrase never reaches the engine: the dispatcher intercepts the
     /// command by value and moves the secret straight to Sync. A document
     /// closed mid-seal has nothing left to answer.

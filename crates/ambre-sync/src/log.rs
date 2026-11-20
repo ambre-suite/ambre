@@ -72,13 +72,42 @@ macro_rules! debug {
 pub(crate) use {debug, error, info, warning};
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::{Level, emit};
     use std::sync::{Arc, Mutex};
 
     /// The level and the message of each event `tracing` receives.
     #[derive(Clone, Default)]
     struct Capture(Arc<Mutex<Vec<(tracing::Level, String)>>>);
+
+    /// The messages `run` logs, once one of them contains `marker`.
+    ///
+    /// Another test thread may leave a callsite's interest stale, as the test
+    /// below states. So `run` runs again after a rebuild until the marker
+    /// shows, a bounded number of times. An absence read off the result is
+    /// then read off messages that did reach the capture.
+    pub(crate) fn logged_by(marker: &str, mut run: impl FnMut()) -> Vec<String> {
+        let capture = Capture::default();
+        tracing::subscriber::with_default(capture.clone(), || {
+            for _ in 0..50 {
+                tracing::callsite::rebuild_interest_cache();
+                if let Ok(mut held) = capture.0.lock() {
+                    held.clear();
+                }
+                run();
+                let seen: Vec<String> = capture
+                    .0
+                    .lock()
+                    .map(|held| held.iter().map(|(_, message)| message.clone()).collect())
+                    .unwrap_or_default();
+                if seen.iter().any(|message| message.contains(marker)) {
+                    return seen;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            panic!("no message contains {marker}");
+        })
+    }
 
     /// The `message` field of one event.
     struct Message(String);
