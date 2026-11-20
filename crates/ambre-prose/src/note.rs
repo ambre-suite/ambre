@@ -14,6 +14,7 @@ use loro::{Container, LoroDoc, LoroText, TreeID, ValueOrContainer};
 
 use crate::doc;
 use crate::events::{FootnoteCall, FootnoteEntry};
+use crate::logic::Roots;
 
 /// The entry of footnote `id`, when `annots` holds one of that kind.
 #[must_use]
@@ -30,17 +31,17 @@ pub(crate) fn entry(document: &LoroDoc, id: &Id<Footnote>) -> Option<doc::Fields
 /// The block holding the text of footnote `id`, when its entry names a live
 /// one (`PROSE-FEAT-305`).
 #[must_use]
-pub(crate) fn block(document: &LoroDoc, id: &Id<Footnote>) -> Option<TreeID> {
+pub(crate) fn block(document: &LoroDoc, roots: &Roots, id: &Id<Footnote>) -> Option<TreeID> {
     let named = doc::read_string(&entry(document, id)?, doc::AnnotKey::NoteBlock)?;
     let block = TreeID::try_from(named.as_str()).ok()?;
-    let tree = doc::blocks_read(document)?;
+    let tree = doc::blocks_read(document, roots)?;
     doc::is_note(&tree, &block).then_some(block)
 }
 
 /// The body of footnote `id`: the text of its block.
 #[must_use]
-pub(crate) fn body(document: &LoroDoc, id: &Id<Footnote>) -> Option<LoroText> {
-    block(document, id).map(|block| doc::get_block_text(document, &block))
+pub(crate) fn body(document: &LoroDoc, roots: &Roots, id: &Id<Footnote>) -> Option<LoroText> {
+    block(document, roots, id).map(|block| doc::get_block_text(document, &block))
 }
 
 /// Every footnote the document holds, whether a call reaches it or not.
@@ -89,10 +90,10 @@ pub fn ordinals(document: &LoroDoc) -> Vec<(Id<Footnote>, Ordinal<FootnoteCall>)
 /// Every note as the view lists it: the numbered ones in order, then the
 /// orphans no call reaches, kept for review (`PROSE-FEAT-098`).
 #[must_use]
-pub fn entries(document: &LoroDoc) -> Vec<FootnoteEntry> {
+pub fn entries(document: &LoroDoc, roots: &Roots) -> Vec<FootnoteEntry> {
     let numbered = ordinals(document);
     let text_of = |id: &Id<Footnote>| {
-        body(document, id)
+        body(document, roots, id)
             .map(|t| t.to_string())
             .unwrap_or_default()
     };

@@ -295,6 +295,7 @@ fn reading(reader: &ProseState, stored: &Stored) -> Option<String> {
 /// the bands take.
 fn meta_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
     let document = &reader.doc;
+    let roots = &reader.roots;
     let stored_key = stored.key(0)?;
     if ambre_core::schema::MetaKey::parse(stored_key)
         == Some(ambre_core::schema::MetaKey::SchemaVersion)
@@ -311,17 +312,17 @@ fn meta_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
     }
     let key = doc::MetaKey::parse(stored_key)?;
     match key {
-        doc::MetaKey::Title => Some(format!("titled {:?}", doc::read_title(document))),
-        doc::MetaKey::Locale => Some(doc::read_locale(document).map_or_else(
+        doc::MetaKey::Title => Some(format!("titled {:?}", doc::read_title(document, roots))),
+        doc::MetaKey::Locale => Some(doc::read_locale(document, roots).map_or_else(
             || "in no well-formed language".to_owned(),
             |tag| format!("in {:?}", tag.as_str()),
         )),
         doc::MetaKey::UpdatedAt => {
-            let date = crate::band::civil_date(doc::read_updated_at(document)?);
+            let date = crate::band::civil_date(doc::read_updated_at(document, roots)?);
             Some(format!("last modified {date} UTC"))
         }
         doc::MetaKey::Page => {
-            let page = PageBox::from_mm(doc::read_page_format(document));
+            let page = PageBox::from_mm(doc::read_page_format(document, roots));
             let length = match doc::PageKey::parse(stored.key(1)?)? {
                 doc::PageKey::WidthMm => page.page_width,
                 doc::PageKey::HeightMm => page.page_height,
@@ -338,7 +339,7 @@ fn meta_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
             Some(format!("{} is {} px", stored.key(1)?, length.get()))
         }
         doc::MetaKey::Defaults => {
-            let defaults = doc::read_defaults(document);
+            let defaults = doc::read_defaults(document, roots);
             let style = EffectiveStyle::from_parts(
                 &defaults,
                 &ParagraphStyle::default(),
@@ -356,13 +357,15 @@ fn meta_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
         }
         doc::MetaKey::DifferentFirstPage => Some(format!(
             "first page has its own bands {}",
-            doc::read_bands(document).different_first_page.has_own()
+            doc::read_bands(document, roots)
+                .different_first_page
+                .has_own()
         )),
         doc::MetaKey::Header
         | doc::MetaKey::Footer
         | doc::MetaKey::HeaderFirst
         | doc::MetaKey::FooterFirst => {
-            let bands = doc::read_bands(document);
+            let bands = doc::read_bands(document, roots);
             let (band, enabled) = match key {
                 doc::MetaKey::Header => (bands.header, Some(bands.header_enabled)),
                 doc::MetaKey::Footer => (bands.footer, Some(bands.footer_enabled)),
@@ -387,6 +390,7 @@ fn meta_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
 /// layout measures the block with and the table the layout draws.
 fn block_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
     let document = &reader.doc;
+    let roots = &reader.roots;
     let tree = doc::blocks(document);
     let id = TreeID::try_from(stored.key(0)?).ok()?;
     let name = block_name(reader, &id);
@@ -398,7 +402,7 @@ fn block_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
         ));
     }
     let style = EffectiveStyle::resolve(
-        &doc::read_defaults(document),
+        &doc::read_defaults(document, roots),
         &tree,
         &id,
         ambre_core::Weight::Regular,
@@ -469,7 +473,8 @@ fn attribute_reading(reader: &ProseState, id: &TreeID, stored: &Stored) -> Optio
         doc::AttrKey::ColWidths => {
             let at = stored.at(3)?;
             let stored_widths = doc::col_widths(&tree, id);
-            let content = PageBox::from_mm(doc::read_page_format(&reader.doc)).content_width;
+            let content =
+                PageBox::from_mm(doc::read_page_format(&reader.doc, &reader.roots)).content_width;
             let cols = Len::<crate::events::grid::Col>::of(stored_widths.len());
             let widths = column_widths(&stored_widths, cols, content);
             format!("column {} is {} px wide", at + 1, widths.get(at)?.get())
@@ -624,7 +629,13 @@ fn mark_reading(
             .map_or(Len::<crate::events::Page>::ONE, |layout| layout.page_count);
         format!(
             "band shows {:?} on page 1",
-            crate::band::resolve(&reader.doc, block, Pos::<crate::events::Page>::ZERO, pages)
+            crate::band::resolve(
+                &reader.doc,
+                &reader.roots,
+                block,
+                Pos::<crate::events::Page>::ZERO,
+                pages
+            )
         )
     } else if mark == crate::mark::MarkRoot::Footnote.as_str() {
         let id = ambre_core::Id::<ambre_core::id::Footnote>::parse_str(stored.string()?).ok();
