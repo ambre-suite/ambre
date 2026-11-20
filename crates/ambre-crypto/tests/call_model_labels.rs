@@ -217,7 +217,7 @@ fn a_wrap_opens_under_the_wrap_label_of_the_model() {
     ]
     .concat();
     let kek: [u8; 32] = expand(shared.as_bytes(), &info).expect("HKDF expands 32 bytes");
-    // The generation, the key, then no departure in sixteen zero slots (`CALL-154`).
+    // The generation, the key, then no departure in sixteen zero slots (`CALL-157`).
     let plaintext = [&9u64.to_be_bytes()[..], &SENDER_KEY, &[0u8; 1 + 8 * 16]].concat();
     let nonce = [5u8; 24];
     let ciphertext = XChaCha20Poly1305::new(Key::from_slice(&kek))

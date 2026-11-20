@@ -986,9 +986,9 @@ pub(crate) fn meta_read(doc: &LoroDoc, roots: &Roots) -> Option<Fields<MetaKey>>
 /// A reader never takes [`blocks`] on a document without the tree: Loro would
 /// attach the root it did not find. Laying the document out writes nothing to
 /// it (`PROSE-079`). Past the first operation, every Prose document holds its
-/// tree (`PROSE-027`). A state that breaks that rule reads as no block, and
-/// its frontiers, its pending operations and its encoded bytes stay as they
-/// were (`PROSE-141`, `PROSE-142`). `roots` answers the presence without
+/// tree (`PROSE-027`). A state that breaks that rule reads as no block. Its
+/// frontiers, its pending operations and its encoded bytes stay as they were
+/// (`PROSE-141`, `PROSE-142`). `roots` answers the presence without
 /// opening the root, since Loro 1.13 reads it only by attaching the root or
 /// by building its value.
 ///

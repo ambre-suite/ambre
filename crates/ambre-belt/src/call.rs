@@ -171,7 +171,7 @@ const tone = () => {
     let chain = Promise.resolve();
     let iced;
     const ice = new Promise((ok) => { iced = ok; });
-    // A later credential of the SFU restarts ICE, as the call client does (`CALL-155`):
+    // A later credential of the SFU restarts ICE, as the call client does (`CALL-156`):
     // 'due' until the offer leaves, 'offered' until its answer lands. An offer of the SFU
     // that crosses it rolls it back, so it leaves again after the answer.
     let restart = 'settled';
@@ -212,7 +212,7 @@ const tone = () => {
     ws.send(JSON.stringify({ admission: query.get('admission') }));
     const servers = await ice;
     pc = new RTCPeerConnection(config(servers));
-    // The renewals the relay would send, one every `every` ms: the SFU keeps the seat, and
+    // The renewals the relay would send, one every `every` ms. The SFU keeps the seat, and
     // answers a fresh TURN credential once the last one nears its expiry.
     const renewals = (query.get('renewals') || '').split(',').filter((t) => t);
     renewals.forEach((token, k) => setTimeout(() => {
@@ -744,8 +744,8 @@ mod tests {
             .await
     }
 
-    /// `CALL-154`, `CALL-155`, audit `P60`: a browser relayed through TURN over TCP alone
-    /// holds a credential of 30 s, which the SFU renews 10 s before its expiry. The seat is
+    /// `CALL-155`, `CALL-156`, audit `P60`: a browser is relayed through TURN over TCP alone.
+    /// It holds a credential of 30 s, which the SFU renews 10 s before its expiry. The seat is
     /// renewed every 3 s, as heartbeats renew it. The page restarts ICE with the fresh
     /// credential, onto a new relay allocation. Past the expiry of the first credential, the
     /// call still flows both ways through TURN.

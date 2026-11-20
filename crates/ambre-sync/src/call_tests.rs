@@ -878,8 +878,8 @@ fn revoked(world: &World, actor: usize) -> Log {
     walk(&entries)
 }
 
-/// `CALL-155`: Eve sits in the call from two sessions. The log removes her, and Alice heeds it.
-/// Both sessions of Eve depart before Alice wraps a fresh key, so the one fresh key goes to
+/// `CALL-158`: Eve sits in the call from two sessions. The log removes her, and Alice heeds it.
+/// Both sessions of Eve depart before Alice wraps a fresh key. The one fresh key goes to
 /// Roger alone, never to the second session of Eve.
 #[test]
 fn a_removal_departs_every_session_of_the_member_before_a_fresh_key() {
@@ -910,7 +910,7 @@ fn a_removal_departs_every_session_of_the_member_before_a_fresh_key() {
     );
 }
 
-/// `CALL-154`: Eve is removed, and a malicious relay withholds from Roger the wrap of the fresh
+/// `CALL-157`: Eve is removed, and a malicious relay withholds from Roger the wrap of the fresh
 /// key of Alice. Roger hands the call worker the close of the older key of Alice anyway. Past
 /// the switch delay, no chunk Eve seals under that key opens, and a replayed wrap of it is
 /// refused. The fresh key of Alice still opens when its wrap arrives late.

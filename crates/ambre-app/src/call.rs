@@ -1558,7 +1558,7 @@ async fn local(
     Validated::parse(sdp).ok()
 }
 
-/// Where the page stands with an ICE restart under a fresh TURN credential (`CALL-155`).
+/// Where the page stands with an ICE restart under a fresh TURN credential (`CALL-156`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Restart {
     /// No restart is owed.
@@ -1620,7 +1620,7 @@ async fn offer_screen(pc: &web_sys::RtcPeerConnection) {
 /// of the call closes it.
 ///
 /// A later credential of the SFU replaces the TURN servers of the configuration, then the
-/// page offers with an ICE restart (`CALL-155`). An offer of the SFU that crosses it rolls it
+/// page offers with an ICE restart (`CALL-156`). An offer of the SFU that crosses it rolls it
 /// back, so the page offers it again once it answered.
 async fn drive(worker: web_sys::Worker, rx: ambre_bus::conduit::Receiver<Drive>) {
     let mut pc: Option<web_sys::RtcPeerConnection> = None;

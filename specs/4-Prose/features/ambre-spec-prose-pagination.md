@@ -113,10 +113,10 @@ status values are normative in `ambre-spec-template.md`.
   section 4 says why.
 * **Boundary.** none: pagination runs on the Logic thread, reads the document and returns a value.
   `PROSE-025` (`features/ambre-spec-prose-engine.md section 1`) bans a network call from this crate.
-* **Verification.** 58 `verified`, 1 `unimplemented`. The five footnote rows run through the engine,
-  since a note is written by its command. Termination rests on `PROSE-078` and `PROSE-017`, which a
-  property over generated documents holds together. Two bans are structural, held by a test that
-  reads the module's own source. The schema holds `PROSE-065`.
+* **Verification.** 59 `verified`. The five footnote rows run through the engine, since a note is
+  written by its command. Termination rests on `PROSE-078` and `PROSE-017`, which a property over
+  generated documents holds together. Two bans are structural, held by a test that reads the
+  module's own source. The schema holds `PROSE-065`.
 
 ---
 
@@ -377,14 +377,12 @@ walks the tree, and `place` is pass 2. `reflow` holds the layout between edits.
 its own stack, and a table inside a cell measures as nothing (`PROSE-140`). A peer can also write
 a tree under the name `meta`. The read of `meta` takes the map root by its typed identifier, so
 Loro builds no value of that tree (`PROSE-143`).
-
-**A read attaches nothing.** Loro 1.13 reads the presence of a root only by opening it, which
-attaches the root, or by building its value, which `PROSE-140` refuses. So the Logic thread keeps
-`ambre_prose::logic::Roots`: the roots of the schema that its commits and its imports reached. A
-subscription fills the set at each commit and each import. A reader asks the set first, and an
-absent root reads as an empty view (`PROSE-142`).
 `ambre_prose::logic::ProseState::paginate` is the one way in, so the document is measured where it
 lives.
+
+**A read attaches nothing.** Loro 1.13 sees a root only by opening it, which attaches it, or by
+building its value (`PROSE-140`). The Logic thread keeps `ambre_prose::logic::Roots`, the roots its
+commits and imports reached, and a reader asks it first (`PROSE-142`).
 
 `pass` runs pass 0 too: it measures the bands and reads the note plan before placement. Pass 3 is
 in the view. `ambre_prose::view::hit` places the footnote band from the foot of the body

@@ -661,7 +661,7 @@ fn credential_of(frame: &Value) -> (u64, String, String) {
     )
 }
 
-/// `CALL-153`, audit `P60`: a credential lives the TURN lifetime alone. A renewal that keeps
+/// `CALL-154`, audit `P60`: a credential lives the TURN lifetime alone. A renewal that keeps
 /// the seat answers a fresh credential under the same pseudonym once the last one expires
 /// within the margin, and none before. A renewal of another seat answers none, in the margin
 /// too.

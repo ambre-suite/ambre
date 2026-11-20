@@ -371,7 +371,7 @@ fn the_worker_closes_an_older_epoch_at_the_switch_delay() {
     );
 }
 
-/// `CALL-154`: Eve is removed, and the relay withholds the fresh key of Alice from Roger. The
+/// `CALL-157`: Eve is removed, and the relay withholds the fresh key of Alice from Roger. The
 /// Sync worker of Roger hands the close of the removal alone. Past its delay, no chunk Eve
 /// seals under the older key of Alice reaches the decoder, and the fresh key still opens once
 /// it arrives.

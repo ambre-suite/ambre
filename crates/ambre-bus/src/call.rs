@@ -24,7 +24,7 @@ pub enum PageDescription {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CallSignal {
     /// The TURN servers the SFU minted a credential for: the peer connection starts with them.
-    /// A later one holds a fresh credential, and the page restarts ICE with it (`CALL-155`).
+    /// A later one holds a fresh credential, and the page restarts ICE with it (`CALL-156`).
     Ice(Vec<IceServer>),
     /// An offer of the SFU, which the UI thread answers.
     Offer(Validated<SessionDescription>),

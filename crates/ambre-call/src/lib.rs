@@ -109,7 +109,7 @@ impl CallWorker {
     /// identifier already sealed under (`CALL-147`). An `End` drops every key of the call. An `Open` of a fresh epoch closes the older epochs of its sender
     /// once the switch delay passed after `now` (`CALL-135`). A `Close` of a removal closes the
     /// epochs it names once its delay passed after `now`, whether a fresh key arrives or not
-    /// (`CALL-154`).
+    /// (`CALL-157`).
     pub fn hand(&mut self, handoff: KeyHandoff, now: Instant<PageLoad>) -> Handled {
         match handoff {
             KeyHandoff::Seal {

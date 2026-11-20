@@ -13,7 +13,7 @@
 //!
 //! A renewal that keeps its seat also answers a fresh TURN credential once the last one nears
 //! its expiry (audit `P60`). The page restarts ICE with it, so its next allocation opens under
-//! a credential coturn still admits (`CALL-153`).
+//! a credential coturn still admits (`CALL-154`).
 //!
 //! One socket costs the SFU a bounded share (audit `N39`). A message past
 //! [`SIGNAL_MESSAGE_MAX`] closes the socket. An admission serves one socket alone, so it mints
@@ -514,7 +514,7 @@ async fn session(mut socket: WebSocket, gate: Gate) {
                         break;
                     }
                     // A renewal that kept the seat answers a fresh credential once the last
-                    // one nears its expiry, under the pseudonym of the seat (`CALL-153`).
+                    // one nears its expiry, under the pseudonym of the seat (`CALL-154`).
                     let kept = renewal.await == Ok(Renewal::Kept);
                     let now = unix_now();
                     let fresh = match (admitting.turn.as_ref(), held) {

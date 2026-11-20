@@ -1124,7 +1124,7 @@ mod tests {
         );
     }
 
-    /// `CALL-155`, audit `P60`: a fresh TURN credential the SFU answers a renewal with reaches
+    /// `CALL-156`, audit `P60`: a fresh TURN credential the SFU answers a renewal with reaches
     /// the UI thread as TURN servers, each one, after the first. So the page restarts ICE
     /// with it. The Sync worker sends the SFU nothing back for it.
     #[test]

@@ -814,8 +814,8 @@ pub(crate) mod tests {
             .find_map(|line| line.trim().strip_prefix("a=ice-ufrag:").map(str::to_owned))
     }
 
-    /// `CALL-155`, audit `P60`, in the browser: Ada and Bob join one call of the application,
-    /// on an SFU that hands TURN credentials of 30 s, renewed 15 s before their expiry. The
+    /// `CALL-156`, audit `P60`, in the browser: Ada and Bob join one call of the application.
+    /// Its SFU hands TURN credentials of 30 s, renewed 15 s before their expiry. The
     /// relay renews each seat every heartbeat, and the SFU answers a fresh credential near
     /// the expiry. The page of each restarts ICE with it, and both still decode each other
     /// past the expiry of the first credential.

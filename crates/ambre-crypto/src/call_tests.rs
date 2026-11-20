@@ -1316,11 +1316,11 @@ fn the_chunk_aead_passes_the_wycheproof_vectors() {
     );
 }
 
-/// `CALL-154`: Eve is removed while Alice talks under her key of epoch zero. The relay
-/// withholds the wrap of the fresh key of Alice from Roger, so no fresh key reaches him and no
-/// `CALL-135` deadline starts. The close of the removal still shuts every chunk Eve seals under
-/// the older key once the switch delay passed: the same step, a step up and a camera chunk. A
-/// late handoff of that key opens nothing either.
+/// `CALL-157`: Eve is removed while Alice talks under her key of epoch zero. The relay
+/// withholds the wrap of the fresh key of Alice from Roger. No fresh key reaches him, and no
+/// deadline of a fresh key starts. Once the switch delay passed, the close of the removal still
+/// shuts every chunk Eve seals under the older key. That holds for the same step, a step up
+/// and a camera chunk. A late handoff of that key opens nothing either.
 #[test]
 fn a_removal_closes_the_older_epochs_with_no_fresh_key() {
     let old = SenderKey::generate();
@@ -1364,7 +1364,7 @@ fn a_removal_closes_the_older_epochs_with_no_fresh_key() {
     assert!(roger.open_audio(seal(&mut alice, b"fresh"), due).is_ok());
 }
 
-/// `CALL-154`: a second removal inside the delay keeps the time of the first close, and moves
+/// `CALL-157`: a second removal inside the delay keeps the time of the first close, and moves
 /// it to the newer epoch. A key of Alice drawn between the two removals closes at that time
 /// too.
 #[test]
@@ -1393,7 +1393,7 @@ fn a_second_removal_keeps_the_time_of_the_first_close() {
     );
 }
 
-/// `CALL-154`: the departures of a wrap keep the newest indexes past the slots, and name an
+/// `CALL-157`: the departures of a wrap keep the newest indexes past the slots, and name an
 /// index alone once it was departed.
 #[test]
 fn the_departures_keep_the_newest_indexes() {

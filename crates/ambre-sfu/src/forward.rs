@@ -703,7 +703,7 @@ impl Sfu {
     ///
     /// An offer that restarts ICE, under a fresh TURN credential, gives the connection a fresh
     /// local fragment. The index of fragments follows it, so a check from the new allocation
-    /// finds the connection (`CALL-154`). The old fragment names nothing from then on.
+    /// finds the connection (`CALL-155`). The old fragment names nothing from then on.
     pub fn accept_offer(&mut self, id: Seq<Participant>, offer: SdpOffer) -> Option<SdpAnswer> {
         let member = self.members.iter_mut().find(|m| m.id == id)?;
         if member.pending.is_some() {

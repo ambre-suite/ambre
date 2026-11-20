@@ -8,8 +8,8 @@
 //! coturn checks the expiry when an allocation first authenticates, then keeps the key of the
 //! allocation for each refresh (`ns_turn_server.c`, `check_stun_auth`). So the lifetime bounds
 //! when a credential opens a new allocation, never how long one lasts (audit `P60`). The SFU
-//! mints a fresh credential on a renewal of the seat once the last one nears its expiry, and
-//! the page restarts ICE with it (`CALL-153`, `CALL-154`).
+//! mints a fresh credential on a renewal of the seat once the last one nears its expiry. The
+//! page restarts ICE with it (`CALL-154`, `CALL-155`).
 
 use ambre_core::{FixedBytes, Instant, ParticipantPseudonym, Sec, TimeSpan, UnixSec, Validated};
 
@@ -77,8 +77,8 @@ impl TurnServers {
         now.plus(self.lifetime)
     }
 
-    /// Whether a renewal at `now` mints a fresh credential, for a participant whose last one
-    /// expires at `held`: the last one expires within the margin, or expired already.
+    /// Whether a renewal at `now` mints a fresh credential for a participant. Their last one
+    /// expires at `held`, and a fresh one is due within the margin or past the expiry.
     pub fn is_due(&self, held: Instant<UnixSec>, now: Instant<UnixSec>) -> bool {
         held.since(now) <= self.margin
     }
@@ -99,7 +99,7 @@ mod tests {
         )
     }
 
-    /// `CALL-153`, audit `P60`: a credential lives the lifetime of the budget row, never
+    /// `CALL-154`, audit `P60`: a credential lives the lifetime of the budget row, never
     /// hours. Its username names that expiry, which coturn reads.
     #[test]
     fn a_credential_expires_one_turn_lifetime_after_it_is_minted() {
@@ -116,7 +116,7 @@ mod tests {
         );
     }
 
-    /// `CALL-153`: a renewal mints a fresh credential once the last one expires within the
+    /// `CALL-154`: a renewal mints a fresh credential once the last one expires within the
     /// margin, or expired already, and never before. So a call restarts ICE once per
     /// lifetime, and not on every heartbeat.
     #[test]

@@ -1078,7 +1078,7 @@ fn a_participant_holds_no_more_routes_than_the_cap() {
     assert!(net.sfu.routes_of(client(&net, 1).id) > ambre_core::Count::new(0));
 }
 
-/// `CALL-154`, audit `P60`: an offer that restarts ICE, as a page sends under a fresh TURN
+/// `CALL-155`, audit `P60`: an offer that restarts ICE, as a page sends under a fresh TURN
 /// credential, keeps the media of the connection flowing. The connection takes a fresh
 /// fragment, and the old one names nothing. A check under the fresh fragment from a new source,
 /// as a new TURN allocation sends it, reaches that connection.

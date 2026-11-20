@@ -65,8 +65,8 @@ const MAX_RATCHETS: ambre_core::Count<ambre_core::Ratchets> = ambre_core::Count:
 /// The delay between a leave and the fresh key in use: the target of the call sender key
 /// switch row of `ambre-spec-budgets.md section 1`. A sender seals under its fresh key once the
 /// delay passed after it drew the key (`CALL-027`). A receiver retires the older epochs of that
-/// sender once the delay passed after the fresh key reached it (`CALL-135`), and once the
-/// delay passed after a removal, whether a fresh key reached it or not (`CALL-154`).
+/// sender once the delay passed after the fresh key reached it (`CALL-135`). It also retires
+/// them once the delay passed after a removal, fresh key or not (`CALL-157`).
 pub const SWITCH_DELAY: TimeSpan<Ms> = TimeSpan::new(5_000);
 /// The most openers a receiver keeps per sender, the newest ones.
 const OPENERS_PER_SENDER: ambre_core::Count<Openers> = ambre_core::Count::new(8);
@@ -100,10 +100,10 @@ const WRAP_DOMAIN: &[u8] = b"ambre-call-wrap-v1";
 /// member take 16 bytes each, and the identity 32. The time and the sender index take 8 each.
 /// The exchange key takes 32, then the signature 64.
 const SIGNED_JOIN_LEN: usize = 16 * 3 + 32 + 8 + 8 + 32 + 64;
-/// The most departed sender indexes a wrap carries, the newest ones (`CALL-154`).
+/// The most departed sender indexes a wrap carries, the newest ones (`CALL-157`).
 const DEPARTURE_SLOTS: usize = 16;
-/// The length of a wrap on the wire: the 24-byte nonce, the 8-byte generation, the 32-byte
-/// key, the count of departures and their slots, then the 16-byte tag. Every wrap has one
+/// The length of a wrap on the wire. It holds the 24-byte nonce, the 8-byte generation, the
+/// 32-byte key, the count of departures and their slots, then the 16-byte tag. Every wrap has one
 /// size, whatever the count.
 const WRAP_LEN: usize = 24 + WRAP_PLAIN_LEN + 16;
 /// The plaintext of a wrap: the generation, the key, the count, then each slot.
@@ -552,7 +552,7 @@ struct Received {
     /// of the fresh epoch arrives or not (`CALL-135`).
     deadline: Option<Retirement>,
     /// The retirement a removal set: the epochs below `epoch` close at `at`, whether a fresh
-    /// key of the sender arrives or not (`CALL-154`).
+    /// key of the sender arrives or not (`CALL-157`).
     removal: Option<Retirement>,
 }
 
@@ -587,7 +587,7 @@ impl ReceiveKeys {
     }
 
     /// Closes every epoch of `sender` up to the epoch of `generation` once `within` passed
-    /// after `now` (`CALL-154`). The sender drew those keys before it departed a removed
+    /// after `now` (`CALL-157`). The sender drew those keys before it departed a removed
     /// session, so the closure holds whether its fresh key arrives or not. A second close
     /// inside the delay keeps the earlier time, and moves to the newer epoch.
     pub fn close(
@@ -613,7 +613,7 @@ impl ReceiveKeys {
         match closure {
             Some(closure) => received.removal = Some(closure),
             // A key identifier carries no epoch past the last one, so nothing the sender
-            // seals later opens either: the receiver forgets it now, ahead of the delay.
+            // seals later opens either. The receiver forgets it now, ahead of the delay.
             None => self.forget(sender),
         }
     }
@@ -758,7 +758,7 @@ impl Received {
         }
     }
 
-    /// Closes the epochs a deadline names once `now` reached it (`CALL-135`, `CALL-154`).
+    /// Closes the epochs a deadline names once `now` reached it (`CALL-135`, `CALL-157`).
     fn retire_due(&mut self, now: Instant<PageLoad>) {
         for due in [self.deadline, self.removal].into_iter().flatten() {
             if now >= due.at {
@@ -826,7 +826,7 @@ pub enum KeyHandoff {
     Forget { sender: Seq<SenderIndex> },
     /// Close every epoch of `sender` up to the epoch of `generation` once `within` passed.
     /// A removal sends it: the sender drew those keys before it departed the removed
-    /// sessions, so they reached one of them (`CALL-154`).
+    /// sessions, so they reached one of them (`CALL-157`).
     Close {
         sender: Seq<SenderIndex>,
         generation: Seq<KeyGeneration>,
@@ -1216,10 +1216,10 @@ fn wrap_key(
 
 /// The sender indexes a participant had departed when it drew a key: the sessions that key
 /// was never wrapped to. The wrap carries them, so a receiver tells a key drawn after a
-/// removal from one drawn before it, without the fresh wrap (`CALL-154`).
+/// removal from one drawn before it, without the fresh wrap (`CALL-157`).
 ///
 /// It keeps the [`DEPARTURE_SLOTS`] newest indexes. A receiver reads an index that fell out
-/// as one the sender did not depart, so a long call fails toward silence, never toward an
+/// as one the sender did not depart. A long call fails toward silence, never toward an
 /// older key.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Departures(Vec<Seq<SenderIndex>>);
@@ -1280,8 +1280,8 @@ pub struct OpenedWrap {
 }
 
 /// Wraps `key` at `generation` from the holder of `own` to the holder of `recipient`
-/// alone (`CALL-016`), with the `departures` of the sender when it drew the key
-/// (`CALL-154`).
+/// alone (`CALL-016`). The wrap carries the `departures` of the sender when it drew the
+/// key (`CALL-157`).
 ///
 /// # Errors
 ///
@@ -1312,8 +1312,8 @@ pub fn wrap_sender_key(
 ///
 /// # Errors
 ///
-/// [`CryptoError::WeakPublicKey`] for a low-order `sender`, [`CryptoError::AeadFailed`]
-/// for a wrap made for another binding or another recipient, and
+/// [`CryptoError::WeakPublicKey`] for a low-order `sender`. [`CryptoError::AeadFailed`]
+/// for a wrap made for another binding or another recipient.
 /// [`CryptoError::InvalidKeyLength`] for a plaintext of another size or a count of
 /// departures past the slots.
 pub fn unwrap_sender_key(

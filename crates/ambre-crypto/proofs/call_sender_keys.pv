@@ -17,7 +17,7 @@
    2. A chunk a receiver opens under the key of Alice for the epoch after the
       removal, or under the ratchet of that key, was sealed by Alice.
    3. A chunk a receiver opens once the switch delay of the removal passed, under
-      any key of Alice, was sealed by Alice (`CALL-154`). The network may withhold
+      any key of Alice, was sealed by Alice (`CALL-157`). The network may withhold
       every wrap of the fresh key: the receiver closes the older keys at the removal
       itself, and opens only a key whose wrap names the sessions of Mallory as
       departed.
@@ -240,7 +240,7 @@ let open_chunks(ph: bitstring, own: G) =
     )
   ).
 
-(* The doors once the switch delay of the removal passed (`CALL-154`). A key whose
+(* The doors once the switch delay of the removal passed (`CALL-157`). A key whose
    wrap does not name the sessions of Mallory as departed is closed, whether a wrap
    of the fresh key arrived or not. *)
 let open_chunks_late(ph: bitstring, own: G) =
@@ -296,7 +296,7 @@ let participant(sk: sskey, uid: bitstring) =
   | (
     (* Phase 1: the log removed Mallory. `CallKeys::heed` departs every session of
        hers at once, then draws one fresh key and wraps it to each participant the
-       log still holds, naming her sessions as departed (`CALL-155`). *)
+       log still holds, naming her sessions as departed (`CALL-158`). *)
     phase 1;
     new k_new: key;
     (

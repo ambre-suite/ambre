@@ -65,7 +65,7 @@ pub(crate) enum Refusal {
     /// The sender index or the generation is past the width of a key identifier.
     Exhausted,
     /// The wrap carries a key its sender drew before a removal, and the switch delay of that
-    /// removal passed. A removed session holds that key (`CALL-154`).
+    /// removal passed. A removed session holds that key (`CALL-157`).
     Retired,
 }
 
@@ -87,7 +87,7 @@ pub(crate) struct Moves {
 }
 
 /// One generation of the sender key of this participant, and the sessions it had departed
-/// when it drew the key of that epoch (`CALL-154`).
+/// when it drew the key of that epoch (`CALL-157`).
 #[derive(Clone)]
 struct Held {
     generation: Seq<KeyGeneration>,
@@ -169,7 +169,7 @@ pub(crate) struct CallKeys {
     peers: HashMap<Seq<SenderIndex>, Peer>,
     /// Every session this participant departed, the newest kept. A key it draws carries them.
     departed: Departures,
-    /// Every removal this client heeded in the call (`CALL-154`).
+    /// Every removal this client heeded in the call (`CALL-157`).
     removals: Vec<RemovalMark>,
     /// Every exchange key, under the identity that signed it, and every sender index of a
     /// join this client admitted. A refused join marks nothing, so a join that claims the
@@ -324,7 +324,7 @@ impl CallKeys {
     ///
     /// A key the sender drew before a removal this client heeded reached a removed session.
     /// Inside the switch delay of that removal, the handoff to open it comes with a close at
-    /// the end of the delay. Past it, the wrap is refused (`CALL-154`).
+    /// the end of the delay. Past it, the wrap is refused (`CALL-157`).
     ///
     /// # Errors
     ///
@@ -391,7 +391,7 @@ impl CallKeys {
     /// The sessions `senders` left at `now`, all at once: forgets each, then draws one fresh
     /// key and wraps it to each remaining participant alone. No fresh key is wrapped while one
     /// of `senders` is still held, so none reaches a second session of a removed member
-    /// (`CALL-155`).
+    /// (`CALL-158`).
     fn depart_all(
         &mut self,
         senders: &[Seq<SenderIndex>],
@@ -432,13 +432,12 @@ impl CallKeys {
         Ok(moves)
     }
 
-    /// Reads a new state of the membership log of the channel: every session of a member it
-    /// no longer holds under its identity departs at `now`, all at once (`CALL-028`,
-    /// `CALL-155`).
+    /// Reads a new state of the membership log of the channel. Every session of a member the
+    /// log no longer holds departs at `now`, all at once (`CALL-028`, `CALL-158`).
     ///
     /// Each key a remaining participant drew before the removal reached a removed session.
     /// So each one closes once the switch delay passed, whether the fresh key of that
-    /// participant arrives or not (`CALL-154`).
+    /// participant arrives or not (`CALL-157`).
     ///
     /// # Errors
     ///
