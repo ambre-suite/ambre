@@ -5,7 +5,7 @@
 //!   * the TURN secret, which it shares with the TURN server alone and mints each credential
 //!     from. The relay never holds it (`CALL-014`);
 //!   * the admission a participant presents, a bearer token of the relay, which it verifies;
-//!   * the token a scrape of the metrics presents, which it compares (`CALL-141`).
+//!   * the token a scrape of the metrics presents, which it compares (`CALL-153`).
 //!
 //! Each sits in an [`ambre_core::Secret`]. The primitive gate admits a read of one here, and
 //! nowhere else in the SFU. Each function below hands the text to one foreign call: the HMAC

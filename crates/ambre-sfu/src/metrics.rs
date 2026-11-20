@@ -3,7 +3,7 @@
 //!
 //! Neither the media socket nor the signalling listener serves a metric. An address off the
 //! loopback needs the token of `SFU_METRICS_TOKEN`, which each scrape presents as a bearer
-//! credential (`CALL-141`). Each
+//! credential (`CALL-153`). Each
 //! label is a closed `enum` of this module, so no series names a room, a
 //! participant or an address (`ZK-029`, `ZK-031`).
 
@@ -127,7 +127,7 @@ impl SfuMetrics {
 /// The metrics of this process.
 pub static SFU: LazyLock<SfuMetrics> = LazyLock::new(SfuMetrics::new);
 
-/// The router of the metrics listener: the scrape route alone, behind `access` (`CALL-141`).
+/// The router of the metrics listener: the scrape route alone, behind `access` (`CALL-153`).
 pub fn router(access: ScrapeAccess) -> Router {
     Router::new()
         .route(ROUTE, get(scrape))

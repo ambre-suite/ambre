@@ -58,7 +58,7 @@ pub async fn auth_config(
 /// A body with neither key signs in as a provider account that owes its keys.
 /// The account keeps the keys it holds, or holds none until its first key
 /// store. The development tiers reach the key setup this way, now that no
-/// anonymous account setup exists (`SRV-308`). A body with one key alone is
+/// anonymous account setup exists (`SRV-319`). A body with one key alone is
 /// refused.
 #[derive(serde::Deserialize)]
 pub struct DevLoginRequest {
@@ -189,7 +189,7 @@ pub async fn refresh(
         Some(key) => Some(key),
         // A session minted before the keys reads the register: a key store
         // may have landed since, in another tab or before a reload. The
-        // renewal then carries the key the account registered (`SRV-307`).
+        // renewal then carries the key the account registered (`SRV-320`).
         None => registered_key(&state, &data.user_id).await?,
     };
     let tokens = auth::issue_session(&state, data.user_id, signing_pubkey).await?;

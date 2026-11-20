@@ -124,7 +124,7 @@ pub fn snapshot_digest(object: &[u8]) -> FixedBytes<ambre_core::SnapshotDigest> 
 }
 
 /// The SHA-256 digest of the bytes an upload link writes, as the object store
-/// checks them under `x-amz-checksum-sha256` (audit `P40`, `SRV-310`). The
+/// checks them under `x-amz-checksum-sha256` (audit `P40`, `SRV-313`). The
 /// store computes the same digest, so no domain tag precedes the bytes.
 pub fn object_checksum(object: &[u8]) -> FixedBytes<ambre_core::ObjectChecksum> {
     use sha2::Digest as _;

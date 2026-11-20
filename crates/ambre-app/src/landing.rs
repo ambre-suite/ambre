@@ -738,7 +738,7 @@ fn sign_in_panel(
                         "Private collaborative office suite. End-to-end encrypted."
                     </p>
                     {crate::dev_login::sign_in_field(to_logic.clone())}
-                    // No setup link: no anonymous account exists (`SRV-308`).
+                    // No setup link: no anonymous account exists (`SRV-319`).
                     // No recovery link: signed out, the form fails as not
                     // signed in (`CHROME-135`).
                 </div>

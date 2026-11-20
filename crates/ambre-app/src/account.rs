@@ -6,7 +6,7 @@
 // (`CHROME-098`, `CHROME-099`). A recovery reads the words back and hands them
 // to the Sync worker. The worker refuses a phrase that spells no seed, and the
 // form shows why (`ZK-043`, `CHROME-128`, `CHROME-130`). No face creates an account: an
-// account comes from a provider, or from the development sign-in (`SRV-308`).
+// account comes from a provider, or from the development sign-in (`SRV-319`).
 //
 // The passphrase form of the account settings changes the passphrase of a
 // session. It takes the current passphrase, then the new one twice, and shows
@@ -105,9 +105,8 @@ impl KeysSignals {
     /// Whether a form shows, the recovery or the passphrase change:
     /// a refusal of the Sync worker then reads on that form.
     pub fn has_form(self) -> bool {
-        self.face.with_untracked(|face| {
-matches!(face, KeysFace::Recover | KeysFace::ChangePassphrase)
-        })
+        self.face
+            .with_untracked(|face| matches!(face, KeysFace::Recover | KeysFace::ChangePassphrase))
     }
 
     /// Whether a form replaces the launcher. The recovery words show in a

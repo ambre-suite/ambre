@@ -64,7 +64,7 @@ pub struct Admitting {
     /// The TURN servers, and the secret their credentials are minted under. `None` when the
     /// deployment runs none.
     pub turn: Option<TurnServers>,
-    /// Who may read a scrape of the metrics listener (`CALL-141`).
+    /// Who may read a scrape of the metrics listener (`CALL-153`).
     pub scrape: ScrapeAccess,
 }
 

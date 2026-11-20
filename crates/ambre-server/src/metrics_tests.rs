@@ -121,7 +121,7 @@ async fn status_with(app: axum::Router, authorization: Option<&str>) -> StatusCo
         .status()
 }
 
-/// `SRV-307`: a listener off the loopback answers the scrape that presents
+/// `SRV-318`: a listener off the loopback answers the scrape that presents
 /// the operator's token, and `401` with no metric to any other.
 #[tokio::test]
 async fn a_scrape_off_the_loopback_presents_the_token() {

@@ -291,7 +291,7 @@ impl SyncState {
     /// answers the recovery words, and the session opens (`SYNC-255`).
     ///
     /// A store the relay refuses because the account holds keys already
-    /// answers with those keys, when the passphrase opens them (`SYNC-285`).
+    /// answers with those keys, when the passphrase opens them (`SYNC-296`).
     pub(crate) fn handle_set_up_keys(
         &mut self,
         id: Seq<Request>,
@@ -1115,7 +1115,7 @@ struct NewKeys<'a> {
 ///
 /// A conflict means the account holds keys already: a store that landed
 /// before a reload, for example. The worker then answers with those keys
-/// when the passphrase opens them, and never with a second seed (`SYNC-285`).
+/// when the passphrase opens them, and never with a second seed (`SYNC-296`).
 async fn store_new_keys(
     transport: &impl http::Transport,
     auth: &http::AuthContext,
@@ -1187,11 +1187,11 @@ async fn store_new_keys(
 }
 
 /// The keys the relay holds for the account, after a first store it refused
-/// as `refused` (`SYNC-285`).
+/// as `refused` (`SYNC-296`).
 ///
 /// The worker reads the master material and opens the seed under `typed`, as
 /// an unlock does. It then renews the pair: the relay mints the next one under
-/// the registered key (`SRV-307`). An account that still owes its keys fails
+/// the registered key (`SRV-320`). An account that still owes its keys fails
 /// with the refusal itself. A passphrase that does not open the stored seed
 /// fails as a wrong passphrase, and nothing is written.
 async fn held_keys(
@@ -1870,7 +1870,7 @@ mod tests {
         })
     }
 
-    /// `SYNC-285`: a second store, sent after a first one landed, answers
+    /// `SYNC-296`: a second store, sent after a first one landed, answers
     /// with the keys the relay holds. The worker opens the stored seed under
     /// the typed passphrase, renews the pair so it carries the registered key,
     /// and reads the identity under it. It writes nothing more, and announces
@@ -1931,7 +1931,7 @@ mod tests {
         );
     }
 
-    /// `SYNC-285`: a second store under a passphrase that does not open the
+    /// `SYNC-296`: a second store under a passphrase that does not open the
     /// stored seed fails as a wrong passphrase. It renews nothing and writes
     /// nothing more. A conflict on an account that still owes its keys fails
     /// with the refusal.

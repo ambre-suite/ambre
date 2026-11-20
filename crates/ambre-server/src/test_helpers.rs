@@ -170,7 +170,7 @@ pub async fn create_test_user(pool: &PgPool, email: &str) -> Id<User> {
 }
 
 /// The path of the account fixture in a test router. No router the relay
-/// serves mounts it: the anonymous account setup is retired (`SRV-308`).
+/// serves mounts it: the anonymous account setup is retired (`SRV-319`).
 pub const ACCOUNT_FIXTURE: &str = "/test/account";
 
 /// The body the account fixture takes: a self-asserted address, a name, the

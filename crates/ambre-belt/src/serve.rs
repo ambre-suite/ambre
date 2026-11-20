@@ -309,7 +309,7 @@ const PROVIDER_EXCHANGE: &str = "/api/auth/google/callback";
 /// provider account through it. The stand-in reads the code of the return as
 /// the name of the person. It signs that name in through the relay's
 /// development sign-in, with no key. The relay then holds an account that owes
-/// its keys, as a provider account does before its key setup (`SRV-308`). A
+/// its keys, as a provider account does before its key setup (`SRV-319`). A
 /// later return under the same name finds the keys that account stored.
 ///
 /// The

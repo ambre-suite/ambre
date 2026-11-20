@@ -542,7 +542,7 @@ impl AuthContext {
 
     /// Renews the pair the store holds now, through `transport`. A key store
     /// that finds the keys stored already renews its keyless pair, and the
-    /// relay mints the next one under the registered key (`SRV-307`).
+    /// relay mints the next one under the registered key (`SRV-320`).
     pub(crate) async fn renew_held_via(&self, transport: &impl Transport) -> Result<(), HttpError> {
         let stale = self.access_token()?;
         self.renew_via(transport, &stale).await
@@ -663,7 +663,7 @@ pub(crate) struct Outgoing {
     /// The content type and the bytes of the body, if any.
     pub body: Option<(ContentType, Payload<HttpBody>)>,
     /// The SHA-256 digest of the body that an upload link signs. The
-    /// transport sends it as `x-amz-checksum-sha256` (`SRV-310`).
+    /// transport sends it as `x-amz-checksum-sha256` (`SRV-313`).
     pub checksum: Option<ambre_core::FixedBytes<ambre_core::ObjectChecksum>>,
     /// How long the transport waits before it aborts the request.
     pub timeout: TimeSpan<Ms>,
@@ -910,7 +910,7 @@ impl Transport for Fetch {
         }
         if let Some(checksum) = &request.checksum {
             // The link signs this header, so the store checks the body
-            // against it and refuses any other (`SRV-310`).
+            // against it and refuses any other (`SRV-313`).
             use base64::Engine as _;
             let value = base64::engine::general_purpose::STANDARD.encode(checksum.as_array());
             builder = builder.header("x-amz-checksum-sha256", &value);
@@ -1440,7 +1440,7 @@ pub(crate) async fn put_sealed_via(
 
 /// A sealed blob to a presigned link that signs its SHA-256 digest: the
 /// request carries the digest the link names, as the store requires
-/// (`SRV-310`).
+/// (`SRV-313`).
 pub(crate) async fn put_checked_via(
     transport: &impl Transport,
     url: &ambre_core::Credential<ambre_core::PresignedUrl>,
@@ -2116,7 +2116,7 @@ pub(crate) struct ReportSnapshotRequest {
 
 /// Response of `POST /api/documents/{id}/snapshot/upload-id`: the id the
 /// relay mints for a snapshot, which the blob seals before its digest is
-/// known (`SYNC-258`, `SRV-310`).
+/// known (`SYNC-258`, `SRV-313`).
 #[derive(Deserialize)]
 pub(crate) struct SnapshotUploadIdResponse {
     #[serde(with = "ambre_core::serde_id::text")]
@@ -2125,7 +2125,7 @@ pub(crate) struct SnapshotUploadIdResponse {
 
 /// Body of `POST /api/documents/{id}/snapshot/upload-url`: the size of the
 /// sealed blob, the id it seals, and its SHA-256 digest, which the link signs
-/// (`SRV-310`).
+/// (`SRV-313`).
 #[derive(Serialize)]
 pub(crate) struct SnapshotUploadUrlRequest {
     #[serde(rename = "size_bytes")]

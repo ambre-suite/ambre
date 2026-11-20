@@ -110,7 +110,7 @@ impl FixedRole for SnapshotDigest {
 /// The role of the SHA-256 digest of the bytes an upload link writes:
 /// `FixedBytes<ObjectChecksum>`. The link signs it as `x-amz-checksum-sha256`,
 /// so the object store refuses any other body through that link (audit
-/// `P40`, `SRV-310`).
+/// `P40`, `SRV-313`).
 pub enum ObjectChecksum {}
 
 impl FixedRole for ObjectChecksum {

@@ -9,7 +9,7 @@ pub struct UserRow {
     pub id: Id<User>,
     pub email: ambre_core::Email,
     /// Whether `email` was proven by a provider (OIDC/dev) rather than merely
-    /// self-asserted at the retired account setup (`SRV-308`). A verified email
+    /// self-asserted at the retired account setup (`SRV-319`). A verified email
     /// wins any collision (#3): an OIDC login reclaims an unverified holder's
     /// email.
     pub email_verified: EmailProof,
@@ -132,7 +132,7 @@ pub async fn get_user_by_email(
 /// Inserts a new user row with a self-asserted address and returns it.
 ///
 /// No route of the relay creates such an account since the anonymous account
-/// setup was retired (`SRV-308`). Rows written before it remain, so the tests
+/// setup was retired (`SRV-319`). Rows written before it remain, so the tests
 /// of the address namespace and of the reclaim create them here. A duplicate
 /// email (any provider, any case) is rejected with 409 Conflict via
 /// `map_email_conflict` (N5).
@@ -348,7 +348,7 @@ pub struct DevKeys<'a> {
 /// server. Gated by `Config::dev_mode` at the call site.
 ///
 /// With `keys` `None`, the row keeps the keys it holds, or holds none. The
-/// account then owes its key setup, as a provider account does (`SRV-308`).
+/// account then owes its key setup, as a provider account does (`SRV-319`).
 pub async fn dev_upsert_user(
     pool: &PgPool,
     username: &ambre_core::Validated<ambre_core::DisplayName>,

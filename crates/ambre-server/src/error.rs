@@ -284,7 +284,7 @@ mod tests {
     use super::*;
     use axum::body::to_bytes;
 
-    /// `SRV-308`: a store failure keeps no identifier of the text
+    /// `SRV-316`: a store failure keeps no identifier of the text
     /// its cause echoes: a UUID, hyphenated or not, or a content hash.
     #[test]
     fn a_fault_text_takes_every_identifier_out() {

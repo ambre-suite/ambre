@@ -34,9 +34,9 @@ refusals are the same set whichever way the bytes will travel, so the two share 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SRV-053` | `POST` | A presigned upload link MUST bind the size the caller declared. | this spec section 3 | `ambre_server::s3::tests::presigned_upload_url_signs_content_length` -- the length is among the signed headers, which is what makes object storage refuse a body of any other size | none | verified |
-| `SRV-310` | `POST` | A presigned upload link of a snapshot MUST sign the SHA-256 digest of the blob the client sealed. | this spec section 3; `SRV-053`; `SRV-247` | `ambre_server::routes::tests::handler_tests::a_snapshot_link_refuses_other_bytes_than_its_digest` -- database tier: the store takes the blob through its link, refuses other bytes of the same size, and serves the blob it took; `ambre_server::s3::tests::an_upload_link_signs_the_checksum_of_its_bytes` -- the link lists `x-amz-checksum-sha256` among its signed headers; `ambre_sync::updates::tests::an_uploaded_snapshot_is_confirmed_by_its_author_once_stored` -- the client asks the link for the digest of the object it puts, and the put carries it | none | verified |
-| `SRV-312` | `FAIL` | A snapshot id the document already records MUST NOT obtain an upload link. | `SRV-310`; `SRV-247` | `ambre_server::routes::tests::handler_tests::a_snapshot_link_refuses_other_bytes_than_its_digest` -- database tier: a link asked for the id of a recorded snapshot answers `409` | none | verified |
-| `SRV-311` | `POST` | Given an object store that does not verify `x-amz-checksum-sha256`, the record of a snapshot MUST copy the object out of the reach of its upload link. | `SRV-310` | not built | unbuilt -- lands with the `A removed member keeps no path through the relay` Story (`ambre-roadmap.md` MVP). The pinned Garage verifies the header, so no deployment of the stack needs the copy yet | unimplemented |
+| `SRV-313` | `POST` | A presigned upload link of a snapshot MUST sign the SHA-256 digest of the blob the client sealed. | this spec section 3; `SRV-053`; `SRV-247` | `ambre_server::routes::tests::handler_tests::a_snapshot_link_refuses_other_bytes_than_its_digest` -- database tier: the store takes the blob through its link, refuses other bytes of the same size, and serves the blob it took; `ambre_server::s3::tests::an_upload_link_signs_the_checksum_of_its_bytes` -- the link lists `x-amz-checksum-sha256` among its signed headers; `ambre_sync::updates::tests::an_uploaded_snapshot_is_confirmed_by_its_author_once_stored` -- the client asks the link for the digest of the object it puts, and the put carries it | none | verified |
+| `SRV-314` | `FAIL` | A snapshot id the document already records MUST NOT obtain an upload link. | `SRV-313`; `SRV-247` | `ambre_server::routes::tests::handler_tests::a_snapshot_link_refuses_other_bytes_than_its_digest` -- database tier: a link asked for the id of a recorded snapshot answers `409` | none | verified |
+| `SRV-315` | `POST` | Given an object store that does not verify `x-amz-checksum-sha256`, the record of a snapshot MUST copy the object out of the reach of its upload link. | `SRV-313` | not built | unbuilt -- lands with the `A removed member keeps no path through the relay` Story (`ambre-roadmap.md` MVP). The pinned Garage verifies the header, so no deployment of the stack needs the copy yet | unimplemented |
 | `SRV-265` | `POST` | When the deployment names a public endpoint of object storage, each presigned link MUST lead through it, with the path, the query and the signature it was signed with. | this spec section 3; `ARCH-114` | `ambre_server::s3::tests::a_public_endpoint_moves_a_link_and_keeps_its_signature` -- a link signed for `garage:3900` moves under three bases, with and without a path prefix, and keeps its path and its query; `::both_links_lead_through_the_public_endpoint` -- the upload and the download link, with an endpoint and without one; `::a_public_endpoint_names_an_http_scheme_a_host_and_no_query` -- a base the relay refuses at start. That the store then accepts the link is `ARCH-114` | none | verified |
 | `SRV-078` | `FRAME` | Issuing a link MUST NOT read or write the object it names. | this spec section 3; `ZK-001` | `ambre_server::routes::tests::handler_tests::issuing_a_link_never_touches_the_object` -- storage refuses every connection, and all four links are still issued | none | verified |
 | `SRV-002` | `FAIL` | A caller who is not a member MUST be refused a link. | `ZK-008`; this spec section 3 | `ambre_server::routes::tests::handler_tests::a_presigned_url_is_signed_only_after_the_access_check` -- an outsider is refused all four links, upload and download, media and snapshot | none | verified |
@@ -149,11 +149,11 @@ each request with the path after the prefix and the host of `S3_ENDPOINT`. Trunk
 **Why the digest of a snapshot is signed into its link.** A link that binds only the size lets
 its holder put other bytes of that size until it expires (audit `P40`). The link of a snapshot
 also signs `x-amz-checksum-sha256`, the SHA-256 digest of the sealed blob. A store that verifies
-it refuses any other body (`SRV-310`).
+it refuses any other body (`SRV-313`).
 
 The blob seals its id before the digest exists, so the client asks for the id first. Garage 2.3
 verifies the header. A store that does not would need the record to copy the object out of the
-reach of the link (`SRV-311`).
+reach of the link (`SRV-315`).
 
 **Why the size is signed into the link.** A link that names an object and nothing else is a licence
 to write any number of bytes under that name. Binding the declared length makes object storage
@@ -202,7 +202,7 @@ The store has no surface of its own: every trigger belongs to the document that 
 
 | Trigger | Behaviour |
 |---|---|
-| a client seals a snapshot | it asks for an id, seals the blob under it, asks for an upload link that signs the digest of the blob, puts the bytes, then records the snapshot (`SRV-310`) |
+| a client seals a snapshot | it asks for an id, seals the blob under it, asks for an upload link that signs the digest of the blob, puts the bytes, then records the snapshot (`SRV-313`) |
 | a client opens a document | it asks for a download link for the current snapshot, then gets the bytes |
 | a client adds a picture | it asks for an upload link, puts the bytes, then confirms the address |
 | a client meets an address it does not hold | it asks for a download link, once per address |

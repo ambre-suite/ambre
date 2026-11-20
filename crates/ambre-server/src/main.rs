@@ -353,7 +353,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // The metrics take a listener of their own, which the public router never
     // serves (`SRV-257`). The loopback is the default, so no metric leaves the
     // host unless the operator names another address. Another address needs a
-    // scrape token, or the relay refuses to start (`SRV-307`).
+    // scrape token, or the relay refuses to start (`SRV-318`).
     let metrics_address = metrics::address()?;
     let scrape = ambre_metrics::ScrapeAccess::for_listener(
         metrics_address,
@@ -753,7 +753,7 @@ mod answer_policy_tests {
                 .body(Body::empty())
                 .unwrap(),
         ));
-        // A scrape the token refuses carries the policy too (`SRV-307`).
+        // A scrape the token refuses carries the policy too (`SRV-318`).
         requests.push((
             crate::metrics::router(ambre_metrics::ScrapeAccess::Token(
                 ambre_core::Credential::new("north-wind".to_owned()),

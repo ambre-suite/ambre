@@ -2070,7 +2070,7 @@ mod handler_tests {
         assert!(!unsigned().await, "the proof of the key lands");
     }
 
-    /// `SRV-307`: a session minted before the keys renews under the key the
+    /// `SRV-320`: a session minted before the keys renews under the key the
     /// account registered since. Another tab or a page before a reload may
     /// have stored the keys: the renewal reads the register.
     #[sqlx::test]
@@ -2201,7 +2201,7 @@ mod handler_tests {
         assert!(again.reclaims.is_empty());
     }
 
-    /// `SRV-308`: the relay serves no anonymous account setup. An account
+    /// `SRV-319`: the relay serves no anonymous account setup. An account
     /// comes from a provider, or from the development sign-in where the
     /// deployment enables it.
     #[sqlx::test]
@@ -3694,7 +3694,7 @@ mod handler_tests {
         assert_eq!(get.bytes().await.unwrap().as_ref(), blob.as_slice());
     }
 
-    // `SRV-310`, audit `P40`: a snapshot link signs the SHA-256 digest of its
+    // `SRV-313`, audit `P40`: a snapshot link signs the SHA-256 digest of its
     // blob. The store refuses other bytes of the same size through it. The
     // stored object stays the one the digest names. An id that already
     // names a snapshot of the document gets no link. Both legs reach a real
@@ -4212,7 +4212,7 @@ mod handler_tests {
     /// The owner of `setup_and_get_auth` uploads a snapshot covering `covered`,
     /// and gets its id back.
     /// The body of a snapshot upload link: `size` bytes under a fresh id, and
-    /// a digest (`SRV-310`).
+    /// a digest (`SRV-313`).
     fn snapshot_link(size: u64) -> serde_json::Value {
         serde_json::json!({
             "size_bytes": size,

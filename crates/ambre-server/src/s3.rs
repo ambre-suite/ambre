@@ -334,7 +334,7 @@ fn presign_lifetime(ttl: TimeSpan<Sec>) -> Duration {
 ///
 /// The checksum goes into the signed headers as `x-amz-checksum-sha256`. A
 /// store that verifies it refuses any other body through the link. That
-/// holds for a second put of the link holder too (audit `P40`, `SRV-310`).
+/// holds for a second put of the link holder too (audit `P40`, `SRV-313`).
 /// Garage 2.3 verifies it.
 pub async fn generate_presigned_upload_url(
     s3: &S3Client,
@@ -1179,7 +1179,7 @@ mod tests {
         );
     }
 
-    /// `SRV-310`, audit `P40`: an upload link that names a checksum signs it
+    /// `SRV-313`, audit `P40`: an upload link that names a checksum signs it
     /// as `x-amz-checksum-sha256`, and a link with none signs no checksum.
     #[tokio::test]
     async fn an_upload_link_signs_the_checksum_of_its_bytes() {

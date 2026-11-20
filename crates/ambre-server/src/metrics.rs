@@ -4,7 +4,7 @@
 //! The public listener serves no metric: an operator scrapes the address of
 //! `METRICS_ADDR`, the loopback by default. An address off the loopback needs
 //! the token of `METRICS_TOKEN`, which each scrape presents as a bearer
-//! credential (`SRV-307`). Each label is a closed `enum` of
+//! credential (`SRV-318`). Each label is a closed `enum` of
 //! this module. So no series names a document, a user, a call, a connection
 //! or an address (`ZK-029`, `ZK-031`).
 
@@ -225,7 +225,7 @@ impl Sequencing {
 }
 
 /// The router of the metrics listener: the scrape route alone, behind
-/// `access` (`SRV-307`). Its answers carry the headers of every answer of the
+/// `access` (`SRV-318`). Its answers carry the headers of every answer of the
 /// relay (`SRV-270`), a refusal included.
 pub fn router(access: ScrapeAccess) -> Router {
     Router::new()

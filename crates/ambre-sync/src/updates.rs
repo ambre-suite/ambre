@@ -5404,7 +5404,7 @@ mod tests {
             assert_eq!(size["size_bytes"], object.len());
             assert_eq!(asked["size_bytes"], object.len());
             assert_eq!(asked["snapshot_id"], given.to_string());
-            // `SRV-310`: the link is asked for the SHA-256 digest of the
+            // `SRV-313`: the link is asked for the SHA-256 digest of the
             // object, and the put carries the same digest.
             let checksum = ambre_crypto::hash::object_checksum(object);
             assert_eq!(asked["sha256"], serde_json::to_value(checksum).unwrap());

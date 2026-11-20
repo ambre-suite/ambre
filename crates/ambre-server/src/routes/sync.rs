@@ -356,7 +356,7 @@ pub struct SnapshotUploadIdRequest {
 
 /// The id the relay minted for a snapshot. The client seals it in the blob,
 /// then asks the upload link for the digest of that blob (`SRV-247`,
-/// `SRV-310`).
+/// `SRV-313`).
 #[derive(serde::Serialize)]
 pub struct SnapshotUploadIdResponse {
     #[serde(with = "ambre_core::serde_id::text")]
@@ -367,7 +367,7 @@ pub struct SnapshotUploadIdResponse {
 /// encrypted snapshot blob. It is validated against `snapshot_max_size`, and
 /// bound into the presigned PUT URL so the upload cannot exceed it. The link
 /// also signs `checksum`, the SHA-256 digest of the blob, so the store takes
-/// no other body through it (audit `P40`, `SRV-310`).
+/// no other body through it (audit `P40`, `SRV-313`).
 #[derive(serde::Deserialize)]
 pub struct SnapshotUploadUrlRequest {
     #[serde(rename = "size_bytes")]
@@ -416,7 +416,7 @@ async fn may_upload_snapshot(
 }
 
 /// Mints the id of a snapshot to upload. The blob seals it before its digest
-/// exists, so the upload link comes in a second request (`SRV-310`).
+/// exists, so the upload link comes in a second request (`SRV-313`).
 pub async fn snapshot_upload_id(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
@@ -432,7 +432,7 @@ pub async fn snapshot_upload_id(
 
 /// Signs the upload link of one snapshot blob: its size and its SHA-256
 /// digest. An id that already names a snapshot of the document gets no link,
-/// so no link writes over a stored snapshot (`SRV-310`).
+/// so no link writes over a stored snapshot (`SRV-313`).
 pub async fn snapshot_upload_url(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,

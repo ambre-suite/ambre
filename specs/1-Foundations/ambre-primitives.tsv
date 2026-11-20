@@ -1986,7 +1986,7 @@ ambre-server | src/error.rs | crate::error | AppError::PayloadTooLarge.0 | field
 ambre-server | src/error.rs | crate::error | AppError::UnknownProvider.0 | field | String	generic	the path segment that named no provider, echoed in the refusal
 ambre-server | src/error.rs | crate::error | AppError::caller_message() | ret | String	free-text	message
 ambre-server | src/error.rs | crate::error | AppError::is_infrastructure() | ret | bool	generic	predicate result
-ambre-server | src/error.rs | crate::error | FaultText.0 | field | String	newtype-inner	the text of a store failure, each identifier taken out by the constructor (SRV-308)
+ambre-server | src/error.rs | crate::error | FaultText.0 | field | String	newtype-inner	the text of a store failure, each identifier taken out by the constructor (SRV-316)
 ambre-server | src/error.rs | crate::error | FaultText::of(what) | param | &str	newtype-inner	the label of the failed store step, which the constructor redacts with its cause
 ambre-server | src/error.rs | crate::error | FaultText::bare(what) | param | &str	newtype-inner	the failure the relay states alone, which the constructor redacts
 ambre-server | src/error.rs | crate::error | FaultText::redacted(text) | param | &str	newtype-inner	the text the constructor takes every identifier out of

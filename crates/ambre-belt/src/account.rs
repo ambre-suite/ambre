@@ -1,6 +1,6 @@
 //! The account keys on the home screen, driven as a person drives them.
 //!
-//! No anonymous account setup exists (`SRV-308`): the keys faces follow a
+//! No anonymous account setup exists (`SRV-319`): the keys faces follow a
 //! provider return. A development relay holds no provider, so the belt's
 //! server stands in for its exchange (`crate::serve`). The code of the return
 //! names the person, and the relay holds an account under that name that owes

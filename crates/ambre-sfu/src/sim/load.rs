@@ -113,7 +113,7 @@ fn start_sfu(host: std::net::IpAddr) -> SfuProcess {
     let addresses = Addresses {
         signal: free(host, false),
         media: free(host, true),
-        // Nothing here scrapes, and an address off the loopback needs a token (`CALL-141`).
+        // Nothing here scrapes, and an address off the loopback needs a token (`CALL-153`).
         metrics: free(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST), false),
     };
     let binary = std::env::var("LOAD_SFU").unwrap_or_else(|_| {

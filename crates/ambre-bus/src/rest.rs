@@ -209,7 +209,7 @@ pub enum RestCommand {
     /// Set up the keys of the account this session signed in with the
     /// provider, sealed under `passphrase` (`CHROME-098`). The relay already
     /// knows who the person is, so no identity travels. No command creates an
-    /// account no provider vouched for (`SRV-308`).
+    /// account no provider vouched for (`SRV-319`).
     /// -> `AccountCreated { recovery_words }`, then `SessionReady`.
     SetUpKeys {
         passphrase: ambre_core::Confidential<ambre_core::Passphrase>,

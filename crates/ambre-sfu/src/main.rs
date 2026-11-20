@@ -5,7 +5,7 @@
 //! | `SFU_SIGNAL_ADDR` | the TCP address of the signalling WebSocket |
 //! | `SFU_MEDIA_ADDR` | the UDP address the browsers send their media to |
 //! | `SFU_METRICS_ADDR` | the TCP address of the metrics, the loopback by default (`CALL-101`) |
-//! | `SFU_METRICS_TOKEN` | the token a scrape presents; required off the loopback (`CALL-141`) |
+//! | `SFU_METRICS_TOKEN` | the token a scrape presents; required off the loopback (`CALL-153`) |
 //! | `SFU_ADMISSION_KEY` | the relay's public key, in hex, which signs every admission |
 //! | `SFU_TURN_URLS` | the TURN servers, separated by commas; none when unset |
 //! | `SFU_TURN_SECRET` | the secret the TURN server shares with the SFU alone (`CALL-014`) |

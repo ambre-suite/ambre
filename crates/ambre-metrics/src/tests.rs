@@ -96,7 +96,7 @@ fn a_help_text_and_a_label_value_are_escaped() {
     assert_eq!(super::escaped(value, super::Quote::On), "a\\\"b");
 }
 
-/// `SRV-307`, `CALL-141`: a listener off the loopback refuses to start
+/// `SRV-318`, `CALL-153`: a listener off the loopback refuses to start
 /// without a token, and answers only the scrape that presents it.
 #[test]
 fn a_listener_off_the_loopback_needs_the_token() {

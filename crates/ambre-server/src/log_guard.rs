@@ -1,4 +1,4 @@
-//! The guard every test of the db tier logs through (`ZK-030`, `SRV-309`).
+//! The guard every test of the db tier logs through (`ZK-030`, `SRV-317`).
 //!
 //! The gate of `ZK-030` reads the type of each logged value. An identifier
 //! first formatted into a text passes it: a foreign error that echoes a key,
@@ -111,7 +111,7 @@ mod tests {
 
     use super::{NoIdentifier, OnRefusal};
 
-    /// `SRV-309`: the guard refuses an info, warn or error line of the relay
+    /// `SRV-317`: the guard refuses an info, warn or error line of the relay
     /// that names an identifier, in its message or in a field. It
     /// passes a debug line and a line that names none.
     #[test]

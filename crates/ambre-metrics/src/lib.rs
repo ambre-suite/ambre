@@ -410,7 +410,7 @@ impl Histogram {
     }
 }
 
-/// Who may read a scrape of a metrics listener (`SRV-307`, `CALL-141`).
+/// Who may read a scrape of a metrics listener (`SRV-318`, `CALL-153`).
 ///
 /// A listener on the loopback answers any process of its host. A listener on
 /// any other address answers only a scrape that presents the token the
