@@ -416,7 +416,8 @@ pub async fn update_member_role(
 /// server does not enforce (N1). When true threshold reconstruction lands, this gate
 /// is replaced by "collect k shares before releasing anything".
 ///
-/// Returns the target user's `org_master_key_enc` (URL-safe base64). The caller
+/// Returns the master key the target escrowed for this organization (URL-safe
+/// base64). The caller
 /// decrypts it client-side with their copy of the organization private key, then
 /// re-encrypts it for the target user. Every recovery is logged (`log_org_recovery`).
 pub async fn recover_master_key(
@@ -437,8 +438,8 @@ pub async fn recover_master_key(
             resource: Resource::OrganizationMember,
         })?;
 
-    // Get the target user's encrypted org master key.
-    let org_master_key_enc = db::get_user_org_master_key_enc(&state.db, &target_uid)
+    // The copy the target escrowed for this organization alone (`SRV-305`).
+    let org_master_key_enc = db::get_member_escrowed_key(&state.db, &org_id, &target_uid)
         .await?
         .ok_or(AppError::NotFound {
             resource: Resource::OrgMasterKey,
@@ -1285,6 +1286,49 @@ mod tests {
             );
         }
 
+        /// Holds `SRV-305`, audit `P56`: the copy a member escrowed for one
+        /// organization is no copy of another. The owner of a second
+        /// organization who adds the member reads nothing, and the owner of
+        /// the first reads the copy.
+        #[sqlx::test]
+        #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+        async fn an_escrow_is_released_by_its_own_organization_alone(pool: sqlx::PgPool) {
+            let state = crate::test_helpers::test_app_state(pool).await;
+            let app = build_org_router(state.clone());
+            let first = setup_org_user(&app, "first@ambre.app", 65).await;
+            let second = setup_org_user(&app, "second@ambre.app", 66).await;
+            let _member = setup_org_user(&app, "member@ambre.app", 67).await;
+            let member_uid = user_id(&state, "member@ambre.app").await;
+            let first_org = create_org(&app, &first).await;
+            let second_org = create_org(&app, &second).await;
+            for (owner, org) in [(&first, &first_org), (&second, &second_org)] {
+                assert_eq!(
+                    post_member(&app, owner, org, &member_uid, "member").await,
+                    StatusCode::CREATED
+                );
+            }
+            sqlx::query(
+                "UPDATE organization_members SET master_key_enc = $1 \
+                 WHERE org_id = $2 AND user_id = $3",
+            )
+            .bind(vec![0xA5u8; 48])
+            .bind(uuid::Uuid::parse_str(&first_org).unwrap())
+            .bind(uuid::Uuid::parse_str(&member_uid).unwrap())
+            .execute(&state.db)
+            .await
+            .unwrap();
+
+            assert_eq!(
+                post_recover(&app, &second, &second_org, &member_uid).await,
+                StatusCode::NOT_FOUND,
+                "another organization reads no copy"
+            );
+            assert_eq!(
+                post_recover(&app, &first, &first_org, &member_uid).await,
+                StatusCode::OK
+            );
+        }
+
         /// Holds `SRV-064` and `SRV-077`. Each release writes one record naming
         /// the organization, the subject and the caller, and leaves the
         /// subject's row as it was. A release whose record fails answers no key.
@@ -1303,17 +1347,25 @@ mod tests {
                 StatusCode::CREATED
             );
             let member = uuid::Uuid::parse_str(&member_uid).unwrap();
-            sqlx::query("UPDATE users SET org_master_key_enc = $1 WHERE id = $2")
-                .bind(vec![0xA5u8; 48])
-                .bind(member)
-                .execute(&state.db)
-                .await
-                .unwrap();
+            let org = uuid::Uuid::parse_str(&org_id).unwrap();
+            sqlx::query(
+                "UPDATE organization_members SET master_key_enc = $1 \
+                 WHERE org_id = $2 AND user_id = $3",
+            )
+            .bind(vec![0xA5u8; 48])
+            .bind(org)
+            .bind(member)
+            .execute(&state.db)
+            .await
+            .unwrap();
             let subject_row = || async {
                 sqlx::query_scalar::<_, serde_json::Value>(
-                    "SELECT to_jsonb(u) FROM users u WHERE id = $1",
+                    "SELECT to_jsonb(u) || to_jsonb(m) FROM users u \
+                     JOIN organization_members m ON m.user_id = u.id \
+                     WHERE u.id = $1 AND m.org_id = $2",
                 )
                 .bind(member)
+                .bind(org)
                 .fetch_one(&state.db)
                 .await
                 .unwrap()

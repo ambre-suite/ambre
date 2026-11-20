@@ -279,7 +279,11 @@ fn a_message_carries_the_author_who_signed_it_and_no_other() {
             .push_container(LoroMap::new())
             .expect("push"),
     );
-    bare.insert(MessageKey::Id, "no author").expect("insert");
+    bare.insert(
+        MessageKey::Id,
+        ambre_core::id::Id::<ambre_core::id::Message>::mint().to_string(),
+    )
+    .expect("insert");
     let anonymous = alice.json_since(&before);
     assert_eq!(
         refusal(
@@ -655,4 +659,279 @@ fn a_meta_delta_under_another_peer_is_refused() {
         bob.state.name().as_ref().map(ambre_core::Validated::as_str),
         Some("us")
     );
+}
+
+// --- MURMURE-678 ---
+
+/// The `id` of the first message map of `update`, rewritten to `id`.
+fn with_id(update: &mut loro::json::JsonSchema, id: &str) {
+    for op in update.changes.iter_mut().flat_map(|c| c.ops.iter_mut()) {
+        if let loro::json::JsonOpContent::Map(loro::json::MapOp::Insert { key, value }) =
+            &mut op.content
+            && MessageKey::parse(key) == Some(MessageKey::Id)
+        {
+            *value = LoroValue::from(id);
+            return;
+        }
+    }
+    panic!("the update creates a message");
+}
+
+/// The check refuses a message under an identifier another message holds. It
+/// refuses an identifier written later, and one identifier on two messages.
+/// The echo of a sent message passes.
+#[test]
+fn a_message_identifier_another_message_holds_is_refused() {
+    let mut alice = founder(ChannelType::Public);
+    let mut bob = join(&alice);
+    let segment = bob.segment();
+    let sent = alice
+        .state
+        .send(&draft("alice wrote this"), alice.user, NOW)
+        .expect("send");
+    bob.state
+        .apply_signed(segment, Seq::<Relay>::new(1), &sent.delta, alice.signer())
+        .expect("accepted");
+    // Her own delta, back from the relay, changes nothing and passes.
+    alice
+        .state
+        .apply_signed(segment, Seq::<Relay>::new(1), &sent.delta, alice.signer())
+        .expect("the echo");
+    let held = alice.state.messages(alice.state.active_id()).expect("read")[0].id;
+    let was = alice.everything();
+
+    // A new message of bob's under alice's identifier.
+    let mine = bob
+        .state
+        .send(&draft("mallory"), bob.user, NOW)
+        .expect("send");
+    let mut update = crate::logic::delta::read(&mine.delta).expect("read");
+    with_id(&mut update, &held.to_string());
+    let forged = crate::logic::delta::encode(&update).expect("encode");
+    assert_eq!(
+        refusal(
+            alice
+                .state
+                .apply_signed(segment, Seq::<Relay>::new(2), &forged, bob.signer())
+        ),
+        Some(Refusal::MessageId)
+    );
+    assert_eq!(alice.everything(), was);
+
+    // The same identifier, written later on bob's own message.
+    alice
+        .state
+        .apply_signed(segment, Seq::<Relay>::new(3), &mine.delta, bob.signer())
+        .expect("bob's own message");
+    let was_with_bob = alice.everything();
+    let rewrite = bob.doc().oplog_vv();
+    let Some(own) = bob
+        .doc()
+        .get_list(Root::Messages.as_str())
+        .get(1)
+        .and_then(crate::logic::schema::fields_of::<MessageKey>)
+    else {
+        panic!("bob's message is a map");
+    };
+    own.insert(MessageKey::Id, held.to_string())
+        .expect("rewrite");
+    let renamed = bob.json_since(&rewrite);
+    assert_eq!(
+        refusal(
+            alice
+                .state
+                .apply_signed(segment, Seq::<Relay>::new(4), &renamed, bob.signer())
+        ),
+        Some(Refusal::MessageId)
+    );
+    assert_eq!(alice.everything(), was_with_bob);
+
+    // Two new messages under one fresh identifier.
+    let twice = bob.doc().oplog_vv();
+    let fresh = ambre_core::id::Id::<ambre_core::id::Message>::mint().to_string();
+    for _ in 0..2 {
+        let map = crate::logic::schema::Fields::<MessageKey>::new(
+            bob.doc()
+                .get_list(Root::Messages.as_str())
+                .push_container(LoroMap::new())
+                .expect("push"),
+        );
+        map.insert(MessageKey::Id, fresh.as_str()).expect("id");
+        map.insert(MessageKey::Author, bob.user.to_string())
+            .expect("author");
+    }
+    let doubled = bob.json_since(&twice);
+    assert_eq!(
+        refusal(
+            alice
+                .state
+                .apply_signed(segment, Seq::<Relay>::new(5), &doubled, bob.signer())
+        ),
+        Some(Refusal::MessageId)
+    );
+    assert_eq!(alice.everything(), was_with_bob);
+    let messages = alice.state.messages(alice.state.active_id()).expect("read");
+    assert_eq!(messages[0].author, alice.user);
+    assert_eq!(messages[0].text, "alice wrote this");
+}
+
+// --- MURMURE-679 ---
+
+/// Once the segment exists, the check refuses a write to its `header` or its
+/// `meta` root. It refuses a write to a root a segment does not hold.
+#[test]
+fn a_write_to_the_header_or_another_root_of_a_segment_is_refused() {
+    let mut alice = founder(ChannelType::Public);
+    let bob = join(&alice);
+    let segment = bob.segment();
+    let was = alice.everything();
+    let forgeries: [&dyn Fn(&LoroDoc); 4] = [
+        &|doc: &LoroDoc| {
+            crate::logic::schema::header(doc)
+                .insert(
+                    crate::logic::schema::HeaderKey::Channel,
+                    Id::<Channel>::mint().to_string(),
+                )
+                .expect("forge");
+        },
+        &|doc: &LoroDoc| {
+            crate::logic::schema::header(doc)
+                .delete(crate::logic::schema::HeaderKey::Kind)
+                .expect("forge");
+        },
+        &|doc: &LoroDoc| {
+            doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
+                .insert(ambre_core::schema::MetaKey::SchemaVersion.as_str(), 99_i64)
+                .expect("forge");
+        },
+        &|doc: &LoroDoc| {
+            doc.get_map("elsewhere")
+                .insert("key", "value")
+                .expect("forge");
+        },
+    ];
+    for (forge, seq) in forgeries.iter().zip(1..) {
+        let before = bob.doc().oplog_vv();
+        forge(bob.doc());
+        let forged = bob.json_since(&before);
+        assert_eq!(
+            refusal(alice.state.apply_signed(
+                segment,
+                Seq::<Relay>::new(seq),
+                &forged,
+                bob.signer()
+            )),
+            Some(Refusal::ForeignRoot)
+        );
+    }
+    assert_eq!(alice.everything(), was);
+}
+
+// --- MURMURE-681 ---
+
+/// The check refuses a new message or a new `reactions` map that names a
+/// held container. No delta then reaches a held container through the rule
+/// of a fresh one.
+#[test]
+fn a_created_container_that_names_another_operation_is_refused() {
+    let mut alice = founder(ChannelType::Public);
+    let mut bob = join(&alice);
+    let segment = bob.segment();
+    let sent = alice
+        .state
+        .send(&draft("alice wrote this"), alice.user, NOW)
+        .expect("send");
+    bob.state
+        .apply_signed(segment, Seq::<Relay>::new(1), &sent.delta, alice.signer())
+        .expect("accepted");
+    let Some(ValueOrContainer::Container(Container::Map(held))) =
+        bob.doc().get_list(Root::Messages.as_str()).get(0)
+    else {
+        panic!("a message is a map");
+    };
+    let held = loro::ContainerTrait::id(&held);
+    let was = alice.everything();
+    let mine = bob.state.send(&draft("mine"), bob.user, NOW).expect("send");
+
+    let retarget = |key: Option<MessageKey>| {
+        let mut update = crate::logic::delta::read(&mine.delta).expect("read");
+        for op in update.changes.iter_mut().flat_map(|c| c.ops.iter_mut()) {
+            match (&mut op.content, key) {
+                (
+                    loro::json::JsonOpContent::List(loro::json::ListOp::Insert { value, .. }),
+                    None,
+                ) => value[0] = LoroValue::Container(held.clone()),
+                (
+                    loro::json::JsonOpContent::Map(loro::json::MapOp::Insert { key: k, value }),
+                    Some(wanted),
+                ) if MessageKey::parse(k) == Some(wanted) => {
+                    *value = LoroValue::Container(held.clone());
+                }
+                _ => {}
+            }
+        }
+        crate::logic::delta::encode(&update).expect("encode")
+    };
+    assert_eq!(
+        refusal(alice.state.apply_signed(
+            segment,
+            Seq::<Relay>::new(2),
+            &retarget(Some(MessageKey::Reactions)),
+            bob.signer()
+        )),
+        Some(Refusal::ForeignReaction)
+    );
+    assert_eq!(
+        refusal(alice.state.apply_signed(
+            segment,
+            Seq::<Relay>::new(3),
+            &retarget(None),
+            bob.signer()
+        )),
+        Some(Refusal::Malformed)
+    );
+    assert_eq!(alice.everything(), was);
+}
+
+// --- MURMURE-680 ---
+
+/// A delta the check passes and Loro refuses is left out of a document that
+/// opens, and the rest of the document opens.
+#[test]
+fn a_delta_loro_refuses_is_left_out_of_an_opening_document() {
+    let mut alice = founder(ChannelType::Public);
+    let bob = join(&alice);
+    let mine = alice
+        .state
+        .send(&draft("mine"), alice.user, NOW)
+        .expect("send");
+    // A container named inside a plain value: Loro refuses the update whole.
+    let mut update = crate::logic::delta::read(&mine.delta).expect("read");
+    let inner = loro::ContainerID::new_normal(
+        loro::ID::new(alice.signer().peer.get(), 0),
+        loro::ContainerType::Map,
+    );
+    for op in update.changes.iter_mut().flat_map(|c| c.ops.iter_mut()) {
+        if let loro::json::JsonOpContent::Map(loro::json::MapOp::Insert { key, value }) =
+            &mut op.content
+            && MessageKey::parse(key) == Some(MessageKey::Ts)
+        {
+            *value = LoroValue::List(vec![LoroValue::Container(inner.clone())].into());
+        }
+    }
+    let doc = LoroDoc::new();
+    doc.import(&bob.doc().export(ExportMode::Snapshot).expect("export"))
+        .expect("import");
+    let was = doc.get_deep_value();
+    crate::logic::delta::import_arrivals(
+        &doc,
+        vec![crate::logic::delta::Arrival::Signed {
+            update,
+            signer: alice.signer(),
+        }],
+        bob.segment(),
+        crate::logic::delta::Rules::Segment,
+    )
+    .expect("the document opens");
+    assert_eq!(doc.get_deep_value(), was);
 }

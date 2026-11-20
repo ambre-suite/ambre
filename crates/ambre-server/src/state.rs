@@ -126,8 +126,42 @@ pub enum ProxyTrust {
     /// The socket peer is the client: the header is the caller's to forge.
     #[default]
     Direct,
-    /// A reverse proxy overwrites the header with the real client address.
-    BehindProxy,
+    /// A chain of `hops` reverse proxies, each of which appends the address
+    /// of its own peer to the header. The client is the entry `hops` places
+    /// from the right; every entry left of it is the caller's to write
+    /// (`SRV-285`).
+    BehindProxy {
+        /// The number of trusted proxies in front of the relay, never zero.
+        hops: ambre_core::Count<ProxyHops>,
+    },
+}
+
+impl ProxyTrust {
+    /// The trust that `TRUST_PROXY_HEADERS` states: the number of trusted
+    /// proxies, or `true` for one. Unset, zero, `false` or a value that does
+    /// not parse is no proxy, the stricter reading.
+    pub fn from_setting(setting: Option<&str>) -> Self {
+        let hops = match setting.map(str::trim) {
+            Some("true" | "TRUE") => 1,
+            Some(text) => text.parse::<u32>().unwrap_or(0),
+            None => 0,
+        };
+        if hops == 0 {
+            Self::Direct
+        } else {
+            Self::BehindProxy {
+                hops: ambre_core::Count::new(hops),
+            }
+        }
+    }
+}
+
+/// A number of reverse proxies between a client and the relay.
+pub enum ProxyHops {}
+
+impl ambre_core::NarrowCount for ProxyHops {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ProxyHops");
 }
 
 /// Why a per-connection message limit read at startup is refused.

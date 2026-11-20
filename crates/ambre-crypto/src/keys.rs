@@ -16,7 +16,8 @@
 use std::sync::Arc;
 
 use ambre_core::{
-    Encoded, EntryDigest, FileSalt, FixedBytes, KeyId, SALT_LEN, Secret, WrappedMasterKey,
+    Encoded, EntryDigest, FileSalt, FixedBytes, KeyId, MasterKeySalt, PublicKey, SALT_LEN, Secret,
+    WrappedMasterKey,
 };
 use blake2::{Blake2b512, Digest};
 use ed25519_dalek::SigningKey;
@@ -123,13 +124,19 @@ impl MasterSeed {
         StoreKey(derive32(STORE_DOMAIN, self.0.expose()))
     }
 
-    /// Seals the raw seed under `key` with the given `aad`, for storage as the
-    /// server-side passphrase-wrapped master key. The raw seed never leaves
-    /// this crate on this path.
+    /// Seals the raw seed under `key`, for storage as the server-side
+    /// passphrase-wrapped master key. The raw seed never leaves this crate on
+    /// this path.
     ///
     /// The key is a [`SealingKey`](crate::passphrase::SealingKey). A
     /// passphrase derives one only once the strength floor admitted it. So
     /// no seed is stored under a passphrase an offline guess finds (`ZK-035`).
+    ///
+    /// The result is the byte of [`SeedVersion::V1`], then the nonce and the
+    /// ciphertext.
+    /// The additional data binds that byte, `salt` and the signing key this
+    /// seed derives (`ZK-047`). So the relay can neither name other Argon2id
+    /// parameters for the seal nor serve it as the seed of another account.
     ///
     /// # Errors
     ///
@@ -137,43 +144,132 @@ impl MasterSeed {
     pub fn wrap_for_storage(
         &self,
         key: &crate::passphrase::SealingKey,
-        aad: &ambre_core::Aad,
+        salt: &FixedBytes<MasterKeySalt>,
     ) -> Result<Encoded<WrappedMasterKey>, CryptoError> {
-        let (nonce, ciphertext) = aead::seal(self.0.expose(), aad, &key.document_key())?;
-        let mut wrapped = nonce.as_slice().to_vec();
+        let account = self.signing_public_key();
+        let aad = seed_aad(salt, &account);
+        let (nonce, ciphertext) = aead::seal(self.0.expose(), &aad, &key.document_key())?;
+        let mut wrapped = Vec::with_capacity(SEED_V1_LEN);
+        wrapped.push(SeedVersion::V1.byte());
+        wrapped.extend_from_slice(nonce.as_slice());
         wrapped.extend_from_slice(ciphertext.as_bytes());
         Ok(Encoded::new(wrapped))
     }
 
-    /// Opens a seed that [`Self::wrap_for_storage`] sealed under `key` with the
-    /// same `aad`. The seed opens into a [`Secret`] and is copied from there
-    /// into its own, so no bare copy of it is left behind.
+    /// Opens a seed that [`Self::wrap_for_storage`] sealed under `key`. The
+    /// seed opens into a [`Secret`] and is copied from there into its own, so
+    /// no bare copy of it is left behind.
+    ///
+    /// Two layouts open (`ZK-047`):
+    /// * [`SeedVersion::V1`] and its nonce and ciphertext, under the additional
+    ///   data of `salt` and `account`. The opened seed must derive `account`.
+    /// * The layout before it, a nonce and a ciphertext alone, under the fixed
+    ///   additional data [`LEGACY_SEED_AAD`]. An account sealed before the
+    ///   version byte existed still unlocks, and its next re-seal writes the
+    ///   versioned layout.
     ///
     /// # Errors
     ///
-    /// * [`CryptoError::AeadFailed`] when `key` or `aad` is not the one that
-    ///   sealed the seed, or the bytes were changed.
-    /// * [`CryptoError::InvalidKeyLength`] when `wrapped` is too short to hold
-    ///   a nonce, or the opened seed is not 32 bytes long.
+    /// * [`CryptoError::AeadFailed`] when `key`, `salt` or `account` is not
+    ///   the one that sealed the seed, or the bytes were changed.
+    /// * [`CryptoError::UnboundSeed`] when a versioned seed comes with no
+    ///   `account`, or opens to a seed that derives another signing key.
+    /// * [`CryptoError::InvalidKeyLength`] when `wrapped` has neither layout,
+    ///   or the opened seed is not 32 bytes long.
     pub fn open_from_storage(
         wrapped: &Encoded<WrappedMasterKey>,
         key: &crate::passphrase::UserKey,
-        aad: &ambre_core::Aad,
+        salt: &FixedBytes<MasterKeySalt>,
+        account: Option<&FixedBytes<PublicKey>>,
     ) -> Result<Self, CryptoError> {
-        let (nonce, ciphertext) = wrapped
-            .as_bytes()
+        let bytes = wrapped.as_bytes();
+        let versioned = bytes
+            .split_first()
+            .and_then(|(&byte, sealed)| Some((SeedVersion::from_byte(byte)?, sealed)));
+        let (sealed, aad, bound) = match (bytes.len(), versioned) {
+            (SEED_V1_LEN, Some((SeedVersion::V1, sealed))) => {
+                let account = account.ok_or(CryptoError::UnboundSeed)?;
+                (sealed, seed_aad(salt, account), Some(account))
+            }
+            (SEED_LEGACY_LEN, _) => (bytes, ambre_core::Aad::of(LEGACY_SEED_AAD), None),
+            _ => return Err(CryptoError::InvalidKeyLength),
+        };
+        let (nonce, ciphertext) = sealed
             .split_first_chunk::<{ aead::NONCE_LEN }>()
             .ok_or(CryptoError::InvalidKeyLength)?;
         let opened = aead::open(
             &FixedBytes::from_array(*nonce),
             &ambre_core::Payload::<ambre_core::Ciphertext>::new(ciphertext.to_vec()),
-            aad,
+            &aad,
             &key.document_key(),
         )?;
-        key_of(opened.secret().expose())
+        let seed = key_of(opened.secret().expose())
             .map(Self)
-            .ok_or(CryptoError::InvalidKeyLength)
+            .ok_or(CryptoError::InvalidKeyLength)?;
+        match bound {
+            Some(account) if seed.signing_public_key() != *account => Err(CryptoError::UnboundSeed),
+            _ => Ok(seed),
+        }
     }
+
+    /// The public half of the signing key this seed derives: the account the
+    /// seal binds.
+    fn signing_public_key(&self) -> FixedBytes<PublicKey> {
+        FixedBytes::from_array(self.derive_signing_key().verifying_key().to_bytes())
+    }
+}
+
+/// The version a sealed seed opens with, as its first byte (`ZK-047`). A
+/// second Argon2id cost takes a second variant, and the byte names the cost
+/// before any derivation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SeedVersion {
+    /// Argon2id under the v1 cost of `crate::passphrase`, and the additional
+    /// data of `seed_aad`.
+    V1,
+}
+
+impl SeedVersion {
+    /// The byte the sealed seed spells the version with.
+    #[must_use]
+    pub const fn byte(self) -> u8 {
+        match self {
+            Self::V1 => 1,
+        }
+    }
+
+    /// The version `byte` spells, or `None` for a byte no seal writes.
+    #[must_use]
+    pub const fn from_byte(byte: u8) -> Option<Self> {
+        match byte {
+            1 => Some(Self::V1),
+            _ => None,
+        }
+    }
+}
+
+/// The fixed additional data of a seed sealed before [`SeedVersion`]
+/// existed. Read alone: no seal writes it any more.
+pub const LEGACY_SEED_AAD: &[u8] = b"ambre-master-seed";
+
+/// The domain the additional data of a versioned seal opens with.
+const SEED_AAD_DOMAIN: &[u8] = b"ambre-sealed-seed";
+
+/// A seed sealed before the version byte: a nonce, the seed and the 16 bytes
+/// of the XChaCha20-Poly1305 tag.
+const SEED_LEGACY_LEN: usize = aead::NONCE_LEN + 32 + 16;
+/// A versioned seed: the version byte, then the legacy layout.
+const SEED_V1_LEN: usize = 1 + SEED_LEGACY_LEN;
+
+/// The additional data of a versioned seal: its domain, the version, the
+/// salt and the signing key of the account. Each field has a fixed width.
+fn seed_aad(salt: &FixedBytes<MasterKeySalt>, account: &FixedBytes<PublicKey>) -> ambre_core::Aad {
+    let mut aad = Vec::with_capacity(SEED_AAD_DOMAIN.len() + 1 + 32 + 32);
+    aad.extend_from_slice(SEED_AAD_DOMAIN);
+    aad.push(SeedVersion::V1.byte());
+    aad.extend_from_slice(salt.as_slice());
+    aad.extend_from_slice(account.as_slice());
+    ambre_core::Aad::new(aad)
 }
 
 /// A 32-byte symmetric key scoped to a single document. Used for AEAD encryption

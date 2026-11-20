@@ -94,6 +94,9 @@ pub(crate) struct Styles {
     resolved: HashMap<String, StyleId>,
     /// The distinct styles, the default first.
     pub(crate) list: Vec<CellStyle>,
+    /// Each style of `list` by its postcard bytes. A style finds its twin
+    /// by a lookup, not a scan of the styles before it (`P66`).
+    by_bytes: HashMap<Vec<u8>, StyleId>,
 }
 
 impl Styles {
@@ -107,6 +110,7 @@ impl Styles {
             base: Props::default(),
             resolved: HashMap::new(),
             list: Vec::new(),
+            by_bytes: HashMap::new(),
         };
         for root in roots {
             for node in root.walk() {
@@ -153,6 +157,9 @@ impl Styles {
     pub(crate) fn id(&mut self, name: &str, report: &mut Report) -> StyleId {
         if self.list.is_empty() {
             let default = self.resolve(DEFAULT);
+            if let Ok(key) = postcard::to_allocvec(&default.0) {
+                self.by_bytes.insert(key, StyleId::DEFAULT);
+            }
             self.list.push(default.0);
             self.resolved.insert(DEFAULT.to_owned(), StyleId::DEFAULT);
             for (construct, outcome) in default.1 {
@@ -166,15 +173,20 @@ impl Styles {
         for (construct, outcome) in losses {
             report.record(construct, outcome);
         }
-        let at = self
-            .list
-            .iter()
-            .position(|s| *s == style)
-            .unwrap_or_else(|| {
+        // Two styles equal under `PartialEq` write the same bytes, save a
+        // zero and a negative zero, which stay two styles.
+        let key = postcard::to_allocvec(&style).ok();
+        let id = match key.as_ref().and_then(|key| self.by_bytes.get(key)) {
+            Some(&id) => id,
+            None => {
                 self.list.push(style);
-                self.list.len() - 1
-            });
-        let id = StyleId::at(ambre_core::index::Pos::from_usize(at));
+                let id = StyleId::at(ambre_core::index::Pos::from_usize(self.list.len() - 1));
+                if let Some(key) = key {
+                    self.by_bytes.insert(key, id);
+                }
+                id
+            }
+        };
         self.resolved.insert(name.to_owned(), id);
         id
     }

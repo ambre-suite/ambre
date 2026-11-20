@@ -715,12 +715,14 @@ impl Switchboard {
                 user_id,
                 display_name,
                 email,
+                email_proof,
                 exchange_pub_key,
                 fingerprint,
             } => effects.push(Effect::Classify(TofuPrompt {
                 purpose: tofu::Purpose::Invite {
                     document_id: *document_id,
                     email: email.clone(),
+                    email_proof: *email_proof,
                 },
                 user_id: *user_id,
                 display_name: Some(display_name.clone()),
@@ -1579,6 +1581,7 @@ mod tests {
             user_id,
             display_name: name("Ada"),
             email: Email::from("ada@test.local"),
+            email_proof: ambre_core::EmailProof::Asserted,
             exchange_pub_key: key(7),
             fingerprint: Opaque::<KeyFingerprints>::new("WXYZ"),
         });
@@ -1588,8 +1591,12 @@ mod tests {
             Purpose::Invite {
                 document_id,
                 email: Email::from("ada@test.local"),
+                email_proof: ambre_core::EmailProof::Asserted,
             }
         );
+        // `CHROME-138`: the relay's flag reaches the prompt, which names the
+        // address unproven before any key is wrapped.
+        assert!(prompt.unproven());
         assert_eq!(prompt.display_name, Some(name("Ada")));
 
         match pin_read(prompt.clone(), None, Role::Editor, AT) {
@@ -1617,6 +1624,7 @@ mod tests {
             user_id,
             display_name: name("Ada"),
             email: Email::from("ada@test.local"),
+            email_proof: ambre_core::EmailProof::Asserted,
             exchange_pub_key: key(7),
             fingerprint: Opaque::<KeyFingerprints>::new("WXYZ"),
         });

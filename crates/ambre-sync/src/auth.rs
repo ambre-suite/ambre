@@ -552,16 +552,67 @@ impl SyncState {
         self._onmessage = None;
         self._onclose = None;
         self._onerror = None;
-        self.documents.clear();
-        self.log_footings.clear();
-        self.session_nonces.clear();
-        self.light.clear();
+        self._onopen = None;
+        self._reconnect_timer = None;
+        self.lifecycle.reset();
+        // A call of the session ends with it, and the call worker drops its
+        // keys (`CALL-029`).
+        self.end_call();
+        self.forget_session();
         self.master_seed = None;
         self.signing_key = None;
         self.exchange_key = None;
         *self.tokens.borrow_mut() = None;
         self.renewal.cancel();
+        // The event queue is the generation of the session. Each task the
+        // session spawned holds a sender of the queue that ends here. What
+        // it answers after the sign-out lands nowhere, so no document key
+        // comes back (`SYNC-281`, audit `W204`).
+        if self.event_tx.is_some() {
+            let (tx, rx) = ambre_bus::conduit::unbounded();
+            self.event_tx = Some(tx);
+            self.next_events = Some(rx);
+        }
         crate::log::info!("Sync: logged out, all keys zeroized");
+    }
+
+    /// Drops every map that holds something of the session. That is the
+    /// document keys, the roots and pins it vouched, and the plaintext deltas
+    /// buffered before an open. It is the logs, footings and names too
+    /// (`SYNC-275`, audit `W204`). A sign-in that follows starts from none.
+    fn forget_session(&mut self) {
+        self.user_id = None;
+        self.setup_owed = false;
+        self.documents.clear();
+        self.doc_metadata.clear();
+        self.log_footings.clear();
+        self.session_nonces.clear();
+        self.light.clear();
+        self.self_join_logs.clear();
+        self.channel_metas.clear();
+        self.listed_channels.clear();
+        self.listing_metas.clear();
+        self.listed_keys.clear();
+        self.creating_public.clear();
+        self.space_rotations.clear();
+        self.new_spaces.clear();
+        self.held_creations.clear();
+        self.roster_logs.clear();
+        #[cfg(not(target_arch = "wasm32"))]
+        self.roster_asks.clear();
+        self.pending_opens.clear();
+        self.pinned_inviters.clear();
+        self.murmure_roots.clear();
+        self.typed_opens.clear();
+        self.pending_pre_session_updates.clear();
+        self.held_outbox.borrow_mut().clear();
+        self.replay_stops.clear();
+        self.replay_asks.borrow_mut().clear();
+        self.owed_cursors = crate::cursors::OwedCursors::default();
+        #[cfg(feature = "dev-login")]
+        {
+            self.dev_username = None;
+        }
     }
 
     /// A sign-out the user asked for. The session ends on the worker at once,
@@ -866,10 +917,14 @@ fn open_stored_seed(
     })?;
     // The seed opens straight into its wrapper, so no bare copy of it is left
     // on this path (`ZK-019`).
+    // The seal binds the salt and the signing key the relay names for the
+    // account. So a seed served for another account does not open
+    // (`ZK-047`). A seed sealed before that binding opens without it.
     MasterSeed::open_from_storage(
         master_key_enc,
         &user_key,
-        &ambre_core::Aad::of(b"ambre-master-seed"),
+        salt,
+        stored.signing_pubkey.as_ref(),
     )
     .map_err(|e| match e {
         // Almost always the wrong passphrase; a tampered row reads the same.
@@ -904,7 +959,7 @@ fn seal_seed(
             AuthFailure::SeedNotWrapped
         })?;
     let master_key_enc = master_seed
-        .wrap_for_storage(&sealing_key, &ambre_core::Aad::of(b"ambre-master-seed"))
+        .wrap_for_storage(&sealing_key, &master_key_salt)
         .map_err(|e| {
             crate::log::warning!("Sync: master-seed wrap failed: {e}");
             AuthFailure::SeedNotWrapped
@@ -1253,8 +1308,10 @@ mod tests {
         assert_proves(&body, &seed, &serde_json::json!(stored_salt()));
 
         // The unlock reads the stored material through `open_stored_seed`.
-        let resealed: http::MasterKeyResponse =
-            serde_json::from_value(body["sealed"].clone()).expect("material");
+        let resealed = http::MasterKeyResponse {
+            signing_pubkey: Some(signing_pubkey(&seed)),
+            ..serde_json::from_value(body["sealed"].clone()).expect("material")
+        };
 
         let opened = open_stored_seed(&resealed, &new_passphrase()).expect("the unlock opens");
         assert_eq!(signing_pubkey(&opened), signing_pubkey(&seed));
@@ -1359,8 +1416,10 @@ mod tests {
         assert_proves(&body, &seed, &before["master_key_salt"]);
 
         // The unlock reads the stored material through `open_stored_seed`.
-        let resealed: http::MasterKeyResponse =
-            serde_json::from_value(body["sealed"].clone()).expect("material");
+        let resealed = http::MasterKeyResponse {
+            signing_pubkey: Some(signing_pubkey(&seed)),
+            ..serde_json::from_value(body["sealed"].clone()).expect("material")
+        };
         let opened = open_stored_seed(&resealed, &new_passphrase()).expect("the unlock opens");
         assert_eq!(signing_pubkey(&opened), signing_pubkey(&seed));
         assert!(matches!(

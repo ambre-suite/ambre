@@ -402,7 +402,7 @@ pub async fn delete_prefix(
             .set_continuation_token(token.take())
             .send()
             .await
-            .map_err(|e| AppError::S3(format!("list {prefix}: {e}")))?;
+            .map_err(|e| AppError::S3(format!("list a document prefix: {e}")))?;
         let objects = page
             .contents()
             .iter()
@@ -423,11 +423,12 @@ pub async fn delete_prefix(
                 .delete(delete)
                 .send()
                 .await
-                .map_err(|e| AppError::S3(format!("delete under {prefix}: {e}")))?;
+                .map_err(|e| AppError::S3(format!("delete under a document prefix: {e}")))?;
             if let Some(failed) = out.errors().first() {
+                // The key names the document: the error is logged, so it
+                // carries the store's refusal alone (`ZK-030`, `SRV-298`).
                 return Err(AppError::S3(format!(
-                    "delete {}: {}",
-                    failed.key().unwrap_or("?"),
+                    "delete under a document prefix: {}",
                     failed.message().unwrap_or("refused")
                 )));
             }
@@ -439,6 +440,31 @@ pub async fn delete_prefix(
             Some(next) if page.is_truncated() == Some(true) => token = Some(next.to_string()),
             _ => return Ok(deleted),
         }
+    }
+}
+
+/// Whether the store holds an object under `key`, read by its head alone.
+///
+/// A media confirmation records an address only once an upload put its
+/// object, so a writer cannot hold an address it never filled (`SRV-292`).
+/// The error text names no key: a store failure is logged (`ZK-030`).
+pub async fn holds_object(
+    s3: &S3Client,
+    bucket: &StoreText<BucketName>,
+    key: &ambre_core::ObjectKey,
+) -> Result<bool, AppError> {
+    match s3
+        .head_object()
+        .bucket(bucket.as_str())
+        .key(key.as_str())
+        .send()
+        .await
+    {
+        Ok(_) => Ok(true),
+        // `as_service_error` and never `into_service_error`, which panics on a
+        // dispatch failure, as in `fetch_object`.
+        Err(e) if e.as_service_error().is_some_and(|se| se.is_not_found()) => Ok(false),
+        Err(e) => Err(AppError::S3(format!("head object: {e}"))),
     }
 }
 
@@ -474,7 +500,7 @@ pub async fn fetch_object(
             {
                 Ok(None)
             } else {
-                Err(AppError::S3(format!("get_object {key}: {e}")))
+                Err(AppError::S3(format!("get object: {e}")))
             }
         }
     }

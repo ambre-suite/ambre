@@ -7,14 +7,17 @@
 
 use super::*;
 use ambre_core::id::{Id, Sheet};
+use ambre_core::{Cells, Count};
 
 impl TrameState {
     /// Merge `rect` into one cell. Rejected locally if a covered cell is
     /// non-empty (`trame-cell-merges`); otherwise records the master->extent
     /// entry in `merges_{sheet}` keyed by stable ids.
     pub(super) fn merge_cells(&mut self, rect: CellRect) -> TrameOutcome {
-        // A single cell is not a merge.
-        if rect.is_single_cell() {
+        // A single cell is not a merge. Nor is one past the bound every peer
+        // holds the merges of a sheet to (`TRAME-315`): its entry would place
+        // nothing, so none is written.
+        if rect.is_single_cell() || merge_area(rect) > SHEET_MERGED_MAX_CELLS {
             return TrameOutcome::display_only(vec![]);
         }
         // Client-side rule: every covered cell (excluding the master) must be
@@ -240,13 +243,25 @@ impl TrameState {
             .collect();
         rects.sort_by(|a, b| a.0.cmp(&b.0));
 
-        let mut placed = Vec::with_capacity(rects.len());
-        let mut occupied: HashSet<CellPos> = HashSet::default();
-        for (_, rect) in rects {
-            if rect.cells().any(|cell| occupied.contains(&cell)) {
+        // A peer writes the entries, so their count and their area are
+        // bounded here, in key order, the same on every peer (`TRAME-315`).
+        // An overlap is a comparison of two rectangles, never a list of
+        // cells, so a skipped entry costs one pass of the placed ones.
+        let mut placed: Vec<CellRect> = Vec::new();
+        let mut covered = Count::<Cells>::ZERO;
+        for (_, rect) in rects
+            .into_iter()
+            .take(usize::try_from(MERGE_MAX_ENTRIES.get()).unwrap_or(usize::MAX))
+        {
+            let area = merge_area(rect);
+            let total = covered.plus(area);
+            if total > SHEET_MERGED_MAX_CELLS {
                 continue;
             }
-            occupied.extend(rect.cells());
+            if placed.iter().any(|block| block.overlaps(rect)) {
+                continue;
+            }
+            covered = total;
             placed.push(rect);
         }
         placed
@@ -282,6 +297,30 @@ impl TrameState {
             .filter(|&at| has_raw_value(super::cells::cell_value(&cells, index, at)))
             .collect()
     }
+}
+
+/// How many merge entries a sheet holds.
+pub(super) enum MergeEntries {}
+
+impl ambre_core::NarrowCount for MergeEntries {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("MergeEntryCount");
+}
+
+/// The merge entries of one sheet read in key order. An entry past it is
+/// skipped on every peer, so the overlap test compares at most this many
+/// rectangles to each other (`TRAME-315`, `ambre-spec-budgets.md section 6`).
+pub(super) const MERGE_MAX_ENTRIES: Count<MergeEntries> = Count::<MergeEntries>::new(8_192);
+
+/// The cells the merges of one sheet cover, all merges together. An entry
+/// that would take the sum past it is skipped on every peer. So the derived
+/// caches list at most this many cells (`TRAME-315`,
+/// `ambre-spec-budgets.md section 6`).
+pub(super) const SHEET_MERGED_MAX_CELLS: Count<Cells> = Count::<Cells>::new(262_144);
+
+/// The cells `rect` spans, counted without listing them.
+fn merge_area(rect: CellRect) -> Count<Cells> {
+    Count::<Cells>::new(u64::from(rect.row_count().get()) * u64::from(rect.col_count().get()))
 }
 
 /// Whether a stored cell value counts as holding something. The one place that

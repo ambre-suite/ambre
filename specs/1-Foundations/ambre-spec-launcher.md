@@ -85,6 +85,7 @@ The provider says who the person is; a passphrase opens their keys, or a setup c
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CHROME-095` | `POST` | The provider control MUST hand the browser to the authorization address the relay answers. | this spec section 2; `ambre-spec-session.md`, `SRV-172` | `ambre_app::landing::tests::the_provider_control_asks_for_the_address` -- the control sends one request for the address and leaves the page where it is; `ambre_app::signin::tests::the_provider_address_is_followed_and_its_state_kept` -- the answered address is followed, and one that is not `https` is not; `ambre_core::provider::tests::a_provider_parses_from_its_word_alone` -- a word that could reach another relay route names no provider, and the bus carries a provider only as one of the closed set | none | verified |
+| `CHROME-139` | `FAIL` | Given an authorization address off the authorization host of every known provider, the sign-in MUST NOT follow it. | this spec section 3; `CHROME-095` | `ambre_app::signin::tests::the_provider_address_is_followed_and_its_state_kept` -- browser tier: an address on another host, on a host that only starts with the provider's, behind a user part or on another port is refused and keeps no state; `ambre_core::provider::tests::each_provider_pins_the_host_of_its_authorization_endpoint` -- each provider names its one host | none | verified |
 | `CHROME-096` | `POST` | A return from the provider MUST establish the session on the live threads, its tokens reaching the Sync worker alone. | this spec section 2; `ambre-spec-sync.md`, `SYNC-060` | `ambre_app::signin::tests::a_provider_return_is_read_from_its_address` -- the page reads the code and the state and hands them on; `ambre_sync::auth::provider_tests::a_provider_sign_in_keeps_its_tokens_on_the_worker` -- the worker stores both tokens, and what Logic hears names the person with no byte of a token | none | verified |
 | `CHROME-101` | `FAIL` | A return from the provider MUST be refused unless it carries the state this tab was handed. | this spec section 2; `ambre-spec-session.md`, `SRV-022` | `ambre_app::signin::tests::a_return_this_tab_did_not_start_is_refused` | none | verified |
 | `CHROME-097` | `POST` | An account that holds its keys MUST be asked for its passphrase before the list is shown. | this spec section 2; `ambre-spec-session.md` section 3 | `ambre_app::switchboard::tests::a_provider_account_is_asked_to_unlock_or_to_set_up` -- a sign-in whose keys are stored asks the unlock, and asks no list; `ambre_app::keys_gate::view::tests::an_unlock_sends_the_passphrase_once_and_empties_the_field` -- wasm tier, one field sends the unlock once; `::a_wrong_passphrase_is_said_and_the_face_stays` -- a refused unlock reads its words and keeps the face | none | verified |
@@ -126,7 +127,7 @@ first, in bands of age, and narrows it by a query that never leaves the page.
   is not: it arrives decrypted from the Sync thread (`CHROME-044`). The launcher opens one
   unauthenticated same-origin read of the sign-in configuration, keeps the sign-in's own state and
   owns the local store. Each is an exception `UI-THREAD-004` names.
-* **Verification.** 48 `verified`. What holds is what a pure function or one mounted control
+* **Verification.** 49 `verified`. What holds is what a pure function or one mounted control
   carries, and what a scan of the source refuses. Creation is held by the gate that keeps the named
   command off the page. A composed name is held by its type, which converts to no `String`
   (`CHROME-080`).
@@ -163,6 +164,10 @@ asked for it. So the tab keeps the state it was handed in its own session storag
 return that carries another (`CHROME-101`). Without it, a link forged by a third party signs the
 person into the third party's account. The address the relay answers is followed only if it is
 `https`: a `javascript:` one would run in this page.
+
+The address must also lie on the authorization host of a provider the client knows. Otherwise a
+relay shows a page of its choice where the person expects the provider's password prompt
+(`CHROME-139`).
 
 **The keys gate.** The two middle faces share one gate, which stands before the sign-in panel and
 the list while it shows.

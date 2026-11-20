@@ -487,6 +487,22 @@ input[type="radio"] {
 
 .ambre-sidebar-fold {
     align-self: flex-end;
+    flex: 0 0 auto;
+    width: 26px;
+    height: 26px;
+    margin: var(--space-2) var(--space-4) 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-dim);
+    font: inherit;
+    font-size: var(--font-large);
+    cursor: pointer;
+}
+
+.ambre-sidebar-fold:hover {
+    background: var(--surface-hover);
+    color: var(--text);
 }
 
 .ambre-sidebar-body {
@@ -514,13 +530,63 @@ input[type="radio"] {
 
 .murmure-spaces form {
     display: flex;
-    gap: var(--space-1);
-    margin: var(--space-1) 0;
+    gap: var(--space-2);
+    margin: var(--space-2) 0;
 }
 
+/* The toggles of the sidebar (New space, New channel, Invite): outlined in
+   the accent, as the secondary action of the landing header. */
+.murmure-new-space-toggle,
+.murmure-new-channel-toggle,
+.murmure-space-invite-toggle {
+    margin: var(--space-1) var(--space-2) var(--space-1) 0;
+    padding: calc(var(--space-2) - 1px) calc(var(--space-6) - 1px);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--accent);
+    font: inherit;
+    cursor: pointer;
+}
+
+.murmure-new-space-toggle:hover,
+.murmure-new-channel-toggle:hover,
+.murmure-space-invite-toggle:hover,
+.murmure-new-space-toggle[aria-expanded="true"],
+.murmure-new-channel-toggle[aria-expanded="true"],
+.murmure-space-invite-toggle[aria-expanded="true"] {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* The field of a sidebar form and its submit, filled as the primary action. */
 .murmure-spaces input {
     flex: 1 1 auto;
     min-width: 0;
+    padding: var(--space-2) var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+}
+
+.murmure-spaces input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.murmure-spaces form button[type="submit"] {
+    padding: var(--space-2) var(--space-6);
+    border: 0;
+    border-radius: var(--radius);
+    background: var(--accent);
+    color: var(--on-accent);
+    font: inherit;
+    cursor: pointer;
+}
+
+.murmure-spaces form button[type="submit"]:hover {
+    filter: brightness(1.1);
 }
 
 /* The Murmure channel list (the Murmure layout spec): one section per group,
@@ -976,6 +1042,22 @@ input[type="radio"] {
     inset: 0;
     overflow: hidden;
     pointer-events: none;
+}
+
+/* The prompt over a web embed whose site holds no choice (TOILE-300). It sits
+   where the frame would, and only its buttons take the pointer. */
+.ambre-web-embed-ask {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    overflow: hidden;
+    font-size: var(--font-ui);
+    text-align: center;
+    color: var(--text);
 }
 
 /* Document-loading overlay (ambre-spec-launcher.md): full-viewport spinner shown while a
@@ -1858,6 +1940,16 @@ input[type="radio"] {
     .ambre-body[data-focus] > .ambre-sidebar[data-expanded="false"] {
         flex-basis: var(--sidebar-strip);
         overflow: hidden;
+    }
+
+    /* The strip holds the unfold control alone: the body would only show
+       cut in it. */
+    .ambre-body[data-focus] > .ambre-sidebar[data-expanded="false"] > .ambre-sidebar-body {
+        display: none;
+    }
+
+    .ambre-body[data-focus] > .ambre-sidebar[data-expanded="false"] > .ambre-sidebar-fold {
+        align-self: center;
     }
 
     .ambre-body[data-focus="sidebar"] > .ambre-content {

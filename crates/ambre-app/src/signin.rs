@@ -64,10 +64,18 @@ pub(crate) fn accept_return(
         .then_some(ret)
 }
 
-/// Whether `url` may be followed: an `https` address. The address is data from
-/// the relay, and a `javascript:` one would run in this page's origin.
+/// Whether `url` may be followed: an `https` address on the authorization
+/// host of a provider the client knows. The address is data from the relay. A
+/// `javascript:` one would run in this page's origin. Any other host would
+/// show a page of the relay's choice where the user expects the provider's
+/// password prompt (`CHROME-139`).
 pub(crate) fn is_followable(url: &ambre_core::Opaque<ambre_core::ProviderUrls>) -> bool {
-    web_sys::Url::new(url.as_str()).is_ok_and(|u| u.protocol() == "https:")
+    web_sys::Url::new(url.as_str()).is_ok_and(|u| {
+        u.protocol() == "https:"
+            && ambre_core::OidcProvider::ALL
+                .iter()
+                .any(|provider| u.host() == provider.authorization_host())
+    })
 }
 
 /// Follow the provider's address: remember its `state` for the return, then
@@ -79,7 +87,7 @@ pub(crate) fn follow_address(
     navigate: impl FnOnce(&ambre_core::Opaque<ambre_core::ProviderUrls>),
 ) -> bool {
     if !is_followable(url) {
-        tracing::warn!("Sign-in: the relay answered an address that is not https");
+        tracing::warn!("Sign-in: the relay answered an address off every provider host");
         return false;
     }
     let Some(storage) = session_storage() else {
@@ -216,12 +224,14 @@ mod tests {
     }
 
     /// Following the address remembers its state for the return and sends the
-    /// browser there; an address that is not `https` is refused (`CHROME-095`).
+    /// browser there (`CHROME-095`). An address that is not `https` is
+    /// refused, and so is one off the provider's authorization host
+    /// (`CHROME-139`).
     #[wasm_bindgen_test]
     fn the_provider_address_is_followed_and_its_state_kept() {
         let _ = take_pending_state();
         let mut went = None;
-        let address = "https://accounts.example.org/o/oauth2/auth?state=st9";
+        let address = "https://accounts.google.com/o/oauth2/v2/auth?state=st9";
         let url = ambre_core::Opaque::<ambre_core::ProviderUrls>::new(address.to_owned());
         assert!(follow_address(&url, &state("st9"), |u| went = Some(u.as_str().to_owned())));
         assert_eq!(went.as_deref(), Some(address));
@@ -230,8 +240,12 @@ mod tests {
 
         for bad in [
             "javascript:alert(1)",
-            "http://accounts.example.org/",
+            "http://accounts.google.com/",
             "/api/auth",
+            "https://accounts.example.org/o/oauth2/auth",
+            "https://accounts.google.com.evil.example/o/oauth2/auth",
+            "https://accounts.google.com@evil.example/",
+            "https://accounts.google.com:8443/o/oauth2/auth",
         ] {
             let mut went = false;
             assert!(

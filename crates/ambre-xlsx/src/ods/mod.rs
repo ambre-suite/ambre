@@ -23,6 +23,7 @@ use quick_xml::Reader;
 use quick_xml::events::{BytesStart, Event};
 
 use crate::xml::{self, XmlError};
+use ambre_opc::TreeBudget;
 
 /// The deepest nesting a tree may hold. A style or a settings part nests
 /// below ten levels; a deeper one is hostile.
@@ -77,34 +78,44 @@ impl Node {
 }
 
 /// The root element of the part `bytes`.
+///
+/// # Errors
+///
+/// A malformed part, one that declares a document type, and one whose tree
+/// passes the bound of a [`TreeBudget`].
 pub(crate) fn tree(bytes: &[u8]) -> Result<Node, XmlError> {
     let mut reader = Reader::from_str(xml::utf8(bytes)?);
+    let mut budget = TreeBudget::default();
     loop {
         match reader.read_event()? {
-            Event::Start(e) => return subtree(&mut reader, &e),
-            Event::Empty(e) => return node_of(&e),
+            Event::Start(e) => return subtree(&mut reader, &e, &mut budget),
+            Event::Empty(e) => return node_of(&e, &mut budget),
+            Event::DocType(_) => return Err(xml::document_type()),
             Event::Eof => return Err(XmlError::new("the part holds no root element")),
             _ => {}
         }
     }
 }
 
-/// The element `start` opens, read up to its end from `reader`.
+/// The element `start` opens, read up to its end from `reader`. Every node
+/// is charged to `budget`, which the caller keeps for the whole part, so
+/// many subtrees of one part meet one bound.
 pub(crate) fn subtree(
     reader: &mut Reader<&[u8]>,
     start: &BytesStart<'_>,
+    budget: &mut TreeBudget,
 ) -> Result<Node, XmlError> {
-    let mut stack = vec![node_of(start)?];
+    let mut stack = vec![node_of(start, budget)?];
     loop {
         match reader.read_event()? {
             Event::Start(e) => {
                 if stack.len() >= MAX_DEPTH {
                     return Err(XmlError::new("the part nests too deep"));
                 }
-                stack.push(node_of(&e)?);
+                stack.push(node_of(&e, budget)?);
             }
             Event::Empty(e) => {
-                let node = node_of(&e)?;
+                let node = node_of(&e, budget)?;
                 if let Some(parent) = stack.last_mut() {
                     parent.children.push(node);
                 }
@@ -134,15 +145,23 @@ pub(crate) fn subtree(
                 }
             }
             Event::Eof => return Err(XmlError::new("the part ends inside an element")),
-            Event::Comment(_) | Event::Decl(_) | Event::PI(_) | Event::DocType(_) => {}
+            Event::DocType(_) => return Err(xml::document_type()),
+            Event::Comment(_) | Event::Decl(_) | Event::PI(_) => {}
         }
     }
 }
 
-fn node_of(e: &BytesStart<'_>) -> Result<Node, XmlError> {
+/// The node `e` opens, charged to `budget` with its attributes. Its text
+/// joins one string per node, which the part bound caps.
+fn node_of(e: &BytesStart<'_>, budget: &mut TreeBudget) -> Result<Node, XmlError> {
+    budget.node()?;
+    let attrs = xml::attributes(e)?;
+    for (_, value) in &attrs {
+        budget.attr(ambre_core::Count::of(value.len()))?;
+    }
     Ok(Node {
         name: xml::local_name(e),
-        attrs: xml::attributes(e)?,
+        attrs,
         children: Vec::new(),
         text: String::new(),
     })

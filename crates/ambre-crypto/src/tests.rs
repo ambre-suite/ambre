@@ -575,28 +575,59 @@ fn a_wrap_has_a_length_the_wire_reads() {
 
     let seed = MasterSeed::from_array([0x03; 32]);
     let wrapped = seed
-        .wrap_for_storage(&sealing_key([0xAB; 32]), &Aad::of(b"aad"))
+        .wrap_for_storage(
+            &sealing_key([0xAB; 32]),
+            &FixedBytes::<MasterKeySalt>::from_array([0xAB; 32]),
+        )
         .unwrap();
     assert_eq!(
         ambre_core::Encoded::<ambre_core::WrappedMasterKey>::LENGTHS,
-        [wrapped.as_bytes().len()]
+        [legacy_seal().as_bytes().len(), wrapped.as_bytes().len()]
     );
 }
 
+/// The salt the stored-seed tests derive under, and its sealing key.
+const SEED_SALT: [u8; 32] = [0xAB; 32];
+
+/// The signing key `seed` derives: the account its seal binds.
+fn account_of(seed: &MasterSeed) -> FixedBytes<ambre_core::PublicKey> {
+    FixedBytes::from_array(seed.derive_signing_key().verifying_key().to_bytes())
+}
+
+/// The seed `MasterSeed::from_array([0x03; 32])` sealed as a client sealed
+/// it before the version byte existed: a nonce and a ciphertext under the
+/// fixed additional data.
+fn legacy_seal() -> ambre_core::Encoded<ambre_core::WrappedMasterKey> {
+    let (nonce, ciphertext) = aead::seal(
+        &[0x03; 32],
+        &Aad::of(crate::keys::LEGACY_SEED_AAD),
+        &sealing_key(SEED_SALT).document_key(),
+    )
+    .unwrap();
+    let mut wrapped = nonce.as_slice().to_vec();
+    wrapped.extend_from_slice(ciphertext.as_bytes());
+    ambre_core::Encoded::new(wrapped)
+}
+
+/// `ZK-047`: a stored seed opens under its user key, its salt and its
+/// account alone. The login path opens the seed this way, and a wrong
+/// passphrase gives the AEAD error, which the login screen reads as
+/// "incorrect passphrase".
 #[test]
-fn a_stored_seed_opens_under_its_user_key_and_its_aad_alone() {
-    // The login path opens the seed this way, so it must give back the seed
-    // that was sealed. A wrong passphrase gives the AEAD error, which the
-    // login screen reads as "incorrect passphrase".
-    let salt = FixedBytes::<MasterKeySalt>::from_array([0xAB; 32]);
+fn a_stored_seed_opens_under_its_user_key_its_salt_and_its_account_alone() {
+    let salt = FixedBytes::<MasterKeySalt>::from_array(SEED_SALT);
     let user = passphrase::derive_user_key(&pass(STRONG), &salt).unwrap();
     let seed = MasterSeed::from_array([0x03; 32]);
-    let aad = Aad::of(b"ambre-master-seed");
+    let account = account_of(&seed);
     let wrapped = seed
-        .wrap_for_storage(&sealing_key([0xAB; 32]), &aad)
+        .wrap_for_storage(&sealing_key(SEED_SALT), &salt)
         .unwrap();
+    assert_eq!(
+        wrapped.as_bytes().first(),
+        Some(&crate::keys::SeedVersion::V1.byte())
+    );
 
-    let opened = MasterSeed::open_from_storage(&wrapped, &user, &aad).unwrap();
+    let opened = MasterSeed::open_from_storage(&wrapped, &user, &salt, Some(&account)).unwrap();
     assert_eq!(
         opened.recovery_words().secret().expose(),
         seed.recovery_words().secret().expose()
@@ -604,16 +635,96 @@ fn a_stored_seed_opens_under_its_user_key_and_its_aad_alone() {
 
     let wrong = passphrase::derive_user_key(&pass("wrong passphrase"), &salt).unwrap();
     assert!(matches!(
-        MasterSeed::open_from_storage(&wrapped, &wrong, &aad),
+        MasterSeed::open_from_storage(&wrapped, &wrong, &salt, Some(&account)),
+        Err(CryptoError::AeadFailed)
+    ));
+    // Another salt beside the same blob: the AEAD refuses before any key.
+    assert!(matches!(
+        MasterSeed::open_from_storage(
+            &wrapped,
+            &user,
+            &FixedBytes::<MasterKeySalt>::from_array([0xCD; 32]),
+            Some(&account)
+        ),
+        Err(CryptoError::AeadFailed)
+    ));
+    // The seal served as the seed of another account.
+    let other = account_of(&MasterSeed::from_array([0x04; 32]));
+    assert!(matches!(
+        MasterSeed::open_from_storage(&wrapped, &user, &salt, Some(&other)),
         Err(CryptoError::AeadFailed)
     ));
     assert!(matches!(
-        MasterSeed::open_from_storage(&wrapped, &user, &Aad::of(b"other")),
-        Err(CryptoError::AeadFailed)
+        MasterSeed::open_from_storage(&wrapped, &user, &salt, None),
+        Err(CryptoError::UnboundSeed)
     ));
     assert!(matches!(
-        MasterSeed::open_from_storage(&ambre_core::Encoded::new(vec![0; 10]), &user, &aad),
+        MasterSeed::open_from_storage(
+            &ambre_core::Encoded::new(vec![0; 10]),
+            &user,
+            &salt,
+            Some(&account)
+        ),
         Err(CryptoError::InvalidKeyLength)
+    ));
+}
+
+/// `ZK-047`: the version byte sits inside the additional data. So a blob
+/// whose byte is changed, or stripped to the old layout, does not open.
+#[test]
+fn a_sealed_seed_whose_version_byte_moves_does_not_open() {
+    let salt = FixedBytes::<MasterKeySalt>::from_array(SEED_SALT);
+    let user = passphrase::derive_user_key(&pass(STRONG), &salt).unwrap();
+    let seed = MasterSeed::from_array([0x03; 32]);
+    let account = account_of(&seed);
+    let wrapped = seed
+        .wrap_for_storage(&sealing_key(SEED_SALT), &salt)
+        .unwrap();
+    let mut bumped = wrapped.as_bytes().to_vec();
+    if let Some(version) = bumped.first_mut() {
+        *version = version.wrapping_add(1);
+    }
+    assert!(
+        MasterSeed::open_from_storage(
+            &ambre_core::Encoded::new(bumped),
+            &user,
+            &salt,
+            Some(&account)
+        )
+        .is_err()
+    );
+    let stripped = wrapped.as_bytes().get(1..).unwrap().to_vec();
+    assert!(matches!(
+        MasterSeed::open_from_storage(
+            &ambre_core::Encoded::new(stripped),
+            &user,
+            &salt,
+            Some(&account)
+        ),
+        Err(CryptoError::AeadFailed)
+    ));
+}
+
+/// `ZK-047`: a seed sealed before the version byte existed still opens, with
+/// or without the account beside it.
+#[test]
+fn a_seed_sealed_before_the_version_byte_still_opens() {
+    let salt = FixedBytes::<MasterKeySalt>::from_array(SEED_SALT);
+    let user = passphrase::derive_user_key(&pass(STRONG), &salt).unwrap();
+    let seed = MasterSeed::from_array([0x03; 32]);
+    let legacy = legacy_seal();
+    for account in [None, Some(account_of(&seed))] {
+        let opened =
+            MasterSeed::open_from_storage(&legacy, &user, &salt, account.as_ref()).unwrap();
+        assert_eq!(
+            opened.recovery_words().secret().expose(),
+            seed.recovery_words().secret().expose()
+        );
+    }
+    let wrong = passphrase::derive_user_key(&pass("wrong passphrase"), &salt).unwrap();
+    assert!(matches!(
+        MasterSeed::open_from_storage(&legacy, &wrong, &salt, None),
+        Err(CryptoError::AeadFailed)
     ));
 }
 

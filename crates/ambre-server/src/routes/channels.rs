@@ -378,8 +378,8 @@ pub async fn close_segment(
 pub(crate) async fn lock_retired_segments(state: &AppState, document_id: &Id<Document>) {
     let locked = async {
         for segment in db::retired_unlocked_segments(&state.db, document_id).await? {
-            let horizon = crate::redis_ops::lock_segment_now(&state.redis, &segment).await?;
-            db::record_lock(&state.db, &segment, horizon).await?;
+            let counted = crate::redis_ops::lock_segment_now(&state.redis, &segment).await?;
+            let horizon = db::record_lock(&state.db, &segment, counted).await?;
             tracing::debug!(segment = %segment, horizon = horizon.get(), "segment locked by a rotation");
         }
         Ok::<(), AppError>(())
@@ -1000,10 +1000,13 @@ mod tests {
     use ambre_core::Creation;
     use ambre_core::{Ms, TimeSpan};
 
-    /// The signing key every test user registers, so an entry one signs
-    /// checks against the row and the session alike.
-    fn signing_key() -> ed25519_dalek::SigningKey {
-        ed25519_dalek::SigningKey::from_bytes(&[7; 32])
+    /// The signing key `user` registers, so an entry it signs checks against
+    /// the row and the session alike. One account holds one key (`SRV-293`),
+    /// so the key derives from the id, which a session alone carries.
+    fn signing_key_of(user: Id<User>) -> ed25519_dalek::SigningKey {
+        use sha2::Digest as _;
+        let seed: [u8; 32] = sha2::Sha256::digest(user.as_bytes()).into();
+        ed25519_dalek::SigningKey::from_bytes(&seed)
     }
 
     /// A [`Creation`] answers as the JSON `bool` the field was: the four
@@ -1048,7 +1051,7 @@ mod tests {
         auth::AuthSession {
             user_id,
             signing_pubkey: ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(
-                signing_key().verifying_key().to_bytes(),
+                signing_key_of(user_id).verifying_key().to_bytes(),
             ),
         }
     }
@@ -1064,7 +1067,7 @@ mod tests {
         role: Role,
     ) -> ambre_core::Encoded<ambre_core::EncodedLogEntry> {
         use ed25519_dalek::Signer;
-        let key = signing_key();
+        let key = signing_key_of(who);
         let mut entry = ambre_protocol::MembershipEntry {
             document,
             position: ambre_core::Seq::<ambre_protocol::LogPlaces>::new(position),
@@ -1131,8 +1134,11 @@ mod tests {
     }
 
     async fn named_user(state: &AppState, email: &str, display_name: &str) -> Id<User> {
+        use sha2::Digest as _;
+        // A placeholder of its own until the id is known: the index refuses
+        // two accounts under one key.
         let signing = ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(
-            signing_key().verifying_key().to_bytes(),
+            sha2::Sha256::digest(email.as_bytes()).into(),
         );
         let row = db::create_user(
             &state.db,
@@ -1145,6 +1151,12 @@ mod tests {
         )
         .await
         .expect("user");
+        sqlx::query("UPDATE users SET signing_pubkey = $2 WHERE id = $1")
+            .bind(uuid::Uuid::from_bytes(*row.id.as_bytes()))
+            .bind(signing_key_of(row.id).verifying_key().to_bytes().to_vec())
+            .execute(&state.db)
+            .await
+            .expect("key");
         row.id
     }
 
@@ -2713,13 +2725,13 @@ mod tests {
         author: Id<User>,
     ) -> ambre_core::Encoded<ambre_core::EncodedLogEntry> {
         use ed25519_dalek::Signer;
-        let signing = signing_key();
+        let signing = signing_key_of(author);
         let mut entry = ambre_protocol::MembershipEntry {
             document,
             position: ambre_core::Seq::<ambre_protocol::LogPlaces>::new(position),
             member,
             member_key: ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(
-                signing.verifying_key().to_bytes(),
+                signing_key_of(member).verifying_key().to_bytes(),
             ),
             member_exchange_key:
                 ambre_core::FixedBytes::<ambre_core::ExchangePublicKey>::from_array([4; 32]),
@@ -3314,6 +3326,57 @@ mod tests {
         .await;
         assert!(matches!(late, Err(AppError::Forbidden)));
         assert_eq!(member_ids(&state, public.meta.document_id()).await, [alice]);
+    }
+
+    /// `SRV-302`, audit `P38`: a member leaves a private channel. The debt
+    /// of `meta` is the debt of its segment, in the register and in the
+    /// store. So the relay refuses each frame of the segment under the key
+    /// the member keeps.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_leave_of_a_private_channel_owes_its_segment_a_rotation(pool: sqlx::PgPool) {
+        use rustis::commands::GenericCommands;
+        let (state, _stub) = with_store(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let space = space(&state, alice, &[(bob, Role::Editor)]).await;
+        let [_, shared, _] = bobs_channels(&state, alice, bob, space).await;
+        let left = crate::routes::share::revoke_from_document(
+            State(state.clone()),
+            session(bob),
+            PathId::new((shared.meta.document_id(), bob)),
+            None,
+        )
+        .await;
+        assert_eq!(status(left), StatusCode::OK);
+
+        let segment = shared.segment.document_id();
+        assert!(owes(&state, &shared).await);
+        assert!(
+            db::rotation_owed(&state.db, &segment).await.expect("query"),
+            "the segment owes what its meta owes"
+        );
+        let mirrored: usize = state
+            .redis
+            .exists(
+                crate::redis_keys::DocKey::<crate::redis_keys::RotationOwed>::of(&segment).as_str(),
+            )
+            .await
+            .expect("exists");
+        assert_eq!(mirrored, 1, "the store mirrors the debt of the segment");
+        let refused = crate::redis_ops::verify_clock_and_assign_seq(
+            &state.redis,
+            &segment,
+            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([9; 32]),
+            ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::new(1),
+        )
+        .await;
+        assert!(
+            matches!(refused, Err(AppError::RotationOwed)),
+            "{refused:?}"
+        );
+        let keys = crate::redis_keys::DocumentStateKeys::of(&segment);
+        let _: usize = state.redis.del(keys.texts()).await.expect("del");
     }
 
     /// `SRV-136`: the owner who removes a member from a space with its
@@ -4094,6 +4157,40 @@ mod tests {
         forget_store(&state, &channel).await;
     }
 
+    /// `SRV-290`: a reset of the ephemeral store loses the counter. The
+    /// finalize lease then takes its horizon from the delta rows the register
+    /// holds.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_lease_after_a_store_reset_takes_its_horizon_from_the_register(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let (alice, _, channel) = closed_channel(&state, 5).await;
+        let segment = channel.segment.document_id();
+        for seq in 1..=5 {
+            delta(&state, segment, seq, "2 days").await;
+        }
+        on_segment(
+            &state,
+            &channel,
+            "UPDATE channel_documents SET closed_at = now() - interval '2 days' \
+             WHERE document_id = $1",
+        )
+        .await;
+        forget_store(&state, &channel).await;
+
+        let granted = lease(&state, alice, &channel).await.expect("lease");
+        let held = granted.lease.expect("the grace period has passed");
+        assert_eq!(held.horizon, ambre_core::Seq::<ambre_core::Relay>::new(5));
+        let recorded: Option<i64> =
+            sqlx::query_scalar("SELECT horizon FROM channel_documents WHERE document_id = $1")
+                .bind(uuid_of_doc(segment))
+                .fetch_one(&state.db)
+                .await
+                .expect("query");
+        assert_eq!(recorded, Some(5), "the register keeps the durable horizon");
+        forget_store(&state, &channel).await;
+    }
+
     /// Whether the store mirrors the lock of `segment`.
     async fn lock_mirrored(state: &AppState, segment: Id<Document>) -> bool {
         use rustis::commands::GenericCommands;
@@ -4481,19 +4578,24 @@ mod tests {
             .await
             .expect("read")
             .expect("the snapshot");
+        let blob = ambre_core::FixedBytes::from_array([6; 32]);
         let transcript = ambre_protocol::snapshot_confirm::confirm_transcript(
-            document,
-            snapshot_id,
-            snapshot.covered_seq,
-            &snapshot.author_pubkey,
+            ambre_protocol::snapshot_confirm::Confirmed {
+                document_id: document,
+                snapshot_id,
+                covered_seq: snapshot.covered_seq,
+                author: &snapshot.author_pubkey,
+                blob: &blob,
+            },
         );
-        let signature = ed25519_dalek::Signer::sign(&signing_key(), transcript.as_bytes());
+        let signature = ed25519_dalek::Signer::sign(&signing_key_of(who), transcript.as_bytes());
         let axum::Json(answer) = crate::routes::confirm_snapshot(
             State(state.clone()),
             session(who),
             PathId::new((document, snapshot_id)),
             Json::new(crate::routes::ConfirmSnapshotRequest {
                 signature: ambre_core::FixedBytes::from_array(signature.to_bytes()),
+                blob,
             }),
         )
         .await

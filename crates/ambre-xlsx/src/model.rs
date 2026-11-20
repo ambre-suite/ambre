@@ -172,6 +172,27 @@ pub struct Cell {
     pub style: StyleId,
 }
 
+impl Cell {
+    /// The bytes of text the cell holds: its value and its formula. A read
+    /// counts them against `MAX_TEXT_BYTES`, since one shared string named
+    /// by a million cells is copied into each (`P53`).
+    #[must_use]
+    pub fn text_bytes(&self) -> ambre_core::Count<ambre_core::Octets> {
+        let value = |value: &Value| match value {
+            Value::Text(text) => text.len(),
+            Value::Empty | Value::Number(_) | Value::Boolean(_) | Value::Error(_) => 0,
+        };
+        let bytes = match &self.content {
+            Content::Value(cached) => value(cached),
+            Content::Formula { formula, cached } => {
+                formula.excel().len() + formula.ambre().map_or(0, str::len) + value(cached)
+            }
+            Content::TrameFormula { formula, cached } => formula.as_str().len() + value(cached),
+        };
+        ambre_core::Count::of(bytes)
+    }
+}
+
 /// What a cell holds.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Content {

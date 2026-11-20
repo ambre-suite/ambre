@@ -386,12 +386,13 @@ const NON_CLIENT_CRATES: &[&str] = &[
     "crates/ambre-primitives/",
 ];
 
-/// The persistence paths `UI-THREAD-004` names: the local store, and the
-/// sign-in's own state for one tab and for the development identity.
+/// The persistence paths `UI-THREAD-004` names: the local store, the sign-in
+/// state and the site choice of a web embed.
 const STORAGE_OWNERS: &[&str] = &[
     "crates/ambre-logic/src/persistence.rs",
     "crates/ambre-app/src/signin.rs",
     "crates/ambre-app/src/platform.rs",
+    "crates/ambre-app/src/host/web_embed.rs",
 ];
 
 /// The renderer, which holds no colour of its own (`CANVAS-060`).

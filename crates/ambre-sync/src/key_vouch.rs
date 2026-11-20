@@ -133,7 +133,9 @@ enum Wrapper {
     /// the log keeps. The key the relay serves on a row counts for nothing.
     Member,
     /// No row carries the wrapper's key, and the log of a space governs this
-    /// one. A space writer re-keys a channel without being a member of it.
+    /// one. The space holds the wrapper as a present writer at its head.
+    /// A space writer re-keys a channel without being a member of it (audit
+    /// `P57`).
     Space,
     /// Any other wrapper, this client's own row absent included.
     Unverified,
@@ -167,7 +169,14 @@ impl Wrapper {
             Some(key) if log.signs_exchange_key(key) => Self::Member,
             Some(key) => {
                 let carried = rows.clone().any(|(exchange, _)| exchange == Some(key));
-                if !carried && rule.space.is_some() {
+                // A removed member of the space wraps no key of a channel
+                // again (audit `P57`).
+                if !carried
+                    && rule
+                        .space
+                        .as_ref()
+                        .is_some_and(|space| space.writes_under(key))
+                {
                     Self::Space
                 } else {
                     Self::Unverified
@@ -587,6 +596,11 @@ impl AnchoredLog {
         &self.log
     }
 
+    /// The walked log, which outlives its footing.
+    pub(crate) fn into_log(self) -> Log {
+        self.log
+    }
+
     /// The anchor a copy of a key seals beside it (`SYNC-104`).
     pub(crate) fn anchor(&self) -> FixedBytes<EntryDigest> {
         self.footing.anchor
@@ -918,14 +932,14 @@ mod tests {
         );
 
         // The relay re-wraps a key of its own for Bob. Under a space, a
-        // wrapper no row carries passes as a space writer, so the key check
-        // alone stands between the relay and the open.
+        // wrapper the space does not hold as a present writer is refused
+        // (audit `P57`).
         let relay_xk = ambre_crypto::MasterSeed::from_array([0x66; 32]).derive_exchange_key();
         let chosen = DocumentKey::generate();
         let forged = doc.rows(&chosen, &relay_xk);
         assert_eq!(
             doc.bob_checks_under_space(&log, &forged, &chosen, std::slice::from_ref(&link)),
-            Err(KeyRefusal::Unvouched)
+            Err(KeyRefusal::WrapperUnverified)
         );
         // A link the relay seals from its own key and signs itself counts for
         // nothing: no writer of the log holds its signing key.
@@ -935,7 +949,7 @@ mod tests {
         let kept = crate::chain::signed_by_writers(vec![own_link], &log.link_signers());
         assert_eq!(
             doc.bob_checks_under_space(&log, &forged, &chosen, &kept),
-            Err(KeyRefusal::Unvouched)
+            Err(KeyRefusal::WrapperUnverified)
         );
     }
 
@@ -1088,19 +1102,45 @@ mod tests {
             Err(KeyRefusal::WrapperUnverified)
         );
 
-        // Under a space, a wrapper no row carries is a space writer.
-        let mut rule = LogRule::document();
-        rule.space = Some(crate::membership_log::SpaceWord::default());
+        // Under a space, a wrapper no row carries counts only as a present
+        // writer of the space (audit `P57`). A space that holds it not, or
+        // holds it as a reader, refuses it.
         let pin = doc.alice_pin();
-        let vouch = KeyVouch::of(
-            &log,
-            &rule,
-            &doc.bob.exchange(),
-            &stranger,
-            &pinned(&pin),
-            RotationDebt::Settled,
+        let under = |word: crate::membership_log::SpaceWord| {
+            let mut rule = LogRule::document();
+            rule.space = Some(word);
+            KeyVouch::of(
+                &log,
+                &rule,
+                &doc.bob.exchange(),
+                &stranger,
+                &pinned(&pin),
+                RotationDebt::Settled,
+            )
+            .check(doc.document_id, &doc.k0, &[])
+        };
+        assert_eq!(
+            under(crate::membership_log::SpaceWord::default()),
+            Err(KeyRefusal::WrapperUnverified),
+            "no writer of the space"
         );
-        assert_eq!(vouch.check(doc.document_id, &doc.k0, &[]), Ok(()));
+        let space_writer = Person::new(0x66).public();
+        let keys = crate::membership_log::MemberKeys {
+            key: space_writer,
+            exchange: crate::sharing::own_exchange_key(&relay_xk),
+        };
+        let mut reader = crate::membership_log::SpaceWord::default();
+        reader.present.insert(Id::<User>::mint(), keys.clone());
+        assert_eq!(
+            under(reader.clone()),
+            Err(KeyRefusal::WrapperUnverified),
+            "a reader of the space"
+        );
+        let mut writer = reader;
+        writer.writing.insert(space_writer);
+        assert_eq!(under(writer.clone()), Ok(()), "a present writer");
+        let mut rule = LogRule::document();
+        rule.space = Some(writer);
         let vouch = KeyVouch::of(
             &log,
             &rule,

@@ -465,14 +465,19 @@ pub(crate) async fn space_admin_of_public_meta(
 
 /// Raises the debt mirror of each of `documents`, in order. The first that
 /// fails stops the rest.
+///
+/// The debt of a channel's `meta` is the debt of every document of the
+/// channel: each is sealed under the key of `meta` (`SRV-302`).
 async fn raise_debt_mirrors(state: &AppState, documents: &[Id<Document>]) -> Result<(), AppError> {
     for doc_id in documents {
-        crate::redis_ops::mirror_rotation_owed(
-            &state.redis,
-            doc_id,
-            crate::redis_ops::RotationDebt::Owed,
-        )
-        .await?;
+        for document in db::documents_sharing_members(&state.db, doc_id).await? {
+            crate::redis_ops::mirror_rotation_owed(
+                &state.redis,
+                &document,
+                crate::redis_ops::RotationDebt::Owed,
+            )
+            .await?;
+        }
     }
     Ok(())
 }
@@ -550,16 +555,24 @@ async fn notify_rotation(state: &AppState, doc_id: &Id<Document>) {
 
 /// Rewrites the debt mirror from the register, which is the authority. A
 /// failure is logged: a subscribe rewrites the mirror again.
+///
+/// The mirror of every document of a channel follows its `meta`, so a
+/// rotation of `meta` clears them all (`SRV-302`).
 async fn restore_debt_mirror(state: &AppState, doc_id: &Id<Document>) {
-    let restored = match db::rotation_owed(&state.db, doc_id).await {
-        Ok(owed) => {
-            let debt = crate::redis_ops::RotationDebt::from_bool(owed);
-            crate::redis_ops::mirror_rotation_owed(&state.redis, doc_id, debt).await
+    let documents = db::documents_sharing_members(&state.db, doc_id)
+        .await
+        .unwrap_or_else(|_| vec![*doc_id]);
+    for document in &documents {
+        let restored = match db::rotation_owed(&state.db, document).await {
+            Ok(owed) => {
+                let debt = crate::redis_ops::RotationDebt::from_bool(owed);
+                crate::redis_ops::mirror_rotation_owed(&state.redis, document, debt).await
+            }
+            Err(e) => Err(e),
+        };
+        if let Err(e) = restored {
+            tracing::error!(error = %e, "rotation debt mirror not restored");
         }
-        Err(e) => Err(e),
-    };
-    if let Err(e) = restored {
-        tracing::error!(error = %e, "rotation debt mirror not restored");
     }
 }
 

@@ -126,22 +126,81 @@ pub fn cut_display_name_to_fit(text: &str) -> Option<Validated<DisplayName>> {
     Validated::parse(cut).ok()
 }
 
-/// The short handle a member who carries no usable name shows: the first
+/// The short handle a member who carries no usable name shows: the last
 /// four bytes of `user` in hex. It always fits the rule.
+///
+/// The first bytes of a version 7 id are its creation time, so two accounts
+/// made in the same minute share them. The last bytes are random.
 #[must_use]
 pub fn display_handle(user: &crate::Id<crate::id::User>) -> Validated<DisplayName> {
     let handle: String = user
         .as_bytes()
         .iter()
+        .rev()
         .take(4)
+        .rev()
         .map(|b| format!("{b:02x}"))
         .collect();
     Validated::admitted(handle)
 }
 
+/// The label of a member's live cursor on the screen of another member. It
+/// is the name the sample carried, then the handle of `user` in parentheses.
+/// A sample with no name reads the handle alone.
+///
+/// The sender writes the name, so the name alone lets Mallory label her
+/// cursor "Alice". The handle comes from the `Id<User>` the transport
+/// resolved from the signing key, which no sender writes. So two members
+/// never read one label, whatever names they choose. The name is cut to
+/// leave the handle room, and the label always fits the rule.
+#[must_use]
+pub fn attributed_label(
+    user: &crate::Id<crate::id::User>,
+    name: Option<&Validated<DisplayName>>,
+) -> Validated<DisplayName> {
+    let handle = display_handle(user);
+    let Some(name) = name else {
+        return handle;
+    };
+    // The handle, two parentheses and one space.
+    let room = NAME_MAX_CHARS.saturating_sub(handle.as_str().chars().count() + 3);
+    let cut: String = name.as_str().chars().take(room).collect();
+    Validated::admitted(format!("{} ({})", cut.trim_end(), handle.as_str()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Two members who send one name read two labels, each ending on the
+    /// handle of its sender. A label always fits the rule, a name at the cap
+    /// included, and a sample with no name reads the handle alone.
+    #[test]
+    fn two_members_under_one_name_read_two_labels() {
+        let (alice, mallory) = (crate::Id::<crate::id::User>::mint(), crate::Id::mint());
+        let name = Validated::<DisplayName>::parse("Alice").unwrap();
+        let (a, m) = (
+            attributed_label(&alice, Some(&name)),
+            attributed_label(&mallory, Some(&name)),
+        );
+        assert_ne!(a, m);
+        assert_eq!(
+            a.as_str(),
+            format!("Alice ({})", display_handle(&alice).as_str())
+        );
+        assert_eq!(attributed_label(&alice, None), display_handle(&alice));
+        let longest = Validated::<DisplayName>::parse("\u{1F600}".repeat(NAME_MAX_CHARS)).unwrap();
+        let label = attributed_label(&alice, Some(&longest));
+        assert_eq!(
+            Validated::<DisplayName>::parse(label.as_str()),
+            Ok(label.clone())
+        );
+        assert!(
+            label
+                .as_str()
+                .ends_with(&format!("({})", display_handle(&alice).as_str()))
+        );
+    }
 
     /// A name's `Debug` form holds none of its text, so a log carries none.
     #[test]

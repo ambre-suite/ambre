@@ -12,6 +12,7 @@ use quick_xml::Reader;
 use quick_xml::events::Event;
 
 use crate::PartBytes;
+use crate::tree::TreeBudget;
 
 /// Why a part does not read. The package layer names the part in its own
 /// error, so this carries nothing.
@@ -40,24 +41,25 @@ impl Entry {
 ///
 /// # Errors
 ///
-/// [`XmlError`] for bytes that are not well-formed UTF-8 XML, and for a
-/// document type declaration.
+/// [`XmlError`] for bytes that are not well-formed UTF-8 XML, for a
+/// document type declaration, and for a list past the bound of a tree.
 pub fn elements(bytes: &[u8]) -> Result<Vec<Entry>, XmlError> {
     let mut reader = Reader::from_reader(bytes);
     reader.config_mut().check_end_names = true;
     let mut buf = Vec::new();
     let mut out = Vec::new();
+    let mut budget = TreeBudget::default();
     let mut depth = 0_usize;
     loop {
         buf.clear();
         match reader.read_event_into(&mut buf).map_err(|_| XmlError)? {
             Event::Start(start) => {
                 if depth > 0 {
-                    out.push(entry(&start)?);
+                    out.push(entry(&start, &mut budget)?);
                 }
                 depth += 1;
             }
-            Event::Empty(start) if depth > 0 => out.push(entry(&start)?),
+            Event::Empty(start) if depth > 0 => out.push(entry(&start, &mut budget)?),
             Event::End(_) => depth = depth.checked_sub(1).ok_or(XmlError)?,
             Event::DocType(_) => return Err(XmlError),
             Event::Eof => break,
@@ -67,7 +69,13 @@ pub fn elements(bytes: &[u8]) -> Result<Vec<Entry>, XmlError> {
     if depth == 0 { Ok(out) } else { Err(XmlError) }
 }
 
-fn entry(start: &quick_xml::events::BytesStart<'_>) -> Result<Entry, XmlError> {
+/// One entry, charged to `budget` before it is built: a flat list of
+/// empty elements costs a record each, as a tree does.
+fn entry(
+    start: &quick_xml::events::BytesStart<'_>,
+    budget: &mut TreeBudget,
+) -> Result<Entry, XmlError> {
+    budget.node().map_err(|_| XmlError)?;
     let name = start.local_name().as_ref().to_owned();
     let mut attrs = Vec::new();
     for attr in start.attributes() {
@@ -80,6 +88,9 @@ fn entry(start: &quick_xml::events::BytesStart<'_>) -> Result<Entry, XmlError> {
             .normalized_value(quick_xml::XmlVersion::Implicit1_0)
             .map_err(|_| XmlError)?
             .into_owned();
+        budget
+            .attr(ambre_core::Count::of(value.len()))
+            .map_err(|_| XmlError)?;
         attrs.push((key, value));
     }
     Ok(Entry { name, attrs })

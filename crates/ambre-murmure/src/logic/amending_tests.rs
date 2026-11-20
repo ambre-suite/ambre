@@ -944,3 +944,36 @@ fn the_amendments_of_each_segment_are_asked_for_in_list_order() {
     let mut bob = peer_of(&alice);
     assert_eq!(bob.amendments_to_open(), named);
 }
+
+// --- MURMURE-679 ---
+
+/// Once the amendments document exists, a write to its header or its version
+/// is refused: the header still names its segment, and the document opens.
+#[test]
+fn a_write_to_the_header_of_amendments_is_refused() {
+    let author = Id::<User>::mint();
+    let (mut alice, segment) = locked_with(&["one"], author);
+    let (amendments, first, meta) = amended(&mut alice, segment);
+    let bob = bob_holding(&alice, segment, amendments, &first, &meta, author);
+    let was = alice.doc(amendments).expect("held").get_deep_value();
+
+    let doc = bob.doc(amendments).expect("held");
+    let before = doc.oplog_vv();
+    crate::logic::schema::header(doc)
+        .delete(crate::logic::schema::HeaderKey::Segment)
+        .expect("forge");
+    let unnamed = json_since(doc, &before);
+    let before = doc.oplog_vv();
+    doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
+        .insert(ambre_core::schema::MetaKey::SchemaVersion.as_str(), 99_i64)
+        .expect("forge");
+    let versioned = json_since(doc, &before);
+    let by_bob = signer(&bob, amendments, author);
+    for (forged, seq) in [(&unnamed, 2), (&versioned, 3)] {
+        assert_eq!(
+            alice.apply_signed(amendments, Seq::<Relay>::new(seq), forged, by_bob),
+            Err(MurmureError::Refused(Refusal::ForeignRoot))
+        );
+    }
+    assert_eq!(alice.doc(amendments).expect("held").get_deep_value(), was);
+}

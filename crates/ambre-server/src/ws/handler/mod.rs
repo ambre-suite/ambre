@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 
 use ambre_core::id::{Channel, Document, Id, User};
-use ambre_core::{Bounded, FixedBytes, PublicKey, RefusalCode};
+use ambre_core::{Bounded, FixedBytes, PublicKey, RefusalCode, Sec, TimeSpan};
 use ambre_protocol::ws::{CloseCode, RelayClose, WsClientMsg, WsServerMsg};
 
 use crate::payload::{self, StoredPayload};
@@ -72,7 +72,7 @@ enum FirstFrameRefusal {
 async fn authenticate_first_frame(
     state: &AppState,
     socket: &mut WebSocket,
-) -> Result<auth::AuthSession, FirstFrameRefusal> {
+) -> Result<(auth::AuthSession, TimeSpan<Sec>), FirstFrameRefusal> {
     let first = tokio::time::timeout(AUTH_DEADLINE, payload::first_frame(socket))
         .await
         .ok()
@@ -80,7 +80,11 @@ async fn authenticate_first_frame(
         .ok_or(FirstFrameRefusal::Session(AppError::Unauthorized))?;
     match first.client_msg() {
         Ok(WsClientMsg::Authenticate { token }) => {
-            auth::authenticate_token(state, &token).map_err(FirstFrameRefusal::Session)
+            let session =
+                auth::authenticate_token(state, &token).map_err(FirstFrameRefusal::Session)?;
+            let left = auth::token_left(state, &token, crate::s3::unix_now())
+                .map_err(FirstFrameRefusal::Session)?;
+            Ok((session, left))
         }
         Err(ambre_protocol::ws::WireDecodeError::UnsupportedVersion(version))
             if version < ambre_protocol::version::CURRENT_VERSION.get() =>
@@ -196,7 +200,7 @@ fn refusal_close(error: &AppError) -> Bounded<CloseCode> {
 }
 
 async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
-    let session = match authenticate_first_frame(&state, &mut socket).await {
+    let (session, token_left) = match authenticate_first_frame(&state, &mut socket).await {
         Ok(s) => s,
         Err(FirstFrameRefusal::OlderWire) => {
             // An older client cannot read the close code below, which it does
@@ -305,12 +309,22 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
         sweep.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         // The first tick fires at once, and every membership was just read.
         sweep.reset();
+        // The socket ends when the token that opened it expires. The client
+        // renews, and its next socket opens under the fresh token. A stolen
+        // token thus opens no socket that outlives it, a sign-out or a
+        // revoked refresh token (`SRV-303`).
+        let expiry = tokio::time::sleep(token_left.to_duration());
+        tokio::pin!(expiry);
         loop {
             let frame = tokio::select! {
                 frame = payload::next_frame(&mut ws_stream) => frame,
                 _ = sweep.tick() => {
                     message::sweep_revoked(&state, &mut conn, &connection_id).await;
                     continue;
+                }
+                () = &mut expiry => {
+                    tracing::debug!("WS session ended at the expiry of its token");
+                    break;
                 }
             };
             let Some(frame) = frame else {
@@ -344,6 +358,17 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
             ) {
                 panic!("forced by a test");
             }
+
+            // The document a frame names, when this connection watches it. A
+            // frame whose membership check fails drops that subscription, and
+            // its hub routes go with it below (`SRV-301`).
+            let watched = match &client_msg {
+                WsClientMsg::Update(update) => Some(update.public_data.document_id),
+                WsClientMsg::Ephemeral(eph) => Some(eph.public_data.document_id),
+                WsClientMsg::RequestMissing { document_id, .. } => Some(*document_id),
+                _ => None,
+            }
+            .filter(|doc| conn.doc_subscriptions.contains(doc));
 
             match client_msg {
                 WsClientMsg::Subscribe { document_id } => {
@@ -424,6 +449,9 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
                 // The session is bound once, by the first frame. A later token
                 // changes nothing on this connection.
                 WsClientMsg::Authenticate { .. } => {}
+            }
+            if let Some(doc) = watched {
+                message::drop_lost_routes(&state, &mut conn, doc, &connection_id).await;
             }
         }
     };

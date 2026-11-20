@@ -42,16 +42,22 @@ use state::{AppState, Config};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "ambre_server=debug,tower_http=info".into()),
-        )
-        .init();
-
     let dev_mode = std::env::var("DEV_MODE")
         .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE"))
         .unwrap_or(false);
+    let dev = if dev_mode {
+        state::DevMode::On
+    } else {
+        state::DevMode::Off
+    };
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| default_log_filter(dev)),
+        )
+        .init();
+    supervise::install_panic_hook();
+
     if dev_mode {
         tracing::warn!("DEV_MODE enabled: POST /api/auth/dev/login is active (insecure, dev only)");
     }
@@ -206,27 +212,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .unwrap_or(default)
     };
 
-    // Only trust `X-Forwarded-For` when explicitly opted in (server behind a
-    // reverse proxy that overwrites the header). Otherwise a client could forge
-    // the header to rotate its rate-limit bucket and defeat brute-force limits.
-    let trust_proxy_headers = std::env::var("TRUST_PROXY_HEADERS")
-        .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE"))
-        .unwrap_or(false);
+    // Only trust `X-Forwarded-For` when explicitly opted in, with the number
+    // of proxies in front of the relay. Otherwise a client could forge the
+    // header to rotate its rate-limit bucket and defeat brute-force limits.
+    let trust_proxy_headers =
+        state::ProxyTrust::from_setting(std::env::var("TRUST_PROXY_HEADERS").ok().as_deref());
 
-    let dev = if dev_mode {
-        state::DevMode::On
-    } else {
-        state::DevMode::Off
-    };
     let config = Config {
         s3_env_prefix,
         oidc_google,
         dev_mode: dev,
-        trust_proxy_headers: if trust_proxy_headers {
-            state::ProxyTrust::BehindProxy
-        } else {
-            state::ProxyTrust::Direct
-        },
+        trust_proxy_headers,
         access_ttl: TimeSpan::<Sec>::new(env_ttl("ACCESS_TTL_SECS", 900)),
         refresh_ttl: TimeSpan::<Sec>::new(env_ttl("REFRESH_TTL_SECS", 30 * 24 * 3600)),
         media_max_size: ambre_core::Count::<ambre_core::Octets>::new(env_ttl(
@@ -440,6 +436,23 @@ where
         ))
 }
 
+/// The log filter when `RUST_LOG` names none (`ZK-046`).
+///
+/// The debug level names the document, the user and the author key of each
+/// step. That is the membership graph `ZK-030` keeps out of the logs. So a
+/// relay outside `DEV_MODE` logs at info, and debug takes an explicit
+/// `RUST_LOG`.
+fn default_log_filter(dev_mode: state::DevMode) -> tracing_subscriber::EnvFilter {
+    match dev_mode {
+        state::DevMode::Off => {
+            tracing_subscriber::EnvFilter::new("ambre_server=info,tower_http=info")
+        }
+        state::DevMode::On => {
+            tracing_subscriber::EnvFilter::new("ambre_server=debug,tower_http=info")
+        }
+    }
+}
+
 /// Builds the CORS layer from a comma-separated allow-list, default-deny (M17).
 ///
 /// - A non-empty, parseable allow-list -> exactly those origins are allowed.
@@ -568,6 +581,25 @@ mod cors_tests {
         assert!(parse_cors_origins("").is_empty());
         assert!(parse_cors_origins("   ").is_empty());
         assert!(parse_cors_origins(" , , ").is_empty());
+    }
+}
+
+#[cfg(test)]
+mod log_filter_tests {
+    use super::default_log_filter;
+    use crate::state::DevMode;
+    use tracing_subscriber::filter::LevelFilter;
+
+    #[test]
+    fn the_default_filter_is_info_outside_dev_mode() {
+        assert_eq!(
+            default_log_filter(DevMode::Off).max_level_hint(),
+            Some(LevelFilter::INFO)
+        );
+        assert_eq!(
+            default_log_filter(DevMode::On).max_level_hint(),
+            Some(LevelFilter::DEBUG)
+        );
     }
 }
 

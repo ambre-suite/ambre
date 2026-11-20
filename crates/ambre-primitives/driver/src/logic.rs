@@ -71,6 +71,11 @@ pub const LOGIC_VIEW_REACH: &[(&str, &str, &str)] = &[
         "the one board walk the screen and the export share (CANVAS-074)",
     ),
     (
+        "crates/ambre-toile/src/logic/interop/raster.rs",
+        "ambre_toile::ui::walk",
+        "the picture the walk paints: a stored thumbnail decodes, under its bound, into the type the screen and the export both draw",
+    ),
+    (
         "crates/ambre-toile/src/logic/interop/pptx_export.rs",
         "ambre_toile::ui::label",
         "the size of a connector label, which the deck writes as the frame of the label text",

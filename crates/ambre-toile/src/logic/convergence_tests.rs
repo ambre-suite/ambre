@@ -4925,6 +4925,45 @@ fn a_peers_unsafe_web_address_never_reaches_a_frame() {
     }
 }
 
+/// `TOILE-308`, audit `P49`. A peer writes the link register of an element
+/// past the check of the local entry, with an address that is not `https`.
+/// The reader's board paints the element with no link, so no click hands
+/// that address to the shell. A safe address still reads back.
+#[test]
+fn a_peers_unsafe_link_address_reads_as_no_link() {
+    let hostile = [
+        "javascript:alert(document.domain)",
+        "java\nscript:alert(1)",
+        "file:///etc/passwd",
+        "ms-officecmd:open",
+        "data:text/html,<script>alert(1)</script>",
+        "http://example.com",
+        "",
+    ];
+    for value in hostile {
+        let mut peer = ToileState::new();
+        let id = create_rect(&mut peer, Point::ZERO, Size::new(10.0, 10.0));
+        // The peer writes the register itself, past the address gate.
+        peer.handle_command(ToileCommand::SetLink {
+            id: id.clone(),
+            link: Some(LinkTarget::Url(value.into())),
+        });
+        let mut reader = ToileState::new();
+        reader.apply_remote_snapshot(&peer.export_snapshot());
+        assert_eq!(link_of(&reader, &id), None, "{value:?} reads as a link");
+    }
+    let mut peer = ToileState::new();
+    let id = create_rect(&mut peer, Point::ZERO, Size::new(10.0, 10.0));
+    let safe = LinkTarget::Url("https://example.org/".into());
+    peer.handle_command(ToileCommand::SetLink {
+        id: id.clone(),
+        link: Some(safe.clone()),
+    });
+    let mut reader = ToileState::new();
+    reader.apply_remote_snapshot(&peer.export_snapshot());
+    assert_eq!(link_of(&reader, &id), Some(safe));
+}
+
 /// A hostile peer writes a path traversal as the address of a picture. The
 /// reader's board derives no address from it, so it never reaches the media
 /// URL of the relay, and the picture paints its placeholder.

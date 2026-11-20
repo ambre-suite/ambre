@@ -181,19 +181,18 @@ impl ambre_core::NarrowCount for ListDepth {
 ///
 /// The same order the layout pass walks in, and the order the tree itself
 /// holds, so no reader sorts anything.
+///
+/// A peer writes the tree, and nothing bounds its depth. So the walk holds
+/// the blocks still to visit on a stack of its own (`PROSE-140`).
 fn walk(tree: &LoroTree, visit: &mut impl FnMut(&LoroTree, &TreeID) -> ControlFlow<()>) {
-    fn descend(
-        tree: &LoroTree,
-        parent: Option<TreeID>,
-        visit: &mut impl FnMut(&LoroTree, &TreeID) -> ControlFlow<()>,
-    ) -> ControlFlow<()> {
-        for id in doc::children_of(tree, parent) {
-            visit(tree, &id)?;
-            descend(tree, Some(id), visit)?;
+    let mut pending: Vec<TreeID> = doc::children_of(tree, None);
+    pending.reverse();
+    while let Some(id) = pending.pop() {
+        if visit(tree, &id).is_break() {
+            return;
         }
-        ControlFlow::Continue(())
+        pending.extend(doc::children_of(tree, Some(id)).into_iter().rev());
     }
-    let _ = descend(tree, None, visit);
 }
 
 #[cfg(test)]

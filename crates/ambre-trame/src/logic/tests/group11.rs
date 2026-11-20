@@ -759,3 +759,97 @@ fn two_peers_deleting_the_last_two_sheets_keep_one() {
     assert_eq!(a.sheet_order_ids()[0], default_sheet());
     assert_eq!(read_cell(&mut b, 0, 0), "kept");
 }
+
+/// A peer's merge entry past the area bound is no merge. It lists none of
+/// its cells into the derived caches, and a merge within the bound beside it
+/// still places (`TRAME-315`, audit `P35`).
+#[test]
+fn a_merge_entry_past_the_area_bound_lists_no_cell() {
+    let mut base = TrameState::new();
+    set(&mut base, 0, 0, "a");
+    let (mut a, mut b) = two_peers(&base);
+    // 600 x 600 = 360 000 cells, past the 262 144 of the bound.
+    let far = CellPos::new(Pos::<Row>::new(599), Pos::<Col>::new(701));
+    b.materialize(far).expect("within the materialization cap");
+    let key = |state: &TrameState, row: u32, col: u32| {
+        state
+            .index
+            .key_at(CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(col)))
+            .expect("materialized")
+    };
+    let merges = b
+        .doc
+        .get_map(SheetContainer::of(SheetRoot::Merges, &default_sheet()).as_str());
+    merges
+        .insert(key(&b, 0, 0).as_str(), key(&b, 599, 599).as_str())
+        .expect("the huge entry");
+    merges
+        .insert(key(&b, 0, 700).as_str(), key(&b, 1, 701).as_str())
+        .expect("a merge within the bound");
+    b.doc.commit();
+    let update = b.flush_delta().expect("the entries are a delta");
+    a.apply_remote(&update);
+    for state in [&mut a, &mut b] {
+        state.rebuild_merges();
+        assert_eq!(state.covered.len(), 3, "the huge entry listed its cells");
+        assert!(
+            state
+                .merges
+                .contains_key(&CellPos::new(Pos::<Row>::ZERO, Pos::<Col>::new(700))),
+            "the merge within the bound placed"
+        );
+        assert!(
+            !state
+                .merges
+                .contains_key(&CellPos::new(Pos::<Row>::ZERO, Pos::<Col>::ZERO)),
+            "the huge entry placed a merge"
+        );
+    }
+}
+
+/// The local merge command writes no entry the bound would skip: it sends
+/// nothing, and the sheet holds no merge (`TRAME-315`).
+#[test]
+fn a_local_merge_past_the_area_bound_writes_no_entry() {
+    let mut state = TrameState::new();
+    set(&mut state, 0, 0, "a");
+    let before = own_ops(&state);
+    let out = merge(&mut state, 0, 0, 599, 599);
+    assert!(out.update.is_none(), "the refused merge sent a delta");
+    assert_eq!(own_ops(&state), before);
+    assert!(
+        matches!(container(&state, SheetContainer::of(SheetRoot::Merges, &default_sheet())), LoroValue::Map(m) if m.is_empty())
+    );
+}
+
+/// Merge entries past the entry bound are skipped in key order, the same on
+/// every peer: the sheet places at most that many merges (`TRAME-315`).
+#[test]
+fn merge_entries_past_the_entry_bound_are_skipped() {
+    let mut state = TrameState::new();
+    set(&mut state, 0, 0, "a");
+    // Two merges a row, side by side, over 4 200 rows: 8 400 entries.
+    state
+        .materialize(CellPos::new(Pos::<Row>::new(4_199), Pos::<Col>::new(3)))
+        .expect("within the materialization cap");
+    let merges = state
+        .doc
+        .get_map(SheetContainer::of(SheetRoot::Merges, &default_sheet()).as_str());
+    for row in 0..4_200 {
+        for col in [0, 2] {
+            let at = |c: u32| {
+                state
+                    .index
+                    .key_at(CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(c)))
+                    .expect("materialized")
+            };
+            merges
+                .insert(at(col).as_str(), at(col + 1).as_str())
+                .expect("the entry");
+        }
+    }
+    state.doc.commit();
+    state.rebuild_merges();
+    let bound = usize::try_from(crate::logic::merges::MERGE_MAX_ENTRIES.get()).expect("fits");
+    assert_eq!(state.merges.len(), bound);
+}

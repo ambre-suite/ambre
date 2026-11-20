@@ -36,6 +36,7 @@ A sealed delta arrives from the relay. Either its base is one this client holds,
 | `SYNC-006` | `POST` | Released updates MUST be applied in parent-snapshot then clock order. | this spec section 3 | `ambre_sync::updates::tests::quarantine_released_in_clock_order` -- several updates held behind one unknown parent, and the release order read back | none | verified |
 | `SYNC-082` | `POST` | An update whose parent snapshot is known MUST be delivered immediately. | this spec section 3 | `ambre_sync::updates::tests::update_with_known_snapshot_delivered_immediately` -- the delivery that makes the quarantine an exception rather than a stage every delta passes through | none | verified |
 | `SYNC-007` | `POST` | A quarantine overflow MUST drop the oldest entry. | this spec section 3 | `ambre_sync::updates::tests::a_quarantine_overflow_drops_the_lowest_clock` -- the lowest clock arrives neither first nor last and waits on one of two parents, so a drop by arrival or by parent fails | none | verified |
+| `SYNC-276` | `POST` | A quarantine past its ceiling in bytes MUST drop its oldest entry until it fits. | this spec section 3; `SYNC-007`; `ambre-spec-budgets.md` section 1 | `ambre_sync::updates::tests::a_quarantine_past_its_bytes_drops_the_oldest` -- three updates of 12 MiB pass the 32 MiB ceiling under the count cap, the lowest clock leaves, and one warning is raised | none | verified |
 | `SYNC-084` | `POST` | A quarantine overflow MUST emit exactly one warning. | this spec section 3 | `ambre_sync::updates::tests::quarantine_overflow_drops_oldest_and_warns` -- its warning count, one at the hard cap, so a warning per further arrival fails | none | verified |
 | `SYNC-032` | `FRAME` | Receiving an update MUST NOT open one it quarantines. | `ZK-001`; this spec section 3 | `ambre_sync::updates::tests::a_quarantined_update_is_not_opened_on_arrival` -- an update sealed under a key this client lacks is held, and its arrival raises no failure to open | none | verified |
 | `SYNC-101` | `FRAME` | A remote change MUST NOT be re-broadcast. | this spec section 3 | type-level -- Toile's and Prose's remote paths answer display events and no outcome, so neither has a field a delta could leave by; Prose `ambre_prose::logic::convergence_tests::a_remote_change_is_never_re_broadcast`; Toile `ambre_toile::logic::convergence_tests::a_remote_change_is_never_re_broadcast`; Trame `ambre_trame::logic::tests::group3::a_remote_change_is_never_re_broadcast` -- in each, the next local delta carries none of the remote peer's operations | none | verified |
@@ -83,9 +84,9 @@ relay. A delta each sends before it sees the other's echo takes a clock the othe
 * **Boundary.** nothing here opens a socket or holds a key of its own. Every message it orders is
   already sealed (`ambre-spec-sealed-envelope.md`). The parent snapshot, the clock and the sequence
   number it reads are the routing metadata `ZK-007` allows.
-* **Verification.** 22 `verified`. What holds is the quarantine itself. An update ahead of its
-  snapshot waits, and one whose base is known is delivered. The release runs in clock order, and
-  the overflow drops the lowest clock and warns once. The clock recovery, the batched replay and the
+* **Verification.** 23 `verified`. What holds is the quarantine itself. An update ahead of its
+  snapshot waits, and one whose base is known is delivered. The release runs in clock order, and the
+  overflow drops the lowest clock and warns once. The clock recovery, the batched replay and the
   pull after a reconnect are driven over the mock transport, whose open event the host tier fires.
 
 ---

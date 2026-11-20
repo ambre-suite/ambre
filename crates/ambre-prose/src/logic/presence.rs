@@ -131,8 +131,10 @@ impl ProseState {
             self.presence.remove(&from_user_id);
             return vec![self.live_presence_event()];
         };
-        self.presence
-            .insert(from_user_id, (position, frame.display_name));
+        // The sender writes its name, so the label ends on the handle of the
+        // user Sync resolved, which no sender writes (`PRESENCE-017`).
+        let label = ambre_core::attributed_label(&from_user_id, frame.display_name.as_ref());
+        self.presence.insert(from_user_id, (position, Some(label)));
         vec![self.live_presence_event()]
     }
 
@@ -295,6 +297,51 @@ mod tests {
         bob.apply_ephemeral(a_user(1), &frame);
         let bob_view = bob.presence_of(a_user(1)).expect("Alice's caret");
         assert_eq!(bob_view.offset, Pos::<DocChar>::new(8));
+    }
+
+    /// `PRESENCE-017`, audit `P63`: Mallory sends a sample under the name of
+    /// Alice. Each caret the view is handed ends on the handle of the user
+    /// Sync resolved, so the two never read one label.
+    #[test]
+    fn a_peer_named_like_another_reads_its_own_handle() {
+        let mut sender = ProseState::new().expect("a document is built");
+        sender.set_display_name(
+            ambre_core::Validated::<ambre_core::DisplayName>::parse("Alice").expect("a name"),
+        );
+        let block = sender.root_blocks()[0];
+        let frame = sender
+            .handle_command(ProseCommand::UpdateCursor {
+                pos: CursorPosition {
+                    block_id: block,
+                    offset: Pos::<DocChar>::ZERO,
+                    anchor: None,
+                },
+            })
+            .ephemeral
+            .expect("a frame");
+        let mut reader = ProseState::new().expect("a document is built");
+        reader
+            .import_snapshot(&sender.export_snapshot())
+            .expect("the seed imports");
+        let (alice, mallory) = (a_user(1), a_user(2));
+        reader.apply_ephemeral(alice, &frame);
+        let events = reader.apply_ephemeral(mallory, &frame);
+        let labels: Vec<String> = events
+            .iter()
+            .flat_map(|e| match e {
+                ProseEvent::RemoteCursors { cursors } => cursors.clone(),
+                _ => Vec::new(),
+            })
+            .filter_map(|c| c.display_name.map(|n| n.as_str().to_owned()))
+            .collect();
+        let expected: Vec<String> = [alice, mallory]
+            .iter()
+            .map(|u| format!("Alice ({})", ambre_core::display_handle(u).as_str()))
+            .collect();
+        assert_eq!(labels.len(), 2);
+        for label in expected {
+            assert!(labels.contains(&label), "{label} missing from {labels:?}");
+        }
     }
 
     #[test]

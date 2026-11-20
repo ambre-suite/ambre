@@ -119,7 +119,7 @@ impl Reader<'_> {
                     line,
                     text,
                 }));
-                self.count()?;
+                self.count(out)?;
                 landed = Landed::Held;
             }
         }
@@ -143,7 +143,7 @@ impl Reader<'_> {
         let Some(part) = data
             .child(Ns::C, "chart")
             .and_then(|c| c.attr_in(Ns::R, "id"))
-            .and_then(|id| target(&context.part.rels, id))
+            .and_then(|id| target(&context.part.targets, id))
             .filter(|part| self.package.contains(part))
         else {
             return Ok(Landed::Nothing);
@@ -186,23 +186,28 @@ impl Reader<'_> {
                         .join(" ")
                 })
                 .unwrap_or_default();
-            let categories = ser
+            // Each category by the index it names, the first of an index
+            // kept: a value finds its category by a lookup, not a scan
+            // (`W305`).
+            let mut categories = std::collections::BTreeMap::new();
+            for (index, category) in ser
                 .child(Ns::C, "cat")
                 .or_else(|| ser.child(Ns::C, "xVal"))
                 .map(points)
-                .unwrap_or_default();
+                .unwrap_or_default()
+            {
+                categories.entry(index).or_insert(category);
+            }
             let values: Vec<String> = ser
                 .child(Ns::C, "val")
                 .or_else(|| ser.child(Ns::C, "yVal"))
                 .map(points)
                 .unwrap_or_default()
                 .into_iter()
-                .map(
-                    |(index, value)| match categories.iter().find(|(held, _)| *held == index) {
-                        Some((_, category)) => format!("{category} {value}"),
-                        None => value,
-                    },
-                )
+                .map(|(index, value)| match categories.get(&index) {
+                    Some(category) => format!("{category} {value}"),
+                    None => value,
+                })
                 .collect();
             if values.is_empty() {
                 continue;
@@ -256,7 +261,7 @@ impl Reader<'_> {
                 inset: DEFAULT_INSET,
             }),
         }));
-        self.count()?;
+        self.count(out)?;
         Ok(Landed::Held)
     }
 }

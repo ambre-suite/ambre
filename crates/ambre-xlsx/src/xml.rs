@@ -10,6 +10,8 @@ use quick_xml::escape::resolve_predefined_entity;
 use quick_xml::events::{BytesRef, BytesStart, Event};
 use quick_xml::{Reader, XmlVersion};
 
+use ambre_opc::TreeBudget;
+
 /// The deepest nesting a tree part may hold. The parts the tree reads nest
 /// below ten levels; a deeper one is hostile.
 const MAX_DEPTH: usize = 64;
@@ -32,6 +34,12 @@ impl XmlError {
 
 impl From<quick_xml::Error> for XmlError {
     fn from(e: quick_xml::Error) -> Self {
+        Self(e.to_string())
+    }
+}
+
+impl From<ambre_opc::TreeTooLarge> for XmlError {
+    fn from(e: ambre_opc::TreeTooLarge) -> Self {
         Self(e.to_string())
     }
 }
@@ -85,21 +93,25 @@ impl Element {
 ///
 /// # Errors
 ///
-/// A malformed document, a document without a root, or one nested past
-/// [`MAX_DEPTH`].
+/// The part refuses when it is one of these:
+/// * malformed, or without a root;
+/// * a part that declares a document type;
+/// * nested past [`MAX_DEPTH`];
+/// * a tree past the node or attribute bound of [`TreeBudget`].
 pub(crate) fn parse_tree(bytes: &[u8]) -> Result<Element, XmlError> {
     let mut reader = Reader::from_str(utf8(bytes)?);
     let mut stack: Vec<Element> = Vec::new();
+    let mut budget = TreeBudget::default();
     loop {
         match reader.read_event()? {
             Event::Start(e) => {
                 if stack.len() >= MAX_DEPTH {
                     return Err(XmlError::new("the part nests too deep"));
                 }
-                stack.push(element_of(&e)?);
+                stack.push(element_of(&e, &mut budget)?);
             }
             Event::Empty(e) => {
-                let element = element_of(&e)?;
+                let element = element_of(&e, &mut budget)?;
                 match stack.last_mut() {
                     Some(parent) => parent.children.push(element),
                     None => return Ok(element),
@@ -115,21 +127,35 @@ pub(crate) fn parse_tree(bytes: &[u8]) -> Result<Element, XmlError> {
                 }
             }
             Event::Eof => return Err(XmlError::new("the part holds no root element")),
+            Event::DocType(_) => return Err(document_type()),
             Event::Text(_)
             | Event::CData(_)
             | Event::GeneralRef(_)
             | Event::Comment(_)
             | Event::Decl(_)
-            | Event::PI(_)
-            | Event::DocType(_) => {}
+            | Event::PI(_) => {}
         }
     }
 }
 
-fn element_of(e: &BytesStart<'_>) -> Result<Element, XmlError> {
+/// The refusal of a part that declares a document type. An entity it
+/// declares could expand without bound or name a file outside the package,
+/// so the four other codecs refuse one too (`W307`).
+pub(crate) fn document_type() -> XmlError {
+    XmlError::new("the part declares a document type")
+}
+
+/// The element `e` opens, charged to `budget` as one node and each
+/// attribute by its value before the tree holds it.
+fn element_of(e: &BytesStart<'_>, budget: &mut TreeBudget) -> Result<Element, XmlError> {
+    budget.node()?;
+    let attrs = attributes(e)?;
+    for (_, value) in &attrs {
+        budget.attr(ambre_core::Count::of(value.len()))?;
+    }
     Ok(Element {
         name: local_name(e),
-        attrs: attributes(e)?,
+        attrs,
         children: Vec::new(),
     })
 }
@@ -305,5 +331,24 @@ mod tests {
     fn a_part_nested_too_deep_is_refused() {
         let deep = "<a>".repeat(100) + &"</a>".repeat(100);
         assert!(parse_tree(deep.as_bytes()).is_err());
+    }
+
+    /// `W72`: a part of empty elements past the node bound of a tree is
+    /// refused, though it reads under the bound of a part.
+    #[test]
+    fn a_part_past_the_node_bound_is_refused() {
+        let past = usize::try_from(ambre_opc::MAX_TREE_NODES.get()).expect("fits");
+        let wide = format!("<a>{}</a>", "<b/>".repeat(past));
+        assert!(parse_tree(wide.as_bytes()).is_err());
+        let under = format!("<a>{}</a>", "<b/>".repeat(past - 1));
+        assert!(parse_tree(under.as_bytes()).is_ok());
+    }
+
+    /// `W307`: a part that declares a document type is refused, as the four
+    /// other codecs refuse it.
+    #[test]
+    fn a_part_that_declares_a_document_type_is_refused() {
+        let part = b"<?xml version='1.0'?><!DOCTYPE a [<!ENTITY e 'x'>]><a/>";
+        assert_eq!(parse_tree(part).err(), Some(document_type()));
     }
 }

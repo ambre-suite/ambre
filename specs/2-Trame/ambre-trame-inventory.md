@@ -16,10 +16,10 @@
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
 | `trame-autofill` | A user types 1 and 2, grabs the small square at the corner of the selection and drags down. | implemented | 11 |  |
-| `trame-cell-merges` | A user joins a rectangle of cells into one block. | implemented | 38 |  |
+| `trame-cell-merges` | A user joins a rectangle of cells into one block. | implemented | 39 |  |
 | `trame-context-menu` | A user right-clicks. | implemented | 13 |  |
 | `trame-find-replace` | A user looks for a value in a sheet of 100 000 rows. | implemented | 6 |  |
-| `trame-formula-engine` | A user types `=SUM(A1:A3)*2`. | implemented | 48 |  |
+| `trame-formula-engine` | A user types `=SUM(A1:A3)*2`. | implemented | 50 |  |
 | `trame-named-ranges` | A user gives a range a name -- `TOTAL` for `A1:A3` -- and writes `=SUM(TOTAL)` instead of the coordinates. | implemented | 10 |  |
 | `trame-number-formats` | A user picks Percent. | implemented | 14 |  |
 | `trame-pdf-export` | Trame's half of the shared PDF export (`ambre-spec-pdf-export.md`): the pagination that cuts a grid into pages, and the persisted page setup. | implemented | 17 |  |
@@ -36,9 +36,9 @@
 | `trame-function-library` | The named calls a user may write inside a formula: `SUM`, `VLOOKUP`, `IF`, `TEXT`, `PMT`. | partial | 37 |  |
 | `trame-grid-viewport` | A user scrolls a sheet of 100 000 rows. | partial | 24 |  |
 | `trame-headers` | Two fixed strips name the rows and the columns, show where the selection is, and carry the gestures that act on a whole axis. | partial | 10 |  |
-| `trame-import-export` | A user opens a table that came from somewhere else, and hands one back to someone who does not use Ambre. | partial | 71 |  |
+| `trame-import-export` | A user opens a table that came from somewhere else, and hands one back to someone who does not use Ambre. | partial | 77 |  |
 | `trame-selection` | A user points at a cell, sweeps a rectangle, adds a second one with a modifier, or takes a whole column from its header. | partial | 12 |  |
 | `trame-shared-filter` | A user hides the rows of a column that fail a test. | partial | 37 |  |
 | `trame-undo` | Trame's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a grid, and which caches an undo rebuilds. | partial | 15 |  |
 
-**25 features: 13 implemented, 12 partial, 0 design-only. 599 contract rows, 0 loose.**
+**25 features: 13 implemented, 12 partial, 0 design-only. 608 contract rows, 0 loose.**

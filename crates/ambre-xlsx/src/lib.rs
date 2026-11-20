@@ -45,6 +45,24 @@ pub use report::Report;
 /// read under the 100 MB of the client memory budget.
 pub const MAX_CELLS: Count<Cells> = Count::new(1 << 20);
 
+/// The sheets of one workbook, counted.
+pub enum WorkbookSheets {}
+
+impl ambre_core::NarrowCount for WorkbookSheets {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("WorkbookSheetCount");
+}
+
+/// The most sheets a read keeps (`ambre-spec-budgets.md section 6`). A
+/// workbook part lists a sheet in a few bytes, and an empty sheet costs a
+/// record, a name and an import step. Past it the file is refused (`P51`).
+pub const MAX_SHEETS: Count<WorkbookSheets> = Count::new(1024);
+
+/// The most bytes of text a read keeps across a workbook: values and
+/// formulas. A shared string is copied into every cell that names it, so the
+/// cell cap alone leaves the model unbounded (`P53`).
+pub const MAX_TEXT_BYTES: Count<ambre_core::Octets> = Count::new(64 * 1024 * 1024);
+
 #[cfg(feature = "codec")]
 /// What a read produced: the workbook, and what it carried and lost.
 #[derive(Debug, Clone, PartialEq)]
@@ -79,6 +97,10 @@ pub enum XlsxError {
     NoSheet,
     /// The workbook holds more cells than a read keeps.
     TooManyCells(Count<Cells>),
+    /// The workbook lists more sheets than a read keeps.
+    TooManySheets(Count<WorkbookSheets>),
+    /// The cells of the workbook hold more text than a read keeps.
+    TooMuchText(Count<ambre_core::Octets>),
     /// Two sheets of the model to write share one name, case ignored.
     DuplicateSheetName(ambre_core::Validated<model::SheetName>),
 }
@@ -99,6 +121,12 @@ impl std::fmt::Display for XlsxError {
             Self::NoSheet => f.write_str("the workbook holds no sheet"),
             Self::TooManyCells(cap) => {
                 write!(f, "the workbook holds more than {} cells", cap.get())
+            }
+            Self::TooManySheets(cap) => {
+                write!(f, "the workbook lists more than {} sheets", cap.get())
+            }
+            Self::TooMuchText(cap) => {
+                write!(f, "the cells hold more than {} bytes of text", cap.get())
             }
             Self::DuplicateSheetName(_) => f.write_str("two sheets share one name"),
         }

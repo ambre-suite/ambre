@@ -497,7 +497,9 @@ mod handler_tests {
 
     // `SRV-093`: a sign-in request counts against the sign-in tier through the
     // nested router. The eleventh request from one peer inside the window is
-    // refused, where the ordinary tier would allow three hundred.
+    // refused, where the ordinary tier would allow three hundred. `SRV-287`:
+    // the provider configuration counts in the ordinary tier, so the same
+    // peer still reads it after the sign-in tier is spent.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn a_sign_in_request_counts_against_the_sign_in_tier(pool: sqlx::PgPool) {
@@ -505,20 +507,36 @@ mod handler_tests {
         // A peer address of its own, so no other test shares the window.
         let salt = uuid::Uuid::new_v4().into_bytes();
         let peer = std::net::SocketAddr::from(([10, 93, salt[0], salt[1]], 0));
+        let send = |req: Request<Body>| {
+            let app = app.clone();
+            async move {
+                let mut req = req;
+                req.extensions_mut()
+                    .insert(axum::extract::ConnectInfo(peer));
+                app.oneshot(req).await.unwrap().status()
+            }
+        };
         let mut statuses = Vec::new();
         for _ in 0..11 {
-            let mut req = Request::get("/api/auth/config")
-                .body(Body::empty())
+            let req = Request::post("/api/auth/refresh")
+                .header("content-type", "application/json")
+                .body(Body::from("{}"))
                 .unwrap();
-            req.extensions_mut()
-                .insert(axum::extract::ConnectInfo(peer));
-            statuses.push(app.clone().oneshot(req).await.unwrap().status());
+            statuses.push(send(req).await);
         }
         assert!(
-            statuses[..10].iter().all(|s| *s == StatusCode::OK),
+            statuses[..10]
+                .iter()
+                .all(|s| *s != StatusCode::TOO_MANY_REQUESTS),
             "{statuses:?}"
         );
         assert_eq!(statuses[10], StatusCode::TOO_MANY_REQUESTS);
+        for _ in 0..11 {
+            let req = Request::get("/api/auth/config")
+                .body(Body::empty())
+                .unwrap();
+            assert_eq!(send(req).await, StatusCode::OK);
+        }
     }
 
     #[sqlx::test]
@@ -1857,6 +1875,58 @@ mod handler_tests {
         assert_eq!(put_master_keys(&app, &auth).await, StatusCode::CONFLICT);
     }
 
+    /// `SRV-293`, audit `W69`: one signing key belongs to one account. A
+    /// setup under a key another account registered is refused with 409 and
+    /// writes no row, and so is a first key store under it.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_signing_key_belongs_to_one_account(pool: sqlx::PgPool) {
+        let state = test_app_state_dev(pool.clone()).await;
+        let app = build_test_router(state);
+        let _alice = setup_and_get_auth(&app).await;
+        let body = serde_json::json!({
+            "email": "mallory@ambre.app",
+            "display_name": "Mallory",
+            "master_key_enc": base64_encode(&[9u8; 72]),
+            "master_key_salt": hex::encode([8u8; 32]),
+            "signing_pubkey": hex::encode([3u8; 32]),
+            "exchange_pubkey": hex::encode([6u8; 32]),
+        });
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::post("/api/auth/setup")
+                    .header("content-type", "application/json")
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::CONFLICT);
+        let rows: i64 = sqlx::query_scalar("SELECT count(*) FROM users")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(rows, 1, "the refused setup wrote no row");
+
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::post("/api/auth/dev/login")
+                    .header("content-type", "application/json")
+                    .body(Body::from(dev_login_body("bob").to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let bob = format!("Bearer {}", access_token_of(resp).await);
+        assert_eq!(
+            put_master_keys(&app, &bob).await,
+            StatusCode::CONFLICT,
+            "a first key store under a registered key"
+        );
+    }
+
     /// A re-seal to the sealed seed `enc` salted `salt`, over the seal salted
     /// `replaces`, signed by `key`, as Sync sends it.
     fn rotation_body(
@@ -2762,6 +2832,50 @@ mod handler_tests {
             .unwrap()
     }
 
+    /// `SRV-303`, audit `P54`: a socket ends when the token that opened it
+    /// expires. It stays open before, and the relay drops it after.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_socket_ends_when_its_token_expires(pool: sqlx::PgPool) {
+        use futures_util::{SinkExt, StreamExt};
+        use tokio_tungstenite::tungstenite::Message;
+
+        let state = test_app_state(pool).await;
+        let now = crate::s3::unix_now();
+        let claims = crate::jwt::Claims {
+            sub: Id::<User>::mint(),
+            spk: Some(ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(
+                [3u8; 32],
+            )),
+            iat: now,
+            exp: now.plus(TimeSpan::<Sec>::new(2)),
+        };
+        let token = state.jwt.mint(&claims).unwrap();
+        let mut socket = open_socket(state, "").await;
+        socket
+            .send(Message::Binary(
+                authenticate(token.secret().expose()).into(),
+            ))
+            .await
+            .unwrap();
+        let early =
+            tokio::time::timeout(std::time::Duration::from_millis(500), socket.next()).await;
+        assert!(
+            early.is_err(),
+            "the socket is open before the expiry: {early:?}"
+        );
+        let ended = tokio::time::timeout(std::time::Duration::from_secs(6), async {
+            loop {
+                match socket.next().await {
+                    None | Some(Err(_)) | Some(Ok(Message::Close(_))) => return,
+                    Some(Ok(_)) => continue,
+                }
+            }
+        })
+        .await;
+        assert!(ended.is_ok(), "the socket outlived its token");
+    }
+
     /// Opens the socket, authenticates with `token`, and returns the code of
     /// the close frame the server sends first.
     async fn first_close_code(state: Arc<AppState>, token: &str) -> Option<Bounded<CloseCode>> {
@@ -2863,7 +2977,7 @@ mod handler_tests {
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn media_confirm_upload_denied_to_viewer(pool: sqlx::PgPool) {
-        let state = test_app_state(pool).await;
+        let state = test_app_state(pool.clone()).await;
         let app = build_test_router(state.clone());
         let owner = setup_and_get_auth(&app).await;
         let doc_id = create_test_doc(&app, &owner).await;
@@ -2871,6 +2985,9 @@ mod handler_tests {
         let viewer_email = "viewer@ambre.app";
         let viewer = setup_named(&app, viewer_email, 5).await;
         invite(&app, &owner, &doc_id, viewer_email, "viewer").await;
+        let (_store, held) =
+            media_store(&pool, &[(doc_id.as_str(), "a".repeat(64).as_str())]).await;
+        let app = build_test_router(held);
 
         let body = serde_json::json!({
             "content_hash": "a".repeat(64),
@@ -2912,10 +3029,13 @@ mod handler_tests {
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn media_confirm_upload_is_idempotent(pool: sqlx::PgPool) {
-        let state = test_app_state(pool).await;
+        let state = test_app_state(pool.clone()).await;
         let app = build_test_router(state.clone());
         let owner = setup_and_get_auth(&app).await;
         let doc_id = create_test_doc(&app, &owner).await;
+        let (_store, held) =
+            media_store(&pool, &[(doc_id.as_str(), "b".repeat(64).as_str())]).await;
+        let app = build_test_router(held);
 
         let body = serde_json::json!({
             "content_hash": "b".repeat(64),
@@ -2940,6 +3060,64 @@ mod handler_tests {
 
     use crate::test_helpers::{S3Stub, offline_s3};
     use ambre_core::{Sec, TimeSpan};
+
+    /// An object store holding the media of each `(document, hash)` pair,
+    /// and a state over `pool` that reaches and presigns for it. A confirmation then finds the object an upload would have put
+    /// (`SRV-292`).
+    async fn media_store(pool: &sqlx::PgPool, media: &[(&str, &str)]) -> (S3Stub, Arc<AppState>) {
+        let env = Config::default().s3_env_prefix;
+        let keys = media.iter().map(|(doc, hash)| {
+            crate::s3::format_s3_media_key(
+                &env,
+                &Id::<Document>::parse_str(doc).unwrap(),
+                &ambre_core::Validated::<ambre_core::ContentHash>::parse(*hash).expect("a hash"),
+            )
+            .as_str()
+            .to_owned()
+        });
+        let store = S3Stub::spawn(keys.collect::<Vec<_>>()).await;
+        let state = test_app_state_with_s3(pool.clone(), offline_s3(Some(&store.endpoint))).await;
+        (store, state)
+    }
+
+    // `SRV-292`: a writer confirms only an address an upload filled. With no
+    // object, the confirmation is refused and the address stays open for an
+    // upload link. Once the object is there, the same confirmation lands.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_confirmation_names_only_an_address_an_upload_filled(pool: sqlx::PgPool) {
+        let setup = build_test_router(test_app_state(pool.clone()).await);
+        let owner = setup_and_get_auth(&setup).await;
+        let doc_id = create_test_doc(&setup, &owner).await;
+        let (store, state) = media_store(&pool, &[]).await;
+        let app = shipped_router(state.clone());
+        let hash = "f".repeat(64);
+        let body = serde_json::json!({ "content_hash": hash, "size_bytes": 7 });
+        let confirm = format!("/api/documents/{doc_id}/media");
+        let link = format!("/api/documents/{doc_id}/media/upload-url");
+
+        assert_eq!(
+            post_json(&app, &owner, confirm.clone(), body.clone()).await,
+            StatusCode::NOT_FOUND,
+            "no upload filled the address"
+        );
+        let document = Id::<Document>::parse_str(&doc_id).unwrap();
+        let address = ambre_core::Validated::<ambre_core::ContentHash>::parse(&hash).unwrap();
+        assert!(
+            !crate::db::document_holds_media(&state.db, &document, &address)
+                .await
+                .unwrap()
+        );
+        assert_eq!(
+            post_json(&app, &owner, link, body.clone()).await,
+            StatusCode::OK,
+            "the address stays open for an upload"
+        );
+        let key =
+            crate::s3::format_s3_media_key(&Config::default().s3_env_prefix, &document, &address);
+        store.put(key.as_str().to_owned());
+        assert_eq!(post_json(&app, &owner, confirm, body).await, StatusCode::OK);
+    }
 
     /// Like [`test_app_state`], with the given S3 client.
     async fn test_app_state_with_s3(pool: sqlx::PgPool, s3: aws_sdk_s3::Client) -> Arc<AppState> {
@@ -2975,13 +3153,21 @@ mod handler_tests {
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn a_download_link_names_an_object_the_document_holds(pool: sqlx::PgPool) {
-        let state = test_app_state_presigning(pool).await;
+        let state = test_app_state_presigning(pool.clone()).await;
         let setup = build_test_router(state.clone());
-        let app = shipped_router(state);
         let owner = setup_and_get_auth(&setup).await;
         let doc_a = create_test_doc(&setup, &owner).await;
         let doc_b = create_test_doc(&setup, &owner).await;
         let held = "c".repeat(64);
+        let (_store, filled) = media_store(
+            &pool,
+            &[
+                (doc_a.as_str(), held.as_str()),
+                (doc_b.as_str(), held.as_str()),
+            ],
+        )
+        .await;
+        let app = shipped_router(filled);
         let never = "d".repeat(64);
         let link = |doc: &str, hash: &str| {
             (
@@ -3022,15 +3208,16 @@ mod handler_tests {
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn an_upload_link_is_refused_for_an_address_the_document_holds(pool: sqlx::PgPool) {
-        let state = test_app_state_presigning(pool).await;
+        let state = test_app_state_presigning(pool.clone()).await;
         let setup = build_test_router(state.clone());
-        let app = shipped_router(state);
         let owner = setup_and_get_auth(&setup).await;
         let doc = create_test_doc(&setup, &owner).await;
         let other_doc = create_test_doc(&setup, &owner).await;
         let editor = setup_named(&setup, "editor@ambre.app", 5).await;
         invite(&setup, &owner, &doc, "editor@ambre.app", "editor").await;
         let held = "c".repeat(64);
+        let (_store, filled) = media_store(&pool, &[(doc.as_str(), held.as_str())]).await;
+        let app = shipped_router(filled);
         let fresh = "d".repeat(64);
         let body = |hash: &str| serde_json::json!({ "content_hash": hash, "size_bytes": 7 });
         let link = |doc: &str| format!("/api/documents/{doc}/media/upload-url");
@@ -3283,6 +3470,46 @@ mod handler_tests {
         }
     }
 
+    // `SRV-289`: a cold counter bounds every snapshot horizon at 0. A horizon
+    // past it is refused, and the same horizon lands once the counter is
+    // warmed.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_cold_counter_refuses_every_horizon_past_zero(pool: sqlx::PgPool) {
+        use rustis::commands::GenericCommands;
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let owner = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &owner).await;
+        let post = |covered: i64| {
+            let body = serde_json::json!({
+                "author_pubkey": hex::encode([3u8; 32]),
+                "s3_key": format!("dev-ambre/documents/{doc_id}/snapshots/{}", uuid::Uuid::new_v4()),
+                "covered_seq": covered,
+            });
+            post_json(
+                &app,
+                &owner,
+                format!("/api/documents/{doc_id}/snapshot"),
+                body,
+            )
+        };
+        assert_eq!(post(1).await, StatusCode::BAD_REQUEST);
+        let document = Id::<Document>::parse_str(&doc_id).unwrap();
+        crate::redis_ops::seed_clock_state(
+            &state.redis,
+            &document,
+            ambre_core::Seq::<ambre_core::Relay>::new(1),
+            &[],
+        )
+        .await
+        .unwrap();
+        assert_eq!(post(1).await, StatusCode::OK);
+        assert_eq!(post(2).await, StatusCode::BAD_REQUEST);
+        let keys = crate::redis_keys::DocumentStateKeys::of(&document);
+        let _: usize = state.redis.del(keys.texts()).await.unwrap();
+    }
+
     // `SRV-078`: issuing a link neither reads nor writes the object it names.
     // Storage here refuses every connection, so any such call would fail.
     #[sqlx::test]
@@ -3290,13 +3517,28 @@ mod handler_tests {
     async fn issuing_a_link_never_touches_the_object(pool: sqlx::PgPool) {
         let state = test_app_state_with_s3(pool, offline_s3(Some("http://127.0.0.1:1"))).await;
         let setup = build_test_router(state.clone());
-        let app = shipped_router(state);
+        let app = shipped_router(state.clone());
         let owner = setup_and_get_auth(&setup).await;
         let doc_id = create_test_doc(&setup, &owner).await;
         let hash = "e".repeat(64);
-        let confirm = serde_json::json!({ "content_hash": hash, "size_bytes": 7 });
-        let uri = format!("/api/documents/{doc_id}/media");
-        assert_eq!(post_json(&app, &owner, uri, confirm).await, StatusCode::OK);
+        // The row goes in directly: a confirmation reads the object's head,
+        // and this store refuses every connection (`SRV-292`).
+        let document = Id::<Document>::parse_str(&doc_id).unwrap();
+        let address = ambre_core::Validated::<ambre_core::ContentHash>::parse(&hash).unwrap();
+        crate::db::insert_media(
+            &state.db,
+            &document,
+            &crate::db::get_user_by_email(&state.db, &ambre_core::Email::from("user@ambre.app"))
+                .await
+                .unwrap()
+                .unwrap()
+                .id,
+            &address,
+            ambre_core::Count::<ambre_core::Octets>::new(7),
+            &crate::s3::format_s3_media_key(&state.config.s3_env_prefix, &document, &address),
+        )
+        .await
+        .unwrap();
         let snapshot_id = upload_snapshot(&app, &owner, &doc_id, 0).await;
         let links = [
             // A fresh address: the held one gets no upload link (`SRV-271`).
@@ -3331,14 +3573,17 @@ mod handler_tests {
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn a_blob_above_its_kind_cap_is_refused(pool: sqlx::PgPool) {
-        let state = test_app_state_presigning(pool).await;
+        let state = test_app_state_presigning(pool.clone()).await;
         let media_cap = state.config.media_max_size.get();
         let snapshot_cap = state.config.snapshot_max_size.get();
-        let setup = build_test_router(state.clone());
-        let app = shipped_router(state);
+        let setup = build_test_router(state);
         let owner = setup_and_get_auth(&setup).await;
         let doc_id = create_test_doc(&setup, &owner).await;
         let hash = "f".repeat(64);
+        // The store holds the object of `hash`, so the confirmation at the
+        // cap finds the object an upload would have put (`SRV-292`).
+        let (_store, filled) = media_store(&pool, &[(doc_id.as_str(), hash.as_str())]).await;
+        let app = shipped_router(filled);
         let media = |size: u64| serde_json::json!({ "content_hash": hash, "size_bytes": size });
         // The confirmation below makes the document hold `hash`, and a held
         // address gets no second link (`SRV-271`). The signed-header check
@@ -3594,7 +3839,7 @@ mod handler_tests {
     }
 
     /// The body of a confirmation `key` signs: `snap` of `doc_id`, its
-    /// horizon `covered` and its `author` (`SRV-284`).
+    /// horizon `covered`, its `author` and the digest of a blob (`SRV-284`).
     fn confirm_body(
         key: &ed25519_dalek::SigningKey,
         doc_id: &str,
@@ -3602,14 +3847,21 @@ mod handler_tests {
         covered: u64,
         author: [u8; 32],
     ) -> serde_json::Value {
+        let blob = ambre_core::FixedBytes::<ambre_core::SnapshotDigest>::from_array([6; 32]);
         let transcript = ambre_protocol::snapshot_confirm::confirm_transcript(
-            Id::<Document>::parse_str(doc_id).unwrap(),
-            Id::<Snapshot>::parse_str(snap).unwrap(),
-            ambre_core::Seq::<ambre_core::Relay>::new(covered),
-            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(author),
+            ambre_protocol::snapshot_confirm::Confirmed {
+                document_id: Id::<Document>::parse_str(doc_id).unwrap(),
+                snapshot_id: Id::<Snapshot>::parse_str(snap).unwrap(),
+                covered_seq: ambre_core::Seq::<ambre_core::Relay>::new(covered),
+                author: &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(author),
+                blob: &blob,
+            },
         );
         let signature = ed25519_dalek::Signer::sign(key, transcript.as_bytes());
-        serde_json::json!({ "signature": hex::encode(signature.to_bytes()) })
+        serde_json::json!({
+            "signature": hex::encode(signature.to_bytes()),
+            "blob": hex::encode(blob.as_array()),
+        })
     }
 
     /// The member behind `auth`, whose signing key is `author`, uploads a
@@ -3870,6 +4122,16 @@ mod handler_tests {
             .await
             .unwrap();
         }
+        // The rows went to the register alone, so the counter is warmed as a
+        // subscribe would: a cold one bounds every horizon at 0 (`SRV-289`).
+        crate::redis_ops::seed_clock_state(
+            &state.redis,
+            &document,
+            ambre_core::Seq::<ambre_core::Relay>::new(3),
+            &[],
+        )
+        .await
+        .unwrap();
         let snap = upload_snapshot(&app, &owner, &doc_id, 3).await;
         let snapshot = Id::<Snapshot>::parse_str(&snap).unwrap();
         let report = format!("/api/documents/{doc_id}/snapshots/{snap}/report");
@@ -4388,8 +4650,27 @@ mod handler_tests {
             .iter()
             .map(|m| m["user_id"].as_str().unwrap().to_string())
             .collect();
-        let keys = serde_json::json!({
+        // `SRV-299`: a rotation that leaves a member without a copy is
+        // refused, and the debt stays owed.
+        let short = serde_json::json!({
             "keys": [ { "user_id": stayer_uid, "doc_key_enc": base64_encode(&[0xCDu8; 72]) } ],
+            "members": members,
+            "link": link_text(&doc_id, 2, 1),
+        });
+        let rotate = Request::post(format!("/api/documents/{doc_id}/rotate-key"));
+        assert_eq!(
+            status_of(&app, rotate, &stayer, Some(short)).await,
+            StatusCode::BAD_REQUEST,
+            "the owner takes no copy"
+        );
+        assert!(owes_rotation(&app, &owner, &doc_id).await);
+
+        let copies: Vec<_> = members
+            .iter()
+            .map(|uid| serde_json::json!({ "user_id": uid, "doc_key_enc": base64_encode(&[0xCDu8; 72]) }))
+            .collect();
+        let keys = serde_json::json!({
+            "keys": copies,
             "members": members,
             "link": link_text(&doc_id, 2, 1),
         });

@@ -489,8 +489,19 @@ impl LinkTarget {
 
     /// Decode a `"link"` register. A malformed blob reads as no link rather
     /// than as a link nobody can follow.
+    ///
+    /// A peer writes the register, and only the local entry checks what it
+    /// types. So a web address passes the rule of [`WebAddress`] here too, at
+    /// the one read, and an address that fails it reads as no link. A
+    /// `javascript:` or a `file:` address, or the scheme of an external
+    /// handler, then never reaches the shell (`TOILE-308`).
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        postcard::from_bytes(bytes).ok()
+        match postcard::from_bytes(bytes).ok()? {
+            Self::Url(url) => Validated::<WebAddress>::parse(url.as_str())
+                .ok()
+                .map(|address| Self::Url(link_url(address))),
+            other => Some(other),
+        }
     }
 }
 

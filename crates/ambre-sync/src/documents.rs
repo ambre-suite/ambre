@@ -265,6 +265,17 @@ impl SyncState {
             };
             let exchange_key = self.exchange_key.clone();
             let signing_key = self.signing_key.clone();
+            // A document not open unwraps its key under the checks of an
+            // open, never against the wrapper the relay names (audit `P45`).
+            let doc_type = self
+                .doc_metadata
+                .get(&document_id)
+                .map_or(DocType::Prose, |(doc_type, _)| *doc_type);
+            let my_user_id = self.user_id;
+            let rule = self.log_rule(document_id);
+            let log_document = self.log_document(document_id);
+            let roots = self.roots(document_id, doc_type);
+            let held = self.log_footings.get(&log_document).copied();
             crate::spawn(async move {
                 let Some(signing_key) = signing_key else {
                     let _ = tx.send(SyncEvent::http_error(
@@ -298,16 +309,30 @@ impl SyncState {
                         )
                         .await
                         {
-                            Ok(resp) => match Self::unwrap_document_key(&ek, &resp.members) {
-                                Ok(k) => k,
-                                Err(e) => {
-                                    let _ = tx.send(SyncEvent::http_error(
-                                        id,
-                                        e.at("RenameDocument: key unwrap failed"),
-                                    ));
-                                    return;
+                            Ok(resp) => {
+                                let check = crate::updates::KeyCheck {
+                                    document_id: doc_id,
+                                    log_document,
+                                    exchange_key: ek,
+                                    my_user_id,
+                                    rule,
+                                    roots,
+                                    held,
+                                    url_scheme,
+                                    api_base: api_base.clone(),
+                                    auth: auth.clone(),
+                                };
+                                match crate::updates::checked_members_key(check, &resp).await {
+                                    Ok(k) => k,
+                                    Err(failed) => {
+                                        let _ = tx.send(SyncEvent::HttpError {
+                                            id,
+                                            failure: failed.failure,
+                                        });
+                                        return;
+                                    }
                                 }
-                            },
+                            }
                             Err(e) => {
                                 let _ = tx.send(SyncEvent::http_error(id, e));
                                 return;

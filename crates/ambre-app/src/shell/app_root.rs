@@ -1226,6 +1226,36 @@ mod tests {
         assert!(!navigated.get(), "an address moved this tab");
     }
 
+    /// Audit `P49`: a followed address that is no web address
+    /// opens nothing, whatever reached the shell. The page's own `open` is
+    /// swapped for a recorder, which stays empty.
+    #[wasm_bindgen_test]
+    fn an_address_that_is_no_web_address_opens_nothing() {
+        let window = web_sys::window().expect("a window");
+        let key = wasm_bindgen::JsValue::from_str("open");
+        let original = js_sys::Reflect::get(&window, &key).expect("window.open");
+        let recorder = js_sys::Function::new_with_args(
+            "url",
+            "globalThis.__ambreRefused = (globalThis.__ambreRefused || 0) + 1; return null;",
+        );
+        js_sys::Reflect::set(&window, &key, &recorder).expect("a writable open");
+        for hostile in [
+            "javascript:alert(1)",
+            "file:///etc/passwd",
+            "ms-officecmd:open",
+            "https://exa mple.com",
+        ] {
+            follow_shell_nav(
+                toile_chrome::ShellNav::Url(hostile.into()),
+                &|_: &str, _| {},
+                DocType::Toile,
+            );
+        }
+        js_sys::Reflect::set(&window, &key, &original).expect("open restored");
+        let opened = js_sys::Reflect::get(&window, &"__ambreRefused".into()).expect("a record");
+        assert!(opened.is_undefined(), "an address opened a tab");
+    }
+
     /// `TOILE-114`: a followed link to another Ambre document is opened by the
     /// shell's own router, at the document's path, and opens no tab.
     #[wasm_bindgen_test]

@@ -95,6 +95,20 @@ pub fn entry_digest(
     FixedBytes::from_array(prefix(&hasher.finalize()))
 }
 
+/// Domain-separation tag for the digest of a sealed snapshot blob.
+const SNAPSHOT_DIGEST_DOMAIN: &[u8] = b"ambre-snapshot-blob-v1";
+
+/// The digest of one sealed snapshot blob, header to last byte, which a
+/// confirmation signs (`AUTHOR-031`, audit `W101`): `BLAKE2b(domain || blob)`,
+/// truncated to 32 bytes. The relay sees each byte of the blob (`ZK-007`), so
+/// the digest tells it nothing new.
+pub fn snapshot_digest(object: &[u8]) -> FixedBytes<ambre_core::SnapshotDigest> {
+    let mut hasher = Blake2b512::new();
+    hasher.update(SNAPSHOT_DIGEST_DOMAIN);
+    hasher.update(object);
+    FixedBytes::from_array(prefix(&hasher.finalize()))
+}
+
 /// Domain-separation tag for the pin of an inviter's signing key.
 const INVITER_PIN_DOMAIN: &[u8] = b"ambre-inviter-pin-v1";
 

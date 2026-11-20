@@ -5,7 +5,7 @@
 //! R-tree caches.
 
 use ambre_core::Count;
-use ambre_core::hash::HashSet;
+use ambre_core::hash::{HashMap, HashSet};
 
 use ambre_core::id::{Element, Id};
 use kurbo::Rect;
@@ -670,30 +670,34 @@ impl ToileState {
     }
 
     /// [`collect_leaves`](Self::collect_leaves), skipping a group already in
-    /// `entered`.
+    /// `entered`. A peer writes the nesting and nothing bounds its depth, so
+    /// the walk holds its own stack, never the call stack (`TOILE-306`).
     fn collect_leaves_once(
         &self,
         id: &Id<Element>,
         out: &mut HashSet<Id<Element>>,
         entered: &mut HashSet<Id<Element>>,
     ) {
-        if !self.is_group(id) {
-            out.insert(id.clone());
-        } else if entered.insert(id.clone()) {
-            for c in self.children_of(id) {
-                self.collect_leaves_once(&c, out, entered);
+        let mut pending = vec![id.clone()];
+        while let Some(id) = pending.pop() {
+            if !self.is_group(&id) {
+                out.insert(id);
+            } else if entered.insert(id.clone()) {
+                pending.extend(self.children_of(&id));
             }
         }
     }
 
-    /// Append `id` and every descendant (groups included) to `out`.
+    /// Append `id` and every descendant (groups included) to `out`, with a
+    /// stack of its own (`TOILE-306`).
     pub(super) fn collect_subtree(&self, id: &Id<Element>, out: &mut HashSet<Id<Element>>) {
-        if !out.insert(id.clone()) {
-            return;
-        }
-        if self.is_group(id) {
-            for c in self.children_of(id) {
-                self.collect_subtree(&c, out);
+        let mut pending = vec![id.clone()];
+        while let Some(id) = pending.pop() {
+            if !out.insert(id.clone()) {
+                continue;
+            }
+            if self.is_group(&id) {
+                pending.extend(self.children_of(&id));
             }
         }
     }
@@ -768,11 +772,28 @@ impl ToileState {
             }
             v
         };
-        // A chain of n groups settles in n + 1 passes. The cap ends the loop
-        // when a box never compares equal to itself, as a NaN box does
-        // (`TOILE-275`).
+        // Children before parents, so one pass settles a nesting of any
+        // depth, and the next one finds nothing changed. Only a loop of
+        // groups, which a peer can write, takes more. The cap ends the loop
+        // then, and when a box never compares equal to itself, as a NaN box
+        // does (`TOILE-275`, `TOILE-306`).
+        let members: HashMap<&Id<Element>, &[Id<Element>]> = groups
+            .iter()
+            .map(|(g, kids)| (g, kids.as_slice()))
+            .collect();
+        let ids: Vec<Id<Element>> = groups.iter().map(|(g, _)| g.clone()).collect();
+        let order = bottom_up(&ids, |g| members.get(g).copied().unwrap_or(&[]));
+        let groups: Vec<(Id<Element>, Vec<Id<Element>>)> = order
+            .into_iter()
+            .filter_map(|g| {
+                let kids = members.get(&g).map(|kids| kids.to_vec())?;
+                Some((g, kids))
+            })
+            .collect();
         let mut changed = true;
-        let mut passes = 0..=groups.len();
+        // Three passes: one settles an order without a loop, the next finds
+        // nothing changed, and a third gives a loop one more round.
+        let mut passes = 0..3;
         while changed && passes.next().is_some() {
             changed = false;
             for (g, kids) in &groups {
@@ -799,6 +820,46 @@ impl ToileState {
             }
         }
     }
+}
+
+/// `groups` in the order one pass of unions settles them. Each group comes
+/// after every group of the set it holds, at any depth.
+///
+/// The walk keeps its own stack, so a nesting of any depth costs no call
+/// stack. Each group is entered once, so a loop a peer wrote ends the walk
+/// (`TOILE-306`). A group of a loop comes after the groups it reached first.
+/// Ties keep the order of `groups`, so each peer derives the same order.
+pub(super) fn bottom_up<'k>(
+    groups: &[Id<Element>],
+    kids_of: impl Fn(&Id<Element>) -> &'k [Id<Element>],
+) -> Vec<Id<Element>> {
+    let wanted: HashSet<&Id<Element>> = groups.iter().collect();
+    let mut entered: HashSet<Id<Element>> = HashSet::default();
+    let mut order = Vec::with_capacity(groups.len());
+    for root in groups {
+        if !entered.insert(root.clone()) {
+            continue;
+        }
+        // Each frame is a group and the place of its next child.
+        let mut frames = vec![(root.clone(), 0_usize)];
+        while let Some((group, next)) = frames.last_mut() {
+            let kid = kids_of(group).get(*next).cloned();
+            *next += 1;
+            match kid {
+                Some(kid) => {
+                    if wanted.contains(&kid) && entered.insert(kid.clone()) {
+                        frames.push((kid, 0));
+                    }
+                }
+                None => {
+                    if let Some((done, _)) = frames.pop() {
+                        order.push(done);
+                    }
+                }
+            }
+        }
+    }
+    order
 }
 
 #[cfg(test)]
@@ -930,6 +991,60 @@ mod tests {
             ids: vec![g1, g2],
             op: crate::logic::align::AlignOp::Left,
         });
+    }
+
+    /// `TOILE-306`, audit `P48`: a peer writes twenty thousand groups, each
+    /// one the only member of the next. A fresh board opens them, and a move
+    /// of the top group reaches the leaf, on a call stack of 1 MiB. The leaf
+    /// walk recursed once per level, and each recomputation of the boxes took
+    /// a pass per level.
+    #[test]
+    fn twenty_thousand_nested_groups_open_and_move_on_a_small_stack() {
+        let mut peer = ToileState::new();
+        let leaf = create(&mut peer, ElementKind::Shape(ShapeKind::Rect));
+        let elements = peer.doc.get_map(Root::Elements.as_str());
+        let mut inner = leaf.clone();
+        for level in 0..20_000 {
+            let id = Id::<Element>::from_text(format!("nest-{level:05}"));
+            let em = super::Fields::<super::ElementKey>::new(
+                elements
+                    .insert_container(id.as_str(), loro::LoroMap::new())
+                    .expect("a group map"),
+            );
+            super::em_seed_group(&em);
+            em.insert_container(super::ElementKey::Children, loro::LoroMovableList::new())
+                .expect("a member list")
+                .push(inner.as_str())
+                .expect("the member");
+            inner = id;
+        }
+        peer.doc.commit();
+        let (snapshot, top) = (peer.export_snapshot(), inner);
+        let moved = std::thread::Builder::new()
+            .stack_size(1024 * 1024)
+            .spawn(move || {
+                let mut st = ToileState::new();
+                st.apply_remote_snapshot(&snapshot);
+                let before = st.bounds.get(&leaf).copied();
+                let top_box = st.bounds.get(&top).copied();
+                st.handle_command(ToileCommand::MoveElements {
+                    ids: vec![top.clone()],
+                    delta: kurbo::Vec2::new(5.0, 0.0),
+                });
+                (
+                    before == top_box,
+                    st.bounds.get(&leaf).map(|r| r.x0) == before.map(|r| r.x0 + 5.0),
+                    st.bounds.get(&top).map(|r| r.x0) == before.map(|r| r.x0 + 5.0),
+                )
+            })
+            .expect("a thread")
+            .join()
+            .expect("no stack overflow");
+        assert_eq!(
+            moved,
+            (true, true, true),
+            "(top box, leaf moved, top moved)"
+        );
     }
 }
 

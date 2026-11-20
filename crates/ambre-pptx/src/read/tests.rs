@@ -267,6 +267,22 @@ fn a_part_nested_past_the_bound_is_refused() {
     assert_eq!(crate::read(&hostile), Err(PptxError::Unreadable));
 }
 
+/// `W72`: a part of empty elements past the node bound of a tree is
+/// refused, though it reads under the bound of a part.
+#[test]
+fn a_part_past_the_node_bound_is_refused() {
+    let past = usize::try_from(ambre_opc::MAX_TREE_NODES.get()).expect("fits");
+    let wide = format!(
+        "<p:presentation xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\">{}</p:presentation>",
+        "<p:x/>".repeat(past)
+    );
+    let hostile = package(&[("/ppt/presentation.xml", PRESENTATION, wide)]);
+    assert_eq!(crate::read(&hostile), Err(PptxError::TooLarge));
+    let part = format!("<a>{}</a>", "<b/>".repeat(past));
+    let tree = super::xml::parse(&Payload::new(part.into_bytes()));
+    assert_eq!(tree.err(), Some(super::xml::XmlError::TooLarge));
+}
+
 /// A malformed part of each shape a parser meets reads to an error, never
 /// to a panic.
 #[test]
@@ -359,6 +375,144 @@ fn a_master_that_flattens_past_the_item_bound_is_refused() {
     );
     let file = w.finish().expect("the package writes");
     assert_eq!(crate::read(file.as_bytes()), Err(PptxError::TooLarge));
+}
+
+/// The shape trees of a deck of one slide part, its layout and its master.
+struct Trees<'a> {
+    slide: &'a str,
+    layout: &'a str,
+    master: &'a str,
+}
+
+/// A deck of one slide part, listed `listed` times, under one layout and one
+/// master, each holding its shape tree of `trees`.
+fn deck_over_master(trees: &Trees<'_>, listed: usize) -> Vec<u8> {
+    let Trees {
+        slide: slide_tree,
+        layout: layout_tree,
+        master: shapes,
+    } = *trees;
+    let ns = "xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\" \
+              xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" \
+              xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"";
+    let kind = |name: &str| {
+        RelKind::new(match name {
+            "slide" => "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide",
+            "slideLayout" => {
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout"
+            }
+            _ => "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster",
+        })
+    };
+    let mut w = PackageWriter::new();
+    let presentation = PartName::new("/ppt/presentation.xml").expect("a name");
+    let slide = PartName::new("/ppt/slides/slide1.xml").expect("a name");
+    let layout = PartName::new("/ppt/slideLayouts/slideLayout1.xml").expect("a name");
+    let master = PartName::new("/ppt/slideMasters/slideMaster1.xml").expect("a name");
+    w.relate(
+        &opc::root(),
+        RelKind::OFFICE_DOCUMENT,
+        RelTarget::Part(presentation.clone()),
+    );
+    let rid = w.relate(&presentation, kind("slide"), RelTarget::Part(slide.clone()));
+    w.relate(&slide, kind("slideLayout"), RelTarget::Part(layout.clone()));
+    w.relate(
+        &layout,
+        kind("slideMaster"),
+        RelTarget::Part(master.clone()),
+    );
+    w.part(
+        slide,
+        None,
+        Payload::new(
+            format!("<p:sld {ns}><p:cSld><p:spTree>{slide_tree}</p:spTree></p:cSld></p:sld>")
+                .into_bytes(),
+        ),
+    );
+    w.part(
+        layout,
+        None,
+        Payload::new(
+            format!(
+                "<p:sldLayout {ns}><p:cSld><p:spTree>{layout_tree}</p:spTree></p:cSld></p:sldLayout>"
+            )
+            .into_bytes(),
+        ),
+    );
+    w.part(
+        master,
+        None,
+        Payload::new(
+            format!(
+                "<p:sldMaster {ns}><p:cSld><p:spTree>{shapes}</p:spTree></p:cSld></p:sldMaster>"
+            )
+            .into_bytes(),
+        ),
+    );
+    let ids = format!("<p:sldId id=\"256\" r:id=\"{}\"/>", rid.as_str()).repeat(listed);
+    w.part(
+        presentation,
+        Some(PRESENTATION),
+        Payload::new(
+            format!("<p:presentation {ns}><p:sldIdLst>{ids}</p:sldIdLst></p:presentation>")
+                .into_bytes(),
+        ),
+    );
+    w.finish().expect("the package writes").as_bytes().to_vec()
+}
+
+/// `W303`: the text of a master is copied onto every slide that lists it.
+/// It passes the text bound far under the item bound, and the deck is
+/// refused whole.
+#[test]
+fn a_master_text_that_flattens_past_the_text_bound_is_refused() {
+    let shape = format!(
+        "<p:sp><p:nvSpPr><p:cNvPr id=\"2\" name=\"s\"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>\
+         <p:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"1\" cy=\"1\"/></a:xfrm></p:spPr>\
+         <p:txBody><a:bodyPr/><a:p><a:r><a:t>{}</a:t></a:r></a:p></p:txBody></p:sp>",
+        "x".repeat(1024 * 1024)
+    );
+    let trees = Trees {
+        slide: "",
+        layout: "",
+        master: &shape,
+    };
+    let under = deck_over_master(&trees, 8);
+    let deck = crate::read(&under).expect("eight copies read");
+    assert_eq!(deck.deck.slides.len(), 8);
+    let past = deck_over_master(&trees, 100);
+    assert_eq!(crate::read(&past), Err(PptxError::TooLarge));
+}
+
+/// `W305`: a slide of many empty placeholders over a layout of many reads
+/// each match by a lookup, and the deck reads.
+#[test]
+fn many_placeholders_match_their_layout_by_lookup() {
+    let count = 20_000;
+    let placeholders = |kind: &str| -> String {
+        (0..count)
+            .map(|idx| {
+                format!(
+                    "<p:sp><p:nvSpPr><p:cNvPr id=\"{}\" name=\"p\"/><p:cNvSpPr/>\
+                     <p:nvPr><p:ph type=\"{kind}\" idx=\"{idx}\"/></p:nvPr></p:nvSpPr>\
+                     <p:spPr/></p:sp>",
+                    idx + 2
+                )
+            })
+            .collect()
+    };
+    let slide = placeholders("body");
+    let layout = placeholders("body");
+    let file = deck_over_master(
+        &Trees {
+            slide: &slide,
+            layout: &layout,
+            master: "",
+        },
+        1,
+    );
+    let deck = crate::read(&file).expect("the deck reads");
+    assert_eq!(deck.deck.slides.len(), 1);
 }
 
 /// A picture in an encoding the deck does not hold is named, never kept

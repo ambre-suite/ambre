@@ -67,6 +67,7 @@ this document alone.
 | `CALL-105` | `INV` | The SFU MUST forward a screen at its one encoding, whatever the downlink estimate of the receiver and whoever speaks. | this spec section 3, the SFU; `CALL-038`; `CALL-041` | `ambre_sfu::sim::tests::a_screen_keeps_its_one_size_under_a_cap_and_a_change_of_speaker` -- eight seeded runs at 150 ms of round trip and 2 % loss, under a cap of 900 kbit/s and through a change of speaker | none | verified |
 | `CALL-106` | `INV` | The SFU MUST forward each other receiver of the room the screen of the participant whose share started last. | this spec section 3, one share at a time | `ambre_sfu::forward::tests::the_screen_of_the_last_share_reaches_each_other_receiver_and_none_reaches_its_sharer`; `ambre_sfu::forward::tests::a_still_screen_that_changes_again_takes_no_screen_back` -- Ada's screen holds still for 3 s, then changes, and Bob's share keeps the screen; `ambre_sync::call_link::tests::a_share_start_reaches_the_sfu_alone_and_never_the_relay` -- the page's start reaches the SFU; `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: once Bob shares, Ada decodes his screen | none | verified |
 | `CALL-111` | `INV` | The SFU MUST forward no screen to the participant whose share started last. | this spec section 3, the SFU; `CALL-033` | `ambre_sfu::forward::tests::the_screen_of_the_last_share_reaches_each_other_receiver_and_none_reaches_its_sharer`; `ambre_sfu::sim::tests::a_screen_keeps_its_one_size_under_a_cap_and_a_change_of_speaker` -- the sharer reads no screen; `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Bob decodes no screen while his share is the last one | none | verified |
+| `CALL-141` | `INV` | The chart of the repository MUST give each SFU node a public address that no load balancer fronts. | this spec section 3; `SRV-309` | not built | unbuilt -- lands with the `The relay ships as images and a chart any host runs` Story (`ambre-roadmap.md` E6). No chart exists | unimplemented |
 
 ### 1.2 Join a call
 
@@ -250,11 +251,12 @@ A participant sends a screen or a window into the call, and stops it.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 140 `verified`. The relay admits under the cap, and the SFU mints the TURN
-  credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography, forwards RTP and reaches a
-  browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`, `CALL-050` to `CALL-052`). Each
-  receiver holds fixed slots, and a seed gives one path (`CALL-045` to `CALL-053`). The seal and the
-  keys hold on the host (`CALL-016` to `CALL-030`, `CALL-054`, `CALL-055`).
+* **Verification.** 140 `verified`, 1 `unimplemented`. The relay admits under the cap, and the SFU
+  mints the TURN credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography, forwards RTP
+  and reaches a browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`, `CALL-050` to
+  `CALL-052`). Each receiver holds fixed slots, and a seed gives one path (`CALL-045` to
+  `CALL-053`). The seal and the keys hold on the host (`CALL-016` to `CALL-030`, `CALL-054`,
+  `CALL-055`).
 
 ---
 

@@ -109,6 +109,11 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-071` | `FRAME` | The Word reader MUST NOT read the bytes of a macro project: it MUST name the project in its report. | this spec section 3; `PROSE-IO-024`; `ZK-001` | `ambre_docx::fixtures::a_macro_project_is_named_and_never_read` -- the project inflates past the bound of a part, so a read of it would fail | none | verified |
 | `PROSE-IO-075` | `FRAME` | The Word reader MUST NOT fetch an address a relationship names outside the package: a link keeps its address, and a linked picture is reported. | this spec section 3; `ZK-001` | `ambre_docx::fixtures::a_linked_picture_is_reported_and_never_fetched`; structural -- `crates/ambre-docx` declares no network crate, and `RelTarget::External` holds the address as text that no reader opens | none | verified |
 | `PROSE-IO-072` | `FAIL` | A Word file that inflates past its bound, declares a document type or nests past its depth MUST fail as a typed error, before it holds the memory it asks for. | this spec section 3; `PROSE-IO-010` | `ambre_docx::fixtures::a_zip_bomb_fails_typed`; `ambre_docx::fixtures::an_external_entity_is_refused`; `ambre_docx::fixtures::a_hostile_nesting_fails_typed`; `ambre_docx::fixtures::a_truncated_file_fails_typed`; `ambre_docx::fixtures::a_corrupted_file_never_panics`; `ambre_opc::tests::a_part_that_inflates_past_its_bound_is_refused_while_it_inflates`; `::parts_that_inflate_past_the_package_bound_are_refused`; `::a_package_past_its_part_count_is_refused` | none | verified |
+| `PROSE-IO-121` | `FAIL` | A Word file whose part builds a tree past its node or attribute bound MUST fail as a typed error. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_docx::xml::tests::a_part_past_the_node_bound_is_refused`; `::a_part_past_the_attribute_bound_is_refused`; `ambre_docx::fixtures::a_body_past_the_node_bound_fails_typed`; `ambre_opc::tree::tests::the_node_past_the_bound_is_refused`; `::short_attributes_meet_the_bound_by_their_records`; `::one_long_value_counts_its_bytes`; `ambre_opc::tests::a_content_types_part_past_the_node_bound_is_refused` | none | verified |
+| `PROSE-IO-122` | `POST` | The Word import MUST read each run and each comment without a scan of the fields or the replies before it. | this spec section 3 | `ambre_docx::fixtures::fields_left_open_cost_no_scan_per_run`; `ambre_prose_form::word_read::tests::a_long_chain_of_replies_joins_one_thread`; `::a_loop_of_parents_opens_one_thread` | none | verified |
+| `PROSE-IO-123` | `POST` | The Word mapping MUST carry at most the open-thread bound of `ambre-spec-budgets.md section 6` over one run. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_prose_form::word_read::tests::threads_left_open_are_bounded_per_run` | none | verified |
+| `PROSE-IO-128` | `POST` | The Word mapping MUST report each comment start past the open-thread bound as an approximated comment. | this spec section 3; `PROSE-IO-074` | `ambre_prose_form::word_read::tests::threads_left_open_are_bounded_per_run` -- the count of the entry equals the starts past the bound | none | verified |
+| `PROSE-IO-124` | `FAIL` | Given a date whose numbers pass the width of the reader, the Word reader MUST read no date, never a wrapped one. | this spec section 3 | `ambre_docx::time::tests::text_that_is_no_date_reads_as_none` | none | verified |
 | `PROSE-IO-079` | `POST` | A comment and a suggestion a Word import brings MUST carry the author the file names, and the importing user as the one who wrote them into the document. | this spec section 3; `PROSE-IO-060`; `features/ambre-spec-prose-track-changes.md` | `ambre_prose::logic::interop::tests::word::a_word_comment_and_tracked_change_land_as_a_thread_and_a_suggestion` -- the replies name Ada and Bob, the suggestions Bob and Eve, and every suggestion holds the importing user | none | verified |
 | `PROSE-IO-080` | `POST` | A Word import in a session with no identity MUST report each comment and each suggestion it drops. | this spec section 3; `PROSE-IO-004` | `ambre_prose::logic::interop::tests::word::without_an_identity_annotations_are_reported_and_their_text_kept` | none | verified |
 | `PROSE-IO-082` | `POST` | A Word import that drops a comment or a suggestion MUST keep the text it covers. | this spec section 3; `PROSE-IO-005` | `ambre_prose::logic::interop::tests::word::without_an_identity_annotations_are_reported_and_their_text_kept` -- the anchor of the thread, the insertion and the deletion all land as text | none | verified |
@@ -162,6 +167,10 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-093` | `FRAME` | The OpenDocument reader MUST NOT read a macro library or a script the package carries: it MUST name it in its report. | this spec section 3; `PROSE-IO-024`; `ZK-001` | `ambre_odt::fixtures::a_macro_library_is_named_and_never_read` -- the library inflates past the bound of a part, so a read of it would fail | none | verified |
 | `PROSE-IO-094` | `FRAME` | The OpenDocument reader MUST NOT fetch an address a link or a picture names outside the package. | this spec section 3; `ZK-001` | `ambre_odt::fixtures::a_linked_picture_is_reported_and_never_fetched`; structural -- `crates/ambre-odt` declares no network crate, and a link keeps its address as text that no reader opens | none | verified |
 | `PROSE-IO-092` | `FAIL` | An OpenDocument text that inflates past its bound, declares a document type or nests past its depth MUST fail as a typed error, before it holds the memory it asks for. | this spec section 3; `PROSE-IO-010` | `ambre_odt::fixtures::a_zip_bomb_fails_typed`; `ambre_odt::fixtures::an_external_entity_and_a_hostile_nesting_fail_typed`; `ambre_odt::fixtures::a_truncated_or_corrupted_file_never_panics` | none | verified |
+| `PROSE-IO-125` | `FAIL` | An OpenDocument text whose part builds a tree past its node or attribute bound MUST fail as a typed error. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_odt::xml::tests::a_part_past_the_node_bound_is_refused`; `::a_part_past_the_attribute_bound_is_refused`; `ambre_odt::fixtures::a_part_past_the_node_bound_fails_typed` | none | verified |
+| `PROSE-IO-126` | `FAIL` | Given repeats or space marks whose copies pass the walk bound of a document, the reader MUST fail as a typed error. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_odt::fixtures::nested_repeats_of_a_table_fail_typed`; `::space_marks_past_the_text_bound_fail_typed` | none | verified |
+| `PROSE-IO-127` | `POST` | The OpenDocument reader MUST expand a tracked deletion at its first mark alone, and report each later mark dropped. | this spec section 3 | `ambre_odt::fixtures::a_deletion_that_names_itself_reads_once`; `::a_deleted_region_is_copied_once_whatever_its_marks` | none | verified |
+| `PROSE-IO-129` | `POST` | The OpenDocument reader MUST read at most the chain bound of style parents for one style. | this spec section 3 | `ambre_odt::fixtures::a_long_chain_of_styles_reads_within_its_bound` | none | verified |
 
 ### 1.12 Export to OpenDocument
 
@@ -186,7 +195,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** a local file, in both directions, and nothing else. `PROSE-IO-001` keeps every
   conversion in the Main instance. `PROSE-IO-043` keeps the document off the relay. `PROSE-IO-016`,
   `PROSE-IO-062` and `PROSE-IO-023` stop an imported file executing or fetching.
-* **Verification.** 95 `verified`. The native file, the Markdown pair, the Word pair and the HTML
+* **Verification.** 104 `verified`. The native file, the Markdown pair, the Word pair and the HTML
   pair are built, and each runs in slices. The browser tier holds the download and the open from the
   home screen.
 
@@ -734,6 +743,7 @@ section 6`:
 | bytes one part inflates to | 32 MiB | the largest real Word body measured, 12 MB, reads under it |
 | bytes every part read inflates to | 64 MiB | about 67 MB, so the model built beside the parts stays under the 100 MB client budget |
 | nesting of one part | 256 elements | a nested table costs three levels, so some 80 tables deep |
+| nodes of the tree of one part, and the bytes of its attributes | the foreign-file tree row of `ambre-spec-budgets.md section 6` | a part of empty elements deflates a thousandfold, and its tree would hold twenty times its bytes (`PROSE-IO-121`) |
 | a file a Word import hands the module | 64 MiB | the inflated bound: a stored package reaches it with no compression |
 
 What the reader does with a construct the model has no form for:
@@ -893,7 +903,9 @@ instant.
 
 The reader bounds a hostile file with the package bounds of `ambre-spec-budgets.md section 6`
 and the nesting bound of the Word reader (`PROSE-IO-092`). A repeat or a span attribute counts
-1024 at most.
+1024 at most. The walk of one document holds the OpenDocument text walk row of the same section,
+copies of a repeat included (`PROSE-IO-126`). A tracked deletion expands at its first mark alone,
+so a deletion that names itself ends, and a region is copied once (`PROSE-IO-127`).
 
 The writer writes the parts LibreOffice opens: `content.xml`, `styles.xml`, `meta.xml` and the
 pictures. Each automatic style takes its name in the order the walk first needs it, so the same

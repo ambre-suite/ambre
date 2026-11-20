@@ -272,10 +272,13 @@ async fn a_join_at_the_participant_cap_is_refused_with_a_notice(pool: sqlx::PgPo
     let call = Id::<Call>::mint();
     let room = FixedBytes::from_array([3; 16]);
     let ttl = state.config.call_state_ttl;
-    for _ in 1..PARTICIPANT_CAP.get() {
+    // One key per seat: one key holds a few seats alone (`SRV-306`).
+    for seat in 1..PARTICIPANT_CAP.get() {
+        let mut bytes = [0xEE; 32];
+        bytes[0] = u8::try_from(seat).expect("a seat under 256");
+        let key = FixedBytes::from_array(bytes);
         let join =
-            redis_ops::join_call(&state.redis, &call, &channel, &alice.key, &room, START, ttl)
-                .await;
+            redis_ops::join_call(&state.redis, &call, &channel, &key, &room, START, ttl).await;
         assert!(matches!(join, Ok(redis_ops::CallJoin::Admitted { .. })));
     }
     let root = served(state.clone()).await;
@@ -298,6 +301,57 @@ async fn a_join_at_the_participant_cap_is_refused_with_a_notice(pool: sqlx::PgPo
         .await
         .expect("a count");
     assert_eq!(seats, PARTICIPANT_CAP.get() as usize);
+}
+
+/// `SRV-306`, audit `P42`: one key holds a few seats of a call, and takes a
+/// bounded count of its sender indexes. Past the seats it reads the call as
+/// full, past the indexes as exhausted, and another member is still admitted.
+#[sqlx::test]
+#[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+async fn one_member_holds_a_bounded_share_of_a_call(pool: sqlx::PgPool) {
+    use rustis::commands::{GenericCommands, HashCommands};
+    let state = test_app_state(pool.clone()).await;
+    let alice = Member::new(&pool, "alice", 1).await;
+    let bob = Member::new(&pool, "bob", 2).await;
+    let channel = channel_of(&pool, &alice, &[&bob]).await;
+    let call = Id::<Call>::mint();
+    let room = FixedBytes::from_array([7; 16]);
+    let ttl = state.config.call_state_ttl;
+    let join = |key| redis_ops::join_call(&state.redis, &call, &channel, key, &room, START, ttl);
+    for _ in 0..4 {
+        assert!(matches!(
+            join(&alice.key).await,
+            Ok(redis_ops::CallJoin::Admitted { .. })
+        ));
+    }
+    assert!(matches!(
+        join(&alice.key).await,
+        Ok(redis_ops::CallJoin::Refused(CallRefusal::Full))
+    ));
+    assert!(matches!(
+        join(&bob.key).await,
+        Ok(redis_ops::CallJoin::Admitted { .. })
+    ));
+
+    // Bob's seats leave, and his key has spent its share of the indexes.
+    let keys = crate::redis_keys::CallStateKeys::of(&call);
+    let _: usize = state.redis.del(keys.seats.as_str()).await.expect("del");
+    let _: usize = state
+        .redis
+        .hset(
+            keys.state.as_str(),
+            [(format!("taken:{}", bob.key.to_hex()), "256".to_owned())],
+        )
+        .await
+        .expect("hset");
+    assert!(matches!(
+        join(&bob.key).await,
+        Ok(redis_ops::CallJoin::Refused(CallRefusal::Exhausted))
+    ));
+    assert!(matches!(
+        join(&alice.key).await,
+        Ok(redis_ops::CallJoin::Admitted { .. })
+    ));
 }
 
 /// Sends `msg` on a call socket.
@@ -440,10 +494,11 @@ async fn no_table_of_the_relay_schema_holds_a_call(pool: sqlx::PgPool) {
     assert!(tables.is_empty(), "a table holds a call: {tables:?}");
 }
 
-/// `ZK-022`, `SRV-248`: the state of a call in the ephemeral store holds four fields. They are
-/// the channel, the room the relay drew, the next sender index and the end. Its seats hold the key of each
-/// sender index, and its joins the opaque signed join of each. Nothing else, and each key
-/// under the time to live.
+/// `ZK-022`, `SRV-248`: the state of a call in the ephemeral store holds the channel, the room
+/// the relay drew and the next sender index. It also holds, per public key, the count of sender
+/// indexes the key took (`SRV-306`). That count follows from the key of each sender index, which the relay learns
+/// already. Its seats hold the key of each sender index, and its joins the opaque signed join
+/// of each. Nothing else, and each key under the time to live.
 #[sqlx::test]
 #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
 async fn the_state_of_a_call_holds_only_what_the_relay_may_learn(pool: sqlx::PgPool) {
@@ -479,7 +534,12 @@ async fn the_state_of_a_call_holds_only_what_the_relay_may_learn(pool: sqlx::PgP
         .hgetall(keys.state.as_str())
         .await
         .expect("state");
-    assert_eq!(fields(call_state), ["channel", "next", "room"]);
+    let taken = format!("taken:{}", alice.key.to_hex());
+    assert_eq!(call_state.get(&taken).map(String::as_str), Some("1"));
+    assert_eq!(
+        fields(call_state),
+        ["channel", "next", "room", taken.as_str()]
+    );
     let seats: std::collections::HashMap<String, String> = state
         .redis
         .hgetall(keys.seats.as_str())

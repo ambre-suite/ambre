@@ -100,6 +100,15 @@ pub enum Refusal {
     /// (`MURMURE-013`).
     #[error("an amendment of a message its segment does not hold")]
     NotInSegment,
+    /// A message identifier written on a map the delta did not create, written
+    /// twice, or already held by another message (`MURMURE-002`, `MURMURE-678`).
+    #[error("a message identifier its signer may not write")]
+    MessageId,
+    /// A write to a root container that members may not write. The `header`
+    /// and the `meta` roots close once the document is created. A root the
+    /// kind of the document does not hold never opens (`MURMURE-679`).
+    #[error("a write to a root container its signer may not write")]
+    ForeignRoot,
 }
 
 impl Refusal {
@@ -186,9 +195,10 @@ fn restore_entries(update: &mut JsonSchema) {
 /// the registry of the segment holds it. `reactions` says whether a container
 /// is the `reactions` map of a message the segment holds. `thread_of` reads
 /// the `thread` field of a message map the segment holds, `None` for any
-/// other container. The check takes no document, so it copies none
-/// (`MURMURE-226`). Every client runs it on the same delta, so every client
-/// reaches the same verdict (`MURMURE-079`).
+/// other container. `held` reads what the segment holds already: its header,
+/// its operations and its message identifiers. The check takes no document,
+/// so it copies none (`MURMURE-226`). Every client runs it on the same delta,
+/// so every client reaches the same verdict (`MURMURE-079`).
 ///
 /// # Errors
 /// The first [`Refusal`] an operation earns.
@@ -199,6 +209,7 @@ pub(crate) fn check(
     reactions: impl Fn(&ContainerID) -> bool,
     call_ends: impl Fn(&ContainerID) -> bool,
     thread_of: impl Fn(&ContainerID) -> Option<ThreadField>,
+    held: Held<'_>,
 ) -> Result<(), Refusal> {
     let user = signer.user.ok_or(Refusal::Unattributed)?;
     if update
@@ -208,6 +219,8 @@ pub(crate) fn check(
     {
         return Err(Refusal::NotSigners);
     }
+    // The identifiers this delta gives its new messages, each once.
+    let mut identities: Vec<Id<Message>> = Vec::new();
     // A container this session created is the signer's own.
     let owner = |peer: ambre_core::PeerId| {
         if peer == signer.peer {
@@ -255,13 +268,43 @@ pub(crate) fn check(
                         }
                         authored.push(id);
                     }
+                    // A message takes its identifier once, with its map. An
+                    // amendment and a fold name a message by it, so no other
+                    // map may hold it (`MURMURE-678`).
+                    JsonOpContent::Map(MapOp::Insert { key, value })
+                        if MessageKey::parse(key) == Some(MessageKey::Id) =>
+                    {
+                        let message = match value {
+                            LoroValue::String(text) => message_key(text),
+                            _ => None,
+                        };
+                        let Some(message) = message.filter(|_| created.contains(&id)) else {
+                            return Err(Refusal::MessageId);
+                        };
+                        if identities.contains(&message) || (held.elsewhere)(message, id) {
+                            return Err(Refusal::MessageId);
+                        }
+                        identities.push(message);
+                    }
+                    JsonOpContent::Map(MapOp::Delete { key })
+                        if MessageKey::parse(key) == Some(MessageKey::Id) =>
+                    {
+                        return Err(Refusal::MessageId);
+                    }
                     // The map comes with its message, and is never replaced:
-                    // a new one would drop every member's reaction.
+                    // a new one would drop every member's reaction. It is the
+                    // container its own operation creates, never one held
+                    // already, or the rule of reactions would reach it.
                     JsonOpContent::Map(MapOp::Insert { key, value })
                         if MessageKey::parse(key) == Some(MessageKey::Reactions) =>
                     {
                         match value {
-                            LoroValue::Container(map) if created.contains(&id) => fresh.push(map),
+                            LoroValue::Container(map)
+                                if created.contains(&id)
+                                    && creates(map, ID::new(signer.peer.get(), op.counter)) =>
+                            {
+                                fresh.push(map);
+                            }
                             _ => return Err(Refusal::ForeignReaction),
                         }
                     }
@@ -276,7 +319,10 @@ pub(crate) fn check(
                         if MessageKey::parse(key) == Some(MessageKey::CallEnd) =>
                     {
                         match value {
-                            LoroValue::Container(map) if created.contains(&id) => {
+                            LoroValue::Container(map)
+                                if created.contains(&id)
+                                    && creates(map, ID::new(signer.peer.get(), op.counter)) =>
+                            {
                                 fresh_ends.push(map);
                             }
                             _ => return Err(Refusal::ForeignCallEnd),
@@ -292,10 +338,18 @@ pub(crate) fn check(
             }
             root if is_root(root, Root::Messages, ContainerType::List) => match &op.content {
                 JsonOpContent::List(ListOp::Insert { value, .. }) => {
-                    for item in value {
+                    for (offset, item) in value.iter().enumerate() {
                         let LoroValue::Container(id) = item else {
                             return Err(Refusal::ForeignAuthor);
                         };
+                        // A message is the map its own operation creates.
+                        let counter = i32::try_from(offset)
+                            .ok()
+                            .and_then(|offset| op.counter.checked_add(offset))
+                            .ok_or(Refusal::Malformed)?;
+                        if !creates(id, ID::new(signer.peer.get(), counter)) {
+                            return Err(Refusal::Malformed);
+                        }
                         created.push(id);
                     }
                 }
@@ -304,8 +358,9 @@ pub(crate) fn check(
             root if is_root(root, FoundationRoot::Peers, ContainerType::Map) => {
                 entry_allowed(&op.content, signer.peer, user)?;
             }
-            // The header and the version register hold no message.
-            ContainerID::Root { .. } => {}
+            // The header and the version register are the creating delta's
+            // alone, and no other root is a segment's (`MURMURE-679`).
+            root => founding_allowed(root, op, signer.peer, held)?,
         }
     }
     // A message this delta creates carries its signer as author.
@@ -328,12 +383,15 @@ pub(crate) fn check(
 /// The first [`Refusal`] an operation earns. [`Refusal::NotInSegment`] marks an
 /// entry of a message the segment does not hold (`MURMURE-013`).
 /// [`Refusal::ForeignMessage`] marks one of another author (`MURMURE-253`).
+/// [`Refusal::ForeignRoot`] marks a write to the header after the creating
+/// delta (`MURMURE-679`).
 pub(crate) fn check_amendments(
     update: &JsonSchema,
     signer: Signer,
     registered: impl Fn(ambre_core::PeerId) -> Option<Id<User>>,
     author_of: impl Fn(Id<Message>) -> Option<Id<User>>,
     thread_of: impl Fn(Id<Message>) -> ThreadField,
+    held: Held<'_>,
 ) -> Result<(), Refusal> {
     let user = signer.user.ok_or(Refusal::Unattributed)?;
     if update
@@ -367,8 +425,12 @@ pub(crate) fn check_amendments(
             root if is_root(root, Root::Amendments, ContainerType::Map) => match &op.content {
                 JsonOpContent::Map(MapOp::Insert {
                     key,
-                    value: LoroValue::Container(_),
+                    value: LoroValue::Container(entry),
                 }) => match message_key(key).and_then(&author_of) {
+                    // An entry is the map its own operation creates.
+                    _ if !creates(entry, ID::new(signer.peer.get(), op.counter)) => {
+                        return Err(Refusal::Malformed);
+                    }
                     None => return Err(Refusal::NotInSegment),
                     Some(author) if author != user => return Err(Refusal::ForeignMessage),
                     Some(_) => {}
@@ -394,8 +456,10 @@ pub(crate) fn check_amendments(
             root if is_root(root, FoundationRoot::Peers, ContainerType::Map) => {
                 entry_allowed(&op.content, signer.peer, user)?;
             }
-            // The header and the version register hold no amendment.
-            ContainerID::Root { .. } => {}
+            // The header and the version register are the creating delta's
+            // alone, and no other root is an amendments document's
+            // (`MURMURE-679`).
+            root => founding_allowed(root, op, signer.peer, held)?,
         }
     }
     Ok(())
@@ -410,19 +474,118 @@ fn message_key(key: &str) -> Option<Id<Message>> {
         .filter(|id| id.to_string() == key)
 }
 
-/// The author `segment` holds for the message `key` names, `None` when it
-/// holds no such message.
-pub(crate) fn author_in(segment: &LoroDoc, key: Id<Message>) -> Option<Id<User>> {
+/// Whether a document holds its header yet, as the check reads it before the
+/// first operation of a delta.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Founding {
+    /// The `header` and the `meta` roots are empty: the next delta creates
+    /// the document.
+    Blank,
+    /// The document holds a header, written once by its creating delta.
+    Founded,
+}
+
+impl Founding {
+    /// What `doc` holds now.
+    pub(crate) fn of(doc: &LoroDoc) -> Self {
+        let empty = |name: &str| schema::held_root_map(doc, name).is_none_or(|map| map.is_empty());
+        if empty(Root::Header.as_str()) && empty(FoundationRoot::Meta.as_str()) {
+            Self::Blank
+        } else {
+            Self::Founded
+        }
+    }
+}
+
+/// What the document a delta goes to holds already, as the check of a message
+/// identifier and of a root write reads it. Lookups alone, never the document
+/// (`MURMURE-226`).
+#[derive(Clone, Copy)]
+pub(crate) struct Held<'a> {
+    /// Whether the document held a header before the delta. Read once, so
+    /// the creating delta that writes every key of it passes whole.
+    founding: Founding,
+    /// The operations the document holds already. An operation it holds is
+    /// an echo or a replay, which Loro drops on import.
+    version: &'a VersionVector,
+    /// Whether a message map other than the given container holds the
+    /// identifier.
+    elsewhere: &'a dyn Fn(Id<Message>, &ContainerID) -> bool,
+}
+
+/// Whether `container` is the one the operation `op` creates. Loro names a
+/// created container after its operation, and refuses an update that names
+/// another one. A container held already would let a delta reach it through
+/// the rule of a fresh one (`MURMURE-681`).
+fn creates(container: &ContainerID, op: ID) -> bool {
+    matches!(container, ContainerID::Normal { peer, counter, .. } if *peer == op.peer && *counter == op.counter)
+}
+
+/// Whether a write to the root `root` is allowed. The creating delta writes
+/// plain values in the `header` and the `meta` roots. An operation the
+/// document holds already is an echo. Every other root write is refused
+/// (`MURMURE-679`).
+fn founding_allowed(
+    root: &ContainerID,
+    op: &loro::json::JsonOp,
+    peer: ambre_core::PeerId,
+    held: Held<'_>,
+) -> Result<(), Refusal> {
+    let founding_root = is_root(root, Root::Header, ContainerType::Map)
+        || is_root(root, FoundationRoot::Meta, ContainerType::Map);
+    if !founding_root {
+        return Err(Refusal::ForeignRoot);
+    }
+    if held.version.includes_id(ID::new(peer.get(), op.counter)) {
+        return Ok(());
+    }
+    match (&op.content, held.founding) {
+        (JsonOpContent::Map(MapOp::Insert { value, .. }), Founding::Blank)
+            if !matches!(value, LoroValue::Container(_)) =>
+        {
+            Ok(())
+        }
+        _ => Err(Refusal::ForeignRoot),
+    }
+}
+
+/// The one message map of `segment` that holds the identifier `key`. `None`
+/// when no map holds it, or when two do: a check then names no author, and
+/// refuses rather than pick one (`MURMURE-678`).
+fn sole_message(segment: &LoroDoc, key: Id<Message>) -> Option<Fields<MessageKey>> {
     let key = key.to_string();
     let key = key.as_str();
-    let list = crate::logic::schema::root_list(segment, Root::Messages);
-    (0..list.len()).find_map(|index| {
-        let map = list.get(index).and_then(schema::fields_of::<MessageKey>)?;
-        if schema::string(&map, MessageKey::Id).as_deref() != Some(key) {
-            return None;
+    let list = schema::held_root_list(segment, Root::Messages)?;
+    let mut found = (0..list.len())
+        .filter_map(|index| list.get(index).and_then(schema::fields_of::<MessageKey>))
+        .filter(|map| schema::string(map, MessageKey::Id).as_deref() == Some(key));
+    let first = found.next()?;
+    found.next().is_none().then_some(first)
+}
+
+/// Whether a message map of `doc` other than `container` holds the
+/// identifier `key`.
+fn held_elsewhere(doc: &LoroDoc, key: Id<Message>, container: &ContainerID) -> bool {
+    let key = key.to_string();
+    let key = key.as_str();
+    let Some(list) = schema::held_root_list(doc, Root::Messages) else {
+        return false;
+    };
+    (0..list.len()).any(|index| match list.get(index) {
+        Some(ValueOrContainer::Container(Container::Map(map))) => {
+            loro::ContainerTrait::id(&map) != *container
+                && schema::string(&Fields::<MessageKey>::new(map), MessageKey::Id).as_deref()
+                    == Some(key)
         }
-        Id::<User>::parse_str(&schema::string(&map, MessageKey::Author)?).ok()
+        _ => false,
     })
+}
+
+/// The author `segment` holds for the message `key` names, `None` when it
+/// holds no such message, or holds the identifier twice.
+pub(crate) fn author_in(segment: &LoroDoc, key: Id<Message>) -> Option<Id<User>> {
+    let map = sole_message(segment, key)?;
+    Id::<User>::parse_str(&schema::string(&map, MessageKey::Author)?).ok()
 }
 
 /// What a message's `thread` field holds, as the check reads it.
@@ -457,18 +620,12 @@ impl ThreadField {
 }
 
 /// The `thread` field `segment` holds for the message `key` names, unset
-/// when it holds no such message or no thread.
+/// when it holds no such message or no thread. The check of a thread asks
+/// [`author_in`] first, so an identifier held twice never reaches here.
 fn thread_in(segment: &LoroDoc, key: Id<Message>) -> ThreadField {
-    let key = key.to_string();
-    let key = key.as_str();
-    let list = crate::logic::schema::root_list(segment, Root::Messages);
-    ThreadField::read((0..list.len()).find_map(|index| {
-        let map = list.get(index).and_then(schema::fields_of::<MessageKey>)?;
-        if schema::string(&map, MessageKey::Id).as_deref() != Some(key) {
-            return None;
-        }
-        schema::string(&map, MessageKey::Thread)
-    }))
+    ThreadField::read(
+        sole_message(segment, key).and_then(|map| schema::string(&map, MessageKey::Thread)),
+    )
 }
 
 /// Whether a write to another author's message sets its `thread` field to a
@@ -619,9 +776,9 @@ fn is_root(id: &ContainerID, root: impl ContainerName, kind: ContainerType) -> b
 /// The user the registry of `doc` names for `peer`, `None` when its entry is
 /// absent or unreadable (`AUTHOR-006`).
 pub(crate) fn registered(doc: &LoroDoc, peer: ambre_core::PeerId) -> Option<Id<User>> {
-    let ValueOrContainer::Value(LoroValue::Binary(bytes)) = doc
-        .get_map(ambre_core::crdt::FoundationRoot::Peers.as_str())
-        .get(ambre_core::PeerKey::of(peer).as_str())?
+    let ValueOrContainer::Value(LoroValue::Binary(bytes)) =
+        schema::held_root_map(doc, FoundationRoot::Peers.as_str())?
+            .get(ambre_core::PeerKey::of(peer).as_str())?
     else {
         return None;
     };
@@ -681,6 +838,13 @@ pub(crate) fn verdict(
     update: &JsonSchema,
     signer: Signer,
 ) -> Result<(), Refusal> {
+    let version = doc.oplog_vv();
+    let elsewhere = |key: Id<Message>, container: &ContainerID| held_elsewhere(doc, key, container);
+    let held = Held {
+        founding: Founding::of(doc),
+        version: &version,
+        elsewhere: &elsewhere,
+    };
     match rules {
         Rules::Segment => check(
             update,
@@ -689,6 +853,7 @@ pub(crate) fn verdict(
             |id| reaction::is_map(doc, id),
             |id| crate::logic::call::is_end_map(doc, id),
             |id| thread_field(doc, id),
+            held,
         ),
         Rules::Thread => check(
             update,
@@ -697,6 +862,7 @@ pub(crate) fn verdict(
             |id| reaction::is_map(doc, id),
             |_| false,
             |_| None,
+            held,
         ),
         Rules::Amendments { segment } => check_amendments(
             update,
@@ -705,24 +871,26 @@ pub(crate) fn verdict(
             |key| author_in(segment, key),
             |key| {
                 schema::string_value(
-                    crate::logic::schema::root_map(doc, Root::Threads).get(&key.to_string()),
+                    schema::held_root_map(doc, Root::Threads.as_str())
+                        .and_then(|threads| threads.get(&key.to_string())),
                 )
                 .map_or_else(
                     || thread_in(segment, key),
                     |named| ThreadField::read(Some(named)),
                 )
             },
+            held,
         ),
     }
 }
 
 /// Import `arrivals` into `doc`, in order. A signed delta passes the check
 /// first, against the registry `doc` holds so far. A refused one is left out,
-/// and changes nothing (`MURMURE-030`).
+/// and changes nothing (`MURMURE-030`). So is a checked one Loro refuses: one
+/// member's delta never makes the document unopenable (`MURMURE-680`).
 ///
 /// # Errors
-/// [`MurmureError::Schema`] for Loro bytes the engine refuses, and
-/// [`MurmureError::Crdt`] for a checked update Loro refuses.
+/// [`MurmureError::Schema`] for Loro bytes the engine refuses.
 pub(crate) fn import_arrivals(
     doc: &LoroDoc,
     arrivals: Vec<Arrival>,
@@ -740,7 +908,11 @@ pub(crate) fn import_arrivals(
                     tracing::warn!("[Murmure] a delta for {document_id} refused: {refusal}");
                     continue;
                 }
-                doc.import_json_updates(update)?;
+                // Loro decodes the whole update before it applies any of it,
+                // so a refused update changes nothing.
+                if let Err(error) = doc.import_json_updates(update) {
+                    tracing::warn!("[Murmure] a delta for {document_id} Loro refused: {error}");
+                }
             }
         }
     }
@@ -773,5 +945,40 @@ mod tests {
         let unreadable = ThreadField::read(Some("not a document".to_owned()));
         assert_eq!(unreadable, ThreadField::Unreadable);
         assert!(!unreadable.takes(thread));
+    }
+
+    /// A segment that holds one message under an identifier names its
+    /// author. A segment that holds the identifier twice names none, so an
+    /// amendment of it is refused rather than bound to the wrong message
+    /// (`MURMURE-678`).
+    #[test]
+    fn an_identifier_held_twice_names_no_author() {
+        let (message, alice, mallory) = (
+            Id::<Message>::mint(),
+            Id::<User>::mint(),
+            Id::<User>::mint(),
+        );
+        let segment = LoroDoc::new();
+        let push = |author: Id<User>| {
+            let map = Fields::<MessageKey>::new(
+                crate::logic::schema::root_list(&segment, Root::Messages)
+                    .push_container(loro::LoroMap::new())
+                    .expect("push"),
+            );
+            map.insert(MessageKey::Id, message.to_string()).expect("id");
+            map.insert(MessageKey::Author, author.to_string())
+                .expect("author");
+            map.insert(MessageKey::Thread, Id::<Document>::mint().to_string())
+                .expect("thread");
+        };
+        push(alice);
+        assert_eq!(author_in(&segment, message), Some(alice));
+        assert!(matches!(
+            thread_in(&segment, message),
+            ThreadField::Names(_)
+        ));
+        push(mallory);
+        assert_eq!(author_in(&segment, message), None);
+        assert_eq!(thread_in(&segment, message), ThreadField::Unset);
     }
 }

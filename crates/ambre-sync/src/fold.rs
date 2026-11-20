@@ -346,7 +346,10 @@ mod tests {
             &root(),
             document,
             snapshot,
-            &Vouch::Confirm(FixedBytes::from_array([0; 64])),
+            &Vouch::Confirm(crate::pipeline::BlobConfirmation {
+                signature: FixedBytes::from_array([0; 64]),
+                blob: FixedBytes::from_array([0; 32]),
+            }),
         )
         .await;
         assert_eq!(folded, Ok(Some(amendments)));

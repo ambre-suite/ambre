@@ -40,6 +40,7 @@ shares nothing.
 | `CHROME-046` | `FRAME` | A document key MUST NOT be wrapped to a recipient before the trust decision is taken. | this spec section 3; `ambre-spec-zero-knowledge.md` | type-level -- the first phase's parameters carry no document key and no exchange key, so there is nothing in scope to wrap with, the wrap living in the second phase alone | none | verified |
 | `CHROME-050` | `FAIL` | A key never seen before MUST interrupt: the invitation MUST NOT proceed until the user confirms. | this spec section 3 | `ambre_app::tofu::tests::a_new_or_changed_key_asks_and_only_the_pinned_key_invites` -- a key with no pin becomes a prompt, not an invitation; ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads each path once it resolves, so an alias, a re-export and a macro name what they reach. It refuses the invitation variant named on the UI thread outside `tofu.rs`, the file that holds the decision (`ambre_primitives::driver::chrome::an_invitation_or_a_named_create_under_a_re_export_is_refused_on_the_ui_thread`) | none | verified |
 | `CHROME-051` | `FAIL` | A key that differs from the stored one MUST block the invitation. | this spec section 3 | `ambre_app::tofu::tests::a_new_or_changed_key_asks_and_only_the_pinned_key_invites` -- a substituted key is classified as changed and becomes a prompt; `ambre_app::switchboard::tests::a_pinned_invitee_key_invites_at_the_instant_read` -- only the pinned key reaches the invitation | none | verified |
+| `CHROME-138` | `FAIL` | Given an invitation to an address no provider proved, the prompt MUST say that the address is unproven before any key is wrapped. | this spec section 3; `ambre-spec-session.md` (`SRV-029`) | `ambre_sync::sharing::tests::fetch_invitee_key_carries_the_proof_of_the_address` -- the first phase carries the relay's flag, and a missing flag reads as unproven; `ambre_app::switchboard::tests::an_invitee_key_asks_for_a_first_contact_and_for_a_change` -- the flag reaches the prompt; `ambre_app::tofu::tests::an_unproven_address_is_named_before_the_invitation_wraps` -- browser tier: the modal warns of an unproven address and its confirming action names it, and a proven one shows no warning | none | verified |
 
 ### 1.3 Confirm the recipient's key
 
@@ -68,7 +69,7 @@ Escape, the backdrop and the refusing action are three routes to one outcome.
 * **Boundary.** this is the boundary. The confirmed key is stored on the client and never sent, and
   the fingerprint is public by construction. The invitation carries the expected key so the wrapping
   thread can refuse. The keys never leave the Sync thread (`ambre-spec-zero-knowledge.md`).
-* **Verification.** 18 `verified`. The two phases run over a scripted relay. The classification and
+* **Verification.** 19 `verified`. The two phases run over a scripted relay. The classification and
   the confirmation are pure, and the prompt is mounted in the browser tier. A scan holds who
   hashes a key and who builds an invitation.
 
@@ -108,6 +109,12 @@ to happen on the first contact or be seen.
 | new | nothing stored for this recipient | the fingerprint, and the invitation waits for a decision |
 | trusted | the stored key equals the fetched one | nothing: the invitation proceeds |
 | changed | the stored key differs | a blocking alert, refusing by default |
+
+**An unproven address.** A provider proves an address at sign-in, and a setup only asserts one. An
+asserted address may belong to whoever set up the account first, so the first contact is the risky
+kind. The relay sends the proof with the search answer. The prompt of a new key for an asserted
+address says so before the user confirms, and before any key is wrapped (`CHROME-138`). A missing
+flag reads as unproven.
 
 **The fingerprint.** A hash of the public key, truncated and grouped so a person can read it over
 the phone.

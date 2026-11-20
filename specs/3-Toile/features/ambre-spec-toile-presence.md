@@ -39,7 +39,7 @@ own half: the board anchor, what the overlay paints, and the trail the receiver 
 | `TOILE-UI-219` | `OBS` | Presence MUST be painted above every element and below the reaction badges, so a chip is never hidden by a ghost. | this spec section 4; `features/ambre-spec-toile-reactions.md` | `ambre_toile::ui::view::view_tests::the_overlays_stack_peers_then_badges_then_pins` -- no peer op in the board pass, and every peer op before the first badge | none | verified |
 | `TOILE-UI-220` | `INV` | The overlay MUST hold no peer from a board that is no longer open. | this spec section 4 | `ambre_toile::ui::view::view_tests::opening_another_board_drops_its_peers` | none | verified |
 | `TOILE-UI-075` | `OBS` | A peer who leaves the board MUST stop being painted. | this spec section 4 | `ambre_toile::ui::presence::tests::a_peer_absent_from_the_set_stops_being_painted` -- it adopts a two-peer set, then a one-peer set, then an empty one, and counts what each paints | none | verified |
-| `TOILE-UI-076` | `OBS` | A peer's label MUST be the display name their session carries. | this spec section 4 | `ambre_toile::ui::presence::tests::the_label_is_the_name_the_sample_carried` -- the reader, over a name; `ambre_toile::logic::convergence_tests::the_outbound_sample_carries_the_session_display_name` -- the writer. That a label decides neither identity nor colour is `PRESENCE-004` | none | verified |
+| `TOILE-UI-076` | `OBS` | A peer's label MUST be the display name their session carries, followed by the handle of the member the transport resolved (`PRESENCE-017`). | this spec section 4 | `ambre_toile::ui::presence::tests::the_label_is_the_name_the_sample_carried` -- the reader, over a name; `ambre_toile::logic::convergence_tests::the_outbound_sample_carries_the_session_display_name` -- the writer. That a label decides neither identity nor colour is `PRESENCE-004` | none | verified |
 | `TOILE-UI-367` | `OBS` | A peer's label MUST fall back to a prefix of their identifier only when they send no display name. | this spec section 4 | `ambre_toile::ui::presence::tests::the_label_is_the_name_the_sample_carried` -- the reader, over an absent name and a blank one | none | verified |
 | `TOILE-287` | `INV` | A local clock that steps backwards MUST NOT age a peer out of the live set. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_clock_that_steps_backwards_ages_nobody` -- a sample lands at a late clock, the next tick reads an earlier one, and the peer is still there | none | verified |
 
@@ -194,7 +194,7 @@ The overlay is one pass, above all content, painted in screen space and never cu
 (`features/ambre-spec-toile-reactions.md`), so a chip is never hidden by a ghost. The pass is skipped
 whole when no peer is known.
 
-**The label is a hex handle today.** The overlay prints the first four bytes of the `Id<User>`, because
+**The label is a hex handle today.** The overlay prints the last four bytes of the `Id<User>`, because
 nothing hands it the display name the member list already carries (`TOILE-UI-076`).
 
 **What sends nothing.** No gesture emits `Presence`, and no tool produces a highlighter point

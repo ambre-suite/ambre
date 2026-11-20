@@ -973,13 +973,23 @@ pub(crate) fn meta_read(doc: &LoroDoc) -> Option<Fields<MetaKey>> {
     doc.get_by_str_path(Root::Meta.as_str()).and_then(fields_of)
 }
 
-/// The block tree, or `None` when the document has none, for the same reason
-/// as [`meta_read`].
+/// The block tree, or `None` when the document state holds no operation yet.
+///
+/// A reader never takes [`blocks`] on a blank document: Loro would attach the
+/// root it did not find. Laying the document out writes nothing to it
+/// (`PROSE-079`). Past the first operation, every Prose document holds its
+/// tree (`PROSE-027`), so taking it attaches nothing. A state that breaks that
+/// rule gets an empty tree in its local state, and no operation.
+///
+/// The lookup by path [`meta_read`] takes is closed to the tree. Before Loro
+/// picks a root by name, it builds the value of each candidate. The value of a
+/// tree nests one call per level. A chain of nested blocks a peer wrote thus
+/// overflowed the stack of the Logic thread. The lookup also cost the size of
+/// the whole tree on every read (`PROSE-140`).
 #[must_use]
 pub(crate) fn blocks_read(doc: &LoroDoc) -> Option<LoroTree> {
-    doc.get_by_str_path(Root::Blocks.as_str())
-        .and_then(|value| value.into_container().ok())
-        .and_then(|container| container.into_tree().ok())
+    let blank = doc.get_pending_txn_len() == 0 && doc.state_frontiers().is_empty();
+    (!blank).then(|| blocks(doc))
 }
 
 /// The map a key already holds, or `None` when the key is empty.

@@ -216,6 +216,26 @@ fn a_package_past_its_part_count_is_refused() {
     assert_eq!(Package::open(&bytes).err(), Some(OpcError::TooManyParts));
 }
 
+/// The bound on a tree: a content types part holds more empty entries than
+/// [`MAX_TREE_NODES`]. It reads under the part bound and deflates to a few
+/// kilobytes, and the package is refused.
+#[test]
+fn a_content_types_part_past_the_node_bound_is_refused() {
+    let past = usize::try_from(MAX_TREE_NODES.get()).expect("fits") + 1;
+    let part = format!("<Types>{}</Types>", "<a/>".repeat(past));
+    assert!(Count::<Octets>::of(part.len()) < MAX_PART_SIZE);
+    let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    zip.start_file(CONTENT_TYPES, zip::write::SimpleFileOptions::default())
+        .expect("starts");
+    zip.write_all(part.as_bytes()).expect("writes");
+    let bytes = zip.finish().expect("finishes").into_inner();
+    assert!(bytes.len() < 1024 * 1024);
+    assert_eq!(
+        Package::open(&bytes).err(),
+        Some(OpcError::Malformed(CONTENT_TYPES))
+    );
+}
+
 /// The bound on one part: a part one byte past [`MAX_PART_SIZE`] fails while
 /// it inflates, whatever its header claims.
 #[test]

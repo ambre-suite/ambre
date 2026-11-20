@@ -24,6 +24,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-084` | `INV` | A nested document MUST carry its own permission: what a user can do on the board MUST NOT decide what they can do inside it. | this spec section 3; `ambre-spec-architecture.md section 2` | `ambre_logic::dispatch::tests::an_embedded_child_is_gated_by_its_own_role_not_the_boards`; `ambre_logic::dispatch::tests::owning_the_board_grants_nothing_on_a_document_embedded_in_it` | none | verified |
 | `TOILE-088` | `INV` | A web page on the board MUST reach neither the board, its keys nor its storage. | README pillar "E2EE"; this spec section 4 | `ambre_toile::ui::embed::address_tests::a_scheme_that_could_run_in_the_boards_stead_is_refused`; `ambre_toile::ui::embed::address_tests::a_scheme_hidden_behind_a_control_character_is_refused`; `ambre_toile::ui::embed::address_tests::plain_http_is_refused_and_not_upgraded`; `ambre_app::host::web_embed::tests::a_web_embed_runs_sandboxed_in_an_opaque_origin` -- the frame's sandbox, `allow` and referrer attributes | none | verified |
 | `TOILE-267` | `INV` | An address a peer wrote MUST pass the same check as a typed one before a frame loads it. | this spec section 4; `TOILE-088` | `ambre_toile::logic::convergence_tests::a_peers_unsafe_web_address_never_reaches_a_frame` -- a `javascript:`, `data:`, `blob:`, `http` and empty address written past the commands; `ambre_toile::message::tests::a_received_address_is_checked_again`; type-level -- the rule of `Validated<WebAddress>` is its only door, and deserialisation goes through it | none | verified |
+| `TOILE-301` | `INV` | The choice for a site MUST stay on this device, keyed by the host alone: the document, the relay and every peer MUST NOT receive it. | this spec section 4; `ZK-048` | `ambre_toile::ui::embed::consent_tests::a_choice_is_keyed_by_the_host_alone`; `ambre_app::host::web_embed::tests::no_page_loads_before_its_site_is_chosen` -- the choice reads back from the storage of the browser in a fresh session; type-level -- `SiteChoice` derives no serde, and no command, event or register of the board names it | none | verified |
 | `TOILE-224` | `INV` | Which embed is entered MUST be this user's own view state: a peer entering an embed MUST NOT change what this user has focused. | this spec section 5 | `ambre_toile::logic::convergence_tests::doc_embed_reference_survives_the_crdt_round_trip` -- it reads no embed as entered, whatever the document holds, so no field carries it | none | verified |
 | `TOILE-UI-016` | `INV` | At most one embed MUST hold focus. | this spec section 3 | `ambre_toile::ui::embed::tests::only_the_focused_embed_comes_back_focused`; type-level -- the focus is one `Option<Id<Element>>`, so a second is unrepresentable | none | verified |
 | `TOILE-UI-090` | `INV` | One session MUST serve one nested document, however many embeds point at it. | this spec section 3 | `ambre_toile::ui::embed::tests::a_visible_embed_opens_once_and_only_once`; `ambre_toile::ui::embed::tests::two_embeds_of_the_same_document_share_one_session` | none | verified |
@@ -108,13 +109,24 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-085` | `POST` | Copying an embed MUST produce a second reference to the same document. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_copied_embed_is_a_second_reference_to_the_same_document` | none | verified |
 | `TOILE-226` | `FRAME` | Copying an embed MUST NOT copy the document it points at. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_copied_embed_is_a_second_reference_to_the_same_document` -- the paste names no other document | none | verified |
 
+### 1.10 Load a web page
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TOILE-299` | `PRE` | A web embed MUST NOT load its page until this user chose to load pages of its site, always or for this embed once. | this spec section 4; `ZK-048` | `ambre_toile::ui::embed::consent_tests::only_an_answer_loads_a_page` -- the decision as a function of the stored choice and of the answer of the session; `ambre_app::host::web_embed::tests::no_page_loads_before_its_site_is_chosen` -- no frame with an address before the answer, two passes long; `::a_page_loaded_once_leaves_the_site_asking` | none | verified |
+| `TOILE-300` | `POST` | A web embed whose site holds no choice MUST show, over its placeholder, the site and three answers: load once, always for the site, never for the site. | this spec section 4 | `ambre_app::host::web_embed::tests::no_page_loads_before_its_site_is_chosen` -- three buttons in the prompt, and the prompt leaves with the answer | none | verified |
+| `TOILE-302` | `FAIL` | A choice the storage of the browser cannot give back MUST read as no choice, so the embed asks. | this spec section 4 | `ambre_toile::ui::embed::consent_tests::an_unreadable_choice_asks` | none | verified |
+| `TOILE-303` | `POST` | A web embed of a site refused on this device MUST load no page. | this spec section 4 | `ambre_toile::ui::embed::consent_tests::a_refused_site_loads_nothing` -- even for an embed loaded once before the refusal; `ambre_app::host::web_embed::tests::a_refused_site_loads_nothing_until_asked_again` | none | verified |
+| `TOILE-304` | `POST` | The placeholder of a refused site MUST offer one gesture that asks again. | this spec section 4 | `ambre_app::host::web_embed::tests::a_refused_site_loads_nothing_until_asked_again` -- one button, and the three answers back once it is pressed | none | verified |
+| `TOILE-305` | `FRAME` | An answer to the prompt of a web embed MUST NOT write to the document. | this spec section 4; `TOILE-301` | structural -- the button queues the answer for the shell's `WebFrames`, which holds the storage of the browser and no handle to the Logic thread of the board, and no `ToileCommand` names a site or a choice | none | verified |
+
 * **Budget.** none of its own, and that is the open question rather than the answer. A child is a
   whole document view painting inside the board's frame, so an embed spends the board's 16 ms. No
   figure bounds how many a board carries.
 * **Boundary.** the board stores a reference and no content, so the relay sees no embedding table
   (`TOILE-021`). A child opens through the ordinary document path, with its own key, session and
   permission (`TOILE-084`). The web page is the exception (`TOILE-088`).
-* **Verification.** 47 `verified`. Host tests hold what the board decides alone: the reference, the
+* **Verification.** 54 `verified`. Host tests hold what the board decides alone: the reference, the
   transforms, the focus, the routing, the address gate and the sessions. Browser tests hold the
   launcher's half: the child paint, the remap, the fan-out, the dialogs and the sandbox.
 
@@ -236,6 +248,15 @@ launcher owns the dialog. A web address is typed into the DOM, and the document 
 launcher's alone. What crosses back into the board is the answer -- an address or a reference --
 never the gesture, exactly as a dropped file does.
 
+**A page loads on the word of the user who watches it.** A frame that loads tells the site the
+address of this client and the time it watches the board. So no frame loads before this user
+answers for its site (`TOILE-299`).
+
+The answer is one of three: this embed once, every page of the
+site, or no page of the site. The shell keeps the last two in the storage of the browser, keyed by
+the host (`TOILE-301`). The choice is no part of the document, so a peer never learns it and never
+makes it. A storage the browser refuses keeps nothing, and the embed asks again (`TOILE-302`).
+
 | Trigger | What happens |
 |---|---|
 | a click on an embed | the topmost one under the pointer takes focus, and the click itself does not reach the child (`TOILE-UI-091`, `TOILE-UI-321`, `TOILE-UI-322`) |
@@ -251,7 +272,9 @@ never the gesture, exactly as a dropped file does.
 |---|---|
 | File -> "Embed a document..." | the launcher's document list opens, this board excluded; picking one mints a `doc_embed` at the centre of the view holding that document's reference (`TOILE-086`, `TOILE-225`) |
 | File -> "Embed a web page..." | a field takes an address; only `https` survives, and a refusal is read beside the field rather than found on the board (`TOILE-087`, `TOILE-088`) |
-| a web embed on screen | a sandboxed frame is mounted over the canvas where the board paints its placeholder, laid out once at the element's world size and moved by the board's own transform (`TOILE-088`) |
+| a web embed on screen, its site never chosen | no frame mounts and no request leaves; a prompt over the placeholder names the site and offers "Load once", "Always for this site" and "Never for this site" (`TOILE-299`, `TOILE-300`) |
+| a web embed on screen, its site loaded always or this embed loaded once | a sandboxed frame is mounted over the canvas where the board paints its placeholder, laid out once at the element's world size and moved by the board's own transform (`TOILE-088`) |
+| a web embed on screen, its site refused | no frame mounts; a line says that pages of the site do not load on this device, beside "Ask again" (`TOILE-303`) |
 | a web embed whose stored address fails the check | the placeholder paints, and no frame mounts (`TOILE-267`) |
 | a click on a web embed | the same arbitration as a nested document: a click enters it and the frame starts taking the pointer, a drag moves it on the board (`TOILE-UI-091`, `TOILE-UI-324`) |
 
@@ -268,6 +291,7 @@ never the gesture, exactly as a dropped file does.
 | Focus is view-local, never document state | a focus field in the document | it converges to one focus for everybody. Two users looking at one board are in different documents at the same moment, so a shared focus drags one into the other's embed |
 | Entering an embed is a click, moving it is a drag | focusing on the press | both gestures start with a press on the same box, so only the release can tell them apart. Focusing on the press makes an embed unmovable, and without the split a drag types into it |
 | A session survives a pan for the debounce | closing the instant the embed leaves the screen | visibility flips on every pan, and re-opening costs a membership fetch, a key unwrap and a snapshot, so binding the session to the cull set storms the socket on a scroll oscillation |
+| A choice per site, kept in the browser of each user | a choice per embed, written in the document | the author of a board would decide what every viewer tells a third party. The flow leaves the client of the viewer, so the viewer decides, and a choice a peer could write is one a peer could make for a victim |
 | A rotated embed clips to its bounding box | withholding rotation from an embed | it makes an embed the one element with a missing handle. The clip is rectangular and resolved against the transform at push time, and rotating a nested document is a degenerate gesture |
 
 ---
@@ -281,13 +305,6 @@ never the gesture, exactly as a dropped file does.
   address could reach `parent.document` and take its own sandbox off. Without it every frame runs
   in an opaque origin. The price is that a page needing its own storage degrades inside an embed,
   and no rule says what the user then sees.
-* **A third party learns what a board holds, and nobody asked the user.** A frame fetches its page
-  the moment a pan brings the embed on screen, and no gesture preceded it. The site sees that
-  request and the relay does not. The zero-knowledge boundary is about the relay
-  (`ambre-spec-zero-knowledge.md`), and it says nothing about a flow that leaves the client for a
-  host the document names. `TOILE-088` covers what the page may reach, not what watching it
-  reveals. The boundary table has no row for it, which is the
-  `A web page loads only when asked` Story (`ambre-roadmap.md` E6).
 * **A frame is clipped by the viewport, not by the embed.** A CSS `clip-path` is resolved in an
   element's own box before its transform, so it cannot express a screen-space rectangle. The layer
   clips instead, which bounds every frame to the visible board. An embed inside a board frame that

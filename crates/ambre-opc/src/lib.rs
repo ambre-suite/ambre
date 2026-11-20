@@ -25,7 +25,10 @@ use ambre_core::NarrowCount;
 use ambre_core::{Count, Octets, Payload, PayloadKind};
 
 pub mod odf;
+pub mod tree;
 mod xml;
+
+pub use tree::{MAX_ATTR_BYTES, MAX_TREE_NODES, TreeBudget, TreeTooLarge};
 
 /// The parts of one package, counted.
 pub enum PackageParts {}
