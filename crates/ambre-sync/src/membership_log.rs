@@ -132,9 +132,9 @@ impl SpaceWord {
 ///
 /// A writer another member revoked keeps its place, under the cap its revoke
 /// names: a delta of it past that clock counts nowhere (`SYNC-300`). A later
-/// grant readmits the writer from the head after its own entry alone: a delta
-/// past the cap counts only when it signs a head of the walk at or past that
-/// place (`SYNC-301`). The caps and the heads are in the log, so every peer
+/// grant readmits the writer from the head after its own entry alone. A delta
+/// past the cap then counts only when it signs a head of the walk at or past
+/// that place (`SYNC-301`). The caps and the heads are in the log, so every peer
 /// that holds the log gives a delta one verdict.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) enum Writers {
@@ -175,8 +175,8 @@ pub(crate) struct Readmission {
 
 impl Readmitted {
     /// Whether a delta `signer` signed at `clock` under `head` passes every
-    /// readmission of its key: at or below the cap, or under a head of the
-    /// walk at or past the grant. A writer who stood excluded never read
+    /// readmission of its key. It passes at or below the cap, or under a head
+    /// of the walk at or past the grant. A writer who stood excluded never read
     /// that head, since its digest seals the grant itself.
     fn admits(
         &self,
@@ -2015,9 +2015,8 @@ pub(crate) mod tests {
 
     /// Holds `SYNC-300` at the walk. A revoke another member signed caps the
     /// key it ends. A delta of it at the cap counts and one past it does not.
-    /// A snapshot of it counts nowhere. A later invite lifts the cap. A
-    /// departure its own member signed caps nothing, whatever it names.
-    /// What the later invite readmits is `SYNC-301`.
+    /// A snapshot of it counts nowhere. A departure its own member signed
+    /// caps nothing, whatever it names. A later invite lifts the cap.
     #[test]
     fn a_revoke_caps_the_clock_of_the_writer_it_ends() {
         let (alice, bob, carol) = (Person::new(1), Person::new(2), Person::new(3));
@@ -2064,8 +2063,8 @@ pub(crate) mod tests {
     /// Holds `SYNC-301` at the walk. Alice revokes Bob at cap 4, then
     /// invites him back. A delta at or below the cap counts under any head.
     /// A delta past it counts only under a head of the walk at or past the
-    /// invite: a head of the exclusion, a head the walk never passed and a
-    /// head with a forged digest each refuse it. A second exclusion stacks on
+    /// invite. A head of the exclusion refuses it, and so do a head the walk
+    /// never passed and a head with a forged digest. A second exclusion stacks on
     /// the first, so each readmission holds on its own.
     #[test]
     fn a_re_invite_admits_only_the_writes_past_its_own_entry() {

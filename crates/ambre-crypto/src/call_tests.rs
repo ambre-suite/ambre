@@ -475,7 +475,7 @@ fn binding(sender: u64, recipient: u64) -> WrapBinding {
     }
 }
 
-/// A wrap opens for its recipient alone, under its own binding alone, and carries the
+/// A wrap opens for its recipient alone, under its own binding alone. It carries the
 /// generation, the departures, the place of the log its sender heeded and the key.
 #[test]
 fn a_wrap_opens_for_its_recipient_and_binding_alone() {

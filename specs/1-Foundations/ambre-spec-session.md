@@ -78,10 +78,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   and sees none of the three secrets behind them (`ZK-003`, `SRV-091`). What it mints is its own
   token, and `SRV-012` refuses it every other cryptographic act. The socket takes its token in its
   first frame, so no address carries one (`SRV-031`).
-* **Verification.** 33 `verified`. What holds is what a request test can drive:
-  the token gate, the address namespace, the one-shot key write and the refresh race. A provider
-  exchange runs against a stub that signs its own identity tokens. A real provider never runs under
-  a test.
+* **Verification.** 34 `verified`. What holds is what a request test can drive: the token gate, the
+  address namespace, the one-shot key write and the refresh race. A provider exchange runs against a
+  stub that signs its own identity tokens. A real provider never runs under a test.
 ---
 
 ## 2. WHAT EACH USER SEES

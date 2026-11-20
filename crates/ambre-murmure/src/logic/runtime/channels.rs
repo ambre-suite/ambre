@@ -1041,8 +1041,8 @@ impl<D> Runtime<D> {
 
     /// A revoke capped a writer below a delta `document_id` applied, so the
     /// state of its channel holds a write the log refuses (`SYNC-300`). A
-    /// merge cannot take that write out. The whole channel ends, each local
-    /// copy of its documents leaves the store, and the channel opens again
+    /// merge cannot take that write out. The whole channel ends, and each
+    /// local copy of its documents leaves the store. The channel opens again
     /// from the relay, which replays each document under the cap. Returns
     /// `false` when no channel holds the document.
     pub fn channel_reread(&mut self, document_id: Id<Document>) -> bool {

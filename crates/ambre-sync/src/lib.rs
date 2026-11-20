@@ -969,8 +969,8 @@ struct SyncDocumentState {
     /// latest walk of its log (`SYNC-211`).
     writers: membership_log::Writers,
     /// What this document applied of each author: the highest clock of
-    /// their deltas and of what each snapshot it opened folds, and the
-    /// heads their deltas signed (`SYNC-300`, `SYNC-301`). A cell: the opens
+    /// their deltas and of what each snapshot it opened folds. It also holds
+    /// the heads their deltas signed (`SYNC-300`, `SYNC-301`). A cell: the opens
     /// that read it borrow the document shared.
     applied: std::cell::RefCell<Applied>,
     /// The latest departure the current key was checked against, or found
@@ -1508,8 +1508,8 @@ impl SyncDocumentState {
     }
 
     /// Whether a delta this document applied lies past a cap `writers`
-    /// sets, or past a cap a later grant lifted under a head before that
-    /// grant. The state then holds a write the log refuses, and is read
+    /// sets. A cap a later grant lifted still holds a delta signed under a
+    /// head before that grant. The state then holds a write the log refuses, and is read
     /// again from the relay (`SYNC-300`, `SYNC-301`).
     pub(crate) fn applied_past_cap(&self, writers: &membership_log::Writers) -> bool {
         self.applied.borrow().past_cap(writers)

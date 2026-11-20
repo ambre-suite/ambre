@@ -1000,7 +1000,7 @@ mod tests {
         container.remove();
     }
 
-    /// `CHROME-146`: the launcher of a session names a reclaim of its
+    /// `CHROME-146`, `CHROME-147`: the launcher of a session names a reclaim of its
     /// address, then says that shares to the address now reach the verified
     /// account. The notice is an alert, and an account that holds its address
     /// shows none.

@@ -7599,9 +7599,9 @@ mod tests {
         assert!(!fresh.documents[&doc].applied_past_cap(&fresh.documents[&doc].writers));
     }
 
-    /// Holds `SYNC-300` at the open. A revoke caps Bob at clock 1, and the
-    /// owner's snapshot folds his clock 2: it holds a write the log refuses,
-    /// so the open refuses it whole and replays from the first delta. The
+    /// Holds `SYNC-304` at the open. A revoke caps Bob at clock 1, and the
+    /// owner's snapshot folds his clock 2. That snapshot holds a write the log
+    /// refuses, so the open refuses it whole and replays from the first delta. The
     /// replay lands his clock 1 and refuses his clock 2. A snapshot that
     /// folds his clock 1 alone opens.
     #[test]

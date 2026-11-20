@@ -105,8 +105,8 @@ impl Held {
     }
 }
 
-/// What a participant had heeded when it drew the key of an epoch: the sessions it had
-/// departed (`CALL-157`), and the place of the membership log it had walked (`CALL-159`).
+/// What a participant had heeded when it drew the key of an epoch. It holds the sessions it
+/// had departed (`CALL-157`) and the place of the membership log it had walked (`CALL-159`).
 /// A ratchet keeps both: it draws no key.
 #[derive(Clone, Default)]
 struct Drawn {
@@ -114,8 +114,8 @@ struct Drawn {
     heeded: Seq<LogPlaces>,
 }
 
-/// A removal this client heeded: the sessions it departed, the participants it still held,
-/// the place of the log that removed them, and the end of its switch delay.
+/// A removal this client heeded: the sessions it departed and the participants it still held.
+/// It also holds the place of the log that removed them and the end of its switch delay.
 struct RemovalMark {
     sessions: Vec<Seq<SenderIndex>>,
     /// The participants this client held at the removal. Their departures tell a key drawn

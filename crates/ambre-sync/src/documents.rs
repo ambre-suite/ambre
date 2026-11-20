@@ -370,9 +370,9 @@ impl SyncState {
     }
 }
 
-/// What a listed name opens under, by the document of its log: the key the
-/// walked or kept log accepted last (`SYNC-291`), and the links its latest
-/// open or rotation held in the session (`SYNC-302`).
+/// What a listed name opens under, by the document of its log. It holds the
+/// key the walked or kept log accepted last (`SYNC-291`). It also holds the
+/// links its latest open or rotation held in the session (`SYNC-302`).
 #[derive(Clone, Default)]
 pub(crate) struct KeptNames {
     pub(crate) keys: HashMap<Id<Document>, ambre_core::FixedBytes<ambre_core::KeyId>>,
@@ -403,10 +403,10 @@ impl ListedName<'_> {
     /// label.
     ///
     /// The relay names the wrapper of the copy. It can wrap a key of its own
-    /// and seal a name of its choosing under it. The name opens only under
-    /// the key the checks of an open accepted last for this log, kept across
-    /// sessions (`SYNC-291`), by an author the walked log admits
-    /// (`SYNC-135`). It is sealed under that key, or under an older key the
+    /// and seal a name of its choosing under it. The name opens only by an
+    /// author the walked log admits (`SYNC-135`). It opens under the key the
+    /// checks of an open accepted last for this log, kept across sessions
+    /// (`SYNC-291`). It is sealed under that key, or under an older key the
     /// chain the log kept reaches from it (`SYNC-302`). A listing sends no
     /// request of its own, so a name past the kept chain, or a document never
     /// walked, shows none.

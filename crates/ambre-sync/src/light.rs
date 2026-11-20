@@ -938,7 +938,7 @@ mod tests {
         assert_eq!(state.take_light(document_id), None);
     }
 
-    /// Holds `SYNC-300` at a reopen. The evicted session applied Bob's
+    /// Holds `SYNC-304` at a reopen. The evicted session applied Bob's
     /// clock 2, and a revoke capped him at 1 while the document was light.
     /// The reopen resumes from the local copy, so the open that walks the
     /// cap reads the document again. A walk with no cap reads nothing.

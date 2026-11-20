@@ -805,7 +805,7 @@ mod tests {
         assert!(!state.rt().closed_channels().any(|c| c == channel_id));
     }
 
-    /// Holds `SYNC-300` for a channel, fail closed. A revoke caps a writer
+    /// Holds `SYNC-303` for a channel, fail closed. A revoke caps a writer
     /// below a delta the active segment applied. The whole channel ends:
     /// each document closes in Sync and its local copy leaves the store.
     /// The channel then opens again from the relay, which replays each

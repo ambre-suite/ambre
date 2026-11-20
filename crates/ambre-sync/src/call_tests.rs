@@ -1039,8 +1039,9 @@ fn wrap_among(moves: &[Moves], to: Seq<SenderIndex>) -> ambre_crypto::call::Wrap
 
 /// `CALL-159`: Eve is removed, and Roger heeds it. Carol joins after the removal, and the relay
 /// serves her the log before it. Her own log holds Eve, so Carol wraps her key to Eve. Roger
-/// admits Carol under the current log. Her key names the place of the log before the removal:
-/// inside the switch delay Roger hands its close with it, and past the delay he refuses it.
+/// admits Carol under the current log. Her key names the place of the log before the removal.
+/// Roger hands its close with it inside the switch delay, and refuses it past the delay.
+///
 /// Dave joins under the current log, and his key opens at Roger with no close.
 #[test]
 fn a_joiner_under_a_rolled_back_log_has_its_key_closed_at_the_removal() {

@@ -102,9 +102,9 @@ const WRAP_DOMAIN: &[u8] = b"ambre-call-wrap-v1";
 const SIGNED_JOIN_LEN: usize = 16 * 3 + 32 + 8 + 8 + 32 + 64;
 /// The most departed sender indexes a wrap carries, the newest ones (`CALL-157`).
 const DEPARTURE_SLOTS: usize = 16;
-/// The length of a wrap on the wire. It holds the 24-byte nonce, the 8-byte generation, the
-/// 32-byte key, the count of departures and their slots, the 8-byte place of the log its sender
-/// heeded, then the 16-byte tag. Every wrap has one size, whatever the count.
+/// The length of a wrap on the wire. It holds the 24-byte nonce, the 8-byte generation and the
+/// 32-byte key. The count of departures and their slots follow, then the 8-byte place of the log
+/// its sender heeded, then the 16-byte tag. Every wrap has one size, whatever the count.
 const WRAP_LEN: usize = 24 + WRAP_PLAIN_LEN + 16;
 /// The plaintext of a wrap: the generation, the key, the count, each slot, then the place.
 const WRAP_PLAIN_LEN: usize = 8 + 32 + DEPARTURES_LEN + 8;
@@ -1272,8 +1272,8 @@ impl Departures {
     }
 }
 
-/// What a wrap opens to: the generation, the departures of the sender when it drew the key,
-/// the place of the membership log it had walked then, and the key.
+/// What a wrap opens to: the generation, the departures of the sender and the key. It also
+/// holds the place of the membership log the sender had walked when it drew the key.
 #[derive(Debug)]
 pub struct OpenedWrap {
     pub generation: Seq<KeyGeneration>,

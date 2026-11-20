@@ -2160,7 +2160,7 @@ mod set_up_keys_tests {
             "told {told:?}"
         );
     }
-    /// `CHROME-146`, `SRV-321`: the relay's account answer reads its reclaim
+    /// `CHROME-146`: the relay's account answer reads its reclaim
     /// flag, and an answer without it reads as held. A session whose address
     /// was reclaimed tells Logic the session, then the reclaim. A session
     /// that holds its address tells the session alone.

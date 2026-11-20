@@ -269,7 +269,7 @@ A participant sends a screen or a window into the call, and stops it.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 157 `verified`, 1 `unimplemented`. The relay admits under the cap, and the SFU
+* **Verification.** 158 `verified`, 1 `unimplemented`. The relay admits under the cap, and the SFU
   mints the TURN credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography, forwards RTP
   and reaches a browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`, `CALL-050` to
   `CALL-052`). Each receiver holds fixed slots, and a seed gives one path (`CALL-045` to
@@ -411,8 +411,9 @@ is empty. The Call crypto review Story (`ambre-roadmap.md` E5) reads it, with
   key. The departures of a joiner name none of the removed sessions, so the receiver reads
   the place instead. A key of a joiner counts as drawn after the removal only at the place of
   the log of the removal or past it (`CALL-159`). Below it, the key closes as a key drawn
-  before the removal does. The joiner opens again once it reads the current log and draws a
-  fresh key, as its own removal of Eve does.
+  before the removal does.
+* The joiner opens again once it reads the current log and draws a fresh key, as its own
+  removal of Eve does.
 * A removal that the log of the space alone makes moves no place of the log of the channel.
   The place then tells a receiver nothing about a joiner, which `CALL-137` alone bounds.
 

@@ -26,20 +26,20 @@
 | `high-density` | A screen with two or more physical pixels per CSS pixel. | implemented | 10 |  |
 | `key-rotation` | Taking someone off a document means they cannot read what is written after it. | implemented | 39 |  |
 | `kinetic-scroll` | A finger moves the view the same way in every editor. | implemented | 15 |  |
-| `launcher` | The home screen at the root of the site: sign in, then every document you can open, whatever kind it is. | implemented | 53 |  |
+| `launcher` | The home screen at the root of the site: sign in, then every document you can open, whatever kind it is. | implemented | 55 |  |
 | `locale` | A document carries one language tag, so two collaborators on differently configured machines read the same number, the same currency and the same date. | implemented | 23 |  |
 | `media` | A picture in a document travels apart from it. | implemented | 20 |  |
-| `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | implemented | 98 |  |
+| `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | implemented | 102 |  |
 | `pdf-export` | A user hands a document to someone who has no Ambre, and the file looks like the screen. | implemented | 20 |  |
 | `residency` | Which documents a client holds, in memory and on disk, and what a document it does not hold still costs. | implemented | 32 |  |
 | `schema-version` | What a document looks like once it reaches the disk, and how a later binary knows it can still read it. | implemented | 20 |  |
 | `sealed-envelope` | Nothing a user writes leaves the browser readable. | implemented | 31 |  |
-| `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 33 |  |
+| `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 34 |  |
 | `text-input` | A text area that shows nothing, sits under the caret, and is the real keyboard focus of the canvas. | implemented | 15 |  |
 | `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 23 |  |
 | `accessibility` | What a screen reader and a keyboard reach. | partial | 15 |  |
 | `adaptive-layout` | How the interface changes with the width of the window. | partial | 9 |  |
-| `call-media` | The audio and video of a call, encrypted end to end. | partial | 158 |  |
+| `call-media` | The audio and video of a call, encrypted end to end. | partial | 159 |  |
 | `chrome` | Everything around the document: the frame the canvas sits in, the menus, the modals and the toasts. | partial | 32 |  |
 | `clipboard` | Copy, cut and paste, the same way in every editor. | partial | 20 |  |
 | `drawing-surface` | The dozen calls a renderer may make: a rectangle, a line, a path, a glyph run, an image, a clip, a transform. | partial | 18 |  |
@@ -65,4 +65,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**49 features: 22 implemented, 23 partial, 4 design-only. 1739 contract rows, 14 loose.**
+**49 features: 22 implemented, 23 partial, 4 design-only. 1747 contract rows, 14 loose.**

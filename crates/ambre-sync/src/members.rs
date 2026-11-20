@@ -408,8 +408,8 @@ impl SyncState {
     }
 
     /// What a listed name opens under, for a listing task that outlives the
-    /// borrow: the key each log accepted last (`SYNC-291`) and the chain
-    /// each log kept (`SYNC-302`).
+    /// borrow. It holds the key each log accepted last (`SYNC-291`) and the
+    /// chain each log kept (`SYNC-302`).
     pub(crate) fn kept_names(&self) -> crate::documents::KeptNames {
         crate::documents::KeptNames {
             keys: self.kept_keys(),
