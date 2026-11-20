@@ -104,6 +104,18 @@ impl LogicState {
         self.route(|m| m.adopt_murmure_session(document_id, peer, entry));
     }
 
+    /// Whether no other session of the space that holds `document_id` holds
+    /// `peer` (`AUTHOR-033`). A document no open space holds reads as
+    /// unclaimed: no registry of this thread names its PeerIDs.
+    pub(crate) fn murmure_peer_unclaimed(
+        &mut self,
+        document_id: Id<Document>,
+        peer: ambre_core::PeerId,
+        nonce: &ambre_core::FixedBytes<ambre_core::SessionNonce>,
+    ) -> bool {
+        self.route(|m| m.space_peer_unclaimed(document_id, peer, nonce))
+    }
+
     /// Apply signed deltas to the channel that holds `document_id`. Returns
     /// `false` when no open or opening channel holds it.
     pub(crate) fn murmure_signed(

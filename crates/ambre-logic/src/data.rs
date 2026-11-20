@@ -1206,7 +1206,7 @@ impl LogicState {
         if let Some(doc) = self.docs.get(&document_id) {
             return crate::peer_unclaimed(doc.state.crdt(), delta.peer, &delta.nonce);
         }
-        self.route(|m| m.space_peer_unclaimed(document_id, delta.peer, &delta.nonce))
+        self.murmure_peer_unclaimed(document_id, delta.peer, &delta.nonce)
     }
 
     /// Note what the deltas just applied wait on, and drop what the document
