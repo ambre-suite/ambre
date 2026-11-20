@@ -52,9 +52,8 @@ impl Roots {
         }));
         let history =
             document.find_id_spans_between(&Frontiers::default(), &document.oplog_frontiers());
-        // The read below commits a pending transaction, and the commit runs
-        // the subscriber above, which takes the lock: so the roots are
-        // gathered first and the lock is taken once the reads are done.
+        // The read below commits a pending transaction. The commit runs the
+        // subscriber above, which takes the lock. So the reads come first.
         let mut written_roots = Vec::new();
         for (peer, span) in history.forward.iter() {
             let Ok(len) = usize::try_from(span.end.saturating_sub(span.start)) else {
