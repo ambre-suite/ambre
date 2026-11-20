@@ -542,9 +542,20 @@ impl Plan {
 pub struct Host {
     reports: Mutex<Vec<Value>>,
     seal: AtomicBool,
+    /// The person a phone signs in as at `/proof/sign-in`, through the
+    /// provider of the belt (`PROOF-020`).
+    phone: Mutex<Option<(crate::provider::Provider, String)>>,
 }
 
 impl Host {
+    /// Lets a phone sign in as `person` through `provider`, at
+    /// `/proof/sign-in`.
+    pub fn sign_in_phone(&self, provider: crate::provider::Provider, person: String) {
+        if let Ok(mut phone) = self.phone.lock() {
+            *phone = Some((provider, person));
+        }
+    }
+
     /// The reports so far.
     pub fn reports(&self) -> Vec<Value> {
         self.reports.lock().map(|r| r.clone()).unwrap_or_default()
@@ -660,6 +671,7 @@ fn router(root: PathBuf, relay: String, sfu: String, host: Arc<Host>) -> axum::R
     };
     let seal = seal_messages();
     let reported = Arc::clone(&host);
+    let (phone_host, phone_relay) = (Arc::clone(&host), relay.clone());
     axum::Router::new()
         .route("/api/ws", get(socket(relay.clone(), peer.clone())))
         .route(
@@ -684,6 +696,26 @@ fn router(root: PathBuf, relay: String, sfu: String, host: Arc<Host>) -> axum::R
             get(move || {
                 let seal = seal.clone();
                 async move { file(seal.to_string(), "application/json") }
+            }),
+        )
+        // The sign-in of a phone: the provider of the belt hands out a code
+        // for the person of the run, and the page stores the state of that
+        // sign-in, then opens its return (`PROOF-020`).
+        .route(
+            "/proof/sign-in",
+            get(move || {
+                let (host, relay) = (Arc::clone(&phone_host), phone_relay.clone());
+                async move {
+                    let phone = host.phone.lock().ok().and_then(|p| p.clone());
+                    let Some((provider, person)) = phone else {
+                        let mut resp = Response::new(Body::from("no sign-in for a phone"));
+                        *resp.status_mut() = StatusCode::NOT_FOUND;
+                        return resp;
+                    };
+                    let (code, state) =
+                        crate::provider::provider_return(&relay, &provider, &person).await;
+                    file(crate::provider::return_page(&code, &state), "text/html")
+                }
             }),
         )
         .route(

@@ -63,7 +63,7 @@ this document alone. These rows hold the harnesses. The budgets the harnesses me
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROOF-020` | `POST` | The identity provider of the belt MUST sign each person in under an identity token the relay verifies, for the code and the verifier of that person's own authorization alone. | this spec section 2, the sign-in; `ambre-spec-session.md`, `SRV-321`; `ambre-spec-zero-knowledge.md`, `ZK-050` | `ambre_belt::provider::tests::each_person_signs_in_at_the_provider_under_a_verified_identity` -- two people at once, each token verified for its own subject, address and name, a code refused a second time and under another verifier; `ambre_belt::provider::tests::a_page_signs_in_through_the_provider_of_the_belt` -- browser tier: a relay configured with the provider signs a page in, which sets up its keys | none | verified |
+| `PROOF-020` | `POST` | The identity provider of the belt MUST sign each person in under an identity token the relay verifies, for the code and the verifier of that person's own authorization alone. | this spec section 2, the sign-in; `ambre-spec-session.md`, `SRV-321`; `ambre-spec-zero-knowledge.md`, `ZK-050` | `ambre_belt::provider::tests::each_person_signs_in_at_the_provider_under_a_verified_identity` -- two people at once, each token verified for its own subject, address and name, a code refused a second time and under another verifier; `ambre_belt::provider::tests::a_page_signs_in_through_the_provider_of_the_belt` -- browser tier: a relay configured with the provider signs a page in, which sets up its keys; `ambre_belt::provider::tests::the_page_of_a_phone_stores_the_state_and_opens_the_return` -- the sign-in page of a phone stores the state and opens the return | none | verified |
 
 * **Budget.** The proofs measure four rows of `ambre-spec-budgets.md section 1`, and hold none of
   them. The four are the call chunk, the call worker load, the call video paint and the stall.
@@ -94,6 +94,7 @@ this document alone. These rows hold the harnesses. The budgets the harnesses me
 | a file of the build | serves the page with the probe, built under the cargo profile of the release |
 | `/api` | forwards it to the relay, as a deployment does |
 | `/sfu/call` | forwards it to the signalling of the SFU |
+| `/proof/sign-in` | signs the phone in through the identity provider of the belt (`PROOF-020`) |
 | the media of the SFU | listens on the address of the machine on the network of the phone |
 | the scheme | HTTPS under a certificate the phone trusts, since a camera needs a secure context; the loopback for a receiver on the desktop |
 
@@ -109,9 +110,11 @@ the host of Google alone. The belt asks the relay for the address and takes the 
 provider. It then opens the return on the page, which runs the exchange of a release build. The
 belt links the provider crate, an RSA key and a clock for it, and the relay already links all three.
 
-The proofs still sign in by a bare name, through the development sign-in (`ZK-050`). A session
-from a provider ends at a page reload. A sender opens Murmure and follows an invite link by a
-reload, so a sender signed in by the provider would lose its session there.
+Each participant signs in that way, and none by a bare name (`ZK-050`). So the build of a proof
+holds no development sign-in, and the release gate passes it (`ZK-049`). A sender opens Murmure and
+follows an invite link by a reload. The session the Sync worker kept survives each reload
+(`ambre-spec-session.md`, `SRV-322`). A phone signs in at `/proof/sign-in` on the host, which stores
+the state of the sign-in and opens the return, as the belt does through WebDriver.
 
 **The probe.** The host injects one script at the head of the page (`PROOF-001`). It runs before
 the application boots, and every 2 s it reports to the host:
@@ -182,7 +185,7 @@ Section 3 gives the procedure a person follows for each.
 | `crates/ambre-belt/src/proof.rs` | the figures, the verdicts, the plan and the proof host |
 | `crates/ambre-belt/src/proof/run.rs` | the run: the services, the senders, the receiver and the phases |
 | `crates/ambre-belt/src/proof/probe.js`, `crates/ambre-belt/src/proof/call_shim.js` | the probe and the timer |
-| `crates/ambre-belt/src/provider.rs` | the identity provider of the belt, and the sign-in of a page through it |
+| `crates/ambre-belt/src/provider.rs` | the identity provider of the belt, the sign-in of a page through it, and the sign-in page of a phone |
 | `crates/ambre-sfu/src/sim/load.rs`, `crates/ambre-sfu/src/sim/browsers.rs` | the stall run, its remote browsers and its verdict |
 | `scripts/call_stall_receivers.sh` | the netem and the WebDriver servers of the receivers' machine |
 
@@ -205,7 +208,8 @@ desktop on TCP 8443 and on UDP. `mkcert` on the desktop.
 1. Run `just call-proof-cert <address of the desktop>`, once. Install the root it names on the
    phone, in Settings, Security, Install a certificate, CA certificate.
 2. Run `just call-proof-android <address of the desktop>`.
-3. On the phone, open the address it prints in Chrome, and sign in with the name it prints.
+3. On the phone, open the address it prints in Chrome: it ends in `/proof/sign-in`. Set a
+   passphrase of your choice, then confirm the recovery words. The list of the name it prints shows.
 4. When the run says so, open Murmure, then the channel `proof` of the space `Proof`. Press Join on
    its call message, then the camera button. Keep the screen on and the page in front.
 5. Wait for the verdict, about 4 minutes.
@@ -277,10 +281,6 @@ on exit.
 * **The held share bounds the load from above.** A share over 25 % does not prove a load over 25 %.
   A profile of the phone through the remote inspector of its browser then decides.
 * **The battery and the crackle have no mechanism.** Section 3.2 is the procedure.
-* **The proofs hold the development sign-in.** Their optimised build fails the gate of
-  `ZK-049` until each participant signs in through the provider of the belt. That waits for a
-  provider session that outlives a page reload (`ZK-050`, the
-  `The relay and the sign-in hold their outbound and logging hygiene` Story (`ambre-roadmap.md` MVP)).
 * **No proof chooses the receiver's network.** A phone on a busy network can lose pictures the SFU
   sent. The run prints the freezes of each video, so a reader sees it.
 

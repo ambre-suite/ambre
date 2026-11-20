@@ -218,14 +218,14 @@ fn refused() -> axum::response::Response {
 }
 
 /// The return of `provider` for `person`: the code it handed out and the
-/// state of the sign-in the relay of `page` started.
-async fn provider_return(page: &Page, provider: &Provider, person: &str) -> (String, String) {
+/// state of the sign-in the relay at `relay` started.
+pub async fn provider_return(relay: &str, provider: &Provider, person: &str) -> (String, String) {
     let http = reqwest::Client::builder()
         .no_proxy()
         .build()
         .expect("an HTTP client");
     let answered = http
-        .get(format!("{}/api/auth/google/login", page.relay().base))
+        .get(format!("{relay}/api/auth/google/login"))
         .header(crate::serve::FORWARDED_FOR, crate::serve::page_address())
         .send()
         .await
@@ -241,6 +241,33 @@ async fn provider_return(page: &Page, provider: &Provider, person: &str) -> (Str
     (provider.authorize(url, person), state)
 }
 
+/// The address the provider sends the browser back to, on `origin`.
+pub fn return_address(origin: &str, code: &str, state: &str) -> String {
+    let mut back =
+        reqwest::Url::parse("http://belt.invalid/signin/google").expect("the return address");
+    back.query_pairs_mut()
+        .append_pair("code", code)
+        .append_pair("state", state);
+    format!(
+        "{origin}{}?{}",
+        back.path(),
+        back.query().unwrap_or_default()
+    )
+}
+
+/// A page that does in a browser what [`sign_in`] does through WebDriver:
+/// it stores the `state` of the sign-in, then opens the return of `code`.
+/// The proof host serves it to a phone, which no WebDriver drives.
+pub fn return_page(code: &str, state: &str) -> String {
+    let state_js = Value::String(state.to_owned());
+    let back = Value::String(return_address("", code, state));
+    format!(
+        "<!doctype html><meta charset=\"utf-8\"><title>Sign in</title><script>\
+         sessionStorage.setItem('ambre.signin.state', {state_js}); \
+         location.replace({back});</script>"
+    )
+}
+
 /// Signs `person` in on `page` through `provider`, as a release build signs
 /// in, then sets up the keys the new account owes. Waits for the document
 /// list under that person.
@@ -249,19 +276,16 @@ async fn provider_return(page: &Page, provider: &Provider, person: &str) -> (Str
 /// It then boots on the return, and its Sync worker has the relay exchange the
 /// code with the provider. No name and no seed comes from the belt.
 pub async fn sign_in(page: &Page, provider: &Provider, person: &str) {
-    let (code, state) = provider_return(page, provider, person).await;
+    let (code, state) = provider_return(&page.relay().base, provider, person).await;
     page.browser
         .script(
             "sessionStorage.setItem('ambre.signin.state', arguments[0]); return true;",
             json!([state]),
         )
         .await;
-    let mut back =
-        reqwest::Url::parse(&format!("{}/signin/google", page.origin)).expect("the return address");
-    back.query_pairs_mut()
-        .append_pair("code", &code)
-        .append_pair("state", &state);
-    page.browser.goto(back.as_str()).await;
+    page.browser
+        .goto(&return_address(&page.origin, &code, &state))
+        .await;
     crate::account::set_up_keys(page).await;
     crate::account::follow(page, ".ambre-words-done").await;
     crate::account::wait_list(page, person).await;
@@ -394,5 +418,187 @@ mod tests {
         let page = Page::home(relay).await;
         let person = format!("ada-{}", &uuid::Uuid::new_v4().simple().to_string()[..8]);
         sign_in(&page, &provider, &person).await;
+    }
+
+    /// `PROOF-020`: the page of a phone stores the state of its sign-in under
+    /// the key the page reads back, then opens the return on its own origin.
+    /// The code and the state reach the address encoded.
+    #[test]
+    fn the_page_of_a_phone_stores_the_state_and_opens_the_return() {
+        let page = return_page("code-1", "a+b/c=");
+        assert!(
+            page.contains("sessionStorage.setItem('ambre.signin.state', \"a+b/c=\");"),
+            "{page}"
+        );
+        assert!(
+            page.contains("location.replace(\"/signin/google?code=code-1&state=a%2Bb%2Fc%3D\")"),
+            "{page}"
+        );
+        assert_eq!(
+            return_address("https://host:8443", "c", "s"),
+            "https://host:8443/signin/google?code=c&state=s"
+        );
+    }
+
+    /// A name no other test signs in under: the relays of a run share one
+    /// database.
+    fn person(name: &str) -> String {
+        format!("{name}-{}", &uuid::Uuid::new_v4().simple().to_string()[..8])
+    }
+
+    /// What the page reads of the record the Sync worker keeps, in the
+    /// IndexedDB of its origin. `needle` is a text the record must not hold
+    /// in the clear. The script never creates the database, so it never
+    /// races the worker's first open.
+    const KEPT_RECORD: &str = "const done = arguments[arguments.length - 1]; \
+        const needle = arguments[0]; \
+        (async () => { \
+          const dbs = await indexedDB.databases(); \
+          if (!dbs.some((d) => d.name === 'ambre-session')) return { present: false }; \
+          const db = await new Promise((ok, ko) => { \
+            const r = indexedDB.open('ambre-session'); r.onsuccess = () => ok(r.result); \
+            r.onerror = () => ko(r.error); }); \
+          if (!db.objectStoreNames.contains('session')) { db.close(); return { present: false }; } \
+          const r = await new Promise((ok, ko) => { \
+            const g = db.transaction('session').objectStore('session').get('kept'); \
+            g.onsuccess = () => ok(g.result); g.onerror = () => ko(g.error); }); \
+          db.close(); \
+          if (!r) return { present: false }; \
+          let exported = true; \
+          try { await crypto.subtle.exportKey('raw', r.key); } catch (e) { exported = false; } \
+          const text = Array.from(new Uint8Array(r.sealed), (b) => String.fromCharCode(b)).join(''); \
+          return { present: true, fields: Object.keys(r).sort(), extractable: r.key.extractable, \
+                   algorithm: r.key.algorithm.name, exported, clear: text.includes(needle) }; \
+        })().then(done, (e) => done({ error: String(e) }));";
+
+    /// Waits until the record the worker keeps is `present`, and returns
+    /// what the page read of it.
+    async fn kept_record(page: &Page, needle: &str, present: bool) -> Value {
+        let deadline = std::time::Instant::now() + crate::page::STEP;
+        loop {
+            let read = page
+                .browser
+                .script_async(KEPT_RECORD, json!([needle]))
+                .await;
+            if read["present"].as_bool() == Some(present) {
+                return read;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the kept record is not {present}: {read}"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+    }
+
+    /// Copies the record the worker keeps into a database of the belt, or
+    /// back: `from` and `to` name the two places.
+    const COPY_RECORD: &str = "const done = arguments[arguments.length - 1]; \
+        const [from, to] = arguments; \
+        const db = (name, upgrade) => new Promise((ok, ko) => { \
+          const r = indexedDB.open(name, 1); r.onupgradeneeded = () => upgrade(r.result); \
+          r.onsuccess = () => ok(r.result); r.onerror = () => ko(r.error); }); \
+        const store = (d) => d.objectStoreNames.contains('session') || d.createObjectStore('session'); \
+        (async () => { \
+          const source = await db(from, store); const target = await db(to, store); \
+          const record = await new Promise((ok, ko) => { \
+            const g = source.transaction('session').objectStore('session').get('kept'); \
+            g.onsuccess = () => ok(g.result); g.onerror = () => ko(g.error); }); \
+          if (!record) return 'none'; \
+          await new Promise((ok, ko) => { \
+            const t = target.transaction('session', 'readwrite'); \
+            t.objectStore('session').put(record, 'kept'); \
+            t.oncomplete = () => ok(); t.onerror = () => ko(t.error); }); \
+          source.close(); target.close(); return 'copied'; \
+        })().then(done, (e) => done(String(e)));";
+
+    /// `SRV-322`, `ZK-051`, in the browser: once a provider session is set
+    /// up, the worker keeps one record of three fields. Its key is an AES-GCM
+    /// key that cannot be exported, and the sealed bytes hold no address of
+    /// the person in the clear. A reload then signs the same person in by a
+    /// renewal of the kept token, with no request to the provider routes.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build and chromedriver; run just test-browser"
+    )]
+    async fn a_reload_resumes_the_session_with_no_provider_round_trip() {
+        let provider = Provider::spawn().await;
+        let relay = Arc::new(Relay::start_with(&provider.relay_env()).await);
+        let page = Page::home(relay).await;
+        let person = person("ada");
+        sign_in(&page, &provider, &person).await;
+
+        let email = format!("{person}@{EMAIL_DOMAIN}");
+        let record = kept_record(&page, &email, true).await;
+        assert_eq!(
+            record,
+            json!({ "present": true, "fields": ["iv", "key", "sealed"], "extractable": false,
+                    "algorithm": "AES-GCM", "exported": false, "clear": false }),
+        );
+
+        let before = crate::serve::asked().len();
+        page.browser.goto(&format!("{}/", page.origin)).await;
+        crate::account::wait_list(&page, &person).await;
+        let asked = crate::serve::asked().split_off(before);
+        assert!(
+            asked.iter().any(|path| path == "/api/auth/refresh"),
+            "the reload renewed no kept token: {asked:?}"
+        );
+        assert!(
+            !asked
+                .iter()
+                .any(|path| path.starts_with("/api/auth/google")),
+            "the reload went through the provider: {asked:?}"
+        );
+    }
+
+    /// `SRV-323`, `SRV-325`, in the browser: a sign-out erases the record.
+    /// A copy of it taken before the sign-out opens nothing after it: put
+    /// back, the next boot presents its refresh token, the relay refuses
+    /// the revoked token, and the worker erases the record again. The page
+    /// stays on the sign-in screen.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build and chromedriver; run just test-browser"
+    )]
+    async fn a_sign_out_leaves_nothing_that_opens() {
+        let provider = Provider::spawn().await;
+        let relay = Arc::new(Relay::start_with(&provider.relay_env()).await);
+        let page = Page::home(relay).await;
+        let person = person("ada");
+        sign_in(&page, &provider, &person).await;
+        kept_record(&page, "", true).await;
+        let copy = page
+            .browser
+            .script_async(COPY_RECORD, json!(["ambre-session", "belt-stash"]))
+            .await;
+        assert_eq!(copy, json!("copied"));
+
+        crate::account::follow(&page, ".ambre-sign-out").await;
+        let signed_out = "return !!document.querySelector('.ambre-signin') \
+             && !document.querySelector('.ambre-landing-user');";
+        page.browser
+            .wait_for("the sign-in screen", signed_out, crate::page::BOOT)
+            .await;
+        kept_record(&page, "", false).await;
+
+        let back = page
+            .browser
+            .script_async(COPY_RECORD, json!(["belt-stash", "ambre-session"]))
+            .await;
+        assert_eq!(back, json!("copied"));
+        let before = crate::serve::asked().len();
+        page.browser.goto(&format!("{}/", page.origin)).await;
+        kept_record(&page, "", false).await;
+        let asked = crate::serve::asked().split_off(before);
+        assert!(
+            asked.iter().any(|path| path == "/api/auth/refresh"),
+            "the boot presented no kept token: {asked:?}"
+        );
+        page.browser
+            .wait_for("the sign-in screen", signed_out, crate::page::BOOT)
+            .await;
     }
 }

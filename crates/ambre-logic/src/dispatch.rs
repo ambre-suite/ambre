@@ -2909,6 +2909,7 @@ mod tests {
                 code: ambre_core::Credential::new("c".to_owned()),
                 state: ambre_core::Credential::new("s".to_owned()),
             },
+            RestCommand::ResumeSession,
         ];
         for cmd in &all {
             let removes = match cmd {
@@ -2941,7 +2942,8 @@ mod tests {
                 | RestCommand::LeaveMeeting { .. }
                 | RestCommand::EndMeeting { .. }
                 | RestCommand::ProviderSignIn { .. }
-                | RestCommand::ProviderReturn { .. } => false,
+                | RestCommand::ProviderReturn { .. }
+                | RestCommand::ResumeSession => false,
             };
             assert!(
                 !removes,

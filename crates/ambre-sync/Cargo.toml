@@ -60,6 +60,11 @@ web-sys      = { workspace = true, features = [
     "MessagePort",
     # The body of an answer, read chunk by chunk under its ceiling (`SYNC-277`).
     "ReadableStream", "ReadableStreamDefaultReader",
+    # The session a device keeps across a reload, sealed by WebCrypto under a
+    # key that cannot be exported, in IndexedDB (`kept.rs`, `ZK-051`).
+    "WorkerGlobalScope", "Crypto", "SubtleCrypto", "CryptoKey", "AesKeyGenParams",
+    "AesGcmParams", "IdbFactory", "IdbOpenDbRequest", "IdbRequest", "IdbDatabase",
+    "IdbTransaction", "IdbTransactionMode", "IdbObjectStore", "DomStringList",
 ] }
 futures-util = { workspace = true }
 

@@ -200,7 +200,8 @@ mod tests {
     /// then reads them back. The Sync worker refuses a mistyped word, a wrong
     /// count and a bad checksum, each in its own words. It reads the words
     /// the setup showed as a seed. Signed out, the panel offers no recovery
-    /// (`CHROME-135`), so the recovery runs from the unlock face.
+    /// (`CHROME-135`), so the recovery runs from the unlock face. A reload
+    /// before the sign-out resumes the session and shows no word either.
     #[tokio::test(flavor = "multi_thread")]
     #[cfg_attr(
         not(feature = "browser"),
@@ -231,9 +232,17 @@ mod tests {
             .wait_for("the words gone from the page", &gone, STEP)
             .await;
 
-        // A reload shows the sign-in panel, and no word. Signed out, the
-        // panel links to no recovery: the form would fail as not signed in.
+        // A reload resumes the session the device kept (`SRV-322`), and
+        // shows no word. A sign-out then shows the sign-in panel. Signed out,
+        // the panel links to no recovery: the form would fail as not signed in.
         page.browser.goto(&format!("{}/", page.origin)).await;
+        wait_list(&page, &name).await;
+        assert_eq!(
+            page.browser.script(&gone, json!([])).await,
+            Value::Bool(true),
+            "the words are readable after a reload"
+        );
+        follow(&page, ".ambre-sign-out").await;
         page.browser
             .wait_for(
                 "the sign-in panel with no recovery link",

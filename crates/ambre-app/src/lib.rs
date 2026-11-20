@@ -873,8 +873,13 @@ pub fn main() {
                 state: ret.state,
             },
         });
-    } else {
-        dev_login::sign_in_at_boot(&shell_outbox);
+    } else if dev_login::sign_in_at_boot(&shell_outbox) == dev_login::BootSignIn::None {
+        // No other sign-in: the Sync worker resumes the session this device
+        // kept, or answers that it keeps none (`SRV-322`).
+        shell_outbox.send(LogicCommand::Rest {
+            id: ambre_bus::next_request(),
+            cmd: RestCommand::ResumeSession,
+        });
     }
 
     // Spawn the Sync worker: a SEPARATE wasm instance in its own Web Worker. Its

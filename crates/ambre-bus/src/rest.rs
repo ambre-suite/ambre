@@ -397,6 +397,10 @@ pub enum RestCommand {
         code: ambre_core::Credential<ambre_core::OidcCode>,
         state: ambre_core::Credential<ambre_core::OidcState>,
     },
+    /// Open the session this device kept from an earlier page, if any
+    /// (`SRV-322`). The page sends it at boot, when no provider return and no
+    /// development name signs it in. -> `SessionReady`, or `NoKeptSession`.
+    ResumeSession,
 }
 
 // -----------------------------------------------------------------------------
@@ -592,4 +596,8 @@ pub enum RestEvent {
         email: ambre_core::Email,
         keys_stored: KeySetup,
     },
+    /// The device keeps no session that opens, or the relay refused the one it
+    /// kept, which is then erased (`SRV-322`, `SRV-325`). The page stays on
+    /// the sign-in screen.
+    NoKeptSession,
 }

@@ -117,6 +117,7 @@ impl SyncState {
     /// A renewal replaced the pair in the store, whichever path ran it. Arms
     /// the renewal of the new pair, or disarms when the session ended.
     pub(crate) fn tokens_renewed(&mut self) {
+        self.rekeep_after_renewal();
         let lifetime = self.tokens.borrow().as_ref().map(TokenPair::lifetime);
         let due = match lifetime {
             Some(lifetime) => self.renewal.stored((self.clock)(), lifetime),
