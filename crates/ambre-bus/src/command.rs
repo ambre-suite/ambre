@@ -382,6 +382,14 @@ pub enum SyncCommand {
         channel: Id<Channel>,
         meta: Id<Document>,
     },
+    /// The `meta` document of the channel of a waiting join, the answer to
+    /// [`crate::LogicEvent::CallMetaAsked`]. Posted by the Logic thread from the channel state
+    /// it opened, whose sealed header names the channel. `None` when it holds no such state,
+    /// and the join then ends (`CALL-141`, audit `P24`).
+    CallMeta {
+        call: Id<ambre_core::id::Call>,
+        meta: Option<Id<Document>>,
+    },
     /// A session description of the peer connection, for the socket of the SFU.
     CallDescription(crate::PageDescription),
     /// The screen sender of the page took a track: a share starts, which the socket of the SFU

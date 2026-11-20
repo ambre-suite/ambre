@@ -5078,6 +5078,57 @@ mod tests {
             .collect()
     }
 
+    /// The `meta` each answer to a join's ask named, in order. Any other command is dropped.
+    fn metas_named(
+        sync: &Receiver<SyncCommand>,
+    ) -> Vec<(Id<ambre_core::id::Call>, Option<Id<Document>>)> {
+        drain(sync)
+            .into_iter()
+            .filter_map(|cmd| match cmd {
+                SyncCommand::CallMeta { call, meta } => Some((call, meta)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// `CALL-141`, audit `P24`: a join asks which document is the `meta` of its channel. The
+    /// answer is the `meta` of the channel state this thread opened, whose header names the
+    /// channel. A closed channel keeps it. A channel this thread never opened names none,
+    /// so the join ends rather than read the relay's word.
+    #[test]
+    fn a_join_takes_the_meta_its_channel_state_names() {
+        let (mut state, _ui, sync) = harness();
+        signed_in(&mut state, Id::<User>::mint());
+        let channel_id = Id::<Channel>::mint();
+        let channel =
+            ChannelState::create(channel_id, ChannelType::Public, None, NOW).expect("create");
+        let meta = channel.meta_id().document_id();
+        state.hold_channel(channel);
+        drain(&sync);
+        let call = Id::<ambre_core::id::Call>::mint();
+        state.handle_logic_event(LogicEvent::CallMetaAsked {
+            call,
+            channel: channel_id,
+        });
+        assert_eq!(metas_named(&sync), [(call, Some(meta))]);
+        state.handle_logic_command(LogicCommand::CloseChannel { channel_id });
+        drain(&sync);
+        state.handle_logic_event(LogicEvent::CallMetaAsked {
+            call,
+            channel: channel_id,
+        });
+        assert_eq!(
+            metas_named(&sync),
+            [(call, Some(meta))],
+            "a closed channel keeps its meta"
+        );
+        state.handle_logic_event(LogicEvent::CallMetaAsked {
+            call,
+            channel: Id::<Channel>::mint(),
+        });
+        assert_eq!(metas_named(&sync), [(call, None)]);
+    }
+
     /// The Logic half: the start the Sync worker heard posts the
     /// call message in the active segment, and the view shows it. The last leave it heard
     /// writes the end in the same segment.

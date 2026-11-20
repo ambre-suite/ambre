@@ -217,6 +217,7 @@ fn sync_variant(cmd: &SyncCommand) -> &'static str {
         SyncCommand::StartCall { .. } => "StartCall",
         SyncCommand::LeaveCall => "LeaveCall",
         SyncCommand::AskCallRoster { .. } => "AskCallRoster",
+        SyncCommand::CallMeta { .. } => "CallMeta",
         SyncCommand::CallDescription(_) => "CallDescription",
         SyncCommand::ShareStarted => "ShareStarted",
         SyncCommand::ChooseVideos(_) => "ChooseVideos",
@@ -232,6 +233,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
         LogicEvent::CallStarted { .. } => "CallStarted",
         LogicEvent::CallEnded { .. } => "CallEnded",
         LogicEvent::CallRoster { .. } => "CallRoster",
+        LogicEvent::CallMetaAsked { .. } => "CallMetaAsked",
         LogicEvent::SessionIdentity { .. } => "SessionIdentity",
         LogicEvent::RemoteUpdate { .. } => "RemoteUpdate",
         LogicEvent::RemoteUpdateBatch { .. } => "RemoteUpdateBatch",
@@ -295,8 +297,8 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 }
 
 /// The number of arms of `sync_variant` and of `event_variant`.
-const SYNC_VARIANTS: usize = 50;
-const EVENT_VARIANTS: usize = 63;
+const SYNC_VARIANTS: usize = 51;
+const EVENT_VARIANTS: usize = 64;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
 /// field. Each arm of the two name functions needs a sample here, and the
@@ -519,6 +521,10 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             channel: chan,
             meta: doc,
         },
+        SyncCommand::CallMeta {
+            call: Id::<ambre_core::id::Call>::mint(),
+            meta: Some(doc),
+        },
         SyncCommand::CallDescription(ambre_bus::PageDescription::Offer(
             ambre_core::Validated::parse("v=0".to_owned()).unwrap(),
         )),
@@ -542,6 +548,10 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             call: Id::<ambre_core::id::Call>::mint(),
             channel: chan,
             members: ambre_bus::CallMembers::Live(vec![Id::<User>::mint()]),
+        },
+        LogicEvent::CallMetaAsked {
+            call: Id::<ambre_core::id::Call>::mint(),
+            channel: chan,
         },
         LogicEvent::Rest {
             id: Some(Seq::nth(6)),

@@ -725,7 +725,6 @@ impl SyncState {
                 roster,
                 log,
             } => self.call_roster_read(call, channel, meta, roster, log),
-            SyncEvent::CallChannel { call, meta } => self.call_channel(call, meta),
             SyncEvent::ReconnectNow => {
                 self._reconnect_timer = None;
                 let next = self.lifecycle.poll((self.clock)());

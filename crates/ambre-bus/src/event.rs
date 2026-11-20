@@ -69,6 +69,14 @@ pub enum LogicEvent {
         channel: Id<ambre_core::id::Channel>,
         members: crate::CallMembers,
     },
+    /// A join of `call` waits for the `meta` document of `channel`. The Logic thread answers
+    /// [`crate::SyncCommand::CallMeta`] from the channel state it opened. The relay never
+    /// names that document, so it cannot seat the join under another channel's log
+    /// (`CALL-141`, audit `P24`).
+    CallMetaAsked {
+        call: Id<ambre_core::id::Call>,
+        channel: Id<ambre_core::id::Channel>,
+    },
 
     // -- Real-time sync (server push) ------------------------------------------
     /// The identity this session writes under in a document, sent once per open
