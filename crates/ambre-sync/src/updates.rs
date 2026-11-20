@@ -3261,6 +3261,7 @@ mod tests {
                     pin: pin.copied(),
                     session: Vec::new(),
                     signer: Some(bob.public()),
+                    catalogue: None,
                 },
                 None,
             )
@@ -7433,6 +7434,7 @@ mod tests {
         state.handle_command(ambre_bus::SyncCommand::OpenChannel {
             channel_id,
             listed_in: None,
+            catalogue_key: None,
         });
         state.channel_listed(channel_id, None, Ok(documents));
         drain(&rx);
@@ -7494,6 +7496,7 @@ mod tests {
         state.handle_command(ambre_bus::SyncCommand::MarkChannelListed {
             channel_id,
             space_id,
+            catalogue_key: ambre_bus::SealedChannelKey::from_bytes(Vec::new()),
         });
         assert_eq!(
             state.documents[&doc].directory_asked.latest(),
@@ -7516,6 +7519,7 @@ mod tests {
         state.handle_command(ambre_bus::SyncCommand::MarkChannelListed {
             channel_id,
             space_id,
+            catalogue_key: ambre_bus::SealedChannelKey::from_bytes(Vec::new()),
         });
         assert_eq!(
             state.documents[&doc].directory_asked.latest(),
@@ -7574,6 +7578,7 @@ mod tests {
         state.handle_command(ambre_bus::SyncCommand::OpenChannel {
             channel_id,
             listed_in: None,
+            catalogue_key: None,
         });
         state.channel_listed(
             channel_id,
@@ -7629,6 +7634,7 @@ mod tests {
         state.handle_command(ambre_bus::SyncCommand::MarkChannelListed {
             channel_id,
             space_id,
+            catalogue_key: ambre_bus::SealedChannelKey::from_bytes(Vec::new()),
         });
         let second = walk(&state);
         assert_eq!(second.1, Root::Stranger);
@@ -7695,6 +7701,7 @@ mod tests {
         state.handle_command(ambre_bus::SyncCommand::OpenChannel {
             channel_id,
             listed_in: None,
+            catalogue_key: None,
         });
         state.channel_listed(
             channel_id,
@@ -7739,6 +7746,7 @@ mod tests {
         state.handle_command(ambre_bus::SyncCommand::MarkChannelListed {
             channel_id,
             space_id,
+            catalogue_key: ambre_bus::SealedChannelKey::from_bytes(Vec::new()),
         });
         drain(&rx);
         drain_ws(&ws_rx);

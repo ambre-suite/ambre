@@ -593,6 +593,8 @@ impl SyncState {
         self.listed_channels.clear();
         self.listing_metas.clear();
         self.listed_keys.clear();
+        self.walked_writers.clear();
+        self.catalogue_pins.clear();
         self.creating_public.clear();
         self.space_rotations.clear();
         self.new_spaces.clear();

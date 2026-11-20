@@ -329,10 +329,13 @@ impl<D> Runtime<D> {
         // A channel a catalogue lists is public: its log admits a member who
         // joined alone, and heeds the log of its space. Any other channel's
         // log admits only invites (`SYNC-106`).
-        let listed_in = self.listing_space(channel_id);
+        // Its catalogue entry names the channel key every open trusts
+        // (`SYNC-287`).
+        let listing = self.listing(channel_id);
         self.ask(SyncCommand::OpenChannel {
             channel_id,
-            listed_in,
+            listed_in: listing.as_ref().map(|(space_id, _)| *space_id),
+            catalogue_key: listing.map(|(_, key)| key),
         });
     }
 

@@ -59,7 +59,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-072` | `FAIL` | A signature MUST be accepted only in its canonical form. | audit `M13` | `ambre_crypto::signature::tests::only_the_canonical_signature_is_accepted` -- the client; `ambre_server::ws::handler::message::ed25519_tests::only_the_canonical_signature_is_accepted` -- the relay. Each refuses the scalar raised by the group order, and a small-order key under a forged signature | none | verified |
 | `SYNC-091` | `POST` | A failed check MUST reach the user's client as a warning. | this spec section 2 | `ambre_sync::updates::tests::every_refused_frame_reaches_logic_as_a_warning` -- an unsigned envelope, one under a key never held and one with a broken tag each raise one warning naming the document. Its code names the failed check -- a refused signature, a key not held, a broken seal -- so a missed re-key reads apart | none | verified |
 | `SYNC-023` | `FRAME` | An envelope that fails any check MUST NOT be applied in part. | this spec section 2 | `ambre_sync::updates::tests::a_refused_frame_is_applied_in_no_part` -- a tampered and an unsigned envelope in one replay each deliver none of their payload, and their neighbours arrive whole | none | verified |
-| `SYNC-135` | `FAIL` | A document name whose author key belongs to no member of its document MUST be refused. | this spec section 2; `SYNC-018` | not built | unbuilt -- lands with the `The author of a sealed object is a member` Story (`ambre-roadmap.md` E7). A listing opens a name with no walk of the log, and a walk per listed document costs one request each | unimplemented |
+| `SYNC-135` | `FAIL` | A document name whose author key the last log this client walked of its document never granted a writing role MUST NOT be shown, and a document this client never walked MUST show no name. | this spec section 2; `SYNC-018`; `ambre-spec-membership.md`, `SYNC-211` | `ambre_sync::documents::tests::a_listed_name_opens_only_under_a_writer_of_the_walked_log` -- a name of a log never walked opens to none, a writer's opens once a walk lands, and a stranger's sealed under the key stays closed | none | verified |
 | `SYNC-285` | `FAIL` | A media blob whose author key the membership log of its document never granted a writing role MUST be refused. | this spec section 2; `SYNC-018`; `ambre-spec-membership.md`, `SYNC-211` | `ambre_sync::media::tests::a_blob_whose_author_never_wrote_is_refused` -- a blob a stranger to the log seals under the key is refused, a writer's opens, and a header rewritten to name the writer fails that writer's signature | none | verified |
 | `SYNC-114` | `POST` | An opened update MUST reach the Logic thread with its session nonce, the PeerID it derives and the user of its signer beside the delta. | this spec section 2; `AUTHOR-013` | `ambre_sync::updates::tests::an_opened_update_reaches_logic_with_its_nonce_its_peer_and_its_signer` -- the delta arrives with the nonce its body carried, the PeerID its signer derives, and the member the directory names, or none | none | verified |
 | `SYNC-144` | `POST` | An opened update that carries an activity summary MUST reach the Logic thread with it beside the delta. | this spec section 2; `ambre-spec-residency.md` | `ambre_sync::updates::tests::an_opened_update_hands_logic_its_summary_beside_the_delta` -- an update with a summary hands it beside its delta, and one with none hands none | none | verified |
@@ -71,7 +71,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this is the boundary `ambre-spec-zero-knowledge.md` draws, on the client side. Every
   byte of user content that leaves the client leaves through the seal here. `SYNC-001` and
   `SYNC-020` keep the metadata down to the whitelist `ZK-007` names.
-* **Verification.** 29 `verified`, 1 `unimplemented`. What holds is refusal: a tampered byte, a
+* **Verification.** 30 `verified`. What holds is refusal: a tampered byte, a
   wrong document and a wrong key fail closed. So do a bad signature, a replayed counter, a
   decompression bomb and an unknown codec. The nonce is drawn fresh, and the signature is checked
   first.
@@ -159,6 +159,10 @@ is sought. It refuses an author the walked log never granted a writing role, the
 (`SYNC-211`). The signature then holds the header to that author (`SYNC-285`). A document with no
 anchored log checks no author, as its deltas do.
 
+**A name opens under a writer.** A listing opens each name against the writers of the last log this
+client walked of its document, in the session (`SYNC-135`). A document never walked shows no name,
+and the listing makes no request for its log.
+
 **Why a layout byte.** The relay keeps a blob across releases. Without the byte, an object of an
 older layout fails as forged or as sealed under a foreign key. With it, the reader refuses it by
 name before reading anything else (`SYNC-138`). Every object of a release shares one layout, so the
@@ -228,9 +232,6 @@ say which of the four refusals fired.
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **The author of a name is checked, not resolved.** The open verifies the signature against the
-  key the name carries. Nothing yet asks whether that key belongs to a member (`SYNC-135`). A blob
-  opens only under a writer of the walked log (`SYNC-285`).
 * **No nonce is ever compared to another.** The generator is the operating system's, and nothing in
   the suite would notice a nonce derived from a counter.
 * **The four refusals arrive as one warning code.** A user, and a developer reading a console, cannot

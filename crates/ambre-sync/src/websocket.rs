@@ -867,6 +867,8 @@ impl SyncState {
                 departed,
             } => {
                 let log_document = self.log_document(document_id);
+                // A listed name is checked against this walk (`SYNC-135`).
+                self.walked_writers.insert(log_document, writers.clone());
                 let doc_state = self
                     .documents
                     .entry(document_id)
@@ -1399,6 +1401,7 @@ impl SyncState {
                 // rebuilds the directory from scratch. An answer older than the
                 // directory held changes nothing (`SYNC-037`).
                 let mut word_changed = false;
+                let log_document = self.log_document(document_id);
                 let fresh = match self.documents.get_mut(&document_id) {
                     Some(doc_state) if asked > doc_state.directory_held => {
                         doc_state.directory_held = asked;
@@ -1407,6 +1410,9 @@ impl SyncState {
                         // the log the open checked: its word changes nothing
                         // (`SYNC-214`).
                         if doc_state.writers.grows_into(&writers) {
+                            // A listed name is checked against this walk
+                            // (`SYNC-135`).
+                            self.walked_writers.insert(log_document, writers.clone());
                             doc_state.set_writers(writers);
                             word_changed = doc_state.word != word;
                             doc_state.word = word;

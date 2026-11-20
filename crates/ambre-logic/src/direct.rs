@@ -136,7 +136,7 @@ mod tests {
         let sent = drain(&sync_rx);
         assert!(matches!(
             sent.as_slice(),
-            [SyncCommand::OpenChannel { channel_id, listed_in: None }] if *channel_id == existing
+            [SyncCommand::OpenChannel { channel_id, listed_in: None, .. }] if *channel_id == existing
         ));
         assert!(!state.rt().channels().contains_key(&requested));
         assert!(!state.rt().unsent().contains_key(&meta.document_id()));

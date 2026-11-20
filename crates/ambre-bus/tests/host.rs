@@ -118,6 +118,7 @@ fn sync_command_roundtrips_through_postcard() {
     roundtrip_sync(&SyncCommand::OpenChannel {
         channel_id: chan,
         listed_in: Some(Id::<Space>::mint()),
+        catalogue_key: Some(ambre_bus::SealedChannelKey::from_bytes(vec![2; 72])),
     });
     roundtrip_sync(&SyncCommand::Shutdown);
 }
@@ -391,10 +392,12 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         SyncCommand::OpenChannel {
             channel_id: chan,
             listed_in: None,
+            catalogue_key: None,
         },
         SyncCommand::MarkChannelListed {
             channel_id: chan,
             space_id: space,
+            catalogue_key: SealedChannelKey::from_bytes(vec![1; 72]),
         },
         SyncCommand::RotateSpace {
             space_id: space,
