@@ -1,0 +1,287 @@
+(* The sender keys of a call: a ProVerif model (`CALL-142`).
+
+   It models the design that `crates/ambre-crypto/src/call.rs` and
+   `crates/ambre-sync/src/call.rs` build, as `ambre-spec-call-media.md section 3`
+   states it: the signed join, the wrap of a sender key, the ratchet of a join,
+   the fresh keys of a removal, and the seal and the open of a chunk.
+
+   The attacker holds the network, so the relay and the SFU. It also holds the
+   identity of Mallory, a member of the channel who joins the call and who is then
+   removed from the membership log of the channel. Phase 0 is the call before the
+   removal, phase 1 the call after it.
+
+   Two properties, three queries:
+   1. A chunk an honest participant seals under its key of the epoch after the
+      removal stays secret from Mallory and from the network.
+   2. A chunk a receiver opens under the key of Alice for the epoch after the
+      removal, or under the ratchet of that key, was sealed by Alice.
+
+   Domain labels. The test `crates/ambre-crypto/tests/call_model_labels.rs` reads
+   each LABEL line below, and checks that the code derives with the same bytes.
+   LABEL label_ratchet "ambre-call-ratchet-v1"
+   LABEL label_join "ambre-call-join-v1"
+   LABEL label_wrap "ambre-call-wrap-v1"
+   LABEL label_sframe_key "SFrame 1.0 Secret key "
+   LABEL label_sframe_salt "SFrame 1.0 Secret salt "
+
+   What the model leaves out, and why:
+   - The time of a join and its clock skew (`CALL-124`), and the refusal of a
+     join already seen (`CALL-020`). Without them the model admits more joins
+     than the code, which only helps the attacker.
+   - The counter as a number, the replay window and the retirement of an older
+     epoch (`CALL-026`, `CALL-125`, `CALL-135`). They need state over time; the
+     roadmap row `A Tamarin model of the call keys` owns them.
+   - The order of the ratchets inside an epoch: a receiver ratchets one step
+     here, where the code ratchets up to 64. *)
+
+(* ---------------------------------------------------------------- types *)
+
+type key.
+type exponent.
+type G.
+type sskey.
+type spkey.
+
+free c: channel.
+
+(* ------------------------------------------------------------ primitives *)
+
+(* X25519. *)
+const g: G [data].
+fun exp(G, exponent): G.
+equation forall x: exponent, y: exponent; exp(exp(g, x), y) = exp(exp(g, y), x).
+
+(* Ed25519. The signed join carries its claim in the clear. *)
+fun spk(sskey): spkey.
+fun sign(bitstring, sskey): bitstring.
+reduc forall m: bitstring, k: sskey; getmess(sign(m, k)) = m.
+reduc forall m: bitstring, k: sskey; checksign(sign(m, k), spk(k)) = m.
+
+(* HKDF-SHA256 with an empty salt: over a sender key, and over an X25519 secret. *)
+fun hkdf(key, bitstring): key.
+fun kdf_wrap(G, bitstring): key.
+
+(* The nonce of a chunk: the salt XOR the counter. *)
+fun nonce_of(key, bitstring): bitstring.
+
+(* ChaCha20-Poly1305 for a chunk, XChaCha20-Poly1305 for a wrap. *)
+fun aead(key, bitstring, bitstring, bitstring): bitstring.
+reduc forall k: key, n: bitstring, a: bitstring, p: bitstring;
+  aead_open(k, n, a, aead(k, n, a, p)) = p.
+
+(* ------------------------------------------------------------- constants *)
+
+const label_ratchet: bitstring.
+const label_join: bitstring.
+const label_wrap: bitstring.
+const label_sframe_key: bitstring.
+const label_sframe_salt: bitstring.
+(* The private suite 0xF001 of RFC 9605. *)
+const suite: bitstring.
+
+(* The call and its channel. *)
+const call: bitstring.
+const chan: bitstring.
+
+(* The generations. A ratchet moves a generation one step up. *)
+fun next(bitstring): bitstring [data].
+const g_old: bitstring.
+const g_mid: bitstring.
+const g_new: bitstring.
+
+(* The phase of the membership log: before and after the removal. *)
+const p0: bitstring.
+const p1: bitstring.
+
+(* The members. Mallory's identity key is public: the attacker plays her. *)
+free skA: sskey [private].
+free skB: sskey [private].
+free skM: sskey.
+const uidA: bitstring.
+const uidB: bitstring.
+const uidM: bitstring.
+
+(* A chunk an honest participant seals after the switch to the key of the
+   removal. Query 1 asks whether the attacker learns it. *)
+free chunk_after: bitstring [private].
+
+(* ---------------------------------------------------------------- tables *)
+
+(* The membership log of the channel at a phase: member, identity. *)
+table member(bitstring, bitstring, spkey).
+(* The participants one session admitted: owner exchange key, sender index,
+   member, identity, exchange key. *)
+table peers(G, bitstring, bitstring, spkey, G).
+(* The sender keys one session received: owner exchange key, sender index,
+   member, identity, generation, key. *)
+table rkeys(G, bitstring, bitstring, spkey, bitstring, key).
+
+(* ---------------------------------------------------------------- events *)
+
+(* An honest participant of identity pk sealed the clear chunk p at generation gk. *)
+event Sealed(spkey, bitstring, bitstring).
+(* A receiver opened the clear chunk p under the key of identity pk at generation gk. *)
+event Accepted(spkey, bitstring, bitstring).
+
+(* --------------------------------------------------------------- queries *)
+
+query attacker(chunk_after).
+
+query m: bitstring;
+  event(Accepted(spk(skA), g_new, m)) ==> event(Sealed(spk(skA), g_new, m)).
+
+query m: bitstring;
+  event(Accepted(spk(skA), next(g_new), m)) ==> event(Sealed(spk(skA), next(g_new), m)).
+
+(* ------------------------------------------------------------ derivations *)
+
+(* `SenderKey::ratcheted`. *)
+letfun ratchet(k: key) = hkdf(k, label_ratchet).
+
+(* `ChunkKey::derive`: the key and the salt of one key identifier. *)
+letfun chunk_key(k: key, kid: bitstring) = hkdf(k, (label_sframe_key, kid, suite)).
+letfun chunk_salt(k: key, kid: bitstring) = hkdf(k, (label_sframe_salt, kid, suite)).
+
+(* The clear prefix and the header are the additional data. *)
+letfun seal_chunk(k: key, kid: bitstring, prefix: bitstring, ctr: bitstring, p: bitstring) =
+  aead(chunk_key(k, kid), nonce_of(chunk_salt(k, kid), ctr), (prefix, (kid, ctr)), p).
+
+letfun open_chunk(k: key, kid: bitstring, prefix: bitstring, ctr: bitstring, ct: bitstring) =
+  aead_open(chunk_key(k, kid), nonce_of(chunk_salt(k, kid), ctr), (prefix, (kid, ctr)), ct).
+
+(* `wrap_key`, on the side of the sender: the binding, then the key of the
+   sender, then the key of the recipient. *)
+letfun wrap_key(x: exponent, own: G, peer: G, own_idx: bitstring, peer_idx: bitstring) =
+  kdf_wrap(exp(peer, x), (label_wrap, call, own_idx, peer_idx, own, peer)).
+
+(* `wrap_key`, on the side of the recipient. *)
+letfun unwrap_key(x: exponent, own: G, peer: G, own_idx: bitstring, peer_idx: bitstring) =
+  kdf_wrap(exp(peer, x), (label_wrap, call, peer_idx, own_idx, peer, own)).
+
+(* ------------------------------------------------------------- processes *)
+
+(* `wrap_sender_key`: the generation and the key, under the wrap label as
+   additional data. The relay route names both sender indexes. *)
+let send_wrap(x: exponent, own: G, own_idx: bitstring, peer: G, peer_idx: bitstring,
+              gk: bitstring, k: key) =
+  new n: bitstring;
+  out(c, (own_idx, peer_idx, n, aead(wrap_key(x, own, peer, own_idx, peer_idx), n, label_wrap, (gk, k)))).
+
+(* `CallKeys::admit`: the signature, the call, then the membership log of the
+   phase. An admitted joiner gets each key the session holds. *)
+let admit(ph: bitstring, x: exponent, own: G, own_idx: bitstring,
+          g1: bitstring, k1: key, g2: bitstring, k2: key) =
+  in(c, sj: bitstring);
+  let claim = getmess(sj) in
+  let (=label_join, =call, =chan, juid: bitstring, jpk: spkey, jidx: bitstring, jX: G) = claim in
+  if checksign(sj, jpk) = claim then
+  get member(=ph, =juid, =jpk) in
+  insert peers(own, jidx, juid, jpk, jX);
+  (
+    send_wrap(x, own, own_idx, jX, jidx, g1, k1)
+  | send_wrap(x, own, own_idx, jX, jidx, g2, k2)
+  ).
+
+(* `CallKeys::receive`: a wrap from an admitted participant that the log of
+   the phase still holds. *)
+let receive_wraps(ph: bitstring, x: exponent, own: G, own_idx: bitstring) =
+  in(c, (from: bitstring, to: bitstring, n: bitstring, w: bitstring));
+  get peers(=own, =from, puid, ppk, pX) in
+  get member(=ph, =puid, =ppk) in
+  let (gw: bitstring, kw: key) = aead_open(unwrap_key(x, own, pX, own_idx, from), n, label_wrap, w) in
+  insert rkeys(own, from, puid, ppk, gw, kw); 0.
+
+(* `ReceiveKeys::open_audio` and the video doors: the key the identifier names,
+   held or one ratchet above a held one. The chunk names its sender by the
+   identity of the join that holds its sender index. *)
+let open_chunks(ph: bitstring, own: G) =
+  in(c, (prefix: bitstring, (trk: bitstring, s: bitstring, gch: bitstring), ctr: bitstring, ct: bitstring));
+  let kid = (trk, s, gch) in
+  (
+    (
+      get rkeys(=own, =s, puid, ppk, =gch, k) in
+      get member(=ph, =puid, =ppk) in
+      let p = open_chunk(k, kid, prefix, ctr, ct) in
+      event Accepted(ppk, gch, p); 0
+    )
+  | (
+      get rkeys(=own, =s, puid, ppk, gb, kb) suchthat gch = next(gb) in
+      get member(=ph, =puid, =ppk) in
+      let p = open_chunk(ratchet(kb), kid, prefix, ctr, ct) in
+      event Accepted(ppk, gch, p); 0
+    )
+  ).
+
+(* `ChunkSealer::seal` and `ChunkSealer::seal_video`: any clear chunk, under a
+   counter the sealer issues once. *)
+let seal_chunks(sk: sskey, own_idx: bitstring, gk: bitstring, k: key) =
+  in(c, (trk: bitstring, prefix: bitstring, p: bitstring));
+  new ctr: bitstring;
+  let kid = (trk, own_idx, gk) in
+  event Sealed(spk(sk), gk, p);
+  out(c, (prefix, kid, ctr, seal_chunk(k, kid, prefix, ctr, p))).
+
+(* The secret chunk, sealed once the switch delay of the removal passed. *)
+let seal_secret(sk: sskey, own_idx: bitstring, gk: bitstring, k: key) =
+  in(c, (trk: bitstring, prefix: bitstring));
+  new ctr: bitstring;
+  let kid = (trk, own_idx, gk) in
+  event Sealed(spk(sk), gk, chunk_after);
+  out(c, (prefix, kid, ctr, seal_chunk(k, kid, prefix, ctr, chunk_after))).
+
+(* One participant session of the member uid. *)
+let participant(sk: sskey, uid: bitstring) =
+  (* The relay gives the sender index. *)
+  in(c, idx: bitstring);
+  new x: exponent;
+  let X = exp(g, x) in
+  out(c, sign((label_join, call, chan, uid, spk(sk), idx, X), sk));
+  new k_old: key;
+  (
+    (* Phase 0: Mallory is a member. *)
+    (! admit(p0, x, X, idx, g_old, k_old, next(g_old), ratchet(k_old)))
+  | (! receive_wraps(p0, x, X, idx))
+  | (! open_chunks(p0, X))
+  | (! seal_chunks(sk, idx, g_old, k_old))
+  | (! seal_chunks(sk, idx, next(g_old), ratchet(k_old)))
+  | (
+    (* Phase 1: the log removed Mallory. `CallKeys::heed` departs each of her
+       sessions in turn, and each depart draws a fresh key for the next epoch.
+       A depart wraps its key to every participant still held, so every key but
+       the last reaches another session of Mallory. k_mid stands for those keys,
+       and k_new for the last one, the key that seals once the delay passed. *)
+    phase 1;
+    new k_mid: key;
+    new k_new: key;
+    (
+      (! get peers(=X, pidx, puid, ppk, pX) in
+         send_wrap(x, X, idx, pX, pidx, g_mid, k_mid))
+    | (! get peers(=X, pidx, puid, ppk, pX) in
+         get member(=p1, =puid, =ppk) in
+         send_wrap(x, X, idx, pX, pidx, g_new, k_new))
+      (* A join in phase 1 ratchets the current key and the waiting one. *)
+    | (! admit(p1, x, X, idx, next(g_old), ratchet(k_old), next(g_new), ratchet(k_new)))
+    | (! receive_wraps(p1, x, X, idx))
+    | (! open_chunks(p1, X))
+      (* The current key seals until the switch delay passed. *)
+    | (! seal_chunks(sk, idx, g_old, k_old))
+    | (! seal_chunks(sk, idx, g_new, k_new))
+    | (! seal_chunks(sk, idx, next(g_new), ratchet(k_new)))
+    | (! seal_secret(sk, idx, g_new, k_new))
+    | (! seal_secret(sk, idx, next(g_new), ratchet(k_new)))
+      )
+    )
+  ).
+
+process
+  insert member(p0, uidA, spk(skA));
+  insert member(p0, uidB, spk(skB));
+  insert member(p0, uidM, spk(skM));
+  insert member(p1, uidA, spk(skA));
+  insert member(p1, uidB, spk(skB));
+  out(c, spk(skA));
+  out(c, spk(skB));
+  (
+    (! participant(skA, uidA))
+  | (! participant(skB, uidB))
+  )
