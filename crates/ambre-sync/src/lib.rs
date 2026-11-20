@@ -403,12 +403,6 @@ enum SyncEvent {
         roster: Option<ambre_protocol::signaling::CallRoster>,
         log: Option<membership_log::Log>,
     },
-    /// The `meta` document of the channel of a waiting join was read, or `None` when the
-    /// channel answered none.
-    CallChannel {
-        call: Id<ambre_core::id::Call>,
-        meta: Option<Id<Document>>,
-    },
     SessionReady {
         /// `None` for the silent re-login, which no request asked for.
         id: Option<Seq<Request>>,
@@ -2099,6 +2093,7 @@ impl SyncState {
                 self.handle_join_call(target, call_client::Opening::Start);
             }
             SyncCommand::LeaveCall => self.leave_call(),
+            SyncCommand::CallMeta { call, meta } => self.call_channel(call, meta),
             SyncCommand::AskCallRoster {
                 call,
                 channel,

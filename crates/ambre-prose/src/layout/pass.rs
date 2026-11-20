@@ -1229,6 +1229,9 @@ mod tests {
         for id in &ids {
             write_text(&document, id, "a line of text long enough to be shaped");
         }
+        // Every document past its first operation carries its version in `meta`
+        // (`PROSE-028`), and the reader of `meta` takes the root it holds.
+        crate::schema::stamp(&document);
         let before = format!("{:?}", document.get_deep_value());
         let mut measurer = crate::layout::measure::shipped_measurer();
         let _ = lay_out(&mut measurer, &document);

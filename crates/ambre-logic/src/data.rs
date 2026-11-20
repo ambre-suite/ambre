@@ -1192,9 +1192,10 @@ impl LogicState {
     /// Whether no other session holds the PeerID of `delta` in the document
     /// (`AUTHOR-032`). `in_batch` is the nonce an earlier delta of the same
     /// replay registered under that PeerID, which the document does not hold
-    /// yet. A document this thread does not hold is the Murmure engine's.
+    /// yet. A document this thread does not hold is the Murmure engine's: an
+    /// open space reads its own registry (`AUTHOR-033`).
     fn peer_unclaimed(
-        &self,
+        &mut self,
         document_id: Id<Document>,
         delta: &SignedDelta,
         in_batch: Option<&FixedBytes<SessionNonce>>,
@@ -1202,9 +1203,10 @@ impl LogicState {
         if let Some(nonce) = in_batch {
             return *nonce == delta.nonce;
         }
-        self.docs
-            .get(&document_id)
-            .is_none_or(|doc| crate::peer_unclaimed(doc.state.crdt(), delta.peer, &delta.nonce))
+        if let Some(doc) = self.docs.get(&document_id) {
+            return crate::peer_unclaimed(doc.state.crdt(), delta.peer, &delta.nonce);
+        }
+        self.route(|m| m.space_peer_unclaimed(document_id, delta.peer, &delta.nonce))
     }
 
     /// Note what the deltas just applied wait on, and drop what the document

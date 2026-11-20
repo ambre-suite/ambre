@@ -868,6 +868,7 @@ impl<D> Runtime<D> {
                 }
                 let documents = state.document_ids();
                 self.channels.insert(channel_id, *state);
+                self.reseal_stale_name(channel_id);
                 self.show_channel_members(channel_id);
                 self.settle_reopen(channel_id);
                 // Each identity landed while the channel was opening.
@@ -1583,6 +1584,7 @@ impl<D> Runtime<D> {
                         });
                         // Sealed beside meta too, so the name shows before the
                         // channel opens (the Murmure layout spec).
+                        self.note_sealed_name(channel_id, &name);
                         self.ask(SyncCommand::NameChannel {
                             meta: named.meta,
                             name,
@@ -2096,6 +2098,7 @@ impl<D> Runtime<D> {
         deltas: &[SignedDelta],
     ) -> bool {
         let signer = |delta: &SignedDelta| Signer {
+            nonce: delta.nonce,
             peer: delta.peer,
             user: delta.user,
         };

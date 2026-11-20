@@ -963,14 +963,21 @@ pub(crate) fn movable_list_at<K: FieldKey>(parent: &Fields<K>, key: K) -> Option
     }
 }
 
-/// The `meta` register, or `None` when the document has none.
+/// The `meta` register, or `None` while the document holds no operation yet.
 ///
-/// A reader takes this path and never `get_map`, which attaches the root
-/// container it did not find. Laying the document out writes nothing to it
-/// (`PROSE-079`).
+/// A reader never takes [`meta`] on a blank document: Loro would attach the
+/// root it did not find. Laying the document out writes nothing to it
+/// (`PROSE-079`). Past the first operation, every Prose document holds its
+/// version in `meta` (`PROSE-028`), so taking it attaches nothing.
+///
+/// The root is taken by its typed identifier, never looked up by name. Before
+/// Loro picks a root by name, it builds the value of each root of that name.
+/// A tree a peer nested ten thousand deep under the name `meta` overflowed the
+/// stack of the Logic thread (`PROSE-141`).
 #[must_use]
 pub(crate) fn meta_read(doc: &LoroDoc) -> Option<Fields<MetaKey>> {
-    doc.get_by_str_path(Root::Meta.as_str()).and_then(fields_of)
+    let blank = doc.get_pending_txn_len() == 0 && doc.state_frontiers().is_empty();
+    (!blank).then(|| meta(doc))
 }
 
 /// The block tree, or `None` when the document state holds no operation yet.
@@ -2082,5 +2089,37 @@ mod tests {
             assert!(page.contains(key), "{key:?} was dropped");
         }
         assert!(page.contains(PageKey::Orientation));
+    }
+
+    /// A tree ten thousand deep under the name `meta`, as a peer may write it.
+    fn deep_tree_named(doc: &LoroDoc, name: &str) {
+        let tree = doc.get_tree(name);
+        let mut parent = None;
+        for _ in 0..10_000 {
+            parent = tree.create(parent).ok();
+        }
+    }
+
+    /// `PROSE-141`: a peer nested a tree ten thousand deep under the name `meta`. The read of
+    /// the `meta` register stays on a stack of 1 MiB. It takes the map root by its typed
+    /// identifier, and never builds the value of the tree.
+    #[test]
+    fn a_deep_tree_under_the_meta_name_reads_on_a_small_stack() {
+        let title = std::thread::Builder::new()
+            .stack_size(1024 * 1024)
+            .spawn(|| {
+                let doc = LoroDoc::new();
+                crate::schema::stamp(&doc);
+                let _ = meta(&doc).insert(MetaKey::Title, "deep");
+                deep_tree_named(&doc, Root::Meta.as_str());
+                doc.commit();
+                meta_read(&doc)
+                    .and_then(|meta| meta.get(MetaKey::Title))
+                    .and_then(|title| title.into_value().ok())
+            })
+            .expect("a thread")
+            .join()
+            .expect("no stack overflow");
+        assert_eq!(title, Some(loro::LoroValue::from("deep")));
     }
 }

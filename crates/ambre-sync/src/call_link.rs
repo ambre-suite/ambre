@@ -173,7 +173,9 @@ impl CallLink {
 
 impl SyncState {
     /// A command of the bus joins `target` (`CALL-065`). It takes the port that came with
-    /// it, then reads which document of the channel is its `meta`. A join while a call is
+    /// it, then asks the Logic thread which document of the channel is its `meta`. The relay
+    /// never names it: the Logic thread reads it from the channel state it opened, whose
+    /// sealed header names the channel (`CALL-141`, audit `P24`). A join while a call is
     /// open, or while another join waits, changes nothing.
     pub(crate) fn handle_join_call(&mut self, target: CallTarget, opening: Opening) {
         let Some(port) = self.call_ports.take() else {
@@ -188,24 +190,14 @@ impl SyncState {
             opening,
             port,
         });
-        let Some(tx) = self.event_tx.clone() else {
-            return;
-        };
-        let (scheme, base) = (self.url_scheme, self.api_base.clone());
-        let http = crate::sharing::GlooHttp {
-            auth: self.auth_context(),
-        };
-        crate::spawn(async move {
-            let meta = crate::sharing::channel_meta(&http, target.channel, scheme, &base).await;
-            let _ = tx.send(SyncEvent::CallChannel {
-                call: target.call,
-                meta,
-            });
+        self.send_to_logic(LogicEvent::CallMetaAsked {
+            call: target.call,
+            channel: target.channel,
         });
     }
 
-    /// The `meta` document of the channel of the waiting join was read: the join goes on, or
-    /// ends when the channel answered none.
+    /// The Logic thread named the `meta` of the channel of the waiting join. The join goes on,
+    /// or ends when that thread holds no state of the channel.
     pub(crate) fn call_channel(&mut self, call: Id<Call>, meta: Option<Id<Document>>) {
         let Some(joining) = self
             .call_joining
@@ -216,7 +208,7 @@ impl SyncState {
         match meta {
             Some(meta) => self.join_call(joining.target, meta, joining.port, joining.opening),
             None => {
-                crate::log::warning!("Sync: the channel of the call holds no meta document");
+                crate::log::warning!("Sync: the Logic thread holds no meta of the call's channel");
                 self.send_to_logic(LogicEvent::Call(CallSignal::Ended));
             }
         }
@@ -1295,9 +1287,8 @@ mod tests {
         assert_eq!(link.sent.sfu.len(), 3, "the latest choice alone");
     }
 
-    /// `CALL-065`, `CALL-029`: a command of the bus joins the call and the channel it names,
-    /// once the relay names the `meta` of that channel. The keys leave on the port that came
-    /// with the command. The SFU's TURN servers reach the UI thread, and its description
+    /// `CALL-065`, `CALL-029`, `CALL-141`: a command of the bus joins the call it names. It
+    /// waits until the Logic thread names the `meta` of its channel, and asks no relay route. The keys leave on the port that came with the command. The SFU's TURN servers reach the UI thread, and its description
     /// waits for the SFU. A leave hands the call worker the end of the call, and the UI
     /// thread hears it.
     #[test]
@@ -1321,12 +1312,23 @@ mod tests {
             state.call.is_none(),
             "the join waits for the meta of its channel"
         );
-        state.call_channel(Id::<Call>::from_bytes([33; 16]), Some(META));
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(LogicEvent::CallMetaAsked { call, channel })
+                if call == TARGET.call && channel == TARGET.channel
+        ));
+        state.handle_command(SyncCommand::CallMeta {
+            call: Id::<Call>::from_bytes([33; 16]),
+            meta: Some(META),
+        });
         assert!(
             state.call.is_none(),
             "the meta of another call joins nothing"
         );
-        state.call_channel(TARGET.call, Some(META));
+        state.handle_command(SyncCommand::CallMeta {
+            call: TARGET.call,
+            meta: Some(META),
+        });
         assert_eq!(
             state.call.as_ref().map(|link| link.client().target()),
             Some(TARGET)
@@ -1501,6 +1503,33 @@ mod tests {
                 members: ambre_bus::CallMembers::Gone,
                 ..
             })
+        ));
+    }
+
+    /// `CALL-141`, audit `P24`: the Logic thread holds no state of the channel of a join. The
+    /// join ends before any socket opens, and the page hears the end. The relay is never asked
+    /// which document is the `meta`, so no answer of it can seat the join.
+    #[test]
+    fn a_join_the_logic_thread_names_no_meta_for_ends() {
+        let alice = Person::new(1);
+        let (mut state, _handed, port, rx) = worker_heard(&alice);
+        state.call_ports.offer(port);
+        state.handle_command(SyncCommand::JoinCall {
+            call: TARGET.call,
+            channel: TARGET.channel,
+        });
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(LogicEvent::CallMetaAsked { call, .. }) if call == TARGET.call
+        ));
+        state.handle_command(SyncCommand::CallMeta {
+            call: TARGET.call,
+            meta: None,
+        });
+        assert!(state.call.is_none() && state.call_joining.is_none());
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(LogicEvent::Call(ambre_bus::CallSignal::Ended))
         ));
     }
 

@@ -20,6 +20,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-079` | `CONC` | Two peers MUST accept and refuse the same deltas on a message. | this spec section 3; `AUTHOR-007` | `ambre_murmure::logic::authorship_tests::two_peers_accept_and_refuse_the_same_deltas` -- two receivers reach the same verdicts and the same messages | none | verified |
 | `MURMURE-223` | `INV` | A delta of a segment, a thread or an amendments document MUST travel as a Loro JSON update. | this spec section 3; `ambre-spec-murmure-schema.md section 7` | `ambre_murmure::logic::authorship_tests::a_segment_delta_travels_as_a_json_update_of_the_pinned_version` -- a send and a first update both parse as JSON | none | verified |
 | `MURMURE-227` | `INV` | A JSON update MUST carry the Loro JSON schema version the schema register pins. | this spec section 3; `ambre-spec-murmure-schema.md section 7` | `ambre_murmure::logic::authorship_tests::a_segment_delta_travels_as_a_json_update_of_the_pinned_version` -- the update reads `JSON_SCHEMA_VERSION` | none | verified |
+| `MURMURE-683` | `INV` | A read of a root of a channel document MUST hold a bounded depth of the call stack, whatever tree a peer wrote under the name of that root. | this spec section 3; `MURMURE-226`; `ambre-spec-prose-pagination.md`, `PROSE-141` | `ambre_murmure::logic::schema::tests::a_deep_tree_under_each_map_root_name_reads_on_a_small_stack` -- `header`, `meta`, `peers` and `threads`, each read on a stack of 1 MiB beside a tree ten thousand deep under its name; `::a_deep_tree_under_the_messages_name_reads_on_a_small_stack` -- the list `messages` so; `::a_blank_document_reads_no_root_and_attaches_none` | none | verified |
 | `MURMURE-565` | `OBS` | A message in the list MUST draw each style of its body. | this spec section 3; `MURMURE-562` | `ambre_murmure::ui::paint::tests::a_sent_body_draws_each_of_its_marks` -- bold widens the layout, code paints its tint under the words, the link alone takes the accent over a rule, past a renamed mention; `ambre_murmure::ui::paint::tests::a_sent_block_draws_its_margin_marks` -- a quote draws one rule and a list one dot per item in the indent, a code block its tint and no margin mark | none | verified |
 ### 1.2 Send a message
 
@@ -110,7 +111,8 @@ no document, in microseconds.
 
 1. Parse the JSON update. A binary delta, or an unknown schema version, is refused (`MURMURE-224`,
    `MURMURE-228`).
-2. Read its operations: each carries its container and its value.
+2. Read its operations: each carries its container and its value. Refuse the delta when its PeerID
+   carries a registry entry that another session wrote (`ambre-spec-op-authorship.md`, `AUTHOR-033`).
 3. Refuse the delta when it creates a message under another author (`MURMURE-082`).
 4. Refuse it when it changes a field, the `content` or the `attachments` of a message created by
    another author's PeerID (`MURMURE-085`, `MURMURE-089`). One field is open to all: the `thread`
@@ -131,6 +133,10 @@ no document, in microseconds.
    not create (`MURMURE-681`). Loro refuses such an update, and the check reaches the same verdict.
 10. Import otherwise, from the update the check read (`MURMURE-225`). When a document opens, a
     delta Loro refuses all the same is left out, and the rest opens (`MURMURE-680`).
+
+The check reads each root by its typed identifier, never by its name. A lookup by name makes Loro
+build the value of every root of that name. A deep tree a peer nests under the name then overflows
+the stack (`MURMURE-683`).
 
 An amendment names its message by identifier, in a document its author did not create. So the
 check reads the author from the locked segment itself, which is immutable and cheap to load again.

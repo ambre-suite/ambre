@@ -875,10 +875,12 @@ impl LogicState {
                 self.send_to_ui(UiEvent::MemberChannels {
                     channels,
                     spaces,
-                    names,
+                    names: names.clone(),
                     peers,
                 });
-                self.route(|m| m.channels_listed(&metas));
+                // The names stay hints: an open channel seals what its
+                // `meta` reads when they differ.
+                self.route(|m| m.channels_listed(&metas, &names));
             }
 
             // -- Meetings (participant push) -----------------------------------
@@ -936,6 +938,9 @@ impl LogicState {
                 channel,
                 members,
             } => self.route(|m| m.call_roster(call, channel, members)),
+            LogicEvent::CallMetaAsked { call, channel } => {
+                self.route(|m| m.call_meta_asked(call, channel))
+            }
             LogicEvent::ApiError {
                 id,
                 request,

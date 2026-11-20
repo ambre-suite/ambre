@@ -1161,26 +1161,6 @@ pub(crate) async fn leave_channel_task<H: ShareHttp>(
         .map_err(http::HttpError::from)
 }
 
-/// The `meta` document of `channel`, whose membership log admits the joiners of its calls,
-/// or `None` when the relay answers no such document.
-pub(crate) async fn channel_meta<H: ShareHttp>(
-    http: &H,
-    channel: Id<Channel>,
-    scheme: crate::http::UrlScheme,
-    base: &crate::http::Url<crate::http::RelayHost>,
-) -> Option<Id<Document>> {
-    let url = crate::http::Url::<crate::http::ApiRoot>::of(scheme, base)
-        .route(format!("/channels/{channel}/documents"));
-    let listed = http
-        .get_json::<http::ChannelDocumentsResponse>(&url)
-        .await
-        .ok()?;
-    crate::channels::channel_documents(&listed.documents)
-        .into_iter()
-        .find(|d| d.kind == ChannelDocumentKind::Meta)
-        .map(|d| d.document_id)
-}
-
 /// Inputs for [`close_segment_task`], gathered from `SyncState` before
 /// spawning.
 pub(crate) struct SegmentCloseParams {
@@ -5440,35 +5420,6 @@ mod tests {
                 _ => panic!("unexpected event (want DocumentMembersReady)"),
             }
         }
-    }
-
-    /// The `meta` document of a channel is the row of that kind, wherever the relay lists
-    /// it. A listing with none, or a failed read, names none.
-    #[tokio::test]
-    async fn the_meta_of_a_channel_is_the_row_of_that_kind() {
-        let meta = Id::<Document>::mint();
-        let channel = Id::<Channel>::mint();
-        let base = crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned());
-        let scheme = crate::http::UrlScheme::Https;
-        let listing = |rows: serde_json::Value| {
-            FakeHttp::new(vec![Ok(serde_json::json!({ "documents": rows }))])
-        };
-        let http = listing(serde_json::json!([
-            { "document_id": Id::<Document>::mint().to_string(), "kind": "segment" },
-            { "document_id": meta.to_string(), "kind": "meta" },
-        ]));
-        assert_eq!(
-            channel_meta(&http, channel, scheme, &base).await,
-            Some(meta)
-        );
-        let http = listing(serde_json::json!([
-            { "document_id": Id::<Document>::mint().to_string(), "kind": "segment" },
-        ]));
-        assert_eq!(channel_meta(&http, channel, scheme, &base).await, None);
-        let http = FakeHttp::new(vec![Err(http::HttpError::Local(
-            ambre_core::LocalFailure::NoRelay,
-        ))]);
-        assert_eq!(channel_meta(&http, channel, scheme, &base).await, None);
     }
 
     /// The log of the channel of a call is read from the members of its `meta` and answered

@@ -39,6 +39,21 @@ impl<D> Runtime<D> {
         self.handle_channel_command(channel, MurmureCommand::EndCall { call, now: at });
     }
 
+    /// A join of `call` waits for the `meta` document of `channel`. The answer is the `meta`
+    /// of the channel state this thread opened, open or closed since, whose sealed header
+    /// names `channel` (`MURMURE-027`). A channel it never opened has none, and the join ends.
+    /// The relay never names it, so it cannot seat a join under another channel's log
+    /// (`CALL-141`, audit `P24`).
+    pub fn call_meta_asked(&mut self, call: Id<Call>, channel: Id<Channel>) {
+        let meta = self
+            .channels
+            .get(&channel)
+            .map(crate::ChannelState::meta_id)
+            .or_else(|| self.closed_channels.get(&channel).map(|c| c.meta()))
+            .map(|meta| meta.document_id());
+        self.ask(SyncCommand::CallMeta { call, meta });
+    }
+
     /// The relay answered who is in `call`. The view shows it, and a call the relay holds no
     /// state of is asked about no more (the Murmure calls spec).
     pub fn call_roster(&mut self, call: Id<Call>, channel: Id<Channel>, members: CallMembers) {

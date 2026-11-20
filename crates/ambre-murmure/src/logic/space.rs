@@ -392,6 +392,19 @@ impl SpaceState {
         session.export(&self.doc)
     }
 
+    /// Whether the registry of the space leaves `peer` free for the session
+    /// that opened with `nonce` (`AUTHOR-033`). A blank document claims
+    /// nothing.
+    pub(crate) fn peer_unclaimed(
+        &self,
+        peer: ambre_core::PeerId,
+        nonce: &ambre_core::FixedBytes<ambre_core::SessionNonce>,
+    ) -> bool {
+        use ambre_core::crdt::CrdtName as _;
+        schema::held_root_map(&self.doc, ambre_core::crdt::FoundationRoot::Peers.as_str())
+            .is_none_or(|registry| ambre_crdt::session::peer_unclaimed(&registry, peer, nonce))
+    }
+
     /// The document itself, for the shape belt.
     #[cfg(test)]
     pub(crate) fn doc(&self) -> &LoroDoc {
