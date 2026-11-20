@@ -592,4 +592,11 @@ pub enum RestEvent {
         email: ambre_core::Email,
         keys_stored: KeySetup,
     },
+
+    // -- Account -------------------------------------------------------------------
+    /// A provider-verified account reclaimed the address of this session's
+    /// account (`SRV-029`, `SRV-321`). Follows the `SessionReady` it belongs
+    /// to; the launcher names the reclaim (`CHROME-146`). Appended last, so
+    /// the tags of the variants above do not move.
+    AddressReclaimed,
 }

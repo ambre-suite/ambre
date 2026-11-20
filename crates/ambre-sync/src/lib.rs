@@ -409,6 +409,8 @@ enum SyncEvent {
         user_id: Id<User>,
         display_name: ambre_core::Validated<ambre_core::DisplayName>,
         email: ambre_core::Email,
+        /// Whether a reclaim took the address (`CHROME-146`).
+        address: ambre_core::AddressStanding,
         master_seed: MasterSeed,
         signing_key: SigningKey,
         exchange_key: StaticSecret,
@@ -438,6 +440,7 @@ enum SyncEvent {
         user_id: Id<User>,
         display_name: ambre_core::Validated<ambre_core::DisplayName>,
         email: ambre_core::Email,
+        address: ambre_core::AddressStanding,
     },
     /// A recovery re-sealed the seed its words spell under the new passphrase
     /// (`SYNC-248`). It carries that seed, the pair the session holds and who
@@ -452,6 +455,7 @@ enum SyncEvent {
         user_id: Id<User>,
         display_name: ambre_core::Validated<ambre_core::DisplayName>,
         email: ambre_core::Email,
+        address: ambre_core::AddressStanding,
     },
     DocumentList {
         id: Seq<Request>,
@@ -2187,6 +2191,24 @@ impl SyncState {
     /// Reply to a service request, echoing its [`Seq<Request>`].
     fn reply(&self, id: Seq<Request>, evt: RestEvent) {
         self.send_to_logic(LogicEvent::Rest { id: Some(id), evt });
+    }
+
+    /// Announce the session `ready`, then the reclaim of its address when the
+    /// relay named one (`CHROME-146`). The reclaim follows the session, so the
+    /// page that shows it already shows the account.
+    fn announce_session(
+        &self,
+        id: Option<Seq<Request>>,
+        ready: RestEvent,
+        address: ambre_core::AddressStanding,
+    ) {
+        self.send_to_logic(LogicEvent::Rest { id, evt: ready });
+        if address == ambre_core::AddressStanding::Reclaimed {
+            self.send_to_logic(LogicEvent::Rest {
+                id: None,
+                evt: RestEvent::AddressReclaimed,
+            });
+        }
     }
 
     /// Dispatch a relayed [`RestCommand`]. Most arms are placeholders today; the

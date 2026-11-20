@@ -271,6 +271,20 @@ pub async fn sign_in_from_oidc(
     Ok(OidcSignIn { user, reclaims })
 }
 
+/// Whether `email` is the stand-in a reclaim writes in place of the address
+/// it took (`SRV-321`). The reclaim of `sign_in_from_oidc` writes the one
+/// form this reads. No provider verifies an address of that domain, and no
+/// route takes a self-asserted one, so no other account holds such an
+/// address. An account that sets an address again holds it.
+#[must_use]
+pub fn address_standing(email: &ambre_core::Email) -> ambre_core::AddressStanding {
+    if email.as_str().starts_with("reclaimed-") && email.as_str().ends_with("@invalid.local") {
+        ambre_core::AddressStanding::Reclaimed
+    } else {
+        ambre_core::AddressStanding::Held
+    }
+}
+
 /// What a provider sign-in wrote: the account, and the inviters each reclaim
 /// of its address owes a notice (`SRV-295`).
 #[derive(Debug)]
@@ -553,6 +567,20 @@ mod tests {
             squatter_now.email.as_str().to_lowercase(),
             "alice@example.com",
             "the squatter no longer holds the reclaimed email"
+        );
+        // The stand-in reads as a reclaim, and neither live address does
+        // (`SRV-321`).
+        assert_eq!(
+            address_standing(&squatter_now.email),
+            ambre_core::AddressStanding::Reclaimed
+        );
+        assert_eq!(
+            address_standing(&oidc.email),
+            ambre_core::AddressStanding::Held
+        );
+        assert_eq!(
+            address_standing(&squatter.email),
+            ambre_core::AddressStanding::Held
         );
     }
 

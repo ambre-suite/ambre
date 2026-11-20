@@ -176,9 +176,9 @@ pub use media::{
 };
 pub use member_count::Members;
 pub use mode::{
-    AfterDrop, Availability, CaseMatch, Creation, DocumentScope, EmailProof, FinalizeEnd,
-    HistoryStep, LinkState, PasteForm, RotationDebt, StepDirection, ThreadState, Toggle,
-    Visibility, WordMatch,
+    AddressStanding, AfterDrop, Availability, CaseMatch, Creation, DocumentScope, EmailProof,
+    FinalizeEnd, HistoryStep, LinkState, PasteForm, RotationDebt, StepDirection, ThreadState,
+    Toggle, Visibility, WordMatch,
 };
 pub use name::{
     DisplayName, InvalidDisplayName, NAME_MAX_CHARS, NAME_TOO_LONG, Name, NameTooLong,

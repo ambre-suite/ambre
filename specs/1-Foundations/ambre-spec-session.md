@@ -60,6 +60,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-074` | `FAIL` | A configured provider the relay cannot reach at startup MUST stop the start, never disable sign-in in silence. | audit `M7`; this spec section 3 | `ambre_server::oidc::tests::a_configured_provider_that_does_not_answer_stops_the_start` -- the start decision against an issuer nothing listens on is an error, which `main` returns. With no client id nothing is discovered and sign-in is off | none | verified |
 | `SRV-296` | `FRAME` | A request of the relay to the identity provider MUST NOT follow a redirect, and MUST end at its deadline. | this spec section 3; `SRV-022`; `ambre-spec-budgets.md` section 8 | `ambre_server::oidc::tests::the_provider_client_follows_no_redirect_and_keeps_a_deadline` -- a redirect comes back as itself, and a provider that stalls fails the request at the deadline | none | verified |
 | `SRV-295` | `POST` | A reclaim of an address MUST tell each member who invited the account that held it. | this spec section 3; `SRV-029` | `ambre_server::routes::tests::handler_tests::a_reclaim_tells_each_inviter_of_the_account_that_held_the_address` -- database tier: the sign-in that reclaims names the one inviter per document, the inviter's topic hears `AddressReclaimed` for that document and member, and a second sign-in owes no notice | none | verified |
+| `SRV-321` | `POST` | The account answer MUST say whether a provider sign-in reclaimed the address of the account. | this spec section 3; `SRV-029`; `ambre-spec-launcher.md`, `CHROME-146` | `ambre_server::routes::tests::handler_tests::the_account_answer_names_a_reclaim_of_its_address` -- database tier: the account answer reads no reclaim, then a reclaim once a provider sign-in took the address, and the account of the inviter reads none; `ambre_server::db::users::tests::oidc_login_reclaims_email_from_unverified_squatter` -- database tier: the stand-in a reclaim writes reads as a reclaim, and neither live address does | none | verified |
 
 ### 1.4 A session ends
 
@@ -190,6 +191,12 @@ member (`SRV-295`).
 
 A notice is best-effort. An inviter that misses it still reads the member list, which shows the
 member unproven and without the address.
+
+**A reclaim tells the account that lost the address.** The account answer of the relay carries a
+reclaim flag (`SRV-321`). The relay reads it off the stand-in address that the reclaim writes, so
+the flag needs no column. The flag reaches the next session of that account, even when the account
+was offline at the reclaim. The launcher names the reclaim (`ambre-spec-launcher.md`,
+`CHROME-146`).
 
 **A re-seal proves the seal it replaces.** A passphrase change and a recovery each replace the
 sealed master material. A session alone does not authorize the write: a stolen session would

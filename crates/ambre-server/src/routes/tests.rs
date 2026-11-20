@@ -2202,6 +2202,46 @@ mod handler_tests {
         assert!(again.reclaims.is_empty());
     }
 
+    /// `SRV-321`: the account answer of `/auth/me` says whether a provider
+    /// sign-in reclaimed the address. The account that lost it reads the
+    /// reclaim, and an account that keeps its address reads none.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn the_account_answer_names_a_reclaim_of_its_address(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let owner = setup_and_get_auth(&app).await;
+        let squatter_email = "victim@example.com";
+        let squatter = setup_named(&app, squatter_email, 5).await;
+        let read_me = |auth: String| {
+            let app = app.clone();
+            async move {
+                let resp = app.oneshot(get_with("/api/auth/me", &auth)).await.unwrap();
+                assert_eq!(resp.status(), StatusCode::OK);
+                let body = axum::body::to_bytes(resp.into_body(), 1 << 16)
+                    .await
+                    .unwrap();
+                serde_json::from_slice::<serde_json::Value>(&body).unwrap()
+            }
+        };
+        assert_eq!(read_me(squatter.clone()).await["address_reclaimed"], false);
+
+        crate::db::sign_in_from_oidc(
+            &state.db,
+            ambre_core::OidcProvider::Google,
+            &openidconnect::SubjectIdentifier::new("sub-victim".to_owned()),
+            &ambre_core::Email::from(squatter_email),
+            &ambre_core::Validated::<ambre_core::DisplayName>::parse("Victim").unwrap(),
+        )
+        .await
+        .unwrap();
+
+        let me = read_me(squatter).await;
+        assert_eq!(me["address_reclaimed"], true, "{me}");
+        assert_ne!(me["email"], squatter_email);
+        assert_eq!(read_me(owner).await["address_reclaimed"], false);
+    }
+
     /// `SRV-319`: the relay serves no anonymous account setup. An account
     /// comes from a provider, or from the development sign-in where the
     /// deployment enables it.

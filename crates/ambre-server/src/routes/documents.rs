@@ -22,6 +22,9 @@ pub struct MeResponse {
     pub user_id: Id<User>,
     pub email: ambre_core::Email,
     pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
+    /// Whether a provider sign-in reclaimed the address of the account
+    /// (`SRV-321`). The launcher names the reclaim (`CHROME-146`).
+    pub address_reclaimed: ambre_core::AddressStanding,
 }
 
 pub async fn me(
@@ -37,6 +40,7 @@ pub async fn me(
     let uid = u.id;
     Ok(axum::Json(MeResponse {
         user_id: uid,
+        address_reclaimed: db::address_standing(&u.email),
         email: u.email,
         display_name: u.display_name,
     }))
