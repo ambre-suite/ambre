@@ -102,10 +102,8 @@ and that container belongs to the application: `3-Toile/ambre-spec-toile-schema.
 **The address.** One string per blob, computed by the Sync worker because it is the only crypto
 consumer on the client. It is content-derived, which is what makes the same picture used ten times
 one upload and one object, with no coordination between peers. It is a keyed hash of the bytes: an
-HMAC under a subkey of the document key and the document identifier. Every member reaches the
-same address, and the relay, which holds no key, cannot compute it from a file it already has
-(`SYNC-050`). The subkey binds the document, so two documents under one key give one file two
-addresses (`SYNC-286`, audit `P20`).
+HMAC under a subkey of the document key. Every member reaches the same address, and the relay,
+which holds no key, cannot compute it from a file it already has (`SYNC-050`).
 
 **An upload, in steps.** A document the relay does not hold yet gets no link. The upload waits for
 its creation, which it starts (`SYNC-145`).
@@ -146,9 +144,7 @@ version byte buys elsewhere is a choice per payload; here there is no choice to 
 **What the relay stores, and what that lets it do.** The relay keeps the address and the size
 against the document. A plain hash would let it hash a known file, a photograph or a leaked page,
 and learn whether this document holds it. The key closes that oracle. What remains is equality
-inside one document: two uploads of one picture share an address (`SYNC-050`, `SYNC-053`).
-
-Equality across documents stays closed when two documents share a key (`SYNC-286`). The
+inside one document: two uploads of one picture share an address (`SYNC-050`, `SYNC-053`). The
 media type stays with the application.
 
 **Code.**
