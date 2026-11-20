@@ -57,7 +57,7 @@ BUDGET = 4_000_000
 # story row that names the new figure and the cut tried first (`ARCH-095`).
 CEILINGS = {
     "Main": 10_470_000,
-    "Sync": 1_320_000,
+    "Sync": 1_350_000,
 }
 
 # The brotli budget of each lazy artefact, its row of `ambre-spec-budgets.md

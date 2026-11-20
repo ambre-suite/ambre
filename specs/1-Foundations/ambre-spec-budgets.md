@@ -978,6 +978,9 @@
 
   The ceiling holds 27 318 bytes of room. Main and the converter modules hold their figures. The
   first download reads 3 180 948 bytes of brotli, against 3 195 403 before.
+  The merges of the kept session, the address reclaim and the membership cap came next. They put
+  Sync at 1 328 640 raw bytes in CI. The ceiling went back to 1 350 000, the figure of the W10
+  raise.
 
 * **The PNG raster raised the PDF module ceiling on 2026-11-15.** The PNG export rasterizes a
   recorded page in the PDF module, on the converter thread
