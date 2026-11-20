@@ -30,7 +30,6 @@ ambre-client-core = { path = "../ambre-client-core" }
 # ambre-crypto's own target-specific dependency, so nothing extra is needed here.
 ambre-crypto   = { path = "../ambre-crypto" }
 
-tracing  = { workspace = true }
 serde    = { workspace = true }
 serde_json = { workspace = true }
 postcard = { workspace = true }
@@ -89,11 +88,15 @@ proptest = { workspace = true }
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
 
-# Sync worker bootstrap (wasm only): panic overlay + tracing into the console.
-# This is a separate wasm instance from Main, so it inits its own subscriber.
+# Sync worker bootstrap (wasm only): the panic overlay. The worker hands its
+# log to the console itself (`src/log.rs`, `SYNC-301`).
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 console_error_panic_hook = { workspace = true }
-tracing-wasm = { workspace = true }
+
+# The log reaches `tracing` on the host alone, where the native tests capture
+# it (`src/log.rs`). The worker links no `tracing`.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tracing = { workspace = true }
 
 [lints]
 workspace = true

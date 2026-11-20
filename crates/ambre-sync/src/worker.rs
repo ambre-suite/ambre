@@ -52,8 +52,6 @@ fn post_bytes(scope: &DedicatedWorkerGlobalScope, post: &Payload<WorkerPost>) {
 #[wasm_bindgen(start)]
 pub fn start() {
     console_error_panic_hook::set_once();
-    // Own tracing subscriber: this is a distinct wasm instance from Main.
-    tracing_wasm::set_as_global_default();
 
     let scope: DedicatedWorkerGlobalScope = js_sys::global()
         .dyn_into()

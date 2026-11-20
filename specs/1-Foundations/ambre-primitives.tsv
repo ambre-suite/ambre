@@ -4820,6 +4820,24 @@ ambre-murmure | src/logic/schema.rs | crate::logic::schema | held_root_map(name)
 ambre-server | src/s3.rs | crate::s3 | holds_object() | ret | Result<bool,AppError>	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | read_metered() | ret | Result<Vec<u8>,TransportError>	generic	opaque bytes of a response body, read under its byte cap and handed to a parser
 ambre-sync | src/lib.rs | crate | SyncDocumentState::quarantine_overflows() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-sync | src/log.rs | crate::log::console | MARKS | static | AtomicU64	foreign-api	the std atomic, which takes the primitive it counts the performance marks of the worker with
+ambre-sync | src/log.rs | crate::log::console | ORIGIN_STYLE | const | &str	foreign-api	a CSS declaration the browser console applies to the second segment of a line
+ambre-sync | src/log.rs | crate::log::console | TEXT_STYLE | const | &str	foreign-api	a CSS declaration the browser console applies to the third segment of a line
+ambre-sync | src/log.rs | crate::log::console | Printed.level_style | field | &'static str	foreign-api	a CSS declaration the browser console applies to the first segment of the line
+ambre-sync | src/log.rs | crate::log::console | Printed.line | field | String	foreign-api	the console line with its %c directives, as console.log takes it
+ambre-sync | src/log.rs | crate::log::console | Printed.mark | field | String	foreign-api	the name of a performance mark, as the browser takes it
+ambre-sync | src/log.rs | crate::log::console | Printed.measure | field | String	foreign-api	the name of a performance measure, as the browser takes it
+ambre-sync | src/log.rs | crate::log::console | Printed::new(marks) | param | &AtomicU64	foreign-api	the std atomic, which takes the primitive it counts the performance marks of the worker with
+ambre-sync | src/log.rs | crate::log::console | Printed::new(message) | param | &str	free-text	the message of a log line, for a person
+ambre-sync | src/log.rs | crate::log::console | console_log(level_style) | param | &str	foreign-api	a CSS declaration the browser console applies to its first segment
+ambre-sync | src/log.rs | crate::log::console | console_log(line) | param | &str	foreign-api	the console line with its %c directives, as console.log takes it
+ambre-sync | src/log.rs | crate::log::console | console_log(origin_style) | param | &str	foreign-api	a CSS declaration the browser console applies to its second segment
+ambre-sync | src/log.rs | crate::log::console | console_log(text_style) | param | &str	foreign-api	a CSS declaration the browser console applies to its third segment
+ambre-sync | src/log.rs | crate::log::console | performance_mark(name) | param | &str	foreign-api	the name of a performance mark, as the browser takes it
+ambre-sync | src/log.rs | crate::log::console | performance_measure(name) | param | &str	foreign-api	the name of a performance measure, as the browser takes it
+ambre-sync | src/log.rs | crate::log::console | performance_measure(start) | param | &str	foreign-api	the name of the mark a measure starts at, as the browser takes it
+ambre-sync | src/log.rs | crate::log::console | style() | ret | &'static str	foreign-api	a CSS declaration that console.log alone reads
+ambre-sync | src/log.rs | crate::log::console | word() | ret | &'static str	free-text	the level word that opens a log line, for a person
 ambre-sync | src/membership_log.rs | crate::membership_log | Log::binds_elsewhere() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | ServedHeads::walked_through() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | SpaceWord::writes_under() | ret | bool	generic	yes/no fact or predicate answer, selects no mode

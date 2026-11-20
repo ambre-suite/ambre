@@ -41,6 +41,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-065` | `POST` | An edit made before the session is ready MUST be held, never dropped. | this spec section 2 | `ambre_sync::updates::tests::an_edit_before_the_session_is_held_then_sent` -- two edits made with no signing key are sent, in order, once the key is set and the replay lands | none | verified |
 | `SYNC-097` | `FRAME` | Commands held during the start MUST NOT be reordered when they are released. | this spec section 2; `ambre-spec-delta-order.md` | `ambre_sync::updates::tests::held_commands_are_released_in_order` -- the held opens subscribe in order, and the held edits leave in order at rising clocks | none | verified |
 | `SYNC-271` | `FRAME` | The worker MUST reach the relay with the scheme of the page that started it, on this machine too. | this spec section 2; `ambre-spec-murmure-phone-measures.md section 2` | `ambre_sync::http::tests::the_scheme_of_the_page_wins_over_the_host` -- a page over TLS on the loopback reaches the relay over TLS, a page in the clear on another host reaches it in the clear, and a page with no scheme falls back to the host rule. The worker start reads the protocol of its own location into that scheme | none | verified |
+| `SYNC-301` | `POST` | Each message the Sync worker logs MUST print one console line of three segments, each opened by a `%c` directive: the level word in its colour, the file and line of its caller, then the message. Each MUST then leave a performance mark, and a measure from that mark labelled with its level, its caller and its message. | this spec section 2, the log; `ambre-spec-budgets.md section 5` | `ambre_sync::log::tests::a_worker_line_holds_the_level_the_caller_and_the_message`; `::each_level_prints_its_word_in_the_colour_of_the_layer`; `::a_worker_message_marks_the_profile_with_a_measure_of_its_text` -- the native tier reads the values the worker hands the browser; `ambre_sync::tests::worker_log::a_worker_message_reaches_console_log_with_its_three_styles`; `ambre_sync::tests::worker_log::a_worker_message_leaves_its_measure_in_the_browser_profile` -- run by `just test-wasm` in the browser, an edit logged before the session reaches `console.log` with its three styles, and its measure reaches the profile | none | verified |
 
 ### 1.3 The socket connects, and reconnects
 
@@ -189,6 +190,12 @@ encoded event is never empty, so the announcement is unambiguous (`SYNC-057`).
 worker reads its host and its protocol from its own location. A page served over TLS reaches the
 relay over TLS, on the loopback too, since the phone stack serves `https://localhost:8443`. With no
 protocol, a relay on this machine speaks plain HTTP, and any other relay TLS (`SYNC-271`).
+
+**The log.** Every message of the worker goes through one function, which hands it to the browser
+itself: one console line, then a performance mark and a measure (`SYNC-301`). No `tracing` layer
+stands between, so the worker links neither `tracing` nor a subscriber registry. The line keeps the
+shape and the colours of the `tracing-wasm` layer it replaces. On the host, the same function reaches
+`tracing`, which the native tests capture.
 
 **The loop.** One non-blocking wait over two queues: the commands relayed in, and the results of
 the socket and the requests. Both producers live in this worker, so the wait wakes correctly and the

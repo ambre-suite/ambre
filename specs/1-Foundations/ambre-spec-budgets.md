@@ -953,6 +953,32 @@
 | each REST body decoded through a `serde_json::Value` | about -5 000 | -- | dropped: it builds a tree for each answer, and the error loses its line and column |
 | a subscriber of the crate in place of `tracing-wasm` | about -18 000 | -- | not built: the marks of each log in the performance panel would go |
 
+* **One cut took Sync to 1 292 682 raw bytes on 2026-11-20, and its ceiling fell to 1 320 000.**
+  The security wave W10 put Sync at 1 320 706 raw bytes in CI on 2026-11-20, before its last
+  merges. The ceiling rose to 1 350 000 with no cut. `twiggy` compared a build of the crate alone
+  that keeps the name section with the same build at `76876c9`, before the wave. The wave spread
+  about 55 KB of code over some 500 items, its own features, and no crate came in whole.
+  * The cut kept is the log stack. The worker hands each message to `console.log` and to the
+    performance profile itself (`ambre-spec-sync.md`, `SYNC-301`). Each log keeps its mark and its
+    measure in the profile, the loss that kept the cut out on 2026-11-17. `tracing`,
+    `tracing-subscriber`, `sharded-slab`, `thread_local` and `tracing-wasm` leave the worker.
+  * No budget of section 1 and no security check moves. The level of `curve25519-dalek` stays 3.
+* **The method.** The first and last rows are `trunk build --release`, then
+  `scripts/wasm_size.py`, on the session container. The tries are
+  `cargo build --profile wasm-release -p ambre-sync`, then `wasm-bindgen` 0.2.122 with
+  `--target no-modules`, on the same container: 1 338 875 bytes before the story by that build.
+
+| Build | Sync raw | Change | Verdict |
+|---|---|---|---|
+| `ccr-cd7c4606-wmq4hy` at `aed75fc`, by `just size` | 1 339 579 | -- | before the story; 405 788 brotli |
+| the hash tables through `ambre_core::hash`, foldhash under the key of the process | 1 342 109 | +3 234 | dropped, it grew |
+| the std hash tables behind one SipHash hasher out of line | 1 338 521 | -354 | dropped: the probe code of each table is the weight, not the hash |
+| the log reaches the browser with no `tracing` | 1 291 984 | -46 891 | kept |
+| the kept cut, by `just size` | 1 292 682 | -46 897 | 391 333 brotli; the ceiling is 2 % above it, rounded up to 10 000 |
+
+  The ceiling holds 27 318 bytes of room. Main and the converter modules hold their figures. The
+  first download reads 3 180 948 bytes of brotli, against 3 195 403 before.
+
 * **The PNG raster raised the PDF module ceiling on 2026-11-15.** The PNG export rasterizes a
   recorded page in the PDF module, on the converter thread
   (`3-Toile/features/ambre-spec-toile-import-export.md section 3`). Three cuts came before the
