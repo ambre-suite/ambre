@@ -577,11 +577,8 @@ mod tests {
                 _ => None,
             });
             let address = answer.expect("the upload answered with an address");
-            let expected = ambre_crypto::commitment::media_address(
-                &key,
-                document_id,
-                &picture.clone().into(),
-            );
+            let expected =
+                ambre_crypto::commitment::media_address(&key, document_id, &picture.clone().into());
             assert_eq!(address, expected.content_hash());
             addresses.push(address);
         }

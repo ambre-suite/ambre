@@ -372,20 +372,12 @@ mod tests {
         );
         let bytes = blob(b"owner snapshot");
         let by_alice = named(&alice, 9);
-        let served = meta(
-            &by_alice,
-            Some(signed(doc, &by_alice, &bytes, &bob)),
-            None,
-        );
+        let served = meta(&by_alice, Some(signed(doc, &by_alice, &bytes, &bob)), None);
         assert_eq!(
             adopts(doc, &served, None, &confirmers, &bytes),
             Some(by_alice)
         );
-        let served = meta(
-            &by_alice,
-            Some(signed(doc, &by_alice, &bytes, &gone)),
-            None,
-        );
+        let served = meta(&by_alice, Some(signed(doc, &by_alice, &bytes, &gone)), None);
         assert_eq!(adopts(doc, &served, None, &confirmers, &bytes), None);
     }
 

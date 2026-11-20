@@ -75,11 +75,8 @@ async fn a_stated_length_past_its_ceiling_reads_no_byte() {
 #[wasm_bindgen_test]
 async fn a_body_up_to_its_ceiling_reads_whole() {
     let (body, _) = stream(2);
-    let read = ambre_sync::metered_body_len(
-        Some(Count::<Octets>::new(1)),
-        body,
-        Count::<Octets>::new(8),
-    )
-    .await;
+    let read =
+        ambre_sync::metered_body_len(Some(Count::<Octets>::new(1)), body, Count::<Octets>::new(8))
+            .await;
     assert_eq!(read, Some(Count::<Octets>::new(8)));
 }

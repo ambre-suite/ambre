@@ -258,9 +258,10 @@ impl Confirmers {
     ) -> bool {
         match self {
             Self::Unchecked => true,
-            Self::Granted(keys) => keys.members.get(confirmer).is_some_and(|binders| {
-                keys.owners.contains(author) || !binders.contains(author)
-            }),
+            Self::Granted(keys) => keys
+                .members
+                .get(confirmer)
+                .is_some_and(|binders| keys.owners.contains(author) || !binders.contains(author)),
         }
     }
 }
@@ -1444,9 +1445,19 @@ pub(crate) mod tests {
             MembershipAct::Invite,
             Role::Editor,
         );
-        append(&mut entries, &alice, &bob, MembershipAct::Revoke, Role::Editor);
+        append(
+            &mut entries,
+            &alice,
+            &bob,
+            MembershipAct::Revoke,
+            Role::Editor,
+        );
         let log = walk(&entries);
-        assert_eq!(log.walked_head().position, place_after(4), "the revoke walks");
+        assert_eq!(
+            log.walked_head().position,
+            place_after(4),
+            "the revoke walks"
+        );
         let granted = Confirmers::of(&log);
         assert!(!granted.admits(&bob.public(), &carol.public()));
         assert!(granted.admits(&carol.public(), &alice.public()));

@@ -222,11 +222,11 @@ mod withheld;
 #[cfg(target_arch = "wasm32")]
 mod worker;
 
-pub use http::{RelayHost, Url, UrlKind};
 /// The metered read of an answer body, for the wasm-tier test of `SYNC-278`.
 #[cfg(target_arch = "wasm32")]
 #[doc(hidden)]
 pub use http::metered_body_len;
+pub use http::{RelayHost, Url, UrlKind};
 
 // -----------------------------------------------------------------------------
 // Quarantine bounds (`ambre-spec-delta-order.md`)
@@ -265,7 +265,6 @@ impl ambre_core::NarrowCount for Ingested {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("Ingested");
 }
-
 
 /// The open a presence sample comes from: its author's signing key and the
 /// session nonce its sealed body carries (`SYNC-285`). One author holds one

@@ -1547,7 +1547,11 @@ mod tests {
         };
         let mentioned = || update(m, Id::<Snapshot>::mint(), &doc_key, Some(&mention()));
         state.receive_update(Seq::<Relay>::new(2), mentioned());
-        assert_eq!(counted(&rx), vec![(0, 0)], "an unwalked log counts activity alone");
+        assert_eq!(
+            counted(&rx),
+            vec![(0, 0)],
+            "an unwalked log counts activity alone"
+        );
 
         // The signer of `update` is seed 2. The walk grants another key.
         let other = MasterSeed::from_array([3; 32]).derive_signing_key();

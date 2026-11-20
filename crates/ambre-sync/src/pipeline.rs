@@ -330,11 +330,9 @@ pub struct PresenceBody {
 /// # Errors
 ///
 /// [`PipelineError::ShortBody`] for a body shorter than a nonce.
-pub fn split_presence_body(
-    body: &Payload<EphemeralBytes>,
-) -> Result<PresenceBody, PipelineError> {
-    let (session, sample) = FixedBytes::<SessionNonce>::split_from(body.as_bytes())
-        .ok_or(PipelineError::ShortBody)?;
+pub fn split_presence_body(body: &Payload<EphemeralBytes>) -> Result<PresenceBody, PipelineError> {
+    let (session, sample) =
+        FixedBytes::<SessionNonce>::split_from(body.as_bytes()).ok_or(PipelineError::ShortBody)?;
     Ok(PresenceBody {
         session,
         sample: Payload::new(sample.to_vec()),
