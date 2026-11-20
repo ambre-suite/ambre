@@ -4787,6 +4787,201 @@ mod tests {
         );
     }
 
+    /// The rows a rotation of `logged` reads: the owner's under its own key,
+    /// and one row per `(peer, served key)`.
+    fn rotation_rows(
+        owner: &Peer,
+        served: &[(&Peer, FixedBytes<ambre_core::ExchangePublicKey>)],
+    ) -> Vec<http::DocumentMemberEntry> {
+        std::iter::once((owner, own_exchange_key(&owner.xk)))
+            .chain(served.iter().map(|(peer, key)| (*peer, *key)))
+            .map(|(peer, key)| member(&peer.author.user_id.to_string(), key))
+            .collect()
+    }
+
+    /// `owner` re-invites the present or absent member `peer` by id, under
+    /// `exchange`, the key the user confirmed. Returns the body the share
+    /// posts, once the invite landed.
+    async fn invite_by_id(
+        logged: &Logged,
+        owner: &Peer,
+        peer: &Peer,
+        exchange: FixedBytes<ambre_core::ExchangePublicKey>,
+    ) -> serde_json::Value {
+        let mut params = invite_params(&owner.xk, exchange);
+        params.invitee_email = None;
+        params.invitee = peer.author.user_id;
+        params.document_id = logged.document_id;
+        params.doc_key = logged.doc_key.clone();
+        params.author = same(&owner.author);
+        params.footing = logged.footing();
+        let http = FakeHttp::new(vec![
+            Ok(serde_json::json!({
+                "signing_pubkey": signing_hex(&peer.author.signing_key),
+                "exchange_pubkey": exchange,
+            })),
+            Ok(logged.answer()),
+            Ok(serde_json::json!({
+                "user_id": peer.author.user_id.to_string(),
+                "display_name": "Member",
+            })),
+        ]);
+        let (etx, erx, sink, lrx) = channels();
+        invite_task(&http, params, &etx, &sink).await;
+        assert!(matches!(erx.try_recv(), Ok(SyncEvent::InviteSent { .. })));
+        assert!(lrx.try_recv().is_err(), "no ApiError on success");
+        let calls = http.calls();
+        let Some(Call::Post(_, body)) = calls.get(2) else {
+            panic!("expected the share POST: {calls:?}");
+        };
+        body.clone()
+    }
+
+    /// Holds `SYNC-285`. Bob changes exchange key, and the relay serves the
+    /// new one on his row. A rotation gives that row no copy while the log
+    /// signs the old key. The owner re-invites Bob under the new key. The
+    /// signed entry replaces the key the log holds, and the copy opens under
+    /// it. The next rotation wraps for the new key alone.
+    #[tokio::test]
+    async fn an_owners_re_invite_replaces_the_exchange_key_a_rotation_wraps_for() {
+        let owner = Peer::new(1);
+        let bob = Peer::new(2);
+        let mut logged = Logged::new(&owner);
+        logged.invite(&owner, &bob, Role::Editor);
+        let (new_xk, new_pub) = keypair(40);
+        let owner_pub = own_exchange_key(&owner.xk);
+        let rows = rotation_rows(&owner, &[(&bob, new_pub)]);
+        let rule = LogRule::document();
+
+        let before = logged.footing().walk(&logged.log, &rule).unwrap();
+        assert_eq!(
+            before.log().exchange_key(bob.author.user_id),
+            Some(own_exchange_key(&bob.xk))
+        );
+        let (entries, unwrapped) = rotate_entries_for(
+            &mut KeyWrapper::new(&owner.xk),
+            &DocumentKey::generate(),
+            &before,
+            &rows,
+        );
+        assert_eq!(
+            entries.iter().map(|e| e.user_id).collect::<Vec<_>>(),
+            [owner.author.user_id],
+            "the new key gets no copy before an entry signs it"
+        );
+        assert_eq!(unwrapped.len(), 1, "and Bob is reported");
+
+        let body = invite_by_id(&logged, &owner, &bob, new_pub).await;
+        let entry = posted_entry(&body);
+        assert_eq!(entry.act, MembershipAct::Invite);
+        assert_eq!(entry.member, bob.author.user_id);
+        assert_eq!(entry.member_exchange_key, new_pub);
+        let enc = serde_json::from_value::<ambre_core::Encoded<ambre_core::WrappedDocKey>>(
+            body["doc_key_enc"].clone(),
+        )
+        .unwrap();
+        assert_eq!(
+            unwrap_b64(&new_xk, &owner_pub, &enc).unwrap().id(),
+            logged.doc_key.id(),
+            "the copy of the re-invite opens under the new key"
+        );
+        assert!(unwrap_b64(&bob.xk, &owner_pub, &enc).is_err());
+
+        let text = body["entry"].as_str().unwrap();
+        logged
+            .log
+            .push(serde_json::from_value(serde_json::json!(text)).unwrap());
+        let after = logged.footing().walk(&logged.log, &rule).unwrap();
+        assert_eq!(after.log().exchange_key(bob.author.user_id), Some(new_pub));
+        assert_eq!(
+            after.log().standing(bob.author.user_id),
+            (MemberStanding::Verified, Some(Role::Editor))
+        );
+        let next_key = DocumentKey::generate();
+        let (entries, unwrapped) =
+            rotate_entries_for(&mut KeyWrapper::new(&owner.xk), &next_key, &after, &rows);
+        assert!(unwrapped.is_empty(), "nobody is left out");
+        let copy = entries
+            .iter()
+            .find(|e| e.user_id == bob.author.user_id)
+            .expect("the rotation wraps for Bob");
+        assert_eq!(
+            unwrap_b64(&new_xk, &owner_pub, &copy.doc_key_enc)
+                .unwrap()
+                .id(),
+            next_key.id()
+        );
+        assert!(unwrap_b64(&bob.xk, &owner_pub, &copy.doc_key_enc).is_err());
+    }
+
+    /// Holds `SYNC-286`. Carol holds a row that no entry of the log signs,
+    /// and Dave a row whose served key differs from the one the log signs.
+    /// A rotation reports both and gives each no copy. The owner signs a
+    /// fresh invite of each under the key the user confirmed. Each member
+    /// gets a copy of the key in force, and the next rotation wraps for both.
+    #[tokio::test]
+    async fn a_member_left_out_of_a_rotation_gets_the_key_back_through_a_fresh_invite() {
+        let owner = Peer::new(1);
+        let (carol, dave) = (Peer::new(3), Peer::new(4));
+        let mut logged = Logged::new(&owner);
+        logged.invite(&owner, &dave, Role::Viewer);
+        let owner_pub = own_exchange_key(&owner.xk);
+        let (carol_pub, dave_pub) = (own_exchange_key(&carol.xk), keypair(41));
+        let rows = rotation_rows(&owner, &[(&carol, carol_pub), (&dave, dave_pub.1)]);
+        let rule = LogRule::document();
+
+        let before = logged.footing().walk(&logged.log, &rule).unwrap();
+        let (entries, unwrapped) = rotate_entries_for(
+            &mut KeyWrapper::new(&owner.xk),
+            &DocumentKey::generate(),
+            &before,
+            &rows,
+        );
+        assert_eq!(entries.len(), 1, "the owner's own copy alone");
+        assert_eq!(unwrapped.len(), 2, "Carol and Dave are reported");
+
+        for (peer, secret, public) in [
+            (&carol, &carol.xk, carol_pub),
+            (&dave, &dave_pub.0, dave_pub.1),
+        ] {
+            let body = invite_by_id(&logged, &owner, peer, public).await;
+            let enc = serde_json::from_value::<ambre_core::Encoded<ambre_core::WrappedDocKey>>(
+                body["doc_key_enc"].clone(),
+            )
+            .unwrap();
+            let (key, anchor) = unwrap_anchor_b64(secret, &owner_pub, &enc).unwrap();
+            assert_eq!(key.id(), logged.doc_key.id(), "the key in force comes back");
+            assert_eq!(anchor, Some(logged.anchor));
+            let text = body["entry"].as_str().unwrap();
+            logged
+                .log
+                .push(serde_json::from_value(serde_json::json!(text)).unwrap());
+        }
+        let after = logged.footing().walk(&logged.log, &rule).unwrap();
+        for peer in [&carol, &dave] {
+            assert_eq!(
+                after.log().standing(peer.author.user_id).0,
+                MemberStanding::Verified
+            );
+        }
+        let next_key = DocumentKey::generate();
+        let (entries, unwrapped) =
+            rotate_entries_for(&mut KeyWrapper::new(&owner.xk), &next_key, &after, &rows);
+        assert!(unwrapped.is_empty(), "nobody is left out");
+        for (peer, secret) in [(&carol, &carol.xk), (&dave, &dave_pub.0)] {
+            let copy = entries
+                .iter()
+                .find(|e| e.user_id == peer.author.user_id)
+                .expect("the rotation wraps for each member invited back");
+            assert_eq!(
+                unwrap_b64(secret, &owner_pub, &copy.doc_key_enc)
+                    .unwrap()
+                    .id(),
+                next_key.id()
+            );
+        }
+    }
+
     /// Holds `SYNC-132` at the revoke: the request carries the entry that
     /// removes the member and names the key the rotation installs.
     #[tokio::test]

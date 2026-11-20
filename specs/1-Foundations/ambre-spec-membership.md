@@ -126,6 +126,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-109` | `FAIL` | Given an invite replayed after a later revoke of the same member, the client MUST count the member as revoked. | this spec section 3 | `ambre_sync::membership_log::tests::an_invite_replayed_after_a_revoke_leaves_the_member_revoked` | none | verified |
 | `SYNC-110` | `POST` | The role a client shows for a member MUST be the role of the latest valid entry for that member. | this spec section 3 | `ambre_sync::membership_log::tests::the_role_is_the_latest_valid_entrys`; `ambre_sync::sharing::tests::the_member_list_shows_what_the_log_verifies` -- the list carries the logged role over the relay's column; `::a_role_change_posts_the_entry_that_gives_the_role` | none | verified |
 | `SYNC-217` | `FAIL` | Given an entry that replaces the keys of a present member, the client MUST count it valid only when an owner signed an invite. | audit `N17`; this spec section 3; `SRV-266` | `ambre_sync::membership_log::tests::no_entry_but_an_owners_replaces_a_present_members_keys` -- an editor's re-invite of a present editor under keys of its own, and a self-join for a present member under a key it names itself, each end the chain and leave the member's keys, while an owner's re-invite lands | none | verified |
+| `SYNC-285` | `POST` | An owner's invite of a present member MUST replace the exchange key the log signs for that member, and the next rotation MUST wrap for the new key alone. | this spec section 3; `SYNC-197`, `SYNC-217`; `ambre-spec-key-rotation.md`, `SYNC-198` | `ambre_sync::sharing::tests::an_owners_re_invite_replaces_the_exchange_key_a_rotation_wraps_for` -- a new key served on the row gets no copy before the entry, the re-invite signs the new key, its copy opens under it alone, and the next rotation wraps for the new key and not the old one | none | verified |
 | `SYNC-111` | `FRAME` | Checking a member list MUST NOT block the open of the document, beyond the checks of its key. | this spec section 3 | `ambre_sync::updates::tests::a_key_the_invitation_does_not_name_is_refused` -- the open reads the log and still completes, the check deciding only which key it holds | none | verified |
 | `SYNC-206` | `POST` | Every update MUST carry, under its author's signature, the head of the membership log its author last read. | this spec section 3; `ambre-spec-sealed-envelope.md` | `ambre_sync::withheld::tests::a_log_served_whole_clears_the_check_and_heads_the_next_delta` -- the next delta signs the head of the log the client last read; `ambre_sync::pipeline::tests::a_rewritten_log_head_breaks_the_signature` -- a head rewritten in transit fails the signature, alone and at the open | none | verified |
 | `SYNC-207` | `FAIL` | Given a member's signed head that the log this client read does not pass through, the client MUST read the log again, and MUST warn the user when that log still does not pass through it. | this spec section 3; `ambre-spec-key-rotation.md` | `ambre_sync::withheld::tests::a_peer_detects_a_revoke_the_relay_hid_from_it` -- a relay hides a revoke and its rotation from Bob, Alice's next delta under the new key still proves its head, the log read again lacks the revoke, and Bob is warned once; `::a_log_served_whole_clears_the_check_and_heads_the_next_delta` -- an honest relay serves the entry and nobody is warned; `::a_head_no_member_signed_asks_nothing` -- a key outside the directory, or a broken signature, asks for no log; `::a_head_past_the_log_asks_once_and_a_log_without_it_is_withheld` -- one read at a time, and an answer to a read that left before the head proves nothing; `::a_served_log_holds_each_head_it_passes_through_and_no_other` -- a head past the log or forking from it is not held | none | verified |
@@ -242,6 +243,10 @@ client check what the relay serves.
 - An entry names the member's signing key and exchange key (`SYNC-197`). The entry that adds a
   member fixes both. A rotation then wraps for the exchange key the log signs, never for one the
   relay alone serves (`SYNC-198`). An invite signs the key the user confirmed.
+- A member who changes keys, on a new device or after a recovery, gets no copy until an entry
+  names the new key. An owner re-invites that member under the confirmed key: the entry replaces
+  both keys, and the next rotation wraps for the new one (`SYNC-217`, `SYNC-285`). The relay
+  refuses an entry under any key but the registered one (`SRV-307`).
 - A new member learns the first entry from its inviter, inside the sealed wrap (`SYNC-104`). So a
   relay cannot hand a new member a log rooted at a creator of its own, unless it wraps the copy
   itself (section 6).
@@ -311,6 +316,7 @@ The detection needs one frame of an up-to-date member to reach the member. A rel
 every such frame partitions the member, and nothing in the document tells it apart from silence.
 
 **How an entry is appended.** The relay checks the signature against the author's registered key.
+It checks that the entry names the two keys its member registered (`SRV-104`, `SRV-307`).
 It appends at the entry's position alone, under the document lock. Two writers racing for one
 position cannot fork the log: the loser is answered `LOG_MOVED`, and signs again after the winner.
 
