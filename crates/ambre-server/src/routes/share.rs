@@ -27,9 +27,10 @@ pub(crate) struct Expected {
 
 /// Decodes and checks the signed membership entry a request carries
 /// (`SRV-104`). The entry must record the change the route makes, about
-/// the member it names and under the key that member registered. The caller
-/// must have signed it with their own key. The relay checks the signature
-/// and nothing past it: the digests are the clients' to walk.
+/// the member it names and under the two keys that member registered
+/// (`SRV-307`). The caller must have signed it with their own key. The
+/// relay checks the signature and nothing past it: the digests are the
+/// clients' to walk.
 pub(crate) async fn checked_entry(
     state: &AppState,
     auth: &auth::AuthSession,
@@ -43,9 +44,12 @@ pub(crate) async fn checked_entry(
     };
     let entry = ambre_protocol::MembershipEntry::decode(sent)
         .map_err(|e| AppError::BadRequest(format!("entry: {e}")))?;
-    let member_key = db::get_user(&state.db, &expected.member)
-        .await?
-        .and_then(|user| user.signing_pubkey);
+    let member = db::get_user(&state.db, &expected.member).await?;
+    let member_key = member.as_ref().and_then(|user| user.signing_pubkey);
+    // A rotation wraps for the exchange key the log signs (`SYNC-198`). An
+    // entry under another key than the registered one would leave the member
+    // without a copy at the next rotation, and nobody would see why.
+    let member_exchange_key = member.and_then(|user| user.exchange_pubkey);
     let first = entry.act == ambre_protocol::MembershipAct::Create;
     let records = entry.well_formed()
         && entry.document == doc_id
@@ -56,7 +60,11 @@ pub(crate) async fn checked_entry(
         && expected.key.is_none_or(|key| entry.key == key)
         && first == (entry.position == ambre_core::Seq::ZERO)
         && member_key.as_ref().map(ambre_core::FixedBytes::as_slice)
-            == Some(entry.member_key.as_slice());
+            == Some(entry.member_key.as_slice())
+        && member_exchange_key
+            .as_ref()
+            .map(ambre_core::FixedBytes::as_slice)
+            == Some(entry.member_exchange_key.as_slice());
     if !records {
         return Err(AppError::BadRequest(
             "entry: does not record this change".into(),

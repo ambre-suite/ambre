@@ -1207,7 +1207,8 @@ mod handler_tests {
     }
 
     /// An unsigned entry of `doc` at `position`. The relay walks no digest,
-    /// so the previous one is filler.
+    /// so the previous one is filler. The member's exchange key is the one
+    /// [`setup_signed`] registers for the seed of its signing key.
     fn entry_at(
         doc: Id<Document>,
         position: u64,
@@ -1224,7 +1225,9 @@ mod handler_tests {
                 member.1.verifying_key().to_bytes(),
             ),
             member_exchange_key:
-                ambre_core::FixedBytes::<ambre_core::ExchangePublicKey>::from_array([4; 32]),
+                ambre_core::FixedBytes::<ambre_core::ExchangePublicKey>::from_array(
+                    [member.1.to_bytes()[0]; 32],
+                ),
             act,
             role,
             key: (act == ambre_protocol::MembershipAct::Invite)
@@ -1374,6 +1377,120 @@ mod handler_tests {
                 changed["entry"].as_str().unwrap()
             ]
         );
+    }
+
+    /// Holds `SRV-307`. The relay refuses an entry whose exchange key is not
+    /// the one its member registered. That holds at the creation, the invite,
+    /// the role change and the revoke, and the log keeps nothing of it. The
+    /// same entries under the registered key land.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn an_entry_naming_another_exchange_key_than_the_registered_one_is_refused(
+        pool: sqlx::PgPool,
+    ) {
+        use ambre_core::Role;
+        use ambre_protocol::MembershipAct;
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let (owner, owner_key, owner_id) = setup_signed(&app, &state, "owner@xk.test", 51).await;
+        let (_bob, bob_key, bob_id) = setup_signed(&app, &state, "bob@xk.test", 52).await;
+        let doc = Id::<Document>::mint();
+        let doc_id = doc.to_string();
+        let me = (owner_id, &owner_key);
+        let bob = (bob_id, &bob_key);
+        // The relay's own key, or any key but the registered one.
+        let swapped = |mut entry: ambre_protocol::MembershipEntry| {
+            entry.member_exchange_key =
+                ambre_core::FixedBytes::<ambre_core::ExchangePublicKey>::from_array([99; 32]);
+            entry
+        };
+
+        let create = entry_at(doc, 0, owner_id, me, MembershipAct::Create, Role::Owner);
+        let creation = |entry| {
+            serde_json::json!({
+                "doc_type": "prose", "document_id": doc_id,
+                "doc_key_enc": base64_encode(&[5u8; 72]), "entry": entry,
+            })
+        };
+        let (status, _) = status_and_code(
+            &app,
+            json_request(
+                "POST",
+                "/api/documents",
+                &owner,
+                &creation(sealed(swapped(create.clone()), &owner_key)),
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "the creation");
+        let create = sealed(create, &owner_key);
+        let (status, _) = status_and_code(
+            &app,
+            json_request("POST", "/api/documents", &owner, &creation(create.clone())),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+
+        let share = format!("/api/documents/{doc_id}/share");
+        let invite = entry_at(doc, 1, owner_id, bob, MembershipAct::Invite, Role::Editor);
+        let invitation = |entry| {
+            serde_json::json!({
+                "invitee_email": "bob@xk.test", "role": "editor",
+                "doc_key_enc": base64_encode(&[9u8; 72]), "key_id": key_id_hex(1),
+                "entry": entry,
+            })
+        };
+        let (status, _) = status_and_code(
+            &app,
+            json_request(
+                "POST",
+                &share,
+                &owner,
+                &invitation(sealed(swapped(invite.clone()), &owner_key)),
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "the invite");
+        assert_eq!(served_log(&app, &owner, &doc_id).await, [create.as_str()]);
+        let invite = sealed(invite, &owner_key);
+        let (status, _) = status_and_code(
+            &app,
+            json_request("POST", &share, &owner, &invitation(invite.clone())),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+
+        let member = format!("/api/documents/{doc_id}/members/{bob_id}");
+        let change = entry_at(
+            doc,
+            2,
+            owner_id,
+            bob,
+            MembershipAct::ChangeRole,
+            Role::Viewer,
+        );
+        let body = serde_json::json!({
+            "role": "viewer", "entry": sealed(swapped(change.clone()), &owner_key),
+        });
+        let (status, _) =
+            status_and_code(&app, json_request("PATCH", &member, &owner, &body)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "the role change");
+        let revoke = entry_at(doc, 2, owner_id, bob, MembershipAct::Revoke, Role::Editor);
+        let body = serde_json::json!({ "entry": sealed(swapped(revoke), &owner_key) });
+        let removal = format!("/api/documents/{doc_id}/share/{bob_id}");
+        let (status, _) =
+            status_and_code(&app, json_request("DELETE", &removal, &owner, &body)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "the revoke");
+        assert_eq!(
+            served_log(&app, &owner, &doc_id).await,
+            [create.as_str(), invite.as_str()],
+            "no refused entry joins the log"
+        );
+
+        let changed = serde_json::json!({ "role": "viewer", "entry": sealed(change, &owner_key) });
+        let (status, _) =
+            status_and_code(&app, json_request("PATCH", &member, &owner, &changed)).await;
+        assert_eq!(status, StatusCode::OK);
     }
 
     /// An owner can change a member's role; an unknown role string is rejected.
