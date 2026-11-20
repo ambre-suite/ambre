@@ -257,6 +257,10 @@ site, or no page of the site. The shell keeps the last two in the storage of the
 the host (`TOILE-301`). The choice is no part of the document, so a peer never learns it and never
 makes it. A storage the browser refuses keeps nothing, and the embed asks again (`TOILE-302`).
 
+The deployment decides which sites a frame may load at all. The page policy admits the sites it
+names, and no frame when it names none (`ambre-spec-server.md section 3`, `SRV-307`). The answer of
+the user comes after that check, and never widens it.
+
 | Trigger | What happens |
 |---|---|
 | a click on an embed | the topmost one under the pointer takes focus, and the click itself does not reach the child (`TOILE-UI-091`, `TOILE-UI-321`, `TOILE-UI-322`) |
