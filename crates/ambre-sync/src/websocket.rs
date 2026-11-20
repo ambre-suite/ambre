@@ -1665,14 +1665,22 @@ impl SyncState {
                     );
                     return;
                 };
-                let opened = doc_state.open_ephemeral_named(&eph);
+                let opened = doc_state
+                    .open_ephemeral_named(&eph)
+                    .and_then(|body| crate::pipeline::split_presence_body(&body));
                 // Anti-replay: reject ephemerals with a non-monotonic counter for
-                // the same author. The counter map is bounded (see
-                // `accept_ephemeral_counter` / `MAX_EPHEMERAL_REMOTE_AUTHORS`).
-                // Only a sample whose signature verified moves the counter, so
-                // a forged one cannot silence its author (`SYNC-216`).
-                if opened.is_ok()
-                    && !doc_state.accept_ephemeral_counter(&author_pk, eph.public_data.counter)
+                // the same open of the same author. The sealed body names the
+                // open, so a reopened author counts from 1 again (`SYNC-285`).
+                // The counter map is bounded (see `accept_ephemeral_counter` /
+                // `MAX_EPHEMERAL_REMOTE_AUTHORS`). Only a sample whose signature
+                // verified moves the counter, so a forged one cannot silence its
+                // author (`SYNC-216`).
+                if let Ok(body) = &opened
+                    && !doc_state.accept_ephemeral_counter(
+                        &author_pk,
+                        &body.session,
+                        eph.public_data.counter,
+                    )
                 {
                     crate::log::debug!(
                         "Sync: dropping replayed ephemeral from {:?} (counter {})",
@@ -1681,6 +1689,7 @@ impl SyncState {
                     );
                     return;
                 }
+                let opened = opened.map(|body| body.sample);
                 self.deliver_remote(doc_id, Some(opened), |payload| {
                     LogicEvent::RemoteEphemeral {
                         document_id: doc_id,
@@ -2210,8 +2219,12 @@ mod tests {
             log_head: ambre_protocol::LogHead::EMPTY,
             log_entry: None,
         };
+        let session = ambre_core::FixedBytes::from_array([5; 16]);
         let eph = crate::pipeline::seal_ephemeral(
-            &ambre_core::Payload::new(b"cursor@42".to_vec()),
+            &crate::pipeline::presence_body(
+                &session,
+                &ambre_core::Payload::new(b"cursor@42".to_vec()),
+            ),
             public_data,
             &doc_key,
             &signing,
@@ -2266,7 +2279,10 @@ mod tests {
                 log_entry: None,
             };
             crate::pipeline::seal_ephemeral(
-                &ambre_core::Payload::new(b"cursor".to_vec()),
+                &crate::pipeline::presence_body(
+                    &ambre_core::FixedBytes::from_array([5; 16]),
+                    &ambre_core::Payload::new(b"cursor".to_vec()),
+                ),
                 public_data,
                 &doc_key,
                 by,

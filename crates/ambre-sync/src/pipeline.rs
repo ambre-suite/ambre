@@ -295,6 +295,52 @@ fn split_frame(body: &[u8]) -> Result<UpdateBody, PipelineError> {
     })
 }
 
+/// The body of a presence sample: the session nonce of its sender's open,
+/// then the sample. It is the payload the seal encrypts, so the relay never
+/// reads the nonce (`SYNC-285`, audit `P22`). The nonce tells two opens of
+/// one author apart, and each open counts its samples from 1.
+#[must_use]
+pub fn presence_body(
+    session: &FixedBytes<SessionNonce>,
+    sample: &Payload<EphemeralBytes>,
+) -> Payload<EphemeralBytes> {
+    let mut body = Vec::with_capacity(
+        FixedBytes::<SessionNonce>::SIZE
+            .saturating_len()
+            .to_usize()
+            .saturating_add(sample.as_bytes().len()),
+    );
+    body.extend_from_slice(session.as_slice());
+    body.extend_from_slice(sample.as_bytes());
+    Payload::new(body)
+}
+
+/// One opened presence sample: the session nonce of its sender's open, and
+/// the sample Logic reads.
+#[derive(Debug)]
+pub struct PresenceBody {
+    /// The session nonce of the open that sent the sample.
+    pub session: FixedBytes<SessionNonce>,
+    /// The sample, opaque to the envelope.
+    pub sample: Payload<EphemeralBytes>,
+}
+
+/// Splits an opened presence sample into its session nonce and its sample.
+///
+/// # Errors
+///
+/// [`PipelineError::ShortBody`] for a body shorter than a nonce.
+pub fn split_presence_body(
+    body: &Payload<EphemeralBytes>,
+) -> Result<PresenceBody, PipelineError> {
+    let (session, sample) = FixedBytes::<SessionNonce>::split_from(body.as_bytes())
+        .ok_or(PipelineError::ShortBody)?;
+    Ok(PresenceBody {
+        session,
+        sample: Payload::new(sample.to_vec()),
+    })
+}
+
 /// Refuses a key other than the one the metadata names (`SYNC-125`). On the
 /// seal it keeps a payload from naming a key that did not seal it. On the open
 /// it refuses before any cryptography.

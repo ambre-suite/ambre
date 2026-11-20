@@ -2084,6 +2084,12 @@ impl SyncState {
         if doc_state.rekey.owes() || doc_state.head_watch.holds_edits() {
             return;
         }
+        // The sample names this open, and each open counts from 1, so a peer
+        // that stayed open takes it after a reopen (`SYNC-285`). A document
+        // opened with no identity sends no presence.
+        let Some(session) = self.session_nonces.get(&document_id).copied() else {
+            return;
+        };
         // A wrapped counter would read as a replay to every peer, so an
         // exhausted counter drops the ephemeral instead.
         let Some(next) = doc_state.ephemeral_counter.get().checked_add(1) else {
@@ -2102,7 +2108,8 @@ impl SyncState {
             log_head: doc_state.head_watch.head(),
             log_entry: doc_state.head_watch.head_entry(),
         };
-        match pipeline::ephemeral_frame(&payload, public_data, &doc_key, &signing_key) {
+        let body = pipeline::presence_body(&session, &payload);
+        match pipeline::ephemeral_frame(&body, public_data, &doc_key, &signing_key) {
             Ok(frame) => self.ws_send_sealed(&frame),
             Err(e) => {
                 crate::log::error!("Sync: SendEphemeral seal failed for {document_id:?}: {e}")
