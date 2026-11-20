@@ -233,23 +233,29 @@ pub(crate) fn root_list(doc: &LoroDoc, root: Root) -> LoroList {
     doc.get_list(root.as_str())
 }
 
-/// The list root `root` of `doc` when the document holds it. A lookup:
-/// unlike [`root_list`], it creates no root, so a check that reads a document
-/// leaves its value as it found it (`MURMURE-226`).
-pub(crate) fn held_root_list(doc: &LoroDoc, root: Root) -> Option<LoroList> {
-    match doc.get_by_str_path(root.as_str())? {
-        ValueOrContainer::Container(loro::Container::List(list)) => Some(list),
-        _ => None,
-    }
+/// Whether `doc` holds no operation yet, applied or pending. A blank document
+/// holds no root, so a read finds none and attaches none.
+fn blank(doc: &LoroDoc) -> bool {
+    doc.get_pending_txn_len() == 0 && doc.state_frontiers().is_empty()
 }
 
-/// The map root named `name` of `doc` when the document holds it. A lookup,
-/// as [`held_root_list`] is.
+/// The list root `root` of `doc`, or `None` while the document is blank. A
+/// check that reads a blank document leaves it as it found it.
+///
+/// The root is taken by its typed identifier. A lookup by name makes Loro
+/// build the value of every root of that name first. The value of a tree nests
+/// one call per level, so a deep tree a peer wrote overflowed the stack of the
+/// Logic thread (`MURMURE-683`). Past the first operation, a root the document
+/// never wrote attaches as an empty local state, with no operation. The
+/// readers of the engine take the roots so already.
+pub(crate) fn held_root_list(doc: &LoroDoc, root: Root) -> Option<LoroList> {
+    (!blank(doc)).then(|| root_list(doc, root))
+}
+
+/// The map root named `name` of `doc`, or `None` while the document is blank.
+/// Taken by its typed identifier, as [`held_root_list`] is (`MURMURE-683`).
 pub(crate) fn held_root_map(doc: &LoroDoc, name: &str) -> Option<LoroMap> {
-    match doc.get_by_str_path(name)? {
-        ValueOrContainer::Container(loro::Container::Map(map)) => Some(map),
-        _ => None,
-    }
+    (!blank(doc)).then(|| doc.get_map(name))
 }
 
 /// The `header` of `doc`.
@@ -715,4 +721,78 @@ fn check_kind(
         });
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ambre_core::crdt::CrdtName as _;
+    use ambre_core::crdt::FoundationRoot;
+
+    /// Runs `work` on a stack of 1 MiB, the size the tests of a deep walk use.
+    fn on_small_stack<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> T {
+        std::thread::Builder::new()
+            .stack_size(1024 * 1024)
+            .spawn(work)
+            .expect("a thread")
+            .join()
+            .expect("no stack overflow")
+    }
+
+    /// A document past its first operation, with a tree a peer nested ten
+    /// thousand deep under `name`.
+    fn deep_tree_under(name: &str) -> LoroDoc {
+        let doc = LoroDoc::new();
+        let _ = doc.get_map(Root::Header.as_str()).insert("kind", "segment");
+        let tree = doc.get_tree(name);
+        let mut parent = None;
+        for _ in 0..10_000 {
+            parent = tree.create(parent).ok();
+        }
+        doc.commit();
+        doc
+    }
+
+    /// `MURMURE-683`: a tree ten thousand deep sits under the name of each map
+    /// root the check reads. The read stays on a small stack, and the map root
+    /// the document holds reads whole.
+    #[test]
+    fn a_deep_tree_under_each_map_root_name_reads_on_a_small_stack() {
+        for name in [
+            Root::Header.as_str(),
+            FoundationRoot::Meta.as_str(),
+            FoundationRoot::Peers.as_str(),
+            Root::Threads.as_str(),
+        ] {
+            let read = on_small_stack(move || {
+                let doc = deep_tree_under(name);
+                let _ = doc.get_map(name).insert("held", "yes");
+                held_root_map(&doc, name)
+                    .and_then(|map| map.get("held"))
+                    .and_then(|value| value.into_value().ok())
+            });
+            assert_eq!(read, Some(LoroValue::from("yes")), "the root {name}");
+        }
+    }
+
+    /// `MURMURE-683`: a tree ten thousand deep under the name `messages` leaves
+    /// the read of the list on a small stack.
+    #[test]
+    fn a_deep_tree_under_the_messages_name_reads_on_a_small_stack() {
+        let length = on_small_stack(|| {
+            let doc = deep_tree_under(Root::Messages.as_str());
+            let _ = root_list(&doc, Root::Messages).push("held");
+            held_root_list(&doc, Root::Messages).map(|list| list.len())
+        });
+        assert_eq!(length, Some(1));
+    }
+
+    /// A blank document holds no root, and a read of one attaches none.
+    #[test]
+    fn a_blank_document_reads_no_root_and_attaches_none() {
+        let doc = LoroDoc::new();
+        assert!(held_root_map(&doc, Root::Header.as_str()).is_none());
+        assert!(held_root_list(&doc, Root::Messages).is_none());
+        assert_eq!(doc.get_deep_value(), LoroDoc::new().get_deep_value());
+    }
 }
