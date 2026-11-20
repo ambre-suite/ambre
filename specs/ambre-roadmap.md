@@ -367,6 +367,9 @@ The test of section 1: a team that lacks one of these stories keeps its old suit
 | `[x]` An older epoch of a sender closes on a deadline | MVP | A receiver retires the older epochs of a sender once the switch delay passed after the fresh key arrived, with no chunk of the fresh epoch. Closes `P31` |
 | `[ ]` The browser tier holds the sender binding of the SFU | MVP | CALL-116 is held by the forwarding core on synthetic packets alone; no browser test sends a forged chunk through a real call (audit N11). Done when a belt row where a member's chunk under another index reaches nobody reads `verified` |
 | `[ ]` The SFU bounds what one participant consumes | MVP | audit `P47`, `P60`, `P61`, `P62`. The signalling socket sets no message bound, a TURN credential lives 12 hours, and a failed receive transform still plays the track. A datagram from an unknown source scans every member. Done when each scenario has a row that reads `verified` |
+| `[ ]` A reviewer of another model family audits the call keys | MVP | the call path is audited by reviewers of the model family that wrote it, so a wrong assumption the writer missed is likely missed again, and no external review comes before the MVP. Comes before `A security pre-audit of the call path`. Done when a reviewer of another model family has read the chunk format and the sender keys, and each finding is fixed or answered in writing |
+| `[ ]` No call chunk key and nonce pair repeats | MVP | a nonce reused under one sender key breaks the AEAD of every chunk that shares it, and nothing fails when it happens. Done when a property test over a long call, with members leaving and joining again, finds no key and nonce pair twice, and the AEAD passes test vectors of a reference implementation |
+| `[ ]` A formal model proves the sender keys | MVP | no proof covers the secrecy of call chunks after a member leaves, or the authenticity of their sender. Done when a ProVerif model of the sender keys proves both, CI runs it, and a test ties the model to the code through its domain labels |
 
 ---
 
@@ -612,6 +615,7 @@ row reads `V1`.
 | `[ ]` The call tests run on simulated time | V1 | the call tests wait on the clock of the host, so a slow runner fails them and a fast one skips a window. Done when each call test reads a clock the test advances, and no call test sleeps |
 | `[ ]` The load run browsers seal a chunk header into each frame | V1 | the browsers of the load run of the SFU send frames with no chunk header. The SFU now drops such a frame (`CALL-140`), so the run measures nothing. Done when each browser of the run seals a header into each frame, and the run reads the forwarded frames |
 | `[ ]` Call crypto review | V1 | an external review of the chunk format, the sender keys and the DTLS stack of the SFU, started once the format is frozen. No call reaches users before it closes with no high finding The owner moved it to V1 on 2026-11-15: the MVP ships calls on the internal pre-audit alone |
+| `[ ]` A Tamarin model of the call keys | V1 | ProVerif may fail to state a property the call keys need, such as a series of states or of compromised keys. Done when such a property is named and a Tamarin lemma proves it in CI, or a row states that the ProVerif model covers every property |
 
 ---
 
