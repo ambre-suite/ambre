@@ -51,6 +51,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-249` | `INV` | A socket of a call MUST close with a notice at its first heartbeat, on the period of `ambre-spec-budgets.md section 1`, that finds the state of its call gone from the ephemeral store. | this spec section 3; `SRV-248` | `ambre_server::ws::handler::call::tests::a_call_whose_state_is_lost_ends` -- database tier: a heartbeat keeps the state past its time to live, then the socket of a lost state gets the notice and closes, and a rejoin starts a fresh call under a new room | none | verified |
 | `SRV-250` | `INV` | The durable register MUST NOT hold a call, its roster or a signed join. | this spec section 3; `ZK-022` | `ambre_server::ws::handler::call::tests::no_table_of_the_relay_schema_holds_a_call` -- database tier: no table or column of the schema names a call, a sender or a room | none | verified |
 | `SRV-251` | `INV` | A seat whose socket stops its heartbeat MUST leave the roster and the cap of its call within the time to live of `ambre-spec-budgets.md section 1`. | this spec section 3; `SRV-248`; `CALL-021` | `ambre_server::ws::handler::call::tests::a_seat_that_stops_its_heartbeat_leaves_the_roster_and_frees_its_place` -- database tier: a seat no socket beats for leaves the roster and frees its place while a beating seat holds the call, and its index is never given again | none | verified |
+| `SRV-308` | `INV` | A release MUST publish the relay, the SFU and the client as container images, each named by its digest. | this spec section 3 | not built | unbuilt -- lands with the `The relay ships as images and a chart any host runs` Story (`ambre-roadmap.md` E6). No image is built: the repository holds a development compose file alone | unimplemented |
+| `SRV-309` | `INV` | The chart of the repository MUST deploy a stack against which the browser tier passes on a local Kubernetes cluster. | this spec section 3; `SRV-308` | not built | unbuilt -- lands with the `The relay ships as images and a chart any host runs` Story (`ambre-roadmap.md` E6). No chart exists | unimplemented |
+| `SRV-310` | `INV` | The self-hosting compose file of the repository MUST deploy, on one host, a stack against which the browser tier passes. | this spec section 3; `SRV-308` | not built | unbuilt -- lands with the `One server runs Ambre from one compose file` Story (`ambre-roadmap.md` E6). The compose file of the repository starts the dependencies of development alone: no relay, no SFU, no TURN and no client | unimplemented |
 
 ### 1.2 A request is classified and limited
 
@@ -191,7 +194,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
-* **Verification.** 119 `verified`, 1 `human-review`, 6 `unimplemented`. A request test drives what
+* **Verification.** 119 `verified`, 1 `human-review`, 9 `unimplemented`. A request test drives what
   holds: the roles, the rank clamps, the signature gate, the error mapping, the origin list and the
   delete. No log line can name the payload type. A deployment's isolation is read by hand.
 ---
@@ -459,6 +462,18 @@ headers in its own configuration.
 reaches any instance and the fan-out crosses them (`SRV-021`). Two things are per process, and
 neither is per request. The first is the signing key derived from the deployment's seed, which
 every instance must share; the second is the fan-out hub (`ambre-spec-broadcast.md`).
+
+**A deployment runs on any host.** A release publishes its images by digest (`SRV-308`), so an
+auditor can match a running image to its source. The chart of the repository deploys them on any
+Kubernetes cluster (`SRV-309`), and a compose file runs them on one host (`SRV-310`). The SFU media
+takes a public address with no load balancer in front (`CALL-141`). The relay needs Redis 7.4 or
+later (`SRV-241`), an S3-compatible object store and its metrics port kept private (`SRV-257`). The
+configuration of one hosting provider lives outside this repository.
+
+**One address serves the page and TURN.** A host with one address has one port 443, and TURN over
+TCP needs that port on networks that open nothing else (`CALL-042`). The compose file puts one TLS
+front before both, and the front routes each connection by its server name. A second address for
+TURN is rare on a self-hosted server.
 
 **A deployment names its own credentials** (`SRV-256`). The local stack of `docker-compose.yml`
 has a database password and an object store key that guard nothing. The relay falls back to them
