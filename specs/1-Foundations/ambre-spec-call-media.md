@@ -55,6 +55,8 @@ this document alone.
 | `CALL-040` | `INV` | The sequence numbers of a video track forwarded to one receiver MUST stay continuous across a layer switch. | this spec section 3, the SFU; `CALL-032` | `ambre_sfu::sim::tests::the_sequence_numbers_stay_continuous_across_a_layer_switch` | none | verified |
 | `CALL-041` | `INV` | The SFU MUST fill the video slots that the choice of a receiver leaves with the most recent speakers, up to the count of `ambre-spec-budgets.md section 1`. | this spec section 3, the SFU; `CALL-126` | `ambre_sfu::sim::tests::a_receiver_gets_the_video_of_the_most_recent_speakers_alone` -- a receiver of no choice; `ambre_sfu::sim::tests::the_most_recent_speakers_fill_the_slots_a_choice_leaves` -- a choice of two leaves seven slots to the speakers | none | verified |
 | `CALL-042` | `OBS` | A browser whose network opens TCP on port 443 alone MUST decode the audio and the video of the call through the TURN relay within the delay of `ambre-spec-budgets.md section 1`. | this spec section 3, the stack | `ambre_belt::call::tests::a_browser_on_tcp_443_alone_decodes_the_call_through_turn` -- browser tier, coturn over TCP behind port 443 at 150 ms of round trip | none | verified |
+| `CALL-153` | `POST` | A TURN credential MUST expire within the TURN lifetime of `ambre-spec-budgets.md section 1`. A renewal that keeps its seat while the last credential of the seat expires within the margin of that row MUST bring a fresh credential under the same pseudonym. Any other renewal MUST bring none. | audit `P60`; this spec section 3, the TURN credential; `CALL-120` | `ambre_sfu::turn::tests::a_credential_expires_one_turn_lifetime_after_it_is_minted`; `ambre_sfu::turn::tests::a_renewal_mints_a_fresh_credential_within_the_margin_alone` -- at the production lifetime and at a short one; `ambre_sfu::serve::tests::a_renewal_near_the_expiry_of_the_credential_answers_a_fresh_one` -- over the socket: a renewal before the margin, a renewal of another seat in the margin and a renewal right after a fresh credential read nothing | none | verified |
+| `CALL-154` | `OBS` | A browser relayed through TURN MUST keep decoding the audio and the video of the call past the expiry of its first credential. | audit `P60`; this spec section 3, the TURN credential; `CALL-042` | `ambre_belt::call::tests::a_relayed_call_flows_past_the_expiry_of_its_first_credential` -- browser tier, coturn over TCP alone, a credential of 30 s renewed 10 s before its expiry: the page restarts ICE onto a new relay allocation, and both pages decode more past the expiry; `ambre_sfu::forward::tests::an_ice_restart_moves_the_connection_to_its_fresh_fragment` -- the audio flows across the restart, and a check of the new allocation reaches its connection | none | verified |
 | `CALL-045` | `INV` | The SFU MUST send each receiver the media of a call over the fixed count of audio and video slots of `ambre-spec-budgets.md section 1`. | this spec section 3, the SFU | `ambre_sfu::sim::tests::a_receiver_holds_a_fixed_count_of_slots` -- a call of twelve | none | verified |
 | `CALL-047` | `INV` | The SFU MUST forward a receiver the audio of the most recent speakers alone, up to the count of `ambre-spec-budgets.md section 1`. | this spec section 3, the SFU | `ambre_sfu::sim::tests::a_receiver_gets_the_audio_of_the_three_most_recent_speakers_alone` | none | verified |
 | `CALL-048` | `INV` | The sequence numbers of a slot MUST stay continuous when the slot moves to another sender. | this spec section 3, the SFU; `CALL-040` | `ambre_sfu::sim::tests::the_sequence_numbers_of_a_slot_stay_continuous_across_a_change_of_sender` | none | verified |
@@ -101,6 +103,7 @@ this document alone.
 | `CALL-120` | `FAIL` | Given a renewal that names another room, participant, member or sender index than its seat, the SFU MUST NOT keep the seat past its last admission. The token of a renewal MUST seat no second connection while it is valid. | audit `N25`; this spec section 3, the SFU seats; `CALL-117` | `ambre_sfu::serve::tests::a_renewal_keeps_its_own_seat_alone` -- a renewal of the same seat keeps it past its first expiry, a renewal that changes the participant, the member or the sender index ends the seat at its first expiry, and the token of a renewal seats nothing | none | verified |
 | `CALL-121` | `POST` | A join under an admission whose member holds a seat in the room MUST end that older seat, so a member holds one seat of a room. | audit `N25`; this spec section 3, the SFU seats | `ambre_sfu::serve::tests::a_join_of_a_member_ends_its_older_seat` -- the older seat of a member closes at its second join, and the seat of another member stays | none | verified |
 | `CALL-122` | `POST` | Each heartbeat of a seat whose member is in the channel MUST send the client a renewed admission that names the room, the participant, the member and the sender index of the first. A heartbeat that finds the member out of the channel MUST send no renewal and end the seat. The client MUST hand each renewal to the SFU. | audit `N25`; this spec section 3, signalling; `SRV-248` | `ambre_server::ws::handler::call::tests::a_heartbeat_renews_the_admission_of_a_member_in_the_channel_alone` -- database tier: a renewal names the seat of the first admission, and once the member leaves the channel, the socket closes and the seat leaves the roster; `ambre_sync::call_link::tests::a_renewal_from_the_relay_reaches_the_sfu_as_an_admission` -- a seated client hands each renewal to the SFU, and a renewal before the seat reaches nothing | none | verified |
+| `CALL-155` | `POST` | Each fresh TURN credential the SFU sends during a call MUST reach the page, and the page MUST restart ICE under it. | audit `P60`; this spec section 3, a join from the page; `CALL-153` | `ambre_sync::call_link::tests::a_fresh_credential_from_the_sfu_reaches_the_page_each_time`; `ambre_belt::murmure::tests::the_page_restarts_ice_with_each_fresh_turn_credential` -- browser tier: two pages of the application on credentials of 30 s, renewed by the heartbeats of the relay, each take a fresh ICE fragment and still decode each other past the first expiry | none | verified |
 | `CALL-068` | `FAIL` | Given a join that starts no call, for a call whose state the relay holds none of, the relay MUST refuse the join with a notice that the call ended. | this spec section 3, signalling; `SRV-249` | `ambre_server::ws::handler::call::tests::a_join_of_a_call_the_relay_holds_no_state_of_is_refused_as_ended` -- database tier; `ambre_server::ws::handler::call::tests::a_call_whose_state_is_lost_ends` -- database tier: a rejoin of a lost call is refused | none | verified |
 | `CALL-076` | `FAIL` | Given a microphone that the browser refuses or does not have, a client MUST send no start and no join of a call. | this spec section 3, a join from the page; `5-Murmure/features/ambre-spec-murmure-calls.md section 3` (`MURMURE-601`) | `ambre_belt::murmure::tests::a_refused_microphone_starts_no_call_and_says_why` -- browser tier, under Chrome and under Firefox: no call worker, no peer connection and no call socket follow a refusal | none | verified |
 
@@ -440,7 +443,8 @@ relay keeps the roster of a call and forwards the wraps; it orders nothing and s
 5. The client opens the socket of the SFU and sends the admission as the first frame. The SFU
    verifies it with the relay's public key alone.
 6. The SFU answers the TURN servers, with a credential under the participant's pseudonym, then
-   reads the offer.
+   reads the offer. A renewal near the expiry of that credential brings a fresh one
+   (`CALL-153`).
 7. The client signs its join under that index and announces it. The relay hands that signed join,
    unchanged, to every other participant (`CALL-057`). It forwards each opaque wrap to the
    session of its sender index alone (`CALL-058`), and announces each leave. A closed call
@@ -802,10 +806,23 @@ One socket holds a bounded share of the SFU (audit `N39`):
 * A socket spends its admission before the SFU mints its TURN credential. A second socket
   under the same admission reads nothing, so one admission mints one credential (`CALL-152`).
 
-The credential still lives for the TURN lifetime of the SFU, past a removal. The blind pass
-reports it as `P60`.
-coturn ends an allocation when its credential expires, so a shorter credential needs a
-renewal that restarts ICE. No story builds that renewal yet.
+**The lifetime of a TURN credential** is the TURN row of `ambre-spec-budgets.md section 1`
+(audit `P60`). coturn reads the expiry when an allocation first authenticates. It then keeps the
+key of the allocation for each refresh, so an allocation outlives its credential. Read on
+2026-11-20 in the coturn source of that day, `ns_turn_server.c`, `check_stun_auth`.
+
+So the lifetime bounds when a credential opens a new allocation, never how long one lasts:
+
+* A member removed from the call opens no allocation once its last credential expired.
+* A page that opens an allocation later, at an ICE restart, needs a credential still valid.
+
+A renewal of the seat that the SFU keeps brings a fresh credential, once the last one expires
+within the margin (`CALL-153`). The margin holds three heartbeats, so one late beat still
+brings it in time. The page sets it on its peer connection and restarts ICE under it
+(`CALL-155`). The fresh allocation carries the call past the first expiry (`CALL-154`).
+
+An offer that restarts ICE gives the connection on the SFU a fresh fragment. The SFU indexes
+the connection under it, and the old fragment names nothing (`CALL-154`).
 
 **The routes of the SFU.** One task reads every datagram, so a datagram costs that task
 little (audit `N41`):

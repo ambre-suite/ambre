@@ -1077,3 +1077,58 @@ fn a_participant_holds_no_more_routes_than_the_cap() {
     // The other participant keeps its own routes.
     assert!(net.sfu.routes_of(client(&net, 1).id) > ambre_core::Count::new(0));
 }
+
+/// `CALL-154`, audit `P60`: an offer that restarts ICE, as a page sends under a fresh TURN
+/// credential, keeps the media of the connection flowing. The connection takes a fresh
+/// fragment, and the old one names nothing. A check under the fresh fragment from a new source,
+/// as a new TURN allocation sends it, reaches that connection.
+#[test]
+fn an_ice_restart_moves_the_connection_to_its_fresh_fragment() {
+    let mut net = connected(&["r", "r"]);
+    let id = client(&net, 0).id;
+    let old = net
+        .sfu
+        .ufrags
+        .iter()
+        .find_map(|(ufrag, owner)| (*owner == id).then(|| ufrag.clone()))
+        .expect("the fragment of the connection");
+
+    let c = net.clients.get_mut(0).expect("a client");
+    let mut change = c.rtc.sdp_api();
+    change.ice_restart(true);
+    let (offer, pending) = change.apply().expect("an offer that restarts ICE");
+    let answer = net
+        .sfu
+        .accept_offer(id, offer)
+        .expect("the SFU answers the restart");
+    c.rtc
+        .sdp_api()
+        .accept_answer(pending, answer)
+        .expect("the client takes the answer");
+    net.run(Duration::from_secs(1));
+    let before = client(&net, 1).got(MediaKind::Audio).len();
+    let (audio, _) = burst(&mut net, 0, 4);
+    let got = client(&net, 1).got(MediaKind::Audio);
+    assert_eq!(
+        got.get(before..),
+        Some(&audio[..]),
+        "the audio stopped across the restart"
+    );
+
+    let check = check_of(&mut net, 0);
+    let fresh = super::named_ufrag(&Payload::new(check.clone())).expect("a fragment");
+    assert_ne!(fresh, old, "the restart kept the fragment");
+    assert_eq!(net.sfu.ufrags.get(&fresh), Some(&id));
+    assert_eq!(
+        net.sfu.ufrags.get(&old),
+        None,
+        "the old fragment still names it"
+    );
+    let relayed: SocketAddr = (Ipv4Addr::new(10, 0, 3, 1), 8000).into();
+    net.sfu.receive(net.now, relayed, Payload::new(check));
+    assert_eq!(
+        net.sfu.routes.get(&relayed),
+        Some(&id),
+        "a check of the new allocation missed its connection"
+    );
+}

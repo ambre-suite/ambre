@@ -8,15 +8,17 @@
 //! | `SFU_ADMISSION_KEY` | the relay's public key, in hex, which signs every admission |
 //! | `SFU_TURN_URLS` | the TURN servers, separated by commas; none when unset |
 //! | `SFU_TURN_SECRET` | the secret the TURN server shares with the SFU alone (`CALL-014`) |
+//! | `SFU_TURN_LIFETIME` | how long a TURN credential admits, in seconds; the budget row when unset |
+//! | `SFU_TURN_MARGIN` | how long before its expiry a renewal mints a fresh one, in seconds; the budget row when unset |
 
 use std::net::SocketAddr;
 use std::process::ExitCode;
 
-use ambre_core::{FixedBytes, PublicKey, Validated};
+use ambre_core::{FixedBytes, PublicKey, Sec, TimeSpan, Validated};
 use ambre_sfu::admit::AdmissionKey;
 use ambre_sfu::secrets::TurnSecret;
 use ambre_sfu::serve::{Addresses, Admitting, run};
-use ambre_sfu::turn::{TurnServers, TurnUrl};
+use ambre_sfu::turn::{TURN_LIFETIME, TURN_MARGIN, TurnServers, TurnUrl};
 
 /// The two addresses the environment may set.
 #[derive(Clone, Copy)]
@@ -80,7 +82,23 @@ fn turn_servers() -> Result<Option<TurnServers>, String> {
     let secret = std::env::var("SFU_TURN_SECRET")
         .map(TurnSecret::new)
         .map_err(|_| "SFU_TURN_SECRET: the TURN servers come with their secret".to_owned())?;
-    Ok(Some(TurnServers::new(urls, secret)))
+    let lifetime = seconds("SFU_TURN_LIFETIME", TURN_LIFETIME)?;
+    let margin = seconds("SFU_TURN_MARGIN", TURN_MARGIN)?;
+    Ok(Some(
+        TurnServers::new(urls, secret).lasting(lifetime, margin),
+    ))
+}
+
+/// The span the variable `name` sets in whole seconds, or `fallback` when it sets none.
+fn seconds(name: &str, fallback: TimeSpan<Sec>) -> Result<TimeSpan<Sec>, String> {
+    match std::env::var(name) {
+        Err(_) => Ok(fallback),
+        Ok(text) => text
+            .trim()
+            .parse()
+            .map(TimeSpan::new)
+            .map_err(|e| format!("{name}: {text:?} is no count of seconds: {e}")),
+    }
 }
 
 #[tokio::main]
