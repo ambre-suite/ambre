@@ -762,7 +762,7 @@ mod tests {
         );
     }
 
-    /// The stack that `deploy/compose/compose.yml` starts on one host serves the
+    /// `SRV-310`: the stack that `deploy/compose/compose.yml` starts on one host serves the
     /// suite. The page is cross-origin isolated, and two members sign in. The second joins the
     /// document of the first from the invite link, and both read one text. The stack runs apart,
     /// behind its TLS front, at `SELFHOST_ORIGIN` (`just selfhost-test`).
@@ -798,7 +798,7 @@ mod tests {
         click_page(&bob).await;
         press(&bob, &[END]).await;
         type_text(&bob, " here").await;
-        wait_counted(&alice, "11 characters").await;
+        wait_counted(&alice, "11 with spaces").await;
         let ours = wait_markdown(&alice, &["Hosted here"]).await;
         assert_eq!(ours.trim(), "Hosted here", "{ours}");
     }
