@@ -225,6 +225,7 @@ The test of section 1: a team that lacks one of these stories keeps its old suit
 | `[ ]` A presence guard survives a reopen | MVP | the replay counter of a presence sample restarts at each open, under a key that is the user's, not the session's (audit `P22`). Done when the guard reads a session nonce the sample carries, and a row reads `verified` |
 | `[ ]` A light subscription counts writers alone | MVP | an evicted document counts the summary and the call cue of any update that opens, with no writer check (audit `P23`). Done when a light subscription refuses a non-writer's summary, and a row reads `verified` |
 | `[ ]` A channel open names the catalogue key it trusts | MVP | the open of a public channel reads its key in the catalogue of the space. It does not name which catalogue key it trusted. Done when the open names the catalogue key it trusts, refuses a channel key under any other, and a row reads `verified` |
+| `[ ]` A self-hosted relay signs in through any OpenID Connect issuer | MVP | the closed set of providers holds Google alone, so a team that hosts its own suite to leave a provider outside the European Union still signs in through one. A relay names an issuer by its address, and discovers it as it discovers Google: Keycloak, Authentik or the directory of the organization. Done when a row of `ambre-spec-session.md` states the sign-in through an issuer the configuration names and reads `verified`, and the compose file of `deploy/compose/` names one |
 
 ### Foundations: platform and architecture
 
