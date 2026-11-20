@@ -227,7 +227,7 @@ async fn the_zoom_readout_follows_its_signal() {
     let owner = Owner::new();
     owner.set();
     let zoom = RwSignal::new(Scale::<Doc, View>::within(1.25, 0.5, 2.0));
-    let root = mount_in_container(move || view! { <ZoomChip zoom=zoom /> });
+    let root = mount_in_container(move || view! { <ZoomChip zoom=zoom range=GRID /> });
     let btn = root.query_selector(".statusbar-zoom-btn").unwrap().unwrap();
     assert_eq!(btn.text_content().as_deref(), Some("125 %"));
 
@@ -257,6 +257,54 @@ async fn the_fps_readout_follows_its_signal() {
     root.remove();
 }
 
+/// The range of a grid in these tests: the stops from 50 % to 200 %.
+const GRID: ambre_core::ZoomRange<Doc> =
+    ambre_core::ZoomRange::new(Scale::positive(0.5), Scale::positive(2.0));
+
+/// `ZOOM-006`: the chip lists the stops of the one ladder inside the range
+/// it is handed, high to low, and nothing else. A board and a grid read the
+/// same stops where their ranges meet.
+#[wasm_bindgen_test]
+async fn the_zoom_chip_lists_the_one_ladder_inside_its_range() {
+    let owner = Owner::new();
+    owner.set();
+    let listed = |root: &web_sys::Element| -> Vec<String> {
+        let items = root.query_selector_all("[role=menuitemradio]").unwrap();
+        (0..items.length())
+            .filter_map(|i| items.item(i))
+            .filter_map(|n| n.text_content())
+            .collect()
+    };
+    let grid_zoom = RwSignal::new(Scale::<Doc, View>::ONE);
+    let grid = mount_in_container(move || view! { <ZoomChip zoom=grid_zoom range=GRID /> });
+    let board_zoom = RwSignal::new(Scale::<ambre_core::Board, View>::ONE);
+    let board_range = ambre_core::ZoomRange::new(Scale::positive(0.1), Scale::positive(10.0));
+    let board =
+        mount_in_container(move || view! { <ZoomChip zoom=board_zoom range=board_range /> });
+    for root in [&grid, &board] {
+        let btn: web_sys::HtmlElement = root
+            .query_selector(".statusbar-zoom-btn")
+            .unwrap()
+            .unwrap()
+            .unchecked_into();
+        btn.click();
+    }
+    leptos::task::tick().await;
+    let ladder: Vec<String> = ambre_core::zoom_ladder::<Doc>()
+        .into_iter()
+        .rev()
+        .map(|stop| format!("{:.0} %", stop.get() * 100.0))
+        .collect();
+    assert_eq!(listed(&board), ladder);
+    assert_eq!(
+        listed(&grid),
+        ["200 %", "150 %", "125 %", "100 %", "75 %", "50 %"]
+    );
+    assert!(listed(&grid).iter().all(|stop| ladder.contains(stop)));
+    grid.remove();
+    board.remove();
+}
+
 #[wasm_bindgen_test]
 fn zoom_chip_renders_readout_from_signal_and_starts_collapsed() {
     let owner = Owner::new();
@@ -264,7 +312,7 @@ fn zoom_chip_renders_readout_from_signal_and_starts_collapsed() {
     // The readout mirrors the live factor (1.25 -> "125 %") and the preset menu
     // is collapsed on mount (only the button shows).
     let zoom = RwSignal::new(Scale::<Doc, View>::within(1.25, 0.5, 2.0));
-    let root = mount_in_container(move || view! { <ZoomChip zoom=zoom /> });
+    let root = mount_in_container(move || view! { <ZoomChip zoom=zoom range=GRID /> });
 
     let btn = root.query_selector(".statusbar-zoom-btn").unwrap().unwrap();
     assert_eq!(btn.text_content().as_deref(), Some("125 %"));
@@ -501,7 +549,7 @@ async fn a_menu_trigger_reports_open_and_closed() {
     let owner = Owner::new();
     owner.set();
     let zoom = RwSignal::new(Scale::<Doc, View>::ONE);
-    let root = mount_in_container(move || view! { <ZoomChip zoom=zoom /> });
+    let root = mount_in_container(move || view! { <ZoomChip zoom=zoom range=GRID /> });
     let btn: web_sys::HtmlElement = root
         .query_selector(".statusbar-zoom-btn")
         .unwrap()
@@ -527,7 +575,7 @@ async fn a_menu_is_operable_by_keyboard_alone() {
     let owner = Owner::new();
     owner.set();
     let zoom = RwSignal::new(Scale::<Doc, View>::ONE);
-    let root = mount_in_container(move || view! { <ZoomChip zoom=zoom /> });
+    let root = mount_in_container(move || view! { <ZoomChip zoom=zoom range=GRID /> });
     let btn: web_sys::HtmlElement = root
         .query_selector(".statusbar-zoom-btn")
         .unwrap()
@@ -602,7 +650,7 @@ async fn a_key_that_closes_a_trigger_menu_returns_the_focus_to_its_trigger() {
     let owner = Owner::new();
     owner.set();
     let zoom = RwSignal::new(Scale::<Doc, View>::ONE);
-    let root = mount_in_container(move || view! { <ZoomChip zoom=zoom /> });
+    let root = mount_in_container(move || view! { <ZoomChip zoom=zoom range=GRID /> });
     let btn: web_sys::HtmlElement = root
         .query_selector(".statusbar-zoom-btn")
         .unwrap()

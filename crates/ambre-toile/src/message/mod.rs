@@ -734,6 +734,11 @@ pub const MIN_ZOOM: ambre_core::Scale<ambre_core::Board, ambre_core::View> =
 pub const MAX_ZOOM: ambre_core::Scale<ambre_core::Board, ambre_core::View> =
     ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(10.0);
 
+/// The factors the board supports, through the one zoom engine
+/// (`ZOOM-002`). The widest range of the suite: the ladder spans it.
+pub const ZOOM_RANGE: ambre_core::ZoomRange<ambre_core::Board> =
+    ambre_core::ZoomRange::new(MIN_ZOOM, MAX_ZOOM);
+
 /// The camera: a world-space center, a zoom factor, and the physical screen
 /// size. Drives culling via [`to_world_rect`](Viewport::to_world_rect).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -758,7 +763,7 @@ impl Viewport {
     /// The zoom inside `MIN_ZOOM ..= MAX_ZOOM`, so a reader can divide by it
     /// (`TOILE-UI-281`). The fields are public, so the clamp sits on the read.
     pub fn clamped_zoom(&self) -> ambre_core::Scale<ambre_core::Board, ambre_core::View> {
-        self.zoom.clamped(MIN_ZOOM, MAX_ZOOM)
+        ZOOM_RANGE.clamp(self.zoom)
     }
 
     /// The world-space rectangle currently visible: the screen box mapped back

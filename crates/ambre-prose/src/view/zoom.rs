@@ -1,36 +1,26 @@
-//! The page zoom: the preset ladder, the clamp, and one step along the ladder
-//! (`features/ambre-spec-prose-viewport.md section 2`).
+//! The page zoom: the range of the page, through the one zoom engine
+//! (`features/ambre-spec-prose-viewport.md section 2`, `UI-THREAD-012`).
 //!
 //! The zoom is local view state (`PROSE-UI-010`). Nothing here reads the
 //! document, moves the caret or sends a command (`PROSE-UI-129`).
 
-use ambre_core::{Doc, Scale, View};
+use ambre_core::{Doc, Scale, View, Zoom, ZoomRange};
+
+pub use ambre_core::ZoomStep;
 
 use crate::ui::ProseUiState;
 
-/// The factors the zoom chip offers and a zoom key steps through, low to high.
-/// The first and the last bound every zoom (`PROSE-UI-024`).
-pub const ZOOM_PRESETS: [Scale<Doc, View>; 9] = [
+/// The factors the page supports (`PROSE-UI-024`). The chip and a zoom key
+/// read the stops of the one ladder inside it (`ZOOM-006`).
+pub const ZOOM_RANGE: ZoomRange<Doc> = ZoomRange::new(
     Scale::<Doc, View>::positive(0.25),
-    Scale::<Doc, View>::positive(0.5),
-    Scale::<Doc, View>::positive(0.75),
-    Scale::<Doc, View>::ONE,
-    Scale::<Doc, View>::positive(1.25),
-    Scale::<Doc, View>::positive(1.5),
-    Scale::<Doc, View>::positive(2.0),
-    Scale::<Doc, View>::positive(3.0),
     Scale::<Doc, View>::positive(4.0),
-];
+);
 
-/// Where a zoom key moves the factor (`PROSE-UI-250`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ZoomStep {
-    /// To the next preset above the factor.
-    In,
-    /// To the next preset below the factor.
-    Out,
-    /// Back to a hundred per cent.
-    Reset,
+/// The stop `index` of the page's presets, low to high, for the tests.
+#[cfg(test)]
+pub(crate) fn zoom_stop(index: usize) -> Scale<Doc, View> {
+    ZOOM_RANGE.presets().nth(index).unwrap_or(Scale::ONE)
 }
 
 /// What a zoom request did to the view.
@@ -50,8 +40,7 @@ impl ProseUiState {
     /// clamped to the column (`PROSE-UI-025`). The column recentres by
     /// itself (`PROSE-UI-026`).
     pub fn zoom_to(&mut self, zoom: Scale<Doc, View>) -> ZoomChange {
-        let [lo, .., hi] = ZOOM_PRESETS;
-        let next = zoom.clamped(lo, hi);
+        let next = ZOOM_RANGE.clamp(zoom);
         if next == self.viewport.zoom {
             return ZoomChange::Same;
         }
@@ -65,13 +54,8 @@ impl ProseUiState {
     /// Move the zoom one preset up or down, or back to a hundred per cent
     /// (`PROSE-UI-250`). A step past either end of the ladder moves nothing.
     pub fn step_zoom(&mut self, step: ZoomStep) -> ZoomChange {
-        let now = self.viewport.zoom;
-        let target = match step {
-            ZoomStep::In => ZOOM_PRESETS.into_iter().find(|preset| *preset > now),
-            ZoomStep::Out => ZOOM_PRESETS.into_iter().rev().find(|preset| *preset < now),
-            ZoomStep::Reset => Some(Scale::<Doc, View>::ONE),
-        };
-        target.map_or(ZoomChange::Same, |zoom| self.zoom_to(zoom))
+        let next = Zoom::at(ZOOM_RANGE, self.viewport.zoom).step(step).factor();
+        self.zoom_to(next)
     }
 }
 
@@ -117,7 +101,7 @@ mod tests {
             ui.viewport.scroll_y = ui.column.clamp_scroll(&ui.viewport, Px::<Doc>::new(scroll));
             let _ = ui.zoom_to(Scale::<Doc, View>::positive(asked));
             let zoom = ui.viewport.zoom;
-            prop_assert!(zoom >= ZOOM_PRESETS[0] && zoom <= ZOOM_PRESETS[8], "{zoom:?}");
+            prop_assert!(zoom >= ZOOM_RANGE.floor() && zoom <= ZOOM_RANGE.ceiling(), "{zoom:?}");
             prop_assert!(ui.viewport.scroll_y >= Px::<Doc>::ZERO);
             prop_assert!(ui.viewport.scroll_y <= ui.column.max_scroll(&ui.viewport));
         }
@@ -149,14 +133,14 @@ mod tests {
     fn a_step_moves_one_preset_and_stops_at_the_ends() {
         let mut ui = a_view(10, 1200.0);
         assert_eq!(ui.step_zoom(ZoomStep::In), ZoomChange::Moved);
-        assert_eq!(ui.viewport.zoom, ZOOM_PRESETS[4]);
+        assert_eq!(ui.viewport.zoom, zoom_stop(4));
         for _ in 0..20 {
             let _ = ui.step_zoom(ZoomStep::In);
         }
-        assert_eq!(ui.viewport.zoom, ZOOM_PRESETS[8]);
+        assert_eq!(ui.viewport.zoom, zoom_stop(8));
         assert_eq!(ui.step_zoom(ZoomStep::In), ZoomChange::Same);
         assert_eq!(ui.step_zoom(ZoomStep::Out), ZoomChange::Moved);
-        assert_eq!(ui.viewport.zoom, ZOOM_PRESETS[7]);
+        assert_eq!(ui.viewport.zoom, zoom_stop(7));
         assert_eq!(ui.step_zoom(ZoomStep::Reset), ZoomChange::Moved);
         assert_eq!(ui.viewport.zoom, Scale::<Doc, View>::ONE);
         // A factor between two presets steps to the nearer one on its side.
@@ -166,7 +150,7 @@ mod tests {
         for _ in 0..20 {
             let _ = ui.step_zoom(ZoomStep::Out);
         }
-        assert_eq!(ui.viewport.zoom, ZOOM_PRESETS[0]);
+        assert_eq!(ui.viewport.zoom, zoom_stop(0));
         assert_eq!(ui.step_zoom(ZoomStep::Out), ZoomChange::Same);
     }
 

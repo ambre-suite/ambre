@@ -115,6 +115,7 @@ pub mod unit;
 pub mod uuid;
 pub mod validated;
 pub mod version;
+pub mod zoom;
 
 // Re-export the main types for convenient use.
 pub use authorship::{
@@ -240,3 +241,4 @@ pub use unit::{
 pub use uuid::Uuid;
 pub use validated::{Displayed, Free, Rule, Validated};
 pub use version::{Current, OpenRange, Version, VersionKind, VersionRepr};
+pub use zoom::{Zoom, ZoomRange, ZoomStep, ZoomedAbout, ladder as zoom_ladder};

@@ -122,6 +122,31 @@ pub mod shared {
     /// Paste as plain text: the chord Chrome, Edge, Firefox, Word and Google
     /// Docs share.
     pub const PASTE_PLAIN_CHORDS: &[KeyBinding] = &[KeyBinding::primary_shift(KeyChar::V)];
+
+    /// The zoom step a chord asks for, in every application (`ZOOM-004`,
+    /// `ZOOM-005`). `Ctrl` with `=` or `+` zooms in, and with `-` zooms out.
+    /// `Ctrl` with `0` returns to one. Shift is free, as `+` is a shifted `=` on most
+    /// layouts. Any other chord is `None`, so it stays the caller's.
+    #[must_use]
+    pub fn zoom_step(
+        key: Key,
+        mods: ambre_core::Flags<ModifierKeys>,
+    ) -> Option<ambre_core::ZoomStep> {
+        use ambre_core::ZoomStep;
+        let held = mods.without(ModifierKeys::SHIFT);
+        if held != ModifierKeys::PRIMARY {
+            return None;
+        }
+        match key {
+            Key::Char(c) => match c.get() {
+                '=' | '+' => Some(ZoomStep::In),
+                '-' => Some(ZoomStep::Out),
+                '0' => Some(ZoomStep::Reset),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
 }
 
 /// Runtime state of a command, derived from app state on each interrogation
@@ -310,6 +335,30 @@ impl Keymap {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `ZOOM-004`, `ZOOM-005`: the zoom chords are one decision, read by
+    /// every application. A plain key and another modifier are no zoom.
+    #[test]
+    fn the_zoom_chords_step_the_zoom_in_every_application() {
+        use ambre_core::ZoomStep;
+        let ctrl = ModifierKeys::PRIMARY;
+        for (c, step) in [
+            ('=', ZoomStep::In),
+            ('+', ZoomStep::In),
+            ('-', ZoomStep::Out),
+            ('0', ZoomStep::Reset),
+        ] {
+            let key = Key::Char(KeyChar::new(c));
+            assert_eq!(shared::zoom_step(key, ctrl), Some(step), "{c}");
+            assert_eq!(
+                shared::zoom_step(key, ctrl.with(ModifierKeys::SHIFT)),
+                Some(step)
+            );
+            assert_eq!(shared::zoom_step(key, ModifierKeys::NONE), None);
+            assert_eq!(shared::zoom_step(key, ctrl.with(ModifierKeys::ALT)), None);
+        }
+        assert_eq!(shared::zoom_step(Key::Char(KeyChar::Z), ctrl), None);
+    }
 
     fn bold_title(l: &Locale) -> ambre_core::Validated<CommandTitle> {
         match l {

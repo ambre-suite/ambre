@@ -78,5 +78,5 @@ pub use passphrase::{
     PassphraseDialog, PassphraseIntent, PassphraseRefusal, vet as vet_passphrase,
 };
 pub use shortcut::Kbd;
-pub use status::{PerfChip, PerfDetail, StatusLabel, ZoomChip, zoom_presets};
+pub use status::{PerfChip, PerfDetail, StatusLabel, ZoomChip};
 pub use toast::{ToastHost, ToastKind, ToastVoice, Toasts};

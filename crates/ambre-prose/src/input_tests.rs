@@ -3155,7 +3155,7 @@ fn a_side_drag_sends_one_free_resize_of_that_side() {
 /// and leave the caret, the selection and the document alone.
 #[test]
 fn a_zoom_key_steps_the_zoom_and_moves_nothing_else() {
-    use crate::view::zoom::{ZOOM_PRESETS, ZoomStep};
+    use crate::view::zoom::{ZoomStep, zoom_stop};
     use ambre_commands::{Key, KeyChar};
 
     let ctrl = ambre_commands::ModifierKeys::PRIMARY;
@@ -3184,10 +3184,10 @@ fn a_zoom_key_steps_the_zoom_and_moves_nothing_else() {
     let sent = rig.sent.len();
     let zoom = |rig: &mut Rig, step| rig.key(ProseKey::Zoom(step), false, true);
     assert!(zoom(&mut rig, ZoomStep::In));
-    assert_eq!(rig.ui.viewport.zoom, ZOOM_PRESETS[4]);
+    assert_eq!(rig.ui.viewport.zoom, zoom_stop(4));
     assert!(zoom(&mut rig, ZoomStep::Out));
     assert!(zoom(&mut rig, ZoomStep::Out));
-    assert_eq!(rig.ui.viewport.zoom, ZOOM_PRESETS[2]);
+    assert_eq!(rig.ui.viewport.zoom, zoom_stop(2));
     assert!(zoom(&mut rig, ZoomStep::Reset));
     assert_eq!(rig.ui.viewport.zoom.get(), 1.0);
     assert_eq!(rig.caret(), caret);

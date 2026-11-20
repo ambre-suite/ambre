@@ -13,14 +13,10 @@
 use crate::message::Viewport;
 /// Minimum / maximum zoom: the bounds the culling type clamps to
 /// (`TOILE-UI-281`), so the camera and the Logic thread share one range.
-pub use crate::message::{MAX_ZOOM, MIN_ZOOM};
+pub use crate::message::{MAX_ZOOM, MIN_ZOOM, ZOOM_RANGE};
 use ambre_core::{Board, Px, Scale, View};
 use ambre_draw::kinetic::ScrollStep;
 use ambre_draw::{Affine, Point, Rect, Size, Vec2};
-
-/// One press of the zoom-in / zoom-out button multiplies (or divides) the zoom
-/// by this factor. A discrete notch, coarser than a wheel tick.
-pub const ZOOM_STEP: f64 = 1.2;
 
 /// Fractional breathing room left around the fitted content on a Fit /
 /// Zoom-to-selection. The content occupies `1 / (1 + FIT_PAD)` of each
@@ -88,9 +84,24 @@ impl ViewportTransform {
         self.world_to_screen().inverse()
     }
 
-    /// Clamp a zoom request to the supported range.
+    /// Clamp a zoom request to the supported range, through the one engine
+    /// (`UI-THREAD-012`, `ZOOM-002`).
     fn clamp_zoom(z: f64) -> Scale<Board, View> {
-        Scale::<Board, View>::positive(z).clamped(MIN_ZOOM, MAX_ZOOM)
+        ZOOM_RANGE.clamp(Scale::<Board, View>::positive(z))
+    }
+
+    /// The camera's zoom, read through the one engine (`UI-THREAD-012`).
+    #[must_use]
+    pub fn zoom_engine(&self) -> ambre_core::Zoom<Board> {
+        ambre_core::Zoom::at(ZOOM_RANGE, self.zoom)
+    }
+
+    /// Step the zoom along the one ladder, or back to one, about the
+    /// viewport center (`ZOOM-004`, `ZOOM-005`). The world point under the
+    /// screen center stays there.
+    pub fn step_zoom(&mut self, step: ambre_core::ZoomStep) {
+        let next = self.zoom_engine().step(step).factor();
+        self.zoom_by_center(next.get() / self.zoom.get());
     }
 
     /// Zoom by `factor` about a screen anchor (typically the cursor), keeping the
@@ -114,12 +125,6 @@ impl ViewportTransform {
     pub fn zoom_by_center(&mut self, factor: f64) {
         let center_screen = Point::new(self.size.width / 2.0, self.size.height / 2.0);
         self.zoom_about(center_screen, factor);
-    }
-
-    /// Reset to 100% (1 screen-pixel per world-unit) keeping the current center
-    /// under the screen center (the `%` chip click,).
-    pub fn reset_zoom(&mut self) {
-        self.zoom = Scale::<Board, View>::ONE;
     }
 
     /// Fit `world` into the viewport with `pad_frac` breathing room on each axis,
@@ -312,11 +317,14 @@ mod tests {
         let mut vt = ViewportTransform::new(Size::new(1000.0, 800.0));
         vt.center = Point::new(42.0, -13.0);
         let center_before = vt.center;
-        vt.zoom_by_center(ZOOM_STEP);
+        vt.step_zoom(ambre_core::ZoomStep::In);
         // The world point under the screen center is the camera center itself; it
         // must not move when zooming about the center.
         assert!(approx(vt.center, center_before));
-        assert!((vt.zoom.get() - ZOOM_STEP).abs() < 1e-9);
+        assert!(
+            (vt.zoom.get() - 1.25).abs() < 1e-9,
+            "the next stop of the ladder"
+        );
     }
 
     #[test]
@@ -324,7 +332,7 @@ mod tests {
         let mut vt = ViewportTransform::new(Size::new(1000.0, 800.0));
         vt.zoom = ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(4.7);
         vt.center = Point::new(10.0, 20.0);
-        vt.reset_zoom();
+        vt.step_zoom(ambre_core::ZoomStep::Reset);
         assert!((vt.zoom.get() - 1.0).abs() < 1e-9);
         // Center is preserved (the chip resets scale, not position).
         assert!(approx(vt.center, Point::new(10.0, 20.0)));

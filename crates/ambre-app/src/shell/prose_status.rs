@@ -32,7 +32,7 @@ pub(crate) fn ProseFigures(
         <span class="spacer"></span>
         <ambre_chrome::ZoomChip
             zoom=zoom
-            presets=ambre_prose::view::zoom::ZOOM_PRESETS.to_vec()
+            range=ambre_prose::view::zoom::ZOOM_RANGE
             title="Page zoom"
         />
     }

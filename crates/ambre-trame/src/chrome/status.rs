@@ -124,7 +124,7 @@ pub fn StatusBar(
         // that zooms (`CHROME-147`).
         <ZoomChip
             zoom=zoom
-            presets=crate::ui::grid::TrameUiState::ZOOM_PRESETS.to_vec()
+            range=crate::ui::grid::TrameUiState::ZOOM_RANGE
             title="Grid zoom (scales the sheet only, not the toolbar)"
         />
     }

@@ -2197,3 +2197,40 @@ fn an_active_cell_past_the_grid_holds_the_menu_inside_it() {
         "above and left"
     );
 }
+
+/// `ZOOM-004`, `ZOOM-005`: the zoom chords step the grid along the one ladder
+/// and return it to one. The grid and an open editor behave alike. `ZOOM-001`,
+/// `ZOOM-008`: the only message a zoom sends is the cull of the new view. No
+/// edit and no presence sample leaves the view.
+#[test]
+fn a_zoom_chord_steps_the_grid_and_sends_only_a_cull() {
+    let ctrl = ModifierKeys::PRIMARY;
+    let mut rig = Rig::new();
+    rig.frame();
+    rig.type_text("x");
+    rig.frame();
+    rig.view.flush_outbox();
+    let _ = rig.to_logic.try_iter().count();
+    assert!(rig.chord(Key::Char(KeyChar::new('=')), ctrl));
+    assert_eq!(rig.view.zoom().get(), 1.25);
+    assert!(rig.chord(Key::Char(KeyChar::new('-')), ctrl));
+    assert!(rig.chord(Key::Char(KeyChar::new('-')), ctrl));
+    assert_eq!(rig.view.zoom().get(), 0.75);
+    assert!(rig.chord(Key::Char(KeyChar::new('0')), ctrl));
+    assert_eq!(rig.view.zoom().get(), 1.0);
+    assert!(rig.view.editor.is_some(), "a zoom closed the editor");
+    rig.frame();
+    rig.view.flush_outbox();
+    let sent: Vec<_> = rig.to_logic.try_iter().collect();
+    assert!(!sent.is_empty(), "a zoom culls the new view");
+    assert!(
+        sent.iter().all(|msg| matches!(
+            msg,
+            LogicCommand::App {
+                command: TrameCommand::ScrollViewport { .. },
+                ..
+            }
+        )),
+        "a zoom sent {sent:?}"
+    );
+}

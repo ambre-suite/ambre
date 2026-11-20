@@ -69,6 +69,6 @@ pub fn StatusBar(
         </PerfChip>
         // The zoom closes the band, at its right end, in every application
         // that zooms (`CHROME-147`).
-        <ZoomChip zoom=zoom title="Board zoom" />
+        <ZoomChip zoom=zoom range=crate::message::ZOOM_RANGE title="Board zoom" />
     }
 }

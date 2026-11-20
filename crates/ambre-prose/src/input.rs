@@ -74,6 +74,10 @@ impl ProseKey {
         {
             return Some(Self::Menu);
         }
+        // The zoom chords are the suite's, decided once (`ZOOM-004`).
+        if let Some(step) = ambre_commands::shared::zoom_step(key, mods) {
+            return Some(Self::Zoom(step));
+        }
         Some(match key {
             Key::ArrowLeft => Self::Left,
             Key::ArrowRight => Self::Right,
@@ -90,10 +94,6 @@ impl ProseKey {
             Key::Char(KeyChar::A) if ctrl => Self::SelectAll,
             Key::Char(KeyChar::Z) if ctrl => Self::Undo,
             Key::Char(KeyChar::Y) if ctrl => Self::Redo,
-            // `+` is the same key as `=` with Shift on most layouts.
-            Key::Char(c) if ctrl && matches!(c.get(), '=' | '+') => Self::Zoom(ZoomStep::In),
-            Key::Char(c) if ctrl && c.get() == '-' => Self::Zoom(ZoomStep::Out),
-            Key::Char(c) if ctrl && c.get() == '0' => Self::Zoom(ZoomStep::Reset),
             _ => return None,
         })
     }

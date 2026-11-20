@@ -279,8 +279,7 @@ impl TrameView {
         {
             let asked = self.zoom_sig.get_untracked();
             self.set_zoom(asked);
-            let [lo, .., hi] = TrameUiState::ZOOM_PRESETS;
-            let shown = self.state.zoom.clamped(lo, hi);
+            let shown = self.state.zoom;
             if shown != asked {
                 self.zoom_sig.set(shown);
             }
@@ -639,6 +638,16 @@ impl TrameView {
         true
     }
 
+    /// Step the zoom along the one ladder, or back to one (`ZOOM-004`,
+    /// `ZOOM-005`). The chip's signal takes the new factor too, so the next
+    /// frame does not pull the grid back to the factor the chip held.
+    pub fn step_zoom(&mut self, step: ambre_core::ZoomStep) -> bool {
+        let next = self.state.zoom_engine().step(step).factor();
+        #[cfg(target_arch = "wasm32")]
+        self.zoom_sig.set(next);
+        self.set_zoom(next)
+    }
+
     /// The current grid zoom factor (`1.0` = 100%), for the status-bar readout.
     pub fn zoom(&self) -> ambre_core::Scale<ambre_core::Doc, ambre_core::View> {
         self.state.zoom
@@ -650,6 +659,15 @@ impl TrameView {
         // the event is what makes the refusal visible: a key that fell through
         // to the browser would scroll the page under a frozen grid.
         if self.is_busy() {
+            return ambre_draw::Consumed::Yes;
+        }
+        // A zoom chord steps the zoom in any mode, an open editor included
+        // (`ZOOM-004`, `ZOOM-005`). It writes no command but the cull of the
+        // new view (`ZOOM-001`, `ZOOM-008`).
+        if let InputEvent::Key { key, mods } = ev
+            && let Some(step) = ambre_commands::shared::zoom_step(*key, *mods)
+        {
+            self.step_zoom(step);
             return ambre_draw::Consumed::Yes;
         }
         // Wheel / two-finger touchpad scroll pans the viewport in any mode and

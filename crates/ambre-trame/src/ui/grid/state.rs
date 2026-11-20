@@ -7,15 +7,12 @@ use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Delta, Len, Pos, Span};
 
 impl TrameUiState {
-    /// Discrete zoom levels cycled by the status-bar zoom control.
-    pub const ZOOM_PRESETS: [ambre_core::Scale<ambre_core::Doc, ambre_core::View>; 6] = [
+    /// The factors the grid supports (`ZOOM-002`). The chip lists the stops
+    /// of the one ladder inside it (`ZOOM-006`).
+    pub const ZOOM_RANGE: ambre_core::ZoomRange<ambre_core::Doc> = ambre_core::ZoomRange::new(
         ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(0.5),
-        ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(0.75),
-        ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::ONE,
-        ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(1.25),
-        ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(1.5),
         ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(2.0),
-    ];
+    );
 
     pub fn new(canvas_width: Px<Surface>, canvas_height: Px<Surface>) -> Self {
         let mut s = Self {
@@ -78,13 +75,17 @@ impl TrameUiState {
         self.viewport_cols = Len::<Col>::new((grid_w / col_w).ceil() as u32);
     }
 
-    /// Set the grid zoom factor (clamped to the preset range), keeping the
+    /// The grid's zoom, read through the one engine (`UI-THREAD-012`).
+    pub fn zoom_engine(&self) -> ambre_core::Zoom<ambre_core::Doc> {
+        ambre_core::Zoom::at(Self::ZOOM_RANGE, self.zoom)
+    }
+
+    /// Set the grid zoom factor (clamped to the grid's range), keeping the
     /// top-left scroll origin pinned. Recomputes the visible range. Returns
     /// `true` when the zoom actually changed, so the caller can repaint and
     /// re-request the (now differently sized) viewport.
     pub fn set_zoom(&mut self, zoom: ambre_core::Scale<ambre_core::Doc, ambre_core::View>) -> bool {
-        let [lo, .., hi] = Self::ZOOM_PRESETS;
-        let z = zoom.clamped(lo, hi);
+        let z = self.zoom_engine().to(zoom).factor();
         if (z.get() - self.zoom.get()).abs() < f64::EPSILON {
             return false;
         }

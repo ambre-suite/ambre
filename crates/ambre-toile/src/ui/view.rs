@@ -2717,8 +2717,7 @@ impl ToileView {
             self.needs_full = true;
             self.queue_viewport();
         }
-        let (lo, hi) = (super::viewport::MIN_ZOOM, super::viewport::MAX_ZOOM);
-        let shown = self.cam.zoom.clamped(lo, hi);
+        let shown = self.cam.zoom_engine().factor();
         self.zoom_published = shown;
         if self.zoom.get_untracked() != shown {
             self.zoom.set(shown);
@@ -2759,19 +2758,19 @@ impl ToileView {
                 return;
             }
             mb::ZOOM_IN => {
-                self.cam.zoom_by_center(super::viewport::ZOOM_STEP);
+                self.cam.step_zoom(ambre_core::ZoomStep::In);
                 self.needs_full = true;
                 self.queue_viewport();
                 return;
             }
             mb::ZOOM_OUT => {
-                self.cam.zoom_by_center(1.0 / super::viewport::ZOOM_STEP);
+                self.cam.step_zoom(ambre_core::ZoomStep::Out);
                 self.needs_full = true;
                 self.queue_viewport();
                 return;
             }
             mb::ZOOM_RESET => {
-                self.cam.reset_zoom();
+                self.cam.step_zoom(ambre_core::ZoomStep::Reset);
                 self.needs_full = true;
                 self.queue_viewport();
                 return;
@@ -3129,6 +3128,15 @@ impl ToileView {
     fn handle_key(&mut self, key: Key, mods: Flags<ModifierKeys>) -> Consumed {
         let cmd = mods.contains(ModifierKeys::PRIMARY);
         let shift = mods.contains(ModifierKeys::SHIFT);
+        // A zoom chord steps the camera about the screen center, the zoom
+        // entries of the View menu with it (`ZOOM-004`, `ZOOM-005`). The only
+        // message it owes is the cull of the new view (`ZOOM-001`).
+        if let Some(step) = ambre_commands::shared::zoom_step(key, mods) {
+            self.cam.step_zoom(step);
+            self.needs_full = true;
+            self.queue_viewport();
+            return Consumed::Yes;
+        }
         // Command chords first, so a bare-key fallthrough never shadows them.
         if cmd {
             match key {
