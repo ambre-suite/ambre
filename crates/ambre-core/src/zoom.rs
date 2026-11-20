@@ -10,8 +10,24 @@
 //! `ZOOM-008`).
 
 use crate::scale::Scale;
-use crate::space::{Rescale, ScalesTo, Space, View};
-use crate::unit::Px;
+use crate::space::{Css, Rescale, ScalesTo, Space, View};
+use crate::unit::{Px, Vector};
+
+/// A log-zoom rate per CSS pixel of wheel: a step of `dy` multiplies the
+/// factor by `exp(-dy * rate)`. A step down zooms out, a step up zooms in.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct WheelRate(f64);
+
+impl WheelRate {
+    /// The ratio a wheel step of `dy` applies to the factor.
+    fn ratio(self, dy: Px<Css>) -> f64 {
+        (-f64::from(dy.get()) * self.0).exp()
+    }
+}
+
+/// The rate of a wheel notch and of a trackpad pinch alike, in every editor
+/// (`ZOOM-004`). A browser reports a pinch as a wheel with the control key.
+const WHEEL_RATE: WheelRate = WheelRate(0.0018);
 
 /// The number of stops on the ladder.
 const STOPS: usize = 13;
@@ -159,6 +175,36 @@ impl<S: ScalesTo<View>> Zoom<S> {
         next.map_or(self, |factor| self.to(factor))
     }
 
+    /// The factor a wheel step of `dy` asks for. A step up zooms in and a
+    /// step down zooms out, at one rate in every editor (`ZOOM-004`). The caller
+    /// zooms to it about the pointer, which clamps it (`ZOOM-002`).
+    #[must_use]
+    pub fn wheeled(self, dy: Px<Css>) -> Scale<S, View> {
+        Scale::positive(self.factor.get() * WHEEL_RATE.ratio(dy))
+    }
+
+    /// The zoom that shows a box of `content` whole inside `view`, clamped
+    /// (`ZOOM-007`). The tighter axis governs. A box with an empty or
+    /// non-finite side frames nothing, so the answer is `None` and the
+    /// caller keeps its zoom (`ZOOM-009`).
+    #[must_use]
+    pub fn framing(self, content: Vector<Px<S>>, view: Vector<Px<View>>) -> Option<Self>
+    where
+        <View as Space>::Repr: Rescale<S::Repr>,
+        S::Repr: Into<f64>,
+    {
+        // The room as it reads at one, so the two sides share the content's
+        // space and its precision.
+        let fit = |side: Px<S>, room: Px<View>| -> Option<f64> {
+            let (side, room): (f64, f64) = (side.get().into(), (room / Scale::<S, View>::ONE).get().into());
+            let ratio = room / side;
+            let sides = side.is_finite() && side > 0.0 && room > 0.0;
+            (sides && ratio.is_finite()).then_some(ratio)
+        };
+        let factor = fit(content.dx, view.dx)?.min(fit(content.dy, view.dy)?);
+        Some(self.to(Scale::positive(factor)))
+    }
+
     /// The zoom to `factor` about a point of the view, on one axis.
     /// `origin` is the content coordinate at the view's origin, and `at` is
     /// the distance of the point from that origin, in view pixels. The
@@ -230,7 +276,8 @@ mod tests {
     use super::{Zoom, ZoomRange, ZoomStep, ladder};
     use crate::scale::Scale;
     use crate::space::{Board, Doc, View};
-    use crate::unit::Px;
+    use crate::space::Css;
+    use crate::unit::{Px, Vector};
     use proptest::prelude::*;
 
     const PAGE: ZoomRange<Doc> = ZoomRange::new(Scale::positive(0.25), Scale::positive(4.0));
@@ -304,6 +351,48 @@ mod tests {
             let under = after.origin + at / after.zoom.factor();
             let drift = (under - before).get().abs();
             prop_assert!(drift <= 1.0e-6 * before.get().abs().max(1.0), "{drift}");
+        }
+    }
+
+    proptest! {
+        /// `ZOOM-004`: a wheel step up zooms in, a step down zooms out, and
+        /// no step keeps the factor, at any factor.
+        #[test]
+        fn a_wheel_step_zooms_the_way_it_turns(from in 0.1f64..10.0, dy in 1.0f32..2000.0) {
+            let zoom = Zoom::at(BOARD, Scale::positive(from));
+            prop_assert!(zoom.wheeled(Px::<Css>::new(-dy)) > zoom.factor());
+            prop_assert!(zoom.wheeled(Px::<Css>::new(dy)) < zoom.factor());
+            prop_assert_eq!(zoom.wheeled(Px::<Css>::ZERO), zoom.factor());
+        }
+
+        /// `ZOOM-007`: a framed box shows whole inside the view, and fills it
+        /// on one axis unless the range stops it. `ZOOM-009`: a box with an
+        /// empty side frames nothing.
+        #[test]
+        fn a_box_is_framed_whole_and_an_empty_one_is_ignored(
+            w in prop_oneof![0.0f64..1.0e5, Just(0.0), Just(f64::NAN), Just(f64::INFINITY)],
+            h in prop_oneof![0.0f64..1.0e5, Just(0.0), Just(-5.0)],
+            vw in 1.0f32..4000.0,
+            vh in 1.0f32..4000.0,
+        ) {
+            let zoom = Zoom::at(BOARD, Scale::ONE);
+            let content = Vector::new(Px::<crate::space::Board>::new(w), Px::<crate::space::Board>::new(h));
+            let view = Vector::new(Px::<View>::new(vw), Px::<View>::new(vh));
+            let framed = zoom.framing(content, view);
+            if !(w.is_finite() && w > 0.0 && h > 0.0) {
+                prop_assert!(framed.is_none());
+            } else if let Some(framed) = framed {
+                let f = framed.factor();
+                prop_assert!(f >= BOARD.floor() && f <= BOARD.ceiling());
+                let (shown_w, shown_h) = (w * f.get(), h * f.get());
+                let fits = shown_w <= f64::from(vw) * (1.0 + 1e-5) && shown_h <= f64::from(vh) * (1.0 + 1e-5);
+                prop_assert!(fits || f == BOARD.floor(), "{shown_w}x{shown_h} in {vw}x{vh}");
+                let fills = (shown_w - f64::from(vw)).abs() <= f64::from(vw) * 1e-5
+                    || (shown_h - f64::from(vh)).abs() <= f64::from(vh) * 1e-5;
+                prop_assert!(fills || f == BOARD.floor() || f == BOARD.ceiling());
+            } else {
+                prop_assert!(false, "a box with two sides frames");
+            }
         }
     }
 

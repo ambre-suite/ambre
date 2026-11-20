@@ -83,7 +83,7 @@ impl PresenceSender {
         sample: PresencePayload,
         now: Instant<PageLoad>,
     ) -> Option<PresencePayload> {
-        let changed = self.last.as_ref() != Some(&sample);
+        let changed = !self.last.as_ref().is_some_and(|last| same_sample(last, &sample));
         let heartbeat = now - self.last_sent >= PRESENCE_HEARTBEAT;
         if !changed && !heartbeat {
             return None;
@@ -100,6 +100,35 @@ impl PresenceSender {
         self.last = None;
         self.last_sent = Instant::<PageLoad>::new(0.0);
     }
+}
+
+/// How far a world cursor may drift and still be the same sample. The cursor
+/// is derived from the screen pointer each frame, so a zoom about the pointer
+/// leaves rounding behind it. That rounding must not broadcast the zoom
+/// (`ZOOM-008`). It is far below a visible move at any zoom the board allows.
+const CURSOR_GRAIN: f64 = 1e-6;
+
+/// Whether two samples say the same thing, the cursor's rounding aside.
+/// Destructured, so a field added to the payload must be compared here.
+fn same_sample(last: &PresencePayload, now: &PresencePayload) -> bool {
+    let PresencePayload {
+        name,
+        cursor,
+        selection,
+        live_stroke,
+        laser,
+        present_slide,
+    } = now;
+    let cursors = match (last.cursor, *cursor) {
+        (Some(a), Some(b)) => (a - b).hypot() <= CURSOR_GRAIN,
+        (a, b) => a == b,
+    };
+    cursors
+        && last.name == *name
+        && last.selection == *selection
+        && last.live_stroke == *live_stroke
+        && last.laser == *laser
+        && last.present_slide == *present_slide
 }
 
 /// The render-thread mirror of every peer's latest presence. Fed by

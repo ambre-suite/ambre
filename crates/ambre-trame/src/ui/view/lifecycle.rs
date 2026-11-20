@@ -39,6 +39,7 @@ impl TrameView {
             active_sheet,
             filter_active,
             find_result,
+            view_cmd,
         } = signals;
         let (canvas_width, canvas_height) = (canvas.width, canvas.height);
         let theme = theme_ctl.get();
@@ -80,6 +81,8 @@ impl TrameView {
             #[cfg(target_arch = "wasm32")]
             zoom_sig,
             #[cfg(target_arch = "wasm32")]
+            view_cmd,
+            #[cfg(target_arch = "wasm32")]
             active_sheet,
             #[cfg(target_arch = "wasm32")]
             filter_active,
@@ -117,6 +120,7 @@ impl TrameView {
             prev_left_col: Pos::<Col>::ZERO,
             scroll: Default::default(),
             drag_point: None,
+            pointer: None,
             cut_pending: false,
             pending_clipboard: None,
             last_clip: None,

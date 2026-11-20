@@ -147,6 +147,7 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
         active_sheet,
         filter_active,
         find_result,
+        view_cmd: trame_view_cmd,
     } = trame;
     let ambre_toile::ui::ToileSignals {
         ctx_scope: toile_ctx_scope,
@@ -281,6 +282,7 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
                 filter_values,
                 style: style_state,
                 anchor: anchor_pos,
+                view_cmd: trame_view_cmd,
             })
         };
         let commands = CommandPath {

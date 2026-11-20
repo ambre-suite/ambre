@@ -126,22 +126,6 @@ fn send_session(outbox: &mut Outbox<ToileCommand>, fatal: bool, cmd: LogicComman
     outcome.accepted()
 }
 
-/// A log-zoom rate per pixel of wheel `dy`: a step of `dy` zooms by the
-/// factor `exp(-dy * rate)`.
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct WheelZoomRate(f64);
-
-impl WheelZoomRate {
-    /// The relative zoom factor a wheel step of `dy` applies. A step down
-    /// zooms out, a step up zooms in, and no step keeps the zoom.
-    fn factor(self, dy: Px<Css>) -> f64 {
-        (-f64::from(dy.get()) * self.0).exp()
-    }
-}
-
-/// The zoom rate of a wheel notch and of a pinch alike.
-const WHEEL_ZOOM_RATE: WheelZoomRate = WheelZoomRate(0.0018);
-
 /// A wheel `|dy|` at or above this (logical px, a pixel-mode delta) reads as
 /// a discrete mouse notch rather than a fine trackpad glide. This is the auto
 /// heuristic's mouse threshold (`toile-tools`).
@@ -1443,10 +1427,11 @@ impl ToileView {
         if zoom {
             // A zoom never coasts, and stops a coast under way.
             self.kinetic.stop();
-            // Zoom about the cursor. A trackpad pinch and a mouse notch both land
-            // here; only `dy` drives the factor.
-            let factor = WHEEL_ZOOM_RATE.factor(px.dy);
-            self.cam.zoom_about(self.last_pointer, factor);
+            // Zoom about the cursor, through the one engine (`ZOOM-003`,
+            // `ZOOM-004`). A trackpad pinch and a mouse notch both land here;
+            // only `dy` drives the factor, at the rate every editor shares.
+            let asked = self.cam.zoom_engine().wheeled(px.dy);
+            self.cam.zoom_to_about(self.last_pointer, asked);
         } else {
             // Two-finger scroll pans the 2D plane in both axes. The model
             // applies the step one for one, and lets a glide coast once it

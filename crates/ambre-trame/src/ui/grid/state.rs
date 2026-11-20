@@ -94,6 +94,99 @@ impl TrameUiState {
         true
     }
 
+    /// Zoom to `asked` about a point of the canvas (`ZOOM-003`). The factor
+    /// comes from the one engine, and the anchor is the grid's own mapping.
+    /// The grid scrolls by whole cells, so the cell under the point stays.
+    /// The frozen band and the first row and column bound that scroll. A point over a
+    /// header or past the cells keeps the top-left cell. Returns `true`
+    /// when the zoom changed.
+    pub fn zoom_about(
+        &mut self,
+        asked: ambre_core::Scale<ambre_core::Doc, ambre_core::View>,
+        at: ambre_core::Point<Px<ambre_core::View>>,
+    ) -> bool {
+        let under = self.cell_at(at);
+        if !self.set_zoom(asked) {
+            return false;
+        }
+        let Some(cell) = under else {
+            return true;
+        };
+        // Variable sizes and hidden rows can leave the first pan a cell short.
+        // The pan repeats until the cell is back or the grid stops.
+        for _ in 0..4 {
+            let Some(now) = self.cell_at(at) else {
+                break;
+            };
+            if now == cell || !self.scroll_by(cell.row - now.row, cell.col - now.col) {
+                break;
+            }
+        }
+        true
+    }
+
+    /// Zoom so the selection shows whole, its top-left cell at the top-left
+    /// of the cells, through the one engine (`ZOOM-007`). A band of whole
+    /// columns or rows frames its own axis alone. The factor is clamped to
+    /// the grid's range, so a range too large to show stops at the floor.
+    /// The selection stays as it was (`ZOOM-010`). Returns `true` when the
+    /// view moved.
+    pub fn zoom_to_selection(&mut self) -> bool {
+        let rect = self.selection.bounds();
+        let kind = self.selection.kind;
+        let zoom = self.zoom.get();
+        // Past what the floor shows, the sum only proves the floor governs.
+        let floor = Self::ZOOM_RANGE.floor().get();
+        let cap_w = self.canvas_width.get() / floor;
+        let cap_h = self.grid_bottom().get() / floor;
+        let at_one = |len: Px<Doc>| f64::from(len.get());
+        let mut cols = 0.0;
+        for col in rect.top_left.col.through(rect.bottom_right.col) {
+            cols += at_one(self.col_widths.get(&col).copied().unwrap_or(COL_WIDTH));
+            if cols > cap_w {
+                break;
+            }
+        }
+        let mut rows = 0.0;
+        for row in rect.top_left.row.through(rect.bottom_right.row) {
+            if !self.is_row_hidden(row) {
+                rows += at_one(self.row_heights.get(&row).copied().unwrap_or(ROW_HEIGHT));
+            }
+            if rows > cap_h {
+                break;
+            }
+        }
+        // The header strips and the frozen bands zoom with the cells, so they
+        // join the content the canvas must hold.
+        let chrome_w = HEADER_WIDTH.get() + self.frozen_w().get() / zoom;
+        let chrome_h = HEADER_HEIGHT.get() + self.frozen_h().get() / zoom;
+        // A band leaves the other axis free: a sliver there never governs.
+        let (across, down) = match kind {
+            SelKind::Cells => (cols + chrome_w, rows + chrome_h),
+            SelKind::Cols => (cols + chrome_w, f64::from(f32::MIN_POSITIVE)),
+            SelKind::Rows => (f64::from(f32::MIN_POSITIVE), rows + chrome_h),
+        };
+        let content = ambre_core::Vector::new(Px::<Doc>::new(across as f32), Px::<Doc>::new(down as f32));
+        let view = ambre_core::Vector::new(
+            self.canvas_width.view_length(),
+            self.grid_bottom().view_length(),
+        );
+        let Some(framed) = self.zoom_engine().framing(content, view) else {
+            return false;
+        };
+        let zoomed = self.set_zoom(framed.factor());
+        let dr = match kind {
+            SelKind::Cols => Delta::<Row>::ZERO,
+            SelKind::Cells | SelKind::Rows => rect.top_left.row - self.top_row,
+        };
+        let dc = match kind {
+            SelKind::Rows => Delta::<Col>::ZERO,
+            SelKind::Cells | SelKind::Cols => rect.top_left.col - self.left_col,
+        };
+        let scrolled = self.scroll_by(dr, dc);
+        zoomed || scrolled
+    }
+
     /// The active cell row (the selection's active corner).
     pub fn active_row(&self) -> Pos<Row> {
         self.selection.active.row

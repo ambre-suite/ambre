@@ -14,7 +14,7 @@ use crate::message::Viewport;
 /// Minimum / maximum zoom: the bounds the culling type clamps to
 /// (`TOILE-UI-281`), so the camera and the Logic thread share one range.
 pub use crate::message::{MAX_ZOOM, MIN_ZOOM, ZOOM_RANGE};
-use ambre_core::{Board, Px, Scale, View};
+use ambre_core::{Board, Px, Scale, Vector, View};
 use ambre_draw::kinetic::ScrollStep;
 use ambre_draw::{Affine, Point, Rect, Size, Vec2};
 
@@ -109,14 +109,26 @@ impl ViewportTransform {
     /// zooms in. The zoom is clamped; at a clamp boundary the anchor still holds
     /// (the recomputed center uses the clamped zoom).
     pub fn zoom_about(&mut self, screen_anchor: Point, factor: f64) {
-        let world_anchor = self.screen_to_world() * screen_anchor;
-        let new_zoom = Self::clamp_zoom(self.zoom.get() * factor);
-        // Solve `(world_anchor - center) * new_zoom + size/2 == screen_anchor`
-        // for center so the anchored world point stays under the cursor.
-        let half = Vec2::new(self.size.width / 2.0, self.size.height / 2.0);
-        let offset = (screen_anchor.to_vec2() - half) / new_zoom.get();
-        self.zoom = new_zoom;
-        self.center = world_anchor - offset;
+        let asked = Scale::<Board, View>::positive(self.zoom.get() * factor);
+        self.zoom_to_about(screen_anchor, asked);
+    }
+
+    /// Zoom to `asked` about a screen anchor through the one engine
+    /// (`UI-THREAD-012`, `ZOOM-003`). The engine clamps the factor and
+    /// solves each axis so the board point under the anchor stays there.
+    pub fn zoom_to_about(&mut self, screen_anchor: Point, asked: Scale<Board, View>) {
+        let engine = self.zoom_engine();
+        let axis = |center: f64, half: f64, at: f64| {
+            // The board coordinate at the view's left or top edge.
+            let origin = Px::<Board>::new(center) - Px::<View>::new(half as f32) / self.zoom;
+            let moved = engine.about(asked, origin, Px::<View>::new(at as f32));
+            let zoom = moved.zoom.factor();
+            (moved.origin + Px::<View>::new(half as f32) / zoom, zoom)
+        };
+        let (x, zoom) = axis(self.center.x, self.size.width / 2.0, screen_anchor.x);
+        let (y, _) = axis(self.center.y, self.size.height / 2.0, screen_anchor.y);
+        self.zoom = zoom;
+        self.center = Point::new(x.get(), y.get());
     }
 
     /// Zoom by `factor` about the viewport center: the zoom-in / zoom-out button
@@ -145,14 +157,18 @@ impl ViewportTransform {
     /// or non-finite rect (nothing to frame). Shared by the instant Fit and by
     /// the presentation camera glide, which lerps toward this target.
     pub fn fit_target(&self, world: Rect, pad_frac: f64) -> Option<(Point, Scale<Board, View>)> {
-        let (bw, bh) = (world.width(), world.height());
-        if !(bw.is_finite() && bh.is_finite()) || bw <= 0.0 || bh <= 0.0 {
-            return None;
-        }
         let pad = 1.0 + pad_frac.max(0.0);
-        let fit_x = self.size.width / (bw * pad);
-        let fit_y = self.size.height / (bh * pad);
-        Some((world.center(), Self::clamp_zoom(fit_x.min(fit_y))))
+        let content = Vector::new(
+            Px::<Board>::new(world.width() * pad),
+            Px::<Board>::new(world.height() * pad),
+        );
+        let view = Vector::new(
+            Px::<View>::new(self.size.width as f32),
+            Px::<View>::new(self.size.height as f32),
+        );
+        // An empty or non-finite box frames nothing (`ZOOM-009`).
+        let framed = self.zoom_engine().framing(content, view)?;
+        Some((world.center(), framed.factor()))
     }
 
     /// Interpolate the camera from `from` toward a target center + zoom at phase

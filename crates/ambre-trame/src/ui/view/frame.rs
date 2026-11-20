@@ -275,6 +275,14 @@ impl TrameView {
         // queues the viewport re-request flushed just below. The signal is
         // shared with Toile, whose range is wider. The grid writes its own
         // clamp back, so the chip reads the zoom the grid shows.
+        // A zoom to the selection the context menu asked for (`ZOOM-007`).
+        #[cfg(target_arch = "wasm32")]
+        if let Some(id) = self.view_cmd.get_untracked() {
+            self.view_cmd.set(None);
+            if id == crate::chrome::ZOOM_TO_SELECTION {
+                self.zoom_to_selection();
+            }
+        }
         #[cfg(target_arch = "wasm32")]
         {
             let asked = self.zoom_sig.get_untracked();
@@ -648,12 +656,51 @@ impl TrameView {
         self.set_zoom(next)
     }
 
+    /// Zoom about a point of the canvas, through the one engine
+    /// (`ZOOM-003`). The chip's signal takes the new factor, as for a step.
+    pub fn zoom_about(
+        &mut self,
+        asked: ambre_core::Scale<ambre_core::Doc, ambre_core::View>,
+        at: ambre_core::Point<ambre_core::Px<ambre_core::View>>,
+    ) -> bool {
+        if !self.state.zoom_about(asked, at) {
+            return false;
+        }
+        #[cfg(target_arch = "wasm32")]
+        self.zoom_sig.set(self.state.zoom);
+        self.needs_full = true;
+        self.viewport_changed = true;
+        self.pending_viewport
+            .coalesce(self.state.scroll_viewport_cmd());
+        true
+    }
+
+    /// Zoom so the selection shows whole (`ZOOM-007`). The selection stays
+    /// (`ZOOM-010`), and the chip's signal takes the new factor.
+    pub fn zoom_to_selection(&mut self) -> bool {
+        if !self.state.zoom_to_selection() {
+            return false;
+        }
+        #[cfg(target_arch = "wasm32")]
+        self.zoom_sig.set(self.state.zoom);
+        self.needs_full = true;
+        self.viewport_changed = true;
+        self.pending_viewport
+            .coalesce(self.state.scroll_viewport_cmd());
+        true
+    }
+
     /// The current grid zoom factor (`1.0` = 100%), for the status-bar readout.
     pub fn zoom(&self) -> ambre_core::Scale<ambre_core::Doc, ambre_core::View> {
         self.state.zoom
     }
 
     pub fn handle_input(&mut self, ev: &InputEvent) -> ambre_draw::Consumed {
+        // A wheel carries no position, so a zoom about the pointer reads the
+        // last one the canvas saw (`ZOOM-003`).
+        if let InputEvent::PointerMove { at } | InputEvent::PointerDown { at, .. } = ev {
+            self.pointer = Some(*at);
+        }
         // The outbox holds a command the Logic thread has not taken, so the grid
         // stops accepting input until the queue drains (`BUS-016`). Consuming
         // the event is what makes the refusal visible: a key that fell through

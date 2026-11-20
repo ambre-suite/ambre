@@ -319,3 +319,57 @@ fn a_change_in_a_frozen_band_re_fetches_the_window() {
     let unseen = CellRect::spanning(at(40, 2), at(40, 2));
     assert!(state.range_viewport_cmd(unseen, served).is_none());
 }
+
+/// The grid of a laptop screen, at a hundred per cent.
+fn laptop() -> TrameUiState {
+    TrameUiState::new(Px::<Surface>::new(1200.0), Px::<Surface>::new(700.0))
+}
+
+fn at(row: u32, col: u32) -> CellPos {
+    CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(col))
+}
+
+/// `ZOOM-007`, `ZOOM-010`: a zoom to the selection shows every cell of it
+/// whole, inside the grid's range, its top-left cell first. The selection
+/// stays as it was.
+#[test]
+fn a_zoom_to_the_selection_shows_it_whole_and_keeps_it() {
+    for (from, to) in [((40, 3), (44, 5)), ((100, 20), (102, 21)), ((7, 0), (30, 12))] {
+        let mut grid = laptop();
+        grid.select(at(from.0, from.1));
+        grid.select_extend(at(to.0, to.1));
+        let selection = grid.selection.clone();
+        grid.zoom_to_selection();
+        assert_eq!(grid.selection, selection, "the selection stays");
+        let range = TrameUiState::ZOOM_RANGE;
+        assert!(grid.zoom >= range.floor() && grid.zoom <= range.ceiling());
+        assert_eq!((grid.top_row.get(), grid.left_col.get()), (from.0, from.1));
+        for corner in [at(from.0, from.1), at(to.0, to.1)] {
+            let shown = grid.cell_pixel_rect(corner).expect("on screen");
+            let whole = shown.width() >= grid.col_width_of(corner.col).get() - 1e-6
+                && shown.height() >= grid.row_height_of(corner.row).get() - 1e-6
+                && shown.x1 <= 1200.0 + 1e-6
+                && shown.y1 <= grid.grid_bottom().get() + 1e-6;
+            assert!(
+                whole || grid.zoom == range.floor(),
+                "{corner:?} shows whole: {shown:?} at {:?}",
+                grid.zoom
+            );
+        }
+    }
+}
+
+/// `ZOOM-007`: a range larger than the floor can show stops at the floor,
+/// and one cell stops at the ceiling.
+#[test]
+fn a_zoom_to_the_selection_clamps_to_the_grid_range() {
+    let mut grid = laptop();
+    grid.select(at(0, 0));
+    grid.select_extend(at(5000, 200));
+    grid.zoom_to_selection();
+    assert_eq!(grid.zoom, TrameUiState::ZOOM_RANGE.floor());
+    let mut grid = laptop();
+    grid.select(at(3, 3));
+    grid.zoom_to_selection();
+    assert_eq!(grid.zoom, TrameUiState::ZOOM_RANGE.ceiling());
+}

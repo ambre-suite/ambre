@@ -1365,25 +1365,45 @@ fn a_wheel_notch_starts_no_coast() {
     assert_eq!(rig.top(), landed, "the grid stays where the notch put it");
 }
 
-/// `TRAME-UI-146`: the wheel held with Ctrl is left to the browser and
-/// scrolls nothing.
+/// `TRAME-UI-146`, `ZOOM-003`, `ZOOM-004`: the wheel held with `Ctrl` zooms
+/// the grid about the pointer. The cell under the pointer stays under it,
+/// the selection stays, and the factor stays inside the grid's range.
 #[test]
-fn a_ctrl_wheel_scrolls_nothing() {
+fn a_ctrl_wheel_zooms_about_the_cell_under_the_pointer() {
     let mut rig = Rig::new();
     rig.frame();
-    rig.sent();
-    assert!(
-        !rig.wheel(5.0, 1, ModifierKeys::PRIMARY),
-        "the browser keeps the gesture"
-    );
+    assert!(rig.wheel(20.0, 1, ModifierKeys::NONE));
     rig.frame();
-    assert_eq!(rig.top(), 0);
-    assert!(
-        !rig.sent()
-            .iter()
-            .any(|c| matches!(c, TrameCommand::ScrollViewport { .. })),
-        "no request for a scroll that did not happen"
-    );
+    rig.sent();
+    let selection = rig.view.state.selection.clone();
+    let at = {
+        let rect = rig
+            .view
+            .state
+            .cell_pixel_rect(CellPos::new(Pos::<Row>::new(30), Pos::<Col>::new(4)))
+            .expect("in view");
+        pointer(rect.center().x, rect.center().y)
+    };
+    let _ = rig.view.handle_input(&InputEvent::PointerMove { at });
+    let under = rig.view.state.cell_at(at);
+    for dy in [-3.0, -3.0, 5.0, -40.0, 60.0] {
+        let zoom = rig.view.zoom();
+        assert!(rig.wheel(dy, 1, ModifierKeys::PRIMARY), "the grid keeps the gesture");
+        let now = rig.view.zoom();
+        assert!(if dy < 0.0 { now >= zoom } else { now <= zoom }, "{dy}: {zoom:?} -> {now:?}");
+        // The grid cannot scroll left of its first column, so a zoom out at
+        // the left edge keeps the row alone.
+        let now_under = rig.view.state.cell_at(at).expect("on the cells");
+        let under = under.expect("on the cells");
+        assert_eq!(now_under.row, under.row, "{dy}: the row stays under the pointer");
+        assert!(
+            now_under.col == under.col || rig.view.state.left_col.get() == 0,
+            "{dy}: the column stays under the pointer unless the grid is at its first"
+        );
+        let range = crate::ui::grid::TrameUiState::ZOOM_RANGE;
+        assert!(now >= range.floor() && now <= range.ceiling());
+    }
+    assert_eq!(rig.view.state.selection, selection, "the selection stays");
 }
 
 /// `TRAME-UI-175`: a selection drag held below the cells scrolls the grid

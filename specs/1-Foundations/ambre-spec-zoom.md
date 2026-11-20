@@ -21,7 +21,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `ZOOM`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `ZOOM-004` | `INV` | `Ctrl` with `=`, `-` or `0`, `Ctrl` with the wheel, and a trackpad pinch MUST zoom in every application. | this spec section 3 | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8). The keys are built: `ZOOM-005` and `ZOOM-006` hold them. The wheel under `Ctrl` and the pinch do not go through the engine yet | unimplemented |
+| `ZOOM-004` | `INV` | `Ctrl` with `=`, `-` or `0`, `Ctrl` with the wheel, and a trackpad pinch MUST zoom in every application. | this spec section 3 | `ambre_core::zoom::tests::a_wheel_step_zooms_the_way_it_turns` -- the engine turns a wheel step into a factor; `ambre_trame::ui::view::view_tests::a_ctrl_wheel_zooms_about_the_cell_under_the_pointer`; `ambre_toile::ui::view::view_tests::a_ctrl_wheel_zooms_about_the_pointer`; `ambre_app::host::prose::tests::a_ctrl_wheel_zooms_the_page_about_the_pointer` -- wasm tier, the event is consumed so the browser does not zoom the tab, and a browser reports a trackpad pinch as that same wheel | none | verified |
 | `ZOOM-006` | `INV` | The preset ladder MUST be one ladder for every application, read by the shared chip. | this spec section 2; `ambre-spec-chrome.md`, `CHROME-014` | type-level -- the ladder is one function, `ambre_core::zoom::ladder`, the chip takes a range and no list of its own, and no application holds a ladder; `ambre_core::zoom::tests::every_editor_reads_its_presets_off_the_one_ladder`; `ambre_core::zoom::tests::a_step_moves_along_the_ladder_inside_the_range`; `ambre_chrome::tests::chrome_ui::the_zoom_chip_lists_the_one_ladder_inside_its_range` -- the chip lists the stops inside the range it is given; `ambre_commands::tests::the_zoom_chords_step_the_zoom_in_every_application`; `ambre_trame::ui::view::view_tests::a_zoom_chord_steps_the_grid_and_sends_only_a_cull`; `ambre_toile::ui::view::view_tests::a_zoom_chord_steps_the_camera_and_sends_only_a_cull`; `ambre_prose::input_tests::a_zoom_key_steps_the_zoom_and_moves_nothing_else` -- a chord steps each editor to the next stop | none | verified |
 
 ### 1.2 Zoom the view
@@ -32,10 +32,10 @@ point.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `ZOOM-002` | `POST` | A zoom MUST clamp to the application's supported range, away from zero, whatever the input. | this spec section 2 | `ambre_core::zoom::tests::a_zoom_clamps_to_its_range_whatever_the_input` -- any factor, a non-finite one included, lands inside the range; type-level -- each application builds its factor through its own `ZoomRange`, and the chip clamps a click through the same range | none | verified |
-| `ZOOM-003` | `POST` | A zoom about a point MUST leave that point under the pointer, in the application's own mapping. | this spec section 2 | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `ZOOM-003` | `POST` | A zoom about a point MUST leave that point under the pointer, in the application's own mapping, as far as the view's own bounds let it. | this spec section 2 | `ambre_core::zoom::tests::a_zoom_about_a_point_keeps_the_content_under_it` -- the engine's transform, one axis; `ambre_toile::ui::view::view_tests::a_ctrl_wheel_zooms_about_the_pointer` -- the board point stays within a thousandth of a pixel; `ambre_prose::view::zoom::tests::a_zoom_about_a_point_keeps_the_point_under_it`; `ambre_app::host::prose::tests::a_ctrl_wheel_zooms_the_page_about_the_pointer` -- wasm tier; `ambre_trame::ui::view::view_tests::a_ctrl_wheel_zooms_about_the_cell_under_the_pointer` -- the grid keeps the cell under the pointer | none | verified |
 | `ZOOM-005` | `POST` | `Ctrl` with `0` MUST return the factor to one, a hundred per cent. | this spec section 3 | `ambre_core::zoom::tests::a_reset_returns_to_one`; `ambre_commands::tests::the_zoom_chords_step_the_zoom_in_every_application`; `ambre_trame::ui::view::view_tests::a_zoom_chord_steps_the_grid_and_sends_only_a_cull`; `ambre_toile::ui::view::view_tests::a_zoom_chord_steps_the_camera_and_sends_only_a_cull`; `ambre_prose::input_tests::a_zoom_key_steps_the_zoom_and_moves_nothing_else` | none | verified |
 | `ZOOM-001` | `FRAME` | A zoom MUST emit no CRDT delta. | this spec section 2 | `ambre_trame::ui::view::view_tests::a_zoom_chord_steps_the_grid_and_sends_only_a_cull`; `ambre_toile::ui::view::view_tests::a_zoom_chord_steps_the_camera_and_sends_only_a_cull` -- a chord sends the Logic thread a viewport cull and no edit; `ambre_prose::input_tests::a_zoom_key_steps_the_zoom_and_moves_nothing_else` -- a zoom key sends nothing at all | none | verified |
-| `ZOOM-008` | `FRAME` | A zoom MUST reach no collaborator. | this spec section 2; `ambre-spec-presence.md` | type-level -- neither `Scale` nor `Zoom` implements a serde trait, so no wire frame or presence sample can carry a factor; `ambre_trame::ui::view::view_tests::a_zoom_chord_steps_the_grid_and_sends_only_a_cull`; `ambre_toile::ui::view::view_tests::a_zoom_chord_steps_the_camera_and_sends_only_a_cull`; `ambre_prose::input_tests::a_zoom_key_steps_the_zoom_and_moves_nothing_else` -- a zoom sends no presence command. It is not the same rule as emitting no delta: a presence sample is broadcast and written to no document | none | verified |
+| `ZOOM-008` | `FRAME` | A zoom MUST reach no collaborator. | this spec section 2; `ambre-spec-presence.md` | type-level -- neither `Scale` nor `Zoom` implements a serde trait. The presence payloads carry no view coordinate: Toile sends world points, Prose a CRDT cursor, and Trame sends none; `ambre_toile::ui::view::view_tests::a_zoom_about_the_pointer_broadcasts_no_presence_sample` -- the sample built after a zoom about the pointer is the one built before it, so none is broadcast; `ambre_trame::ui::view::view_tests::a_zoom_chord_steps_the_grid_and_sends_only_a_cull`; `ambre_toile::ui::view::view_tests::a_zoom_chord_steps_the_camera_and_sends_only_a_cull`; `ambre_prose::input_tests::a_zoom_key_steps_the_zoom_and_moves_nothing_else` -- a zoom sends no presence command. It is not the same rule as emitting no delta: a presence sample is broadcast and written to no document | none | verified |
 
 ### 1.3 Zoom to a selection
 
@@ -43,9 +43,9 @@ The user asks for the selection to fill the view. The target may be empty.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `ZOOM-007` | `POST` | A zoom to a selection MUST frame it and clamp. | this spec section 3 | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8) | unimplemented |
-| `ZOOM-010` | `FRAME` | A zoom to a selection MUST NOT change the selection. | this spec section 3; derived | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8). The gesture reads a selection to compute a factor, and an application that grew or collapsed it while framing would make the command unrepeatable | unimplemented |
-| `ZOOM-009` | `FAIL` | A zoom to an empty target MUST be ignored, never applied as a degenerate factor. | this spec section 3 | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8). It is the half `ZOOM-007` carried, and the one with a failure mode of its own: framing nothing is a division by a zero-sized box, which clamps to the range bound rather than to anything the user asked for | unimplemented |
+| `ZOOM-007` | `POST` | A zoom to a selection MUST frame it and clamp. | this spec section 3 | `ambre_core::zoom::tests::a_box_is_framed_whole_and_an_empty_one_is_ignored` -- the frame fits the box whole, clamped; `ambre_toile::ui::view::view_tests::a_zoom_to_the_selection_frames_it_and_keeps_the_selection`; `ambre_trame::ui::grid::tests::viewport::a_zoom_to_the_selection_shows_it_whole_and_keeps_it`; `ambre_trame::ui::grid::tests::viewport::a_zoom_to_the_selection_clamps_to_the_grid_range` | none | verified |
+| `ZOOM-010` | `FRAME` | A zoom to a selection MUST NOT change the selection. | this spec section 3; derived | `ambre_toile::ui::view::view_tests::a_zoom_to_the_selection_frames_it_and_keeps_the_selection`; `ambre_trame::ui::grid::tests::viewport::a_zoom_to_the_selection_shows_it_whole_and_keeps_it` -- the selection compares equal before and after | none | verified |
+| `ZOOM-009` | `FAIL` | A zoom to an empty target MUST be ignored, never applied as a degenerate factor. | this spec section 3 | `ambre_core::zoom::tests::a_box_is_framed_whole_and_an_empty_one_is_ignored` -- a box with no width or no height, or one not finite, gives no frame; `ambre_toile::ui::view::view_tests::a_zoom_to_the_selection_frames_it_and_keeps_the_selection` -- a box of no area moves nothing, and an empty selection publishes a notice and asks nothing | none | verified |
 
 * **Budget.** none of its own: a zoom recomputes one view transform and repaints, which is the frame
   cost the application's viewport already carries in `ambre-spec-budgets.md`. This document adds no
@@ -53,9 +53,9 @@ The user asks for the selection to fill the view. The target may be empty.
 * **Boundary.** none: a zoom is local view state. It writes no document, so nothing here reaches the
   relay, holds a key or opens a socket. `ambre-spec-zero-knowledge.md` seals every payload that does
   leave the client.
-* **Verification.** 5 `verified`, 5 `unimplemented`. The engine, the ladder, the clamp, the keys
-  and the chip are built and shared by the three editors. The zoom about a point, the wheel, the
-  pinch and the zoom to a selection are not routed through the engine yet. Section 5 names them.
+* **Verification.** 10 `verified`. The three editors share the engine, the ladder, the clamp, the
+  keys and the chip. They also share the wheel under `Ctrl` and the zoom about a point. The zoom to a
+  selection is shared by the board and the grid. Section 5 names what is left.
 
   Writing the rules before the code is what makes the three added ones cheap. `ZOOM-008`, because
   reaching no collaborator is not the same rule as emitting no delta once presence exists.
@@ -140,15 +140,12 @@ every editor.
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **The zoom about a point is not shared.** The engine offers it, but Toile's wheel still maps its
-  own zoom about the pointer (`3-Toile/features/ambre-spec-toile-viewport.md`). The rest of the
-  `One zoom model` Story (`ambre-roadmap.md` E8) routes it through the engine.
-* **The wheel and the pinch are not shared.** No wheel under `Ctrl` or pinch reaches Trame, and
-  there is no zoom to a selection (`2-Trame/features/ambre-spec-trame-grid-viewport.md`).
-* **Prose keeps the top of the canvas in place.** The pinch and the anchor on the caret wait for
-  the rest of the Story (`4-Prose/features/ambre-spec-prose-viewport.md`).
-* **Touch is not ruled.** Pinch is named here as a trigger; the touch pipeline that raises it is not
-  specified in any application yet.
+* **A two-finger touch pinch is not built.** A trackpad pinch arrives as a wheel with `Ctrl`, and
+  zooms in every editor. A touch screen raises pointer events with no pointer identity, so no editor
+  can tell two fingers apart (`ambre-spec-ui.md`, `UI-THREAD-013`).
+* **Prose frames no selection.** No command of the page asks for one, so `ZOOM-007` holds on the
+  board and the grid alone. A key and the chip keep the top of the canvas in place; the anchor on
+  the caret is not ruled (`4-Prose/features/ambre-spec-prose-viewport.md`).
 
 ---
 

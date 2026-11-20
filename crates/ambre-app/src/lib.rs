@@ -746,6 +746,7 @@ pub fn main() {
         active_sheet,
         filter_active,
         find_result,
+        view_cmd: RwSignal::new(None),
     };
     let toile_signals = ambre_toile::ui::ToileSignals {
         ctx_scope: toile_ctx_scope,
@@ -1516,6 +1517,7 @@ pub fn main() {
                         active_sheet: ch_tr_active_sheet,
                         filter_active: ch_tr_filter_active,
                         find_result: ch_tr_find_result,
+                        view_cmd: RwSignal::new(None),
                     },
                 },
             )),

@@ -2387,6 +2387,51 @@ fn a_drag_past_the_edge_scrolls_and_the_selection_follows() {
     assert_eq!(rig.caret().anchor, Some((first, Pos::<DocChar>::new(2))));
 }
 
+/// `PROSE-UI-025`: the offset stays inside the column after each path that
+/// moves it. Those are a scroll, a zoom, a zoom about a point, a relayout
+/// and an autoscroll tick held past the end.
+#[test]
+fn the_offset_stays_in_the_column_after_every_path() {
+    use ambre_core::Scale;
+    let lines: Vec<String> = (0..80).map(|i| format!("line {i}")).collect();
+    let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+    let mut rig = Rig::new(&refs);
+    let inside = |ui: &ProseUiState| {
+        ui.viewport.scroll_y >= Px::<Doc>::ZERO
+            && ui.viewport.scroll_y <= ui.column.max_scroll(&ui.viewport)
+            && ui.viewport.scroll_x >= Px::<Doc>::ZERO
+            && ui.viewport.scroll_x <= ui.column.max_scroll_x(&ui.viewport)
+    };
+    rig.ui.scroll_by(down(1.0e7));
+    assert!(inside(&rig.ui), "after a scroll");
+    let _ = rig.ui.zoom_to(Scale::positive(0.25));
+    assert!(inside(&rig.ui), "after a zoom out at the bottom");
+    let _ = rig.ui.zoom_about(Scale::positive(4.0), view_at(5.0, 5.0));
+    assert!(inside(&rig.ui), "after a zoom about a point");
+    rig.lay();
+    assert!(inside(&rig.ui), "after a relayout");
+    let first = rig.blocks()[0];
+    let _ = rig.ui.zoom_to(Scale::ONE);
+    rig.ui.scroll_by(down(-1.0e7));
+    rig.press(rig.point_of(first, 2), false, Instant::<PageLoad>::new(0.0));
+    let (x, _) = rig.point_of(first, 2);
+    let bottom = rig.ui.viewport.height + Px::<View>::new(400.0);
+    rig.input(ProseInput::Drag {
+        at: view_at(x, bottom.get()),
+    });
+    let mut now = 0.0;
+    for _ in 0..400 {
+        now += 16.0;
+        rig.ui.tick_autoscroll(Instant::<PageLoad>::new(now));
+        assert!(inside(&rig.ui), "after an autoscroll tick at {now}");
+    }
+    assert_eq!(
+        rig.ui.viewport.scroll_y,
+        rig.ui.column.max_scroll(&rig.ui.viewport),
+        "the autoscroll reached the end and stopped there"
+    );
+}
+
 /// `PROSE-UI-163`: once released, no tick scrolls, and nothing is armed.
 #[test]
 fn a_released_drag_leaves_nothing_armed() {

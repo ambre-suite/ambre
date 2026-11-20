@@ -133,6 +133,7 @@ commands! {
     FREEZE_ROWS = StaticKey::<Commands>::new("trame.view.freeze_rows"), "Freeze up to this row", None, &[], VIEW;
     FREEZE_COLS = StaticKey::<Commands>::new("trame.view.freeze_cols"), "Freeze up to this column", None, &[], VIEW;
     UNFREEZE = StaticKey::<Commands>::new("trame.view.unfreeze"), "Unfreeze rows and columns", None, &[], VIEW;
+    ZOOM_TO_SELECTION = StaticKey::<Commands>::new("trame.view.zoom_to_selection"), "Zoom to selection", None, &[], VIEW;
     PALETTE = StaticKey::<Commands>::new("trame.palette.open"), "Command palette", None, &[KeyBinding::primary(KeyChar::K)], GENERAL;
 }
 
@@ -287,6 +288,7 @@ pub fn context_layout(scope: CtxScope, filter: SheetFilter) -> Vec<MenuRow> {
             group(&mut rows, MERGE_GROUP);
             rows.push(MenuRow::Separator);
             group(&mut rows, FREEZE_GROUP);
+            group(&mut rows, &[ZOOM_TO_SELECTION]);
         }
         CtxScope::Column => {
             group(&mut rows, COLUMN_STRUCTURAL_GROUP);
@@ -294,7 +296,7 @@ pub fn context_layout(scope: CtxScope, filter: SheetFilter) -> Vec<MenuRow> {
             group(&mut rows, SORT_GROUP);
             group(&mut rows, &[filter_command(filter)]);
             rows.push(MenuRow::Separator);
-            group(&mut rows, &[FREEZE_COLS, UNFREEZE]);
+            group(&mut rows, &[FREEZE_COLS, UNFREEZE, ZOOM_TO_SELECTION]);
         }
         CtxScope::Row => {
             group(&mut rows, ROW_STRUCTURAL_GROUP);
@@ -306,7 +308,7 @@ pub fn context_layout(scope: CtxScope, filter: SheetFilter) -> Vec<MenuRow> {
                 group(&mut rows, &[CLEAR_FILTER]);
             }
             rows.push(MenuRow::Separator);
-            group(&mut rows, &[FREEZE_ROWS, UNFREEZE]);
+            group(&mut rows, &[FREEZE_ROWS, UNFREEZE, ZOOM_TO_SELECTION]);
         }
         CtxScope::Corner => {
             // The corner selects the whole sheet: only whole-sheet ops apply.

@@ -669,6 +669,39 @@ fn zoom_to_selection_with_nothing_selected_says_so() {
     assert!(rig.notices.take().is_empty(), "a done entry says nothing");
 }
 
+/// `ZOOM-007`, `ZOOM-009`, `ZOOM-010`: a zoom to the selection frames the
+/// box the board answers, inside the range, and leaves the selection as it
+/// was. A box with no area moves the camera nowhere.
+#[test]
+fn a_zoom_to_the_selection_frames_it_and_keeps_the_selection() {
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    rig.click(50.0, 50.0);
+    rig.frame();
+    rig.sent();
+    let before = rig.view.selection.clone();
+    rig.view
+        .apply_menu_command(crate::ui::menu_bar::ZOOM_TO_SELECTION);
+    rig.sent();
+    let target = Rect::new(-20.0, 10.0, 180.0, 90.0);
+    rig.answer(fit_reply(Some(target)));
+    let seen = rig.view.cam.visible_world();
+    assert!(
+        seen.contains(target.origin()) && seen.contains(Point::new(target.x1, target.y1)),
+        "{seen:?} frames {target:?}"
+    );
+    let zoom = rig.view.cam.zoom;
+    assert!(zoom >= crate::ui::viewport::MIN_ZOOM && zoom <= crate::ui::viewport::MAX_ZOOM);
+    assert_eq!(rig.view.selection, before, "the selection stays as it was");
+
+    let cam = rig.view.cam;
+    rig.view
+        .apply_menu_command(crate::ui::menu_bar::ZOOM_TO_SELECTION);
+    rig.sent();
+    rig.answer(fit_reply(Some(Rect::new(40.0, 40.0, 40.0, 40.0))));
+    assert_eq!(rig.view.cam, cam, "an empty box moves nothing");
+    assert_eq!(rig.view.selection, before);
+}
+
 /// The bytes Toile's own copy reply leaves in a blob, standing in for a
 /// payload whose `origin` names where it came from.
 fn clip(origin: Rect) -> ambre_bus::ClipboardBlob {
@@ -1829,6 +1862,56 @@ fn ctrl_and_the_pinch_zoom_in_every_mode() {
         wheel(&mut rig, (0.0, -30.0), 0, ModifierKeys::PRIMARY);
         assert!(rig.view.cam.zoom > zoom, "a pinch out zooms in");
     }
+}
+
+/// `ZOOM-003`, `ZOOM-004`: `Ctrl` with the wheel zooms about the pointer
+/// through the one engine. The board point under the pointer stays there,
+/// and the factor stays inside the board's range however far it turns.
+#[test]
+fn a_ctrl_wheel_zooms_about_the_pointer() {
+    let mut rig = Rig::new();
+    rig.input(InputEvent::PointerMove {
+        at: pointer(300.0, 220.0),
+    });
+    let under = rig.view.cam.screen_to_world() * kurbo::Point::new(300.0, 220.0);
+    for dy in [-120.0, -400.0, 90.0, 5000.0, -9000.0] {
+        wheel(&mut rig, (0.0, dy), 0, ModifierKeys::PRIMARY);
+        let (x, y) = rig.screen(under.x, under.y);
+        assert!((x - 300.0).abs() < 1e-3 && (y - 220.0).abs() < 1e-3, "{x} {y}");
+        let zoom = rig.view.cam.zoom;
+        assert!(zoom >= crate::ui::viewport::MIN_ZOOM && zoom <= crate::ui::viewport::MAX_ZOOM);
+    }
+}
+
+/// `ZOOM-008`: a zoom reaches no collaborator. The presence sample holds
+/// world coordinates alone. The sample built after a zoom about the pointer
+/// is the one built before it, so nothing new is broadcast.
+#[test]
+fn a_zoom_about_the_pointer_broadcasts_no_presence_sample() {
+    let mut rig = Rig::new();
+    rig.input(InputEvent::PointerMove {
+        at: pointer(300.0, 220.0),
+    });
+    rig.view
+        .plan_repaint(Instant::<PageLoad>::new(100.0), ambre_canvas::HudTick::Idle);
+    let first = rig.sent();
+    assert!(
+        first.iter().any(|c| matches!(c, ToileCommand::Presence { .. })),
+        "the pointer's first sample goes out: {first:?}"
+    );
+    let mut t = 116.0;
+    for dy in [-120.0, -400.0, 90.0, -60.0] {
+        wheel(&mut rig, (0.0, dy), 0, ModifierKeys::PRIMARY);
+        rig.view
+            .plan_repaint(Instant::<PageLoad>::new(t), ambre_canvas::HudTick::Idle);
+        t += 16.0;
+    }
+    assert_ne!(rig.view.cam.zoom.get(), 1.0, "the wheel zoomed");
+    let after = rig.sent();
+    assert!(
+        !after.iter().any(|c| matches!(c, ToileCommand::Presence { .. })),
+        "a zoom broadcast {after:?}"
+    );
 }
 
 /// `TOILE-UI-029`: a mode the user picked ignores the device signature. A

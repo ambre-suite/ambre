@@ -4,7 +4,7 @@
 //! The zoom is local view state (`PROSE-UI-010`). Nothing here reads the
 //! document, moves the caret or sends a command (`PROSE-UI-129`).
 
-use ambre_core::{Doc, Scale, View, Zoom, ZoomRange};
+use ambre_core::{Doc, Point, Px, Scale, View, Zoom, ZoomRange};
 
 pub use ambre_core::ZoomStep;
 
@@ -45,10 +45,36 @@ impl ProseUiState {
             return ZoomChange::Same;
         }
         self.viewport.zoom = next;
-        self.viewport.scroll_y = self
-            .column
-            .clamp_scroll(&self.viewport, self.viewport.scroll_y);
+        self.clamp_scroll();
         ZoomChange::Moved
+    }
+
+    /// Zoom to `asked` about a canvas point, through the one engine
+    /// (`ZOOM-003`, `PROSE-UI-128`). The document point under `at` stays
+    /// there. The clamp of the offsets (`PROSE-UI-025`) and the centring of
+    /// a page that fits (`PROSE-UI-026`) may move it.
+    pub fn zoom_about(&mut self, asked: Scale<Doc, View>, at: Point<Px<View>>) -> ZoomChange {
+        let zoom = Zoom::at(ZOOM_RANGE, self.viewport.zoom);
+        if zoom.to(asked).factor() == self.viewport.zoom {
+            return ZoomChange::Same;
+        }
+        // The column coordinate at the canvas's left edge.
+        let left = self.column.left(&self.viewport);
+        let origin_x = Px::<View>::ZERO - left;
+        let across = zoom.about(asked, origin_x / zoom.factor(), at.x);
+        let down = zoom.about(asked, self.viewport.scroll_y, at.y);
+        self.viewport.zoom = down.zoom.factor();
+        self.viewport.scroll_y = down.origin;
+        self.viewport.scroll_x = across.origin;
+        self.clamp_scroll();
+        ZoomChange::Moved
+    }
+
+    /// The factor a wheel step held with `Ctrl` asks for, a trackpad pinch
+    /// included (`ZOOM-004`).
+    #[must_use]
+    pub fn wheel_zoom(&self, dy: Px<ambre_core::Css>) -> Scale<Doc, View> {
+        Zoom::at(ZOOM_RANGE, self.viewport.zoom).wheeled(dy)
     }
 
     /// Move the zoom one preset up or down, or back to a hundred per cent
@@ -118,11 +144,85 @@ mod tests {
             let _ = ui.zoom_to(Scale::<Doc, View>::positive(asked));
             let left = ui.column.left(&ui.viewport).get();
             let page = ui.column.page_width.get() * ui.viewport.scale();
-            prop_assert!(left >= 0.0);
             if page <= width {
+                prop_assert!(left >= 0.0);
                 prop_assert!((left * 2.0 + page - width).abs() < 1e-2, "{left} {page} {width}");
             } else {
                 prop_assert!(left == 0.0);
+            }
+        }
+    }
+
+    proptest! {
+        /// `PROSE-UI-128`, `ZOOM-003`: the document point under the pointer
+        /// stays under it, on each axis the clamp and the centring leave
+        /// free. The zoom stays in range whatever factor is asked.
+        #[test]
+        fn a_zoom_about_a_point_keeps_the_point_under_it(
+            from in 0.25f64..4.0,
+            asked in 0.05f64..8.0,
+            scroll in 0.0f32..300_000.0,
+            across in 0.0f32..3000.0,
+            width in 200.0f32..2400.0,
+            x in 0.0f32..1.0,
+            y in 0.0f32..1.0,
+        ) {
+            let mut ui = a_view(300, width);
+            let _ = ui.zoom_to(Scale::<Doc, View>::positive(from));
+            ui.viewport.scroll_y = Px::<Doc>::new(scroll);
+            ui.viewport.scroll_x = Px::<Doc>::new(across);
+            ui.clamp_scroll();
+            let at = ambre_core::Point::new(Px::<View>::new(x * width), Px::<View>::new(y * 900.0));
+            let crate::view::column::DocPos::OnPage { page, x_in_page, y_in_page } =
+                ui.column.screen_to_doc(&ui.viewport, at)
+            else {
+                return Err(TestCaseError::fail("no page"));
+            };
+            // A point in a gutter resolves to a page edge (`PROSE-UI-124`), so
+            // it is not the point under the pointer: leave it out.
+            let under = ui.viewport.scroll_y.get() + at.y.get() / ui.viewport.scale();
+            let resolved = ui.column.page_top_y(page).get() + y_in_page.get();
+            prop_assume!((under - resolved).abs() <= 0.05);
+            let _ = ui.zoom_about(Scale::<Doc, View>::positive(asked), at);
+            let zoom = ui.viewport.zoom;
+            prop_assert!(zoom >= ZOOM_RANGE.floor() && zoom <= ZOOM_RANGE.ceiling());
+            let now = ui.column.doc_to_screen(&ui.viewport, page, x_in_page, y_in_page);
+            let free_y = ui.viewport.scroll_y > Px::<Doc>::ZERO
+                && ui.viewport.scroll_y < ui.column.max_scroll(&ui.viewport);
+            let free_x = ui.viewport.scroll_x > Px::<Doc>::ZERO
+                && ui.viewport.scroll_x < ui.column.max_scroll_x(&ui.viewport);
+            // `f32` offsets of a 300-page column: a few steps of 300 000.
+            let grain = 0.25 * ui.viewport.scale().max(1.0);
+            if free_y {
+                prop_assert!((now.y - at.y).get().abs() <= grain, "y {:?} -> {:?}", at.y, now.y);
+            }
+            if free_x {
+                prop_assert!((now.x - at.x).get().abs() <= 1e-2, "x {:?} -> {:?}", at.x, now.x);
+            }
+        }
+
+        /// `PROSE-UI-251`: a page wider than the canvas can be reached edge
+        /// to edge, and never leaves a gap on either side of it.
+        #[test]
+        fn a_wide_page_is_reachable_edge_to_edge(
+            zoom in 0.25f64..4.0,
+            width in 100.0f32..3000.0,
+            dx in -5000.0f32..5000.0,
+        ) {
+            let mut ui = a_view(3, width);
+            let _ = ui.zoom_to(Scale::<Doc, View>::positive(zoom));
+            ui.scroll_across(Px::<View>::new(dx));
+            let left = ui.column.left(&ui.viewport).get();
+            let page = ui.column.page_width.get() * ui.viewport.scale();
+            if page > width {
+                prop_assert!(left <= 0.0 && left + page >= width - 1e-2, "{left} {page} {width}");
+                ui.scroll_across(Px::<View>::new(1.0e7));
+                let right = ui.column.left(&ui.viewport).get() + page;
+                prop_assert!((right - width).abs() <= 1e-2 * page.max(1.0) / 100.0 + 1e-2);
+                ui.scroll_across(Px::<View>::new(-1.0e7));
+                prop_assert!(ui.column.left(&ui.viewport).get() == 0.0);
+            } else {
+                prop_assert!((left * 2.0 + page - width).abs() < 1e-2);
             }
         }
     }

@@ -117,6 +117,9 @@ pub struct ProseView {
     /// The keystrokes in flight, from their input to their frame.
     probe: KeyProbe,
     timeline: super::probe::Timeline,
+    /// The last pointer over the canvas, the point a `Ctrl` wheel zooms
+    /// about (`ZOOM-003`).
+    pointer: Option<Point<Px<View>>>,
 }
 
 /// The width and the height of a canvas box, as the view pixels the page
@@ -196,6 +199,7 @@ impl ProseView {
             now: Instant::<PageLoad>::new(0.0),
             probe: KeyProbe::default(),
             timeline: super::probe::Timeline::new(),
+            pointer: None,
         }
     }
 
@@ -604,7 +608,29 @@ impl ProseView {
         if self.outbox.is_busy() {
             return Consumed::Yes;
         }
+        if let InputEvent::PointerMove { at } | InputEvent::PointerDown { at, .. } = ev {
+            self.pointer = Some(*at);
+        }
         match ev {
+            // A wheel held with `Ctrl`, a trackpad pinch included, zooms about
+            // the pointer (`ZOOM-003`, `ZOOM-004`, `PROSE-UI-128`).
+            InputEvent::Wheel { delta, mods } if mods.contains(ModifierKeys::PRIMARY) => {
+                let page = self.state.viewport.height.css_length();
+                let line = ambre_core::Vector::new(ambre_draw::WHEEL_LINE, ambre_draw::WHEEL_LINE);
+                let dy = delta.to_px(line, ambre_core::Vector::new(page, page)).dy;
+                let asked = self.state.wheel_zoom(dy);
+                let at = self.pointer.unwrap_or_else(|| {
+                    let (width, height) = self.size;
+                    Point::new(width / 2.0, height / 2.0)
+                });
+                if self.state.zoom_about(asked, at) == ambre_prose::view::zoom::ZoomChange::Moved {
+                    self.state.hovered = None;
+                    self.publish_hover();
+                    self.publish_toolbar();
+                    self.dirty = true;
+                }
+                Consumed::Yes
+            }
             InputEvent::Wheel { delta, .. } => {
                 // A new scroll stops the motion a flick left, and a glide
                 // may leave its own (`PROSE-UI-218`, `KINETIC-002`).
@@ -924,6 +950,80 @@ mod tests {
             "{}",
             focused.tag_name()
         );
+    }
+
+    /// `ZOOM-003`, `ZOOM-004`, `PROSE-UI-128`: a wheel held with `Ctrl` over
+    /// the page zooms it, and the document point under the pointer stays
+    /// there. The event is consumed, so the browser does not zoom the tab.
+    #[wasm_bindgen_test]
+    fn a_ctrl_wheel_zooms_the_page_about_the_pointer() {
+        use ambre_prose::layout::pass::PageLayout;
+        use ambre_prose::view::column::{DocPos, PageColumn};
+        let document = web_sys::window()
+            .and_then(|w| w.document())
+            .expect("a page");
+        let cell = document.create_element("div").expect("a cell");
+        document
+            .body()
+            .expect("a body")
+            .append_child(&cell)
+            .expect("attached");
+        let (to_logic, _queue) = ambre_bus::conduit::local(ambre_core::Bounded::<
+            ambre_bus::conduit::ChannelSlots,
+        >::of::<4>());
+        let (_to_ui, from_logic) = ambre_bus::conduit::local(ambre_core::Bounded::<
+            ambre_bus::conduit::ChannelSlots,
+        >::of::<4>());
+        let mut view = ProseView::new(
+            Id::<Document>::mint(),
+            Size::new(Px::new(800), Px::new(600)),
+            ProseWiring {
+                to_logic: Port::direct(to_logic),
+                from_logic: Feed::direct(from_logic),
+                text_input: TextInput::create(&document, &cell),
+                theme_ctl: ThemeControl::new(Theme::Dark),
+                figures: RwSignal::new(None),
+                zoom: RwSignal::new(ambre_core::Scale::ONE),
+                annotations: ProseSignals::new(),
+                busy_pub: BusyPublisher::new(),
+                notices: NoticePublisher::new(),
+            },
+        );
+        view.state.column = PageColumn::of(&PageLayout {
+            // Wider than the canvas at every factor the notches reach, so no
+            // recentring moves the point sideways (`PROSE-UI-026`).
+            page_width: Px::new(1000.0),
+            page_height: Px::new(800.0),
+            page_count: Len::<Page>::new(40),
+            ..PageLayout::default()
+        });
+        view.state.viewport.scroll_y = Px::new(5_000.0);
+        let at = pointer(420.0, 310.0);
+        let _ = view.handle_input(&InputEvent::PointerMove { at });
+        let DocPos::OnPage { page, x_in_page, y_in_page } =
+            view.state.column.screen_to_doc(&view.state.viewport, at)
+        else {
+            panic!("the pointer is over a page");
+        };
+        let notch = |dy: f64| InputEvent::Wheel {
+            delta: ambre_canvas::WheelDelta::pixels(ambre_core::Vector::new(
+                ambre_canvas::WheelAmount::new(0.0),
+                ambre_canvas::WheelAmount::new(dy),
+            )),
+            mods: ModifierKeys::PRIMARY,
+        };
+        for dy in [-120.0, -120.0, -60.0, 120.0, -200.0] {
+            assert!(view.handle_input(&notch(dy)).is_yes(), "the browser must not zoom the tab");
+            let now = view
+                .state
+                .column
+                .doc_to_screen(&view.state.viewport, page, x_in_page, y_in_page);
+            assert!((now.y - at.y).get().abs() < 0.5, "{:?} drifted to {:?}", at.y, now.y);
+            assert!((now.x - at.x).get().abs() < 0.5, "{:?} drifted to {:?}", at.x, now.x);
+        }
+        assert!(view.state.viewport.zoom.get() > 1.0, "a wheel away from the reader zooms in");
+        assert!(view.dirty, "the zoomed page repaints");
+        cell.remove();
     }
 
     /// `BUS-022`: the page takes no input while its outbox holds a command, and
