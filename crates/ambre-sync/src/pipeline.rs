@@ -743,6 +743,12 @@ impl SealedBlob {
         &self.0
     }
 
+    /// The SHA-256 digest the upload link of these bytes signs, so the object
+    /// store refuses any other body through it (audit `P40`, `SRV-310`).
+    pub(crate) fn checksum(&self) -> FixedBytes<ambre_core::ObjectChecksum> {
+        ambre_crypto::hash::object_checksum(&self.0)
+    }
+
     /// The body of the upload that sends it.
     pub(crate) fn to_body(&self) -> Payload<crate::http::HttpBody> {
         Payload::new(self.0.clone())

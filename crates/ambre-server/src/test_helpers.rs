@@ -20,6 +20,7 @@ pub fn empty_oidc_clients() -> OidcClients {
 /// sets to the one server of `just services-up`. `just test-db-cluster` points
 /// it at the cluster of `just cluster-up`, so every test runs against both.
 pub async fn connect_test_redis() -> rustis::Result<rustis::client::Client> {
+    crate::log_guard::install();
     let url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".into());
     rustis::client::Client::connect(url.as_str()).await
 }
@@ -220,6 +221,7 @@ pub async fn storage_service() -> (
     aws_sdk_s3::Client,
     crate::s3::StoreText<crate::s3::BucketName>,
 ) {
+    crate::log_guard::install();
     let endpoint = std::env::var("S3_ENDPOINT")
         .expect("S3_ENDPOINT: the database tier needs an object store (just services-up)");
     let env = |name: &str, default: &str| std::env::var(name).unwrap_or_else(|_| default.into());

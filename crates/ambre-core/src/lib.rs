@@ -148,8 +148,8 @@ pub use encoded::{
     MasterKeySalt, SealedName, SealedShare, WrappedDocKey, WrappedMasterKey,
 };
 pub use envelope::{
-    Aad, ChainHash, Ciphertext, CommitmentTag, EntryDigest, Nonce, Signature, SnapshotDigest,
-    Transcript,
+    Aad, ChainHash, Ciphertext, CommitmentTag, EntryDigest, Nonce, ObjectChecksum, Signature,
+    SnapshotDigest, Transcript,
 };
 pub use error::{DocTypeError, Error, UuidError, VersionError};
 pub use fingerprint::{InviterPin, KeyFingerprints};
@@ -209,7 +209,8 @@ pub use search::{SearchQuery, UserSearch};
 pub use secret::{
     AccessToken, CallAdmission, Confidential, ConfidentialKind, Credential, CredentialKind,
     OidcCode, OidcState, Passphrase, PassphraseWeakness, Plaintext, PresignedUrl, RecoveryWords,
-    RecoveryWordsRefusal, RefreshToken, Secret, TurnPassword, WireConfidential, WireCredential,
+    RecoveryWordsRefusal, RefreshToken, ScrapeToken, Secret, TurnPassword, WireConfidential,
+    WireCredential,
 };
 pub use seq::{
     Before, CountsSince, Deltas, Issuer, Relay, Seq, SeqColumn, SeqKind, SharedIssuer, Wire,

@@ -27,6 +27,11 @@ async fn sfu() -> String {
 
 /// As [`sfu`], and answers the three addresses.
 async fn sfu_at() -> Addresses {
+    sfu_scraped(ambre_metrics::ScrapeAccess::Loopback).await
+}
+
+/// As [`sfu_at`], with its metrics listener behind `scrape`.
+async fn sfu_scraped(scrape: ambre_metrics::ScrapeAccess) -> Addresses {
     let free = |udp: bool| {
         if udp {
             std::net::UdpSocket::bind("127.0.0.1:0").and_then(|s| s.local_addr())
@@ -50,6 +55,7 @@ async fn sfu_at() -> Addresses {
             ],
             TurnSecret::new("north-wind".to_owned()),
         )),
+        scrape,
     };
     tokio::spawn(run(addresses, admitting));
     let deadline = Instant::now() + Duration::from_secs(10);
@@ -80,6 +86,70 @@ async fn http_get(at: std::net::SocketAddr, path: &str) -> String {
         .await
         .expect("the answer");
     answer
+}
+
+/// The status line, the headers and the body of a `GET` of `path` on `at` that presents
+/// `authorization`, over HTTP/1.1.
+async fn http_get_with(at: std::net::SocketAddr, path: &str, authorization: &str) -> String {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let mut stream = tokio::net::TcpStream::connect(at)
+        .await
+        .expect("a connection");
+    let request = format!(
+        "GET {path} HTTP/1.1\r\nHost: sfu\r\nAuthorization: {authorization}\r\nConnection: close\r\n\r\n"
+    );
+    stream
+        .write_all(request.as_bytes())
+        .await
+        .expect("the request");
+    let mut answer = String::new();
+    stream
+        .read_to_string(&mut answer)
+        .await
+        .expect("the answer");
+    answer
+}
+
+/// `CALL-141`: a metrics listener behind a token answers the scrape that presents it, and
+/// `401` with no metric to any other. An address off the loopback with no token refuses to
+/// start.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_scrape_behind_a_token_presents_it() {
+    use ambre_core::{Credential, ScrapeToken};
+    use ambre_metrics::ScrapeAccess;
+
+    let shared: std::net::SocketAddr = "10.0.0.7:3482".parse().expect("an address");
+    assert!(ScrapeAccess::for_listener(shared, None).is_err());
+    let token = Credential::<ScrapeToken>::new("south-wind".to_owned());
+    let addresses = sfu_scraped(ScrapeAccess::Token(token)).await;
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while tokio::net::TcpStream::connect(addresses.metrics)
+        .await
+        .is_err()
+    {
+        assert!(Instant::now() < deadline, "the metrics did not listen");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let admitted = http_get_with(
+        addresses.metrics,
+        crate::metrics::ROUTE,
+        "Bearer south-wind",
+    )
+    .await;
+    assert!(admitted.starts_with("HTTP/1.1 200"), "{admitted}");
+    assert!(admitted.contains("ambre_sfu_participants"), "{admitted}");
+    for refused in [
+        http_get(addresses.metrics, crate::metrics::ROUTE).await,
+        http_get_with(
+            addresses.metrics,
+            crate::metrics::ROUTE,
+            "Bearer north-wind",
+        )
+        .await,
+    ] {
+        assert!(refused.starts_with("HTTP/1.1 401"), "{refused}");
+        assert!(!refused.contains("ambre_sfu"), "{refused}");
+    }
 }
 
 /// `CALL-101`, `ZK-029`, `ZK-031`: the metrics answer in the Prometheus text format on the

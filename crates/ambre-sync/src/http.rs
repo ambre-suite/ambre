@@ -648,6 +648,9 @@ pub(crate) struct Outgoing {
     pub bearer: Option<Credential<AccessToken>>,
     /// The content type and the bytes of the body, if any.
     pub body: Option<(ContentType, Payload<HttpBody>)>,
+    /// The SHA-256 digest of the body that an upload link signs. The
+    /// transport sends it as `x-amz-checksum-sha256` (`SRV-310`).
+    pub checksum: Option<ambre_core::FixedBytes<ambre_core::ObjectChecksum>>,
     /// How long the transport waits before it aborts the request.
     pub timeout: TimeSpan<Ms>,
     /// The most bytes the answer's body may hold. The transport stops
@@ -664,6 +667,7 @@ impl Outgoing {
             url,
             bearer: None,
             body: None,
+            checksum: None,
             timeout: REQUEST_TIMEOUT,
             ceiling: ANSWER_CEILING,
         }
@@ -857,6 +861,13 @@ impl Transport for Fetch {
         if let Some(token) = &request.bearer {
             // The value is wiped once the request holds its copy.
             builder = token.present_bearer(|value| builder.header("Authorization", value));
+        }
+        if let Some(checksum) = &request.checksum {
+            // The link signs this header, so the store checks the body
+            // against it and refuses any other (`SRV-310`).
+            use base64::Engine as _;
+            let value = base64::engine::general_purpose::STANDARD.encode(checksum.as_array());
+            builder = builder.header("x-amz-checksum-sha256", &value);
         }
         let sent = match &request.body {
             Some((content_type, bytes)) => {
@@ -1384,6 +1395,23 @@ pub(crate) async fn put_sealed_via(
 ) -> Result<(), HttpError> {
     let request = Outgoing {
         body: Some((ContentType::Octets, blob.to_body())),
+        ..Outgoing::new(Method::Put, url.into())
+    };
+    let resp = exchange(transport, &request).await?;
+    expect_ok(&request, &resp)
+}
+
+/// A sealed blob to a presigned link that signs its SHA-256 digest: the
+/// request carries the digest the link names, as the store requires
+/// (`SRV-310`).
+pub(crate) async fn put_checked_via(
+    transport: &impl Transport,
+    url: &ambre_core::Credential<ambre_core::PresignedUrl>,
+    blob: &crate::pipeline::SealedBlob,
+) -> Result<(), HttpError> {
+    let request = Outgoing {
+        body: Some((ContentType::Octets, blob.to_body())),
+        checksum: Some(blob.checksum()),
         ..Outgoing::new(Method::Put, url.into())
     };
     let resp = exchange(transport, &request).await?;
@@ -2070,16 +2098,35 @@ pub(crate) struct ReportSnapshotRequest {
     pub signature: ambre_core::FixedBytes<ambre_core::Signature>,
 }
 
+/// Response of `POST /api/documents/{id}/snapshot/upload-id`: the id the
+/// relay mints for a snapshot, which the blob seals before its digest is
+/// known (`SYNC-258`, `SRV-310`).
+#[derive(Deserialize)]
+pub(crate) struct SnapshotUploadIdResponse {
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub snapshot_id: Id<Snapshot>,
+}
+
+/// Body of `POST /api/documents/{id}/snapshot/upload-url`: the size of the
+/// sealed blob, the id it seals, and its SHA-256 digest, which the link signs
+/// (`SRV-310`).
+#[derive(Serialize)]
+pub(crate) struct SnapshotUploadUrlRequest {
+    #[serde(rename = "size_bytes")]
+    pub size: ambre_core::Count<ambre_core::Octets>,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub snapshot_id: Id<Snapshot>,
+    #[serde(rename = "sha256")]
+    pub checksum: ambre_core::FixedBytes<ambre_core::ObjectChecksum>,
+}
+
 /// Response of `POST /api/documents/{id}/snapshot/upload-url`. It holds a
-/// presigned PUT URL and the S3 key the confirmation names. It also holds
-/// the id the relay minted for the snapshot, which the blob seals
-/// (`SYNC-258`).
+/// presigned PUT URL and the S3 key the confirmation names. The id the blob
+/// seals came from `upload-id` already (`SYNC-258`).
 #[derive(Deserialize)]
 pub(crate) struct SnapshotUploadUrlResponse {
     pub upload_url: ambre_core::Credential<ambre_core::PresignedUrl>,
     pub s3_key: ambre_core::ObjectKey,
-    #[serde(with = "ambre_core::serde_id::text")]
-    pub snapshot_id: Id<Snapshot>,
 }
 
 /// Body of `POST /api/documents/{id}/snapshot` (confirm upload + insert metadata).

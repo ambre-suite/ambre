@@ -72,6 +72,10 @@ pub fn api_router(
             axum::routing::get(get_snapshot_metadata).post(create_snapshot),
         )
         .route(
+            "/documents/{id}/snapshot/upload-id",
+            axum::routing::post(snapshot_upload_id),
+        )
+        .route(
             "/documents/{id}/snapshot/upload-url",
             axum::routing::post(snapshot_upload_url),
         )

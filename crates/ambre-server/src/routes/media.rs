@@ -73,6 +73,9 @@ pub async fn media_upload_url(
         &key,
         state.config.presigned_url_ttl,
         req.size,
+        // The document key names a media address, not the digest of its bytes.
+        // The client asks for no checksum of a media blob yet (audit `N26`).
+        None,
         state.config.s3_public_endpoint.as_ref(),
     )
     .await?;
@@ -227,7 +230,9 @@ pub async fn media_erase(
                 .key(&s3_key)
                 .send()
                 .await
-                .map_err(|e| AppError::S3(format!("delete a media object: {e}")))?;
+                .map_err(|e| {
+                    AppError::S3(crate::error::FaultText::of("delete a media object", e))
+                })?;
         }
     }
     tx.commit().await?;

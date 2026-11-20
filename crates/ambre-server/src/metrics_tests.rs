@@ -4,7 +4,7 @@ use tower::ServiceExt;
 use tower_http::cors::CorsLayer;
 
 use super::{Delta, Failure, RELAY, ROUTE, Socket, router};
-use ambre_metrics::Label;
+use ambre_metrics::{Label, ScrapeAccess};
 
 /// The spellings of every value of `L`.
 fn spellings<L: Label>() -> Vec<&'static str> {
@@ -42,7 +42,7 @@ async fn get(app: axum::Router, path: &str) -> (StatusCode, String, String) {
 async fn the_scrape_answers_the_text_format_under_closed_labels_alone() {
     RELAY.deltas.inc(Delta::Sequenced);
     RELAY.failures.inc(Failure::Broadcast);
-    let (status, kind, body) = get(router(), ROUTE).await;
+    let (status, kind, body) = get(router(ScrapeAccess::Loopback), ROUTE).await;
     assert_eq!(status, StatusCode::OK);
     assert!(kind.starts_with("text/plain; version=0.0.4"), "{kind}");
     let closed: [(&str, &str, Vec<&str>); 4] = [
@@ -106,5 +106,48 @@ async fn the_public_listener_serves_no_metric(pool: sqlx::PgPool) {
         let (status, _, body) = get(app.clone(), path).await;
         assert_ne!(status, StatusCode::OK, "{path}");
         assert!(!body.contains("ambre_relay_"), "{path}: {body}");
+    }
+}
+
+/// The status of a scrape of `app` that presents `authorization`.
+async fn status_with(app: axum::Router, authorization: Option<&str>) -> StatusCode {
+    let mut request = Request::get(ROUTE);
+    if let Some(value) = authorization {
+        request = request.header(header::AUTHORIZATION, value);
+    }
+    app.oneshot(request.body(Body::empty()).expect("a request"))
+        .await
+        .expect("an answer")
+        .status()
+}
+
+/// `SRV-307`: a listener off the loopback answers the scrape that presents
+/// the operator's token, and `401` with no metric to any other.
+#[tokio::test]
+async fn a_scrape_off_the_loopback_presents_the_token() {
+    let shared: std::net::SocketAddr = "10.0.0.7:9464".parse().expect("an address");
+    assert!(ScrapeAccess::for_listener(shared, None).is_err());
+    let token = ambre_core::Credential::new("north-wind".to_owned());
+    let access = ScrapeAccess::for_listener(shared, Some(token)).expect("an access");
+    assert_eq!(
+        status_with(router(access.clone()), Some("Bearer north-wind")).await,
+        StatusCode::OK
+    );
+    for refused in [None, Some("Bearer south-wind"), Some("north-wind")] {
+        let answer = router(access.clone())
+            .oneshot({
+                let mut request = Request::get(ROUTE);
+                if let Some(value) = refused {
+                    request = request.header(header::AUTHORIZATION, value);
+                }
+                request.body(Body::empty()).expect("a request")
+            })
+            .await
+            .expect("an answer");
+        assert_eq!(answer.status(), StatusCode::UNAUTHORIZED, "{refused:?}");
+        let body = axum::body::to_bytes(answer.into_body(), 1 << 20)
+            .await
+            .expect("a body");
+        assert!(!String::from_utf8_lossy(&body).contains("ambre_relay"));
     }
 }
