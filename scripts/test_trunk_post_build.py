@@ -271,6 +271,80 @@ class ContentPolicy(unittest.TestCase):
             self.assertIn(hook.digest(settled), self.directive(text, "script-src"))
 
 
+class EmbedSites(unittest.TestCase):
+    """`SRV-307`: the page admits in a frame the sites the deployment names, and no frame
+    when it names none."""
+
+    def frame_src(self, tmp: str, frames: list[str] | None) -> list[str]:
+        root = Path(tmp)
+        (root / "index.html").write_text(POLICY_PAGE, encoding="utf-8")
+        theme = root / "theme.css"
+        theme.write_text(":root { --bg: #fff; }\n", encoding="utf-8")
+        text = hook.fill_policy(root, theme, frames=frames)
+        found = [d.split()[1:] for d in text.split("; ") if d.split()[0] == "frame-src"]
+        self.assertEqual(len(found), 1, text)
+        return found[0]
+
+    def test_a_deployment_that_names_no_site_admits_no_frame(self) -> None:
+        for value in ("", "  ", " , "):
+            with tempfile.TemporaryDirectory() as tmp:
+                self.assertEqual(self.frame_src(tmp, hook.embed_sites(value)), ["'none'"], repr(value))
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(self.frame_src(tmp, None), ["'none'"])
+
+    def test_each_named_site_is_admitted_as_an_https_origin_and_nothing_else(self) -> None:
+        sites = hook.embed_sites("www.youtube.com, https://*.Vimeo.com/\n example.org:8443 www.youtube.com")
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(
+                self.frame_src(tmp, sites),
+                ["https://www.youtube.com", "https://*.vimeo.com", "https://example.org:8443"],
+            )
+
+    def test_a_value_that_is_not_a_site_fails_the_build(self) -> None:
+        for value in (
+            "*",
+            "https:",
+            "https://",
+            "http://example.org",
+            "data:",
+            "example.org/watch",
+            "'unsafe-inline'",
+            "'self'",
+            "example.org;script-src",
+            "*.",
+            "-bad.example.org",
+        ):
+            with self.subTest(value=value), self.assertRaises(hook.HookError):
+                hook.embed_sites(value)
+
+    def test_the_hook_reads_the_sites_from_the_deployment(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {"TRUNK_STAGING_DIR": tmp, hook.EMBED_SITES_VAR: "www.youtube.com"}
+            seen: list[list[str] | None] = []
+            with (
+                mock.patch.dict(os.environ, env, clear=True),
+                mock.patch.object(hook, "hash_worker"),
+                mock.patch.object(hook, "fill_worker_address"),
+                mock.patch.object(hook, "write_thread_script"),
+                mock.patch.object(hook, "copy_converter"),
+                mock.patch.object(hook, "write_headers"),
+                mock.patch.object(hook, "fill_policy", side_effect=lambda *a, **k: seen.append(k["frames"])),
+            ):
+                self.assertEqual(hook.main(), 0)
+            self.assertEqual(seen, [["https://www.youtube.com"]])
+            env[hook.EMBED_SITES_VAR] = "http://www.youtube.com"
+            with (
+                mock.patch.dict(os.environ, env, clear=True),
+                mock.patch.object(hook, "hash_worker"),
+                mock.patch.object(hook, "fill_worker_address"),
+                mock.patch.object(hook, "write_thread_script"),
+                mock.patch.object(hook, "copy_converter"),
+                mock.patch.object(hook, "write_headers"),
+                redirect_stderr(io.StringIO()),
+            ):
+                self.assertEqual(hook.main(), 1)
+
+
 class Headers(unittest.TestCase):
     """`SRV-281`, `SRV-282`: the headers file of the build refuses any frame on every answer,
     and gives the script of each worker the worker policy."""

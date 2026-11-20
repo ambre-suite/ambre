@@ -15,7 +15,9 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
+use tokio_tungstenite::tungstenite::Message;
 
 /// The browser engine a build of the belt drives.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -155,6 +157,9 @@ fn firefox_capabilities(downloads: &Path) -> Value {
         "capabilities": { "alwaysMatch": {
             "browserName": "firefox",
             "moz:firefoxOptions": options,
+            // The session answers the address of its WebDriver BiDi socket,
+            // through which `Browser::preload` reaches each new document.
+            "webSocketUrl": true,
         }}
     })
 }
@@ -173,6 +178,10 @@ fn collect_console(stream: impl Read + Send + 'static, printed: Arc<Mutex<Vec<St
     });
 }
 
+/// An open WebDriver BiDi socket of a Firefox session.
+type Bidi =
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
+
 /// One running driver and the one session it holds.
 pub struct Browser {
     http: reqwest::Client,
@@ -181,6 +190,12 @@ pub struct Browser {
     engine: Engine,
     /// The console lines Firefox printed since the last read.
     printed: Arc<Mutex<Vec<String>>>,
+    /// The address of the WebDriver BiDi socket the session answered: Firefox
+    /// alone asks for one.
+    bidi_url: Option<String>,
+    /// The BiDi socket once a script was preloaded through it. It stays open
+    /// with the session, so no driver drops a script it added on this socket.
+    bidi: Mutex<Option<Bidi>>,
 }
 
 impl Browser {
@@ -239,12 +254,17 @@ impl Browser {
         let id = resp["sessionId"]
             .as_str()
             .unwrap_or_else(|| panic!("no session: {resp}"));
+        let bidi_url = resp["capabilities"]["webSocketUrl"]
+            .as_str()
+            .map(str::to_owned);
         let browser = Self {
             http,
             session: format!("{root}/session/{id}"),
             process,
             engine,
             printed,
+            bidi_url,
+            bidi: Mutex::new(None),
         };
         if engine == Engine::Firefox {
             // Chrome takes its window size as an argument. Headless Firefox
@@ -366,6 +386,74 @@ impl Browser {
             &json!({ "cmd": method, "params": params }),
         )
         .await
+    }
+
+    /// Runs `source` in each document the page loads from now on, before any
+    /// script of that document. Chrome takes it through the DevTools Protocol.
+    /// Firefox takes it through WebDriver BiDi, `script.addPreloadScript`,
+    /// which runs it in the realm of the page.
+    pub async fn preload(&self, source: &str) {
+        match self.engine {
+            Engine::Chrome => {
+                self.cdp(
+                    "Page.addScriptToEvaluateOnNewDocument",
+                    json!({ "source": source }),
+                )
+                .await;
+            }
+            Engine::Firefox => self.bidi_preload(source).await,
+        }
+    }
+
+    /// Adds `source` as a preload script of the session, through its BiDi
+    /// socket, and fails unless the browser confirms it.
+    async fn bidi_preload(&self, source: &str) {
+        let url = self
+            .bidi_url
+            .as_deref()
+            .expect("the Firefox session answered no BiDi socket: ask for `webSocketUrl`");
+        let held = self.bidi.lock().map(|mut b| b.take()).unwrap_or_default();
+        let mut socket = match held {
+            Some(socket) => socket,
+            None => {
+                tokio_tungstenite::connect_async(url)
+                    .await
+                    .unwrap_or_else(|e| panic!("{url}: {e}"))
+                    .0
+            }
+        };
+        let id = 1;
+        let command = json!({
+            "id": id,
+            "method": "script.addPreloadScript",
+            "params": { "functionDeclaration": format!("() => {{ {source} }}") },
+        });
+        socket
+            .send(Message::text(command.to_string()))
+            .await
+            .unwrap_or_else(|e| panic!("{url}: {e}"));
+        // The socket may carry events before the reply: the reply is the
+        // message that names the command's id.
+        loop {
+            let message = socket
+                .next()
+                .await
+                .unwrap_or_else(|| panic!("{url}: the socket closed before the reply"))
+                .unwrap_or_else(|e| panic!("{url}: {e}"));
+            let Message::Text(text) = message else {
+                continue;
+            };
+            let reply: Value =
+                serde_json::from_str(&text).unwrap_or_else(|_| panic!("{url}: {text}"));
+            if reply["id"] != json!(id) {
+                continue;
+            }
+            assert_eq!(reply["type"], json!("success"), "{url}: {reply}");
+            break;
+        }
+        if let Ok(mut held) = self.bidi.lock() {
+            *held = Some(socket);
+        }
     }
 
     /// Sets a permission of the page's origin (WebDriver Permissions).
