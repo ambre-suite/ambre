@@ -579,6 +579,7 @@ impl SyncState {
         self.log_footings.clear();
         self.shown_identities.clear();
         self.kept_logs.clear();
+        self.kept_chains.clear();
         self.session_nonces.clear();
         self.light.clear();
         self.self_join_logs.clear();

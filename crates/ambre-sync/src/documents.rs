@@ -16,7 +16,9 @@ impl SyncState {
             // A listed name opens under the key the walked or kept log
             // accepted alone (`SYNC-291`), and from an author it admits
             // (`SYNC-135`).
-            let kept = self.kept_keys();
+            // A name sealed before the last rotation opens through the chain
+            // the log kept, with no request (`SYNC-302`).
+            let kept = self.kept_names();
             let authors = self.name_authors();
             crate::spawn(async move {
                 let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
@@ -39,7 +41,8 @@ impl SyncState {
                                             .wrapper_exchange_pub_key
                                             .as_ref(),
                                         name_enc,
-                                        kept: kept.get(&document_id).copied(),
+                                        kept: kept.keys.get(&document_id).copied(),
+                                        chain: kept.chains.get(&document_id),
                                         authors: &authors,
                                     };
                                     listed.open(ek)
@@ -367,6 +370,15 @@ impl SyncState {
     }
 }
 
+/// What a listed name opens under, by the document of its log: the key the
+/// walked or kept log accepted last (`SYNC-291`), and the links its latest
+/// open or rotation held in the session (`SYNC-302`).
+#[derive(Clone, Default)]
+pub(crate) struct KeptNames {
+    pub(crate) keys: HashMap<Id<Document>, ambre_core::FixedBytes<ambre_core::KeyId>>,
+    pub(crate) chains: HashMap<Id<Document>, crate::chain::Chain>,
+}
+
 /// One sealed name of a listing, with the wrapped key that opens it: a
 /// document of the launcher, or the meta of a channel. The wrapper's
 /// exchange key is `None` for a self-wrapped owner row.
@@ -379,6 +391,9 @@ pub(crate) struct ListedName<'a> {
     /// The key id the walked or kept log of the document accepted last,
     /// `None` for a document this client never walked (`SYNC-291`).
     pub(crate) kept: Option<ambre_core::FixedBytes<ambre_core::KeyId>>,
+    /// The links the log of the document kept in this session, `None` when
+    /// none: a name sealed under an older key walks them (`SYNC-302`).
+    pub(crate) chain: Option<&'a crate::chain::Chain>,
     /// What the author of the name is checked against (`SYNC-135`).
     pub(crate) authors: &'a NameAuthors,
 }
@@ -390,27 +405,25 @@ impl ListedName<'_> {
     /// The relay names the wrapper of the copy. It can wrap a key of its own
     /// and seal a name of its choosing under it. The name opens only under
     /// the key the checks of an open accepted last for this log, kept across
-    /// sessions. It must be sealed under that key (`SYNC-291`), by an author
-    /// the walked log admits (`SYNC-135`). A
-    /// listing sends no request of its own, so a name sealed before the last
-    /// rotation, or a document never walked, shows none.
+    /// sessions (`SYNC-291`), by an author the walked log admits
+    /// (`SYNC-135`). It is sealed under that key, or under an older key the
+    /// chain the log kept reaches from it (`SYNC-302`). A listing sends no
+    /// request of its own, so a name past the kept chain, or a document never
+    /// walked, shows none.
     pub(crate) fn open(
         &self,
         exchange_key: &x25519_dalek::StaticSecret,
     ) -> Option<ambre_core::Validated<ambre_core::Name>> {
         let current = self.unwrap_key(exchange_key)?;
-        if self.kept != Some(current.id())
-            || pipeline::object_key(self.name_enc).ok()? != current.id()
-        {
+        if self.kept != Some(current.id()) {
             return None;
         }
-        // Sealed under the current key, the name needs no link, and the
-        // author check reads the writers of the walked log (`SYNC-135`).
-        open_name(
+        let none = crate::chain::Chain::new(self.document_id, Vec::new());
+        open_name_through(
             self.document_id,
             &current,
             self.name_enc,
-            Vec::new(),
+            self.chain.unwrap_or(&none),
             self.authors,
         )
     }
@@ -489,6 +502,7 @@ impl SyncState {
 /// author the walked log never granted a writing role is refused before any
 /// key is sought. So is any name of a log this client never walked
 /// (`SYNC-135`).
+#[cfg(test)]
 pub(crate) fn open_name(
     document_id: Id<Document>,
     current: &DocumentKey,
@@ -496,12 +510,24 @@ pub(crate) fn open_name(
     links: Vec<ambre_protocol::KeyLink>,
     authors: &NameAuthors,
 ) -> Option<ambre_core::Validated<ambre_core::Name>> {
+    let chain = crate::chain::Chain::new(document_id, links);
+    open_name_through(document_id, current, sealed, &chain, authors)
+}
+
+/// Opens a sealed name as [`open_name`] does, through the links `chain`
+/// already holds.
+pub(crate) fn open_name_through(
+    document_id: Id<Document>,
+    current: &DocumentKey,
+    sealed: &ambre_core::Encoded<ambre_core::SealedName>,
+    chain: &crate::chain::Chain,
+    authors: &NameAuthors,
+) -> Option<ambre_core::Validated<ambre_core::Name>> {
     if !authors.admits(document_id, sealed) {
         return None;
     }
-    let chain = crate::chain::Chain::new(document_id, links);
     let wanted = pipeline::object_key(sealed).ok()?;
-    let key = crate::chain::find_key(current, &[], &chain, wanted)?;
+    let key = crate::chain::find_key(current, &[], chain, wanted)?;
     let plaintext = pipeline::open_object(sealed, &pipeline::name_aad(document_id), &key).ok()?;
     // The name is read in place and copied once it is taken, so a refused
     // name leaves no copy behind. The wrapper wipes the opened bytes.
@@ -710,6 +736,92 @@ mod tests {
         );
         assert_eq!(open(&state, &by_writer).as_deref(), Some("Budget"));
         assert_eq!(open(&state, &by_stranger), None, "a stranger to the log");
+    }
+
+    /// Holds `SYNC-302`. The listing wraps the current key, which the kept
+    /// log accepted, and the name was sealed one rotation before it. The
+    /// chain the open of the log kept reaches the older key, so the name
+    /// shows with no request. With no kept chain, or when the kept log
+    /// accepted another key, the name shows none. An open keeps its chain.
+    #[test]
+    fn a_listed_name_sealed_before_the_last_rotation_opens_through_the_kept_chain() {
+        let mut state = SyncState::new(
+            LogicSink::channel().0,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
+        let document_id = Id::<Document>::mint();
+        let writer = MasterSeed::from_array([5; 32]).derive_signing_key();
+        let (old, current) = (DocumentKey::generate(), DocumentKey::generate());
+        let link = pipeline::seal_link(
+            document_id,
+            &old,
+            &current,
+            ambre_protocol::LogHead::EMPTY,
+            &writer,
+        )
+        .unwrap();
+        let name = SyncState::seal_document_name(
+            document_id,
+            &old,
+            &writer,
+            &ambre_core::Validated::<ambre_core::Name>::parse("Budget").unwrap(),
+        )
+        .unwrap();
+        let own = x25519_dalek::StaticSecret::from([1; 32]);
+        let own_pub = crate::sharing::own_exchange_key(&own);
+        let doc_key_enc =
+            ambre_crypto::ecdh::wrap_document_key(&own, &own_pub, document_id, &current).unwrap();
+        let authors = NameAuthors::unchecked(document_id);
+        let chain = crate::chain::Chain::new(document_id, [link.clone()]);
+        let listed = |kept: Option<&DocumentKey>, chain: Option<&crate::chain::Chain>| {
+            ListedName {
+                document_id,
+                doc_key_enc: &doc_key_enc,
+                wrapper_exchange_pub_key: None,
+                name_enc: &name,
+                kept: kept.map(DocumentKey::id),
+                chain,
+                authors: &authors,
+            }
+            .open(&own)
+            .map(|name| name.as_str().to_owned())
+        };
+        assert_eq!(
+            listed(Some(&current), Some(&chain)).as_deref(),
+            Some("Budget")
+        );
+        assert_eq!(listed(Some(&current), None), None, "no kept chain");
+        assert_eq!(
+            listed(Some(&old), Some(&chain)),
+            None,
+            "the kept log accepted another key"
+        );
+        assert_eq!(listed(None, Some(&chain)), None, "a log never kept");
+
+        // The open of the document keeps the links it accepted.
+        state.handle_sync_event(SyncEvent::OpenDocumentReady {
+            document_id,
+            doc_key: current.clone(),
+            snapshot_payload: None,
+            snapshot_id: Id::<Snapshot>::genesis(document_id),
+            covered_seq: Seq::<Relay>::ZERO,
+            held_snapshot: None,
+            doc_type: DocType::Prose,
+            existence: crate::Existence::LocalOnly,
+            signing_keys: Vec::new(),
+            role: Role::Owner,
+            rotation_owed: ambre_core::RotationDebt::Settled,
+            links: vec![link],
+            writers: crate::membership_log::Writers::Unchecked,
+            departed: None,
+        });
+        assert_eq!(
+            state
+                .kept_chains()
+                .get(&document_id)
+                .map(crate::chain::Chain::len),
+            Some(1)
+        );
     }
 
     /// A create answer that names another document, or no document, fails:

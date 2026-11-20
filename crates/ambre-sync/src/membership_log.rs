@@ -131,8 +131,11 @@ impl SpaceWord {
 /// peer applied before it.
 ///
 /// A writer another member revoked keeps its place, under the cap its revoke
-/// names: a delta of it past that clock counts nowhere (`SYNC-300`). The cap
-/// is in the log, so every peer that holds the log gives a delta one verdict.
+/// names: a delta of it past that clock counts nowhere (`SYNC-300`). A later
+/// grant readmits the writer from the head after its own entry alone: a delta
+/// past the cap counts only when it signs a head of the walk at or past that
+/// place (`SYNC-301`). The caps and the heads are in the log, so every peer
+/// that holds the log gives a delta one verdict.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) enum Writers {
     /// No anchored log: a local document, or one older than the log. Its
@@ -144,7 +147,50 @@ pub(crate) enum Writers {
     Granted {
         keys: HashSet<FixedBytes<PublicKey>>,
         caps: HashMap<FixedBytes<PublicKey>, Seq<DeltaAuthor>>,
+        readmitted: Readmitted,
     },
+}
+
+/// The writers a later grant readmitted past a cap, and the heads of the
+/// walk a delta past that cap may sign (`SYNC-301`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Readmitted {
+    /// Each readmission of each key, oldest first.
+    by_key: HashMap<FixedBytes<PublicKey>, Vec<Readmission>>,
+    /// Every head the valid walk passes through, kept only when a key was
+    /// readmitted.
+    heads: Vec<LogHead>,
+}
+
+/// One readmission of a capped writer (`SYNC-301`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Readmission {
+    /// The cap the revoke set: a delta at or below it counts whatever head
+    /// it signs.
+    pub(crate) cap: Seq<DeltaAuthor>,
+    /// The place of the head right after the grant. A delta past the cap
+    /// must sign a head of the walk at or past it.
+    pub(crate) from: Seq<LogPlaces>,
+}
+
+impl Readmitted {
+    /// Whether a delta `signer` signed at `clock` under `head` passes every
+    /// readmission of its key: at or below the cap, or under a head of the
+    /// walk at or past the grant. A writer who stood excluded never read
+    /// that head, since its digest seals the grant itself.
+    fn admits(
+        &self,
+        signer: &FixedBytes<PublicKey>,
+        clock: Seq<DeltaAuthor>,
+        head: LogHead,
+    ) -> bool {
+        self.by_key.get(signer).is_none_or(|readmissions| {
+            readmissions.iter().all(|readmission| {
+                clock <= readmission.cap
+                    || (head.position >= readmission.from && self.heads.contains(&head))
+            })
+        })
+    }
 }
 
 impl Writers {
@@ -153,14 +199,32 @@ impl Writers {
         log.signers().map_or(Self::Unchecked, |keys| Self::Granted {
             keys: keys.clone(),
             caps: log.caps.clone(),
+            readmitted: Readmitted {
+                heads: if log.readmitted.is_empty() {
+                    Vec::new()
+                } else {
+                    log.history.heads.clone()
+                },
+                by_key: log.readmitted.clone(),
+            },
         })
     }
 
     /// The writers `keys`, none of them capped.
     pub(crate) fn granted(keys: HashSet<FixedBytes<PublicKey>>) -> Self {
+        Self::capped(keys, HashMap::new())
+    }
+
+    /// The writers `keys`, each key of `caps` capped at its clock, none of
+    /// them readmitted.
+    pub(crate) fn capped(
+        keys: HashSet<FixedBytes<PublicKey>>,
+        caps: HashMap<FixedBytes<PublicKey>, Seq<DeltaAuthor>>,
+    ) -> Self {
         Self::Granted {
             keys,
-            caps: HashMap::new(),
+            caps,
+            readmitted: Readmitted::default(),
         }
     }
 
@@ -187,15 +251,34 @@ impl Writers {
         }
     }
 
-    /// Whether a delta `signer` signed at `clock` may reach the document. The
-    /// log must grant the signer a writing role, and no revoke may cap it
-    /// below `clock` (`SYNC-300`).
+    /// Whether a delta `signer` signed at `clock` under the log head `head`
+    /// may reach the document. The log must grant the signer a writing role,
+    /// and no revoke may cap it below `clock` (`SYNC-300`). A writer a later
+    /// grant readmitted writes past the cap only under a head at or past
+    /// that grant (`SYNC-301`).
     pub(crate) fn admits_delta(
         &self,
         signer: &FixedBytes<PublicKey>,
         clock: Seq<DeltaAuthor>,
+        head: LogHead,
     ) -> bool {
-        self.admits(signer) && self.cap(signer).is_none_or(|cap| clock <= cap)
+        self.admits(signer)
+            && self.cap(signer).is_none_or(|cap| clock <= cap)
+            && self.readmits(signer, clock, head)
+    }
+
+    /// Whether a delta `signer` signed at `clock` under `head` passes every
+    /// readmission of its key (`SYNC-301`).
+    pub(crate) fn readmits(
+        &self,
+        signer: &FixedBytes<PublicKey>,
+        clock: Seq<DeltaAuthor>,
+        head: LogHead,
+    ) -> bool {
+        match self {
+            Self::Unchecked => true,
+            Self::Granted { readmitted, .. } => readmitted.admits(signer, clock, head),
+        }
     }
 
     /// The cap a revoke set on `signer`, if any (`SYNC-300`).
@@ -208,9 +291,15 @@ impl Writers {
 
     /// Whether a snapshot `signer` signed may stand. A capped writer's
     /// snapshot names no clock, so it is refused whole, and its deltas
-    /// replay under the cap instead (`SYNC-300`).
+    /// replay under the cap instead (`SYNC-300`). A readmitted writer's
+    /// snapshot names no head, so it could hold a write of the exclusion: it
+    /// is refused the same way (`SYNC-301`).
     pub(crate) fn admits_snapshot(&self, signer: &FixedBytes<PublicKey>) -> bool {
-        self.admits(signer) && self.cap(signer).is_none()
+        let readmitted = match self {
+            Self::Unchecked => false,
+            Self::Granted { readmitted, .. } => readmitted.by_key.contains_key(signer),
+        };
+        self.admits(signer) && self.cap(signer).is_none() && !readmitted
     }
 
     /// Whether the writers `later`, which a refresh of the members walked,
@@ -621,6 +710,9 @@ pub(crate) struct Log {
     /// until a later entry grants that key a writing role again
     /// (`SYNC-300`).
     caps: HashMap<FixedBytes<PublicKey>, Seq<DeltaAuthor>>,
+    /// Each cap a later grant lifted, with the place of the head after that
+    /// grant (`SYNC-301`).
+    readmitted: HashMap<FixedBytes<PublicKey>, Vec<Readmission>>,
     /// The key that signed the valid first entry, the creation.
     creator: Option<FixedBytes<PublicKey>>,
     /// Whether the wrapped key carried an anchor at all.
@@ -656,6 +748,7 @@ impl Log {
             bound: HashMap::new(),
             binders: HashMap::new(),
             caps: HashMap::new(),
+            readmitted: HashMap::new(),
             creator: None,
             anchored: anchor.is_some(),
             anchor,
@@ -853,9 +946,15 @@ impl Log {
                 .and_modify(|held| *held = (*held).min(cap))
                 .or_insert(cap);
         }
-        // A later grant of a writing role lifts the cap.
-        if let Some(key) = after {
-            self.caps.remove(&key);
+        // A later grant of a writing role lifts the cap. The writer is
+        // readmitted from the head after this entry alone, so no write of the
+        // exclusion counts (`SYNC-301`).
+        if let Some((key, cap)) = after.and_then(|key| self.caps.remove(&key).map(|cap| (key, cap)))
+        {
+            self.readmitted.entry(key).or_default().push(Readmission {
+                cap,
+                from: entry.position.next(),
+            });
         }
         if before != after {
             let place = entry.position.next();
@@ -1891,7 +1990,12 @@ pub(crate) mod tests {
     }
 
     /// The entry `by` signs revoking `member`, capped at `cap`.
-    fn revoke_capped(log: &mut Vec<MembershipEntry>, by: &Person, member: &Person, cap: u64) {
+    pub(crate) fn revoke_capped(
+        log: &mut Vec<MembershipEntry>,
+        by: &Person,
+        member: &Person,
+        cap: u64,
+    ) {
         let next = LogHead {
             position: place_after(log.len()),
             previous: log.last().and_then(digest),
@@ -1913,6 +2017,7 @@ pub(crate) mod tests {
     /// key it ends. A delta of it at the cap counts and one past it does not.
     /// A snapshot of it counts nowhere. A later invite lifts the cap. A
     /// departure its own member signed caps nothing, whatever it names.
+    /// What the later invite readmits is `SYNC-301`.
     #[test]
     fn a_revoke_caps_the_clock_of_the_writer_it_ends() {
         let (alice, bob, carol) = (Person::new(1), Person::new(2), Person::new(3));
@@ -1927,24 +2032,92 @@ pub(crate) mod tests {
         revoke_capped(&mut log, &alice, &bob, 4);
         let writers = Writers::of(&walk(&log));
         let at = Seq::<DeltaAuthor>::new;
-        assert!(writers.admits_delta(&bob.public(), at(4)), "at the cap");
-        assert!(!writers.admits_delta(&bob.public(), at(5)), "past the cap");
+        let head = walk(&log).walked_head();
+        assert!(
+            writers.admits_delta(&bob.public(), at(4), head),
+            "at the cap"
+        );
+        assert!(
+            !writers.admits_delta(&bob.public(), at(5), head),
+            "past the cap"
+        );
         assert!(!writers.admits_snapshot(&bob.public()));
         assert!(
-            writers.admits_delta(&alice.public(), at(99)),
+            writers.admits_delta(&alice.public(), at(99), head),
             "no cap on Alice"
         );
         assert!(writers.admits_snapshot(&alice.public()));
 
         // Carol leaves on her own and names a cap: it binds nobody.
         revoke_capped(&mut log, &carol, &carol, 0);
-        assert!(Writers::of(&walk(&log)).admits_delta(&carol.public(), at(7)));
+        let head = walk(&log).walked_head();
+        assert!(Writers::of(&walk(&log)).admits_delta(&carol.public(), at(7), head));
 
-        // Bob is invited back: his deltas count again.
+        // Bob is invited back: his deltas count again from the invite on.
         append(&mut log, &alice, &bob, MembershipAct::Invite, Role::Editor);
         let back = Writers::of(&walk(&log));
-        assert!(back.admits_delta(&bob.public(), at(9)));
+        let head = walk(&log).walked_head();
+        assert!(back.admits_delta(&bob.public(), at(9), head));
         assert_eq!(back.cap(&bob.public()), None);
+    }
+
+    /// Holds `SYNC-301` at the walk. Alice revokes Bob at cap 4, then
+    /// invites him back. A delta at or below the cap counts under any head.
+    /// A delta past it counts only under a head of the walk at or past the
+    /// invite: a head of the exclusion, a head the walk never passed and a
+    /// head with a forged digest each refuse it. A second exclusion stacks on
+    /// the first, so each readmission holds on its own.
+    #[test]
+    fn a_re_invite_admits_only_the_writes_past_its_own_entry() {
+        let (alice, bob) = (Person::new(1), Person::new(2));
+        let at = Seq::<DeltaAuthor>::new;
+        let mut log = created(&alice, &bob);
+        revoke_capped(&mut log, &alice, &bob, 4);
+        let excluded = walk(&log).walked_head();
+        append(&mut log, &alice, &bob, MembershipAct::Invite, Role::Editor);
+        let back = walk(&log).walked_head();
+        let writers = Writers::of(&walk(&log));
+        let admits = |writers: &Writers, clock: u64, head: LogHead| {
+            writers.admits_delta(&bob.public(), at(clock), head)
+        };
+        assert!(admits(&writers, 4, LogHead::EMPTY), "history under the cap");
+        assert!(
+            !admits(&writers, 5, excluded),
+            "a write of the exclusion counts nowhere"
+        );
+        assert!(!admits(&writers, 5, LogHead::EMPTY));
+        assert!(admits(&writers, 5, back), "a write past the invite counts");
+        let forged = LogHead {
+            position: back.position,
+            previous: Some(FixedBytes::from_array([0xEE; 32])),
+        };
+        assert!(!admits(&writers, 5, forged), "a forged digest");
+        let beyond = LogHead {
+            position: back.position.next(),
+            previous: back.previous,
+        };
+        assert!(!admits(&writers, 5, beyond), "a head the walk never passed");
+        assert!(
+            writers.admits_delta(&alice.public(), at(99), LogHead::EMPTY),
+            "no readmission binds Alice"
+        );
+
+        // A second exclusion at cap 7, then a second invite.
+        revoke_capped(&mut log, &alice, &bob, 7);
+        let again = walk(&log).walked_head();
+        append(&mut log, &alice, &bob, MembershipAct::Invite, Role::Editor);
+        let back_again = walk(&log).walked_head();
+        let writers = Writers::of(&walk(&log));
+        assert!(admits(&writers, 7, back), "under the second cap");
+        assert!(!admits(&writers, 8, back), "past the second cap, before it");
+        assert!(!admits(&writers, 8, again));
+        assert!(admits(&writers, 8, back_again));
+        assert!(!admits(&writers, 5, excluded), "the first exclusion holds");
+        assert!(
+            !writers.admits_snapshot(&bob.public()),
+            "a snapshot names no head"
+        );
+        assert!(writers.admits_snapshot(&alice.public()));
     }
 
     /// Holds `SYNC-211` at the walk: the writers are the keys a valid entry

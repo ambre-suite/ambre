@@ -915,8 +915,21 @@ impl SyncState {
                     ))
                     .into_mut();
                 doc_state.chain = crate::chain::Chain::new(log_document, links);
+                self.kept_chains
+                    .insert(log_document, doc_state.chain.clone());
                 doc_state.set_signing_keys(signing_keys);
                 doc_state.set_writers(writers);
+                // A reopen resumes from the local copy of an evicted session.
+                // A revoke that capped a writer below a delta that copy
+                // applied leaves a write the log refuses: the document is
+                // read again (`SYNC-300`, `RESID-010`).
+                let resumed_past_cap =
+                    self.resumed_clocks
+                        .remove(&document_id)
+                        .is_some_and(|clocks| {
+                            doc_state.resume_applied(clocks);
+                            doc_state.applied_past_cap(&doc_state.writers)
+                        });
                 doc_state.role = role;
                 // The open checked the key against this departure: a debt it
                 // owes is the relay's word below (`SYNC-222`, `SYNC-223`).
@@ -950,6 +963,21 @@ impl SyncState {
                             document_id,
                             payload,
                             covered_seq,
+                        });
+                    }
+                    // A snapshot past a cap is refused, and the open replays
+                    // every delta from the first one under the cap. The
+                    // deltas past it are signed one by one, so they open on
+                    // their own (`SYNC-300`).
+                    Some(Err(pipeline::PipelineError::PastCap)) => {
+                        crate::log::warning!(
+                            "Sync: the latest snapshot folds a delta past a revoke cap; replaying from the first delta"
+                        );
+                        doc_state.current_snapshot_id = snapshot_id;
+                        doc_state.known_snapshots.insert(snapshot_id);
+                        self.send_to_logic(LogicEvent::SyncWarning {
+                            document_id,
+                            code: SyncWarningCode::WriterRefused,
                         });
                     }
                     Some(Err(e)) => {
@@ -1024,8 +1052,15 @@ impl SyncState {
                 if existence == crate::Existence::LocalOnly {
                     self.flush_pre_session_updates(document_id);
                 }
+                if resumed_past_cap {
+                    crate::log::warning!(
+                        "[Sync] doc={document_id}: the local copy holds a delta past a revoke cap; reading the document again"
+                    );
+                    self.send_to_logic(LogicEvent::DocumentReread { document_id });
+                }
             }
             SyncEvent::OpenDocumentFailed { document_id, cause } => {
+                self.resumed_clocks.remove(&document_id);
                 crate::log::error!("Sync: open document {document_id:?} failed: {cause}");
                 self.send_to_logic(LogicEvent::DocumentOpenFailed { document_id, cause });
             }

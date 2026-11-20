@@ -1073,7 +1073,9 @@ impl SyncState {
         // A listed name opens under the key the walked or kept log of its
         // meta accepted alone (`SYNC-291`), from an author it admits
         // (`SYNC-135`).
-        let kept = self.kept_keys();
+        // A name sealed before the last rotation opens through the chain the
+        // log of its meta kept, with no request (`SYNC-302`).
+        let kept = self.kept_names();
         let authors = self.name_authors();
         crate::spawn(async move {
             let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
@@ -1187,14 +1189,15 @@ fn listed_keys(
 
 /// The names sealed beside each meta of `answer`, opened with the user's
 /// wrapped key of that meta (`SYNC-171`). A name opens only under the key
-/// `kept` holds for it (`SYNC-291`), from an author `authors` admits
+/// `kept` holds for it (`SYNC-291`), or an older key the chain of the meta
+/// kept reaches from it (`SYNC-302`), from an author `authors` admits
 /// (`SYNC-135`). A name that does not open is none, and so is an empty one:
 /// a rename clears a name that way.
 fn open_channel_names(
     answer: &http::MemberChannelsResponse,
     authors: &crate::documents::NameAuthors,
     exchange_key: &StaticSecret,
-    kept: &HashMap<Id<Document>, FixedBytes<KeyId>>,
+    kept: &crate::documents::KeptNames,
 ) -> Vec<ChannelName> {
     let mut names = Vec::new();
     for entry in &answer.channels {
@@ -1206,7 +1209,8 @@ fn open_channel_names(
             doc_key_enc: &entry.doc_key_enc,
             wrapper_exchange_pub_key: entry.wrapper_exchange_pub_key.as_ref(),
             name_enc,
-            kept: kept.get(&entry.meta_id.document_id()).copied(),
+            kept: kept.keys.get(&entry.meta_id.document_id()).copied(),
+            chain: kept.chains.get(&entry.meta_id.document_id()),
             authors,
         };
         match listed.open(exchange_key) {
@@ -2463,6 +2467,10 @@ pub(crate) mod tests {
             .into_iter()
             .map(|meta| (meta.document_id(), key.id()))
             .collect();
+        let kept = crate::documents::KeptNames {
+            keys: kept,
+            chains: HashMap::new(),
+        };
         // No log of a listed meta was walked: no name shows (`SYNC-135`).
         let unwalked = open_channel_names(&answer, &state.name_authors(), &own, &kept);
         assert!(unwalked.is_empty(), "{unwalked:?}");
@@ -2484,9 +2492,19 @@ pub(crate) mod tests {
         // `SYNC-291`: a meta this client never walked shows no name, nor
         // one whose log accepted another key. The relay can wrap a key of
         // its own, so the copy alone names nothing.
-        assert!(open_channel_names(&answer, &authors, &own, &HashMap::new()).is_empty());
-        let moved: HashMap<Id<Document>, FixedBytes<KeyId>> =
-            [(named.document_id(), DocumentKey::generate().id())].into();
+        assert!(
+            open_channel_names(
+                &answer,
+                &authors,
+                &own,
+                &crate::documents::KeptNames::default()
+            )
+            .is_empty()
+        );
+        let moved = crate::documents::KeptNames {
+            keys: [(named.document_id(), DocumentKey::generate().id())].into(),
+            chains: HashMap::new(),
+        };
         assert!(open_channel_names(&answer, &authors, &own, &moved).is_empty());
         // Each key opens, and one that does not is left out.
         // Each keeps the last number of its meta, none where none is listed.

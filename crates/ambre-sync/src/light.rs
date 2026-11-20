@@ -87,6 +87,10 @@ pub(crate) struct LightSubscription {
     asked: HashSet<FixedBytes<KeyId>>,
     /// Whose summaries count (`RESID-032`).
     writers: LightWriters,
+    /// The clocks the evicted copy applied. The reopen resumes from that
+    /// copy, so a revoke that caps one of them reads the document again
+    /// (`SYNC-300`).
+    applied: crate::Applied,
 }
 
 impl LightSubscription {
@@ -111,6 +115,7 @@ impl LightSubscription {
             unopened_from: None,
             asked: HashSet::new(),
             writers,
+            applied: crate::Applied::default(),
         }
     }
 
@@ -120,6 +125,7 @@ impl LightSubscription {
     fn of(doc: SyncDocumentState, applied: Seq<Relay>) -> Self {
         Self {
             on_relay: doc.existence,
+            applied: doc.take_applied(),
             ..Self::new(
                 doc.doc_key,
                 doc.doc_type,
@@ -500,7 +506,13 @@ impl SyncState {
     /// Takes the light subscription of a document being reopened: its kind
     /// and the horizon the reopen resumes after.
     pub(crate) fn take_light(&mut self, document_id: Id<Document>) -> Option<Seq<Relay>> {
-        self.light.remove(&document_id).map(|light| light.horizon)
+        let light = self.light.remove(&document_id)?;
+        // The open that resumes from the copy checks its clocks against the
+        // caps of the log it walks (`SYNC-300`).
+        if !light.applied.is_empty() {
+            self.resumed_clocks.insert(document_id, light.applied);
+        }
+        Some(light.horizon)
     }
 
     /// The light subscriptions the socket subscribes and replays, with the
@@ -924,6 +936,54 @@ mod tests {
         );
         assert_eq!(state.take_light(document_id), Some(Seq::<Relay>::new(5)));
         assert_eq!(state.take_light(document_id), None);
+    }
+
+    /// Holds `SYNC-300` at a reopen. The evicted session applied Bob's
+    /// clock 2, and a revoke capped him at 1 while the document was light.
+    /// The reopen resumes from the local copy, so the open that walks the
+    /// cap reads the document again. A walk with no cap reads nothing.
+    #[test]
+    fn a_reopen_past_a_revoke_cap_reads_the_document_again() {
+        use crate::membership_log::Writers;
+        let bob = FixedBytes::<PublicKey>::from_array([0x52; 32]);
+        for (cap, reread) in [(Some(1), true), (Some(2), false), (None, false)] {
+            let (mut state, rx, document_id, doc_key, snapshot_id) =
+                released(ambre_bus::Seq::<ambre_bus::Relay>::new(9));
+            // The clocks the evicted session applied travel with its light
+            // subscription.
+            if let Some(light) = state.light.get_mut(&document_id) {
+                light.applied.clocks.insert(bob, Seq::<DeltaAuthor>::new(2));
+            }
+            assert_eq!(state.take_light(document_id), Some(Seq::<Relay>::new(9)));
+            drain(&rx);
+            let writers = Writers::capped(
+                HashSet::from([bob]),
+                cap.map(|cap| (bob, Seq::<DeltaAuthor>::new(cap)))
+                    .into_iter()
+                    .collect(),
+            );
+            state.handle_sync_event(SyncEvent::OpenDocumentReady {
+                document_id,
+                doc_key,
+                snapshot_payload: None,
+                snapshot_id,
+                covered_seq: Seq::<Relay>::new(9),
+                held_snapshot: None,
+                doc_type: DocType::Trame,
+                existence: crate::Existence::OnRelay,
+                signing_keys: Vec::new(),
+                role: ambre_bus::Role::Owner,
+                rotation_owed: ambre_core::RotationDebt::Settled,
+                links: Vec::new(),
+                writers,
+                departed: None,
+            });
+            let read_again = drain(&rx).iter().any(
+                |e| matches!(e, LogicEvent::DocumentReread { document_id: d } if *d == document_id),
+            );
+            assert_eq!(read_again, reread, "cap {cap:?}");
+            assert!(!state.resumed_clocks.contains_key(&document_id));
+        }
     }
 
     /// The horizon never passes what the session itself received.
