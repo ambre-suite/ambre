@@ -192,8 +192,8 @@ impl ProseState {
                 Count::of(missing),
             );
         }
-        let title = doc::read_title(&self.doc);
-        let stored = doc::read_locale(&self.doc);
+        let title = doc::read_title(&self.doc, &self.roots);
+        let stored = doc::read_locale(&self.doc, &self.roots);
         let document_locale =
             DocumentLocale::from_register(stored.as_ref().map(ambre_core::Validated::as_str));
         let mut document = PrintDocument::new(PrintPage {

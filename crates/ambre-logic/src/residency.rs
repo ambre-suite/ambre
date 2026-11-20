@@ -62,7 +62,7 @@ impl LogicState {
     }
 
     /// Reads `document_id` again from the relay, as no copy of it existed
-    /// (`SYNC-297`). Its state holds a delta past the cap of a revoke, which
+    /// (`SYNC-300`). Its state holds a delta past the cap of a revoke, which
     /// no merge takes out. So the state and the local copy go, and the open
     /// starts over: the relay replays every delta, and Sync refuses those
     /// past the cap. A document this thread does not hold reads nothing.

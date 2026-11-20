@@ -1124,6 +1124,46 @@ mod tests {
         );
     }
 
+    /// `CALL-156`, audit `P60`: a fresh TURN credential the SFU answers a renewal with reaches
+    /// the UI thread as TURN servers, each one, after the first. So the page restarts ICE
+    /// with it. The Sync worker sends the SFU nothing back for it.
+    #[test]
+    fn a_fresh_credential_from_the_sfu_reaches_the_page_each_time() {
+        let alice = Person::new(1);
+        let (mut state, _, port, rx) = worker_heard(&alice);
+        state.join_call(TARGET, META, port, Opening::Join);
+        state.call_log(META, Some(log_of(&alice)));
+        state.call_relay(CallServerMsg::Admitted {
+            admission: ambre_core::Credential::new("admission".to_owned()),
+            sfu: Some(Validated::parse("wss://sfu.example/call").expect("an address")),
+            sender: ambre_core::Seq::new(3),
+            roster: Vec::new(),
+        });
+        let mut ices = 0;
+        for _ in 0..3 {
+            state.call_sfu(SfuMsg::Ice(Vec::new()));
+            state.call_relay(CallServerMsg::Renewed(ambre_core::Credential::new(
+                "renewed".to_owned(),
+            )));
+        }
+        while let Ok(event) = rx.try_recv() {
+            if matches!(event, LogicEvent::Call(ambre_bus::CallSignal::Ice(_))) {
+                ices += 1;
+            }
+        }
+        assert_eq!(ices, 3, "a fresh credential missed the page");
+        let link = state.call.as_ref().expect("a call");
+        assert!(
+            link.sent
+                .sfu
+                .iter()
+                .all(|msg| matches!(msg, SfuMsg::Admission(_))),
+            "the SFU socket carried {:?}",
+            link.sent.sfu
+        );
+        assert_eq!(link.sent.sfu.len(), 4, "the admission, then three renewals");
+    }
+
     /// `CALL-060`: a change of the members of the channel of the call, or a rotation of its
     /// key, reads the log again. A change of another document reads nothing.
     #[test]

@@ -24,6 +24,7 @@
 | `docfile` | The file a user saves a document into, and opens back. | implemented | 22 |  |
 | `fixtures` | Ambre documents in known states, built from a seed instead of by hand. | implemented | 37 |  |
 | `high-density` | A screen with two or more physical pixels per CSS pixel. | implemented | 10 |  |
+| `key-rotation` | Taking someone off a document means they cannot read what is written after it. | implemented | 39 |  |
 | `kinetic-scroll` | A finger moves the view the same way in every editor. | implemented | 15 |  |
 | `launcher` | The home screen at the root of the site: sign in, then every document you can open, whatever kind it is. | implemented | 53 |  |
 | `locale` | A document carries one language tag, so two collaborators on differently configured machines read the same number, the same currency and the same date. | implemented | 23 |  |
@@ -31,21 +32,21 @@
 | `pdf-export` | A user hands a document to someone who has no Ambre, and the file looks like the screen. | implemented | 20 |  |
 | `residency` | Which documents a client holds, in memory and on disk, and what a document it does not hold still costs. | implemented | 32 |  |
 | `schema-version` | What a document looks like once it reaches the disk, and how a later binary knows it can still read it. | implemented | 20 |  |
+| `sealed-envelope` | Nothing a user writes leaves the browser readable. | implemented | 31 |  |
 | `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 33 |  |
 | `text-input` | A text area that shows nothing, sits under the caret, and is the real keyboard focus of the canvas. | implemented | 15 |  |
 | `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 23 |  |
 | `accessibility` | What a screen reader and a keyboard reach. | partial | 15 |  |
 | `adaptive-layout` | How the interface changes with the width of the window. | partial | 9 |  |
-| `call-media` | The audio and video of a call, encrypted end to end. | partial | 153 |  |
+| `call-media` | The audio and video of a call, encrypted end to end. | partial | 158 |  |
 | `chrome` | Everything around the document: the frame the canvas sits in, the menus, the modals and the toasts. | partial | 32 |  |
 | `clipboard` | Copy, cut and paste, the same way in every editor. | partial | 20 |  |
 | `drawing-surface` | The dozen calls a renderer may make: a rectangle, a line, a path, a glyph run, an image, a clip, a transform. | partial | 18 |  |
 | `find` | A user types a word and the application takes them to it, wherever it is -- including far past the edge of the screen. | partial | 15 |  |
 | `frame` | One frame, from the browser's tick to the pixels on the screen. | partial | 25 | 2 |
 | `interop` | A user brings a file in, or takes a document out, and reads the conversion report: what the file kept and what it lost. | partial | 26 | 2 |
-| `key-rotation` | Taking someone off a document means they cannot read what is written after it. | partial | 39 |  |
 | `key-verification` | Before a document is shared with someone, their key is shown as a short readable fingerprint and the user confirms it. | partial | 21 |  |
-| `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | partial | 95 |  |
+| `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | partial | 97 |  |
 | `message-bus` | The contract the three threads talk over. | partial | 46 |  |
 | `object-store` | Everything too large for a wire message lives in object storage, sealed. | partial | 24 |  |
 | `op-authorship` | Who wrote each operation of a document. | partial | 37 |  |
@@ -53,7 +54,6 @@
 | `presence` | Where the other collaborators are, right now: a position in each peer's colour, their name beside it, and what they hold selected. | partial | 17 |  |
 | `profile` | The avatar that stands for a user in every application: a picture the user chooses, or their initials on their identity colour. | partial | 9 |  |
 | `render-assets` | What the renderer loads before it can draw anything: the fonts a script needs, the glyphs rasterized from them, the icons, the embedded images. | partial | 26 |  |
-| `sealed-envelope` | Nothing a user writes leaves the browser readable. | partial | 30 |  |
 | `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | partial | 83 |  |
 | `server` | The one process every client talks to. | partial | 134 | 1 |
 | `sync` | The one part of the client that talks to the network. | partial | 89 |  |
@@ -65,4 +65,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**49 features: 19 implemented, 26 partial, 4 design-only. 1730 contract rows, 14 loose.**
+**49 features: 21 implemented, 24 partial, 4 design-only. 1738 contract rows, 14 loose.**

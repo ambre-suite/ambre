@@ -1196,12 +1196,15 @@ mod tests {
         });
         let link =
             |c: &web_sys::Element| c.query_selector(".ambre-signin-recover").unwrap().is_some();
-        assert!(
+        // The name field exists only in a build with the development
+        // sign-in (`ZK-045`).
+        assert_eq!(
             container
                 .query_selector(".ambre-signin-input")
                 .unwrap()
                 .is_some(),
-            "the sign-in field shows signed out"
+            cfg!(feature = "dev-login"),
+            "the sign-in field follows the development sign-in signed out"
         );
         assert!(
             container

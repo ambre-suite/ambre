@@ -144,7 +144,7 @@ impl ProseState {
                 if let Some(LoroValue::String(note)) =
                     attributes.get(crate::mark::MarkRoot::Footnote.as_str())
                     && let Some(uuid) = Id::<Footnote>::parse_str(note.as_str()).ok()
-                    && let Some(block) = crate::note::block(&self.doc, &uuid)
+                    && let Some(block) = crate::note::block(&self.doc, &self.roots, &uuid)
                 {
                     notes.push(block);
                 }

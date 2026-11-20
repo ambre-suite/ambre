@@ -845,7 +845,7 @@ impl LogicState {
             }
             LogicEvent::KeyRotated { document_id } => self.route(|m| m.key_rotated(document_id)),
             // A revoke capped a writer below a delta the document applied
-            // (`SYNC-297`).
+            // (`SYNC-300`).
             LogicEvent::DocumentReread { document_id } => self.reread(document_id),
             LogicEvent::ConverterFetched { family, module } => {
                 self.converter_fetched(family, module);
@@ -1870,7 +1870,7 @@ mod tests {
         );
     }
 
-    /// Holds `SYNC-297` on the Logic side: a document read again loses its
+    /// Holds `SYNC-300` on the Logic side: a document read again loses its
     /// state and its local copy, then closes and opens again in Sync, so
     /// the relay replays it under the cap. One this thread does not hold
     /// reads nothing.

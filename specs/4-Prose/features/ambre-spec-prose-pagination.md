@@ -65,7 +65,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-078` | `POST` | Placement MUST resolve a constraint it cannot meet by moving forward: it MUST NOT revisit a page it has already emitted. | this spec section 2 | proptest -- `ambre_prose::layout::place::properties::pages_only_ever_move_forward`; `ambre_prose::layout::place::tests::placement_never_goes_back_to_a_page_it_left` | none | verified |
 | `PROSE-079` | `FRAME` | Laying the document out MUST NOT write to the document it measures. | this spec section 2 | `ambre_prose::layout::pass::tests::measuring_the_document_writes_nothing_to_it` -- it compares the whole document before and after, so a read that attaches a container fails it | none | verified |
 | `PROSE-141` | `FRAME` | A read of the document MUST leave its frontiers and its pending operations as they were, on a document with operations and no block tree too. | this spec section 2; `ambre-spec-prose-schema.md section 4` | `ambre_prose::doc::tests::a_read_of_a_document_with_no_tree_leaves_its_frontiers_and_its_pending_operations` -- a committed write and a write still in its transaction, then the tree read and the bands read | none | verified |
-| `PROSE-142` | `FRAME` | A read of the document MUST NOT attach a root container it did not find, the block tree included. | this spec section 2; `ambre-spec-prose-schema.md section 4` | not built | unbuilt -- lands with the `A Prose read writes nothing into the document` Story (`ambre-roadmap.md` MVP). Loro 1.13.6 reads the presence of a root only by attaching it or by building its whole value, which `PROSE-140` refuses | unimplemented |
+| `PROSE-142` | `FRAME` | A read of the document MUST NOT attach a root container it did not find, the block tree included. | this spec section 2; `ambre-spec-prose-schema.md section 4` | `ambre_prose::logic::roots::tests::a_read_of_a_document_with_no_tree_attaches_no_root` -- every reader of the tree and of `meta` on a document with neither: the frontiers, the pending operations, the roots of the state and the encoded bytes stay as they were; `::the_roots_follow_an_import_that_adds_the_tree` -- an import and a local commit add the tree and `meta`, and a map under the name of the tree does not; `::the_roots_follow_a_snapshot_import` | none | verified |
 | `PROSE-139` | `POST` | A full recomputation MUST drop the run of a block once it has measured it, when the block cannot reach the pages held or the layout before placed it away from them. | this spec section 2 | `ambre_prose::layout::reflow::held::a_full_recomputation_keeps_the_runs_near_the_pages_shown_alone` -- once with no layout before, once from the middle of a layout | none | verified |
 
 ### 1.3 Reflow after an edit
@@ -113,10 +113,10 @@ status values are normative in `ambre-spec-template.md`.
   section 4 says why.
 * **Boundary.** none: pagination runs on the Logic thread, reads the document and returns a value.
   `PROSE-025` (`features/ambre-spec-prose-engine.md section 1`) bans a network call from this crate.
-* **Verification.** 58 `verified`, 1 `unimplemented`. The five footnote rows run through the engine,
-  since a note is written by its command. Termination rests on `PROSE-078` and `PROSE-017`, which a
-  property over generated documents holds together. Two bans are structural, held by a test that
-  reads the module's own source. The schema holds `PROSE-065`.
+* **Verification.** 59 `verified`. The five footnote rows run through the engine, since a note is
+  written by its command. Termination rests on `PROSE-078` and `PROSE-017`, which a property over
+  generated documents holds together. Two bans are structural, held by a test that reads the
+  module's own source. The schema holds `PROSE-065`.
 
 ---
 
@@ -379,6 +379,10 @@ a tree under the name `meta`. The read of `meta` takes the map root by its typed
 Loro builds no value of that tree (`PROSE-143`).
 `ambre_prose::logic::ProseState::paginate` is the one way in, so the document is measured where it
 lives.
+
+**A read attaches nothing.** Loro 1.13 sees a root only by opening it, which attaches it, or by
+building its value (`PROSE-140`). The Logic thread keeps `ambre_prose::logic::Roots`, the roots its
+commits and imports reached, and a reader asks it first (`PROSE-142`).
 
 `pass` runs pass 0 too: it measures the bands and reads the note plan before placement. Pass 3 is
 in the view. `ambre_prose::view::hit` places the footnote band from the foot of the body

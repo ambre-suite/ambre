@@ -595,8 +595,8 @@ impl Sfu {
             .iter()
             .any(|m| m.room == room && !m.tracks_in.is_empty());
         let id = self.issuer.issue();
-        // str0m draws the fragment at the build, and the SFU restarts no ICE, so it holds
-        // for the life of the connection.
+        // str0m draws the fragment at the build. An offer that restarts ICE draws another one,
+        // and [`Sfu::accept_offer`] moves the index to it.
         let ufrag = Validated::<Ufrag>::parse(rtc.direct_api().local_ice_credentials().ufrag).ok();
         if let Some(ufrag) = &ufrag {
             self.ufrags.insert(ufrag.clone(), id);
@@ -700,6 +700,10 @@ impl Sfu {
     /// Answers a later offer of participant `id`, which adds its screen section at its first
     /// share (`CALL-112`). An offer that crosses an unanswered offer of the SFU gets no answer
     /// (`CALL-114`). The page rolls its offer back, answers the SFU, then offers again.
+    ///
+    /// An offer that restarts ICE, under a fresh TURN credential, gives the connection a fresh
+    /// local fragment. The index of fragments follows it, so a check from the new allocation
+    /// finds the connection (`CALL-155`). The old fragment names nothing from then on.
     pub fn accept_offer(&mut self, id: Seq<Participant>, offer: SdpOffer) -> Option<SdpAnswer> {
         let member = self.members.iter_mut().find(|m| m.id == id)?;
         if member.pending.is_some() {
@@ -708,6 +712,14 @@ impl Sfu {
         let offer = without_candidates(&offer).ok()?;
         let answer = member.rtc.sdp_api().accept_offer(offer).ok()?;
         member.touched = true;
+        let fresh =
+            Validated::<Ufrag>::parse(member.rtc.direct_api().local_ice_credentials().ufrag).ok();
+        if let Some(fresh) = fresh
+            && self.ufrags.get(&fresh) != Some(&id)
+        {
+            self.ufrags.retain(|_, owner| *owner != id);
+            self.ufrags.insert(fresh, id);
+        }
         Some(answer)
     }
 

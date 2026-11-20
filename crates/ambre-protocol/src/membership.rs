@@ -173,7 +173,7 @@ pub struct MembershipEntry {
     /// The member who made the change and signed it.
     pub author: Id<User>,
     /// On a revoke, the highest clock of the revoked member's deltas its
-    /// author applied (`SYNC-297`). A delta of that member past the cap
+    /// author applied (`SYNC-300`). A delta of that member past the cap
     /// counts nowhere. `None` on every other act.
     pub cap: Option<Seq<DeltaAuthor>>,
     /// The author's signature over [`MembershipEntry::signed_bytes`]. It

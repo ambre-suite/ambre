@@ -98,7 +98,7 @@ impl ProseState {
     pub fn settle_toc(&mut self) -> Vec<ProseEvent> {
         let _ = self.paginate(&[]);
         if let Some(paginator) = self.paginator.as_mut() {
-            let _ = paginator.settle_toc(&self.doc);
+            let _ = paginator.settle_toc(&self.doc, &self.roots);
         }
         self.stamp_pages();
         let tree = doc::blocks(&self.doc);
@@ -140,7 +140,7 @@ impl ProseState {
     /// a layout (`PROSE-FEAT-125`). Nothing is written, so no delta leaves.
     pub(super) fn count_words(&mut self) -> ProseOutcome {
         let pages = self.word_count.pages;
-        self.word_count = count::compute_word_count(&self.doc);
+        self.word_count = count::compute_word_count(&self.doc, &self.roots);
         self.word_count.pages = pages;
         let mut display = vec![ProseEvent::WordCountUpdated {
             count: self.word_count,
@@ -149,7 +149,7 @@ impl ProseState {
         // A deletion orphans a note or a thread, and a reference's target
         // moves. One walk per pause, never one per keystroke.
         display.push(ProseEvent::FootnotesUpdated {
-            notes: crate::note::entries(&self.doc),
+            notes: crate::note::entries(&self.doc, &self.roots),
         });
         display.push(ProseEvent::CommentsUpdated {
             threads: crate::comment::threads(&self.doc),
@@ -551,7 +551,7 @@ mod tests {
             .expect("the recount is due");
         let outcome = state.handle_command(command);
         show(&mut view, &outcome.display);
-        let text = compute_word_count(state.document());
+        let text = compute_word_count(state.document(), state.roots());
         assert_eq!(view.word_count.words, text.words);
         assert_eq!(view.word_count.words.get(), 3);
         assert_eq!(view.word_count.characters, text.characters);

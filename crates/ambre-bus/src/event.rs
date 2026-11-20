@@ -189,7 +189,7 @@ pub enum LogicEvent {
     },
 
     /// The log capped a writer below a delta the document applied: the state
-    /// holds a write the log refuses (`SYNC-297`). The Logic thread drops the
+    /// holds a write the log refuses (`SYNC-300`). The Logic thread drops the
     /// document and its local copy, and reads it again from the relay, where
     /// the cap holds from the start.
     DocumentReread { document_id: Id<Document> },

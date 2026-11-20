@@ -11,6 +11,10 @@
 //! renewal on the same socket, and the SFU ends a seat whose last admission expired. It
 //! seats one connection per member of a room: a join of a member ends the older seat.
 //!
+//! A renewal that keeps its seat also answers a fresh TURN credential once the last one nears
+//! its expiry (audit `P60`). The page restarts ICE with it, so its next allocation opens under
+//! a credential coturn still admits (`CALL-154`).
+//!
 //! One socket costs the SFU a bounded share (audit `N39`). A message past
 //! [`SIGNAL_MESSAGE_MAX`] closes the socket. An admission serves one socket alone, so it mints
 //! one TURN credential. A socket waits [`ADMISSION_DEADLINE`] for its admission, then as long
@@ -95,8 +99,8 @@ enum Command {
     /// A later offer of the participant, which adds its screen section (`CALL-112`).
     Offer(Seq<Participant>, SdpOffer),
     /// A renewal of the participant's admission, verified: it keeps the seat while it names
-    /// the seat (audit `N25`).
-    Renew(Seq<Participant>, Claims),
+    /// the seat (audit `N25`). The media loop answers whether it kept it.
+    Renew(Seq<Participant>, Claims, oneshot::Sender<Renewal>),
     Leave(Seq<Participant>),
 }
 
@@ -136,6 +140,15 @@ enum Freshness {
     Spent,
     /// No socket spent it before: this socket holds it now.
     Fresh,
+}
+
+/// What a verified renewal did to the seat of its socket.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Renewal {
+    /// The renewal names another seat, or the seat ended: it keeps nothing.
+    Ignored,
+    /// The renewal names the seat, which lives to its expiry now.
+    Kept,
 }
 
 /// The most datagrams one turn of the media loop reads before it polls the SFU.
@@ -249,10 +262,12 @@ async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver
                     }
                     occupancy(&sessions);
                 }
-                Some(Command::Renew(id, claims)) => {
+                Some(Command::Renew(id, claims, kept)) => {
                     // A renewal keeps the seat it names alone. One for another room,
                     // participant, member or sender index keeps nothing (audit `N25`).
+                    let mut renewal = Renewal::Ignored;
                     if let Some(session) = sessions.iter_mut().find(|s| s.id == id && s.renewed_by(&claims)) {
+                        renewal = Renewal::Kept;
                         session.expires = session.expires.max(claims.expires);
                         // The token of a renewal admits the participant too: it stays spent
                         // while it is valid, so it seats no second connection (`CALL-117`).
@@ -262,6 +277,7 @@ async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver
                             }
                         }
                     }
+                    let _ = kept.send(renewal);
                 }
                 Some(Command::Answer(id, answer)) => sfu.accept_answer(id, answer),
                 Some(Command::Share(id)) => sfu.share_started(Instant::now(), id),
@@ -391,6 +407,14 @@ async fn next_wire(socket: &mut WebSocket) -> Option<Option<Wire>> {
     }
 }
 
+/// Sends `wire` on `socket` as JSON text. Answers whether it left.
+async fn send_wire(socket: &mut WebSocket, wire: &Wire) -> bool {
+    match serde_json::to_string(wire) {
+        Ok(text) => socket.send(Message::Text(text.into())).await.is_ok(),
+        Err(_) => false,
+    }
+}
+
 /// One browser's signalling: its admission, the TURN servers, its offer, then the SFU's
 /// offers and its answers. A socket without a valid admission closes before the SFU reads an
 /// offer.
@@ -420,16 +444,16 @@ async fn session(mut socket: WebSocket, gate: Gate) {
         SFU.admissions.inc(Admission::Refused);
         return;
     }
+    let minted = unix_now();
+    // When the last credential the socket read expires. A renewal near it mints a fresh one.
+    let mut held = gate.admitting.turn.as_ref().map(|turn| turn.expiry(minted));
     let ice = gate
         .admitting
         .turn
         .iter()
-        .map(|turn| turn.credential(admission.participant, unix_now()))
+        .map(|turn| turn.credential(admission.participant, minted))
         .collect();
-    let Ok(text) = serde_json::to_string(&Wire::Ice(ice)) else {
-        return;
-    };
-    if socket.send(Message::Text(text.into())).await.is_err() {
+    if !send_wire(&mut socket, &Wire::Ice(ice)).await {
         return;
     }
     // An admitted socket that sends no offer within the deadline closes (audit `N39`).
@@ -485,7 +509,24 @@ async fn session(mut socket: WebSocket, gate: Gate) {
                     let Ok(claims) = admitting.key.admit(&token, unix_now()) else {
                         continue;
                     };
-                    if commands.send(Command::Renew(id, claims)).await.is_err() {
+                    let (kept, renewal) = oneshot::channel();
+                    if commands.send(Command::Renew(id, claims, kept)).await.is_err() {
+                        break;
+                    }
+                    // A renewal that kept the seat answers a fresh credential once the last
+                    // one nears its expiry, under the pseudonym of the seat (`CALL-154`).
+                    let kept = renewal.await == Ok(Renewal::Kept);
+                    let now = unix_now();
+                    let fresh = match (admitting.turn.as_ref(), held) {
+                        (Some(turn), Some(last)) if kept && turn.is_due(last, now) => {
+                            held = Some(turn.expiry(now));
+                            Some(turn.credential(admission.participant, now))
+                        }
+                        _ => None,
+                    };
+                    if let Some(fresh) = fresh
+                        && !send_wire(&mut socket, &Wire::Ice(vec![fresh])).await
+                    {
                         break;
                     }
                 }

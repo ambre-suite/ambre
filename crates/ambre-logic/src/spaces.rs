@@ -561,8 +561,11 @@ mod tests {
         assert!(
             matches!(
                 sent.as_slice(),
-                [SyncCommand::OpenChannel { channel_id: id, listed_in: Some(of) }]
-                    if *id == channel_id && *of == space_id
+                [SyncCommand::OpenChannel {
+                    channel_id: id,
+                    listed_in: Some(of),
+                    catalogue_key: Some(_),
+                }] if *id == channel_id && *of == space_id
             ),
             "a listed channel's log admits self-joins"
         );
@@ -653,6 +656,7 @@ mod tests {
                 SyncCommand::MarkChannelListed {
                     channel_id,
                     space_id,
+                    ..
                 } => Some((*channel_id, *space_id)),
                 _ => None,
             })

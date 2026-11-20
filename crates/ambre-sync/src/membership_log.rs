@@ -131,7 +131,7 @@ impl SpaceWord {
 /// peer applied before it.
 ///
 /// A writer another member revoked keeps its place, under the cap its revoke
-/// names: a delta of it past that clock counts nowhere (`SYNC-297`). The cap
+/// names: a delta of it past that clock counts nowhere (`SYNC-300`). The cap
 /// is in the log, so every peer that holds the log gives a delta one verdict.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) enum Writers {
@@ -189,7 +189,7 @@ impl Writers {
 
     /// Whether a delta `signer` signed at `clock` may reach the document: the
     /// log granted the signer a writing role, and no revoke capped it below
-    /// `clock` (`SYNC-297`).
+    /// `clock` (`SYNC-300`).
     pub(crate) fn admits_delta(
         &self,
         signer: &FixedBytes<PublicKey>,
@@ -198,7 +198,7 @@ impl Writers {
         self.admits(signer) && self.cap(signer).is_none_or(|cap| clock <= cap)
     }
 
-    /// The cap a revoke set on `signer`, if any (`SYNC-297`).
+    /// The cap a revoke set on `signer`, if any (`SYNC-300`).
     pub(crate) fn cap(&self, signer: &FixedBytes<PublicKey>) -> Option<Seq<DeltaAuthor>> {
         match self {
             Self::Unchecked => None,
@@ -208,7 +208,7 @@ impl Writers {
 
     /// Whether a snapshot `signer` signed may stand. A capped writer's
     /// snapshot names no clock, so it is refused whole, and its deltas
-    /// replay under the cap instead (`SYNC-297`).
+    /// replay under the cap instead (`SYNC-300`).
     pub(crate) fn admits_snapshot(&self, signer: &FixedBytes<PublicKey>) -> bool {
         self.admits(signer) && self.cap(signer).is_none()
     }
@@ -619,7 +619,7 @@ pub(crate) struct Log {
     binders: HashMap<FixedBytes<PublicKey>, HashSet<FixedBytes<PublicKey>>>,
     /// The cap the latest revoke another member signed set on each key,
     /// until a later entry grants that key a writing role again
-    /// (`SYNC-297`).
+    /// (`SYNC-300`).
     caps: HashMap<FixedBytes<PublicKey>, Seq<DeltaAuthor>>,
     /// The key that signed the valid first entry, the creation.
     creator: Option<FixedBytes<PublicKey>>,
@@ -839,7 +839,7 @@ impl Log {
     fn apply(&mut self, entry: &MembershipEntry) {
         let before = self.writer_key(entry.member);
         // A revoke another member signed caps the key it ends, at the clock
-        // its author named (`SYNC-297`). A departure is signed by its own
+        // its author named (`SYNC-300`). A departure is signed by its own
         // member, whose word caps nothing.
         let capped = (entry.act == MembershipAct::Revoke && entry.author != entry.member)
             .then(|| self.held.get(&entry.member).map(|held| held.key))
@@ -1215,7 +1215,7 @@ pub(crate) fn sign(
 }
 
 /// Signs `draft` as [`sign`] does, with `cap`, the highest clock of the
-/// revoked member's deltas the author applied, on a revoke (`SYNC-297`).
+/// revoked member's deltas the author applied, on a revoke (`SYNC-300`).
 ///
 /// # Errors
 ///
@@ -1909,7 +1909,7 @@ pub(crate) mod tests {
         log.push(sign_capped(draft, cap, next, by.id, &by.key).unwrap());
     }
 
-    /// Holds `SYNC-297` at the walk. A revoke another member signed caps the
+    /// Holds `SYNC-300` at the walk. A revoke another member signed caps the
     /// key it ends: a delta of it at the cap counts, one past it does not,
     /// and a snapshot of it counts nowhere. A later invite lifts the cap. A
     /// departure its own member signed caps nothing, whatever it names.

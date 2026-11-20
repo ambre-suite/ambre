@@ -896,6 +896,8 @@ impl SyncState {
                 departed,
             } => {
                 let log_document = self.log_document(document_id);
+                // A listed name is checked against this walk (`SYNC-135`).
+                self.walked_writers.insert(log_document, writers.clone());
                 let doc_state = self
                     .documents
                     .entry(document_id)
@@ -1380,8 +1382,10 @@ impl SyncState {
                 link,
             } => {
                 // A revoke by an owner is no departure (`SYNC-223`).
+                let key = new_doc_key.id();
                 self.install_key(document_id, new_doc_key, [link], None);
                 self.send_to_logic(LogicEvent::KeyRotated { document_id });
+                self.snapshot_after_rotation(document_id, key);
                 self.reply(id, RestEvent::RevocationComplete { document_id });
                 // The relay may push no frame of the removal: the call of the channel reads
                 // the log this client just signed into (`CALL-136`).
@@ -1407,8 +1411,10 @@ impl SyncState {
                 link,
                 departed,
             } => {
+                let key = new_doc_key.id();
                 self.install_key(document_id, new_doc_key, [link], departed);
                 self.send_to_logic(LogicEvent::KeyRotated { document_id });
+                self.snapshot_after_rotation(document_id, key);
             }
             SyncEvent::DebtGone { document_id } => self.fetch_rotated_key(document_id),
             SyncEvent::DebtUnsettled {
@@ -1448,6 +1454,7 @@ impl SyncState {
                 // directory held changes nothing (`SYNC-037`).
                 let mut word_changed = false;
                 let mut reread = false;
+                let log_document = self.log_document(document_id);
                 let fresh = match self.documents.get_mut(&document_id) {
                     Some(doc_state) if asked > doc_state.directory_held => {
                         doc_state.directory_held = asked;
@@ -1459,10 +1466,13 @@ impl SyncState {
                             // A revoke that caps a writer below a delta this
                             // document applied leaves a write the log refuses
                             // in its state: the document is read again
-                            // (`SYNC-297`).
+                            // (`SYNC-300`).
                             if doc_state.applied_past_cap(&writers) {
                                 reread = true;
                             }
+                            // A listed name is checked against this walk
+                            // (`SYNC-135`).
+                            self.walked_writers.insert(log_document, writers.clone());
                             doc_state.set_writers(writers);
                             word_changed = doc_state.word != word;
                             doc_state.word = word;

@@ -214,7 +214,7 @@ fn entry_at(
     entry_at_capped(next, draft, None, author)
 }
 
-/// [`entry_at`], with the cap a revoke names (`SYNC-297`).
+/// [`entry_at`], with the cap a revoke names (`SYNC-300`).
 fn entry_at_capped(
     next: LogHead,
     draft: Draft,
@@ -912,7 +912,7 @@ pub(crate) struct RevokeParams {
     /// The rule the log walks under (`SYNC-106`).
     pub rule: LogRule,
     /// The highest clock of each author's deltas the document applied. The
-    /// revoke caps its member at its own (`SYNC-297`).
+    /// revoke caps its member at its own (`SYNC-300`).
     pub applied: std::collections::HashMap<FixedBytes<ambre_core::PublicKey>, Seq<DeltaAuthor>>,
 }
 
@@ -990,7 +990,7 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
                 key: Some(new_doc_key.id()),
             };
             // The cap is the member's latest delta this client applied,
-            // under the key the log holds for them (`SYNC-297`).
+            // under the key the log holds for them (`SYNC-300`).
             let cap = log
                 .log()
                 .present_key(p.user_id)
@@ -5125,7 +5125,7 @@ mod tests {
 
     /// Holds `SYNC-132` at the revoke: the request carries the entry that
     /// removes the member and names the key the rotation installs. Holds
-    /// `SYNC-297` there too: the entry caps the member at the latest of
+    /// `SYNC-300` there too: the entry caps the member at the latest of
     /// their deltas this client applied, under the key the log holds.
     #[tokio::test]
     async fn a_revoke_posts_the_entry_that_removes_the_member() {
