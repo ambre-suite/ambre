@@ -27,11 +27,35 @@ async fn sfu() -> String {
 
 /// As [`sfu`], and answers the three addresses.
 async fn sfu_at() -> Addresses {
-    sfu_scraped(ambre_metrics::ScrapeAccess::Loopback).await
+    sfu_with(
+        ambre_metrics::ScrapeAccess::Loopback,
+        crate::turn::TURN_LIFETIME,
+        crate::turn::TURN_MARGIN,
+    )
+    .await
 }
 
 /// As [`sfu_at`], with its metrics listener behind `scrape`.
 async fn sfu_scraped(scrape: ambre_metrics::ScrapeAccess) -> Addresses {
+    sfu_with(scrape, crate::turn::TURN_LIFETIME, crate::turn::TURN_MARGIN).await
+}
+
+/// As [`sfu_at`], each TURN credential valid for `lifetime` and renewed `margin` before its
+/// expiry.
+async fn sfu_lasting(
+    lifetime: ambre_core::TimeSpan<ambre_core::Sec>,
+    margin: ambre_core::TimeSpan<ambre_core::Sec>,
+) -> Addresses {
+    sfu_with(ambre_metrics::ScrapeAccess::Loopback, lifetime, margin).await
+}
+
+/// As [`sfu_at`], with its metrics listener behind `scrape` and each TURN credential valid for
+/// `lifetime`, renewed `margin` before its expiry.
+async fn sfu_with(
+    scrape: ambre_metrics::ScrapeAccess,
+    lifetime: ambre_core::TimeSpan<ambre_core::Sec>,
+    margin: ambre_core::TimeSpan<ambre_core::Sec>,
+) -> Addresses {
     let free = |udp: bool| {
         if udp {
             std::net::UdpSocket::bind("127.0.0.1:0").and_then(|s| s.local_addr())
@@ -48,13 +72,16 @@ async fn sfu_scraped(scrape: ambre_metrics::ScrapeAccess) -> Addresses {
     let key = FixedBytes::from_array(relay_key().verifying_key().to_bytes());
     let admitting = Admitting {
         key: AdmissionKey::new(&key).expect("a key"),
-        turn: Some(TurnServers::new(
-            vec![
-                ambre_core::Validated::<TurnUrl>::parse("turn:127.0.0.1:3478?transport=tcp")
-                    .expect("a URL"),
-            ],
-            TurnSecret::new("north-wind".to_owned()),
-        )),
+        turn: Some(
+            TurnServers::new(
+                vec![
+                    ambre_core::Validated::<TurnUrl>::parse("turn:127.0.0.1:3478?transport=tcp")
+                        .expect("a URL"),
+                ],
+                TurnSecret::new("north-wind".to_owned()),
+            )
+            .lasting(lifetime, margin),
+        ),
         scrape,
     };
     tokio::spawn(run(addresses, admitting));
@@ -606,5 +633,98 @@ async fn a_second_socket_under_one_admission_reads_no_credential() {
             .await
             .is_some_and(|v| v["answer"].is_string()),
         "the first socket lost its seat to the others"
+    );
+}
+
+/// Whether `socket` sends no text frame within `span`. A close counts as silence.
+async fn quiet_for(socket: &mut Socket, span: Duration) -> bool {
+    let deadline = tokio::time::Instant::now() + span;
+    loop {
+        match tokio::time::timeout_at(deadline, socket.next()).await {
+            Err(_) | Ok(None | Some(Err(_) | Ok(Message::Close(_)))) => return true,
+            Ok(Some(Ok(Message::Text(_)))) => return false,
+            Ok(Some(Ok(_))) => {}
+        }
+    }
+}
+
+/// The expiry and the name of the one TURN credential of an `ice` frame, and its password.
+fn credential_of(frame: &Value) -> (u64, String, String) {
+    let server = &frame["ice"][0];
+    let username = server["username"].as_str().expect("a username");
+    let (expiry, name) = username.split_once(':').expect("an expiry and a name");
+    let password = server["credential"].as_str().expect("a password");
+    (
+        expiry.parse().expect("an expiry"),
+        name.to_owned(),
+        password.to_owned(),
+    )
+}
+
+/// `CALL-153`, audit `P60`: a credential lives the TURN lifetime alone. A renewal that keeps
+/// the seat answers a fresh credential under the same pseudonym once the last one expires
+/// within the margin, and none before. A renewal of another seat answers none, in the margin
+/// too.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_renewal_near_the_expiry_of_the_credential_answers_a_fresh_one() {
+    let lifetime = ambre_core::TimeSpan::new(6);
+    let url = format!(
+        "ws://{}/call",
+        sfu_lasting(lifetime, ambre_core::TimeSpan::new(3))
+            .await
+            .signal
+    );
+    let kept = fresh(50);
+    let minted = unix_now();
+    let mut socket = admitted(&url, &kept, &relay_key()).await;
+    let first = next(&mut socket).await.expect("the TURN servers");
+    let (first_expiry, name, first_password) = credential_of(&first);
+    assert!(
+        first_expiry <= minted.plus(lifetime).get() + 1,
+        "a credential outlives the TURN lifetime: {first}"
+    );
+    offer(&mut socket).await;
+    assert!(
+        next(&mut socket)
+            .await
+            .is_some_and(|v| v["answer"].is_string())
+    );
+    let other_seat = fresh(51);
+    let mut other = seated(&url, &other_seat).await;
+
+    let renewal = |admission: &Admission| Admission {
+        expires: unix_now().plus(ambre_core::TimeSpan::new(61)),
+        ..admission.clone()
+    };
+    renew(&mut socket, &renewal(&kept)).await;
+    assert!(
+        quiet_for(&mut socket, Duration::from_millis(500)).await,
+        "a renewal before the margin answered a credential"
+    );
+
+    tokio::time::sleep(Duration::from_millis(3500)).await;
+    let mut wrong = renewal(&other_seat);
+    wrong.participant = FixedBytes::from_array([99; 16]);
+    renew(&mut other, &wrong).await;
+    assert!(
+        quiet_for(&mut other, Duration::from_millis(500)).await,
+        "a renewal of another seat answered a credential"
+    );
+    renew(&mut socket, &renewal(&kept)).await;
+    let again = next(&mut socket).await.expect("a fresh credential");
+    let (expiry, again_name, password) = credential_of(&again);
+    assert_eq!(
+        again_name, name,
+        "the fresh credential names another pseudonym"
+    );
+    assert!(
+        expiry > first_expiry,
+        "the fresh credential expires no later: {again}"
+    );
+    assert_ne!(password, first_password);
+    renew(&mut socket, &renewal(&kept)).await;
+    assert!(
+        quiet_for(&mut socket, Duration::from_millis(500)).await,
+        "a renewal right after a fresh credential answered another one"
     );
 }

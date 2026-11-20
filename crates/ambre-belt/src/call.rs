@@ -100,7 +100,8 @@ const onTrack = (e) => {
   if (e.track.kind === 'audio' && query.get('beep')) listen(e.track);
 };
 window.callStats = async () => {
-  const out = { samples: null, packets: 0, video: 0, sent: 0, state: pc && pc.connectionState, relay: null };
+  const out = { samples: null, packets: 0, video: 0, sent: 0, state: pc && pc.connectionState, relay: null,
+    local: null, restarts: window.restarts };
   if (!pc) return out;
   const stats = await pc.getStats();
   stats.forEach((s) => {
@@ -111,7 +112,10 @@ window.callStats = async () => {
       || (s.type === 'candidate-pair' && s.nominated && s);
     if (pair && pair.state === 'succeeded') {
       const local = stats.get(pair.localCandidateId);
-      if (local) out.relay = local.candidateType + '/' + (local.relayProtocol || local.protocol);
+      if (local) {
+        out.relay = local.candidateType + '/' + (local.relayProtocol || local.protocol);
+        out.local = local.address + ':' + local.port;
+      }
     }
     if (s.type === 'outbound-rtp') out.sent += s.packetsSent || 0;
     if (s.type !== 'inbound-rtp') return;
@@ -167,17 +171,37 @@ const tone = () => {
     let chain = Promise.resolve();
     let iced;
     const ice = new Promise((ok) => { iced = ok; });
+    // A later credential of the SFU restarts ICE, as the call client does (`CALL-155`):
+    // 'due' until the offer leaves, 'offered' until its answer lands. An offer of the SFU
+    // that crosses it rolls it back, so it leaves again after the answer.
+    let restart = 'settled';
+    window.restarts = 0;
+    const config = (servers) => (query.get('turn')
+      ? { iceServers: servers, iceTransportPolicy: 'relay' } : {});
+    const restartIce = async () => {
+      if (restart !== 'due' || pc.signalingState !== 'stable') return;
+      await pc.setLocalDescription(await pc.createOffer({ iceRestart: true }));
+      restart = 'offered';
+      ws.send(JSON.stringify({ offer: pc.localDescription.sdp }));
+    };
     ws.onmessage = (m) => {
       const msg = JSON.parse(m.data);
       chain = chain.then(async () => {
-        if (msg.ice !== undefined) {
+        if (msg.ice !== undefined && pc === null) {
           iced(msg.ice);
+        } else if (msg.ice !== undefined) {
+          pc.setConfiguration(config(msg.ice));
+          restart = 'due';
+          await restartIce();
         } else if (msg.answer !== undefined) {
           await pc.setRemoteDescription({ type: 'answer', sdp: msg.answer });
+          if (restart === 'offered') { restart = 'settled'; window.restarts += 1; }
         } else if (msg.offer !== undefined) {
+          if (restart === 'offered') restart = 'due';
           await pc.setRemoteDescription({ type: 'offer', sdp: msg.offer });
           await pc.setLocalDescription(await pc.createAnswer());
           ws.send(JSON.stringify({ answer: pc.localDescription.sdp }));
+          await restartIce();
         }
       }).catch((e) => { window.callError = String(e); });
     };
@@ -187,12 +211,13 @@ const tone = () => {
     // port 443 alone allows.
     ws.send(JSON.stringify({ admission: query.get('admission') }));
     const servers = await ice;
-    const config = {};
-    if (query.get('turn')) {
-      config.iceServers = servers;
-      config.iceTransportPolicy = 'relay';
-    }
-    pc = new RTCPeerConnection(config);
+    pc = new RTCPeerConnection(config(servers));
+    // The renewals the relay would send, one every `every` ms: the SFU keeps the seat, and
+    // answers a fresh TURN credential once the last one nears its expiry.
+    const renewals = (query.get('renewals') || '').split(',').filter((t) => t);
+    renewals.forEach((token, k) => setTimeout(() => {
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ admission: token }));
+    }, (k + 1) * Number(query.get('every') || 0)));
     pc.ontrack = onTrack;
     media.getTracks().forEach((t) => {
       pc.addTrack(t, media).transform = frame('send', t.kind);
@@ -253,6 +278,25 @@ impl Sfu {
     /// As [`Sfu::start`], with its media on `media`: an address of the machine that a phone on
     /// the same network reaches. The signalling stays on the loopback, behind the proof host.
     pub async fn start_on(turn: Option<&Turn>, media: std::net::IpAddr) -> Self {
+        Self::launch(turn, media, &[]).await
+    }
+
+    /// As [`Sfu::start`] with `turn`, each credential valid for `lifetime` and renewed
+    /// `margin` before its expiry, so a test crosses an expiry within its run.
+    pub async fn start_lasting(turn: &Turn, lifetime: Duration, margin: Duration) -> Self {
+        let env = [
+            ("SFU_TURN_LIFETIME", lifetime.as_secs().to_string()),
+            ("SFU_TURN_MARGIN", margin.as_secs().to_string()),
+        ];
+        Self::launch(Some(turn), std::net::Ipv4Addr::LOCALHOST.into(), &env).await
+    }
+
+    /// Starts the SFU with its media on `media`, and the variables `env` besides its own.
+    async fn launch(
+        turn: Option<&Turn>,
+        media: std::net::IpAddr,
+        env: &[(&'static str, String)],
+    ) -> Self {
         let signal_port = free_port();
         let media_port = std::net::UdpSocket::bind((media, 0))
             .and_then(|s| s.local_addr())
@@ -260,6 +304,7 @@ impl Sfu {
             .expect("a free port on the media address");
         let relay = ed25519_dalek::SigningKey::from_bytes(&drawn());
         let mut command = Command::new(binary());
+        command.envs(env.iter().map(|(k, v)| (*k, v.as_str())));
         if let Some(turn) = turn {
             command
                 .env("SFU_TURN_URLS", &turn.url)
@@ -345,6 +390,51 @@ impl Sfu {
             .ok()
             .and_then(|v| v.as_str().map(str::to_owned))
             .expect("a token is text")
+    }
+
+    /// An admission to `room` for a fresh participant, then `count` renewals of its seat, one
+    /// every `every`. The first expires after three periods, and each renewal one period
+    /// later, as the heartbeats of the relay issue them.
+    pub fn renewed(&self, room: [u8; 16], count: u32, every: Duration) -> Vec<String> {
+        use ed25519_dalek::Signer;
+        let participant = ambre_core::FixedBytes::from_array(drawn());
+        let member = ambre_core::FixedBytes::from_array(drawn());
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("a clock after 1970");
+        (0..=count)
+            .map(|k| {
+                let admission = ambre_protocol::signaling::Admission {
+                    room: ambre_core::FixedBytes::from_array(room),
+                    participant,
+                    member,
+                    sender: ambre_core::Seq::new(0),
+                    expires: ambre_core::Instant::new((now + every * (3 + k)).as_secs()),
+                };
+                let signed = admission.signed_bytes().expect("an admission encodes");
+                let signature = self.relay.sign(signed.as_bytes()).to_bytes();
+                let token = admission
+                    .token(&ambre_core::FixedBytes::from_array(signature))
+                    .expect("a token encodes");
+                serde_json::to_value(&token)
+                    .ok()
+                    .and_then(|v| v.as_str().map(str::to_owned))
+                    .expect("a token is text")
+            })
+            .collect()
+    }
+
+    /// The page URL that joins `room` on this SFU, then renews its seat `count` times, one
+    /// every `every`.
+    pub fn renewed_page(&self, page: &str, room: [u8; 16], count: u32, every: Duration) -> String {
+        let tokens = self.renewed(room, count, every);
+        let (first, renewals) = tokens.split_first().expect("a first admission");
+        format!(
+            "{page}?sfu={}&admission={first}&renewals={}&every={}",
+            self.signal,
+            renewals.join(","),
+            every.as_millis()
+        )
     }
 
     /// The page URL that joins `room` on this SFU, with a fresh admission.
@@ -652,6 +742,85 @@ mod tests {
                 json!([]),
             )
             .await
+    }
+
+    /// `CALL-154`, `CALL-155`, audit `P60`: a browser relayed through TURN over TCP alone
+    /// holds a credential of 30 s, which the SFU renews 10 s before its expiry. The seat is
+    /// renewed every 3 s, as heartbeats renew it. The page restarts ICE with the fresh
+    /// credential, onto a new relay allocation. Past the expiry of the first credential, the
+    /// call still flows both ways through TURN.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs the SFU binary, coturn and a browser driver; run just test-browser"
+    )]
+    async fn a_relayed_call_flows_past_the_expiry_of_its_first_credential() {
+        let turn = Turn::start(Duration::from_millis(75)).await;
+        let lifetime = Duration::from_secs(30);
+        let sfu = Sfu::start_lasting(&turn, lifetime, Duration::from_secs(10)).await;
+        let page = serve_page().await;
+        let room = drawn();
+        let every = Duration::from_secs(3);
+        let urls = [
+            sfu.page(&page, room),
+            format!("{}&turn=1", sfu.renewed_page(&page, room, 30, every)),
+        ];
+        let mut browsers = Vec::new();
+        for url in &urls {
+            let downloads = std::env::temp_dir().join(format!("belt-{}", uuid::Uuid::new_v4()));
+            std::fs::create_dir_all(&downloads).expect("a download directory");
+            let browser = Browser::start(&downloads).await;
+            browser.goto(url).await;
+            browsers.push((browser, downloads));
+        }
+        let joined = Instant::now();
+        let (direct, relayed) = match browsers.as_slice() {
+            [direct, relayed] => (&direct.0, &relayed.0),
+            _ => panic!("two pages"),
+        };
+        let deadline = joined + Duration::from_secs(30);
+        let first = loop {
+            let s = heard(relayed).await;
+            assert!(s.get("error").is_none(), "the relayed page failed: {s}");
+            if s["video"].as_f64().unwrap_or(0.0) > 0.0 && s["relay"] == json!("relay/tcp") {
+                break s;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "within 30 s, the relayed page decoded {s}"
+            );
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        };
+        // The first credential expired 30 s after the join. The page waits past it, with
+        // room for the restart that a renewal 10 s before it started.
+        tokio::time::sleep_until((joined + lifetime + Duration::from_secs(10)).into()).await;
+        let (d0, r0) = (decoded(direct).await, heard(relayed).await);
+        assert!(r0.get("error").is_none(), "the relayed page failed: {r0}");
+        assert!(
+            r0["restarts"].as_u64().unwrap_or(0) >= 1,
+            "the page restarted no ICE: {r0}"
+        );
+        assert_eq!(r0["relay"], json!("relay/tcp"), "the page left TURN: {r0}");
+        assert_ne!(
+            r0["local"], first["local"],
+            "the restart kept the first allocation: {first} then {r0}"
+        );
+        tokio::time::sleep(Duration::from_secs(3)).await;
+        let (d1, r1) = (decoded(direct).await, heard(relayed).await);
+        for (name, before, after) in [("direct", &d0, &d1), ("relayed", &r0, &r1)] {
+            for counter in ["video", "packets"] {
+                assert!(
+                    after[counter].as_f64().unwrap_or(0.0)
+                        > before[counter].as_f64().unwrap_or(0.0),
+                    "past the expiry, the {name} page decoded no more {counter}: {before} then {after}"
+                );
+            }
+        }
+        drop(turn);
+        for (browser, downloads) in browsers {
+            drop(browser);
+            let _ = std::fs::remove_dir_all(downloads);
+        }
     }
 
     /// The mouth-to-ear delays one page heard: each onset it heard, less the last onset the
