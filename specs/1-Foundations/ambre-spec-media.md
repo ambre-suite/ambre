@@ -22,6 +22,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SYNC-050` | `INV` | A blob's address MUST NOT be computable from its plaintext without the document key. | `ZK-007`; this spec section 3 | `ambre_sync::media::tests::an_upload_is_addressed_under_the_document_key` -- the worker answers with the keyed address, and the same bytes in two documents get two; `ambre_crypto::tests::a_media_address_needs_the_document_key` -- another key moves it, and it is never the bare hash of the bytes | none | verified |
+| `SYNC-286` | `INV` | A blob's address MUST bind its document, so one plaintext in two documents under one key MUST take two addresses. | this spec section 3; `SYNC-050` | `ambre_crypto::tests::a_media_address_binds_its_document` -- one picture under one key in two documents takes two addresses; `ambre_crypto::tests::the_media_address_keeps_its_bytes` -- the address of version 2 stays pinned; `ambre_sync::media::tests::an_upload_is_addressed_under_the_document_key` -- the worker answers two documents under one key with two addresses | none | verified |
 | `SYNC-051` | `INV` | A sealed blob MUST be bound to the document it belongs to. | this spec section 3; `SYNC-018` | `ambre_sync::media::tests::a_blob_opens_under_its_own_document_only` -- a blob sealed for one document fails to open under another that holds the same key | none | verified |
 | `SYNC-074` | `INV` | A sealed blob MUST be bound to the address that names it. | this spec section 3; `SYNC-018` | `ambre_sync::media::tests::a_blob_opens_under_its_own_address_only` -- a blob sealed under one address fails to open under another address of the same document | none | verified |
 
@@ -70,7 +71,7 @@ to erase it (`ambre-spec-object-store.md`, `SRV-139`).
 * **Boundary.** this is the one path on which a whole file leaves the client. The bytes are sealed
   (`SYNC-049`). Beside them travel the size and an address keyed by the document key, which the
   relay cannot compute from a file it holds (`SYNC-050`, `SYNC-053`).
-* **Verification.** 19 `verified`. The address, the two requests and each leg through a fake
+* **Verification.** 20 `verified`. The address, the two requests and each leg through a fake
   transport are held on the host. The database tier round-trips a blob through a real store
   (`SYNC-139`). The browser tier carries a picture from one user's board to another's screen
   (`SYNC-140`).
@@ -101,8 +102,10 @@ and that container belongs to the application: `3-Toile/ambre-spec-toile-schema.
 **The address.** One string per blob, computed by the Sync worker because it is the only crypto
 consumer on the client. It is content-derived, which is what makes the same picture used ten times
 one upload and one object, with no coordination between peers. It is a keyed hash of the bytes: an
-HMAC under a subkey of the document key. Every member reaches the same address, and the relay,
-which holds no key, cannot compute it from a file it already has (`SYNC-050`).
+HMAC under a subkey of the document key and the document identifier. Every member reaches the
+same address, and the relay, which holds no key, cannot compute it from a file it already has
+(`SYNC-050`). The subkey binds the document, so two documents under one key give one file two
+addresses (`SYNC-286`, audit `P20`).
 
 **An upload, in steps.** A document the relay does not hold yet gets no link. The upload waits for
 its creation, which it starts (`SYNC-145`).
@@ -143,7 +146,9 @@ version byte buys elsewhere is a choice per payload; here there is no choice to 
 **What the relay stores, and what that lets it do.** The relay keeps the address and the size
 against the document. A plain hash would let it hash a known file, a photograph or a leaked page,
 and learn whether this document holds it. The key closes that oracle. What remains is equality
-inside one document: two uploads of one picture share an address (`SYNC-050`, `SYNC-053`). The
+inside one document: two uploads of one picture share an address (`SYNC-050`, `SYNC-053`).
+
+Equality across documents stays closed when two documents share a key (`SYNC-286`). The
 media type stays with the application.
 
 **Code.**

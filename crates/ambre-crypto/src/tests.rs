@@ -4,6 +4,7 @@ use proptest::prelude::*;
 
 use crate::keys::{DocumentKey, FileKey, MasterSeed};
 use crate::{CryptoError, aead, commitment, ecdh, envelope, hash, passphrase};
+use ambre_core::id::{Document, Id};
 use ambre_core::{
     Aad, Ciphertext, EntryDigest, FileSalt, FixedBytes, MasterKeySalt, MediaBytes, Nonce, Payload,
     SealedRowBytes,
@@ -874,30 +875,48 @@ fn a_previous_key_opens_under_the_next_one_and_no_other() {
 
 // -- Media address -----------------------------------------------------------
 
-/// One address per plaintext under one key, and another under any other key.
-/// It is never the bare hash of the bytes, which the relay could compute
-/// itself (`SYNC-050`).
+/// One address per plaintext under one key in one document, and another
+/// under any other key. It is never the bare hash of the bytes, which the
+/// relay could compute itself (`SYNC-050`).
 #[test]
 fn a_media_address_needs_the_document_key() {
     use blake2::{Blake2b512, Digest};
 
+    let doc = Id::<Document>::from_bytes([0x44; 16]);
     let picture = Payload::<MediaBytes>::new(b"the same picture, used twice".to_vec());
-    let address = commitment::media_address(&fixed_doc_key(), &picture);
+    let address = commitment::media_address(&fixed_doc_key(), doc, &picture);
     assert_eq!(
         address,
-        commitment::media_address(&fixed_doc_key(), &picture)
+        commitment::media_address(&fixed_doc_key(), doc, &picture)
     );
     assert_ne!(
         address,
-        commitment::media_address(&DocumentKey::from_array([0x12; 32]), &picture)
+        commitment::media_address(&DocumentKey::from_array([0x12; 32]), doc, &picture)
     );
     let another = Payload::<MediaBytes>::new(b"another picture".to_vec());
     assert_ne!(
         address,
-        commitment::media_address(&fixed_doc_key(), &another)
+        commitment::media_address(&fixed_doc_key(), doc, &another)
     );
     let plain = Blake2b512::digest(picture.as_bytes());
     assert_ne!(address.as_array()[..], plain[..32]);
+}
+
+/// `SYNC-286`, audit `P20`: two documents under one key give one picture
+/// two addresses, so the relay cannot tell that both hold it. Before the
+/// fix, the address read the key and the bytes alone.
+#[test]
+fn a_media_address_binds_its_document() {
+    let picture = Payload::<MediaBytes>::new(b"one picture in two channels".to_vec());
+    let address = |doc: u8| {
+        commitment::media_address(
+            &fixed_doc_key(),
+            Id::<Document>::from_bytes([doc; 16]),
+            &picture,
+        )
+    };
+    assert_ne!(address(1), address(2));
+    assert_eq!(address(1), address(1));
 }
 
 // -- Property tests ----------------------------------------------------------
@@ -1241,9 +1260,13 @@ fn the_commitment_tag_keeps_its_bytes() {
 #[test]
 fn the_media_address_keeps_its_bytes() {
     let picture = Payload::<MediaBytes>::new(b"a picture".to_vec());
-    let address = commitment::media_address(&fixed_doc_key(), &picture);
+    let address = commitment::media_address(
+        &fixed_doc_key(),
+        Id::<Document>::from_bytes([0x44; 16]),
+        &picture,
+    );
     let expected: [u8; 32] =
-        golden("c72a97882edaf9922202a868bba98c10b9d8391391ee833ce679124602fd0f98")
+        golden("b6deaed13abe1ce736321e841580876443150e09036ed187bc06172a6124d700")
             .try_into()
             .unwrap();
     assert_eq!(
