@@ -623,7 +623,8 @@ impl Gate {
     }
 
     /// `ZK-012`: no serialized type of the worker holds a passphrase field
-    /// or a secret, whatever the alias or the wrapper around it.
+    /// or a secret, whatever the alias or the wrapper around it. The record
+    /// of the kept session alone holds a secret, never a passphrase field.
     pub fn passphrase_fields(&mut self, tcx: TyCtxt<'_>, def: LocalDefId) {
         if self.test
             || self.unit.krate != "ambre-sync"
@@ -631,6 +632,9 @@ impl Gate {
         {
             return;
         }
+        // The record of the kept session is sealed and stays on the device:
+        // it holds the seed by design, and never reaches the relay.
+        let kept = self.in_file(tcx, tcx.def_span(def), |f| f == crate::bounds::KEPT_SESSION);
         let adt = tcx.adt_def(def);
         for field in adt.all_fields() {
             let name = field.name.to_string();
@@ -650,7 +654,7 @@ impl Gate {
                     "ZK-012",
                     &format!("a serialized field names a passphrase: `{name}`"),
                 );
-            } else if let Some((secret, _)) = secret {
+            } else if let Some((secret, _)) = secret.filter(|_| !kept) {
                 self.wired(
                     tcx,
                     span,

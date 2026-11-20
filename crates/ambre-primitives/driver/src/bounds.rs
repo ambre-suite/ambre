@@ -388,7 +388,8 @@ const NON_CLIENT_CRATES: &[&str] = &[
 
 /// The one file of the Sync worker that reaches the browser's database: the
 /// session the device keeps across a reload, sealed (`SYNC-060`, `ZK-051`).
-const KEPT_SESSION: &str = "crates/ambre-sync/src/kept.rs";
+/// Its record holds the seed and never reaches the relay (`ZK-012`).
+pub const KEPT_SESSION: &str = "crates/ambre-sync/src/kept.rs";
 
 /// The persistence paths `UI-THREAD-004` names: the local store, the sign-in
 /// state and the site choice of a web embed.

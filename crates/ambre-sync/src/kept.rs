@@ -154,7 +154,8 @@ pub(crate) enum Loaded {
 pub(crate) enum Resumed {
     /// The device keeps no record.
     Absent,
-    /// The record does not open, or opens as no session. It is erased.
+    /// The record does not open, or opens as no session. The worker erases
+    /// it, as it erases a refused one.
     Unreadable,
     /// The relay refused the kept refresh token. The record is erased.
     Refused,
@@ -163,17 +164,6 @@ pub(crate) enum Resumed {
     Unreachable,
     /// The relay renewed the kept refresh token into `tokens`.
     Ready { kept: Kept, tokens: http::TokenPair },
-}
-
-#[cfg_attr(
-    all(not(target_arch = "wasm32"), not(test)),
-    expect(dead_code, reason = "only the worker resumes a kept session")
-)]
-impl Resumed {
-    /// Whether the record that gave this outcome must be erased.
-    pub(crate) fn erases(&self) -> bool {
-        matches!(self, Self::Unreadable | Self::Refused)
-    }
 }
 
 /// Resumes the session `record` keeps, through `transport` to the relay at
@@ -354,7 +344,7 @@ impl SyncState {
             crate::spawn(async move {
                 let record = web.load().await;
                 let resumed = resume_via(&http::Fetch, &api, record).await;
-                if resumed.erases() {
+                if matches!(resumed, Resumed::Unreadable | Resumed::Refused) {
                     web.enqueue(web::Op::Erase);
                 }
                 match resumed {
@@ -607,28 +597,23 @@ pub(crate) mod web {
         key.dyn_into()
     }
 
-    /// A buffer of the JS heap that holds a copy of `bytes`. It is no view
-    /// of the memory of this instance, which WebCrypto may refuse.
-    fn copy_out(bytes: &[u8]) -> js_sys::Uint8Array {
-        let view = js_sys::Uint8Array::new_with_length(bytes.len().try_into().unwrap_or(0));
-        view.copy_from(bytes);
-        view
-    }
-
     /// Seals `plaintext` under `key`, with a fresh nonce of 96 bits. The
     /// copy handed to WebCrypto is wiped once WebCrypto took its own.
     async fn seal(
         key: &web_sys::CryptoKey,
         plaintext: &Confidential<Plaintext>,
     ) -> Result<(js_sys::Uint8Array, JsValue), JsValue> {
-        let mut nonce = [0u8; 12];
+        let iv = js_sys::Uint8Array::new_with_length(12);
         scope()?
             .crypto()?
-            .get_random_values_with_u8_array(&mut nonce)?;
-        let iv = copy_out(&nonce);
+            .get_random_values_with_array_buffer_view(&iv)?;
         let params = web_sys::AesGcmParams::new("AES-GCM", &iv);
+        // A copy on the JS heap, no view of the memory of this instance,
+        // which WebCrypto may refuse. WebCrypto takes its own copy at the
+        // call, so this one is wiped at once.
         let sealing = plaintext.with_plaintext(|bytes| {
-            let data = copy_out(bytes);
+            let data = js_sys::Uint8Array::new_with_length(bytes.len().try_into().unwrap_or(0));
+            data.copy_from(bytes);
             let promise = subtle().and_then(|subtle| {
                 subtle.encrypt_with_object_and_buffer_source(&params, key, &data)
             });
@@ -775,7 +760,7 @@ mod tests {
             Loaded::Opened(record("Ada", "refresh-1", [7; 32])),
         )
         .await;
-        assert!(matches!(resumed, Resumed::Refused) && resumed.erases());
+        assert!(matches!(resumed, Resumed::Refused));
 
         let silent = Scripted::new([]);
         let resumed = resume_via(
@@ -784,17 +769,17 @@ mod tests {
             Loaded::Opened(record("Ada", "refresh-1", [7; 32])),
         )
         .await;
-        assert!(matches!(resumed, Resumed::Unreachable) && !resumed.erases());
+        assert!(matches!(resumed, Resumed::Unreachable));
 
         let garbage = Loaded::Opened(Confidential::<Plaintext>::new(vec![1; 16]));
         let resumed = resume_via(&silent, &api(), garbage).await;
-        assert!(matches!(resumed, Resumed::Unreadable) && resumed.erases());
+        assert!(matches!(resumed, Resumed::Unreadable));
         let resumed = resume_via(&silent, &api(), Loaded::Unopened).await;
-        assert!(matches!(resumed, Resumed::Unreadable) && resumed.erases());
+        assert!(matches!(resumed, Resumed::Unreadable));
 
         let none = Scripted::new([]);
         let resumed = resume_via(&none, &api(), Loaded::Absent).await;
-        assert!(matches!(resumed, Resumed::Absent) && !resumed.erases());
+        assert!(matches!(resumed, Resumed::Absent));
         assert!(none.sent.borrow().is_empty(), "no record sends nothing");
     }
 
