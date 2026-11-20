@@ -41,14 +41,21 @@ Redis keeps nothing that the relay cannot rebuild.
 
 ## How the stack is wired
 
-| Traffic | Path |
-| :--- | :--- |
-| the page | browser -> 443/tcp, TLS with a server name -> nginx front -> Caddy |
-| a request of the relay | Caddy `/api` -> relay -> Postgres, Redis, Garage |
-| a blob through a presigned link | Caddy `/s3/` -> Garage |
-| the signalling of a call | Caddy `/sfu/` -> SFU |
-| the media of a call | browser -> 3481/udp -> SFU |
-| the media of a call, on a network that opens TCP 443 alone | browser -> 443/tcp, plain TURN -> nginx front -> coturn -> SFU |
+```mermaid
+flowchart LR
+    B[Browser] -- "443/tcp, TLS with a server name" --> F[nginx front]
+    B -- "443/tcp, plain TURN" --> F
+    B -- "3481/udp, media" --> S[SFU]
+    F -- page --> C[Caddy]
+    F -- TURN --> T[coturn]
+    T --> S
+    C -- "/api" --> R[relay]
+    C -- "/s3/" --> G[Garage]
+    C -- "/sfu/" --> S
+    R --> P[(Postgres)]
+    R --> D[(Redis)]
+    R --> G
+```
 
 * **One port 443 serves the page and TURN.** The front reads the first bytes of each connection. A
   TLS hello that names a server goes to Caddy, and anything else goes to coturn. The front opens no
