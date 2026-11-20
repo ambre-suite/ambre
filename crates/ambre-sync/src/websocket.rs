@@ -745,6 +745,7 @@ impl SyncState {
                 user_id,
                 display_name,
                 email,
+                address,
                 master_seed,
                 signing_key,
                 exchange_key,
@@ -758,14 +759,15 @@ impl SyncState {
                 self.setup_owed = false;
                 self.open_websocket();
                 self.flush_pending_opens();
-                self.send_to_logic(LogicEvent::Rest {
+                self.announce_session(
                     id,
-                    evt: RestEvent::SessionReady {
+                    RestEvent::SessionReady {
                         user_id,
                         display_name,
                         email,
                     },
-                });
+                    address,
+                );
             }
             SyncEvent::ProviderSignedIn {
                 id,
@@ -800,20 +802,22 @@ impl SyncState {
                 user_id,
                 display_name,
                 email,
+                address,
             } => {
                 self.user_id = Some(user_id);
                 self.adopt_new_keys(master_seed, signing_key, exchange_key, tokens);
                 // The words first, then the session: the page shows the words
                 // before the list (`CHROME-099`).
                 self.reply(id, RestEvent::AccountCreated { recovery_words });
-                self.send_to_logic(LogicEvent::Rest {
-                    id: None,
-                    evt: RestEvent::SessionReady {
+                self.announce_session(
+                    None,
+                    RestEvent::SessionReady {
                         user_id,
                         display_name,
                         email,
                     },
-                });
+                    address,
+                );
             }
             SyncEvent::AccountRecovered {
                 id,
@@ -824,6 +828,7 @@ impl SyncState {
                 user_id,
                 display_name,
                 email,
+                address,
             } => {
                 self.reply(id, RestEvent::AccountRecovered);
                 // A session that holds keys already re-sealed its own seed. The
@@ -836,14 +841,15 @@ impl SyncState {
                 self.adopt_new_keys(master_seed, signing_key, exchange_key, tokens);
                 // The form closes on the answer, then the list replaces the
                 // gate: no second unlock under the new passphrase (`SYNC-293`).
-                self.send_to_logic(LogicEvent::Rest {
-                    id: None,
-                    evt: RestEvent::SessionReady {
+                self.announce_session(
+                    None,
+                    RestEvent::SessionReady {
                         user_id,
                         display_name,
                         email,
                     },
-                });
+                    address,
+                );
             }
             SyncEvent::DocumentList { id, documents } => {
                 self.reply(id, RestEvent::DocumentList { documents });
@@ -2466,6 +2472,7 @@ mod tests {
             user_id: Id::<User>::mint(),
             display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada").unwrap(),
             email: "ada@example.org".into(),
+            address: ambre_core::AddressStanding::Held,
         });
         assert_eq!(state.socket_opens.get(), 1);
     }

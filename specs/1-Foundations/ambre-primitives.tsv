@@ -3,6 +3,7 @@
 # Answer the five questions of ai/ambre-rust-style.md ("A type is the default") before adding a line.
 key	category	note
 ambre-app | src/account.rs | crate::account | KeysSignals::has_form() | ret | bool	generic	predicate result
+ambre-app | src/account.rs | crate::account | ReclaimLine::text() | ret | &'static str	free-text	the words of one line of the reclaim notice, which a person reads and no code matches back
 ambre-app | src/doc_list.rs | crate::doc_list | Recency::heading() | ret | &'static str	free-text	the display label of a band of the document list, which a person reads and no code matches back
 ambre-app | src/doc_list.rs | crate::doc_list | arrange(query) | param | &str	free-text	the search a person types into the launcher: free text with no rule, matched as the palette matches its query
 ambre-app | src/host/cell.rs | crate::host::cell | Bound.listeners | field | Vec<Listener>	foreign-api	the DOM event name each closure was added under, which removeEventListener takes as &str

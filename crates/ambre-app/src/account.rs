@@ -16,10 +16,15 @@
 // `present_words` writes them, into the list of the face. They leave this
 // thread with the face: no signal, store or log keeps them (`CHROME-099`). A
 // passphrase leaves its field with the submission (`CHROME-129`).
+//
+// A provider sign-in may reclaim the address of the account (`SRV-029`). The
+// launcher then says so, and says that shares to the address now reach the
+// verified account (`CHROME-146`).
 // ============================================================================
 
 use ambre_bus::{AuthFailure, RestCommand};
-use ambre_core::{Confidential, Passphrase, RecoveryWords};
+use ambre_chrome::commands::Locale;
+use ambre_core::{AddressStanding, Confidential, Passphrase, RecoveryWords};
 use ambre_logic::app::LogicCommand;
 use leptos::prelude::*;
 
@@ -58,6 +63,10 @@ pub struct KeysSignals {
     pub face: RwSignal<KeysFace>,
     /// The last refusal the Sync worker answered to the form shown.
     pub refusal: RwSignal<Option<AuthFailure>>,
+    /// Whether a provider sign-in reclaimed the address of the account
+    /// (`CHROME-146`). A page boots afresh on a sign-out, so a new session
+    /// starts from `Held`.
+    pub address: RwSignal<AddressStanding>,
 }
 
 impl Default for KeysSignals {
@@ -72,7 +81,14 @@ impl KeysSignals {
         Self {
             face: RwSignal::new(KeysFace::Closed),
             refusal: RwSignal::new(None),
+            address: RwSignal::new(AddressStanding::Held),
         }
+    }
+
+    /// The relay said that a provider sign-in reclaimed the address of the
+    /// account: the launcher names the reclaim (`CHROME-146`).
+    pub fn address_reclaimed(self) {
+        self.address.set(AddressStanding::Reclaimed);
     }
 
     /// Shows `face`, with no refusal of an earlier form.
@@ -117,6 +133,58 @@ impl KeysSignals {
             KeysFace::Recover | KeysFace::ChangePassphrase => Launcher::Covered,
             KeysFace::Closed | KeysFace::Words(_) => Launcher::Shown,
         })
+    }
+}
+
+/// One line of the reclaim notice (`CHROME-146`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum ReclaimLine {
+    /// The fact: the address left the account.
+    Title,
+    /// What the fact means for a share to the address.
+    Meaning,
+}
+
+impl ReclaimLine {
+    /// The words of the line in `locale`. A function of the locale, as a
+    /// command title is (`ambre-spec-commands.md`): the view supplies the
+    /// language, and this table owns the words.
+    fn text(self, locale: Locale) -> &'static str {
+        match (self, locale) {
+            (Self::Title, Locale::En) => "Your address was reclaimed",
+            (Self::Title, Locale::Fr) => "Votre adresse a \u{e9}t\u{e9} reprise",
+            (Self::Meaning, Locale::En) => {
+                "An account that its provider verified now holds this address. Documents \
+                 shared with the address now reach that account, not yours. Your documents \
+                 and keys stay with you."
+            }
+            (Self::Meaning, Locale::Fr) => {
+                "Un compte v\u{e9}rifi\u{e9} par son fournisseur d\u{e9}tient \
+                 d\u{e9}sormais cette adresse. Les documents partag\u{e9}s avec cette \
+                 adresse parviennent \u{e0} ce compte, plus au v\u{f4}tre. Vos documents \
+                 et vos cl\u{e9}s restent les v\u{f4}tres."
+            }
+        }
+    }
+}
+
+/// The reclaim notice of the launcher, or nothing while the account holds its
+/// address (`CHROME-146`). It names the reclaim, then what a share to the
+/// address now reaches. It stays for the whole session: a toast would leave
+/// before a person reads it.
+pub fn reclaim_notice(keys: KeysSignals) -> impl IntoView {
+    // No setting supplies the reader's language yet (`ambre-spec-commands.md`
+    // section 6). Every view of the launcher shows English.
+    let locale = Locale::En;
+    move || match keys.address.get() {
+        AddressStanding::Held => ().into_any(),
+        AddressStanding::Reclaimed => view! {
+            <section class="ambre-address-reclaimed" role="alert">
+                <h2>{ReclaimLine::Title.text(locale)}</h2>
+                <p>{ReclaimLine::Meaning.text(locale)}</p>
+            </section>
+        }
+        .into_any(),
     }
 }
 

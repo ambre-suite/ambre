@@ -45,6 +45,7 @@ impl SyncState {
                         user_id: me.user_id,
                         display_name: me.display_name,
                         email: me.email,
+                        address: me.address_reclaimed,
                         signing_key: master_seed.derive_signing_key(),
                         exchange_key: master_seed.derive_exchange_key(),
                         master_seed,
@@ -121,6 +122,7 @@ impl SyncState {
                             user_id,
                             display_name: resp.display_name,
                             email: ambre_core::Email::new(String::new()),
+                            address: ambre_core::AddressStanding::Held,
                             master_seed,
                             signing_key,
                             exchange_key,
@@ -346,6 +348,7 @@ impl SyncState {
                         user_id: me.user_id,
                         display_name: me.display_name,
                         email: me.email,
+                        address: me.address_reclaimed,
                     });
                 }
                 Err(KeyWriteFailure::Auth(cause)) => {
@@ -485,6 +488,7 @@ impl SyncState {
                 user_id: me.user_id,
                 display_name: me.display_name,
                 email: me.email,
+                address: me.address_reclaimed,
             });
         });
     }
@@ -2039,6 +2043,7 @@ mod set_up_keys_tests {
                 display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada")
                     .unwrap(),
                 email: "ada@example.org".into(),
+                address: ambre_core::AddressStanding::Held,
             });
             id
         };
@@ -2127,6 +2132,7 @@ mod set_up_keys_tests {
             user_id,
             display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada").unwrap(),
             email: "ada@example.org".into(),
+            address: ambre_core::AddressStanding::Held,
         });
         assert!(!state.setup_owed);
         assert_eq!(state.socket_opens.get(), 1);
@@ -2152,5 +2158,89 @@ mod set_up_keys_tests {
             ),
             "told {told:?}"
         );
+    }
+    /// `CHROME-146`, `SRV-321`: the relay's account answer reads its reclaim
+    /// flag, and an answer without it reads as held. A session whose address
+    /// was reclaimed tells Logic the session, then the reclaim. A session
+    /// that holds its address tells the session alone.
+    #[test]
+    fn a_reclaimed_address_follows_the_session_it_belongs_to() {
+        let me = |json: &str| {
+            serde_json::from_str::<http::AuthMeResponse>(json)
+                .expect("an account answer")
+                .address_reclaimed
+        };
+        let user = Id::<User>::mint();
+        let answer = |reclaimed: &str| {
+            format!(
+                r#"{{"user_id":"{user}","display_name":"Ada","email":"ada@example.org"{reclaimed}}}"#
+            )
+        };
+        assert_eq!(
+            me(&answer(r#","address_reclaimed":true"#)),
+            ambre_core::AddressStanding::Reclaimed
+        );
+        assert_eq!(
+            me(&answer(r#","address_reclaimed":false"#)),
+            ambre_core::AddressStanding::Held
+        );
+        assert_eq!(me(&answer("")), ambre_core::AddressStanding::Held);
+
+        for address in [
+            ambre_core::AddressStanding::Held,
+            ambre_core::AddressStanding::Reclaimed,
+        ] {
+            let (mut state, rx) = worker();
+            let seed = MasterSeed::generate();
+            let id = ambre_bus::next_request();
+            state.handle_sync_event(SyncEvent::SessionReady {
+                id: Some(id),
+                user_id: user,
+                display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada")
+                    .unwrap(),
+                email: "ada@example.org".into(),
+                address,
+                signing_key: seed.derive_signing_key(),
+                exchange_key: seed.derive_exchange_key(),
+                master_seed: seed,
+                tokens: TokenPair::new(
+                    Credential::new("access-3".to_owned()),
+                    Credential::new("refresh-3".to_owned()),
+                    ambre_core::TimeSpan::<ambre_core::Sec>::new(900),
+                ),
+            });
+            let told: Vec<LogicEvent> = rx
+                .try_iter()
+                .filter(|e| matches!(e, LogicEvent::Rest { .. }))
+                .collect();
+            match address {
+                ambre_core::AddressStanding::Held => assert!(
+                    matches!(
+                        told.as_slice(),
+                        [LogicEvent::Rest {
+                            evt: RestEvent::SessionReady { .. },
+                            ..
+                        }]
+                    ),
+                    "told {told:?}"
+                ),
+                ambre_core::AddressStanding::Reclaimed => assert!(
+                    matches!(
+                        told.as_slice(),
+                        [
+                            LogicEvent::Rest {
+                                id: Some(answered),
+                                evt: RestEvent::SessionReady { .. },
+                            },
+                            LogicEvent::Rest {
+                                id: None,
+                                evt: RestEvent::AddressReclaimed,
+                            },
+                        ] if *answered == id
+                    ),
+                    "told {told:?}"
+                ),
+            }
+        }
     }
 }

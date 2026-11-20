@@ -460,6 +460,9 @@ pub(crate) enum Effect<'e> {
     Refused(AuthFailure),
     /// The recovery is done: close the keys face.
     CloseKeys,
+    /// A provider sign-in reclaimed the address of the account: the launcher
+    /// names the reclaim (`CHROME-146`).
+    AddressReclaimed,
     /// The Sync worker refused the passphrase of a sealed save as weak: the
     /// prompt opens again and says why (`DOCFILE-022`).
     RefuseSeal(PassphraseWeakness),
@@ -673,6 +676,10 @@ impl Switchboard {
             // The form closes; the session of the recovered keys follows
             // and replaces the gate (`SYNC-293`, `CHROME-133`).
             RestEvent::AccountRecovered => effects.push(Effect::CloseKeys),
+            // The relay's account answer names a reclaim of the address
+            // (`SRV-321`). The launcher says so for the whole session
+            // (`CHROME-146`).
+            RestEvent::AddressReclaimed => effects.push(Effect::AddressReclaimed),
             // The change form closes and says the new passphrase holds.
             RestEvent::PassphraseChanged => {
                 effects.push(Effect::CloseKeys);
@@ -1797,6 +1804,19 @@ mod tests {
         let recovered = rest(RestEvent::AccountRecovered);
         let effects = switchboard.service(&recovered, on(None), &nobody());
         assert!(matches!(effects.as_slice(), [Effect::CloseKeys]));
+    }
+
+    /// `CHROME-146`: the reclaim the Sync worker tells reaches the launcher
+    /// alone. It raises no toast and asks nothing of the relay.
+    #[test]
+    fn a_reclaimed_address_reaches_the_launcher() {
+        let mut switchboard = Switchboard::new(Page::Document);
+        let reclaimed = rest(RestEvent::AddressReclaimed);
+        let effects = switchboard.service(&reclaimed, on(None), &nobody());
+        assert!(
+            matches!(effects.as_slice(), [Effect::AddressReclaimed]),
+            "the reclaim did not reach the launcher alone"
+        );
     }
 
     /// A Murmure page asks its channels once signed in, after the document

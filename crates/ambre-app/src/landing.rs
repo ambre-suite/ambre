@@ -215,6 +215,12 @@ pub fn landing_view(
                 </Show>
             </header>
 
+            // A provider sign-in reclaimed the address of the account
+            // (`CHROME-146`). The notice stays over the list for the session.
+            <Show when=move || username.get().is_some()>
+                {crate::account::reclaim_notice(keys)}
+            </Show>
+
             // A provider account whose keys are still to open or to set up.
             // The setup and the recovery forms cover the gate.
             <Show when=move || keys.launcher() == crate::account::Launcher::Shown>
@@ -990,6 +996,77 @@ mod tests {
         assert_eq!(
             web_sys::window().unwrap().location().href().unwrap(),
             before
+        );
+        container.remove();
+    }
+
+    /// `CHROME-146`: the launcher of a session names a reclaim of its
+    /// address, then says that shares to the address now reach the verified
+    /// account. The notice is an alert, and an account that holds its address
+    /// shows none.
+    #[wasm_bindgen_test]
+    async fn the_launcher_names_a_reclaimed_address_and_what_it_means() {
+        let owner = Owner::new();
+        owner.set();
+        let (tx, _rx) = ambre_bus::conduit::local::<LogicCommand>(ambre_core::Bounded::<
+            ambre_bus::conduit::ChannelSlots,
+        >::of::<8>());
+        let keys = crate::account::KeysSignals::new();
+        let signals = LandingSignals {
+            docs: RwSignal::new(Vec::new()),
+            username: RwSignal::new(Some(
+                ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada".to_owned()).unwrap(),
+            )),
+            dev_mode: RwSignal::new(Some(SignInMode::Oidc)),
+            booted: DocType::Prose,
+            toasts: Toasts::new(),
+            opened_file: RwSignal::new(None),
+            keys,
+            gate: crate::keys_gate::KeysGate::new(),
+        };
+        let container = mount_in_container(move || {
+            view! {
+                <leptos_router::components::Router>
+                    {landing_view(signals, crate::outbox::ShellOutbox::new(tx))}
+                </leptos_router::components::Router>
+            }
+        });
+        tick().await;
+        let notice = |c: &web_sys::Element| {
+            c.query_selector(".ambre-address-reclaimed[role='alert']")
+                .unwrap()
+        };
+        assert!(
+            notice(&container).is_none(),
+            "an account that holds its address shows a reclaim"
+        );
+        assert!(
+            container
+                .query_selector(".ambre-landing-user")
+                .unwrap()
+                .is_some(),
+            "the launcher shows no session"
+        );
+
+        keys.address_reclaimed();
+        tick().await;
+        let shown = notice(&container).expect("the launcher names the reclaim");
+        let title = shown
+            .query_selector("h2")
+            .unwrap()
+            .unwrap()
+            .text_content()
+            .unwrap();
+        assert_eq!(title, "Your address was reclaimed");
+        let meaning = shown
+            .query_selector("p")
+            .unwrap()
+            .unwrap()
+            .text_content()
+            .unwrap();
+        assert!(
+            meaning.contains("shared with the address now reach that account, not yours"),
+            "the notice does not say where a share goes: {meaning}"
         );
         container.remove();
     }

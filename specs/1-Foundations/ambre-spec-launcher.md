@@ -98,6 +98,7 @@ The provider says who the person is; a passphrase opens their keys, or a setup c
 | `CHROME-132` | `POST` | An account setup MUST end in the session of the account it created: once the recovery words are confirmed, the list MUST show, never the sign-in panel. | this spec section 2; `ambre-spec-sync.md`, `SYNC-261`; `CHROME-099` | `ambre_belt::account::tests::a_setup_ends_in_the_session_once_the_words_are_confirmed` -- browser tier, the words show in a modal over the list of the new user, and their confirmation leaves that list with no sign-in panel | none | verified |
 | `CHROME-133` | `POST` | The unlock face MUST link to the recovery form, and a recovery there MUST open the list on the recovered keys, never the unlock face again. | this spec section 2; `ambre-spec-zero-knowledge.md`, `ZK-043`; `CHROME-097`; `CHROME-128`; `ambre-spec-sync.md`, `SYNC-293` | `ambre_app::keys_gate::view::tests::the_unlock_face_links_to_the_recovery_form` -- wasm tier, the unlock face links to the form and the setup face does not; `ambre_app::switchboard::tests::the_words_and_a_refusal_reach_the_keys_face` -- the answer of a recovery closes the form; `ambre_belt::account::tests::the_unlock_face_leads_to_a_recovery_that_opens_the_account` -- browser tier, a provider account recovers from the unlock face, and the list then shows with no gate | none | verified |
 | `CHROME-142` | `POST` | Each face of the keys gate MUST offer a sign-out, which ends the session on the live threads. | this spec section 2; `CHROME-107` | `ambre_app::keys_gate::view::tests::each_face_offers_a_sign_out` -- wasm tier, the unlock and the setup faces each send one sign-out, however many clicks | none | verified |
+| `CHROME-146` | `OBS` | Given an account whose address a provider sign-in reclaimed, the launcher MUST name the reclaim, and MUST say that shares to the address now reach the verified account. | this spec section 2; `ambre-spec-session.md`, `SRV-029`, `SRV-321` | `ambre_app::landing::tests::the_launcher_names_a_reclaimed_address_and_what_it_means` -- wasm tier, the mounted launcher of a session shows no notice, then an alert that names the reclaim and says where a share goes; `ambre_app::switchboard::tests::a_reclaimed_address_reaches_the_launcher` -- the reclaim reaches the launcher alone; `ambre_sync::auth::set_up_keys_tests::a_reclaimed_address_follows_the_session_it_belongs_to` -- the account answer reads its flag, and the worker tells the reclaim after the session, never for an address the account holds | none | verified |
 
 ### 1.7 Sign out
 
@@ -152,7 +153,7 @@ surface, and which face it shows is decided by the state of the session.
 | unknown, otherwise | a single button that hands the browser to the identity provider (`CHROME-095`) |
 | signed in with the provider, keys stored | the account the provider named (`CHROME-144`), a passphrase field that opens its keys (`CHROME-097`), a link to the recovery form (`CHROME-133`) and a sign-out (`CHROME-142`) |
 | signed in with the provider, keys owed | the account the provider named (`CHROME-144`), the setup: a passphrase, then the recovery words once (`CHROME-098`, `CHROME-099`), and a sign-out (`CHROME-142`) |
-| known | the header, the kind picker and the document list |
+| known | the header, the kind picker and the document list. A notice over them names a reclaim of the address (`CHROME-146`) |
 
 **Why a provider sign-in is not yet a session.** The provider vouches for who the person is, and
 the relay answers a token pair for that. Neither can open a key. A development sign-in derives its
@@ -204,6 +205,12 @@ closes the form.
 Each refusal reads on the form in its own words (`CHROME-143`). A refusal names a wrong current
 passphrase, a weak new one, or a seal another device changed meanwhile. A stale seal asks for a new
 try (`ambre-spec-sync.md`, `SYNC-295`).
+
+**A reclaimed address.** A provider sign-in reclaims the address of an account that only asserted
+it (`ambre-spec-session.md`, `SRV-029`). The relay's account answer says so (`SRV-321`). The
+launcher of that session then shows a notice for the whole session. The notice names the reclaim,
+and says that shares to the address now reach the verified account (`CHROME-146`). A toast would
+leave before a person reads it.
 
 **A setup ends in a session.** The Sync worker answers a setup with the recovery words, then
 announces the session of the user the relay names (`SYNC-261`). The words cover the list until

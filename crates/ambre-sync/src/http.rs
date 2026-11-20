@@ -1598,6 +1598,10 @@ pub(crate) struct AuthMeResponse {
     pub user_id: Id<User>,
     pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
     pub email: ambre_core::Email,
+    /// Whether a provider sign-in reclaimed the address (`SRV-321`). A relay
+    /// that predates the field answers none, which reads as held.
+    #[serde(default)]
+    pub address_reclaimed: ambre_core::AddressStanding,
 }
 
 /// `GET /api/channels/{id}/documents`: the documents a channel groups.
