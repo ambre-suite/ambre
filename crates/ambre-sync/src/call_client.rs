@@ -260,7 +260,7 @@ impl CallClient {
             sender,
             at: Instant::<Authored>::after_epoch(now.since_epoch()),
         };
-        let Ok((keys, handoff)) = CallKeys::start(identity, joining) else {
+        let Ok((keys, handoff)) = CallKeys::start(identity, joining, log) else {
             self.phase = Phase::Ended;
             return Steps::ended(CallEnd::Exhausted);
         };

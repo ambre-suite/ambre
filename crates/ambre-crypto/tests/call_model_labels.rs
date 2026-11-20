@@ -217,8 +217,15 @@ fn a_wrap_opens_under_the_wrap_label_of_the_model() {
     ]
     .concat();
     let kek: [u8; 32] = expand(shared.as_bytes(), &info).expect("HKDF expands 32 bytes");
-    // The generation, the key, then no departure in sixteen zero slots (`CALL-157`).
-    let plaintext = [&9u64.to_be_bytes()[..], &SENDER_KEY, &[0u8; 1 + 8 * 16]].concat();
+    // The generation, the key, no departure in sixteen zero slots (`CALL-157`), then the
+    // place of the log the sender heeded (`CALL-159`).
+    let plaintext = [
+        &9u64.to_be_bytes()[..],
+        &SENDER_KEY,
+        &[0u8; 1 + 8 * 16],
+        &4u64.to_be_bytes(),
+    ]
+    .concat();
     let nonce = [5u8; 24];
     let ciphertext = XChaCha20Poly1305::new(Key::from_slice(&kek))
         .encrypt(
@@ -231,7 +238,7 @@ fn a_wrap_opens_under_the_wrap_label_of_the_model() {
         .expect("the wrap seals");
     let wrapped =
         WrappedSenderKey::from_bytes(&Payload::new([&nonce[..], ciphertext.as_slice()].concat()))
-            .expect("a wrap is 209 bytes");
+            .expect("a wrap is 217 bytes");
     let opened = unwrap_sender_key(
         &recipient,
         &FixedBytes::from_array(sender_public.to_bytes()),
@@ -241,6 +248,7 @@ fn a_wrap_opens_under_the_wrap_label_of_the_model() {
     .expect("the code opens the wrap of the model");
     let key = opened.key;
     assert_eq!(opened.generation.get(), 9);
+    assert_eq!(opened.heeded.get(), 4);
     let kid = audio_kid(9);
     let (sealed, counter) = sealed_by_the_code(&key, kid, b"opus").expect("the code seals");
     let spelled = kid.to_bytes().expect("the identifier fits");
