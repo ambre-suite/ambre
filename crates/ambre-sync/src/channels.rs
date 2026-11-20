@@ -1030,6 +1030,9 @@ impl SyncState {
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
         let exchange_key = self.exchange_key.clone();
+        // A listed name opens under the key the walked or kept log of its
+        // meta accepted alone (`SYNC-291`).
+        let kept = self.kept_keys();
         crate::spawn(async move {
             let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route("/channels");
@@ -1038,9 +1041,7 @@ impl SyncState {
                 {
                     Ok(answer) => {
                         let names = match exchange_key.as_ref() {
-                            Some(key) => {
-                                open_channel_names(&answer, key, url_scheme, &api_base, &auth).await
-                            }
+                            Some(key) => open_channel_names(&answer, key, &kept),
                             None => Vec::new(),
                         };
                         let keys = exchange_key
@@ -1143,14 +1144,13 @@ fn listed_keys(
 }
 
 /// The names sealed beside each meta of `answer`, opened with the user's
-/// wrapped key of that meta (`SYNC-171`). A name that does not open is
-/// none, and so is an empty one: a rename clears a name that way.
-async fn open_channel_names(
+/// wrapped key of that meta (`SYNC-171`), and only under the key `kept`
+/// holds for it (`SYNC-291`). A name that does not open is none, and so is
+/// an empty one: a rename clears a name that way.
+fn open_channel_names(
     answer: &http::MemberChannelsResponse,
     exchange_key: &StaticSecret,
-    url_scheme: crate::http::UrlScheme,
-    api_base: &crate::http::Url<crate::http::RelayHost>,
-    auth: &http::AuthContext,
+    kept: &HashMap<Id<Document>, FixedBytes<KeyId>>,
 ) -> Vec<ChannelName> {
     let mut names = Vec::new();
     for entry in &answer.channels {
@@ -1162,8 +1162,9 @@ async fn open_channel_names(
             doc_key_enc: &entry.doc_key_enc,
             wrapper_exchange_pub_key: entry.wrapper_exchange_pub_key.as_ref(),
             name_enc,
+            kept: kept.get(&entry.meta_id.document_id()).copied(),
         };
-        match listed.open(exchange_key, url_scheme, api_base, auth).await {
+        match listed.open(exchange_key) {
             Some(name) if !ambre_core::name_is_empty(&name) => names.push(ChannelName {
                 channel_id: entry.channel_id,
                 name,
@@ -2362,15 +2363,12 @@ pub(crate) mod tests {
             ],
             spaces: Vec::new(),
         };
-        let auth = state.auth_context();
-        let names = open_channel_names(
-            &answer,
-            &own,
-            crate::http::UrlScheme::Http,
-            &crate::http::Url::<crate::http::RelayHost>::new(String::new()),
-            &auth,
-        )
-        .await;
+        // Every meta's log accepted `key` at an open (`SYNC-291`).
+        let kept: HashMap<Id<Document>, FixedBytes<KeyId>> = [named, elsewhere, cleared, bare]
+            .into_iter()
+            .map(|meta| (meta.document_id(), key.id()))
+            .collect();
+        let names = open_channel_names(&answer, &own, &kept);
         assert_eq!(
             names,
             vec![ChannelName {
@@ -2378,6 +2376,13 @@ pub(crate) mod tests {
                 name: ambre_core::Validated::<ambre_core::Name>::parse("Design").unwrap(),
             }]
         );
+        // `SYNC-291`: a meta this client never walked shows no name, nor
+        // one whose log accepted another key. The relay can wrap a key of
+        // its own, so the copy alone names nothing.
+        assert!(open_channel_names(&answer, &own, &HashMap::new()).is_empty());
+        let moved: HashMap<Id<Document>, FixedBytes<KeyId>> =
+            [(named.document_id(), DocumentKey::generate().id())].into();
+        assert!(open_channel_names(&answer, &own, &moved).is_empty());
         // Each key opens, and one that does not is left out.
         // Each keeps the last number of its meta, none where none is listed.
         let mut answer = answer;

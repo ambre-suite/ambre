@@ -66,6 +66,15 @@ pub enum SyncCommand {
         inviter: ambre_core::FixedBytes<ambre_core::InviterPin>,
     },
 
+    /// Hold `kept`, where the log of `document_id` stood in an earlier
+    /// session, as the footing of every later open of the session
+    /// (`SYNC-290`). The Main thread sends it from the local store before
+    /// any open.
+    KeepLog {
+        document_id: Id<Document>,
+        kept: crate::KeptLog,
+    },
+
     /// Pin the inviter that a Murmure invite link names (`SYNC-236`). A
     /// Murmure page binds no document, so the pin roots every Murmure open
     /// of the session (`SYNC-235`).

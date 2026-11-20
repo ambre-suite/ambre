@@ -1456,6 +1456,11 @@ pub struct SyncState {
     /// it (audit `P44`). An invite of that user refuses another signing key
     /// beside the exchange key the user confirmed.
     shown_identities: HashMap<Id<User>, ambre_crypto::IdentityKeys>,
+    /// Where each log stood when this client last accepted a key of it, by
+    /// the log's document, this session and the kept ones before it
+    /// (`SYNC-290`). A listed name opens under the key it names alone
+    /// (`SYNC-291`).
+    kept_logs: HashMap<Id<Document>, ambre_bus::KeptLog>,
 
     // -- Single multiplexed WebSocket -----------------------------------------
     ws: Option<WebSocket>,
@@ -1633,6 +1638,7 @@ impl SyncState {
             space_rotations: HashMap::new(),
             log_footings: HashMap::new(),
             shown_identities: HashMap::new(),
+            kept_logs: HashMap::new(),
             ws: None,
             _onmessage: None,
             _onclose: None,
@@ -1889,6 +1895,7 @@ impl SyncState {
             } => {
                 self.pinned_inviters.insert(document_id, inviter);
             }
+            SyncCommand::KeepLog { document_id, kept } => self.hold_kept_log(document_id, kept),
             SyncCommand::PinMurmureInviter { inviter } => {
                 self.murmure_roots.insert(inviter);
             }

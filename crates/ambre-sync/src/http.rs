@@ -2264,25 +2264,8 @@ pub(crate) fn decode_links(resp: KeyLinksResponse) -> Vec<ambre_protocol::KeyLin
         .collect()
 }
 
-/// The links of `document_id`, or none when the relay cannot serve them: the
-/// frames sealed under a key older than the cache then stay closed.
-pub(crate) async fn fetch_key_links(
-    url_scheme: crate::http::UrlScheme,
-    api_base: &crate::http::Url<crate::http::RelayHost>,
-    document_id: Id<Document>,
-    auth: AuthContext,
-) -> Vec<ambre_protocol::KeyLink> {
-    match try_fetch_key_links(url_scheme, api_base, document_id, auth).await {
-        Ok(links) => links,
-        Err(e) => {
-            crate::log::warning!("Sync: key links of {document_id:?} unavailable: {e}");
-            Vec::new()
-        }
-    }
-}
-
-/// [`fetch_key_links`], with the failure of the request kept. A check that
-/// needs the links tells a relay out of reach apart from a link it lacks
+/// The links of `document_id`, with the failure of the request kept. A check
+/// that needs the links tells a relay out of reach apart from a link it lacks
 /// (`SYNC-200`).
 pub(crate) async fn try_fetch_key_links(
     url_scheme: crate::http::UrlScheme,

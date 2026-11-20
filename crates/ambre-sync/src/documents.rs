@@ -13,6 +13,9 @@ impl SyncState {
             let url_scheme = self.url_scheme;
             let auth = self.auth_context();
             let exchange_key = self.exchange_key.clone();
+            // A listed name opens under the key the walked or kept log
+            // accepted alone (`SYNC-291`).
+            let kept = self.kept_keys();
             crate::spawn(async move {
                 let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                     .route("/documents");
@@ -34,8 +37,9 @@ impl SyncState {
                                             .wrapper_exchange_pub_key
                                             .as_ref(),
                                         name_enc,
+                                        kept: kept.get(&document_id).copied(),
                                     };
-                                    listed.open(ek, url_scheme, &api_base, &auth).await
+                                    listed.open(ek)
                                 }
                                 _ => None,
                             };
@@ -361,36 +365,40 @@ impl SyncState {
 }
 
 /// One sealed name of a listing, with the wrapped key that opens it: a
-/// document of the launcher, or the meta of a channel. Keys are base64 of
-/// `nonce || ciphertext`; the wrapper's exchange key is `None` for a
-/// self-wrapped owner row.
+/// document of the launcher, or the meta of a channel. The wrapper's
+/// exchange key is `None` for a self-wrapped owner row.
 pub(crate) struct ListedName<'a> {
     pub(crate) document_id: Id<Document>,
     pub(crate) doc_key_enc: &'a ambre_core::Encoded<ambre_core::WrappedDocKey>,
     pub(crate) wrapper_exchange_pub_key:
         Option<&'a ambre_core::FixedBytes<ambre_core::ExchangePublicKey>>,
     pub(crate) name_enc: &'a ambre_core::Encoded<ambre_core::SealedName>,
+    /// The key id the walked or kept log of the document accepted last,
+    /// `None` for a document this client never walked (`SYNC-291`).
+    pub(crate) kept: Option<ambre_core::FixedBytes<ambre_core::KeyId>>,
 }
 
 impl ListedName<'_> {
-    /// The plaintext name. A name sealed before the last rotation names an
-    /// older key, which the chain recovers (`SYNC-042`, `SYNC-119`). `None` on
-    /// any decode or crypto failure: the launcher shows "Untitled".
-    pub(crate) async fn open(
+    /// The plaintext name, or `None`: the launcher then shows its neutral
+    /// label.
+    ///
+    /// The relay names the wrapper of the copy, so it can wrap a key of its
+    /// own and seal a name of its choosing under it. The name opens only
+    /// under the key the checks of an open accepted last for this log, kept
+    /// across sessions, and only when it was sealed under that key
+    /// (`SYNC-291`). A listing sends no request of its own, so a name sealed
+    /// before the last rotation, or a document never walked, shows none.
+    pub(crate) fn open(
         &self,
         exchange_key: &x25519_dalek::StaticSecret,
-        url_scheme: crate::http::UrlScheme,
-        api_base: &crate::http::Url<crate::http::RelayHost>,
-        auth: &http::AuthContext,
     ) -> Option<ambre_core::Validated<ambre_core::Name>> {
         let current = self.unwrap_key(exchange_key)?;
-        // One request more, and only for a name older than the current key.
-        let links = if pipeline::object_key(self.name_enc).ok()? == current.id() {
-            Vec::new()
-        } else {
-            http::fetch_key_links(url_scheme, api_base, self.document_id, auth.clone()).await
-        };
-        open_name(self.document_id, &current, self.name_enc, links)
+        if self.kept != Some(current.id())
+            || pipeline::object_key(self.name_enc).ok()? != current.id()
+        {
+            return None;
+        }
+        open_name(self.document_id, &current, self.name_enc, Vec::new())
     }
 
     /// The current key, ECDH-unwrapped against the wrapper's exchange key.

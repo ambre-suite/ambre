@@ -628,6 +628,7 @@ impl SyncState {
         self.doc_metadata.clear();
         self.log_footings.clear();
         self.shown_identities.clear();
+        self.kept_logs.clear();
         self.session_nonces.clear();
         self.light.clear();
         self.self_join_logs.clear();

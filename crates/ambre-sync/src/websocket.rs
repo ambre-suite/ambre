@@ -1053,6 +1053,7 @@ impl SyncState {
                         None => doc_state.footing = Some(footing),
                     }
                     self.log_walked_to(footing);
+                    self.keep_log(document_id);
                 }
             }
             SyncEvent::ChannelRotated {

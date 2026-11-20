@@ -316,6 +316,10 @@ impl LogicState {
             LogicCommand::PinMurmureInviter { inviter } => {
                 self.send_to_sync(SyncCommand::PinMurmureInviter { inviter })
             }
+            // The kept log is the Sync worker's to hold (`SYNC-290`).
+            LogicCommand::KeepLog { document_id, kept } => {
+                self.send_to_sync(SyncCommand::KeepLog { document_id, kept });
+            }
             LogicCommand::OpenDocument {
                 document_id,
                 doc_type,
@@ -672,6 +676,11 @@ impl LogicState {
                 document_id,
                 inviter,
             } => self.send_to_persist(document_id, PersistWrite::KeepInviter(inviter)),
+
+            // The local store keeps where the log stands (`SYNC-290`).
+            LogicEvent::LogKept { document_id, kept } => {
+                self.send_to_persist(document_id, PersistWrite::KeepLog(kept));
+            }
 
             // Initial hydration complete: any snapshot was applied by the
             // preceding RemoteSnapshot arm (queue order is preserved), so the
@@ -1821,6 +1830,40 @@ mod tests {
         assert_eq!(
             persist_rx.try_iter().collect::<Vec<_>>(),
             [(document_id, PersistWrite::KeepInviter(pin))]
+        );
+    }
+
+    /// Holds `SYNC-290` on the Logic side: a kept log goes to the local store
+    /// as a row of its document, and one the store hands back reaches the
+    /// Sync worker unchanged.
+    #[test]
+    fn a_kept_log_goes_to_the_store_and_back_to_sync() {
+        let (to_ui, _ui) = test_link();
+        let (to_sync, sync_rx) = test_link();
+        let (to_persist, persist_rx) = test_link();
+        let mut state = LogicState::new(to_ui, to_sync, to_persist);
+        let document_id = Id::<Document>::mint();
+        let kept = ambre_bus::KeptLog {
+            anchor: ambre_core::FixedBytes::from_array([1; 32]),
+            head: ambre_bus::LogHead {
+                position: ambre_core::Seq::new(4),
+                previous: Some(ambre_core::FixedBytes::from_array([2; 32])),
+            },
+            key: ambre_core::FixedBytes::from_array([3; 16]),
+        };
+        state.handle_logic_event(LogicEvent::LogKept { document_id, kept });
+        assert_eq!(
+            persist_rx.try_iter().collect::<Vec<_>>(),
+            [(document_id, PersistWrite::KeepLog(kept))]
+        );
+        state.handle_logic_command(LogicCommand::KeepLog { document_id, kept });
+        let sent: Vec<SyncCommand> = std::iter::from_fn(|| sync_rx.try_recv().ok()).collect();
+        assert!(
+            sent.iter().any(|cmd| matches!(
+                cmd,
+                SyncCommand::KeepLog { document_id: d, kept: k } if *d == document_id && *k == kept
+            )),
+            "{sent:?}"
         );
     }
 

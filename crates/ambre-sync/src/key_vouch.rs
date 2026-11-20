@@ -478,9 +478,10 @@ impl KeyVouch {
 /// `P27`). It holds the anchor that the checks of an open accepted, and the
 /// latest valid head this client walked or signed from that anchor.
 ///
-/// Only three paths build one: the checks of an open, the creation this
-/// client signed, and the anchor a catalogue seals under a space key. The
-/// relay can forge none of them. The fields stay private to this module.
+/// Only four paths build one: the checks of an open, the creation this
+/// client signed, the anchor a catalogue seals under a space key, and the
+/// footing an earlier session of this client kept (`SYNC-290`). The relay
+/// can forge none of them. The fields stay private to this module.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Footing {
     /// The document whose log this is: the `meta` of a channel, or the
@@ -561,6 +562,27 @@ impl Footing {
     /// or the document itself (`SYNC-229`).
     pub(crate) fn document(&self) -> Id<Document> {
         self.document
+    }
+
+    /// The footing an earlier session of this client kept for the log of
+    /// `document` (`SYNC-290`). The local store took it from this worker
+    /// alone, so the relay chose none of it.
+    pub(crate) fn kept(document: Id<Document>, kept: &ambre_bus::KeptLog) -> Self {
+        Self {
+            document,
+            anchor: kept.anchor,
+            head: kept.head,
+        }
+    }
+
+    /// What the local store keeps of this footing, beside `key`, the key the
+    /// checks accepted last (`SYNC-290`).
+    pub(crate) fn to_kept(self, key: FixedBytes<ambre_core::KeyId>) -> ambre_bus::KeptLog {
+        ambre_bus::KeptLog {
+            anchor: self.anchor,
+            head: self.head,
+            key,
+        }
     }
 
     /// This footing when it walks from `anchor`, `None` when it walks from

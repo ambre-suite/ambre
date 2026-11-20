@@ -1836,6 +1836,7 @@ impl SyncState {
         let current = doc_state.doc_key.id();
         let (refused, waiting) = doc_state.rekey.key_installed(current);
         self.resend_refused(document_id, refused, waiting);
+        self.keep_log(document_id);
         // A new space key leaves each catalogue entry under the old one stale.
         self.drive_space_rotation(document_id);
     }
