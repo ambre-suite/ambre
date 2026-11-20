@@ -119,7 +119,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-275` | `POST` | A sign-out MUST drop every key, root, pin, log and buffered delta of the session. | this spec section 2; `SYNC-235`, `SYNC-237` | `ambre_sync::run_tests::a_sign_out_leaves_nothing_of_the_session_in_the_worker` -- the roots, the pins, the listed channel keys, the typed opens and the plaintext deltas buffered before an open are gone | none | verified |
 | `SYNC-281` | `FAIL` | Given a request the session spawned before its sign-out, its answer MUST NOT reach the session that follows. | this spec section 2; `SYNC-275` | `ambre_sync::run_tests::a_sign_out_leaves_nothing_of_the_session_in_the_worker` -- a sender a task of the ended session holds reaches the queue of that session alone, and the next session reads another queue | none | verified |
 | `SYNC-277` | `FAIL` | Given an answer body or a socket frame past its ceiling in `ambre-spec-budgets.md`, the Sync worker MUST refuse it. | this spec section 2; `ambre-spec-budgets.md` section 1 | `ambre_sync::http::tests::a_body_meter_refuses_the_chunk_past_its_ceiling` -- the meter takes bytes up to the ceiling and refuses the chunk past it; `ambre_sync::http::tests::an_answer_past_its_ceiling_is_no_answer` -- a relay answer past its ceiling is no answer, and an object request holds the larger ceiling; `ambre_sync::websocket::tests::a_socket_frame_past_its_ceiling_is_not_read` -- a frame past its ceiling is not read | none | verified |
-| `SYNC-278` | `FAIL` | Given a body whose stated length or whose bytes read so far pass its ceiling, the Sync worker MUST stop reading it. | this spec section 2; `SYNC-277` | none | unheld -- the metered read of a browser `fetch` runs only in a worker; a wasm-tier test lands with the `A sign-out leaves nothing of the session in the worker` Story (`ambre-roadmap.md` MVP) | failing |
+| `SYNC-278` | `FAIL` | Given a body whose stated length or whose bytes read so far pass its ceiling, the Sync worker MUST stop reading it. | this spec section 2; `SYNC-277` | `ambre_sync::tests::metered_fetch::a_body_past_its_ceiling_stops_at_the_chunk_that_passes_it` -- wasm tier: a body that never ends stops at the chunk past its ceiling, and the stream is cancelled; `ambre_sync::tests::metered_fetch::a_stated_length_past_its_ceiling_reads_no_byte` -- a stated length past the ceiling pulls no chunk; `ambre_sync::tests::metered_fetch::a_body_up_to_its_ceiling_reads_whole` -- a body up to its ceiling reads whole | none | verified |
 
 ### 1.7 An account is recovered
 
@@ -154,7 +154,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this worker **is** the client side of the boundary `ambre-spec-zero-knowledge.md`
   draws. `SYNC-002` and `SYNC-095` keep the keys in. `SYNC-060` and `SYNC-061` keep the tokens in,
   and `SYNC-067` seals the one document field that is content rather than routing.
-* **Verification.** 82 `verified`, 1 `failing`, 1 `unimplemented`. The crate graph holds the keys
+* **Verification.** 83 `verified`, 1 `unimplemented`. The crate graph holds the keys
   and the CRDT apart. Unit tests hold the token redaction and wipe, the refused channel send and the
   name bound to its document. A gate refuses browser storage in the worker. Each gap left is a
   browser property the wasm tier cannot boot, `ambre-spec-testing.md section 9`.

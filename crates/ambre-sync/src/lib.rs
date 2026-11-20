@@ -223,6 +223,10 @@ mod withheld;
 mod worker;
 
 pub use http::{RelayHost, Url, UrlKind};
+/// The metered read of an answer body, for the wasm-tier test of `SYNC-278`.
+#[cfg(target_arch = "wasm32")]
+#[doc(hidden)]
+pub use http::metered_body_len;
 
 // -----------------------------------------------------------------------------
 // Quarantine bounds (`ambre-spec-delta-order.md`)

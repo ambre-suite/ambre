@@ -83,6 +83,12 @@ mutants = { workspace = true }
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 proptest = { workspace = true }
 
+# The metered read of a `fetch` body runs on a browser stream alone, so its
+# test runs under `wasm-bindgen-test-runner` (`tests/metered_fetch.rs`,
+# `SYNC-278`).
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3"
+
 # Sync worker bootstrap (wasm only): panic overlay + tracing into the console.
 # This is a separate wasm instance from Main, so it inits its own subscriber.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
