@@ -522,12 +522,10 @@ impl SyncState {
             .and_then(|tx| {
                 let (space_keys, exchange_key) = self.space_keys(space_id)?;
                 let author = self.author().ok_or(SyncError::SessionLocked)?;
-                let (doc_key_enc, key_id) =
-                    join_key(channel_id, sealed, &space_keys, &exchange_key)?;
-                let exchange = crate::sharing::own_exchange_key(&exchange_key);
-                Ok((tx, doc_key_enc, key_id, (author, exchange)))
+                let unsealed = unseal_channel_key(channel_id, sealed, &space_keys)?;
+                Ok((tx, unsealed, exchange_key, author))
             });
-        let (tx, doc_key_enc, key_id, (author, exchange)) = match prepared {
+        let (tx, unsealed, exchange_key, author) = match prepared {
             Ok(prepared) => prepared,
             Err(message) => return self.channel_answered(channel_id, Err(message.into())),
         };
@@ -540,7 +538,13 @@ impl SyncState {
             let result = async {
                 let head =
                     http::get_json_auth::<http::JoinHeadResponse>(&url, auth.clone()).await?;
-                let entry = self_join_entry(&author, exchange, &head, key_id)?;
+                // The copy lands on the rows of the meta the join head names,
+                // and binds it (audit `P59`). The key is this user's own, so a
+                // meta the relay names wrongly opens nothing for anyone else.
+                let doc_key_enc =
+                    wrap_join_key(head.meta_id.document_id(), &unsealed, &exchange_key)?;
+                let exchange = crate::sharing::own_exchange_key(&exchange_key);
+                let entry = self_join_entry(&author, exchange, &head, unsealed.0.id())?;
                 let body = http::JoinChannelRequest { doc_key_enc, entry };
                 http::post_json_auth_ok(&url, &body, auth).await?;
                 Ok::<_, http::HttpError>(())
@@ -1126,6 +1130,7 @@ fn listed_keys(
                 &entry.doc_key_enc,
                 entry.wrapper_exchange_pub_key.as_ref(),
                 exchange_key,
+                entry.meta_id.document_id(),
             )?;
             let listed = ambre_bus::ChannelMeta {
                 channel_id: entry.channel_id,
@@ -1258,9 +1263,13 @@ pub(crate) fn unseal_channel_key(
 /// The self-join key: the catalogue's key, unsealed and wrapped for this
 /// user alone, as the Murmure spaces spec asks of a self-join, and its id.
 /// The wrap carries the anchor the catalogue sealed, so the joiner replays
-/// meta's log from the word of the member who created the channel.
+/// meta's log from the word of the member who created the channel. It binds
+/// `meta`, whose rows it lands on (audit `P59`). The join task wraps once the
+/// join head names the meta, so only the tests take the two steps at once.
+#[cfg(test)]
 pub(crate) fn join_key(
     channel_id: Id<Channel>,
+    meta: Id<Document>,
     sealed: &SealedChannelKey,
     space_keys: &crate::chain::Keyring,
     exchange_key: &StaticSecret,
@@ -1271,10 +1280,26 @@ pub(crate) fn join_key(
     ),
     SyncError,
 > {
-    let (key, anchor) = unseal_channel_key(channel_id, sealed, space_keys)?;
+    let unsealed = unseal_channel_key(channel_id, sealed, space_keys)?;
+    let wrapped = wrap_join_key(meta, &unsealed, exchange_key)?;
+    Ok((wrapped, unsealed.0.id()))
+}
+
+/// The copy of an unsealed catalogue key and its anchor this user wraps for
+/// itself, bound to `meta`.
+fn wrap_join_key(
+    meta: Id<Document>,
+    (key, anchor): &(DocumentKey, Option<FixedBytes<ambre_protocol::EntryDigest>>),
+    exchange_key: &StaticSecret,
+) -> Result<ambre_core::Encoded<ambre_core::WrappedDocKey>, SyncError> {
     let own_pub = crate::sharing::own_exchange_key(exchange_key);
-    let wrapped = crate::sharing::wrap_anchored_b64(exchange_key, &own_pub, &key, anchor)?;
-    Ok((wrapped, key.id()))
+    Ok(crate::sharing::wrap_anchored_b64(
+        exchange_key,
+        &own_pub,
+        meta,
+        key,
+        *anchor,
+    )?)
 }
 
 /// The `SelfJoin` entry that extends the log the join head names, at the
@@ -1375,7 +1400,7 @@ pub(crate) fn direct_message_request(
     // The creation goes first, so the first digest is the log's root.
     let root = root.ok_or(SyncError::NoDigest)?;
     let wrap = |peer: &FixedBytes<ambre_core::ExchangePublicKey>| {
-        crate::sharing::wrap_anchored_b64(exchange_key, peer, &key, Some(root))
+        crate::sharing::wrap_anchored_b64(exchange_key, peer, document, &key, Some(root))
     };
     let members = members
         .iter()
@@ -1764,20 +1789,17 @@ pub(crate) mod tests {
         StaticSecret::from([byte; 32])
     }
 
-    /// The key a wrapped value opens to, for its holder.
+    /// The meta every self-join test wraps a copy for.
+    const META: Id<Document> = Id::<Document>::from_bytes([0x3e; 16]);
+
+    /// The key a wrapped value of [`META`] opens to, for its holder.
     fn unwrap_own(
         exchange_key: &StaticSecret,
         doc_key_enc: &ambre_core::Encoded<ambre_core::WrappedDocKey>,
     ) -> Option<DocumentKey> {
-        let bytes = doc_key_enc.as_bytes();
-        let (nonce, ciphertext) = FixedBytes::<ambre_core::Nonce>::split_from(bytes)?;
-        let wrapped = ambre_crypto::ecdh::WrappedKey {
-            nonce,
-            ciphertext: Payload::<ambre_core::Ciphertext>::new(ciphertext.to_vec()),
-        };
         let own_pub = crate::sharing::own_exchange_key(exchange_key);
         let (key, anchor) =
-            ambre_crypto::ecdh::unwrap_anchored(exchange_key, &own_pub, &wrapped).ok()?;
+            ambre_crypto::ecdh::unwrap_anchored(exchange_key, &own_pub, META, doc_key_enc).ok()?;
         assert_eq!(anchor, Some(ANCHOR), "every wrap carries meta's anchor");
         Some(key)
     }
@@ -1794,8 +1816,9 @@ pub(crate) mod tests {
         let channel_key = DocumentKey::generate();
         let sealed = seal_channel_key(channel_id, &channel_key, space_key, ANCHOR).expect("seal");
         let own_pub = crate::sharing::own_exchange_key(creator);
-        let own = crate::sharing::wrap_anchored_b64(creator, &own_pub, &channel_key, Some(ANCHOR))
-            .expect("wrap");
+        let own =
+            crate::sharing::wrap_anchored_b64(creator, &own_pub, META, &channel_key, Some(ANCHOR))
+                .expect("wrap");
         (sealed, own)
     }
 
@@ -1834,7 +1857,7 @@ pub(crate) mod tests {
         let channel_key = unwrap_own(&alice, &alice_enc).expect("Alice opens her own wrap");
 
         let (bob_enc, key_id) =
-            join_key(channel_id, &sealed, &ring(&space_key, &[]), &bob).expect("join");
+            join_key(channel_id, META, &sealed, &ring(&space_key, &[]), &bob).expect("join");
         assert_eq!(key_id, channel_key.id());
         let bob_key = unwrap_own(&bob, &bob_enc).expect("Bob opens his wrap");
         assert!(same_key(&bob_key, &channel_key));
@@ -2180,7 +2203,7 @@ pub(crate) mod tests {
         let keys = format!(
             r#""doc_key_enc":{},"wrapper_exchange_pub_key":null"#,
             serde_json::to_string(&ambre_core::Encoded::<ambre_core::WrappedDocKey>::new(
-                vec![0; 72]
+                vec![0; 73]
             ))
             .unwrap()
         );
@@ -2295,10 +2318,10 @@ pub(crate) mod tests {
         let own = exchange_key(1);
         let own_pub = crate::sharing::own_exchange_key(&own);
         let key = DocumentKey::generate();
-        let wrapped = ambre_crypto::ecdh::wrap_document_key(&own, &own_pub, &key).unwrap();
-        let doc_key_enc = ambre_core::Encoded::new(
-            [wrapped.nonce.as_slice(), wrapped.ciphertext.as_bytes()].concat(),
-        );
+        // Each copy binds the meta whose rows carry it (audit `P59`).
+        let doc_key_enc = |meta: Id<Meta>| {
+            ambre_crypto::ecdh::wrap_document_key(&own, &own_pub, meta.document_id(), &key).unwrap()
+        };
         let entry =
             |meta: Id<Meta>, name_enc: Option<ambre_core::Encoded<ambre_core::SealedName>>| {
                 http::MemberChannelEntry {
@@ -2307,7 +2330,7 @@ pub(crate) mod tests {
                     visibility: ambre_core::Visibility::Private,
                     meta_id: meta,
                     name_enc,
-                    doc_key_enc: doc_key_enc.clone(),
+                    doc_key_enc: doc_key_enc(meta),
                     wrapper_exchange_pub_key: None,
                     peers: Vec::new(),
                     meta_last: None,
@@ -2742,17 +2765,17 @@ pub(crate) mod tests {
     fn unwrap_from(
         holder: &StaticSecret,
         sender: &StaticSecret,
+        meta: Id<Meta>,
         doc_key_enc: &ambre_core::Encoded<ambre_core::WrappedDocKey>,
     ) -> Option<(DocumentKey, Option<FixedBytes<ambre_protocol::EntryDigest>>)> {
-        let bytes = doc_key_enc.as_bytes();
-        let (nonce, ciphertext) = FixedBytes::<ambre_core::Nonce>::split_from(bytes)?;
-        let wrapped = ambre_crypto::ecdh::WrappedKey {
-            nonce,
-            ciphertext: Payload::<ambre_core::Ciphertext>::new(ciphertext.to_vec()),
-        };
         let sender_pub = crate::sharing::own_exchange_key(sender);
-        let (key, root) =
-            ambre_crypto::ecdh::unwrap_anchored(holder, &sender_pub, &wrapped).ok()?;
+        let (key, root) = ambre_crypto::ecdh::unwrap_anchored(
+            holder,
+            &sender_pub,
+            meta.document_id(),
+            doc_key_enc,
+        )
+        .ok()?;
         Some((key, root))
     }
 
@@ -2800,7 +2823,8 @@ pub(crate) mod tests {
         .expect("request");
 
         assert_eq!(body.entries.len(), members.len() + 2);
-        let (own_key, root) = unwrap_from(&alice, &alice, &body.doc_key_enc).expect("own wrap");
+        let (own_key, root) =
+            unwrap_from(&alice, &alice, meta, &body.doc_key_enc).expect("own wrap");
         assert_eq!(body.key_id, own_key.id());
         let entries = membership_log::decode(&body.entries);
         // `SYNC-123`: the creation and each invite name the key; the role
@@ -2827,7 +2851,7 @@ pub(crate) mod tests {
 
         for (secret, wrap) in [(&bob, &body.members[0]), (&carol, &body.members[1])] {
             let (key, opened_root) =
-                unwrap_from(secret, &alice, &wrap.doc_key_enc).expect("member wrap");
+                unwrap_from(secret, &alice, meta, &wrap.doc_key_enc).expect("member wrap");
             assert_eq!(opened_root, root);
             assert!(same_key(&key, &own_key));
         }

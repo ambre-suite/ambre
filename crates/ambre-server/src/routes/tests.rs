@@ -120,7 +120,7 @@ mod handler_tests {
         let body = serde_json::json!({
             "email": "user@ambre.app",
             "display_name": "Test User",
-            "master_key_enc": base64_encode(&[1u8; 72]),
+            "master_key_enc": base64_encode(&[1u8; 73]),
             "master_key_salt": hex::encode([2u8; 32]),
             "signing_pubkey": hex::encode([3u8; 32]),
             "exchange_pubkey": hex::encode([4u8; 32]),
@@ -155,7 +155,7 @@ mod handler_tests {
         let body = serde_json::json!({
             "email": "User@Ambre.App",
             "display_name": "Impostor",
-            "master_key_enc": base64_encode(&[9u8; 72]),
+            "master_key_enc": base64_encode(&[9u8; 73]),
             "master_key_salt": hex::encode([8u8; 32]),
             "signing_pubkey": hex::encode([7u8; 32]),
             "exchange_pubkey": hex::encode([6u8; 32]),
@@ -267,7 +267,7 @@ mod handler_tests {
         let body = serde_json::json!({
             "doc_type": "prose",
             "name_enc": base64_encode(b"encrypted-name"),
-            "doc_key_enc": base64_encode(&[5u8; 72]),
+            "doc_key_enc": base64_encode(&[5u8; 73]),
         });
         let resp = app
             .clone()
@@ -549,7 +549,7 @@ mod handler_tests {
         let body = serde_json::json!({
             "doc_type": "spreadsheet",
             "name_enc": base64_encode(b"x"),
-            "doc_key_enc": base64_encode(&[5u8; 72]),
+            "doc_key_enc": base64_encode(&[5u8; 73]),
         });
         let resp = app
             .clone()
@@ -941,7 +941,7 @@ mod handler_tests {
         let body = serde_json::json!({
             "invitee_email": invitee_email,
             "role": "editor",
-            "doc_key_enc": base64_encode(&[9u8; 72]),
+            "doc_key_enc": base64_encode(&[9u8; 73]),
             "key_id": key_id_hex(1),
         });
         let resp = app
@@ -973,7 +973,7 @@ mod handler_tests {
         let body = |email: Option<&str>, id: Option<String>| {
             let mut body = serde_json::json!({
                 "role": "editor",
-                "doc_key_enc": base64_encode(&[9u8; 72]),
+                "doc_key_enc": base64_encode(&[9u8; 73]),
                 "key_id": key_id_hex(1),
             });
             if let Some(email) = email {
@@ -1101,7 +1101,7 @@ mod handler_tests {
         let body = serde_json::json!({
             "invitee_email": invitee_email,
             "role": "editor",
-            "doc_key_enc": base64_encode(&[9u8; 72]),
+            "doc_key_enc": base64_encode(&[9u8; 73]),
             "key_id": key_id_hex(1),
         });
         let resp = app
@@ -1134,10 +1134,10 @@ mod handler_tests {
         assert_eq!(members.len(), 1);
         let owner_id = members[0]["user_id"].as_str().unwrap().to_string();
         // The owner's key is still the one set at document creation.
-        assert_eq!(members[0]["doc_key_enc"], base64_encode(&[5u8; 72]));
+        assert_eq!(members[0]["doc_key_enc"], base64_encode(&[5u8; 73]));
 
         // Rotate: re-wrap the document key for the remaining owner.
-        let new_key = base64_encode(&[0xABu8; 72]);
+        let new_key = base64_encode(&[0xABu8; 73]);
         let rotate_body = serde_json::json!({
             "keys": [ { "user_id": owner_id, "doc_key_enc": new_key } ],
             "members": [ owner_id ],
@@ -1173,7 +1173,7 @@ mod handler_tests {
         let body = serde_json::json!({
             "email": email,
             "display_name": "Signer",
-            "master_key_enc": base64_encode(&[1u8; 72]),
+            "master_key_enc": base64_encode(&[1u8; 73]),
             "master_key_salt": hex::encode([2u8; 32]),
             "signing_pubkey": hex::encode(key.verifying_key().to_bytes()),
             "exchange_pubkey": hex::encode([seed; 32]),
@@ -1297,7 +1297,7 @@ mod handler_tests {
         );
         let body = serde_json::json!({
             "doc_type": "prose", "document_id": doc_id,
-            "doc_key_enc": base64_encode(&[5u8; 72]), "entry": create,
+            "doc_key_enc": base64_encode(&[5u8; 73]), "entry": create,
         });
         let (status, _) =
             status_and_code(&app, json_request("POST", "/api/documents", &owner, &body)).await;
@@ -1309,7 +1309,7 @@ mod handler_tests {
         );
         let body = serde_json::json!({
             "invitee_email": "bob@log.test", "role": "editor",
-            "doc_key_enc": base64_encode(&[9u8; 72]), "key_id": key_id_hex(1), "entry": invite,
+            "doc_key_enc": base64_encode(&[9u8; 73]), "key_id": key_id_hex(1), "entry": invite,
         });
         let share = format!("/api/documents/{doc_id}/share");
         let (status, _) = status_and_code(&app, json_request("POST", &share, &owner, &body)).await;
@@ -1507,7 +1507,7 @@ mod handler_tests {
         let body = serde_json::json!({
             "invitee_email": invitee_email,
             "role": "editor",
-            "doc_key_enc": base64_encode(&[9u8; 72]),
+            "doc_key_enc": base64_encode(&[9u8; 73]),
             "key_id": key_id_hex(1),
         });
         let resp = app
@@ -1940,7 +1940,7 @@ mod handler_tests {
 
     fn store_master_keys_body() -> serde_json::Value {
         serde_json::json!({
-            "master_key_enc": base64_encode(&[1u8; 72]),
+            "master_key_enc": base64_encode(&[1u8; 73]),
             "master_key_salt": hex::encode([2u8; 32]),
             "signing_pubkey": hex::encode([3u8; 32]),
             "exchange_pubkey": hex::encode([4u8; 32]),
@@ -2004,7 +2004,7 @@ mod handler_tests {
         let body = serde_json::json!({
             "email": "mallory@ambre.app",
             "display_name": "Mallory",
-            "master_key_enc": base64_encode(&[9u8; 72]),
+            "master_key_enc": base64_encode(&[9u8; 73]),
             "master_key_salt": hex::encode([8u8; 32]),
             "signing_pubkey": hex::encode([3u8; 32]),
             "exchange_pubkey": hex::encode([6u8; 32]),
@@ -2055,7 +2055,7 @@ mod handler_tests {
         use ambre_protocol::master_rotation::{MasterRotation, SealedSeed, rotation_transcript};
         use ed25519_dalek::Signer;
         let sealed = SealedSeed {
-            master_key_enc: ambre_core::Encoded::new(vec![enc; 72]),
+            master_key_enc: ambre_core::Encoded::new(vec![enc; 73]),
             master_key_salt: ambre_core::FixedBytes::from_array([salt; 32]),
         };
         let replaces = ambre_core::FixedBytes::from_array([replaces; 32]);
@@ -2119,7 +2119,7 @@ mod handler_tests {
         let body = rotation_body(&key, 2, 5, 6);
         let (status, _) = status_and_code(&app, json_request("PUT", rotate, &auth, &body)).await;
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(stored_seal(&state, id).await, (vec![5; 72], vec![6; 32]));
+        assert_eq!(stored_seal(&state, id).await, (vec![5; 73], vec![6; 32]));
     }
 
     /// `SRV-279`: two re-seals over one seal race, and one lands. The loser
@@ -2141,8 +2141,8 @@ mod handler_tests {
         );
         let moved = (StatusCode::CONFLICT, "CONFLICT".to_owned());
         let (winner, landed, lost) = match (a, b) {
-            ((StatusCode::OK, _), lost) => (first, (vec![5; 72], vec![6; 32]), lost),
-            (lost, (StatusCode::OK, _)) => (second, (vec![7; 72], vec![8; 32]), lost),
+            ((StatusCode::OK, _), lost) => (first, (vec![5; 73], vec![6; 32]), lost),
+            (lost, (StatusCode::OK, _)) => (second, (vec![7; 73], vec![8; 32]), lost),
             other => panic!("no re-seal landed: {other:?}"),
         };
         assert_eq!(lost, moved, "the loser is refused");
@@ -2180,7 +2180,7 @@ mod handler_tests {
             let mut body = serde_json::json!({
                 "email": "short@ambre.app",
                 "display_name": "Short",
-                "master_key_enc": base64_encode(&[1u8; 72]),
+                "master_key_enc": base64_encode(&[1u8; 73]),
                 "master_key_salt": hex::encode([2u8; 32]),
                 "signing_pubkey": hex::encode([3u8; 32]),
                 "exchange_pubkey": hex::encode([4u8; 32]),
@@ -2382,7 +2382,7 @@ mod handler_tests {
             serde_json::json!({
                 "invitee_email": "keyless@example.com",
                 "role": role,
-                "doc_key_enc": base64_encode(&[9u8; 72]),
+                "doc_key_enc": base64_encode(&[9u8; 73]),
                 "key_id": key_id_hex(1),
             "key_id": key_id_hex(1),
             })
@@ -3022,7 +3022,7 @@ mod handler_tests {
         let body = serde_json::json!({
             "email": "user@ambre.app",
             "display_name": "Test User",
-            "master_key_enc": base64_encode(&[1u8; 72]),
+            "master_key_enc": base64_encode(&[1u8; 73]),
             "master_key_salt": hex::encode([2u8; 32]),
             "signing_pubkey": hex::encode([3u8; 32]),
             "exchange_pubkey": hex::encode([4u8; 32]),
@@ -3047,7 +3047,7 @@ mod handler_tests {
         let body = serde_json::json!({
             "email": email,
             "display_name": "Second User",
-            "master_key_enc": base64_encode(&[1u8; 72]),
+            "master_key_enc": base64_encode(&[1u8; 73]),
             "master_key_salt": hex::encode([2u8; 32]),
             "signing_pubkey": hex::encode([spk_byte; 32]),
             "exchange_pubkey": hex::encode([spk_byte; 32]),
@@ -3071,7 +3071,7 @@ mod handler_tests {
         let body = serde_json::json!({
             "invitee_email": invitee_email,
             "role": role,
-            "doc_key_enc": base64_encode(&[9u8; 72]),
+            "doc_key_enc": base64_encode(&[9u8; 73]),
             "key_id": key_id_hex(1),
         });
         let resp = app
@@ -3873,7 +3873,7 @@ mod handler_tests {
         let body = serde_json::json!({
             "invitee_email": invitee_email,
             "role": role,
-            "doc_key_enc": base64_encode(&[9u8; 72]),
+            "doc_key_enc": base64_encode(&[9u8; 73]),
             "key_id": key_id_hex(1),
         });
         app.clone()
@@ -3931,7 +3931,7 @@ mod handler_tests {
         let body = serde_json::json!({
             "email": email,
             "display_name": "Signer",
-            "master_key_enc": base64_encode(&[1u8; 72]),
+            "master_key_enc": base64_encode(&[1u8; 73]),
             "master_key_salt": hex::encode([2u8; 32]),
             "signing_pubkey": hex::encode(key.verifying_key().to_bytes()),
             "exchange_pubkey": hex::encode([8u8; 32]),
@@ -4360,7 +4360,7 @@ mod handler_tests {
             .find(|m| m["email"] == "user@ambre.app")
             .expect("owner still a member");
         assert_eq!(owner_row["role"], "owner");
-        assert_eq!(owner_row["doc_key_enc"], base64_encode(&[5u8; 72]));
+        assert_eq!(owner_row["doc_key_enc"], base64_encode(&[5u8; 73]));
 
         // Nominal path: the editor may still invite a fresh viewer.
         let viewer_email = "viewer2@ambre.app";
@@ -4392,7 +4392,7 @@ mod handler_tests {
             "document_id": doc_id,
             "doc_type": "prose",
             "name_enc": base64_encode(b"test"),
-            "doc_key_enc": base64_encode(&[7u8; 72]),
+            "doc_key_enc": base64_encode(&[7u8; 73]),
         });
         app.clone()
             .oneshot(
@@ -4596,7 +4596,7 @@ mod handler_tests {
         let body = serde_json::json!({
             "doc_type": "prose",
             "name_enc": base64_encode(b"test"),
-            "doc_key_enc": base64_encode(&[5u8; 72]),
+            "doc_key_enc": base64_encode(&[5u8; 73]),
         });
         let resp = app
             .clone()
@@ -4631,7 +4631,7 @@ mod handler_tests {
         let editor_uid = doc_user_id(&state, "editor@test.com").await;
 
         let rotate_body = serde_json::json!({
-            "keys": [ { "user_id": editor_uid, "doc_key_enc": base64_encode(&[0xABu8; 72]) } ],
+            "keys": [ { "user_id": editor_uid, "doc_key_enc": base64_encode(&[0xABu8; 73]) } ],
             "members": [ editor_uid ],
             "link": link_text(&doc_id, 2, 1),
         });
@@ -4770,7 +4770,7 @@ mod handler_tests {
         // `SRV-299`: a rotation that leaves a member without a copy is
         // refused, and the debt stays owed.
         let short = serde_json::json!({
-            "keys": [ { "user_id": stayer_uid, "doc_key_enc": base64_encode(&[0xCDu8; 72]) } ],
+            "keys": [ { "user_id": stayer_uid, "doc_key_enc": base64_encode(&[0xCDu8; 73]) } ],
             "members": members,
             "link": link_text(&doc_id, 2, 1),
         });
@@ -4784,7 +4784,7 @@ mod handler_tests {
 
         let copies: Vec<_> = members
             .iter()
-            .map(|uid| serde_json::json!({ "user_id": uid, "doc_key_enc": base64_encode(&[0xCDu8; 72]) }))
+            .map(|uid| serde_json::json!({ "user_id": uid, "doc_key_enc": base64_encode(&[0xCDu8; 73]) }))
             .collect();
         let keys = serde_json::json!({
             "keys": copies,
@@ -4829,7 +4829,7 @@ mod handler_tests {
             .unwrap()
             .to_string();
 
-        let new_key = base64_encode(&[0xEFu8; 72]);
+        let new_key = base64_encode(&[0xEFu8; 73]);
         let body = serde_json::json!({
             "user_id": revokee_uid,
             "keys": [ { "user_id": owner_uid, "doc_key_enc": new_key } ],
@@ -4885,7 +4885,7 @@ mod handler_tests {
             )
             .await
             .unwrap();
-        let new_key = base64_encode(&[0xE7; 72]);
+        let new_key = base64_encode(&[0xE7; 73]);
         let revoke_keeping = |read: &[String]| {
             let keys: Vec<_> = read
                 .iter()
@@ -4965,7 +4965,7 @@ mod handler_tests {
         let revoke_with = |read: Vec<String>| {
             let keys: Vec<_> = read
                 .iter()
-                .map(|uid| serde_json::json!({ "user_id": uid, "doc_key_enc": base64_encode(&[0xE2; 72]) }))
+                .map(|uid| serde_json::json!({ "user_id": uid, "doc_key_enc": base64_encode(&[0xE2; 73]) }))
                 .collect();
             serde_json::json!({
                 "user_id": revokee_uid,
@@ -5011,7 +5011,7 @@ mod handler_tests {
         assert!(
             members
                 .iter()
-                .all(|m| m["doc_key_enc"] == base64_encode(&[0xE2; 72])),
+                .all(|m| m["doc_key_enc"] == base64_encode(&[0xE2; 73])),
             "every member left holds the current key: {members:?}"
         );
 
@@ -5020,7 +5020,7 @@ mod handler_tests {
         let stale = serde_json::json!({
             "invitee_email": "late@test.com",
             "role": "editor",
-            "doc_key_enc": base64_encode(&[9u8; 72]),
+            "doc_key_enc": base64_encode(&[9u8; 73]),
             "key_id": key_id_hex(1),
         });
         let share = || Request::post(format!("/api/documents/{doc_id}/share"));
@@ -5032,7 +5032,7 @@ mod handler_tests {
         let current = serde_json::json!({
             "invitee_email": "late@test.com",
             "role": "editor",
-            "doc_key_enc": base64_encode(&[0xE2; 72]),
+            "doc_key_enc": base64_encode(&[0xE2; 73]),
             "key_id": key_id_hex(2),
         });
         assert_eq!(
@@ -5142,7 +5142,7 @@ mod handler_tests {
             .to_string();
         let rotation = |copy: u8, link: String| {
             serde_json::json!({
-                "keys": [ { "user_id": owner_uid, "doc_key_enc": base64_encode(&[copy; 72]) } ],
+                "keys": [ { "user_id": owner_uid, "doc_key_enc": base64_encode(&[copy; 73]) } ],
                 "members": [ owner_uid ],
                 "link": link,
             })
@@ -5176,7 +5176,7 @@ mod handler_tests {
             StatusCode::BAD_REQUEST
         );
         let bare = serde_json::json!({
-            "keys": [ { "user_id": owner_uid, "doc_key_enc": base64_encode(&[0xB3; 72]) } ],
+            "keys": [ { "user_id": owner_uid, "doc_key_enc": base64_encode(&[0xB3; 73]) } ],
             "members": [ owner_uid ],
         });
         assert!(
@@ -5186,7 +5186,7 @@ mod handler_tests {
         );
         assert_eq!(key_links(&app, &owner, &doc_id).await, chained);
         let members = list_members(&app, &owner, &doc_id).await;
-        assert_eq!(members[0]["doc_key_enc"], base64_encode(&[0xA3; 72]));
+        assert_eq!(members[0]["doc_key_enc"], base64_encode(&[0xA3; 73]));
 
         let stranger = setup_named(&app, "stranger@test.com", 76).await;
         let read = Request::get(format!("/api/documents/{doc_id}/key-links"));
@@ -5300,7 +5300,7 @@ mod handler_tests {
         let intruder = setup_named(&app, "intruder@test.com", 72).await;
         let body = serde_json::json!({
             "doc_type": "prose",
-            "doc_key_enc": base64_encode(&[6u8; 72]),
+            "doc_key_enc": base64_encode(&[6u8; 73]),
             "document_id": doc_id,
         });
         let resp = app

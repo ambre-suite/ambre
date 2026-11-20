@@ -1270,8 +1270,16 @@ impl SyncState {
                 email,
                 email_proof,
                 exchange_pub_key,
+                signing_pub_key,
                 fingerprint,
             } => {
+                self.shown_identities.insert(
+                    user_id,
+                    ambre_crypto::IdentityKeys {
+                        exchange: exchange_pub_key,
+                        signing: signing_pub_key,
+                    },
+                );
                 self.reply(
                     id,
                     RestEvent::InviteeKey {
@@ -1289,8 +1297,16 @@ impl SyncState {
                 id,
                 user_id,
                 exchange_pub_key,
+                signing_pub_key,
                 fingerprint,
             } => {
+                self.shown_identities.insert(
+                    user_id,
+                    ambre_crypto::IdentityKeys {
+                        exchange: exchange_pub_key,
+                        signing: signing_pub_key,
+                    },
+                );
                 self.reply(
                     id,
                     RestEvent::MemberKey {
@@ -1994,13 +2010,14 @@ impl SyncState {
 
             // The new key was wrapped by the rotator, and the unwrap runs
             // against their exchange key, not our own.
-            let (new_doc_key, anchor) = match Self::unwrap_anchored(&ek, &resp.members) {
-                Ok(unwrapped) => unwrapped,
-                Err(e) => {
-                    crate::log::error!("Sync: KeyRotationRequired unwrap failed: {e}");
-                    return;
-                }
-            };
+            let (new_doc_key, anchor) =
+                match Self::unwrap_anchored(&ek, log_document, &resp.members) {
+                    Ok(unwrapped) => unwrapped,
+                    Err(e) => {
+                        crate::log::error!("Sync: KeyRotationRequired unwrap failed: {e}");
+                        return;
+                    }
+                };
 
             // The link the rotator left reaches back from the new key
             // (`SYNC-117`). It counts only when a writer the log names

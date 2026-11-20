@@ -854,7 +854,16 @@ mod tests {
             user_id: member.id(),
             signing_pub_key: http::ServedKey::of(member.person.public()),
             exchange_pub_key: http::ServedKey::of(holder),
-            doc_key_enc: crate::sharing::wrap_anchored_b64(wrapper, &holder, key, None).unwrap(),
+            // No check here unwraps the copy, so the document it binds is
+            // any one.
+            doc_key_enc: crate::sharing::wrap_anchored_b64(
+                wrapper,
+                &holder,
+                Id::<Document>::from_bytes([0x6b; 16]),
+                key,
+                None,
+            )
+            .unwrap(),
             role: Role::Editor,
             wrapper_exchange_pub_key: http::ServedKey::of(crate::sharing::own_exchange_key(
                 wrapper,

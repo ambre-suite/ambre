@@ -586,6 +586,7 @@ impl SyncState {
         self.documents.clear();
         self.doc_metadata.clear();
         self.log_footings.clear();
+        self.shown_identities.clear();
         self.session_nonces.clear();
         self.light.clear();
         self.self_join_logs.clear();
@@ -919,7 +920,7 @@ fn open_stored_seed(
     // on this path (`ZK-019`).
     // The seal binds the salt and the signing key the relay names for the
     // account. So a seed served for another account does not open
-    // (`ZK-047`). A seed sealed before that binding opens without it.
+    // (`ZK-047`). No seal without the version byte opens (audit `P59`).
     MasterSeed::open_from_storage(
         master_key_enc,
         &user_key,
@@ -1217,7 +1218,7 @@ mod tests {
     /// The master material the relay answers, under the signing key `signer`.
     fn stored(signer: Option<ambre_core::FixedBytes<ambre_core::PublicKey>>) -> serde_json::Value {
         serde_json::json!({
-            "master_key_enc": ambre_core::Encoded::<ambre_core::WrappedMasterKey>::new(vec![1; 72]),
+            "master_key_enc": ambre_core::Encoded::<ambre_core::WrappedMasterKey>::new(vec![1; 73]),
             "master_key_salt": stored_salt(),
             "signing_pubkey": signer,
             "exchange_pubkey": null,

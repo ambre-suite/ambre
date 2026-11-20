@@ -300,41 +300,25 @@ impl SyncState {
                             ));
                             return;
                         };
-                        let members_url =
-                            crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
-                                .route(format!("/documents/{doc_id}/members"));
-                        match http::get_json_auth::<http::MembersResponse>(
-                            &members_url,
-                            auth.clone(),
-                        )
-                        .await
-                        {
-                            Ok(resp) => {
-                                let check = crate::updates::KeyCheck {
-                                    document_id: doc_id,
-                                    log_document,
-                                    exchange_key: ek,
-                                    my_user_id,
-                                    rule,
-                                    roots,
-                                    held,
-                                    url_scheme,
-                                    api_base: api_base.clone(),
-                                    auth: auth.clone(),
-                                };
-                                match crate::updates::checked_members_key(check, &resp).await {
-                                    Ok(k) => k,
-                                    Err(failed) => {
-                                        let _ = tx.send(SyncEvent::HttpError {
-                                            id,
-                                            failure: failed.failure,
-                                        });
-                                        return;
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                let _ = tx.send(SyncEvent::http_error(id, e));
+                        let check = crate::updates::KeyCheck {
+                            document_id: doc_id,
+                            log_document,
+                            exchange_key: ek,
+                            my_user_id,
+                            rule,
+                            roots,
+                            held,
+                            url_scheme,
+                            api_base: api_base.clone(),
+                            auth: auth.clone(),
+                        };
+                        match crate::updates::members_key_via(&http::Fetch, check).await {
+                            Ok(k) => k,
+                            Err(failed) => {
+                                let _ = tx.send(SyncEvent::HttpError {
+                                    id,
+                                    failure: failed.failure,
+                                });
                                 return;
                             }
                         }
@@ -415,26 +399,26 @@ impl ListedName<'_> {
             self.doc_key_enc,
             self.wrapper_exchange_pub_key,
             exchange_key,
+            self.document_id,
         )
     }
 }
 
 /// The key a listing wrapped for this user, ECDH-unwrapped against the
-/// wrapper's exchange key. The key is base64 of `nonce || ciphertext`, and
-/// the wrapper is `None` for a self-wrapped owner row. `None` on any decode
-/// or crypto failure.
+/// wrapper's exchange key. The wrapper is `None` for a self-wrapped owner
+/// row. The copy must be a wrap for `document`, the document the listing
+/// names it under (audit `P59`). `None` on any decode or crypto failure.
 pub(crate) fn unwrap_listed_key(
     doc_key_enc: &ambre_core::Encoded<ambre_core::WrappedDocKey>,
     wrapper_exchange_pub_key: Option<&ambre_core::FixedBytes<ambre_core::ExchangePublicKey>>,
     exchange_key: &x25519_dalek::StaticSecret,
+    document: Id<Document>,
 ) -> Option<DocumentKey> {
-    let (nonce, ciphertext) = doc_key_enc.parts()?;
-    let wrapped = ambre_crypto::WrappedKey { nonce, ciphertext };
     // Self-wrapped owner row: the DH peer is our own public key.
     let peer_pub = wrapper_exchange_pub_key
         .copied()
         .unwrap_or_else(|| crate::sharing::own_exchange_key(exchange_key));
-    ambre_crypto::ecdh::unwrap_document_key(exchange_key, &peer_pub, &wrapped).ok()
+    ambre_crypto::ecdh::unwrap_document_key(exchange_key, &peer_pub, document, doc_key_enc).ok()
 }
 
 /// Opens a sealed name with the key it names: `current`, or one the chain

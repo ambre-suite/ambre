@@ -2284,9 +2284,20 @@ pub(crate) async fn try_fetch_key_links(
     document_id: Id<Document>,
     auth: AuthContext,
 ) -> Result<Vec<ambre_protocol::KeyLink>, HttpError> {
+    try_fetch_key_links_via(&Fetch, url_scheme, api_base, document_id, &auth).await
+}
+
+/// [`try_fetch_key_links`] over `transport`, which a host test scripts.
+pub(crate) async fn try_fetch_key_links_via(
+    transport: &impl Transport,
+    url_scheme: crate::http::UrlScheme,
+    api_base: &crate::http::Url<crate::http::RelayHost>,
+    document_id: Id<Document>,
+    auth: &AuthContext,
+) -> Result<Vec<ambre_protocol::KeyLink>, HttpError> {
     let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, api_base)
         .route(format!("/documents/{document_id}/key-links"));
-    get_json_auth::<KeyLinksResponse>(&url, auth)
+    get_json_auth_via::<KeyLinksResponse>(transport, &url, auth)
         .await
         .map(decode_links)
 }
@@ -3452,7 +3463,7 @@ mod tests {
             serde_json::from_str(r#"{"master_key_enc":null,"master_key_salt":null}"#).unwrap();
         assert!(owed.setup_owed());
         let stored = serde_json::json!({
-            "master_key_enc": ambre_core::Encoded::<ambre_core::WrappedMasterKey>::new(vec![1; 72]),
+            "master_key_enc": ambre_core::Encoded::<ambre_core::WrappedMasterKey>::new(vec![1; 73]),
             "master_key_salt": ambre_core::FixedBytes::<ambre_core::MasterKeySalt>::from_array([2; 32]),
         });
         let stored: MasterKeyResponse = serde_json::from_value(stored).unwrap();
