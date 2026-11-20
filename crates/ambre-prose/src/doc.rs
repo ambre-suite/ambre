@@ -979,7 +979,10 @@ pub(crate) fn meta_read(doc: &LoroDoc) -> Option<Fields<MetaKey>> {
 /// root it did not find. Laying the document out writes nothing to it
 /// (`PROSE-079`). Past the first operation, every Prose document holds its
 /// tree (`PROSE-027`), so taking it attaches nothing. A state that breaks that
-/// rule gets an empty tree in its local state, and no operation.
+/// rule gets an empty tree in its local state. Its frontiers and its pending
+/// operations stay as they were (`PROSE-141`). Loro 1.13 reads no presence of
+/// a root without attaching it or building its value, so the empty tree stays
+/// (`PROSE-142`).
 ///
 /// The lookup by path [`meta_read`] takes is closed to the tree. Before Loro
 /// picks a root by name, it builds the value of each candidate. The value of a
@@ -1770,6 +1773,29 @@ mod tests {
             crate::message::ProseRefusal::from(WriteError::Refused(RefusalCause::TreeRefusedRow)),
             crate::message::ProseRefusal::WriteFailed
         );
+    }
+
+    /// `PROSE-141`: a document that holds operations and no block tree reads
+    /// as a document of no block. The read leaves its frontiers and its
+    /// pending operations as they were, a write still in its transaction
+    /// included.
+    #[test]
+    fn a_read_of_a_document_with_no_tree_leaves_its_frontiers_and_its_pending_operations() {
+        let doc = LoroDoc::new();
+        root_map(&doc, Root::Annots)
+            .insert("committed", 1)
+            .expect("the map takes a value");
+        doc.commit();
+        root_map(&doc, Root::Annots)
+            .insert("pending", 2)
+            .expect("the map takes a value");
+        let frontiers = doc.state_frontiers();
+        let pending = doc.get_pending_txn_len();
+        assert!(pending > 0, "one write waits in the transaction");
+        let _tree = blocks_read(&doc);
+        let _bands = read_bands(&doc);
+        assert_eq!(doc.state_frontiers(), frontiers);
+        assert_eq!(doc.get_pending_txn_len(), pending);
     }
 
     #[test]
