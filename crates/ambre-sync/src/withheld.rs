@@ -1060,6 +1060,10 @@ mod tests {
         let key = crate::DocumentKey::generate();
         let (mut state, _rx, doc, snapshot) = bob_reads(&alice, &key, &entries, 2);
         state.signing_key = Some(bob.key.clone());
+        // A sample names the open it comes from (`SYNC-285`).
+        state
+            .session_nonces
+            .insert(doc, ambre_core::FixedBytes::from_array([7; 16]));
         let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
         let samples = |state: &mut SyncState| {

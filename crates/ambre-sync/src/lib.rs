@@ -222,6 +222,10 @@ mod withheld;
 #[cfg(target_arch = "wasm32")]
 mod worker;
 
+/// The metered read of an answer body, for the wasm-tier test of `SYNC-278`.
+#[cfg(target_arch = "wasm32")]
+#[doc(hidden)]
+pub use http::metered_body_len;
 pub use http::{RelayHost, Url, UrlKind};
 
 // -----------------------------------------------------------------------------
@@ -262,6 +266,14 @@ impl ambre_core::NarrowCount for Ingested {
         ambre_core::StaticKey::new("Ingested");
 }
 
+/// The open a presence sample comes from: its author's signing key and the
+/// session nonce its sealed body carries (`SYNC-285`). One author holds one
+/// key for every open, so the key alone cannot tell two opens apart.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct SampleSource {
+    author: FixedBytes<PublicKey>,
+    session: FixedBytes<SessionNonce>,
+}
 /// Hard cap on the per-document ephemeral anti-replay map
 /// ([`SyncDocumentState::ephemeral_remote_counters`]). In practice the author set
 /// is bounded by document membership, but a malicious peer can mint arbitrary
@@ -921,10 +933,11 @@ struct SyncDocumentState {
     /// The links the rotations left: a key older than the cache opens through
     /// them, walked back from the active key (`SYNC-119`).
     chain: chain::Chain,
-    /// Per-author ephemeral anti-replay counter. Keyed by the author's Ed25519
-    /// verifying key bytes. An inbound ephemeral whose counter is <= the stored
-    /// value is silently dropped.
-    ephemeral_remote_counters: HashMap<FixedBytes<PublicKey>, Seq<Ephemerals>>,
+    /// Per-open ephemeral anti-replay counter. Keyed by the author's Ed25519
+    /// verifying key and by the session nonce of the open the sample names.
+    /// A sender counts from 1 at each open (`SYNC-285`, audit `P22`). An inbound
+    /// ephemeral whose counter is <= the stored value is silently dropped.
+    ephemeral_remote_counters: HashMap<SampleSource, Seq<Ephemerals>>,
     /// Directory of this document's members' Ed25519 signing keys, mapping an
     /// ephemeral author's verifying key to their canonical `Id<User>`
     /// (`ambre-spec-membership.md`). Built from the members response already fetched at open and
@@ -1182,9 +1195,11 @@ impl SyncDocumentState {
         pipeline::open_ephemeral(eph, &key)
     }
 
-    /// Anti-replay gate for an inbound ephemeral. Returns `true` if `counter` is
-    /// strictly greater than the last value seen for `author_pk` (accept and
-    /// record it); `false` if it is a replay (drop).
+    /// Anti-replay gate for an inbound ephemeral. Returns `true` when `counter`
+    /// passes the last value seen for `author_pk` in the open `session` names,
+    /// and records it. Returns `false` for a replay, which the caller drops.
+    /// A reopened author names a new session, so a peer that stayed open
+    /// takes its samples from counter 1 again (`SYNC-285`, audit `P22`).
     ///
     /// The counter map is bounded by [`MAX_EPHEMERAL_REMOTE_AUTHORS`]: when a new
     /// author would exceed the cap, the least-active entry (lowest counter) is
@@ -1194,19 +1209,24 @@ impl SyncDocumentState {
     fn accept_ephemeral_counter(
         &mut self,
         author_pk: &FixedBytes<PublicKey>,
+        session: &FixedBytes<SessionNonce>,
         counter: Seq<Ephemerals>,
     ) -> bool {
-        // A sender counts from 1, so the floor of an author not seen yet is
-        // the counter before its first send.
+        let source = SampleSource {
+            author: *author_pk,
+            session: *session,
+        };
+        // A sender counts from 1 at each open, so the floor of an open not
+        // seen yet is the counter before its first send.
         let last = self
             .ephemeral_remote_counters
-            .get(author_pk)
+            .get(&source)
             .copied()
             .unwrap_or(Seq::<Ephemerals>::new(0));
         if counter <= last {
             return false;
         }
-        let is_new = !self.ephemeral_remote_counters.contains_key(author_pk);
+        let is_new = !self.ephemeral_remote_counters.contains_key(&source);
         if is_new && Count::of(self.ephemeral_remote_counters.len()) >= MAX_EPHEMERAL_REMOTE_AUTHORS
         {
             // Evict the least-active (lowest-counter) author to make room.
@@ -1219,7 +1239,7 @@ impl SyncDocumentState {
                 self.ephemeral_remote_counters.remove(&evict);
             }
         }
-        self.ephemeral_remote_counters.insert(*author_pk, counter);
+        self.ephemeral_remote_counters.insert(source, counter);
         true
     }
 
@@ -2552,6 +2572,9 @@ mod setup_tests {
 mod ephemeral_tests {
     use super::*;
 
+    /// The session nonce of the one open these tests read.
+    const SESSION: FixedBytes<SessionNonce> = FixedBytes::from_array([7; 16]);
+
     fn doc_state() -> SyncDocumentState {
         SyncDocumentState::new(
             Id::<Document>::mint(),
@@ -2565,13 +2588,30 @@ mod ephemeral_tests {
     fn monotonic_counter_accepted_replay_dropped() {
         let mut d = doc_state();
         let author = FixedBytes::from_array([1u8; 32]);
-        assert!(d.accept_ephemeral_counter(&author, Seq::<Ephemerals>::new(1)));
-        assert!(d.accept_ephemeral_counter(&author, Seq::<Ephemerals>::new(2)));
+        assert!(d.accept_ephemeral_counter(&author, &SESSION, Seq::<Ephemerals>::new(1)));
+        assert!(d.accept_ephemeral_counter(&author, &SESSION, Seq::<Ephemerals>::new(2)));
         // Replay / stale counters are dropped.
-        assert!(!d.accept_ephemeral_counter(&author, Seq::<Ephemerals>::new(2)));
-        assert!(!d.accept_ephemeral_counter(&author, Seq::<Ephemerals>::new(1)));
+        assert!(!d.accept_ephemeral_counter(&author, &SESSION, Seq::<Ephemerals>::new(2)));
+        assert!(!d.accept_ephemeral_counter(&author, &SESSION, Seq::<Ephemerals>::new(1)));
         // Forward progress resumes.
-        assert!(d.accept_ephemeral_counter(&author, Seq::<Ephemerals>::new(3)));
+        assert!(d.accept_ephemeral_counter(&author, &SESSION, Seq::<Ephemerals>::new(3)));
+    }
+
+    /// `SYNC-285`, audit `P22`: Alice reopens the document, and her new
+    /// open counts from 1 again. A peer that stayed open takes it, and still
+    /// refuses a replay of her former open. Before the fix, the guard read
+    /// her key alone and dropped her samples until the new counter passed
+    /// the old one.
+    #[test]
+    fn a_reopened_author_counts_from_one_again() {
+        let mut d = doc_state();
+        let alice = FixedBytes::from_array([1u8; 32]);
+        let reopened = FixedBytes::<SessionNonce>::from_array([8; 16]);
+        assert!(d.accept_ephemeral_counter(&alice, &SESSION, Seq::<Ephemerals>::new(40)));
+        assert!(d.accept_ephemeral_counter(&alice, &reopened, Seq::<Ephemerals>::new(1)));
+        assert!(!d.accept_ephemeral_counter(&alice, &reopened, Seq::<Ephemerals>::new(1)));
+        assert!(!d.accept_ephemeral_counter(&alice, &SESSION, Seq::<Ephemerals>::new(40)));
+        assert!(d.accept_ephemeral_counter(&alice, &reopened, Seq::<Ephemerals>::new(2)));
     }
 
     #[test]
@@ -2582,7 +2622,7 @@ mod ephemeral_tests {
             let mut author = [0u8; 32];
             author[..8].copy_from_slice(&i.to_le_bytes());
             let author = FixedBytes::from_array(author);
-            assert!(d.accept_ephemeral_counter(&author, Seq::<Ephemerals>::new(1)));
+            assert!(d.accept_ephemeral_counter(&author, &SESSION, Seq::<Ephemerals>::new(1)));
         }
         assert!(d.ephemeral_remote_counters.len() <= MAX_EPHEMERAL_REMOTE_AUTHORS.get() as usize);
     }
@@ -2599,10 +2639,10 @@ mod ephemeral_tests {
     #[test]
     fn below_the_cap_each_author_keeps_its_counter() {
         let mut d = doc_state();
-        assert!(d.accept_ephemeral_counter(&author(0), Seq::<Ephemerals>::new(1)));
-        assert!(d.accept_ephemeral_counter(&author(1), Seq::<Ephemerals>::new(1)));
-        assert!(!d.accept_ephemeral_counter(&author(0), Seq::<Ephemerals>::new(1)));
-        assert!(!d.accept_ephemeral_counter(&author(1), Seq::<Ephemerals>::new(1)));
+        assert!(d.accept_ephemeral_counter(&author(0), &SESSION, Seq::<Ephemerals>::new(1)));
+        assert!(d.accept_ephemeral_counter(&author(1), &SESSION, Seq::<Ephemerals>::new(1)));
+        assert!(!d.accept_ephemeral_counter(&author(0), &SESSION, Seq::<Ephemerals>::new(1)));
+        assert!(!d.accept_ephemeral_counter(&author(1), &SESSION, Seq::<Ephemerals>::new(1)));
     }
 
     /// At the cap, a known author's next counter evicts nobody: only a new
@@ -2612,11 +2652,19 @@ mod ephemeral_tests {
         let mut d = doc_state();
         let cap = u64::from(MAX_EPHEMERAL_REMOTE_AUTHORS.get());
         for i in 0..cap {
-            assert!(d.accept_ephemeral_counter(&author(i), Seq::<Ephemerals>::new(i + 1)));
+            assert!(d.accept_ephemeral_counter(
+                &author(i),
+                &SESSION,
+                Seq::<Ephemerals>::new(i + 1)
+            ));
         }
-        assert!(d.accept_ephemeral_counter(&author(cap - 1), Seq::<Ephemerals>::new(cap + 1)));
+        assert!(d.accept_ephemeral_counter(
+            &author(cap - 1),
+            &SESSION,
+            Seq::<Ephemerals>::new(cap + 1)
+        ));
         assert!(
-            !d.accept_ephemeral_counter(&author(0), Seq::<Ephemerals>::new(1)),
+            !d.accept_ephemeral_counter(&author(0), &SESSION, Seq::<Ephemerals>::new(1)),
             "the least active author is still known"
         );
     }
@@ -2815,9 +2863,9 @@ mod seal_tests {
         let WsClientMsg::Ephemeral(ephemeral) = &frames[1] else {
             panic!("the second frame is not the ephemeral: {:?}", frames[1]);
         };
-        assert_eq!(
-            pipeline::open_ephemeral(ephemeral, key).expect("opens"),
-            typed
-        );
+        let opened = pipeline::open_ephemeral(ephemeral, key).expect("opens");
+        let body = pipeline::split_presence_body(&opened).expect("splits");
+        assert_eq!(body.session, FixedBytes::from_array([1; 16]));
+        assert_eq!(body.sample, typed);
     }
 }

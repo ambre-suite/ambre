@@ -828,6 +828,38 @@ async fn read_metered(
     }
 }
 
+/// Reads the body of an answer under `ceiling`. A length `stated` past the
+/// ceiling is refused before any byte is read (`SYNC-277`). The bytes are
+/// then counted as they arrive, since a length header can lie or be absent
+/// (`SYNC-278`).
+async fn read_body(
+    stated: Option<ambre_core::Count<ambre_core::Octets>>,
+    stream: Option<web_sys::ReadableStream>,
+    ceiling: ambre_core::Count<ambre_core::Octets>,
+) -> Result<Vec<u8>, TransportError> {
+    if let Some(stated) = stated {
+        BodyMeter::new(ceiling).take(stated)?;
+    }
+    match stream {
+        Some(stream) => read_metered(stream, BodyMeter::new(ceiling)).await,
+        None => Ok(Vec::new()),
+    }
+}
+
+/// The count of bytes [`read_body`] keeps of `stream`, or `None` when it stops
+/// the read past `ceiling`. The wasm-tier test of `SYNC-278` reads it: the
+/// metered read runs only on a browser stream.
+#[cfg(target_arch = "wasm32")]
+#[doc(hidden)]
+pub async fn metered_body_len(
+    stated: Option<ambre_core::Count<ambre_core::Octets>>,
+    stream: web_sys::ReadableStream,
+    ceiling: ambre_core::Count<ambre_core::Octets>,
+) -> Option<ambre_core::Count<ambre_core::Octets>> {
+    let body = read_body(stated, Some(stream), ceiling).await.ok()?;
+    Some(ambre_core::Count::new(u64::try_from(body.len()).ok()?))
+}
+
 impl Method {
     /// The same method, as gloo-net names it.
     fn gloo(self) -> gloo_net::http::Method {
@@ -874,21 +906,12 @@ impl Transport for Fetch {
             None => builder.send().await,
         };
         let resp = sent.map_err(|e| TransportError::Fetch(e.to_string()))?;
-        let mut meter = BodyMeter::new(request.ceiling);
-        // A length the answer states past the ceiling is refused before any
-        // byte is read (`SYNC-277`).
-        if let Some(stated) = resp
+        let stated = resp
             .headers()
             .get("content-length")
             .and_then(|text| text.trim().parse::<u64>().ok())
-        {
-            meter.take(ambre_core::Count::new(stated))?;
-            meter = BodyMeter::new(request.ceiling);
-        }
-        let body = match resp.body() {
-            Some(stream) => read_metered(stream, meter).await?,
-            None => Vec::new(),
-        };
+            .map(ambre_core::Count::new);
+        let body = read_body(stated, resp.body(), request.ceiling).await?;
         Ok(Incoming {
             status: HttpStatus::new(resp.status()),
             body: Payload::<HttpBody>::new(body),

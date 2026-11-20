@@ -649,6 +649,7 @@ dependencies = [
  "tracing-wasm",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "wasm-bindgen-test",
  "web-sys",
  "x25519-dalek 2.0.1",
  "zeroize",

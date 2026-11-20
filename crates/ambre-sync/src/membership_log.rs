@@ -182,43 +182,75 @@ impl Writers {
 /// The signing keys whose confirmation of a snapshot an open trusts
 /// (`AUTHOR-030`).
 ///
-/// The set is every key a valid entry bound to a member, of any role, at any
-/// point. A reader holds the deltas as a writer does, so either may confirm.
-/// The relay cannot sign an entry, so it cannot add a key of its own.
+/// The set is the key of each member the log holds present. A reader holds
+/// the deltas as a writer does, so either may confirm. The relay cannot sign
+/// an entry, so it cannot add a key of its own. A removed member, and a key
+/// its member replaced, confirm nothing (`AUTHOR-035`).
 ///
-/// Each key keeps the keys that signed a binding of it. A confirmer that the
-/// snapshot's author bound does not count for that author. Else an editor
-/// invites a second account of their own to confirm their snapshot
-/// (`AUTHOR-034`, audit `W203`).
+/// Each key keeps the keys that signed a binding of it. A confirmer that an
+/// editor bound does not count for that editor. Else the editor invites a
+/// second account of their own to confirm their snapshot (`AUTHOR-034`,
+/// audit `W203`). An owner's snapshot counts the confirmers the owner
+/// bound: the owner ruled so on 2026-11-19 (`AUTHOR-036`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) enum Confirmers {
     /// No anchored log: a local document, or one older than the log. A
     /// confirmation then stands on its signature alone.
     #[default]
     Unchecked,
-    /// The keys the walk bound to a member, each with the keys that signed
-    /// a binding of it.
-    Granted(HashMap<FixedBytes<PublicKey>, HashSet<FixedBytes<PublicKey>>>),
+    /// The keys of the present members, and the keys of the present owners.
+    Granted(ConfirmerKeys),
+}
+
+/// What an anchored log grants a confirmer.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct ConfirmerKeys {
+    /// The key of each present member, with the keys that signed a binding
+    /// of it, every binding kept.
+    members: HashMap<FixedBytes<PublicKey>, HashSet<FixedBytes<PublicKey>>>,
+    /// The key of each present member whose role is owner.
+    owners: HashSet<FixedBytes<PublicKey>>,
 }
 
 impl Confirmers {
-    /// What the walked `log` grants.
+    /// What the walked `log` grants. The log is read at the head of its
+    /// walk, which holds every removal up to the snapshot's horizon. A
+    /// member removed after the horizon thus counts for no snapshot: the
+    /// open fails closed and checks it after the replay.
     pub(crate) fn of(log: &Log) -> Self {
-        if log.anchored {
-            Self::Granted(
-                log.bound
-                    .keys()
-                    .map(|key| (*key, log.binders.get(key).cloned().unwrap_or_default()))
-                    .collect(),
-            )
-        } else {
-            Self::Unchecked
+        if !log.anchored {
+            return Self::Unchecked;
         }
+        let present = || log.held.values().filter(|held| held.present);
+        Self::Granted(ConfirmerKeys {
+            members: present()
+                .map(|held| {
+                    let binders = log.binders.get(&held.key).cloned().unwrap_or_default();
+                    (held.key, binders)
+                })
+                .collect(),
+            owners: present()
+                .filter(|held| held.role == Role::Owner)
+                .map(|held| held.key)
+                .collect(),
+        })
+    }
+
+    /// The grant of a log whose present members hold `members`, each with
+    /// the keys that bound it, and whose present owners hold `owners`.
+    #[cfg(test)]
+    pub(crate) fn granted(
+        members: HashMap<FixedBytes<PublicKey>, HashSet<FixedBytes<PublicKey>>>,
+        owners: HashSet<FixedBytes<PublicKey>>,
+    ) -> Self {
+        Self::Granted(ConfirmerKeys { members, owners })
     }
 
     /// Whether a confirmation `confirmer` signed may stand for a member other
-    /// than `author`, the author of the snapshot. The log bound `confirmer`,
-    /// and `author` signed none of its bindings (`AUTHOR-030`, `AUTHOR-034`).
+    /// than `author`, the author of the snapshot. The log holds `confirmer`
+    /// as a present member (`AUTHOR-030`, `AUTHOR-035`). `author` signed none
+    /// of its bindings, unless `author` is a present owner (`AUTHOR-034`,
+    /// `AUTHOR-036`).
     pub(crate) fn admits(
         &self,
         confirmer: &FixedBytes<PublicKey>,
@@ -227,8 +259,9 @@ impl Confirmers {
         match self {
             Self::Unchecked => true,
             Self::Granted(keys) => keys
+                .members
                 .get(confirmer)
-                .is_some_and(|binders| !binders.contains(author)),
+                .is_some_and(|binders| keys.owners.contains(author) || !binders.contains(author)),
         }
     }
 }
@@ -1338,8 +1371,7 @@ pub(crate) mod tests {
 
     /// `AUTHOR-034`, audit `W203`: Mallory, an editor, invites a second
     /// account of hers. Its key confirms no snapshot Mallory authored, and
-    /// still confirms one Alice authored. A member the author bound never
-    /// counts for that author, the owner's invitees included.
+    /// still confirms one Alice authored.
     #[test]
     fn a_confirmer_the_author_bound_does_not_count_for_that_author() {
         let (alice, bob, mallory, guest) = (
@@ -1367,10 +1399,68 @@ pub(crate) mod tests {
         assert!(!granted.admits(&guest.public(), &mallory.public()));
         assert!(granted.admits(&guest.public(), &alice.public()));
         assert!(granted.admits(&bob.public(), &mallory.public()));
-        assert!(
-            !granted.admits(&bob.public(), &alice.public()),
-            "Alice bound Bob"
+    }
+
+    /// `AUTHOR-036`, the owner's ruling of 2026-11-19: Alice, the owner,
+    /// invited Bob, and Bob's key confirms a snapshot Alice authored. An
+    /// owner demoted to editor loses the exemption.
+    #[test]
+    fn an_owner_counts_the_confirmers_the_owner_invited() {
+        let (alice, bob, carol) = (Person::new(1), Person::new(2), Person::new(3));
+        let mut entries = created(&alice, &bob);
+        append(
+            &mut entries,
+            &alice,
+            &carol,
+            MembershipAct::Invite,
+            Role::Owner,
         );
+        assert!(Confirmers::of(&walk(&entries)).admits(&bob.public(), &alice.public()));
+        append(
+            &mut entries,
+            &carol,
+            &alice,
+            MembershipAct::ChangeRole,
+            Role::Editor,
+        );
+        let demoted = Confirmers::of(&walk(&entries));
+        assert_eq!(walk(&entries).walked_head().position, place_after(4));
+        assert!(
+            !demoted.admits(&bob.public(), &alice.public()),
+            "Alice, an editor now, bound Bob"
+        );
+        assert!(demoted.admits(&bob.public(), &carol.public()));
+    }
+
+    /// `AUTHOR-035`: a member the log removed confirms no snapshot, whoever
+    /// authored it. A member still present does.
+    #[test]
+    fn a_removed_member_confirms_nothing() {
+        let (alice, bob, carol) = (Person::new(1), Person::new(2), Person::new(3));
+        let mut entries = created(&alice, &bob);
+        append(
+            &mut entries,
+            &alice,
+            &carol,
+            MembershipAct::Invite,
+            Role::Editor,
+        );
+        append(
+            &mut entries,
+            &alice,
+            &bob,
+            MembershipAct::Revoke,
+            Role::Editor,
+        );
+        let log = walk(&entries);
+        assert_eq!(
+            log.walked_head().position,
+            place_after(4),
+            "the revoke walks"
+        );
+        let granted = Confirmers::of(&log);
+        assert!(!granted.admits(&bob.public(), &carol.public()));
+        assert!(granted.admits(&carol.public(), &alice.public()));
     }
 
     /// A present space writer signs a key link of a channel at each head the
