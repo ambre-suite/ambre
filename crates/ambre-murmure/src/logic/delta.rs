@@ -54,7 +54,15 @@ pub struct Signer {
     /// The member the signing key resolves to, `None` when the directory does
     /// not name it (`AUTHOR-013`).
     pub user: Option<Id<User>>,
+    /// The session nonce `peer` derives from. A registry entry of `peer` that
+    /// another session wrote claims the PeerID (`AUTHOR-033`).
+    pub nonce: ambre_core::FixedBytes<ambre_core::SessionNonce>,
 }
+
+/// The nonce the test sessions register under, with their signers.
+#[cfg(test)]
+pub(crate) const TEST_NONCE: ambre_core::FixedBytes<ambre_core::SessionNonce> =
+    ambre_core::FixedBytes::from_array([7; 16]);
 
 /// Why the check refused a delta. Every refusal leaves the document as it
 /// was, since the check runs before import.
@@ -104,6 +112,10 @@ pub enum Refusal {
     /// twice, or already held by another message (`MURMURE-002`, `MURMURE-678`).
     #[error("a message identifier its signer may not write")]
     MessageId,
+    /// A delta under a PeerID whose registry entry another session wrote
+    /// (`AUTHOR-033`). A second preimage of a member's PeerID buys this.
+    #[error("a PeerID another session registered")]
+    PeerClaimed,
     /// A write to a root container that members may not write. The `header`
     /// and the `meta` roots close once the document is created. A root the
     /// kind of the document does not hold never opens (`MURMURE-679`).
@@ -785,6 +797,15 @@ pub(crate) fn registered(doc: &LoroDoc, peer: ambre_core::PeerId) -> Option<Id<U
     PeerEntry::from_bytes(&bytes).map(|entry| entry.user)
 }
 
+/// Whether the registry of `doc` leaves the PeerID of `signer` free for its
+/// session (`AUTHOR-033`). A blank document holds no registry, and claims
+/// nothing.
+pub(crate) fn peer_unclaimed(doc: &LoroDoc, signer: Signer) -> bool {
+    schema::held_root_map(doc, FoundationRoot::Peers.as_str()).is_none_or(|registry| {
+        ambre_crdt::session::peer_unclaimed(&registry, signer.peer, &signer.nonce)
+    })
+}
+
 /// The operations a JSON update holds, per PeerID: where they start, and
 /// where they end.
 pub(crate) fn range(update: &JsonSchema) -> (VersionVector, VersionVector) {
@@ -838,6 +859,9 @@ pub(crate) fn verdict(
     update: &JsonSchema,
     signer: Signer,
 ) -> Result<(), Refusal> {
+    if !peer_unclaimed(doc, signer) {
+        return Err(Refusal::PeerClaimed);
+    }
     let version = doc.oplog_vv();
     let elsewhere = |key: Id<Message>, container: &ContainerID| held_elsewhere(doc, key, container);
     let held = Held {

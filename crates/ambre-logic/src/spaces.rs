@@ -1259,6 +1259,63 @@ mod tests {
         assert_eq!(catalogue[0].name.as_str(), "general");
     }
 
+    /// `AUTHOR-033`: a delta of an open space under a PeerID whose entry another session
+    /// registered is refused whole, and the catalogue stays as it was. The same delta under
+    /// the session that registered it lands.
+    #[test]
+    fn a_space_delta_under_a_peer_id_another_session_registered_is_refused() {
+        let space_id = Id::<Space>::mint();
+        let peer = crate::test_peer();
+        let mut alice = SpaceState::create(space_id, &fit_name("Acme"), NOW).expect("create");
+        alice
+            .adopt_session(peer, ambre_core::Payload::from(&crate::test_entry(peer)))
+            .expect("adopt");
+        let first = alice.export_all().expect("export");
+        let (mut bob, ui, sync) = harness();
+        bob.handle_logic_command(LogicCommand::OpenSpace { space_id });
+        bob.handle_logic_event(LogicEvent::RemoteUpdate {
+            document_id: space_id.document_id(),
+            delta: crate::remote_delta(1, first),
+        });
+        ready(&mut bob, space_id.document_id(), Role::Editor);
+        let _ = (drain(&ui), drain(&sync));
+
+        let listed = ChannelState::create(
+            Id::<Channel>::mint(),
+            ChannelType::Public,
+            Some(&fit_name("general")),
+            NOW,
+        )
+        .expect("channel");
+        let delta = alice
+            .list_channel(
+                &listed,
+                &Listing {
+                    topic: None,
+                    category: None,
+                    position: ambre_bus::Rank::FIRST,
+                    key: sealed(2),
+                },
+            )
+            .expect("list");
+        let mut claimed = crate::remote_delta(2, delta.clone());
+        claimed.nonce = ambre_core::FixedBytes::from_array([9; 16]);
+        bob.handle_logic_event(LogicEvent::RemoteUpdate {
+            document_id: space_id.document_id(),
+            delta: claimed,
+        });
+        assert!(
+            last_catalogue(&drain(&ui)).is_none(),
+            "a delta under a claimed PeerID changes nothing"
+        );
+        bob.handle_logic_event(LogicEvent::RemoteUpdate {
+            document_id: space_id.document_id(),
+            delta: crate::remote_delta(3, delta),
+        });
+        let (_, catalogue) = last_catalogue(&drain(&ui)).expect("the catalogue");
+        assert_eq!(catalogue.len(), 1);
+    }
+
     #[test]
     fn closing_a_space_ends_its_session_and_forgets_it() {
         let (mut state, ui, sync) = harness();

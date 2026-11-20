@@ -565,16 +565,7 @@ fn peer_unclaimed(
 ) -> bool {
     use ambre_core::crdt::CrdtName as _;
     let registry = doc.get_map(ambre_core::crdt::FoundationRoot::Peers.as_str());
-    let key = ambre_core::PeerKey::of(peer);
-    if registry.get_last_editor(key.as_str()) != Some(peer.get()) {
-        return true;
-    }
-    match registry.get(key.as_str()) {
-        Some(loro::ValueOrContainer::Value(loro::LoroValue::Binary(bytes))) => {
-            ambre_core::PeerEntry::from_bytes(&bytes).is_none_or(|entry| entry.nonce == *nonce)
-        }
-        _ => true,
-    }
+    ambre_crdt::session::peer_unclaimed(&registry, peer, nonce)
 }
 
 /// How a document's window gives up what it holds.

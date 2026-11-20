@@ -2098,6 +2098,7 @@ impl<D> Runtime<D> {
         deltas: &[SignedDelta],
     ) -> bool {
         let signer = |delta: &SignedDelta| Signer {
+            nonce: delta.nonce,
             peer: delta.peer,
             user: delta.user,
         };

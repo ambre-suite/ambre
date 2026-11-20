@@ -18,6 +18,7 @@ const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 /// Who signed what `from` wrote in `segment`: `user`, under its session.
 fn signer(from: &ChannelState, segment: Id<Segment>, user: Id<User>) -> Signer {
     Signer {
+        nonce: crate::logic::delta::TEST_NONCE,
         peer: from.peer(segment.document_id()).expect("a session"),
         user: Some(user),
     }

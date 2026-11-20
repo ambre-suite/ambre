@@ -111,7 +111,8 @@ no document, in microseconds.
 
 1. Parse the JSON update. A binary delta, or an unknown schema version, is refused (`MURMURE-224`,
    `MURMURE-228`).
-2. Read its operations: each carries its container and its value.
+2. Read its operations: each carries its container and its value. Refuse the delta when its PeerID
+   carries a registry entry that another session wrote (`ambre-spec-op-authorship.md`, `AUTHOR-033`).
 3. Refuse the delta when it creates a message under another author (`MURMURE-082`).
 4. Refuse it when it changes a field, the `content` or the `attachments` of a message created by
    another author's PeerID (`MURMURE-085`, `MURMURE-089`). One field is open to all: the `thread`

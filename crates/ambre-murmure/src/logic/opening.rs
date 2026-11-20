@@ -159,6 +159,13 @@ impl OpeningChannel {
             if !delta::binary_by(payload, signer.peer) {
                 return Err(Refusal::NotSigners.into());
             }
+            // An admitted `meta` reads its registry now (`AUTHOR-033`). Bytes
+            // held before it is admitted are not checked against it.
+            if let Some(meta) = &self.meta
+                && !delta::peer_unclaimed(meta, signer)
+            {
+                return Err(Refusal::PeerClaimed.into());
+            }
             let _kept = self.receive(document_id, payload.into());
             return Ok(());
         }

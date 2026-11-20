@@ -175,6 +175,7 @@ impl World {
     fn publish(&mut self, by: usize, document: Id<Document>, delta: Payload<DeltaBytes>) {
         let member = &self.members[by];
         let signer = Signer {
+            nonce: crate::logic::delta::TEST_NONCE,
             peer: member.state.peer(document).expect("a session"),
             user: Some(member.user),
         };

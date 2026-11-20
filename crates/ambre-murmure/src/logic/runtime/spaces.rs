@@ -223,6 +223,22 @@ impl<D> Runtime<D> {
         });
     }
 
+    /// Whether the open space that holds `document_id` leaves `peer` free for
+    /// the session that opened with `nonce` (`AUTHOR-033`). A document no open
+    /// space holds claims nothing here. A channel runs its own check. A space
+    /// still opening keeps its payloads unchecked against the registry.
+    #[must_use]
+    pub fn space_peer_unclaimed(
+        &self,
+        document_id: Id<Document>,
+        peer: ambre_core::PeerId,
+        nonce: &ambre_core::FixedBytes<ambre_core::SessionNonce>,
+    ) -> bool {
+        self.spaces
+            .get(&Id::<Space>::from_document(document_id))
+            .is_none_or(|space| space.state.peer_unclaimed(peer, nonce))
+    }
+
     /// Apply remote payloads to the space that holds `document_id`. Returns
     /// `false` when no space, open or opening, holds it.
     pub fn apply_space_remote(
