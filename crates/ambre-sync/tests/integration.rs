@@ -760,6 +760,57 @@ fn full_session_flow_sign_in_create_open_close_logout() {
 // need.
 // -----------------------------------------------------------------------------
 
+/// A passphrase the strength floor admits: four words of a diceware list.
+const SEAL_PASSPHRASE: &str = "anchovy glider ruckus tadpole";
+
+/// `DOCFILE-022`: a passphrase under the strength floor seals nothing. The
+/// answer names its weakness and carries no file; a passphrase the floor
+/// admits seals.
+#[test]
+fn a_weak_passphrase_seals_no_file_and_names_its_weakness() {
+    let (mut state, rx, _mock) = setup(false);
+    let plaintext = ambre_client_core::write_ambre_plaintext(
+        DocType::Prose,
+        Id::<Document>::mint(),
+        &ambre_core::Payload::new(b"body".to_vec()),
+    );
+    for (weak, weakness) in [
+        ("password", ambre_core::PassphraseWeakness::CommonPassword),
+        ("x7q", ambre_core::PassphraseWeakness::TooShort),
+    ] {
+        let id = next_request();
+        send_rest(
+            &mut state,
+            id,
+            RestCommand::SealDocFile {
+                plaintext: plaintext.as_bytes().to_vec().into(),
+                passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new(
+                    weak.to_owned(),
+                ),
+            },
+        );
+        match drain_rest(&rx, id) {
+            RestEvent::DocFileSealRefused { weakness: named } => assert_eq!(named, weakness),
+            other => panic!("{weak}: expected DocFileSealRefused, got {other:?}"),
+        }
+    }
+    let id = next_request();
+    send_rest(
+        &mut state,
+        id,
+        RestCommand::SealDocFile {
+            plaintext: plaintext.as_bytes().to_vec().into(),
+            passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new(
+                SEAL_PASSPHRASE.to_owned(),
+            ),
+        },
+    );
+    assert!(matches!(
+        drain_rest(&rx, id),
+        RestEvent::DocFileSealed { .. }
+    ));
+}
+
 #[test]
 fn a_sealed_file_round_trips_through_the_service_plane() {
     let (mut state, rx, _mock) = setup(false);
@@ -777,7 +828,7 @@ fn a_sealed_file_round_trips_through_the_service_plane() {
         RestCommand::SealDocFile {
             plaintext: plaintext.as_bytes().to_vec().into(),
             passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new(
-                "correct horse".to_owned(),
+                SEAL_PASSPHRASE.to_owned(),
             ),
         },
     );
@@ -806,7 +857,7 @@ fn a_sealed_file_round_trips_through_the_service_plane() {
         RestCommand::OpenDocFile {
             sealed: ambre_core::Payload::new(sealed),
             passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new(
-                "correct horse".to_owned(),
+                SEAL_PASSPHRASE.to_owned(),
             ),
         },
     );
@@ -842,7 +893,7 @@ fn a_wrong_passphrase_and_a_tampered_file_fail_the_same_way() {
         RestCommand::SealDocFile {
             plaintext: plaintext.into_bytes().into(),
             passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new(
-                "correct horse".to_owned(),
+                SEAL_PASSPHRASE.to_owned(),
             ),
         },
     );
@@ -852,7 +903,11 @@ fn a_wrong_passphrase_and_a_tampered_file_fail_the_same_way() {
     };
 
     for (case, bytes, passphrase) in [
-        ("wrong passphrase", sealed.clone(), "correct horsf"),
+        (
+            "wrong passphrase",
+            sealed.clone(),
+            "anchovy glider ruckus tadpolf",
+        ),
         (
             "tampered ciphertext",
             {
@@ -861,7 +916,7 @@ fn a_wrong_passphrase_and_a_tampered_file_fail_the_same_way() {
                 t[last] ^= 0x01;
                 t
             },
-            "correct horse",
+            SEAL_PASSPHRASE,
         ),
         (
             "tampered salt",
@@ -870,7 +925,7 @@ fn a_wrong_passphrase_and_a_tampered_file_fail_the_same_way() {
                 t[5] ^= 0x01;
                 t
             },
-            "correct horse",
+            SEAL_PASSPHRASE,
         ),
     ] {
         let id = next_request();

@@ -429,11 +429,15 @@ impl FileKey {
     ///
     /// [`CryptoError::Argon2Failed`] from [`Self::from_passphrase`]. The salt it
     /// draws is [`SALT_LEN`] bytes wide, which Argon2id accepts.
+    ///
+    /// The passphrase is a [`crate::strength::ChosenPassphrase`]: whoever
+    /// holds the file guesses offline, so a seal takes the floor of the
+    /// account passphrase (`DOCFILE-022`, `ZK-035`). The open takes any text.
     pub fn for_new_file(
-        passphrase: &ambre_core::Confidential<ambre_core::Passphrase>,
+        passphrase: &crate::strength::ChosenPassphrase,
     ) -> Result<(Self, FixedBytes<FileSalt>), CryptoError> {
         let salt = FixedBytes::from_array(random::bytes::<SALT_LEN>());
-        let key = Self::from_passphrase(passphrase, &salt)?;
+        let key = Self::from_passphrase(passphrase.passphrase(), &salt)?;
         Ok((key, salt))
     }
 

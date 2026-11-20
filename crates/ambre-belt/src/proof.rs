@@ -576,8 +576,10 @@ pub fn seal_messages() -> Value {
         id,
         cmd: RestCommand::SealDocFile {
             plaintext: ambre_core::Confidential::<ambre_core::Plaintext>::new(vec![0x5a; 65_536]),
+            // A passphrase the strength floor admits, so the worker derives
+            // and seals rather than refusing it (`DOCFILE-022`).
             passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new(
-                "a passphrase of the call proof".to_owned(),
+                "anchovy glider ruckus tadpole".to_owned(),
             ),
         },
     };

@@ -851,6 +851,7 @@ ambre-chrome | src/palette.rs | crate::palette | matches(label) | param | &str	f
 ambre-chrome | src/palette.rs | crate::palette | matches(query) | param | &str	free-text	text, label or user content
 ambre-chrome | src/palette.rs | crate::palette | rows(query) | param | &str	free-text	text, label or user content
 ambre-chrome | src/passphrase.rs | crate::passphrase | PassphraseRefusal::message() | ret | &'static str	free-text	PassphraseRefusal message text
+ambre-chrome | src/passphrase.rs | crate::passphrase | prompt_line() | ret | &'static str	free-text	the line a person reads under the passphrase fields
 ambre-chrome | src/status.rs | crate::status | StatusLabel(label) | param | String	free-text	text, label or user content
 ambre-chrome | src/status.rs | crate::status | ZoomChip(title) | param | Option<String>	free-text	text, label or user content
 ambre-chrome | src/toast.rs | crate::toast | Toast.message | field | String	free-text	text, label or user content
@@ -2964,6 +2965,7 @@ ambre-core | src/secret.rs | crate::secret | Credential<OidcState>::present_stat
 ambre-core | src/secret.rs | crate::secret | Confidential<RecoveryWords>::present_words(show) | param | impl FnOnce(&str)->R	generic	lends the recovery words to the one foreign call that writes them on the setup screen (ARCH-049, CHROME-099)
 ambre-core | src/secret.rs | crate::secret | Credential<PresignedUrl>::object_address() | ret | &str	newtype-inner	the object address before the signed query, for a log or an error
 ambre-core | src/secret.rs | crate::secret | Credential<PresignedUrl>::present_link(send) | param | impl FnOnce(&str)->R	generic	lends the signed address to the one foreign call that fetches it (ARCH-049)
+ambre-core | src/secret.rs | crate::secret | PassphraseWeakness::message() | ret | &'static str	free-text	the words a person reads for a passphrase the strength floor refuses
 ambre-crypto | src/ecdh.rs | crate::ecdh | SharedSecret.0 | field | Secret<[u8;32]>	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/keys.rs | crate::keys | DocumentKey.0 | field | Arc<Secret<[u8;32]>>	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/keys.rs | crate::keys | DocumentKey::from_secret(key) | param | Secret<[u8;32]>	newtype-inner	newtype field, constructor or accessor

@@ -550,6 +550,10 @@ pub enum AuthFailure {
     /// This build holds no development sign-in, so a sign-in by a bare name
     /// derived no key and sent nothing (`ZK-045`).
     NoDevSignIn,
+    /// The relay no longer holds the sealed seed a recovery or a passphrase
+    /// change read: another device re-sealed it in between. Nothing was
+    /// written, and a new try reads the seal again (`SYNC-286`).
+    StaleReseal,
 }
 
 ambre_core::define_flag! {
@@ -575,7 +579,8 @@ impl AuthFailure {
             | Self::Api(_)
             | Self::BadRecoveryWords(_)
             | Self::ForeignRecoveryWords
-            | Self::NoDevSignIn => PassphraseVerdict::Other,
+            | Self::NoDevSignIn
+            | Self::StaleReseal => PassphraseVerdict::Other,
         }
     }
 }
@@ -591,22 +596,7 @@ impl fmt::Display for AuthFailure {
             Self::SessionEnded => f.write_str("Unlock failed: the session ended"),
             Self::SeedNotWrapped => f.write_str("Sign-in failed: the account key did not seal"),
             Self::Api(failure) => write!(f, "Sign-in failed: {failure}"),
-            Self::WeakPassphrase(weakness) => {
-                f.write_str("Choose a stronger passphrase: ")?;
-                f.write_str(match weakness {
-                    ambre_core::PassphraseWeakness::CommonPassword => {
-                        "it is a common password, which a guess tries first."
-                    }
-                    ambre_core::PassphraseWeakness::Repetition => "it repeats itself.",
-                    ambre_core::PassphraseWeakness::Sequence => {
-                        "it follows the alphabet, the digits or a keyboard row."
-                    }
-                    ambre_core::PassphraseWeakness::TooShort => {
-                        "it is too short to resist an offline guess."
-                    }
-                })?;
-                f.write_str(" Four or more random words resist one.")
-            }
+            Self::WeakPassphrase(weakness) => f.write_str(weakness.message()),
             Self::BadRecoveryWords(refusal) => {
                 f.write_str("Recovery failed: ")?;
                 f.write_str(match refusal {
@@ -627,6 +617,10 @@ impl fmt::Display for AuthFailure {
             Self::NoDevSignIn => {
                 f.write_str("Sign-in failed: this build holds no development sign-in.")
             }
+            Self::StaleReseal => f.write_str(
+                "Nothing changed: the account keys changed on another device while this ran. \
+                 Try again.",
+            ),
         }
     }
 }

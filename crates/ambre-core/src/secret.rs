@@ -414,6 +414,31 @@ pub enum PassphraseWeakness {
     TooShort,
 }
 
+impl PassphraseWeakness {
+    /// The words a person reads for the refusal: what to change, and what
+    /// resists a guess. Every prompt that takes the floor shows these.
+    pub fn message(self) -> &'static str {
+        match self {
+            Self::CommonPassword => {
+                "Choose a stronger passphrase: it is a common password, which a guess tries \
+                 first. Four or more random words resist one."
+            }
+            Self::Repetition => {
+                "Choose a stronger passphrase: it repeats itself. Four or more random words \
+                 resist one."
+            }
+            Self::Sequence => {
+                "Choose a stronger passphrase: it follows the alphabet, the digits or a \
+                 keyboard row. Four or more random words resist one."
+            }
+            Self::TooShort => {
+                "Choose a stronger passphrase: it is too short to resist an offline guess. \
+                 Four or more random words resist one."
+            }
+        }
+    }
+}
+
 /// Why the client refuses the recovery words it was handed
 /// (`ambre-spec-zero-knowledge.md`, `ZK-043`).
 ///

@@ -190,6 +190,14 @@ pub fn landing_view(
                         <span class="ambre-landing-user">
                             {move || username.get().map(ambre_core::Validated::into_string).unwrap_or_default()}
                         </span>
+                        // The account settings: the passphrase change covers
+                        // the launcher until it ends (`CHROME-141`).
+                        <button
+                            class="ambre-change-passphrase"
+                            on:click=move |_| keys.open(crate::account::KeysFace::ChangePassphrase)
+                        >
+                            "Change passphrase"
+                        </button>
                         {sign_out_control(to_logic_signout.clone())}
                         <NewDocPicker on_pick=on_pick />
                         <button
@@ -665,7 +673,7 @@ fn rel_time(updated_at: Option<Instant<Relayed>>) -> String {
 /// The sign-out control (`CHROME-107`). It asks the live threads to end the
 /// session, once: the page boots home afresh when the Sync worker confirms,
 /// so nothing here clears anything.
-fn sign_out_control(to_logic: crate::outbox::ShellOutbox) -> impl IntoView {
+pub(crate) fn sign_out_control(to_logic: crate::outbox::ShellOutbox) -> impl IntoView {
     let leaving = RwSignal::new(false);
     view! {
         <button

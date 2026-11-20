@@ -197,6 +197,13 @@ impl LogicState {
     /// A document closed while its seal was in flight drops the answer.
     /// Nothing remains to download into, and the bytes go out of scope sealed.
     pub(crate) fn resolve_pending_seal(&mut self, id: Seq<Request>, evt: &RestEvent) -> bool {
+        // A passphrase under the floor sealed nothing. The prompt shows why
+        // and asks again, so the answer goes on to the UI verbatim. The
+        // application raises no failure of its own (`DOCFILE-022`).
+        if let RestEvent::DocFileSealRefused { .. } = evt {
+            self.pending_seals.remove(&id);
+            return false;
+        }
         let answer = match evt {
             RestEvent::DocFileSealed { data } => {
                 Ok(data.clone().into_role::<ambre_client_core::FileBytes>())

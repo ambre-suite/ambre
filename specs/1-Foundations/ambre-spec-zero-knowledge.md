@@ -401,6 +401,11 @@ steps, and a refusal at one step writes nothing:
    seal it read (`SYNC-254`). The relay writes only under that key, over that seal
    (`ambre-spec-session.md`, `SRV-278`, `SRV-279`).
 
+Another device may replace the seal between the read and the write. The write then draws a refusal
+of its own, and a new try reads the seal again (`ambre-spec-sync.md`, `SYNC-286`). Once the write
+lands, the worker reads who the account is and opens the session on the seed. The person types no
+passphrase again (`ambre-spec-sync.md`, `SYNC-287`).
+
 **The re-seal of a passphrase change.** A passphrase change writes the same seed back to the
 relay, sealed under the new passphrase (`ambre-spec-sync.md`, `SYNC-251`). It takes the route and
 the seal of a recovery, in three steps, and a refusal at one step writes nothing:
@@ -415,8 +420,9 @@ the seal of a recovery, in three steps, and a refusal at one step writes nothing
 **The strength floor.** The relay stores the salt and the Master Seed sealed under the passphrase,
 so the relay, or a thief of its database, can guess offline. Argon2id prices each guess, and the
 client refuses a new passphrase that too few guesses find (`ZK-035`, `ZK-036`). A setup, a
-passphrase change and a recovery each take the floor (`ZK-042`). The arithmetic below sets
-the floor on 2026-11-14.
+passphrase change and a recovery each take the floor (`ZK-042`). The seal of an `.ambre` file
+takes it too: whoever holds the file guesses offline (`ambre-spec-docfile.md`, `DOCFILE-022`).
+The arithmetic below sets the floor on 2026-11-14.
 
 | Step | Figure | Why |
 |---|---|---|

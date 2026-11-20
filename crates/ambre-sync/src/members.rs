@@ -535,7 +535,10 @@ impl SyncState {
                 }
             });
         } else {
-            crate::log::info!("Sync: SearchUsers '{}'", query.as_str());
+            // The query is now a whole address, so no log line names it
+            // (`SYNC-285`).
+            drop(query);
+            crate::log::info!("Sync: SearchUsers with no relay");
             self.reply(id, RestEvent::UserSearchResults { users: Vec::new() });
         }
     }
@@ -592,6 +595,34 @@ mod tests {
             .expect("the creator's footing");
         state.log_walked_to(walked);
         assert_eq!(state.footing(DOC), Some(walked));
+    }
+
+    /// `SYNC-285`: a user search with no relay logs that it ran, and never
+    /// the address it searched.
+    #[test]
+    fn a_user_search_logs_no_searched_address() {
+        let (state, rx) = bare_state();
+        let logged = crate::log::tests::logged_by("SearchUsers", || {
+            let query = ambre_core::Validated::<ambre_core::UserSearch>::parse("ada@example.org")
+                .expect("a search");
+            state.handle_search_users(ambre_bus::next_request(), query);
+        });
+        for message in &logged {
+            assert!(
+                !message.contains("ada") && !message.contains("example.org"),
+                "{message}"
+            );
+        }
+        assert!(
+            rx.try_iter().any(|e| matches!(
+                e,
+                LogicEvent::Rest {
+                    evt: RestEvent::UserSearchResults { .. },
+                    ..
+                }
+            )),
+            "the search went unanswered"
+        );
     }
 
     /// How the Sync worker ended a waiting invite, if it did.

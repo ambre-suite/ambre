@@ -1084,14 +1084,15 @@ fn each_new_file_draws_its_own_salt() {
     // The salt is what keeps two files sealed under one passphrase from sharing
     // a key. So this entry point draws one per file, and the caller cannot
     // supply it here at all.
-    let (first, first_salt) = FileKey::for_new_file(&pass("correct horse")).unwrap();
-    let (again, again_salt) = FileKey::for_new_file(&pass("correct horse")).unwrap();
+    let chosen = crate::strength::ChosenPassphrase::check(pass(STRONG)).unwrap();
+    let (first, first_salt) = FileKey::for_new_file(&chosen).unwrap();
+    let (again, again_salt) = FileKey::for_new_file(&chosen).unwrap();
     assert_ne!(first_salt, again_salt);
     assert_ne!(first.as_bytes(), again.as_bytes());
 
     // And the salt it returns is the one that reopens the file. The header
     // carries this value in the clear, and nothing else can re-derive the key.
-    let reopened = FileKey::from_passphrase(&pass("correct horse"), &first_salt).unwrap();
+    let reopened = FileKey::from_passphrase(&pass(STRONG), &first_salt).unwrap();
     assert_eq!(reopened.as_bytes(), first.as_bytes());
 }
 

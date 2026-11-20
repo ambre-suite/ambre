@@ -18,8 +18,10 @@ use super::*;
 impl SyncState {
     /// Seals a whole plaintext container under a passphrase.
     ///
-    /// Draws a fresh salt, derives the file key, and seals the plaintext under
-    /// the sealed header's non-nonce prefix as associated data. No other salt
+    /// A passphrase under the strength floor seals nothing, and the answer
+    /// names its weakness. Otherwise the worker draws a fresh salt, derives
+    /// the file key, and seals the plaintext under the sealed header's
+    /// non-nonce prefix as associated data. No other salt
     /// and no other sealed layout can then carry this ciphertext.
     ///
     /// The ~64 MiB of the derivation is the largest transient this worker
@@ -31,6 +33,15 @@ impl SyncState {
         plaintext: Confidential<Plaintext>,
         passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
     ) {
+        // The floor runs first, before any derivation: whoever holds the file
+        // guesses offline, as against the account passphrase (`DOCFILE-022`).
+        let passphrase = match ambre_crypto::strength::ChosenPassphrase::check(passphrase) {
+            Ok(chosen) => chosen,
+            Err(weakness) => {
+                self.reply(id, RestEvent::DocFileSealRefused { weakness });
+                return;
+            }
+        };
         let Ok((key, salt)) = FileKey::for_new_file(&passphrase) else {
             crate::log::warning!("Sync: SealDocFile: key derivation failed");
             self.reply(id, RestEvent::DocFileSealFailed);
