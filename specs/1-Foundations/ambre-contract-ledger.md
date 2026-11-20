@@ -21,14 +21,14 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**4748 rows: 4331 shipped, of which 14 loose. 417 unbuilt.**
+**4749 rows: 4331 shipped, of which 14 loose. 418 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
 | `verified` | 1454 | 574 | 981 | 788 | 520 | 4317 |
 | `failing` |  |  |  |  |  | 0 |
 | `human-review` | 14 |  |  |  |  | 14 |
-| `unimplemented` | 165 | 42 | 21 | 32 | 157 | 417 |
+| `unimplemented` | 166 | 42 | 21 | 32 | 157 | 418 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -73,7 +73,7 @@
 | `ambre-spec-residency.md` | 31 | 31 | 31 |  |  |
 | `ambre-spec-schema-version.md` | 20 | 20 | 20 |  |  |
 | `ambre-spec-sealed-envelope.md` | 29 | 28 | 28 |  | 1 |
-| `ambre-spec-sequencer.md` | 78 | 78 | 78 |  |  |
+| `ambre-spec-sequencer.md` | 79 | 78 | 78 |  | 1 |
 | `ambre-spec-server.md` | 117 | 111 | 110 | 1 | 6 |
 | `ambre-spec-session.md` | 25 | 25 | 25 |  |  |
 | `ambre-spec-sync.md` | 80 | 79 | 79 |  | 1 |
@@ -297,7 +297,7 @@
 | `ambre-spec-residency.md` | RESID-001..031 |
 | `ambre-spec-schema-version.md` | SCHEMA-001..020 |
 | `ambre-spec-sealed-envelope.md` | SYNC-001,003..005,008..009,018..023,072,088..091,112..114,125,135,138,144,203,216,257..259 |
-| `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155,169,184,194..215,259,262..264,274,276..277,284 |
+| `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155,169,184,194..215,259,262..264,274,276..277,284..285 |
 | `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165,167..168,170..171,173..182,187..193,216..228,230,238..257,260..261,266,268,270,272..273,275,280..283 |
 | `ambre-spec-session.md` | SRV-003,009,022..031,074,090..092,163,172,232,234..236,267,278..279 |
 | `ambre-spec-sync.md` | SYNC-002,011,013,056..071,095..100,133..134,136..137,149,152..160,162..167,169..171,177..189,191..196,248..256,261,269..271 |
