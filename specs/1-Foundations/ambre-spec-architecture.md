@@ -387,7 +387,8 @@ a measure (`ARCH-092`).
 
 **Why a subscriber of our own.** It replaced the `tracing-subscriber` registry and the
 `tracing-wasm` layer to hold the ceiling of Main (`ambre-spec-budgets.md section 5`). The Sync
-worker is a separate instance and keeps `tracing-wasm`.
+worker is a separate instance, and it hands each message to the console itself, with no `tracing`
+(`ambre-spec-sync.md`, `SYNC-305`).
 
 **A span is refused.** No client code opens a span today, and the subscriber keeps no span tree. A
 span the filter keeps prints one line that names it and refuses it (`ARCH-093`). So a span added
