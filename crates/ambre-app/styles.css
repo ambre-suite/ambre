@@ -313,20 +313,15 @@ body {
     border-color: var(--accent);
 }
 
-/* Toile top menu bar and zoom control (toile-ui SS5quinquies.E). Both are
-   groups inside the command bar row, under the header (`CHROME-141`). Each
-   reuses `.ambre-commandbar` for its buttons, so the nested group drops the
-   frame of a bar. The zoom group sits at the end of the row. */
-.ambre-commandbar > .ambre-toile-menubar,
-.ambre-commandbar > .ambre-toile-zoom {
+/* Toile top menu bar (toile-ui SS5quinquies.E): a group inside the command
+   bar row, under the header (`CHROME-141`). It reuses `.ambre-commandbar` for
+   its buttons, so the nested group drops the frame of a bar. The zoom is not
+   here: it closes the status bar (`CHROME-147`). */
+.ambre-commandbar > .ambre-toile-menubar {
     padding: 0;
     min-height: 0;
     background: none;
     border: 0;
-}
-
-.ambre-commandbar > .ambre-toile-zoom {
-    margin-left: auto;
 }
 
 /* Menu titles are text, not icons: give them horizontal padding and normal
@@ -334,14 +329,6 @@ body {
 .ambre-menu-title {
     padding: 0 var(--space-4);
     font-size: var(--font-body);
-}
-
-/* The `%` readout doubles as the reset-to-100% button: a fixed-width numeric
-   label so the bar does not reflow as the zoom changes. */
-.ambre-zoom-readout {
-    min-width: 48px;
-    font: var(--font-ui) ui-monospace, monospace;
-    color: var(--text);
 }
 
 /* Toile style / property inspector (toile-ui SS5quinquies.B): a floating side

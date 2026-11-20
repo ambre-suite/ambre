@@ -99,11 +99,6 @@ pub fn StatusBar(
         // `toile-status-bar`). The
         // grid-zoom ladder stays Trame's own so it never diverges from the
         // sheet's virtual-scroll steps; the perf panel shows Trame's grid detail.
-        <ZoomChip
-            zoom=zoom
-            presets=crate::ui::grid::TrameUiState::ZOOM_PRESETS.to_vec()
-            title="Grid zoom (scales the sheet only, not the toolbar)"
-        />
         <PerfChip fps=Signal::derive(move || perf.get().fps)>
             <PerfDetail slot>
                 {move || {
@@ -125,5 +120,12 @@ pub fn StatusBar(
                 }}
             </PerfDetail>
         </PerfChip>
+        // The zoom closes the band, at its right end, in every application
+        // that zooms (`CHROME-147`).
+        <ZoomChip
+            zoom=zoom
+            presets=crate::ui::grid::TrameUiState::ZOOM_PRESETS.to_vec()
+            title="Grid zoom (scales the sheet only, not the toolbar)"
+        />
     }
 }

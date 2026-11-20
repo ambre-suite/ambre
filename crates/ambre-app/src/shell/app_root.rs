@@ -796,7 +796,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 // the header, so neither covers the header (`CHROME-141`).
                 {boot_is_toile.then(|| view! {
                     <toile_chrome::EditingSurfaces present=present_toile>
-                        <toile_chrome::TopMenuBar zoom=board_zoom on_command=on_command toggles=toile_toggles />
+                        <toile_chrome::TopMenuBar on_command=on_command toggles=toile_toggles />
                     </toile_chrome::EditingSurfaces>
                 })}
             </Toolbar>

@@ -300,6 +300,25 @@ fn status_bar_renders_label_and_aggregates() {
     container.remove();
 }
 
+/// The zoom chip closes the status bar, at its right end (`CHROME-147`).
+#[wasm_bindgen_test]
+fn the_zoom_chip_closes_the_status_bar() {
+    let container = mount_in_container(|| {
+        let stats = RwSignal::new(None);
+        let perf = RwSignal::new(PerfSnapshot::default());
+        let zoom = RwSignal::new(ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::ONE);
+        let locale = RwSignal::new(None);
+        view! { <StatusBar stats=stats perf=perf zoom=zoom locale=locale /> }
+    });
+    let last = container.last_element_child().expect("a status bar child");
+    assert!(
+        last.class_list().contains("statusbar-zoom"),
+        "the band ends on `{}`",
+        last.class_name()
+    );
+    container.remove();
+}
+
 /// The find counter is built from the reply's zero-based index, and an index
 /// past the matches focuses nothing (`UI-THREAD-060`).
 #[wasm_bindgen_test]

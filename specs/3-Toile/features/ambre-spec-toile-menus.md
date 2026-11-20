@@ -6,7 +6,7 @@
 > top and finds everything else, each entry showing the shortcut that reaches it faster.
 
 A menu owns no behaviour: every entry names a command another feature specifies. What this document
-holds is the scope, the layout and the dispatch, plus the zoom control that rides the same bar.
+holds is the scope, the layout and the dispatch. The zoom shows in the status bar alone (`CHROME-147`).
 
 ---
 
@@ -98,7 +98,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-158` | `POST` | A fit MUST ask the Logic thread for the extent before it moves the camera. | this spec section 3 | `ambre_toile::ui::view::view_tests::a_fit_asks_for_the_extent_before_it_moves` -- both fits send the request with the camera still, and move it on the answer | none | verified |
 | `TOILE-UI-159` | `POST` | A pointer-mode entry MUST stay in the view: it MUST change no camera and reach no thread. | this spec section 3 | `ambre_toile::ui::view::view_tests::a_pointer_mode_entry_stays_in_the_view` | none | verified |
 | `TOILE-UI-160` | `FAIL` | A fit to the selection with nothing selected MUST tell the user why nothing happened. | this spec section 5 | `ambre_toile::ui::view::view_tests::zoom_to_selection_with_nothing_selected_says_so` -- one notice and no request, then a selected sticky asks for its extent with no notice | none | verified |
-| `TOILE-UI-416` | `POST` | The zoom-in button of the menu bar MUST report the zoom-in command. | this spec section 3 | `ambre_toile::tests::chrome_ui::top_menu_bar_zoom_in_fires_command` -- wasm tier: a click on the mounted bar's Zoom in button reports `ZOOM_IN` | none | verified |
+| `TOILE-UI-416` | `POST` | The zoom-in entry of the View menu MUST report the zoom-in command. | this spec section 3 | `ambre_toile::tests::chrome_ui::the_view_menu_reports_zoom_in_and_the_bar_holds_no_zoom_control` -- wasm tier: the View title opens its menu on the mounted bar, and its Zoom in row reports `ZOOM_IN` | none | verified |
 
 * **Budget.** none: a menu is built from a static entry set on the UI thread, and
   `ambre-spec-budgets.md` budgets no menu operation. What an entry commits is budgeted
@@ -208,10 +208,11 @@ does not apply is disabled by its command state, so the layout never moves under
 | File | bringing a file onto the board, saving the board as a native `.ambre` file, and taking it out as a lossy one -- the save above the separator, the exports below it (`features/ambre-spec-toile-import-export.md section 4`) -- then the presentation entry point |
 | Present | the presentation entry point, listed in both, and the deck panel (`features/ambre-spec-toile-presentation.md section 4`) |
 
-**The zoom control.** Zoom out, the current percentage, zoom in, fit, and fit the selection. Each moves the
-camera and forwards one cull request (`TOILE-UI-157`); the percentage mirrors what the status bar reports
-(`features/ambre-spec-toile-status-bar.md`). Neither fit moves the camera on its own. Both ask the Logic
-thread for the extent first, because the UI holds the culled set alone (`TOILE-UI-158`,
+**The zoom entries.** Zoom out, zoom in, 100 %, fit, and fit the selection sit in the View menu
+and the palette. The menu bar carries no zoom control: the zoom chip of the status bar shows the
+percentage (`features/ambre-spec-toile-status-bar.md`, `CHROME-147`). Each entry moves the camera
+and forwards one cull request (`TOILE-UI-157`). Neither fit moves the camera on its own. Both ask
+the Logic thread for the extent first, because the UI holds the culled set alone (`TOILE-UI-158`,
 `features/ambre-spec-toile-viewport.md`).
 
 **Where each entry is specified.** The command an entry names is owned by the feature that implements it. The

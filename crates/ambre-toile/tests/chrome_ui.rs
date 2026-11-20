@@ -12,8 +12,8 @@
 //! - the right-click context menu end-to-end -- the entry rows a
 //!   [`CtxScope`] renders, and that clicking a row fires its `StaticKey<Commands>`;
 //! - the tool palette -- a click switches the shared active tool;
-//! - the top menu bar zoom cluster and the floating selection
-//!   toolbar -- a click fires its `StaticKey<Commands>` on the shared sink.
+//! - the top menu bar and the floating selection toolbar -- a click fires
+//!   its `StaticKey<Commands>` on the shared sink.
 //!
 //! On the host target the whole file is empty (the `cfg` gate below), so the
 //! native tier (`just test-native`) skips it cleanly.
@@ -105,6 +105,21 @@ fn mount_bar(
     });
     let root = mount_in_container(move || view! { <StatusBar stats=stats perf=perf zoom=zoom /> });
     (root, zoom)
+}
+
+/// `CHROME-147`: the zoom chip closes the status bar, at its right end.
+#[wasm_bindgen_test]
+fn the_zoom_chip_closes_the_status_bar() {
+    let owner = Owner::new();
+    owner.set();
+    let (root, _zoom) = mount_bar(None, 1.0, ambre_core::FrameRate::new(60.0));
+    let last = root.last_element_child().expect("a status bar child");
+    assert!(
+        last.class_list().contains("statusbar-zoom"),
+        "the band ends on `{}`",
+        last.class_name()
+    );
+    root.remove();
 }
 
 /// `TOILE-UI-053`: the mounted band shows the count of a multi-selection.
@@ -373,25 +388,39 @@ fn tool_palette_click_switches_active_tool() {
     root.remove();
 }
 
-// -- Top menu bar zoom cluster, input -------------------------
+// -- Top menu bar, zoom from the View menu -----------------------
 
-/// `TOILE-UI-416`: the zoom-in button of the menu bar reports the zoom-in
-/// command.
+/// `TOILE-UI-416`: the zoom-in entry of the View menu reports the zoom-in
+/// command. The bar itself holds no zoom control: the zoom lives in the status
+/// bar alone (`CHROME-147`).
 #[wasm_bindgen_test]
-fn top_menu_bar_zoom_in_fires_command() {
+async fn the_view_menu_reports_zoom_in_and_the_bar_holds_no_zoom_control() {
     let owner = Owner::new();
     owner.set();
-    let zoom = RwSignal::new(Scale::<Board, View>::ONE);
     let fired = RwSignal::new(None::<StaticKey<Commands>>);
     let on_command = Callback::new(move |id: StaticKey<Commands>| fired.set(Some(id)));
     let store = CommandStates::new(ambre_toile::chrome::COMMANDS.iter().map(|c| c.id));
     ambre_toile::chrome::init_command_states(&store);
     let toggles = Toggles::from_store(&store);
     let root = mount_in_container(move || {
-        view! { <TopMenuBar zoom=zoom on_command=on_command toggles=toggles /> }
+        view! { <TopMenuBar on_command=on_command toggles=toggles /> }
     });
+    assert!(
+        root.query_selector("[aria-label=\"Zoom in\"]")
+            .unwrap()
+            .is_none(),
+        "the menu bar holds a zoom control"
+    );
+    assert!(root.query_selector(".ambre-toile-zoom").unwrap().is_none());
 
-    assert!(click_by_aria(&root, "Zoom in"));
+    assert!(click_by_aria(&root, "View"));
+    leptos::task::tick().await;
+    let rows = root.query_selector_all(".ambre-ctx-item").unwrap();
+    let zoom_in = (0..rows.length())
+        .filter_map(|i| rows.item(i))
+        .find(|row| row.text_content().is_some_and(|t| t.starts_with("Zoom in")))
+        .expect("a Zoom in row in the View menu");
+    zoom_in.dyn_into::<web_sys::HtmlElement>().unwrap().click();
     assert_eq!(fired.get_untracked(), Some(ZOOM_IN));
 
     root.remove();
@@ -480,11 +509,10 @@ fn assert_registry_labels(root: &web_sys::Element, ids: &[StaticKey<Commands>]) 
     }
 }
 
-/// The tool palette, the zoom cluster and the selection toolbar announce the
-/// title each command's description carries (`UI-THREAD-036`).
+/// The tool palette and the selection toolbar announce the title each
+/// command's description carries (`UI-THREAD-036`).
 #[wasm_bindgen_test]
 fn the_button_bars_announce_the_registry_labels() {
-    use ambre_toile::ui::menu_bar::{ZOOM_FIT, ZOOM_OUT, ZOOM_RESET, ZOOM_TO_SELECTION};
     use ambre_toile::ui::palette::{
         TOOL_COMMENT, TOOL_CONNECTOR, TOOL_DRAW, TOOL_HAND, TOOL_LASER, TOOL_PEN, TOOL_SELECT,
         TOOL_SHAPE, TOOL_STICKY, TOOL_TEXT,
@@ -511,20 +539,7 @@ fn the_button_bars_announce_the_registry_labels() {
     );
     palette.remove();
 
-    let store = CommandStates::new(ambre_toile::chrome::COMMANDS.iter().map(|c| c.id));
-    ambre_toile::chrome::init_command_states(&store);
-    let toggles = Toggles::from_store(&store);
-    let zoom = RwSignal::new(Scale::<Board, View>::ONE);
     let on_command = Callback::new(|_: StaticKey<Commands>| {});
-    let menu_bar = mount_in_container(move || {
-        view! { <TopMenuBar zoom=zoom on_command=on_command toggles=toggles /> }
-    });
-    assert_registry_labels(
-        &menu_bar,
-        &[ZOOM_OUT, ZOOM_RESET, ZOOM_IN, ZOOM_FIT, ZOOM_TO_SELECTION],
-    );
-    menu_bar.remove();
-
     // A grouped selection holding a locked and an unlocked element shows every
     // command button the bar has.
     let bar = RwSignal::new(Some(FloatBar {
