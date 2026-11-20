@@ -213,7 +213,8 @@ pub use secret::{
     WireCredential,
 };
 pub use seq::{
-    Before, CountsSince, Deltas, Issuer, Relay, Seq, SeqColumn, SeqKind, SharedIssuer, Wire,
+    Before, CountsSince, Deltas, Issuer, LogPlaces, Relay, Seq, SeqColumn, SeqKind, SharedIssuer,
+    Wire,
 };
 pub use space::{
     Board, CanvasCss, Css, Device, Doc, Image, ScalesTo, Space, StoredBoard, Surface, Texel, View,

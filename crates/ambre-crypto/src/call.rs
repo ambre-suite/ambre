@@ -28,9 +28,9 @@ use std::sync::Arc;
 use ambre_core::id::{Call, Channel, Id, User};
 use ambre_core::{
     Authored, ChunkCounter, ClearChunk, Confidential, Count, ExchangePublicKey, FixedBytes,
-    Instant, Issuer, KeyGeneration, KeyIdentifier, KeyIdentifierBytes, Ms, Octets, PageLoad,
-    Payload, PictureKind, Plaintext, PublicKey, SealedChunk, Secret, SenderIndex, SenderKeyWraps,
-    Seq, Signature, SignedJoins, TimeSpan, Track, Transcript,
+    Instant, Issuer, KeyGeneration, KeyIdentifier, KeyIdentifierBytes, LogPlaces, Ms, Octets,
+    PageLoad, Payload, PictureKind, Plaintext, PublicKey, SealedChunk, Secret, SenderIndex,
+    SenderKeyWraps, Seq, Signature, SignedJoins, TimeSpan, Track, Transcript,
 };
 use chacha20poly1305::aead::AeadInPlace;
 use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
@@ -103,11 +103,13 @@ const SIGNED_JOIN_LEN: usize = 16 * 3 + 32 + 8 + 8 + 32 + 64;
 /// The most departed sender indexes a wrap carries, the newest ones (`CALL-157`).
 const DEPARTURE_SLOTS: usize = 16;
 /// The length of a wrap on the wire. It holds the 24-byte nonce, the 8-byte generation, the
-/// 32-byte key, the count of departures and their slots, then the 16-byte tag. Every wrap has one
-/// size, whatever the count.
+/// 32-byte key, the count of departures and their slots, the 8-byte place of the log its sender
+/// heeded, then the 16-byte tag. Every wrap has one size, whatever the count.
 const WRAP_LEN: usize = 24 + WRAP_PLAIN_LEN + 16;
-/// The plaintext of a wrap: the generation, the key, the count, then each slot.
-const WRAP_PLAIN_LEN: usize = 8 + 32 + 1 + 8 * DEPARTURE_SLOTS;
+/// The plaintext of a wrap: the generation, the key, the count, each slot, then the place.
+const WRAP_PLAIN_LEN: usize = 8 + 32 + DEPARTURES_LEN + 8;
+/// The departures in a wrap: the count, then each slot.
+const DEPARTURES_LEN: usize = 1 + 8 * DEPARTURE_SLOTS;
 
 /// Why a chunk was not sealed or not opened. The receiver drops a chunk on any of them,
 /// and tells no sender which.
@@ -1271,17 +1273,20 @@ impl Departures {
 }
 
 /// What a wrap opens to: the generation, the departures of the sender when it drew the key,
-/// and the key.
+/// the place of the membership log it had walked then, and the key.
 #[derive(Debug)]
 pub struct OpenedWrap {
     pub generation: Seq<KeyGeneration>,
     pub departures: Departures,
+    pub heeded: Seq<LogPlaces>,
     pub key: SenderKey,
 }
 
 /// Wraps `key` at `generation` from the holder of `own` to the holder of `recipient`
 /// alone (`CALL-016`). The wrap carries the `departures` of the sender when it drew the
-/// key (`CALL-157`).
+/// key (`CALL-157`). It also carries `heeded`, the place after the last entry of the
+/// membership log the sender had walked then. A receiver closes a key drawn under a log
+/// that held no removal it heeded (`CALL-159`).
 ///
 /// # Errors
 ///
@@ -1293,6 +1298,7 @@ pub fn wrap_sender_key(
     binding: WrapBinding,
     generation: Seq<KeyGeneration>,
     departures: &Departures,
+    heeded: Seq<LogPlaces>,
     key: &SenderKey,
 ) -> Result<WrappedSenderKey, CryptoError> {
     let shared = crate::ecdh::shared_secret(&own.0, recipient)?;
@@ -1302,6 +1308,7 @@ pub fn wrap_sender_key(
         plain.extend_from_slice(&generation.get().to_be_bytes());
         plain.extend_from_slice(key.bytes());
         departures.write(plain);
+        plain.extend_from_slice(&heeded.get().to_be_bytes());
     });
     let (nonce, ciphertext) =
         crate::aead::seal(plaintext.expose(), &ambre_core::Aad::of(WRAP_DOMAIN), &kek)?;
@@ -1337,10 +1344,16 @@ pub fn unwrap_sender_key(
     let (generation, rest) = plain
         .split_first_chunk::<8>()
         .ok_or(CryptoError::InvalidKeyLength)?;
-    let (key, departures) = rest
+    let (key, rest) = rest
         .split_first_chunk::<32>()
         .ok_or(CryptoError::InvalidKeyLength)?;
+    let (departures, heeded) = rest
+        .split_at_checked(DEPARTURES_LEN)
+        .ok_or(CryptoError::InvalidKeyLength)?;
     let departures = Departures::read(departures).ok_or(CryptoError::InvalidKeyLength)?;
+    let heeded: &[u8; 8] = heeded
+        .try_into()
+        .map_err(|_| CryptoError::InvalidKeyLength)?;
     let key = Secret::try_filled(|out: &mut [u8; 32]| {
         out.copy_from_slice(key);
         Ok::<(), CryptoError>(())
@@ -1348,6 +1361,7 @@ pub fn unwrap_sender_key(
     Ok(OpenedWrap {
         generation: Seq::new(u64::from_be_bytes(*generation)),
         departures,
+        heeded: Seq::new(u64::from_be_bytes(*heeded)),
         key: SenderKey(Arc::new(key)),
     })
 }

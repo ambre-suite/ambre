@@ -325,7 +325,7 @@ impl World {
         };
         self.next_index += 1;
         let (keys, handoff) =
-            CallKeys::start(&person.key, joining).unwrap_or_else(|e| panic!("{e:?}"));
+            CallKeys::start(&person.key, joining, &self.log).unwrap_or_else(|e| panic!("{e:?}"));
         let join: SignedJoin = keys.join().clone();
         let mut session = Session {
             keys,
@@ -688,6 +688,7 @@ fn a_join_older_than_its_own_is_refused() {
             sender: Seq::new(61),
             at: Instant::<Authored>::new(world.now - JOIN_CLOCK_SKEW.get()),
         },
+        &world.log,
     )
     .unwrap_or_else(|e| panic!("{e:?}"));
     let lagging = keys.join().clone();
@@ -714,6 +715,7 @@ fn a_joiner_outside_the_channel_gets_no_wrap() {
             sender: Seq::new(99),
             at: Instant::<Authored>::new(0),
         },
+        &world.log,
     )
     .unwrap_or_else(|e| panic!("{e:?}"));
     let join = keys.join().clone();
@@ -743,6 +745,7 @@ fn join_of(
             sender: Seq::new(sender),
             at: Instant::<Authored>::new(world.now),
         },
+        &world.log,
     )
     .unwrap_or_else(|e| panic!("{e:?}"));
     keys.join().clone()
@@ -839,6 +842,12 @@ fn a_join_claiming_another_exchange_key_evicts_nobody() {
 
 /// The keys of the session `sender` of member `actor`, joined at the time of `world`.
 fn session_of(world: &World, actor: usize, sender: u64) -> CallKeys {
+    session_under(world, actor, sender, &world.log)
+}
+
+/// The keys of the session `sender` of member `actor`, joined under `log` at the time of
+/// `world`.
+fn session_under(world: &World, actor: usize, sender: u64, log: &Log) -> CallKeys {
     let person = &world.people[actor];
     let (keys, _) = CallKeys::start(
         &person.key,
@@ -849,6 +858,7 @@ fn session_of(world: &World, actor: usize, sender: u64) -> CallKeys {
             sender: Seq::new(sender),
             at: Instant::<Authored>::new(world.now),
         },
+        log,
     )
     .unwrap_or_else(|e| panic!("{e:?}"));
     keys
@@ -1013,6 +1023,102 @@ fn a_removal_closes_the_older_key_of_a_sender_whose_fresh_wrap_is_withheld() {
     let fresh_to_roger = wrap_to(&[fresh], roger.own());
     let handoffs = roger
         .receive(alice.own(), &fresh_to_roger, past)
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    assert!(matches!(handoffs.as_slice(), [KeyHandoff::Open { .. }]));
+}
+
+/// The wrap among `moves` to the session `to`.
+fn wrap_among(moves: &[Moves], to: Seq<SenderIndex>) -> ambre_crypto::call::WrappedSenderKey {
+    moves
+        .iter()
+        .flat_map(|m| &m.wraps)
+        .find(|wrap| wrap.to == to)
+        .map(|wrap| wrap.wrapped.clone())
+        .unwrap_or_else(|| panic!("no wrap to {to:?}"))
+}
+
+/// `CALL-159`: Eve is removed, and Roger heeds it. Carol joins after the removal, and the relay
+/// serves her the log before it. Her own log holds Eve, so Carol wraps her key to Eve. Roger
+/// admits Carol under the current log. Her key names the place of the log before the removal:
+/// inside the switch delay Roger hands its close with it, and past the delay he refuses it.
+/// Dave joins under the current log, and his key opens at Roger with no close.
+#[test]
+fn a_joiner_under_a_rolled_back_log_has_its_key_closed_at_the_removal() {
+    let world = World::new();
+    let mut alice = session_of(&world, 0, 1);
+    let mut roger = session_of(&world, 1, 2);
+    let eve = session_of(&world, 2, 3);
+    admit_each(&mut alice, &[&roger, &eve], &world.log);
+    admit_each(&mut roger, &[&alice, &eve], &world.log);
+    let start = Instant::<UnixMs>::new(world.now);
+    let log = revoked(&world, 2);
+    alice.heed(&log, start).unwrap_or_else(|e| panic!("{e:?}"));
+    roger.heed(&log, start).unwrap_or_else(|e| panic!("{e:?}"));
+
+    // The relay serves Carol the log before the removal, and the roster with Eve in it.
+    let mut carol = session_under(&world, 3, 4, &world.log);
+    let carol_moves = admit_each(&mut carol, &[&alice, &roger, &eve], &world.log);
+    wrap_among(&carol_moves, eve.own());
+    roger
+        .admit(carol.join(), &log, Arrival::New)
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    let carol_to_roger = wrap_among(&carol_moves, roger.own());
+    let handoffs = roger
+        .receive(carol.own(), &carol_to_roger, start)
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    assert!(
+        matches!(
+            handoffs.as_slice(),
+            [KeyHandoff::Open { .. }, KeyHandoff::Close { sender, within, .. }]
+                if *sender == carol.own() && *within <= SWITCH_DELAY
+        ),
+        "the key of Carol opened with no close: {handoffs:?}"
+    );
+    let past = start.plus(SWITCH_DELAY);
+    assert_eq!(
+        roger
+            .receive(carol.own(), &carol_to_roger, past)
+            .map(|h| h.len()),
+        Err(Refusal::Retired)
+    );
+
+    // Dave reads the current log: his key names a place that holds the removal.
+    let mut dave = session_under(&world, 4, 5, &log);
+    let dave_moves = admit_each(&mut dave, &[&alice, &roger], &log);
+    roger
+        .admit(dave.join(), &log, Arrival::New)
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    let handoffs = roger
+        .receive(dave.own(), &wrap_among(&dave_moves, roger.own()), past)
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    assert!(matches!(handoffs.as_slice(), [KeyHandoff::Open { .. }]));
+}
+
+/// `CALL-159`: Carol joined under the log the relay rolled back, and wrapped her key to Eve.
+/// Once Carol reads the current log, she departs Eve and draws a fresh key that names its
+/// place. Roger opens that fresh key past the switch delay of the removal, with no close, and
+/// the fresh key reaches no session of Eve.
+#[test]
+fn a_rolled_back_joiner_opens_again_once_it_heeds_the_removal() {
+    let world = World::new();
+    let mut roger = session_of(&world, 1, 2);
+    let eve = session_of(&world, 2, 3);
+    admit_each(&mut roger, &[&eve], &world.log);
+    let start = Instant::<UnixMs>::new(world.now);
+    let log = revoked(&world, 2);
+    roger.heed(&log, start).unwrap_or_else(|e| panic!("{e:?}"));
+
+    let mut carol = session_under(&world, 3, 4, &world.log);
+    admit_each(&mut carol, &[&roger, &eve], &world.log);
+    roger
+        .admit(carol.join(), &log, Arrival::New)
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    let fresh = carol.heed(&log, start).unwrap_or_else(|e| panic!("{e:?}"));
+    let to: Vec<_> = fresh.wraps.iter().map(|wrap| wrap.to).collect();
+    assert_eq!(to, [roger.own()], "the fresh key of Carol reached Eve");
+    let past = start.plus(SWITCH_DELAY);
+    let handoffs = roger
+        .receive(carol.own(), &wrap_among(&[fresh], roger.own()), past)
         .unwrap_or_else(|e| panic!("{e:?}"));
     assert!(matches!(handoffs.as_slice(), [KeyHandoff::Open { .. }]));
 }

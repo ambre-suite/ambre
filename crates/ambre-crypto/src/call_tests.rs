@@ -476,7 +476,7 @@ fn binding(sender: u64, recipient: u64) -> WrapBinding {
 }
 
 /// A wrap opens for its recipient alone, under its own binding alone, and carries the
-/// generation and the key.
+/// generation, the departures, the place of the log its sender heeded and the key.
 #[test]
 fn a_wrap_opens_for_its_recipient_and_binding_alone() {
     let alice = CallExchangeKey::generate();
@@ -492,6 +492,7 @@ fn a_wrap_opens_for_its_recipient_and_binding_alone() {
         binding(1, 2),
         generation,
         &departures,
+        Seq::new(11),
         &key,
     )
     .unwrap_or_else(|e| panic!("{e}"));
@@ -499,6 +500,7 @@ fn a_wrap_opens_for_its_recipient_and_binding_alone() {
         .unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(opened.generation, generation);
     assert_eq!(opened.departures, departures);
+    assert_eq!(opened.heeded, Seq::new(11));
     assert_eq!(opened.key.bytes(), key.bytes());
     assert!(unwrap_sender_key(&carol, &alice.public(), binding(1, 2), &wrapped).is_err());
     assert!(unwrap_sender_key(&bob, &alice.public(), binding(1, 3), &wrapped).is_err());
@@ -559,7 +561,7 @@ fn a_signed_join_reads_back_from_its_bytes_and_a_changed_byte_refuses_it() {
     assert!(SignedJoin::from_bytes(&Payload::new(long)).is_err());
 }
 
-/// A wrap reads back from the 209 bytes the relay forwards and opens for its recipient.
+/// A wrap reads back from the 217 bytes the relay forwards and opens for its recipient.
 /// Bytes of another length read as no wrap.
 #[test]
 fn a_wrap_reads_back_from_its_bytes() {
@@ -573,18 +575,19 @@ fn a_wrap_reads_back_from_its_bytes() {
         binding(1, 2),
         Seq::new(3),
         &none,
+        Seq::ZERO,
         &key,
     )
     .unwrap_or_else(|e| panic!("{e}"));
     let bytes = wrapped.to_bytes();
-    assert_eq!(bytes.len().get(), 209);
-    assert_eq!(wrapped.size().get(), 209);
+    assert_eq!(bytes.len().get(), 217);
+    assert_eq!(wrapped.size().get(), 217);
     let read = super::WrappedSenderKey::from_bytes(&bytes).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(read, wrapped);
     let opened = unwrap_sender_key(&bob, &alice.public(), binding(1, 2), &read)
         .unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(opened.key.bytes(), key.bytes());
-    let short = Payload::new(bytes.as_bytes().get(..208).unwrap_or_default().to_vec());
+    let short = Payload::new(bytes.as_bytes().get(..216).unwrap_or_default().to_vec());
     assert!(super::WrappedSenderKey::from_bytes(&short).is_err());
 }
 

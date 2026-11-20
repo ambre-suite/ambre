@@ -9,8 +9,7 @@
 
 use ambre_core::id::{Document, Id, User};
 use ambre_core::{
-    Encoded, EncodedLogEntry, ExchangePublicKey, FixedBytes, KeyId, PublicKey, Role, Seq, SeqKind,
-    Wire,
+    Encoded, EncodedLogEntry, ExchangePublicKey, FixedBytes, KeyId, PublicKey, Role, Seq,
 };
 use serde::{Deserialize, Serialize};
 
@@ -76,21 +75,9 @@ pub fn ownerless_log(
         )))
 }
 
-/// The places of the entries of a document's membership log, from zero:
-/// `Seq<LogPlaces>`. A place is signed with the entry, and the relay appends
-/// an entry at its own place alone. It encodes as the bare `u64` of the
-/// hand-written `LogPosition`, so a stored entry and its digest keep their
-/// bytes, and `Debug` keeps that name.
-pub enum LogPlaces {}
-
-impl SeqKind for LogPlaces {
-    type IssueRight = ();
-    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
-        ambre_core::StaticKey::new("LogPosition");
-}
-
-/// A place crosses the wire and the relay's rows.
-impl Wire for LogPlaces {}
+/// The places of the entries of a document's membership log. A call key
+/// names one too, so `ambre-core` holds the marker (`CALL-159`).
+pub use ambre_core::LogPlaces;
 
 /// The place a log of `length` entries gives its next entry. A length past
 /// `u64::MAX` saturates, which no log reaches.

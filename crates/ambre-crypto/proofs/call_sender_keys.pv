@@ -11,6 +11,10 @@
    removal, phase 1 the call after it, phase 2 the call once the switch delay of the
    removal passed.
 
+   A participant may also join after the removal, under a log the network chose: the
+   current one, or the log before the removal (a roll back). This late joiner is a
+   second session of Alice.
+
    Three properties, four queries:
    1. A chunk an honest participant seals under its key of the epoch after the
       removal stays secret from Mallory and from the network.
@@ -19,8 +23,10 @@
    3. A chunk a receiver opens once the switch delay of the removal passed, under
       any key of Alice, was sealed by Alice (`CALL-157`). The network may withhold
       every wrap of the fresh key: the receiver closes the older keys at the removal
-      itself, and opens only a key whose wrap names the sessions of Mallory as
-      departed.
+      itself. It opens only a key whose wrap names the sessions of Mallory as
+      departed, or names a log that holds the removal (`CALL-159`). A late joiner
+      under the rolled back log wraps its key to Mallory, and its wrap names the log
+      before the removal.
 
    Domain labels. The test `crates/ambre-crypto/tests/call_model_labels.rs` reads
    each LABEL line below, and checks that the code derives with the same bytes.
@@ -42,8 +48,16 @@
    - The departures as a list of sender indexes. A wrap names one of two values
      here: no departure, or the sessions of Mallory. The code names each index,
      and a receiver checks the indexes of the sessions it departed.
-   - A participant who joins after the removal: every participant here was in the
-     call before it. *)
+   - The place of a log as a number: a wrap names one of two logs here, the log
+     before the removal or the log after it. The code names the count of entries
+     its sender walked, and a receiver compares it with the place it heeded.
+   - Which sender a receiver reads by its departures. The doors here open a key
+     of any sender on either the departures or the place. The code reads the
+     departures of a participant it held at the removal, and the place of a later
+     joiner alone. The doors here open more keys, which only helps the attacker.
+   - A late joiner that reads the log again: it seals under its first key alone.
+     A joiner under the rolled back log seals no secret chunk: its own log holds
+     Mallory, so she reads what it seals. *)
 
 (* ---------------------------------------------------------------- types *)
 
@@ -98,12 +112,16 @@ const chan: bitstring.
 fun next(bitstring): bitstring [data].
 const g_old: bitstring.
 const g_new: bitstring.
+(* The first key of a late joiner. The code draws it at generation zero; a
+   constant of its own lets a query name it. *)
+const g_late: bitstring.
 
 (* The phase of the membership log: before and after the removal. *)
 const p0: bitstring.
 const p1: bitstring.
 
-(* The departures a wrap carries: none, or the sessions of Mallory. *)
+(* The departures a wrap carries: none, or the sessions of Mallory. A wrap also
+   carries the log its sender heeded when it drew the key: p0 or p1. *)
 const dep_none: bitstring.
 const dep_mallory: bitstring.
 
@@ -127,8 +145,8 @@ table member(bitstring, bitstring, spkey).
    member, identity, exchange key. *)
 table peers(G, bitstring, bitstring, spkey, G).
 (* The sender keys one session received: owner exchange key, sender index,
-   member, identity, generation, key, departures. *)
-table rkeys(G, bitstring, bitstring, spkey, bitstring, key, bitstring).
+   member, identity, generation, key, departures, log heeded. *)
+table rkeys(G, bitstring, bitstring, spkey, bitstring, key, bitstring, bitstring).
 
 (* ---------------------------------------------------------------- events *)
 
@@ -159,6 +177,9 @@ query m: bitstring, gk: bitstring;
 query m: bitstring; event(Accepted(spk(skA), g_new, m)).
 query m: bitstring; event(Accepted(spk(skA), next(g_new), m)).
 query m: bitstring; event(AcceptedLate(spk(skA), g_new, m)).
+(* A session that heeded the removal opens the first key of a late joiner whose
+   log holds the removal: the fix closes no key a removed member lacks. *)
+query m: bitstring; event(AcceptedLate(spk(skA), g_late, m)).
 query g: bitstring; event(Sealed(spk(skA), g, chunk_after)).
 
 (* ------------------------------------------------------------ derivations *)
@@ -188,17 +209,19 @@ letfun unwrap_key(x: exponent, own: G, peer: G, own_idx: bitstring, peer_idx: bi
 
 (* ------------------------------------------------------------- processes *)
 
-(* `wrap_sender_key`: the generation, the key and the departures, under the wrap
-   label as additional data. The relay route names both sender indexes. *)
+(* `wrap_sender_key`: the generation, the key, the departures and the log heeded,
+   under the wrap label as additional data. The relay route names both sender
+   indexes. *)
 let send_wrap(x: exponent, own: G, own_idx: bitstring, peer: G, peer_idx: bitstring,
-              gk: bitstring, k: key, dep: bitstring) =
+              gk: bitstring, k: key, dep: bitstring, pl: bitstring) =
   new n: bitstring;
-  out(c, (own_idx, peer_idx, n, aead(wrap_key(x, own, peer, own_idx, peer_idx), n, label_wrap, (gk, k, dep)))).
+  out(c, (own_idx, peer_idx, n, aead(wrap_key(x, own, peer, own_idx, peer_idx), n, label_wrap, (gk, k, dep, pl)))).
 
 (* `CallKeys::admit`: the signature, the call, then the membership log of the
    phase. An admitted joiner gets each key the session holds. *)
 let admit(ph: bitstring, x: exponent, own: G, own_idx: bitstring,
-          g1: bitstring, k1: key, d1: bitstring, g2: bitstring, k2: key, d2: bitstring) =
+          g1: bitstring, k1: key, d1: bitstring, l1: bitstring,
+          g2: bitstring, k2: key, d2: bitstring, l2: bitstring) =
   in(c, sj: bitstring);
   let claim = getmess(sj) in
   let (=label_join, =call, =chan, juid: bitstring, jpk: spkey, jidx: bitstring, jX: G) = claim in
@@ -206,8 +229,8 @@ let admit(ph: bitstring, x: exponent, own: G, own_idx: bitstring,
   get member(=ph, =juid, =jpk) in
   insert peers(own, jidx, juid, jpk, jX);
   (
-    send_wrap(x, own, own_idx, jX, jidx, g1, k1, d1)
-  | send_wrap(x, own, own_idx, jX, jidx, g2, k2, d2)
+    send_wrap(x, own, own_idx, jX, jidx, g1, k1, d1, l1)
+  | send_wrap(x, own, own_idx, jX, jidx, g2, k2, d2, l2)
   ).
 
 (* `CallKeys::receive`: a wrap from an admitted participant that the log of
@@ -216,8 +239,8 @@ let receive_wraps(ph: bitstring, x: exponent, own: G, own_idx: bitstring) =
   in(c, (from: bitstring, to: bitstring, n: bitstring, w: bitstring));
   get peers(=own, =from, puid, ppk, pX) in
   get member(=ph, =puid, =ppk) in
-  let (gw: bitstring, kw: key, dw: bitstring) = aead_open(unwrap_key(x, own, pX, own_idx, from), n, label_wrap, w) in
-  insert rkeys(own, from, puid, ppk, gw, kw, dw); 0.
+  let (gw: bitstring, kw: key, dw: bitstring, lw: bitstring) = aead_open(unwrap_key(x, own, pX, own_idx, from), n, label_wrap, w) in
+  insert rkeys(own, from, puid, ppk, gw, kw, dw, lw); 0.
 
 (* `ReceiveKeys::open_audio` and the video doors: the key the identifier names,
    held or one ratchet above a held one. The chunk names its sender by the
@@ -227,13 +250,13 @@ let open_chunks(ph: bitstring, own: G) =
   let kid = (trk, s, gch) in
   (
     (
-      get rkeys(=own, =s, puid, ppk, =gch, k, d) in
+      get rkeys(=own, =s, puid, ppk, =gch, k, d, l) in
       get member(=ph, =puid, =ppk) in
       let p = open_chunk(k, kid, prefix, ctr, ct) in
       event Accepted(ppk, gch, p); 0
     )
   | (
-      get rkeys(=own, =s, puid, ppk, gb, kb, d) suchthat gch = next(gb) in
+      get rkeys(=own, =s, puid, ppk, gb, kb, d, l) suchthat gch = next(gb) in
       get member(=ph, =puid, =ppk) in
       let p = open_chunk(ratchet(kb), kid, prefix, ctr, ct) in
       event Accepted(ppk, gch, p); 0
@@ -241,20 +264,20 @@ let open_chunks(ph: bitstring, own: G) =
   ).
 
 (* The doors once the switch delay of the removal passed (`CALL-157`). A key whose
-   wrap does not name the sessions of Mallory as departed is closed, whether a wrap
-   of the fresh key arrived or not. *)
+   wrap names neither the sessions of Mallory as departed nor a log that holds the
+   removal is closed, whether a wrap of the fresh key arrived or not (`CALL-159`). *)
 let open_chunks_late(ph: bitstring, own: G) =
   in(c, (prefix: bitstring, (trk: bitstring, s: bitstring, gch: bitstring), ctr: bitstring, ct: bitstring));
   let kid = (trk, s, gch) in
   (
     (
-      get rkeys(=own, =s, puid, ppk, =gch, k, =dep_mallory) in
+      get rkeys(=own, =s, puid, ppk, =gch, k, d, l) suchthat d = dep_mallory || l = p1 in
       get member(=ph, =puid, =ppk) in
       let p = open_chunk(k, kid, prefix, ctr, ct) in
       event AcceptedLate(ppk, gch, p); 0
     )
   | (
-      get rkeys(=own, =s, puid, ppk, gb, kb, =dep_mallory) suchthat gch = next(gb) in
+      get rkeys(=own, =s, puid, ppk, gb, kb, d, l) suchthat gch = next(gb) && (d = dep_mallory || l = p1) in
       get member(=ph, =puid, =ppk) in
       let p = open_chunk(ratchet(kb), kid, prefix, ctr, ct) in
       event AcceptedLate(ppk, gch, p); 0
@@ -288,7 +311,7 @@ let participant(sk: sskey, uid: bitstring) =
   new k_old: key;
   (
     (* Phase 0: Mallory is a member. *)
-    (! admit(p0, x, X, idx, g_old, k_old, dep_none, next(g_old), ratchet(k_old), dep_none))
+    (! admit(p0, x, X, idx, g_old, k_old, dep_none, p0, next(g_old), ratchet(k_old), dep_none, p0))
   | (! receive_wraps(p0, x, X, idx))
   | (! open_chunks(p0, X))
   | (! seal_chunks(sk, idx, g_old, k_old))
@@ -302,10 +325,10 @@ let participant(sk: sskey, uid: bitstring) =
     (
       (! get peers(=X, pidx, puid, ppk, pX) in
          get member(=p1, =puid, =ppk) in
-         send_wrap(x, X, idx, pX, pidx, g_new, k_new, dep_mallory))
+         send_wrap(x, X, idx, pX, pidx, g_new, k_new, dep_mallory, p1))
       (* A join in phase 1 ratchets the current key and the waiting one. *)
-    | (! admit(p1, x, X, idx, next(g_old), ratchet(k_old), dep_none,
-               next(g_new), ratchet(k_new), dep_mallory))
+    | (! admit(p1, x, X, idx, next(g_old), ratchet(k_old), dep_none, p0,
+               next(g_new), ratchet(k_new), dep_mallory, p1))
     | (! receive_wraps(p1, x, X, idx))
     | (! open_chunks(p1, X))
       (* The current key seals until the switch delay passed. *)
@@ -332,6 +355,40 @@ let participant(sk: sskey, uid: bitstring) =
     )
   ).
 
+(* A session that joins after the removal, under the log ph the network served
+   it: p1, or p0 rolled back. It draws its first key under that log, and its own
+   log alone chooses whom it admits. It heeded no removal, so its doors close no
+   key. *)
+let late_participant(sk: sskey, uid: bitstring, ph: bitstring) =
+  in(c, idx: bitstring);
+  new x: exponent;
+  let X = exp(g, x) in
+  out(c, sign((label_join, call, chan, uid, spk(sk), idx, X), sk));
+  new k_late: key;
+  (
+    (! admit(ph, x, X, idx, g_late, k_late, dep_none, ph, next(g_late), ratchet(k_late), dep_none, ph))
+  | (! receive_wraps(ph, x, X, idx))
+  | (! open_chunks(ph, X))
+  | (! seal_chunks(sk, idx, g_late, k_late))
+  | (! seal_chunks(sk, idx, next(g_late), ratchet(k_late)))
+  | (if ph = p1 then
+       ((! seal_secret(sk, idx, g_late, k_late))
+      | (! seal_secret(sk, idx, next(g_late), ratchet(k_late)))))
+  | (
+      phase 2;
+      (
+        (! admit(ph, x, X, idx, g_late, k_late, dep_none, ph, next(g_late), ratchet(k_late), dep_none, ph))
+      | (! receive_wraps(ph, x, X, idx))
+      | (! open_chunks(ph, X))
+      | (! seal_chunks(sk, idx, g_late, k_late))
+      | (! seal_chunks(sk, idx, next(g_late), ratchet(k_late)))
+      | (if ph = p1 then
+           ((! seal_secret(sk, idx, g_late, k_late))
+          | (! seal_secret(sk, idx, next(g_late), ratchet(k_late)))))
+      )
+    )
+  ).
+
 process
   insert member(p0, uidA, spk(skA));
   insert member(p0, uidB, spk(skB));
@@ -343,4 +400,6 @@ process
   (
     (! participant(skA, uidA))
   | (! participant(skB, uidB))
+  | (! (phase 1; late_participant(skA, uidA, p0)))
+  | (! (phase 1; late_participant(skA, uidA, p1)))
   )
