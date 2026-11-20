@@ -809,6 +809,9 @@ mod tests {
             return;
         };
         let _ = crate::doc::Fields::new(defaults).insert(crate::doc::DefaultsKey::FontSizePt, 24.0);
+        // Roots learns of a root at a commit, as the Logic thread commits
+        // each write (`PROSE-142`).
+        document.commit();
         let _ = paginator.reflow(&document, &roots, &[]);
         // `PROSE-082`: the inherited size moved, so every block is re-styled
         // and shaped again, even though no block was named dirty.
@@ -830,6 +833,9 @@ mod tests {
             return;
         };
         let _ = crate::doc::Fields::new(page).insert(crate::doc::PageKey::WidthMm, 100.0);
+        // Roots learns of a root at a commit, as the Logic thread commits
+        // each write (`PROSE-142`).
+        document.commit();
         let _ = paginator.reflow(&document, &roots, &[]);
         // `PROSE-082`: the width moved, so every block is shaped again.
         assert_eq!(

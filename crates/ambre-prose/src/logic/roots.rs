@@ -52,16 +52,21 @@ impl Roots {
         }));
         let history =
             document.find_id_spans_between(&Frontiers::default(), &document.oplog_frontiers());
-        {
-            let mut roots = found.lock().unwrap_or_else(PoisonError::into_inner);
-            for (peer, span) in history.forward.iter() {
-                let Ok(len) = usize::try_from(span.end.saturating_sub(span.start)) else {
-                    continue;
-                };
-                let written = document.get_changed_containers_in(ID::new(*peer, span.start), len);
-                roots.extend(written.iter().filter_map(root_named));
-            }
+        // The read below commits a pending transaction, and the commit runs
+        // the subscriber above, which takes the lock: so the roots are
+        // gathered first and the lock is taken once the reads are done.
+        let mut written_roots = Vec::new();
+        for (peer, span) in history.forward.iter() {
+            let Ok(len) = usize::try_from(span.end.saturating_sub(span.start)) else {
+                continue;
+            };
+            let written = document.get_changed_containers_in(ID::new(*peer, span.start), len);
+            written_roots.extend(written.iter().filter_map(root_named));
         }
+        found
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .extend(written_roots);
         Self {
             found,
             _subscription: subscription,
