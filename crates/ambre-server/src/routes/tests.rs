@@ -3694,6 +3694,108 @@ mod handler_tests {
         assert_eq!(get.bytes().await.unwrap().as_ref(), blob.as_slice());
     }
 
+    // `SRV-310`, audit `P40`: a snapshot link signs the SHA-256 digest of its
+    // blob. The store refuses other bytes of the same size through it. The
+    // stored object stays the one the digest names. An id that already
+    // names a snapshot of the document gets no link. Both legs reach a real
+    // object store.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_snapshot_link_refuses_other_bytes_than_its_digest(pool: sqlx::PgPool) {
+        use base64::Engine as _;
+        use sha2::Digest as _;
+        let (s3, bucket) = crate::test_helpers::storage_service().await;
+        let state = crate::test_helpers::with_storage(&*test_app_state(pool).await, s3, bucket);
+        let setup = build_test_router(state.clone());
+        let app = shipped_router(state);
+        let owner = setup_and_get_auth(&setup).await;
+        let doc = create_test_doc(&setup, &owner).await;
+        let blob: Vec<u8> = (0..=255u8).cycle().take(1031).collect();
+        let forged: Vec<u8> = blob.iter().map(|b| b ^ 0x5a).collect();
+        let digest = sha2::Sha256::digest(&blob);
+        let http = reqwest::Client::builder().no_proxy().build().unwrap();
+
+        let id = post_for_json(
+            &app,
+            &owner,
+            format!("/api/documents/{doc}/snapshot/upload-id"),
+            serde_json::json!({ "size_bytes": blob.len() }),
+        )
+        .await;
+        let minted = id["snapshot_id"].as_str().unwrap().to_owned();
+        let link = post_for_json(
+            &app,
+            &owner,
+            format!("/api/documents/{doc}/snapshot/upload-url"),
+            serde_json::json!({
+                "size_bytes": blob.len(),
+                "snapshot_id": minted,
+                "sha256": hex::encode(digest),
+            }),
+        )
+        .await;
+        let url = link["upload_url"].as_str().unwrap();
+        let header = base64::engine::general_purpose::STANDARD.encode(digest);
+        let put = |body: Vec<u8>| {
+            http.put(url)
+                .header("x-amz-checksum-sha256", header.clone())
+                .body(body)
+                .send()
+        };
+        let first = put(blob.clone()).await.unwrap();
+        assert!(first.status().is_success(), "upload: {}", first.status());
+        let second = put(forged).await.unwrap();
+        assert!(
+            second.status().is_client_error(),
+            "other bytes through the link: {}",
+            second.status()
+        );
+
+        let s3_key = link["s3_key"].as_str().unwrap().to_owned();
+        post_for_json(
+            &app,
+            &owner,
+            format!("/api/documents/{doc}/snapshot"),
+            serde_json::json!({
+                "author_pubkey": hex::encode([3u8; 32]),
+                "s3_key": s3_key,
+                "covered_seq": 0,
+            }),
+        )
+        .await;
+        let download = post_for_json(
+            &app,
+            &owner,
+            format!("/api/documents/{doc}/snapshot/download-url"),
+            serde_json::json!({ "snapshot_id": minted }),
+        )
+        .await;
+        let get = http
+            .get(download["download_url"].as_str().unwrap())
+            .send()
+            .await
+            .unwrap();
+        assert!(get.status().is_success(), "download: {}", get.status());
+        assert_eq!(get.bytes().await.unwrap().as_ref(), blob.as_slice());
+
+        let again = post_json(
+            &app,
+            &owner,
+            format!("/api/documents/{doc}/snapshot/upload-url"),
+            serde_json::json!({
+                "size_bytes": blob.len(),
+                "snapshot_id": minted,
+                "sha256": hex::encode(digest),
+            }),
+        )
+        .await;
+        assert_eq!(
+            again,
+            StatusCode::CONFLICT,
+            "a stored snapshot gets no link"
+        );
+    }
+
     // `ZK-008`: no presigned URL is signed before the document's access check.
     // An outsider gets none of the four (`SRV-002`), a viewer gets neither
     // upload URL (`SRV-056`).
@@ -3715,10 +3817,7 @@ mod handler_tests {
                 "media/upload-url",
                 serde_json::json!({ "content_hash": hash, "size_bytes": 10 }),
             ),
-            (
-                "snapshot/upload-url",
-                serde_json::json!({ "size_bytes": 10 }),
-            ),
+            ("snapshot/upload-url", snapshot_link(10)),
         ];
         let download = [
             (
@@ -3828,10 +3927,7 @@ mod handler_tests {
                 "media/download-url",
                 serde_json::json!({ "content_hash": hash }),
             ),
-            (
-                "snapshot/upload-url",
-                serde_json::json!({ "size_bytes": 7 }),
-            ),
+            ("snapshot/upload-url", snapshot_link(7)),
             (
                 "snapshot/download-url",
                 serde_json::json!({ "snapshot_id": snapshot_id }),
@@ -3867,7 +3963,7 @@ mod handler_tests {
         // address gets no second link (`SRV-271`). The signed-header check
         // asks for a fresh one.
         let fresh = serde_json::json!({ "content_hash": "a".repeat(64), "size_bytes": 7 });
-        let snapshot = |size: u64| serde_json::json!({ "size_bytes": size });
+        let snapshot = snapshot_link;
         let cases = [
             ("media/upload-url", media(media_cap), StatusCode::OK),
             (
@@ -3900,14 +3996,17 @@ mod handler_tests {
             let status = post_json(&app, &owner, uri, body.clone()).await;
             assert_eq!(status, expected, "{path} {body}");
         }
-        for path in ["media/upload-url", "snapshot/upload-url"] {
+        for (path, body) in [
+            ("media/upload-url", fresh.clone()),
+            ("snapshot/upload-url", snapshot_link(7)),
+        ] {
             let resp = app
                 .clone()
                 .oneshot(
                     Request::post(format!("/api/documents/{doc_id}/{path}"))
                         .header("content-type", "application/json")
                         .header("authorization", &owner)
-                        .body(Body::from(fresh.to_string()))
+                        .body(Body::from(body.to_string()))
                         .unwrap(),
                 )
                 .await
@@ -4112,6 +4211,16 @@ mod handler_tests {
 
     /// The owner of `setup_and_get_auth` uploads a snapshot covering `covered`,
     /// and gets its id back.
+    /// The body of a snapshot upload link: `size` bytes under a fresh id, and
+    /// a digest (`SRV-310`).
+    fn snapshot_link(size: u64) -> serde_json::Value {
+        serde_json::json!({
+            "size_bytes": size,
+            "snapshot_id": uuid::Uuid::now_v7().to_string(),
+            "sha256": "ab".repeat(32),
+        })
+    }
+
     async fn upload_snapshot(app: &Router, owner: &str, doc_id: &str, covered: i64) -> String {
         upload_snapshot_by(app, owner, doc_id, covered, [3u8; 32]).await
     }
@@ -4208,14 +4317,26 @@ mod handler_tests {
         let app = shipped_router(state);
         let owner = setup_and_get_auth(&setup).await;
         let doc_id = create_test_doc(&setup, &owner).await;
+        let id = post_for_json(
+            &app,
+            &owner,
+            format!("/api/documents/{doc_id}/snapshot/upload-id"),
+            serde_json::json!({ "size_bytes": 10 }),
+        )
+        .await;
+        let minted = id["snapshot_id"].as_str().unwrap().to_owned();
         let link = post_for_json(
             &app,
             &owner,
             format!("/api/documents/{doc_id}/snapshot/upload-url"),
-            serde_json::json!({ "size_bytes": 10 }),
+            serde_json::json!({
+                "size_bytes": 10,
+                "snapshot_id": minted,
+                "sha256": "ab".repeat(32),
+            }),
         )
         .await;
-        let minted = link["snapshot_id"].as_str().unwrap().to_owned();
+        assert_eq!(link["snapshot_id"], minted.as_str());
         let s3_key = link["s3_key"].as_str().unwrap().to_owned();
         assert!(
             s3_key.ends_with(&format!("/snapshots/{minted}")),

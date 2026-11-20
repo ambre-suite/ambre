@@ -4,13 +4,16 @@
 //!
 //!   * the TURN secret, which it shares with the TURN server alone and mints each credential
 //!     from. The relay never holds it (`CALL-014`);
-//!   * the admission a participant presents, a bearer token of the relay, which it verifies.
+//!   * the admission a participant presents, a bearer token of the relay, which it verifies;
+//!   * the token a scrape of the metrics presents, which it compares (`CALL-141`).
 //!
 //! Each sits in an [`ambre_core::Secret`]. The primitive gate admits a read of one here, and
 //! nowhere else in the SFU. Each function below hands the text to one foreign call: the HMAC
 //! of the TURN credential, or the hex decoder of the admission.
 
-use ambre_core::{CallAdmission, Credential, FixedBytes, Payload, Secret, Signature, TurnPassword};
+use ambre_core::{
+    CallAdmission, Credential, FixedBytes, Payload, ScrapeToken, Secret, Signature, TurnPassword,
+};
 use ambre_protocol::signaling::{Admission, AdmissionDecodeError};
 use base64::Engine;
 use hmac::{Hmac, Mac};
@@ -55,6 +58,15 @@ pub fn read_admission(
     let bytes =
         hex::decode(token.secret().expose()).map_err(|_| AdmissionDecodeError::Malformed)?;
     Admission::read(&Payload::new(bytes))
+}
+
+/// The token `SFU_METRICS_TOKEN` sets, or `None` when it is unset or empty. The text goes
+/// straight into its credential, and the scrape compares it there in constant time.
+pub fn scrape_token() -> Option<Credential<ScrapeToken>> {
+    std::env::var("SFU_METRICS_TOKEN")
+        .ok()
+        .filter(|text| !text.is_empty())
+        .map(Credential::new)
 }
 
 #[cfg(test)]

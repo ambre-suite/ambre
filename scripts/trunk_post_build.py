@@ -67,8 +67,9 @@ every key of an account from its bare name (`ZK-045`, audit `P28`). A release
 build whose wasm carries a mark of it fails here, before any copy is written.
 The hook reads the bytes the build wrote, so the check holds whatever turned
 the feature on: a flag, an attribute of the page or a manifest. No variable
-opens the gate. The call proofs sign in by a bare name, so they build without
-`--release`, under the cargo profile of the release (`justfile`, `proof_build`).
+opens the gate. The gate guards every optimised build, not only a build Trunk
+calls a release: a wasm with no `name` section comes from the profile of the
+release, whatever profile name Trunk was given (`ZK-049`, audit `W209`).
 
 Run by Trunk only. It reads `TRUNK_STAGING_DIR`, `TRUNK_PROFILE`,
 `TRUNK_PUBLIC_URL` and `AMBRE_EMBED_SITES` from the environment Trunk gives its
@@ -111,6 +112,8 @@ GLUE, WASM, LOADER = worker_files()
 # The modules and their digests, as the pre-build hook writes them, one pair
 # per family of `scripts/converter_build.py`.
 CONVERTER_DIR = Path(__file__).resolve().parent.parent / "target" / "converter"
+# The prefix every converter module of the staging directory carries.
+CONVERTER_PREFIX = "ambre-convert-"
 CONVERTER_FAMILIES = (
     "tables",
     "pdf",
@@ -459,15 +462,73 @@ def refuse_dev_login(staging: Path) -> None:
         )
 
 
-def guards_dev_login(env: Mapping[str, str]) -> bool:
-    """Whether the build `env` describes must carry no development sign-in."""
-    return env.get("TRUNK_PROFILE") == "release"
+def wasm_sections(data: bytes) -> list[bytes] | None:
+    """The names of the custom sections of the wasm `data`, or `None` when it is no wasm.
+
+    A section is one id byte, a LEB128 size and its body. A custom section
+    (id 0) opens its body with a LEB128 length and its name. A truncated file
+    stops the walk at the last whole section.
+    """
+    if data[:4] != b"\0asm":
+        return None
+
+    def leb(at: int) -> tuple[int, int]:
+        value, shift = 0, 0
+        while at < len(data):
+            byte = data[at]
+            at += 1
+            value |= (byte & 0x7F) << shift
+            if byte < 0x80:
+                return value, at
+            shift += 7
+        return -1, at
+
+    names: list[bytes] = []
+    at = 8
+    while at < len(data):
+        kind = data[at]
+        size, body = leb(at + 1)
+        if size < 0 or body + size > len(data):
+            break
+        if kind == 0:
+            length, name = leb(body)
+            if length >= 0:
+                names.append(data[name : name + length])
+        at = body + size
+    return names
+
+
+def optimised_wasm_in(staging: Path) -> list[str]:
+    """The wasm files of `staging` a build of the release profile wrote.
+
+    The `wasm-release` profile strips symbols, so its wasm carries no `name`
+    section (`Cargo.toml`). A debug build keeps one. The test reads the bytes,
+    so it holds whatever profile name Trunk was given. A converter module is
+    always built under that profile, so it says nothing of this build.
+    """
+    return sorted(
+        path.name
+        for path in staging.rglob("*.wasm")
+        if not path.name.startswith(CONVERTER_PREFIX)
+        and (sections := wasm_sections(path.read_bytes())) is not None
+        and b"name" not in sections
+    )
+
+
+def guards_dev_login(env: Mapping[str, str], staging: Path) -> bool:
+    """Whether the build in `staging` must carry no development sign-in (`ZK-049`).
+
+    A release of Trunk is guarded, and so is every optimised build: the call
+    proofs once built the profile of the release without `--release`, and the
+    gate let them carry the sign-in (audit `W209`).
+    """
+    return env.get("TRUNK_PROFILE") == "release" or bool(optimised_wasm_in(staging))
 
 
 def main() -> int:
     staging = Path(os.environ["TRUNK_STAGING_DIR"])
     try:
-        if guards_dev_login(os.environ):
+        if guards_dev_login(os.environ, staging):
             refuse_dev_login(staging)
         for worker in WORKERS:
             hash_worker(staging, worker)

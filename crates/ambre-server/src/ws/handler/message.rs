@@ -2586,7 +2586,9 @@ mod refusal_tests {
 
     #[test]
     fn a_store_failure_reaches_the_client_without_its_name_or_text() {
-        let cause = AppError::Redis("clock validation failed: ERR connection refused".into());
+        let cause = AppError::Redis(crate::error::FaultText::bare(
+            "clock validation failed: ERR connection refused",
+        ));
         let update = seq_update(1).update;
         let doc = update.public_data.document_id;
         assert!(matches!(
@@ -2622,7 +2624,10 @@ mod refusal_tests {
     fn a_delta_the_relay_failed_to_sequence_is_named_and_fences_the_socket() {
         let update = seq_update(3).update;
         let doc = update.public_data.document_id;
-        let failed = update_refusal(&update, &AppError::Redis("down".into()));
+        let failed = update_refusal(
+            &update,
+            &AppError::Redis(crate::error::FaultText::bare("down")),
+        );
         let mut fences = ClockFences::default();
         fences.raise_for(&failed);
         assert!(fences.holds(&doc), "the failed delta fences its document");

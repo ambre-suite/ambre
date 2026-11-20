@@ -1983,11 +1983,13 @@ ambre-server | src/error.rs | crate::error | AppError::Conflict.detail | field |
 ambre-server | src/error.rs | crate::error | AppError::Internal.0 | field | String	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | AppError::Oidc.0 | field | String	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | AppError::PayloadTooLarge.0 | field | String	free-text	user text or error message
-ambre-server | src/error.rs | crate::error | AppError::Redis.0 | field | String	free-text	user text or error message
-ambre-server | src/error.rs | crate::error | AppError::S3.0 | field | String	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | AppError::UnknownProvider.0 | field | String	generic	the path segment that named no provider, echoed in the refusal
 ambre-server | src/error.rs | crate::error | AppError::caller_message() | ret | String	free-text	message
 ambre-server | src/error.rs | crate::error | AppError::is_infrastructure() | ret | bool	generic	predicate result
+ambre-server | src/error.rs | crate::error | FaultText.0 | field | String	newtype-inner	the text of a store failure, each identifier taken out by the constructor (SRV-308)
+ambre-server | src/error.rs | crate::error | FaultText::of(what) | param | &str	newtype-inner	the label of the failed store step, which the constructor redacts with its cause
+ambre-server | src/error.rs | crate::error | FaultText::bare(what) | param | &str	newtype-inner	the failure the relay states alone, which the constructor redacts
+ambre-server | src/error.rs | crate::error | FaultText::redacted(text) | param | &str	newtype-inner	the text the constructor takes every identifier out of
 ambre-server | src/error.rs | crate::error | ErrorBody.message | field | String	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | ErrorBody::json(message) | param | impl Into<String>	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | Resource::as_str() | ret | &'static str	free-text	the words a refusal message names the resource by
@@ -2071,6 +2073,9 @@ ambre-server | src/redis_keys.rs | crate::redis_keys | FlushDirtySet::as_str() |
 ambre-server | src/redis_keys.rs | crate::redis_keys | PendingKey.text | field | String	generic	the key text of PendingKey, beside its document and read back by PendingKey::parse
 ambre-server | src/redis_keys.rs | crate::redis_keys | PendingKey::as_str() | ret | &str	generic	the key text of PendingKey, its own codec, read back by PendingKey::parse
 ambre-server | src/redis_keys.rs | crate::redis_keys | PendingKey::parse(text) | param | &str	foreign-api	a dirty-set member or scanned key the store hands back as text
+ambre-server | src/redis_keys.rs | crate::redis_keys | RateKey.0 | field | String	newtype-inner	the key text of one sliding window of the rate limiter
+ambre-server | src/redis_keys.rs | crate::redis_keys | RateKey::of(tier) | param | &str	newtype-inner	the word of the rate tier, RateLimitCategory::prefix, which the constructor writes into the key
+ambre-server | src/redis_keys.rs | crate::redis_keys | RateKey::as_str() | ret | &str	newtype-inner	the key text, as a store command takes it
 ambre-sync | src/call.rs | crate::call | CallKeys::switch_pending() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/fuzz.rs | crate::fuzz | open_authenticated() | ret | Result<Vec<u8>,PipelineError>	generic	generic byte/text API or codec
 ambre-sync | src/fuzz.rs | crate::fuzz | open_authenticated(plaintext) | param | &[u8]	generic	generic byte/text API or codec
@@ -4659,6 +4664,7 @@ ambre-core | src/static_key.rs | crate::static_key | <LabelValues as KeyKind>::N
 ambre-core | src/static_key.rs | crate::static_key | <MetricNames as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
 ambre-crypto | src/hash.rs | crate::hash | INVITER_PIN_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/hash.rs | crate::hash | snapshot_digest(object) | param | &[u8]	generic	the opaque bytes of a sealed snapshot blob, read in two roles: SealedBlob and Payload<FetchedBlob>; ambre-sync types the call through its StoredObject trait
+ambre-crypto | src/hash.rs | crate::hash | object_checksum(object) | param | &[u8]	generic	the opaque bytes of a sealed blob an upload link writes; ambre-sync types the call through SealedBlob
 ambre-metrics | src/lib.rs | crate | <Events as CountKind>::Repr | assoc | u64	newtype-inner	the number a count of this kind holds, the inside of Count
 ambre-metrics | src/lib.rs | crate | Counter.cells | field | Vec<AtomicU64>	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock, one per series
 ambre-metrics | src/lib.rs | crate | Gauge.cells | field | Vec<AtomicU64>	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock, one per series

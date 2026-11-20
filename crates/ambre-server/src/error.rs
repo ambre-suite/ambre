@@ -76,10 +76,10 @@ pub enum AppError {
     Database(#[from] sqlx::Error),
 
     #[error("Redis error: {0}")]
-    Redis(String),
+    Redis(FaultText),
 
     #[error("S3 error: {0}")]
-    S3(String),
+    S3(FaultText),
 
     #[error("Internal error: {0}")]
     Internal(String),
@@ -225,10 +225,83 @@ impl ErrorBody {
     }
 }
 
+/// The text of a store failure, with every identifier taken out (`ZK-030`).
+///
+/// A foreign error may echo the key it failed on: a store key or an object
+/// key names a document, a user or a call. The gate of `ZK-030` reads the
+/// type of a logged value, and a text hides the key from it. So the one
+/// constructor replaces each run that spells an identifier with `<id>`. Such
+/// a run is a UUID in any case, with or without its hyphens. It is also a run
+/// of 32 hex digits or more, such as a content hash.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FaultText(String);
+
+impl FaultText {
+    /// The failure of `what`, under the text of its `cause`, identifiers out.
+    pub fn of(what: &str, cause: impl std::fmt::Display) -> Self {
+        Self::redacted(&format!("{what}: {cause}"))
+    }
+
+    /// A failure the relay states alone, identifiers out.
+    pub fn bare(what: &str) -> Self {
+        Self::redacted(what)
+    }
+
+    /// `text`, each identifier replaced with `<id>`. A run of hex digits and
+    /// hyphens is an identifier when it holds 32 hex digits or more.
+    fn redacted(text: &str) -> Self {
+        let mut out = String::with_capacity(text.len());
+        let mut run = String::new();
+        let flush = |run: &mut String, out: &mut String| {
+            if run.chars().filter(char::is_ascii_hexdigit).count() >= 32 {
+                out.push_str("<id>");
+            } else {
+                out.push_str(run);
+            }
+            run.clear();
+        };
+        for c in text.chars() {
+            if c.is_ascii_hexdigit() || c == '-' {
+                run.push(c);
+            } else {
+                flush(&mut run, &mut out);
+                out.push(c);
+            }
+        }
+        flush(&mut run, &mut out);
+        Self(out)
+    }
+}
+
+impl std::fmt::Display for FaultText {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use axum::body::to_bytes;
+
+    /// `SRV-308`: a store failure keeps no identifier of the text
+    /// its cause echoes: a UUID, hyphenated or not, or a content hash.
+    #[test]
+    fn a_fault_text_takes_every_identifier_out() {
+        let doc = "0192f3a4-5b6c-7d8e-9fab-0123456789ab";
+        let hash = "ab".repeat(32);
+        let cause = format!(
+            "NOPERM no access to doc:{{{doc}}}:dirty, dev/documents/{}/media/{hash}",
+            doc.replace('-', "").to_uppercase()
+        );
+        let text = FaultText::of("dirty mark", cause).to_string();
+        assert_eq!(
+            text,
+            "dirty mark: NOPERM no access to doc:{<id>}:dirty, dev/documents/<id>/media/<id>"
+        );
+        let plain = FaultText::bare("seq 42 at 2026-11-20, code ab-cd").to_string();
+        assert_eq!(plain, "seq 42 at 2026-11-20, code ab-cd");
+    }
 
     async fn extract_body(resp: Response) -> serde_json::Value {
         let body = resp.into_body();
@@ -334,8 +407,8 @@ mod tests {
     async fn infrastructure_errors_return_internal_server_error_message() {
         for err in [
             AppError::Database(sqlx::Error::PoolTimedOut),
-            AppError::Redis("connection refused".into()),
-            AppError::S3("access denied".into()),
+            AppError::Redis(crate::error::FaultText::bare("connection refused")),
+            AppError::S3(crate::error::FaultText::bare("access denied")),
             AppError::Decode(postcard::Error::SerdeDeCustom),
         ] {
             let r = err.into_response();

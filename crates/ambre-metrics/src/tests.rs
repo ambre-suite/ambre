@@ -95,3 +95,43 @@ fn a_help_text_and_a_label_value_are_escaped() {
     let value = StaticKey::<LabelValues>::new("a\"b");
     assert_eq!(super::escaped(value, super::Quote::On), "a\\\"b");
 }
+
+/// `SRV-307`, `CALL-141`: a listener off the loopback refuses to start
+/// without a token, and answers only the scrape that presents it.
+#[test]
+fn a_listener_off_the_loopback_needs_the_token() {
+    use super::{Scrape, ScrapeAccess, ScrapeRefusal};
+    use ambre_core::{Credential, ScrapeToken};
+
+    let token = || Some(Credential::<ScrapeToken>::new("north-wind".to_owned()));
+    let loopback: std::net::SocketAddr = "127.0.0.1:9464".parse().unwrap();
+    let loopback_v6: std::net::SocketAddr = "[::1]:9464".parse().unwrap();
+    let shared: std::net::SocketAddr = "10.0.0.7:9464".parse().unwrap();
+    let any: std::net::SocketAddr = "0.0.0.0:9464".parse().unwrap();
+
+    for address in [shared, any] {
+        assert_eq!(
+            ScrapeAccess::for_listener(address, None).unwrap_err(),
+            ScrapeRefusal::TokenMissing
+        );
+    }
+    for address in [loopback, loopback_v6] {
+        let open = ScrapeAccess::for_listener(address, None).unwrap();
+        assert_eq!(open.admits(None), Scrape::Admitted);
+    }
+
+    let presented = |text: &str| Credential::<ScrapeToken>::new(text.to_owned());
+    for address in [shared, loopback] {
+        let guarded = ScrapeAccess::for_listener(address, token()).unwrap();
+        assert_eq!(
+            guarded.admits(Some(&presented("north-wind"))),
+            Scrape::Admitted
+        );
+        assert_eq!(guarded.admits(None), Scrape::Refused);
+        assert_eq!(
+            guarded.admits(Some(&presented("north-win"))),
+            Scrape::Refused
+        );
+        assert_eq!(guarded.admits(Some(&presented(""))), Scrape::Refused);
+    }
+}

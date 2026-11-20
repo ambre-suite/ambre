@@ -42,7 +42,7 @@ use crate::forward::{Participant, Room, Sfu, Signal};
 use crate::metrics::{Admission, Direction, SFU};
 use crate::turn::TurnServers;
 use ambre_core::NarrowCount;
-use ambre_metrics::Whole;
+use ambre_metrics::{ScrapeAccess, Whole};
 
 /// Where the SFU listens.
 #[derive(Clone, Copy, Debug)]
@@ -64,6 +64,8 @@ pub struct Admitting {
     /// The TURN servers, and the secret their credentials are minted under. `None` when the
     /// deployment runs none.
     pub turn: Option<TurnServers>,
+    /// Who may read a scrape of the metrics listener (`CALL-141`).
+    pub scrape: ScrapeAccess,
 }
 
 /// What a signalling session asks of the task that owns the SFU.
@@ -108,7 +110,8 @@ pub async fn run(addresses: Addresses, admitting: Admitting) -> std::io::Result<
     let media = udp.local_addr()?;
     let listener = TcpListener::bind(addresses.signal).await?;
     let metrics = TcpListener::bind(addresses.metrics).await?;
-    tokio::spawn(async move { axum::serve(metrics, crate::metrics::router()).await });
+    let scrape = crate::metrics::router(admitting.scrape.clone());
+    tokio::spawn(async move { axum::serve(metrics, scrape).await });
     let (commands, inbox) = mpsc::channel(64);
     let app = Router::new().route("/call", get(upgrade)).with_state(Gate {
         commands,

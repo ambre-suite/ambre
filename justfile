@@ -333,11 +333,12 @@ test-browser-firefox *filter:
 # job runs them. Each builds the page into `target/proof-dist`, then starts the relay, the SFU
 # and nine headless senders here, and serves the page to one receiver. It prints each figure
 # against its threshold, then one `PROOF-RESULT` line of JSON. The db-tier services must be up
-# (`just services-up`). The senders capture at 30 fps. The senders sign in by a bare name, so
-# the build adds the development sign-in, and a release refuses it (`ZK-045`). The build is
-# therefore no release: it takes the cargo profile of the release, `wasm-release`, so each
-# wasm compiles as the shipped one. Trunk runs no wasm-opt and minifies nothing in either
-# mode. The hook writes no brotli copy here, and the proof host never serves one.
+# (`just services-up`). The senders capture at 30 fps. The build takes the cargo profile of
+# the release, `wasm-release`, so each wasm compiles as the shipped one. The senders sign in by
+# a bare name, so the build adds the development sign-in. The hook refuses that sign-in in
+# every optimised build (`ZK-049`, audit `W209`), so this recipe fails until the proofs sign in
+# another way. Trunk runs no wasm-opt and minifies nothing in either mode. The hook writes no
+# brotli copy here, and the proof host never serves one.
 proof_build := 'trunk build --cargo-profile=wasm-release --features dev-login --dist target/proof-dist && cargo build -p ambre-server && cargo build --release -p ambre-sfu'
 proof_env := 'BELT_DIST="$PWD/target/proof-dist" BELT_SFU="$PWD/target/release/ambre-sfu" S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}"'
 proof_senders := '--use-fake-device-for-media-stream=fps=30'

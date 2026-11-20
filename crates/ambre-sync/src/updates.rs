@@ -2192,20 +2192,33 @@ pub(crate) async fn upload_snapshot(
         author_pubkey,
         draft,
     } = upload;
-    let link: http::SnapshotUploadUrlResponse = http::post_json_auth_via(
+    let minted: http::SnapshotUploadIdResponse = http::post_json_auth_via(
         transport,
-        &base.route(format!("/documents/{document_id}/snapshot/upload-url")),
+        &base.route(format!("/documents/{document_id}/snapshot/upload-id")),
         &serde_json::json!({ "size_bytes": draft.size() }),
         auth,
     )
     .await?;
-    // The blob seals the identifier the relay minted for this link, so an
-    // open can refuse another snapshot served in its place (`SYNC-258`).
+    // The blob seals the identifier the relay minted, so an open can refuse
+    // another snapshot served in its place (`SYNC-258`).
     let blob = draft
-        .seal(link.snapshot_id)
+        .seal(minted.snapshot_id)
         .map_err(|_| http::HttpError::Local(ambre_core::LocalFailure::Crypto))?;
+    // The link signs the digest of these bytes, so no other body goes
+    // through it, a later put of the same author included (audit `P40`).
+    let link: http::SnapshotUploadUrlResponse = http::post_json_auth_via(
+        transport,
+        &base.route(format!("/documents/{document_id}/snapshot/upload-url")),
+        &http::SnapshotUploadUrlRequest {
+            size: draft.size(),
+            snapshot_id: minted.snapshot_id,
+            checksum: blob.checksum(),
+        },
+        auth,
+    )
+    .await?;
     // The presigned link is its own credential: no session token goes there.
-    http::put_sealed_via(transport, &link.upload_url, &blob).await?;
+    http::put_checked_via(transport, &link.upload_url, &blob).await?;
     let metadata = http::CreateSnapshotRequest {
         author_pubkey,
         s3_key: link.s3_key,
@@ -5336,6 +5349,10 @@ mod tests {
             vec![
                 (
                     http::Method::Post,
+                    format!("{base}/api/documents/{doc}/snapshot/upload-id"),
+                ),
+                (
+                    http::Method::Post,
                     format!("{base}/api/documents/{doc}/snapshot/upload-url"),
                 ),
                 (http::Method::Put, "https://store.test/o?sig=x".to_owned()),
@@ -5354,6 +5371,7 @@ mod tests {
 
         for stored in [200, 500] {
             let transport = Scripted::new([
+                Ok((200, serde_json::json!({ "snapshot_id": given.to_string() }))),
                 Ok((200, link.clone())),
                 Ok((200, serde_json::Value::Null)),
                 Ok((
@@ -5373,21 +5391,30 @@ mod tests {
             assert_eq!(transport.calls(), steps(stored));
             let sent = transport.sent.borrow();
             assert!(
-                sent[1].bearer.is_none(),
+                sent[2].bearer.is_none(),
                 "the presigned link carries no session token"
             );
             // `SYNC-258`: the object seals the id the relay minted for its
             // link, at the size the link was asked for.
             let size: serde_json::Value =
                 serde_json::from_slice(sent[0].body.as_ref().unwrap().1.as_bytes()).unwrap();
-            let object = sent[1].body.as_ref().unwrap().1.as_bytes();
+            let asked: serde_json::Value =
+                serde_json::from_slice(sent[1].body.as_ref().unwrap().1.as_bytes()).unwrap();
+            let object = sent[2].body.as_ref().unwrap().1.as_bytes();
             assert_eq!(size["size_bytes"], object.len());
+            assert_eq!(asked["size_bytes"], object.len());
+            assert_eq!(asked["snapshot_id"], given.to_string());
+            // `SRV-310`: the link is asked for the SHA-256 digest of the
+            // object, and the put carries the same digest.
+            let checksum = ambre_crypto::hash::object_checksum(object);
+            assert_eq!(asked["sha256"], serde_json::to_value(checksum).unwrap());
+            assert_eq!(sent[2].checksum, Some(checksum));
             let stored = Payload::<pipeline::FetchedBlob>::new(object.to_vec());
             // `SYNC-259`: it seals the horizon the metadata names.
             assert!(pipeline::decode_snapshot_blob(&stored, doc, served(given, 3)).is_ok());
             // `SYNC-182`: the metadata names no snapshot id and no clocks.
             let metadata: serde_json::Value =
-                serde_json::from_slice(sent[2].body.as_ref().unwrap().1.as_bytes()).unwrap();
+                serde_json::from_slice(sent[3].body.as_ref().unwrap().1.as_bytes()).unwrap();
             let fields: Vec<&str> = metadata
                 .as_object()
                 .unwrap()

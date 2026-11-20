@@ -139,7 +139,10 @@ fn clock_refusal(error: &str, got: Seq<DeltaAuthor>) -> AppError {
             expected: Seq::<DeltaAuthor>::new(current.saturating_add(1)),
             got,
         },
-        None => AppError::Redis(format!("clock validation failed: {error}")),
+        None => AppError::Redis(crate::error::FaultText::of(
+            "clock validation failed",
+            error,
+        )),
     }
 }
 
@@ -160,7 +163,7 @@ pub async fn document_seqs(
     let counters = redis
         .mget::<Vec<Option<u64>>>(keys)
         .await
-        .map_err(|e| AppError::Redis(format!("sequence counters: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("sequence counters", e)))?;
     Ok(counters
         .into_iter()
         .map(|c| c.map(ambre_core::Seq::<ambre_core::Relay>::new))
@@ -200,10 +203,9 @@ pub async fn clock_state_is_cold(
     document_id: &Id<Document>,
 ) -> Result<bool, AppError> {
     let clocks_key = DocKey::<Clocks>::of(document_id);
-    let existing: usize = redis
-        .exists(clocks_key.as_str())
-        .await
-        .map_err(|e| AppError::Redis(format!("clock state EXISTS failed: {e}")))?;
+    let existing: usize = redis.exists(clocks_key.as_str()).await.map_err(|e| {
+        AppError::Redis(crate::error::FaultText::of("clock state EXISTS failed", e))
+    })?;
     Ok(existing == 0)
 }
 
@@ -238,7 +240,12 @@ pub async fn seed_clock_state(
             argv.iter().map(String::as_str).collect::<Vec<_>>(),
         )
         .await
-        .map_err(|e| AppError::Redis(format!("clock state rehydrate failed: {e}")))?;
+        .map_err(|e| {
+            AppError::Redis(crate::error::FaultText::of(
+                "clock state rehydrate failed",
+                e,
+            ))
+        })?;
     Ok(())
 }
 
@@ -342,7 +349,7 @@ fn store_refusal(error: &str, what: &str) -> AppError {
             resource: Resource::Document,
         }
     } else {
-        AppError::Redis(format!("{what}: {error}"))
+        AppError::Redis(crate::error::FaultText::of(what, error))
     }
 }
 
@@ -396,7 +403,7 @@ pub async fn pending_entries(
     let entries: Vec<String> = redis
         .lrange(pending_key.as_str(), 0, -1)
         .await
-        .map_err(|e| AppError::Redis(format!("pending lrange failed: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("pending lrange failed", e)))?;
     Ok(entries
         .into_iter()
         .map(|entry| StoredPayload::new(entry.into_bytes()))
@@ -409,7 +416,7 @@ pub async fn mark_pending_dirty(redis: &Client, pending_key: &PendingKey) -> Res
     redis
         .sadd(FlushDirtySet.as_str(), [pending_key.as_str()])
         .await
-        .map_err(|e| AppError::Redis(format!("mark pending dirty: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("mark pending dirty", e)))?;
     Ok(())
 }
 
@@ -420,7 +427,7 @@ pub async fn dirty_pending_keys(redis: &Client) -> Result<Vec<PendingKey>, AppEr
     let members: Vec<String> = redis
         .smembers(FlushDirtySet.as_str())
         .await
-        .map_err(|e| AppError::Redis(format!("dirty pending keys: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("dirty pending keys", e)))?;
     Ok(members
         .iter()
         .filter_map(|member| PendingKey::parse(member))
@@ -445,11 +452,11 @@ pub async fn clear_pending_dirty_if_empty(
     let _: usize = redis
         .srem(FlushDirtySet.as_str(), [pending_key.as_str()])
         .await
-        .map_err(|e| AppError::Redis(format!("clear pending dirty: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("clear pending dirty", e)))?;
     let length: usize = redis
         .llen(pending_key.as_str())
         .await
-        .map_err(|e| AppError::Redis(format!("clear pending dirty: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("clear pending dirty", e)))?;
     if length > 0 {
         mark_pending_dirty(redis, pending_key).await?;
     }
@@ -550,7 +557,7 @@ pub async fn try_acquire_flush_lock(
             [token.as_str(), ttl.as_str()],
         )
         .await
-        .map_err(|e| AppError::Redis(format!("flush lock acquire: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("flush lock acquire", e)))?;
     Ok(res.is_some())
 }
 
@@ -569,7 +576,7 @@ pub async fn release_flush_lock(
     let _: i64 = redis
         .eval::<i64>(LUA, [lock_key.as_str()], [token.as_str()])
         .await
-        .map_err(|e| AppError::Redis(format!("flush lock release: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("flush lock release", e)))?;
     Ok(())
 }
 
@@ -586,7 +593,7 @@ pub async fn claim_snapshot_ask(
     let res: Option<String> = redis
         .eval::<Option<String>>(ACQUIRE_LUA, [key.as_str()], ["1", ttl.as_str()])
         .await
-        .map_err(|e| AppError::Redis(format!("snapshot ask claim: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("snapshot ask claim", e)))?;
     Ok(res.is_some())
 }
 
@@ -599,7 +606,7 @@ pub async fn current_seq(
     let seq: Option<u64> = redis
         .get(DocKey::<SeqCounter>::of(document_id).as_str())
         .await
-        .map_err(|e| AppError::Redis(format!("current seq: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("current seq", e)))?;
     Ok(ambre_core::Seq::<ambre_core::Relay>::new(seq.unwrap_or(0)))
 }
 
@@ -618,7 +625,7 @@ pub async fn refresh_get(
     let fields: std::collections::HashMap<String, String> =
         crate::secrets::token::refresh_key(token, |key| redis.hgetall(key))
             .await
-            .map_err(|e| AppError::Redis(format!("refresh get failed: {e}")))?;
+            .map_err(|e| AppError::Redis(crate::error::FaultText::of("refresh get failed", e)))?;
 
     if fields.is_empty() {
         return Ok(None);
@@ -628,14 +635,18 @@ pub async fn refresh_get(
 
     let user_id = ambre_core::Uuid::parse_str(&user_id)
         .map(Id::<User>::from_uuid)
-        .map_err(|e| AppError::Redis(format!("invalid user_id in refresh: {e}")))?;
+        .map_err(|e| {
+            AppError::Redis(crate::error::FaultText::of("invalid user_id in refresh", e))
+        })?;
 
     // An absent field is a session without keys; a present one must parse.
     let signing_pubkey = fields
         .get("signing_pubkey_hex")
         .map(|hex| FixedBytes::<PublicKey>::from_hex(hex))
         .transpose()
-        .map_err(|e| AppError::Redis(format!("invalid pubkey in refresh: {e}")))?;
+        .map_err(|e| {
+            AppError::Redis(crate::error::FaultText::of("invalid pubkey in refresh", e))
+        })?;
 
     Ok(Some(RefreshData {
         user_id,
@@ -674,7 +685,7 @@ pub async fn refresh_create(
         redis.eval::<i64>(HASH_WITH_TTL_LUA, [key], args)
     })
     .await
-    .map_err(|e| AppError::Redis(format!("refresh create: {e}")))?;
+    .map_err(|e| AppError::Redis(crate::error::FaultText::of("refresh create", e)))?;
     Ok(())
 }
 
@@ -685,7 +696,7 @@ pub async fn refresh_delete(
 ) -> Result<(), AppError> {
     crate::secrets::token::refresh_key(token, |key| redis.del([key]))
         .await
-        .map_err(|e| AppError::Redis(format!("refresh delete failed: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("refresh delete failed", e)))?;
     Ok(())
 }
 
@@ -701,7 +712,7 @@ pub async fn refresh_claim(
 ) -> Result<bool, AppError> {
     let removed: usize = crate::secrets::token::refresh_key(token, |key| redis.del([key]))
         .await
-        .map_err(|e| AppError::Redis(format!("refresh claim del: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("refresh claim del", e)))?;
     Ok(removed == 1)
 }
 
@@ -742,7 +753,7 @@ pub async fn doc_broadcast(
     redis
         .spublish(channel.as_str(), RefBulkString::new(payload.expose_bytes()))
         .await
-        .map_err(|e| AppError::Redis(format!("doc broadcast: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("doc broadcast", e)))?;
     Ok(())
 }
 
@@ -760,7 +771,7 @@ pub async fn user_broadcast(
     redis
         .spublish(channel.as_str(), RefBulkString::new(payload.expose_bytes()))
         .await
-        .map_err(|e| AppError::Redis(format!("user broadcast: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("user broadcast", e)))?;
     Ok(())
 }
 
@@ -793,7 +804,7 @@ pub async fn thread_activity(
     redis
         .spublish(topic.as_str(), RefBulkString::new(msg.expose_bytes()))
         .await
-        .map_err(|e| AppError::Redis(format!("thread activity: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("thread activity", e)))?;
     Ok(())
 }
 
@@ -812,7 +823,7 @@ pub async fn call_signal(
             RefBulkString::new(frame.expose_bytes()),
         )
         .await
-        .map_err(|e| AppError::Redis(format!("call signal: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("call signal", e)))?;
     Ok(())
 }
 
@@ -943,7 +954,7 @@ return {'admitted', state[2], tostring(sender)}
             ],
         )
         .await
-        .map_err(|e| AppError::Redis(format!("call join: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("call join", e)))?;
     let malformed = || AppError::Internal(format!("a call join answered {answer:?}"));
     match answer.as_slice() {
         [word] if word == "channel" => Ok(CallJoin::Refused(CallRefusal::NotMember)),
@@ -989,7 +1000,7 @@ return 1
             ],
         )
         .await
-        .map_err(|e| AppError::Redis(format!("call announce: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("call announce", e)))?;
     Ok(kept == 1)
 }
 
@@ -1006,7 +1017,7 @@ pub async fn seated(
     let joins: std::collections::HashMap<String, String> = redis
         .hgetall(keys.joins.as_str())
         .await
-        .map_err(|e| AppError::Redis(format!("call roster: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("call roster", e)))?;
     let mut seated: Vec<_> = joins
         .into_iter()
         .filter_map(|(sender, join)| {
@@ -1066,7 +1077,7 @@ return answer
             ],
         )
         .await
-        .map_err(|e| AppError::Redis(format!("call hold: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("call hold", e)))?;
     match held.split_first() {
         Some((word, gone)) if word == "held" => Ok(CallHold::Held {
             gone: gone
@@ -1105,7 +1116,7 @@ return 0
     let last: i64 = redis
         .eval(LUA, keys.texts(), [sender.get().to_string()])
         .await
-        .map_err(|e| AppError::Redis(format!("call leave: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("call leave", e)))?;
     Ok(if last == 1 {
         Departure::Last
     } else {
@@ -1145,7 +1156,7 @@ return answer
     let read: Vec<String> = redis
         .eval(LUA, keys.texts(), [channel.to_string()])
         .await
-        .map_err(|e| AppError::Redis(format!("call roster: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("call roster", e)))?;
     let Some((word, seats)) = read.split_first() else {
         return Ok(CallRoster::Gone);
     };
@@ -1236,7 +1247,7 @@ pub async fn doc_presence_remove(
     redis
         .hdel(key.as_str(), pub_key.to_hex().as_str())
         .await
-        .map_err(|e| AppError::Redis(format!("presence remove: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("presence remove", e)))?;
     Ok(())
 }
 
@@ -1273,7 +1284,7 @@ return 1
             [ttl.as_str(), pub_key_hex.as_str()],
         )
         .await
-        .map_err(|e| AppError::Redis(format!("session open: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("session open", e)))?;
     Ok(())
 }
 
@@ -1300,7 +1311,7 @@ return 0
     let last: i64 = redis
         .eval(LUA, [key.as_str()], [pub_key_hex.as_str()])
         .await
-        .map_err(|e| AppError::Redis(format!("session close: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("session close", e)))?;
     Ok(last == 1)
 }
 
@@ -1317,7 +1328,7 @@ pub async fn mark_document_gone(
     let _: String = redis
         .eval::<String>(LUA, [gone_key.as_str()], [ttl.as_str()])
         .await
-        .map_err(|e| AppError::Redis(format!("mark document gone: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("mark document gone", e)))?;
     Ok(())
 }
 
@@ -1377,11 +1388,11 @@ return 1
             [ttl.get().to_string()],
         )
         .await
-        .map_err(|e| AppError::Redis(format!("purge document state: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("purge document state", e)))?;
     let _: usize = redis
         .srem(FlushDirtySet.as_str(), [keys.pending.as_str()])
         .await
-        .map_err(|e| AppError::Redis(format!("purge dirty mark: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("purge dirty mark", e)))?;
     Ok(())
 }
 
@@ -1410,7 +1421,7 @@ return tonumber(redis.call('GET', KEYS[3])) or 0
             Vec::<String>::new(),
         )
         .await
-        .map_err(|e| AppError::Redis(format!("lock segment: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("lock segment", e)))?;
     Ok(ambre_core::Seq::<ambre_core::Relay>::try_from(answer).ok())
 }
 
@@ -1430,7 +1441,7 @@ return tonumber(redis.call('GET', KEYS[2])) or 0
     let answer: i64 = redis
         .eval::<i64>(LUA, [locked.as_str(), seq.as_str()], Vec::<String>::new())
         .await
-        .map_err(|e| AppError::Redis(format!("lock segment now: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("lock segment now", e)))?;
     Ok(ambre_core::Seq::<ambre_core::Relay>::new(
         answer.unsigned_abs(),
     ))
@@ -1466,7 +1477,7 @@ return 1
             [folded_seq.get().to_string()],
         )
         .await
-        .map_err(|e| AppError::Redis(format!("seal folded: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("seal folded", e)))?;
     Ok(sealed == 1)
 }
 
@@ -1479,7 +1490,7 @@ pub async fn mirror_segment_lock(
     redis
         .set(DocKey::<Locked>::of(document_id).as_str(), "1")
         .await
-        .map_err(|e| AppError::Redis(format!("mirror segment lock: {e}")))
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("mirror segment lock", e)))
 }
 
 /// Whether a document owes a key rotation, as its mirror holds it
@@ -1508,7 +1519,7 @@ return redis.call('DEL', KEYS[1])
     let _: i64 = redis
         .eval::<i64>(LUA, [key.as_str()], [flag])
         .await
-        .map_err(|e| AppError::Redis(format!("mirror rotation owed: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("mirror rotation owed", e)))?;
     Ok(())
 }
 
@@ -1551,7 +1562,7 @@ pub async fn oidc_state_set(
         })
     })
     .await
-    .map_err(|e| AppError::Redis(format!("oidc state set: {e}")))?;
+    .map_err(|e| AppError::Redis(crate::error::FaultText::of("oidc state set", e)))?;
     Ok(())
 }
 
@@ -1574,7 +1585,7 @@ pub async fn oidc_state_take(
     });
     let fields: std::collections::HashMap<String, String> = get
         .await
-        .map_err(|e| AppError::Redis(format!("oidc state get: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("oidc state get", e)))?;
 
     if fields.is_empty() {
         return Err(AppError::SessionExpired);
@@ -1585,7 +1596,7 @@ pub async fn oidc_state_take(
 
     delete
         .await
-        .map_err(|e| AppError::Redis(format!("oidc state delete: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("oidc state delete", e)))?;
 
     Ok(OidcAuthState {
         pkce_verifier_secret: ambre_core::Confidential::<OidcSecret>::new(verifier),
@@ -1621,12 +1632,18 @@ pub fn parse_store_version(info: &str) -> Option<StoreVersion> {
 /// Refuses an `INFO server` reply that names no version, or a version older
 /// than [`MIN_STORE_VERSION`].
 fn check_store_version(info: &str) -> Result<StoreVersion, AppError> {
-    let version = parse_store_version(info)
-        .ok_or_else(|| AppError::Redis("INFO server names no redis_version".into()))?;
+    let version = parse_store_version(info).ok_or_else(|| {
+        AppError::Redis(crate::error::FaultText::bare(
+            "INFO server names no redis_version",
+        ))
+    })?;
     if version < MIN_STORE_VERSION {
-        return Err(AppError::Redis(format!(
-            "Redis {}.{} is too old: the relay needs {}.{} or later for HEXPIRE",
-            version.major, version.minor, MIN_STORE_VERSION.major, MIN_STORE_VERSION.minor
+        return Err(AppError::Redis(crate::error::FaultText::of(
+            "the store is too old for HEXPIRE",
+            format_args!(
+                "Redis {}.{}, and the relay needs {}.{} or later",
+                version.major, version.minor, MIN_STORE_VERSION.major, MIN_STORE_VERSION.minor
+            ),
         )));
     }
     Ok(version)
@@ -1654,20 +1671,20 @@ pub async fn primaries(redis: &Client) -> Result<Vec<Client>, AppError> {
     let nodes: String = redis
         .cluster_nodes()
         .await
-        .map_err(|e| AppError::Redis(format!("CLUSTER NODES: {e}")))?;
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("CLUSTER NODES", e)))?;
     let servers = primary_servers(&nodes);
     if servers.is_empty() {
-        return Err(AppError::Redis("CLUSTER NODES names no primary".into()));
+        return Err(AppError::Redis(crate::error::FaultText::bare(
+            "CLUSTER NODES names no primary",
+        )));
     }
     let mut clients = Vec::with_capacity(servers.len());
     for server in servers {
         let mut config = redis.config().clone();
         config.server = server;
-        clients.push(
-            Client::connect(config)
-                .await
-                .map_err(|e| AppError::Redis(format!("connect to a primary: {e}")))?,
-        );
+        clients.push(Client::connect(config).await.map_err(|e| {
+            AppError::Redis(crate::error::FaultText::of("connect to a primary", e))
+        })?);
     }
     Ok(clients)
 }
@@ -1722,11 +1739,11 @@ pub async fn require_store_version(redis: &Client) -> Result<StoreVersion, AppEr
         let info: String = node
             .info([InfoSection::Server])
             .await
-            .map_err(|e| AppError::Redis(format!("INFO server: {e}")))?;
+            .map_err(|e| AppError::Redis(crate::error::FaultText::of("INFO server", e)))?;
         let version = check_store_version(&info)?;
         oldest = Some(oldest.map_or(version, |o: StoreVersion| o.min(version)));
     }
-    oldest.ok_or_else(|| AppError::Redis("no primary answered INFO".into()))
+    oldest.ok_or_else(|| AppError::Redis(crate::error::FaultText::bare("no primary answered INFO")))
 }
 
 #[cfg(test)]
