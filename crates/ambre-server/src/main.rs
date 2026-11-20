@@ -29,6 +29,8 @@ mod ws;
 
 // Test-only: the crate is a binary, so no build outside the tests can call these.
 #[cfg(test)]
+mod log_guard;
+#[cfg(test)]
 mod test_helpers;
 
 use axum::Router;
@@ -350,14 +352,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // The metrics take a listener of their own, which the public router never
     // serves (`SRV-257`). The loopback is the default, so no metric leaves the
-    // host unless the operator names another address.
-    let metrics_listener = tokio::net::TcpListener::bind(metrics::address()?).await?;
+    // host unless the operator names another address. Another address needs a
+    // scrape token, or the relay refuses to start (`SRV-318`).
+    let metrics_address = metrics::address()?;
+    let scrape = ambre_metrics::ScrapeAccess::for_listener(
+        metrics_address,
+        secrets::scrape::scrape_token(),
+    )?;
+    let metrics_listener = tokio::net::TcpListener::bind(metrics_address).await?;
     tracing::info!(
         port = metrics_listener.local_addr()?.port(),
         "metrics listening"
     );
     tokio::spawn(async move {
-        if let Err(e) = metrics::serve(metrics_listener).await {
+        if let Err(e) = metrics::serve(metrics_listener, scrape).await {
             tracing::error!(error = %e, "the metrics listener stopped");
         }
     });
@@ -740,7 +748,16 @@ mod answer_policy_tests {
                 .unwrap(),
         ));
         requests.push((
-            crate::metrics::router(),
+            crate::metrics::router(ambre_metrics::ScrapeAccess::Loopback),
+            Request::get(crate::metrics::ROUTE)
+                .body(Body::empty())
+                .unwrap(),
+        ));
+        // A scrape the token refuses carries the policy too (`SRV-318`).
+        requests.push((
+            crate::metrics::router(ambre_metrics::ScrapeAccess::Token(
+                ambre_core::Credential::new("north-wind".to_owned()),
+            )),
             Request::get(crate::metrics::ROUTE)
                 .body(Body::empty())
                 .unwrap(),

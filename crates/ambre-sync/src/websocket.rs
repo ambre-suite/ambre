@@ -106,8 +106,8 @@ impl SyncState {
 
     // -- WebSocket lifecycle ---------------------------------------------------
 
-    /// Opens the session-level multiplexed WebSocket. Called after Unlock or
-    /// SetupAccount. If the socket is already present (reconnection), it is
+    /// Opens the session-level multiplexed WebSocket. Called after an unlock or
+    /// a key setup. If the socket is already present (reconnection), it is
     /// replaced. All open documents are automatically re-subscribed.
     #[cfg(target_arch = "wasm32")]
     // The wasm twin: a host build never compiles it, so cargo-mutants skips it.
@@ -1933,6 +1933,19 @@ impl SyncState {
             }
 
             WsServerMsg::ThreadActivity { document_id } => self.thread_activity(document_id),
+
+            // A member this user invited lost the address it was invited
+            // under (`SRV-295`). An open document reads its rows again, so the
+            // view shows the member unproven and without the address.
+            WsServerMsg::AddressReclaimed {
+                document_id,
+                member,
+            } => {
+                crate::log::info!("Sync: the address of {member} was reclaimed on {document_id}");
+                if self.documents.contains_key(&document_id) {
+                    self.handle_list_document_members(None, document_id);
+                }
+            }
 
             WsServerMsg::DocumentRevoked { document_id } => {
                 // The server removed us from this document (targeted push on our

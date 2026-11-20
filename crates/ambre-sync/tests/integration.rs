@@ -78,34 +78,6 @@ fn dev_login_returns_session_ready() {
 }
 
 #[test]
-fn setup_account_returns_created_with_recovery_words() {
-    let (mut state, rx, _mock) = setup(false);
-    let id = next_request();
-
-    send_rest(
-        &mut state,
-        id,
-        RestCommand::SetupAccount {
-            passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new(
-                "anchovy glider ruckus tadpole".to_owned(),
-            ),
-            email: "alice@example.com".into(),
-            display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Alice").unwrap(),
-        },
-    );
-
-    match drain_rest(&rx, id) {
-        RestEvent::AccountCreated { recovery_words } => {
-            // `ZK-043`: 24 BIP39 words, which read back to a seed.
-            let words = recovery_words.secret().expose();
-            assert_eq!(words.split(' ').count(), 24, "24 words");
-            assert!(ambre_crypto::keys::MasterSeed::from_recovery_words(&recovery_words).is_ok());
-        }
-        other => panic!("expected AccountCreated, got {other:?}"),
-    }
-}
-
-#[test]
 fn a_setup_under_the_strength_floor_is_refused_before_any_key_exists() {
     // `ZK-035`: a weak passphrase seals no seed. The worker answers the
     // weakness alone: no account, no recovery words, no socket.
@@ -120,13 +92,10 @@ fn a_setup_under_the_strength_floor_is_refused_before_any_key_exists() {
         send_rest(
             &mut state,
             next_request(),
-            RestCommand::SetupAccount {
+            RestCommand::SetUpKeys {
                 passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new(
                     weak.to_owned(),
                 ),
-                email: "alice@example.com".into(),
-                display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Alice")
-                    .unwrap(),
             },
         );
         let events: Vec<LogicEvent> = rx.try_iter().collect();

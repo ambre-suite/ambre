@@ -9,8 +9,9 @@ pub struct UserRow {
     pub id: Id<User>,
     pub email: ambre_core::Email,
     /// Whether `email` was proven by a provider (OIDC/dev) rather than merely
-    /// self-asserted at `/auth/setup`. A verified email wins any collision (#3):
-    /// an OIDC login reclaims an unverified holder's email.
+    /// self-asserted at the retired account setup (`SRV-319`). A verified email
+    /// wins any collision (#3): an OIDC login reclaims an unverified holder's
+    /// email.
     pub email_verified: EmailProof,
     pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
     pub master_key_enc: Option<ambre_core::Encoded<ambre_core::WrappedMasterKey>>,
@@ -128,10 +129,14 @@ pub async fn get_user_by_email(
     }
 }
 
-/// Inserts a new user row and returns it.
+/// Inserts a new user row with a self-asserted address and returns it.
 ///
-/// A duplicate email (any provider, any case) is rejected with 409 Conflict
-/// via `map_email_conflict` (N5).
+/// No route of the relay creates such an account since the anonymous account
+/// setup was retired (`SRV-319`). Rows written before it remain, so the tests
+/// of the address namespace and of the reclaim create them here. A duplicate
+/// email (any provider, any case) is rejected with 409 Conflict via
+/// `map_email_conflict` (N5).
+#[cfg(test)]
 pub async fn create_user(
     pool: &PgPool,
     email: &ambre_core::Email,
@@ -185,19 +190,23 @@ pub async fn create_user(
 /// Collision policy (#3, supersedes the earlier "always 409" note for the
 /// verified-vs-unverified case): a provider-verified email wins over a
 /// self-asserted one. Before upserting, this RECLAIMS the email from any
-/// UNVERIFIED account currently holding it. That account is a `/auth/setup`
+/// UNVERIFIED account currently holding it. That account is a self-asserted
 /// squatter, and its email is unbound to a unique, non-resolvable sentinel. A
 /// collision with another VERIFIED identity is left intact, so the upsert then
 /// violates `users_email_lower_unique` and the login fails with 409. Verified
 /// identities never silently steal each other's email. Reclaim + upsert run in
 /// one transaction so a concurrent login cannot observe a half-freed email.
-pub async fn upsert_user_from_oidc(
+///
+/// The answer names each inviter of a reclaimed account, per document, so the
+/// caller tells them that the address left the member they invited
+/// (`SRV-295`).
+pub async fn sign_in_from_oidc(
     pool: &PgPool,
     oidc_provider: ambre_core::OidcProvider,
     oidc_subject: &openidconnect::SubjectIdentifier,
     email: &ambre_core::Email,
     display_name: &ambre_core::Validated<ambre_core::DisplayName>,
-) -> Result<UserRow, AppError> {
+) -> Result<OidcSignIn, AppError> {
     let mut tx = pool.begin().await?;
 
     // Reclaim the email from any UNVERIFIED holder that is not this same OIDC
@@ -205,18 +214,25 @@ pub async fn upsert_user_from_oidc(
     // squatter's address non-resolvable for sharing (`get_user_by_email` will no
     // longer return it), and re-settable by that account later. A verified holder
     // is deliberately NOT touched, so the upsert below surfaces 409.
-    sqlx::query(
+    let reclaimed: Vec<Id<User>> = sqlx::query_scalar::<_, PgId>(
         "UPDATE users \
          SET email = 'reclaimed-' || id::text || '@invalid.local', email_verified = false \
          WHERE lower(email) = lower($1) \
            AND email_verified = false \
-           AND (oidc_provider IS DISTINCT FROM $2 OR oidc_subject IS DISTINCT FROM $3)",
+           AND (oidc_provider IS DISTINCT FROM $2 OR oidc_subject IS DISTINCT FROM $3) \
+         RETURNING id",
     )
     .bind(email.as_str())
     .bind(oidc_provider.as_str())
     .bind(oidc_subject.as_str())
-    .execute(&mut *tx)
-    .await?;
+    .fetch_all(&mut *tx)
+    .await?
+    .into_iter()
+    .map(Id::from)
+    .collect();
+    // The reclaim leaves every member row and wrapped key of the account. Its
+    // inviters are read in the same transaction, so none is missed.
+    let reclaims = reclaim_notices(&mut tx, &reclaimed).await?;
 
     let row = sqlx::query(
         "INSERT INTO users (oidc_provider, oidc_subject, email, email_verified, display_name) VALUES ($1, $2, $3, true, $4) ON CONFLICT (oidc_provider, oidc_subject) DO UPDATE SET email = $3, email_verified = true, display_name = $4 RETURNING id, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, (xmax = 0) AS inserted"
@@ -252,7 +268,74 @@ pub async fn upsert_user_from_oidc(
         tracing::debug!(user_id = %user.id, provider = %oidc_provider, "user created");
     }
 
-    Ok(user)
+    Ok(OidcSignIn { user, reclaims })
+}
+
+/// What a provider sign-in wrote: the account, and the inviters each reclaim
+/// of its address owes a notice (`SRV-295`).
+#[derive(Debug)]
+pub struct OidcSignIn {
+    pub user: UserRow,
+    pub reclaims: Vec<ReclaimNotice>,
+}
+
+/// One inviter of an account whose address a provider sign-in reclaimed: on
+/// `document`, `inviter` invited `member`, which no longer holds the address.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReclaimNotice {
+    pub document: Id<ambre_core::id::Document>,
+    pub inviter: Id<User>,
+    pub member: Id<User>,
+}
+
+/// The inviters of the accounts `reclaimed`, one per document and member. A
+/// row with no inviter, or that the member wrapped for itself, owes nobody a
+/// notice.
+async fn reclaim_notices(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    reclaimed: &[Id<User>],
+) -> Result<Vec<ReclaimNotice>, AppError> {
+    if reclaimed.is_empty() {
+        return Ok(Vec::new());
+    }
+    let accounts: Vec<uuid::Uuid> = reclaimed.iter().map(|id| id_to_uuid(*id)).collect();
+    let rows = sqlx::query(
+        "SELECT DISTINCT document_id, invited_by, user_id FROM document_members \
+         WHERE user_id = ANY($1) AND invited_by IS NOT NULL AND invited_by <> user_id",
+    )
+    .bind(accounts)
+    .fetch_all(&mut **tx)
+    .await?;
+    rows.iter()
+        .map(|row| {
+            Ok(ReclaimNotice {
+                document: row.try_get::<PgId, _>("document_id")?.into(),
+                inviter: row.try_get::<PgId, _>("invited_by")?.into(),
+                member: row.try_get::<PgId, _>("user_id")?.into(),
+            })
+        })
+        .collect()
+}
+
+/// The account a provider sign-in wrote, without the notices its reclaims
+/// owe. The tests of the address namespace read the account alone.
+#[cfg(test)]
+pub async fn upsert_user_from_oidc(
+    pool: &PgPool,
+    oidc_provider: ambre_core::OidcProvider,
+    oidc_subject: &openidconnect::SubjectIdentifier,
+    email: &ambre_core::Email,
+    display_name: &ambre_core::Validated<ambre_core::DisplayName>,
+) -> Result<UserRow, AppError> {
+    sign_in_from_oidc(pool, oidc_provider, oidc_subject, email, display_name)
+        .await
+        .map(|signed_in| signed_in.user)
+}
+
+/// The two public keys a development sign-in registers.
+pub struct DevKeys<'a> {
+    pub signing: &'a FixedBytes<ambre_core::PublicKey>,
+    pub exchange: &'a FixedBytes<ambre_core::ExchangePublicKey>,
 }
 
 /// Dev-only: upserts a user identified by the name it signs in under.
@@ -263,22 +346,26 @@ pub async fn upsert_user_from_oidc(
 /// on insert and refreshed on conflict, so the server can verify the user's
 /// signatures. `master_key_*` stay NULL: dev keys never round-trip through the
 /// server. Gated by `Config::dev_mode` at the call site.
+///
+/// With `keys` `None`, the row keeps the keys it holds, or holds none. The
+/// account then owes its key setup, as a provider account does (`SRV-319`).
 pub async fn dev_upsert_user(
     pool: &PgPool,
     username: &ambre_core::Validated<ambre_core::DisplayName>,
-    signing_pubkey: &FixedBytes<ambre_core::PublicKey>,
-    exchange_pubkey: &FixedBytes<ambre_core::ExchangePublicKey>,
+    keys: Option<DevKeys<'_>>,
 ) -> Result<UserRow, AppError> {
     let email = format!("{}@dev.local", username.as_str());
+    let signing = keys.as_ref().map(|keys| keys.signing.as_slice());
+    let exchange = keys.as_ref().map(|keys| keys.exchange.as_slice());
     // `(xmax = 0)` is true only for a freshly INSERTed row (vs an ON CONFLICT
     // UPDATE), so we can log creation without a prior existence check.
     let row = sqlx::query(
-        "INSERT INTO users (oidc_provider, oidc_subject, email, email_verified, display_name, signing_pubkey, exchange_pubkey) VALUES ('dev', $1, $2, true, $1, $3, $4) ON CONFLICT (oidc_provider, oidc_subject) DO UPDATE SET email = $2, email_verified = true, display_name = $1, signing_pubkey = $3, exchange_pubkey = $4 RETURNING id, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, (xmax = 0) AS inserted"
+        "INSERT INTO users (oidc_provider, oidc_subject, email, email_verified, display_name, signing_pubkey, exchange_pubkey) VALUES ('dev', $1, $2, true, $1, $3, $4) ON CONFLICT (oidc_provider, oidc_subject) DO UPDATE SET email = $2, email_verified = true, display_name = $1, signing_pubkey = COALESCE($3, users.signing_pubkey), exchange_pubkey = COALESCE($4, users.exchange_pubkey) RETURNING id, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, (xmax = 0) AS inserted"
     )
     .bind(username.as_str())
     .bind(&email)
-    .bind(signing_pubkey.as_slice())
-    .bind(exchange_pubkey.as_slice())
+    .bind(signing)
+    .bind(exchange)
     .fetch_one(pool)
     .await
     .map_err(map_email_conflict)?;
@@ -411,7 +498,7 @@ mod tests {
     }
 
     /// #3: a provider-verified OIDC login RECLAIMS an email squatted by an
-    /// unverified `/auth/setup` account. The login succeeds (closing the
+    /// unverified account of the retired setup. The login succeeds (closing the
     /// unauthenticated login-DoS), the OIDC row owns the verified email, and the
     /// squatter's row no longer resolves for that email.
     #[sqlx::test]
@@ -470,7 +557,7 @@ mod tests {
     }
 
     /// #3: a verified email is NOT reclaimable. Once an OIDC identity owns it, a
-    /// later `/auth/setup` claim for the same email fails with 409.
+    /// later self-asserted claim for the same email fails with 409.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn verified_email_cannot_be_squatted_by_setup(pool: PgPool) {

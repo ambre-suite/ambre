@@ -20,6 +20,7 @@ pub fn empty_oidc_clients() -> OidcClients {
 /// sets to the one server of `just services-up`. `just test-db-cluster` points
 /// it at the cluster of `just cluster-up`, so every test runs against both.
 pub async fn connect_test_redis() -> rustis::Result<rustis::client::Client> {
+    crate::log_guard::install();
     let url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".into());
     rustis::client::Client::connect(url.as_str()).await
 }
@@ -168,6 +169,50 @@ pub async fn create_test_user(pool: &PgPool, email: &str) -> Id<User> {
     user.id
 }
 
+/// The path of the account fixture in a test router. No router the relay
+/// serves mounts it: the anonymous account setup is retired (`SRV-319`).
+pub const ACCOUNT_FIXTURE: &str = "/test/account";
+
+/// The body the account fixture takes: a self-asserted address, a name, the
+/// sealed master material and the two public keys. No proof of the signing key
+/// is asked, so a test may register any key.
+#[derive(serde::Deserialize)]
+pub struct AccountFixture {
+    pub email: ambre_core::Email,
+    pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
+    pub master_key_enc: ambre_core::Encoded<ambre_core::WrappedMasterKey>,
+    pub master_key_salt: ambre_core::FixedBytes<ambre_core::MasterKeySalt>,
+    pub signing_pubkey: ambre_core::FixedBytes<ambre_core::PublicKey>,
+    pub exchange_pubkey: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
+}
+
+/// A test router's handler of [`ACCOUNT_FIXTURE`]: it writes the account as a
+/// row of the retired setup, then answers a session under its signing key.
+/// The answer carries the `user_id` and the token pair, as a sign-in does.
+pub async fn create_account(
+    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+    body: crate::extract::Json<AccountFixture>,
+) -> Result<axum::Json<serde_json::Value>, crate::error::AppError> {
+    let req = body.into_inner();
+    let user = db::create_user(
+        &state.db,
+        &ambre_core::Email::from(req.email.as_str().trim()),
+        &req.display_name,
+        &req.master_key_enc,
+        &req.master_key_salt,
+        &req.signing_pubkey,
+        &req.exchange_pubkey,
+    )
+    .await?;
+    let tokens = crate::auth::issue_session(&state, user.id, Some(req.signing_pubkey)).await?;
+    Ok(axum::Json(serde_json::json!({
+        "user_id": user.id.to_string(),
+        "access_token": tokens.access_token,
+        "refresh_token": tokens.refresh_token,
+        "access_expires_in": tokens.access_expires_in,
+    })))
+}
+
 /// Like the state given, with another S3 client.
 pub fn with_s3(base: &AppState, s3: aws_sdk_s3::Client) -> Arc<AppState> {
     with_storage(base, s3, base.s3_bucket.clone())
@@ -220,6 +265,7 @@ pub async fn storage_service() -> (
     aws_sdk_s3::Client,
     crate::s3::StoreText<crate::s3::BucketName>,
 ) {
+    crate::log_guard::install();
     let endpoint = std::env::var("S3_ENDPOINT")
         .expect("S3_ENDPOINT: the database tier needs an object store (just services-up)");
     let env = |name: &str, default: &str| std::env::var(name).unwrap_or_else(|_| default.into());

@@ -62,6 +62,7 @@ this document alone.
 | `CALL-056` | `INV` | The relay MUST give each join of a call a sender index that no earlier join of that call held. | this spec section 3, signalling; `CALL-005` | `ambre_server::ws::handler::call::tests::each_join_of_a_call_gets_a_sender_index_no_earlier_join_held` -- database tier: a join after a leave gets a fresh index, and a join past the last index a key identifier carries reads a notice, since one script takes the seat and the index (`SRV-248`) | none | verified |
 | `CALL-064` | `INV` | A sender key MUST reach the call worker from the Sync worker on a port of their own, never through the Main instance. | this spec section 3, the client of a call; `CALL-004`; `ARCH-004` | cargo-deny -- `deny.toml` grants `ambre-crypto` to no crate of the Main instance, so no code there names a key; `ambre_crypto::call::tests::a_handoff_crosses_the_port_whole`; `ambre_sync::call_link::tests::a_join_command_seats_the_call_it_names_and_hands_the_keys_on_its_port` -- the keys leave on the port of the command alone; `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier | none | verified |
 | `CALL-101` | `INV` | The SFU MUST expose its metrics in the Prometheus text format, on a port that the media listener does not serve. | this spec section 3; `ZK-029` | `ambre_sfu::serve::tests::the_metrics_answer_on_their_own_port_under_closed_labels_alone` -- a scrape of the metrics port answers the text format, version 0.0.4, and the signalling port answers `404` on the same route. The media socket is UDP, so it serves no HTTP route | none | verified |
+| `CALL-153` | `INV` | A metrics listener of the SFU off the loopback MUST answer only a scrape that presents the token of `SFU_METRICS_TOKEN`, and the SFU MUST NOT start there without one. | this spec section 3, the metrics of the SFU; `CALL-101`; `SRV-318` | `ambre_sfu::serve::tests::a_scrape_behind_a_token_presents_it` -- a served SFU answers `200` to the token and `401` with no metric to a missing or wrong one; `ambre_metrics::tests::a_listener_off_the_loopback_needs_the_token` -- an address off the loopback refuses to start without a token | none | verified |
 | `CALL-115` | `INV` | A client MUST send its screen as one VP8 encoding, on a screen sender apart from the camera, capped at the call screen row of `ambre-spec-budgets.md section 1`. | this spec section 3, the screen; `CALL-096` | `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Ada's screen sender holds one encoding, capped at 30 fps and 1 500 kbit/s, and sends VP8 at most 1 920 pixels across | none | verified |
 | `CALL-102` | `INV` | A chunk of the screen MUST be sealed under the key identifier of the screen track. | this spec section 3, the screen; `CALL-001` | `ambre_crypto::call::tests::a_screen_chunk_is_sealed_under_the_key_identifier_of_the_screen` -- the header names the screen track, and the screen seals under a key of its own; `ambre_call::tests::a_screen_chunk_leaves_sealed_and_opens_on_a_receiver_of_the_screen_alone`; `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Bob decodes Ada's screen through the transform of his screen slot | none | verified |
 | `CALL-110` | `INV` | A chunk of the screen MUST open through the open transform of the screen alone. | this spec section 3, the screen; `CALL-022` | `ambre_crypto::call::tests::a_screen_chunk_opens_through_the_door_of_the_screen_alone` -- the camera door and the audio door refuse a screen chunk, and the screen door refuses a camera chunk; `ambre_call::tests::a_screen_chunk_leaves_sealed_and_opens_on_a_receiver_of_the_screen_alone` | none | verified |
@@ -262,7 +263,7 @@ A participant sends a screen or a window into the call, and stops it.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 151 `verified`, 1 `unimplemented`. The relay admits under the cap, and the SFU
+* **Verification.** 152 `verified`, 1 `unimplemented`. The relay admits under the cap, and the SFU
   mints the TURN credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography, forwards RTP
   and reaches a browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`, `CALL-050` to
   `CALL-052`). Each receiver holds fixed slots, and a seed gives one path (`CALL-045` to
@@ -936,8 +937,9 @@ The audio does not follow the choice. The three audio slots carry the most recen
 (`CALL-047`). So the SFU learns which senders each receiver watches (`ZK-044`).
 
 **The metrics of the SFU** take a listener of their own, on the address of `SFU_METRICS_ADDR`, the
-loopback by default (`CALL-101`). Neither the media socket nor the signalling serves them. The
-format and the closed labels are the relay's (`ambre-spec-server.md section 3`):
+loopback by default (`CALL-101`). Neither the media socket nor the signalling serves them. An
+address off the loopback needs the token of `SFU_METRICS_TOKEN`, or the SFU refuses to start
+(`CALL-153`). The format and the closed labels are the relay's (`ambre-spec-server.md section 3`):
 
 | Metric | Kind | Label |
 |---|---|---|

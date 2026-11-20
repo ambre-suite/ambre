@@ -206,19 +206,10 @@ pub enum RestCommand {
         /// once the Sync thread finishes deriving the user key.
         passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
     },
-    /// First-time account setup. -> `AccountCreated { recovery_words }`, then
-    /// `SessionReady` for the user the relay assigned.
-    /// `email`/`display_name` are the user-supplied identity; the server records
-    /// them verbatim instead of a hardcoded placeholder (N3). `email` is the
-    /// handle other members resolve when sharing a document.
-    SetupAccount {
-        passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
-        email: ambre_core::Email,
-        display_name: ambre_core::Validated<ambre_core::DisplayName>,
-    },
     /// Set up the keys of the account this session signed in with the
     /// provider, sealed under `passphrase` (`CHROME-098`). The relay already
-    /// knows who the person is, so no identity travels.
+    /// knows who the person is, so no identity travels. No command creates an
+    /// account no provider vouched for (`SRV-319`).
     /// -> `AccountCreated { recovery_words }`, then `SessionReady`.
     SetUpKeys {
         passphrase: ambre_core::Confidential<ambre_core::Passphrase>,

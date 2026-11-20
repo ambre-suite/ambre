@@ -196,6 +196,24 @@ impl fmt::Display for PendingKey {
     }
 }
 
+/// The sorted set of one sliding window of the rate limiter,
+/// `rate:{tier}:{bucket}`. The bucket names a user or a client address. So
+/// the key is a type of this module, and the gate of `ZK-030` refuses it in
+/// a log line above `debug`.
+pub struct RateKey(String);
+
+impl RateKey {
+    /// The window of `bucket` in the tier whose word is `tier`.
+    pub fn of(tier: &str, bucket: impl fmt::Display) -> Self {
+        Self(format!("rate:{tier}:{bucket}"))
+    }
+
+    /// The key text, as a store command takes it.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 /// The set of the pending lists that hold a delta to flush. The flusher reads
 /// it instead of a scan of the whole keyspace.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

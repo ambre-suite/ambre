@@ -524,6 +524,10 @@ fn server_samples() -> Vec<crate::ws::WsServerMsg> {
             after: ambre_core::AfterDrop::Refinalize,
         },
         S::ThreadActivity { document_id: doc },
+        S::AddressReclaimed {
+            document_id: doc,
+            member: Id::<User>::from_bytes([17; 16]),
+        },
     ]
 }
 

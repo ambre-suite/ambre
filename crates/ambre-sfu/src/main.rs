@@ -5,6 +5,7 @@
 //! | `SFU_SIGNAL_ADDR` | the TCP address of the signalling WebSocket |
 //! | `SFU_MEDIA_ADDR` | the UDP address the browsers send their media to |
 //! | `SFU_METRICS_ADDR` | the TCP address of the metrics, the loopback by default (`CALL-101`) |
+//! | `SFU_METRICS_TOKEN` | the token a scrape presents; required off the loopback (`CALL-153`) |
 //! | `SFU_ADMISSION_KEY` | the relay's public key, in hex, which signs every admission |
 //! | `SFU_TURN_URLS` | the TURN servers, separated by commas; none when unset |
 //! | `SFU_TURN_SECRET` | the secret the TURN server shares with the SFU alone (`CALL-014`) |
@@ -13,8 +14,9 @@ use std::net::SocketAddr;
 use std::process::ExitCode;
 
 use ambre_core::{FixedBytes, PublicKey, Validated};
+use ambre_metrics::ScrapeAccess;
 use ambre_sfu::admit::AdmissionKey;
-use ambre_sfu::secrets::TurnSecret;
+use ambre_sfu::secrets::{TurnSecret, scrape_token};
 use ambre_sfu::serve::{Addresses, Admitting, run};
 use ambre_sfu::turn::{TurnServers, TurnUrl};
 
@@ -91,9 +93,12 @@ async fn main() -> ExitCode {
             media: Setting::Media.read()?,
             metrics: Setting::Metrics.read()?,
         };
+        let scrape = ScrapeAccess::for_listener(addresses.metrics, scrape_token())
+            .map_err(|e| format!("SFU_METRICS_TOKEN: {e}"))?;
         let admitting = Admitting {
             key: admission_key()?,
             turn: turn_servers()?,
+            scrape,
         };
         Ok::<_, String>((addresses, admitting))
     })();

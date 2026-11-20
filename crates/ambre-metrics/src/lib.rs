@@ -13,10 +13,14 @@
 
 use std::fmt::Write as _;
 use std::marker::PhantomData;
+use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-use ambre_core::{Count, CountKind, DebugNames, KeyKind, LabelValues, MetricNames, StaticKey};
+use ambre_core::{
+    Count, CountKind, Credential, DebugNames, KeyKind, LabelValues, MetricNames, ScrapeToken,
+    StaticKey,
+};
 
 #[cfg(test)]
 mod tests;
@@ -403,5 +407,77 @@ impl Histogram {
         let seconds = Duration::from_nanos(nanos).as_secs_f64();
         out.sample(self.name, Suffix::Sum, Whole::All, &seconds);
         out.sample(self.name, Suffix::Count, Whole::All, &total);
+    }
+}
+
+/// Who may read a scrape of a metrics listener (`SRV-318`, `CALL-153`).
+///
+/// A listener on the loopback answers any process of its host. A listener on
+/// any other address answers only a scrape that presents the token the
+/// operator set. A token, once set, binds the loopback too.
+#[derive(Clone, Debug)]
+pub enum ScrapeAccess {
+    /// The listener sits on the loopback and the operator set no token.
+    Loopback,
+    /// A scrape presents this token as a bearer credential.
+    Token(Credential<ScrapeToken>),
+}
+
+/// Why a metrics listener refuses to start.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ScrapeRefusal {
+    /// The address leaves the loopback and the operator set no token.
+    TokenMissing,
+}
+
+impl std::fmt::Display for ScrapeRefusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::TokenMissing => f.write_str(
+                "a metrics address off the loopback needs a scrape token: set one, or bind the loopback",
+            ),
+        }
+    }
+}
+
+impl std::error::Error for ScrapeRefusal {}
+
+/// What a scrape receives.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Scrape {
+    /// The listener answers the metrics.
+    Admitted,
+    /// The listener answers `401 Unauthorized` and no metric.
+    Refused,
+}
+
+impl ScrapeAccess {
+    /// The access of a listener bound to `address`, under the `token` the
+    /// operator set, if any.
+    ///
+    /// # Errors
+    ///
+    /// [`ScrapeRefusal::TokenMissing`] when `address` leaves the loopback and
+    /// `token` is `None`. The unspecified address leaves it.
+    pub fn for_listener(
+        address: SocketAddr,
+        token: Option<Credential<ScrapeToken>>,
+    ) -> Result<Self, ScrapeRefusal> {
+        match token {
+            Some(token) => Ok(Self::Token(token)),
+            None if address.ip().is_loopback() => Ok(Self::Loopback),
+            None => Err(ScrapeRefusal::TokenMissing),
+        }
+    }
+
+    /// What a scrape that presents the bearer credential `presented`
+    /// receives. The comparison runs in constant time over the token.
+    #[must_use]
+    pub fn admits(&self, presented: Option<&Credential<ScrapeToken>>) -> Scrape {
+        match (self, presented) {
+            (Self::Loopback, _) => Scrape::Admitted,
+            (Self::Token(token), Some(presented)) if token.matches(presented) => Scrape::Admitted,
+            (Self::Token(_), _) => Scrape::Refused,
+        }
     }
 }

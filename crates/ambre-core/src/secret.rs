@@ -467,6 +467,7 @@ mod credential_kind {
     impl Sealed for super::OidcState {}
     impl Sealed for super::CallAdmission {}
     impl Sealed for super::TurnPassword {}
+    impl Sealed for super::ScrapeToken {}
 }
 
 /// The role of a bearer credential: a text that grants access to whoever
@@ -672,6 +673,15 @@ impl CredentialKind for TurnPassword {
 }
 
 impl WireCredential for TurnPassword {}
+
+/// The role of the token a scrape of the metrics presents, which the operator
+/// sets for a listener off the loopback. `Credential<ScrapeToken>`. It never
+/// travels in a frame of the workspace, so it has no serde form.
+pub enum ScrapeToken {}
+
+impl CredentialKind for ScrapeToken {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ScrapeToken");
+}
 
 #[cfg(test)]
 mod tests {

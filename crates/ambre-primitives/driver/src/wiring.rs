@@ -106,11 +106,14 @@ const ADDRESSES: &[&str] = &[
 const NAMING_WORDS: &[&str] = &["Pseudonym"];
 
 /// The types, by crate, that hold an identifier as text (`ZK-030`). They are
-/// the room of the SFU, the topic of a broadcast and the key of an object.
+/// the room of the SFU, a broadcast topic and an object key. The text of
+/// the object store is one too, since its key prefix names a document. A
+/// bucket name shares that type, and no log line needs one.
 const NAMING_TYPES: &[(&str, &str)] = &[
     ("ambre_sfu", "Room"),
     ("ambre_server", "Topic"),
     ("ambre_core", "ObjectKey"),
+    ("ambre_server", "StoreText"),
 ];
 
 /// The modules of the relay whose every type is a store key that holds the

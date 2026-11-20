@@ -123,6 +123,14 @@ pub fn snapshot_digest(object: &[u8]) -> FixedBytes<ambre_core::SnapshotDigest> 
     FixedBytes::from_array(prefix(&hasher.finalize()))
 }
 
+/// The SHA-256 digest of the bytes an upload link writes, as the object store
+/// checks them under `x-amz-checksum-sha256` (audit `P40`, `SRV-313`). The
+/// store computes the same digest, so no domain tag precedes the bytes.
+pub fn object_checksum(object: &[u8]) -> FixedBytes<ambre_core::ObjectChecksum> {
+    use sha2::Digest as _;
+    FixedBytes::from_array(sha2::Sha256::digest(object).into())
+}
+
 /// Domain-separation tag for the pin of an inviter's signing key.
 const INVITER_PIN_DOMAIN: &[u8] = b"ambre-inviter-pin-v1";
 

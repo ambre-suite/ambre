@@ -17,6 +17,7 @@
 
 pub mod error;
 pub mod key_link;
+pub mod key_registration;
 pub mod master_rotation;
 pub mod membership;
 pub mod messages;

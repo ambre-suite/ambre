@@ -10,7 +10,7 @@
 //! its policy (`SRV-282`).
 //!
 //! The server also stands in for the exchange of an identity provider return,
-//! which a development relay cannot answer (`StandIn`).
+//! which a development relay cannot answer (`provider_exchange`).
 
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -300,69 +300,59 @@ pub(crate) async fn join_socket(page: WebSocket, relay: String, peer: String, pa
     tokio::join!(to_relay, to_page);
 }
 
+/// The path of the provider exchange the belt stands in for.
+const PROVIDER_EXCHANGE: &str = "/api/auth/google/callback";
+
 /// The belt's stand-in for the exchange of an identity provider return.
 ///
 /// A development relay holds no provider, so no page reaches the faces of a
-/// provider account through it. The stand-in records the account the last
-/// setup of its page created: the user, the address, the name and the pair the
-/// relay answered. It then answers a provider return with that account, as the
-/// relay's exchange answers with the account the provider vouched for. The page
-/// then reads the stored keys from the relay itself, so it shows the unlock
-/// face of a real account (`CHROME-097`).
-#[derive(Clone, Default)]
-pub(crate) struct StandIn(Arc<std::sync::Mutex<Option<serde_json::Value>>>);
-
-/// The path of the provider exchange the stand-in answers.
-const PROVIDER_EXCHANGE: &str = "/api/auth/google/callback";
-
-/// The path of the account setup the stand-in records.
-const ACCOUNT_SETUP: &str = "/api/auth/setup";
-
-impl StandIn {
-    /// Forwards a setup to the relay, and records the account it created.
-    async fn record_setup(
-        &self,
-        relay: String,
-        peer: String,
-        req: Request<Body>,
-    ) -> Response<Body> {
-        let (parts, body) = req.into_parts();
-        let Ok(sent) = axum::body::to_bytes(body, 1 << 20).await else {
-            return status(StatusCode::PAYLOAD_TOO_LARGE);
-        };
-        let typed: serde_json::Value = serde_json::from_slice(&sent).unwrap_or_default();
-        let resp = forward(relay, peer, Request::from_parts(parts, Body::from(sent))).await;
-        let (parts, body) = resp.into_parts();
-        let answered = axum::body::to_bytes(body, 1 << 20)
-            .await
-            .unwrap_or_default();
-        if parts.status.is_success()
-            && let Ok(serde_json::Value::Object(mut account)) =
-                serde_json::from_slice::<serde_json::Value>(&answered)
-        {
-            account.insert("email".into(), typed["email"].clone());
-            account.insert("display_name".into(), typed["display_name"].clone());
-            if let Ok(mut held) = self.0.lock() {
-                *held = Some(serde_json::Value::Object(account));
-            }
-        }
-        Response::from_parts(parts, Body::from(answered))
+/// provider account through it. The stand-in reads the code of the return as
+/// the name of the person. It signs that name in through the relay's
+/// development sign-in, with no key. The relay then holds an account that owes
+/// its keys, as a provider account does before its key setup (`SRV-319`). A
+/// later return under the same name finds the keys that account stored.
+///
+/// The
+/// stand-in answers as the relay's exchange answers, with the account, its
+/// address and the pair. The page then reads the keys from the relay itself,
+/// so it shows the setup or the unlock face of a real account (`CHROME-097`).
+async fn provider_exchange(relay: String, peer: String, req: Request<Body>) -> Response<Body> {
+    let Ok(sent) = axum::body::to_bytes(req.into_body(), 1 << 20).await else {
+        return status(StatusCode::PAYLOAD_TOO_LARGE);
+    };
+    let typed: serde_json::Value = serde_json::from_slice(&sent).unwrap_or_default();
+    let Some(name) = typed["code"].as_str().map(str::to_owned) else {
+        return status(StatusCode::UNAUTHORIZED);
+    };
+    let sign_in = serde_json::json!({ "username": name }).to_string();
+    let Ok(dev) = axum::http::Request::builder()
+        .method(axum::http::Method::POST)
+        .uri("/api/auth/dev/login")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(sign_in))
+    else {
+        return status(StatusCode::INTERNAL_SERVER_ERROR);
+    };
+    let resp = forward(relay, peer, dev).await;
+    let (parts, body) = resp.into_parts();
+    let answered = axum::body::to_bytes(body, 1 << 20)
+        .await
+        .unwrap_or_default();
+    let Ok(serde_json::Value::Object(mut account)) =
+        serde_json::from_slice::<serde_json::Value>(&answered)
+    else {
+        return Response::from_parts(parts, Body::from(answered));
+    };
+    if !parts.status.is_success() {
+        return Response::from_parts(parts, Body::from(answered));
     }
-
-    /// Answers a provider return with the account recorded last, or refuses
-    /// it when no setup ran.
-    fn exchange(&self) -> Response<Body> {
-        let held = self.0.lock().ok().and_then(|held| held.clone());
-        let Some(account) = held else {
-            return status(StatusCode::UNAUTHORIZED);
-        };
-        let mut resp = Response::new(Body::from(account.to_string()));
-        resp.headers_mut().insert(
-            header::CONTENT_TYPE,
-            HeaderValue::from_static("application/json"),
-        );
-        resp
-    }
+    account.insert("email".into(), format!("{name}@dev.local").into());
+    let mut resp = Response::new(Body::from(serde_json::Value::Object(account).to_string()));
+    resp.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/json"),
+    );
+    resp
 }
 
 /// Every `/api` path a page of this process asked, in order. A test reads from them an
@@ -394,8 +384,6 @@ pub async fn spawn(root: PathBuf, relay: String) -> String {
     let ws_relay = relay.clone();
     let ws_peer = peer.clone();
     let (call_relay, call_peer) = (relay.clone(), peer.clone());
-    // One stand-in per page server, so parallel tests share no account.
-    let stand_in = StandIn::default();
     let app = axum::Router::new()
         .route(
             "/api/ws",
@@ -424,15 +412,11 @@ pub async fn spawn(root: PathBuf, relay: String) -> String {
             let rules = Arc::clone(&rules);
             let relay = relay.clone();
             let peer = peer.clone();
-            let stand_in = stand_in.clone();
             async move {
                 let path = req.uri().path().to_owned();
                 if path == PROVIDER_EXCHANGE {
                     record(&path);
-                    stand_in.exchange()
-                } else if path == ACCOUNT_SETUP {
-                    record(&path);
-                    stand_in.record_setup(relay, peer, req).await
+                    provider_exchange(relay, peer, req).await
                 } else if path.starts_with("/api/") {
                     record(&path);
                     forward(relay, peer, req).await
