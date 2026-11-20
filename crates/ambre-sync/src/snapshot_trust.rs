@@ -224,10 +224,11 @@ mod tests {
     /// Members whose bindings a key no test authors signed.
     fn members(keys: &[&SigningKey]) -> Confirmers {
         let binder = public(&key(99));
-        Confirmers::Granted(
+        Confirmers::granted(
             keys.iter()
                 .map(|k| (public(k), HashSet::from([binder])))
                 .collect::<HashMap<_, _>>(),
+            HashSet::new(),
         )
     }
 
@@ -324,11 +325,14 @@ mod tests {
     fn a_confirmer_the_author_bound_does_not_make_a_snapshot_trusted() {
         let doc = Id::<Document>::mint();
         let (mallory, guest, alice) = (key(1), key(2), key(3));
-        let confirmers = Confirmers::Granted(HashMap::from([
-            (public(&mallory), HashSet::from([public(&alice)])),
-            (public(&guest), HashSet::from([public(&mallory)])),
-            (public(&alice), HashSet::from([public(&alice)])),
-        ]));
+        let confirmers = Confirmers::granted(
+            HashMap::from([
+                (public(&mallory), HashSet::from([public(&alice)])),
+                (public(&guest), HashSet::from([public(&mallory)])),
+                (public(&alice), HashSet::from([public(&alice)])),
+            ]),
+            HashSet::new(),
+        );
         let bytes = blob(b"snapshot");
         let by_mallory = named(&mallory, 9);
         let served = meta(
@@ -349,6 +353,40 @@ mod tests {
             adopts(doc, &served, None, &confirmers, &bytes),
             Some(by_alice)
         );
+    }
+
+    /// `AUTHOR-036`, the owner's ruling of 2026-11-19: Bob, whom Alice the
+    /// owner invited, confirms her snapshot, and the open adopts it whole.
+    /// A key the log no longer holds as a member confirms nothing
+    /// (`AUTHOR-035`).
+    #[test]
+    fn an_owner_snapshot_opens_under_a_confirmer_the_owner_invited() {
+        let doc = Id::<Document>::mint();
+        let (alice, bob, gone) = (key(1), key(2), key(3));
+        let confirmers = Confirmers::granted(
+            HashMap::from([
+                (public(&alice), HashSet::from([public(&alice)])),
+                (public(&bob), HashSet::from([public(&alice)])),
+            ]),
+            HashSet::from([public(&alice)]),
+        );
+        let bytes = blob(b"owner snapshot");
+        let by_alice = named(&alice, 9);
+        let served = meta(
+            &by_alice,
+            Some(signed(doc, &by_alice, &bytes, &bob)),
+            None,
+        );
+        assert_eq!(
+            adopts(doc, &served, None, &confirmers, &bytes),
+            Some(by_alice)
+        );
+        let served = meta(
+            &by_alice,
+            Some(signed(doc, &by_alice, &bytes, &gone)),
+            None,
+        );
+        assert_eq!(adopts(doc, &served, None, &confirmers, &bytes), None);
     }
 
     /// `AUTHOR-030`: a snapshot this user built opens whole on its own word.

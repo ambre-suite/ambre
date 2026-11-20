@@ -64,7 +64,9 @@ Another member checks it against the signed deltas before anyone opens from it.
 | `AUTHOR-023` | `POST` | A mismatch report MUST be signed by its reporter, and name the snapshot and its author. | this spec section 3; `SRV-133` | `ambre_server::routes::tests::a_signed_report_drops_a_pending_snapshot_alone` -- the relay refuses a report signed over another author, and acts on one signed over the right one; `ambre_protocol::snapshot_report::tests::the_transcript_names_the_document_the_snapshot_and_the_author` -- what is signed changes with each of the three | none | verified |
 | `AUTHOR-030` | `FAIL` | A client MUST adopt a snapshot whole only when it built it, or when another member signed a confirmation of the very blob it downloaded. | this spec section 3; `SRV-284`; audit `N31` | `ambre_sync::snapshot_trust::tests::a_snapshot_the_relay_alone_calls_confirmed_is_held_back` -- a snapshot the relay calls confirmed is held back under no signature, its author's, one over another horizon or one of a key the log never bound; `ambre_sync::snapshot_trust::tests::a_confirmation_holds_for_the_blob_it_names_alone` -- a genuine confirmation served beside another blob under the same identifier and horizon trusts nothing, and the blob it names is adopted; `ambre_sync::snapshot_trust::tests::the_reference_is_the_start_only_under_its_signed_confirmation` -- the reference is the start only under its signed confirmation, and the first delta otherwise; `ambre_sync::updates::tests::a_start_blob_signed_by_another_author_is_refused` -- the blob adopted must verify under the author the confirmation names; `ambre_sync::membership_log::tests::an_anchored_log_grants_confirmation_to_its_members_alone` -- the keys an anchored log grants | none | verified |
 | `AUTHOR-031` | `POST` | A confirmation MUST be signed by its confirmer over the document, the snapshot, the horizon, the author and the digest of the sealed blob it checked. | this spec section 3; `SRV-284` | `ambre_protocol::snapshot_confirm::tests::the_transcript_names_the_document_the_snapshot_the_horizon_the_author_and_the_blob` -- each of the five changes the bytes signed; `ambre_sync::updates::tests::a_checked_snapshot_is_confirmed_or_reported_to_the_relay` -- the confirmation posted verifies under the checker's key, over the horizon, the key the blob verified under and the digest of the blob checked, and the request carries that digest; `ambre_sync::snapshot_trust::tests::a_confirmation_holds_for_the_blob_it_names_alone` -- a genuine confirmation served with another blob under the same identifier and horizon is not adopted | none | verified |
-| `AUTHOR-034` | `FAIL` | Given a confirmation whose confirmer's key the snapshot's author bound to a member, a client MUST NOT adopt the snapshot whole on it. | this spec section 3; `AUTHOR-030` | `ambre_sync::membership_log::tests::a_confirmer_the_author_bound_does_not_count_for_that_author` -- the key of an account an editor invited counts for no snapshot of that editor, and still counts for another author; `ambre_sync::snapshot_trust::tests::a_confirmer_the_author_bound_does_not_make_a_snapshot_trusted` -- such a confirmation leaves the snapshot held back, and the same confirmer makes a snapshot of another author the start | none | verified |
+| `AUTHOR-034` | `FAIL` | Given a confirmation whose confirmer's key the snapshot's author bound to a member, and an author the log holds as no owner, a client MUST NOT adopt the snapshot whole on it. | this spec section 3; `AUTHOR-030` | `ambre_sync::membership_log::tests::a_confirmer_the_author_bound_does_not_count_for_that_author` -- the key of an account an editor invited counts for no snapshot of that editor, and still counts for another author; `ambre_sync::snapshot_trust::tests::a_confirmer_the_author_bound_does_not_make_a_snapshot_trusted` -- such a confirmation leaves the snapshot held back, and the same confirmer makes a snapshot of another author the start | none | verified |
+| `AUTHOR-035` | `FAIL` | Given a confirmation whose confirmer's key the log holds for no present member, a client MUST NOT adopt the snapshot whole on it. | this spec section 3; `AUTHOR-030` | `ambre_sync::membership_log::tests::a_removed_member_confirms_nothing` -- a member an owner revoked confirms no snapshot, and a present member does; `ambre_sync::snapshot_trust::tests::an_owner_snapshot_opens_under_a_confirmer_the_owner_invited` -- a confirmation by a key outside the present members leaves the snapshot held back | none | verified |
+| `AUTHOR-036` | `POST` | Given a confirmation of a snapshot whose author the log holds as a present owner, a client MUST count a present confirmer that owner bound. | this spec section 3; `AUTHOR-034` | `ambre_sync::membership_log::tests::an_owner_counts_the_confirmers_the_owner_invited` -- Bob, whom the owner invited, counts for her snapshot, and no longer once she is demoted to editor; `ambre_sync::snapshot_trust::tests::an_owner_snapshot_opens_under_a_confirmer_the_owner_invited` -- the open adopts such a snapshot whole | none | verified |
 | `AUTHOR-018` | `FRAME` | Checking a snapshot MUST NOT change the document. | this spec section 3 | `ambre_logic::snapshot_check::tests::the_check_leaves_the_document_unchanged` -- the version and the value are unchanged; `ambre_logic::authorship_tests::a_pending_snapshot_is_answered_and_never_imported` -- neither verdict reaches the document | none | verified |
 
 ### 1.5 The operations no session signs
@@ -97,7 +99,7 @@ derive from no key. No delta ever carries them, so every client must write them 
   comparison.
 * **Boundary.** the session nonce rides inside the sealed payload (`AUTHOR-010`), so the relay
   learns nothing beyond the `ZK-007` set. The registry is document content, sealed like the rest.
-* **Verification.** 33 `verified`, 1 `unimplemented`. Every delta is checked, and every row on it
+* **Verification.** 35 `verified`, 1 `unimplemented`. Every delta is checked, and every row on it
   holds by a test.
 
 ---
@@ -220,17 +222,29 @@ identifier and horizon carries no confirmation over to it (audit `W101`).
 **A cold open trusts a snapshot whole only under that signature** (`AUTHOR-030`, audit `N31`).
 The relay's word that a member confirmed a snapshot proves nothing. The open checks four things:
 
-1. The confirmer is a key the membership log bound to a member, and not the author.
-2. The author signed no binding of the confirmer's key (`AUTHOR-034`).
+1. The confirmer is the key the membership log holds for a present member, and not the author
+   (`AUTHOR-035`).
+2. The author signed no binding of the confirmer's key, unless the author is a present owner
+   (`AUTHOR-034`, `AUTHOR-036`).
 3. The signature verifies over the snapshot the relay names, its horizon, its author and the
    digest of the blob the open downloads.
 4. That blob verifies under that author.
 
-An editor may invite a second account of their own. A confirmation by that account would let the
-editor vouch for their own snapshot, so the open does not count it (audit `W203`). The rule reads
-every binding: a member the author ever bound counts for none of that author's snapshots. So an
-owner who invited every member gets no confirmation of the snapshots they author. An open checks
-those after the replay, as a snapshot its author confirmed alone is.
+**A confirmer is a member at the horizon.** The open reads the log at the head of its walk. That
+head holds every removal up to the horizon, so a removed member confirms nothing. A member removed
+after the horizon counts for no snapshot either: the open fails closed and checks the snapshot
+after the replay. A horizon is a relay number, and no log place the open can check before the
+replay maps to it.
+
+**An editor never counts their own guest.** An editor may invite a second account of their own. A
+confirmation by that account would let the editor vouch for their own snapshot, so the open does
+not count it (audit `W203`). The rule reads every binding: a member an editor ever bound counts for
+none of that editor's snapshots.
+
+**An owner counts the members the owner invited.** The owner chose so on 2026-11-19. An owner
+invites most members, so the editor rule would leave every owner snapshot unconfirmed. The price is
+stated: an owner and a guest of that owner make a forged snapshot read as checked. An owner demoted
+to editor falls under the editor rule again.
 
 A snapshot this user built opens whole on its own word. Any other snapshot is held back and
 checked once the replay is done, as a snapshot its author confirmed alone is. The open then starts
