@@ -120,9 +120,10 @@ fn ShellHeader(
     about_open: RwSignal<ambre_chrome::Openness>,
     username: RwSignal<Option<ambre_core::Validated<ambre_core::DisplayName>>>,
     me: RwSignal<Option<Id<User>>>,
+    docs: RwSignal<Vec<crate::landing::DocItem>>,
 ) -> impl IntoView {
     view! {
-        <span class="title">"Ambre"</span>
+        <HeaderTitle docs=docs current_doc=current_doc />
         <span class="spacer"></span>
         <SyncBadge status=chrome_status.into() />
         <button
@@ -180,6 +181,81 @@ fn ShellHeader(
         >
             {move || ambre_chrome::avatar_initials(username.get().as_ref().map_or("", ambre_core::Validated::as_str))}
         </span>
+    }
+}
+
+/// The optional rows of the shell each application lays out (`CHROME-140`).
+/// The formula bar and the sheet tabs are Trame's alone. A Toile board docks
+/// its menus in the command bar. A Prose page formats from the bar over its
+/// selection, so it lays out no command bar. Murmure builds its own shell.
+pub(crate) fn shell_rows(kind: DocType) -> ambre_chrome::ShellRows {
+    use ambre_chrome::RowShown::{Absent, Shown};
+    match kind {
+        DocType::Trame => ambre_chrome::ShellRows::ALL,
+        DocType::Toile => ambre_chrome::ShellRows {
+            toolbar: Shown,
+            formula_bar: Absent,
+            tabs: Absent,
+        },
+        DocType::Prose => ambre_chrome::ShellRows {
+            toolbar: Absent,
+            formula_bar: Absent,
+            tabs: Absent,
+        },
+        DocType::Murmure => ambre_chrome::ShellRows {
+            toolbar: Shown,
+            formula_bar: Absent,
+            tabs: Absent,
+        },
+    }
+}
+
+/// The way home and the name of the open document, at the start of the
+/// header (`CHROME-144`, `CHROME-145`). A plain click goes home in place. It
+/// takes the navigation the launcher opens a document with, so the address bar
+/// and the frame loop follow. The router's own anchor handling moves its state and
+/// leaves the address unchanged, as no `Routes` completes the navigation. A
+/// modified click keeps the browser's own behaviour, a new tab for example.
+/// The name is the one the document list holds, composed at the point of use
+/// (`CHROME-080`).
+#[component]
+pub(crate) fn HeaderTitle(
+    docs: RwSignal<Vec<crate::landing::DocItem>>,
+    current_doc: RwSignal<Option<Id<Document>>>,
+) -> impl IntoView {
+    let navigate = leptos_router::hooks::use_navigate();
+    let go_home = move |ev: web_sys::MouseEvent| {
+        let modified =
+            ev.button() != 0 || ev.ctrl_key() || ev.meta_key() || ev.shift_key() || ev.alt_key();
+        if !modified {
+            ev.prevent_default();
+            navigate("/", Default::default());
+        }
+    };
+    view! {
+        <a
+            class="title ambre-home"
+            href="/"
+            title="All documents"
+            aria-label="Ambre, all documents"
+            on:click=go_home
+        >
+            "Ambre"
+        </a>
+        {move || {
+            current_doc.get().map(|document_id| {
+                let name = docs.with(|list| {
+                    list.iter()
+                        .find(|d| d.document_id == document_id)
+                        .and_then(|d| d.name.clone())
+                });
+                view! {
+                    <span class="ambre-doc-name">
+                        {ambre_chrome::ComposedName::or_placeholder(name.as_ref()).into_view()}
+                    </span>
+                }
+            })
+        }}
     }
 }
 
@@ -684,6 +760,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     about_open=about_open
                     username=username
                     me=me
+                    docs=docs
                 />
             }
         }
@@ -700,15 +777,13 @@ pub(crate) fn AppRoot() -> impl IntoView {
         .into_any()
     } else {
         view! {
-        <AppShell>
+        <AppShell rows=shell_rows(booted)>
             <Header slot>{header.clone()}</Header>
-            // The toolbar / formula bar / sheet tabs / status bar are Trame chrome
-            // (`trame-cell-styles`, `trame-cell-editing`, `trame-sheets`,
-            // `trame-status-bar`). A Toile board renders none of them. Its tool palette,
-            // status bar and panels are separate roadmap items (`toile-tools`,
-            // `toile-status-bar`). Gated on the booted app kind, fixed per page load.
+            // Each application lays out its own rows (`CHROME-140`). The formula
+            // bar and the sheet tabs are Trame's alone. A Prose page has no
+            // command bar. Gated on the booted app kind, fixed per page load.
             <Toolbar slot>
-                {(!boot_is_toile).then(|| view! {
+                {boot_is_trame.then(|| view! {
                     <trame_chrome::FormatBar
                         toggles=toggles
                         style=style_state
@@ -717,9 +792,16 @@ pub(crate) fn AppRoot() -> impl IntoView {
                         on_style=on_style
                     />
                 })}
+                // Toile docks its menus and its zoom in the command bar, under
+                // the header, so neither covers the header (`CHROME-141`).
+                {boot_is_toile.then(|| view! {
+                    <toile_chrome::EditingSurfaces present=present_toile>
+                        <toile_chrome::TopMenuBar zoom=board_zoom on_command=on_command toggles=toile_toggles />
+                    </toile_chrome::EditingSurfaces>
+                })}
             </Toolbar>
             <FormulaBar slot>
-                {(!boot_is_toile).then(|| view! {
+                {boot_is_trame.then(|| view! {
                     <trame_chrome::FormulaBar
                         cell_ref=formula_ref
                         content=formula_text
@@ -729,7 +811,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 })}
             </FormulaBar>
             <Tabs slot>
-                {(!boot_is_toile).then(|| view! {
+                {boot_is_trame.then(|| view! {
                     <trame_chrome::SheetTabs
                         sheets=sheets
                         active=active_sheet
@@ -986,16 +1068,6 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 <toile_chrome::ToolPalette active=toile_active_tool />
             </toile_chrome::EditingSurfaces>
         })}
-        // Toile top menu bar + zoom control (toile-menus): the low- frequency menus
-        // (File/Edit/View/Object/Present) and the zoom cluster. Every entry routes
-        // through the shared `on_command` path, the same path the context menu
-        // uses. The zoom readout mirrors the `zoom` signal the canvas view
-        // publishes each frame.
-        {boot_is_toile.then(|| view! {
-            <toile_chrome::EditingSurfaces present=present_toile>
-                <toile_chrome::TopMenuBar zoom=board_zoom on_command=on_command toggles=toile_toggles />
-            </toile_chrome::EditingSurfaces>
-        })}
         // Toile style / property inspector (toile-styles): a side panel shown only for
         // a non-empty selection. It reads the common style the canvas view publishes.
         // It reuses `toile_ctx_scope` for the lock buttons and the shared `on_command`
@@ -1192,6 +1264,88 @@ mod tests {
             ids(ambre_murmure::ui::commands::COMMANDS)
         );
         assert!(fed(DocType::Toile).len() > ambre_toile::ui::menu::COMMANDS.len());
+    }
+
+    /// The header names the open document (`CHROME-144`), and its way home
+    /// moves the address bar home (`CHROME-145`) with no reload
+    /// (`CHROME-146`). A page with no document
+    /// shows the way home alone.
+    #[wasm_bindgen_test]
+    async fn the_header_links_home_and_names_the_open_document() {
+        use wasm_bindgen::JsCast as _;
+        let document_id = Id::<Document>::mint();
+        let docs = RwSignal::new(vec![crate::landing::DocItem {
+            document_id,
+            doc_type: DocType::Prose,
+            name: Some(ambre_core::Validated::<ambre_core::Name>::parse("Plan").expect("a name")),
+            updated_at: None,
+            member_count: ambre_core::Count::<ambre_core::Members>::ONE,
+        }]);
+        let current_doc = RwSignal::new(None);
+        let page = web_sys::window()
+            .and_then(|w| w.document())
+            .expect("a document");
+        let container = page.create_element("div").expect("a container");
+        page.body()
+            .expect("a body")
+            .append_child(&container)
+            .expect("appended");
+        let target: web_sys::HtmlElement = container.clone().dyn_into().expect("an element");
+        leptos::mount::mount_to(target, move || {
+            view! {
+                <leptos_router::components::Router>
+                    <HeaderTitle docs=docs current_doc=current_doc />
+                </leptos_router::components::Router>
+            }
+        })
+        .forget();
+        let query = |selector: &str| container.query_selector(selector).expect("a selector");
+        let home = query("a.ambre-home").expect("the way home");
+        assert_eq!(home.get_attribute("href").as_deref(), Some("/"));
+        assert!(query(".ambre-doc-name").is_none(), "no document, no name");
+
+        current_doc.set(Some(document_id));
+        leptos::task::tick().await;
+        let name = query(".ambre-doc-name").expect("the name of the open document");
+        assert_eq!(name.text_content().as_deref(), Some("Plan"));
+
+        // A plain click moves the address bar home, which the frame loop reads.
+        let window = web_sys::window().expect("a window");
+        let history = window.history().expect("a history");
+        let runner = window.location().href().expect("the runner address");
+        let doc = crate::route::doc_path(DocType::Prose, document_id);
+        history
+            .push_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&doc))
+            .expect("a document address");
+        home.dyn_ref::<web_sys::HtmlElement>()
+            .expect("an element")
+            .click();
+        leptos::task::tick().await;
+        let path = window.location().pathname().expect("a path");
+        history
+            .replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&runner))
+            .expect("the runner address back");
+        assert_eq!(path, "/", "the address bar goes home");
+        assert!(
+            home.is_connected(),
+            "the page did not reload (`CHROME-146`)"
+        );
+        container.remove();
+    }
+
+    /// Each application lays out its own rows (`CHROME-140`). The formula bar
+    /// and the sheet tabs are Trame's alone. A Prose page lays out no command
+    /// bar.
+    #[wasm_bindgen_test]
+    fn the_formula_bar_and_the_tabs_are_trames_alone_and_prose_has_no_command_bar() {
+        use ambre_chrome::RowShown::{Absent, Shown};
+        let rows = |kind| {
+            let r = shell_rows(kind);
+            (r.toolbar, r.formula_bar, r.tabs)
+        };
+        assert_eq!(rows(DocType::Trame), (Shown, Shown, Shown));
+        assert_eq!(rows(DocType::Toile), (Shown, Absent, Absent));
+        assert_eq!(rows(DocType::Prose), (Absent, Absent, Absent));
     }
 
     /// `TOILE-065`: a followed web address opens in a fresh tab that can neither

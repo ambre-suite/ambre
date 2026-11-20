@@ -22,8 +22,9 @@
 
 use ambre_chrome::{
     AppShell, CommandStates, ContextMenu, FONT_SIZES, FontSizeSelect, FormatBar, FormatControl,
-    FormatToggle, Header, MenuEntry, Openness, PerfChip, PerfDetail, Pressed, Sidebar, StatusBar,
-    ToastHost, ToastKind, ToastVoice, Toasts, Toolbar, ZoomChip,
+    FormatToggle, FormulaBar, Header, MenuEntry, Openness, PerfChip, PerfDetail, Pressed, RowShown,
+    ShellRows, Sidebar, StatusBar, Tabs, ToastHost, ToastKind, ToastVoice, Toasts, Toolbar,
+    ZoomChip,
 };
 use ambre_core::FontSize;
 use ambre_core::{Categories, Commands, StaticKey};
@@ -1687,5 +1688,53 @@ async fn the_shell_fills_its_toolbar_and_sidebar_and_the_sidebar_folds() {
     fold.click();
     leptos::task::tick().await;
     assert_eq!(nav.get_attribute("data-expanded").as_deref(), Some("true"));
+    root.remove();
+}
+
+/// A row the application marks absent renders no element, though its slot is
+/// handed (`CHROME-140`). A shown row keeps its content.
+#[wasm_bindgen_test]
+fn an_absent_row_renders_no_element_and_a_shown_row_keeps_its_content() {
+    let owner = Owner::new();
+    owner.set();
+    let rows = ShellRows {
+        toolbar: RowShown::Shown,
+        formula_bar: RowShown::Absent,
+        tabs: RowShown::Absent,
+    };
+    let root = mount_in_container(move || {
+        view! {
+            <AppShell rows=rows>
+                <Header slot>"H"</Header>
+                <Toolbar slot><button class="test-tool">"Menu"</button></Toolbar>
+                <FormulaBar slot><input class="test-formula" /></FormulaBar>
+                <Tabs slot><button class="test-tab">"Sheet1"</button></Tabs>
+            </AppShell>
+        }
+    });
+    let present = |selector: &str| root.query_selector(selector).unwrap().is_some();
+    assert!(present(".ambre-commandbar .test-tool"));
+    assert!(!present(".ambre-formulabar"), "an absent formula bar");
+    assert!(!present(".test-formula"));
+    assert!(!present(".ambre-tabstrip"), "an absent tab strip");
+    assert!(!present(".test-tab"));
+    root.remove();
+
+    let none = ShellRows {
+        toolbar: RowShown::Absent,
+        ..rows
+    };
+    let root = mount_in_container(move || {
+        view! {
+            <AppShell rows=none>
+                <Header slot>"H"</Header>
+                <Toolbar slot><button class="test-tool">"Menu"</button></Toolbar>
+            </AppShell>
+        }
+    });
+    assert!(
+        root.query_selector(".ambre-commandbar").unwrap().is_none(),
+        "an absent command bar"
+    );
     root.remove();
 }

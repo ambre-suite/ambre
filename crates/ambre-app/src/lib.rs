@@ -766,9 +766,11 @@ pub fn main() {
     };
 
     // Design tokens: inject the generated CSS custom properties (theme.css) and
-    // boot the dark theme. `theme_ctl` is the single source of truth for the
-    // active scheme, shared with the chrome toggle and the canvas view.
-    let theme_ctl = ambre_canvas::ThemeControl::new(ambre_canvas::Theme::Dark);
+    // boot the theme the system asks for (`UI-THREAD-065`). `theme_ctl` is the
+    // single source of truth for the active scheme, shared with the chrome
+    // toggle and the canvas view.
+    let theme_ctl =
+        ambre_canvas::ThemeControl::new(platform::boot_theme(platform::system_scheme()));
     inject_theme(theme_ctl.get());
 
     // Resolve the boot route once. `/` is the landing (document list); a

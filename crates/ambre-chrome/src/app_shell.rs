@@ -95,6 +95,38 @@ impl ShellRegion {
     }
 }
 
+ambre_core::define_flag! {
+    /// Whether the shell lays out a row of the grid. An absent row renders no
+    /// element, so it costs no height and shows no empty band.
+    pub enum RowShown {
+        /// The row is not in the page.
+        Absent,
+        /// The row is in the page, filled by its slot.
+        Shown,
+    }
+}
+
+/// The optional rows an application lays out. Each application states its own
+/// anatomy, so a row that belongs to another application never shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ShellRows {
+    /// The command bar under the header.
+    pub toolbar: RowShown,
+    /// The formula bar under the command bar.
+    pub formula_bar: RowShown,
+    /// The tab strip over the status bar.
+    pub tabs: RowShown,
+}
+
+impl ShellRows {
+    /// Every row the shell knows.
+    pub const ALL: Self = Self {
+        toolbar: RowShown::Shown,
+        formula_bar: RowShown::Shown,
+        tabs: RowShown::Shown,
+    };
+}
+
 /// A canvas of its own beside the central one, filling the rest of the region
 /// that holds it. The canvas host binds it by `id` while it is in the page
 /// (`CANVAS-070`), so a view can show a second region on a canvas.
@@ -138,16 +170,23 @@ pub fn AppShell(
     /// Whether the panel is open. A closed panel leaves the DOM. Open when unset.
     #[prop(optional, into)]
     panel_open: Option<Signal<crate::Openness>>,
+    /// The optional rows the application lays out. Every row when unset.
+    #[prop(optional)]
+    rows: Option<ShellRows>,
 ) -> impl IntoView {
     let canvas_id = canvas_id.unwrap_or(ambre_core::StaticKey::<ambre_core::Canvases>::CONTENT);
     let focus = focus.unwrap_or_else(|| Signal::stored(ShellRegion::Content));
     let panel_open = panel_open.unwrap_or_else(|| Signal::stored(crate::Openness::Open));
+    let rows = rows.unwrap_or(ShellRows::ALL);
+    let shown = |row: RowShown| row == RowShown::Shown;
     let folded = RwSignal::new(false);
     view! {
         <div class="ambre-shell">
             <header class="ambre-header">{(header.children)()}</header>
-            <div class="ambre-commandbar">{(toolbar.children)()}</div>
-            {formula_bar.map(|fb| view! { <div class="ambre-formulabar">{(fb.children)()}</div> })}
+            {shown(rows.toolbar).then(|| view! { <div class="ambre-commandbar">{(toolbar.children)()}</div> })}
+            {formula_bar
+                .filter(|_| shown(rows.formula_bar))
+                .map(|fb| view! { <div class="ambre-formulabar">{(fb.children)()}</div> })}
             <div class="ambre-body" data-focus=move || focus.get().as_str()>
                 {sidebar.map(|sidebar| {
                     view! {
@@ -194,7 +233,9 @@ pub fn AppShell(
                     }
                 })}
             </div>
-            {tabs.map(|tabs| view! { <div class="ambre-tabstrip">{(tabs.children)()}</div> })}
+            {tabs
+                .filter(|_| shown(rows.tabs))
+                .map(|tabs| view! { <div class="ambre-tabstrip">{(tabs.children)()}</div> })}
             {status_bar.map(|sb| view! { <footer class="ambre-statusbar">{(sb.children)()}</footer> })}
         </div>
     }

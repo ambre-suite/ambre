@@ -21,7 +21,7 @@
 | `call-proofs` | The harnesses that measure a call on hardware no CI job runs. | implemented | 19 |  |
 | `commands` | Everything the user can ask for has one name. | implemented | 13 |  |
 | `delta-order` | A change made on one screen appears on another with the changes it was built on, or it waits. | implemented | 23 |  |
-| `design-tokens` | The interface is drawn twice, once by the browser and once by the graphics card. | implemented | 6 |  |
+| `design-tokens` | The interface is drawn twice, once by the browser and once by the graphics card. | implemented | 8 |  |
 | `docfile` | The file a user saves a document into, and opens back. | implemented | 21 |  |
 | `fixtures` | Ambre documents in known states, built from a seed instead of by hand. | implemented | 37 |  |
 | `high-density` | A screen with two or more physical pixels per CSS pixel. | implemented | 10 |  |
@@ -39,7 +39,7 @@
 | `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 23 |  |
 | `accessibility` | What a screen reader and a keyboard reach. | partial | 15 |  |
 | `adaptive-layout` | How the interface changes with the width of the window. | partial | 9 |  |
-| `chrome` | Everything around the document: the frame the canvas sits in, the menus, the modals and the toasts. | partial | 32 |  |
+| `chrome` | Everything around the document: the frame the canvas sits in, the menus, the modals and the toasts. | partial | 39 |  |
 | `clipboard` | Copy, cut and paste, the same way in every editor. | partial | 20 |  |
 | `drawing-surface` | The dozen calls a renderer may make: a rectangle, a line, a path, a glyph run, an image, a clip, a transform. | partial | 18 |  |
 | `find` | A user types a word and the application takes them to it, wherever it is -- including far past the edge of the screen. | partial | 15 |  |
@@ -65,4 +65,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**49 features: 22 implemented, 23 partial, 4 design-only. 1677 contract rows, 16 loose.**
+**49 features: 22 implemented, 23 partial, 4 design-only. 1686 contract rows, 16 loose.**

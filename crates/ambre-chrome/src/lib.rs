@@ -51,7 +51,8 @@ mod status;
 mod toast;
 
 pub use app_shell::{
-    AppShell, CanvasCell, FormulaBar, Header, Panel, ShellRegion, Sidebar, StatusBar, Tabs, Toolbar,
+    AppShell, CanvasCell, FormulaBar, Header, Panel, RowShown, ShellRegion, ShellRows, Sidebar,
+    StatusBar, Tabs, Toolbar,
 };
 pub use avatar::{Avatar, avatar_initials};
 pub use color::{AlphaEdit, ColorPopover, PickedColour};
