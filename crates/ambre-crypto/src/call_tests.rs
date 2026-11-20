@@ -1194,3 +1194,90 @@ fn a_step_of_the_current_epoch_keeps_the_deadline_a_late_key_set() {
         Err(ChunkError::Retired)
     );
 }
+
+/// The Project Wycheproof vectors of ChaCha20-Poly1305 with a 96-bit nonce, vendored from
+/// `testvectors_v1/chacha20_poly1305_test.json` (`fixtures/THIRD_PARTY.md`). The file holds
+/// 87 of the 316 vectors of that group, under the 64 KiB cap of a fixture. The cut takes, for
+/// each flag in turn, the shortest vector left, until the next would pass the cap. Every flag
+/// of the group is there, the RFC 8439 vector and 16 forged tags included.
+const WYCHEPROOF: &str = include_str!("../tests/fixtures/wycheproof/chacha20_poly1305_test.json");
+
+/// The bytes of one hex field of a vector.
+fn hex_field(test: &serde_json::Value, field: &str) -> Vec<u8> {
+    let text = test[field]
+        .as_str()
+        .unwrap_or_else(|| panic!("a vector with no `{field}`"));
+    data_encoding::HEXLOWER
+        .decode(text.as_bytes())
+        .unwrap_or_else(|e| panic!("`{field}` is no hex: {e}"))
+}
+
+/// `CALL-148`: the key and the nonce a chunk seals under drive the AEAD as a reference does.
+/// Each vector of Project Wycheproof goes through the key and the nonce of the chunk format,
+/// at counter 0, where the nonce is the salt. A valid vector seals to its ciphertext and its
+/// tag, and opens back. An invalid one opens to nothing.
+#[test]
+fn the_chunk_aead_passes_the_wycheproof_vectors() {
+    use chacha20poly1305::aead::AeadInPlace;
+
+    let suite: serde_json::Value =
+        serde_json::from_str(WYCHEPROOF).unwrap_or_else(|e| panic!("the vectors parse: {e}"));
+    assert_eq!(suite["algorithm"], "CHACHA20-POLY1305");
+    let mut counted = (0, 0);
+    for group in suite["testGroups"].as_array().into_iter().flatten() {
+        assert_eq!(group["ivSize"], 96, "a group of another nonce size");
+        for test in group["tests"].as_array().into_iter().flatten() {
+            let id = &test["tcId"];
+            let key: [u8; 32] = hex_field(test, "key")
+                .try_into()
+                .unwrap_or_else(|_| panic!("vector {id}: a key of another size"));
+            let salt: [u8; 12] = hex_field(test, "iv")
+                .try_into()
+                .unwrap_or_else(|_| panic!("vector {id}: a nonce of another size"));
+            let (aad, msg, ct, tag) = (
+                hex_field(test, "aad"),
+                hex_field(test, "msg"),
+                hex_field(test, "ct"),
+                hex_field(test, "tag"),
+            );
+            let chunk_key = super::ChunkKey::from_parts(key, salt);
+            let nonce = chunk_key.nonce(Seq::<ChunkCounter>::new(0));
+            assert_eq!(
+                nonce.as_slice(),
+                &salt[..],
+                "vector {id}: the nonce at counter 0"
+            );
+            let cipher = chunk_key.cipher();
+            let mut opened = ct.clone();
+            let open = cipher.decrypt_in_place_detached(
+                &nonce,
+                &aad,
+                &mut opened,
+                chacha20poly1305::Tag::from_slice(&tag),
+            );
+            match test["result"].as_str() {
+                Some("valid") => {
+                    let mut sealed = msg.clone();
+                    let got = cipher
+                        .encrypt_in_place_detached(&nonce, &aad, &mut sealed)
+                        .unwrap_or_else(|e| panic!("vector {id}: {e}"));
+                    assert_eq!(sealed, ct, "vector {id}: the ciphertext");
+                    assert_eq!(got.as_slice(), tag.as_slice(), "vector {id}: the tag");
+                    assert!(open.is_ok(), "vector {id}: a valid vector does not open");
+                    assert_eq!(opened, msg, "vector {id}: the opened text");
+                    counted.0 += 1;
+                }
+                Some("invalid") => {
+                    assert!(open.is_err(), "vector {id}: an invalid vector opens");
+                    counted.1 += 1;
+                }
+                other => panic!("vector {id}: a result of {other:?}"),
+            }
+        }
+    }
+    assert_eq!(
+        counted,
+        (71, 16),
+        "the vendored file holds 71 valid and 16 invalid vectors"
+    );
+}

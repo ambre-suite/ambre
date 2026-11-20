@@ -218,7 +218,7 @@ async fn offer(socket: &mut Socket) {
 /// `ZK-023`: the SFU serves a socket on an admission the relay signed alone. A
 /// forged and an expired admission close the socket before the SFU reads anything more. An
 /// admitted participant first reads a TURN credential the SFU minted under its pseudonym, then
-/// the answer to its offer. One admission seats one connection.
+/// the answer to its offer. One admission serves one socket.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_socket_is_served_on_a_signed_admission_alone() {
     let url = sfu().await;
@@ -263,17 +263,16 @@ async fn a_socket_is_served_on_a_signed_admission_alone() {
     assert!(answer["answer"].is_string(), "{answer}");
 
     let mut twice = admitted(&url, &admission(2, later), &relay_key()).await;
-    assert!(next(&mut twice).await.is_some_and(|v| v["ice"].is_array()));
-    offer(&mut twice).await;
     assert_eq!(
         next(&mut twice).await,
         None,
-        "a seated admission seats no second connection"
+        "a seated admission serves a second socket"
     );
 }
 
 /// `CALL-117`, audit `N12`: an admission whose connection left seats nobody again while it
 /// is still valid. A captured token is worth one seat, never a second one after the first.
+/// The second socket reads no TURN credential, and the SFU reads no offer of it.
 #[tokio::test(flavor = "multi_thread")]
 async fn an_admission_seats_no_connection_after_its_own_left() {
     let url = sfu().await;
@@ -298,12 +297,10 @@ async fn an_admission_seats_no_connection_after_its_own_left() {
     tokio::time::sleep(Duration::from_millis(300)).await;
 
     let mut again = admitted(&url, &admission, &relay_key()).await;
-    assert!(next(&mut again).await.is_some_and(|v| v["ice"].is_array()));
-    offer(&mut again).await;
     assert_eq!(
         next(&mut again).await,
         None,
-        "a spent admission seats a second connection"
+        "a spent admission serves a second socket"
     );
 }
 
@@ -415,12 +412,10 @@ async fn a_renewal_keeps_its_own_seat_alone() {
     );
 
     let mut again = admitted(&url, &renewal, &relay_key()).await;
-    assert!(next(&mut again).await.is_some_and(|v| v["ice"].is_array()));
-    offer(&mut again).await;
     assert_eq!(
         next(&mut again).await,
         None,
-        "the token of a renewal seats a second connection"
+        "the token of a renewal serves a second socket"
     );
 }
 
@@ -446,4 +441,100 @@ async fn a_join_of_a_member_ends_its_older_seat() {
     );
     assert!(!closes_within(&mut stranger, Duration::from_secs(1)).await);
     assert!(!closes_within(&mut newer, Duration::from_secs(1)).await);
+}
+
+/// An admission of a fresh participant and member to room 1, valid for 60 s.
+fn fresh(participant: u8) -> Admission {
+    Admission {
+        room: FixedBytes::from_array([1; 16]),
+        participant: FixedBytes::from_array([participant; 16]),
+        member: FixedBytes::from_array([participant; 16]),
+        sender: ambre_core::Seq::new(u64::from(participant)),
+        expires: unix_now().plus(ambre_core::TimeSpan::new(60)),
+    }
+}
+
+/// `CALL-141`, audit `N39`: a message one byte past the bound closes the socket, before and
+/// after the admission. A socket under the bound reads its TURN servers and its answer.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_message_past_the_bound_closes_the_socket() {
+    let url = sfu().await;
+    let past = usize::try_from(super::SIGNAL_MESSAGE_MAX.get())
+        .expect("a bound that fits")
+        .saturating_add(1);
+    let big = |field: &str| {
+        let mut frame = serde_json::Map::new();
+        frame.insert(field.to_owned(), Value::String("a".repeat(past)));
+        Value::Object(frame).to_string()
+    };
+
+    let (mut first, _) = tokio_tungstenite::connect_async(&url)
+        .await
+        .expect("a socket");
+    // A frame of the bound alone, past it by its framing: the socket closes on its read.
+    let _ = first.send(Message::Text(big("admission").into())).await;
+    assert!(
+        closes_within(&mut first, Duration::from_secs(3)).await,
+        "a first frame past the bound kept the socket"
+    );
+
+    let mut admitted_socket = admitted(&url, &fresh(40), &relay_key()).await;
+    assert!(
+        next(&mut admitted_socket)
+            .await
+            .is_some_and(|v| v["ice"].is_array())
+    );
+    let _ = admitted_socket
+        .send(Message::Text(big("offer").into()))
+        .await;
+    assert!(
+        closes_within(&mut admitted_socket, Duration::from_secs(3)).await,
+        "an offer past the bound kept the socket"
+    );
+
+    seated(&url, &fresh(41)).await;
+}
+
+/// `CALL-142`, audit `N39`: an admitted socket that sends no offer closes once the deadline
+/// passes, and not before it.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_admitted_socket_with_no_offer_closes_at_the_deadline() {
+    let url = sfu().await;
+    let mut socket = admitted(&url, &fresh(42), &relay_key()).await;
+    assert!(next(&mut socket).await.is_some_and(|v| v["ice"].is_array()));
+    let deadline = super::ADMISSION_DEADLINE;
+    assert!(
+        !closes_within(&mut socket, deadline.saturating_sub(Duration::from_secs(2))).await,
+        "the socket closed before the deadline"
+    );
+    assert!(
+        closes_within(&mut socket, Duration::from_secs(5)).await,
+        "a socket with no offer outlived the deadline"
+    );
+}
+
+/// `CALL-143`, audit `N39`: one socket under an admission waits for its offer. A second
+/// socket under the same admission reads no TURN credential, and closes. So one admission
+/// mints one credential, and holds one unfinished message at most.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_second_socket_under_one_admission_reads_no_credential() {
+    let url = sfu().await;
+    let admission = fresh(43);
+    let mut first = admitted(&url, &admission, &relay_key()).await;
+    assert!(next(&mut first).await.is_some_and(|v| v["ice"].is_array()));
+    for _ in 0..3 {
+        let mut more = admitted(&url, &admission, &relay_key()).await;
+        assert_eq!(
+            next(&mut more).await,
+            None,
+            "a second socket under one admission read something"
+        );
+    }
+    offer(&mut first).await;
+    assert!(
+        next(&mut first)
+            .await
+            .is_some_and(|v| v["answer"].is_string()),
+        "the first socket lost its seat to the others"
+    );
 }

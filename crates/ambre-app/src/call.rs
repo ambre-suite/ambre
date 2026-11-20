@@ -898,7 +898,12 @@ fn attach(
     let t = transform(worker, side, track, slot)?;
     js_sys::Reflect::set(target, &"transform".into(), &t)
         .ok()
-        .filter(|set| *set)
+        .filter(|set| *set)?;
+    // An engine that accepted the assignment and kept no transform reads back another value:
+    // the attach failed, whatever the assignment answered (`CALL-146`).
+    js_sys::Reflect::get(target, &"transform".into())
+        .ok()
+        .filter(|kept| *kept == t)
         .map(|_| ())
 }
 
@@ -1395,7 +1400,12 @@ fn connect(
                     // The call worker tells the page the sender of the slot. Its picture then
                     // draws in the tile of its member (the Murmure calls spec, section 3).
                     let named = Some(MediaSlot::Video(slot));
-                    attach(&receiver, &worker, TransformSide::Receive, track, named);
+                    // A slot whose transform did not attach shows nothing: its decoder would
+                    // read what the SFU sends, unopened (`CALL-146`, audit `N40`).
+                    if attach(&receiver, &worker, TransformSide::Receive, track, named).is_none() {
+                        e.track().stop();
+                        return;
+                    }
                     ambre_canvas::video::show(slot, &e.track());
                 }
                 return;
@@ -1404,13 +1414,19 @@ fn connect(
                 slot_of(&receiver)
             } else {
                 let slot = next_slot(&receiver);
-                attach(
+                let attached = attach(
                     &receiver,
                     &worker,
                     TransformSide::Receive,
                     Track::Audio,
                     slot.map(MediaSlot::Audio),
                 );
+                // A slot whose transform did not attach plays nothing (`CALL-146`, audit
+                // `N40`).
+                if attached.is_none() {
+                    e.track().stop();
+                    return;
+                }
                 slot
             };
             let Some(slot) = slot else {

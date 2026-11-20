@@ -3430,6 +3430,10 @@ ambre-sfu | src/forward.rs | crate::forward | <Room as Rule>::Error | assoc | &'
 ambre-sfu | src/forward.rs | crate::forward | <Room as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
 ambre-sfu | src/forward.rs | crate::forward | <Room as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-sfu | src/forward.rs | crate::forward | <Room as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-sfu | src/forward.rs | crate::forward | <Ufrag as Rule>::Error | assoc | &'static str	free-text	the fixed message a rule refuses a text with, which a decode prints
+ambre-sfu | src/forward.rs | crate::forward | <Ufrag as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
+ambre-sfu | src/forward.rs | crate::forward | <Ufrag as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-sfu | src/forward.rs | crate::forward | <Ufrag as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-sfu | src/main.rs | crate | Setting::read() | ret | Result<SocketAddr,String>	free-text	the words of the error the binary prints when a variable holds no socket address
 ambre-sfu | src/main.rs | crate | Setting::variable() | ret | &'static str	newtype-inner	the fieldless enum's own spelling, the name of the environment variable std::env::var takes
 ambre-trame | src/logic/locale.rs | crate::logic::locale | canonical_formula() | ret | String	local	the formula text in the canonical separators, which typed_source() stores

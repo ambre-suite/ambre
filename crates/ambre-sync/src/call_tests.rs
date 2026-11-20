@@ -7,14 +7,18 @@
 //! and every wrap at once. An actor who leaves or is removed keeps what it holds. It also
 //! keeps receiving every wrap addressed to its old index, as a curious member would. The model
 //! knows none of the keys: it states who may open a chunk from who was in the call when.
+//!
+//! The same world runs a long call to check that no key and nonce pair seals two chunks
+//! (`CALL-147`). It reads the pair from the cipher itself. ChaCha20 writes one keystream under
+//! one key and one nonce, so two chunks that share a pair share a keystream.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use ambre_core::Role;
 use ambre_core::id::{Call, Channel, Id};
 use ambre_core::{
-    Authored, ClearChunk, FixedBytes, Instant, KeyIdentifier, PageLoad, Payload, SealedChunk,
-    SenderIndex, Seq, Track, UnixMs,
+    Authored, ClearChunk, FixedBytes, Instant, KeyGeneration, KeyIdentifier, PageLoad, Payload,
+    SealedChunk, SenderIndex, Seq, Track, UnixMs,
 };
 use ambre_crypto::call::{ChunkHeader, ChunkSealer, ReceiveKeys, SenderKey, SignedJoin};
 use ambre_protocol::MembershipAct;
@@ -38,6 +42,8 @@ struct Session {
     receive: ReceiveKeys,
     /// Every key ever handed to the session, which a curious member keeps.
     held: Vec<SenderKey>,
+    /// The generation of the last `Seal` handed to the session.
+    top: Option<Seq<KeyGeneration>>,
 }
 
 /// Whether any key of `held`, or a ratchet of one, opens `chunk` under its own identifier.
@@ -74,6 +80,14 @@ impl Session {
             KeyHandoff::Seal {
                 generation, key, ..
             } => {
+                // The Sync worker moves the generation of its own key up at each `Seal`, so
+                // the call worker never takes one twice (`CALL-147`).
+                assert!(
+                    self.top.is_none_or(|top| generation > top),
+                    "a Seal at generation {generation:?} after {:?}",
+                    self.top
+                );
+                self.top = Some(generation);
                 self.held.push(key.clone());
                 let kid = KeyIdentifier {
                     track: Track::Audio,
@@ -108,8 +122,20 @@ enum Standing {
     Refused,
 }
 
+/// What a chunk a participant seals is checked against.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Check {
+    /// Every reader opens exactly what the model allows, and the keystream is new.
+    EveryReader,
+    /// The keystream alone is new: a long call, where reading every chunk costs too much.
+    KeystreamAlone,
+}
+
 /// The test world: the channel log, the sessions, the clock, and the reference model.
 struct World {
+    check: Check,
+    /// The keystream of every chunk sealed so far: the sealed body XOR its clear body.
+    keystreams: HashSet<Vec<u8>>,
     owner: Person,
     people: Vec<Person>,
     entries: Vec<ambre_protocol::MembershipEntry>,
@@ -149,6 +175,35 @@ fn op() -> impl Strategy<Value = Op> {
     ]
 }
 
+/// The operations of a long call: members join and leave again and again, and two of them
+/// may be removed. Most operations speak, so each key seals many chunks.
+fn long_op() -> impl Strategy<Value = Op> {
+    prop_oneof![
+        4 => (0..ACTORS).prop_map(Op::Join),
+        3 => (0..ACTORS).prop_map(Op::Leave),
+        1 => (0..2usize).prop_map(Op::Remove),
+        3 => (0u64..4_000).prop_map(Op::Advance),
+        12 => (0..ACTORS).prop_map(Op::Speak),
+    ]
+}
+
+/// The keystream that sealed the body of an audio chunk: its sealed body XOR its clear body.
+/// The seal pads `clear` to a big-endian length, the chunk, then zeros (`CALL-007`).
+fn keystream_of(chunk: &Payload<SealedChunk>, clear: &Payload<ClearChunk>) -> Vec<u8> {
+    const HEADER: usize = 17;
+    const BODY: usize = 162;
+    let clear = clear.as_bytes();
+    let length = u16::try_from(clear.len()).unwrap_or_else(|e| panic!("{e}"));
+    let mut body = length.to_be_bytes().to_vec();
+    body.extend_from_slice(clear);
+    body.resize(BODY, 0);
+    let sealed = chunk
+        .as_bytes()
+        .get(HEADER..HEADER + BODY)
+        .unwrap_or_else(|| panic!("a sealed chunk shorter than its body"));
+    sealed.iter().zip(&body).map(|(s, c)| s ^ c).collect()
+}
+
 fn walk(entries: &[ambre_protocol::MembershipEntry]) -> Log {
     Log::walk(DOC, entries.first().and_then(digest), entries, no_self_join)
 }
@@ -178,6 +233,8 @@ impl World {
         }
         let log = walk(&entries);
         Self {
+            check: Check::EveryReader,
+            keystreams: HashSet::new(),
             owner,
             people,
             entries,
@@ -264,6 +321,7 @@ impl World {
             sealer: None,
             receive: ReceiveKeys::default(),
             held: Vec::new(),
+            top: None,
         };
         session.hand(handoff);
         let present = self.in_call();
@@ -436,6 +494,15 @@ impl World {
         let chunk = chunk
             .unwrap_or_else(|| panic!("no sealer"))
             .unwrap_or_else(|e| panic!("{e}"));
+        let keystream = keystream_of(&chunk, &clear);
+        assert!(
+            self.keystreams.insert(keystream),
+            "actor {actor} sealed a chunk under a key and a nonce already used, at {}",
+            self.now
+        );
+        if self.check == Check::KeystreamAlone {
+            return;
+        }
         let readers: Vec<usize> = self.sessions.keys().copied().collect();
         for reader in readers {
             let expected = self.may_open(reader, actor, self.now);
@@ -466,6 +533,9 @@ impl World {
 
     /// A joiner opens no chunk sealed before its join.
     fn probe_history(&mut self, actor: usize) {
+        if self.check == Check::KeystreamAlone {
+            return;
+        }
         let Some((session, Standing::In)) = self.sessions.get(&actor) else {
             return;
         };
@@ -530,6 +600,25 @@ proptest! {
         for op in ops {
             world.apply(op);
         }
+    }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(16))]
+
+    /// `CALL-147`: over a long call, where members leave and join again and the others switch
+    /// their keys, no two chunks share a keystream. So no key and nonce pair sealed twice, and
+    /// each `Seal` the Sync worker hands moves the generation of its session up.
+    #[test]
+    fn no_key_and_nonce_pair_repeats_over_a_long_call(
+        ops in prop::collection::vec(long_op(), 400..800)
+    ) {
+        let mut world = World::new();
+        world.check = Check::KeystreamAlone;
+        for op in ops {
+            world.apply(op);
+        }
+        prop_assert!(world.keystreams.len() > 50, "a call too short to tell");
     }
 }
 

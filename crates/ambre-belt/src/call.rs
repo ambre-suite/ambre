@@ -39,12 +39,15 @@ window.firstAudio = null;
 // Writes the chunk header of seat 0 into each frame it sends, where the receiver reads one.
 // That is past the clear prefix of a VP8 frame, and at the start of an Opus frame. It strips
 // the header from each frame it receives, so the decoder reads the frame the encoder wrote.
+// `forge` names another sender index for the header, as a member who forges a chunk does.
 const framing = URL.createObjectURL(new Blob([`
 onrtctransform = (event) => {
-  const { side, kind } = event.transformer.options;
+  const { side, kind, index } = event.transformer.options;
   const header = new Uint8Array(9);
   header[0] = 0xff;
-  header[8] = kind === 'video' ? 1 : 0;
+  // The key identifier: the sender index in bits 2 to 15, the track in bits 0 and 1.
+  header[7] = (index >> 6) & 0xff;
+  header[8] = ((index & 0x3f) << 2) | (kind === 'video' ? 1 : 0);
   event.transformer.readable.pipeThrough(new TransformStream({
     transform(frame, out) {
       const data = new Uint8Array(frame.data);
@@ -68,7 +71,8 @@ onrtctransform = (event) => {
 };
 `], { type: 'text/javascript' }));
 const framer = new Worker(framing);
-const frame = (side, kind) => new RTCRtpScriptTransform(framer, { side, kind });
+const index = Number(query.get('forge') || 0);
+const frame = (side, kind) => new RTCRtpScriptTransform(framer, { side, kind, index });
 // Hears the onset of each tone in a remote audio track, by its peak.
 const listen = (track) => {
   const ac = new AudioContext();
@@ -96,7 +100,7 @@ const onTrack = (e) => {
   if (e.track.kind === 'audio' && query.get('beep')) listen(e.track);
 };
 window.callStats = async () => {
-  const out = { samples: null, packets: 0, video: 0, state: pc && pc.connectionState, relay: null };
+  const out = { samples: null, packets: 0, video: 0, sent: 0, state: pc && pc.connectionState, relay: null };
   if (!pc) return out;
   const stats = await pc.getStats();
   stats.forEach((s) => {
@@ -109,6 +113,7 @@ window.callStats = async () => {
       const local = stats.get(pair.localCandidateId);
       if (local) out.relay = local.candidateType + '/' + (local.relayProtocol || local.protocol);
     }
+    if (s.type === 'outbound-rtp') out.sent += s.packetsSent || 0;
     if (s.type !== 'inbound-rtp') return;
     if (s.kind === 'audio' && s.jitterBufferEmittedCount) out.audioBuffer = 1000 * s.jitterBufferDelay / s.jitterBufferEmittedCount;
     if (s.kind === 'audio') out.audioDetail = { jitter: s.jitter, lost: s.packetsLost, nack: s.nackCount, target: s.jitterBufferTargetDelay / (s.jitterBufferEmittedCount || 1) * 1000, minimum: s.jitterBufferMinimumDelay / (s.jitterBufferEmittedCount || 1) * 1000, accel: s.removedSamplesForAcceleration, decel: s.insertedSamplesForDeceleration, concealed: s.concealedSamples, received: s.totalSamplesReceived };
@@ -559,6 +564,75 @@ mod tests {
             );
             tokio::time::sleep(Duration::from_millis(250)).await;
         }
+        for (browser, downloads) in browsers {
+            drop(browser);
+            let _ = std::fs::remove_dir_all(downloads);
+        }
+    }
+
+    /// `CALL-116`, audit `N11`, in the browser: two browsers join one room through the SFU
+    /// binary, each under an admission of sender index 0. Mallory writes index 1 into the
+    /// chunk header of each frame she sends. Her packets leave her browser, and Ada decodes
+    /// none of them, audio or video. Mallory decodes Ada, so the call carries media.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs the SFU binary and a browser driver; run just test-browser"
+    )]
+    async fn a_chunk_under_another_sender_index_reaches_nobody() {
+        let sfu = Sfu::start(None).await;
+        let page = serve_page().await;
+        let room = drawn();
+        let urls = [
+            sfu.page(&page, room),
+            format!("{}&forge=1", sfu.page(&page, room)),
+        ];
+        let mut browsers = Vec::new();
+        for url in &urls {
+            let downloads = std::env::temp_dir().join(format!("belt-{}", uuid::Uuid::new_v4()));
+            std::fs::create_dir_all(&downloads).expect("a download directory");
+            let browser = Browser::start(&downloads).await;
+            browser.goto(url).await;
+            browsers.push((browser, downloads));
+        }
+        let (ada, mallory) = match browsers.as_slice() {
+            [ada, mallory] => (&ada.0, &mallory.0),
+            _ => panic!("two pages"),
+        };
+        // Mallory decodes 1 s of Ada, and sends at least as long: 50 packets of 20 ms.
+        let deadline = Instant::now() + Duration::from_secs(30);
+        let seen = loop {
+            let (a, m) = (decoded(ada).await, decoded(mallory).await);
+            assert!(
+                a.get("error").is_none() && m.get("error").is_none(),
+                "a page failed: {a} {m}"
+            );
+            let heard = m["samples"].as_f64().map_or_else(
+                || m["packets"].as_f64().unwrap_or(0.0) >= 50.0,
+                |samples| samples >= 48_000.0,
+            );
+            if heard
+                && m["video"].as_f64().unwrap_or(0.0) >= 30.0
+                && m["sent"].as_f64().unwrap_or(0.0) >= 100.0
+            {
+                break a;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "within 30 s, Mallory decoded and sent {m}"
+            );
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        };
+        assert_eq!(
+            seen["video"].as_f64(),
+            Some(0.0),
+            "Ada decoded a picture under another index: {seen}"
+        );
+        assert_eq!(
+            seen["packets"].as_f64(),
+            Some(0.0),
+            "Ada received audio under another index: {seen}"
+        );
         for (browser, downloads) in browsers {
             drop(browser);
             let _ = std::fs::remove_dir_all(downloads);

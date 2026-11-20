@@ -806,6 +806,88 @@ pub(crate) mod tests {
             .await;
     }
 
+    /// Makes every receive transform of the page fail to attach. From now on, it also records
+    /// each track the peer connection hands the page, and each media element the page plays.
+    const NO_RECEIVE_TRANSFORM: &str = "window.beltPlayed = []; window.beltReceived = []; \
+        const Q = window.RTCPeerConnection; \
+        window.RTCPeerConnection = class extends Q { constructor(...a) { super(...a); \
+          this.addEventListener('track', (e) => window.beltReceived.push(e.track)); } }; \
+        Object.defineProperty(RTCRtpReceiver.prototype, 'transform', { configurable: true, \
+          get() { return null; }, \
+          set(v) { throw new Error('belt: no receive transform'); } }); \
+        const play = HTMLMediaElement.prototype.play; \
+        HTMLMediaElement.prototype.play = function () { \
+          window.beltPlayed.push(this); return play.call(this); }; \
+        return true;";
+
+    /// What the page received and played. It counts the tracks the peer connection handed
+    /// over and the live ones, and tells whether a played media element holds a live one.
+    const PLAYED_REMOTE: &str = "const remote = window.beltReceived || []; \
+        const live = remote.filter((t) => t.readyState === 'live'); \
+        const played = (window.beltPlayed || []).some((el) => el.srcObject \
+          && el.srcObject.getTracks().some((t) => live.includes(t))); \
+        return { remote: remote.length, live: live.length, played };";
+
+    /// `CALL-146`, audit `N40`, in the browser: Ada and Bob join one call, and no receive
+    /// transform attaches on Bob's page. Bob's page plays no track it receives, and stops
+    /// each one, so its decoder never reads what the SFU forwards unopened. Ada decodes Bob,
+    /// so the call carries his audio.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build, the SFU, a driver and the services; run just test-browser"
+    )]
+    async fn a_receiver_with_no_transform_plays_nothing() {
+        let sfu = crate::call::Sfu::start(None).await;
+        let relay = Arc::new(Relay::start_with(&sfu.relay_env()).await);
+        let (ada, bob) = (user(), user());
+        let ada_page = murmure(Arc::clone(&relay), &ada).await;
+        let bob_page = murmure(Arc::clone(&relay), &bob).await;
+        space_with_channel(&ada_page, "Belt", "general", &bob, &bob_page).await;
+        open(&bob_page, "general").await;
+        let channel = last_channel();
+        for page in [&ada_page, &bob_page] {
+            page.browser.script(RECORD, json!([])).await;
+        }
+        bob_page
+            .browser
+            .script(NO_RECEIVE_TRANSFORM, json!([]))
+            .await;
+
+        let call = start_call(&ada_page, &channel).await;
+        read_until(&bob_page, "a live call", |h| h.contains(LIVE), ROSTER_WAIT).await;
+        let joined = bob_page
+            .browser
+            .script(
+                "window.wasmBindings.join_call(arguments[0], arguments[1]); return true;",
+                json!([call, channel]),
+            )
+            .await;
+        assert_eq!(joined, json!(true), "the page has no join");
+        decoded_past(&[&ada_page], &[0.0], 48_000.0).await;
+
+        let seen = bob_page
+            .browser
+            .wait_for(
+                "the receivers of Bob's page",
+                &format!(
+                    "const s = (() => {{ {PLAYED_REMOTE} }})(); return s && s.remote > 0 ? s : null;"
+                ),
+                STEP,
+            )
+            .await;
+        assert_eq!(
+            seen["played"],
+            json!(false),
+            "a track with no transform played: {seen}"
+        );
+        assert_eq!(
+            seen["live"],
+            json!(0),
+            "a track with no transform is still live: {seen}"
+        );
+    }
+
     /// Presses the list of the channel, then `Up`, until what the live region reads of the
     /// latest message satisfies `done`, within `within`. Answers what it read.
     pub(crate) async fn read_until(
