@@ -133,6 +133,14 @@ query m: bitstring;
 query m: bitstring;
   event(Accepted(spk(skA), next(g_new), m)) ==> event(Sealed(spk(skA), next(g_new), m)).
 
+(* Sanity: a receiver does accept a chunk of A at each generation. Each query
+   must read `not event(...) is false`, a trace that reaches the event, so the
+   two correspondences above do not hold for want of any accepted chunk, and
+   the secrecy of chunk_after does not hold for want of its seal. *)
+query m: bitstring; event(Accepted(spk(skA), g_new, m)).
+query m: bitstring; event(Accepted(spk(skA), next(g_new), m)).
+query g: bitstring; event(Sealed(spk(skA), g, chunk_after)).
+
 (* ------------------------------------------------------------ derivations *)
 
 (* `SenderKey::ratcheted`. *)

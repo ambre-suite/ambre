@@ -835,11 +835,16 @@ proverif model="crates/ambre-crypto/proofs/call_sender_keys.pv":
     out="$(proverif "{{model}}")"
     results="$(printf '%s\n' "$out" | grep '^RESULT' || true)"
     printf '%s\n' "$results"
+    # A bare `query event(...)` is a sanity witness: it must read `is false`, a
+    # trace that reaches the event. Every other query must read `is true`.
     total="$(printf '%s\n' "$results" | grep -c '^RESULT' || true)"
-    proved="$(printf '%s\n' "$results" | grep -c ' is true\.$' || true)"
-    if [ "$total" -eq 0 ] || [ "$total" -ne "$proved" ]; then
+    proved="$(printf '%s\n' "$results" | grep -v '^RESULT not event(' | grep -c ' is true\.$' || true)"
+    reached="$(printf '%s\n' "$results" | grep '^RESULT not event(' | grep -c ' is false\.$' || true)"
+    witnesses="$(printf '%s\n' "$results" | grep -c '^RESULT not event(' || true)"
+    if [ "$total" -eq 0 ] || [ "$witnesses" -eq 0 ] || [ "$witnesses" -ne "$reached" ] \
+        || [ "$total" -ne "$((proved + reached))" ]; then
         printf '%s\n' "$out" >&2
-        echo "proverif: $proved of $total queries proved" >&2
+        echo "proverif: $proved proved, $reached of $witnesses witnesses reached, $total queries" >&2
         exit 1
     fi
 

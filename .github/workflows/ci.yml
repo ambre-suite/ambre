@@ -219,7 +219,8 @@ jobs:
   # ---------------------------------------------------------------------------
   # proverif -- the formal model of the call sender keys (`CALL-142`). The job
   # builds ProVerif 2.05 from the tarball of its authors, checked against its
-  # SHA-256, then fails unless every query of the model reads `is true`. No
+  # SHA-256, then fails unless every query of the model reads `is true` and
+  # every sanity witness reads `is false`, a trace that reaches it. No
   # package archive ships that version, so a build from source pins it.
   # ---------------------------------------------------------------------------
   proverif:
