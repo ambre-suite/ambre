@@ -175,7 +175,7 @@ impl SyncState {
     /// A command of the bus joins `target` (`CALL-065`). It takes the port that came with
     /// it, then asks the Logic thread which document of the channel is its `meta`. The relay
     /// never names it: the Logic thread reads it from the channel state it opened, whose
-    /// sealed header names the channel (`CALL-141`, audit `P24`). A join while a call is
+    /// sealed header names the channel (`CALL-149`, audit `P24`). A join while a call is
     /// open, or while another join waits, changes nothing.
     pub(crate) fn handle_join_call(&mut self, target: CallTarget, opening: Opening) {
         let Some(port) = self.call_ports.take() else {
@@ -1287,7 +1287,7 @@ mod tests {
         assert_eq!(link.sent.sfu.len(), 3, "the latest choice alone");
     }
 
-    /// `CALL-065`, `CALL-029`, `CALL-141`: a command of the bus joins the call it names. It
+    /// `CALL-065`, `CALL-029`, `CALL-149`: a command of the bus joins the call it names. It
     /// waits until the Logic thread names the `meta` of its channel, and asks no relay route. The keys leave on the port that came with the command. The SFU's TURN servers reach the UI thread, and its description
     /// waits for the SFU. A leave hands the call worker the end of the call, and the UI
     /// thread hears it.
@@ -1506,7 +1506,7 @@ mod tests {
         ));
     }
 
-    /// `CALL-141`, audit `P24`: the Logic thread holds no state of the channel of a join. The
+    /// `CALL-149`, audit `P24`: the Logic thread holds no state of the channel of a join. The
     /// join ends before any socket opens, and the page hears the end. The relay is never asked
     /// which document is the `meta`, so no answer of it can seat the join.
     #[test]

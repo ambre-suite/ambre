@@ -9,7 +9,7 @@
 //
 // The passphrase form of the account settings changes the passphrase of a
 // session. It takes the current passphrase, then the new one twice, and shows
-// each refusal of the Sync worker in its own words (`CHROME-141`).
+// each refusal of the Sync worker in its own words (`CHROME-145`).
 //
 // The words reach this thread inside a `Confidential<RecoveryWords>`. Only
 // `present_words` writes them, into the list of the face. They leave this
@@ -38,7 +38,7 @@ pub enum KeysFace {
     /// The recovery form: the words and a new passphrase (`CHROME-128`).
     Recover,
     /// The passphrase form of the account settings: the current passphrase
-    /// and a new one (`CHROME-141`).
+    /// and a new one (`CHROME-145`).
     ChangePassphrase,
 }
 
@@ -205,10 +205,10 @@ fn take_current(
     Ok(typed)
 }
 
-/// The passphrase form of the account settings (`CHROME-141`). The Sync
+/// The passphrase form of the account settings (`CHROME-145`). The Sync
 /// worker answers `PassphraseChanged`, which closes the form. Or it answers a
 /// refusal the form shows (`CHROME-143`). That is a wrong current passphrase,
-/// a weak new one, or a stale seal, which asks for a new try (`SYNC-286`).
+/// a weak new one, or a stale seal, which asks for a new try (`SYNC-295`).
 fn change_form(keys: KeysSignals, to_logic: ShellOutbox) -> impl IntoView {
     let current = NodeRef::<leptos::html::Input>::new();
     let first = NodeRef::<leptos::html::Input>::new();
@@ -670,7 +670,7 @@ mod tests {
         container.remove();
     }
 
-    /// `CHROME-141`, `CHROME-143`, `CHROME-129`: the passphrase form sends
+    /// `CHROME-145`, `CHROME-143`, `CHROME-129`: the passphrase form sends
     /// the current and the new passphrase once, and empties its three fields.
     /// Each refusal of the Sync worker reads on the form in its own words. The
     /// refusals are a wrong current passphrase, a weak new one and a stale

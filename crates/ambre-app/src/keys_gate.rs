@@ -17,7 +17,7 @@
 // screen reader announces when it changes (`CHROME-131`).
 //
 // Each face names the account the provider vouched for, so the setup asks for
-// no name or address the provider gave (`CHROME-140`). Each face offers a
+// no name or address the provider gave (`CHROME-144`). Each face offers a
 // sign-out, for a person who signed in with the wrong account (`CHROME-142`).
 // ============================================================================
 
@@ -67,7 +67,7 @@ mod view {
     }
 
     /// Who the provider signed in: the name and the address it gave
-    /// (`CHROME-140`).
+    /// (`CHROME-144`).
     #[derive(Clone, PartialEq, Eq, Debug)]
     pub(crate) struct GateIdentity {
         pub(crate) display_name: Validated<DisplayName>,
@@ -203,7 +203,7 @@ mod view {
                     <span class="ambre-signin-wordmark">"Ambre"</span>
                     <h2>{heading}</h2>
                     // The provider gave the name and the address: the face
-                    // shows them, and asks for neither (`CHROME-140`).
+                    // shows them, and asks for neither (`CHROME-144`).
                     {move || gate.identity.get().map(|identity| view! {
                         <p class="ambre-keys-identity">
                             "Signed in as "
@@ -516,7 +516,7 @@ mod view {
             assert!(sent(&rx).is_empty());
         }
 
-        /// `CHROME-140`: each face names the account the provider signed in,
+        /// `CHROME-144`: each face names the account the provider signed in,
         /// by the name and the address it gave. The setup holds no field for
         /// either, and its command carries the passphrase alone.
         #[wasm_bindgen_test]

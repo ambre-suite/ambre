@@ -5162,7 +5162,7 @@ mod tests {
             .collect()
     }
 
-    /// `CALL-141`, audit `P24`: a join asks which document is the `meta` of its channel. The
+    /// `CALL-149`, audit `P24`: a join asks which document is the `meta` of its channel. The
     /// answer is the `meta` of the channel state this thread opened, whose header names the
     /// channel. A closed channel keeps it. A channel this thread never opened names none,
     /// so the join ends rather than read the relay's word.

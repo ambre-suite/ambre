@@ -442,7 +442,7 @@ enum SyncEvent {
     /// A recovery re-sealed the seed its words spell under the new passphrase
     /// (`SYNC-248`). It carries that seed, the pair the session holds and who
     /// the account is, so the session opens on the recovered keys
-    /// (`SYNC-287`).
+    /// (`SYNC-293`).
     AccountRecovered {
         id: Seq<Request>,
         master_seed: MasterSeed,

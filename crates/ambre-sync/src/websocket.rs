@@ -828,14 +828,14 @@ impl SyncState {
                 self.reply(id, RestEvent::AccountRecovered);
                 // A session that holds keys already re-sealed its own seed. The
                 // words matched its signing key, so it holds the recovered
-                // keys, and its socket stays (`SYNC-288`, `CHROME-135`).
+                // keys, and its socket stays (`SYNC-294`, `CHROME-135`).
                 if self.master_seed.is_some() {
                     return;
                 }
                 self.user_id = Some(user_id);
                 self.adopt_new_keys(master_seed, signing_key, exchange_key, tokens);
                 // The form closes on the answer, then the list replaces the
-                // gate: no second unlock under the new passphrase (`SYNC-287`).
+                // gate: no second unlock under the new passphrase (`SYNC-293`).
                 self.send_to_logic(LogicEvent::Rest {
                     id: None,
                     evt: RestEvent::SessionReady {

@@ -417,7 +417,7 @@ impl From<&ambre_core::Credential<ambre_core::PresignedUrl>> for Target {
 
 /// A target shows its address without its query. A relay query carries what a
 /// user typed, a searched address among it, and a log line keeps none of it
-/// (`SYNC-285`). An object link's query is its credential.
+/// (`SYNC-292`). An object link's query is its credential.
 impl std::fmt::Display for Target {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -2736,7 +2736,7 @@ mod tests {
         );
     }
 
-    /// `SYNC-285`: an error on a search shows the route, never the address
+    /// `SYNC-292`: an error on a search shows the route, never the address
     /// the query searched, encoded or not.
     #[test]
     fn an_error_on_a_search_shows_no_searched_address() {

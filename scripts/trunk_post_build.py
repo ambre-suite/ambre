@@ -44,7 +44,7 @@ frames a page of another site (`TOILE-088`). The deployment names the sites it
 admits in `AMBRE_EMBED_SITES`, at build time: hosts or `https` origins, split by
 spaces or commas, each host with an optional `*.` prefix. The hook writes each
 one into `frame-src` as an `https` origin. A deployment that names no site
-admits no frame (`SRV-307`). A value that is not a site fails the build, so no
+admits no frame (`SRV-312`). A value that is not a site fails the build, so no
 source of another kind reaches the policy.
 
 **The headers each answer carries.** A meta policy governs the page alone, and
@@ -307,7 +307,7 @@ def policy(scripts: list[str], styles: list[str], frames: list[str] | None = Non
     string runs nowhere. `wasm-unsafe-eval` admits the compile of a wasm module
     alone. The workers come from the page's own origin, never from `blob:`. A
     web embed is a sandboxed frame (`TOILE-088`) of one of the sites in
-    `frames`, and no frame loads when `frames` is empty (`SRV-307`). A picture
+    `frames`, and no frame loads when `frames` is empty (`SRV-312`). A picture
     the page shows from memory is a `blob:` or `data:` address.
     """
     return "; ".join(

@@ -402,9 +402,9 @@ steps, and a refusal at one step writes nothing:
    (`ambre-spec-session.md`, `SRV-278`, `SRV-279`).
 
 Another device may replace the seal between the read and the write. The write then draws a refusal
-of its own, and a new try reads the seal again (`ambre-spec-sync.md`, `SYNC-286`). Once the write
+of its own, and a new try reads the seal again (`ambre-spec-sync.md`, `SYNC-295`). Once the write
 lands, the worker reads who the account is and opens the session on the seed. The person types no
-passphrase again (`ambre-spec-sync.md`, `SYNC-287`).
+passphrase again (`ambre-spec-sync.md`, `SYNC-293`).
 
 **The re-seal of a passphrase change.** A passphrase change writes the same seed back to the
 relay, sealed under the new passphrase (`ambre-spec-sync.md`, `SYNC-251`). It takes the route and

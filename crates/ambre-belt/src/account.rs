@@ -310,7 +310,7 @@ mod tests {
             .await;
     }
 
-    /// `CHROME-133`, `CHROME-134`, `SYNC-287`: the unlock face of a provider
+    /// `CHROME-133`, `CHROME-134`, `SYNC-293`: the unlock face of a provider
     /// account links to the recovery form. A recovery there re-seals the
     /// account under a new passphrase and opens the list on the recovered
     /// keys, with no second unlock.

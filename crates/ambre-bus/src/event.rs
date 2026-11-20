@@ -72,7 +72,7 @@ pub enum LogicEvent {
     /// A join of `call` waits for the `meta` document of `channel`. The Logic thread answers
     /// [`crate::SyncCommand::CallMeta`] from the channel state it opened. The relay never
     /// names that document, so it cannot seat the join under another channel's log
-    /// (`CALL-141`, audit `P24`).
+    /// (`CALL-149`, audit `P24`).
     CallMetaAsked {
         call: Id<ambre_core::id::Call>,
         channel: Id<ambre_core::id::Channel>,
@@ -560,7 +560,7 @@ pub enum AuthFailure {
     NoDevSignIn,
     /// The relay no longer holds the sealed seed a recovery or a passphrase
     /// change read: another device re-sealed it in between. Nothing was
-    /// written, and a new try reads the seal again (`SYNC-286`).
+    /// written, and a new try reads the seal again (`SYNC-295`).
     StaleReseal,
 }
 

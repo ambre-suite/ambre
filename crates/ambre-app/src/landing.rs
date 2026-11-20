@@ -191,7 +191,7 @@ pub fn landing_view(
                             {move || username.get().map(ambre_core::Validated::into_string).unwrap_or_default()}
                         </span>
                         // The account settings: the passphrase change covers
-                        // the launcher until it ends (`CHROME-141`).
+                        // the launcher until it ends (`CHROME-145`).
                         <button
                             class="ambre-change-passphrase"
                             on:click=move |_| keys.open(crate::account::KeysFace::ChangePassphrase)

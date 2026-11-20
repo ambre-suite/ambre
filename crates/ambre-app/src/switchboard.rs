@@ -444,7 +444,7 @@ pub(crate) enum Effect<'e> {
     /// or to set up (`CHROME-097`, `CHROME-098`).
     AskKeys(KeysFace),
     /// Show on the keys gate who the provider signed in, so the setup asks
-    /// nothing the provider already gave (`CHROME-140`).
+    /// nothing the provider already gave (`CHROME-144`).
     Identify {
         display_name: &'e Validated<DisplayName>,
         email: &'e Email,
@@ -653,7 +653,7 @@ impl Switchboard {
             // Signed in with the provider: the Sync worker holds the tokens,
             // and the keys are still to open or to set up (`CHROME-096`).
             // The gate names the account the provider vouched for, so a
-            // person who signed in with the wrong one sees it (`CHROME-140`).
+            // person who signed in with the wrong one sees it (`CHROME-144`).
             RestEvent::ProviderSignedIn {
                 display_name,
                 email,
@@ -671,7 +671,7 @@ impl Switchboard {
                 effects.push(Effect::ShowWords(recovery_words));
             }
             // The form closes; the session of the recovered keys follows
-            // and replaces the gate (`SYNC-287`, `CHROME-133`).
+            // and replaces the gate (`SYNC-293`, `CHROME-133`).
             RestEvent::AccountRecovered => effects.push(Effect::CloseKeys),
             // The change form closes and says the new passphrase holds.
             RestEvent::PassphraseChanged => {
@@ -2245,7 +2245,7 @@ mod tests {
         );
     }
 
-    /// `CHROME-140`: a provider sign-in hands the gate the name and the
+    /// `CHROME-144`: a provider sign-in hands the gate the name and the
     /// address the provider gave, before the face, so the setup asks for
     /// neither again.
     #[test]
@@ -2272,7 +2272,7 @@ mod tests {
         }
     }
 
-    /// `CHROME-141`, `CHROME-143`: a passphrase change the worker answered
+    /// `CHROME-145`, `CHROME-143`: a passphrase change the worker answered
     /// closes its form and says so. A refusal of the change reads on the
     /// form, in the words of the refusal, a stale re-seal included.
     #[test]

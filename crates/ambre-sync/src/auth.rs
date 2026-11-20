@@ -494,7 +494,7 @@ impl SyncState {
     }
 
     /// Run the re-seal of a recovery, then open the session on the seed it
-    /// stored (`SYNC-287`). A refusal answers as a re-seal refusal does.
+    /// stored (`SYNC-293`). A refusal answers as a re-seal refusal does.
     // Its whole body is a task spawned on the event loop of the browser, as
     // for `spawn_reseal`. `recover_session` holds its steps on host.
     #[cfg_attr(test, mutants::skip)]
@@ -716,7 +716,7 @@ fn account_set_up(
 }
 
 /// The event a refused re-seal raises. A refusal of the worker or a stale
-/// seal keeps its own kind (`SYNC-286`); a failed request reads as its
+/// seal keeps its own kind (`SYNC-295`); a failed request reads as its
 /// failure.
 fn reseal_refused(failure: KeyWriteFailure) -> LogicEvent {
     match failure {
@@ -1064,7 +1064,7 @@ async fn reseal_recovered_seed(
 }
 
 /// Re-seal the seed a recovery read back, then read who the account is, so
-/// the session opens on that seed (`SYNC-287`). The identity is read under
+/// the session opens on that seed (`SYNC-293`). The identity is read under
 /// the pair the session holds: the re-seal moves no key, so the pair stays
 /// valid.
 async fn recover_session(
@@ -1137,7 +1137,7 @@ fn prove_rotation(
 /// A bare `CONFLICT` says the relay no longer holds the seal the proof
 /// replaces: another device re-sealed it after the read (`SRV-279`). That
 /// refusal is its own, so the view asks for a new try rather than showing an
-/// HTTP failure (`SYNC-286`).
+/// HTTP failure (`SYNC-295`).
 async fn send_rotation(
     transport: &impl http::Transport,
     auth: &http::AuthContext,
@@ -1431,7 +1431,7 @@ mod tests {
         }
     }
 
-    /// `SYNC-287`: a recovery re-seals, then reads who the account is under
+    /// `SYNC-293`: a recovery re-seals, then reads who the account is under
     /// the pair the session holds, so the session opens on the recovered seed.
     /// A refused re-seal reads no identity.
     #[tokio::test]
@@ -1480,7 +1480,7 @@ mod tests {
         assert_eq!(transport.calls().len(), 2, "a refused re-seal read on");
     }
 
-    /// `SYNC-286`: a re-seal the relay refuses as stale, after a recovery or
+    /// `SYNC-295`: a re-seal the relay refuses as stale, after a recovery or
     /// a passphrase change, draws a refusal of its own on the bus. Another
     /// refusal of the write stays an HTTP failure.
     #[tokio::test]
@@ -1908,7 +1908,7 @@ mod set_up_keys_tests {
         );
     }
 
-    /// `SYNC-287`, `SYNC-288`: a recovery answered by the relay opens the
+    /// `SYNC-293`, `SYNC-294`: a recovery answered by the relay opens the
     /// session on the recovered keys. Logic hears the recovery, then the
     /// session, and no second unlock is asked. A session that holds keys
     /// already keeps them and its socket, and hears the recovery alone.

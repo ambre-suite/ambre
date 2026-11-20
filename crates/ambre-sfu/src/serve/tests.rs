@@ -454,7 +454,7 @@ fn fresh(participant: u8) -> Admission {
     }
 }
 
-/// `CALL-141`, audit `N39`: a message one byte past the bound closes the socket, before and
+/// `CALL-150`, audit `N39`: a message one byte past the bound closes the socket, before and
 /// after the admission. A socket under the bound reads its TURN servers and its answer.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_message_past_the_bound_closes_the_socket() {
@@ -495,7 +495,7 @@ async fn a_message_past_the_bound_closes_the_socket() {
     seated(&url, &fresh(41)).await;
 }
 
-/// `CALL-142`, audit `N39`: an admitted socket that sends no offer closes once the deadline
+/// `CALL-151`, audit `N39`: an admitted socket that sends no offer closes once the deadline
 /// passes, and not before it.
 #[tokio::test(flavor = "multi_thread")]
 async fn an_admitted_socket_with_no_offer_closes_at_the_deadline() {
@@ -513,7 +513,7 @@ async fn an_admitted_socket_with_no_offer_closes_at_the_deadline() {
     );
 }
 
-/// `CALL-143`, audit `N39`: one socket under an admission waits for its offer. A second
+/// `CALL-152`, audit `N39`: one socket under an admission waits for its offer. A second
 /// socket under the same admission reads no TURN credential, and closes. So one admission
 /// mints one credential, and holds one unfinished message at most.
 #[tokio::test(flavor = "multi_thread")]

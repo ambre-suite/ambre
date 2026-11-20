@@ -272,7 +272,7 @@ class ContentPolicy(unittest.TestCase):
 
 
 class EmbedSites(unittest.TestCase):
-    """`SRV-307`: the page admits in a frame the sites the deployment names, and no frame
+    """`SRV-312`: the page admits in a frame the sites the deployment names, and no frame
     when it names none."""
 
     def frame_src(self, tmp: str, frames: list[str] | None) -> list[str]:

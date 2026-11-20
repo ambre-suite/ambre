@@ -385,7 +385,7 @@ pub enum SyncCommand {
     /// The `meta` document of the channel of a waiting join, the answer to
     /// [`crate::LogicEvent::CallMetaAsked`]. Posted by the Logic thread from the channel state
     /// it opened, whose sealed header names the channel. `None` when it holds no such state,
-    /// and the join then ends (`CALL-141`, audit `P24`).
+    /// and the join then ends (`CALL-149`, audit `P24`).
     CallMeta {
         call: Id<ambre_core::id::Call>,
         meta: Option<Id<Document>>,

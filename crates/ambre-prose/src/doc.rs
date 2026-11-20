@@ -973,7 +973,7 @@ pub(crate) fn movable_list_at<K: FieldKey>(parent: &Fields<K>, key: K) -> Option
 /// The root is taken by its typed identifier, never looked up by name. Before
 /// Loro picks a root by name, it builds the value of each root of that name.
 /// A tree a peer nested ten thousand deep under the name `meta` overflowed the
-/// stack of the Logic thread (`PROSE-141`).
+/// stack of the Logic thread (`PROSE-143`).
 #[must_use]
 pub(crate) fn meta_read(doc: &LoroDoc) -> Option<Fields<MetaKey>> {
     let blank = doc.get_pending_txn_len() == 0 && doc.state_frontiers().is_empty();
@@ -2100,7 +2100,7 @@ mod tests {
         }
     }
 
-    /// `PROSE-141`: a peer nested a tree ten thousand deep under the name `meta`. The read of
+    /// `PROSE-143`: a peer nested a tree ten thousand deep under the name `meta`. The read of
     /// the `meta` register stays on a stack of 1 MiB. It takes the map root by its typed
     /// identifier, and never builds the value of the tree.
     #[test]

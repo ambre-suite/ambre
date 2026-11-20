@@ -543,7 +543,7 @@ impl SyncState {
             });
         } else {
             // The query is now a whole address, so no log line names it
-            // (`SYNC-285`).
+            // (`SYNC-292`).
             drop(query);
             crate::log::info!("Sync: SearchUsers with no relay");
             self.reply(id, RestEvent::UserSearchResults { users: Vec::new() });
@@ -604,7 +604,7 @@ mod tests {
         assert_eq!(state.footing(DOC), Some(walked));
     }
 
-    /// `SYNC-285`: a user search with no relay logs that it ran, and never
+    /// `SYNC-292`: a user search with no relay logs that it ran, and never
     /// the address it searched.
     #[test]
     fn a_user_search_logs_no_searched_address() {

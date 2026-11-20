@@ -43,7 +43,7 @@ impl<D> Runtime<D> {
     /// of the channel state this thread opened, open or closed since, whose sealed header
     /// names `channel` (`MURMURE-027`). A channel it never opened has none, and the join ends.
     /// The relay never names it, so it cannot seat a join under another channel's log
-    /// (`CALL-141`, audit `P24`).
+    /// (`CALL-149`, audit `P24`).
     pub fn call_meta_asked(&mut self, call: Id<Call>, channel: Id<Channel>) {
         let meta = self
             .channels
