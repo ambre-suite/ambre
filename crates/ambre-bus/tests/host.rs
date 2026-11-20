@@ -301,8 +301,8 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 }
 
 /// The number of arms of `sync_variant` and of `event_variant`.
-const SYNC_VARIANTS: usize = 51;
-const EVENT_VARIANTS: usize = 64;
+const SYNC_VARIANTS: usize = 52;
+const EVENT_VARIANTS: usize = 67;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
 /// field. Each arm of the two name functions needs a sample here, and the
@@ -853,6 +853,14 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         LogicEvent::ConverterFetched {
             family: ambre_core::ConverterFamily::Tables,
             module: ambre_core::Payload::new(b"\0asm".to_vec()),
+        },
+        LogicEvent::CallCue {
+            document_id: doc,
+            cue: ambre_bus::CallCue {
+                call: Id::<ambre_core::id::Call>::from_bytes([3; 16]),
+                kind: ambre_bus::CueKind::Ring,
+                at: Instant::<Authored>::new(42),
+            },
         },
         LogicEvent::ConverterRefused {
             family: ambre_core::ConverterFamily::Images,
