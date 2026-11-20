@@ -1262,6 +1262,7 @@ ambre-murmure | src/logic/runtime/channels.rs | crate::logic::runtime::channels 
 ambre-murmure | src/logic/runtime/channels.rs | crate::logic::runtime::channels | Runtime<D>::murmure_writable() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-murmure | src/logic/runtime/channels.rs | crate::logic::runtime::channels | Runtime<D>::murmure_writable(identified) | param | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-murmure | src/logic/runtime/channels.rs | crate::logic::runtime::channels | Runtime<D>::reads_channel_copy() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-murmure | src/logic/runtime/channels.rs | crate::logic::runtime::channels | Runtime<D>::channel_reread() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/dispatch.rs | crate::dispatch | LogicState::murmure_remote() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/dispatch.rs | crate::dispatch | LogicState::murmure_replay() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/dispatch.rs | crate::dispatch | LogicState::murmure_signed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -4526,6 +4527,7 @@ ambre-crypto | src/call.rs | crate::call | Departures::names_any() | ret | bool	
 ambre-crypto | src/call.rs | crate::call | Departures::read(bytes) | param | &[u8]	newtype-inner	the opened plaintext of a wrap the departures are parsed from
 ambre-crypto | src/call.rs | crate::call | Departures::write(out) | param | &mut Vec<u8>	generic	the opaque plaintext buffer of a wrap, sealed whole after the write
 ambre-crypto | src/call.rs | crate::call | WRAP_PLAIN_LEN | const | usize	generic	wrap byte-layout constant
+ambre-crypto | src/call.rs | crate::call | DEPARTURES_LEN | const | usize	generic	wrap byte-layout constant
 ambre-app | src/console_trace.rs | crate::console_trace | <ConsoleTrace as Subscriber>::enabled() | ret | bool	trait	signature fixed by foreign trait
 ambre-app | src/console_trace.rs | crate::console_trace | ConsoleLine.level_style | field | &'static str	foreign-api	a CSS declaration the browser console applies to the first segment of the line
 ambre-app | src/console_trace.rs | crate::console_trace | ConsoleLine.text | field | String	foreign-api	the console line with its %c directives, as console.log takes it
@@ -4845,6 +4847,8 @@ ambre-sync | src/http.rs | crate::http | read_metered() | ret | Result<Vec<u8>,T
 ambre-sync | src/http.rs | crate::http | read_body() | ret | Result<Vec<u8>,TransportError>	generic	opaque bytes of a response body, read under its byte cap and handed to a parser
 ambre-sync | src/lib.rs | crate | SyncDocumentState::quarantine_overflows() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncDocumentState::applied_past_cap() | ret | bool	generic	predicate result
+ambre-sync | src/lib.rs | crate | Applied::is_empty() | ret | bool	generic	predicate result
+ambre-sync | src/lib.rs | crate | Applied::past_cap() | ret | bool	generic	predicate result
 ambre-sync | src/log.rs | crate::log::console | MARKS | static | AtomicU64	foreign-api	the std atomic, which takes the primitive it counts the performance marks of the worker with
 ambre-sync | src/log.rs | crate::log::console | ORIGIN_STYLE | const | &str	foreign-api	a CSS declaration the browser console applies to the second segment of a line
 ambre-sync | src/log.rs | crate::log::console | TEXT_STYLE | const | &str	foreign-api	a CSS declaration the browser console applies to the third segment of a line
@@ -4869,6 +4873,8 @@ ambre-sync | src/membership_log.rs | crate::membership_log | SpaceWord::writes_u
 ambre-sync | src/membership_log.rs | crate::membership_log | key_held_elsewhere() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | Writers::admits_delta() | ret | bool	generic	predicate result
 ambre-sync | src/membership_log.rs | crate::membership_log | Writers::admits_snapshot() | ret | bool	generic	predicate result
+ambre-sync | src/membership_log.rs | crate::membership_log | Readmitted::admits() | ret | bool	generic	predicate result
+ambre-sync | src/membership_log.rs | crate::membership_log | Writers::readmits() | ret | bool	generic	predicate result
 ambre-sync | src/snapshot_trust.rs | crate::snapshot_trust | Trusted::holds() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/snapshot_trust.rs | crate::snapshot_trust | confirmation_admitted() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/updates.rs | crate::updates | absent_opens_local() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
