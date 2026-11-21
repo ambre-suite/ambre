@@ -895,9 +895,14 @@ services-down:
 selfhost := 'docker compose -f deploy/compose/compose.yml --env-file target/selfhost/.env -p ambre-selfhost-test'
 
 # Build and start the self-hosted stack under test, then wait for its page and its relay.
+# Each run drops the stack left by an earlier one with its volumes, then writes
+# fresh secrets: CI restores `target/` from its cache, and an `.env` kept from an
+# older `setup.sh` lacks the secrets added since.
 selfhost-up:
     mkdir -p target/selfhost
-    test -e target/selfhost/.env || { AMBRE_ENV_FILE="$PWD/target/selfhost/.env" sh deploy/compose/setup.sh localhost 127.0.0.1 internal && printf 'AMBRE_DEV_MODE=true\nAMBRE_DEV_LOGIN=1\nTURN_LOOPBACK_PEERS=--allow-loopback-peers\n' >> target/selfhost/.env; }
+    docker compose -p ambre-selfhost-test down -v --remove-orphans
+    rm -f target/selfhost/.env
+    { AMBRE_ENV_FILE="$PWD/target/selfhost/.env" sh deploy/compose/setup.sh localhost 127.0.0.1 internal && printf 'AMBRE_DEV_MODE=true\nAMBRE_DEV_LOGIN=1\nTURN_LOOPBACK_PEERS=--allow-loopback-peers\n' >> target/selfhost/.env; }
     {{selfhost}} up -d --build
     python3 scripts/selfhost_wait.py "{{selfhost}}"
 
