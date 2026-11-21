@@ -363,28 +363,50 @@ impl SyncState {
     /// in the session. A log the relay cut before an entry walked then
     /// installs no key. A footing this session holds already moves on to it
     /// only when it is later.
+    ///
+    /// The chain it stored is rebuilt, so a listed name opens through it
+    /// with no request (`SYNC-308`). A chain the kept log no longer extends
+    /// is refused, and so is one of a log this session walked from another
+    /// anchor. A chain this session already holds is the later one, and
+    /// stays.
     pub(crate) fn hold_kept_log(&mut self, log_document: Id<Document>, kept: ambre_bus::KeptLog) {
-        self.log_walked_to(crate::key_vouch::Footing::kept(log_document, &kept));
+        let footing = crate::key_vouch::Footing::kept(log_document, &kept);
+        let other_anchor = self
+            .log_footings
+            .get(&log_document)
+            .is_some_and(|held| held.sealed_at(kept.anchor).is_none());
+        self.log_walked_to(footing);
+        match crate::chain::Chain::kept(log_document, &kept) {
+            Some(chain) if !other_anchor => {
+                self.kept_chains.entry(log_document).or_insert(chain);
+            }
+            _ => crate::log::warning!(
+                "Sync: the kept chain of {log_document:?} is refused: its log no longer extends it"
+            ),
+        }
         self.kept_logs.entry(log_document).or_insert(kept);
     }
 
     /// Records where the log of `document_id` stands now, with the key the
-    /// document holds, and hands it to the local store when it moved
-    /// (`SYNC-290`). It is a no-op before a footing or a key exists.
+    /// document holds and the chain it holds, and hands it to the local
+    /// store when it moved (`SYNC-290`, `SYNC-308`). It is a no-op before a
+    /// footing or a key exists.
     pub(crate) fn keep_log(&mut self, document_id: Id<Document>) {
-        let (Some(footing), Some(key)) = (
+        let (Some(footing), Some((key, links))) = (
             self.footing(document_id),
-            self.documents.get(&document_id).map(|doc| doc.doc_key.id()),
+            self.documents
+                .get(&document_id)
+                .map(|doc| (doc.doc_key.id(), doc.chain.links())),
         ) else {
             return;
         };
-        let kept = footing.to_kept(key);
+        let kept = footing.to_kept(key, links);
         let log_document = footing.document();
         self.keep_chain(document_id);
         if self.kept_logs.get(&log_document) == Some(&kept) {
             return;
         }
-        self.kept_logs.insert(log_document, kept);
+        self.kept_logs.insert(log_document, kept.clone());
         self.send_to_logic(LogicEvent::LogKept {
             document_id: log_document,
             kept,
@@ -753,13 +775,13 @@ mod tests {
                 _ => None,
             })
             .collect();
-        assert_eq!(kept, [(DOC, walked.to_kept(key.id()))]);
+        assert_eq!(kept, [(DOC, walked.to_kept(key.id(), Vec::new()))]);
 
         // The next session: the store hands the kept log back first.
         let (mut next, _rx) = bare_state();
         next.handle_command(SyncCommand::KeepLog {
             document_id: DOC,
-            kept: kept[0].1,
+            kept: kept[0].1.clone(),
         });
         let held = next.log_footings.get(&DOC).copied();
         assert_eq!(held, Some(walked));
@@ -772,6 +794,124 @@ mod tests {
             "a log cut before the kept head installs nothing"
         );
         assert!(walk(&texts).is_ok());
+    }
+
+    /// Holds `SYNC-308`. The chain an open holds goes to the local store
+    /// beside its kept log. The next session rebuilds it from the row, and
+    /// a name sealed two rotations back opens through it. A stored chain
+    /// with a link signed past the kept head, a link the kept key does not
+    /// walk to, or a log this session walked from another anchor is
+    /// refused, and the kept footing still holds.
+    #[test]
+    fn a_kept_chain_outlives_the_session_and_one_its_log_no_longer_extends_is_refused() {
+        use crate::key_vouch::Footing;
+        use crate::membership_log::tests::{DOC, Person, append, created};
+        use crate::membership_log::{LogRule, digest, encode};
+        let (mut state, rx) = bare_state();
+        let alice = Person::new(1);
+        let mut entries = created(&alice, &Person::new(2));
+        append(
+            &mut entries,
+            &alice,
+            &Person::new(3),
+            ambre_protocol::MembershipAct::Invite,
+            Role::Editor,
+        );
+        let texts: Vec<_> = entries.iter().map(|e| encode(e).unwrap()).collect();
+        let anchor = digest(&entries[0]).expect("an anchor");
+        let keys: Vec<DocumentKey> = (0..3).map(|_| DocumentKey::generate()).collect();
+        let links: Vec<_> = keys
+            .windows(2)
+            .map(|pair| {
+                crate::pipeline::seal_link(
+                    DOC,
+                    &pair[0],
+                    &pair[1],
+                    ambre_protocol::LogHead::EMPTY,
+                    &alice.key,
+                )
+                .unwrap()
+            })
+            .collect();
+        let mut doc = SyncDocumentState::new(
+            DOC,
+            keys[2].clone(),
+            DocType::Prose,
+            crate::Existence::LocalOnly,
+        );
+        doc.chain = crate::chain::Chain::new(DOC, links.clone());
+        state.documents.insert(DOC, doc);
+        let walked = Footing::sealed_in_catalogue(DOC, anchor)
+            .walk(&texts, &LogRule::document())
+            .expect("the whole log walks")
+            .footing();
+        state.handle_sync_event(SyncEvent::FootingAdvanced {
+            document_id: DOC,
+            footing: walked,
+        });
+        let kept = rx
+            .try_iter()
+            .find_map(|event| match event {
+                LogicEvent::LogKept { kept, .. } => Some(kept),
+                _ => None,
+            })
+            .expect("the log is kept");
+        assert_eq!(kept.links.len(), 2, "the chain rides beside the head");
+
+        // The next session reads the row back and rebuilds the chain.
+        let row = ambre_bus::KeptLog::from_row(&kept.to_row().unwrap()).expect("a row");
+        let (mut next, _rx) = bare_state();
+        next.handle_command(SyncCommand::KeepLog {
+            document_id: DOC,
+            kept: row.clone(),
+        });
+        let rebuilt = next.kept_chains().get(&DOC).expect("the chain is rebuilt");
+        assert_eq!(
+            rebuilt.recover(&keys[2], keys[0].id()).map(|k| k.id()),
+            Some(keys[0].id()),
+            "two rotations back"
+        );
+
+        let refused = |kept: ambre_bus::KeptLog, walked_elsewhere: bool| {
+            let (mut next, _rx) = bare_state();
+            if walked_elsewhere {
+                next.log_walked_to(Footing::sealed_in_catalogue(
+                    DOC,
+                    ambre_core::FixedBytes::from_array([0xEE; 32]),
+                ));
+            }
+            next.handle_command(SyncCommand::KeepLog {
+                document_id: DOC,
+                kept,
+            });
+            assert_eq!(next.kept_keys().get(&DOC), Some(&keys[2].id()));
+            next.kept_chains().get(&DOC).is_none()
+        };
+        let mut past_head = row.clone();
+        if let Some(link) = past_head.links.last_mut() {
+            link.head.position = ambre_core::Seq::new(99);
+        }
+        assert!(refused(past_head, false), "a link past the kept head");
+        let mut left_over = row.clone();
+        left_over.links.push(
+            crate::pipeline::seal_link(
+                DOC,
+                &DocumentKey::generate(),
+                &DocumentKey::generate(),
+                ambre_protocol::LogHead::EMPTY,
+                &alice.key,
+            )
+            .unwrap(),
+        );
+        assert!(
+            refused(left_over, false),
+            "a link the kept key never reaches"
+        );
+        assert!(
+            refused(row.clone(), true),
+            "a log walked from another anchor"
+        );
+        assert!(!refused(row, false), "the honest chain holds");
     }
 
     /// `SYNC-292`: a user search with no relay logs that it ran, and never

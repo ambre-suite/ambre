@@ -1870,13 +1870,20 @@ mod tests {
                 previous: Some(ambre_core::FixedBytes::from_array([2; 32])),
             },
             key: ambre_core::FixedBytes::from_array([3; 16]),
+            links: Vec::new(),
         };
-        state.handle_logic_event(LogicEvent::LogKept { document_id, kept });
+        state.handle_logic_event(LogicEvent::LogKept {
+            document_id,
+            kept: kept.clone(),
+        });
         assert_eq!(
             persist_rx.try_iter().collect::<Vec<_>>(),
-            [(document_id, PersistWrite::KeepLog(kept))]
+            [(document_id, PersistWrite::KeepLog(kept.clone()))]
         );
-        state.handle_logic_command(LogicCommand::KeepLog { document_id, kept });
+        state.handle_logic_command(LogicCommand::KeepLog {
+            document_id,
+            kept: kept.clone(),
+        });
         let sent: Vec<SyncCommand> = std::iter::from_fn(|| sync_rx.try_recv().ok()).collect();
         assert!(
             sent.iter().any(|cmd| matches!(

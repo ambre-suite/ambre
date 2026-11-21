@@ -1521,6 +1521,7 @@ mod wasm_tests {
                 previous: Some(FixedBytes::from_array([0xA2; 32])),
             },
             key: FixedBytes::from_array([0xA3; 16]),
+            links: Vec::new(),
         };
         store.save_inviter(me, doc, &FixedBytes::from_array([0xB1; 32]));
         store.save_kept_log(me, doc, &kept(2));

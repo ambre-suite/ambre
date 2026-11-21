@@ -614,12 +614,18 @@ impl Footing {
     }
 
     /// What the local store keeps of this footing, beside `key`, the key the
-    /// checks accepted last (`SYNC-290`).
-    pub(crate) fn to_kept(self, key: FixedBytes<ambre_core::KeyId>) -> ambre_bus::KeptLog {
+    /// checks accepted last (`SYNC-290`), and `links`, the chain the log
+    /// held (`SYNC-308`).
+    pub(crate) fn to_kept(
+        self,
+        key: FixedBytes<ambre_core::KeyId>,
+        links: Vec<ambre_protocol::KeyLink>,
+    ) -> ambre_bus::KeptLog {
         ambre_bus::KeptLog {
             anchor: self.anchor,
             head: self.head,
             key,
+            links,
         }
     }
 

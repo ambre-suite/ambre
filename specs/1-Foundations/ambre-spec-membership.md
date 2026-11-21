@@ -67,6 +67,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-290` | `FAIL` | Given a log head this client walked or signed in an earlier session, a key a members answer hands MUST pass the checks of an open from that head, so a log the relay cut before an entry walked then installs no key. | this spec section 3; `SYNC-272` | `ambre_sync::members::tests::a_log_head_outlives_the_session_through_the_local_store` -- a walked footing goes to the store with its key once, and the kept log the next session holds refuses a log cut before its head; `ambre_logic::dispatch::tests::a_kept_log_goes_to_the_store_and_back_to_sync`; `ambre_app::kept::tests::the_kept_logs_of_a_user_go_ahead_of_its_opens_alone` -- held per user, a log moved on the page wins; `ambre_logic::persistence::wasm_tests::a_kept_log_reads_back_for_its_user_and_a_later_head_replaces_it` -- at rest, wasm tier; `ambre_bus::host::a_kept_log_reads_back_from_its_row` -- the row the bus host decodes | none | verified |
 | `SYNC-291` | `FAIL` | Given a listing of documents or of channels, a name MUST open only under the key the walked or kept log of its document accepted last, or a key the chain of `SYNC-302` reaches from it, with no request of its own; a document never walked MUST show no name. | this spec section 3; `SYNC-284`, `SYNC-290` | `ambre_sync::channels::tests::a_listed_name_opens_under_the_users_key_of_its_meta` -- a name opens under the kept key, and a meta never walked or whose log accepted another key shows none | none | verified |
 | `SYNC-302` | `FAIL` | Given a listed name sealed under a key older than the one the kept log of its document accepted last, the client MUST open it through the links the latest open or rotation of that log held in the session, with no request of its own. | this spec section 3; `SYNC-291`, `SYNC-119`, `SYNC-204` | `ambre_sync::documents::tests::a_listed_name_sealed_before_the_last_rotation_opens_through_the_kept_chain` -- a name sealed one rotation back opens through the kept chain, and shows none with no chain, under another kept key or with no kept log, and an open keeps the links it accepted; `ambre_sync::channels::tests::a_listed_name_opens_under_the_users_key_of_its_meta` -- a listing of channels takes the kept chains beside the kept keys | none | verified |
+| `SYNC-308` | `FAIL` | Given a kept log, the local store MUST keep the chain of links its latest open or rotation held beside it, under the same account, and a reload MUST rebuild that chain; a stored chain the kept log no longer extends MUST be refused whole. | this spec section 3; `SYNC-290`, `SYNC-302`, `SYNC-121` | `ambre_sync::members::tests::a_kept_chain_outlives_the_session_and_one_its_log_no_longer_extends_is_refused` -- the chain rides beside the kept log, the next session rebuilds it and opens a key two rotations back, and a link past the kept head, a link the kept key never reaches and a log walked from another anchor are refused; `ambre_bus::host::a_kept_chain_reads_back_and_an_older_row_reads_as_none` -- the row reads the chain back, and a row of the older form or with bytes past it reads as none | none | verified |
 | `SYNC-202` | `FAIL` | Given a key that a link a writer signed replaced, the client MUST refuse the key. | this spec section 3; `SYNC-116`; audit `N13` | `ambre_sync::key_vouch::tests::a_key_a_writer_replaced_is_refused` -- a copy the relay kept from before a rotation is refused once the link of that rotation is served | none | verified |
 | `SYNC-221` | `FAIL` | Given a key that only links vouch for, and a writer who named another key in an entry at or past the head of each such link, the client MUST refuse the key. | audit `N14`; this spec section 3; `ambre-spec-key-rotation.md`, `SYNC-204` | `ambre_sync::key_vouch::tests::a_key_a_revoked_writer_links_is_refused` -- a revoked editor's link at a head before its revoke is kept by the signer check, and refused as backdated since the revoke named another key, while the owner's own link at the head she read passes | none | verified |
 | `SYNC-222` | `FAIL` | Given a member who left on their own, a key a writer named before the departure or a link before it vouches for, and a members answer that owes no rotation, the client MUST refuse the key. A departure MUST name no key. | this spec section 3; `SYNC-221`; `ambre-spec-key-rotation.md`, `SYNC-127`, `SYNC-130` | `ambre_sync::key_vouch::tests::a_key_held_before_a_departure_is_refused_unless_the_debt_is_owed` -- a leaver's link at a head before its departure, the key before it and the creation's key are each refused under a settled answer and stand while the debt is owed, and the key that pays the debt stands; `ambre_sync::key_vouch::tests::a_departure_names_no_key` -- a departure that names a key of the leaver's leaves it unvouched | none | verified |
@@ -163,7 +164,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 104 `verified`. Every pure transform holds, out of the browser: the wrap, the
+* **Verification.** 105 `verified`. Every pure transform holds, out of the browser: the wrap, the
   weak key, the pin, the invitee, the role and the log walk. What is loose is the branches that only
   run against a live relay.
 ---
@@ -458,6 +459,19 @@ identity. The copy then lands under that identity and takes no rebuild (`AUTHOR-
 
 The row never leaves the device, and it names a document the relay already knows. A pin the
 relay could choose is worth nothing, so the store keeps only a pin the log proved.
+
+**The chain outlives the session.** The local store keeps the links the latest open or rotation
+held, in the row of the kept log, under the same account (`SYNC-308`). Each link was signed by a
+writer of the log when the open kept it (`SYNC-121`). A reload rebuilds the chain from the row, so a
+listed name sealed before the last rotation opens with no request. The worker refuses a stored
+chain the kept log no longer extends: a link of another document, a link signed at a head past the
+kept head, or a link the kept key does not walk back to. It refuses the chain of a log this session
+walked from another anchor too. A refused chain leaves the kept footing in force, and the next open
+fetches the links again.
+
+The row changed form when it took the chain. A row of the older form, or one with bytes past the
+kept log, reads as no row. Ambre is not released yet, so no migration reads it: the store drops it,
+and the next open walks and fetches again. Such a row is never trusted.
 
 **A link that names another inviter.** A kept pin is never replaced (`SYNC-239`). On a document
 that keeps a pin, the Main thread hands the kept pin to the open in place of the link's. The kept

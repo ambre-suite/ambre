@@ -49,6 +49,48 @@ impl Chain {
         }
     }
 
+    /// The links the chain holds, in the order of the key each starts from,
+    /// for the local store (`SYNC-308`). One chain always writes one list.
+    pub(crate) fn links(&self) -> Vec<KeyLink> {
+        let mut links: Vec<KeyLink> = self.links.values().cloned().collect();
+        links.sort_by(|a, b| a.key.as_slice().cmp(b.key.as_slice()));
+        links
+    }
+
+    /// The chain `kept` stored for the log of `scope`, when that log still
+    /// extends it (`SYNC-308`). Every link names `scope` and signs a head the
+    /// kept log reached. The links walk back from the kept key one by one,
+    /// with no link left over and no key twice. Any other chain is refused
+    /// whole: the relay serves the links again at the next open.
+    pub(crate) fn kept(scope: Id<Document>, kept: &ambre_bus::KeptLog) -> Option<Self> {
+        let reached = |head: ambre_protocol::LogHead| {
+            head.position < kept.head.position
+                || (head.position == kept.head.position && head.previous == kept.head.previous)
+        };
+        if kept
+            .links
+            .iter()
+            .any(|link| link.document_id != scope || !reached(link.head))
+        {
+            return None;
+        }
+        let chain = Self::new(scope, kept.links.iter().cloned());
+        if chain.links.len() != kept.links.len() {
+            return None;
+        }
+        // Each step consumes one link, so the walk ends within the chain.
+        let mut key = kept.key;
+        let mut walked = 0_usize;
+        while let Some(link) = chain.links.get(&key) {
+            walked = walked.saturating_add(1);
+            if walked > chain.links.len() {
+                return None;
+            }
+            key = link.previous;
+        }
+        (walked == chain.links.len()).then_some(chain)
+    }
+
     /// How many links the chain holds.
     #[cfg(test)]
     pub(crate) fn len(&self) -> usize {

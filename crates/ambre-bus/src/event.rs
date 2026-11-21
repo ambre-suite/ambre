@@ -887,9 +887,10 @@ pub enum Successor {
 /// Where the membership log of one document stood when this client last
 /// accepted it (`SYNC-290`, `SYNC-291`). The anchor and the head are the
 /// footing of the checks of an open. The key is the document key that open
-/// or the rotation after it accepted. The Sync worker builds it, the local
-/// store keeps it, and nothing else reads it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// or the rotation after it accepted, and the links are the chain it held
+/// (`SYNC-308`). The Sync worker builds it, the local store keeps it, and
+/// nothing else reads it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct KeptLog {
     /// The digest of the first entry the walk started from.
     pub anchor: ambre_core::FixedBytes<ambre_core::EntryDigest>,
@@ -897,6 +898,10 @@ pub struct KeptLog {
     pub head: ambre_protocol::LogHead,
     /// The id of the document key the checks accepted last.
     pub key: ambre_core::FixedBytes<ambre_core::KeyId>,
+    /// The links the open or the rotation held, each signed by a writer of
+    /// the log. A reload rebuilds the chain from them, and refuses a chain
+    /// the log no longer extends (`SYNC-308`).
+    pub links: Vec<ambre_protocol::KeyLink>,
 }
 
 /// The role of a [`KeptLog`] as the local store holds it: its postcard
@@ -918,12 +923,17 @@ impl KeptLog {
         postcard::to_allocvec(self).map(ambre_core::Payload::new)
     }
 
-    /// The kept log a row holds, `None` for bytes that are not one: a row a
-    /// later build wrote, or a damaged one. The store then holds no head for
-    /// that log, and the next open walks from its served anchor.
+    /// The kept log a row holds, `None` for bytes that are not one: a row
+    /// an older or a later build wrote, or a damaged one. A row with bytes
+    /// past the kept log is no row either. The store then holds no head and
+    /// no chain for that log, and the next open walks from its served anchor
+    /// and fetches the links again (`SYNC-308`).
     #[must_use]
     pub fn from_row(row: &ambre_core::Payload<KeptLogRow>) -> Option<Self> {
-        postcard::from_bytes(row.as_bytes()).ok()
+        match postcard::take_from_bytes(row.as_bytes()) {
+            Ok((kept, [])) => Some(kept),
+            _ => None,
+        }
     }
 }
 

@@ -1009,7 +1009,26 @@ fn kept_log() -> ambre_bus::KeptLog {
             previous: Some(ambre_core::FixedBytes::from_array([10; 32])),
         },
         key: ambre_core::FixedBytes::from_array([11; 16]),
+        links: vec![ambre_protocol::KeyLink {
+            document_id: Id::<Document>::from_bytes([12; 16]),
+            key: ambre_core::FixedBytes::from_array([11; 16]),
+            previous: ambre_core::FixedBytes::from_array([13; 16]),
+            head: ambre_bus::LogHead {
+                position: ambre_core::Seq::new(2),
+                previous: Some(ambre_core::FixedBytes::from_array([14; 32])),
+            },
+            sealed: ambre_core::Payload::new(vec![15; 40]),
+        }],
     }
+}
+
+/// The fields of a kept log as the store wrote them before it kept the
+/// chain.
+#[derive(serde::Serialize)]
+struct KeptLogBeforeTheChain {
+    anchor: ambre_core::FixedBytes<ambre_core::EntryDigest>,
+    head: ambre_bus::LogHead,
+    key: ambre_core::FixedBytes<ambre_core::KeyId>,
 }
 
 /// `SYNC-290`: a kept log reads back from the row the local store keeps,
@@ -1021,4 +1040,28 @@ fn a_kept_log_reads_back_from_its_row() {
     assert_eq!(ambre_bus::KeptLog::from_row(&row), Some(kept));
     let damaged = ambre_core::Payload::<ambre_bus::KeptLogRow>::new(vec![1]);
     assert_eq!(ambre_bus::KeptLog::from_row(&damaged), None);
+}
+
+/// `SYNC-308`: the row keeps the chain beside the head, so a reload reads
+/// both back. A row of the form before the chain reads as none, and so does
+/// a row with bytes past the kept log: the store drops it, and the next open
+/// fetches the links again.
+#[test]
+fn a_kept_chain_reads_back_and_an_older_row_reads_as_none() {
+    let kept = kept_log();
+    let row = kept.to_row().unwrap();
+    let read = ambre_bus::KeptLog::from_row(&row).unwrap();
+    assert_eq!(read.links, kept.links);
+    let older = KeptLogBeforeTheChain {
+        anchor: kept.anchor,
+        head: kept.head,
+        key: kept.key,
+    };
+    let older =
+        ambre_core::Payload::<ambre_bus::KeptLogRow>::new(postcard::to_allocvec(&older).unwrap());
+    assert_eq!(ambre_bus::KeptLog::from_row(&older), None);
+    let mut longer = row.as_bytes().to_vec();
+    longer.push(0);
+    let longer = ambre_core::Payload::<ambre_bus::KeptLogRow>::new(longer);
+    assert_eq!(ambre_bus::KeptLog::from_row(&longer), None);
 }
