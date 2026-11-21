@@ -119,10 +119,10 @@ table; the launcher calls both and names no command itself. Two applications dec
 between them -- 26 and 42.
 
 **Both applications describe their commands, and every view derives.** A table holds a `Command`
-per affordance -- label, icon, default chord, category, home region. Trame's context menu, its format toolbar and
-its chord defaults read it. Toile's context menu, menu bar, tool palette and floating selection bar
-read the same table. Nine of Toile's labels had been written twice, once for the menu
-bar and once for the right-click menu. Trame's toolbar repeated eleven more.
+per affordance -- label, icon, default chord, category, home region. Trame's context menu, its
+format toolbar and its chord defaults read it. Toile's context menu, menu bar, tool palette and
+floating selection bar read the same table. Nine of Toile's labels had been written twice, once for
+the menu bar and once for the right-click menu. Trame's toolbar repeated eleven more.
 
 **A control that backs no command keeps its own words**, having no description to read. Underline,
 strikethrough, wrap and the decimal steppers emit a `StylePatch` and name no identity.

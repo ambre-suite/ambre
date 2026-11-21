@@ -31,9 +31,9 @@ use crate::ui::menu;
 use crate::ui::menu_bar;
 use crate::ui::palette;
 
-/// Describe one command per line: the name of its title function, the identity
-/// it describes, its label, its icon, the chord it announces, its category and
-/// its home region (`CHROME-148`).
+/// Describe one command per line. A line names its title function, the
+/// identity it describes, its label, its icon, the chord it announces, its
+/// category and its home region (`CHROME-148`).
 ///
 /// A macro because `Command::title` is a plain `fn` pointer: it captures
 /// nothing, so every command needs a function item of its own. Generating them

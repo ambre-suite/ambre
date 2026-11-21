@@ -2296,8 +2296,9 @@ struct Wired {
 impl Wired {
     /// A sheet whose block A1:C3 holds values, with B2:C3 selected, settled.
     /// A value at J20 grows the sheet first. The lines a write forces into
-    /// being stay out of the undo history by design (`CommitOrigin::Materialize`),
-    /// so a command run inside the grown sheet forces none.
+    /// being stay out of the undo history by design. That is
+    /// `CommitOrigin::Materialize`. A command run inside the grown sheet
+    /// forces none.
     fn filled() -> Self {
         let mut state = crate::TrameState::new();
         let mut cells: Vec<_> = (0..3u32)
@@ -2519,9 +2520,9 @@ fn a_paste_keeps_the_zoom_and_is_one_undo_item() {
 }
 
 /// `CHROME-173`, `CHROME-174`: the entries that wait on a dialog or a file
-/// write once it resolves, through the command the dialog sends. Each leaves
-/// the zoom where it was and goes back whole on one undo: the multi-key sort,
-/// the column filter and a replace of every match. An import is one undo item
+/// write once it resolves, through the command the dialog sends. These are
+/// the multi-key sort, the column filter and a replace of every match. Each
+/// leaves the zoom where it was, and one undo takes it back whole. An import is one undo item
 /// too (`logic::tests::group12::an_import_is_one_undo_item`). Its lines stay out
 /// of the history by design, so it is not compared value for value here.
 #[test]

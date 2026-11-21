@@ -3240,3 +3240,137 @@ fn a_zoom_key_steps_the_zoom_and_moves_nothing_else() {
     assert_eq!(rig.sent.len(), sent, "a zoom sent {:?}", &rig.sent[sent..]);
     assert!(rig.outbox.is_empty());
 }
+
+// -- The rules of a command's home --------------------------------------------
+
+/// The document with each empty map and empty list left out. A command may
+/// leave behind an empty container it touched, and its undo cannot remove the
+/// container. An empty container reads as an absent one.
+fn settled(value: loro::LoroValue) -> loro::LoroValue {
+    use loro::LoroValue;
+    match value {
+        LoroValue::Map(map) => LoroValue::Map(
+            map.iter()
+                .map(|(k, v)| (k.clone(), settled(v.clone())))
+                .filter(|(_, v)| !matches!(v, LoroValue::Map(m) if m.is_empty()))
+                .filter(|(_, v)| !matches!(v, LoroValue::List(l) if l.is_empty()))
+                .collect::<loro::LoroMapValue>(),
+        ),
+        LoroValue::List(list) => {
+            LoroValue::List(list.iter().cloned().map(settled).collect::<Vec<_>>().into())
+        }
+        other => other,
+    }
+}
+
+/// The document, and the marks of each block, which the deep value leaves
+/// out.
+fn snapshot(rig: &Rig) -> (loro::LoroValue, Vec<Option<loro::LoroValue>>) {
+    let marks = rig
+        .logic
+        .root_blocks()
+        .iter()
+        .map(|block| rig.logic.marks_of(block))
+        .collect();
+    (settled(rig.logic.document().get_deep_value()), marks)
+}
+
+/// `CHROME-173`, `CHROME-174`: each command of the Prose table that the view
+/// runs writes, keeps the zoom, and one undo takes it back whole. These are
+/// the format marks, the cut and the two pastes at a caret. The format bar, a chord and
+/// the palette hand the same id to the same path, so the region never
+/// changes the result. The imports and the picture insert run on the Logic
+/// thread from a file the host reads. Their tests are
+/// `logic::interop::tests::one_undo_takes_the_import_back` and
+/// `logic::pictures::tests::a_picture_from_a_file_is_one_undo_item`.
+#[test]
+fn each_command_the_view_runs_keeps_the_zoom_and_is_one_undo_item() {
+    use crate::commands::{CUT, PASTE, PASTE_PLAIN, mark_key};
+    let zoom = ambre_core::Scale::<Doc, View>::positive(1.5);
+    let mut ran = Vec::new();
+    for command in crate::commands::COMMANDS {
+        let id = command.id;
+        let mut rig = Rig::new(&["hello world", "second"]);
+        let block = rig.blocks()[0];
+        rig.ui.viewport.zoom = zoom;
+        rig.select(block, 0, 5);
+        let before = snapshot(&rig);
+        if mark_key(id).is_some() {
+            rig.read_marks();
+            let _ = rig.format(id);
+        } else if id == CUT {
+            rig.input(ProseInput::Copy(ClipboardWrite::Cut));
+            rig.deliver();
+        } else if id == PASTE || id == PASTE_PLAIN {
+            // At a caret: a paste over a selection takes the selection out
+            // first, as a step of its own.
+            rig.ui.cursor = Some(CursorPosition {
+                block_id: block,
+                offset: Pos::<DocChar>::new(5),
+                anchor: None,
+            });
+            let (html, form) = if id == PASTE {
+                (
+                    Some("<b>pasted</b>".to_owned()),
+                    ambre_core::PasteForm::Rich,
+                )
+            } else {
+                (None, ambre_core::PasteForm::Plain)
+            };
+            let blob = ambre_bus::ClipboardBlob {
+                text: "pasted".to_owned(),
+                html,
+                ambre: None,
+                form,
+            };
+            let input = rig.ui.paste_input(blob, PasteSource::Foreign);
+            rig.input(input);
+            rig.deliver();
+        } else {
+            continue;
+        }
+        rig.lay();
+        ran.push(id);
+        assert_ne!(snapshot(&rig), before, "{id:?} writes");
+        assert_eq!(rig.ui.viewport.zoom, zoom, "{id:?} keeps the zoom");
+        rig.logic.handle_command(ProseCommand::Undo);
+        assert_eq!(snapshot(&rig), before, "one undo takes {id:?} back");
+    }
+    // Five marks, the cut and the two pastes.
+    assert_eq!(ran.len(), 8, "{ran:?}");
+    // `CHROME-149`: Prose homes no command in the status bar. A new one
+    // fails here until it runs above and shows that it writes nothing.
+    assert!(
+        crate::commands::COMMANDS
+            .iter()
+            .all(|command| command.home != ambre_commands::Home::StatusBar)
+    );
+}
+
+/// `CHROME-174`: an import writes once its file is read, on the Logic
+/// thread. The view takes every event of the import and keeps its zoom.
+#[test]
+fn an_import_keeps_the_zoom() {
+    use crate::message::{ImportFormat, ProseImport};
+    use ambre_bus::interop::InteropRequest;
+    let mut rig = Rig::new(&["kept"]);
+    let zoom = ambre_core::Scale::<Doc, View>::positive(1.5);
+    rig.ui.viewport.zoom = zoom;
+    let before = snapshot(&rig);
+    let outcome = rig
+        .logic
+        .handle_converted(ProseCommand::Interop(InteropRequest::Import(ProseImport {
+            format: ImportFormat::Markdown,
+            data: ambre_core::Payload::<ambre_client_core::FileBytes>::new(
+                b"# Title\n\nA paragraph.\n".to_vec(),
+            ),
+            now: Instant::<ambre_core::Authored>::new(0),
+            zone: crate::message::TimeZone::UTC,
+        })));
+    for event in &outcome.display {
+        rig.ui.apply_event(event);
+    }
+    rig.lay();
+    assert_ne!(snapshot(&rig), before, "the import wrote nothing");
+    assert_eq!(rig.ui.viewport.zoom, zoom, "the import moved the zoom");
+}

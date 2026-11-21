@@ -3437,6 +3437,20 @@ fn each_command_keeps_the_rules_of_its_home() {
             );
         }
     }
+    // The handler routes these through a dialog, a file or the palette, so
+    // the view runs none of them above. None is homed in the status bar.
+    for id in [
+        crate::ui::commands::PALETTE,
+        crate::ui::find::FIND,
+        crate::ui::menu_bar::IMPORT_FILE,
+        crate::ui::menu_bar::EMBED_WEB,
+        crate::ui::menu_bar::EMBED_DOC,
+        crate::ui::menu_bar::LINK_SET,
+        crate::ui::menu_bar::SAVE_SEALED_FILE,
+    ] {
+        let command = COMMANDS.iter().find(|c| c.id == id).expect("a declared id");
+        assert_ne!(command.home, Home::StatusBar, "{id:?}");
+    }
     // The loop is not vacuous: the writers of the selection ran and wrote.
     for id in [
         crate::ui::menu::DELETE,
@@ -3485,4 +3499,57 @@ fn a_placed_embed_keeps_the_zoom_and_is_one_undo_item() {
         wired.pump();
         assert_eq!(settled(wired.state.deep_value()), before);
     }
+}
+
+/// `CHROME-174`: an import writes once its file is read, through a path of
+/// its own. The view takes every event of the import and keeps its zoom.
+/// One undo takes an import back whole: that is
+/// `logic::state::import::tests::import_is_one_undo_group`.
+#[test]
+fn an_import_keeps_the_zoom() {
+    use crate::logic::command::{InitContent, ToileCommand};
+    use crate::logic::interop::ImportBatch;
+    use crate::logic::model::{ElementKind, ShapeKind};
+    let mut wired = Wired::selecting(1);
+    let zoom = wired.rig.view.cam.zoom;
+    let rect = |x: f64| ToileCommand::CreateElement {
+        kind: ElementKind::Shape(ShapeKind::Rect),
+        at: kurbo::Point::new(x, 900.0),
+        size: kurbo::Size::new(10.0, 10.0),
+        content: InitContent::None,
+        fill: None,
+        correlate: None,
+    };
+    let batch = ImportBatch {
+        commands: (0..4).map(|i| rect(f64::from(i) * 20.0)).collect(),
+        styles: vec![None; 4],
+        ..ImportBatch::new(ambre_bus::interop::FileFormat::Svg)
+    };
+    let (_, outcome) = wired.state.apply_import(batch);
+    assert!(outcome.update.is_some(), "the import wrote nothing");
+    for event in outcome.display {
+        wired.rig.answer(event);
+    }
+    wired.pump();
+    assert_eq!(wired.rig.view.cam.zoom, zoom, "the import moved the zoom");
+}
+
+/// `CHROME-173`, `CHROME-174`: the link entry writes once its dialog
+/// resolves. The write leaves the zoom where it was, and one undo takes it
+/// back whole.
+#[test]
+fn a_set_link_keeps_the_zoom_and_is_one_undo_item() {
+    use crate::logic::command::ToileCommand;
+    use crate::logic::model::LinkTarget;
+    let mut wired = Wired::selecting(1);
+    let before = settled(wired.state.deep_value());
+    let zoom = wired.rig.view.cam.zoom;
+    let id = wired.rig.view.selection[0].clone();
+    let link = Some(LinkTarget::Url("https://example.org/".into()));
+    assert!(wired.rig.view.send_edit(ToileCommand::SetLink { id, link }));
+    assert!(wired.pump(), "the link wrote nothing");
+    assert_eq!(wired.rig.view.cam.zoom, zoom, "the link moved the zoom");
+    wired.rig.view.apply_menu_command(crate::ui::menu_bar::UNDO);
+    wired.pump();
+    assert_eq!(settled(wired.state.deep_value()), before);
 }

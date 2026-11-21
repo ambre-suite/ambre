@@ -61,7 +61,7 @@ is `features/ambre-spec-toile-menus.md` and is not restated here.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-UI-081` | `POST` | One reaction gesture MUST apply to every element of the selection. | this spec section 4 | `ambre_toile::ui::menu::tests::react_emoji_resolves_to_one_react_per_target` -- it resolves one entry against two selected elements and reads one command per element, each carrying the picker's glyph | none | verified |
+| `TOILE-UI-081` | `POST` | One reaction gesture MUST apply to every element of the selection. | this spec section 4 | `ambre_toile::ui::menu::tests::react_emoji_resolves_to_one_command_for_the_selection` -- it resolves one entry against two selected elements and reads one command for both, carrying the picker's glyph | none | verified |
 | `TOILE-UI-300` | `POST` | The clear entry MUST remove this user's own reaction from every selected element, and only their own. | this spec section 4 | `ambre_toile::ui::menu::tests::react_clear_resolves_to_none_reaction` -- it holds the resolution, over one element only, and the per-user half is held by `TOILE-FEAT-065` | none | verified |
 | `TOILE-UI-301` | `FRAME` | The picker MUST NOT place an emoji it does not show: four entries, and a clear. | this spec section 4; section 5 | structural -- the arm matches the four fixed command ids and looks their glyph up in the same table the menu renders from | none | verified |
 
