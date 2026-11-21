@@ -24,8 +24,8 @@ other six documents of the DOM side.
 |---|---|---|---|---|---|---|
 | `CHROME-148` | `INV` | Each command an application declares MUST name exactly one home region. | this spec section 2; `ambre-spec-commands.md section 2` (`UI-THREAD-019`) | not built | unbuilt -- lands with the `Command home regions` Story (`ambre-roadmap.md` MVP). The description of a command carries a category, and no region | unimplemented |
 | `CHROME-149` | `INV` | A command that writes to the document MUST NOT have the status bar as its home region. | this spec section 2 | not built | unbuilt -- lands with the `Command home regions` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `CHROME-150` | `INV` | The near-selection bar MUST hold only commands whose home region is the context panel. | this spec section 2 | not built | unbuilt -- lands with the `The context panel and the near-selection bar` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `CHROME-151` | `INV` | The near-selection bar MUST NOT hold a clipboard command. | this spec section 2; `ambre-spec-clipboard.md` | not built | unbuilt -- lands with the `The context panel and the near-selection bar` Story (`ambre-roadmap.md` MVP) | unimplemented |
+| `CHROME-150` | `INV` | The context bar MUST hold only commands whose home region is the context panel. | this spec section 2 | not built | unbuilt -- lands with the `The context panel and the context bar` Story (`ambre-roadmap.md` MVP) | unimplemented |
+| `CHROME-151` | `INV` | The context bar MUST NOT hold a clipboard command. | this spec section 2; `ambre-spec-clipboard.md` | not built | unbuilt -- lands with the `The context panel and the context bar` Story (`ambre-roadmap.md` MVP) | unimplemented |
 | `CHROME-152` | `INV` | The creation bar MUST hold every command that inserts a new object, and no other command. | this spec section 2 | not built | unbuilt -- lands with the `The creation bar` Story (`ambre-roadmap.md` MVP). The board's tool palette is the one creation bar, and it docks to the left | unimplemented |
 | `CHROME-153` | `OBS` | In Prose, Trame and Toile, the creation bar MUST take the same place and the same shape. | this spec section 2, the placement table | not built | unbuilt -- lands with the `The creation bar` Story (`ambre-roadmap.md` MVP) | unimplemented |
 | `CHROME-154` | `INV` | A command that acts on the document as a file MUST have the Ambre menu as its home region. | this spec section 2 | not built | unbuilt -- lands with the `The Ambre and avatar menus` Story (`ambre-roadmap.md` MVP). The board's File menu holds the save to a file, and no other application has a file menu | unimplemented |
@@ -37,15 +37,16 @@ other six documents of the DOM side.
 | `CHROME-160` | `INV` | In Prose, Trame and Toile, the shell MUST NOT lay out a bar of drop-down menus. | this spec section 2; this spec section 4 | not built | unbuilt -- lands with the `The Ambre and avatar menus` Story (`ambre-roadmap.md` MVP). Toile docks a bar of five menus in the command bar | unimplemented |
 | `CHROME-161` | `INV` | In Prose, Trame and Toile, the shell MUST NOT lay out a button whose only role is to open a list of commands. | this spec section 2; this spec section 4 | not built | unbuilt -- lands with the `The Ambre and avatar menus` Story (`ambre-roadmap.md` MVP) | unimplemented |
 | `CHROME-162` | `OBS` | In Trame, the sheet tabs MUST sit in the status bar, before the zoom. | this spec section 2; `CHROME-147` | not built | unbuilt -- lands with the `Command home regions` Story (`ambre-roadmap.md` MVP). The tabs fill a row of their own, and section 5 holds the trial | unimplemented |
-| `CHROME-163` | `OBS` | With nothing selected, the context panel MUST show the properties of the document: the page in Prose, the sheet in Trame, the board in Toile. | this spec section 2 | not built | unbuilt -- lands with the `The context panel and the near-selection bar` Story (`ambre-roadmap.md` MVP). No application lays out a context panel | unimplemented |
-| `CHROME-164` | `OBS` | With a selection, the context panel MUST show the commands that apply to it. | this spec section 2 | not built | unbuilt -- lands with the `The context panel and the near-selection bar` Story (`ambre-roadmap.md` MVP) | unimplemented |
+| `CHROME-163` | `OBS` | With nothing selected, the context panel MUST show the properties of the document: the page in Prose, the sheet in Trame, the board in Toile. | this spec section 2 | not built | unbuilt -- lands with the `The context panel and the context bar` Story (`ambre-roadmap.md` MVP). No application lays out a context panel | unimplemented |
+| `CHROME-164` | `OBS` | With a selection, the context panel MUST show the commands that apply to it. | this spec section 2 | not built | unbuilt -- lands with the `The context panel and the context bar` Story (`ambre-roadmap.md` MVP) | unimplemented |
 | `CHROME-165` | `INV` | A command MUST NOT be reachable by hover alone. | this spec section 2; `ambre-spec-accessibility.md` | not built | unbuilt -- lands with the `Command home regions` Story (`ambre-roadmap.md` MVP). No scan reads the controls a hover reveals | unimplemented |
-| `CHROME-166` | `OBS` | On a phone, one context panel MUST carry every formatting command. | this spec section 2, the placement table; `ambre-spec-adaptive-layout.md` | not built | unbuilt -- lands with the `The context panel and the near-selection bar` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `CHROME-167` | `OBS` | On a phone, the context panel MUST open from the bottom edge, in place of the keyboard. | this spec section 2, the placement table; `CHROME-032` | not built | unbuilt -- lands with the `The context panel and the near-selection bar` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `CHROME-168` | `OBS` | On a phone, the near-selection bar MUST NOT cover the menu the system raises over a selection. | this spec section 2, the placement table | not built | unbuilt -- lands with the `The context panel and the near-selection bar` Story (`ambre-roadmap.md` MVP) | unimplemented |
+| `CHROME-166` | `OBS` | On a phone, one context panel MUST carry every formatting command. | this spec section 2, the placement table; `ambre-spec-adaptive-layout.md` | not built | unbuilt -- lands with the `The context panel and the context bar` Story (`ambre-roadmap.md` MVP) | unimplemented |
+| `CHROME-167` | `OBS` | On a phone, the context panel MUST open from the bottom edge, in place of the keyboard. | this spec section 2, the placement table; `CHROME-032` | not built | unbuilt -- lands with the `The context panel and the context bar` Story (`ambre-roadmap.md` MVP) | unimplemented |
+| `CHROME-168` | `OBS` | On a phone, the context bar MUST NOT cover the menu the system raises over a selection. | this spec section 2, the placement table | not built | unbuilt -- lands with the `The context panel and the context bar` Story (`ambre-roadmap.md` MVP) | unimplemented |
 | `CHROME-169` | `OBS` | On a phone, the Ambre menu MUST offer the command palette. | this spec section 2, the placement table; `CHROME-008` | not built | unbuilt -- lands with the `The Ambre and avatar menus` Story (`ambre-roadmap.md` MVP) | unimplemented |
 | `CHROME-170` | `INV` | In Toile, the tool palette and the selection bar MUST each publish the part of the board they cover. | this spec section 2; `ambre-spec-zoom.md section 3` (`ZOOM-011`) | `ambre_toile::tests::chrome_ui::the_palette_publishes_the_edge_it_covers_and_clears_it_when_it_hides` -- wasm tier, the palette measures itself under the shell stylesheet and clears when it hides; `ambre_toile::tests::chrome_ui::the_selection_bar_publishes_its_reach_and_clears_it_when_it_leaves` -- the bar publishes its height and its lift, and clears when it leaves | none | verified |
 | `CHROME-178` | `INV` | Cut, copy and paste MUST have the context menu as their home region. | this spec section 2; `ambre-spec-clipboard.md` | not built | unbuilt -- lands with the `One context menu` Story (`ambre-roadmap.md` MVP). Each application lays out a context menu of its own | unimplemented |
+| `CHROME-182` | `INV` | Besides cut, copy and paste, the context menu MUST hold only commands whose home region is the context panel. | this spec section 2 | not built | unbuilt -- lands with the `One context menu` Story (`ambre-roadmap.md` MVP). Each menu holds commands of its own, such as the sort and the merge of Trame | unimplemented |
 | `CHROME-179` | `OBS` | In Prose, Trame and Toile, the context menu MUST list cut, copy and paste first, in that order. | this spec section 2 | not built | unbuilt -- lands with the `One context menu` Story (`ambre-roadmap.md` MVP) | unimplemented |
 | `CHROME-180` | `OBS` | In Prose, the creation bar MUST offer text, a picture, a table, a separator and a comment. | this spec section 2 | not built | unbuilt -- lands with the `The creation bar` Story (`ambre-roadmap.md` MVP). Prose inserts each from a chord or the format bar | unimplemented |
 | `CHROME-181` | `OBS` | In Trame, the creation bar MUST offer a function, a chart, a picture and a comment. | this spec section 2 | not built | unbuilt -- lands with the `The creation bar` Story (`ambre-roadmap.md` MVP). A filter acts on a range and creates nothing, so its home is the context panel | unimplemented |
@@ -68,15 +69,15 @@ other six documents of the DOM side.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CHROME-175` | `POST` | `Ctrl+.` MUST collapse an open context panel to a rail. | this spec section 3 | not built | unbuilt -- lands with the `The context panel and the near-selection bar` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `CHROME-176` | `POST` | `Ctrl+.` or a click on the rail MUST open a collapsed context panel. | this spec section 3 | not built | unbuilt -- lands with the `The context panel and the near-selection bar` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `CHROME-177` | `FRAME` | Collapsing or opening the context panel MUST NOT write to the document, nor drop the open section, the scroll or the edit in progress of the panel. | this spec section 3 | not built | unbuilt -- lands with the `The context panel and the near-selection bar` Story (`ambre-roadmap.md` MVP) | unimplemented |
+| `CHROME-175` | `POST` | `Ctrl+.` MUST collapse an open context panel to a rail. | this spec section 3 | not built | unbuilt -- lands with the `The context panel and the context bar` Story (`ambre-roadmap.md` MVP) | unimplemented |
+| `CHROME-176` | `POST` | `Ctrl+.` or a click on the rail MUST open a collapsed context panel. | this spec section 3 | not built | unbuilt -- lands with the `The context panel and the context bar` Story (`ambre-roadmap.md` MVP) | unimplemented |
+| `CHROME-177` | `FRAME` | Collapsing or opening the context panel MUST NOT write to the document, nor drop the open section, the scroll or the edit in progress of the panel. | this spec section 3 | not built | unbuilt -- lands with the `The context panel and the context bar` Story (`ambre-roadmap.md` MVP) | unimplemented |
 
 * **Budget.** none: the regions are DOM, off the frame loop, and `ambre-spec-budgets.md` budgets no
   chrome operation. A cover a surface publishes is read by a fit, which is a zoom cost.
 * **Boundary.** none: a region holds commands, and a command reaches the Logic thread as every
   command does. Nothing here opens a socket or holds a key.
-* **Verification.** 1 `verified`, 33 `unimplemented`. The board's cover is held by a wasm test of
+* **Verification.** 1 `verified`, 34 `unimplemented`. The board's cover is held by a wasm test of
   each surface; the rest waits on the regions, which no application lays out.
 
 ---
@@ -88,31 +89,34 @@ owned by the feature that declares the command.
 
 **The eight regions, and the question each one answers.** A command goes where its subject is. A
 command has one home, so a user who looks for it looks in one place. Six regions are homes; the
-near-selection bar and the command palette only reach commands whose home is elsewhere.
+context bar and the command palette reach commands whose home is elsewhere.
 
 | Region | Answers | Home of commands | Writes to the document | Examples |
 |---|---|---|---|---|
 | status bar | how I see the document | yes | never (`CHROME-149`) | the zoom, the counters, the sheet tabs of Trame |
 | context panel | what the document or the selection is | yes | yes | the page format and the margins of Prose, the sheet and the filter of Trame, the board of Toile; the style of a selection |
 | creation bar | what I can add | yes | yes | the tools of the board; text, a picture, a table, a chart, a comment (`CHROME-180`, `CHROME-181`) |
-| context menu | what I do with the selection under the pointer | yes, of the clipboard (`CHROME-178`) | cut and paste | cut, copy and paste first (`CHROME-179`), then commands of the selection |
+| context menu | what I do with the selection under the pointer | the clipboard alone (`CHROME-178`) | yes | cut, copy and paste first (`CHROME-179`), then commands of the panel (`CHROME-182`) |
 | Ambre menu | what I do with the file | yes | through the file | the way home first, then new, open, rename, export, print, the history |
 | avatar menu | who I am | yes | never | the account, the theme, the interface language, sign out |
-| near-selection bar | the most frequent actions of the panel, at the pointer | no (`CHROME-150`) | yes | bold, italic, colour, a link |
+| context bar | the most frequent actions of the panel, at the pointer | no (`CHROME-150`) | yes | bold, italic, colour, a link |
 | command palette | every command, by name | no | as the command does | each command with its chord and its home region (`CHROME-008`) |
 
-**A home is not the only way in.** A chord, the context menu and the command palette reach a command
-in any region. The share button of the header reaches a command whose home is the Ambre menu. A
-reach never makes a second home, so a command keeps one entry in the region map.
+**A home is not the only way in.** A chord and the command palette reach a command in any
+region. The share button of the header reaches a command whose home is the Ambre menu. A reach
+never makes a second home, so a command keeps one entry in the region map.
 
-**The near-selection bar is the one exception to one place.** It gathers the actions a user repeats
-most over a selection, taken from the panel, so bold costs no pointer travel. Every command it holds
-keeps the panel as its home (`CHROME-150`), so the bar shows a command twice and files it once. It
-holds no clipboard command (`CHROME-151`): a chord and the context menu carry those.
+**What is contextual repeats the panel.** The context panel is the home of every command of the
+selection. Two surfaces show part of it again, at the pointer, and are the exceptions to one place.
+The context bar gathers the actions a user repeats most, so bold costs no pointer travel
+(`CHROME-150`). After the clipboard, the context menu lists the panel actions that apply under
+the pointer (`CHROME-182`). Each surface shows a command twice, yet files it once. The shared
+word is the rule: a surface named contextual holds nothing the panel lacks, except the clipboard.
 
 **The clipboard lives in the context menu.** Copy writes nothing, and cut and paste write, so the
-three fit neither the status bar nor the panel. The context menu opens on the selection, which is
-what the three act on, and lists them first in every application (`CHROME-179`).
+three fit neither the status bar nor the panel. The context bar holds none of them (`CHROME-151`).
+The context menu opens on the selection, which is what the three act on, and lists them first in
+every application (`CHROME-179`).
 
 **The panel shows the document when nothing is selected.** The page format and the margins of
 Prose, the sheet of Trame and the board of Toile are document state. They live in the panel, never
@@ -130,13 +134,13 @@ edits the content of the active cell, and holds no command.
 | status bar | a band under the content, the zoom at its end | a short band; a pinch zooms |
 | sheet tabs of Trame | in the status bar, before the zoom (`CHROME-162`) | a strip above the status bar |
 | context panel | a column on the right, collapsible to a rail | a sheet from the bottom edge, in place of the keyboard (`CHROME-167`) |
-| near-selection bar | floating over the selection | a bar above the keyboard, clear of the system menu (`CHROME-168`) |
+| context bar | floating over the selection | a bar above the keyboard, clear of the system menu (`CHROME-168`) |
 | creation bar | floating, centred at the bottom of the content | one add button that opens the modes |
 | Ambre menu | the logo, top left of the header | the logo, which also offers the command palette (`CHROME-169`) |
 | avatar menu | the avatar, top right of the header | the avatar |
 | command palette | `Ctrl+K` | an entry of the Ambre menu |
 
-**A floating surface publishes what it covers.** The near-selection bar, the creation bar and the
+**A floating surface publishes what it covers.** The context bar, the creation bar and the
 context panel float over the canvas, so a fit must frame the selection clear of them (`ZOOM-011`).
 Each surface measures the part of the canvas it covers, and a fit reads the latest measure
 (`CHROME-171`). The board's tool palette and selection bar do it today (`CHROME-170`). No size of
@@ -156,7 +160,7 @@ takes is `crates/ambre-toile/src/chrome/cover.rs`. No region has code beyond it.
 | `Ctrl+.`, or a click on the rail | the panel opens again as it was |
 | a click on the Ambre logo | the Ambre menu opens, the way home first |
 | a click on the avatar | the avatar menu opens |
-| a selection made | the near-selection bar floats over it, and the panel shows what applies to it |
+| a selection made | the context bar floats over it, and the panel shows what applies to it |
 | the selection cleared | the bar leaves, and the panel shows the document |
 | a mode of the creation bar | the next press on the content inserts that object |
 | a tap on a selection, on a phone | the system menu offers copy and paste, and the bar sits above the keyboard |
@@ -171,7 +175,7 @@ takes is `crates/ambre-toile/src/chrome/cover.rs`. No region has code beyond it.
 | One region per subject | a bar of drop-down menus | it files commands under words a user must guess, and hides each one behind two clicks. The command palette finds a command by name in one |
 | One region per subject | a hamburger button | it is a drawer of everything, so it answers no question. The Ambre menu holds the file and the avatar menu holds the account, each with a subject |
 | The margins live in the panel | the margins in the status bar | margins are document state and every peer sees them. The zoom is view state and only this user sees it. One band holding both mixes what writes the document with what does not |
-| A near-selection bar beside the panel | the formatting in the side panel alone | bold and italic are the actions a user repeats most. The pointer would cross the screen to the panel for each one |
+| A context bar beside the panel | the formatting in the side panel alone | bold and italic are the actions a user repeats most. The pointer would cross the screen to the panel for each one |
 | One map for three applications | one chrome per application | a user would learn three places for the same command. Each application keeps its commands, and the map of regions is shared |
 
 ---
@@ -189,7 +193,7 @@ takes is `crates/ambre-toile/src/chrome/cover.rs`. No region has code beyond it.
   rewrites them.
 * **Trame's toolbar holds verified rows.** `TRAME-097`, `TRAME-186` and `TRAME-188` name the
   toolbar as the control that reports a style. The
-  `The context panel and the near-selection bar` Story (`ambre-roadmap.md` MVP) rewrites them
+  `The context panel and the context bar` Story (`ambre-roadmap.md` MVP) rewrites them
   against the panel.
 * **The context menu has no shared design.** Each application lays out its own: Trame's in
   `ambre-spec-trame-context-menu.md`, the board's in `ambre-spec-toile-menus.md`, and a page menu in
