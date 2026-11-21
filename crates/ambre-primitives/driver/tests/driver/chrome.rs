@@ -46,6 +46,7 @@ const TACHYS: &str = "pub mod html {\n\
             pub fn r#type(self, _: &str) -> El { El }\n\
             pub fn sandbox(self, _: &str) -> El { El }\n\
             pub fn role(self, _: &str) -> El { El }\n\
+            pub fn on<F>(self, _: &str, _: F) -> El { El }\n\
             pub fn aria_pressed<V>(self, _: V) -> El { El }\n\
         }\n\
         pub fn dialog() -> El { El }\n\
@@ -235,10 +236,10 @@ fn a_modal_a_macro_writes_or_concat_spells_is_refused_outside_the_shared_dialog(
 }
 
 // A helper macro writes a range input whose type `concat!` builds, so no line
-// spells `type="range"`. A file that names the debouncer through a `use`
-// rename may hold one (`CHROME-015`).
+// spells `type="range"`. A control whose own handler calls the debouncer,
+// named through a `use` rename, is free (`CHROME-015`).
 #[test]
-fn a_drag_control_a_macro_writes_is_refused_in_a_file_with_no_debouncer() {
+fn a_drag_control_a_macro_writes_is_refused_unless_its_handler_debounces() {
     let ws = helpers("drag");
     ws.file("crates/ambre-toile/src/lib.rs", "pub mod chrome;\n");
     ws.file(
@@ -252,7 +253,7 @@ fn a_drag_control_a_macro_writes_is_refused_in_a_file_with_no_debouncer() {
     ws.file(
         "crates/ambre-toile/src/chrome/coalesced.rs",
         "use ambre_chrome::Debouncer as Burst;\n\
-         pub fn opacity(b: &Burst) { let _ = ambre_helpers::slider!(); b.call(); }\n",
+         pub fn opacity(b: &Burst) { let _ = ambre_helpers::slider!().on(\"input\", move || b.call()); }\n",
     );
     let toile = ws.compile("ambre_toile", "ambre-toile", HELPED, Build::Shipped);
     assert_refused(
@@ -262,10 +263,10 @@ fn a_drag_control_a_macro_writes_is_refused_in_a_file_with_no_debouncer() {
 }
 
 // The scan read `create_element("iframe")` on one line. A frame `view!`
-// writes, or one whose tag `concat!` builds, passed it. A file that sets the
-// sandbox may create one (`ARCH-001`).
+// writes, or one whose tag `concat!` builds, passed it. A frame whose own
+// call or binding sets the sandbox is free (`ARCH-001`).
 #[test]
-fn a_frame_the_toolkit_writes_or_concat_spells_is_refused_unless_its_file_sandboxes() {
+fn a_frame_the_toolkit_writes_or_concat_spells_is_refused_unless_it_is_sandboxed() {
     let ws = helpers("frame");
     ws.file(
         "crates/ambre-app/src/lib.rs",
@@ -361,10 +362,10 @@ fn a_two_state_attribute_whose_false_state_drops_it_is_refused() {
 }
 
 // A helper macro renders the menu with a role `concat!` builds, so no line
-// spells `role="menu"`. A file that names a key handler of the shared menu
-// through a `use` rename may render one (`CHROME-026`).
+// spells `role="menu"`. A menu whose own handler calls a key handler of the
+// shared menu, named through a `use` rename, is free (`CHROME-026`).
 #[test]
-fn a_menu_a_macro_renders_is_refused_in_a_file_with_no_key_handler() {
+fn a_menu_a_macro_renders_is_refused_unless_its_handler_reaches_a_menu_key() {
     let ws = helpers("menu");
     ws.file(
         "crates/ambre-app/src/lib.rs",
@@ -377,7 +378,7 @@ fn a_menu_a_macro_renders_is_refused_in_a_file_with_no_key_handler() {
     ws.file(
         "crates/ambre-app/src/keyed.rs",
         "use ambre_chrome::on_menu_keydown as keys;\n\
-         pub fn types() { let _ = ambre_helpers::menu!(); keys(); }\n",
+         pub fn types() { let _ = ambre_helpers::menu!().on(\"keydown\", move || keys()); }\n",
     );
     let app = ws.compile("ambre_app", "ambre-app", HELPED, Build::Shipped);
     assert_refused(
@@ -416,6 +417,44 @@ fn a_static_subtree_the_toolkit_writes_as_html_is_read_where_the_inert_element_t
             "crates/ambre-app/src/still.rs:1: a menu with no keyboard",
             "crates/ambre-app/src/still.rs:1: a modal outside the shared dialog",
             "crates/ambre-app/src/still.rs:1: creates a frame and never sandboxes it",
+        ],
+    );
+}
+
+// The script read each guard on the file: one debouncer, one key handler or
+// one sandbox anywhere freed every control of the file. Here each guarded
+// control sits beside a second one with no guard of its own, and the second
+// is refused. A static subtree that sandboxes one frame of two is refused too
+// (`CHROME-015`, `CHROME-026`, `ARCH-001`).
+#[test]
+fn a_second_control_in_a_file_rides_no_guard_of_the_first() {
+    let ws = helpers("two-controls");
+    ws.file("crates/ambre-app/src/lib.rs", "pub mod panel;\n");
+    ws.file(
+        "crates/ambre-app/src/panel.rs",
+        "use ambre_chrome::{Debouncer, on_menu_keydown};\n\
+         pub fn panel(b: &Debouncer, d: &web_sys::Document) {\n\
+             let _ = ambre_helpers::slider!().on(\"input\", move || b.call());\n\
+             let _ = ambre_helpers::slider!();\n\
+             let _ = ambre_helpers::menu!().on(\"keydown\", on_menu_keydown);\n\
+             let _ = ambre_helpers::menu!();\n\
+             let frame = d.create_element(\"iframe\");\n\
+             frame.set_attribute(\"sandbox\", \"\");\n\
+             let _ = tachys::html::element::iframe();\n\
+             let bare = d.create_element(\"iframe\");\n\
+             let _ = tachys::html::InertElement::new(\"<iframe sandbox=\\\"\\\"></iframe><iframe src=\\\"x\\\"></iframe>\");\n\
+             let _ = bare;\n\
+         }\n",
+    );
+    let app = ws.compile("ambre_app", "ambre-app", HELPED, Build::Shipped);
+    assert_refused(
+        &refused(&app),
+        &[
+            "crates/ambre-app/src/panel.rs:10: creates a frame and never sandboxes it",
+            "crates/ambre-app/src/panel.rs:11: creates a frame and never sandboxes it",
+            "crates/ambre-app/src/panel.rs:4: a drag control that is not debounced",
+            "crates/ambre-app/src/panel.rs:6: a menu with no keyboard",
+            "crates/ambre-app/src/panel.rs:9: creates a frame and never sandboxes it",
         ],
     );
 }

@@ -5,11 +5,21 @@
 //! is derived from it via HKDF-BLAKE2b, bound to both parties' public keys. The
 //! document key is then sealed under the KEK with XChaCha20-Poly1305. This module
 //! provides the primitive only; the share/rotation flow lives in the Sync thread.
+//!
+//! A wrap opens with the byte of its [`WrapVersion`]. Its additional data is
+//! the wrap domain, that byte and the document it is for (audit `P59`). So a
+//! genuine wrap of one document never opens as a wrap of another. A reader
+//! refuses bytes no version names before it derives anything. MVP has not
+//! shipped, so no reader accepts the unversioned layout before it.
 
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 
-use ambre_core::{Ciphertext, EntryDigest, ExchangePublicKey, FixedBytes, Nonce, Payload, Secret};
+use ambre_core::id::{Document, Id};
+use ambre_core::{
+    Ciphertext, Encoded, EntryDigest, ExchangePublicKey, FixedBytes, Nonce, Payload, Secret,
+    WrappedDocKey,
+};
 use blake2::Blake2b512;
 use hkdf::SimpleHkdf;
 use x25519_dalek::{PublicKey, StaticSecret};
@@ -23,13 +33,67 @@ use crate::keys::DocumentKey;
 /// wire-compatible with the `v1` bare-BLAKE2b derivation.
 const KEK_DOMAIN: &[u8] = b"ambre-kek-v2";
 
-/// A document key wrapped for a specific recipient.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WrappedKey {
-    /// AEAD nonce used to wrap the key.
-    pub nonce: FixedBytes<Nonce>,
-    /// Sealed document key (32 bytes + Poly1305 tag).
-    pub ciphertext: Payload<Ciphertext>,
+/// The domain the additional data of a wrap opens with. It is no other
+/// seal's, so the bytes of a wrap never open as an update, a snapshot or a
+/// sealed seed (audit `P59`).
+const WRAP_AAD_DOMAIN: &[u8] = b"ambre-wrap";
+
+/// The layout a wrap opens with, as its first byte (audit `P59`). A second
+/// derivation or a second plaintext layout takes a second variant, and the
+/// byte names it before any exchange runs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WrapVersion {
+    /// The KEK of [`KEK_DOMAIN`], and the additional data of [`wrap_aad`].
+    V1,
+}
+
+impl WrapVersion {
+    /// The byte the wrap spells the version with.
+    #[must_use]
+    pub const fn byte(self) -> u8 {
+        match self {
+            Self::V1 => 1,
+        }
+    }
+
+    /// The version `byte` spells, or `None` for a byte no wrap writes.
+    #[must_use]
+    pub const fn from_byte(byte: u8) -> Option<Self> {
+        match byte {
+            1 => Some(Self::V1),
+            _ => None,
+        }
+    }
+}
+
+/// The additional data of a wrap of `version` for `document`: the wrap
+/// domain, the version byte, then the 16 bytes of the document id.
+fn wrap_aad(version: WrapVersion, document: Id<Document>) -> ambre_core::Aad {
+    let mut aad = Vec::with_capacity(WRAP_AAD_DOMAIN.len() + 1 + 16);
+    aad.extend_from_slice(WRAP_AAD_DOMAIN);
+    aad.push(version.byte());
+    aad.extend_from_slice(document.as_bytes());
+    ambre_core::Aad::new(aad)
+}
+
+/// The version, the nonce and the ciphertext of `wrapped`.
+///
+/// # Errors
+///
+/// [`CryptoError::UnversionedWrap`] when the first byte names no version: an
+/// unversioned wrap, or bytes the relay made up. [`CryptoError::InvalidKeyLength`]
+/// when the bytes past it are shorter than a nonce.
+fn split_wrap(
+    wrapped: &Encoded<WrappedDocKey>,
+) -> Result<(WrapVersion, FixedBytes<Nonce>, Payload<Ciphertext>), CryptoError> {
+    let (&byte, sealed) = wrapped
+        .as_bytes()
+        .split_first()
+        .ok_or(CryptoError::InvalidKeyLength)?;
+    let version = WrapVersion::from_byte(byte).ok_or(CryptoError::UnversionedWrap)?;
+    let (nonce, ciphertext) =
+        FixedBytes::<Nonce>::split_from(sealed).ok_or(CryptoError::InvalidKeyLength)?;
+    Ok((version, nonce, Payload::new(ciphertext.to_vec())))
 }
 
 /// The raw X25519 output between two parties, the input of the KEK.
@@ -99,8 +163,10 @@ fn derive_kek(
     DocumentKey::from_secret(kek)
 }
 
-/// Wraps `doc_key` for the holder of `peer_public`, using `own_secret`. Here the
-/// caller is the sender, `peer_public` the recipient.
+/// Wraps `doc_key` of `document` for the holder of `peer_public`, using
+/// `own_secret`. Here the caller is the sender, `peer_public` the recipient.
+/// The result is the byte of [`WrapVersion::V1`], the nonce and the
+/// ciphertext, under the additional data of [`wrap_aad`].
 ///
 /// # Errors
 ///
@@ -109,9 +175,10 @@ fn derive_kek(
 pub fn wrap_document_key(
     own_secret: &StaticSecret,
     peer_public: &FixedBytes<ExchangePublicKey>,
+    document: Id<Document>,
     doc_key: &DocumentKey,
-) -> Result<WrappedKey, CryptoError> {
-    wrap_anchored(own_secret, peer_public, doc_key, None)
+) -> Result<Encoded<WrappedDocKey>, CryptoError> {
+    wrap_anchored(own_secret, peer_public, document, doc_key, None)
 }
 
 /// Wraps `doc_key` as [`wrap_document_key`] does, with the digest of the
@@ -125,10 +192,11 @@ pub fn wrap_document_key(
 pub fn wrap_anchored(
     own_secret: &StaticSecret,
     peer_public: &FixedBytes<ExchangePublicKey>,
+    document: Id<Document>,
     doc_key: &DocumentKey,
     anchor: Option<&FixedBytes<EntryDigest>>,
-) -> Result<WrappedKey, CryptoError> {
-    KeyWrapper::new(own_secret).wrap(peer_public, doc_key, anchor)
+) -> Result<Encoded<WrappedDocKey>, CryptoError> {
+    KeyWrapper::new(own_secret).wrap(peer_public, document, doc_key, anchor)
 }
 
 /// The recipients a [`KeyWrapper`] holds a key-encryption key for.
@@ -189,9 +257,9 @@ impl KeyWrapper {
         ambre_core::Count::of(self.keks.len())
     }
 
-    /// Wraps `doc_key` for the holder of `peer_public`, as [`wrap_anchored`]
-    /// does. The first wrap for a recipient derives its key-encryption key,
-    /// and every later one reuses it.
+    /// Wraps `doc_key` of `document` for the holder of `peer_public`, as
+    /// [`wrap_anchored`] does. The first wrap for a recipient derives its
+    /// key-encryption key, and every later one reuses it.
     ///
     /// # Errors
     ///
@@ -200,9 +268,10 @@ impl KeyWrapper {
     pub fn wrap(
         &mut self,
         peer_public: &FixedBytes<ExchangePublicKey>,
+        document: Id<Document>,
         doc_key: &DocumentKey,
         anchor: Option<&FixedBytes<EntryDigest>>,
-    ) -> Result<WrappedKey, CryptoError> {
+    ) -> Result<Encoded<WrappedDocKey>, CryptoError> {
         let kek = match self.keks.entry(*peer_public) {
             Entry::Occupied(held) => held.into_mut(),
             Entry::Vacant(slot) => {
@@ -217,29 +286,38 @@ impl KeyWrapper {
                 plain.extend_from_slice(anchor.as_slice());
             }
         });
+        let version = WrapVersion::V1;
         let (nonce, ciphertext) =
-            aead::seal(plaintext.expose(), &ambre_core::Aad::of(KEK_DOMAIN), kek)?;
-        Ok(WrappedKey { nonce, ciphertext })
+            aead::seal(plaintext.expose(), &wrap_aad(version, document), kek)?;
+        let mut wrapped = Vec::with_capacity(1 + aead::NONCE_LEN + ciphertext.as_bytes().len());
+        wrapped.push(version.byte());
+        nonce.push_to(&mut wrapped);
+        wrapped.extend_from_slice(ciphertext.as_bytes());
+        Ok(Encoded::new(wrapped))
     }
 }
 
-/// Unwraps a [`WrappedKey`] sent by the holder of `peer_public`, using
+/// Unwraps a key of `document` sent by the holder of `peer_public`, using
 /// `own_secret`. Here `peer_public` is the sender and the caller the recipient,
 /// so the identity binding is fed to [`derive_kek`] in that order.
 ///
 /// # Errors
 ///
+/// * [`CryptoError::UnversionedWrap`] when the first byte names no
+///   [`WrapVersion`]. No exchange runs on such bytes.
 /// * [`CryptoError::WeakPublicKey`] from [`shared_secret`].
 /// * [`CryptoError::AeadFailed`] when the wrapped key does not verify under the
-///   derived key-encryption key.
-/// * [`CryptoError::InvalidKeyLength`] when the plaintext inside is neither a
-///   key nor a key and an anchor.
+///   derived key-encryption key, or was wrapped for another document.
+/// * [`CryptoError::InvalidKeyLength`] when the bytes are too short for a
+///   version and a nonce. The same error comes when the plaintext inside is
+///   neither a key nor a key and an anchor.
 pub fn unwrap_document_key(
     own_secret: &StaticSecret,
     peer_public: &FixedBytes<ExchangePublicKey>,
-    wrapped: &WrappedKey,
+    document: Id<Document>,
+    wrapped: &Encoded<WrappedDocKey>,
 ) -> Result<DocumentKey, CryptoError> {
-    unwrap_anchored(own_secret, peer_public, wrapped).map(|(key, _)| key)
+    unwrap_anchored(own_secret, peer_public, document, wrapped).map(|(key, _)| key)
 }
 
 /// Unwraps what [`wrap_anchored`] sealed: the key, and the anchor of the
@@ -251,17 +329,14 @@ pub fn unwrap_document_key(
 pub fn unwrap_anchored(
     own_secret: &StaticSecret,
     peer_public: &FixedBytes<ExchangePublicKey>,
-    wrapped: &WrappedKey,
+    document: Id<Document>,
+    wrapped: &Encoded<WrappedDocKey>,
 ) -> Result<(DocumentKey, Option<FixedBytes<EntryDigest>>), CryptoError> {
+    let (version, nonce, ciphertext) = split_wrap(wrapped)?;
     let shared = shared_secret(own_secret, peer_public)?;
     let own_pub =
         FixedBytes::<ExchangePublicKey>::from_array(PublicKey::from(own_secret).to_bytes());
     let kek = derive_kek(&shared, peer_public, &own_pub);
-    let bytes = aead::open(
-        &wrapped.nonce,
-        &wrapped.ciphertext,
-        &ambre_core::Aad::of(KEK_DOMAIN),
-        &kek,
-    )?;
+    let bytes = aead::open(&nonce, &ciphertext, &wrap_aad(version, document), &kek)?;
     crate::keys::split_anchored(bytes.secret().expose())
 }

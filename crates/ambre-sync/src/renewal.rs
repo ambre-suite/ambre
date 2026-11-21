@@ -115,7 +115,9 @@ impl SyncState {
     }
 
     /// A renewal replaced the pair in the store, whichever path ran it. Arms
-    /// the renewal of the new pair, or disarms when the session ended.
+    /// the renewal of the new pair, or disarms when the session ended. The
+    /// renewal kept its refresh token already, under the lock of the record
+    /// (`SRV-327`, `SRV-330`): a write here would land outside that lock.
     pub(crate) fn tokens_renewed(&mut self) {
         let lifetime = self.tokens.borrow().as_ref().map(TokenPair::lifetime);
         let due = match lifetime {

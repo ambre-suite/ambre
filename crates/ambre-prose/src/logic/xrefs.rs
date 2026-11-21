@@ -48,10 +48,15 @@ impl ProseState {
     /// Bring the target of the reference at `pos` in `block` into view
     /// (`PROSE-UI-085`). A broken reference has nowhere to go and says so.
     pub(super) fn follow_cross_ref(&mut self, block: &TreeID, pos: Pos<DocChar>) -> ProseOutcome {
-        let found = doc::anchors(&self.doc, crate::mark::MarkRoot::CrossRef, xref::decode)
-            .into_iter()
-            .find(|anchor| anchor.block == *block && anchor.offset == pos)
-            .map(|anchor| anchor.value);
+        let found = doc::anchors(
+            &self.doc,
+            &self.roots,
+            crate::mark::MarkRoot::CrossRef,
+            xref::decode,
+        )
+        .into_iter()
+        .find(|anchor| anchor.block == *block && anchor.offset == pos)
+        .map(|anchor| anchor.value);
         let Some((target, _)) = found else {
             return ProseOutcome::refused(ProseRefusal::NoCrossRef);
         };
@@ -74,7 +79,7 @@ impl ProseState {
     pub(super) fn cross_refs_event(&self) -> ProseEvent {
         let layout = self.paginator.as_ref().map(|paginator| paginator.layout());
         ProseEvent::CrossRefsUpdated {
-            refs: xref::resolve_all(&self.doc, layout),
+            refs: xref::resolve_all(&self.doc, &self.roots, layout),
         }
     }
 }
@@ -143,9 +148,12 @@ mod tests {
         let heading_text = state.text_of(&ids[2]);
         let heading_marks = doc::get_block_text(state.document(), &tree_id(ids[2])).to_delta();
         refer(&mut state, ids[1], ids[2], CrossRefKind::HeadingNumber);
-        let anchors = doc::anchors(state.document(), crate::mark::MarkRoot::CrossRef, |value| {
-            Some(value.to_owned())
-        });
+        let anchors = doc::anchors(
+            state.document(),
+            state.roots(),
+            crate::mark::MarkRoot::CrossRef,
+            |value| Some(value.to_owned()),
+        );
         assert_eq!(anchors.len(), 1);
         let (named, _) = xref::decode(&anchors[0].value).expect("a record");
         assert_eq!(named, tree_id(ids[2]));
@@ -254,6 +262,7 @@ mod tests {
         assert_eq!(
             doc::anchors(
                 state.document(),
+                state.roots(),
                 crate::mark::MarkRoot::CrossRef,
                 xref::decode
             )
@@ -280,6 +289,7 @@ mod tests {
         assert!(
             doc::anchors(
                 state.document(),
+                state.roots(),
                 crate::mark::MarkRoot::CrossRef,
                 xref::decode
             )

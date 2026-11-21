@@ -1,15 +1,14 @@
 //! The account keys on the home screen, driven as a person drives them.
 //!
-//! A development relay answers the setup with no provider. The page reaches the
-//! setup and the recovery through the two links of its development panel.
-//! The setup creates the keys on the Sync worker, which answers with the 24
-//! recovery words, then the session. The recovery form hands typed words back
-//! to that worker, which refuses a phrase that spells no seed before it derives
-//! any key.
-//!
-//! The faces of a provider account need a provider return. The belt's server
-//! stands in for its exchange with the account a setup created
-//! (`crate::serve`), so the page unlocks a real account of the relay.
+//! No anonymous account setup exists (`SRV-319`): the keys faces follow a
+//! provider return. A development relay holds no provider, so the belt's
+//! server stands in for its exchange (`crate::serve`). The code of the return
+//! names the person, and the relay holds an account under that name that owes
+//! its keys. The setup face creates the keys on the Sync worker, which answers
+//! with the 24 recovery words, then the session. A later return under the same
+//! name shows the unlock face of that account. The recovery form hands typed
+//! words back to the worker, which refuses a phrase that spells no seed before
+//! it derives any key.
 
 use std::sync::Arc;
 
@@ -26,7 +25,7 @@ const STRONG: &str = "violet-harbor-quietly-folds-ninety-kites";
 const SETUP: std::time::Duration = std::time::Duration::from_secs(90);
 
 /// Clicks the development link `selector` once the panel shows it.
-async fn follow(page: &Page, selector: &str) {
+pub(crate) async fn follow(page: &Page, selector: &str) {
     page.browser
         .wait_for(
             selector,
@@ -105,21 +104,55 @@ async fn wait_refusal(page: &Page, text: &str) -> Vec<String> {
 /// A second passphrase above the floor, which a recovery sets.
 const RECOVERED: &str = "amber-lantern-gravel-sixty-orchids-hum";
 
-/// Sets up an account named `name` through the development panel, and returns
-/// the 24 recovery words the page shows once.
+/// A name no other test signs in under: the relays of a run share one
+/// database, and the stand-in signs in by name.
+fn unique(name: &str) -> String {
+    let tag = uuid::Uuid::new_v4().simple().to_string();
+    format!("{name}-{}", tag.get(..8).unwrap_or_default())
+}
+
+/// The provider comes back to this tab for the person `name`, with the state
+/// it was handed (`crate::serve`).
+async fn provider_return(page: &Page, name: &str) {
+    page.browser
+        .script(
+            "sessionStorage.setItem('ambre.signin.state', 'belt-state');",
+            json!([]),
+        )
+        .await;
+    page.browser
+        .goto(&format!(
+            "{}/signin/google?code={name}&state=belt-state",
+            page.origin
+        ))
+        .await;
+}
+
+/// Signs `name` in through a provider return, sets up the keys the account
+/// owes, and returns the 24 recovery words the page shows once.
 async fn set_up(page: &Page, name: &str) -> String {
-    follow(page, ".ambre-signin-setup").await;
-    let address = format!("belt-{}@test.local", uuid::Uuid::new_v4());
-    submit(
-        page,
-        json!([
-            [".ambre-keys-name", name],
-            [".ambre-keys-email", address],
-            [".ambre-keys-passphrase", STRONG],
-            [".ambre-keys-confirm", STRONG],
-        ]),
-    )
-    .await;
+    provider_return(page, name).await;
+    set_up_keys(page).await
+}
+
+/// Sets up the keys the account of a provider return owes, once the page shows
+/// the setup face. Returns the 24 recovery words the page shows once.
+pub(crate) async fn set_up_keys(page: &Page) -> String {
+    page.browser
+        .wait_for(
+            "the setup face",
+            "return !!document.querySelector('.ambre-keys-confirm');",
+            SETUP,
+        )
+        .await;
+    page.browser
+        .script(
+            "document.querySelector('.ambre-keys-passphrase').value = arguments[0]; \
+             document.querySelector('.ambre-keys-confirm').value = arguments[0]; \
+             document.querySelector('.ambre-signin-btn').click();",
+            json!([STRONG]),
+        )
+        .await;
     let phrase = page
         .browser
         .wait_for(
@@ -134,7 +167,7 @@ async fn set_up(page: &Page, name: &str) -> String {
 }
 
 /// Waits until the document list shows under the user `name`.
-async fn wait_list(page: &Page, name: &str) {
+pub(crate) async fn wait_list(page: &Page, name: &str) {
     page.browser
         .wait_for(
             "the document list of the user",
@@ -144,26 +177,6 @@ async fn wait_list(page: &Page, name: &str) {
                    && !document.querySelector('.ambre-keys') \
                    && !!user && user.textContent === {};",
                 Value::String(name.to_owned())
-            ),
-            SETUP,
-        )
-        .await;
-}
-
-/// Types `passphrase` into the unlock face, once it shows, and submits it.
-async fn unlock(page: &Page, passphrase: &str) {
-    page.browser
-        .wait_for(
-            "the unlock face",
-            &format!(
-                "const field = document.querySelector('.ambre-keys-passphrase'); \
-                 const button = document.querySelector('.ambre-signin-btn'); \
-                 if (!field || !button || button.disabled \
-                   || !document.querySelector('.ambre-keys-recover')) return false; \
-                 field.value = {}; \
-                 button.click(); \
-                 return true;",
-                Value::String(passphrase.to_owned())
             ),
             SETUP,
         )
@@ -184,10 +197,13 @@ mod tests {
     /// `CHROME-099`, `CHROME-128`, `CHROME-130`: the setup shows the 24 recovery words
     /// once. The confirmation takes them off the page, and neither the page,
     /// a reload nor the web storage reads them afterwards. The recovery form
-    /// then reads them back. The Sync worker refuses a mistyped word, a wrong
-    /// count and a bad checksum, each in its own words. It reads the words
-    /// the setup showed as a seed. Signed out, the panel offers no recovery
-    /// (`CHROME-135`), so the recovery runs from the unlock face.
+    /// then reads them back.
+    ///
+    /// The Sync worker refuses a mistyped word, a wrong count and a bad
+    /// checksum, each in its own words. It reads the words the setup showed
+    /// as a seed. Signed out, the panel offers no recovery
+    /// (`CHROME-135`), so the recovery runs from the unlock face. A reload
+    /// before the sign-out resumes the session and shows no word either.
     #[tokio::test(flavor = "multi_thread")]
     #[cfg_attr(
         not(feature = "browser"),
@@ -195,7 +211,8 @@ mod tests {
     )]
     async fn the_setup_shows_the_words_once_and_the_recovery_reads_them() {
         let page = Page::home(Arc::new(Relay::start().await)).await;
-        let phrase = set_up(&page, "Ada").await;
+        let name = unique("Ada");
+        let phrase = set_up(&page, &name).await;
         let words: Vec<&str> = phrase.split(' ').collect();
         assert_eq!(words.len(), 24, "{phrase}");
         assert!(
@@ -217,13 +234,22 @@ mod tests {
             .wait_for("the words gone from the page", &gone, STEP)
             .await;
 
-        // A reload shows the sign-in panel, and no word. Signed out, the
-        // panel links to no recovery: the form would fail as not signed in.
+        // A reload resumes the session the device kept (`SRV-323`), and
+        // shows no word. A sign-out then shows the sign-in panel. Signed out,
+        // the panel links to no recovery: the form would fail as not signed in.
         page.browser.goto(&format!("{}/", page.origin)).await;
+        wait_list(&page, &name).await;
+        assert_eq!(
+            page.browser.script(&gone, json!([])).await,
+            Value::Bool(true),
+            "the words are readable after a reload"
+        );
+        follow(&page, ".ambre-sign-out").await;
         page.browser
             .wait_for(
                 "the sign-in panel with no recovery link",
-                "return !!document.querySelector('.ambre-signin-setup') \
+                "return !!document.querySelector('.ambre-signin-input') \
+                   && !document.querySelector('.ambre-keys') \
                    && !document.querySelector('.ambre-signin-recover');",
                 BOOT,
             )
@@ -236,18 +262,7 @@ mod tests {
 
         // The provider comes back to this tab, so a session holds and the
         // unlock face links to the recovery form (`CHROME-133`).
-        page.browser
-            .script(
-                "sessionStorage.setItem('ambre.signin.state', 'belt-state');",
-                json!([]),
-            )
-            .await;
-        page.browser
-            .goto(&format!(
-                "{}/signin/google?code=belt-code&state=belt-state",
-                page.origin
-            ))
-            .await;
+        provider_return(&page, &name).await;
         follow(&page, ".ambre-keys-recover").await;
 
         record_refusals(&page).await;
@@ -285,14 +300,18 @@ mod tests {
     )]
     async fn a_setup_ends_in_the_session_once_the_words_are_confirmed() {
         let page = Page::home(Arc::new(Relay::start().await)).await;
-        set_up(&page, "Ada").await;
+        let name = unique("Ada");
+        set_up(&page, &name).await;
         // The session is announced with the words. Wait for the user's name
         // in the header, then read that the words show in a modal over the list.
         page.browser
             .wait_for(
                 "the session under the words",
-                "const user = document.querySelector('.ambre-landing-user'); \
-                 return !!user && user.textContent === 'Ada';",
+                &format!(
+                    "const user = document.querySelector('.ambre-landing-user'); \
+                     return !!user && user.textContent === {};",
+                    Value::String(name.clone())
+                ),
                 STEP,
             )
             .await;
@@ -308,7 +327,7 @@ mod tests {
             "the words show in no modal over the list"
         );
         follow(&page, ".ambre-words-done").await;
-        wait_list(&page, "Ada").await;
+        wait_list(&page, &name).await;
         assert_eq!(
             page.browser
                 .script(
@@ -330,10 +349,10 @@ mod tests {
             .await;
     }
 
-    /// `CHROME-133`, `CHROME-134`: the unlock face of a provider account links
-    /// to the recovery form. A recovery there re-seals the account under a new
-    /// passphrase. The unlock face then refuses the old passphrase and opens
-    /// the list under the new one.
+    /// `CHROME-133`, `CHROME-134`, `SYNC-293`: the unlock face of a provider
+    /// account links to the recovery form. A recovery there re-seals the
+    /// account under a new passphrase and opens the list on the recovered
+    /// keys, with no second unlock.
     #[tokio::test(flavor = "multi_thread")]
     #[cfg_attr(
         not(feature = "browser"),
@@ -341,23 +360,13 @@ mod tests {
     )]
     async fn the_unlock_face_leads_to_a_recovery_that_opens_the_account() {
         let page = Page::home(Arc::new(Relay::start().await)).await;
-        let phrase = set_up(&page, "Ada").await;
+        let name = unique("Ada");
+        let phrase = set_up(&page, &name).await;
         follow(&page, ".ambre-words-done").await;
-        wait_list(&page, "Ada").await;
+        wait_list(&page, &name).await;
 
         // The provider comes back to this tab, with the state it was handed.
-        page.browser
-            .script(
-                "sessionStorage.setItem('ambre.signin.state', 'belt-state');",
-                json!([]),
-            )
-            .await;
-        page.browser
-            .goto(&format!(
-                "{}/signin/google?code=belt-code&state=belt-state",
-                page.origin
-            ))
-            .await;
+        provider_return(&page, &name).await;
         follow(&page, ".ambre-keys-recover").await;
 
         // A refusal reads on the form that covers the gate.
@@ -374,25 +383,7 @@ mod tests {
             ]),
         )
         .await;
-        page.browser
-            .wait_for(
-                "the unlock face after the recovery",
-                "return !document.querySelector('.ambre-keys-words-field') \
-                   && !!document.querySelector('.ambre-keys-recover');",
-                SETUP,
-            )
-            .await;
-
-        unlock(&page, STRONG).await;
-        page.browser
-            .wait_for(
-                "the old passphrase refused",
-                "const line = document.querySelector('.ambre-keys-refusal'); \
-                 return !!line && line.textContent.length > 0;",
-                SETUP,
-            )
-            .await;
-        unlock(&page, RECOVERED).await;
-        wait_list(&page, "Ada").await;
+        // The list shows, and no gate asks the new passphrase again (`SYNC-293`).
+        wait_list(&page, &name).await;
     }
 }

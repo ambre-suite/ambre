@@ -469,7 +469,7 @@ mod stylesheet_tests {
         })
     }
 
-    /// `CHROME-142`: every family the chrome names is the chrome family, or a
+    /// `CHROME-201`: every family the chrome names is the chrome family, or a
     /// monospace one, and the body carries the chrome family. A toast or a
     /// dialog mounted outside the shell then never falls back to the serif
     /// face of the browser.
@@ -494,7 +494,7 @@ mod stylesheet_tests {
         }
     }
 
-    /// `CHROME-141`: a fixed surface that sets its top sits under the header,
+    /// `CHROME-200`: a fixed surface that sets its top sits under the header,
     /// or is centred on the viewport. A call ring is an alert that covers the
     /// header on purpose, for the seconds it rings.
     #[test]
@@ -537,7 +537,7 @@ mod stylesheet_tests {
         );
     }
 
-    /// `CHROME-143`: the format bar carries the frame of a floating bar. Each
+    /// `CHROME-202`: the format bar carries the frame of a floating bar. Each
     /// control carries the look of a chrome button, not the raw button of the
     /// browser.
     #[test]

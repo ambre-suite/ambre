@@ -160,6 +160,13 @@ pub enum LogicCommand<A = Infallible, P: ChannelPlane = NoChannels> {
         inviter: ambre_core::FixedBytes<ambre_core::InviterPin>,
     },
 
+    /// Hold where the log of `document_id` stood in an earlier session
+    /// (`SYNC-290`). The Logic thread forwards it and reads nothing of it.
+    KeepLog {
+        document_id: Id<Document>,
+        kept: crate::KeptLog,
+    },
+
     /// Pin the inviter that a Murmure invite link names (`SYNC-236`). The
     /// Logic thread forwards it and reads nothing of it.
     PinMurmureInviter {
@@ -328,6 +335,7 @@ impl<A, P: ChannelPlane> LogicCommand<A, P> {
                 document_id,
                 inviter,
             },
+            Self::KeepLog { document_id, kept } => LogicCommand::KeepLog { document_id, kept },
             Self::PinMurmureInviter { inviter } => LogicCommand::PinMurmureInviter { inviter },
             Self::CloseDocument { document_id } => LogicCommand::CloseDocument { document_id },
             Self::ResendState { document_id } => LogicCommand::ResendState { document_id },

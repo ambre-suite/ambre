@@ -52,6 +52,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-203` | `FAIL` | Given a replay that names one document and carries an update sealed for another, the client MUST deliver none of that update. | audit `N6`; this spec section 2; `SYNC-004` | `ambre_sync::updates::tests::a_replay_filed_under_another_document_delivers_nothing` -- an update of an open document, filed in the replay of another, reaches Logic under neither, and reaches it filed under its own | none | verified |
 | `SYNC-008` | `FAIL` | An ephemeral whose counter is not greater than the last one seen for its author and document MUST be dropped. | this spec section 2 | `ambre_sync::ephemeral_tests::monotonic_counter_accepted_replay_dropped` -- an equal and a lower counter are both refused, and forward progress resumes, and the check has one hole the rule does not state, an author evicted by `SYNC-088`'s cap losing the baseline the rule reads and replaying once; `ambre_sync::ephemeral_tests::below_the_cap_each_author_keeps_its_counter`; `::at_the_cap_a_known_author_evicts_nobody` -- the cap evicts for a new author alone, so a known author keeps the baseline its replay is refused against | none | verified |
 | `SYNC-216` | `FAIL` | An ephemeral whose signature fails MUST NOT move the counter of its author. | audit `N21`; this spec section 2; `SYNC-023` | `ambre_sync::websocket::tests::a_forged_sample_moves_no_replay_counter` -- a sample forged under an author's key at the highest counter is dropped, and the author's genuine sample at counter 2 still reaches Logic | none | verified |
+| `SYNC-287` | `FAIL` | An ephemeral MUST carry the session nonce of its sender's open inside its ciphertext, and its counter MUST be checked against the last one seen for that author and that nonce. | this spec section 2; `SYNC-008` | `ambre_sync::ephemeral_tests::a_reopened_author_counts_from_one_again` -- a new open of Alice counts from 1 and is taken, while a replay of either open is refused; `ambre_sync::seal_tests::a_payload_frame_built_outside_the_seal_never_reaches_the_socket` -- a sample sent seals the session nonce of the open ahead of the bytes Logic gave; `ambre_sync::websocket::tests::a_remote_ephemeral_reaches_logic_as_its_author_sealed_it` -- the sample reaches Logic without the nonce | none | verified |
 | `SYNC-009` | `FAIL` | Decompression MUST be refused past a size ceiling drawn from the compressed length. | audit `H9`; this spec section 2 | `ambre_sync::pipeline::tests::decompress_bomb_rejected` -- 8 MiB compressed answers the typed refusal; `::decompress_within_ceiling_ok` -- a legitimate payload is untouched by the bound, the half that keeps the ceiling from being a denial of service of its own; `ambre_sync::pipeline::tests::an_output_at_the_ceiling_opens_and_one_byte_past_is_refused` -- the ceiling is inclusive, to the byte | none | verified |
 | `SYNC-090` | `FAIL` | An unknown compression version MUST be refused, never guessed. | audit `H9`; this spec section 2 | `ambre_sync::pipeline::tests::decompress_unknown_version_rejected` -- the version byte is echoed in a typed error rather than falling through to a default codec | none | verified |
 | `SYNC-138` | `FAIL` | A document name or a media blob of a layout the reader does not know MUST be refused by that layout, before any other part of it is read. | this spec section 2; `ambre-spec-media.md` | `ambre_sync::pipeline::tests::an_unknown_object_layout_is_refused_before_any_check` -- a later layout is named in a typed error by the open and by the key read, and one byte alone is enough to refuse | none | verified |
@@ -59,7 +60,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-072` | `FAIL` | A signature MUST be accepted only in its canonical form. | audit `M13` | `ambre_crypto::signature::tests::only_the_canonical_signature_is_accepted` -- the client; `ambre_server::ws::handler::message::ed25519_tests::only_the_canonical_signature_is_accepted` -- the relay. Each refuses the scalar raised by the group order, and a small-order key under a forged signature | none | verified |
 | `SYNC-091` | `POST` | A failed check MUST reach the user's client as a warning. | this spec section 2 | `ambre_sync::updates::tests::every_refused_frame_reaches_logic_as_a_warning` -- an unsigned envelope, one under a key never held and one with a broken tag each raise one warning naming the document. Its code names the failed check -- a refused signature, a key not held, a broken seal -- so a missed re-key reads apart | none | verified |
 | `SYNC-023` | `FRAME` | An envelope that fails any check MUST NOT be applied in part. | this spec section 2 | `ambre_sync::updates::tests::a_refused_frame_is_applied_in_no_part` -- a tampered and an unsigned envelope in one replay each deliver none of their payload, and their neighbours arrive whole | none | verified |
-| `SYNC-135` | `FAIL` | A document name or a media blob whose author key belongs to no member of its document MUST be refused. | this spec section 2; `SYNC-018` | not built | unbuilt -- lands with the `The author of a sealed object is a member` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SYNC-135` | `FAIL` | A document name whose author key the last log this client walked of its document never granted a writing role MUST NOT be shown, and a document this client never walked MUST show no name. | this spec section 2; `SYNC-018`; `ambre-spec-membership.md`, `SYNC-211` | `ambre_sync::documents::tests::a_listed_name_opens_only_under_a_writer_of_the_walked_log` -- a name of a log never walked opens to none, a writer's opens once a walk lands, and a stranger's sealed under the key stays closed | none | verified |
+| `SYNC-297` | `FAIL` | A media blob whose author key the membership log of its document never granted a writing role MUST be refused. | this spec section 2; `SYNC-018`; `ambre-spec-membership.md`, `SYNC-211` | `ambre_sync::media::tests::a_blob_whose_author_never_wrote_is_refused` -- a blob a stranger to the log seals under the key is refused, a writer's opens, and a header rewritten to name the writer fails that writer's signature | none | verified |
 | `SYNC-114` | `POST` | An opened update MUST reach the Logic thread with its session nonce, the PeerID it derives and the user of its signer beside the delta. | this spec section 2; `AUTHOR-013` | `ambre_sync::updates::tests::an_opened_update_reaches_logic_with_its_nonce_its_peer_and_its_signer` -- the delta arrives with the nonce its body carried, the PeerID its signer derives, and the member the directory names, or none | none | verified |
 | `SYNC-144` | `POST` | An opened update that carries an activity summary MUST reach the Logic thread with it beside the delta. | this spec section 2; `ambre-spec-residency.md` | `ambre_sync::updates::tests::an_opened_update_hands_logic_its_summary_beside_the_delta` -- an update with a summary hands it beside its delta, and one with none hands none | none | verified |
 
@@ -70,10 +72,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this is the boundary `ambre-spec-zero-knowledge.md` draws, on the client side. Every
   byte of user content that leaves the client leaves through the seal here. `SYNC-001` and
   `SYNC-020` keep the metadata down to the whitelist `ZK-007` names.
-* **Verification.** 28 `verified`, 1 `unimplemented`. What holds is refusal: a tampered byte, a
-  wrong document and a wrong key fail closed. So do a bad signature, a replayed counter, a
-  decompression bomb and an unknown codec. The nonce is drawn fresh, and the signature is checked
-  first.
+* **Verification.** 31 `verified`. What holds is refusal: a tampered byte, a wrong document and a
+  wrong key fail closed. So do a bad signature, a replayed counter, a decompression bomb and an
+  unknown codec. The nonce is drawn fresh, and the signature is checked first.
 ---
 
 ## 2. MODEL
@@ -153,6 +154,15 @@ signature, the commitment tag, the nonce, then the ciphertext. The layout and th
 are also bound into the additional data, so a header cannot be made to name another of either.
 Neither object is compressed.
 
+**A blob opens under a writer.** The download reads the author key from the header, before any key
+is sought. It refuses an author the walked log never granted a writing role, the set a delta takes
+(`SYNC-211`). The signature then holds the header to that author (`SYNC-297`). A document with no
+anchored log checks no author, as its deltas do.
+
+**A name opens under a writer.** A listing opens each name against the writers of the last log this
+client walked of its document, in the session (`SYNC-135`). A document never walked shows no name,
+and the listing makes no request for its log.
+
 **Why a layout byte.** The relay keeps a blob across releases. Without the byte, an object of an
 older layout fails as forged or as sealed under a foreign key. With it, the reader refuses it by
 name before reading anything else (`SYNC-138`). Every object of a release shares one layout, so the
@@ -180,10 +190,12 @@ ceiling is derived per message, and the decoder streams into it rather than allo
 | absolute cap | 64 MiB | the client-memory pillar is 100 MB for a whole document |
 
 **The ephemeral counter is a per-device replay guard**, kept apart from the identity the envelope is
-delivered under. It is keyed by the author's signing key, which the master seed derives: one key
-per user, not per session. A sender starts its counter again at each open. A peer that stayed open
-then drops the samples of a reopened author until the new counter passes the old one. The audit
-answer `P22` owes the fix.
+delivered under. The author's signing key is one key per user, not per open, and a sender starts its
+counter again at each open. So the guard also reads the session nonce of the open, which the
+sample seals ahead of its bytes (`SYNC-287`, audit `P22`). A peer that stayed open takes a
+reopened author from counter 1. The nonce stays inside the ciphertext: a PeerID derives from it,
+and the relay never reads a PeerID. A peer that opens after a replayed sample was sent has no
+baseline for its open, so it takes that sample once.
 
 The map is capped so a peer minting keys cannot grow it without bound
 (`SYNC-008`). Who the author *is* is
@@ -222,9 +234,6 @@ say which of the four refusals fired.
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **The author of a name or a blob is checked, not resolved.** The open verifies the signature
-  against the key the object carries. Nothing yet asks whether that key belongs to a member
-  (`SYNC-135`).
 * **No nonce is ever compared to another.** The generator is the operating system's, and nothing in
   the suite would notice a nonce derived from a counter.
 * **The four refusals arrive as one warning code.** A user, and a developer reading a console, cannot

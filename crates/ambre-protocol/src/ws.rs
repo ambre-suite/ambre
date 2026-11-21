@@ -10,7 +10,7 @@
 use crate::messages::{DeltaAuthor, Relay, Seq, Signature};
 use crate::version::CURRENT_VERSION;
 use crate::{Ephemeral, SeqUpdate, Update};
-use ambre_core::id::{Document, Id, Snapshot};
+use ambre_core::id::{Document, Id, Snapshot, User};
 use ambre_core::{
     Bounded, Bounds, DocType, FixedBytes, KeyId, Ms, Payload, PublicKey, Refusal, RefusalCode,
     TimeSpan,
@@ -280,6 +280,19 @@ pub enum WsServerMsg {
     /// (`SRV-162`): a client that holds the thread hears the delta on its own
     /// topic, and any other fetches the summaries.
     ThreadActivity { document_id: Id<Document> },
+
+    /// A provider sign-in reclaimed the address of `member`, which this user
+    /// invited to the document (`ambre-spec-session.md`, `SRV-295`). Pushed
+    /// on the inviter's own topic (`user:{id}`). The member keeps its rows and
+    /// its wrapped key, but no provider ever proved the address it was invited
+    /// under. A client that shows the members asks the relay for the rows
+    /// again.
+    ///
+    /// Appended last, so the wire tags of the variants above do not move.
+    AddressReclaimed {
+        document_id: Id<Document>,
+        member: Id<User>,
+    },
 }
 
 // ---------------------------------------------------------------------------

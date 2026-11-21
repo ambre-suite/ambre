@@ -36,6 +36,7 @@ mod clipboard;
 mod comments;
 pub(crate) mod conversion;
 pub use ambre_convert::FileWork;
+pub use roots::Roots;
 mod derived;
 mod docfile;
 mod find;
@@ -50,6 +51,7 @@ pub(crate) mod notes;
 mod pictures;
 mod presence;
 mod print;
+mod roots;
 mod sliced;
 mod spelling;
 mod suggestions;
@@ -266,6 +268,9 @@ pub struct ProseState {
     stamped_counter: ambre_core::OpCounter,
     /// The blocks written to since the last layout, whoever wrote them.
     touched: touched::Touched,
+    /// The roots the document holds, so a read opens none it lacks
+    /// (`PROSE-142`).
+    roots: Roots,
     /// The changes the view has not drawn yet, and what it drew for the
     /// command in dispatch (`catchup`).
     catchup: catchup::CatchUp,
@@ -355,6 +360,9 @@ impl ProseState {
     /// already configured.
     fn from_doc(doc: LoroDoc, ids: ids::IdSource) -> Option<Self> {
         Self::prepare(&doc);
+        // Before the scaffolding: the set notes every root from the first
+        // commit on (`PROSE-142`).
+        let roots = Roots::watch(&doc);
         let peer = doc.peer_id();
         // Every peer writes the scaffolding as one shared identity, so every
         // copy is one change, the root paragraph included. Under the
@@ -420,6 +428,7 @@ impl ProseState {
             find: None,
             stamped_counter,
             touched,
+            roots,
             catchup: catchup::CatchUp::default(),
             converted: None,
             file_jobs: conversion::FileJobs::default(),
@@ -461,9 +470,9 @@ impl ProseState {
             paginator
         });
         let layout = if structural {
-            paginator.reflow(&self.doc, &dirty)
+            paginator.reflow(&self.doc, &self.roots, &dirty)
         } else {
-            paginator.reflow_text(&self.doc, &dirty)
+            paginator.reflow_text(&self.doc, &self.roots, &dirty)
         };
         self.word_count.pages = layout.page_count;
         layout
@@ -1554,7 +1563,13 @@ impl ProseState {
 
     // -- refusals ----------------------------------------------------------
 
-    /// The refusal a command that names no live block answers with.
+    /// The roots the document holds, for a test that calls a reader beside
+    /// [`Self::document`] (`PROSE-142`).
+    #[cfg(test)]
+    pub(crate) fn roots(&self) -> &Roots {
+        &self.roots
+    }
+
     /// The document itself, for a test that reads a container no command
     /// exposes, or that plays an import by writing one directly.
     #[cfg(test)]
@@ -1569,6 +1584,7 @@ impl ProseState {
         ids.iter().flatten().any(|id| doc::is_aside(tree, id))
     }
 
+    /// The refusal a command that names no live block answers with.
     fn err_no_block(id: &TreeID) -> ProseOutcome {
         ProseOutcome::refused(ProseRefusal::NoSuchBlock(block_id(*id)))
     }

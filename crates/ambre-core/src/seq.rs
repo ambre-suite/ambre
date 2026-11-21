@@ -459,6 +459,22 @@ impl CountKind for Deltas {
 /// The relay reads a `COUNT` of rows from Postgres.
 impl CountColumn for Deltas {}
 
+/// The places of the entries of a document's membership log, from zero:
+/// `Seq<LogPlaces>`. A place is signed with the entry, and the relay appends
+/// an entry at its own place alone. It encodes as the bare `u64` of the
+/// hand-written `LogPosition`, so a stored entry and its digest keep their
+/// bytes, and `Debug` keeps that name. A call key names the place its sender
+/// walked when it drew the key (`CALL-159`), so this crate holds the marker.
+pub enum LogPlaces {}
+
+impl SeqKind for LogPlaces {
+    type IssueRight = ();
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("LogPosition");
+}
+
+/// A place crosses the wire and the relay's rows.
+impl Wire for LogPlaces {}
+
 #[cfg(test)]
 mod tests {
     use super::{Deltas, Issuer, Relay, Seq, SeqKind, SharedIssuer, Wire};

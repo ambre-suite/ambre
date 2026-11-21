@@ -61,6 +61,28 @@ impl LogicState {
         }
     }
 
+    /// Reads `document_id` again from the relay, as no copy of it existed
+    /// (`SYNC-300`). Its state holds a delta past the cap of a revoke, which
+    /// no merge takes out. So the state and the local copy go, and the open
+    /// starts over: the relay replays every delta, and Sync refuses those
+    /// past the cap. A document this thread does not hold reads nothing.
+    pub(crate) fn reread(&mut self, document_id: Id<Document>) {
+        let Some(doc_type) = self.docs.get(&document_id).map(|doc| doc.state.doc_type()) else {
+            return;
+        };
+        self.settle_import(document_id);
+        self.docs.remove(&document_id);
+        self.evicted.remove(&document_id);
+        self.rest_routes.retain(|_, d| *d != document_id);
+        self.forget_pending_seals(Some(document_id));
+        self.send_to_persist(document_id, PersistWrite::Erase);
+        self.send_to_sync(SyncCommand::CloseDocument { document_id });
+        self.handle_logic_command(LogicCommand::OpenDocument {
+            document_id,
+            doc_type,
+        });
+    }
+
     /// Reopens a document that left memory: the Main thread reads its local
     /// copy back, and Sync opens once it lands (`RESID-010`). Returns `false`
     /// for a document that never left.

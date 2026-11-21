@@ -86,7 +86,7 @@ impl ProseState {
         text: &str,
         now: Instant<Authored>,
     ) -> ProseOutcome {
-        let Some(entry) = comment::entry(&self.doc, id) else {
+        let Some(entry) = comment::entry(&self.doc, &self.roots, id) else {
             return ProseOutcome::refused(ProseRefusal::NoSuchComment(*id));
         };
         if self.my_user_id.is_none() {
@@ -110,7 +110,7 @@ impl ProseState {
         id: &Id<Comment>,
         state: ambre_core::ThreadState,
     ) -> ProseOutcome {
-        let Some(entry) = comment::entry(&self.doc, id) else {
+        let Some(entry) = comment::entry(&self.doc, &self.roots, id) else {
             return ProseOutcome::refused(ProseRefusal::NoSuchComment(*id));
         };
         if let Err(e) = entry.insert(doc::AnnotKey::Resolved, state.is_resolved()) {
@@ -125,7 +125,7 @@ impl ProseState {
     /// Only this thread's key is taken off, so another thread over the same
     /// characters keeps its span (`PROSE-FEAT-201`).
     pub(super) fn delete_comment(&mut self, id: &Id<Comment>) -> ProseOutcome {
-        if comment::entry(&self.doc, id).is_none() {
+        if comment::entry(&self.doc, &self.roots, id).is_none() {
             return ProseOutcome::refused(ProseRefusal::NoSuchComment(*id));
         }
         if let Err(e) = self.remove_thread(id) {
@@ -183,7 +183,7 @@ impl ProseState {
     /// Every thread, marked or orphaned, as the view lists it.
     #[must_use]
     pub fn comments(&self) -> Vec<crate::events::CommentThread> {
-        comment::threads(&self.doc)
+        comment::threads(&self.doc, &self.roots)
     }
 
     /// Rewrite the cached anchor of every thread whose mark sits elsewhere
@@ -195,14 +195,14 @@ impl ProseState {
     /// known to be an orphan. That is a mark a split carried away, or a thread
     /// that just lost its text. Returns whether anything was written.
     pub(super) fn refresh_anchors(&mut self) -> bool {
-        let ids = comment::all(&self.doc);
+        let ids = comment::all(&self.doc, &self.roots);
         if ids.is_empty() {
             return false;
         }
         let tree = doc::blocks(&self.doc);
         let mut blocks: Vec<TreeID> = ids
             .iter()
-            .filter_map(|id| comment::entry(&self.doc, id))
+            .filter_map(|id| comment::entry(&self.doc, &self.roots, id))
             .filter_map(|entry| comment::cached(&entry))
             .map(|span| span.block)
             .filter(|block| doc::node_of(&tree, block).is_some())
@@ -214,7 +214,7 @@ impl ProseState {
             .iter()
             .any(|id| !spans.contains_key(id) && !self.orphans.contains(id));
         if lost {
-            spans = comment::live_spans(&self.doc, &comment::text_blocks(&self.doc));
+            spans = comment::live_spans(&self.doc, &comment::text_blocks(&self.doc, &self.roots));
             self.orphans = ids
                 .iter()
                 .filter(|id| !spans.contains_key(id))
@@ -227,7 +227,9 @@ impl ProseState {
     fn write_anchors(&self, ids: &[Id<Comment>], spans: &HashMap<Id<Comment>, Span>) -> bool {
         let mut wrote = false;
         for id in ids {
-            let (Some(entry), Some(span)) = (comment::entry(&self.doc, id), spans.get(id)) else {
+            let (Some(entry), Some(span)) =
+                (comment::entry(&self.doc, &self.roots, id), spans.get(id))
+            else {
                 continue;
             };
             if comment::cached(&entry).as_ref() == Some(span) {
@@ -306,7 +308,7 @@ impl ProseState {
         id: &Id<Comment>,
         reply: &Id<Reply>,
     ) -> Result<(LoroList, Pos<ReplySlot>), ProseOutcome> {
-        let entry = comment::entry(&self.doc, id)
+        let entry = comment::entry(&self.doc, &self.roots, id)
             .ok_or_else(|| ProseOutcome::refused(ProseRefusal::NoSuchComment(*id)))?;
         let list = comment::replies_of(&entry)
             .ok_or_else(|| ProseOutcome::refused(ProseRefusal::NoSuchReply(*reply)))?;
@@ -328,7 +330,7 @@ impl ProseState {
     /// Take thread `id`'s mark off every run it covers, then its entry.
     fn remove_thread(&self, id: &Id<Comment>) -> Result<(), doc::WriteError> {
         let key = comment::mark_key(id);
-        let runs = comment::runs(&self.doc, &comment::text_blocks(&self.doc));
+        let runs = comment::runs(&self.doc, &comment::text_blocks(&self.doc, &self.roots));
         for (_, span) in runs.iter().filter(|(thread, _)| thread == id) {
             doc::get_block_text(&self.doc, &span.block)
                 .unmark(span.start.to_usize()..span.end.to_usize(), key.as_str())?;
@@ -341,7 +343,7 @@ impl ProseState {
     /// Commit a comment command out of the undo stack, and answer the list
     /// it leaves.
     fn commit_comments(&mut self) -> ProseOutcome {
-        let threads = comment::threads(&self.doc);
+        let threads = comment::threads(&self.doc, &self.roots);
         self.doc
             .set_next_commit_origin(ambre_core::crdt::CommitOrigin::Comment.as_str());
         self.commit_with(vec![ProseEvent::CommentsUpdated { threads }])
@@ -456,7 +458,7 @@ mod tests {
     }
 
     fn cache(state: &ProseState, id: Id<Comment>) -> Option<Span> {
-        comment::entry(&state.doc, &id).and_then(|entry| comment::cached(&entry))
+        comment::entry(&state.doc, &state.roots, &id).and_then(|entry| comment::cached(&entry))
     }
 
     /// Opening a thread writes one entry, and a mark over the range and no
@@ -465,13 +467,14 @@ mod tests {
     fn a_thread_marks_its_range_and_no_character_outside_it() {
         let (mut state, block) = document(ambre_core::PeerId::new(1), ALICE, "Hello brave world");
         let id = open(&mut state, block, (6, 11), "Why brave?");
-        let runs: Vec<(u32, u32)> = comment::runs(&state.doc, &comment::text_blocks(&state.doc))
-            .into_iter()
-            .filter(|(thread, _)| *thread == id)
-            .map(|(_, s)| (s.start.get(), s.end.get()))
-            .collect();
+        let runs: Vec<(u32, u32)> =
+            comment::runs(&state.doc, &comment::text_blocks(&state.doc, &state.roots))
+                .into_iter()
+                .filter(|(thread, _)| *thread == id)
+                .map(|(_, s)| (s.start.get(), s.end.get()))
+                .collect();
         assert_eq!(runs, vec![(6, 11)]);
-        assert_eq!(comment::all(&state.doc), vec![id]);
+        assert_eq!(comment::all(&state.doc, &state.roots), vec![id]);
         let t = thread(&state, id);
         assert_eq!(t.anchor_block, Some(block));
         assert_eq!(
@@ -729,7 +732,9 @@ mod tests {
             reply_id: head,
         });
         assert!(state.comments().is_empty());
-        assert!(comment::runs(&state.doc, &comment::text_blocks(&state.doc)).is_empty());
+        assert!(
+            comment::runs(&state.doc, &comment::text_blocks(&state.doc, &state.roots)).is_empty()
+        );
     }
 
     /// Deleting a thread removes its entry and its mark, leaves the text, and
@@ -741,7 +746,7 @@ mod tests {
         let gone = open(&mut state, block, (0, 11), "Gone.");
         let kept = open(&mut state, block, (6, 17), "Kept.");
         state.handle_command(ProseCommand::DeleteComment { comment_id: gone });
-        assert_eq!(comment::all(&state.doc), vec![kept]);
+        assert_eq!(comment::all(&state.doc, &state.roots), vec![kept]);
         assert_eq!(span(&state, kept), (6, 17));
         assert_eq!(
             thread(&state, kept).orphaned,
@@ -749,7 +754,7 @@ mod tests {
         );
         assert_eq!(state.text_of(&block).as_deref(), Some("Hello brave world"));
         assert!(
-            comment::runs(&state.doc, &comment::text_blocks(&state.doc))
+            comment::runs(&state.doc, &comment::text_blocks(&state.doc, &state.roots))
                 .iter()
                 .all(|(thread, _)| *thread == kept)
         );
@@ -774,7 +779,7 @@ mod tests {
         };
         assert_eq!(cache(&state, id), Some(moved));
         assert_eq!(span(&state, id), (10, 15));
-        let entry = comment::entry(&state.doc, &id).expect("the entry");
+        let entry = comment::entry(&state.doc, &state.roots, &id).expect("the entry");
         entry
             .insert(doc::AnnotKey::AnchorStart, 0_i64)
             .expect("a write");

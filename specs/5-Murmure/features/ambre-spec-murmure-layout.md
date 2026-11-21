@@ -138,6 +138,12 @@ A channel that could not open is told with no cause, and its next selection open
 name sealed beside it (`MURMURE-490`). A direct message with neither shows its other members' display
 names, as the relay lists them (`MURMURE-492`). That name is composed for display and never stored.
 
+**The sealed name is a hint.** A seal that failed to reach the relay, or two renames racing, leave
+an older name. A relay can also serve an older seal, and never forge or read one. So an open
+channel whose `meta` reads another name than the latest listing seals that name again
+(`ambre-spec-murmure-channels.md`, `MURMURE-682`). The new seal reaches every member, so a stale
+hint lasts until one member opens the channel.
+
 A channel keeps the message it shows, so back from a thread lands on its root (`MURMURE-168`).
 The pane names the region in focus, and the stylesheet alone decides which regions sit beside it.
 The member list of a space takes the panel a thread takes, beside the public channel it was opened
@@ -182,9 +188,9 @@ in a cell of its own (`MURMURE-421`).
 * **The members a direct message shows can be stale.** They are read with the listing, so a
   member who leaves or renames shows as before until the next one. A long list is never shortened.
   It lands with the `A composed name that follows its members` Story (`ambre-roadmap.md` E5).
-* **The name a closed channel shows can be stale.** A seal that failed to reach the relay, or two
-  renames racing, leave an older name until the channel opens. It lands with the
-  `A stale channel name` Story (`ambre-roadmap.md` E5).
+* **The name a closed channel shows can be stale until one member opens it.** A member who never
+  opens it shows the older name, since only an open reads what `meta` holds
+  (`ambre-spec-murmure-channels.md`, `MURMURE-682`).
 * **A space that failed waits for the next listing.** No timer opens it again, so a quiet session
   shows its channels to join only once a listing comes. A retry on a delay is not ruled.
 * **A space made before the relay knew spaces, and with no channel, is not listed.** Only dev data

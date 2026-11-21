@@ -97,12 +97,19 @@ impl ProseState {
                 out.push_str(&format!("[{i}] text {}\n", render_delta(&delta, &names)));
             }
         }
+        // A root no operation reached reads as an empty map, as it did
+        // opened, and the dump attaches nothing (`PROSE-142`).
+        let read = |root| {
+            doc::root_map_read(&self.doc, &self.roots, root).map_or_else(
+                || LoroValue::Map(Default::default()),
+                |map| map.get_deep_value(),
+            )
+        };
         for root in [doc::Root::Meta, doc::Root::Styles] {
             let label = root.as_str();
-            let value = doc::root_map(&self.doc, root).get_deep_value();
-            out.push_str(&format!("{label} {}\n", render(&value, &names)));
+            out.push_str(&format!("{label} {}\n", render(&read(root), &names)));
         }
-        let annots = match doc::annots(&self.doc).get_deep_value() {
+        let annots = match read(doc::Root::Annots) {
             LoroValue::Map(map) => map
                 .iter()
                 .map(|(k, v)| Annotation {
@@ -144,7 +151,7 @@ impl ProseState {
                 if let Some(LoroValue::String(note)) =
                     attributes.get(crate::mark::MarkRoot::Footnote.as_str())
                     && let Some(uuid) = Id::<Footnote>::parse_str(note.as_str()).ok()
-                    && let Some(block) = crate::note::block(&self.doc, &uuid)
+                    && let Some(block) = crate::note::block(&self.doc, &self.roots, &uuid)
                 {
                     notes.push(block);
                 }

@@ -212,7 +212,7 @@ the ladder, the clamp and the step.
 | a drag past the top or bottom edge | scrolls while the drag continues (`features/ambre-spec-prose-selection.md`) |
 | a caret move that leaves the viewport | scrolls the minimum needed to bring the caret back, with a margin |
 | `Ctrl` with `=`, `-` or `0` | zooms in, zooms out, returns to a hundred per cent (`PROSE-UI-250`) |
-| a preset of the zoom chip, at the end of the status bar | zooms to that preset (`PROSE-UI-250`, `CHROME-147`) |
+| a preset of the zoom chip, at the end of the status bar | zooms to that preset (`PROSE-UI-250`, `CHROME-206`) |
 | `Ctrl` with the wheel, a trackpad pinch | zooms about the pointer (`PROSE-UI-128`) |
 | a canvas resize | keeps the offset and the zoom, recentres the column, re-culls |
 | a layout that changed the page count | rebuilds the column, then clamps the offset (`PROSE-UI-025`) |

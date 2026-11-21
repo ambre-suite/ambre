@@ -294,6 +294,7 @@ mod tests {
             "snapshot_id": given.to_string(),
         });
         let transport = Scripted::new([
+            Ok((200, serde_json::json!({ "snapshot_id": given.to_string() }))),
             Ok((200, link)),
             Ok((200, serde_json::Value::Null)),
             Ok((200, serde_json::json!({ "snapshot_id": given.to_string() }))),
@@ -318,7 +319,7 @@ mod tests {
                 .expect("json")
         };
         assert_eq!(
-            json(2)["covered_seq"],
+            json(3)["covered_seq"],
             41,
             "the snapshot covers the horizon"
         );

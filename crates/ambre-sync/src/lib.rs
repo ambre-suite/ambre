@@ -198,6 +198,7 @@ mod fold;
 pub mod fuzz;
 mod generation;
 mod http;
+mod kept;
 mod key_vouch;
 mod lifecycle;
 mod light;
@@ -222,7 +223,16 @@ mod withheld;
 #[cfg(target_arch = "wasm32")]
 mod worker;
 
+/// The metered read of an answer body, for the wasm-tier test of `SYNC-278`.
+#[cfg(target_arch = "wasm32")]
+#[doc(hidden)]
+pub use http::metered_body_len;
 pub use http::{RelayHost, Url, UrlKind};
+/// The lock every tab takes to renew the kept session, for the wasm-tier
+/// test of `SRV-330`.
+#[cfg(target_arch = "wasm32")]
+#[doc(hidden)]
+pub use kept::web::strictly_exclusive;
 
 // -----------------------------------------------------------------------------
 // Quarantine bounds (`ambre-spec-delta-order.md`)
@@ -262,6 +272,14 @@ impl ambre_core::NarrowCount for Ingested {
         ambre_core::StaticKey::new("Ingested");
 }
 
+/// The open a presence sample comes from: its author's signing key and the
+/// session nonce its sealed body carries (`SYNC-287`). One author holds one
+/// key for every open, so the key alone cannot tell two opens apart.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct SampleSource {
+    author: FixedBytes<PublicKey>,
+    session: FixedBytes<SessionNonce>,
+}
 /// Hard cap on the per-document ephemeral anti-replay map
 /// ([`SyncDocumentState::ephemeral_remote_counters`]). In practice the author set
 /// is bounded by document membership, but a malicious peer can mint arbitrary
@@ -391,22 +409,20 @@ enum SyncEvent {
         roster: Option<ambre_protocol::signaling::CallRoster>,
         log: Option<membership_log::Log>,
     },
-    /// The `meta` document of the channel of a waiting join was read, or `None` when the
-    /// channel answered none.
-    CallChannel {
-        call: Id<ambre_core::id::Call>,
-        meta: Option<Id<Document>>,
-    },
     SessionReady {
         /// `None` for the silent re-login, which no request asked for.
         id: Option<Seq<Request>>,
         user_id: Id<User>,
         display_name: ambre_core::Validated<ambre_core::DisplayName>,
         email: ambre_core::Email,
+        /// Whether a reclaim took the address (`CHROME-146`).
+        address: ambre_core::AddressStanding,
         master_seed: MasterSeed,
         signing_key: SigningKey,
         exchange_key: StaticSecret,
         tokens: http::TokenPair,
+        /// What the device keeps of the session (`SRV-323`, `SRV-328`).
+        kept: kept::Keeping,
     },
     /// A provider return was exchanged: the session's tokens, and whether the
     /// account holds its keys. No key is held yet, so no socket opens.
@@ -432,6 +448,22 @@ enum SyncEvent {
         user_id: Id<User>,
         display_name: ambre_core::Validated<ambre_core::DisplayName>,
         email: ambre_core::Email,
+        address: ambre_core::AddressStanding,
+    },
+    /// A recovery re-sealed the seed its words spell under the new passphrase
+    /// (`SYNC-248`). It carries that seed, the pair the session holds and who
+    /// the account is, so the session opens on the recovered keys
+    /// (`SYNC-293`).
+    AccountRecovered {
+        id: Seq<Request>,
+        master_seed: MasterSeed,
+        signing_key: SigningKey,
+        exchange_key: StaticSecret,
+        tokens: http::TokenPair,
+        user_id: Id<User>,
+        display_name: ambre_core::Validated<ambre_core::DisplayName>,
+        email: ambre_core::Email,
+        address: ambre_core::AddressStanding,
     },
     DocumentList {
         id: Seq<Request>,
@@ -465,6 +497,10 @@ enum SyncEvent {
         /// author is another user. `snapshot_payload` is then the reference,
         /// and this one is checked once the replay is done (`AUTHOR-022`).
         held_snapshot: Option<HeldSnapshot>,
+        /// The trusted reference, fetched when `snapshot_payload` folds a
+        /// delta past a cap. The open starts from it instead, and replays
+        /// from its horizon (`SYNC-307`).
+        fallback: Option<FallbackStart>,
         /// Document kind, carried so a not-yet-on-server doc can be lazily created
         /// with the right type on its first outbound update.
         doc_type: DocType,
@@ -675,6 +711,9 @@ enum SyncEvent {
         /// Whether a provider proved the address the invite names.
         email_proof: ambre_core::EmailProof,
         exchange_pub_key: FixedBytes<ambre_core::ExchangePublicKey>,
+        /// The signing key the relay served beside it, which the fingerprint
+        /// covers and the invite binds (audit `P44`).
+        signing_pub_key: FixedBytes<ambre_core::PublicKey>,
         fingerprint: ambre_core::Opaque<ambre_core::KeyFingerprints>,
     },
     /// The key a user the client named is served with, and its fingerprint.
@@ -683,6 +722,8 @@ enum SyncEvent {
         id: Seq<Request>,
         user_id: Id<User>,
         exchange_pub_key: FixedBytes<ambre_core::ExchangePublicKey>,
+        /// The signing key the relay served beside it (audit `P44`).
+        signing_pub_key: FixedBytes<ambre_core::PublicKey>,
         fingerprint: ambre_core::Opaque<ambre_core::KeyFingerprints>,
     },
     /// Invite completed: the invitee's DocumentKey was wrapped via ECDH and the
@@ -921,10 +962,11 @@ struct SyncDocumentState {
     /// The links the rotations left: a key older than the cache opens through
     /// them, walked back from the active key (`SYNC-119`).
     chain: chain::Chain,
-    /// Per-author ephemeral anti-replay counter. Keyed by the author's Ed25519
-    /// verifying key bytes. An inbound ephemeral whose counter is <= the stored
-    /// value is silently dropped.
-    ephemeral_remote_counters: HashMap<FixedBytes<PublicKey>, Seq<Ephemerals>>,
+    /// Per-open ephemeral anti-replay counter. Keyed by the author's Ed25519
+    /// verifying key and by the session nonce of the open the sample names.
+    /// A sender counts from 1 at each open (`SYNC-287`, audit `P22`). An inbound
+    /// ephemeral whose counter is <= the stored value is silently dropped.
+    ephemeral_remote_counters: HashMap<SampleSource, Seq<Ephemerals>>,
     /// Directory of this document's members' Ed25519 signing keys, mapping an
     /// ephemeral author's verifying key to their canonical `Id<User>`
     /// (`ambre-spec-membership.md`). Built from the members response already fetched at open and
@@ -938,6 +980,11 @@ struct SyncDocumentState {
     /// The keys whose deltas and snapshots this document takes, from the
     /// latest walk of its log (`SYNC-211`).
     writers: membership_log::Writers,
+    /// What this document applied of each author: the highest clock of
+    /// their deltas and of what each snapshot it opened folds. It also holds
+    /// the heads their deltas signed (`SYNC-300`, `SYNC-301`). A cell: the opens
+    /// that read it borrow the document shared.
+    applied: std::cell::RefCell<Applied>,
     /// The latest departure the current key was checked against, or found
     /// owed for. A walk that holds a later one leaves the current key in
     /// the leaver's hands, so a writer owes a rotation (`SYNC-223`).
@@ -1044,12 +1091,119 @@ pub(crate) struct HeldSnapshot {
     pub blob: Payload<pipeline::FetchedBlob>,
 }
 
+/// The most distinct log heads one author's applied deltas are kept under.
+/// Past it, the heads merge into the empty head, which no readmission
+/// passes: the bound fails closed (`SYNC-301`).
+const APPLIED_HEADS_PER_AUTHOR: Count<AppliedHeads> = Count::new(64);
+
+/// The distinct log heads kept for one author's applied deltas.
+enum AppliedHeads {}
+
+impl ambre_core::NarrowCount for AppliedHeads {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("AppliedHeads");
+}
+
+/// What a document applied of each author's deltas (`SYNC-300`,
+/// `SYNC-301`).
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Applied {
+    /// The highest clock of each author's deltas, alone or folded in a
+    /// snapshot. A revoke caps its member at the clock held here.
+    pub(crate) clocks: HashMap<FixedBytes<PublicKey>, Seq<DeltaAuthor>>,
+    /// The highest clock of each author's deltas under each log head they
+    /// signed, for the deltas that reached the document alone. A snapshot
+    /// names no head, so it adds nothing here.
+    heads: HashMap<FixedBytes<PublicKey>, Vec<(ambre_protocol::LogHead, Seq<DeltaAuthor>)>>,
+}
+
+impl Applied {
+    /// Notes a delta `author` signed at `clock`, alone or folded.
+    fn note(&mut self, author: &FixedBytes<PublicKey>, clock: Seq<DeltaAuthor>) {
+        self.clocks
+            .entry(*author)
+            .and_modify(|held| *held = (*held).max(clock))
+            .or_insert(clock);
+    }
+
+    /// Notes a delta `author` signed at `clock` under `head`, which reached
+    /// the document alone.
+    fn note_signed(
+        &mut self,
+        author: &FixedBytes<PublicKey>,
+        head: ambre_protocol::LogHead,
+        clock: Seq<DeltaAuthor>,
+    ) {
+        self.note(author, clock);
+        let heads = self.heads.entry(*author).or_default();
+        if let Some(held) = heads.iter_mut().find(|(h, _)| *h == head) {
+            held.1 = held.1.max(clock);
+            return;
+        }
+        if Count::<AppliedHeads>::of(heads.len()) < APPLIED_HEADS_PER_AUTHOR {
+            heads.push((head, clock));
+            return;
+        }
+        // Past the bound, the clock counts under the empty head, which no
+        // readmission passes.
+        let empty = ambre_protocol::LogHead::EMPTY;
+        match heads.iter_mut().find(|(h, _)| *h == empty) {
+            Some(held) => held.1 = held.1.max(clock),
+            None => {
+                if let Some(slot) = heads.last_mut() {
+                    *slot = (empty, slot.1.max(clock));
+                }
+            }
+        }
+    }
+
+    /// Takes in what `other` applied: a reopen resumes from a local copy
+    /// that folds it.
+    fn merge(&mut self, other: Self) {
+        for (author, clock) in other.clocks {
+            self.note(&author, clock);
+        }
+        for (author, heads) in other.heads {
+            for (head, clock) in heads {
+                self.note_signed(&author, head, clock);
+            }
+        }
+    }
+
+    /// Whether nothing was applied.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.clocks.is_empty()
+    }
+
+    /// Whether a delta applied lies past a cap `writers` sets, or past a cap
+    /// a later grant lifted under a head before that grant.
+    fn past_cap(&self, writers: &membership_log::Writers) -> bool {
+        let capped = self
+            .clocks
+            .iter()
+            .any(|(author, clock)| writers.cap(author).is_some_and(|cap| *clock > cap));
+        let excluded = self.heads.iter().any(|(author, heads)| {
+            heads
+                .iter()
+                .any(|(head, clock)| !writers.readmits(author, *clock, *head))
+        });
+        capped || excluded
+    }
+}
+
 /// The snapshot an open adopts whole, still sealed, and the key it must
 /// verify under: the author its confirmation names, or this user
 /// (`AUTHOR-030`).
 pub(crate) struct StartBlob {
     pub blob: Payload<pipeline::FetchedBlob>,
     pub author: FixedBytes<PublicKey>,
+}
+
+/// An older trusted snapshot an open starts from when its start folds a
+/// delta past a cap, and what the relay served it as (`SYNC-307`).
+pub(crate) struct FallbackStart {
+    pub start: StartBlob,
+    pub served: pipeline::ServedSnapshot,
 }
 
 impl SyncDocumentState {
@@ -1087,6 +1241,7 @@ impl SyncDocumentState {
             ephemeral_remote_counters: HashMap::new(),
             signing_keys: HashMap::new(),
             writers: membership_log::Writers::Unchecked,
+            applied: std::cell::RefCell::new(Applied::default()),
             departed: None,
             unvouched: Vec::new(),
             refused: Vec::new(),
@@ -1182,9 +1337,11 @@ impl SyncDocumentState {
         pipeline::open_ephemeral(eph, &key)
     }
 
-    /// Anti-replay gate for an inbound ephemeral. Returns `true` if `counter` is
-    /// strictly greater than the last value seen for `author_pk` (accept and
-    /// record it); `false` if it is a replay (drop).
+    /// Anti-replay gate for an inbound ephemeral. Returns `true` when `counter`
+    /// passes the last value seen for `author_pk` in the open `session` names,
+    /// and records it. Returns `false` for a replay, which the caller drops.
+    /// A reopened author names a new session, so a peer that stayed open
+    /// takes its samples from counter 1 again (`SYNC-287`, audit `P22`).
     ///
     /// The counter map is bounded by [`MAX_EPHEMERAL_REMOTE_AUTHORS`]: when a new
     /// author would exceed the cap, the least-active entry (lowest counter) is
@@ -1194,19 +1351,24 @@ impl SyncDocumentState {
     fn accept_ephemeral_counter(
         &mut self,
         author_pk: &FixedBytes<PublicKey>,
+        session: &FixedBytes<SessionNonce>,
         counter: Seq<Ephemerals>,
     ) -> bool {
-        // A sender counts from 1, so the floor of an author not seen yet is
-        // the counter before its first send.
+        let source = SampleSource {
+            author: *author_pk,
+            session: *session,
+        };
+        // A sender counts from 1 at each open, so the floor of an open not
+        // seen yet is the counter before its first send.
         let last = self
             .ephemeral_remote_counters
-            .get(author_pk)
+            .get(&source)
             .copied()
             .unwrap_or(Seq::<Ephemerals>::new(0));
         if counter <= last {
             return false;
         }
-        let is_new = !self.ephemeral_remote_counters.contains_key(author_pk);
+        let is_new = !self.ephemeral_remote_counters.contains_key(&source);
         if is_new && Count::of(self.ephemeral_remote_counters.len()) >= MAX_EPHEMERAL_REMOTE_AUTHORS
         {
             // Evict the least-active (lowest-counter) author to make room.
@@ -1219,7 +1381,7 @@ impl SyncDocumentState {
                 self.ephemeral_remote_counters.remove(&evict);
             }
         }
-        self.ephemeral_remote_counters.insert(*author_pk, counter);
+        self.ephemeral_remote_counters.insert(source, counter);
         true
     }
 
@@ -1299,14 +1461,82 @@ impl SyncDocumentState {
         let snapshot = pipeline::decode_snapshot_blob(blob, self.document_id, served)?;
         // A snapshot its author could not have written as a delta is refused
         // whole (`SYNC-211`).
-        if !self.writers.admits(&snapshot.public_data.pub_key) {
+        // A capped writer's snapshot names no clock, so its deltas replay
+        // under the cap instead (`SYNC-300`).
+        if !self.writers.admits_snapshot(&snapshot.public_data.pub_key) {
             return Err(pipeline::PipelineError::NotAWriter);
+        }
+        // A snapshot that folds a delta past the cap of its writer holds a
+        // write the log refuses, whoever signed it. It is refused whole, and
+        // the deltas replay one by one under the cap (`SYNC-300`).
+        let folded = &snapshot.public_data.parent_snapshot_update_clocks;
+        if self.writers.folds_past_cap(folded) {
+            return Err(pipeline::PipelineError::PastCap);
         }
         let key = self
             .key_named(snapshot.public_data.key_id)
             .ok_or(pipeline::PipelineError::WrongKey)?;
         let payload = pipeline::open_snapshot(&snapshot, &key)?;
+        // What the snapshot folds counts as applied, so a revoke caps a
+        // writer at the deltas the snapshot holds too (`SYNC-300`).
+        for (author, clock) in folded {
+            self.note_applied(author, *clock);
+        }
         Ok((payload, snapshot.public_data.pub_key))
+    }
+
+    /// Notes that a delta `author` signed at `clock` reached the document,
+    /// alone or folded in a snapshot (`SYNC-300`).
+    fn note_applied(&self, author: &FixedBytes<PublicKey>, clock: Seq<DeltaAuthor>) {
+        self.applied.borrow_mut().note(author, clock);
+    }
+
+    /// The highest clock of `author`'s deltas this document applied, the
+    /// cap a revoke of that author names (`SYNC-300`). Zero for an author
+    /// none of whose deltas reached it. The revoke reads the whole map, so
+    /// only a test reads one author.
+    #[cfg(test)]
+    pub(crate) fn applied_clock(&self, author: &FixedBytes<PublicKey>) -> Seq<DeltaAuthor> {
+        self.applied
+            .borrow()
+            .clocks
+            .get(author)
+            .copied()
+            .unwrap_or(Seq::<DeltaAuthor>::new(0))
+    }
+
+    /// The last clock this client's key `own` wrote in this document. It is
+    /// the clock it sealed last, or a higher one an echo or a snapshot held.
+    /// A departure names it as its cap (`SYNC-306`).
+    pub(crate) fn own_last_clock(&self, own: &FixedBytes<PublicKey>) -> Seq<DeltaAuthor> {
+        let applied = self.applied.borrow().clocks.get(own).copied();
+        applied.map_or(self.local_clock, |clock| clock.max(self.local_clock))
+    }
+
+    /// What this document applied, which an eviction keeps for the reopen
+    /// (`SYNC-300`).
+    pub(crate) fn take_applied(&self) -> Applied {
+        self.applied.take()
+    }
+
+    /// The highest clock of each author's deltas this document applied, the
+    /// caps a revoke names (`SYNC-300`).
+    pub(crate) fn applied_clocks(&self) -> HashMap<FixedBytes<PublicKey>, Seq<DeltaAuthor>> {
+        self.applied.borrow().clocks.clone()
+    }
+
+    /// Notes what `applied` holds as applied: a reopen resumes from a local
+    /// copy that folds it (`SYNC-300`, `RESID-010`).
+    pub(crate) fn resume_applied(&self, applied: Applied) {
+        self.applied.borrow_mut().merge(applied);
+    }
+
+    /// Whether a delta this document applied lies past a cap `writers`
+    /// sets. A cap a later grant lifted still holds a delta signed under a
+    /// head before that grant. The state then holds a write the log refuses, and is read
+    /// again from the relay (`SYNC-300`, `SYNC-301`).
+    pub(crate) fn applied_past_cap(&self, writers: &membership_log::Writers) -> bool {
+        self.applied.borrow().past_cap(writers)
     }
 
     /// Opens an update with the one key it names, and with no other
@@ -1332,11 +1562,16 @@ impl SyncDocumentState {
     ) -> Result<SignedDelta, pipeline::PipelineError> {
         let signer = &update.public_data.pub_key;
         // A signer the log never granted a writing role writes nothing, though
-        // it holds a key the cache or the chain reaches (`SYNC-211`).
-        if !self.writers.admits(signer) {
+        // it holds a key the cache or the chain reaches (`SYNC-211`). A revoked
+        // writer writes nothing past the cap of its revoke (`SYNC-300`), and a
+        // readmitted one nothing it signed while it stood excluded
+        // (`SYNC-301`).
+        let (clock, head) = (update.public_data.clock, update.public_data.log_head);
+        if !self.writers.admits_delta(signer, clock, head) {
             return Err(pipeline::PipelineError::NotAWriter);
         }
         let body = pipeline::split_update_body(self.open_update_named(update)?)?;
+        self.applied.borrow_mut().note_signed(signer, head, clock);
         Ok(SignedDelta {
             seq,
             peer: ambre_crypto::peer::derive_peer_id(signer, &body.nonce),
@@ -1380,7 +1615,9 @@ pub struct SyncState {
     /// Access + refresh tokens returned by login/setup and rotated by HTTP 401
     /// retry helpers. Kept in worker memory only.
     tokens: http::TokenStore,
-    /// Authenticated user id, set after Unlock/SetupAccount.
+    /// The session this device keeps across a page reload (`SRV-323`).
+    kept: kept::KeptSession,
+    /// Authenticated user id, set after a sign-in, an unlock or a key setup.
     user_id: Option<Id<User>>,
 
     // -- Session-level crypto (derived once at Unlock, zeroized at Logout) ----
@@ -1419,6 +1656,19 @@ pub struct SyncState {
     /// document. So a re-key of a channel this client walked earlier in the
     /// session stands on the latest head it walked or signed (audit `P27`).
     log_footings: HashMap<Id<Document>, key_vouch::Footing>,
+    /// The keys each user's fingerprint covered when this session last showed
+    /// it (audit `P44`). An invite of that user refuses another signing key
+    /// beside the exchange key the user confirmed.
+    shown_identities: HashMap<Id<User>, ambre_crypto::IdentityKeys>,
+    /// Where each log stood when this client last accepted a key of it, by
+    /// the log's document. It holds this session and the kept ones before it
+    /// (`SYNC-290`). A listed name opens under the key it names alone
+    /// (`SYNC-291`).
+    kept_logs: HashMap<Id<Document>, ambre_bus::KeptLog>,
+    /// The links each log's latest open or rotation in this session held,
+    /// by the log's document. A listed name sealed before the last rotation
+    /// opens through them, with no request (`SYNC-302`).
+    kept_chains: HashMap<Id<Document>, chain::Chain>,
 
     // -- Single multiplexed WebSocket -----------------------------------------
     ws: Option<WebSocket>,
@@ -1486,6 +1736,13 @@ pub struct SyncState {
     /// user. A channel never opened is watched under it (the Murmure
     /// notifications spec).
     listed_keys: HashMap<Id<Channel>, (Id<Meta>, DocumentKey)>,
+    /// The writers of the last log this client walked, by log document. It
+    /// outlives the close of the document, until sign-out. A listed name is
+    /// checked against it (`SYNC-135`).
+    walked_writers: HashMap<Id<Document>, membership_log::Writers>,
+    /// The channel key the catalogue entry of each listed channel holds,
+    /// which every open of the channel trusts (`SYNC-299`).
+    catalogue_pins: HashMap<Id<Channel>, key_vouch::CataloguePin>,
     /// The documents of spaces this client created and the relay does not
     /// hold yet. Their lazy creation marks them spaces (`SYNC-170`).
     new_spaces: HashSet<Id<Document>>,
@@ -1567,6 +1824,10 @@ pub struct SyncState {
     /// subscription (`RESID-004`).
     light: HashMap<Id<Document>, light::LightSubscription>,
 
+    /// The clocks a reopen of an evicted document resumes with: what its
+    /// local copy folds, until its open lands (`SYNC-300`, `RESID-010`).
+    resumed_clocks: HashMap<Id<Document>, Applied>,
+
     /// Last dev username seen on `DevLogin`, kept so the WS reauth path can
     /// silently re-login if the refresh token is also dead. That happens when
     /// the server restarts with a fresh JWT key and an empty Redis. `None` in a
@@ -1595,6 +1856,9 @@ impl SyncState {
             creating_public: HashMap::new(),
             space_rotations: HashMap::new(),
             log_footings: HashMap::new(),
+            shown_identities: HashMap::new(),
+            kept_logs: HashMap::new(),
+            kept_chains: HashMap::new(),
             ws: None,
             _onmessage: None,
             _onclose: None,
@@ -1604,6 +1868,7 @@ impl SyncState {
             lifecycle: lifecycle::Lifecycle::default(),
             clock: lifecycle::system_clock(),
             renewal: renewal::Renewal::default(),
+            kept: kept::KeptSession::default(),
             renewing: Rc::new(futures_util::lock::Mutex::new(())),
             #[cfg(not(target_arch = "wasm32"))]
             renewals_ahead: Vec::new(),
@@ -1620,6 +1885,8 @@ impl SyncState {
             socket_opens: Count::ZERO,
             member_channels_asked: ambre_core::Issuer::default(),
             listed_keys: HashMap::new(),
+            walked_writers: HashMap::new(),
+            catalogue_pins: HashMap::new(),
             new_spaces: HashSet::new(),
             held_creations: HashMap::new(),
             call: None,
@@ -1640,6 +1907,7 @@ impl SyncState {
             pending_pre_session_updates: Vec::new(),
             session_nonces: HashMap::new(),
             light: HashMap::new(),
+            resumed_clocks: HashMap::new(),
             #[cfg(feature = "dev-login")]
             dev_username: None,
         }
@@ -1659,6 +1927,7 @@ impl SyncState {
             tokens: self.tokens.clone(),
             renewing: self.renewing.clone(),
             renewed: self.event_tx.clone(),
+            kept: self.kept_link(),
         }
     }
 
@@ -1851,6 +2120,7 @@ impl SyncState {
             } => {
                 self.pinned_inviters.insert(document_id, inviter);
             }
+            SyncCommand::KeepLog { document_id, kept } => self.hold_kept_log(document_id, kept),
             SyncCommand::PinMurmureInviter { inviter } => {
                 self.murmure_roots.insert(inviter);
             }
@@ -1918,17 +2188,23 @@ impl SyncState {
             SyncCommand::OpenChannel {
                 channel_id,
                 listed_in,
+                catalogue_key,
             } => {
                 match listed_in {
                     Some(space_id) => self.listed_channels.insert(channel_id, space_id),
                     None => self.listed_channels.remove(&channel_id),
                 };
+                self.pin_catalogue(channel_id, listed_in.zip(catalogue_key.as_ref()));
                 self.handle_open_channel(channel_id, listed_in);
             }
             SyncCommand::MarkChannelListed {
                 channel_id,
                 space_id,
-            } => self.mark_channel_listed(channel_id, space_id),
+                catalogue_key,
+            } => {
+                self.pin_catalogue(channel_id, Some((space_id, &catalogue_key)));
+                self.mark_channel_listed(channel_id, space_id);
+            }
             SyncCommand::RotateSpace { space_id, channels } => {
                 self.handle_rotate_space(space_id, channels);
             }
@@ -2055,6 +2331,7 @@ impl SyncState {
                 self.handle_join_call(target, call_client::Opening::Start);
             }
             SyncCommand::LeaveCall => self.leave_call(),
+            SyncCommand::CallMeta { call, meta } => self.call_channel(call, meta),
             SyncCommand::AskCallRoster {
                 call,
                 channel,
@@ -2080,17 +2357,30 @@ impl SyncState {
         self.send_to_logic(LogicEvent::Rest { id: Some(id), evt });
     }
 
+    /// Announce the session `ready`, then the reclaim of its address when the
+    /// relay named one (`CHROME-146`). The reclaim follows the session, so the
+    /// page that shows it already shows the account.
+    fn announce_session(
+        &self,
+        id: Option<Seq<Request>>,
+        ready: RestEvent,
+        address: ambre_core::AddressStanding,
+    ) {
+        self.send_to_logic(LogicEvent::Rest { id, evt: ready });
+        if address == ambre_core::AddressStanding::Reclaimed {
+            self.send_to_logic(LogicEvent::Rest {
+                id: None,
+                evt: RestEvent::AddressReclaimed,
+            });
+        }
+    }
+
     /// Dispatch a relayed [`RestCommand`]. Most arms are placeholders today; the
     /// ones that already produce data answer via [`reply`](Self::reply).
     fn handle_rest(&mut self, id: Seq<Request>, cmd: RestCommand) {
         match cmd {
             // -- Session -------------------------------------------------------
             RestCommand::Unlock { passphrase } => self.handle_unlock(id, passphrase),
-            RestCommand::SetupAccount {
-                passphrase,
-                email,
-                display_name,
-            } => self.handle_setup_account(id, passphrase, email, display_name),
             RestCommand::SetUpKeys { passphrase } => self.handle_set_up_keys(id, passphrase),
             RestCommand::DevLogin { username } => self.handle_dev_login(Some(id), username),
             RestCommand::ProviderSignIn { provider } => self.handle_provider_sign_in(id, provider),
@@ -2112,6 +2402,7 @@ impl SyncState {
                 self.handle_recover_account(id, recovery_words, new_passphrase);
             }
             RestCommand::Logout => self.handle_sign_out(id),
+            RestCommand::ResumeSession => self.handle_resume(id),
 
             // -- Document CRUD -------------------------------------------------
             RestCommand::ListDocuments => self.handle_list_documents(id),
@@ -2552,6 +2843,9 @@ mod setup_tests {
 mod ephemeral_tests {
     use super::*;
 
+    /// The session nonce of the one open these tests read.
+    const SESSION: FixedBytes<SessionNonce> = FixedBytes::from_array([7; 16]);
+
     fn doc_state() -> SyncDocumentState {
         SyncDocumentState::new(
             Id::<Document>::mint(),
@@ -2565,13 +2859,30 @@ mod ephemeral_tests {
     fn monotonic_counter_accepted_replay_dropped() {
         let mut d = doc_state();
         let author = FixedBytes::from_array([1u8; 32]);
-        assert!(d.accept_ephemeral_counter(&author, Seq::<Ephemerals>::new(1)));
-        assert!(d.accept_ephemeral_counter(&author, Seq::<Ephemerals>::new(2)));
+        assert!(d.accept_ephemeral_counter(&author, &SESSION, Seq::<Ephemerals>::new(1)));
+        assert!(d.accept_ephemeral_counter(&author, &SESSION, Seq::<Ephemerals>::new(2)));
         // Replay / stale counters are dropped.
-        assert!(!d.accept_ephemeral_counter(&author, Seq::<Ephemerals>::new(2)));
-        assert!(!d.accept_ephemeral_counter(&author, Seq::<Ephemerals>::new(1)));
+        assert!(!d.accept_ephemeral_counter(&author, &SESSION, Seq::<Ephemerals>::new(2)));
+        assert!(!d.accept_ephemeral_counter(&author, &SESSION, Seq::<Ephemerals>::new(1)));
         // Forward progress resumes.
-        assert!(d.accept_ephemeral_counter(&author, Seq::<Ephemerals>::new(3)));
+        assert!(d.accept_ephemeral_counter(&author, &SESSION, Seq::<Ephemerals>::new(3)));
+    }
+
+    /// `SYNC-287`, audit `P22`: Alice reopens the document, and her new
+    /// open counts from 1 again. A peer that stayed open takes it, and still
+    /// refuses a replay of her former open. Before the fix, the guard read
+    /// her key alone and dropped her samples until the new counter passed
+    /// the old one.
+    #[test]
+    fn a_reopened_author_counts_from_one_again() {
+        let mut d = doc_state();
+        let alice = FixedBytes::from_array([1u8; 32]);
+        let reopened = FixedBytes::<SessionNonce>::from_array([8; 16]);
+        assert!(d.accept_ephemeral_counter(&alice, &SESSION, Seq::<Ephemerals>::new(40)));
+        assert!(d.accept_ephemeral_counter(&alice, &reopened, Seq::<Ephemerals>::new(1)));
+        assert!(!d.accept_ephemeral_counter(&alice, &reopened, Seq::<Ephemerals>::new(1)));
+        assert!(!d.accept_ephemeral_counter(&alice, &SESSION, Seq::<Ephemerals>::new(40)));
+        assert!(d.accept_ephemeral_counter(&alice, &reopened, Seq::<Ephemerals>::new(2)));
     }
 
     #[test]
@@ -2582,7 +2893,7 @@ mod ephemeral_tests {
             let mut author = [0u8; 32];
             author[..8].copy_from_slice(&i.to_le_bytes());
             let author = FixedBytes::from_array(author);
-            assert!(d.accept_ephemeral_counter(&author, Seq::<Ephemerals>::new(1)));
+            assert!(d.accept_ephemeral_counter(&author, &SESSION, Seq::<Ephemerals>::new(1)));
         }
         assert!(d.ephemeral_remote_counters.len() <= MAX_EPHEMERAL_REMOTE_AUTHORS.get() as usize);
     }
@@ -2599,10 +2910,10 @@ mod ephemeral_tests {
     #[test]
     fn below_the_cap_each_author_keeps_its_counter() {
         let mut d = doc_state();
-        assert!(d.accept_ephemeral_counter(&author(0), Seq::<Ephemerals>::new(1)));
-        assert!(d.accept_ephemeral_counter(&author(1), Seq::<Ephemerals>::new(1)));
-        assert!(!d.accept_ephemeral_counter(&author(0), Seq::<Ephemerals>::new(1)));
-        assert!(!d.accept_ephemeral_counter(&author(1), Seq::<Ephemerals>::new(1)));
+        assert!(d.accept_ephemeral_counter(&author(0), &SESSION, Seq::<Ephemerals>::new(1)));
+        assert!(d.accept_ephemeral_counter(&author(1), &SESSION, Seq::<Ephemerals>::new(1)));
+        assert!(!d.accept_ephemeral_counter(&author(0), &SESSION, Seq::<Ephemerals>::new(1)));
+        assert!(!d.accept_ephemeral_counter(&author(1), &SESSION, Seq::<Ephemerals>::new(1)));
     }
 
     /// At the cap, a known author's next counter evicts nobody: only a new
@@ -2612,11 +2923,19 @@ mod ephemeral_tests {
         let mut d = doc_state();
         let cap = u64::from(MAX_EPHEMERAL_REMOTE_AUTHORS.get());
         for i in 0..cap {
-            assert!(d.accept_ephemeral_counter(&author(i), Seq::<Ephemerals>::new(i + 1)));
+            assert!(d.accept_ephemeral_counter(
+                &author(i),
+                &SESSION,
+                Seq::<Ephemerals>::new(i + 1)
+            ));
         }
-        assert!(d.accept_ephemeral_counter(&author(cap - 1), Seq::<Ephemerals>::new(cap + 1)));
+        assert!(d.accept_ephemeral_counter(
+            &author(cap - 1),
+            &SESSION,
+            Seq::<Ephemerals>::new(cap + 1)
+        ));
         assert!(
-            !d.accept_ephemeral_counter(&author(0), Seq::<Ephemerals>::new(1)),
+            !d.accept_ephemeral_counter(&author(0), &SESSION, Seq::<Ephemerals>::new(1)),
             "the least active author is still known"
         );
     }
@@ -2815,9 +3134,9 @@ mod seal_tests {
         let WsClientMsg::Ephemeral(ephemeral) = &frames[1] else {
             panic!("the second frame is not the ephemeral: {:?}", frames[1]);
         };
-        assert_eq!(
-            pipeline::open_ephemeral(ephemeral, key).expect("opens"),
-            typed
-        );
+        let opened = pipeline::open_ephemeral(ephemeral, key).expect("opens");
+        let body = pipeline::split_presence_body(&opened).expect("splits");
+        assert_eq!(body.session, FixedBytes::from_array([1; 16]));
+        assert_eq!(body.sample, typed);
     }
 }

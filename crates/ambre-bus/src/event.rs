@@ -69,6 +69,14 @@ pub enum LogicEvent {
         channel: Id<ambre_core::id::Channel>,
         members: crate::CallMembers,
     },
+    /// A join of `call` waits for the `meta` document of `channel`. The Logic thread answers
+    /// [`crate::SyncCommand::CallMeta`] from the channel state it opened. The relay never
+    /// names that document, so it cannot seat the join under another channel's log
+    /// (`CALL-149`, audit `P24`).
+    CallMetaAsked {
+        call: Id<ambre_core::id::Call>,
+        channel: Id<ambre_core::id::Channel>,
+    },
 
     // -- Real-time sync (server push) ------------------------------------------
     /// The identity this session writes under in a document, sent once per open
@@ -178,6 +186,20 @@ pub enum LogicEvent {
     InviterProven {
         document_id: Id<Document>,
         inviter: ambre_core::FixedBytes<ambre_core::InviterPin>,
+    },
+
+    /// The log capped a writer below a delta the document applied: the state
+    /// holds a write the log refuses (`SYNC-300`). The Logic thread drops the
+    /// document and its local copy, and reads it again from the relay, where
+    /// the cap holds from the start.
+    DocumentReread { document_id: Id<Document> },
+
+    /// Where the membership log of `document_id` stands for this client
+    /// moved: the local store keeps it for the sessions after (`SYNC-290`).
+    /// `document_id` names the log's document, the `meta` of a channel.
+    LogKept {
+        document_id: Id<Document>,
+        kept: KeptLog,
     },
 
     /// Initial hydration of a freshly opened document is complete. The Sync thread has
@@ -550,6 +572,10 @@ pub enum AuthFailure {
     /// This build holds no development sign-in, so a sign-in by a bare name
     /// derived no key and sent nothing (`ZK-045`).
     NoDevSignIn,
+    /// The relay no longer holds the sealed seed a recovery or a passphrase
+    /// change read: another device re-sealed it in between. Nothing was
+    /// written, and a new try reads the seal again (`SYNC-295`).
+    StaleReseal,
 }
 
 ambre_core::define_flag! {
@@ -575,7 +601,8 @@ impl AuthFailure {
             | Self::Api(_)
             | Self::BadRecoveryWords(_)
             | Self::ForeignRecoveryWords
-            | Self::NoDevSignIn => PassphraseVerdict::Other,
+            | Self::NoDevSignIn
+            | Self::StaleReseal => PassphraseVerdict::Other,
         }
     }
 }
@@ -591,22 +618,7 @@ impl fmt::Display for AuthFailure {
             Self::SessionEnded => f.write_str("Unlock failed: the session ended"),
             Self::SeedNotWrapped => f.write_str("Sign-in failed: the account key did not seal"),
             Self::Api(failure) => write!(f, "Sign-in failed: {failure}"),
-            Self::WeakPassphrase(weakness) => {
-                f.write_str("Choose a stronger passphrase: ")?;
-                f.write_str(match weakness {
-                    ambre_core::PassphraseWeakness::CommonPassword => {
-                        "it is a common password, which a guess tries first."
-                    }
-                    ambre_core::PassphraseWeakness::Repetition => "it repeats itself.",
-                    ambre_core::PassphraseWeakness::Sequence => {
-                        "it follows the alphabet, the digits or a keyboard row."
-                    }
-                    ambre_core::PassphraseWeakness::TooShort => {
-                        "it is too short to resist an offline guess."
-                    }
-                })?;
-                f.write_str(" Four or more random words resist one.")
-            }
+            Self::WeakPassphrase(weakness) => f.write_str(weakness.message()),
             Self::BadRecoveryWords(refusal) => {
                 f.write_str("Recovery failed: ")?;
                 f.write_str(match refusal {
@@ -627,6 +639,10 @@ impl fmt::Display for AuthFailure {
             Self::NoDevSignIn => {
                 f.write_str("Sign-in failed: this build holds no development sign-in.")
             }
+            Self::StaleReseal => f.write_str(
+                "Nothing changed: the account keys changed on another device while this ran. \
+                 Try again.",
+            ),
         }
     }
 }
@@ -866,6 +882,59 @@ pub enum Successor {
     Fetched,
     /// This client registered it: the channel holds it at once.
     Created,
+}
+
+/// Where the membership log of one document stood when this client last
+/// accepted it (`SYNC-290`, `SYNC-291`). The anchor and the head are the
+/// footing of the checks of an open. The key is the document key that open
+/// or the rotation after it accepted, and the links are the chain it held
+/// (`SYNC-308`). The Sync worker builds it, the local store keeps it, and
+/// nothing else reads it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KeptLog {
+    /// The digest of the first entry the walk started from.
+    pub anchor: ambre_core::FixedBytes<ambre_core::EntryDigest>,
+    /// The latest valid head this client walked or signed.
+    pub head: ambre_protocol::LogHead,
+    /// The id of the document key the checks accepted last.
+    pub key: ambre_core::FixedBytes<ambre_core::KeyId>,
+    /// The links the open or the rotation held, each signed by a writer of
+    /// the log. A reload rebuilds the chain from them, and refuses a chain
+    /// the log no longer extends (`SYNC-308`).
+    pub links: Vec<ambre_protocol::KeyLink>,
+}
+
+/// The role of a [`KeptLog`] as the local store holds it: its postcard
+/// encoding. `Payload<KeptLogRow>`.
+pub enum KeptLogRow {}
+
+impl ambre_core::PayloadKind for KeptLogRow {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("KeptLogRow");
+}
+
+impl KeptLog {
+    /// The row the local store keeps.
+    ///
+    /// # Errors
+    ///
+    /// The encoder's error, which a value of fixed fields never reaches.
+    pub fn to_row(&self) -> Result<ambre_core::Payload<KeptLogRow>, postcard::Error> {
+        postcard::to_allocvec(self).map(ambre_core::Payload::new)
+    }
+
+    /// The kept log a row holds. It is `None` for bytes that are not one: a
+    /// row an older or a later build wrote, or a damaged one. A row with
+    /// bytes past the kept log is no row either. The store then holds no
+    /// head and no chain for that log. The next open walks from its served
+    /// anchor and fetches the links again (`SYNC-308`).
+    #[must_use]
+    pub fn from_row(row: &ambre_core::Payload<KeptLogRow>) -> Option<Self> {
+        match postcard::take_from_bytes(row.as_bytes()) {
+            Ok((kept, [])) => Some(kept),
+            _ => None,
+        }
+    }
 }
 
 #[cfg(test)]

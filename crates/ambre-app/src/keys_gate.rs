@@ -15,6 +15,10 @@
 // store or log line of this thread holds it afterwards (`CHROME-100`). The words of a
 // refusal, the worker's or the field's own, sit in one alert line, which a
 // screen reader announces when it changes (`CHROME-131`).
+//
+// Each face names the account the provider vouched for, so the setup asks for
+// no name or address the provider gave (`CHROME-144`). Each face offers a
+// sign-out, for a person who signed in with the wrong account (`CHROME-142`).
 // ============================================================================
 
 use ambre_bus::KeySetup;
@@ -47,7 +51,7 @@ mod view {
     use super::KeysFace;
     use ambre_bus::{AuthFailure, RestCommand};
     use ambre_chrome::PassphraseIntent;
-    use ambre_core::{Confidential, Passphrase};
+    use ambre_core::{Confidential, DisplayName, Email, Passphrase, Validated};
     use ambre_logic::app::LogicCommand;
     use leptos::html;
     use leptos::prelude::*;
@@ -62,12 +66,22 @@ mod view {
         Worker(AuthFailure),
     }
 
-    /// The state of the gate: the face it shows, and the last refusal. It holds
-    /// no passphrase, by construction (`CHROME-100`).
+    /// Who the provider signed in: the name and the address it gave
+    /// (`CHROME-144`).
+    #[derive(Clone, PartialEq, Eq, Debug)]
+    pub(crate) struct GateIdentity {
+        pub(crate) display_name: Validated<DisplayName>,
+        pub(crate) email: Email,
+    }
+
+    /// The state of the gate: the face it shows, the account it names and the
+    /// last refusal. It holds no passphrase, by construction (`CHROME-100`).
     #[derive(Clone, Copy)]
     pub(crate) struct KeysGate {
         /// `None` while no provider account waits on its keys.
         pub(crate) face: RwSignal<Option<KeysFace>>,
+        /// The account the provider signed in, once it answered.
+        pub(crate) identity: RwSignal<Option<GateIdentity>>,
         /// The words the alert line shows, or `None` for a quiet line.
         pub(crate) refusal: RwSignal<Option<GateRefusal>>,
     }
@@ -77,13 +91,23 @@ mod view {
         pub(crate) fn new() -> Self {
             Self {
                 face: RwSignal::new(None),
+                identity: RwSignal::new(None),
                 refusal: RwSignal::new(None),
             }
+        }
+
+        /// Name on each face the account the provider signed in.
+        pub(crate) fn identify(self, display_name: Validated<DisplayName>, email: Email) {
+            self.identity.set(Some(GateIdentity {
+                display_name,
+                email,
+            }));
         }
 
         /// Close the gate: the session is ready, and the list shows.
         pub(crate) fn open(self) {
             self.face.set(None);
+            self.identity.set(None);
             self.refusal.set(None);
         }
     }
@@ -124,6 +148,7 @@ mod view {
             let first = NodeRef::<html::Input>::new();
             let second = NodeRef::<html::Input>::new();
             let submission = RwSignal::new(Submission::Idle);
+            let sign_out = crate::landing::sign_out_control(to_logic.clone());
             let to_logic = to_logic.clone();
             // A `Callback` is `Copy`, so the Enter key of either field and the
             // button each hold it.
@@ -177,6 +202,17 @@ mod view {
                 <div class="ambre-signin ambre-keys">
                     <span class="ambre-signin-wordmark">"Ambre"</span>
                     <h2>{heading}</h2>
+                    // The provider gave the name and the address: the face
+                    // shows them, and asks for neither (`CHROME-144`).
+                    {move || gate.identity.get().map(|identity| view! {
+                        <p class="ambre-keys-identity">
+                            "Signed in as "
+                            <span class="ambre-keys-name">{identity.display_name.into_string()}</span>
+                            " ("
+                            <span class="ambre-keys-email">{identity.email.as_str().to_owned()}</span>
+                            ")"
+                        </p>
+                    })}
                     <p class="ambre-keys-note">{note}</p>
                     <input
                         class="ambre-signin-input ambre-keys-passphrase"
@@ -225,6 +261,9 @@ mod view {
                             "Forgot the passphrase? Recover the account with its recovery words"
                         </button>
                     </Show>
+                    // The header and its sign-out show only once a session
+                    // holds, so each face carries its own (`CHROME-142`).
+                    <div class="ambre-keys-leave">{sign_out}</div>
                 </div>
             })
         }
@@ -475,6 +514,81 @@ mod view {
                 "the link opened no recovery form"
             );
             assert!(sent(&rx).is_empty());
+        }
+
+        /// `CHROME-144`: each face names the account the provider signed in,
+        /// by the name and the address it gave. The setup holds no field for
+        /// either, and its command carries the passphrase alone.
+        #[wasm_bindgen_test]
+        async fn each_face_names_the_provider_account_and_asks_for_no_identity() {
+            let (container, gate, _keys, rx) = mounted();
+            gate.identify(
+                Validated::<DisplayName>::parse("Ada").unwrap(),
+                Email::from("ada@test.local"),
+            );
+            for face in [KeysFace::Unlock, KeysFace::SetUp] {
+                gate.face.set(Some(face));
+                tick().await;
+                let named = container
+                    .query_selector(".ambre-keys-identity")
+                    .unwrap()
+                    .unwrap_or_else(|| panic!("{face:?} names no account"))
+                    .text_content()
+                    .unwrap_or_default();
+                assert!(named.contains("Ada"), "{face:?}: {named}");
+                assert!(named.contains("ada@test.local"), "{face:?}: {named}");
+                assert!(
+                    container
+                        .query_selector("input[type=email]")
+                        .unwrap()
+                        .is_none()
+                        && container
+                            .query_selector("input:not([type=password])")
+                            .unwrap()
+                            .is_none(),
+                    "{face:?} asks for the identity again"
+                );
+            }
+            field(&container, "ambre-keys-passphrase").set_value("anchovy glider");
+            field(&container, "ambre-keys-confirm").set_value("anchovy glider");
+            click_action(&container);
+            tick().await;
+            assert_eq!(sent(&rx), [("setup", true)]);
+
+            // The session opens: the gate forgets the account it named.
+            gate.open();
+            assert_eq!(gate.identity.get_untracked(), None);
+        }
+
+        /// `CHROME-142`: the unlock and the setup faces each offer a sign-out.
+        /// A click sends one sign-out to the live threads, and no passphrase.
+        #[wasm_bindgen_test]
+        async fn each_face_offers_a_sign_out() {
+            for face in [KeysFace::Unlock, KeysFace::SetUp] {
+                let (container, gate, _keys, rx) = mounted();
+                gate.face.set(Some(face));
+                tick().await;
+                let button: web_sys::HtmlElement = container
+                    .query_selector(".ambre-keys .ambre-sign-out")
+                    .unwrap()
+                    .unwrap_or_else(|| panic!("{face:?} offers no sign-out"))
+                    .unchecked_into();
+                button.click();
+                button.click();
+                tick().await;
+                let sent: Vec<LogicCommand> = rx.try_iter().collect();
+                assert!(
+                    matches!(
+                        sent.as_slice(),
+                        [LogicCommand::Rest {
+                            cmd: RestCommand::Logout,
+                            ..
+                        }]
+                    ),
+                    "{face:?}: not one sign-out alone"
+                );
+                container.remove();
+            }
         }
 
         /// The gate opened by a ready session shows no face and no refusal.

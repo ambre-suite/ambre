@@ -218,6 +218,12 @@ impl LocalStore {
                 Some(user) => self.inner.store.save_inviter(user, id, &inviter),
                 None => tracing::warn!("Persistence: no session names a user, the pin is dropped"),
             },
+            // A kept log no session's user owns has no row to take
+            // (`SYNC-290`).
+            PersistWrite::KeepLog(kept) => match self.inner.user.get() {
+                Some(user) => self.inner.store.save_kept_log(user, id, &kept),
+                None => tracing::warn!("Persistence: no session names a user, the log is dropped"),
+            },
             PersistWrite::Shown | PersistWrite::Hidden => {}
             // The copy leaves whole, with what the quota held back of it
             // (`SYNC-233`).

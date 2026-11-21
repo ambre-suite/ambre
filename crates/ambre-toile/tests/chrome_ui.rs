@@ -107,7 +107,7 @@ fn mount_bar(
     (root, zoom)
 }
 
-/// `CHROME-147`: the zoom chip closes the status bar, at its right end.
+/// `CHROME-206`: the zoom chip closes the status bar, at its right end.
 #[wasm_bindgen_test]
 fn the_zoom_chip_closes_the_status_bar() {
     let owner = Owner::new();
@@ -392,7 +392,7 @@ fn tool_palette_click_switches_active_tool() {
 
 /// `TOILE-UI-416`: the zoom-in entry of the View menu reports the zoom-in
 /// command. The bar itself holds no zoom control: the zoom lives in the status
-/// bar alone (`CHROME-147`).
+/// bar alone (`CHROME-206`).
 #[wasm_bindgen_test]
 async fn the_view_menu_reports_zoom_in_and_the_bar_holds_no_zoom_control() {
     let owner = Owner::new();

@@ -300,7 +300,7 @@ fn status_bar_renders_label_and_aggregates() {
     container.remove();
 }
 
-/// The zoom chip closes the status bar, at its right end (`CHROME-147`).
+/// The zoom chip closes the status bar, at its right end (`CHROME-206`).
 #[wasm_bindgen_test]
 fn the_zoom_chip_closes_the_status_bar() {
     let container = mount_in_container(|| {

@@ -199,6 +199,18 @@ crate::define_flag! {
         Verified,
     }
 
+    /// Whether an account still holds the address it was set up under, or a
+    /// provider sign-in reclaimed it (`SRV-029`). The relay's account answer
+    /// carries it, so the launcher names the reclaim (`CHROME-146`). Its serde
+    /// form is the `address_reclaimed` bool of that answer.
+    pub enum AddressStanding {
+        /// The account holds its address.
+        Held,
+        /// A provider-verified account took the address. Shares to it reach
+        /// that account now.
+        Reclaimed,
+    }
+
     /// Whether a request made the record it answers, or found one an earlier
     /// request made. A race that lost answers `Existing`, with the winner's
     /// record.

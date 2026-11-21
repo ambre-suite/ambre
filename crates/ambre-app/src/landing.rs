@@ -190,6 +190,14 @@ pub fn landing_view(
                         <span class="ambre-landing-user">
                             {move || username.get().map(ambre_core::Validated::into_string).unwrap_or_default()}
                         </span>
+                        // The account settings: the passphrase change covers
+                        // the launcher until it ends (`CHROME-145`).
+                        <button
+                            class="ambre-change-passphrase"
+                            on:click=move |_| keys.open(crate::account::KeysFace::ChangePassphrase)
+                        >
+                            "Change passphrase"
+                        </button>
                         {sign_out_control(to_logic_signout.clone())}
                         <NewDocPicker on_pick=on_pick />
                         <button
@@ -206,6 +214,12 @@ pub fn landing_view(
                     </div>
                 </Show>
             </header>
+
+            // A provider sign-in reclaimed the address of the account
+            // (`CHROME-146`). The notice stays over the list for the session.
+            <Show when=move || username.get().is_some()>
+                {crate::account::reclaim_notice(keys)}
+            </Show>
 
             // A provider account whose keys are still to open or to set up.
             // The setup and the recovery forms cover the gate.
@@ -665,7 +679,7 @@ fn rel_time(updated_at: Option<Instant<Relayed>>) -> String {
 /// The sign-out control (`CHROME-107`). It asks the live threads to end the
 /// session, once: the page boots home afresh when the Sync worker confirms,
 /// so nothing here clears anything.
-fn sign_out_control(to_logic: crate::outbox::ShellOutbox) -> impl IntoView {
+pub(crate) fn sign_out_control(to_logic: crate::outbox::ShellOutbox) -> impl IntoView {
     let leaving = RwSignal::new(false);
     view! {
         <button
@@ -730,15 +744,7 @@ fn sign_in_panel(
                         "Private collaborative office suite. End-to-end encrypted."
                     </p>
                     {crate::dev_login::sign_in_field(to_logic.clone())}
-                    // A development relay answers the setup with no provider,
-                    // so these two reach the keys faces a provider sign-in
-                    // reaches in a deployment (`CHROME-098`).
-                    <button
-                        class="ambre-signin-link ambre-signin-setup"
-                        on:click=move |_| keys.open(crate::account::KeysFace::Setup)
-                    >
-                        "Set up an account with a passphrase"
-                    </button>
+                    // No setup link: no anonymous account exists (`SRV-319`).
                     // No recovery link: signed out, the form fails as not
                     // signed in (`CHROME-135`).
                 </div>
@@ -994,6 +1000,77 @@ mod tests {
         container.remove();
     }
 
+    /// `CHROME-146`, `CHROME-147`: the launcher of a session names a reclaim of its
+    /// address, then says that shares to the address now reach the verified
+    /// account. The notice is an alert, and an account that holds its address
+    /// shows none.
+    #[wasm_bindgen_test]
+    async fn the_launcher_names_a_reclaimed_address_and_what_it_means() {
+        let owner = Owner::new();
+        owner.set();
+        let (tx, _rx) = ambre_bus::conduit::local::<LogicCommand>(ambre_core::Bounded::<
+            ambre_bus::conduit::ChannelSlots,
+        >::of::<8>());
+        let keys = crate::account::KeysSignals::new();
+        let signals = LandingSignals {
+            docs: RwSignal::new(Vec::new()),
+            username: RwSignal::new(Some(
+                ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada".to_owned()).unwrap(),
+            )),
+            dev_mode: RwSignal::new(Some(SignInMode::Oidc)),
+            booted: DocType::Prose,
+            toasts: Toasts::new(),
+            opened_file: RwSignal::new(None),
+            keys,
+            gate: crate::keys_gate::KeysGate::new(),
+        };
+        let container = mount_in_container(move || {
+            view! {
+                <leptos_router::components::Router>
+                    {landing_view(signals, crate::outbox::ShellOutbox::new(tx))}
+                </leptos_router::components::Router>
+            }
+        });
+        tick().await;
+        let notice = |c: &web_sys::Element| {
+            c.query_selector(".ambre-address-reclaimed[role='alert']")
+                .unwrap()
+        };
+        assert!(
+            notice(&container).is_none(),
+            "an account that holds its address shows a reclaim"
+        );
+        assert!(
+            container
+                .query_selector(".ambre-landing-user")
+                .unwrap()
+                .is_some(),
+            "the launcher shows no session"
+        );
+
+        keys.address_reclaimed();
+        tick().await;
+        let shown = notice(&container).expect("the launcher names the reclaim");
+        let title = shown
+            .query_selector("h2")
+            .unwrap()
+            .unwrap()
+            .text_content()
+            .unwrap();
+        assert_eq!(title, "Your address was reclaimed");
+        let meaning = shown
+            .query_selector("p")
+            .unwrap()
+            .unwrap()
+            .text_content()
+            .unwrap();
+        assert!(
+            meaning.contains("shared with the address now reach that account, not yours"),
+            "the notice does not say where a share goes: {meaning}"
+        );
+        container.remove();
+    }
+
     /// The sign-out control asks the live threads to end the session, once,
     /// and leaves the page where it is until the worker confirms
     /// (`CHROME-107`).
@@ -1196,12 +1273,22 @@ mod tests {
         });
         let link =
             |c: &web_sys::Element| c.query_selector(".ambre-signin-recover").unwrap().is_some();
+        // The name field exists only in a build with the development
+        // sign-in (`ZK-045`).
+        assert_eq!(
+            container
+                .query_selector(".ambre-signin-input")
+                .unwrap()
+                .is_some(),
+            cfg!(feature = "dev-login"),
+            "the sign-in field follows the development sign-in signed out"
+        );
         assert!(
             container
                 .query_selector(".ambre-signin-setup")
                 .unwrap()
-                .is_some(),
-            "the setup link shows signed out"
+                .is_none(),
+            "a link to an anonymous account setup"
         );
         assert!(!link(&container), "a recovery link signed out");
 

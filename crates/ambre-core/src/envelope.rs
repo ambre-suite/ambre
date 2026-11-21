@@ -107,6 +107,17 @@ impl FixedRole for SnapshotDigest {
     type Array = [u8; 32];
 }
 
+/// The role of the SHA-256 digest of the bytes an upload link writes:
+/// `FixedBytes<ObjectChecksum>`. The link signs it as `x-amz-checksum-sha256`,
+/// so the object store refuses any other body through that link (audit
+/// `P40`, `SRV-313`).
+pub enum ObjectChecksum {}
+
+impl FixedRole for ObjectChecksum {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ObjectChecksum");
+    type Array = [u8; 32];
+}
+
 /// The role of the digest of one membership-log entry, which the next entry
 /// names: `FixedBytes<EntryDigest>`. A wrapped document key also seals the
 /// digest of the first entry, as the anchor of the log (`SYNC-104`).

@@ -1799,7 +1799,7 @@ async fn the_shell_fills_its_toolbar_and_sidebar_and_the_sidebar_folds() {
 }
 
 /// A row the application marks absent renders no element, though its slot is
-/// handed (`CHROME-140`). A shown row keeps its content.
+/// handed (`CHROME-199`). A shown row keeps its content.
 #[wasm_bindgen_test]
 fn an_absent_row_renders_no_element_and_a_shown_row_keeps_its_content() {
     let owner = Owner::new();

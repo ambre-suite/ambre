@@ -23,6 +23,7 @@ other six documents of the DOM side.
 |---|---|---|---|---|---|---|
 | `CHROME-048` | `INV` | A fingerprint MUST be stable for a key. | this spec section 3; `ambre-spec-server.md` | `ambre_crypto::tests::fingerprint_is_stable_grouped_base32` -- the value is frozen for a known key, so any change to the tag, the hash variant, the truncation or the encoding fails | none | verified |
 | `CHROME-071` | `INV` | A fingerprint MUST differ for any other key. | this spec section 3; `ambre-spec-server.md` | `ambre_crypto::tests::fingerprint_distinguishes_keys` -- a one-bit change moves the string | none | verified |
+| `CHROME-140` | `INV` | A fingerprint MUST cover the recipient's signing key beside the exchange key, and an invite MUST refuse a signing key other than the one the fingerprint this session showed covered. | this spec section 3, the fingerprint | `ambre_crypto::tests::a_fingerprint_covers_the_signing_key_beside_the_exchange_key` -- another signing key beside the true exchange key, or the two keys swapped, move the string; `ambre_sync::sharing::tests::fetch_invitee_key_emits_key_and_matching_fingerprint` -- the first phase hashes the signing key the relay served; `ambre_sync::sharing::tests::an_invite_refuses_a_signing_key_other_than_the_one_shown` -- a signing key swapped at the second phase refuses the invite before any wrap, and the one shown shares | none | verified |
 | `CHROME-072` | `OBS` | A fingerprint MUST be readable aloud. | this spec section 3 | `ambre_crypto::tests::fingerprint_is_stable_grouped_base32` -- its second assertion, the alphabet and the grouping into eight blocks of four being what a person reads over the phone | none | verified |
 | `CHROME-049` | `INV` | The fingerprint MUST be computed where the keys are: the chrome MUST NOT hash anything. | this spec section 3; `ambre-spec-zero-knowledge.md` (`ZK-001`) | ci-gate -- `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads the graph `cargo metadata` resolves, so a renamed or a test dependency names its package. It refuses the crypto crate declared by any member but the Sync worker and the call worker, and the Logic crate's own unless it is optional and its `fixtures` feature alone turns it on. So neither the launcher nor the shared toolkit declares it, and the string arrives already formatted (`ambre_primitives::boundaries::chrome::tests::the_crypto_crate_declared_by_the_chrome_or_the_launcher_is_refused`, `ambre_primitives::boundaries::chrome::tests::the_logic_crate_beyond_its_fixtures_is_refused`) | none | verified |
 | `CHROME-053` | `INV` | The stored key MUST survive a browser that already holds documents: adding it MUST NOT disturb them. | this spec section 3 | `ambre_logic::persistence::wasm_tests::an_upgrade_adds_trusted_keys_and_keeps_snapshots`; `::trusted_key_roundtrips_and_absent_is_none` -- wasm tier, a real browser database holding a snapshot is opened at the next version | none | verified |
@@ -40,6 +41,7 @@ shares nothing.
 | `CHROME-046` | `FRAME` | A document key MUST NOT be wrapped to a recipient before the trust decision is taken. | this spec section 3; `ambre-spec-zero-knowledge.md` | type-level -- the first phase's parameters carry no document key and no exchange key, so there is nothing in scope to wrap with, the wrap living in the second phase alone | none | verified |
 | `CHROME-050` | `FAIL` | A key never seen before MUST interrupt: the invitation MUST NOT proceed until the user confirms. | this spec section 3 | `ambre_app::tofu::tests::a_new_or_changed_key_asks_and_only_the_pinned_key_invites` -- a key with no pin becomes a prompt, not an invitation; ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads each path once it resolves, so an alias, a re-export and a macro name what they reach. It refuses the invitation variant named on the UI thread outside `tofu.rs`, the file that holds the decision (`ambre_primitives::driver::chrome::an_invitation_or_a_named_create_under_a_re_export_is_refused_on_the_ui_thread`) | none | verified |
 | `CHROME-051` | `FAIL` | A key that differs from the stored one MUST block the invitation. | this spec section 3 | `ambre_app::tofu::tests::a_new_or_changed_key_asks_and_only_the_pinned_key_invites` -- a substituted key is classified as changed and becomes a prompt; `ambre_app::switchboard::tests::a_pinned_invitee_key_invites_at_the_instant_read` -- only the pinned key reaches the invitation | none | verified |
+| `CHROME-141` | `FAIL` | Given a recipient whose pinned key comes back with another signing key, the invitation MUST block as for a changed key. | this spec section 3; `CHROME-051`; `ambre-spec-membership.md`, `SYNC-282` | not built | unbuilt -- lands with the `A signing key is bound to its member alone` Story (`ambre-roadmap.md` MVP). The pin the local store keeps is the exchange key alone, so a later session takes a signing key the relay swapped as a trusted key. A direct message and a channel invite carry no signing key the user saw | unimplemented |
 | `CHROME-138` | `FAIL` | Given an invitation to an address no provider proved, the prompt MUST say that the address is unproven before any key is wrapped. | this spec section 3; `ambre-spec-session.md` (`SRV-029`) | `ambre_sync::sharing::tests::fetch_invitee_key_carries_the_proof_of_the_address` -- the first phase carries the relay's flag, and a missing flag reads as unproven; `ambre_app::switchboard::tests::an_invitee_key_asks_for_a_first_contact_and_for_a_change` -- the flag reaches the prompt; `ambre_app::tofu::tests::an_unproven_address_is_named_before_the_invitation_wraps` -- browser tier: the modal warns of an unproven address and its confirming action names it, and a proven one shows no warning | none | verified |
 
 ### 1.3 Confirm the recipient's key
@@ -69,9 +71,9 @@ Escape, the backdrop and the refusing action are three routes to one outcome.
 * **Boundary.** this is the boundary. The confirmed key is stored on the client and never sent, and
   the fingerprint is public by construction. The invitation carries the expected key so the wrapping
   thread can refuse. The keys never leave the Sync thread (`ambre-spec-zero-knowledge.md`).
-* **Verification.** 19 `verified`. The two phases run over a scripted relay. The classification and
-  the confirmation are pure, and the prompt is mounted in the browser tier. A scan holds who
-  hashes a key and who builds an invitation.
+* **Verification.** 20 `verified`, 1 `unimplemented`. The two phases run over a scripted relay. The
+  classification and the confirmation are pure, and the prompt is mounted in the browser tier. A
+  scan holds who hashes a key and who builds an invitation.
 
 ---
 
@@ -121,16 +123,18 @@ the phone.
 
 | Step | Value |
 |---|---|
-| input | a domain tag, then the 32 bytes of the exchange key |
+| input | a domain tag, the 32 bytes of the exchange key, the 32 of the signing key |
 | hash | BLAKE2b, the 512-bit variant |
 | truncation | the first 20 bytes, which is 160 bits |
 | encoding | base32, the standard alphabet, no padding |
 | presentation | the 32 characters in 8 groups of 4, separated by spaces |
 
 The domain tag separates this hash from every key derivation over the same input, so a fingerprint
-can never collide with a derived key's digest. 160 bits is far beyond collision reach and still fits
-one line. The value is computed on the Sync thread and carried up as a finished string
-(`CHROME-049`).
+can never collide with a derived key's digest. The signing key is the one an invite binds to the
+recipient in the log, so the string covers it too (`CHROME-140`). A relay that serves the true
+exchange key beside a signing key of its own changes what the user compares. 160 bits is far
+beyond collision reach and still fits one line. The value is computed on the Sync thread and
+carried up as a finished string (`CHROME-049`).
 
 **The invitation, in two phases.** The split is the whole design: a key is never wrapped to before a
 person has looked at it.

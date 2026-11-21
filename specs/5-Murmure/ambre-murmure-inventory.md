@@ -20,13 +20,13 @@
 | `murmure-engine` | A channel opens, shows its latest messages, and carries what the user writes to every member. | implemented | 19 |  |
 | `murmure-keyboard` | No frequent action in Murmure needs the mouse. | implemented | 21 |  |
 | `murmure-mentions` | A member names another in a message with `@`. | implemented | 23 |  |
-| `murmure-messages` | A member writes a message, edits it, or deletes it. | implemented | 30 |  |
+| `murmure-messages` | A member writes a message, edits it, or deletes it. | implemented | 31 |  |
 | `murmure-phone-measures` | The pages that time the Murmure budgets in the browser of a phone, where no CI job runs. | implemented | 9 |  |
 | `murmure-reactions` | A member answers a message with an emoji. | implemented | 7 |  |
 | `murmure-segments` | A channel grows for years and still opens fast. | implemented | 26 |  |
 | `murmure-unread` | The sidebar shows where something new is, and how much. | implemented | 18 |  |
 | `murmure-attachments` | A member drops a file or an image into a message. | partial | 19 |  |
-| `murmure-channels` | A few people talk where nobody else reads: a private channel of a space, or a direct message between two or more members. | partial | 56 |  |
+| `murmure-channels` | A few people talk where nobody else reads: a private channel of a space, or a direct message between two or more members. | partial | 57 |  |
 | `murmure-emoji` | A member writes an emoji in a message, or reacts with one, from a picker. | partial | 14 |  |
 | `murmure-layout` | Murmure shows the channels, the conversation and a thread side by side on a desktop, and one of them at a time on a phone. | partial | 28 |  |
 | `murmure-members` | A member sees who else belongs to the space, who is online, and writes to any of them in one gesture. | partial | 23 |  |
@@ -45,4 +45,4 @@
 | `murmure-pins` | A member pins a message for every member of the channel: a decision, a link, the rules of the room. | design-only | 10 |  |
 | `murmure-sidebar` | Each member arranges the channel list for themselves: groups and order of their own, channels muted or hidden, and messages bookmarked. | design-only | 16 |  |
 
-**29 features: 10 implemented, 11 partial, 8 design-only. 657 contract rows, 0 loose.**
+**29 features: 10 implemented, 11 partial, 8 design-only. 659 contract rows, 0 loose.**

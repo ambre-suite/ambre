@@ -12,28 +12,42 @@ pub const HASH_LEN: usize = 32;
 
 /// Domain-separation tag for the TOFU public-key fingerprint. Distinct from the
 /// key-derivation tags in `keys.rs` so a fingerprint can never collide with a
-/// derived key digest over the same input.
-const FINGERPRINT_DOMAIN: &[u8] = b"ambre-fingerprint-v1";
+/// derived key digest over the same input. `v2` covers the signing key beside
+/// the exchange key (audit `P44`); it reads no `v1` string.
+const FINGERPRINT_DOMAIN: &[u8] = b"ambre-fingerprint-v2";
 
 /// Bytes of the fingerprint retained after truncation: 20 bytes = 160 bits, far
 /// beyond collision reach yet short enough to read aloud over the phone.
 const FINGERPRINT_LEN: usize = 20;
 
-/// Human-verifiable fingerprint of a public key for the TOFU trust check
-/// (`ambre-spec-key-verification.md`, CHROME-048).
+/// The two public keys a user is known by. The exchange key is the one a copy
+/// is wrapped for. The signing key is the one the membership log binds to the
+/// user. A struct, so a call cannot swap the two.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct IdentityKeys {
+    /// The X25519 key a wrapped copy is sealed for.
+    pub exchange: FixedBytes<ambre_core::ExchangePublicKey>,
+    /// The Ed25519 key an invite binds to the member, whose deltas it signs.
+    pub signing: FixedBytes<ambre_core::PublicKey>,
+}
+
+/// Human-verifiable fingerprint of the public keys of a user for the TOFU
+/// trust check (`ambre-spec-key-verification.md`, CHROME-048).
 ///
-/// Computes `BLAKE2b-512(domain || pub_key)`, keeps the first 20 bytes, and
-/// base32-encodes them (RFC 4648, no padding). The 32 output characters are
-/// grouped into 4-char blocks separated by spaces, so the string reads cleanly
-/// aloud for out-of-band verification. The output is stable for a given key: the
-/// same key always yields the same string.
+/// Computes `BLAKE2b-512(domain || exchange || signing)`, keeps the first 20
+/// bytes, and base32-encodes them (RFC 4648, no padding). The 32 output
+/// characters are grouped into 4-char blocks separated by spaces, so the
+/// string reads cleanly aloud for out-of-band verification. The output is
+/// stable for a given pair: the same keys always yield the same string.
 ///
-pub fn fingerprint(
-    pub_key: &FixedBytes<ambre_core::ExchangePublicKey>,
-) -> ambre_core::Opaque<ambre_core::KeyFingerprints> {
+/// It covers both keys (audit `P44`). Say the relay serves the true exchange
+/// key beside a signing key of its own. The string the user compares then
+/// changes, so an invite never binds that signing key to the user unseen.
+pub fn fingerprint(keys: &IdentityKeys) -> ambre_core::Opaque<ambre_core::KeyFingerprints> {
     let mut hasher = Blake2b512::new();
     hasher.update(FINGERPRINT_DOMAIN);
-    hasher.update(pub_key.as_array());
+    hasher.update(keys.exchange.as_array());
+    hasher.update(keys.signing.as_array());
     let digest: [u8; FINGERPRINT_LEN] = prefix(&hasher.finalize());
     // Each 5-byte block gives 8 base32 characters, so the 20 bytes give 4
     // blocks, and each block is two groups of 4. A hand-written encoder links
@@ -107,6 +121,14 @@ pub fn snapshot_digest(object: &[u8]) -> FixedBytes<ambre_core::SnapshotDigest> 
     hasher.update(SNAPSHOT_DIGEST_DOMAIN);
     hasher.update(object);
     FixedBytes::from_array(prefix(&hasher.finalize()))
+}
+
+/// The SHA-256 digest of the bytes an upload link writes, as the object store
+/// checks them under `x-amz-checksum-sha256` (audit `P40`, `SRV-313`). The
+/// store computes the same digest, so no domain tag precedes the bytes.
+pub fn object_checksum(object: &[u8]) -> FixedBytes<ambre_core::ObjectChecksum> {
+    use sha2::Digest as _;
+    FixedBytes::from_array(sha2::Sha256::digest(object).into())
 }
 
 /// Domain-separation tag for the pin of an inviter's signing key.

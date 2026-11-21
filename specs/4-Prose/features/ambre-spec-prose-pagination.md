@@ -53,6 +53,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-115` | `INV` | A document MUST be paginated on every face the application has loaded, whether the document was opened before that face arrived or after it. | this spec section 2; `1-Foundations/ambre-spec-render-assets.md`, `CANVAS-067` | `ambre_logic::dispatch::tests::every_prose_document_takes_the_faces_whenever_it_was_opened` -- it opens one document before the delivery and one after, and reads the face count back off both | none | verified |
 | `PROSE-112` | `INV` | A page number that leaves the screen -- a comment anchor, a cross reference, a table-of-contents entry, an exported file -- MUST NOT be taken from a layout that names a missing script. | this spec section 2 | `ambre_prose::logic::print::tests::a_layout_missing_a_script_exports_no_file` -- the PDF export refuses with its reason and writes no file; structural -- the PDF is the one output that carries a page number off the screen: the intermediate form the other writers read holds a table of contents and a reference with no page | none | verified |
 | `PROSE-140` | `INV` | A walk of the block tree MUST hold a bounded depth of the call stack, whatever depth a peer gave the tree, and a table inside a cell MUST measure as nothing. | this spec section 2; `ambre-spec-prose-schema.md section 4` | `ambre_prose::layout::pass::tests::a_chain_of_ten_thousand_nested_blocks_measures_on_a_small_stack` -- the layout and the word count of ten thousand nested blocks on a stack of 1 MiB; `::tables_nested_in_cells_measure_on_a_small_stack` -- two thousand nested tables; `ambre_prose::logic::tables::tests::a_deep_cell_finds_its_text_on_a_small_stack` | none | verified |
+| `PROSE-143` | `INV` | A read of the `meta` register MUST hold a bounded depth of the call stack, whatever tree a peer wrote under the name `meta`. | this spec section 2; `PROSE-079`; `ambre-spec-murmure-messages.md`, `MURMURE-683` | `ambre_prose::doc::tests::a_deep_tree_under_the_meta_name_reads_on_a_small_stack` -- the title in `meta` reads on a stack of 1 MiB beside a tree ten thousand deep under the name | none | verified |
 
 ### 1.2 Lay the whole document out again
 
@@ -63,6 +64,8 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-077` | `POST` | A full recomputation MUST place blocks in the order of a depth-first walk of the block tree: that walk is the document flow. | this spec section 2 | `ambre_prose::layout::pass::tests::the_walk_visits_the_tree_depth_first` | none | verified |
 | `PROSE-078` | `POST` | Placement MUST resolve a constraint it cannot meet by moving forward: it MUST NOT revisit a page it has already emitted. | this spec section 2 | proptest -- `ambre_prose::layout::place::properties::pages_only_ever_move_forward`; `ambre_prose::layout::place::tests::placement_never_goes_back_to_a_page_it_left` | none | verified |
 | `PROSE-079` | `FRAME` | Laying the document out MUST NOT write to the document it measures. | this spec section 2 | `ambre_prose::layout::pass::tests::measuring_the_document_writes_nothing_to_it` -- it compares the whole document before and after, so a read that attaches a container fails it | none | verified |
+| `PROSE-141` | `FRAME` | A read of the document MUST leave its frontiers and its pending operations as they were, on a document with operations and no block tree too. | this spec section 2; `ambre-spec-prose-schema.md section 4` | `ambre_prose::doc::tests::a_read_of_a_document_with_no_tree_leaves_its_frontiers_and_its_pending_operations` -- a committed write and a write still in its transaction, then the tree read and the bands read | none | verified |
+| `PROSE-142` | `FRAME` | A read of the document MUST NOT attach a root container it did not find: the block tree, `meta`, `styles` and `annots`. A reader asks `Roots` first and reads an absent root as empty. A reader that takes a bare document MUST hold this rule. A `ProseState` writes the tree before its first read (`PROSE-027`). | this spec section 2; `ambre-spec-prose-schema.md section 4` | `ambre_prose::logic::roots::tests::a_read_of_a_document_with_no_tree_attaches_no_root` -- every reader of the tree and of `meta` on a document with neither (`doc::blocks_read`, `doc::meta_read`, `doc::read_bands`, `doc::read_page_format`, `doc::read_defaults`, `doc::read_title`, `doc::read_locale`, `doc::read_updated_at`, `count::compute_word_count`): the frontiers, the pending operations, the roots of the state and the encoded bytes stay as they were; `::the_roots_follow_an_import_that_adds_the_tree` -- an import and a local commit add the tree and `meta`, and a map under the name of the tree does not; `::the_roots_follow_a_snapshot_import`; `::each_tree_reader_leaves_a_document_with_no_tree_as_it_was` -- each reader that walks the tree, alone, on a document holding operations and no tree (`comment::text_blocks`, `suggest::text_blocks`, `doc::anchors`, `note::footnote_calls`, `note::ordinals`, `comment::threads`, `suggest::pending`, `link::links`, `xref::resolve`, `xref::resolve_all`, `toc::all`, `toc::one`): the frontiers, the pending operations, the roots of the state and the encoded bytes stay as they were; `::a_read_of_a_document_with_no_annotations_attaches_no_root` -- every reader of `annots` and `styles` (`doc::annots_read`, `doc::root_map_read`, `note::entry`, `note::block`, `note::body`, `note::all`, `note::ordinals`, `note::entries`, `comment::entry`, `comment::all`, `comment::threads`, `suggest::entry`, `suggest::pending`) on a document holding the tree and neither root: the frontiers, the pending operations, the roots of the state and the encoded bytes stay as they were; `::a_written_annotation_reads_through_the_roots` -- a written `annots` reads, and the tree never reads as a map root | none | verified |
 | `PROSE-139` | `POST` | A full recomputation MUST drop the run of a block once it has measured it, when the block cannot reach the pages held or the layout before placed it away from them. | this spec section 2 | `ambre_prose::layout::reflow::held::a_full_recomputation_keeps_the_runs_near_the_pages_shown_alone` -- once with no layout before, once from the middle of a layout | none | verified |
 
 ### 1.3 Reflow after an edit
@@ -110,10 +113,10 @@ status values are normative in `ambre-spec-template.md`.
   section 4 says why.
 * **Boundary.** none: pagination runs on the Logic thread, reads the document and returns a value.
   `PROSE-025` (`features/ambre-spec-prose-engine.md section 1`) bans a network call from this crate.
-* **Verification.** 56 `verified`. The five footnote rows run
-  through the engine, since a note is written by its command. Termination rests on `PROSE-078` and
-  `PROSE-017`, which a property over generated documents holds together. Two bans are structural,
-  held by a test that reads the module's own source. The schema holds `PROSE-065`.
+* **Verification.** 59 `verified`. The five footnote rows run through the engine, since a note is
+  written by its command. Termination rests on `PROSE-078` and `PROSE-017`, which a property over
+  generated documents holds together. Two bans are structural, held by a test that reads the
+  module's own source. The schema holds `PROSE-065`.
 
 ---
 
@@ -371,9 +374,21 @@ family label to a shipped face. `measure` shapes one block and reports its line 
 walks the tree, and `place` is pass 2. `reflow` holds the layout between edits.
 
 **A deep tree.** A peer writes the tree, and nothing bounds its depth. Each walk of the tree keeps
-its own stack, and a table inside a cell measures as nothing (`PROSE-140`).
+its own stack, and a table inside a cell measures as nothing (`PROSE-140`). A peer can also write
+a tree under the name `meta`. The read of `meta` takes the map root by its typed identifier, so
+Loro builds no value of that tree (`PROSE-143`).
 `ambre_prose::logic::ProseState::paginate` is the one way in, so the document is measured where it
 lives.
+
+**A read attaches nothing.** Loro 1.13 sees a root only by opening it, which attaches it, or by
+building its value (`PROSE-140`). The Logic thread keeps `ambre_prose::logic::Roots`, the roots its
+commits and imports reached, and a reader asks it first (`PROSE-142`). That holds for the tree,
+`meta`, `styles` and `annots`. A footnote, a comment thread or a suggestion read off a document
+without `annots` reads as none.
+
+A reader that walks the tree finds no block in a document without one. So it reads no footnote
+call, no reference, no link and no table of contents. A `ProseState` writes the tree before its
+first read (`PROSE-027`), so its own readers always find it.
 
 `pass` runs pass 0 too: it measures the bands and reads the note plan before placement. Pass 3 is
 in the view. `ambre_prose::view::hit` places the footnote band from the foot of the body

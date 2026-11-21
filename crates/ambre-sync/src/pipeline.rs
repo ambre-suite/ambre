@@ -113,6 +113,8 @@ pub enum PipelineError {
     NotAWriter,
     #[error("the log of the document walks again, or roots outside its space")]
     LogUnsettled,
+    #[error("the snapshot folds a delta past the cap a revoke set on its writer")]
+    PastCap,
 }
 
 impl PipelineError {
@@ -124,7 +126,7 @@ impl PipelineError {
         match self {
             Self::Crypto(CryptoError::InvalidSignature) => SyncWarningCode::SignatureRefused,
             Self::WrongKey => SyncWarningCode::KeyNotHeld,
-            Self::NotAWriter => SyncWarningCode::WriterRefused,
+            Self::NotAWriter | Self::PastCap => SyncWarningCode::WriterRefused,
             _ => SyncWarningCode::DecryptFailed,
         }
     }
@@ -292,6 +294,50 @@ fn split_frame(body: &[u8]) -> Result<UpdateBody, PipelineError> {
         nonce,
         summary,
         delta: Payload::new(delta.to_vec()),
+    })
+}
+
+/// The body of a presence sample: the session nonce of its sender's open,
+/// then the sample. It is the payload the seal encrypts, so the relay never
+/// reads the nonce (`SYNC-287`, audit `P22`). The nonce tells two opens of
+/// one author apart, and each open counts its samples from 1.
+#[must_use]
+pub fn presence_body(
+    session: &FixedBytes<SessionNonce>,
+    sample: &Payload<EphemeralBytes>,
+) -> Payload<EphemeralBytes> {
+    let mut body = Vec::with_capacity(
+        FixedBytes::<SessionNonce>::SIZE
+            .saturating_len()
+            .to_usize()
+            .saturating_add(sample.as_bytes().len()),
+    );
+    body.extend_from_slice(session.as_slice());
+    body.extend_from_slice(sample.as_bytes());
+    Payload::new(body)
+}
+
+/// One opened presence sample: the session nonce of its sender's open, and
+/// the sample Logic reads.
+#[derive(Debug)]
+pub struct PresenceBody {
+    /// The session nonce of the open that sent the sample.
+    pub session: FixedBytes<SessionNonce>,
+    /// The sample, opaque to the envelope.
+    pub sample: Payload<EphemeralBytes>,
+}
+
+/// Splits an opened presence sample into its session nonce and its sample.
+///
+/// # Errors
+///
+/// [`PipelineError::ShortBody`] for a body shorter than a nonce.
+pub fn split_presence_body(body: &Payload<EphemeralBytes>) -> Result<PresenceBody, PipelineError> {
+    let (session, sample) =
+        FixedBytes::<SessionNonce>::split_from(body.as_bytes()).ok_or(PipelineError::ShortBody)?;
+    Ok(PresenceBody {
+        session,
+        sample: Payload::new(sample.to_vec()),
     })
 }
 
@@ -741,6 +787,12 @@ impl SealedBlob {
     #[cfg(test)]
     pub(crate) fn as_bytes(&self) -> &[u8] {
         &self.0
+    }
+
+    /// The SHA-256 digest the upload link of these bytes signs, so the object
+    /// store refuses any other body through it (audit `P40`, `SRV-313`).
+    pub(crate) fn checksum(&self) -> FixedBytes<ambre_core::ObjectChecksum> {
+        ambre_crypto::hash::object_checksum(&self.0)
     }
 
     /// The body of the upload that sends it.

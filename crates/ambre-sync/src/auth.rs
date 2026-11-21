@@ -45,10 +45,12 @@ impl SyncState {
                         user_id: me.user_id,
                         display_name: me.display_name,
                         email: me.email,
+                        address: me.address_reclaimed,
                         signing_key: master_seed.derive_signing_key(),
                         exchange_key: master_seed.derive_exchange_key(),
                         master_seed,
                         tokens,
+                        kept: crate::kept::Keeping::Under(crate::kept::DeviceKey::Fresh),
                     });
                 }
                 // The same answer as a request the relay refused for a setup
@@ -121,10 +123,14 @@ impl SyncState {
                             user_id,
                             display_name: resp.display_name,
                             email: ambre_core::Email::new(String::new()),
+                            address: ambre_core::AddressStanding::Held,
                             master_seed,
                             signing_key,
                             exchange_key,
                             tokens: resp.tokens,
+                            // The name derives the session again at the
+                            // next boot, so the device keeps nothing.
+                            kept: crate::kept::Keeping::Nothing,
                         });
                     }
                     Err(e) => {
@@ -259,6 +265,7 @@ impl SyncState {
                 tokens: Rc::new(RefCell::new(Some(resp.tokens))),
                 renewing: Rc::new(futures_util::lock::Mutex::new(())),
                 renewed: None,
+                kept: None,
             };
             let keys_url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route("/keys/master");
@@ -285,97 +292,35 @@ impl SyncState {
         });
     }
 
-    pub(crate) fn handle_setup_account(
-        &mut self,
-        id: Seq<Request>,
-        passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
-        email: ambre_core::Email,
-        display_name: ambre_core::Validated<ambre_core::DisplayName>,
-    ) {
-        crate::log::info!("Sync: SetupAccount");
-
-        // The strength floor runs first, before any key or request exists.
-        let Some(passphrase) = self.admit_new_passphrase(passphrase) else {
-            return;
-        };
-
-        let logic_tx = self.logic_tx.clone();
-        let api_base = self.api_base.clone();
-        let url_scheme = self.url_scheme;
-        let event_tx = self.event_tx.clone();
-
-        if let Some(tx) = event_tx {
-            crate::spawn(async move {
-                let master_seed = MasterSeed::generate();
-                let signing_pub_key = ambre_core::FixedBytes::from_array(
-                    master_seed.derive_signing_key().verifying_key().to_bytes(),
-                );
-                let exchange_pub_key =
-                    crate::sharing::own_exchange_key(&master_seed.derive_exchange_key());
-                let SealedSeed {
-                    master_key_enc,
-                    master_key_salt,
-                } = match seal_seed(&master_seed, &passphrase) {
-                    Ok(sealed) => sealed,
-                    Err(cause) => {
-                        let _ = logic_tx.send(LogicEvent::AuthError { cause });
-                        return;
-                    }
-                };
-
-                // Zero-Knowledge (N4): only the wrapped master key and its salt go
-                // over the wire; the passphrase stays in this worker and zeroizes
-                // on drop.
-                let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
-                    .route("/auth/setup");
-                let body = http::SetupAccountRequest {
-                    email,
-                    display_name,
-                    master_key_enc,
-                    master_key_salt,
-                    signing_pubkey: signing_pub_key,
-                    exchange_pubkey: exchange_pub_key,
-                };
-                match http::post_json::<_, http::SetupAccountResponse>(&url, &body).await {
-                    Ok(resp) => {
-                        let _ = tx.send(account_set_up(id, master_seed, resp, body));
-                    }
-                    Err(e) => {
-                        let _ = logic_tx.send(auth_failed(e));
-                    }
-                }
-            });
-        } else {
-            // Host-test / offline path: the identity is not persisted anywhere, so
-            // the supplied fields are dropped (passphrase zeroizes on drop).
-            let _ = (passphrase, email, display_name);
-            let master_seed = MasterSeed::generate();
-            self.signing_key = Some(master_seed.derive_signing_key());
-            self.exchange_key = Some(master_seed.derive_exchange_key());
-            let recovery_words = master_seed.recovery_words();
-            self.master_seed = Some(master_seed);
-            self.open_websocket();
-            self.reply(id, RestEvent::AccountCreated { recovery_words });
-        }
-    }
-
     /// Set up the keys of the account this session signed in with the
     /// provider (`CHROME-098`). The floor runs first. A new seed is sealed
     /// under the passphrase and stored on that account. The worker then
     /// answers the recovery words, and the session opens (`SYNC-255`).
+    ///
+    /// A store the relay refuses because the account holds keys already
+    /// answers with those keys, when the passphrase opens them (`SYNC-296`).
     pub(crate) fn handle_set_up_keys(
         &mut self,
         id: Seq<Request>,
         passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
     ) {
         crate::log::info!("Sync: SetUpKeys");
+        // A clone shares the one wiping value: it opens the keys a store
+        // found stored already, and nothing else.
+        let typed = passphrase.clone();
         let Some(passphrase) = self.admit_new_passphrase(passphrase) else {
             return;
         };
-        let Some(tx) = self.event_tx.clone() else {
-            // No relay holds the account, so nothing can take the keys.
+        let (Some(tx), Some(account)) = (self.event_tx.clone(), self.user_id) else {
+            // No relay holds the account, or no sign-in named it, so nothing
+            // can take the keys.
+            let cause = if self.event_tx.is_none() {
+                ambre_core::LocalFailure::NoRelay
+            } else {
+                ambre_core::LocalFailure::NotSignedIn
+            };
             self.send_to_logic(LogicEvent::AuthError {
-                cause: AuthFailure::Api(ApiFailure::Local(ambre_core::LocalFailure::NoRelay)),
+                cause: AuthFailure::Api(ApiFailure::Local(cause)),
             });
             return;
         };
@@ -383,13 +328,21 @@ impl SyncState {
         let api = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base);
         let auth = self.auth_context();
         crate::spawn(async move {
-            let master_seed = MasterSeed::generate();
-            let outcome =
-                store_new_keys(&http::Fetch, &auth, &api, &master_seed, &passphrase).await;
+            let new_keys = NewKeys {
+                account,
+                master_seed: MasterSeed::generate(),
+                passphrase: &passphrase,
+                typed: &typed,
+            };
+            let outcome = store_new_keys(&http::Fetch, &auth, &api, new_keys).await;
             // The passphrase wipes its bytes here (H4).
-            drop(passphrase);
+            drop((passphrase, typed));
             match outcome {
-                Ok(StoredKeys { tokens, me }) => {
+                Ok(StoredKeys {
+                    master_seed,
+                    tokens,
+                    me,
+                }) => {
                     let _ = tx.send(SyncEvent::KeysSetUp {
                         id,
                         recovery_words: master_seed.recovery_words(),
@@ -400,6 +353,7 @@ impl SyncState {
                         user_id: me.user_id,
                         display_name: me.display_name,
                         email: me.email,
+                        address: me.address_reclaimed,
                     });
                 }
                 Err(KeyWriteFailure::Auth(cause)) => {
@@ -490,14 +444,57 @@ impl SyncState {
         let Some((auth, api)) = self.reseal_target() else {
             return;
         };
-        self.spawn_reseal(id, RestEvent::AccountRecovered, async move {
+        self.spawn_recovery(id, auth, api, master_seed, new_passphrase);
+    }
+
+    /// Run the re-seal of a recovery, then open the session on the seed it
+    /// stored (`SYNC-293`). A refusal answers as a re-seal refusal does.
+    // Its whole body is a task spawned on the event loop of the browser, as
+    // for `spawn_reseal`. `recover_session` holds its steps on host.
+    #[cfg_attr(test, mutants::skip)]
+    fn spawn_recovery(
+        &self,
+        id: Seq<Request>,
+        auth: http::AuthContext,
+        api: crate::http::Url<crate::http::ApiRoot>,
+        master_seed: MasterSeed,
+        new_passphrase: ambre_crypto::strength::ChosenPassphrase,
+    ) {
+        let Some(tx) = self.event_tx.clone() else {
+            return;
+        };
+        let logic_tx = self.logic_tx.clone();
+        crate::spawn(async move {
             let outcome =
-                reseal_recovered_seed(&http::Fetch, &auth, &api, &master_seed, &new_passphrase)
-                    .await;
-            // The seed and the passphrase wipe their bytes here (H4). The
-            // user unlocks under the new passphrase to open the session.
-            drop((master_seed, new_passphrase));
-            outcome
+                recover_session(&http::Fetch, &auth, &api, &master_seed, &new_passphrase).await;
+            // The passphrase wipes its bytes here (H4). The seed moves into
+            // the session, or drops with the refusal.
+            drop(new_passphrase);
+            let me = match outcome {
+                Ok(me) => me,
+                Err(failure) => {
+                    let _ = logic_tx.send(reseal_refused(failure));
+                    return;
+                }
+            };
+            let tokens = match session_tokens(&auth.tokens) {
+                Ok(tokens) => tokens,
+                Err(failure) => {
+                    let _ = logic_tx.send(*failure);
+                    return;
+                }
+            };
+            let _ = tx.send(SyncEvent::AccountRecovered {
+                id,
+                signing_key: master_seed.derive_signing_key(),
+                exchange_key: master_seed.derive_exchange_key(),
+                master_seed,
+                tokens,
+                user_id: me.user_id,
+                display_name: me.display_name,
+                email: me.email,
+                address: me.address_reclaimed,
+            });
         });
     }
 
@@ -534,8 +531,7 @@ impl SyncState {
                     id: Some(id),
                     evt: done,
                 },
-                Err(KeyWriteFailure::Auth(cause)) => LogicEvent::AuthError { cause },
-                Err(KeyWriteFailure::Http(e)) => auth_failed(e),
+                Err(failure) => reseal_refused(failure),
             };
             let _ = logic_tx.send(evt);
         });
@@ -582,10 +578,14 @@ impl SyncState {
     /// (`SYNC-275`, audit `W204`). A sign-in that follows starts from none.
     fn forget_session(&mut self) {
         self.user_id = None;
+        self.forget_kept_profile();
         self.setup_owed = false;
         self.documents.clear();
         self.doc_metadata.clear();
         self.log_footings.clear();
+        self.shown_identities.clear();
+        self.kept_logs.clear();
+        self.kept_chains.clear();
         self.session_nonces.clear();
         self.light.clear();
         self.self_join_logs.clear();
@@ -593,6 +593,8 @@ impl SyncState {
         self.listed_channels.clear();
         self.listing_metas.clear();
         self.listed_keys.clear();
+        self.walked_writers.clear();
+        self.catalogue_pins.clear();
         self.creating_public.clear();
         self.space_rotations.clear();
         self.new_spaces.clear();
@@ -620,6 +622,9 @@ impl SyncState {
     /// does `LoggedOut` answer. A failed revocation still signs out: the keys
     /// are gone already, and the token expires on its own.
     pub(crate) fn handle_sign_out(&mut self, id: Seq<Request>) {
+        // The kept session goes first, so a reload during the revocation
+        // finds nothing to resume (`SRV-324`).
+        self.erase_kept();
         let held = self.tokens.borrow_mut().take();
         self.handle_logout();
         let (Some(tokens), Some(_)) = (held, self.event_tx.as_ref()) else {
@@ -637,6 +642,7 @@ impl SyncState {
             tokens: Rc::new(RefCell::new(Some(tokens))),
             renewing: Rc::new(futures_util::lock::Mutex::new(())),
             renewed: None,
+            kept: None,
         };
         let logic_tx = self.logic_tx.clone();
         crate::spawn(async move {
@@ -651,25 +657,13 @@ impl SyncState {
     }
 }
 
-/// The event an answered account setup raises (`SYNC-261`). It carries the
-/// keys of `master_seed`, the pair the relay answered and the user it assigned.
-/// The name and the address are the ones the setup sent.
-fn account_set_up(
-    id: Seq<Request>,
-    master_seed: MasterSeed,
-    resp: http::SetupAccountResponse,
-    sent: http::SetupAccountRequest,
-) -> SyncEvent {
-    SyncEvent::KeysSetUp {
-        id,
-        recovery_words: master_seed.recovery_words(),
-        signing_key: master_seed.derive_signing_key(),
-        exchange_key: master_seed.derive_exchange_key(),
-        master_seed,
-        tokens: resp.tokens,
-        user_id: resp.user_id,
-        display_name: sent.display_name,
-        email: sent.email,
+/// The event a refused re-seal raises. A refusal of the worker or a stale
+/// seal keeps its own kind (`SYNC-295`); a failed request reads as its
+/// failure.
+fn reseal_refused(failure: KeyWriteFailure) -> LogicEvent {
+    match failure {
+        KeyWriteFailure::Auth(cause) => LogicEvent::AuthError { cause },
+        KeyWriteFailure::Http(e) => auth_failed(e),
     }
 }
 
@@ -919,7 +913,7 @@ fn open_stored_seed(
     // on this path (`ZK-019`).
     // The seal binds the salt and the signing key the relay names for the
     // account. So a seed served for another account does not open
-    // (`ZK-047`). A seed sealed before that binding opens without it.
+    // (`ZK-047`). No seal without the version byte opens (audit `P59`).
     MasterSeed::open_from_storage(
         master_key_enc,
         &user_key,
@@ -1011,6 +1005,23 @@ async fn reseal_recovered_seed(
     .await
 }
 
+/// Re-seal the seed a recovery read back, then read who the account is, so
+/// the session opens on that seed (`SYNC-293`). The identity is read under
+/// the pair the session holds: the re-seal moves no key, so the pair stays
+/// valid.
+async fn recover_session(
+    transport: &impl http::Transport,
+    auth: &http::AuthContext,
+    api: &crate::http::Url<crate::http::ApiRoot>,
+    master_seed: &MasterSeed,
+    new_passphrase: &ambre_crypto::strength::ChosenPassphrase,
+) -> Result<http::AuthMeResponse, KeyWriteFailure> {
+    reseal_recovered_seed(transport, auth, api, master_seed, new_passphrase).await?;
+    http::get_json_auth_via(transport, &api.route("/auth/me"), auth)
+        .await
+        .map_err(KeyWriteFailure::Http)
+}
+
 /// Store the seed sealed under a new passphrase, in place of the seal under
 /// the current one.
 ///
@@ -1064,6 +1075,11 @@ fn prove_rotation(
 }
 
 /// Send the one write of a re-seal.
+///
+/// A bare `CONFLICT` says the relay no longer holds the seal the proof
+/// replaces: another device re-sealed it after the read (`SRV-279`). That
+/// refusal is its own, so the view asks for a new try rather than showing an
+/// HTTP failure (`SYNC-295`).
 async fn send_rotation(
     transport: &impl http::Transport,
     auth: &http::AuthContext,
@@ -1078,43 +1094,79 @@ async fn send_rotation(
         auth,
     )
     .await
-    .map_err(KeyWriteFailure::Http)
+    .map_err(|e| {
+        if e.is_conflict() {
+            KeyWriteFailure::Auth(AuthFailure::StaleReseal)
+        } else {
+            KeyWriteFailure::Http(e)
+        }
+    })
 }
 
-/// What the first store of a signed-in account leaves the worker. That is the
-/// pair the relay bound to the new signing key, and who the account is.
+/// What the first store of a signed-in account leaves the worker. That is
+/// the seed the relay holds, the pair the relay bound to its signing key, and
+/// who the account is.
 struct StoredKeys {
+    master_seed: MasterSeed,
     tokens: http::TokenPair,
     me: http::AuthMeResponse,
 }
 
-/// Store a new seed on the account `auth` signed in, sealed under
-/// `passphrase` (`SYNC-255`).
+/// What a first key store sends: a new seed for `account`, sealed under
+/// `passphrase`. `typed` is the same passphrase before the floor, which opens
+/// keys the relay holds already.
+struct NewKeys<'a> {
+    account: Id<User>,
+    master_seed: MasterSeed,
+    passphrase: &'a ambre_crypto::strength::ChosenPassphrase,
+    typed: &'a ambre_core::Confidential<ambre_core::Passphrase>,
+}
+
+/// Store a new seed on the account `auth` signed in, sealed under the
+/// passphrase (`SYNC-255`).
 ///
 /// The one write carries the sealed seed, its salt and the two public keys the
-/// seed derives, and nothing else (`SYNC-256`). The relay answers a fresh
-/// pair, bound to the new signing key, and the identity is read under it. The
-/// stored pair is stale from the write on, so it reads nothing more.
+/// seed derives. It adds the proof of the signing key, and nothing else
+/// (`SYNC-256`, `SRV-294`). The relay answers a fresh pair, bound to the new
+/// signing key, and the identity is read under it. The stored pair is stale
+/// from the write on, so it reads nothing more.
+///
+/// A conflict means the account holds keys already: a store that landed
+/// before a reload, for example. The worker then answers with those keys
+/// when the passphrase opens them, and never with a second seed (`SYNC-296`).
 async fn store_new_keys(
     transport: &impl http::Transport,
     auth: &http::AuthContext,
     api: &crate::http::Url<crate::http::ApiRoot>,
-    master_seed: &MasterSeed,
-    passphrase: &ambre_crypto::strength::ChosenPassphrase,
+    keys: NewKeys<'_>,
 ) -> Result<StoredKeys, KeyWriteFailure> {
+    let NewKeys {
+        account,
+        master_seed,
+        passphrase,
+        typed,
+    } = keys;
     let SealedSeed {
         master_key_enc,
         master_key_salt,
-    } = seal_seed(master_seed, passphrase).map_err(KeyWriteFailure::Auth)?;
+    } = seal_seed(&master_seed, passphrase).map_err(KeyWriteFailure::Auth)?;
+    let signing_key = master_seed.derive_signing_key();
+    let signing_pubkey = ambre_core::FixedBytes::from_array(signing_key.verifying_key().to_bytes());
+    let exchange_pubkey = crate::sharing::own_exchange_key(&master_seed.derive_exchange_key());
+    let transcript = ambre_protocol::key_registration::registration_transcript(
+        &account,
+        &signing_pubkey,
+        &exchange_pubkey,
+    );
+    let signature = ed25519_dalek::Signer::sign(&signing_key, transcript.as_bytes()).to_bytes();
     let body = http::StoreMasterKeysRequest {
         master_key_enc,
         master_key_salt,
-        signing_pubkey: ambre_core::FixedBytes::from_array(
-            master_seed.derive_signing_key().verifying_key().to_bytes(),
-        ),
-        exchange_pubkey: crate::sharing::own_exchange_key(&master_seed.derive_exchange_key()),
+        signing_pubkey,
+        exchange_pubkey,
+        signature: ambre_core::FixedBytes::from_array(signature),
     };
-    let stored: http::KeysStoredResponse = http::send_json_auth_read_via(
+    let stored: http::KeysStoredResponse = match http::send_json_auth_read_via(
         transport,
         http::Method::Put,
         &api.route("/keys/master"),
@@ -1122,13 +1174,20 @@ async fn store_new_keys(
         auth,
     )
     .await
-    .map_err(KeyWriteFailure::Http)?;
+    {
+        Ok(stored) => stored,
+        Err(refused) if refused.is_conflict() => {
+            return held_keys(transport, auth, api, typed, refused).await;
+        }
+        Err(e) => return Err(KeyWriteFailure::Http(e)),
+    };
     let fresh = http::AuthContext {
         api_base: auth.api_base.clone(),
         url_scheme: auth.url_scheme,
         tokens: Rc::new(RefCell::new(Some(stored.tokens))),
         renewing: Rc::new(futures_util::lock::Mutex::new(())),
         renewed: None,
+        kept: None,
     };
     let me: http::AuthMeResponse =
         http::get_json_auth_via(transport, &api.route("/auth/me"), &fresh)
@@ -1139,7 +1198,53 @@ async fn store_new_keys(
         .borrow_mut()
         .take()
         .ok_or(KeyWriteFailure::Auth(AuthFailure::SessionEnded))?;
-    Ok(StoredKeys { tokens, me })
+    Ok(StoredKeys {
+        master_seed,
+        tokens,
+        me,
+    })
+}
+
+/// The keys the relay holds for the account, after a first store it refused
+/// as `refused` (`SYNC-296`).
+///
+/// The worker reads the master material and opens the seed under `typed`, as
+/// an unlock does. It then renews the pair: the relay mints the next one under
+/// the registered key (`SRV-320`). An account that still owes its keys fails
+/// with the refusal itself. A passphrase that does not open the stored seed
+/// fails as a wrong passphrase, and nothing is written.
+async fn held_keys(
+    transport: &impl http::Transport,
+    auth: &http::AuthContext,
+    api: &crate::http::Url<crate::http::ApiRoot>,
+    typed: &ambre_core::Confidential<ambre_core::Passphrase>,
+    refused: http::HttpError,
+) -> Result<StoredKeys, KeyWriteFailure> {
+    let held: http::MasterKeyResponse =
+        http::get_json_auth_via(transport, &api.route("/keys/master"), auth)
+            .await
+            .map_err(KeyWriteFailure::Http)?;
+    if held.setup_owed() {
+        return Err(KeyWriteFailure::Http(refused));
+    }
+    let master_seed = open_stored_seed(&held, typed).map_err(KeyWriteFailure::Auth)?;
+    auth.renew_held_via(transport)
+        .await
+        .map_err(KeyWriteFailure::Http)?;
+    let me: http::AuthMeResponse = http::get_json_auth_via(transport, &api.route("/auth/me"), auth)
+        .await
+        .map_err(KeyWriteFailure::Http)?;
+    let tokens = auth
+        .tokens
+        .borrow()
+        .as_ref()
+        .cloned()
+        .ok_or(KeyWriteFailure::Auth(AuthFailure::SessionEnded))?;
+    Ok(StoredKeys {
+        master_seed,
+        tokens,
+        me,
+    })
 }
 
 /// The keys an unlock opened, and the identity of their account.
@@ -1217,7 +1322,7 @@ mod tests {
     /// The master material the relay answers, under the signing key `signer`.
     fn stored(signer: Option<ambre_core::FixedBytes<ambre_core::PublicKey>>) -> serde_json::Value {
         serde_json::json!({
-            "master_key_enc": ambre_core::Encoded::<ambre_core::WrappedMasterKey>::new(vec![1; 72]),
+            "master_key_enc": ambre_core::Encoded::<ambre_core::WrappedMasterKey>::new(vec![1; 73]),
             "master_key_salt": stored_salt(),
             "signing_pubkey": signer,
             "exchange_pubkey": null,
@@ -1349,6 +1454,105 @@ mod tests {
                 )]
             );
         }
+    }
+
+    /// `SYNC-293`: a recovery re-seals, then reads who the account is under
+    /// the pair the session holds, so the session opens on the recovered seed.
+    /// A refused re-seal reads no identity.
+    #[tokio::test]
+    async fn a_recovery_reads_the_identity_its_session_opens_with() {
+        let seed = recovered_seed();
+        let user = "77777777-7777-7777-7777-777777777777";
+        let transport = Scripted::new([
+            Ok((200, stored(Some(signing_pubkey(&seed))))),
+            Ok((200, serde_json::json!({ "status": "rotated" }))),
+            Ok((
+                200,
+                serde_json::json!({
+                    "user_id": user,
+                    "display_name": "Ada",
+                    "email": "ada@example.org",
+                }),
+            )),
+        ]);
+        let auth = session("access-1", "refresh-1");
+        let chosen =
+            ambre_crypto::strength::ChosenPassphrase::check(new_passphrase()).expect("strong");
+        let Ok(me) = recover_session(&transport, &auth, &root(), &seed, &chosen).await else {
+            panic!("the recovery read no identity");
+        };
+        assert_eq!(me.user_id.to_string(), user);
+        assert_eq!(me.display_name.as_str(), "Ada");
+        let calls: Vec<String> = transport.calls().into_iter().map(|(_, url)| url).collect();
+        assert_eq!(
+            calls,
+            [
+                "https://relay.test/api/keys/master",
+                "https://relay.test/api/keys/master/rotate",
+                "https://relay.test/api/auth/me",
+            ]
+        );
+
+        let transport = Scripted::new([
+            Ok((200, stored(Some(signing_pubkey(&seed))))),
+            Ok((409, serde_json::json!({ "code": "CONFLICT" }))),
+        ]);
+        let outcome = recover_session(&transport, &auth, &root(), &seed, &chosen).await;
+        assert!(matches!(
+            outcome,
+            Err(KeyWriteFailure::Auth(AuthFailure::StaleReseal))
+        ));
+        assert_eq!(transport.calls().len(), 2, "a refused re-seal read on");
+    }
+
+    /// `SYNC-295`: a re-seal the relay refuses as stale, after a recovery or
+    /// a passphrase change, draws a refusal of its own on the bus. Another
+    /// refusal of the write stays an HTTP failure.
+    #[tokio::test]
+    async fn a_stale_re_seal_is_refused_as_stale() {
+        let chosen =
+            ambre_crypto::strength::ChosenPassphrase::check(new_passphrase()).expect("strong");
+        let auth = session("access-1", "refresh-1");
+        let conflict = || -> Result<(u16, serde_json::Value), String> {
+            Ok((409, serde_json::json!({ "code": "CONFLICT" })))
+        };
+
+        let seed = recovered_seed();
+        let transport = Scripted::new([Ok((200, stored(Some(signing_pubkey(&seed))))), conflict()]);
+        let recovered = reseal_recovered_seed(&transport, &auth, &root(), &seed, &chosen).await;
+
+        let seed = MasterSeed::generate();
+        let transport = Scripted::new([Ok((200, sealed_under_current(&seed))), conflict()]);
+        let changed =
+            reseal_changed_passphrase(&transport, &auth, &root(), &current_passphrase(), &chosen)
+                .await;
+
+        for outcome in [recovered, changed] {
+            let Err(failure) = outcome else {
+                panic!("a stale re-seal succeeded");
+            };
+            assert!(matches!(
+                reseal_refused(failure),
+                LogicEvent::AuthError {
+                    cause: AuthFailure::StaleReseal
+                }
+            ));
+        }
+        assert_eq!(
+            AuthFailure::StaleReseal.passphrase_verdict(),
+            ambre_bus::PassphraseVerdict::Other,
+            "a stale seal blames the passphrase"
+        );
+        assert!(AuthFailure::StaleReseal.to_string().contains("Try again"));
+
+        let transport = Scripted::new([
+            Ok((200, sealed_under_current(&seed))),
+            Ok((500, serde_json::json!({ "code": "INTERNAL_ERROR" }))),
+        ]);
+        let failed =
+            reseal_changed_passphrase(&transport, &auth, &root(), &current_passphrase(), &chosen)
+                .await;
+        assert!(matches!(failed, Err(KeyWriteFailure::Http(_))));
     }
 
     const CURRENT_PASSPHRASE: &str = "pelican harbor voltage minnow";
@@ -1550,9 +1754,20 @@ mod tests {
         let auth = session("access-1", "refresh-1");
         let chosen =
             ambre_crypto::strength::ChosenPassphrase::check(new_passphrase()).expect("strong");
+        let account = Id::<User>::parse_str(user).expect("an id");
+        let keys = NewKeys {
+            account,
+            master_seed: seed,
+            passphrase: &chosen,
+            typed: &new_passphrase(),
+        };
 
-        let Ok(StoredKeys { tokens, me }) =
-            store_new_keys(&transport, &auth, &root(), &seed, &chosen).await
+        // The seed comes back with the answer: it is the seed the relay holds.
+        let Ok(StoredKeys {
+            master_seed: seed,
+            tokens,
+            me,
+        }) = store_new_keys(&transport, &auth, &root(), keys).await
         else {
             panic!("the setup did not land");
         };
@@ -1598,12 +1813,28 @@ mod tests {
                 "exchange_pubkey",
                 "master_key_enc",
                 "master_key_salt",
+                "signature",
                 "signing_pubkey"
             ]
         );
         let stored: http::MasterKeyResponse =
             serde_json::from_value(body.clone()).expect("material");
         assert_eq!(stored.signing_pubkey, Some(signing_pubkey(&seed)));
+        // `SRV-294`: the signing key of the seed signs the account and the
+        // two keys, as the relay verifies it.
+        let exchange_key: ambre_core::FixedBytes<ambre_core::ExchangePublicKey> =
+            serde_json::from_value(body["exchange_pubkey"].clone()).expect("a key");
+        let proof: ambre_core::FixedBytes<ambre_core::Signature> =
+            serde_json::from_value(body["signature"].clone()).expect("a signature");
+        let transcript = ambre_protocol::key_registration::registration_transcript(
+            &account,
+            &signing_pubkey(&seed),
+            &exchange_key,
+        );
+        let key = ed25519_dalek::VerifyingKey::from_bytes(signing_pubkey(&seed).as_array())
+            .expect("a key");
+        let signature = ed25519_dalek::Signature::from_bytes(proof.as_array());
+        assert!(key.verify_strict(transcript.as_bytes(), &signature).is_ok());
         let opened = open_stored_seed(&stored, &new_passphrase()).expect("the unlock opens");
         assert_eq!(signing_pubkey(&opened), signing_pubkey(&seed));
         let exchange: ambre_core::FixedBytes<ambre_core::ExchangePublicKey> =
@@ -1614,18 +1845,153 @@ mod tests {
         );
     }
 
+    /// A first key store of a new seed, sealed under `chosen`.
+    fn new_keys<'a>(
+        chosen: &'a ambre_crypto::strength::ChosenPassphrase,
+        typed: &'a ambre_core::Confidential<ambre_core::Passphrase>,
+    ) -> NewKeys<'a> {
+        NewKeys {
+            account: Id::<User>::mint(),
+            master_seed: MasterSeed::generate(),
+            passphrase: chosen,
+            typed,
+        }
+    }
+
     /// A store the relay refuses ends the setup with its error, and reads no
     /// identity.
     #[tokio::test]
     async fn a_refused_key_store_reads_no_identity() {
-        let transport = Scripted::new([Ok((409, serde_json::json!({ "code": "CONFLICT" })))]);
+        let transport = Scripted::new([Ok((500, serde_json::json!({ "code": "INTERNAL" })))]);
         let auth = session("access-1", "refresh-1");
         let chosen =
             ambre_crypto::strength::ChosenPassphrase::check(new_passphrase()).expect("strong");
-        let outcome =
-            store_new_keys(&transport, &auth, &root(), &MasterSeed::generate(), &chosen).await;
+        let typed = new_passphrase();
+        let outcome = store_new_keys(&transport, &auth, &root(), new_keys(&chosen, &typed)).await;
         assert!(matches!(outcome, Err(KeyWriteFailure::Http(_))));
         assert_eq!(transport.calls().len(), 1);
+    }
+
+    /// The master material of a seed `seed` sealed under the passphrase
+    /// `typed`, as the relay answers it.
+    fn sealed_material(seed: &MasterSeed, typed: &str) -> serde_json::Value {
+        let chosen =
+            ambre_crypto::strength::ChosenPassphrase::check(ambre_core::Confidential::<
+                ambre_core::Passphrase,
+            >::new(typed.to_owned()))
+            .expect("strong");
+        let sealed = seal_seed(seed, &chosen).expect("sealed");
+        serde_json::json!({
+            "master_key_enc": sealed.master_key_enc,
+            "master_key_salt": sealed.master_key_salt,
+            "signing_pubkey": signing_pubkey(seed),
+            "exchange_pubkey": crate::sharing::own_exchange_key(&seed.derive_exchange_key()),
+        })
+    }
+
+    /// `SYNC-296`: a second store, sent after a first one landed, answers
+    /// with the keys the relay holds. The worker opens the stored seed under
+    /// the typed passphrase, renews the pair so it carries the registered key,
+    /// and reads the identity under it. It writes nothing more, and announces
+    /// the stored seed, never the one it sealed.
+    #[tokio::test]
+    async fn a_second_key_store_answers_the_keys_the_relay_holds() {
+        let first = MasterSeed::generate();
+        let user = "66666666-6666-6666-6666-666666666666";
+        let transport = Scripted::new([
+            Ok((409, serde_json::json!({ "code": "CONFLICT" }))),
+            Ok((200, sealed_material(&first, NEW_PASSPHRASE))),
+            Ok((200, crate::http::scripted::renewed("access-2"))),
+            Ok((
+                200,
+                serde_json::json!({
+                    "user_id": user,
+                    "display_name": "Ada",
+                    "email": "ada@example.org",
+                }),
+            )),
+        ]);
+        let auth = session("access-1", "refresh-1");
+        let chosen =
+            ambre_crypto::strength::ChosenPassphrase::check(new_passphrase()).expect("strong");
+        let typed = new_passphrase();
+
+        let Ok(StoredKeys {
+            master_seed,
+            tokens,
+            me,
+        }) = store_new_keys(&transport, &auth, &root(), new_keys(&chosen, &typed)).await
+        else {
+            panic!("the second store did not answer the held keys");
+        };
+        assert_eq!(signing_pubkey(&master_seed), signing_pubkey(&first));
+        assert_eq!(tokens.access_token().secret().expose(), "access-2");
+        assert_eq!(me.user_id.to_string(), user);
+        assert_eq!(
+            transport.calls(),
+            [
+                (
+                    http::Method::Put,
+                    "https://relay.test/api/keys/master".to_owned()
+                ),
+                (
+                    http::Method::Get,
+                    "https://relay.test/api/keys/master".to_owned()
+                ),
+                (
+                    http::Method::Post,
+                    "https://relay.test/api/auth/refresh".to_owned()
+                ),
+                (
+                    http::Method::Get,
+                    "https://relay.test/api/auth/me".to_owned()
+                ),
+            ]
+        );
+    }
+
+    /// `SYNC-296`: a second store under a passphrase that does not open the
+    /// stored seed fails as a wrong passphrase. It renews nothing and writes
+    /// nothing more. A conflict on an account that still owes its keys fails
+    /// with the refusal.
+    #[tokio::test]
+    async fn a_second_key_store_under_another_passphrase_opens_nothing() {
+        let transport = Scripted::new([
+            Ok((409, serde_json::json!({ "code": "CONFLICT" }))),
+            Ok((
+                200,
+                sealed_material(
+                    &MasterSeed::generate(),
+                    "violet-harbor-quietly-folds-ninety-kites",
+                ),
+            )),
+        ]);
+        let auth = session("access-1", "refresh-1");
+        let chosen =
+            ambre_crypto::strength::ChosenPassphrase::check(new_passphrase()).expect("strong");
+        let typed = new_passphrase();
+        let outcome = store_new_keys(&transport, &auth, &root(), new_keys(&chosen, &typed)).await;
+        assert!(matches!(
+            outcome,
+            Err(KeyWriteFailure::Auth(AuthFailure::BadPassphrase))
+        ));
+        assert_eq!(transport.calls().len(), 2);
+
+        let owed = Scripted::new([
+            Ok((409, serde_json::json!({ "code": "CONFLICT" }))),
+            Ok((
+                200,
+                serde_json::json!({
+                    "master_key_enc": null,
+                    "master_key_salt": null,
+                    "signing_pubkey": null,
+                    "exchange_pubkey": null,
+                }),
+            )),
+        ]);
+        let outcome = store_new_keys(&owed, &auth, &root(), new_keys(&chosen, &typed)).await;
+        assert!(matches!(outcome, Err(KeyWriteFailure::Http(_))));
+        assert_eq!(owed.calls().len(), 2);
     }
 }
 
@@ -1667,45 +2033,44 @@ mod set_up_keys_tests {
         assert!(state.master_seed.is_none());
     }
 
-    /// `SYNC-261`: an account setup the relay answered opens a session. The
-    /// worker holds the keys and the user the relay assigned. Logic hears the
-    /// words, then the session of that user, under the name the setup sent.
+    /// `SYNC-293`, `SYNC-294`: a recovery answered by the relay opens the
+    /// session on the recovered keys. Logic hears the recovery, then the
+    /// session, and no second unlock is asked. A session that holds keys
+    /// already keeps them and its socket, and hears the recovery alone.
     #[test]
-    fn an_answered_account_setup_announces_the_session_of_the_assigned_user() {
-        let (mut state, rx) = worker();
-        let user = "55555555-5555-5555-5555-555555555555";
-        let resp: http::SetupAccountResponse = serde_json::from_value(serde_json::json!({
-            "user_id": user,
-            "access_token": "access-1",
-            "refresh_token": "refresh-1",
-            "access_expires_in": 900,
-        }))
-        .expect("the relay's answer");
-        let seed = MasterSeed::generate();
-        let chosen = ambre_crypto::strength::ChosenPassphrase::check(ambre_core::Confidential::<
-            ambre_core::Passphrase,
-        >::new(
-            "violet-harbor-quietly-folds-ninety-kites".to_owned(),
-        ))
-        .expect("strong");
-        let sealed = seal_seed(&seed, &chosen).expect("sealed");
-        let signing = seed.derive_signing_key().verifying_key().to_bytes();
-        let sent = http::SetupAccountRequest {
-            email: "ada@example.org".into(),
-            display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada").unwrap(),
-            master_key_enc: sealed.master_key_enc,
-            master_key_salt: sealed.master_key_salt,
-            signing_pubkey: ambre_core::FixedBytes::from_array(signing),
-            exchange_pubkey: crate::sharing::own_exchange_key(&seed.derive_exchange_key()),
+    fn a_recovery_ends_on_the_session_of_the_recovered_keys() {
+        let recovered = |state: &mut SyncState, seed: MasterSeed, user_id: Id<User>| {
+            let id = ambre_bus::next_request();
+            state.handle_sync_event(SyncEvent::AccountRecovered {
+                id,
+                signing_key: seed.derive_signing_key(),
+                exchange_key: seed.derive_exchange_key(),
+                master_seed: seed,
+                tokens: TokenPair::new(
+                    Credential::new("access-1".to_owned()),
+                    Credential::new("refresh-1".to_owned()),
+                    ambre_core::TimeSpan::<ambre_core::Sec>::new(900),
+                ),
+                user_id,
+                display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada")
+                    .unwrap(),
+                email: "ada@example.org".into(),
+                address: ambre_core::AddressStanding::Held,
+            });
+            id
         };
-        let id = ambre_bus::next_request();
-        let user_id = resp.user_id;
-        assert_eq!(user_id.to_string(), user, "the id the relay assigned");
-        state.handle_sync_event(account_set_up(id, seed, resp, sent));
+        let (mut state, rx) = worker();
+        let seed = MasterSeed::generate();
+        let signing = seed.derive_signing_key().verifying_key().to_bytes();
+        let user_id = Id::<User>::mint();
+        let id = recovered(&mut state, seed, user_id);
 
         assert_eq!(state.user_id, Some(user_id));
         assert_eq!(state.socket_opens.get(), 1);
-        let held = state.signing_key.as_ref().expect("the keys are held");
+        let held = state
+            .signing_key
+            .as_ref()
+            .expect("the recovered keys are held");
         assert_eq!(held.verifying_key().to_bytes(), signing);
         let told: Vec<LogicEvent> = rx
             .try_iter()
@@ -1717,13 +2082,39 @@ mod set_up_keys_tests {
                 [
                     LogicEvent::Rest {
                         id: Some(answered),
-                        evt: RestEvent::AccountCreated { .. },
+                        evt: RestEvent::AccountRecovered,
                     },
                     LogicEvent::Rest {
                         id: None,
-                        evt: RestEvent::SessionReady { user_id: ready, display_name, .. },
+                        evt: RestEvent::SessionReady { user_id: ready, .. },
                     },
-                ] if *answered == id && *ready == user_id && display_name.as_str() == "Ada"
+                ] if *answered == id && *ready == user_id
+            ),
+            "told {told:?}"
+        );
+
+        // The same seed again, over the session it opened.
+        let again = recovered(&mut state, MasterSeed::generate(), user_id);
+        assert_eq!(state.socket_opens.get(), 1, "a second socket opened");
+        assert_eq!(
+            state
+                .signing_key
+                .as_ref()
+                .map(|key| key.verifying_key().to_bytes()),
+            Some(signing),
+            "the held keys moved"
+        );
+        let told: Vec<LogicEvent> = rx
+            .try_iter()
+            .filter(|e| matches!(e, LogicEvent::Rest { .. }))
+            .collect();
+        assert!(
+            matches!(
+                told.as_slice(),
+                [LogicEvent::Rest {
+                    id: Some(answered),
+                    evt: RestEvent::AccountRecovered,
+                }] if *answered == again
             ),
             "told {told:?}"
         );
@@ -1753,6 +2144,7 @@ mod set_up_keys_tests {
             user_id,
             display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada").unwrap(),
             email: "ada@example.org".into(),
+            address: ambre_core::AddressStanding::Held,
         });
         assert!(!state.setup_owed);
         assert_eq!(state.socket_opens.get(), 1);
@@ -1778,5 +2170,90 @@ mod set_up_keys_tests {
             ),
             "told {told:?}"
         );
+    }
+    /// `CHROME-146`: the relay's account answer reads its reclaim
+    /// flag, and an answer without it reads as held. A session whose address
+    /// was reclaimed tells Logic the session, then the reclaim. A session
+    /// that holds its address tells the session alone.
+    #[test]
+    fn a_reclaimed_address_follows_the_session_it_belongs_to() {
+        let me = |json: &str| {
+            serde_json::from_str::<http::AuthMeResponse>(json)
+                .expect("an account answer")
+                .address_reclaimed
+        };
+        let user = Id::<User>::mint();
+        let answer = |reclaimed: &str| {
+            format!(
+                r#"{{"user_id":"{user}","display_name":"Ada","email":"ada@example.org"{reclaimed}}}"#
+            )
+        };
+        assert_eq!(
+            me(&answer(r#","address_reclaimed":true"#)),
+            ambre_core::AddressStanding::Reclaimed
+        );
+        assert_eq!(
+            me(&answer(r#","address_reclaimed":false"#)),
+            ambre_core::AddressStanding::Held
+        );
+        assert_eq!(me(&answer("")), ambre_core::AddressStanding::Held);
+
+        for address in [
+            ambre_core::AddressStanding::Held,
+            ambre_core::AddressStanding::Reclaimed,
+        ] {
+            let (mut state, rx) = worker();
+            let seed = MasterSeed::generate();
+            let id = ambre_bus::next_request();
+            state.handle_sync_event(SyncEvent::SessionReady {
+                id: Some(id),
+                user_id: user,
+                display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada")
+                    .unwrap(),
+                email: "ada@example.org".into(),
+                address,
+                signing_key: seed.derive_signing_key(),
+                exchange_key: seed.derive_exchange_key(),
+                master_seed: seed,
+                tokens: TokenPair::new(
+                    Credential::new("access-3".to_owned()),
+                    Credential::new("refresh-3".to_owned()),
+                    ambre_core::TimeSpan::<ambre_core::Sec>::new(900),
+                ),
+                kept: crate::kept::Keeping::Nothing,
+            });
+            let told: Vec<LogicEvent> = rx
+                .try_iter()
+                .filter(|e| matches!(e, LogicEvent::Rest { .. }))
+                .collect();
+            match address {
+                ambre_core::AddressStanding::Held => assert!(
+                    matches!(
+                        told.as_slice(),
+                        [LogicEvent::Rest {
+                            evt: RestEvent::SessionReady { .. },
+                            ..
+                        }]
+                    ),
+                    "told {told:?}"
+                ),
+                ambre_core::AddressStanding::Reclaimed => assert!(
+                    matches!(
+                        told.as_slice(),
+                        [
+                            LogicEvent::Rest {
+                                id: Some(answered),
+                                evt: RestEvent::SessionReady { .. },
+                            },
+                            LogicEvent::Rest {
+                                id: None,
+                                evt: RestEvent::AddressReclaimed,
+                            },
+                        ] if *answered == id
+                    ),
+                    "told {told:?}"
+                ),
+            }
+        }
     }
 }

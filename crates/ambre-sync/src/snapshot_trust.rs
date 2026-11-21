@@ -83,6 +83,10 @@ pub(crate) struct OpenStart {
     pub start: Option<Trusted>,
     /// The latest snapshot, checked once the replay is done (`AUTHOR-022`).
     pub held: Option<Named>,
+    /// An older trusted snapshot, the reference, to start from when the
+    /// start folds a delta past a cap (`SYNC-307`). `None` when the start is
+    /// the reference itself, or no reference is trusted.
+    pub fallback: Option<Trusted>,
 }
 
 /// Where the open of `document_id` starts, given the snapshot the relay
@@ -117,12 +121,6 @@ pub(crate) fn open_start(
         covered_seq: meta.covered_seq,
         author: meta.author_pubkey,
     };
-    if let Some(start) = trusted(latest, meta.confirmation.as_ref()) {
-        return OpenStart {
-            start: Some(start),
-            held: None,
-        };
-    }
     let reference = meta.reference.as_ref().and_then(|r| {
         let named = Named {
             snapshot_id: r.snapshot_id,
@@ -131,9 +129,23 @@ pub(crate) fn open_start(
         };
         trusted(named, r.confirmation.as_ref())
     });
+    if let Some(start) = trusted(latest, meta.confirmation.as_ref()) {
+        // The relay keeps every delta past the reference (`SRV-127`), so a
+        // start past a cap replays from the reference, not from the first
+        // delta (`SYNC-307`).
+        let fallback = reference.filter(|r| {
+            r.named.snapshot_id != latest.snapshot_id && r.named.covered_seq < latest.covered_seq
+        });
+        return OpenStart {
+            start: Some(start),
+            held: None,
+            fallback,
+        };
+    }
     OpenStart {
         start: reference,
         held: Some(latest),
+        fallback: None,
     }
 }
 
@@ -224,10 +236,11 @@ mod tests {
     /// Members whose bindings a key no test authors signed.
     fn members(keys: &[&SigningKey]) -> Confirmers {
         let binder = public(&key(99));
-        Confirmers::Granted(
+        Confirmers::granted(
             keys.iter()
                 .map(|k| (public(k), HashSet::from([binder])))
                 .collect::<HashMap<_, _>>(),
+            HashSet::new(),
         )
     }
 
@@ -324,11 +337,14 @@ mod tests {
     fn a_confirmer_the_author_bound_does_not_make_a_snapshot_trusted() {
         let doc = Id::<Document>::mint();
         let (mallory, guest, alice) = (key(1), key(2), key(3));
-        let confirmers = Confirmers::Granted(HashMap::from([
-            (public(&mallory), HashSet::from([public(&alice)])),
-            (public(&guest), HashSet::from([public(&mallory)])),
-            (public(&alice), HashSet::from([public(&alice)])),
-        ]));
+        let confirmers = Confirmers::granted(
+            HashMap::from([
+                (public(&mallory), HashSet::from([public(&alice)])),
+                (public(&guest), HashSet::from([public(&mallory)])),
+                (public(&alice), HashSet::from([public(&alice)])),
+            ]),
+            HashSet::new(),
+        );
         let bytes = blob(b"snapshot");
         let by_mallory = named(&mallory, 9);
         let served = meta(
@@ -349,6 +365,61 @@ mod tests {
             adopts(doc, &served, None, &confirmers, &bytes),
             Some(by_alice)
         );
+    }
+
+    /// `AUTHOR-036`, the owner's ruling of 2026-11-19: Bob, whom Alice the
+    /// owner invited, confirms her snapshot, and the open adopts it whole.
+    /// A key the log no longer holds as a member confirms nothing
+    /// (`AUTHOR-035`).
+    #[test]
+    fn an_owner_snapshot_opens_under_a_confirmer_the_owner_invited() {
+        let doc = Id::<Document>::mint();
+        let (alice, bob, gone) = (key(1), key(2), key(3));
+        let confirmers = Confirmers::granted(
+            HashMap::from([
+                (public(&alice), HashSet::from([public(&alice)])),
+                (public(&bob), HashSet::from([public(&alice)])),
+            ]),
+            HashSet::from([public(&alice)]),
+        );
+        let bytes = blob(b"owner snapshot");
+        let by_alice = named(&alice, 9);
+        let served = meta(&by_alice, Some(signed(doc, &by_alice, &bytes, &bob)), None);
+        assert_eq!(
+            adopts(doc, &served, None, &confirmers, &bytes),
+            Some(by_alice)
+        );
+        let served = meta(&by_alice, Some(signed(doc, &by_alice, &bytes, &gone)), None);
+        assert_eq!(adopts(doc, &served, None, &confirmers, &bytes), None);
+    }
+
+    /// `SYNC-307`: a trusted latest keeps the trusted reference beside it,
+    /// to start from when the latest folds a delta past a cap. A reference
+    /// that is the latest itself, one at or past its horizon, and one with
+    /// no signed confirmation are no fallback.
+    #[test]
+    fn a_trusted_latest_keeps_the_trusted_reference_to_fall_back_on() {
+        let doc = Id::<Document>::mint();
+        let (alice, bob) = (key(1), key(2));
+        let confirmers = members(&[&alice, &bob]);
+        let bytes = blob(b"snapshot");
+        let latest = named(&alice, 9);
+        let reference = named(&alice, 4);
+        let on_latest = Some(signed(doc, &latest, &bytes, &bob));
+        let plan = |reference: &Named, confirmation| {
+            let served = meta(&latest, on_latest, Some((reference, confirmation)));
+            open_start(&served, None, &confirmers)
+        };
+        let good = plan(&reference, Some(signed(doc, &reference, &bytes, &bob)));
+        assert_eq!(good.start.map(|s| s.named), Some(latest));
+        assert_eq!(good.fallback.map(|f| f.named), Some(reference));
+        assert!(good.fallback.is_some_and(|f| f.holds(doc, &bytes)));
+        assert_eq!(plan(&reference, None).fallback, None, "no confirmation");
+        let itself = plan(&latest, Some(signed(doc, &latest, &bytes, &bob)));
+        assert_eq!(itself.fallback, None, "the latest itself");
+        let later = named(&alice, 12);
+        let past = plan(&later, Some(signed(doc, &later, &bytes, &bob)));
+        assert_eq!(past.fallback, None, "a horizon past the latest");
     }
 
     /// `AUTHOR-030`: a snapshot this user built opens whole on its own word.
@@ -377,6 +448,7 @@ mod tests {
             OpenStart {
                 start: None,
                 held: Some(latest),
+                fallback: None,
             }
         );
         // Its author opens its own snapshot whole.

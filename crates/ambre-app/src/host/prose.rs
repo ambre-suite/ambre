@@ -104,7 +104,7 @@ pub struct ProseView {
     figures: RwSignal<Option<ambre_prose::ui::StatusFigures>>,
     shown: Option<WordCount>,
     /// The zoom chip of the status bar: the chip writes a factor, the view
-    /// applies it and writes back what it shows (`CHROME-147`).
+    /// applies it and writes back what it shows (`CHROME-206`).
     zoom: RwSignal<ambre_core::Scale<ambre_core::Doc, View>>,
     /// The factor the chip last read from the view. A signal that differs
     /// from it holds a factor the chip asked for.
@@ -1184,7 +1184,7 @@ mod tests {
         slot.remove();
     }
 
-    /// `CHROME-147`, `PROSE-UI-250`: the Prose band ends on the shared zoom
+    /// `CHROME-206`, `PROSE-UI-250`: the Prose band ends on the shared zoom
     /// chip. A preset picked there zooms the page, and a zoom key moves the
     /// chip.
     #[wasm_bindgen_test]

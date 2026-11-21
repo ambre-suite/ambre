@@ -582,10 +582,11 @@ impl<D> Runtime<D> {
         if self.opening.contains_key(&channel_id) {
             return;
         }
-        let listed_in = self.listing_space(channel_id);
+        let listing = self.listing(channel_id);
         self.ask(SyncCommand::OpenChannel {
             channel_id,
-            listed_in,
+            listed_in: listing.as_ref().map(|(space_id, _)| *space_id),
+            catalogue_key: listing.map(|(_, key)| key),
         });
     }
 
