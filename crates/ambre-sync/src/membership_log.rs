@@ -131,7 +131,9 @@ impl SpaceWord {
 /// peer applied before it.
 ///
 /// A writer another member revoked keeps its place, under the cap its revoke
-/// names: a delta of it past that clock counts nowhere (`SYNC-300`). A later
+/// names: a delta of it past that clock counts nowhere (`SYNC-300`). A writer
+/// who left keeps its place under the cap its departure names, the same way
+/// (`SYNC-306`). A later
 /// grant readmits the writer from the head after its own entry alone. A delta
 /// past the cap then counts only when it signs a head of the walk at or past
 /// that place (`SYNC-301`). The caps and the heads are in the log, so every peer
@@ -706,9 +708,9 @@ pub(crate) struct Log {
     /// The keys that signed a binding of each key, every binding kept
     /// (`AUTHOR-034`).
     binders: HashMap<FixedBytes<PublicKey>, HashSet<FixedBytes<PublicKey>>>,
-    /// The cap the latest revoke another member signed set on each key,
-    /// until a later entry grants that key a writing role again
-    /// (`SYNC-300`).
+    /// The lowest cap a revoke set on each key, until a later entry grants
+    /// that key a writing role again. A revoke another member signed names
+    /// it (`SYNC-300`), and a departure names its leaver's own (`SYNC-306`).
     caps: HashMap<FixedBytes<PublicKey>, Seq<DeltaAuthor>>,
     /// Each cap a later grant lifted, with the place of the head after that
     /// grant (`SYNC-301`).
@@ -931,10 +933,11 @@ impl Log {
     /// effect at the head after the entry (`SYNC-204`).
     fn apply(&mut self, entry: &MembershipEntry) {
         let before = self.writer_key(entry.member);
-        // A revoke another member signed caps the key it ends, at the clock
-        // its author named (`SYNC-300`). A departure is signed by its own
-        // member, whose word caps nothing.
-        let capped = (entry.act == MembershipAct::Revoke && entry.author != entry.member)
+        // A revoke caps the key it ends, at the clock its entry names under
+        // the author's signature. Another member names the clock it applied
+        // (`SYNC-300`). A leaver names the last clock it wrote, so a key it
+        // loses later writes nothing past its departure (`SYNC-306`).
+        let capped = (entry.act == MembershipAct::Revoke)
             .then(|| self.held.get(&entry.member).map(|held| held.key))
             .flatten()
             .zip(entry.cap);
@@ -1313,8 +1316,9 @@ pub(crate) fn sign(
     sign_capped(draft, None, next, author, signing_key)
 }
 
-/// Signs `draft` as [`sign`] does, with `cap`, the highest clock of the
-/// revoked member's deltas the author applied, on a revoke (`SYNC-300`).
+/// Signs `draft` as [`sign`] does, with `cap` on a revoke: the highest clock
+/// of the revoked member's deltas the author applied (`SYNC-300`), or of its
+/// own deltas on a departure (`SYNC-306`).
 ///
 /// # Errors
 ///
@@ -2015,8 +2019,7 @@ pub(crate) mod tests {
 
     /// Holds `SYNC-300` at the walk. A revoke another member signed caps the
     /// key it ends. A delta of it at the cap counts and one past it does not.
-    /// A snapshot of it counts nowhere. A departure its own member signed
-    /// caps nothing, whatever it names. A later invite lifts the cap.
+    /// A snapshot of it counts nowhere. A later invite lifts the cap.
     #[test]
     fn a_revoke_caps_the_clock_of_the_writer_it_ends() {
         let (alice, bob, carol) = (Person::new(1), Person::new(2), Person::new(3));
@@ -2047,17 +2050,95 @@ pub(crate) mod tests {
         );
         assert!(writers.admits_snapshot(&alice.public()));
 
-        // Carol leaves on her own and names a cap: it binds nobody.
-        revoke_capped(&mut log, &carol, &carol, 0);
-        let head = walk(&log).walked_head();
-        assert!(Writers::of(&walk(&log)).admits_delta(&carol.public(), at(7), head));
-
         // Bob is invited back: his deltas count again from the invite on.
         append(&mut log, &alice, &bob, MembershipAct::Invite, Role::Editor);
         let back = Writers::of(&walk(&log));
         let head = walk(&log).walked_head();
         assert!(back.admits_delta(&bob.public(), at(9), head));
         assert_eq!(back.cap(&bob.public()), None);
+    }
+
+    /// Holds `SYNC-306` at the walk. Carol leaves on her own and names her
+    /// last clock, 3, under her signature. A delta of hers at or below it
+    /// counts, one past it does not, and her snapshot stands nowhere. A cap
+    /// rewritten in transit breaks her signature, so the walk stops before
+    /// the departure. A later invite readmits her from its own entry alone,
+    /// as it readmits a revoked writer (`SYNC-301`).
+    #[test]
+    fn a_departure_caps_the_clock_of_its_leaver() {
+        let (alice, bob, carol) = (Person::new(1), Person::new(2), Person::new(3));
+        let at = Seq::<DeltaAuthor>::new;
+        let mut log = created(&alice, &bob);
+        append(
+            &mut log,
+            &alice,
+            &carol,
+            MembershipAct::Invite,
+            Role::Editor,
+        );
+        let next = LogHead {
+            position: place_after(log.len()),
+            previous: log.last().and_then(digest),
+        };
+        let draft = Draft {
+            document: DOC,
+            member: carol.id,
+            member_key: carol.public(),
+            member_exchange_key: carol.exchange(),
+            act: MembershipAct::Revoke,
+            role: Role::Editor,
+            key: None,
+        };
+        log.push(sign_capped(draft, Some(at(3)), next, carol.id, &carol.key).unwrap());
+        let walked = walk(&log);
+        assert_eq!(walked.departed_at(), Some(next.position), "a departure");
+        let left = walked.walked_head();
+        let writers = Writers::of(&walked);
+        assert!(
+            writers.admits_delta(&carol.public(), at(3), left),
+            "at the cap"
+        );
+        assert!(
+            writers.admits_delta(&carol.public(), at(1), LogHead::EMPTY),
+            "under the cap"
+        );
+        assert!(
+            !writers.admits_delta(&carol.public(), at(4), left),
+            "past the cap"
+        );
+        assert!(!writers.admits_snapshot(&carol.public()));
+        assert_eq!(writers.cap(&carol.public()), Some(at(3)));
+        assert!(
+            writers.admits_delta(&bob.public(), at(99), left),
+            "the departure caps its leaver alone"
+        );
+
+        // The relay raises the cap of the departure: the signature fails.
+        let mut raised = log.clone();
+        if let Some(entry) = raised.last_mut() {
+            entry.cap = Some(at(99));
+        }
+        assert_eq!(
+            walk(&raised).walked_head(),
+            next,
+            "the walk stops before it"
+        );
+
+        // Carol is invited back: only a write past the invite counts.
+        append(
+            &mut log,
+            &alice,
+            &carol,
+            MembershipAct::Invite,
+            Role::Editor,
+        );
+        let back = walk(&log).walked_head();
+        let writers = Writers::of(&walk(&log));
+        assert!(writers.readmits(&carol.public(), at(3), LogHead::EMPTY));
+        assert!(!writers.readmits(&carol.public(), at(4), left));
+        assert!(writers.admits_delta(&carol.public(), at(4), back));
+        assert!(!writers.admits_delta(&carol.public(), at(4), left));
+        assert!(!writers.admits_snapshot(&carol.public()));
     }
 
     /// Holds `SYNC-301` at the walk. Alice revokes Bob at cap 4, then

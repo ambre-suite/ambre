@@ -1492,6 +1492,14 @@ impl SyncDocumentState {
             .unwrap_or(Seq::<DeltaAuthor>::new(0))
     }
 
+    /// The last clock this client's key `own` wrote in this document: the
+    /// clock it sealed last, or a higher one an echo or a snapshot held. A
+    /// departure names it as its cap (`SYNC-306`).
+    pub(crate) fn own_last_clock(&self, own: &FixedBytes<PublicKey>) -> Seq<DeltaAuthor> {
+        let applied = self.applied.borrow().clocks.get(own).copied();
+        applied.map_or(self.local_clock, |clock| clock.max(self.local_clock))
+    }
+
     /// What this document applied, which an eviction keeps for the reopen
     /// (`SYNC-300`).
     pub(crate) fn take_applied(&self) -> Applied {

@@ -1064,6 +1064,9 @@ pub(crate) struct LeaveParams {
     pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::Url<crate::http::RelayHost>,
     pub exchange_key: StaticSecret,
+    /// The last clock this user wrote in the document, which the departure
+    /// names as its cap (`SYNC-306`).
+    pub cap: Seq<DeltaAuthor>,
 }
 
 /// Departure orchestration: DELETE this user's own share with the revoke they
@@ -1081,6 +1084,7 @@ pub(crate) async fn leave_task<H: ShareHttp>(
         http,
         p.document_id,
         &p.author,
+        Some(p.cap),
         p.url_scheme,
         &p.api_base,
         &p.exchange_key,
@@ -1098,11 +1102,13 @@ pub(crate) async fn leave_task<H: ShareHttp>(
 }
 
 /// DELETEs this user's own share of `document_id` with the revoke they sign
-/// on the log the relay serves. A log that moved meanwhile is read again.
+/// on the log the relay serves, capped at `cap` (`SYNC-306`). A log that
+/// moved meanwhile is read again.
 async fn leave_document<H: ShareHttp>(
     http: &H,
     document_id: Id<Document>,
     author: &Author,
+    cap: Option<Seq<DeltaAuthor>>,
     url_scheme: crate::http::UrlScheme,
     api_base: &crate::http::Url<crate::http::RelayHost>,
     exchange_key: &StaticSecret,
@@ -1136,7 +1142,9 @@ async fn leave_document<H: ShareHttp>(
         };
         // A departure removes this user alone, and writes no key: it signs
         // after the served log, which a relay that cut it refuses anyway.
-        let entry = entry_at(log.next(), draft, author)?;
+        // Its cap binds the deltas this user's key signs after it, whoever
+        // holds that key then (`SYNC-306`).
+        let entry = entry_at_capped(log.next(), draft, cap, author)?;
         let body = http::LeaveRequest { entry };
         match http.delete(&url, &body).await {
             Ok(()) => return Ok(()),
@@ -1161,6 +1169,11 @@ pub(crate) struct ChannelLeaveParams {
 /// then leave that document as any other. The members who stay owe the
 /// rotation (`SYNC-127`, `SYNC-130`).
 ///
+/// The departure names no cap. Each document of the channel numbers the
+/// clocks of an author on its own, and the `meta` log vouches for all of
+/// them. One cap below the clock of one segment would refuse history that
+/// segment holds (`SYNC-306`).
+///
 /// Nothing lands on any failure. The caller hears the reason.
 pub(crate) async fn leave_channel_task<H: ShareHttp>(
     http: &H,
@@ -1177,7 +1190,7 @@ pub(crate) async fn leave_channel_task<H: ShareHttp>(
         .find(|d| d.kind == ChannelDocumentKind::Meta)
         .ok_or(http::HttpError::Local(LocalFailure::NoMetaDocument))?
         .document_id;
-    leave_document(http, meta, &p.author, scheme, base, &p.exchange_key)
+    leave_document(http, meta, &p.author, None, scheme, base, &p.exchange_key)
         .await
         .map_err(http::HttpError::from)
 }
@@ -3491,6 +3504,7 @@ mod tests {
             (entry.member, entry.author, entry.act),
             (me, me, MembershipAct::Revoke)
         );
+        assert_eq!(entry.cap, None, "no one clock bounds every segment");
         assert!(body.get("keys").is_none(), "the leaver picks no key");
     }
 
@@ -3825,6 +3839,7 @@ mod tests {
             url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
             exchange_key: my_xk,
+            cap: Seq::<DeltaAuthor>::new(5),
         };
         leave_task(&http, params, &etx, &sink).await;
         assert!(matches!(
@@ -3840,6 +3855,14 @@ mod tests {
         );
         assert!(matches!(&calls[0], Call::Get(_)));
         assert!(matches!(&calls[1], Call::Delete(u, _) if u.ends_with(&format!("/share/{me}"))));
+        // The departure signs the last clock this user wrote (`SYNC-306`).
+        let Call::Delete(_, body) = &calls[1] else {
+            panic!("expected the leave DELETE: {calls:?}");
+        };
+        let entry = posted_entry(body);
+        assert_eq!(entry.act, MembershipAct::Revoke);
+        assert_eq!(entry.author, me);
+        assert_eq!(entry.cap, Some(Seq::<DeltaAuthor>::new(5)));
     }
 
     /// A leave the relay refuses reaches the Logic thread as the relay's
@@ -3867,6 +3890,7 @@ mod tests {
             url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
             exchange_key: keypair(1).0,
+            cap: Seq::<DeltaAuthor>::new(0),
         };
         leave_task(&http, params, &etx, &sink).await;
         assert!(matches!(
@@ -5181,6 +5205,7 @@ mod tests {
             url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
             exchange_key: bob.xk.clone(),
+            cap: Seq::<DeltaAuthor>::new(3),
         };
         let http = FakeHttp::new(vec![
             Ok(logged.answer()),
@@ -5294,6 +5319,7 @@ mod tests {
             url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
             exchange_key: bob.xk.clone(),
+            cap: Seq::<DeltaAuthor>::new(3),
         };
         let mut script = Vec::new();
         for _ in 0..ROTATION_TRIES {

@@ -7684,6 +7684,52 @@ mod tests {
         }
     }
 
+    /// Holds `SYNC-306` at the worker. A departure names the last clock this
+    /// user wrote: the clock sealed last, or a higher one a snapshot or an
+    /// echo held. A document that is not open names no cap, and its leave
+    /// fails closed before any request.
+    #[test]
+    fn a_departure_caps_the_leaver_at_the_last_clock_it_wrote() {
+        let (mut state, rx, doc, _key, sk, _snap) = setup();
+        let author = crate::sharing::Author {
+            user_id: Id::<User>::mint(),
+            signing_key: sk.clone(),
+        };
+        let own = author.public();
+        let at = Seq::<DeltaAuthor>::new;
+        state.documents.get_mut(&doc).unwrap().local_clock = at(4);
+        assert_eq!(state.leaving_cap(doc, &author), Some(at(4)), "sealed last");
+        state.documents[&doc].note_applied(&own, at(2));
+        assert_eq!(
+            state.leaving_cap(doc, &author),
+            Some(at(4)),
+            "an older echo"
+        );
+        state.documents[&doc].note_applied(&own, at(6));
+        assert_eq!(
+            state.leaving_cap(doc, &author),
+            Some(at(6)),
+            "a later snapshot"
+        );
+        let other = Id::<Document>::mint();
+        assert_eq!(state.leaving_cap(other, &author), None, "not open");
+
+        state.user_id = Some(author.user_id);
+        state.signing_key = Some(sk);
+        state.exchange_key = Some(x25519_dalek::StaticSecret::from([7; 32]));
+        state.set_event_tx(ambre_bus::conduit::unbounded().0);
+        let id = Seq::<Request>::new(1);
+        state.handle_leave_document(id, other);
+        assert!(drain(&rx).iter().any(|e| matches!(
+            e,
+            LogicEvent::ApiError {
+                request: ApiRequest::LeaveDocument,
+                failure: ApiFailure::Local(ambre_core::LocalFailure::DocumentNotOpen),
+                ..
+            }
+        )));
+    }
+
     /// Audit `N16`, at the delta. A space document checks its writers
     /// against its own log, as any document does. A viewer of the space who
     /// writes a catalogue entry, forwarded by the relay, reaches no document;

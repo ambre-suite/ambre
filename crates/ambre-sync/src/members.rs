@@ -452,6 +452,17 @@ impl SyncState {
             });
             return;
         };
+        // The departure caps this user at the last clock they wrote, which
+        // only an open document knows (`SYNC-306`). A cap read from nothing
+        // would refuse their own history, so the leave fails closed.
+        let Some(cap) = self.leaving_cap(document_id, &author) else {
+            let _ = self.logic_tx.send(LogicEvent::ApiError {
+                id: Some(id),
+                request: ApiRequest::LeaveDocument,
+                failure: ApiFailure::Local(ambre_core::LocalFailure::DocumentNotOpen),
+            });
+            return;
+        };
         let logic_tx = self.logic_tx.clone();
         let params = sharing::LeaveParams {
             id,
@@ -460,6 +471,7 @@ impl SyncState {
             url_scheme: self.url_scheme,
             api_base: self.api_base.clone(),
             exchange_key,
+            cap,
         };
         let http = sharing::GlooHttp {
             auth: self.auth_context(),
@@ -467,6 +479,20 @@ impl SyncState {
         crate::spawn(async move {
             sharing::leave_task(&http, params, &tx, &logic_tx).await;
         });
+    }
+
+    /// The cap a departure of `document_id` by `author` names: the last
+    /// clock the open document knows that author wrote (`SYNC-306`). `None`
+    /// when the document is not open here.
+    pub(crate) fn leaving_cap(
+        &self,
+        document_id: Id<Document>,
+        author: &sharing::Author,
+    ) -> Option<Seq<DeltaAuthor>> {
+        let key = author.public();
+        self.documents
+            .get(&document_id)
+            .map(|doc| doc.own_last_clock(&key))
     }
 
     /// Fetches the member list for a document via `GET /api/documents/{id}/members`,
