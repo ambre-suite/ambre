@@ -196,7 +196,10 @@ impl<S: ScalesTo<View>> Zoom<S> {
         // The room as it reads at one, so the two sides share the content's
         // space and its precision.
         let fit = |side: Px<S>, room: Px<View>| -> Option<f64> {
-            let (side, room): (f64, f64) = (side.get().into(), (room / Scale::<S, View>::ONE).get().into());
+            let (side, room): (f64, f64) = (
+                side.get().into(),
+                (room / Scale::<S, View>::ONE).get().into(),
+            );
             let ratio = room / side;
             let sides = side.is_finite() && side > 0.0 && room > 0.0;
             (sides && ratio.is_finite()).then_some(ratio)
@@ -275,8 +278,8 @@ impl<S: ScalesTo<View>> std::fmt::Debug for Zoom<S> {
 mod tests {
     use super::{Zoom, ZoomRange, ZoomStep, ladder};
     use crate::scale::Scale;
-    use crate::space::{Board, Doc, View};
     use crate::space::Css;
+    use crate::space::{Board, Doc, View};
     use crate::unit::{Px, Vector};
     use proptest::prelude::*;
 

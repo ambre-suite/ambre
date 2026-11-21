@@ -21,6 +21,9 @@
     --sidebar-w: 260px;
     --sidebar-strip: 44px;
     --panel-w: 380px;
+    /* The context panel's width; the panel overrides it inline with the
+       width the user dragged (`CHROME-198`). */
+    --ctx-panel-w: 300px;
     /* 1 at the desktop width, where a chord shows. The host reads it for the
        canvas, so no width lives outside this sheet. */
     --desktop: 0;
@@ -1075,7 +1078,7 @@ body {
 .ambre-body > .ambre-ctx-panel {
     position: relative;
     display: flex;
-    flex: 0 0 var(--ctx-panel-w, 300px);
+    flex: 0 0 var(--ctx-panel-w);
     min-width: 0;
     min-height: 0;
     order: 2;
@@ -1131,7 +1134,7 @@ body {
     top: 0;
     bottom: 0;
     left: 0;
-    width: var(--ctx-panel-w, 300px);
+    width: var(--ctx-panel-w);
     visibility: hidden;
 }
 

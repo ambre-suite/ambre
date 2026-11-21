@@ -523,10 +523,12 @@ mod tests {
     }
 
     /// The room a fit frames into: the canvas less the strips `clear` covers.
+    #[cfg(not(target_arch = "wasm32"))]
     fn room(size: Size, clear: kurbo::Insets) -> Rect {
         Rect::from_origin_size(Point::ZERO, size) - clear
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     proptest::proptest! {
         /// A fit lands the whole box inside the uncovered part of the canvas,
         /// centred on it (`ZOOM-011`). That holds for any box, any measured

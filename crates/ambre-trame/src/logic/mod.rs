@@ -385,8 +385,9 @@ impl TrameState {
     }
 
     /// The whole document as one value, for a test that compares the
-    /// workbook before a command and after its undo (`CHROME-173`).
-    #[cfg(test)]
+    /// workbook before a command and after its undo (`CHROME-173`). Only the
+    /// host view tests call it, so wasm leaves it out.
+    #[cfg(all(test, not(target_arch = "wasm32")))]
     pub(crate) fn deep_value(&self) -> loro::LoroValue {
         self.doc.get_deep_value()
     }

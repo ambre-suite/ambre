@@ -166,7 +166,8 @@ impl TrameUiState {
             SelKind::Cols => (cols + chrome_w, f64::from(f32::MIN_POSITIVE)),
             SelKind::Rows => (f64::from(f32::MIN_POSITIVE), rows + chrome_h),
         };
-        let content = ambre_core::Vector::new(Px::<Doc>::new(across as f32), Px::<Doc>::new(down as f32));
+        let content =
+            ambre_core::Vector::new(Px::<Doc>::new(across as f32), Px::<Doc>::new(down as f32));
         let view = ambre_core::Vector::new(
             self.canvas_width.view_length(),
             self.grid_bottom().view_length(),

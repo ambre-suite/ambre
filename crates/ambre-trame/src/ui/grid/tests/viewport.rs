@@ -334,7 +334,11 @@ fn at(row: u32, col: u32) -> CellPos {
 /// stays as it was.
 #[test]
 fn a_zoom_to_the_selection_shows_it_whole_and_keeps_it() {
-    for (from, to) in [((40, 3), (44, 5)), ((100, 20), (102, 21)), ((7, 0), (30, 12))] {
+    for (from, to) in [
+        ((40, 3), (44, 5)),
+        ((100, 20), (102, 21)),
+        ((7, 0), (30, 12)),
+    ] {
         let mut grid = laptop();
         grid.select(at(from.0, from.1));
         grid.select_extend(at(to.0, to.1));

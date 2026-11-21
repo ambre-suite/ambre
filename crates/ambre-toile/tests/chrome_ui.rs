@@ -1521,7 +1521,9 @@ async fn the_board_panel_shows_the_board_then_what_applies_to_the_selection() {
     );
     let markers = ambre_chrome::reach_markers(&board);
     assert!(
-        ambre_chrome::commands::Reach::Command(menu::SELECT_ALL).matches_marker(&markers[0]),
+        markers.first().is_some_and(
+            |m| ambre_chrome::commands::Reach::Command(menu::SELECT_ALL).matches_marker(m)
+        ),
         "{markers:?}"
     );
     board.remove();
