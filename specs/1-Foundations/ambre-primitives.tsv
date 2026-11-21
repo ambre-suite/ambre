@@ -818,6 +818,8 @@ ambre-chrome | src/app_shell.rs | crate::app_shell | Sidebar.label | field | Str
 ambre-chrome | src/avatar.rs | crate::avatar | avatar_initials() | ret | String	free-text	text, label or user content
 ambre-chrome | src/avatar.rs | crate::avatar | avatar_initials(name) | param | &str	free-text	text, label or user content
 ambre-chrome | src/color.rs | crate::color | ColorPopover(reset_label) | param | &'static str	free-text	text, label or user content
+ambre-chrome | src/color.rs | crate::color | color_popover(reset_label) | param | &'static str	free-text	text, label or user content
+ambre-chrome | src/color.rs | crate::color | color_popover(title) | param | String	free-text	text, label or user content
 ambre-chrome | src/color.rs | crate::color | parse_hex_color(s) | param | &str	foreign-api	the value an `<input type="color">` reports
 ambre-chrome | src/composed.rs | crate::composed | BRAND | const | &str	free-text	UI text/label const
 ambre-chrome | src/composed.rs | crate::composed | ComposedName.0 | field | String	newtype-inner	newtype inner
@@ -854,6 +856,10 @@ ambre-chrome | src/passphrase.rs | crate::passphrase | PassphraseRefusal::messag
 ambre-chrome | src/passphrase.rs | crate::passphrase | prompt_line() | ret | &'static str	free-text	the line a person reads under the passphrase fields
 ambre-chrome | src/status.rs | crate::status | StatusLabel(label) | param | String	free-text	text, label or user content
 ambre-chrome | src/status.rs | crate::status | ZoomChip(title) | param | Option<String>	free-text	text, label or user content
+ambre-chrome | src/status.rs | crate::status | zoom_chip(factors) | param | Vec<f64>	math	the zoom factors of the menu stops, scalar multipliers, their space dropped so one view serves every space
+ambre-chrome | src/status.rs | crate::status | zoom_chip(pick) | param | Callback<f64>	math	the zoom factor of the stop a person picks, a scalar multiplier the wrapper turns back into its scale
+ambre-chrome | src/status.rs | crate::status | zoom_chip(title) | param | String	free-text	text, label or user content
+ambre-chrome | src/status.rs | crate::status | zoom_chip(zoom) | param | Signal<f64>	math	the live zoom factor, a scalar multiplier, its space dropped so one view serves every space
 ambre-chrome | src/toast.rs | crate::toast | Toast.message | field | String	free-text	text, label or user content
 ambre-chrome | src/toast.rs | crate::toast | ToastKind::class() | ret | &'static str	newtype-inner	the enum's own CSS class, which the stylesheet matches
 ambre-chrome | src/toast.rs | crate::toast | Toasts::error(message) | param | impl Into<String>	free-text	text, label or user content

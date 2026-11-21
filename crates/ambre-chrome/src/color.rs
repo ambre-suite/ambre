@@ -133,17 +133,27 @@ fn parse_hex_color(s: &str) -> Option<Pick> {
     }
 }
 
+/// The four channels of `picked` over `current`. The alpha is the one the
+/// pick names, else the alpha of `current`, else opaque.
+fn repaint_rgba(current: Option<Rgba>, picked: Pick) -> Rgba {
+    let [.., kept] = current.unwrap_or(UNSET).channels();
+    picked.rgb.to_rgba(picked.alpha.unwrap_or(Alpha::new(kept)))
+}
+
 /// The colour `picked` in the packing of `current`. The alpha is the one the
 /// pick names, else the alpha of `current`, else opaque. A packing with no
 /// alpha drops it.
+#[cfg(test)]
 fn repaint<C: PickedColour>(current: Option<C>, picked: Pick) -> C {
-    let [.., kept] = current.map_or(UNSET, PickedColour::as_rgba).channels();
-    C::from_rgba(picked.rgb.to_rgba(picked.alpha.unwrap_or(Alpha::new(kept))))
+    C::from_rgba(repaint_rgba(current.map(C::as_rgba), picked))
 }
 
 /// A composed colour control. `on_pick` receives `Some(colour)` for a chosen
 /// colour or `None` for the reset entry. A packing with an alpha also gets an
 /// opacity slider (see the module header).
+///
+/// The packing stops at this wrapper. The popover below reads and writes
+/// four channels, so the main instance carries one copy of its view.
 #[component]
 pub fn ColorPopover<C: PickedColour>(
     #[prop(into)] title: String,
@@ -153,6 +163,29 @@ pub fn ColorPopover<C: PickedColour>(
     reset_label: &'static str,
     on_pick: Callback<Option<C>>,
 ) -> impl IntoView {
+    color_popover(
+        title,
+        icon,
+        Signal::derive(move || current.get().map(C::as_rgba)),
+        Signal::derive(move || default.get().as_rgba()),
+        C::ALPHA,
+        reset_label,
+        Callback::new(move |picked: Option<Rgba>| on_pick.run(picked.map(C::from_rgba))),
+    )
+}
+
+/// The popover of [`ColorPopover`], over the four channels of an [`Rgba`].
+/// A write leaves through `on_pick`, which puts it back in the caller's
+/// packing.
+fn color_popover(
+    title: String,
+    icon: icondata::Icon,
+    current: Signal<Option<Rgba>>,
+    default: Signal<Rgba>,
+    alpha_edit: AlphaEdit,
+    reset_label: &'static str,
+    on_pick: Callback<Option<Rgba>>,
+) -> AnyView {
     let open = RwSignal::new(crate::Openness::Closed);
     let (rgb_drag, alpha_drag) = (Debouncer::new(), Debouncer::new());
     // The wrapper node, so a global pointerdown can tell clicks inside the popover
@@ -190,7 +223,7 @@ pub fn ColorPopover<C: PickedColour>(
                 <span
                     class="swatch-strip"
                     style:background-color=move || {
-                        current.get().unwrap_or(default.get()).as_rgba().to_string()
+                        current.get().unwrap_or(default.get()).to_string()
                     }
                 ></span>
             </button>
@@ -219,7 +252,7 @@ pub fn ColorPopover<C: PickedColour>(
                                         style:background-color=rgb.to_string()
                                         on:mousedown=move |ev| ev.prevent_default()
                                         on:click=move |_| {
-                                            on_pick.run(Some(repaint(current.get_untracked(), Pick::keeping_alpha(rgb))));
+                                            on_pick.run(Some(repaint_rgba(current.get_untracked(), Pick::keeping_alpha(rgb))));
                                             open.set(crate::Openness::Closed);
                                         }
                                     ></button>
@@ -232,11 +265,11 @@ pub fn ColorPopover<C: PickedColour>(
                         <input
                             type="color"
                             prop:value=move || {
-                                current.get().unwrap_or(default.get()).as_rgba().rgb().to_string()
+                                current.get().unwrap_or(default.get()).rgb().to_string()
                             }
                             on:input=move |ev| {
                                 if let Some(pick) = parse_hex_color(&event_target_value(&ev)) {
-                                    let picked = repaint(current.get_untracked(), pick);
+                                    let picked = repaint_rgba(current.get_untracked(), pick);
                                     rgb_drag.call(DRAG_DEBOUNCE, move || on_pick.run(Some(picked)));
                                 }
                             }
@@ -245,7 +278,7 @@ pub fn ColorPopover<C: PickedColour>(
                     </label>
                     // Opacity slider, for a packing with an alpha: drives the
                     // alpha channel while preserving the current RGB channels.
-                    {(C::ALPHA == AlphaEdit::Slider)
+                    {(alpha_edit == AlphaEdit::Slider)
                         .then(|| {
                             view! {
                                 <label class="opacity">
@@ -254,10 +287,7 @@ pub fn ColorPopover<C: PickedColour>(
                                         min="0"
                                         max="255"
                                         prop:value=move || {
-                                            let [.., alpha] = current
-                                                .get()
-                                                .map_or(UNSET, PickedColour::as_rgba)
-                                                .channels();
+                                            let [.., alpha] = current.get().unwrap_or(UNSET).channels();
                                             alpha.to_string()
                                         }
                                         on:input=move |ev| {
@@ -267,8 +297,8 @@ pub fn ColorPopover<C: PickedColour>(
                                             let base = current
                                                 .get_untracked()
                                                 .unwrap_or(default.get_untracked());
-                                            let [r, g, b, _] = base.as_rgba().channels();
-                                            let picked = C::from_rgba(Rgba::from_channels(r, g, b, alpha));
+                                            let [r, g, b, _] = base.channels();
+                                            let picked = Rgba::from_channels(r, g, b, alpha);
                                             alpha_drag.call(DRAG_DEBOUNCE, move || on_pick.run(Some(picked)));
                                         }
                                     />
@@ -280,6 +310,7 @@ pub fn ColorPopover<C: PickedColour>(
             </Show>
         </span>
     }
+    .into_any()
 }
 
 #[cfg(test)]

@@ -43,11 +43,30 @@ pub fn ZoomChip<S: ScalesTo<View>>(
     #[prop(optional, into)]
     title: Option<String>,
 ) -> impl IntoView {
+    // The space stops at this wrapper. The menu below reads bare factors, so
+    // the main instance carries one copy of its view. A stop reads back as
+    // the scale it came from.
+    let factors = range.presets().map(Scale::get).collect();
+    let pick = Callback::new(move |factor: f64| {
+        if let Some(z) = Scale::new(factor) {
+            zoom.set(range.clamp(z));
+        }
+    });
+    zoom_chip(
+        Signal::derive(move || zoom.get().get()),
+        factors,
+        pick,
+        title.unwrap_or_else(|| "Zoom".to_owned()),
+    )
+}
+
+/// The chip of [`ZoomChip`], over bare factors. `factors` lists the stops
+/// of the menu, and `pick` receives the stop a person picks.
+fn zoom_chip(zoom: Signal<f64>, factors: Vec<f64>, pick: Callback<f64>, title: String) -> AnyView {
     // The preset menu is collapsed by default: only the readout shows.
     let show = RwSignal::new(crate::Openness::Closed);
     // Stored so the (repeatable) `Show` child can iterate it without moving it.
-    let presets = StoredValue::new(range.presets().collect::<Vec<_>>());
-    let title = title.unwrap_or_else(|| "Zoom".to_owned());
+    let presets = StoredValue::new(factors);
     let menu_ref = NodeRef::<leptos::html::Ul>::new();
     // An opened menu takes the focus, so the keys reach it (`CHROME-026`).
     Effect::new(move |_| {
@@ -65,7 +84,7 @@ pub fn ZoomChip<S: ScalesTo<View>>(
                 aria-expanded=move || show.get().aria()
                 on:click=move |_| show.update(|v| *v = v.toggled())
             >
-                {move || format!("{:.0} %", zoom.get().get() * 100.0)}
+                {move || format!("{:.0} %", zoom.get() * 100.0)}
             </button>
             <Show when=move || show.get() == crate::Openness::Open fallback=|| ()>
                 <ul
@@ -83,10 +102,9 @@ pub fn ZoomChip<S: ScalesTo<View>>(
                         .into_iter()
                         .rev()
                         .map(|z| {
-                            let pct = format!("{:.0} %", z.get() * 100.0);
+                            let pct = format!("{:.0} %", z * 100.0);
                             // `selected` highlights the row matching the live zoom.
-                            let selected =
-                                move || (zoom.get().get() - z.get()).abs() < f64::EPSILON;
+                            let selected = move || (zoom.get() - z).abs() < f64::EPSILON;
                             view! {
                                 <li role="none">
                                     <button
@@ -95,7 +113,7 @@ pub fn ZoomChip<S: ScalesTo<View>>(
                                         class:selected=selected
                                         aria-checked=move || crate::Checked::from_bool(selected()).aria()
                                         on:click=move |_| {
-                                            zoom.set(range.clamp(z));
+                                            pick.run(z);
                                             show.set(crate::Openness::Closed);
                                         }
                                     >
@@ -109,6 +127,7 @@ pub fn ZoomChip<S: ScalesTo<View>>(
             </Show>
         </div>
     }
+    .into_any()
 }
 
 /// The expandable render-diagnostics panel behind [`PerfChip`]. App-supplied so
