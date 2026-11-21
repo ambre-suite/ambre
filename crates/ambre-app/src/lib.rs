@@ -47,8 +47,8 @@ use ambre_bus::conduit::{self, Marks};
 use ambre_bus::{Embed, LogicEvent, MemberInfo, RestCommand, Role, SyncCommand};
 #[cfg(target_arch = "wasm32")]
 use ambre_chrome::{
-    AppShell, CanvasCell, CommandStates, ContextMenu, Dialog, FormulaBar, Header, Panel, Sidebar,
-    StatusBar, Tabs, ToastHost, Toasts, Toolbar,
+    AppShell, CanvasCell, CommandStates, ContextMenu, ContextRegion, Dialog, FormulaBar, Header,
+    Panel, Sidebar, StatusBar, ToastHost, Toasts, Toolbar,
 };
 #[cfg(target_arch = "wasm32")]
 use ambre_core::id::{Document, Frame, Id, User};

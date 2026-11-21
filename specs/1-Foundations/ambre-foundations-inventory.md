@@ -57,7 +57,7 @@
 | `sealed-envelope` | Nothing a user writes leaves the browser readable. | partial | 29 |  |
 | `server` | The one process every client talks to. | partial | 126 | 1 |
 | `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | partial | 31 |  |
-| `shell` | Where each command of a document page lives. | partial | 51 | 2 |
+| `shell` | Where each command of a document page lives. | partial | 56 | 2 |
 | `sync` | The one part of the client that talks to the network. | partial | 84 | 1 |
 | `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 20 |  |
 | `ui` | The page's own thread. | partial | 24 |  |
@@ -66,4 +66,4 @@
 | `macros` | A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. | design-only | 54 |  |
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 
-**50 features: 23 implemented, 24 partial, 3 design-only. 1740 contract rows, 18 loose.**
+**50 features: 23 implemented, 24 partial, 3 design-only. 1745 contract rows, 18 loose.**

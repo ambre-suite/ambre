@@ -4818,3 +4818,44 @@ ambre-sync | src/updates.rs | crate::updates | absent_opens_local() | ret | bool
 ambre-sync | src/websocket.rs | crate::websocket | frame_fits() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-toile | src/ui/embed.rs | crate::ui::embed | <SiteHost as ambre_core::Rule>::admit() | ret | Result<String,SiteError>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-toile | src/ui/embed.rs | crate::ui::embed | <SiteHost as ambre_core::Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-app | src/platform.rs | crate::platform | keep_word(word) | param | &str	foreign-api	the word the local storage API takes, a view setting the shell spells
+ambre-app | src/platform.rs | crate::platform | stored_word() | ret | Option<String>	foreign-api	the word the local storage API returns, which the caller parses into its type
+ambre-app | src/shell/panel.rs | crate::shell::panel | keep(word) | param | &str	local	the stored word of one panel setting, handed straight to the storage call; private
+ambre-app | src/shell/panel.rs | crate::shell::panel | read() | ret | Option<String>	local	the stored word of one panel setting, parsed by the caller at once; private
+ambre-chrome | src/color.rs | crate::color | ColorPopover(title) | param | String	free-text	text, label or user content
+ambre-chrome | src/context_panel.rs | crate::context_panel | ContextPanel(title) | param | Signal<String>	free-text	the header a person reads, naming the selection
+ambre-chrome | src/context_panel.rs | crate::context_panel | DockSide::as_str() | ret | &'static str	newtype-inner	the enum's own word on data-side and in the store, which the stylesheet and from_stored read back
+ambre-chrome | src/context_panel.rs | crate::context_panel | DockSide::from_stored(word) | param | Option<&str>	newtype-inner	the enum's own word read back from the local store
+ambre-chrome | src/context_panel.rs | crate::context_panel | Fold::as_str() | ret | &'static str	newtype-inner	the enum's own word on data-fold and in the store, which the stylesheet and from_stored read back
+ambre-chrome | src/context_panel.rs | crate::context_panel | Fold::from_stored(word) | param | Option<&str>	newtype-inner	the enum's own word read back from the local store
+ambre-chrome | src/context_panel.rs | crate::context_panel | PanelContent.title | field | Signal<String>	free-text	the header a person reads, naming the selection
+ambre-chrome | src/context_panel.rs | crate::context_panel | PanelSection.label | field | &'static str	free-text	text, label or user content
+ambre-chrome | src/context_panel.rs | crate::context_panel | PanelSection::new(label) | param | &'static str	free-text	text, label or user content
+ambre-chrome | src/context_panel.rs | crate::context_panel | PanelWidth::from_stored(word) | param | Option<&str>	newtype-inner	the newtype's own number read back from the local store
+ambre-chrome | src/context_panel.rs | crate::context_panel | PanelWidth::to_stored() | ret | String	newtype-inner	the newtype's own number as the local store keeps it
+ambre-chrome | src/context_panel.rs | crate::context_panel | is_toggle() | ret | bool	generic	predicate result
+ambre-chrome | src/kit.rs | crate::kit | <PrintLength<Mm> as FieldLength>::UNIT | const | &'static str	free-text	the unit a person reads after the number
+ambre-chrome | src/kit.rs | crate::kit | <PrintLength<Mm> as FieldLength>::field_text() | ret | String	foreign-api	the text an `<input>` shows
+ambre-chrome | src/kit.rs | crate::kit | <PrintLength<Mm> as FieldLength>::from_field(text) | param | &str	foreign-api	the value an `<input>` reports
+ambre-chrome | src/kit.rs | crate::kit | <Px<StoredBoard> as FieldLength>::UNIT | const | &'static str	free-text	the unit a person reads after the number
+ambre-chrome | src/kit.rs | crate::kit | <Px<StoredBoard> as FieldLength>::field_text() | ret | String	foreign-api	the text an `<input>` shows
+ambre-chrome | src/kit.rs | crate::kit | <Px<StoredBoard> as FieldLength>::from_field(text) | param | &str	foreign-api	the value an `<input>` reports
+ambre-chrome | src/kit.rs | crate::kit | Choice.label | field | &'static str	free-text	text, label or user content
+ambre-chrome | src/kit.rs | crate::kit | ColourField(reset_label) | param | &'static str	free-text	text, label or user content
+ambre-chrome | src/kit.rs | crate::kit | Field(label) | param | &'static str	free-text	text, label or user content
+ambre-chrome | src/kit.rs | crate::kit | FieldLength::field_text() | ret | String	foreign-api	the text an `<input>` shows
+ambre-chrome | src/kit.rs | crate::kit | FieldLength::from_field(text) | param | &str	foreign-api	the value an `<input>` reports
+ambre-chrome | src/kit.rs | crate::kit | command_label() | ret | String	free-text	text, label or user content
+ambre-chrome | src/kit.rs | crate::kit | field_number() | ret | Option<f32>	local	the number a field reads, wrapped by the caller into its length at once; private
+ambre-chrome | src/kit.rs | crate::kit | field_number(text) | param | &str	foreign-api	the value an `<input>` reports
+ambre-chrome | src/kit.rs | crate::kit | mixed_hint(mixed) | param | bool	generic	state flag/predicate
+ambre-chrome | src/kit.rs | crate::kit | property_label() | ret | String	free-text	text, label or user content
+ambre-chrome | src/kit.rs | crate::kit | reach_markers() | ret | Vec<String>	foreign-api	the data-reach attributes the DOM holds, which a test reads back with Reach::matches_marker
+ambre-commands | src/lib.rs | crate | Reach::COMMAND | const | &'static str	generic	the prefix of the codec of an enum that carries data, on the data-reach attribute
+ambre-commands | src/lib.rs | crate | Reach::PROPERTY | const | &'static str	generic	the prefix of the codec of an enum that carries data, on the data-reach attribute
+ambre-commands | src/lib.rs | crate | Reach::marker() | ret | String	generic	the codec of an enum that carries data: its data-reach attribute, read back by matches_marker
+ambre-commands | src/lib.rs | crate | Reach::matches_marker() | ret | bool	generic	predicate result
+ambre-commands | src/lib.rs | crate | Reach::matches_marker(marker) | param | &str	foreign-api	the data-reach attribute the DOM returns
+ambre-commands | src/lib.rs | crate | Reading<T>::is_mixed() | ret | bool	generic	predicate result
+ambre-core | src/static_key.rs | crate::static_key | <PanelSections as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
+ambre-core | src/static_key.rs | crate::static_key | <Properties as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line

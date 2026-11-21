@@ -121,10 +121,16 @@ fn ShellHeader(
     username: RwSignal<Option<ambre_core::Validated<ambre_core::DisplayName>>>,
     me: RwSignal<Option<Id<User>>>,
     docs: RwSignal<Vec<crate::landing::DocItem>>,
+    /// The side of the context panel, on a page that lays one out.
+    dock_side: Option<RwSignal<ambre_chrome::DockSide>>,
 ) -> impl IntoView {
     view! {
         <HeaderTitle docs=docs current_doc=current_doc />
         <span class="spacer"></span>
+        // The side of the context panel is a setting of the person. It sits
+        // beside the theme switch, the one setting the header holds: no
+        // avatar menu exists yet (`ambre-spec-shell.md` section 2).
+        {dock_side.map(|side| view! { <super::panel::DockSideSwitch side=side /> })}
         <SyncBadge status=chrome_status.into() />
         <button
             class="icon"
@@ -753,6 +759,12 @@ pub(crate) fn AppRoot() -> impl IntoView {
     };
     let landing_tx = to_logic.clone();
 
+    // The context panel of a document page: one frame for Prose, Trame and
+    // Toile, its view state kept on this device (`ambre-spec-shell.md`
+    // section 2). Murmure lays out no context panel.
+    let panel_prefs = (!boot_is_murmure).then(|| super::panel::panel_prefs(booted));
+    let panel_content = ambre_chrome::PanelContent::empty();
+
     let header = {
         let theme_ctl = theme_ctl.clone();
         move || {
@@ -768,6 +780,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     username=username
                     me=me
                     docs=docs
+                    dock_side=panel_prefs.map(|p| p.side)
                 />
             }
         }
@@ -786,6 +799,15 @@ pub(crate) fn AppRoot() -> impl IntoView {
         view! {
         <AppShell rows=shell_rows(booted)>
             <Header slot>{header.clone()}</Header>
+            <ContextRegion slot>
+                {panel_prefs.map(|prefs| view! {
+                    <ambre_chrome::ContextPanel
+                        prefs=prefs
+                        title=panel_content.title
+                        sections=panel_content.sections
+                    />
+                })}
+            </ContextRegion>
             // Each application lays out its own rows (`CHROME-140`). The formula
             // bar is Trame's alone, and its sheet tabs sit in the status bar. A Prose page has no
             // command bar. Gated on the booted app kind, fixed per page load.
