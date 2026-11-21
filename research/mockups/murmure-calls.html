@@ -1,0 +1,950 @@
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Murmure Calls Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&family=Noto+Serif:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: control strip, one live mock of Murmure (desktop or phone) in the chosen state, then the decisions it embodies. */
+:root{
+  --bg:#f6f4f0; --surface:#ffffff; --sunken:#efece6; --line:#e3ddd3; --line-strong:#cfc7ba;
+  --ink:#1f1b16; --muted:#6f675c; --faint:#9a9184;
+  --accent:#b4530b; --accent-ink:#ffffff; --accent-soft:#f6e3d1;
+  --ok:#2f8f5b; --ok-soft:#dcefe3; --danger:#c23a2b; --mention:#c23a78;
+  --stage:#e9e5de; --tile-name:#1f1b16b8;
+  --shadow:0 1px 2px #1f1b1614, 0 6px 20px #1f1b1617;
+  --shadow-float:0 2px 6px #1f1b161f, 0 14px 40px #1f1b1630;
+  --font-ui:"Noto Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-page:"Noto Serif", Georgia, serif;
+  --font-mono:"JetBrains Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#13110e; --surface:#1d1a16; --sunken:#171511; --line:#312c25; --line-strong:#453e35;
+  --ink:#eee8df; --muted:#a59a89; --faint:#7b7266;
+  --accent:#ec8a3c; --accent-ink:#1d1206; --accent-soft:#3a2614;
+  --ok:#4fbf83; --ok-soft:#1c3427; --danger:#ef6a5a; --mention:#ec6aa6;
+  --stage:#100e0b; --tile-name:#000000a8;
+  --shadow:0 1px 2px #0006, 0 8px 24px #0008; --shadow-float:0 2px 8px #0008, 0 16px 44px #000a; color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#13110e; --surface:#1d1a16; --sunken:#171511; --line:#312c25; --line-strong:#453e35;
+  --ink:#eee8df; --muted:#a59a89; --faint:#7b7266;
+  --accent:#ec8a3c; --accent-ink:#1d1206; --accent-soft:#3a2614;
+  --ok:#4fbf83; --ok-soft:#1c3427; --danger:#ef6a5a; --mention:#ec6aa6;
+  --stage:#100e0b; --tile-name:#000000a8;
+  --shadow:0 1px 2px #0006, 0 8px 24px #0008; --shadow-float:0 2px 8px #0008, 0 16px 44px #000a; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-ui);font-size:14px;line-height:1.45;
+  padding:20px max(16px,env(safe-area-inset-right,0px)) 48px max(16px,env(safe-area-inset-left,0px))}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+svg.i{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.wrap{max-width:1320px;margin:0 auto;display:grid;gap:18px}
+header.top h1{font-size:22px;margin:0;font-weight:700;letter-spacing:-.01em}
+header.top p{margin:4px 0 0;color:var(--muted);max-width:78ch}
+
+.controls{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.ctl{display:flex;align-items:center;flex-wrap:wrap;gap:4px}
+.ctl-label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);margin-right:6px}
+.seg{display:inline-flex;flex-wrap:wrap;background:var(--sunken);border:1px solid var(--line);border-radius:10px;padding:3px;gap:2px}
+.seg button{padding:5px 11px;border-radius:7px;color:var(--muted);font-weight:500;white-space:nowrap}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px #0002}
+.note{color:var(--muted);font-size:13px;background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:9px 12px;max-width:100ch}
+.note b{color:var(--ink)}
+
+.stage-wrap{overflow-x:auto;border-radius:14px}
+.stage-wrap.phone{display:flex;justify-content:center;padding:6px 0}
+
+/* ---------- desktop frame ---------- */
+.mock{min-width:1040px;height:700px;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--surface);
+  display:grid;grid-template-rows:48px 1fr;position:relative;box-shadow:var(--shadow)}
+.topbar{display:flex;align-items:center;gap:10px;padding:0 10px 0 8px;border-bottom:1px solid var(--line)}
+.logo{display:flex;align-items:center;gap:7px;padding:5px 8px;border-radius:8px;font-weight:700}
+.logo:hover{background:var(--sunken)}
+.mark{width:20px;height:20px;border-radius:6px;background:linear-gradient(140deg,#f2a24a,var(--accent));position:relative;flex:none}
+.mark::after{content:"";position:absolute;inset:5px;border-radius:50%;border:2px solid #fff9;border-right-color:transparent}
+.appname{color:var(--muted);font-weight:500}
+.cmdk{margin:0 auto;display:flex;align-items:center;gap:8px;width:340px;padding:6px 10px;border:1px solid var(--line);border-radius:9px;color:var(--faint);background:var(--sunken)}
+.kbd{font-family:var(--font-mono);font-size:11px;border:1px solid var(--line-strong);border-bottom-width:2px;border-radius:5px;padding:0 5px;color:var(--muted);background:var(--surface);white-space:nowrap}
+.cmdk .kbd{margin-left:auto}
+.avatar{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:600;font-size:11.5px;flex:none}
+.av-me{background:#8a4fd1}.av-lea{background:#2f6fd6}.av-kar{background:#138a86}.av-ine{background:#c23a78}.av-tom{background:#3f8a2f}.av-sam{background:#8f6a00}.av-noe{background:#5b6472}
+.sync{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12.5px}
+.sync::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--ok)}
+
+.body{display:grid;min-height:0;position:relative}
+.body.mur{grid-template-columns:252px 1fr}
+.body.mur.with-thread{grid-template-columns:252px 1fr 330px}
+
+/* sidebar */
+.side{border-right:1px solid var(--line);background:var(--sunken);display:flex;flex-direction:column;min-height:0;position:relative}
+.space-btn{display:flex;align-items:center;gap:9px;margin:10px 10px 6px;padding:7px 9px;border-radius:9px;font-weight:650;text-align:left}
+.space-btn:hover,.space-btn[aria-expanded="true"]{background:var(--surface)}
+.space-ic{width:24px;height:24px;border-radius:7px;display:grid;place-items:center;color:#fff;font-size:12px;font-weight:700;flex:none}
+.space-btn .chev{margin-left:auto;color:var(--faint)}
+.space-pop{position:absolute;top:50px;left:10px;right:10px;z-index:20;background:var(--surface);border:1px solid var(--line);border-radius:11px;box-shadow:var(--shadow-float);padding:6px}
+.space-pop .row{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:7px;width:100%;text-align:left}
+.space-pop .row:hover{background:var(--sunken)}
+.space-pop .row .kbd{margin-left:auto}
+.space-pop .dot{width:7px;height:7px;border-radius:50%;background:var(--ink)}
+.space-pop hr{border:0;border-top:1px solid var(--line);margin:5px 2px}
+.side-scroll{overflow:auto;padding:0 8px 12px;flex:1;min-height:0}
+.quick{display:grid;gap:1px;margin:2px 0 10px}
+.item{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:7px;color:var(--muted);width:100%;text-align:left;min-height:30px}
+.item:hover{background:color-mix(in srgb,var(--surface) 70%,transparent)}
+.item.on{background:var(--surface);color:var(--ink);font-weight:600;box-shadow:0 1px 2px #0001}
+.item.unread{color:var(--ink);font-weight:650}
+.item .hash{width:16px;text-align:center;color:var(--faint);font-weight:500;flex:none}
+.item .count{margin-left:auto;font-size:11.5px;color:var(--faint);font-weight:500}
+.item .badge{margin-left:auto;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--mention);color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center}
+.sect{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:600;padding:12px 8px 4px;display:flex;align-items:center;gap:6px}
+.sect.fold{width:100%;border:0;background:none;cursor:pointer;text-align:left;border-radius:6px;font-family:inherit}
+.sect.fold:hover{color:var(--ink)}
+.sect.fold .fchev{width:12px;height:12px;margin-left:-2px;transition:transform .15s}
+.sect.fold.is-folded .fchev{transform:rotate(-90deg)}
+.sect.fold.has-unread span:first-of-type{color:var(--ink)}
+.sect .fhid{margin-left:auto;display:flex;align-items:center;gap:5px;text-transform:none;letter-spacing:0;font-weight:500}
+.sect .udot{width:6px;height:6px;border-radius:3px;background:var(--ink)}
+.live{margin-left:auto;display:flex;align-items:center;gap:5px}
+.live .ring{display:flex}
+.live .ring .avatar{width:18px;height:18px;font-size:8.5px;border:2px solid var(--sunken);margin-left:-6px}
+.live .ring .avatar:first-child{margin-left:0}
+.item.on .live .ring .avatar{border-color:var(--surface)}
+.live .ph{color:var(--ok)}
+.live-sub{display:flex;align-items:center;gap:6px;margin:0 0 3px 32px;font-size:12px;color:var(--ok);font-weight:600}
+.live-sub .t{color:var(--muted);font-weight:500;font-variant-numeric:tabular-nums}
+
+/* main column */
+.main{display:flex;flex-direction:column;min-width:0;min-height:0}
+.chead{height:52px;flex:none;display:flex;align-items:center;gap:10px;padding:0 12px 0 16px;border-bottom:1px solid var(--line)}
+.chead h2{font-size:15.5px;margin:0;font-weight:700;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.chead h2 .hash{color:var(--faint);font-weight:500}
+.topic{color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.tools{margin-left:auto;display:flex;align-items:center;gap:2px}
+.ib{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;color:var(--muted);position:relative}
+.ib:hover{background:var(--sunken);color:var(--ink)}
+.ib[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent)}
+.ib.off{color:var(--danger)}
+.ib .n{position:absolute;right:2px;bottom:2px;font-size:9.5px;font-weight:700;color:var(--muted)}
+.sep{width:1px;height:20px;background:var(--line);margin:0 6px}
+.callgrp{display:flex;align-items:center;gap:2px;padding:2px;border-radius:10px;background:var(--ok-soft)}
+.callgrp .timer{font-size:12.5px;font-weight:600;color:var(--ok);padding:0 6px 0 8px;font-variant-numeric:tabular-nums;display:flex;align-items:center;gap:6px}
+.callgrp .timer::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--ok);animation:pulse 1.6s infinite}
+@keyframes pulse{50%{opacity:.35}}
+.leave{height:30px;padding:0 12px;border-radius:8px;background:var(--danger);color:#fff;font-weight:600;display:flex;align-items:center;gap:6px;margin-left:4px}
+.joinbtn{height:30px;padding:0 12px;border-radius:8px;background:var(--ok);color:#fff;font-weight:600;display:flex;align-items:center;gap:6px}
+.callbtn{height:30px;padding:0 10px;border-radius:8px;border:1px solid var(--line);display:flex;align-items:center;gap:6px;color:var(--muted);font-weight:500}
+.callbtn:hover{background:var(--sunken);color:var(--ink)}
+
+.list{flex:1;min-height:0;overflow:auto;padding:8px 0 10px}
+.list.gone{flex:0 0 0;padding:0;overflow:hidden}
+.day{display:flex;align-items:center;gap:10px;color:var(--faint);font-size:12px;font-weight:600;margin:10px 16px}
+.day::before,.day::after{content:"";flex:1;border-top:1px solid var(--line)}
+.newline{display:flex;align-items:center;gap:8px;color:var(--mention);font-size:11.5px;font-weight:700;margin:6px 16px}
+.newline::before{content:"";flex:1;border-top:1px solid var(--mention)}
+.msg{display:grid;grid-template-columns:36px 1fr;gap:0 10px;padding:5px 16px}
+.msg:hover{background:var(--sunken)}
+.msg .avatar{width:36px;height:36px;border-radius:10px;font-size:13px}
+.msg .who{font-weight:650}
+.msg .when{color:var(--faint);font-size:12px;margin-left:6px}
+.msg .txt{margin-top:1px;text-wrap:pretty}
+.msg .txt code{font-family:var(--font-mono);font-size:12.5px;background:var(--sunken);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.msg .mention{color:var(--mention);background:color-mix(in srgb,var(--mention) 12%,transparent);border-radius:4px;padding:0 3px;font-weight:600}
+.msg.cont{padding-top:1px}
+.msg.cont .avatar{visibility:hidden;height:0}
+.reacts{display:flex;gap:5px;margin-top:5px;flex-wrap:wrap}
+.react{display:flex;align-items:center;gap:4px;padding:1px 8px;border-radius:99px;border:1px solid var(--line);background:var(--surface);font-size:12.5px;color:var(--muted)}
+.react.mine{border-color:var(--accent);background:var(--accent-soft);color:var(--accent);font-weight:600}
+.thr{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin-top:5px;padding:3px 8px 3px 4px;border-radius:8px;max-width:100%;text-align:left;font-size:12.5px}
+.thr:hover{background:var(--surface);box-shadow:0 0 0 1px var(--line)}
+.thr .avatar{width:20px;height:20px;font-size:8.5px;border-radius:6px}
+.thr b{color:var(--accent)}
+.thr span{color:var(--faint)}
+.callcard{margin-top:5px;display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;border:1px solid color-mix(in srgb,var(--ok) 40%,var(--line));background:color-mix(in srgb,var(--ok-soft) 60%,var(--surface));max-width:520px}
+.callcard .cic{width:34px;height:34px;border-radius:10px;background:var(--ok);color:#fff;display:grid;place-items:center;flex:none}
+.callcard .ct{font-weight:650}
+.callcard .cs{font-size:12.5px;color:var(--muted)}
+.callcard .ring{display:flex;margin-left:auto}
+.callcard .ring .avatar{width:24px;height:24px;font-size:9.5px;border:2px solid var(--surface);margin-left:-7px}
+.callcard.ended{border-color:var(--line);background:var(--sunken)}
+.callcard.ended .cic{background:var(--faint)}
+
+.composer{flex:none;margin:6px 16px 14px;border:1px solid var(--line-strong);border-radius:12px;background:var(--surface);padding:9px 10px 7px 12px}
+.composer .ph{color:var(--faint)}
+.composer .bar{display:flex;align-items:center;gap:2px;margin-top:6px}
+.composer .bar .ib{width:28px;height:28px}
+.composer .send{margin-left:auto;width:30px;height:28px;border-radius:8px;display:grid;place-items:center;background:var(--sunken);color:var(--faint)}
+.composer .also{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);margin-right:auto;margin-left:6px}
+.composer .also i{width:14px;height:14px;border:1.5px solid var(--line-strong);border-radius:4px;display:inline-block}
+
+/* thread */
+.thread{border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0;background:var(--surface)}
+.thread .chead h2{font-size:14.5px}
+
+/* ---------- call region ---------- */
+.callreg{flex:none;background:var(--stage);border-bottom:1px solid var(--line);padding:10px 12px;display:flex;gap:10px;position:relative}
+.callreg.band{height:204px;padding-bottom:16px}
+.callreg.fill{padding-bottom:18px}
+.callreg.fill{flex:1;min-height:0}
+.callreg.scene{flex:1;min-height:0;padding:10px}
+.grid{flex:1;display:grid;gap:10px;min-width:0;align-content:center;justify-content:center}
+.band .grid{grid-auto-flow:column;grid-auto-columns:minmax(0,200px);grid-template-rows:1fr;align-content:stretch;justify-content:center}
+.fill .grid{grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:1fr;align-content:stretch;max-width:980px;margin:0 auto;width:100%}
+.tile{position:relative;border-radius:14px;overflow:hidden;background:var(--sunken);min-height:0;min-width:0;display:grid;place-items:center;
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--line) 70%,transparent);transition:box-shadow .2s}
+.tile.speak{box-shadow:0 0 0 2.5px var(--ok),0 0 0 6px color-mix(in srgb,var(--ok) 22%,transparent)}
+.tile .nm{position:absolute;left:8px;bottom:8px;background:var(--tile-name);color:#fff;font-size:12px;font-weight:600;padding:2px 8px;border-radius:7px;display:flex;align-items:center;gap:5px;backdrop-filter:blur(6px);max-width:calc(100% - 16px);white-space:nowrap;overflow:hidden}
+.tile .pin{position:absolute;right:8px;top:8px;width:26px;height:26px;border-radius:8px;background:var(--tile-name);color:#fff;display:grid;place-items:center;opacity:0;transition:opacity .15s}
+.tile:hover .pin,.tile .pin.on{opacity:1}
+.tile .ini{width:64px;height:64px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:650;font-size:22px}
+.fill .tile .ini{width:96px;height:96px;font-size:32px}
+.tile.small .ini{width:40px;height:40px;font-size:14px}
+/* fake camera: soft background, head, shoulders */
+.cam{background:
+  radial-gradient(circle at 50% 41%, var(--skin) 0 15%, transparent 15.6%),
+  radial-gradient(ellipse 30% 26% at 50% 100%, var(--shirt) 0 98%, transparent 100%),
+  radial-gradient(ellipse 80% 70% at 30% 20%, #ffffff30, transparent 60%),
+  linear-gradient(165deg,var(--c1),var(--c2))}
+.cam.mirror{transform:scaleX(-1)}
+.cam.mirror .nm{transform:scaleX(-1)}
+.own{flex:none;width:150px;align-self:flex-end;aspect-ratio:16/10}
+.band .own{height:94px;width:auto}
+.fill .tile.mine{box-shadow:0 0 0 1.5px var(--line-strong)}
+.own .muted{position:absolute;right:7px;top:7px;width:22px;height:22px;border-radius:7px;background:var(--danger);color:#fff;display:grid;place-items:center}
+.own .muted svg{width:13px;height:13px}
+.pager{display:flex;flex-direction:column;justify-content:center}
+.pager button{width:26px;height:26px;border-radius:50%;background:var(--surface);color:var(--muted);display:grid;place-items:center;box-shadow:var(--shadow)}
+
+.gridwrap{flex:1;min-width:0;display:flex;position:relative;padding:0 30px}
+.gridwrap .grid{flex:1}
+.fill .gridwrap .grid{max-width:none}
+.pg{position:absolute;top:50%;transform:translateY(-50%);z-index:3;width:28px;height:28px;border-radius:50%;background:var(--surface);color:var(--ink);display:grid;place-items:center;box-shadow:var(--shadow)}
+.pg.prev{left:-2px}.pg.next{right:-2px}
+.pg:disabled{opacity:.3;cursor:default}
+.pg .who{display:none}
+.pg.hint{box-shadow:0 0 0 2.5px var(--ok),var(--shadow)}
+.pg.hint .who{display:grid;position:absolute;top:-12px;right:-10px;width:20px;height:20px;border-radius:50%;place-items:center;color:#fff;font-size:8.5px;font-weight:700;border:2px solid var(--surface)}
+.pgind{position:absolute;left:50%;bottom:-9px;transform:translateX(-50%);z-index:3;display:flex;align-items:center;gap:5px;background:var(--surface);border:1px solid var(--line);border-radius:99px;padding:2px 9px;font-size:11.5px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.pgind i{width:6px;height:6px;border-radius:50%;background:var(--line-strong)}
+.pgind i.on{background:var(--accent)}
+.pgind span{margin-left:3px}
+.band .pgind{bottom:-9px}
+.strip{position:relative}
+.strip .pg.v{position:static;transform:none;width:100%;height:24px;border-radius:8px;flex:none;box-shadow:0 0 0 1px var(--line)}
+.strip .pg.v.hint .who{top:-6px;right:6px}
+.strip .pgind.v{position:static;transform:none;align-self:center;order:99;padding:1px 9px}
+.strip .pg.next.v{order:98}
+.strip .tile.mine{order:100}
+/* scene: screen dominant, faces strip */
+.scene .screen{flex:1;min-width:0;border-radius:12px;overflow:hidden;background:var(--surface);box-shadow:0 0 0 1px var(--line);display:flex;flex-direction:column;position:relative}
+.scene .screen .nm{position:absolute;left:10px;bottom:10px;background:var(--tile-name);color:#fff;font-size:12px;font-weight:600;padding:3px 9px;border-radius:7px;display:flex;gap:6px;align-items:center}
+.strip{flex:none;width:176px;display:flex;flex-direction:column;gap:8px;overflow:hidden}
+.strip .tile{flex:1 1 0;min-height:60px}
+.strip .tile.mine{flex:.8 1 0}
+.tile.mine .ini{width:40px;height:40px;font-size:14px}
+.strip .more{flex:none;padding:6px;border-radius:10px;text-align:center;color:var(--muted);font-size:12.5px;background:var(--sunken)}
+.sharing-bar{display:flex;align-items:center;gap:10px;padding:7px 12px;background:var(--accent-soft);color:var(--accent);font-weight:600;font-size:13px;border-bottom:1px solid var(--line)}
+.sharing-bar button{margin-left:auto;padding:3px 10px;border-radius:7px;background:var(--accent);color:var(--accent-ink);font-weight:600}
+
+/* fake shared screen: a Trame sheet */
+.fake-app{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--muted)}
+.fake-app .mark{width:16px;height:16px;border-radius:5px}
+.sheet{flex:1;display:grid;grid-template-columns:34px repeat(6,1fr);grid-auto-rows:26px;font-size:12px;font-variant-numeric:tabular-nums;overflow:hidden;min-height:0}
+.sheet div{border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:4px 7px;white-space:nowrap;overflow:hidden}
+.sheet .h{background:var(--sunken);color:var(--faint);text-align:center;font-weight:600}
+.sheet .n{text-align:right}
+.sheet .sel{outline:2px solid var(--accent);outline-offset:-2px;background:var(--accent-soft)}
+.chart{position:absolute;right:22px;top:58px;width:250px;height:150px;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:10px 12px;display:flex;align-items:flex-end;gap:10px}
+.chart i{flex:1;border-radius:4px 4px 0 0;background:var(--accent);opacity:.85}
+.chart i:nth-child(even){background:#2f6fd6}
+.cursor{position:absolute;left:44%;top:46%;width:16px;height:16px;transform:rotate(-12deg)}
+
+/* ---------- the floating call bubble (in Prose) ---------- */
+.prose{display:grid;grid-template-columns:1fr;background:var(--bg);position:relative;min-height:0;overflow:hidden}
+.page{width:640px;margin:26px auto 0;background:var(--surface);border:1px solid var(--line);border-radius:4px;box-shadow:var(--shadow);padding:56px 72px;font-family:var(--font-page);font-size:15.5px;line-height:1.65;color:var(--ink);height:calc(100% - 26px);overflow:hidden}
+.page h1{font-size:26px;margin:0 0 14px;line-height:1.25}
+.page p{margin:0 0 12px;text-wrap:pretty}
+.page .remote{position:relative;background:#2f6fd622;border-radius:2px}
+.page .caret{position:relative}
+.page .caret::after{content:"Léa";position:absolute;left:0;top:-17px;font:600 10.5px var(--font-ui);background:#2f6fd6;color:#fff;padding:1px 5px;border-radius:4px 4px 4px 0;white-space:nowrap}
+.page .caret{display:inline-block;width:2px;height:1.1em;background:#2f6fd6;vertical-align:text-bottom}
+.statusbar{position:absolute;left:0;right:0;bottom:0;height:30px;border-top:1px solid var(--line);background:var(--surface);display:flex;align-items:center;gap:14px;padding:0 12px;font-size:12px;color:var(--muted)}
+.bubble{position:absolute;z-index:30;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow-float);touch-action:none;user-select:none;overflow:hidden}
+.bubble .grip{display:flex;align-items:center;gap:8px;padding:8px 10px 6px 12px;cursor:grab;font-size:12.5px}
+.bubble .grip:active{cursor:grabbing}
+.bubble .ch{font-weight:650;display:flex;align-items:center;gap:4px}
+.bubble .ch .hash{color:var(--faint)}
+.bubble .tm{color:var(--ok);font-weight:600;font-variant-numeric:tabular-nums;display:flex;align-items:center;gap:5px}
+.bubble .tm::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--ok);animation:pulse 1.6s infinite}
+.bubble .faces{display:flex;gap:6px;padding:2px 12px 8px}
+.bubble .faces .avatar{width:34px;height:34px;font-size:12px;transition:box-shadow .2s}
+.bubble .faces .avatar.speak{box-shadow:0 0 0 2.5px var(--surface),0 0 0 4.5px var(--ok)}
+.bubble .mini{margin:0 8px 8px;border-radius:11px;aspect-ratio:16/9;position:relative;overflow:hidden}
+.bubble .mini .nm{position:absolute;left:7px;bottom:7px;background:var(--tile-name);color:#fff;font-size:11.5px;font-weight:600;padding:1px 7px;border-radius:6px}
+.bubble .mini.scr{background:var(--surface);box-shadow:0 0 0 1px var(--line)}
+.bubble .ctrls{display:flex;align-items:center;gap:2px;padding:6px 8px 8px;border-top:1px solid var(--line)}
+.bubble .ctrls .ib{width:30px;height:30px}
+.bubble .ctrls .leave{height:28px;padding:0 10px;margin-left:auto}
+.cover-hint{position:absolute;z-index:29;border:1.5px dashed var(--accent);border-radius:20px;pointer-events:none;opacity:.55}
+
+/* ---------- phone ---------- */
+.phone-frame{width:390px;height:800px;border-radius:44px;border:10px solid #1f1b16;background:var(--surface);overflow:hidden;position:relative;box-shadow:var(--shadow);display:flex;flex-direction:column;flex:none}
+.p-status{height:34px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 26px;font-size:13px;font-weight:600}
+.p-head{height:52px;flex:none;display:flex;align-items:center;gap:6px;padding:0 6px;border-bottom:1px solid var(--line)}
+.p-head h2{font-size:16px;margin:0;font-weight:700;display:flex;align-items:center;gap:4px;flex:1;min-width:0;white-space:nowrap;overflow:hidden}
+.p-head h2 .hash{color:var(--faint);font-weight:500}
+.p-head .ib{width:38px;height:38px}
+.phone-frame .msg{grid-template-columns:32px 1fr;padding:5px 12px}
+.phone-frame .msg .avatar{width:32px;height:32px}
+.phone-frame .composer{margin:6px 10px 18px}
+.phone-frame .callreg{padding:8px}
+.phone-frame .callreg.band{height:150px}
+.phone-frame .band .grid{grid-auto-columns:minmax(0,1fr)}
+.phone-frame .band .own{display:none}
+.p-scene{flex:1;min-height:0;display:flex;flex-direction:column;gap:8px;background:var(--stage);padding:8px}
+.p-scene .screen{flex:none;aspect-ratio:16/10;border-radius:12px;overflow:hidden;background:var(--surface);box-shadow:0 0 0 1px var(--line);display:flex;flex-direction:column;position:relative}
+.p-scene .screen .sheet{grid-template-columns:24px repeat(4,1fr);grid-auto-rows:20px;font-size:10.5px}
+.p-scene .screen .sheet div{padding:2px 4px}
+.p-scene .screen .nm{position:absolute;left:8px;bottom:8px;background:var(--tile-name);color:#fff;font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:7px}
+.p-strip{display:flex;gap:8px;overflow-x:auto;flex:none}
+.p-strip .tile{width:118px;aspect-ratio:4/5;flex:none}
+.p-strip .tile .ini{width:44px;height:44px;font-size:15px}
+.p-big{flex:1;min-height:0;border-radius:14px}
+.p-ctrls{flex:none;display:flex;justify-content:center;gap:10px;padding:10px 0 18px;background:var(--stage)}
+.p-ctrls button{width:52px;height:52px;border-radius:50%;background:var(--surface);display:grid;place-items:center;color:var(--ink);box-shadow:var(--shadow)}
+.p-ctrls button.off{color:var(--danger)}
+.p-ctrls button.end{background:var(--danger);color:#fff}
+.p-ctrls svg.i{width:20px;height:20px}
+.p-pill{flex:none;margin:6px 10px 0;display:flex;align-items:center;gap:8px;padding:6px 6px 6px 12px;border-radius:14px;background:var(--ok);color:#fff;font-weight:600;font-size:13px}
+.p-pill .t{font-variant-numeric:tabular-nums;opacity:.9;font-weight:500}
+.p-pill .ring{display:flex;margin-left:auto}
+.p-pill .ring .avatar{width:24px;height:24px;font-size:9px;border:2px solid var(--ok);margin-left:-7px}
+.p-pill .pb{width:30px;height:30px;border-radius:9px;background:#ffffff2e;display:grid;place-items:center}
+.p-pill .pb.end{background:#00000033}
+.p-list{flex:1;overflow:auto;padding:4px 8px}
+.p-list .item{min-height:42px;font-size:15px}
+.p-list .live-sub{margin-left:32px}
+.phone-frame .callcard{flex-wrap:wrap;gap:8px 10px}
+.phone-frame .callcard .ring{display:none}
+.phone-frame .callcard .joinbtn{margin-left:auto!important}
+
+.p-doc{flex:1;min-height:0;overflow:hidden;background:var(--surface);padding:18px 20px;font-family:var(--font-page);font-size:15px;line-height:1.6}
+.p-doc h1{font-size:21px;line-height:1.25;margin:0 0 10px}
+.p-doc p{margin:0 0 10px;text-wrap:pretty}
+.p-doc .remote{background:#2f6fd622;border-radius:2px}
+.p-doc .caret{display:inline-block;width:2px;height:1.1em;background:#2f6fd6;vertical-align:text-bottom;position:relative}
+.p-doc .caret::after{content:"Léa";position:absolute;left:0;top:-17px;font:600 10.5px var(--font-ui);background:#2f6fd6;color:#fff;padding:1px 5px;border-radius:4px 4px 4px 0;white-space:nowrap}
+.p-sbar{flex:none;height:30px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;padding:0 16px 6px;font-size:12px;color:var(--muted)}
+.p-pill{cursor:pointer}
+.p-pill .ring .avatar.p-speak{box-shadow:0 0 0 2px #fff}
+.pband{display:block;position:relative}
+.carousel{display:grid;grid-auto-flow:column;grid-auto-columns:calc((100% - 16px)/3);gap:8px;height:100%;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;overscroll-behavior-x:contain;touch-action:pan-x}
+.carousel::-webkit-scrollbar{display:none}
+.carousel .tile{scroll-snap-align:start}
+.carousel .tile:nth-child(3n+1){scroll-snap-stop:always}
+.pband .pgind{bottom:-6px}
+.prose.present{grid-template-columns:1fr 300px}
+.docarea{position:relative;min-height:0;overflow:hidden}
+.present .page{width:600px;padding:48px 64px}
+.follow{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:8px;padding:4px 6px 4px 5px;border-radius:99px;background:#c23a78;color:#fff;font-size:12.5px;box-shadow:var(--shadow);white-space:nowrap}
+.follow .avatar{width:22px;height:22px;font-size:9px;border:2px solid #fff}
+.follow button{background:#ffffff2e;color:#fff;border-radius:99px;padding:2px 10px;font-weight:600}
+.present .docarea{box-shadow:inset 0 0 0 3px #c23a78}
+.mysel{background:color-mix(in srgb,var(--accent) 22%,transparent)}
+.page .remote.r-kar{background:#138a8622}
+.page .caret.c-kar{background:#138a86}
+.page .caret.c-kar::after{content:"Karim";background:#138a86}
+.cpanel{border-left:1px solid var(--line);background:var(--surface);padding-bottom:30px;overflow:hidden;font-size:13px}
+.cp-head{height:44px;display:flex;align-items:center;gap:8px;padding:0 14px;font-weight:650;border-bottom:1px solid var(--line)}
+.cp-head span{margin-left:auto;font-weight:400;color:var(--faint);font-size:12px}
+.cp-sec{padding:10px 14px;border-bottom:1px solid var(--line);display:grid;gap:7px}
+.cp-t{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:600}
+.cp-row{display:flex;gap:6px;align-items:center}
+.cp-in{border:1px solid var(--line);border-radius:7px;padding:4px 8px;background:var(--sunken)}
+.cp-b{width:28px;height:28px;border-radius:7px;display:grid;place-items:center;border:1px solid var(--line);font-style:normal;font-weight:600;font-family:var(--font-page)}
+.cp-b.on{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+.cp-sw{width:22px;height:22px;border-radius:6px;border:1px solid var(--line-strong)}
+/* tooltip */
+.tip{position:fixed;z-index:1000;pointer-events:none;max-width:280px;background:var(--ink);color:var(--bg);border-radius:8px;padding:6px 9px 7px;font:500 12.5px/1.35 var(--font-ui);box-shadow:0 2px 6px #0003,0 8px 22px #0003}
+.tip[hidden]{display:none}
+.tip .l1{display:flex;align-items:center;gap:12px;white-space:nowrap}
+.tip .kbd{margin-left:auto;background:transparent;color:inherit;opacity:.8;border-color:color-mix(in srgb,var(--bg) 45%,transparent)}
+.tip .l2{margin-top:3px;font-weight:400;font-size:12px;opacity:.78}
+
+/* decisions */
+.rules{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.rules h3{margin:0;padding:12px 16px;font-size:14px;border-bottom:1px solid var(--line)}
+.rules table{width:100%;border-collapse:collapse;font-size:13px}
+.rules th,.rules td{text-align:left;padding:9px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+.rules th{color:var(--faint);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.06em}
+.rules tr:last-child td{border-bottom:0}
+.tag{display:inline-block;font-size:11px;font-weight:700;padding:1px 7px;border-radius:99px;white-space:nowrap}
+.tag.new{background:var(--accent-soft);color:var(--accent)}
+.tag.keep{background:var(--ok-soft);color:var(--ok)}
+.tag.open{background:var(--sunken);color:var(--muted);border:1px solid var(--line)}
+.rules-scroll{overflow-x:auto}
+.p-list{flex:1;min-height:0;display:flex}
+.p-list .side{flex:1;border-right:0}
+.p-list .item{padding-top:8px;padding-bottom:8px;font-size:15px}
+.p-tabs{flex:none;display:flex;justify-content:space-around;border-top:1px solid var(--line);background:var(--surface);padding:6px 0 16px}
+.p-tabs button{border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:2px;font:inherit;font-size:11px;color:var(--faint);padding:4px 14px}
+.p-tabs button.on{color:var(--accent,var(--ink));font-weight:650}
+/* desktop stage keeps its width and scrolls instead of squeezing */
+.stage-wrap:not(.phone)>*{min-width:1180px}
+@media (max-width:700px){
+  .stage-wrap.phone{padding:0}
+  .phone-frame{width:100%;height:min(800px,calc(100svh - 24px));border-width:1px;border-color:var(--line);border-radius:18px;box-shadow:none}
+  .phone-frame .p-status{display:none}
+  .rules thead{display:none}
+  .rules tr,.rules td{display:block}
+  .rules tr{border-bottom:1px solid var(--line);padding:8px 0}
+  .rules td{border:0;padding:3px 16px}
+  .rules td:first-child{font-weight:650}
+  .rules .tag{white-space:normal;border-radius:8px}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-hash" viewBox="0 0 24 24"><path d="M5 9h14M5 15h14M10 3 8 21M16 3l-2 18"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+  <symbol id="i-forum" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></symbol>
+  <symbol id="i-chevup" viewBox="0 0 24 24"><path d="m7 14 5-5 5 5"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 17v5M8 3h8l-1 6 3 4H6l3-4z"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></symbol>
+  <symbol id="i-micoff" viewBox="0 0 24 24"><path d="M15 9.3V6a3 3 0 0 0-5.7-1.3M9 9v2a3 3 0 0 0 4.6 2.5M19 11a7 7 0 0 1-1.2 3.9M5 11a7 7 0 0 0 10.7 6M12 18v3M3 3l18 18"/></symbol>
+  <symbol id="i-cam" viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3"/></symbol>
+  <symbol id="i-screen" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4M12 8v5M9.5 10.5 12 8l2.5 2.5"/></symbol>
+  <symbol id="i-expand" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+  <symbol id="i-shrink" viewBox="0 0 24 24"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></symbol>
+  <symbol id="i-end" viewBox="0 0 24 24"><path d="M3 14.5c5-4.5 13-4.5 18 0l-2 3-3.5-1.5V13a12 12 0 0 0-7 0v3L5 17.5z"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-smile" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0M9 9.5h.01M15 9.5h.01"/></symbol>
+  <symbol id="i-at" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 5 1.5V12a9 9 0 1 0-3.5 7"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M4 12 20 4l-6 16-3-7z"/></symbol>
+  <symbol id="i-thread" viewBox="0 0 24 24"><path d="M4 5h16v10h-7l-5 4v-4H4z"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M3 13h5l1.5 3h5l1.5-3h5M5 5h14l2 8v6H3v-6z"/></symbol>
+  <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4z"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 3l14 8-6 2-2 6z" fill="currentColor"/></symbol>
+</svg>
+
+<div class="wrap">
+  <header class="top">
+    <h1>Murmure: channels, calls, screen share</h1>
+    <div class="note" style="margin-top:8px"><b>Non-normative.</b> Snapshot of a design discussion held on 2026-11-21. The decisions it led to live in the Murmure specs (<code>specs/5-Murmure/</code>); where this page and a spec disagree, the spec wins. This file is frozen: it is not updated when the specs change.</div>
+    <p>Discussion mockup. Base: the Murmure specs of the time (three columns, thread on the right, call started from a channel, video above the composer). The table at the bottom gives the outcome of each point; orange marks a change to those specs.</p>
+  </header>
+
+  <div class="controls">
+    <div class="ctl"><span class="ctl-label">State</span>
+      <div class="seg" id="seg-state">
+        <button data-v="channel">Channel + thread</button>
+        <button data-v="band">Call · band</button>
+        <button data-v="fill">Call · fill</button>
+        <button data-v="scene">Screen share · scene</button>
+        <button data-v="bubble">Call bubble in Prose</button>
+        <button data-v="present">Presented document</button>
+      </div></div>
+    <div class="ctl"><span class="ctl-label">Device</span>
+      <div class="seg" id="seg-device"><button data-v="desktop">Desktop</button><button data-v="phone">Phone</button></div></div>
+    <div class="ctl"><span class="ctl-label">Participants</span>
+      <div class="seg" id="seg-count"><button data-v="4">4</button><button data-v="20">20</button></div></div>
+    <div class="ctl"><span class="ctl-label">Theme</span>
+      <div class="seg" id="seg-theme"><button data-v="auto">Auto</button><button data-v="light">Light</button><button data-v="dark">Dark</button></div></div>
+  </div>
+
+  <div class="note" id="note"></div>
+  <div class="stage-wrap" id="stage"></div>
+
+  <section class="rules">
+    <h3>What the mockup settles</h3>
+    <div class="rules-scroll"><table>
+      <thead><tr><th>Topic</th><th>Rule</th><th>Outcome</th></tr></thead>
+      <tbody>
+        <tr><td>Message model</td><td>Only one: a thread is a chain of replies on any message, opened on the right. “Also send to #channel” under the thread composer.</td><td><span class="tag keep">in spec</span></td></tr>
+        <tr><td>Organisation</td><td>Spaces → categories → channels, then private channels, direct messages, channels to join. No icon rail.</td><td><span class="tag keep">in spec</span></td></tr>
+        <tr><td>Space switcher</td><td>At the top of the sidebar. The sidebar shows <b>one</b> space at a time. <span class="kbd">Ctrl 1</span>…<span class="kbd">Ctrl 9</span> switch spaces. DMs stay shared across all spaces.</td><td><span class="tag new">adopted</span></td></tr>
+        <tr><td>Collapsible categories</td><td>Each sidebar group folds: categories, Private, Direct messages, To join. Folded, it keeps the open channel, a channel with a call and the channels that mention you visible; the other unread channels sum up as a dot and a count. The fold state follows the account (Murmure settings), never the space catalogue.</td><td><span class="tag new">adopted; fold state follows the account</span></td></tr>
+        <tr><td>Live call in the sidebar</td><td>A channel with a call shows a green phone and the participants' avatars; under it, the timer and “Join”. Join in one click, with no permanent room.</td><td><span class="tag new">adopted, reduced: icon and count, no names; avatars only for the shown channel (ZK-024)</span></td></tr>
+        <tr><td>Call controls</td><td>In the channel header, grouped on a green background with the timer. No floating bar at the bottom in the Zoom style.</td><td><span class="tag keep">in spec</span></td></tr>
+        <tr><td>Two automatic layouts</td><td><b>Grid</b> (3×3, pages) by default. <b>Scene</b> as soon as a screen arrives or someone pins: the subject takes the space, faces move to a side strip (bottom strip on phone). No “gallery / speaker” menu.</td><td><span class="tag new">adopted</span></td></tr>
+        <tr><td>A screen share switches to scene</td><td>A received screen enlarges the call into the scene; “shrink” returns to the call band with the screen alone. The sharer sees a “You are sharing” bar and never their own screen.</td><td><span class="tag new">adopted</span></td></tr>
+        <tr><td>Call bubble</td><td>Leaving the call's channel (another channel, Prose, Trame, Toile) leaves a floating bubble: channel, timer, speaking faces, mic, camera, screen, back to the channel, leave. It can be dragged and snaps to the corners. It publishes the area it covers (story “The floating cover”). Click on the faces: a mini video of who is speaking, or of the shared screen.</td><td><span class="tag new">adopted</span></td></tr>
+        <tr><td>Present an Ambre document</td><td>No screen share for an Ambre document: “Present” opens the document for everyone, in <b>follow mode</b> (the view follows the presenter's). Everyone keeps their own context panel, selection and tools. Editing or scrolling stops following; a click on the follow bar resumes. The call turns into a bubble, on the side opposite the panel. Screen share stays for what is not in Ambre.</td><td><span class="tag new">adopted for v1: document members only; others get “Invite as viewer”, screen share meanwhile</span></td></tr>
+        <tr><td>Fill grid</td><td>Your tile becomes the last cell of the grid, whose column count follows the shape of the area (4×3 on a wide screen). Pages of eleven: the video server must send eleven streams, not nine (<code>CALL-041</code>, budget).</td><td><span class="tag new">adopted; CALL-041 raised to 11 on desktop, 9 on phone; replaces MURMURE-652</span></td></tr>
+        <tr><td>Band page sizes</td><td>The page size follows the room each layout has: five tiles in the desktop call band, three on phone, four in the scene strip. Order of arrival; arrows, dots and “1–5 of 20”; <span class="kbd">Page ↑</span> <span class="kbd">Page ↓</span> on the keyboard. A speaker on another page lights the arrow toward them.</td><td><span class="tag new">adopted; replaces MURMURE-654</span></td></tr>
+        <tr><td>Phone</td><td>Outside the call's channel: a green pill under the header. In the scene: screen at the top, faces in a horizontal strip, round controls at the bottom (the only place where controls leave the header: the thumb).</td><td><span class="tag new">adopted; stack navigation, Murmure-only bottom tab bar</span></td></tr>
+        <tr><td>Phone channel list</td><td>The list is the home screen; a channel stacks on it, a thread on the channel; back is the native gesture. A swipe drawer was rejected: it would fight the call band's horizontal scroll.</td><td><span class="tag new">adopted</span></td></tr>
+        <tr><td>Presence in the sidebar</td><td>The participant list comes from the request to the relay (<code>ZK-024</code>), today limited to the shown channel. Extending it to the sidebar widens what the relay learns: to be decided.</td><td><span class="tag new">settled: icon and count only</span></td></tr>
+        <tr><td>Video in the bubble</td><td>Videos are drawn by the canvas (<code>CALL-015</code>). In Prose, the bubble's mini video must go through the Prose render runtime. The call survives the app switch (the call lives in the page, one router): to check in code.</td><td><span class="tag new">adopted; goes through the render runtime</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+</div>
+<div class="tip" id="tip" hidden></div>
+
+<script>
+const S={pview:"channel",folded:new Set(["eng"]),count:"4",page:0,state:"channel",device:"desktop",theme:"auto",spaceOpen:false,pinned:null,bubbleMini:false,bubblePos:null,micOff:true,tick:14*60+32};
+const P={
+  me:{n:"You",i:"MC",c:"av-me",skin:"#e7b894",shirt:"#4a3f8f",c1:"#d9d1c4",c2:"#b9ae9d"},
+  lea:{n:"Léa Martin",i:"LM",c:"av-lea",skin:"#f0c8a8",shirt:"#2f6fd6",c1:"#c9d6e8",c2:"#8ea6c8",cam:true},
+  kar:{n:"Karim Bensaïd",i:"KB",c:"av-kar",skin:"#c68f63",shirt:"#1f5f5c",c1:"#d8e4dc",c2:"#94b3a0",cam:true},
+  ine:{n:"Inès Roux",i:"IR",c:"av-ine",skin:"#e9b99a",shirt:"#7a2550",c1:"#ead6dc",c2:"#c79aa8",cam:false},
+  tom:{n:"Tom Leroy",i:"TL",c:"av-tom",skin:"#dba67f",shirt:"#3f8a2f",c1:"#e2e0cf",c2:"#b8b38f",cam:true},
+};
+const EXTRA=[["sam","Samia Haddad"],["noe","Noé Garnier"],["jul","Julie Petit"],["ben","Benoît Faure"],["ama","Amandine Roy"],["hug","Hugo Morel"],["cla","Claire Dubois"],["yan","Yann Le Gall"],["fat","Fatou Diallo"],["luc","Lucas Girard"],["eli","Élise Bonnet"],["mat","Mathis Lambert"],["sar","Sarah Cohen"],["ade","Adèle Fontaine"],["vic","Victor Chevalier"],["zoe","Zoé Mercier"]];
+const HUES=["#2f6fd6","#138a86","#c23a78","#3f8a2f","#8f6a00","#5b6472","#8a4fd1","#b4530b","#1f7a9a","#a8432f"];
+const SKINS=["#f0c8a8","#c68f63","#e9b99a","#dba67f","#8d5a3b","#f3d2b8","#b07650","#e2ad88"];
+const BGS=[["#c9d6e8","#8ea6c8"],["#d8e4dc","#94b3a0"],["#ead6dc","#c79aa8"],["#e2e0cf","#b8b38f"],["#e3dcef","#ab9cc9"],["#efe0cf","#c9a988"],["#d3e3e6","#8fb2b8"]];
+{let css="";EXTRA.forEach(([id,n],k)=>{const ini=n.split(" ").filter(w=>w.length>2||w===w.toUpperCase()).map(w=>w[0]).join("").slice(0,2).toUpperCase();
+  const h=HUES[k%HUES.length],bg=BGS[k%BGS.length];
+  P[id]={n,i:ini,c:"av-"+id,skin:SKINS[k%SKINS.length],shirt:h,c1:bg[0],c2:bg[1],cam:k%4!==2};css+=`.av-${id}{background:${h}}`;});
+  const st=document.createElement("style");st.textContent=css;document.head.appendChild(st);}
+const ROSTER4=["lea","kar","ine","tom"];
+const ROSTER20=["lea","kar","ine","tom",...EXTRA.map(e=>e[0])];
+const roster=()=>S.count==="20"?ROSTER20:ROSTER4;
+const pageSize=()=>S.device==="phone"?3:(S.state==="band"?5:S.state==="fill"&&!S.pinned?11:4);
+function paged(list){const size=pageSize(),pages=Math.max(1,Math.ceil(list.length/size));
+  S.page=Math.min(S.page,pages-1);return {items:list.slice(S.page*size,S.page*size+size),pages,size,total:list.length};}
+let SPEAKER="kar";
+const CMD={
+  pins:["Pinned messages","","The pinned messages of this channel"],
+  members:["Members","Ctrl Shift M","The list of the channel members"],
+  search:["Search in the channel","Ctrl F",""],
+  call:["Start a call","Ctrl Shift A","Leaves a call message in the channel"],
+  mic:["Mute the mic","Ctrl D",""],
+  cam:["Camera","Ctrl E",""],
+  screen:["Share the screen","Ctrl Shift E","One share at a time: the latest takes over"],
+  fill:["Fill the call","Ctrl Shift F","The call takes the full height above the composer"],
+  shrink:["Shrink the call","Ctrl Shift F","Back to the call band"],
+  people:["Participants","","The list of all participants, with pinning"],
+  back:["Back to the call's channel","Ctrl Shift H",""],
+  attach:["Attach a file","",""],emoji:["Emoji","Ctrl Shift ;",""],mention:["Mention","@",""],
+  send:["Send","Enter",""],
+  pin:["Pin this participant","","They move to the scene, large, on every page"],
+  prev:["Previous page","Page ↑","Participants in order of arrival"],
+  next:["Next page","Page ↓","Participants in order of arrival"],
+  close:["Close the thread","Esc",""],
+};
+const ic=(n,cls="i")=>`<svg class="${cls}"><use href="#i-${n}"/></svg>`;
+const tip=id=>`data-tip="${id}" aria-label="${CMD[id][0]}"`;
+const av=(p,extra="")=>`<span class="avatar ${P[p].c} ${extra}">${P[p].i}</span>`;
+const fmt=s=>`${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
+const inCall=()=>S.state!=="channel";
+const away=()=>S.state==="bubble"||S.state==="present";
+
+/* ---------- pieces ---------- */
+function topbar(app){
+  return `<div class="topbar">
+    <button class="logo"><span class="mark"></span>Ambre <span class="appname">· ${app}</span></button>
+    ${app==="Prose"?`<span style="font-weight:500">Scoping note: UX overhaul</span><span class="sync">Synced</span>`:""}
+    <div class="cmdk">${ic("search")}Search or go to…<span class="kbd">Ctrl K</span></div>
+    <div style="display:flex;align-items:center;gap:8px">${app==="Prose"?`<span style="display:flex">${av("lea")}</span>`:""}${av("me")}</div>
+  </div>`;
+}
+function grp(k,label,items){
+  const f=S.folded.has(k);
+  const shown=f?items.filter(i=>i.keep||i.mention):items;
+  const hidden=items.length-shown.length;
+  const unread=f&&items.some(i=>(i.unread||i.mention)&&!(i.keep||i.mention));
+  return `<button class="sect fold ${f?"is-folded":""} ${unread?"has-unread":""}" data-act="fold" data-k="${k}" aria-expanded="${!f}">${ic("chev","i fchev")}<span>${label}</span>${f&&hidden?`<span class="fhid">${unread?'<span class="udot"></span>':""}${hidden}</span>`:""}</button>
+      ${shown.map(i=>i.h).join("")}`;
+}
+function sidebar(){
+  const live=inCall()||true;
+  return `<aside class="side">
+    <button class="space-btn" id="space-btn" aria-expanded="${S.spaceOpen}"><span class="space-ic" style="background:#b4530b">NS</span>North Studio ${ic("chev","i chev")}</button>
+    ${S.spaceOpen?`<div class="space-pop">
+      <button class="row"><span class="space-ic" style="background:#b4530b">NS</span>North Studio<span class="kbd">Ctrl 1</span></button>
+      <button class="row"><span class="space-ic" style="background:#2f6fd6">OC</span>Open Collective<span class="dot" style="margin-left:6px"></span><span class="kbd">Ctrl 2</span></button>
+      <button class="row"><span class="space-ic" style="background:#3f8a2f">FA</span>Family<span class="kbd">Ctrl 3</span></button>
+      <hr><button class="row" style="color:var(--muted)">${ic("plus")}Create or join a space</button></div>`:""}
+    <div class="side-scroll">
+      <div class="quick">
+        <button class="item unread">${ic("thread")}Followed threads<span class="badge">3</span></button>
+        <button class="item">${ic("inbox")}Unread<span class="count">12</span></button>
+        <button class="item">${ic("bookmark")}Bookmarks</button>
+      </div>
+      ${grp("prod","Product",[
+        {h:`<button class="item">${ic("hash")}general</button>`},
+        {h:`<button class="item ${!away()?"on":""}">${ic("hash")}design${live?`<span class="live">${ic("phone","i ph")}<span class="ring">${av("lea")}${av("kar")}${av("ine")}${inCall()?av("me"):""}</span></span>`:""}</button>`
+          +(live&&!inCall()?`<div class="live-sub">Call in progress <span class="t">${fmt(S.tick)}</span></div>`:""),keep:true},
+        {h:`<button class="item unread">${ic("hash")}roadmap<span class="count">4</span></button>`,unread:true},
+        {h:`<button class="item">${ic("forum")}ideas</button>`}])}
+      ${grp("eng","Engineering",[
+        {h:`<button class="item">${ic("hash")}backend</button>`},
+        {h:`<button class="item unread">${ic("hash")}incidents<span class="badge">2</span></button>`,mention:2},
+        {h:`<button class="item unread">${ic("hash")}migrations<span class="count">7</span></button>`,unread:true},
+        {h:`<button class="item">${ic("hash")}wasm-render</button>`}])}
+      ${grp("priv","Private",[{h:`<button class="item">${ic("lock")}leadership</button>`}])}
+      ${grp("dm","Direct messages",[
+        {h:`<button class="item">${av("lea","").replace('class="avatar','style="width:18px;height:18px;font-size:8px" class="avatar')}Léa Martin</button>`},
+        {h:`<button class="item unread">${av("tom").replace('class="avatar','style="width:18px;height:18px;font-size:8px" class="avatar')}Tom Leroy<span class="count">1</span></button>`,unread:true}])}
+      ${grp("join","To join",[{h:`<button class="item">${ic("hash")}hiring</button>`}])}
+    </div>
+  </aside>`;
+}
+function channelHead(){
+  const call=inCall()&&!away();
+  return `<div class="chead">
+    <h2><span class="hash">#</span>design</h2>
+    <span class="topic">Mockups, UX reviews and design decisions</span>
+    <div class="tools">
+      ${call?`<div class="callgrp"><span class="timer">${fmt(S.tick)}</span>
+        <button class="ib ${S.micOff?"off":""}" ${tip("mic")}>${ic(S.micOff?"micoff":"mic")}</button>
+        <button class="ib" ${tip("cam")} aria-pressed="true">${ic("cam")}</button>
+        <button class="ib" ${tip("screen")}>${ic("screen")}</button>
+        <button class="ib" ${tip(S.state==="band"?"fill":"shrink")} aria-pressed="${S.state!=="band"}" data-act="fill">${ic(S.state==="band"?"expand":"shrink")}</button>
+        <button class="ib" ${tip("people")}>${ic("users")}<span class="n">${roster().length+1}</span></button>
+        <button class="leave" data-act="leave">${ic("end")}Leave</button></div><span class="sep"></span>`
+      :`<button class="joinbtn" data-act="join">${ic("phone")}Join · 3</button><span class="sep"></span>`}
+      <button class="ib" ${tip("pins")}>${ic("pin")}<span class="n">2</span></button>
+      <button class="ib" ${tip("members")}>${ic("users")}</button>
+      <button class="ib" ${tip("search")}>${ic("search")}</button>
+    </div></div>`;
+}
+function messages(){
+  return `<div class="day">Today</div>
+  <div class="msg">${av("lea")}<div><span class="who">Léa Martin</span><span class="when">10:12</span>
+    <div class="txt">I pushed v6 of the chrome mockup: the context menu, the tooltips, and the panel docked on the left as an option.</div>
+    <div class="reacts"><span class="react mine">👍 3</span><span class="react">🎉 2</span></div>
+    <button class="thr" data-act="thread">${av("kar")}${av("ine")}<b>4 replies</b><span>Last reply from Karim 5 min ago</span></button></div></div>
+  <div class="msg">${av("kar")}<div><span class="who">Karim Bensaïd</span><span class="when">10:41</span>
+    <div class="txt">For Murmure we follow the same rule: no docked toolbar. Call controls stay in the channel header.</div></div></div>
+  <div class="msg cont">${av("kar")}<div><div class="txt">The 196 px band holds 4 faces. Beyond that, pages of nine: <code>MURMURE-654</code>.</div></div></div>
+  <div class="newline">New</div>
+  <div class="msg">${av("lea")}<div><span class="who">Léa Martin</span><span class="when">14:18</span>
+    <div class="callcard"><span class="cic">${ic("phone")}</span><div><div class="ct">Call in progress</div><div class="cs">Started by Léa · ${fmt(S.tick)}</div></div>
+      <span class="ring">${av("lea")}${av("kar")}${av("ine")}${inCall()?av("me"):""}</span>
+      ${inCall()?"":`<button class="joinbtn" data-act="join" style="margin-left:6px">Join</button>`}</div></div></div>
+  <div class="msg">${av("ine")}<div><span class="who">Inès Roux</span><span class="when">14:21</span>
+    <div class="txt"><span class="mention">@Michael</span> are you joining us? We are going through the budget sheet in Trame.</div></div></div>`;
+}
+function composer(where="#design",thread=false){
+  return `<div class="composer"><div class="ph">${thread?"Reply…":"Message "+where}</div>
+    <div class="bar">
+      ${thread?`<span class="also"><i></i>Also send to #design</span>`:""}
+      <button class="ib" ${tip("attach")}>${ic("plus")}</button>
+      <button class="ib" ${tip("emoji")}>${ic("smile")}</button>
+      <button class="ib" ${tip("mention")}>${ic("at")}</button>
+      <button class="send" ${tip("send")} style="${thread?"margin-left:4px":""}">${ic("send")}</button>
+    </div></div>`;
+}
+function threadPane(){
+  return `<aside class="thread">
+    <div class="chead"><h2>Thread <span class="hash" style="font-weight:500">· #design</span></h2>
+      <div class="tools"><button class="ib" ${tip("close")} data-act="closethread">${ic("x")}</button></div></div>
+    <div class="list">
+      <div class="msg">${av("lea")}<div><span class="who">Léa Martin</span><span class="when">10:12</span>
+        <div class="txt">I pushed v6 of the chrome mockup: the context menu, the tooltips, and the panel docked on the left as an option.</div></div></div>
+      <div class="day">4 replies</div>
+      <div class="msg">${av("ine")}<div><span class="who">Inès Roux</span><span class="when">10:20</span><div class="txt">The panel on the left works much better for me.</div></div></div>
+      <div class="msg">${av("me")}<div><span class="who">You</span><span class="when">10:31</span><div class="txt">It is a user setting, shared by the three apps. The side follows the account; the width stays on the device.</div></div></div>
+      <div class="msg">${av("kar")}<div><span class="who">Karim Bensaïd</span><span class="when">14:06</span><div class="txt">Fine by me. And the collapsed state is remembered per app.</div></div></div>
+    </div>
+    ${composer("",true)}
+  </aside>`;
+}
+function camTile(p,{speak=false,small=false,mirror=false,pin=true,cls="",css=""}={}){
+  const q=P[p];
+  const style=`--skin:${q.skin};--shirt:${q.shirt};--c1:${q.c1};--c2:${q.c2};${css}`;
+  const on=p==="me"?true:q.cam;
+  return `<div class="tile ${on?"cam":""} ${speak?"speak":""} ${small?"small own":""} ${mirror?"mirror":""} ${cls}" style="${style}" data-p="${p}">
+    ${on?"":`<span class="ini ${q.c}">${q.i}</span>`}
+    <span class="nm">${p==="me"?"You":q.n}</span>
+    ${p==="me"&&S.micOff?`<span class="muted">${ic("micoff")}</span>`:""}
+    ${pin&&p!=="me"?`<button class="pin ${S.pinned===p?"on":""}" ${tip("pin")} data-act="pin" data-p="${p}">${ic("pin")}</button>`:""}
+  </div>`;
+}
+function fakeScreen(phone=false){
+  const cols=phone?["","A","B","C","D"]:["","A","B","C","D","E","F"];
+  const rows=[["Budget","Q1","Q2","Q3","Q4","Total"],["Relay","42","44","47","51","184"],["SFU","18","21","24","29","92"],["Storage","9","9","11","12","41"],["Render","31","28","26","25","110"],["Network","14","15","15","17","61"],["Total","114","117","123","134","488"],["","","","","",""],["","","","","",""],["","","","","",""],["","","","","",""],["","","","","",""],["","","","","",""],["","","","","",""]];
+  let h=cols.map(c=>`<div class="h">${c}</div>`).join("");
+  rows.forEach((r,i)=>{h+=`<div class="h">${i+1}</div>`;r.slice(0,cols.length-1).forEach((v,j)=>{h+=`<div class="${j?"n":""} ${i===6&&j===5?"sel":""}" style="${i===0||i===6?"font-weight:650":""}">${v}</div>`;});});
+  return `<div class="fake-app"><span class="mark"></span>Trame · Budgets 2027, shared by Inès</div>
+    <div class="sheet">${h}</div>
+    ${phone?"":`<div class="chart"><i style="height:55%"></i><i style="height:62%"></i><i style="height:70%"></i><i style="height:84%"></i><i style="height:48%"></i><i style="height:58%"></i></div>
+    <svg class="cursor" viewBox="0 0 24 24" style="color:#c23a78"><use href="#i-arrow"/></svg>`}
+    <span class="nm">${ic("screen")}Inès's screen</span>`;
+}
+function pager(pg,vertical=false){
+  if(pg.pages<2)return "";
+  const first=S.page*pg.size+1,last=Math.min(pg.total,first+pg.size-1);
+  return `<button class="pg prev ${vertical?"v":""}" data-act="page" data-d="-1" ${tip("prev")} ${S.page===0?"disabled":""}>${ic(vertical?"chevup":"left")}<span class="who"></span></button>
+    <button class="pg next ${vertical?"v":""}" data-act="page" data-d="1" ${tip("next")} ${S.page===pg.pages-1?"disabled":""}>${ic(vertical?"chev":"right")}<span class="who"></span></button>
+    <div class="pgind ${vertical?"v":""}">${vertical?`${first}–${last} of ${pg.total}`:`${Array.from({length:pg.pages},(_,k)=>`<i class="${k===S.page?"on":""}"></i>`).join("")}<span>${first}–${last} of ${pg.total}</span>`}</div>`;
+}
+function callRegion(){
+  const all=roster();
+  if(S.state==="band"){
+    const pg=paged(all);
+    return `<div class="callreg band" data-pages="${pg.pages}">
+      <div class="gridwrap">${pager(pg)}<div class="grid">${pg.items.map(p=>camTile(p,{speak:p===SPEAKER})).join("")}</div></div>
+      ${camTile("me",{small:true,mirror:true,pin:false})}
+    </div>`;
+  }
+  if(S.state==="fill"&&!S.pinned){
+    // the own tile is the last cell of the grid: no column is kept for it alone
+    const pg=paged(all),n=pg.items.length+1,cols=n<=4?2:n<=6?3:4;
+    return `<div class="callreg fill" data-pages="${pg.pages}">
+      <div class="gridwrap">${pager(pg)}<div class="grid" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${pg.items.map(p=>camTile(p,{speak:p===SPEAKER})).join("")}${camTile("me",{mirror:true,pin:false,cls:"mine"})}</div></div>
+    </div>`;
+  }
+  // scene: a received screen, or a pinned participant
+  const subject=S.state==="scene"?`<div class="screen">${fakeScreen()}</div>`
+    :`<div class="screen" style="background:none;box-shadow:none">${camTile(S.pinned,{speak:S.pinned===SPEAKER,css:"height:100%"})}</div>`;
+  const pg=paged(all.filter(p=>p!==S.pinned));
+  return `<div class="callreg scene" data-pages="${pg.pages}">${subject}
+    <div class="strip">${pager(pg,true)}${pg.items.map(p=>camTile(p,{speak:p===SPEAKER})).join("")}${camTile("me",{mirror:true,pin:false,cls:"mine"})}</div>
+  </div>`;
+}
+function murmureDesktop(){
+  const thread=S.state==="channel";
+  const call=inCall()&&!away();
+  const listGone=call&&S.state!=="band";
+  return `<div class="mock">${topbar("Murmure")}
+    <div class="body mur ${thread?"with-thread":""}">
+      ${sidebar()}
+      <section class="main">${channelHead()}
+        ${call?callRegion():""}
+        <div class="list ${listGone?"gone":""}">${messages()}</div>
+        ${composer()}
+      </section>
+      ${thread?threadPane():""}
+    </div></div>`;
+}
+function proseDesktop(){
+  return `<div class="mock">${topbar("Prose")}
+    <div class="prose" id="prose-area">
+      <div class="page">
+        <h1>Scoping note: UX overhaul</h1>
+        <p>The three editors share one chrome. Global actions live in the status bar and the Ambre menu; account actions live on the avatar.</p>
+        <p>Each command has one home. The context panel holds every command for the selection; the context bar and the context menu repeat some of them, <span class="remote">and the clipboard lives in the context menu</span><span class="caret"></span>.</p>
+        <p>Murmure keeps its own structure: sidebar, channel, thread. A call started in a channel follows the person across the whole suite, as a bubble.</p>
+        <p style="color:var(--faint)">Next step: the mockup of calls and screen share.</p>
+      </div>
+      <div class="statusbar"><span>Page 1 of 3</span><span>412 words</span><span style="margin-left:auto">100 %</span></div>
+      ${bubble()}
+    </div></div>`;
+}
+function presentDesktop(){
+  return `<div class="mock">${topbar("Prose")}
+    <div class="prose present" id="prose-area" data-panel="300">
+      <div class="docarea">
+        <div class="follow">${av("ine")}<span>You are following <b>Inès</b> · she is presenting</span><button>Stop following</button></div>
+        <div class="page">
+          <h1>Budgets 2027: review</h1>
+          <p>The relay stays the largest item: €184k over the year, driven by the growing number of active spaces.</p>
+          <p>The SFU almost doubles between Q1 and Q4. <span class="mysel">The rise comes from calls with more than nine people, which need more streams per participant.</span></p>
+          <p><span class="remote r-kar">Storage stays flat</span><span class="caret c-kar"></span>: deduplicating attachments offsets the growth in volume.</p>
+          <p style="color:var(--faint)">To decide in the meeting: the cap on participants per call.</p>
+        </div>
+      </div>
+      <aside class="cpanel">
+        <div class="cp-head">Text <span>selection: 1 sentence</span></div>
+        <div class="cp-sec"><div class="cp-t">Style</div><div class="cp-row"><span class="cp-in" style="flex:1">Body text</span></div>
+          <div class="cp-row"><span class="cp-in" style="flex:1">Noto Serif</span><span class="cp-in" style="width:56px">15</span></div>
+          <div class="cp-row"><b class="cp-b">B</b><i class="cp-b">I</i><u class="cp-b">U</u><span class="cp-b" style="text-decoration:line-through">S</span><span class="cp-sw" style="background:var(--ink)"></span><span class="cp-sw" style="background:#fff3a6"></span></div></div>
+        <div class="cp-sec"><div class="cp-t">Paragraph</div><div class="cp-row"><span class="cp-b on">≡</span><span class="cp-b">≣</span><span class="cp-b">☰</span><span class="cp-in" style="margin-left:auto;width:70px">1.6</span></div></div>
+        <div class="cp-sec"><div class="cp-t">Comment</div><div class="cp-row"><span class="cp-in" style="flex:1;color:var(--faint)">Add a comment…</span></div></div>
+      </aside>
+      <div class="statusbar" style="right:300px"><span>Page 1 of 2</span><span>3 people in the document</span><span style="margin-left:auto">100 %</span></div>
+      ${bubble(true)}
+    </div></div>`;
+}
+function bubble(leftDock=false){
+  const pos=S.bubblePos||{right:20,bottom:46};
+  const st=S.bubblePos?`left:${pos.left}px;top:${pos.top}px`:(leftDock?`left:20px;bottom:46px`:`right:${pos.right}px;bottom:${pos.bottom}px`);
+  return `<div class="bubble" id="bubble" style="${st};width:${S.bubbleMini?268:248}px">
+    <div class="grip" id="grip"><span class="ch"><span class="hash">#</span>design</span><span class="tm">${fmt(S.tick)}</span>
+      <span style="margin-left:auto;color:var(--faint)">${ic("dots")}</span></div>
+    ${S.bubbleMini
+      ?`<button class="mini scr" data-act="mini" style="display:flex;flex-direction:column;width:calc(100% - 16px);text-align:left">${fakeScreen(true).replace("Trame · Budgets 2027, shared by Inès","Inès's screen")}</button>`
+      :`<button class="faces" data-act="mini" aria-label="Show the shared screen">${av("lea")}${av("kar","speak")}${av("ine")}${av("tom")}</button>`}
+    <div class="ctrls">
+      <button class="ib ${S.micOff?"off":""}" ${tip("mic")}>${ic(S.micOff?"micoff":"mic")}</button>
+      <button class="ib" ${tip("cam")}>${ic("cam")}</button>
+      <button class="ib" ${tip("screen")}>${ic("screen")}</button>
+      <button class="ib" ${tip("back")} data-act="backcall">${ic("back")}</button>
+      <button class="leave" data-act="leave">${ic("end")}</button>
+    </div></div>`;
+}
+
+/* ---------- phone ---------- */
+function phone(){
+  const status=`<div class="p-status"><span>14:32</span><span>●●● 5G</span></div>`;
+  if(away()){
+    return `<div class="phone-frame">${status}
+      <div class="p-head"><button class="ib">${ic("left")}</button><h2 style="font-size:15px">Scoping note</h2>${av("lea")}<button class="ib">${ic("dots")}</button></div>
+      <div class="p-pill" data-act="backcall">${ic("phone")}#design <span class="t">${fmt(S.tick)}</span><span class="ring">${av("lea")}${av("kar","p-speak")}${av("ine")}</span>
+        <button class="pb">${ic(S.micOff?"micoff":"mic")}</button><button class="pb end" data-act="leave">${ic("end")}</button></div>
+      ${S.state==="present"?`<div class="follow" style="position:static;transform:none;margin:8px auto 0;width:max-content">${av("ine")}<span>You are following <b>Inès</b></span><button>Stop following</button></div>`:""}
+      <div class="p-doc">
+        <h1>Scoping note: UX overhaul</h1>
+        <p>The three editors share one chrome. Global actions live in the status bar and the Ambre menu; account actions live on the avatar.</p>
+        <p>Each command has one home. The context panel holds every command for the selection; the context bar and the context menu repeat some of them, <span class="remote">and the clipboard lives in the context menu</span><span class="caret"></span>.</p>
+        <p>Murmure keeps its own structure: sidebar, channel, thread. A call started in a channel follows the person across the whole suite.</p>
+        <p style="color:var(--faint)">Next step: the mockup of calls and screen share.</p>
+      </div>
+      <div class="p-sbar"><span>412 words</span><span>100 %</span></div></div>`;
+  }
+  if(S.pview==="list"){
+    return `<div class="phone-frame">${status}
+      ${inCall()?`<div class="p-pill" data-act="pchan">${ic("phone")}#design <span class="t">${fmt(S.tick)}</span><span class="ring">${av("lea")}${av("kar","p-speak")}${av("ine")}</span>
+        <button class="pb">${ic(S.micOff?"micoff":"mic")}</button><button class="pb end" data-act="leave">${ic("end")}</button></div>`:""}
+      <div class="p-list">${sidebar()}</div>
+      <nav class="p-tabs"><button class="on">${ic("hash")}<span>Channels</span></button><button>${ic("inbox")}<span>Activity</span></button><button>${ic("search")}<span>Search</span></button></nav></div>`;
+  }
+  const head=`<div class="p-head"><button class="ib" data-act="plist" aria-label="Channels">${ic("left")}</button><h2><span class="hash">#</span>design</h2>
+    ${inCall()?`<button class="ib" ${tip(S.state==="band"?"fill":"shrink")} data-act="fill">${ic(S.state==="band"?"expand":"shrink")}</button>`:`<button class="joinbtn" data-act="join">${ic("phone")}3</button>`}
+    <button class="ib">${ic("users")}</button></div>`;
+  if(S.state==="channel"||S.state==="band"){
+    return `<div class="phone-frame">${status}${head}
+      ${S.state==="band"?(()=>{const all=roster(),pages=Math.ceil(all.length/3);return `<div class="callreg band pband">${pages>1?`<div class="pgind" id="pdots">${Array.from({length:pages},(_,k)=>`<i class="${k===0?"on":""}"></i>`).join("")}<span>1–3 of ${all.length}</span></div>`:""}<div class="carousel" id="carousel">${all.map(p=>camTile(p,{speak:p===SPEAKER,pin:false})).join("")}</div></div>`})():""}
+      <div class="list">${messages()}</div>${composer()}</div>`;
+  }
+  const others=["lea","kar","ine","tom"];
+  const top=S.state==="scene"?`<div class="screen">${fakeScreen(true)}</div>`:camTile(S.pinned||"kar",{speak:true,cls:"p-big"});
+  return `<div class="phone-frame">${status}${head}
+    <div class="p-scene">${top}
+      ${S.state==="scene"?`<div class="p-strip">${roster().map(p=>camTile(p,{speak:p===SPEAKER,pin:false})).join("")}</div>
+        <div class="tile cam mirror small" style="--skin:${P.me.skin};--shirt:${P.me.shirt};--c1:${P.me.c1};--c2:${P.me.c2};width:96px;aspect-ratio:3/4;align-self:flex-end;flex:none"><span class="nm">You</span></div>`
+      :`<div class="p-strip">${roster().filter(p=>p!==(S.pinned||"kar")).map(p=>camTile(p,{pin:false})).join("")}</div>`}
+    </div>
+    <div class="p-ctrls">
+      <button class="${S.micOff?"off":""}">${ic(S.micOff?"micoff":"mic")}</button><button>${ic("cam")}</button><button>${ic("screen")}</button><button>${ic("thread")}</button><button class="end" data-act="leave">${ic("end")}</button>
+    </div></div>`;
+}
+
+/* ---------- notes per state ---------- */
+const NOTES={
+  channel:"<b>Not in the call.</b> Channel #design has a call: the sidebar shows it (green phone, avatars, timer) and the header offers “Join”. The thread is open on the right. Open the space switcher at the top of the sidebar.",
+  present:"<b>Presented document.</b> Inès presents the document: everyone opens it in Prose, with their own chrome. You follow her view (pink bar). You select a sentence and your context panel opens, as usual. Karim types at the same time. The call bubble moves to the left, opposite the panel, and never snaps over it.",
+  band20:"<b>Call band, 20 participants.</b> The call band holds one row: pages of five, in order of arrival. Arrows on each side, dots and “1–5 of 20” below, <span class='kbd'>Page ↑</span> <span class='kbd'>Page ↓</span> on the keyboard. When someone speaks on another page, the arrow toward them lights up green with their avatar. Differs from <code>MURMURE-654</code> (pages of nine): nine tiles in 200 px of height make 50 px faces.",
+  fill20:"<b>Fill, 20 participants.</b> A 4×3 grid whose last cell is your tile: pages of eleven, two pages. The page requests the eleven streams it shows (<code>MURMURE-667</code>), which means raising the cap of nine videos (<code>CALL-041</code>). Watch the arrow light up when Fatou or Victor speaks elsewhere.",
+  scene20:"<b>Scene, 20 participants.</b> The side strip shows four faces per page, with up and down arrows and “1–4 of 20”. The arrow lights up when someone speaks elsewhere.",
+  band:"<b>Call band.</b> The call takes 196 px above the composer, and the conversation stays readable. Controls are grouped in the header. Your tile sits apart, mirrored, and is the only one to show a muted mic (<code>ZK-025</code>). Hover a tile to pin it.",
+  fill:"<b>Fill.</b> The call takes the full height; the composer stays. Your tile is the last cell of the grid: no column is kept for it. Differs from <code>MURMURE-652</code>, which sets it apart and smaller. Pin a face: the call switches to the <b>scene</b>, with no layout menu.",
+  scene:"<b>Scene.</b> A screen arrives: it takes the space, and the faces move to a side strip. Proposed: the arrival of a screen enlarges the call on its own. Shrink returns to the call band.",
+  bubble:"<b>Bubble.</b> You left #design for Prose: the call goes on in a bubble you can drag. Click the faces to see the shared screen. The dashed outline is the area it publishes to the canvas (“The floating cover”).",
+};
+
+function render(){
+  document.querySelectorAll(".seg").forEach(seg=>{
+    const key=seg.id.replace("seg-","");
+    seg.querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.v===S[key])));
+  });
+  document.documentElement.toggleAttribute("data-theme",S.theme!=="auto");
+  if(S.theme!=="auto")document.documentElement.dataset.theme=S.theme;
+  const st=document.getElementById("stage");
+  st.className="stage-wrap"+(S.device==="phone"?" phone":"");
+  let note=(S.count==="20"&&NOTES[S.state+"20"])||NOTES[S.state];
+  if(S.device==="phone"&&away())note="<b>Pill.</b> On a phone with Prose open, a green pill under the header replaces the bubble: channel, timer, who is speaking, mic, leave. A tap goes back to the call. It takes one line from the document instead of covering it: on 390 px, a bubble would hide text.";
+  if(S.device==="phone"&&S.state==="band"&&S.count==="20")note="<b>Call band on phone, 20 participants.</b> The call band follows the finger (native scrolling) and stops on pages of three. The page requests its streams when scrolling stops.";
+  if(S.device==="phone"&&S.pview==="list"&&!away())note="<b>Channel list, phone.</b> Stack navigation, not a drawer: the list is the home screen, a channel stacks on it, a thread stacks on the channel. Back is the native gesture (left edge on iOS, back on Android). A swipe drawer would fight the call band, which scrolls under the finger. A call in progress stays as a pill at the top of the list.";
+  if(S.device==="phone"&&S.state==="present")note="<b>Presented document, phone.</b> The document is open on your phone, the call pill sits under the header, and “You are following Inès” shows above the text.";
+  if(S.device==="phone"&&S.state==="scene")note="<b>Scene on phone.</b> Screen at the top, faces in a horizontal strip, round controls at the bottom, within reach of the thumb.";
+  if(S.state==="fill"&&S.pinned)note="<b>Scene by pin.</b> The pinned participant takes the place of the screen. Same layout, no setting. Click the pin again to go back to the grid.";
+  document.getElementById("note").innerHTML=note;
+  st.innerHTML=S.device==="phone"?phone():(S.state==="present"?presentDesktop():away()?proseDesktop():murmureDesktop());
+  if(away()&&S.device==="desktop")wireBubble();
+  markSpeaker();
+  const car=document.getElementById("carousel");
+  if(car){const dots=document.getElementById("pdots");car.addEventListener("scroll",()=>{if(!dots)return;
+    const k=Math.round(car.scrollLeft/car.clientWidth),n=roster().length;
+    dots.querySelectorAll("i").forEach((d,j)=>d.classList.toggle("on",j===k));
+    dots.querySelector("span").textContent=`${k*3+1}–${Math.min(n,k*3+3)} of ${n}`;},{passive:true});}
+}
+
+/* ---------- interactions ---------- */
+document.querySelectorAll(".seg").forEach(seg=>seg.addEventListener("click",e=>{
+  const b=e.target.closest("button");if(!b)return;
+  const key=seg.id.replace("seg-","");S[key]=b.dataset.v;
+  if(key==="state"||key==="count"||key==="device"){S.pinned=null;S.spaceOpen=false;S.page=0;}
+  render();
+}));
+document.getElementById("stage").addEventListener("click",e=>{
+  if(e.target.closest("#space-btn")){S.spaceOpen=!S.spaceOpen;render();return;}
+  if(S.device==="phone"&&S.pview==="list"&&e.target.closest(".side .item")&&!e.target.closest("[data-act]")){S.pview="channel";render();return;}
+  const a=e.target.closest("[data-act]");if(!a){if(S.spaceOpen&&!e.target.closest(".space-pop")){S.spaceOpen=false;render();}return;}
+  const act=a.dataset.act;
+  if(act==="join")S.state="band";
+  else if(act==="leave"){S.state="channel";S.pinned=null;}
+  else if(act==="fill"){S.state=S.state==="band"?"fill":"band";S.pinned=null;S.page=0;}
+  else if(act==="pin"){const p=a.dataset.p;S.pinned=S.pinned===p?null:p;S.page=0;if(S.pinned&&S.state!=="scene")S.state="fill";}
+  else if(act==="mini")S.bubbleMini=!S.bubbleMini;
+  else if(act==="fold"){const k=a.dataset.k;S.folded.has(k)?S.folded.delete(k):S.folded.add(k);}
+  else if(act==="plist")S.pview="list";
+  else if(act==="pchan")S.pview="channel";
+  else if(act==="page"){S.page+=Number(a.dataset.d);}
+  else if(act==="backcall")S.state="band";
+  else if(act==="closethread")S.state="band";
+  else if(act==="thread")S.state="channel";
+  hideTip();render();
+});
+function wireBubble(){
+  const b=document.getElementById("bubble"),g=document.getElementById("grip"),area=document.getElementById("prose-area");
+  const hint=document.createElement("div");hint.className="cover-hint";area.appendChild(hint);
+  const place=()=>{hint.style.left=(b.offsetLeft-6)+"px";hint.style.top=(b.offsetTop-6)+"px";hint.style.width=(b.offsetWidth+12)+"px";hint.style.height=(b.offsetHeight+12)+"px";};
+  place();
+  let sx,sy,ox,oy,drag=false;
+  g.addEventListener("pointerdown",e=>{drag=true;g.setPointerCapture(e.pointerId);sx=e.clientX;sy=e.clientY;ox=b.offsetLeft;oy=b.offsetTop;});
+  g.addEventListener("pointermove",e=>{if(!drag)return;
+    const x=Math.max(8,Math.min(area.clientWidth-Number(area.dataset.panel||0)-b.offsetWidth-8,ox+e.clientX-sx));
+    const y=Math.max(8,Math.min(area.clientHeight-b.offsetHeight-38,oy+e.clientY-sy));
+    b.style.left=x+"px";b.style.top=y+"px";b.style.right="auto";b.style.bottom="auto";place();});
+  g.addEventListener("pointerup",()=>{if(!drag)return;drag=false;
+    // snap to the nearest corner
+    const W=area.clientWidth-Number(area.dataset.panel||0),H=area.clientHeight,x=b.offsetLeft,y=b.offsetTop;
+    const left=(x+b.offsetWidth/2<W/2)?16:W-b.offsetWidth-16;
+    const top=(y+b.offsetHeight/2<H/2)?16:H-b.offsetHeight-46;
+    S.bubblePos={left,top};b.style.transition="left .18s ease-out, top .18s ease-out";b.style.left=left+"px";b.style.top=top+"px";
+    setTimeout(()=>{b.style.transition="";place();},200);});
+}
+/* tooltips: hover and keyboard focus, name + chord chip + description */
+const tipEl=document.getElementById("tip");let tipT=null;
+function showTip(el){
+  const c=CMD[el.dataset.tip];if(!c||!el.isConnected)return;
+  tipEl.innerHTML=`<div class="l1">${c[0]}${c[1]?`<span class="kbd">${c[1]}</span>`:""}</div>${c[2]?`<div class="l2">${c[2]}</div>`:""}`;
+  tipEl.hidden=false;
+  const r=el.getBoundingClientRect(),t=tipEl.getBoundingClientRect();
+  let x=r.left+r.width/2-t.width/2,y=r.bottom+8;
+  if(y+t.height>innerHeight-8)y=r.top-t.height-8;
+  x=Math.max(8,Math.min(innerWidth-t.width-8,x));
+  tipEl.style.left=x+"px";tipEl.style.top=y+"px";
+}
+function hideTip(){clearTimeout(tipT);tipT=null;tipEl.hidden=true;}
+document.addEventListener("pointerover",e=>{const el=e.target.closest?.("[data-tip]");if(!el||el.closest(".phone-frame"))return;clearTimeout(tipT);tipT=setTimeout(()=>showTip(el),tipEl.hidden?450:0);});
+document.addEventListener("pointerout",e=>{const el=e.target.closest?.("[data-tip]");if(el&&!(e.relatedTarget&&el.contains(e.relatedTarget)))hideTip();});
+document.addEventListener("focusin",e=>{const el=e.target.closest?.("[data-tip]");if(el&&el.matches(":focus-visible"))showTip(el);});
+document.addEventListener("focusout",hideTip);
+setInterval(()=>{S.tick++;document.querySelectorAll(".timer,.tm,.live-sub .t,.p-pill .t").forEach(n=>n.textContent=fmt(S.tick));
+  document.querySelectorAll(".cs").forEach(n=>n.textContent="Started by Léa · "+fmt(S.tick));},1000);
+/* the speaker moves around the call every few seconds */
+const SP4=["kar","lea","ine","kar","tom"],SP20=["kar","lea","fat","fat","kar","vic","ine","sar"];let si=0;
+function markSpeaker(){
+  document.querySelectorAll(".tile[data-p]").forEach(t=>t.classList.toggle("speak",t.dataset.p===SPEAKER));
+  document.querySelectorAll(".bubble .faces .avatar").forEach((a,i)=>a.classList.toggle("speak",ROSTER4[i]===SPEAKER));
+  // a speaker on another page lights the arrow toward it
+  document.querySelectorAll(".pg").forEach(b=>b.classList.remove("hint"));
+  const reg=document.querySelector(".callreg[data-pages]");if(!reg||S.device==="phone")return;
+  const list=roster().filter(p=>p!==S.pinned),idx=list.indexOf(SPEAKER);if(idx<0)return;
+  const pg=Math.floor(idx/pageSize());if(pg===S.page)return;
+  const b=reg.querySelector(pg<S.page?".pg.prev":".pg.next");if(!b)return;
+  b.classList.add("hint");const w=b.querySelector(".who");w.className="who "+P[SPEAKER].c;w.textContent=P[SPEAKER].i;
+  b.setAttribute("aria-label",(pg<S.page?"Previous page":"Next page")+": "+P[SPEAKER].n+" is speaking");
+}
+setInterval(()=>{const L=S.count==="20"?SP20:SP4;si=(si+1)%L.length;SPEAKER=L[si];markSpeaker();},2600);
+if(matchMedia("(max-width:700px)").matches)S.device="phone";
+render();
+</script>
