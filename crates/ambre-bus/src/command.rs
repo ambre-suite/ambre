@@ -66,6 +66,15 @@ pub enum SyncCommand {
         inviter: ambre_core::FixedBytes<ambre_core::InviterPin>,
     },
 
+    /// Hold `kept`, where the log of `document_id` stood in an earlier
+    /// session, as the footing of every later open of the session
+    /// (`SYNC-290`). The Main thread sends it from the local store before
+    /// any open.
+    KeepLog {
+        document_id: Id<Document>,
+        kept: crate::KeptLog,
+    },
+
     /// Pin the inviter that a Murmure invite link names (`SYNC-236`). A
     /// Murmure page binds no document, so the pin roots every Murmure open
     /// of the session (`SYNC-235`).
@@ -153,6 +162,11 @@ pub enum SyncCommand {
         /// verifies its removals and its key links. The Logic thread knows
         /// the catalogues; the Sync worker does not.
         listed_in: Option<Id<Space>>,
+        /// The channel key that catalogue holds, sealed under the space key.
+        /// The Sync worker pins its id, and an open of the channel trusts
+        /// that key. It trusts a newer one only when the log links it to the
+        /// pin through signed rotations (`SYNC-299`).
+        catalogue_key: Option<SealedChannelKey>,
     },
     /// The catalogue of `space_id` lists `channel_id`, which this client
     /// opened before that space, or while its listing was in flight. Its log
@@ -161,6 +175,9 @@ pub enum SyncCommand {
     MarkChannelListed {
         channel_id: Id<Channel>,
         space_id: Id<Space>,
+        /// The channel key the catalogue holds, which the Sync worker pins
+        /// (`SYNC-299`).
+        catalogue_key: SealedChannelKey,
     },
     /// Rotate what a leave left owed in an open space. The space key goes
     /// first, when the relay says the space owes it. Then each public
@@ -381,6 +398,14 @@ pub enum SyncCommand {
         call: Id<ambre_core::id::Call>,
         channel: Id<Channel>,
         meta: Id<Document>,
+    },
+    /// The `meta` document of the channel of a waiting join, the answer to
+    /// [`crate::LogicEvent::CallMetaAsked`]. Posted by the Logic thread from the channel state
+    /// it opened, whose sealed header names the channel. `None` when it holds no such state,
+    /// and the join then ends (`CALL-149`, audit `P24`).
+    CallMeta {
+        call: Id<ambre_core::id::Call>,
+        meta: Option<Id<Document>>,
     },
     /// A session description of the peer connection, for the socket of the SFU.
     CallDescription(crate::PageDescription),

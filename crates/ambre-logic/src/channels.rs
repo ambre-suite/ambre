@@ -805,6 +805,62 @@ mod tests {
         assert!(!state.rt().closed_channels().any(|c| c == channel_id));
     }
 
+    /// Holds `SYNC-303` for a channel, fail closed. A revoke caps a writer
+    /// below a delta the active segment applied. The whole channel ends:
+    /// each document closes in Sync and its local copy leaves the store.
+    /// The channel then opens again from the relay, which replays each
+    /// document under the cap. A document no channel holds reads nothing
+    /// here.
+    #[test]
+    fn a_channel_read_again_drops_each_copy_and_opens_anew() {
+        let (mut state, _ui, sync, store) = harness_with_store();
+        let (channel_id, stored) = stored_channel();
+        let meta = stored.meta_id().document_id();
+        let active = stored.active_id().document_id();
+        state.handle_logic_command(LogicCommand::OpenChannel { channel_id });
+        state.handle_logic_event(LogicEvent::ChannelDocuments {
+            channel_id,
+            documents: listing(&stored),
+        });
+        serve(&mut state, &stored, meta);
+        serve(&mut state, &stored, active);
+        drain(&sync);
+        drain(&store);
+        assert!(state.rt().channels().contains_key(&channel_id));
+
+        state.handle_logic_event(LogicEvent::DocumentReread {
+            document_id: active,
+        });
+        let erased: HashSet<Id<Document>> = drain(&store)
+            .into_iter()
+            .filter_map(|(id, write)| matches!(write, PersistWrite::Erase).then_some(id))
+            .collect();
+        assert_eq!(erased, HashSet::from([meta, active]), "each copy leaves");
+        let sent = sent(&sync);
+        let closed: HashSet<Id<Document>> = sent
+            .iter()
+            .filter_map(|s| match s {
+                Sent::Close(id) => Some(*id),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(closed, HashSet::from([meta, active]), "{sent:?}");
+        assert_eq!(
+            sent.last(),
+            Some(&Sent::List(channel_id)),
+            "the channel opens again after each close: {sent:?}"
+        );
+        assert!(!state.rt().channels().contains_key(&channel_id));
+        assert!(state.rt().opening().contains_key(&channel_id));
+
+        let stranger = Id::<Document>::mint();
+        state.handle_logic_event(LogicEvent::DocumentReread {
+            document_id: stranger,
+        });
+        assert!(drain(&store).is_empty());
+        assert!(drain(&sync).is_empty());
+    }
+
     /// The relay serves a document: its snapshot, then its ready signal.
     fn serve(state: &mut LogicState, stored: &ChannelState, document_id: Id<Document>) {
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
@@ -891,6 +947,77 @@ mod tests {
         assert_eq!(messages[0].text, "stored");
         assert!(state.rt().channels().contains_key(&channel_id));
         assert!(state.rt().opening().is_empty());
+    }
+
+    /// The names each seal of a name beside a `meta` carried, in order. Any other command is
+    /// dropped.
+    fn sealed_names(sync: &Receiver<SyncCommand>) -> Vec<(Id<Meta>, Option<String>)> {
+        drain(sync)
+            .into_iter()
+            .filter_map(|cmd| match cmd {
+                SyncCommand::NameChannel { meta, name } => {
+                    Some((meta, name.map(|n| n.as_str().to_owned())))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The name sealed beside `meta` is a hint. An open channel whose `meta` reads another
+    /// name seals that name again, once. A hint that matches seals nothing, and
+    /// a listing that names the channel again with the stale hint seals it again.
+    #[test]
+    fn an_open_channel_seals_its_name_again_when_the_hint_is_stale() {
+        let (mut state, _ui, sync) = harness();
+        let channel_id = Id::<Channel>::mint();
+        let name = ambre_core::Validated::<ambre_core::Name>::parse("board").expect("a name");
+        let stored = crate::identified(
+            ChannelState::create(channel_id, ChannelType::Private, Some(&name), NOW)
+                .expect("create"),
+        );
+        let meta = stored.meta_id();
+        let listed = |hint: &str| LogicEvent::MemberChannels {
+            channels: vec![ambre_bus::MemberChannel {
+                channel_id,
+                place: ambre_bus::ChannelPlace::Private(Id::<Space>::mint()),
+            }],
+            spaces: Vec::new(),
+            names: vec![ambre_bus::ChannelName {
+                channel_id,
+                name: ambre_core::Validated::<ambre_core::Name>::parse(hint).expect("a name"),
+            }],
+            peers: Vec::new(),
+            metas: vec![ambre_bus::ChannelMeta {
+                channel_id,
+                meta,
+                last: None,
+            }],
+        };
+        state.handle_logic_event(listed("old board"));
+        state.handle_logic_command(LogicCommand::OpenChannel { channel_id });
+        state.handle_logic_event(LogicEvent::ChannelDocuments {
+            channel_id,
+            documents: listing(&stored),
+        });
+        serve(&mut state, &stored, meta.document_id());
+        serve(&mut state, &stored, stored.active_id().document_id());
+        assert!(state.rt().channels().contains_key(&channel_id));
+        assert_eq!(
+            sealed_names(&sync),
+            [(meta, Some("board".to_owned()))],
+            "the open seals what meta reads"
+        );
+        state.handle_logic_event(listed("board"));
+        assert!(
+            sealed_names(&sync).is_empty(),
+            "a hint that matches seals nothing"
+        );
+        state.handle_logic_event(listed("old board"));
+        assert_eq!(
+            sealed_names(&sync),
+            [(meta, Some("board".to_owned()))],
+            "a seal that did not reach the relay is sealed again"
+        );
     }
 
     /// Holds `SYNC-229` on the Logic side. The meta opens naming itself, and
@@ -5076,6 +5203,57 @@ mod tests {
                 _ => None,
             })
             .collect()
+    }
+
+    /// The `meta` each answer to a join's ask named, in order. Any other command is dropped.
+    fn metas_named(
+        sync: &Receiver<SyncCommand>,
+    ) -> Vec<(Id<ambre_core::id::Call>, Option<Id<Document>>)> {
+        drain(sync)
+            .into_iter()
+            .filter_map(|cmd| match cmd {
+                SyncCommand::CallMeta { call, meta } => Some((call, meta)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// `CALL-149`, audit `P24`: a join asks which document is the `meta` of its channel. The
+    /// answer is the `meta` of the channel state this thread opened, whose header names the
+    /// channel. A closed channel keeps it. A channel this thread never opened names none,
+    /// so the join ends rather than read the relay's word.
+    #[test]
+    fn a_join_takes_the_meta_its_channel_state_names() {
+        let (mut state, _ui, sync) = harness();
+        signed_in(&mut state, Id::<User>::mint());
+        let channel_id = Id::<Channel>::mint();
+        let channel =
+            ChannelState::create(channel_id, ChannelType::Public, None, NOW).expect("create");
+        let meta = channel.meta_id().document_id();
+        state.hold_channel(channel);
+        drain(&sync);
+        let call = Id::<ambre_core::id::Call>::mint();
+        state.handle_logic_event(LogicEvent::CallMetaAsked {
+            call,
+            channel: channel_id,
+        });
+        assert_eq!(metas_named(&sync), [(call, Some(meta))]);
+        state.handle_logic_command(LogicCommand::CloseChannel { channel_id });
+        drain(&sync);
+        state.handle_logic_event(LogicEvent::CallMetaAsked {
+            call,
+            channel: channel_id,
+        });
+        assert_eq!(
+            metas_named(&sync),
+            [(call, Some(meta))],
+            "a closed channel keeps its meta"
+        );
+        state.handle_logic_event(LogicEvent::CallMetaAsked {
+            call,
+            channel: Id::<Channel>::mint(),
+        });
+        assert_eq!(metas_named(&sync), [(call, None)]);
     }
 
     /// The Logic half: the start the Sync worker heard posts the

@@ -346,18 +346,41 @@ pub async fn create_snapshot(
     Ok(axum::Json(CreateSnapshotResponse { snapshot_id: sid }))
 }
 
-/// Request for a presigned snapshot upload URL. `size` is the size of the
-/// encrypted snapshot blob. It is validated against `snapshot_max_size`, and
-/// bound into the presigned PUT URL so the upload cannot exceed it.
+/// Request for the id of a snapshot to upload. `size` is the size of the
+/// encrypted blob, refused here already when it passes `snapshot_max_size`.
 #[derive(serde::Deserialize)]
-pub struct SnapshotUploadUrlRequest {
+pub struct SnapshotUploadIdRequest {
     #[serde(rename = "size_bytes")]
     pub size: ambre_core::Count<ambre_core::Octets>,
 }
 
+/// The id the relay minted for a snapshot. The client seals it in the blob,
+/// then asks the upload link for the digest of that blob (`SRV-247`,
+/// `SRV-313`).
+#[derive(serde::Serialize)]
+pub struct SnapshotUploadIdResponse {
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub snapshot_id: Id<Snapshot>,
+}
+
+/// Request for a presigned snapshot upload URL. `size` is the size of the
+/// encrypted snapshot blob. It is validated against `snapshot_max_size`, and
+/// bound into the presigned PUT URL so the upload cannot exceed it. The link
+/// also signs `checksum`, the SHA-256 digest of the blob, so the store takes
+/// no other body through it (audit `P40`, `SRV-313`).
+#[derive(serde::Deserialize)]
+pub struct SnapshotUploadUrlRequest {
+    #[serde(rename = "size_bytes")]
+    pub size: ambre_core::Count<ambre_core::Octets>,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub snapshot_id: Id<Snapshot>,
+    #[serde(rename = "sha256")]
+    pub checksum: FixedBytes<ambre_core::ObjectChecksum>,
+}
+
 /// Presigned PUT URL for direct client-to-S3 upload of an encrypted snapshot,
-/// and the id the relay minted for it. The client seals that id in the blob,
-/// and the confirmation stores the row under it (`SRV-247`).
+/// and the id of the snapshot it writes. The client seals that id in the
+/// blob, and the confirmation stores the row under it (`SRV-247`).
 #[derive(serde::Serialize)]
 pub struct SnapshotUploadUrlResponse {
     pub upload_url: ambre_core::Credential<ambre_core::PresignedUrl>,
@@ -366,6 +389,50 @@ pub struct SnapshotUploadUrlResponse {
     pub snapshot_id: Id<Snapshot>,
 }
 
+/// Refuses a caller that may not write `doc_id`, or a snapshot size outside
+/// `1..=snapshot_max_size`.
+async fn may_upload_snapshot(
+    state: &AppState,
+    doc_id: &Id<Document>,
+    user: &Id<ambre_core::id::User>,
+    size: ambre_core::Count<ambre_core::Octets>,
+) -> Result<(), AppError> {
+    let m = db::get_document_member(&state.db, doc_id, user)
+        .await?
+        .ok_or(AppError::Forbidden)?;
+    if !m.role.can_write_document() {
+        return Err(AppError::Forbidden);
+    }
+    if size == ambre_core::Count::<ambre_core::Octets>::new(0)
+        || size > state.config.snapshot_max_size
+    {
+        return Err(AppError::PayloadTooLarge(format!(
+            "snapshot size {} bytes outside 1..={}",
+            size.get(),
+            state.config.snapshot_max_size.get()
+        )));
+    }
+    Ok(())
+}
+
+/// Mints the id of a snapshot to upload. The blob seals it before its digest
+/// exists, so the upload link comes in a second request (`SRV-313`).
+pub async fn snapshot_upload_id(
+    State(state): State<Arc<AppState>>,
+    auth: auth::AuthSession,
+    ids: PathId<Id<Document>>,
+    body: Json<SnapshotUploadIdRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let doc_id = ids.into_inner();
+    may_upload_snapshot(&state, &doc_id, &auth.user_id, body.into_inner().size).await?;
+    Ok(axum::Json(SnapshotUploadIdResponse {
+        snapshot_id: Id::<Snapshot>::mint(),
+    }))
+}
+
+/// Signs the upload link of one snapshot blob: its size and its SHA-256
+/// digest. An id that already names a snapshot of the document gets no link,
+/// so no link writes over a stored snapshot (`SRV-313`).
 pub async fn snapshot_upload_url(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
@@ -374,41 +441,33 @@ pub async fn snapshot_upload_url(
 ) -> Result<impl IntoResponse, AppError> {
     let doc_id = ids.into_inner();
     let req = body.into_inner();
-    let s = auth;
-    let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
-        .await?
-        .ok_or(AppError::Forbidden)?;
-    if !m.role.can_write_document() {
-        return Err(AppError::Forbidden);
-    }
     // Reject an oversized snapshot before handing out an upload URL. Bind the
     // declared size into the presigned PUT, so the actual upload cannot exceed
     // it.
-    if req.size == ambre_core::Count::<ambre_core::Octets>::new(0)
-        || req.size > state.config.snapshot_max_size
+    may_upload_snapshot(&state, &doc_id, &auth.user_id, req.size).await?;
+    if db::get_snapshot(&state.db, &doc_id, &req.snapshot_id)
+        .await?
+        .is_some()
     {
-        return Err(AppError::PayloadTooLarge(format!(
-            "snapshot size {} bytes outside 1..={}",
-            req.size.get(),
-            state.config.snapshot_max_size.get()
-        )));
+        return Err(AppError::Conflict {
+            detail: "the document already holds this snapshot".to_owned(),
+        });
     }
-
-    let snapshot_id = Id::<Snapshot>::mint();
-    let key = s3::format_s3_snapshot_key(&state.config.s3_env_prefix, &doc_id, &snapshot_id);
+    let key = s3::format_s3_snapshot_key(&state.config.s3_env_prefix, &doc_id, &req.snapshot_id);
     let url = s3::generate_presigned_upload_url(
         &state.s3,
         &state.s3_bucket,
         &key,
         state.config.presigned_url_ttl,
         req.size,
+        Some(&req.checksum),
         state.config.s3_public_endpoint.as_ref(),
     )
     .await?;
     Ok(axum::Json(SnapshotUploadUrlResponse {
         upload_url: url,
         s3_key: key,
-        snapshot_id,
+        snapshot_id: req.snapshot_id,
     }))
 }
 

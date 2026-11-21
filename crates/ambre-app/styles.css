@@ -510,6 +510,12 @@ input[type="radio"] {
     overflow: auto;
 }
 
+/* A folded sidebar holds the unfold control alone, at every width: on a wide
+   window its strip would only show the body cut. */
+.ambre-sidebar[data-expanded="false"] > .ambre-sidebar-body {
+    display: none;
+}
+
 /* The spaces of the Murmure sidebar (the Murmure spaces spec): the control
    that creates a space, then each space with the controls its role allows. */
 .murmure-spaces {
@@ -1940,12 +1946,6 @@ input[type="radio"] {
     .ambre-body[data-focus] > .ambre-sidebar[data-expanded="false"] {
         flex-basis: var(--sidebar-strip);
         overflow: hidden;
-    }
-
-    /* The strip holds the unfold control alone: the body would only show
-       cut in it. */
-    .ambre-body[data-focus] > .ambre-sidebar[data-expanded="false"] > .ambre-sidebar-body {
-        display: none;
     }
 
     .ambre-body[data-focus] > .ambre-sidebar[data-expanded="false"] > .ambre-sidebar-fold {

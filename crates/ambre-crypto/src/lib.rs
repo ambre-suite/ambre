@@ -25,10 +25,10 @@ mod random;
 pub mod signature;
 pub mod strength;
 
-pub use ecdh::WrappedKey;
+pub use ecdh::WrapVersion;
 pub use envelope::{Sealed, open, seal};
 pub use error::CryptoError;
-pub use hash::{fingerprint, inviter_pin};
+pub use hash::{IdentityKeys, fingerprint, inviter_pin};
 pub use keys::{DocumentKey, FileKey, MasterSeed, StoreKey};
 
 #[cfg(test)]

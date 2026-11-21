@@ -329,10 +329,13 @@ impl<D> Runtime<D> {
         // A channel a catalogue lists is public: its log admits a member who
         // joined alone, and heeds the log of its space. Any other channel's
         // log admits only invites (`SYNC-106`).
-        let listed_in = self.listing_space(channel_id);
+        // Its catalogue entry names the channel key every open trusts
+        // (`SYNC-299`).
+        let listing = self.listing(channel_id);
         self.ask(SyncCommand::OpenChannel {
             channel_id,
-            listed_in,
+            listed_in: listing.as_ref().map(|(space_id, _)| *space_id),
+            catalogue_key: listing.map(|(_, key)| key),
         });
     }
 
@@ -868,6 +871,7 @@ impl<D> Runtime<D> {
                 }
                 let documents = state.document_ids();
                 self.channels.insert(channel_id, *state);
+                self.reseal_stale_name(channel_id);
                 self.show_channel_members(channel_id);
                 self.settle_reopen(channel_id);
                 // Each identity landed while the channel was opening.
@@ -995,25 +999,7 @@ impl<D> Runtime<D> {
     /// that failed to open (`SYNC-231`). A document no channel holds any more
     /// belongs to a channel an earlier failure already ended.
     fn end_rooted_outside(&mut self, document_id: Id<Document>) {
-        let channel_id = self
-            .channels
-            .iter()
-            .find(|(_, c)| c.holds(document_id))
-            .map(|(id, _)| *id)
-            .or_else(|| {
-                self.opening.iter().find_map(|(id, o)| {
-                    o.as_ref()
-                        .is_some_and(|o| o.expects(document_id))
-                        .then_some(*id)
-                })
-            })
-            .or_else(|| {
-                self.closed_channels
-                    .iter()
-                    .find(|(_, c)| c.documents.contains(&document_id))
-                    .map(|(id, _)| *id)
-            });
-        let Some(channel_id) = channel_id else {
+        let Some(channel_id) = self.channel_anywhere(document_id) else {
             tracing::warn!(
                 "Logic: {document_id} starts outside its space, and no channel holds it"
             );
@@ -1029,6 +1015,47 @@ impl<D> Runtime<D> {
         for document_id in copies {
             self.store(document_id, StoreWrite::Erase);
         }
+    }
+
+    /// The channel that holds `document_id`, whether it is open, opening or
+    /// closed.
+    fn channel_anywhere(&self, document_id: Id<Document>) -> Option<Id<Channel>> {
+        self.channels
+            .iter()
+            .find(|(_, c)| c.holds(document_id))
+            .map(|(id, _)| *id)
+            .or_else(|| {
+                self.opening.iter().find_map(|(id, o)| {
+                    o.as_ref()
+                        .is_some_and(|o| o.expects(document_id))
+                        .then_some(*id)
+                })
+            })
+            .or_else(|| {
+                self.closed_channels
+                    .iter()
+                    .find(|(_, c)| c.documents.contains(&document_id))
+                    .map(|(id, _)| *id)
+            })
+    }
+
+    /// A revoke capped a writer below a delta `document_id` applied, so the
+    /// state of its channel holds a write the log refuses (`SYNC-300`). A
+    /// merge cannot take that write out. The whole channel ends, and each
+    /// local copy of its documents leaves the store. The channel opens again
+    /// from the relay, which replays each document under the cap. Returns
+    /// `false` when no channel holds the document.
+    pub fn channel_reread(&mut self, document_id: Id<Document>) -> bool {
+        let Some(channel_id) = self.channel_anywhere(document_id) else {
+            return false;
+        };
+        let copies = self.documents_anywhere(channel_id);
+        self.end_channel(channel_id);
+        for document_id in copies {
+            self.store(document_id, StoreWrite::Erase);
+        }
+        self.open_channel(channel_id);
+        true
     }
 
     /// Every document of `channel_id` this thread knows, whether the channel
@@ -1583,6 +1610,7 @@ impl<D> Runtime<D> {
                         });
                         // Sealed beside meta too, so the name shows before the
                         // channel opens (the Murmure layout spec).
+                        self.note_sealed_name(channel_id, &name);
                         self.ask(SyncCommand::NameChannel {
                             meta: named.meta,
                             name,
@@ -2096,6 +2124,7 @@ impl<D> Runtime<D> {
         deltas: &[SignedDelta],
     ) -> bool {
         let signer = |delta: &SignedDelta| Signer {
+            nonce: delta.nonce,
             peer: delta.peer,
             user: delta.user,
         };

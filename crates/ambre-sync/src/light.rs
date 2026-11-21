@@ -44,6 +44,18 @@ enum Arrival {
     Gap { after: Seq<Relay> },
 }
 
+/// Whose summaries a light subscription counts (`RESID-032`, audit `P23`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum LightWriters {
+    /// The writers a walk of the document's log granted. A summary another
+    /// key signed counts nothing.
+    Walked(membership_log::Writers),
+    /// The log of this document, the `meta` of a channel never opened, is
+    /// not walked yet. A summary counts as activity alone: no mention and
+    /// no call cue.
+    Awaiting(Id<Document>),
+}
+
 /// What the Sync worker keeps of a document the Logic thread evicted.
 pub(crate) struct LightSubscription {
     /// Opens the summaries. A frame sealed under another key is counted as
@@ -73,11 +85,24 @@ pub(crate) struct LightSubscription {
     /// The keys a frame was sealed under that the relay was asked for, so
     /// each is asked once.
     asked: HashSet<FixedBytes<KeyId>>,
+    /// Whose summaries count (`RESID-032`).
+    writers: LightWriters,
+    /// The clocks the evicted copy applied. The reopen resumes from that
+    /// copy, so a revoke that caps one of them reads the document again
+    /// (`SYNC-300`).
+    applied: crate::Applied,
 }
 
 impl LightSubscription {
-    /// A light subscription under `doc_key` that read up to `seen`.
-    fn new(doc_key: DocumentKey, doc_type: DocType, horizon: Seq<Relay>, seen: Seq<Relay>) -> Self {
+    /// A light subscription under `doc_key` that read up to `seen`, whose
+    /// summaries count when `writers` admits their signer.
+    fn new(
+        doc_key: DocumentKey,
+        doc_type: DocType,
+        horizon: Seq<Relay>,
+        seen: Seq<Relay>,
+        writers: LightWriters,
+    ) -> Self {
         Self {
             doc_key,
             doc_type,
@@ -89,19 +114,24 @@ impl LightSubscription {
             holes: Vec::new(),
             unopened_from: None,
             asked: HashSet::new(),
+            writers,
+            applied: crate::Applied::default(),
         }
     }
 
     /// The light subscription a full session leaves behind. The horizon never
     /// passes what the session itself received.
+    /// It keeps the writers the session walked (`RESID-032`).
     fn of(doc: SyncDocumentState, applied: Seq<Relay>) -> Self {
         Self {
             on_relay: doc.existence,
+            applied: doc.take_applied(),
             ..Self::new(
                 doc.doc_key,
                 doc.doc_type,
                 applied.min(doc.last_seq),
                 doc.last_seq,
+                LightWriters::Walked(doc.writers),
             )
         }
     }
@@ -168,16 +198,25 @@ impl LightSubscription {
         me: Option<Id<User>>,
         mine: Option<&FixedBytes<PublicKey>>,
     ) -> Option<(ActivityCounters, Option<ambre_bus::CallCue>)> {
-        if mine == Some(&update.public_data.pub_key) {
+        let signer = &update.public_data.pub_key;
+        if mine == Some(signer) {
             return None;
         }
+        // A key the walk granted no writing role counts nothing: a viewer
+        // and the relay inflate no mention and ring no call (`RESID-032`).
+        let walked = match &self.writers {
+            LightWriters::Walked(writers) if !writers.admits(signer) => return None,
+            LightWriters::Walked(_) => true,
+            LightWriters::Awaiting(_) => false,
+        };
         if update.public_data.key_id != self.doc_key.id() {
             self.unopened_from.get_or_insert(seq);
         }
         let summary = pipeline::open_update(update, &self.doc_key)
             .ok()
             .and_then(|body| pipeline::split_update_body(body).ok())
-            .and_then(|body| body.summary);
+            .and_then(|body| body.summary)
+            .filter(|_| walked);
         self.counters.advance(summary.as_ref(), me);
         Some((self.counters, summary.and_then(|summary| summary.call)))
     }
@@ -346,18 +385,25 @@ impl SyncState {
             return;
         }
         let meta = meta.document_id();
-        let Some(doc_key) = self
+        // A segment and a thread take the writers of their channel, which
+        // the `meta` holds (`SYNC-229`, `RESID-032`).
+        let Some((doc_key, writers)) = self
             .light
             .get(&meta)
-            .map(|light| light.doc_key.clone())
-            .or_else(|| self.documents.get(&meta).map(|doc| doc.doc_key.clone()))
+            .map(|light| (light.doc_key.clone(), light.writers.clone()))
+            .or_else(|| {
+                self.documents.get(&meta).map(|doc| {
+                    let writers = LightWriters::Walked(doc.writers.clone());
+                    (doc.doc_key.clone(), writers)
+                })
+            })
         else {
             crate::log::warning!("[Sync] no key to watch document {document_id}");
             return;
         };
         self.light.insert(
             document_id,
-            LightSubscription::new(doc_key, DocType::Murmure, after, after),
+            LightSubscription::new(doc_key, DocType::Murmure, after, after, writers),
         );
         self.ws_send(&WsClientMsg::Subscribe { document_id });
         self.ws_send(&WsClientMsg::RequestMissing {
@@ -388,7 +434,26 @@ impl SyncState {
         };
         let meta_entry = (meta.document_id(), meta_last);
         for &(document_id, last) in std::iter::once(&meta_entry).chain(documents) {
-            self.watch_unheld(document_id, &doc_key, last);
+            self.watch_unheld(document_id, &doc_key, last, meta.document_id());
+        }
+        // The log of the `meta` walks first: until then a summary counts as
+        // activity alone (`RESID-032`, audit `P23`).
+        self.handle_list_document_members(None, meta.document_id());
+    }
+
+    /// The listing of `document_id`, a document this session does not hold
+    /// open, walked its log to `writers`. Each light subscription that
+    /// awaited that log now counts the summaries of those writers alone
+    /// (`RESID-032`).
+    pub(crate) fn light_walked(
+        &mut self,
+        document_id: Id<Document>,
+        writers: &membership_log::Writers,
+    ) {
+        for light in self.light.values_mut() {
+            if light.writers == LightWriters::Awaiting(document_id) {
+                light.writers = LightWriters::Walked(writers.clone());
+            }
         }
     }
 
@@ -401,6 +466,7 @@ impl SyncState {
         document_id: Id<Document>,
         key: &DocumentKey,
         last: Option<Seq<Relay>>,
+        meta: Id<Document>,
     ) {
         if self.documents.contains_key(&document_id) || self.light.contains_key(&document_id) {
             return;
@@ -414,6 +480,7 @@ impl SyncState {
                     DocType::Murmure,
                     Seq::<Relay>::new(0),
                     last.unwrap_or(Seq::<Relay>::new(0)),
+                    LightWriters::Awaiting(meta),
                 )
             },
         );
@@ -439,7 +506,13 @@ impl SyncState {
     /// Takes the light subscription of a document being reopened: its kind
     /// and the horizon the reopen resumes after.
     pub(crate) fn take_light(&mut self, document_id: Id<Document>) -> Option<Seq<Relay>> {
-        self.light.remove(&document_id).map(|light| light.horizon)
+        let light = self.light.remove(&document_id)?;
+        // The open that resumes from the copy checks its clocks against the
+        // caps of the log it walks (`SYNC-300`).
+        if !light.applied.is_empty() {
+            self.resumed_clocks.insert(document_id, light.applied);
+        }
+        Some(light.horizon)
     }
 
     /// The light subscriptions the socket subscribes and replays, with the
@@ -865,6 +938,55 @@ mod tests {
         assert_eq!(state.take_light(document_id), None);
     }
 
+    /// Holds `SYNC-304` at a reopen. The evicted session applied Bob's
+    /// clock 2, and a revoke capped him at 1 while the document was light.
+    /// The reopen resumes from the local copy, so the open that walks the
+    /// cap reads the document again. A walk with no cap reads nothing.
+    #[test]
+    fn a_reopen_past_a_revoke_cap_reads_the_document_again() {
+        use crate::membership_log::Writers;
+        let bob = FixedBytes::<PublicKey>::from_array([0x52; 32]);
+        for (cap, reread) in [(Some(1), true), (Some(2), false), (None, false)] {
+            let (mut state, rx, document_id, doc_key, snapshot_id) =
+                released(ambre_bus::Seq::<ambre_bus::Relay>::new(9));
+            // The clocks the evicted session applied travel with its light
+            // subscription.
+            if let Some(light) = state.light.get_mut(&document_id) {
+                light.applied.clocks.insert(bob, Seq::<DeltaAuthor>::new(2));
+            }
+            assert_eq!(state.take_light(document_id), Some(Seq::<Relay>::new(9)));
+            drain(&rx);
+            let writers = Writers::capped(
+                HashSet::from([bob]),
+                cap.map(|cap| (bob, Seq::<DeltaAuthor>::new(cap)))
+                    .into_iter()
+                    .collect(),
+            );
+            state.handle_sync_event(SyncEvent::OpenDocumentReady {
+                document_id,
+                doc_key,
+                snapshot_payload: None,
+                snapshot_id,
+                covered_seq: Seq::<Relay>::new(9),
+                held_snapshot: None,
+                fallback: None,
+                doc_type: DocType::Trame,
+                existence: crate::Existence::OnRelay,
+                signing_keys: Vec::new(),
+                role: ambre_bus::Role::Owner,
+                rotation_owed: ambre_core::RotationDebt::Settled,
+                links: Vec::new(),
+                writers,
+                departed: None,
+            });
+            let read_again = drain(&rx).iter().any(
+                |e| matches!(e, LogicEvent::DocumentReread { document_id: d } if *d == document_id),
+            );
+            assert_eq!(read_again, reread, "cap {cap:?}");
+            assert!(!state.resumed_clocks.contains_key(&document_id));
+        }
+    }
+
     /// The horizon never passes what the session itself received.
     #[test]
     fn the_horizon_never_passes_what_the_session_received() {
@@ -1049,6 +1171,7 @@ mod tests {
         );
         state.handle_command(watch);
         assert!(sent().is_empty(), "a held document was watched again");
+        state.light_walked(m, &membership_log::Writers::Unchecked);
 
         let heads: HashSet<_> = state.light_heads().into_iter().collect();
         assert_eq!(heads, HashSet::from([m, o]));
@@ -1169,6 +1292,7 @@ mod tests {
             documents: Vec::new(),
         });
         let m = meta.document_id();
+        state.light_walked(m, &membership_log::Writers::Unchecked);
         let mentions = |rx: &ambre_bus::conduit::Receiver<LogicEvent>| -> Vec<(Id<Document>, u32)> {
             drain(rx)
                 .into_iter()
@@ -1234,6 +1358,7 @@ mod tests {
             documents: Vec::new(),
         });
         let m = meta.document_id();
+        state.light_walked(m, &membership_log::Writers::Unchecked);
         let requests = || -> Vec<Seq<Relay>> {
             ws_rx
                 .try_iter()
@@ -1418,6 +1543,7 @@ mod tests {
             meta_last: Some(Seq::<Relay>::new(1)),
             documents: vec![(segment, None)],
         });
+        state.light_walked(meta.document_id(), &membership_log::Writers::Unchecked);
         let watched = asks(&ws_rx);
         assert!(
             watched
@@ -1437,5 +1563,72 @@ mod tests {
         assert_eq!(mentions(&rx), vec![1]);
         deliver(&mut state, 503);
         assert_eq!(asks(&ws_rx), vec![(segment, Seq::<Relay>::new(500))]);
+    }
+
+    /// `RESID-032`, audit `P23`: a channel never opened counts a summary as
+    /// activity alone until the log of its `meta` walks. Once it walks, the
+    /// summary of a key it granted no writing role counts nothing, and the
+    /// summary of a writer counts its mention. Before the fix, any update
+    /// that opened counted its mention and rang its call.
+    #[test]
+    fn a_light_subscription_counts_the_summaries_of_writers_alone() {
+        let (sink, rx) = LogicSink::channel();
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
+        state.user_id = Some(Id::<User>::from_bytes([7; 16]));
+        let (ws_tx, _ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        let (channel_id, meta, doc_key) = (
+            Id::<Channel>::mint(),
+            Id::<Meta>::mint(),
+            DocumentKey::generate(),
+        );
+        state
+            .listed_keys
+            .insert(channel_id, (meta, doc_key.clone()));
+        state.handle_command(SyncCommand::WatchChannel {
+            channel_id,
+            meta,
+            meta_last: Some(Seq::<Relay>::new(1)),
+            documents: Vec::new(),
+        });
+        let m = meta.document_id();
+        let counted = |rx: &ambre_bus::conduit::Receiver<LogicEvent>| -> Vec<(u32, u32)> {
+            drain(rx)
+                .into_iter()
+                .filter_map(|event| match event {
+                    LogicEvent::Activity { counters, .. } => {
+                        Some((counters.content.get(), counters.mentions.get()))
+                    }
+                    _ => None,
+                })
+                .collect()
+        };
+        let mentioned = || update(m, Id::<Snapshot>::mint(), &doc_key, Some(&mention()));
+        state.receive_update(Seq::<Relay>::new(2), mentioned());
+        assert_eq!(
+            counted(&rx),
+            vec![(0, 0)],
+            "an unwalked log counts activity alone"
+        );
+
+        // The signer of `update` is seed 2. The walk grants another key.
+        let other = MasterSeed::from_array([3; 32]).derive_signing_key();
+        let granted = membership_log::Writers::granted(HashSet::from([FixedBytes::from_array(
+            other.verifying_key().to_bytes(),
+        )]));
+        state.light_walked(m, &granted);
+        state.receive_update(Seq::<Relay>::new(3), mentioned());
+        assert!(counted(&rx).is_empty(), "a non-writer's summary counted");
+
+        let writer = MasterSeed::from_array([2; 32]).derive_signing_key();
+        let granted = membership_log::Writers::granted(HashSet::from([FixedBytes::from_array(
+            writer.verifying_key().to_bytes(),
+        )]));
+        state.light.get_mut(&m).expect("watched").writers = LightWriters::Walked(granted);
+        state.receive_update(Seq::<Relay>::new(4), mentioned());
+        assert_eq!(counted(&rx), vec![(1, 1)], "a writer's summary counts");
     }
 }

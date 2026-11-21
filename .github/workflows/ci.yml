@@ -11,7 +11,8 @@ name: CI
 # budget (`ambre-spec-budgets.md section 7`):
 #
 # * the fast lane, every event: `lint`, `test-native`, `test-wasm`, `test-db`,
-#   `deny` and `size`. A push of a branch other than `main` runs it alone.
+#   `deny`, `proverif` and `size`. A push of a branch other than `main` runs
+#   it alone.
 # * the full lane: the fast lane plus `fuzz`, `instructions`,
 #   `test-db-cluster`, `test-browser` and `reproducible`. A push of `main`, a pull
 #   request, the nightly schedule and a manual dispatch run it.
@@ -214,6 +215,36 @@ jobs:
         with:
           tool: cargo-deny
       - run: just deny
+
+  # ---------------------------------------------------------------------------
+  # proverif -- the formal model of the call sender keys (`CALL-142`). The job
+  # builds ProVerif 2.05 from the tarball of its authors, checked against its
+  # SHA-256, then fails unless every query of the model reads `is true` and
+  # every sanity witness reads `is false`, a trace that reaches it. No
+  # package archive ships that version, so a build from source pins it.
+  # ---------------------------------------------------------------------------
+  proverif:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: System deps
+        run: sudo apt-get update -qq && sudo apt-get install -y ocaml ocaml-findlib
+      - name: Build ProVerif 2.05
+        working-directory: ${{ runner.temp }}
+        run: |
+          curl -sSfLO https://bblanche.gitlabpages.inria.fr/proverif/proverif2.05.tar.gz
+          echo "4871f53c32ab4a04669a060c4886ba5d9080496963fb980a9a62d2c429ceabc4  proverif2.05.tar.gz" | sha256sum -c -
+          tar xzf proverif2.05.tar.gz
+          (cd proverif2.05 && ./build -nointeract)
+          echo "$RUNNER_TEMP/proverif2.05" >> "$GITHUB_PATH"
+      - name: Install just
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: just
+      - run: just proverif
 
   # ---------------------------------------------------------------------------
   # fuzz -- one minute of libFuzzer on each untrusted reader: the wire decode,

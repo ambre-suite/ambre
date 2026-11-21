@@ -1,17 +1,21 @@
 //! The metrics of the SFU, in the Prometheus text format, on a listener of
 //! their own (`CALL-101`).
 //!
-//! Neither the media socket nor the signalling listener serves a metric. Each
+//! Neither the media socket nor the signalling listener serves a metric. An address off the
+//! loopback needs the token of `SFU_METRICS_TOKEN`, which each scrape presents as a bearer
+//! credential (`CALL-153`). Each
 //! label is a closed `enum` of this module, so no series names a room, a
 //! participant or an address (`ZK-029`, `ZK-031`).
 
 use std::sync::LazyLock;
 
-use ambre_core::{LabelValues, MetricNames, StaticKey};
-use ambre_metrics::{Counter, Exposition, Gauge, Label, Whole};
+use ambre_core::{Credential, LabelValues, MetricNames, ScrapeToken, StaticKey};
+use ambre_metrics::{Counter, Exposition, Gauge, Label, Scrape, ScrapeAccess, Whole};
 use axum::Router;
-use axum::http::header;
-use axum::response::IntoResponse;
+use axum::extract::{Request, State};
+use axum::http::{StatusCode, header};
+use axum::middleware::Next;
+use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 
 /// The route the scrape reads.
@@ -123,9 +127,25 @@ impl SfuMetrics {
 /// The metrics of this process.
 pub static SFU: LazyLock<SfuMetrics> = LazyLock::new(SfuMetrics::new);
 
-/// The router of the metrics listener: the scrape route alone.
-pub fn router() -> Router {
-    Router::new().route(ROUTE, get(scrape))
+/// The router of the metrics listener: the scrape route alone, behind `access` (`CALL-153`).
+pub fn router(access: ScrapeAccess) -> Router {
+    Router::new()
+        .route(ROUTE, get(scrape))
+        .layer(axum::middleware::from_fn_with_state(access, guard))
+}
+
+/// Answers `401 Unauthorized` to a scrape `access` refuses, before any metric is read.
+async fn guard(State(access): State<ScrapeAccess>, request: Request, next: Next) -> Response {
+    let presented = request
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "))
+        .map(|text| Credential::<ScrapeToken>::new(text.to_owned()));
+    match access.admits(presented.as_ref()) {
+        Scrape::Admitted => next.run(request).await,
+        Scrape::Refused => StatusCode::UNAUTHORIZED.into_response(),
+    }
 }
 
 /// Answers a scrape.

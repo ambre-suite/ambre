@@ -129,8 +129,9 @@ const FLOOR_DEADLINE: TimeSpan<FracMs> = TimeSpan::new(30_000.0);
 
 /// The spawns the Logic thread tries again in one session, past the first
 /// (`ambre-spec-budgets.md section 6`). A missed deadline asks one
-/// (`ARCH-108`), and so does a job after a spawn that failed (`ARCH-118`). A thread held lost is
-/// never ended: its worker and its stack stay for the session.
+/// (`ARCH-108`), and so does a job after a spawn that failed (`ARCH-118`). A
+/// thread held lost is never terminated, so a session holds at most four of
+/// them (`ARCH-132`). `ambre-spec-budgets.md section 6` counts what each keeps.
 pub(crate) const RESPAWN_LIMIT: Count<Respawns> = Count::new(3);
 
 /// The converter spawns tried again after a missed deadline or a failed
@@ -268,9 +269,17 @@ impl ConverterThread {
 
     /// Serve every message queued now, in order. A load comes before the
     /// jobs that need it, so a job never meets a module still on its way.
+    ///
+    /// A thread the Logic thread held lost runs nothing more: the Logic
+    /// thread dropped its end and failed every job it sent (`ARCH-108`). So
+    /// the thread drops what still waits, and its loop ends (`ARCH-131`).
     pub fn serve(&mut self) {
         let queued = self.from_logic.len();
         for _ in 0..queued.get() {
+            if self.to_logic.is_disconnected() {
+                self.drop_queued();
+                return;
+            }
             let Ok(message) = self.from_logic.try_recv() else {
                 return;
             };
@@ -317,6 +326,13 @@ impl ConverterThread {
             .get(&family)
             .and_then(|held| held.converter.as_ref().ok())
             .and_then(Converter::footprint)
+    }
+
+    /// Drop each message queued now. A job's file and a module's bytes go
+    /// back to the shared heap, and no instance is compiled for them.
+    fn drop_queued(&mut self) {
+        self.from_logic.try_iter_now().for_each(drop);
+        tracing::info!("the converter thread was held lost: it drops what waits");
     }
 
     /// Whether every sender of the Logic thread is gone and nothing waits.
@@ -1258,6 +1274,64 @@ mod tests {
             offload.send(decode_job(5)),
             Err((_, _, ConvertError::Absent))
         ));
+    }
+
+    /// `ARCH-131`: a thread held lost that comes back runs nothing it was
+    /// sent. It compiles no module queued to it, drops the jobs that wait,
+    /// and its loop ends, so its worker returns what the jobs held.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn a_thread_held_lost_that_comes_back_runs_nothing_and_ends() {
+        let (link, ends) = converter_channels(&Doorbell::new());
+        let (mut stuck, _) = ConverterThread::new(ends);
+        let (spawner, spawned) = hand_spawner();
+        let mut offload = Offload::over(link).respawning(spawner);
+        offload
+            .load(ConverterFamily::Images, Payload::new(Vec::new()))
+            .expect("the thread takes the module");
+        assert!(offload.send(decode_job(1)).is_ok());
+        assert!(offload.send(decode_job(2)).is_ok());
+        assert!(offload.take_answers(at(0.0)).is_empty());
+        assert_eq!(
+            offload.take_answers(at(IMAGE_DEADLINE.get())).len(),
+            2,
+            "each job in flight fails once"
+        );
+        assert_eq!(spawned.lock().expect("lock").len(), 1, "the next thread");
+        assert!(!stuck.from_logic.is_empty(), "the load and the jobs wait");
+        stuck.serve();
+        assert!(stuck.modules.is_empty(), "no module is compiled");
+        assert!(stuck.from_logic.is_empty(), "what waited is dropped");
+        assert!(stuck.is_over(), "its loop ends");
+    }
+
+    /// `ARCH-132`: a session holds at most four threads held lost: the first
+    /// thread and each thread spawned again. Past them no thread is spawned,
+    /// so no deadline holds a fifth one lost.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn a_session_holds_at_most_four_threads_held_lost() {
+        let (spawner, spawned) = hand_spawner();
+        let mut offload = Offload::started(ConverterThreads::on_demand(spawner));
+        let mut lost = 0usize;
+        let mut clock = 0.0;
+        for ticket in 1..=8 {
+            offload.start();
+            if offload
+                .load(ConverterFamily::Images, Payload::new(Vec::new()))
+                .is_err()
+            {
+                continue;
+            }
+            assert!(offload.send(decode_job(ticket)).is_ok());
+            assert!(offload.take_answers(at(clock)).is_empty());
+            clock += IMAGE_DEADLINE.get();
+            assert_eq!(offload.take_answers(at(clock)).len(), 1);
+            lost += 1;
+        }
+        assert_eq!(lost, 4, "the first thread and three spawned again");
+        assert_eq!(spawned.lock().expect("lock").len(), lost);
+        assert_eq!(offload.respawns, RESPAWN_LIMIT);
     }
 
     /// `ARCH-107`: an instance that stopped mid-job is loaded again, as one

@@ -417,7 +417,7 @@ async fn check_sliding_window(
     max_requests: Count<Requests>,
 ) -> Result<Verdict, AppError> {
     // No window bucket in the key: the sorted set is the sliding window.
-    let key = format!("rate:{}:{bucket}", category.prefix());
+    let key = crate::redis_keys::RateKey::of(category.prefix(), bucket);
     let nonce = REQUEST_NONCE.fetch_add(1, Ordering::Relaxed);
     // Unique per (instance, request), so same-millisecond requests are distinct
     // sorted-set members even across pods (see `INSTANCE_ID`).
@@ -436,7 +436,12 @@ async fn check_sliding_window(
             ],
         )
         .await
-        .map_err(|e| AppError::Redis(format!("rate limit sliding-window eval: {e}")))?;
+        .map_err(|e| {
+            AppError::Redis(crate::error::FaultText::of(
+                "rate limit sliding-window eval",
+                e,
+            ))
+        })?;
 
     let count = Count::<Requests>::new(u32::try_from(count.max(0)).unwrap_or(u32::MAX));
     Ok(if count <= max_requests {
@@ -800,8 +805,9 @@ mod tests {
     }
 
     #[test]
-    fn classify_auth_setup() {
-        let category = RateLimitCategory::classify("/api/auth/setup", &axum::http::Method::POST);
+    fn classify_dev_sign_in() {
+        let category =
+            RateLimitCategory::classify("/api/auth/dev/login", &axum::http::Method::POST);
         assert!(matches!(category, RateLimitCategory::Auth));
     }
 

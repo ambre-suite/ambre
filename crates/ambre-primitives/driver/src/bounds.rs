@@ -12,7 +12,7 @@
 //! | a network call outside the Sync worker, the relay, the SFU and the belt | `ARCH-005` |
 //! | a worker spawned outside the launcher's spawner | `ARCH-001`, `ARCH-011` |
 //! | a worker that two tabs would share | `ARCH-011` |
-//! | browser storage named by the Sync worker | `SYNC-054`, `SYNC-060` |
+//! | browser storage named by the Sync worker, the database of its kept session aside | `SYNC-054`, `SYNC-060` |
 //! | the PDF back end named outside a `src/logic/` directory and the converter module | `CANVAS-028` |
 //! | the display density read outside `density.rs` | `CANVAS-031`, `CANVAS-043` |
 //! | an application's command, event or command id named by the launcher | `ARCH-018` |
@@ -386,6 +386,11 @@ const NON_CLIENT_CRATES: &[&str] = &[
     "crates/ambre-primitives/",
 ];
 
+/// The one file of the Sync worker that reaches the browser's database: the
+/// session the device keeps across a reload, sealed (`SYNC-060`, `ZK-051`).
+/// Its record holds the seed and never reaches the relay (`ZK-012`).
+pub const KEPT_SESSION: &str = "crates/ambre-sync/src/kept.rs";
+
 /// The persistence paths `UI-THREAD-004` names: the local store, the sign-in
 /// state and the site choice of a web embed.
 const STORAGE_OWNERS: &[&str] = &[
@@ -432,6 +437,12 @@ fn browser_storage(r: &Reached) -> bool {
         && (STORAGE_CRATES.contains(&r.krate.as_str())
             || STORAGE_NAMES.iter().any(|n| r.named(n))
             || r.named_by(|n| n.starts_with("Idb") || n.to_lowercase().contains("cookie")))
+}
+
+/// Whether an item reaches the browser's database, where the kept session
+/// lives (`SYNC-060`, `ambre-spec-session.md` `SRV-323`).
+fn browser_database(r: &Reached) -> bool {
+    r.named("indexed_db") || r.named_by(|n| n.starts_with("Idb"))
 }
 
 /// Whether an item is a colour of the paint crates (`CANVAS-060`). That is
@@ -549,8 +560,15 @@ const BOUNDS: &[Bound] = &[
         rows: "SYNC-054, SYNC-060",
         what: "the Sync worker reaches browser storage",
         reads: Reads::AllCode,
-        closed: |f| f.starts_with("crates/ambre-sync/"),
+        closed: |f| f.starts_with("crates/ambre-sync/") && f != KEPT_SESSION,
         reaches: browser_storage,
+    },
+    Bound {
+        rows: "SYNC-060",
+        what: "the kept session reaches browser storage other than its database",
+        reads: Reads::AllCode,
+        closed: |f| f == KEPT_SESSION,
+        reaches: |r| browser_storage(r) && !browser_database(r),
     },
     Bound {
         rows: "UI-THREAD-004",

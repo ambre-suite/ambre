@@ -52,7 +52,7 @@ impl Page {
     pub async fn home(relay: Arc<Relay>) -> Self {
         let downloads = std::env::temp_dir().join(format!("belt-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&downloads).expect("a download directory");
-        let origin = serve::spawn(serve::dist_dir(), relay.base.clone()).await;
+        let origin = serve::spawn(serve::dist_dir(), relay.base.clone(), relay.exchange).await;
         let browser = Browser::start(&downloads).await;
         browser.goto(&format!("{origin}/")).await;
         Self {

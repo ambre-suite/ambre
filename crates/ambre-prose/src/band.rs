@@ -16,6 +16,7 @@ use loro::{LoroDoc, LoroValue, TextDelta, TreeID};
 
 use crate::doc;
 use crate::events::{DateFieldFormat, HeaderField, Page};
+use crate::logic::Roots;
 
 /// The span of one day.
 const DAY: TimeSpan<Ms> = TimeSpan::<Ms>::new(86_400_000);
@@ -24,6 +25,7 @@ const DAY: TimeSpan<Ms> = TimeSpan::<Ms>::new(86_400_000);
 #[must_use]
 pub fn resolve(
     document: &LoroDoc,
+    roots: &Roots,
     block: &TreeID,
     page: Pos<Page>,
     page_count: Len<Page>,
@@ -46,7 +48,7 @@ pub fn resolve(
         };
         // A field of a kind this build does not know shows nothing.
         let shown = field
-            .map(|field| field_value(document, field, page, page_count))
+            .map(|field| field_value(document, roots, field, page, page_count))
             .unwrap_or_default();
         // One value per field character: a span may carry several fields that
         // share a key and a value.
@@ -113,6 +115,7 @@ pub fn field_of(key: &str, value: &LoroValue) -> Option<HeaderField> {
 /// What one field shows on one page.
 fn field_value(
     document: &LoroDoc,
+    roots: &Roots,
     field: HeaderField,
     page: Pos<Page>,
     count: Len<Page>,
@@ -120,9 +123,9 @@ fn field_value(
     match field {
         HeaderField::PageNumber => page.number().to_string(),
         HeaderField::PageCount => count.to_string(),
-        HeaderField::Title => doc::read_title(document),
-        HeaderField::Date(format) => doc::read_updated_at(document)
-            .map(|at| format_date(at, format, doc::read_locale(document).as_ref()))
+        HeaderField::Title => doc::read_title(document, roots),
+        HeaderField::Date(format) => doc::read_updated_at(document, roots)
+            .map(|at| format_date(at, format, doc::read_locale(document, roots).as_ref()))
             .unwrap_or_default(),
     }
 }

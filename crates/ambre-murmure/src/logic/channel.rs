@@ -1740,8 +1740,9 @@ impl ChannelState {
     /// it (`MURMURE-029`). A refused delta changes nothing (`MURMURE-030`).
     ///
     /// A segment delta is a JSON update, checked with no document copied
-    /// (`MURMURE-226`). `meta` travels binary, and only its PeerID is checked
-    /// (`AUTHOR-012`). A refused delta still counts as delivered.
+    /// (`MURMURE-226`). `meta` travels binary, and only its PeerID is checked,
+    /// against its signer and the registry (`AUTHOR-012`, `AUTHOR-033`). A
+    /// refused delta still counts as delivered.
     ///
     /// # Errors
     /// [`MurmureError::Refused`] for a delta the check refuses, and every
@@ -1756,6 +1757,9 @@ impl ChannelState {
         if document_id == self.meta.id {
             if !delta::binary_by(payload, signer.peer) {
                 return Err(Refusal::NotSigners.into());
+            }
+            if !delta::peer_unclaimed(&self.meta.doc, signer) {
+                return Err(Refusal::PeerClaimed.into());
             }
             return self.apply_remote_at(document_id, Some(Order::Update(seq)), payload.into());
         }

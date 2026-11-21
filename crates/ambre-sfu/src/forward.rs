@@ -104,6 +104,74 @@ impl Rule for Room {
     }
 }
 
+/// The rule of the local ICE username fragment of a connection, as RFC 8445 section 5.3
+/// spells it. A fragment holds 4 to 256 ASCII letters, digits, `+` or `/`. A check of a browser names
+/// its connection by this fragment. So the SFU finds that connection in one lookup, whatever
+/// the count of participants (audit `N41`).
+pub enum Ufrag {}
+
+impl Rule for Ufrag {
+    type Error = &'static str;
+    const LOGGED_AS: Option<&'static str> = Some("Ufrag");
+
+    fn admit(text: String) -> Result<String, Self::Error> {
+        let fits = (4..=256).contains(&text.len())
+            && text
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'+' || b == b'/');
+        if fits {
+            Ok(text)
+        } else {
+            Err("an ICE username fragment is 4 to 256 ASCII letters, digits, '+' or '/'")
+        }
+    }
+}
+
+/// How many source addresses one participant may reach the SFU from.
+pub enum Routes {}
+
+impl NarrowCount for Routes {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("RouteCount");
+}
+
+/// The most source addresses the SFU remembers for one participant (audit `N41`). A browser
+/// checks from a host, a reflexive and a relayed candidate on each address family, so 8
+/// holds every honest path. A new source past it forgets the oldest one of the participant.
+pub const ROUTES_PER_PARTICIPANT: Count<Routes> = Count::new(8);
+
+/// The local username fragment a STUN request names: the part of its USERNAME before the
+/// colon. That part is the fragment of the agent that receives the request (RFC 8445 section
+/// 7.2.2). `None` for a datagram that is no STUN message, or that names no valid fragment.
+/// The integrity of the message stays the check of the connection it names.
+fn named_ufrag(datagram: &Payload<Datagram>) -> Option<Validated<Ufrag>> {
+    let bytes = datagram.as_bytes();
+    let head = bytes.get(..20)?;
+    // RFC 7983: the two top bits of a STUN message are zero. RFC 8489 section 5: bytes 4 to 7
+    // hold the magic cookie.
+    if head.first().is_none_or(|b| b & 0xC0 != 0)
+        || head.get(4..8) != Some(&[0x21, 0x12, 0xA4, 0x42][..])
+    {
+        return None;
+    }
+    let length = usize::from(u16::from_be_bytes([*head.get(2)?, *head.get(3)?]));
+    let mut attributes = bytes.get(20..20usize.checked_add(length)?)?;
+    while let Some(header) = attributes.get(..4) {
+        let size = usize::from(u16::from_be_bytes([*header.get(2)?, *header.get(3)?]));
+        let value = attributes.get(4..4usize.checked_add(size)?)?;
+        // The attribute type of USERNAME, RFC 8489 section 14.3.
+        if header.get(..2) == Some(&[0x00, 0x06][..]) {
+            let text = std::str::from_utf8(value).ok()?;
+            let (local, _) = text.split_once(':')?;
+            return Validated::parse(local.to_owned()).ok();
+        }
+        // Each attribute pads its value to a multiple of 4 bytes.
+        let next = 4usize.checked_add(size.checked_add(3)? & !3)?;
+        attributes = attributes.get(next..).unwrap_or_default();
+    }
+    None
+}
+
 /// `offer` with none of its candidates.
 ///
 /// The SFU runs ICE-lite: it answers the checks of each browser and sends none. It learns the
@@ -388,6 +456,9 @@ struct Member {
     /// sends under another index never leaves the SFU (`CALL-116`).
     sender: Seq<SenderIndex>,
     rtc: Rtc,
+    /// The source addresses this participant reached the SFU from, oldest first, at most
+    /// [`ROUTES_PER_PARTICIPANT`] (audit `N41`).
+    sources: VecDeque<SocketAddr>,
     pending: Option<SdpPendingOffer>,
     tracks_in: Vec<TrackIn>,
     /// The fixed audio and video slots of this receiver, empty until its room carries a track
@@ -456,6 +527,9 @@ pub struct Sfu {
     next_choice: Option<Instant>,
     /// The participant each source address reached last, so a datagram skips the search.
     routes: HashMap<SocketAddr, Seq<Participant>>,
+    /// The participant each local ICE username fragment names, so a check from a new source
+    /// finds its connection in one lookup (audit `N41`).
+    ufrags: HashMap<Validated<Ufrag>, Seq<Participant>>,
     /// The most threads that run the connections of one poll.
     workers: Count<Threads>,
     /// The keyframes the layer choice asked of each layer of each track, and when. A layer
@@ -475,6 +549,7 @@ impl Sfu {
             propagated: VecDeque::new(),
             next_choice: None,
             routes: HashMap::new(),
+            ufrags: HashMap::new(),
             workers: WORKERS,
             keyframes_asked: Vec::new(),
         }
@@ -520,11 +595,18 @@ impl Sfu {
             .iter()
             .any(|m| m.room == room && !m.tracks_in.is_empty());
         let id = self.issuer.issue();
+        // str0m draws the fragment at the build. An offer that restarts ICE draws another one,
+        // and [`Sfu::accept_offer`] moves the index to it.
+        let ufrag = Validated::<Ufrag>::parse(rtc.direct_api().local_ice_credentials().ufrag).ok();
+        if let Some(ufrag) = &ufrag {
+            self.ufrags.insert(ufrag.clone(), id);
+        }
         self.members.push(Member {
             id,
             room,
             sender,
             rtc,
+            sources: VecDeque::new(),
             pending: None,
             tracks_in: Vec::new(),
             slots: Vec::new(),
@@ -618,6 +700,10 @@ impl Sfu {
     /// Answers a later offer of participant `id`, which adds its screen section at its first
     /// share (`CALL-112`). An offer that crosses an unanswered offer of the SFU gets no answer
     /// (`CALL-114`). The page rolls its offer back, answers the SFU, then offers again.
+    ///
+    /// An offer that restarts ICE, under a fresh TURN credential, gives the connection a fresh
+    /// local fragment. The index of fragments follows it, so a check from the new allocation
+    /// finds the connection (`CALL-155`). The old fragment names nothing from then on.
     pub fn accept_offer(&mut self, id: Seq<Participant>, offer: SdpOffer) -> Option<SdpAnswer> {
         let member = self.members.iter_mut().find(|m| m.id == id)?;
         if member.pending.is_some() {
@@ -626,6 +712,14 @@ impl Sfu {
         let offer = without_candidates(&offer).ok()?;
         let answer = member.rtc.sdp_api().accept_offer(offer).ok()?;
         member.touched = true;
+        let fresh =
+            Validated::<Ufrag>::parse(member.rtc.direct_api().local_ice_credentials().ufrag).ok();
+        if let Some(fresh) = fresh
+            && self.ufrags.get(&fresh) != Some(&id)
+        {
+            self.ufrags.retain(|_, owner| *owner != id);
+            self.ufrags.insert(fresh, id);
+        }
         Some(answer)
     }
 
@@ -638,6 +732,10 @@ impl Sfu {
 
     /// Hands a datagram from `source` to the participant whose connection accepts it, and
     /// drops it when none does. The connection reads it at the next poll.
+    ///
+    /// A known source names its participant. A new source reaches a participant by a STUN
+    /// check alone, through the username fragment the check names, in one lookup. Any other
+    /// datagram of a new source is dropped before any connection reads it (audit `N41`).
     pub fn receive(&mut self, now: Instant, source: SocketAddr, contents: Payload<Datagram>) {
         let Ok(datagram) = DatagramRecv::try_from(contents.as_bytes()) else {
             return;
@@ -652,16 +750,41 @@ impl Sfu {
             },
         );
         let known = self.routes.get(&source).copied();
-        let index = known
-            .and_then(|id| self.members.iter().position(|m| m.id == id))
-            .filter(|i| self.members.get(*i).is_some_and(|m| m.rtc.accepts(&input)))
-            .or_else(|| self.members.iter().position(|m| m.rtc.accepts(&input)));
-        if let Some(member) = index.and_then(|i| self.members.get_mut(i)) {
-            if known != Some(member.id) {
-                self.routes.insert(source, member.id);
+        let accepting = |id: Seq<Participant>| {
+            self.members
+                .iter()
+                .position(|m| m.id == id)
+                .filter(|i| self.members.get(*i).is_some_and(|m| m.rtc.accepts(&input)))
+        };
+        let index = known.and_then(accepting).or_else(|| {
+            let named = named_ufrag(&contents).and_then(|u| self.ufrags.get(&u).copied())?;
+            Some(named)
+                .filter(|id| known != Some(*id))
+                .and_then(accepting)
+        });
+        let Some(member) = index.and_then(|i| self.members.get_mut(i)) else {
+            return;
+        };
+        if known != Some(member.id) {
+            self.routes.insert(source, member.id);
+            member.sources.retain(|s| *s != source);
+            member.sources.push_back(source);
+            while Count::<Routes>::of(member.sources.len()) > ROUTES_PER_PARTICIPANT {
+                let Some(oldest) = member.sources.pop_front() else {
+                    break;
+                };
+                if self.routes.get(&oldest) == Some(&member.id) {
+                    self.routes.remove(&oldest);
+                }
             }
-            member.inbox.push((now, source, contents));
         }
+        member.inbox.push((now, source, contents));
+    }
+
+    /// How many source addresses route to participant `id`.
+    #[cfg(test)]
+    pub(crate) fn routes_of(&self, id: Seq<Participant>) -> Count<Routes> {
+        Count::of(self.routes.values().filter(|r| **r == id).count())
     }
 
     /// Moves the clock of every connection whose timer is due to `now`, at the next poll.
@@ -687,6 +810,7 @@ impl Sfu {
                 }
             }
             self.routes.retain(|_, id| live.contains(id));
+            self.ufrags.retain(|_, id| live.contains(id));
         }
         self.work();
         // A new layer is chosen at once, so the first packets of a track reach the receivers.

@@ -158,6 +158,7 @@ fn measure(channels: usize, members: usize, samples: usize) -> Value {
     let staying: Vec<_> = (1..members - 1).map(member).collect();
     let keys: Vec<DocumentKey> = (0..=channels).map(|_| DocumentKey::generate()).collect();
     let anchor = FixedBytes::<EntryDigest>::from_array([0x33; 32]);
+    let space_id = ambre_core::id::Id::<ambre_core::id::Document>::from_bytes([0x34; 16]);
     let wraps = keys.len() * (staying.len() + 1);
     let leave = spread(samples.min(5), wraps, |runs| {
         let start = now();
@@ -172,11 +173,15 @@ fn measure(channels: usize, members: usize, samples: usize) -> Value {
                 };
                 std::hint::black_box(
                     wrapper
-                        .wrap(&admin_pub, key, Some(&anchor))
+                        .wrap(&admin_pub, space_id, key, Some(&anchor))
                         .expect("wrap own"),
                 );
                 for (_, public) in &staying {
-                    std::hint::black_box(wrapper.wrap(public, key, Some(&anchor)).expect("wrap"));
+                    std::hint::black_box(
+                        wrapper
+                            .wrap(public, space_id, key, Some(&anchor))
+                            .expect("wrap"),
+                    );
                 }
             }
         }
@@ -186,13 +191,13 @@ fn measure(channels: usize, members: usize, samples: usize) -> Value {
     // The member opens a wrap the shared wrapper made from a held pair key.
     let mut shared = KeyWrapper::new(&admin);
     shared
-        .wrap(last_public, &keys[0], Some(&anchor))
+        .wrap(last_public, space_id, &keys[0], Some(&anchor))
         .expect("wrap");
     let wrapped = shared
-        .wrap(last_public, &keys[channels], Some(&anchor))
+        .wrap(last_public, space_id, &keys[channels], Some(&anchor))
         .expect("wrap");
     let (unwrapped, read_anchor) =
-        unwrap_anchored(last_secret, &admin_pub, &wrapped).expect("unwrap");
+        unwrap_anchored(last_secret, &admin_pub, space_id, &wrapped).expect("unwrap");
     assert_eq!(
         unwrapped.id(),
         keys[channels].id(),

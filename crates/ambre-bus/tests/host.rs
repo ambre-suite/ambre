@@ -118,6 +118,7 @@ fn sync_command_roundtrips_through_postcard() {
     roundtrip_sync(&SyncCommand::OpenChannel {
         channel_id: chan,
         listed_in: Some(Id::<Space>::mint()),
+        catalogue_key: Some(ambre_bus::SealedChannelKey::from_bytes(vec![2; 72])),
     });
     roundtrip_sync(&SyncCommand::Shutdown);
 }
@@ -174,6 +175,7 @@ fn sync_variant(cmd: &SyncCommand) -> &'static str {
         SyncCommand::Rest { .. } => "Rest",
         SyncCommand::OpenDocument { .. } => "OpenDocument",
         SyncCommand::PinInviter { .. } => "PinInviter",
+        SyncCommand::KeepLog { .. } => "KeepLog",
         SyncCommand::PinMurmureInviter { .. } => "PinMurmureInviter",
         SyncCommand::CloseDocument { .. } => "CloseDocument",
         SyncCommand::ReleaseDocument { .. } => "ReleaseDocument",
@@ -217,6 +219,7 @@ fn sync_variant(cmd: &SyncCommand) -> &'static str {
         SyncCommand::StartCall { .. } => "StartCall",
         SyncCommand::LeaveCall => "LeaveCall",
         SyncCommand::AskCallRoster { .. } => "AskCallRoster",
+        SyncCommand::CallMeta { .. } => "CallMeta",
         SyncCommand::CallDescription(_) => "CallDescription",
         SyncCommand::ShareStarted => "ShareStarted",
         SyncCommand::ChooseVideos(_) => "ChooseVideos",
@@ -232,6 +235,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
         LogicEvent::CallStarted { .. } => "CallStarted",
         LogicEvent::CallEnded { .. } => "CallEnded",
         LogicEvent::CallRoster { .. } => "CallRoster",
+        LogicEvent::CallMetaAsked { .. } => "CallMetaAsked",
         LogicEvent::SessionIdentity { .. } => "SessionIdentity",
         LogicEvent::RemoteUpdate { .. } => "RemoteUpdate",
         LogicEvent::RemoteUpdateBatch { .. } => "RemoteUpdateBatch",
@@ -243,6 +247,8 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
         LogicEvent::PeerLeft { .. } => "PeerLeft",
         LogicEvent::MembersChanged { .. } => "MembersChanged",
         LogicEvent::InviterProven { .. } => "InviterProven",
+        LogicEvent::LogKept { .. } => "LogKept",
+        LogicEvent::DocumentReread { .. } => "DocumentReread",
         LogicEvent::DocumentReady { .. } => "DocumentReady",
         LogicEvent::ConnectionStatus { .. } => "ConnectionStatus",
         LogicEvent::Activity { .. } => "Activity",
@@ -295,8 +301,8 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 }
 
 /// The number of arms of `sync_variant` and of `event_variant`.
-const SYNC_VARIANTS: usize = 50;
-const EVENT_VARIANTS: usize = 63;
+const SYNC_VARIANTS: usize = 52;
+const EVENT_VARIANTS: usize = 67;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
 /// field. Each arm of the two name functions needs a sample here, and the
@@ -342,6 +348,10 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         SyncCommand::PinInviter {
             document_id: doc,
             inviter: FixedBytes::from_array([5; 32]),
+        },
+        SyncCommand::KeepLog {
+            document_id: doc,
+            kept: kept_log(),
         },
         SyncCommand::PinMurmureInviter {
             inviter: FixedBytes::from_array([6; 32]),
@@ -391,10 +401,12 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         SyncCommand::OpenChannel {
             channel_id: chan,
             listed_in: None,
+            catalogue_key: None,
         },
         SyncCommand::MarkChannelListed {
             channel_id: chan,
             space_id: space,
+            catalogue_key: SealedChannelKey::from_bytes(vec![1; 72]),
         },
         SyncCommand::RotateSpace {
             space_id: space,
@@ -519,6 +531,10 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             channel: chan,
             meta: doc,
         },
+        SyncCommand::CallMeta {
+            call: Id::<ambre_core::id::Call>::mint(),
+            meta: Some(doc),
+        },
         SyncCommand::CallDescription(ambre_bus::PageDescription::Offer(
             ambre_core::Validated::parse("v=0".to_owned()).unwrap(),
         )),
@@ -542,6 +558,10 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             call: Id::<ambre_core::id::Call>::mint(),
             channel: chan,
             members: ambre_bus::CallMembers::Live(vec![Id::<User>::mint()]),
+        },
+        LogicEvent::CallMetaAsked {
+            call: Id::<ambre_core::id::Call>::mint(),
+            channel: chan,
         },
         LogicEvent::Rest {
             id: Some(Seq::nth(6)),
@@ -607,6 +627,11 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             document_id: doc,
             inviter: FixedBytes::from_array([8; 32]),
         },
+        LogicEvent::LogKept {
+            document_id: doc,
+            kept: kept_log(),
+        },
+        LogicEvent::DocumentReread { document_id: doc },
         LogicEvent::DocumentReady {
             document_id: doc,
             role: Role::Viewer,
@@ -829,6 +854,14 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             family: ambre_core::ConverterFamily::Tables,
             module: ambre_core::Payload::new(b"\0asm".to_vec()),
         },
+        LogicEvent::CallCue {
+            document_id: doc,
+            cue: ambre_bus::CallCue {
+                call: Id::<ambre_core::id::Call>::from_bytes([3; 16]),
+                kind: ambre_bus::CueKind::Ring,
+                at: Instant::<Authored>::new(42),
+            },
+        },
         LogicEvent::ConverterRefused {
             family: ambre_core::ConverterFamily::Images,
             cause: ambre_core::ConverterRefusal::DigestMismatch,
@@ -964,4 +997,71 @@ fn a_key_no_member_signed_crosses_the_bus_as_its_own_failure() {
         OpenFailure::KeyUnsigned.to_string(),
         OpenFailure::KeyNotReceived.to_string()
     );
+}
+
+/// A kept log whose every field holds a distinct value, so a codec that
+/// drops or swaps a field fails the round trip.
+fn kept_log() -> ambre_bus::KeptLog {
+    ambre_bus::KeptLog {
+        anchor: ambre_core::FixedBytes::from_array([9; 32]),
+        head: ambre_bus::LogHead {
+            position: ambre_core::Seq::new(3),
+            previous: Some(ambre_core::FixedBytes::from_array([10; 32])),
+        },
+        key: ambre_core::FixedBytes::from_array([11; 16]),
+        links: vec![ambre_protocol::KeyLink {
+            document_id: Id::<Document>::from_bytes([12; 16]),
+            key: ambre_core::FixedBytes::from_array([11; 16]),
+            previous: ambre_core::FixedBytes::from_array([13; 16]),
+            head: ambre_bus::LogHead {
+                position: ambre_core::Seq::new(2),
+                previous: Some(ambre_core::FixedBytes::from_array([14; 32])),
+            },
+            sealed: ambre_core::Payload::new(vec![15; 40]),
+        }],
+    }
+}
+
+/// The fields of a kept log as the store wrote them before it kept the
+/// chain.
+#[derive(serde::Serialize)]
+struct KeptLogBeforeTheChain {
+    anchor: ambre_core::FixedBytes<ambre_core::EntryDigest>,
+    head: ambre_bus::LogHead,
+    key: ambre_core::FixedBytes<ambre_core::KeyId>,
+}
+
+/// `SYNC-290`: a kept log reads back from the row the local store keeps,
+/// and bytes that are no kept log read as none.
+#[test]
+fn a_kept_log_reads_back_from_its_row() {
+    let kept = kept_log();
+    let row = kept.to_row().unwrap();
+    assert_eq!(ambre_bus::KeptLog::from_row(&row), Some(kept));
+    let damaged = ambre_core::Payload::<ambre_bus::KeptLogRow>::new(vec![1]);
+    assert_eq!(ambre_bus::KeptLog::from_row(&damaged), None);
+}
+
+/// `SYNC-308`: the row keeps the chain beside the head, so a reload reads
+/// both back. A row of the form before the chain reads as none. So does a
+/// row with bytes past the kept log. The store drops either, and the next
+/// open fetches the links again.
+#[test]
+fn a_kept_chain_reads_back_and_an_older_row_reads_as_none() {
+    let kept = kept_log();
+    let row = kept.to_row().unwrap();
+    let read = ambre_bus::KeptLog::from_row(&row).unwrap();
+    assert_eq!(read.links, kept.links);
+    let older = KeptLogBeforeTheChain {
+        anchor: kept.anchor,
+        head: kept.head,
+        key: kept.key,
+    };
+    let older =
+        ambre_core::Payload::<ambre_bus::KeptLogRow>::new(postcard::to_allocvec(&older).unwrap());
+    assert_eq!(ambre_bus::KeptLog::from_row(&older), None);
+    let mut longer = row.as_bytes().to_vec();
+    longer.push(0);
+    let longer = ambre_core::Payload::<ambre_bus::KeptLogRow>::new(longer);
+    assert_eq!(ambre_bus::KeptLog::from_row(&longer), None);
 }

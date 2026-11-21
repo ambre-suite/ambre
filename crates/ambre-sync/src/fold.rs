@@ -287,6 +287,7 @@ mod tests {
             "snapshot_id": given.to_string(),
         });
         let transport = Scripted::new([
+            Ok((200, serde_json::json!({ "snapshot_id": given.to_string() }))),
             Ok((200, link)),
             Ok((200, serde_json::Value::Null)),
             Ok((200, serde_json::json!({ "snapshot_id": given.to_string() }))),
@@ -310,7 +311,7 @@ mod tests {
             serde_json::from_slice(sent[at].body.as_ref().expect("a body").1.as_bytes())
                 .expect("json")
         };
-        assert_eq!(json(2)["covered_seq"], 41, "the fold covers the horizon");
+        assert_eq!(json(3)["covered_seq"], 41, "the fold covers the horizon");
         let commit = sent.len() - 1;
         assert_eq!(
             sent[commit].url.reveal(),

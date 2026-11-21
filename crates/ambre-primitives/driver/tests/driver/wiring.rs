@@ -502,6 +502,43 @@ fn a_passphrase_under_an_alias_or_a_macro_key_is_refused_in_a_request() {
     );
 }
 
+// The record of the kept session holds a secret, and stays on the device.
+// A passphrase field stays refused there, and a secret in any other file of
+// the worker (`ZK-012`, `ZK-051`).
+#[test]
+fn the_kept_session_alone_serializes_a_secret_in_the_worker() {
+    let ws = core("kept-record");
+    ws.file(
+        "crates/ambre-sync/src/lib.rs",
+        "pub trait Serialize {}\n\
+         pub mod kept;\n\
+         pub struct Login { pub key: ambre_core::Key }\n\
+         #[automatically_derived]\n\
+         impl Serialize for Login {}\n",
+    );
+    ws.file(
+        "crates/ambre-sync/src/kept.rs",
+        "pub struct Record { pub words: ambre_core::Key }\n\
+         #[automatically_derived]\n\
+         impl crate::Serialize for Record {}\n\
+         pub struct Typed { pub passphrase: String }\n\
+         #[automatically_derived]\n\
+         impl crate::Serialize for Typed {}\n",
+    );
+    let sync = ws.compile("ambre_sync", "ambre-sync", &["ambre_core"], Build::Shipped);
+    let sync = refused(&sync);
+    assert_eq!(sync.len(), 2, "{sync:#?}");
+    for start in [
+        "crates/ambre-sync/src/kept.rs:4: a serialized field names a passphrase: `passphrase`",
+        "crates/ambre-sync/src/lib.rs:3: a serialized field holds a secret: `key: Confidential`",
+    ] {
+        assert!(
+            sync.iter().any(|r| r.starts_with(start)),
+            "{start}\n{sync:#?}"
+        );
+    }
+}
+
 /// A stand-in for the log crate: a macro that records a value as `debug`.
 const TRACING: &str = "pub mod field { pub fn debug<T: core::fmt::Debug>(t: T) -> T { t } }\n\
     #[macro_export]\n\

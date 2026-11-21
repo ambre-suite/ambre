@@ -148,8 +148,8 @@ pub use encoded::{
     MasterKeySalt, SealedName, SealedShare, WrappedDocKey, WrappedMasterKey,
 };
 pub use envelope::{
-    Aad, ChainHash, Ciphertext, CommitmentTag, EntryDigest, Nonce, Signature, SnapshotDigest,
-    Transcript,
+    Aad, ChainHash, Ciphertext, CommitmentTag, EntryDigest, Nonce, ObjectChecksum, Signature,
+    SnapshotDigest, Transcript,
 };
 pub use error::{DocTypeError, Error, UuidError, VersionError};
 pub use fingerprint::{InviterPin, KeyFingerprints};
@@ -176,9 +176,9 @@ pub use media::{
 };
 pub use member_count::Members;
 pub use mode::{
-    AfterDrop, Availability, CaseMatch, Creation, DocumentScope, EmailProof, FinalizeEnd,
-    HistoryStep, LinkState, PasteForm, RotationDebt, StepDirection, ThreadState, Toggle,
-    Visibility, WordMatch,
+    AddressStanding, AfterDrop, Availability, CaseMatch, Creation, DocumentScope, EmailProof,
+    FinalizeEnd, HistoryStep, LinkState, PasteForm, RotationDebt, StepDirection, ThreadState,
+    Toggle, Visibility, WordMatch,
 };
 pub use name::{
     DisplayName, InvalidDisplayName, NAME_MAX_CHARS, NAME_TOO_LONG, Name, NameTooLong,
@@ -209,10 +209,12 @@ pub use search::{SearchQuery, UserSearch};
 pub use secret::{
     AccessToken, CallAdmission, Confidential, ConfidentialKind, Credential, CredentialKind,
     OidcCode, OidcState, Passphrase, PassphraseWeakness, Plaintext, PresignedUrl, RecoveryWords,
-    RecoveryWordsRefusal, RefreshToken, Secret, TurnPassword, WireConfidential, WireCredential,
+    RecoveryWordsRefusal, RefreshToken, ScrapeToken, Secret, TurnPassword, WireConfidential,
+    WireCredential,
 };
 pub use seq::{
-    Before, CountsSince, Deltas, Issuer, Relay, Seq, SeqColumn, SeqKind, SharedIssuer, Wire,
+    Before, CountsSince, Deltas, Issuer, LogPlaces, Relay, Seq, SeqColumn, SeqKind, SharedIssuer,
+    Wire,
 };
 pub use space::{
     Board, CanvasCss, Css, Device, Doc, Image, ScalesTo, Space, StoredBoard, Surface, Texel, View,

@@ -21,6 +21,29 @@ pub struct StoreMasterKeysRequest {
     pub master_key_salt: FixedBytes<MasterKeySalt>,
     pub signing_pubkey: FixedBytes<PublicKey>,
     pub exchange_pubkey: FixedBytes<ExchangePublicKey>,
+    /// The signature of `signing_pubkey` over the account and the two keys
+    /// (`ambre_protocol::key_registration`). It proves that the caller holds
+    /// the key it registers (`SRV-294`).
+    pub signature: FixedBytes<ambre_core::Signature>,
+}
+
+/// Refuses a key store that the signing key it registers does not sign over
+/// `account` and the two keys (`SRV-294`). A key that is no Ed25519 point
+/// fails the same way.
+fn verify_registration(
+    account: &ambre_core::id::Id<ambre_core::id::User>,
+    req: &StoreMasterKeysRequest,
+) -> Result<(), AppError> {
+    use ed25519_dalek::VerifyingKey;
+    let transcript = ambre_protocol::key_registration::registration_transcript(
+        account,
+        &req.signing_pubkey,
+        &req.exchange_pubkey,
+    );
+    let signature = ed25519_dalek::Signature::from_bytes(req.signature.as_array());
+    VerifyingKey::from_bytes(req.signing_pubkey.as_array())
+        .and_then(|key| key.verify_strict(transcript.as_bytes(), &signature))
+        .map_err(|_| AppError::InvalidSignature)
 }
 
 pub async fn store_master_keys(
@@ -30,6 +53,9 @@ pub async fn store_master_keys(
 ) -> Result<impl IntoResponse, AppError> {
     let req = body.into_inner();
     let s = auth;
+    // The proof is checked before any write: a key the caller does not hold
+    // is registered nowhere (`SRV-294`).
+    verify_registration(&s.user_id, &req)?;
     let mk_enc = req.master_key_enc;
     let mk_salt = req.master_key_salt;
     let (spk, epk) = (req.signing_pubkey, req.exchange_pubkey);

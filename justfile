@@ -47,6 +47,7 @@ lint-wasm:
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-trame -p ambre-toile --tests
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-prose --test chrome_panel --test chrome_ui
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-murmure --test chrome_relay
+    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-sync --test metered_fetch --test worker_log --test renewal_lock
     # Each converter module as `scripts/converter_build.py` builds it: one
     # family's engine and the exports, with no loader. No line above turns an
     # engine on for wasm, so these read the exports (`ARCH-079`), and each
@@ -332,12 +333,13 @@ test-browser-firefox *filter:
 # job runs them. Each builds the page into `target/proof-dist`, then starts the relay, the SFU
 # and nine headless senders here, and serves the page to one receiver. It prints each figure
 # against its threshold, then one `PROOF-RESULT` line of JSON. The db-tier services must be up
-# (`just services-up`). The senders capture at 30 fps. The senders sign in by a bare name, so
-# the build adds the development sign-in, and a release refuses it (`ZK-045`). The build is
-# therefore no release: it takes the cargo profile of the release, `wasm-release`, so each
-# wasm compiles as the shipped one. Trunk runs no wasm-opt and minifies nothing in either
+# (`just services-up`). The senders capture at 30 fps. The build takes the cargo profile of
+# the release, `wasm-release`, so each wasm compiles as the shipped one. It holds no
+# development sign-in, so the release gate of the hook passes it (`ZK-049`, `ZK-050`): each
+# participant signs in through the identity provider of the belt
+# (`crates/ambre-belt/src/provider.rs`). Trunk runs no wasm-opt and minifies nothing in either
 # mode. The hook writes no brotli copy here, and the proof host never serves one.
-proof_build := 'trunk build --cargo-profile=wasm-release --features dev-login --dist target/proof-dist && cargo build -p ambre-server && cargo build --release -p ambre-sfu'
+proof_build := 'trunk build --cargo-profile=wasm-release --dist target/proof-dist && cargo build -p ambre-server && cargo build --release -p ambre-sfu'
 proof_env := 'BELT_DIST="$PWD/target/proof-dist" BELT_SFU="$PWD/target/release/ambre-sfu" S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}"'
 proof_senders := '--use-fake-device-for-media-stream=fps=30'
 proof_test := 'cargo test -p ambre-belt -- --ignored --exact --nocapture proof::run::a_call_proof_on_one_receiver'
@@ -456,6 +458,11 @@ test-wasm:
     # The smoke of the phone page of the Sync worker's crypto. The crate's own
     # tests run on the host.
     {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-crypto --test phone_bench
+    # The metered read of a `fetch` body runs on a browser stream alone
+    # (`SYNC-278`), and the worker hands its log to the browser console and
+    # profile (`SYNC-305`). The Web Lock that orders the renewals of the kept
+    # session runs in a browser alone (`SRV-330`). The crate's other tests run on the host.
+    {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-sync --test metered_fetch --test worker_log --test renewal_lock
     # Threaded: the converter respawn test spawns real workers from a Logic
     # worker (`ARCH-108`). The Logic thread runs on a shared memory in the
     # product too.
@@ -817,6 +824,32 @@ fixture-provenance:
 # cargo-deny: advisories, licences, sources, and the ZK capability bans.
 deny:
     cargo deny check --deny unused-wrapper
+
+# ProVerif over the model of the call sender keys (`CALL-142`). The model sits beside
+# the code it models, and `tests/call_model_labels.rs` of that crate ties its labels
+# to the code. A query ProVerif cannot prove reads `is false` or `cannot be proved`,
+# so the recipe fails unless every result line reads `is true`. A model that does
+# not parse exits non-zero and fails too. CI builds ProVerif 2.05 from its tarball.
+
+# ProVerif: every query of the call sender keys model is true.
+proverif model="crates/ambre-crypto/proofs/call_sender_keys.pv":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    out="$(proverif "{{model}}")"
+    results="$(printf '%s\n' "$out" | grep '^RESULT' || true)"
+    printf '%s\n' "$results"
+    # A bare `query event(...)` is a sanity witness: it must read `is false`, a
+    # trace that reaches the event. Every other query must read `is true`.
+    total="$(printf '%s\n' "$results" | grep -c '^RESULT' || true)"
+    proved="$(printf '%s\n' "$results" | grep -v '^RESULT not event(' | grep -c ' is true\.$' || true)"
+    reached="$(printf '%s\n' "$results" | grep '^RESULT not event(' | grep -c ' is false\.$' || true)"
+    witnesses="$(printf '%s\n' "$results" | grep -c '^RESULT not event(' || true)"
+    if [ "$total" -eq 0 ] || [ "$witnesses" -eq 0 ] || [ "$witnesses" -ne "$reached" ] \
+        || [ "$total" -ne "$((proved + reached))" ]; then
+        printf '%s\n' "$out" >&2
+        echo "proverif: $proved proved, $reached of $witnesses witnesses reached, $total queries" >&2
+        exit 1
+    fi
 
 # cargo-fuzz: each untrusted reader, for `seconds` apiece (`ambre-spec-testing.md
 # section 2`). The targets live in `fuzz/`, a workspace of its own, so the

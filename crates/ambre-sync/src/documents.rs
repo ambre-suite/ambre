@@ -13,6 +13,13 @@ impl SyncState {
             let url_scheme = self.url_scheme;
             let auth = self.auth_context();
             let exchange_key = self.exchange_key.clone();
+            // A listed name opens under the key the walked or kept log
+            // accepted alone (`SYNC-291`), and from an author it admits
+            // (`SYNC-135`).
+            // A name sealed before the last rotation opens through the chain
+            // the log kept, with no request (`SYNC-302`).
+            let kept = self.kept_names();
+            let authors = self.name_authors();
             crate::spawn(async move {
                 let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                     .route("/documents");
@@ -34,8 +41,11 @@ impl SyncState {
                                             .wrapper_exchange_pub_key
                                             .as_ref(),
                                         name_enc,
+                                        kept: kept.keys.get(&document_id).copied(),
+                                        chain: kept.chains.get(&document_id),
+                                        authors: &authors,
                                     };
-                                    listed.open(ek, url_scheme, &api_base, &auth).await
+                                    listed.open(ek)
                                 }
                                 _ => None,
                             };
@@ -300,41 +310,25 @@ impl SyncState {
                             ));
                             return;
                         };
-                        let members_url =
-                            crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
-                                .route(format!("/documents/{doc_id}/members"));
-                        match http::get_json_auth::<http::MembersResponse>(
-                            &members_url,
-                            auth.clone(),
-                        )
-                        .await
-                        {
-                            Ok(resp) => {
-                                let check = crate::updates::KeyCheck {
-                                    document_id: doc_id,
-                                    log_document,
-                                    exchange_key: ek,
-                                    my_user_id,
-                                    rule,
-                                    roots,
-                                    held,
-                                    url_scheme,
-                                    api_base: api_base.clone(),
-                                    auth: auth.clone(),
-                                };
-                                match crate::updates::checked_members_key(check, &resp).await {
-                                    Ok(k) => k,
-                                    Err(failed) => {
-                                        let _ = tx.send(SyncEvent::HttpError {
-                                            id,
-                                            failure: failed.failure,
-                                        });
-                                        return;
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                let _ = tx.send(SyncEvent::http_error(id, e));
+                        let check = crate::updates::KeyCheck {
+                            document_id: doc_id,
+                            log_document,
+                            exchange_key: ek,
+                            my_user_id,
+                            rule,
+                            roots,
+                            held,
+                            url_scheme,
+                            api_base: api_base.clone(),
+                            auth: auth.clone(),
+                        };
+                        match crate::updates::members_key_via(&http::Fetch, check).await {
+                            Ok(k) => k,
+                            Err(failed) => {
+                                let _ = tx.send(SyncEvent::HttpError {
+                                    id,
+                                    failure: failed.failure,
+                                });
                                 return;
                             }
                         }
@@ -376,37 +370,62 @@ impl SyncState {
     }
 }
 
+/// What a listed name opens under, by the document of its log. It holds the
+/// key the walked or kept log accepted last (`SYNC-291`). It also holds the
+/// links its latest open or rotation held in the session (`SYNC-302`).
+#[derive(Clone, Default)]
+pub(crate) struct KeptNames {
+    pub(crate) keys: HashMap<Id<Document>, ambre_core::FixedBytes<ambre_core::KeyId>>,
+    pub(crate) chains: HashMap<Id<Document>, crate::chain::Chain>,
+}
+
 /// One sealed name of a listing, with the wrapped key that opens it: a
-/// document of the launcher, or the meta of a channel. Keys are base64 of
-/// `nonce || ciphertext`; the wrapper's exchange key is `None` for a
-/// self-wrapped owner row.
+/// document of the launcher, or the meta of a channel. The wrapper's
+/// exchange key is `None` for a self-wrapped owner row.
 pub(crate) struct ListedName<'a> {
     pub(crate) document_id: Id<Document>,
     pub(crate) doc_key_enc: &'a ambre_core::Encoded<ambre_core::WrappedDocKey>,
     pub(crate) wrapper_exchange_pub_key:
         Option<&'a ambre_core::FixedBytes<ambre_core::ExchangePublicKey>>,
     pub(crate) name_enc: &'a ambre_core::Encoded<ambre_core::SealedName>,
+    /// The key id the walked or kept log of the document accepted last,
+    /// `None` for a document this client never walked (`SYNC-291`).
+    pub(crate) kept: Option<ambre_core::FixedBytes<ambre_core::KeyId>>,
+    /// The links the log of the document kept in this session, `None` when
+    /// none: a name sealed under an older key walks them (`SYNC-302`).
+    pub(crate) chain: Option<&'a crate::chain::Chain>,
+    /// What the author of the name is checked against (`SYNC-135`).
+    pub(crate) authors: &'a NameAuthors,
 }
 
 impl ListedName<'_> {
-    /// The plaintext name. A name sealed before the last rotation names an
-    /// older key, which the chain recovers (`SYNC-042`, `SYNC-119`). `None` on
-    /// any decode or crypto failure: the launcher shows "Untitled".
-    pub(crate) async fn open(
+    /// The plaintext name, or `None`: the launcher then shows its neutral
+    /// label.
+    ///
+    /// The relay names the wrapper of the copy. It can wrap a key of its own
+    /// and seal a name of its choosing under it. The name opens only by an
+    /// author the walked log admits (`SYNC-135`). It opens under the key the
+    /// checks of an open accepted last for this log, kept across sessions
+    /// (`SYNC-291`). It is sealed under that key, or under an older key the
+    /// chain the log kept reaches from it (`SYNC-302`). A listing sends no
+    /// request of its own, so a name past the kept chain, or a document never
+    /// walked, shows none.
+    pub(crate) fn open(
         &self,
         exchange_key: &x25519_dalek::StaticSecret,
-        url_scheme: crate::http::UrlScheme,
-        api_base: &crate::http::Url<crate::http::RelayHost>,
-        auth: &http::AuthContext,
     ) -> Option<ambre_core::Validated<ambre_core::Name>> {
         let current = self.unwrap_key(exchange_key)?;
-        // One request more, and only for a name older than the current key.
-        let links = if pipeline::object_key(self.name_enc).ok()? == current.id() {
-            Vec::new()
-        } else {
-            http::fetch_key_links(url_scheme, api_base, self.document_id, auth.clone()).await
-        };
-        open_name(self.document_id, &current, self.name_enc, links)
+        if self.kept != Some(current.id()) {
+            return None;
+        }
+        let none = crate::chain::Chain::new(self.document_id, Vec::new());
+        open_name_through(
+            self.document_id,
+            &current,
+            self.name_enc,
+            self.chain.unwrap_or(&none),
+            self.authors,
+        )
     }
 
     /// The current key, ECDH-unwrapped against the wrapper's exchange key.
@@ -415,40 +434,100 @@ impl ListedName<'_> {
             self.doc_key_enc,
             self.wrapper_exchange_pub_key,
             exchange_key,
+            self.document_id,
         )
     }
 }
 
 /// The key a listing wrapped for this user, ECDH-unwrapped against the
-/// wrapper's exchange key. The key is base64 of `nonce || ciphertext`, and
-/// the wrapper is `None` for a self-wrapped owner row. `None` on any decode
-/// or crypto failure.
+/// wrapper's exchange key. The wrapper is `None` for a self-wrapped owner
+/// row. The copy must be a wrap for `document`, the document the listing
+/// names it under (audit `P59`). `None` on any decode or crypto failure.
 pub(crate) fn unwrap_listed_key(
     doc_key_enc: &ambre_core::Encoded<ambre_core::WrappedDocKey>,
     wrapper_exchange_pub_key: Option<&ambre_core::FixedBytes<ambre_core::ExchangePublicKey>>,
     exchange_key: &x25519_dalek::StaticSecret,
+    document: Id<Document>,
 ) -> Option<DocumentKey> {
-    let (nonce, ciphertext) = doc_key_enc.parts()?;
-    let wrapped = ambre_crypto::WrappedKey { nonce, ciphertext };
     // Self-wrapped owner row: the DH peer is our own public key.
     let peer_pub = wrapper_exchange_pub_key
         .copied()
         .unwrap_or_else(|| crate::sharing::own_exchange_key(exchange_key));
-    ambre_crypto::ecdh::unwrap_document_key(exchange_key, &peer_pub, &wrapped).ok()
+    ambre_crypto::ecdh::unwrap_document_key(exchange_key, &peer_pub, document, doc_key_enc).ok()
+}
+
+/// The writers of the last log this client walked, by log document: what a
+/// listed name is checked against (`SYNC-135`). A document this client never
+/// walked shows no name, and costs no request.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct NameAuthors(HashMap<Id<Document>, crate::membership_log::Writers>);
+
+impl NameAuthors {
+    /// Every name stands on its seal alone, as a document with no anchored
+    /// log does.
+    #[cfg(test)]
+    pub(crate) fn unchecked(document_id: Id<Document>) -> Self {
+        Self(HashMap::from([(
+            document_id,
+            crate::membership_log::Writers::Unchecked,
+        )]))
+    }
+
+    /// Whether the log of `document_id` this client walked granted a writing
+    /// role to the key that signed `sealed`. A log never walked admits none.
+    fn admits(
+        &self,
+        document_id: Id<Document>,
+        sealed: &ambre_core::Encoded<ambre_core::SealedName>,
+    ) -> bool {
+        self.0.get(&document_id).is_some_and(|writers| {
+            pipeline::object_author(sealed).is_ok_and(|author| writers.admits(&author))
+        })
+    }
+}
+
+impl SyncState {
+    /// What a listed name is checked against (`SYNC-135`). It reads the
+    /// writers of the last log this client walked in the session, which an
+    /// open or a members refresh records. A head persisted across sessions
+    /// (audit `P43`) plugs in here.
+    pub(crate) fn name_authors(&self) -> NameAuthors {
+        NameAuthors(self.walked_writers.clone())
+    }
 }
 
 /// Opens a sealed name with the key it names: `current`, or one the chain
 /// `links` reach from it. `None` on any failure: a name sealed for another
-/// document, a forged author, a key out of reach, a name past the cap.
+/// document, a forged author, a key out of reach, a name past the cap. An
+/// author the walked log never granted a writing role is refused before any
+/// key is sought. So is any name of a log this client never walked
+/// (`SYNC-135`).
+#[cfg(test)]
 pub(crate) fn open_name(
     document_id: Id<Document>,
     current: &DocumentKey,
     sealed: &ambre_core::Encoded<ambre_core::SealedName>,
     links: Vec<ambre_protocol::KeyLink>,
+    authors: &NameAuthors,
 ) -> Option<ambre_core::Validated<ambre_core::Name>> {
     let chain = crate::chain::Chain::new(document_id, links);
+    open_name_through(document_id, current, sealed, &chain, authors)
+}
+
+/// Opens a sealed name as [`open_name`] does, through the links `chain`
+/// already holds.
+pub(crate) fn open_name_through(
+    document_id: Id<Document>,
+    current: &DocumentKey,
+    sealed: &ambre_core::Encoded<ambre_core::SealedName>,
+    chain: &crate::chain::Chain,
+    authors: &NameAuthors,
+) -> Option<ambre_core::Validated<ambre_core::Name>> {
+    if !authors.admits(document_id, sealed) {
+        return None;
+    }
     let wanted = pipeline::object_key(sealed).ok()?;
-    let key = crate::chain::find_key(current, &[], &chain, wanted)?;
+    let key = crate::chain::find_key(current, &[], chain, wanted)?;
     let plaintext = pipeline::open_object(sealed, &pipeline::name_aad(document_id), &key).ok()?;
     // The name is read in place and copied once it is taken, so a refused
     // name leaves no copy behind. The wrapper wipes the opened bytes.
@@ -471,6 +550,7 @@ mod tests {
     #[test]
     fn a_document_name_reaches_the_relay_sealed_under_the_document_key() {
         let document_id = Id::<Document>::mint();
+        let all = NameAuthors::unchecked(document_id);
         let signing_key = MasterSeed::from_array([5; 32]).derive_signing_key();
         let doc_key = DocumentKey::generate();
         let name = "Quarterly budget";
@@ -485,13 +565,16 @@ mod tests {
         assert!(!bytes.windows(name.len()).any(|w| w == name.as_bytes()));
         assert_eq!(pipeline::object_key(&sent).unwrap(), doc_key.id());
         assert_eq!(
-            open_name(document_id, &doc_key, &sent, Vec::new())
+            open_name(document_id, &doc_key, &sent, Vec::new(), &all)
                 .as_ref()
                 .map(ambre_core::Validated::as_str),
             Some(name)
         );
         let other = DocumentKey::generate();
-        assert_eq!(open_name(document_id, &other, &sent, Vec::new()), None);
+        assert_eq!(
+            open_name(document_id, &other, &sent, Vec::new(), &all),
+            None
+        );
     }
 
     /// `SYNC-178`: a name past its budget is refused before it is sealed: no
@@ -528,6 +611,7 @@ mod tests {
     #[test]
     fn a_sealed_name_that_is_no_text_or_past_the_cap_opens_to_none() {
         let document_id = Id::<Document>::mint();
+        let all = NameAuthors::unchecked(document_id);
         let doc_key = DocumentKey::generate();
         let signing_key = MasterSeed::from_array([5; 32]).derive_signing_key();
         let seal = |bytes: Vec<u8>| {
@@ -542,8 +626,15 @@ mod tests {
         };
         let at_cap = "a".repeat(ambre_core::NAME_MAX_CHARS);
         let past = "a".repeat(ambre_core::NAME_MAX_CHARS + 1);
-        let open =
-            |bytes: &[u8]| open_name(document_id, &doc_key, &seal(bytes.to_vec()), Vec::new());
+        let open = |bytes: &[u8]| {
+            open_name(
+                document_id,
+                &doc_key,
+                &seal(bytes.to_vec()),
+                Vec::new(),
+                &all,
+            )
+        };
         assert_eq!(
             open(at_cap.as_bytes())
                 .as_ref()
@@ -559,6 +650,7 @@ mod tests {
     #[test]
     fn a_name_sealed_before_a_rotation_opens_through_the_chain() {
         let document_id = Id::<Document>::mint();
+        let all = NameAuthors::unchecked(document_id);
         let signing_key = MasterSeed::from_array([5; 32]).derive_signing_key();
         let keys: Vec<_> = (0..4).map(|_| DocumentKey::generate()).collect();
         let links: Vec<_> = keys
@@ -583,16 +675,153 @@ mod tests {
         .unwrap();
         let current = &keys[3];
         assert_eq!(
-            open_name(document_id, current, &name, links.clone())
+            open_name(document_id, current, &name, links.clone(), &all)
                 .as_ref()
                 .map(ambre_core::Validated::as_str),
             Some("Budget")
         );
-        assert_eq!(open_name(document_id, current, &name, Vec::new()), None);
-        // Another document's chain opens nothing here.
         assert_eq!(
-            open_name(Id::<Document>::mint(), current, &name, links),
+            open_name(document_id, current, &name, Vec::new(), &all),
             None
+        );
+        // Another document's chain opens nothing here.
+        let elsewhere = Id::<Document>::mint();
+        assert_eq!(
+            open_name(
+                elsewhere,
+                current,
+                &name,
+                links,
+                &NameAuthors::unchecked(elsewhere)
+            ),
+            None
+        );
+    }
+
+    /// Holds `SYNC-135`: a listed name opens only when the log this client
+    /// walked granted its author a writing role. A stranger who holds the
+    /// key seals a name the cipher alone would accept. A document this client
+    /// never walked shows no name at all, and a walk that lands later shows
+    /// the writer's.
+    #[test]
+    fn a_listed_name_opens_only_under_a_writer_of_the_walked_log() {
+        let mut state = SyncState::new(
+            LogicSink::channel().0,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
+        let (document_id, doc_key) = (Id::<Document>::mint(), DocumentKey::generate());
+        let writer = MasterSeed::from_array([5; 32]).derive_signing_key();
+        let stranger = MasterSeed::from_array([6; 32]).derive_signing_key();
+        let name = ambre_core::Validated::<ambre_core::Name>::parse("Budget").unwrap();
+        let by_writer =
+            SyncState::seal_document_name(document_id, &doc_key, &writer, &name).unwrap();
+        let by_stranger =
+            SyncState::seal_document_name(document_id, &doc_key, &stranger, &name).unwrap();
+        let open = |state: &SyncState, sealed| {
+            open_name(
+                document_id,
+                &doc_key,
+                sealed,
+                Vec::new(),
+                &state.name_authors(),
+            )
+            .map(|name| name.as_str().to_owned())
+        };
+
+        assert_eq!(open(&state, &by_writer), None, "a log never walked");
+        let author = FixedBytes::<PublicKey>::from_array(writer.verifying_key().to_bytes());
+        state.walked_writers.insert(
+            document_id,
+            crate::membership_log::Writers::granted(std::iter::once(author).collect()),
+        );
+        assert_eq!(open(&state, &by_writer).as_deref(), Some("Budget"));
+        assert_eq!(open(&state, &by_stranger), None, "a stranger to the log");
+    }
+
+    /// Holds `SYNC-302`. The listing wraps the current key, which the kept
+    /// log accepted, and the name was sealed one rotation before it. The
+    /// chain the open of the log kept reaches the older key, so the name
+    /// shows with no request. With no kept chain, or when the kept log
+    /// accepted another key, the name shows none. An open keeps its chain.
+    #[test]
+    fn a_listed_name_sealed_before_the_last_rotation_opens_through_the_kept_chain() {
+        let mut state = SyncState::new(
+            LogicSink::channel().0,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
+        let document_id = Id::<Document>::mint();
+        let writer = MasterSeed::from_array([5; 32]).derive_signing_key();
+        let (old, current) = (DocumentKey::generate(), DocumentKey::generate());
+        let link = pipeline::seal_link(
+            document_id,
+            &old,
+            &current,
+            ambre_protocol::LogHead::EMPTY,
+            &writer,
+        )
+        .unwrap();
+        let name = SyncState::seal_document_name(
+            document_id,
+            &old,
+            &writer,
+            &ambre_core::Validated::<ambre_core::Name>::parse("Budget").unwrap(),
+        )
+        .unwrap();
+        let own = x25519_dalek::StaticSecret::from([1; 32]);
+        let own_pub = crate::sharing::own_exchange_key(&own);
+        let doc_key_enc =
+            ambre_crypto::ecdh::wrap_document_key(&own, &own_pub, document_id, &current).unwrap();
+        let authors = NameAuthors::unchecked(document_id);
+        let chain = crate::chain::Chain::new(document_id, [link.clone()]);
+        let listed = |kept: Option<&DocumentKey>, chain: Option<&crate::chain::Chain>| {
+            ListedName {
+                document_id,
+                doc_key_enc: &doc_key_enc,
+                wrapper_exchange_pub_key: None,
+                name_enc: &name,
+                kept: kept.map(DocumentKey::id),
+                chain,
+                authors: &authors,
+            }
+            .open(&own)
+            .map(|name| name.as_str().to_owned())
+        };
+        assert_eq!(
+            listed(Some(&current), Some(&chain)).as_deref(),
+            Some("Budget")
+        );
+        assert_eq!(listed(Some(&current), None), None, "no kept chain");
+        assert_eq!(
+            listed(Some(&old), Some(&chain)),
+            None,
+            "the kept log accepted another key"
+        );
+        assert_eq!(listed(None, Some(&chain)), None, "a log never kept");
+
+        // The open of the document keeps the links it accepted.
+        state.handle_sync_event(SyncEvent::OpenDocumentReady {
+            document_id,
+            doc_key: current.clone(),
+            snapshot_payload: None,
+            snapshot_id: Id::<Snapshot>::genesis(document_id),
+            covered_seq: Seq::<Relay>::ZERO,
+            held_snapshot: None,
+            fallback: None,
+            doc_type: DocType::Prose,
+            existence: crate::Existence::LocalOnly,
+            signing_keys: Vec::new(),
+            role: Role::Owner,
+            rotation_owed: ambre_core::RotationDebt::Settled,
+            links: vec![link],
+            writers: crate::membership_log::Writers::Unchecked,
+            departed: None,
+        });
+        assert_eq!(
+            state
+                .kept_chains()
+                .get(&document_id)
+                .map(crate::chain::Chain::len),
+            Some(1)
         );
     }
 

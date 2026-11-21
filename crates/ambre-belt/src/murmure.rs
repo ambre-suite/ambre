@@ -33,6 +33,13 @@ pub(crate) mod tests {
     /// Murmure. Waits for the sidebar's control that creates a space.
     pub(crate) async fn enter(page: Page, name: &str) -> Page {
         page.sign_in(name).await;
+        open_murmure(&page).await;
+        page
+    }
+
+    /// Opens Murmure on `page`, which holds a session. Waits for the
+    /// sidebar's control that creates a space.
+    pub(crate) async fn open_murmure(page: &Page) {
         page.browser
             .goto(&format!("{}/murmure/{}", page.origin, uuid::Uuid::now_v7()))
             .await;
@@ -43,7 +50,6 @@ pub(crate) mod tests {
                 BOOT,
             )
             .await;
-        page
     }
 
     /// Fills the prompt control whose form has the class `class`, found
@@ -804,6 +810,165 @@ pub(crate) mod tests {
                 STEP,
             )
             .await;
+    }
+
+    /// The ICE username fragment of the local description that `stats` read.
+    fn local_ufrag(stats: &Value) -> Option<String> {
+        stats["sdp"]
+            .as_str()?
+            .lines()
+            .find_map(|line| line.trim().strip_prefix("a=ice-ufrag:").map(str::to_owned))
+    }
+
+    /// `CALL-156`, audit `P60`, in the browser: Ada and Bob join one call of the application.
+    /// Its SFU hands TURN credentials of 30 s, renewed 15 s before their expiry. The
+    /// relay renews each seat every heartbeat, and the SFU answers a fresh credential near
+    /// the expiry. The page of each restarts ICE with it, and both still decode each other
+    /// past the expiry of the first credential.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build, the SFU, coturn, a driver and the services; run just test-browser"
+    )]
+    async fn the_page_restarts_ice_with_each_fresh_turn_credential() {
+        let turn = crate::call::Turn::start(std::time::Duration::from_millis(5)).await;
+        let lifetime = std::time::Duration::from_secs(30);
+        let sfu =
+            crate::call::Sfu::start_lasting(&turn, lifetime, std::time::Duration::from_secs(15))
+                .await;
+        let relay = Arc::new(Relay::start_with(&sfu.relay_env()).await);
+        let (ada, bob) = (user(), user());
+        let ada_page = murmure(Arc::clone(&relay), &ada).await;
+        let bob_page = murmure(Arc::clone(&relay), &bob).await;
+        space_with_channel(&ada_page, "Belt", "general", &bob, &bob_page).await;
+        open(&bob_page, "general").await;
+        let channel = last_channel();
+        let pages = [&ada_page, &bob_page];
+        for page in pages {
+            page.browser.script(RECORD, json!([])).await;
+        }
+        let call = start_call(&ada_page, &channel).await;
+        read_until(&bob_page, "a live call", |h| h.contains(LIVE), ROSTER_WAIT).await;
+        let joined = bob_page
+            .browser
+            .script(
+                "window.wasmBindings.join_call(arguments[0], arguments[1]); return true;",
+                json!([call, channel]),
+            )
+            .await;
+        assert_eq!(joined, json!(true), "the page has no join");
+        let started = std::time::Instant::now();
+        let first = decoded_past(&pages, &[0.0; 2], 48_000.0).await;
+        let ufrags: Vec<Option<String>> = first.iter().map(local_ufrag).collect();
+        assert!(
+            ufrags.iter().all(Option::is_some),
+            "no local fragment: {first:#?}"
+        );
+
+        // Heartbeats every 20 s: the beat past the start of the margin brings a fresh
+        // credential before the first one expires. The test reads the pages past that expiry.
+        let past = started + lifetime + std::time::Duration::from_secs(15);
+        tokio::time::sleep_until(past.into()).await;
+        let mut now = Vec::new();
+        for page in pages {
+            now.push(call_stats(page).await);
+        }
+        for (stats, before) in now.iter().zip(&ufrags) {
+            assert_eq!(stats["pcs"], json!(1), "one peer connection: {stats:#}");
+            assert_ne!(
+                local_ufrag(stats),
+                *before,
+                "the page restarted no ICE with the fresh credential: {stats:#}"
+            );
+        }
+        let base: Vec<f64> = now
+            .iter()
+            .map(|s| s["decoded"].as_f64().unwrap_or(0.0))
+            .collect();
+        decoded_past(&pages, &base, 48_000.0).await;
+        drop(turn);
+    }
+
+    /// Makes every receive transform of the page fail to attach. From now on, it also records
+    /// each track the peer connection hands the page, and each media element the page plays.
+    const NO_RECEIVE_TRANSFORM: &str = "window.beltPlayed = []; window.beltReceived = []; \
+        const Q = window.RTCPeerConnection; \
+        window.RTCPeerConnection = class extends Q { constructor(...a) { super(...a); \
+          this.addEventListener('track', (e) => window.beltReceived.push(e.track)); } }; \
+        Object.defineProperty(RTCRtpReceiver.prototype, 'transform', { configurable: true, \
+          get() { return null; }, \
+          set(v) { throw new Error('belt: no receive transform'); } }); \
+        const play = HTMLMediaElement.prototype.play; \
+        HTMLMediaElement.prototype.play = function () { \
+          window.beltPlayed.push(this); return play.call(this); }; \
+        return true;";
+
+    /// What the page received and played. It counts the tracks the peer connection handed
+    /// over and the live ones, and tells whether a played media element holds a live one.
+    const PLAYED_REMOTE: &str = "const remote = window.beltReceived || []; \
+        const live = remote.filter((t) => t.readyState === 'live'); \
+        const played = (window.beltPlayed || []).some((el) => el.srcObject \
+          && el.srcObject.getTracks().some((t) => live.includes(t))); \
+        return { remote: remote.length, live: live.length, played };";
+
+    /// `CALL-146`, audit `N40`, in the browser: Ada and Bob join one call, and no receive
+    /// transform attaches on Bob's page. Bob's page plays no track it receives, and stops
+    /// each one, so its decoder never reads what the SFU forwards unopened. Ada decodes Bob,
+    /// so the call carries his audio.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build, the SFU, a driver and the services; run just test-browser"
+    )]
+    async fn a_receiver_with_no_transform_plays_nothing() {
+        let sfu = crate::call::Sfu::start(None).await;
+        let relay = Arc::new(Relay::start_with(&sfu.relay_env()).await);
+        let (ada, bob) = (user(), user());
+        let ada_page = murmure(Arc::clone(&relay), &ada).await;
+        let bob_page = murmure(Arc::clone(&relay), &bob).await;
+        space_with_channel(&ada_page, "Belt", "general", &bob, &bob_page).await;
+        open(&bob_page, "general").await;
+        let channel = last_channel();
+        for page in [&ada_page, &bob_page] {
+            page.browser.script(RECORD, json!([])).await;
+        }
+        bob_page
+            .browser
+            .script(NO_RECEIVE_TRANSFORM, json!([]))
+            .await;
+
+        let call = start_call(&ada_page, &channel).await;
+        read_until(&bob_page, "a live call", |h| h.contains(LIVE), ROSTER_WAIT).await;
+        let joined = bob_page
+            .browser
+            .script(
+                "window.wasmBindings.join_call(arguments[0], arguments[1]); return true;",
+                json!([call, channel]),
+            )
+            .await;
+        assert_eq!(joined, json!(true), "the page has no join");
+        decoded_past(&[&ada_page], &[0.0], 48_000.0).await;
+
+        let seen = bob_page
+            .browser
+            .wait_for(
+                "the receivers of Bob's page",
+                &format!(
+                    "const s = (() => {{ {PLAYED_REMOTE} }})(); return s && s.remote > 0 ? s : null;"
+                ),
+                STEP,
+            )
+            .await;
+        assert_eq!(
+            seen["played"],
+            json!(false),
+            "a track with no transform played: {seen}"
+        );
+        assert_eq!(
+            seen["live"],
+            json!(0),
+            "a track with no transform is still live: {seen}"
+        );
     }
 
     /// Presses the list of the channel, then `Up`, until what the live region reads of the

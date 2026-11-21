@@ -77,7 +77,7 @@ web-sys      = { workspace = true, features = [
     "DisplayMediaStreamConstraints", "MediaDevices", "MediaStream", "MediaStreamConstraints",
     "MediaStreamTrack",
     "HtmlAudioElement", "HtmlMediaElement", "MessageChannel", "MessagePort",
-    "RtcConfiguration", "RtcPeerConnection", "RtcRtpReceiver", "RtcRtpSender",
+    "RtcConfiguration", "RtcOfferOptions", "RtcPeerConnection", "RtcRtpReceiver", "RtcRtpSender",
     "RtcRtpTransceiver", "RtcRtpTransceiverDirection", "RtcRtpTransceiverInit",
     "RtcSignalingState",
     "RtcSdpType", "RtcSessionDescription", "RtcSessionDescriptionInit", "RtcTrackEvent",

@@ -2,7 +2,9 @@
 //! their own (`SRV-257`).
 //!
 //! The public listener serves no metric: an operator scrapes the address of
-//! `METRICS_ADDR`, the loopback by default. Each label is a closed `enum` of
+//! `METRICS_ADDR`, the loopback by default. An address off the loopback needs
+//! the token of `METRICS_TOKEN`, which each scrape presents as a bearer
+//! credential (`SRV-318`). Each label is a closed `enum` of
 //! this module. So no series names a document, a user, a call, a connection
 //! or an address (`ZK-029`, `ZK-031`).
 
@@ -10,11 +12,13 @@ use std::net::SocketAddr;
 use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
-use ambre_core::{LabelValues, MetricNames, StaticKey};
-use ambre_metrics::{Counter, Exposition, Gauge, Histogram, Label};
+use ambre_core::{Credential, LabelValues, MetricNames, ScrapeToken, StaticKey};
+use ambre_metrics::{Counter, Exposition, Gauge, Histogram, Label, Scrape, ScrapeAccess};
 use axum::Router;
-use axum::http::header;
-use axum::response::IntoResponse;
+use axum::extract::{Request, State};
+use axum::http::{StatusCode, header};
+use axum::middleware::Next;
+use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 
 #[cfg(test)]
@@ -220,12 +224,29 @@ impl Sequencing {
     }
 }
 
-/// The router of the metrics listener: the scrape route alone. Its answers
-/// carry the headers of every answer of the relay (`SRV-270`).
-pub fn router() -> Router {
+/// The router of the metrics listener: the scrape route alone, behind
+/// `access` (`SRV-318`). Its answers carry the headers of every answer of the
+/// relay (`SRV-270`), a refusal included.
+pub fn router(access: ScrapeAccess) -> Router {
     Router::new()
         .route(ROUTE, get(scrape))
+        .layer(axum::middleware::from_fn_with_state(access, guard))
         .layer(axum::middleware::map_response(crate::stamp))
+}
+
+/// Answers `401 Unauthorized` to a scrape `access` refuses, before any
+/// metric is read.
+async fn guard(State(access): State<ScrapeAccess>, request: Request, next: Next) -> Response {
+    let presented = request
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "))
+        .map(|text| Credential::<ScrapeToken>::new(text.to_owned()));
+    match access.admits(presented.as_ref()) {
+        Scrape::Admitted => next.run(request).await,
+        Scrape::Refused => StatusCode::UNAUTHORIZED.into_response(),
+    }
 }
 
 /// Answers a scrape.
@@ -242,11 +263,11 @@ pub fn address() -> Result<SocketAddr, std::net::AddrParseError> {
     std::env::var("METRICS_ADDR").map_or(Ok(FALLBACK), |text| text.parse())
 }
 
-/// Serves the metrics on `listener` until it fails.
+/// Serves the metrics on `listener`, behind `access`, until it fails.
 ///
 /// # Errors
 ///
 /// The I/O error of the listener.
-pub async fn serve(listener: tokio::net::TcpListener) -> std::io::Result<()> {
-    axum::serve(listener, router()).await
+pub async fn serve(listener: tokio::net::TcpListener, access: ScrapeAccess) -> std::io::Result<()> {
+    axum::serve(listener, router(access)).await
 }

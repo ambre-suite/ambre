@@ -173,6 +173,7 @@ fn amended_with(first: &MessageDraft, edit: &MessageDraft) -> Amended {
 impl Amended {
     fn signer(&self) -> Signer {
         Signer {
+            nonce: crate::logic::delta::TEST_NONCE,
             peer: self.alice.peer(self.amendments).expect("a session"),
             user: Some(self.author),
         }

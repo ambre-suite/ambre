@@ -147,13 +147,16 @@ dependencies = [
  "ambre-protocol",
  "axum",
  "base64 0.22.1",
+ "chrono",
  "ed25519-dalek 2.2.0",
  "futures-util",
  "getrandom 0.3.4",
  "hex",
  "image",
+ "openidconnect",
  "postcard",
  "reqwest",
+ "rsa",
  "serde_json",
  "tokio",
  "tokio-rustls",
@@ -646,9 +649,9 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
- "tracing-wasm",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "wasm-bindgen-test",
  "web-sys",
  "x25519-dalek 2.0.1",
  "zeroize",
@@ -8494,17 +8497,6 @@ dependencies = [
  "tracing-core",
  "tracing-log",
  "tracing-serde",
-]
-
-[[package]]
-name = "tracing-wasm"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4575c663a174420fa2d78f4108ff68f65bf2fbb7dd89f33749b6e826b3626e07"
-dependencies = [
- "tracing",
- "tracing-subscriber",
- "wasm-bindgen",
 ]
 
 [[package]]

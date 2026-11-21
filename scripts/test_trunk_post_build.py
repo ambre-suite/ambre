@@ -271,6 +271,80 @@ class ContentPolicy(unittest.TestCase):
             self.assertIn(hook.digest(settled), self.directive(text, "script-src"))
 
 
+class EmbedSites(unittest.TestCase):
+    """`SRV-312`: the page admits in a frame the sites the deployment names, and no frame
+    when it names none."""
+
+    def frame_src(self, tmp: str, frames: list[str] | None) -> list[str]:
+        root = Path(tmp)
+        (root / "index.html").write_text(POLICY_PAGE, encoding="utf-8")
+        theme = root / "theme.css"
+        theme.write_text(":root { --bg: #fff; }\n", encoding="utf-8")
+        text = hook.fill_policy(root, theme, frames=frames)
+        found = [d.split()[1:] for d in text.split("; ") if d.split()[0] == "frame-src"]
+        self.assertEqual(len(found), 1, text)
+        return found[0]
+
+    def test_a_deployment_that_names_no_site_admits_no_frame(self) -> None:
+        for value in ("", "  ", " , "):
+            with tempfile.TemporaryDirectory() as tmp:
+                self.assertEqual(self.frame_src(tmp, hook.embed_sites(value)), ["'none'"], repr(value))
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(self.frame_src(tmp, None), ["'none'"])
+
+    def test_each_named_site_is_admitted_as_an_https_origin_and_nothing_else(self) -> None:
+        sites = hook.embed_sites("www.youtube.com, https://*.Vimeo.com/\n example.org:8443 www.youtube.com")
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(
+                self.frame_src(tmp, sites),
+                ["https://www.youtube.com", "https://*.vimeo.com", "https://example.org:8443"],
+            )
+
+    def test_a_value_that_is_not_a_site_fails_the_build(self) -> None:
+        for value in (
+            "*",
+            "https:",
+            "https://",
+            "http://example.org",
+            "data:",
+            "example.org/watch",
+            "'unsafe-inline'",
+            "'self'",
+            "example.org;script-src",
+            "*.",
+            "-bad.example.org",
+        ):
+            with self.subTest(value=value), self.assertRaises(hook.HookError):
+                hook.embed_sites(value)
+
+    def test_the_hook_reads_the_sites_from_the_deployment(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {"TRUNK_STAGING_DIR": tmp, hook.EMBED_SITES_VAR: "www.youtube.com"}
+            seen: list[list[str] | None] = []
+            with (
+                mock.patch.dict(os.environ, env, clear=True),
+                mock.patch.object(hook, "hash_worker"),
+                mock.patch.object(hook, "fill_worker_address"),
+                mock.patch.object(hook, "write_thread_script"),
+                mock.patch.object(hook, "copy_converter"),
+                mock.patch.object(hook, "write_headers"),
+                mock.patch.object(hook, "fill_policy", side_effect=lambda *a, **k: seen.append(k["frames"])),
+            ):
+                self.assertEqual(hook.main(), 0)
+            self.assertEqual(seen, [["https://www.youtube.com"]])
+            env[hook.EMBED_SITES_VAR] = "http://www.youtube.com"
+            with (
+                mock.patch.dict(os.environ, env, clear=True),
+                mock.patch.object(hook, "hash_worker"),
+                mock.patch.object(hook, "fill_worker_address"),
+                mock.patch.object(hook, "write_thread_script"),
+                mock.patch.object(hook, "copy_converter"),
+                mock.patch.object(hook, "write_headers"),
+                redirect_stderr(io.StringIO()),
+            ):
+                self.assertEqual(hook.main(), 1)
+
+
 class Headers(unittest.TestCase):
     """`SRV-281`, `SRV-282`: the headers file of the build refuses any frame on every answer,
     and gives the script of each worker the worker policy."""
@@ -341,6 +415,15 @@ class Headers(unittest.TestCase):
         self.assertLess(main.index("write_headers("), main.index("write_brotli("))
 
 
+def wasm(*custom: bytes) -> bytes:
+    """A wasm module of one type section and one custom section per name of `custom`."""
+    out = b"\0asm\x01\0\0\0" + b"\x01\x01\x00"
+    for name in custom:
+        body = bytes([len(name)]) + name + b"x"
+        out += b"\x00" + bytes([len(body)]) + body
+    return out
+
+
 class DevLoginGate(unittest.TestCase):
     """`ZK-045`: a release whose wasm carries the development sign-in fails."""
 
@@ -362,14 +445,53 @@ class DevLoginGate(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             hook.refuse_dev_login(self.built(tmp, b"\0asm ambre-dev"))
 
-    def test_the_release_alone_is_guarded(self) -> None:
-        self.assertTrue(hook.guards_dev_login({"TRUNK_PROFILE": "release"}))
-        self.assertFalse(hook.guards_dev_login({"TRUNK_PROFILE": "debug"}))
+    def test_a_release_is_guarded_and_a_debug_build_is_not(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "ambre-app-0123abcd_bg.wasm").write_bytes(wasm(b"name", b"producers"))
+            self.assertTrue(hook.guards_dev_login({"TRUNK_PROFILE": "release"}, root))
+            self.assertFalse(hook.guards_dev_login({"TRUNK_PROFILE": "debug"}, root))
+
+    def test_an_optimised_build_is_guarded_whatever_its_trunk_profile(self) -> None:
+        # `ZK-049`, audit `W209`: the proofs built the profile of the release
+        # without `--release`, and the gate read the Trunk profile alone.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "ambre-app-0123abcd_bg.wasm").write_bytes(wasm(b"producers"))
+            self.assertEqual(hook.optimised_wasm_in(root), ["ambre-app-0123abcd_bg.wasm"])
+            self.assertTrue(hook.guards_dev_login({"TRUNK_PROFILE": "debug"}, root))
+            self.assertTrue(hook.guards_dev_login({}, root))
+
+    def test_a_converter_module_marks_no_build_optimised(self) -> None:
+        # A converter module is always built under the profile of the release.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "ambre-app-0123abcd_bg.wasm").write_bytes(wasm(b"name"))
+            (root / "ambre-convert-pdf-0123456789abcdef.wasm").write_bytes(wasm())
+            self.assertFalse(hook.guards_dev_login({"TRUNK_PROFILE": "debug"}, root))
+
+    def test_the_hook_refuses_an_optimised_debug_build_with_the_sign_in(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "ambre-sync-0123abcd_bg.wasm").write_bytes(wasm(b"producers") + b"ambre-dev-seed")
+            env = {"TRUNK_STAGING_DIR": str(root), "TRUNK_PROFILE": "debug"}
+            with mock.patch.dict(os.environ, env), redirect_stderr(io.StringIO()):
+                self.assertEqual(hook.main(), 1)
+            self.assertEqual(len(list(root.iterdir())), 1)
+
+    def test_the_sections_of_a_wasm_are_read_by_name(self) -> None:
+        self.assertEqual(hook.wasm_sections(wasm(b"name", b"producers")), [b"name", b"producers"])
+        self.assertIsNone(hook.wasm_sections(b"not a wasm"))
+        # A truncated section stops the walk without an error.
+        self.assertEqual(hook.wasm_sections(wasm(b"name")[:-1]), [])
 
     def test_the_former_escape_opens_nothing(self) -> None:
         # The call proofs once passed a release through this name. It now
         # opens nothing: the hook refuses the release all the same.
-        self.assertTrue(hook.guards_dev_login({"TRUNK_PROFILE": "release", "AMBRE_DEV_LOGIN_RELEASE": "1"}))
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertTrue(
+                hook.guards_dev_login({"TRUNK_PROFILE": "release", "AMBRE_DEV_LOGIN_RELEASE": "1"}, Path(tmp))
+            )
         with tempfile.TemporaryDirectory() as tmp:
             root = self.built(tmp, b"\0asm ambre-dev-seed")
             env = {"TRUNK_STAGING_DIR": str(root), "TRUNK_PROFILE": "release", "AMBRE_DEV_LOGIN_RELEASE": "1"}
@@ -377,9 +499,10 @@ class DevLoginGate(unittest.TestCase):
                 self.assertEqual(hook.main(), 1)
             self.assertEqual(len(list(root.iterdir())), 2)
 
-    def test_the_proofs_build_no_release_under_the_profile_of_the_release(self) -> None:
+    def test_the_proofs_build_under_the_profile_of_the_release(self) -> None:
         # The proofs measure the shipped wasm, so they take the cargo profile
-        # of the release; they sign in by a bare name, so they are no release.
+        # of the release. They sign in through the provider of the belt, so
+        # the build carries no development sign-in (`ZK-050`).
         repo = Path(__file__).resolve().parent.parent
         page = (repo / "crates" / "ambre-app" / "index.html").read_text(encoding="utf-8")
         profiles = set(re.findall(r'data-cargo-profile-release="([^"]+)"', page))
@@ -390,7 +513,8 @@ class DevLoginGate(unittest.TestCase):
         self.assertEqual(trunk[:2], ["trunk", "build"])
         self.assertNotIn("--release", trunk)
         self.assertIn(f"--cargo-profile={profiles.pop()}", trunk)
-        self.assertIn("dev-login", trunk)
+        self.assertNotIn("dev-login", trunk)
+        self.assertNotIn("dev-login", recipe.group(1))
 
     def test_the_hook_refuses_a_release_before_it_writes_a_copy(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

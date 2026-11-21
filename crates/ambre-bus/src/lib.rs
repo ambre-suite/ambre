@@ -55,13 +55,15 @@ pub use app::murmure::{
     MemberChannel, Mentions, Messages, Octets, SealedChannelKey, Unread,
 };
 // The grid coordinates Trame and Prose share.
+/// The head of a membership log, which a [`KeptLog`] holds.
+pub use ambre_protocol::LogHead;
 pub use app::grid::{CellPos, CellRect, Col, MergeSpan, Row};
 pub use call::{CallMembers, CallSignal, PageDescription};
 pub use command::SyncCommand;
 pub use content::{Embed, Mutation, Traffic};
 pub use event::{
-    ApiRequest, AuthFailure, FoldAnswer, LeaseAnswer, LogicEvent, OpenFailure, PassphraseVerdict,
-    SignedDelta, SnapshotPurpose, SnapshotVerdict, Successor,
+    ApiRequest, AuthFailure, FoldAnswer, KeptLog, KeptLogRow, LeaseAnswer, LogicEvent, OpenFailure,
+    PassphraseVerdict, SignedDelta, SnapshotPurpose, SnapshotVerdict, Successor,
 };
 pub use logic::{LogicCommand, StoreRoom};
 pub use lossy::{LossyOutcome, is_lossy_class};

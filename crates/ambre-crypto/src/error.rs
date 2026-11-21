@@ -38,6 +38,12 @@ pub enum CryptoError {
     #[error("sealed seed bound to another account")]
     UnboundSeed,
 
+    /// A wrapped key or a sealed seed whose first byte names no version. It is
+    /// the layout before the version byte, or bytes the relay made up. It is
+    /// refused before any key is derived (audit `P59`).
+    #[error("unversioned seal")]
+    UnversionedWrap,
+
     /// The X25519 shared secret was non-contributory (peer sent a low-order
     /// public key), yielding a predictable all-zero secret. Rejected.
     #[error("weak public key")]

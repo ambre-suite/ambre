@@ -17,6 +17,7 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use crate::doc;
 use crate::events::{Graphemes, Paragraphs, WordCount, Words};
+use crate::logic::Roots;
 
 /// The four text counts of the whole document, `pages` left at zero.
 ///
@@ -24,9 +25,9 @@ use crate::events::{Graphemes, Paragraphs, WordCount, Words};
 /// included, in the order of the document flow. A table of contents stores no
 /// text, so it adds nothing.
 #[must_use]
-pub fn compute_word_count(document: &LoroDoc) -> WordCount {
+pub fn compute_word_count(document: &LoroDoc, roots: &Roots) -> WordCount {
     let mut count = WordCount::default();
-    let Some(tree) = doc::blocks_read(document) else {
+    let Some(tree) = doc::blocks_read(document, roots) else {
         return count;
     };
     // The flow starts at the body roots, so a band is never counted. It is
@@ -106,13 +107,17 @@ mod tests {
     }
 
     fn count_of(paragraphs: &[&str]) -> WordCount {
-        compute_word_count(document_of(paragraphs).document())
+        let state = document_of(paragraphs);
+        compute_word_count(state.document(), state.roots())
     }
 
     #[test]
     fn an_empty_document_counts_zero_for_the_four_counts() {
         let state = ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document is built");
-        assert_eq!(compute_word_count(state.document()), WordCount::default());
+        assert_eq!(
+            compute_word_count(state.document(), state.roots()),
+            WordCount::default()
+        );
     }
 
     #[test]
@@ -168,7 +173,7 @@ mod tests {
             pos: Pos::<DocChar>::ZERO,
             text: "inside".to_owned(),
         });
-        let count = compute_word_count(state.document());
+        let count = compute_word_count(state.document(), state.roots());
         assert_eq!(count.words.get(), 2);
         assert_eq!(count.paragraphs.get(), 2);
     }
@@ -177,7 +182,7 @@ mod tests {
     fn counting_writes_nothing_to_the_document() {
         let state = document_of(&["some words", "and more"]);
         let before = state.document().oplog_vv();
-        let _ = compute_word_count(state.document());
+        let _ = compute_word_count(state.document(), state.roots());
         assert_eq!(state.document().oplog_vv(), before);
     }
 }

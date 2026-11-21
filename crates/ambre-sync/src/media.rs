@@ -39,7 +39,7 @@ fn open_blob(
     // The media file keeps its bytes in the clear by role, so they move out
     // of the wrapper with no copy. A blob the address refuses is wiped.
     let data = ambre_core::Payload::new(data.into_plaintext());
-    if ambre_crypto::commitment::media_address(doc_key, &data) != address {
+    if ambre_crypto::commitment::media_address(doc_key, document_id, &data) != address {
         data.wipe();
         return Err(SyncError::BlobMismatch);
     }
@@ -48,11 +48,20 @@ fn open_blob(
 
 /// Opens a downloaded blob with the one key it names: the current key, a
 /// cached one, or one the chain recovers (`SYNC-042`, `SYNC-045`).
+///
+/// A blob whose author the walked log never granted a writing role is
+/// refused before any key is sought (`SYNC-297`). The open then checks the
+/// signature under that same author, so a header cannot name a writer it
+/// was not signed by.
 fn open_blob_named(
     blob: &Payload<pipeline::FetchedBlob>,
     content_hash: &ambre_core::Validated<ambre_core::ContentHash>,
     keyring: &crate::chain::Keyring,
+    writers: &crate::membership_log::Writers,
 ) -> Result<ambre_core::Payload<ambre_core::MediaBytes>, SyncError> {
+    if !writers.admits(&pipeline::object_author(blob)?) {
+        return Err(pipeline::PipelineError::NotAWriter.into());
+    }
     let wanted = pipeline::object_key(blob)?;
     let key = keyring.find(wanted).ok_or(SyncError::KeyOutOfReach)?;
     open_blob(blob, keyring.document_id, content_hash, &key)
@@ -114,7 +123,7 @@ impl SyncState {
                 return;
             }
         };
-        let address = ambre_crypto::commitment::media_address(&doc_key, &data);
+        let address = ambre_crypto::commitment::media_address(&doc_key, document_id, &data);
         let content_hash = address.content_hash();
         let Some(tx) = event_tx else {
             self.reply(
@@ -200,7 +209,10 @@ impl SyncState {
         let auth = self.auth_context();
         // A blob sealed before a rotation names an older key, which the
         // chain recovers (`SYNC-042`, `SYNC-119`).
-        let keyring = self.documents.get(&document_id).map(|ds| ds.keyring());
+        let keyring = self
+            .documents
+            .get(&document_id)
+            .map(|ds| (ds.keyring(), ds.writers.clone()));
 
         let Some(tx) = event_tx else {
             self.reply(
@@ -213,7 +225,7 @@ impl SyncState {
             );
             return;
         };
-        let Some(keyring) = keyring else {
+        let Some((keyring, writers)) = keyring else {
             let _ = logic_tx.send(LogicEvent::ApiError {
                 id: Some(id),
                 request: ApiRequest::DownloadMedia,
@@ -226,7 +238,11 @@ impl SyncState {
             let base = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route(format!("/documents/{document_id}"));
             let http = GlooHttp { auth };
-            download_media(&http, &base, id, content_hash, &keyring, &tx, &logic_tx).await;
+            let keys = BlobKeys {
+                keyring: &keyring,
+                writers: &writers,
+            };
+            download_media(&http, &base, id, content_hash, keys, &tx, &logic_tx).await;
         });
     }
 
@@ -375,6 +391,14 @@ async fn upload_media(
     }
 }
 
+/// What opens a blob of one document: its keys, and the writers its walked
+/// log granted (`SYNC-297`).
+#[derive(Clone, Copy)]
+struct BlobKeys<'a> {
+    keyring: &'a crate::chain::Keyring,
+    writers: &'a crate::membership_log::Writers,
+}
+
 /// Downloads and opens one blob, then answers the caller (`SYNC-055`). A
 /// success answers with the whole plaintext. A failure is reported, and no
 /// byte of the blob is sent.
@@ -383,15 +407,15 @@ async fn download_media(
     base: &crate::http::Url<http::Route>,
     id: Seq<Request>,
     content_hash: ambre_core::Validated<ambre_core::ContentHash>,
-    keyring: &crate::chain::Keyring,
+    keys: BlobKeys<'_>,
     tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
     logic_tx: &LogicSink,
 ) {
-    match download_leg(http, base, &content_hash, keyring).await {
+    match download_leg(http, base, &content_hash, keys).await {
         Ok(data) => {
             let _ = tx.send(SyncEvent::MediaDownloaded {
                 id,
-                document_id: keyring.document_id,
+                document_id: keys.keyring.document_id,
                 content_hash,
                 data,
             });
@@ -483,7 +507,7 @@ async fn download_leg(
     http: &impl MediaHttp,
     base: &crate::http::Url<http::Route>,
     content_hash: &ambre_core::Validated<ambre_core::ContentHash>,
-    keyring: &crate::chain::Keyring,
+    keys: BlobKeys<'_>,
 ) -> Result<ambre_core::Payload<ambre_core::MediaBytes>, http::Failed> {
     let link: http::DownloadUrlResponse = http
         .post_json(
@@ -498,7 +522,7 @@ async fn download_leg(
         .fetch_bytes(&link.download_url)
         .await
         .map_err(|e| e.at("S3 GET"))?;
-    open_blob_named(&blob, content_hash, keyring).map_err(|e| {
+    open_blob_named(&blob, content_hash, keys.keyring, keys.writers).map_err(|e| {
         crate::log::warning!("Sync: Open: {e}");
         http::Failed::local(ambre_core::LocalFailure::Crypto)
     })
@@ -542,8 +566,9 @@ mod tests {
         );
     }
 
-    /// The address the worker answers with is keyed by the document key: the
-    /// same bytes in two documents get two addresses (`SYNC-050`).
+    /// The address the worker answers with is keyed by the document key, and
+    /// binds the document. The same bytes in two documents under one key get
+    /// two addresses (`SYNC-050`, `SYNC-288`, audit `P20`).
     #[test]
     fn an_upload_is_addressed_under_the_document_key() {
         let (sink, rx) = LogicSink::channel();
@@ -553,9 +578,9 @@ mod tests {
         );
         let picture = b"one picture, two documents".to_vec();
         let mut addresses = Vec::new();
-        for byte in [0x31, 0x32] {
+        for _ in 0..2 {
             let document_id = Id::<Document>::mint();
-            let key = DocumentKey::from_array([byte; 32]);
+            let key = DocumentKey::from_array([0x31; 32]);
             let doc_state = SyncDocumentState::new(
                 document_id,
                 key.clone(),
@@ -576,7 +601,8 @@ mod tests {
                 _ => None,
             });
             let address = answer.expect("the upload answered with an address");
-            let expected = ambre_crypto::commitment::media_address(&key, &picture.clone().into());
+            let expected =
+                ambre_crypto::commitment::media_address(&key, document_id, &picture.clone().into());
             assert_eq!(address, expected.content_hash());
             addresses.push(address);
         }
@@ -803,7 +829,11 @@ mod tests {
     async fn a_failed_upload_step_confirms_nothing() {
         let key = DocumentKey::from_array([0x31; 32]);
         let document_id = Id::<Document>::mint();
-        let address = ambre_crypto::commitment::media_address(&key, &b"a picture".to_vec().into());
+        let address = ambre_crypto::commitment::media_address(
+            &key,
+            document_id,
+            &b"a picture".to_vec().into(),
+        );
         let upload = |id| Upload {
             id,
             document_id,
@@ -848,7 +878,11 @@ mod tests {
     async fn an_upload_of_a_held_address_confirms_without_a_put() {
         let key = DocumentKey::from_array([0x31; 32]);
         let document_id = Id::<Document>::mint();
-        let address = ambre_crypto::commitment::media_address(&key, &b"a picture".to_vec().into());
+        let address = ambre_crypto::commitment::media_address(
+            &key,
+            document_id,
+            &b"a picture".to_vec().into(),
+        );
         let (logic, logic_rx) = LogicSink::channel();
         let (tx, events) = ambre_bus::conduit::unbounded::<SyncEvent>();
         for (status, ran, confirmed) in [
@@ -907,6 +941,11 @@ mod tests {
         let (logic, logic_rx) = LogicSink::channel();
         let (tx, events) = ambre_bus::conduit::unbounded::<SyncEvent>();
 
+        let unchecked = crate::membership_log::Writers::Unchecked;
+        let keys = BlobKeys {
+            keyring: &keyring,
+            writers: &unchecked,
+        };
         for (fail, served) in [
             ("link", blob.clone()),
             ("fetch", blob.clone()),
@@ -916,14 +955,14 @@ mod tests {
         ] {
             let http = FakeMedia::new(fail, served);
             let id = ambre_bus::next_request();
-            download_media(&http, &base(), id, hash.clone(), &keyring, &tx, &logic).await;
+            download_media(&http, &base(), id, hash.clone(), keys, &tx, &logic).await;
             let (errors, sent) = answers(&logic_rx, &events);
             assert_eq!(errors, [(Some(id), "DownloadMedia".to_owned())], "{fail}");
             assert!(sent.is_empty(), "{fail} delivered bytes");
         }
         let http = FakeMedia::new("", blob);
         let id = ambre_bus::next_request();
-        download_media(&http, &base(), id, hash.clone(), &keyring, &tx, &logic).await;
+        download_media(&http, &base(), id, hash.clone(), keys, &tx, &logic).await;
         let (errors, sent) = answers(&logic_rx, &events);
         assert!(errors.is_empty());
         assert!(matches!(
@@ -943,7 +982,7 @@ mod tests {
     ) {
         let signing = SigningKey::from_bytes(&[0x07; 32]);
         let data = ambre_core::Payload::new(data.to_vec());
-        let address = ambre_crypto::commitment::media_address(key, &data);
+        let address = ambre_crypto::commitment::media_address(key, document_id, &data);
         let blob = seal_blob(&data, document_id, &address, key, &signing).unwrap();
         (
             Payload::<pipeline::FetchedBlob>::new(blob.into_bytes()),
@@ -978,11 +1017,65 @@ mod tests {
             previous: Vec::new(),
             chain: crate::chain::Chain::new(document_id, links),
         };
+        let unchecked = crate::membership_log::Writers::Unchecked;
         assert_eq!(
-            open_blob_named(&blob, &address, &keyring(links)).unwrap(),
+            open_blob_named(&blob, &address, &keyring(links), &unchecked).unwrap(),
             b"a picture"
         );
-        assert!(open_blob_named(&blob, &address, &keyring(Vec::new())).is_err());
+        assert!(open_blob_named(&blob, &address, &keyring(Vec::new()), &unchecked).is_err());
+    }
+
+    /// Holds `SYNC-297`: a blob opens only when the walked log granted its
+    /// author a writing role. A member who holds the key, and a stranger to
+    /// the log, each seal a blob the cipher alone would accept. A header
+    /// rewritten to name a writer fails the signature of that writer.
+    #[test]
+    fn a_blob_whose_author_never_wrote_is_refused() {
+        let key = DocumentKey::from_array([0x31; 32]);
+        let document_id = Id::<Document>::mint();
+        let keyring = crate::chain::Keyring {
+            document_id,
+            current: key.clone(),
+            previous: Vec::new(),
+            chain: crate::chain::Chain::new(document_id, Vec::new()),
+        };
+        let writer = SigningKey::from_bytes(&[0x07; 32]);
+        let stranger = SigningKey::from_bytes(&[0x08; 32]);
+        let author = |signing: &SigningKey| {
+            FixedBytes::<ambre_core::PublicKey>::from_array(signing.verifying_key().to_bytes())
+        };
+        let writers =
+            crate::membership_log::Writers::granted(std::iter::once(author(&writer)).collect());
+        let seal_by = |signing: &SigningKey| {
+            let data = ambre_core::Payload::new(b"a picture".to_vec());
+            let address = ambre_crypto::commitment::media_address(&key, document_id, &data);
+            let blob = seal_blob(&data, document_id, &address, &key, signing).unwrap();
+            (blob.into_bytes(), address.content_hash())
+        };
+
+        let (bytes, hash) = seal_by(&writer);
+        let blob = Payload::<pipeline::FetchedBlob>::new(bytes.clone());
+        assert_eq!(
+            open_blob_named(&blob, &hash, &keyring, &writers).unwrap(),
+            b"a picture"
+        );
+
+        let (forged, _) = seal_by(&stranger);
+        let forged = Payload::<pipeline::FetchedBlob>::new(forged);
+        assert!(matches!(
+            open_blob_named(&forged, &hash, &keyring, &writers),
+            Err(SyncError::Pipeline(pipeline::PipelineError::NotAWriter))
+        ));
+        // Under an unchecked log the same blob stands on its seal alone.
+        let unchecked = crate::membership_log::Writers::Unchecked;
+        assert!(open_blob_named(&forged, &hash, &keyring, &unchecked).is_ok());
+
+        // The stranger's blob, its header rewritten to name the writer.
+        let mut renamed = forged.as_bytes().to_vec();
+        let at = 1 + ambre_core::key_id::KEY_ID_LEN;
+        renamed[at..at + 32].copy_from_slice(author(&writer).as_array());
+        let renamed = Payload::<pipeline::FetchedBlob>::new(renamed);
+        assert!(open_blob_named(&renamed, &hash, &keyring, &writers).is_err());
     }
 
     /// A blob sealed for one document does not open under another, even one
@@ -1018,7 +1111,11 @@ mod tests {
         let (served, _) = sealed(b"another picture", document_id, &key);
         assert!(open_blob(&served, document_id, &wanted, &key).is_err());
 
-        let address = ambre_crypto::commitment::media_address(&key, &b"a picture".to_vec().into());
+        let address = ambre_crypto::commitment::media_address(
+            &key,
+            document_id,
+            &b"a picture".to_vec().into(),
+        );
         let signing = SigningKey::from_bytes(&[0x07; 32]);
         let other = ambre_core::Payload::new(b"other bytes".to_vec());
         let forged = seal_blob(&other, document_id, &address, &key, &signing).unwrap();

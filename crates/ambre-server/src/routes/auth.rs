@@ -54,11 +54,30 @@ pub async fn auth_config(
 /// is the account's display name, so a body whose name breaks that rule does
 /// not decode (`SRV-234`). Nor does a key of the wrong length, so it is refused
 /// before any row is written (`SRV-232`).
+///
+/// A body with neither key signs in as a provider account that owes its keys.
+/// The account keeps the keys it holds, or holds none until its first key
+/// store. The development tiers reach the key setup this way, now that no
+/// anonymous account setup exists (`SRV-319`). A body with one key alone is
+/// refused.
 #[derive(serde::Deserialize)]
 pub struct DevLoginRequest {
     pub username: ambre_core::Validated<ambre_core::DisplayName>,
-    pub signing_pub_key: ambre_core::FixedBytes<ambre_core::PublicKey>,
-    pub exchange_pub_key: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
+    #[serde(default)]
+    pub signing_pub_key: Option<ambre_core::FixedBytes<ambre_core::PublicKey>>,
+    #[serde(default)]
+    pub exchange_pub_key: Option<ambre_core::FixedBytes<ambre_core::ExchangePublicKey>>,
+}
+
+/// The two public keys of a development sign-in, or none.
+fn dev_keys(req: &DevLoginRequest) -> Result<Option<db::DevKeys<'_>>, AppError> {
+    match (&req.signing_pub_key, &req.exchange_pub_key) {
+        (Some(signing), Some(exchange)) => Ok(Some(db::DevKeys { signing, exchange })),
+        (None, None) => Ok(None),
+        _ => Err(AppError::BadRequest(
+            "a development sign-in carries both keys or neither".into(),
+        )),
+    }
 }
 
 /// Response for `POST /api/auth/dev/login`.
@@ -90,20 +109,14 @@ pub async fn dev_login(
     if state.config.dev_mode == crate::state::DevMode::Off {
         return Err(AppError::Unauthorized);
     }
-    let user = db::dev_upsert_user(
-        &state.db,
-        &req.username,
-        &req.signing_pub_key,
-        &req.exchange_pub_key,
-    )
-    .await?;
+    let user = db::dev_upsert_user(&state.db, &req.username, dev_keys(&req)?).await?;
 
     let user_id = user.id;
-    // The upsert above writes both keys, so a dev account always holds one.
-    let signing_pubkey = account_session_key(&user)
-        .ok_or_else(|| AppError::Internal("dev account stored no signing key".into()))?;
+    // A keyless sign-in of an account that owes its keys mints a keyless
+    // session, as a provider sign-in does (`SRV-027`).
+    let signing_pubkey = account_session_key(&user);
 
-    let tokens = auth::issue_session(&state, user_id, Some(signing_pubkey)).await?;
+    let tokens = auth::issue_session(&state, user_id, signing_pubkey).await?;
     tracing::debug!(user_id = %user_id, provider = "dev", "login");
 
     Ok(axum::Json(DevLoginResponse {
@@ -127,6 +140,18 @@ fn account_session_key(
     user: &db::UserRow,
 ) -> Option<ambre_core::FixedBytes<ambre_core::PublicKey>> {
     user.signing_pubkey
+}
+
+/// The signing key the account `user_id` registered, or `None` while it owes
+/// its keys. An account the register no longer holds mints no session.
+async fn registered_key(
+    state: &AppState,
+    user_id: &Id<User>,
+) -> Result<Option<ambre_core::FixedBytes<ambre_core::PublicKey>>, AppError> {
+    db::get_user(&state.db, user_id)
+        .await?
+        .map(|user| account_session_key(&user))
+        .ok_or(AppError::Unauthorized)
 }
 
 /// Request body for `POST /api/auth/refresh`: the opaque refresh token.
@@ -160,7 +185,14 @@ pub async fn refresh(
     let data = redis_ops::refresh_consume(&state.redis, &req.refresh_token)
         .await?
         .ok_or(AppError::Unauthorized)?;
-    let tokens = auth::issue_session(&state, data.user_id, data.signing_pubkey).await?;
+    let signing_pubkey = match data.signing_pubkey {
+        Some(key) => Some(key),
+        // A session minted before the keys reads the register: a key store
+        // may have landed since, in another tab or before a reload. The
+        // renewal then carries the key the account registered (`SRV-320`).
+        None => registered_key(&state, &data.user_id).await?,
+    };
+    let tokens = auth::issue_session(&state, data.user_id, signing_pubkey).await?;
     Ok(axum::Json(RefreshResponse {
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
@@ -245,8 +277,9 @@ pub async fn oidc_callback(
     )
     .ok_or_else(|| AppError::BadRequest("OIDC provider returned a blank subject".into()))?;
 
-    let user = db::upsert_user_from_oidc(&state.db, provider, &oidc_subject, &email, &display_name)
-        .await?;
+    let db::OidcSignIn { user, reclaims } =
+        db::sign_in_from_oidc(&state.db, provider, &oidc_subject, &email, &display_name).await?;
+    tell_reclaims(&state, &reclaims).await;
 
     let user_id = user.id;
     let signing_pubkey = account_session_key(&user);
@@ -263,6 +296,25 @@ pub async fn oidc_callback(
         refresh_token: tokens.refresh_token,
         access_expires_in: tokens.access_expires_in,
     }))
+}
+
+/// Tells each inviter of a reclaimed account that the member it invited no
+/// longer holds the address it was invited under (`SRV-295`). The notice goes
+/// to the inviter's own topic, so a member the inviter never invited hears
+/// nothing. A lost notice leaves the member list, which shows the member
+/// unproven and without the address.
+pub(crate) async fn tell_reclaims(state: &AppState, reclaims: &[db::ReclaimNotice]) {
+    for notice in reclaims {
+        let msg = crate::payload::StoredPayload::server_msg(
+            &ambre_protocol::ws::WsServerMsg::AddressReclaimed {
+                document_id: notice.document,
+                member: notice.member,
+            },
+        );
+        if let Err(e) = redis_ops::user_broadcast(&state.redis, &notice.inviter, &msg).await {
+            tracing::warn!(error = %e, "an address reclaim was not told to an inviter");
+        }
+    }
 }
 
 /// The display name a provider's claims give. It is the first of the full

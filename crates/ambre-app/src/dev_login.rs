@@ -58,23 +58,41 @@ pub(crate) fn forget_user() {}
 /// The boot sign-in: `?user=` wins, else the dev user remembered from a
 /// prior session. A refresh of a deep link carries no query string, and
 /// still re-establishes the session. A relay outside development mode
-/// refuses the `DevLogin` this sends.
+/// refuses the `DevLogin` this sends. Answers [`BootSignIn::Sent`] when a
+/// name signs the page in.
 #[cfg(feature = "dev-login")]
-pub(crate) fn sign_in_at_boot(outbox: &ShellOutbox) {
-    if let Some(username) = user_from_url().or_else(stored_user) {
-        tracing::info!("Dev login requested for user {username:?}");
-        remember_user(&username);
-        outbox.send(LogicCommand::Rest {
-            id: ambre_bus::next_request(),
-            cmd: RestCommand::DevLogin { username },
-        });
-    }
+pub(crate) fn sign_in_at_boot(outbox: &ShellOutbox) -> BootSignIn {
+    let Some(username) = user_from_url().or_else(stored_user) else {
+        return BootSignIn::None;
+    };
+    tracing::info!("Dev login requested for user {username:?}");
+    remember_user(&username);
+    outbox.send(LogicCommand::Rest {
+        id: ambre_bus::next_request(),
+        cmd: RestCommand::DevLogin { username },
+    });
+    BootSignIn::Sent
 }
 
 /// A build without the development sign-in reads no `?user=` and no stored
 /// name at boot (`ZK-045`).
 #[cfg(not(feature = "dev-login"))]
-pub(crate) fn sign_in_at_boot(_outbox: &ShellOutbox) {}
+pub(crate) fn sign_in_at_boot(_outbox: &ShellOutbox) -> BootSignIn {
+    BootSignIn::None
+}
+
+/// Whether the development sign-in signed the page in at boot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BootSignIn {
+    /// No name: the page resumes the session the device keeps, if any.
+    None,
+    /// A name signs the page in.
+    #[cfg_attr(
+        not(feature = "dev-login"),
+        expect(dead_code, reason = "only the development sign-in sends a name")
+    )]
+    Sent,
+}
 
 /// The sign-in field of the development panel: a username, sent as
 /// `DevLogin` to the live Logic thread with no reload. The relay creates the

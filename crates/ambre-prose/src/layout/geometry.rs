@@ -5,6 +5,7 @@
 //! no break position and no measured height is stored, so no reader can find a
 //! stale one (`PROSE-033`, `PROSE-065`).
 
+use crate::logic::Roots;
 use ambre_core::{Doc, Px};
 use loro::LoroDoc;
 
@@ -43,8 +44,8 @@ impl PageBox {
     /// is a document that opens and cannot be read, which is worse than a
     /// document read on the wrong sheet.
     #[must_use]
-    pub fn read(document: &LoroDoc) -> Self {
-        let format = doc::read_page_format(document);
+    pub fn read(document: &LoroDoc, roots: &Roots) -> Self {
+        let format = doc::read_page_format(document, roots);
         Self::from_mm(format)
     }
 

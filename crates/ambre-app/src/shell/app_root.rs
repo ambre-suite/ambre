@@ -541,6 +541,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
     // `Copy`, so it is handed to each app-chrome component below.
     let palette_open = commands.palette_open;
     let seal_open = commands.seal_open;
+    let seal_refusal = commands.seal_refusal;
     let on_command = Callback::new({
         let commands = commands.clone();
         move |id: StaticKey<Commands>| commands.run(id)
@@ -780,6 +781,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         <ambre_chrome::PassphraseDialog
             open=seal_open
             intent=ambre_chrome::PassphraseIntent::Seal
+            weakness=seal_refusal
             on_submit=Callback::new({
                 // The application wraps the passphrase in its sealed-save
                 // command, and nothing else holds it (`ARCH-004`).

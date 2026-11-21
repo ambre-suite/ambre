@@ -7,7 +7,8 @@
 //!     store;
 //!   * the OIDC client secret and PKCE verifier, which it presents to the
 //!     provider, and the code, which it trades there;
-//!   * the hex text of the token signing seed, which it decodes once.
+//!   * the hex text of the token signing seed, which it decodes once;
+//!   * the token a scrape of the metrics presents, which it compares.
 //!
 //! Each sits in an [`ambre_core::Secret`]. The primitive gate admits a read
 //! of one here, and nowhere else in the relay. The rest of the relay calls
@@ -26,6 +27,7 @@
 //! nothing else (`ARCH-047`).
 
 pub mod oidc;
+pub mod scrape;
 pub mod seed;
 pub mod token;
 

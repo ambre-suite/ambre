@@ -14,6 +14,12 @@
 //! the same proof decides it (`SYNC-263`). Presence flows while nobody
 //! writes, so a relay that drops every update still lets a head through.
 //!
+//! A client that read the removal sees the other side of the same gap. It
+//! opens a member's delta under the key the removal retired, with a head
+//! before it. The relay
+//! numbered that delta after one under the current key, so the member writes
+//! behind the log, and the user is told (`SYNC-298`).
+//!
 //! The warning alone stops nothing: an edit sealed under the old key still
 //! reaches the removed member through the relay. So from the ask on, each
 //! edit waits unsealed, and leaves once a log that passes through the head is
@@ -22,8 +28,10 @@
 
 use ambre_bus::LogicEvent;
 use ambre_bus::sync_warning::SyncWarningCode;
+use std::collections::HashSet;
+
 use ambre_core::id::{Document, Id};
-use ambre_core::{FixedBytes, PublicKey, Seq};
+use ambre_core::{FixedBytes, KeyId, PublicKey, Relay, Seq};
 use ambre_protocol::{Ephemeral, LogHead, MembershipEntry, Update};
 
 use crate::generation::Listing;
@@ -64,6 +72,29 @@ pub(crate) enum Verdict {
     Withheld,
 }
 
+/// The lowest relay number this client opened a delta at, under one key.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct KeySince {
+    key: FixedBytes<KeyId>,
+    since: Seq<Relay>,
+}
+
+/// One delta this client opened, as the check of a member writing behind
+/// the log reads it (`SYNC-298`).
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct OpenedFrame {
+    /// The number the relay gave the delta.
+    pub(crate) seq: Seq<Relay>,
+    /// The key that sealed the delta.
+    pub(crate) key: FixedBytes<KeyId>,
+    /// The current key of the document when it opened.
+    pub(crate) current: FixedBytes<KeyId>,
+    /// The log head its author signed (`SYNC-206`).
+    pub(crate) head: LogHead,
+    /// The key that signed it.
+    pub(crate) signer: FixedBytes<PublicKey>,
+}
+
 /// The log heads one document checks against (`SYNC-207`), and the edits
 /// that wait while a head is under check (`SYNC-220`).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -73,6 +104,13 @@ pub(crate) struct HeadWatch {
     check: HeadCheck,
     /// Edits made while a head is under check, unsealed and in order.
     held: Vec<UpdateFrame>,
+    /// The lowest relay number of a delta opened under the current key.
+    /// A rotation leaves it naming the replaced key (`SYNC-298`).
+    current_since: Option<KeySince>,
+    /// The signers already found writing behind the log. Each one warns
+    /// once, and only a key that signed a delta that opened joins it, so
+    /// the set grows with the writers alone.
+    behind: HashSet<FixedBytes<PublicKey>>,
 }
 
 impl Default for HeadWatch {
@@ -81,6 +119,8 @@ impl Default for HeadWatch {
             served: ServedHeads::default(),
             check: HeadCheck::Clear,
             held: Vec::new(),
+            current_since: None,
+            behind: HashSet::new(),
         }
     }
 }
@@ -101,6 +141,40 @@ impl HeadWatch {
     /// its proof (`SYNC-218`). Absent on an empty log.
     pub(crate) fn head_entry(&self) -> Option<Box<MembershipEntry>> {
         self.served.last_entry().cloned().map(Box::new)
+    }
+
+    /// Whether the delta `frame` shows its signer writing behind the log
+    /// (`SYNC-298`), the first time for that signer.
+    ///
+    /// Three facts hold together. The delta is sealed under a key other than
+    /// the current one. The relay numbered it after a delta under the
+    /// current key, so it is no delta in flight before the rotation. Its
+    /// head is one the valid walk passes through, short of the head this
+    /// client read: the removal the rotation answered is past it.
+    ///
+    /// A delta under the current key only records its number. History
+    /// replayed under an older key carries lower numbers, so it warns
+    /// nobody.
+    pub(crate) fn writes_behind(&mut self, frame: OpenedFrame) -> bool {
+        if frame.key == frame.current {
+            self.current_since = Some(match self.current_since {
+                Some(held) if held.key == frame.current => KeySince {
+                    key: held.key,
+                    since: held.since.min(frame.seq),
+                },
+                _ => KeySince {
+                    key: frame.current,
+                    since: frame.seq,
+                },
+            });
+            return false;
+        }
+        let after_successor = self
+            .current_since
+            .is_some_and(|held| held.key == frame.current && held.since < frame.seq);
+        let short_of_log =
+            frame.head.position < self.head().position && self.served.walked_through(frame.head);
+        after_successor && short_of_log && self.behind.insert(frame.signer)
     }
 
     /// Whether a signed `head` asks for the log again. A head the valid walk
@@ -270,6 +344,38 @@ impl SyncState {
         if let Some(doc_state) = self.documents.get_mut(&document_id) {
             let listing = doc_state.directory_asked.latest();
             doc_state.head_watch.asked(head, listing);
+        }
+    }
+
+    /// Reads a peer's delta that opened at `seq` (`SYNC-298`). A member
+    /// that writes under a retired key, behind the log this client read,
+    /// raises a warning for the user. Either the relay withholds the removal
+    /// from that member, or the member has not read it yet. Under the key it
+    /// retired, the member who left may read that delta. This client's own
+    /// delta under a retired key is a resend, and warns nobody.
+    pub(crate) fn note_writer_behind(&mut self, seq: Seq<Relay>, update: &Update) {
+        let document_id = update.public_data.document_id;
+        let signer = update.public_data.pub_key;
+        let peer = self.author_pub_key() != Some(signer);
+        let Some(doc_state) = self.documents.get_mut(&document_id) else {
+            return;
+        };
+        let frame = OpenedFrame {
+            seq,
+            key: update.public_data.key_id,
+            current: doc_state.doc_key.id(),
+            head: update.public_data.log_head,
+            signer,
+        };
+        if (frame.key == frame.current || peer) && doc_state.head_watch.writes_behind(frame) {
+            crate::log::warning!(
+                "[Sync] a member writes under a retired key, behind the log doc={document_id} seq={}",
+                seq.get()
+            );
+            self.send_to_logic(LogicEvent::SyncWarning {
+                document_id,
+                code: SyncWarningCode::WriterBehindLog,
+            });
         }
     }
 
@@ -621,6 +727,97 @@ mod tests {
         assert_eq!(codes(&rx), vec![SyncWarningCode::KeyNotHeld]);
         let doc_state = state.documents.get(&doc).expect("open");
         assert_eq!(doc_state.directory_asked.latest(), listing);
+    }
+
+    /// Holds `SYNC-298`: Alice revoked Carol and rotated the key, and the
+    /// relay hides it from Bob. Bob's delta under the retired key, with the
+    /// head before the revoke, opens on Alice's client. Numbered after a
+    /// delta under the current key, it warns once for Bob. Three deltas
+    /// under the retired key warn nobody:
+    /// * history numbered before it;
+    /// * a delta in flight before the rotation;
+    /// * a delta whose head holds the revoke.
+    #[test]
+    fn a_member_writing_behind_the_log_is_seen_by_a_peer() {
+        let (alice, bob, carol) = (Person::new(1), Person::new(2), Person::new(3));
+        let mut entries = created(&alice, &bob);
+        append(
+            &mut entries,
+            &alice,
+            &carol,
+            MembershipAct::Invite,
+            Role::Editor,
+        );
+        append(
+            &mut entries,
+            &alice,
+            &carol,
+            MembershipAct::Revoke,
+            Role::Editor,
+        );
+        let retired = crate::DocumentKey::generate();
+        let current = crate::DocumentKey::generate();
+        // Alice's client: it read the whole log, and the revoke rotated the
+        // key, so the retired one sits in the cache.
+        let (mut state, rx, doc, snapshot) = bob_reads(&alice, &retired, &entries, entries.len());
+        state
+            .documents
+            .get_mut(&doc)
+            .expect("open")
+            .rotate_key(current.clone());
+        state.signing_key = Some(alice.key.clone());
+        let behind = walk(&entries[..3]).heads().last();
+        let bob_writes = |key: &crate::DocumentKey, head: LogHead, entry: usize| {
+            writes(
+                &bob,
+                (doc, snapshot),
+                key,
+                head,
+                entries.get(entry).cloned(),
+            )
+        };
+
+        // History: Bob wrote under the retired key before the revoke.
+        state.receive_update(Seq::nth(1), bob_writes(&retired, behind, 2));
+        assert!(codes(&rx).is_empty(), "history warns nobody");
+        // Alice's own delta under the current key, which the relay numbers 5.
+        state.receive_update(
+            Seq::nth(5),
+            alice_writes(&alice, doc, snapshot, &current, &entries),
+        );
+        // A delta in flight before the rotation, numbered before it.
+        state.receive_update(Seq::nth(3), bob_writes(&retired, behind, 2));
+        assert!(codes(&rx).is_empty(), "a delta in flight warns nobody");
+
+        // Bob writes behind the log, after the current key was in use.
+        state.receive_update(Seq::nth(6), bob_writes(&retired, behind, 2));
+        assert_eq!(codes(&rx), vec![SyncWarningCode::WriterBehindLog]);
+        state.receive_update(Seq::nth(7), bob_writes(&retired, behind, 2));
+        assert!(codes(&rx).is_empty(), "one warning per member");
+
+        // A delta under the retired key whose head holds the revoke is not
+        // behind the log, so it warns nobody here.
+        let (mut state, rx, doc, snapshot) = bob_reads(&alice, &retired, &entries, entries.len());
+        state
+            .documents
+            .get_mut(&doc)
+            .expect("open")
+            .rotate_key(current.clone());
+        state.receive_update(
+            Seq::nth(1),
+            alice_writes(&alice, doc, snapshot, &current, &entries),
+        );
+        state.receive_update(
+            Seq::nth(2),
+            writes(
+                &bob,
+                (doc, snapshot),
+                &retired,
+                walk(&entries).heads().last(),
+                entries.last().cloned(),
+            ),
+        );
+        assert!(codes(&rx).is_empty(), "a head that holds the removal");
     }
 
     /// An honest relay serves the revoke on the second read: no warning,
@@ -1060,6 +1257,10 @@ mod tests {
         let key = crate::DocumentKey::generate();
         let (mut state, _rx, doc, snapshot) = bob_reads(&alice, &key, &entries, 2);
         state.signing_key = Some(bob.key.clone());
+        // A sample names the open it comes from (`SYNC-287`).
+        state
+            .session_nonces
+            .insert(doc, ambre_core::FixedBytes::from_array([7; 16]));
         let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
         let samples = |state: &mut SyncState| {

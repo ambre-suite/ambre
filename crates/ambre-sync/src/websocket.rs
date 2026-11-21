@@ -106,8 +106,8 @@ impl SyncState {
 
     // -- WebSocket lifecycle ---------------------------------------------------
 
-    /// Opens the session-level multiplexed WebSocket. Called after Unlock or
-    /// SetupAccount. If the socket is already present (reconnection), it is
+    /// Opens the session-level multiplexed WebSocket. Called after an unlock or
+    /// a key setup. If the socket is already present (reconnection), it is
     /// replaced. All open documents are automatically re-subscribed.
     #[cfg(target_arch = "wasm32")]
     // The wasm twin: a host build never compiles it, so cargo-mutants skips it.
@@ -725,7 +725,6 @@ impl SyncState {
                 roster,
                 log,
             } => self.call_roster_read(call, channel, meta, roster, log),
-            SyncEvent::CallChannel { call, meta } => self.call_channel(call, meta),
             SyncEvent::ReconnectNow => {
                 self._reconnect_timer = None;
                 let next = self.lifecycle.poll((self.clock)());
@@ -746,10 +745,12 @@ impl SyncState {
                 user_id,
                 display_name,
                 email,
+                address,
                 master_seed,
                 signing_key,
                 exchange_key,
                 tokens,
+                kept,
             } => {
                 self.user_id = Some(user_id);
                 self.master_seed = Some(master_seed);
@@ -757,16 +758,24 @@ impl SyncState {
                 self.exchange_key = Some(exchange_key);
                 self.hold_tokens(tokens);
                 self.setup_owed = false;
+                self.adopt_kept(
+                    kept,
+                    crate::kept::KeptProfile {
+                        display_name: display_name.clone(),
+                        email: email.clone(),
+                    },
+                );
                 self.open_websocket();
                 self.flush_pending_opens();
-                self.send_to_logic(LogicEvent::Rest {
+                self.announce_session(
                     id,
-                    evt: RestEvent::SessionReady {
+                    RestEvent::SessionReady {
                         user_id,
                         display_name,
                         email,
                     },
-                });
+                    address,
+                );
             }
             SyncEvent::ProviderSignedIn {
                 id,
@@ -801,20 +810,68 @@ impl SyncState {
                 user_id,
                 display_name,
                 email,
+                address,
             } => {
                 self.user_id = Some(user_id);
                 self.adopt_new_keys(master_seed, signing_key, exchange_key, tokens);
+                self.adopt_kept(
+                    crate::kept::Keeping::Under(crate::kept::DeviceKey::Fresh),
+                    crate::kept::KeptProfile {
+                        display_name: display_name.clone(),
+                        email: email.clone(),
+                    },
+                );
                 // The words first, then the session: the page shows the words
                 // before the list (`CHROME-099`).
                 self.reply(id, RestEvent::AccountCreated { recovery_words });
-                self.send_to_logic(LogicEvent::Rest {
-                    id: None,
-                    evt: RestEvent::SessionReady {
+                self.announce_session(
+                    None,
+                    RestEvent::SessionReady {
                         user_id,
                         display_name,
                         email,
                     },
-                });
+                    address,
+                );
+            }
+            SyncEvent::AccountRecovered {
+                id,
+                master_seed,
+                signing_key,
+                exchange_key,
+                tokens,
+                user_id,
+                display_name,
+                email,
+                address,
+            } => {
+                self.reply(id, RestEvent::AccountRecovered);
+                // A session that holds keys already re-sealed its own seed. The
+                // words matched its signing key, so it holds the recovered
+                // keys, and its socket stays (`SYNC-294`, `CHROME-135`).
+                if self.master_seed.is_some() {
+                    return;
+                }
+                self.user_id = Some(user_id);
+                self.adopt_new_keys(master_seed, signing_key, exchange_key, tokens);
+                self.adopt_kept(
+                    crate::kept::Keeping::Under(crate::kept::DeviceKey::Fresh),
+                    crate::kept::KeptProfile {
+                        display_name: display_name.clone(),
+                        email: email.clone(),
+                    },
+                );
+                // The form closes on the answer, then the list replaces the
+                // gate: no second unlock under the new passphrase (`SYNC-293`).
+                self.announce_session(
+                    None,
+                    RestEvent::SessionReady {
+                        user_id,
+                        display_name,
+                        email,
+                    },
+                    address,
+                );
             }
             SyncEvent::DocumentList { id, documents } => {
                 self.reply(id, RestEvent::DocumentList { documents });
@@ -857,6 +914,7 @@ impl SyncState {
                 snapshot_id,
                 covered_seq,
                 held_snapshot,
+                fallback,
                 doc_type,
                 existence,
                 signing_keys,
@@ -867,6 +925,8 @@ impl SyncState {
                 departed,
             } => {
                 let log_document = self.log_document(document_id);
+                // A listed name is checked against this walk (`SYNC-135`).
+                self.walked_writers.insert(log_document, writers.clone());
                 let doc_state = self
                     .documents
                     .entry(document_id)
@@ -878,8 +938,21 @@ impl SyncState {
                     ))
                     .into_mut();
                 doc_state.chain = crate::chain::Chain::new(log_document, links);
+                self.kept_chains
+                    .insert(log_document, doc_state.chain.clone());
                 doc_state.set_signing_keys(signing_keys);
                 doc_state.set_writers(writers);
+                // A reopen resumes from the local copy of an evicted session.
+                // A revoke that capped a writer below a delta that copy
+                // applied leaves a write the log refuses: the document is
+                // read again (`SYNC-300`, `RESID-010`).
+                let resumed_past_cap =
+                    self.resumed_clocks
+                        .remove(&document_id)
+                        .is_some_and(|clocks| {
+                            doc_state.resume_applied(clocks);
+                            doc_state.applied_past_cap(&doc_state.writers)
+                        });
                 doc_state.role = role;
                 // The open checked the key against this departure: a debt it
                 // owes is the relay's word below (`SYNC-222`, `SYNC-223`).
@@ -913,6 +986,38 @@ impl SyncState {
                             document_id,
                             payload,
                             covered_seq,
+                        });
+                    }
+                    // A snapshot past a cap is refused. The open starts from
+                    // the trusted reference when it folds no delta past a
+                    // cap, and replays from its horizon (`SYNC-307`). With
+                    // none, it replays every delta from the first. The
+                    // deltas past either start are signed one by one, so
+                    // they open on their own (`SYNC-300`, `SYNC-304`).
+                    Some(Err(pipeline::PipelineError::PastCap)) => {
+                        crate::log::warning!(
+                            "Sync: the latest snapshot folds a delta past a revoke cap"
+                        );
+                        doc_state.current_snapshot_id = snapshot_id;
+                        doc_state.known_snapshots.insert(snapshot_id);
+                        let earlier = fallback.and_then(|fallback| {
+                            doc_state
+                                .open_start_blob(&fallback.start, fallback.served)
+                                .ok()
+                                .map(|payload| (payload, fallback.served))
+                        });
+                        if let Some((payload, served)) = earlier {
+                            doc_state.known_snapshots.insert(served.snapshot_id);
+                            doc_state.last_seq = served.covered_seq;
+                            self.send_to_logic(LogicEvent::RemoteSnapshot {
+                                document_id,
+                                payload,
+                                covered_seq: served.covered_seq,
+                            });
+                        }
+                        self.send_to_logic(LogicEvent::SyncWarning {
+                            document_id,
+                            code: SyncWarningCode::WriterRefused,
                         });
                     }
                     Some(Err(e)) => {
@@ -987,8 +1092,15 @@ impl SyncState {
                 if existence == crate::Existence::LocalOnly {
                     self.flush_pre_session_updates(document_id);
                 }
+                if resumed_past_cap {
+                    crate::log::warning!(
+                        "[Sync] doc={document_id}: the local copy holds a delta past a revoke cap; reading the document again"
+                    );
+                    self.send_to_logic(LogicEvent::DocumentReread { document_id });
+                }
             }
             SyncEvent::OpenDocumentFailed { document_id, cause } => {
+                self.resumed_clocks.remove(&document_id);
                 crate::log::error!("Sync: open document {document_id:?} failed: {cause}");
                 self.send_to_logic(LogicEvent::DocumentOpenFailed { document_id, cause });
             }
@@ -1024,6 +1136,7 @@ impl SyncState {
                         None => doc_state.footing = Some(footing),
                     }
                     self.log_walked_to(footing);
+                    self.keep_log(document_id);
                 }
             }
             SyncEvent::ChannelRotated {
@@ -1270,8 +1383,16 @@ impl SyncState {
                 email,
                 email_proof,
                 exchange_pub_key,
+                signing_pub_key,
                 fingerprint,
             } => {
+                self.shown_identities.insert(
+                    user_id,
+                    ambre_crypto::IdentityKeys {
+                        exchange: exchange_pub_key,
+                        signing: signing_pub_key,
+                    },
+                );
                 self.reply(
                     id,
                     RestEvent::InviteeKey {
@@ -1289,8 +1410,16 @@ impl SyncState {
                 id,
                 user_id,
                 exchange_pub_key,
+                signing_pub_key,
                 fingerprint,
             } => {
+                self.shown_identities.insert(
+                    user_id,
+                    ambre_crypto::IdentityKeys {
+                        exchange: exchange_pub_key,
+                        signing: signing_pub_key,
+                    },
+                );
                 self.reply(
                     id,
                     RestEvent::MemberKey {
@@ -1334,8 +1463,10 @@ impl SyncState {
                 link,
             } => {
                 // A revoke by an owner is no departure (`SYNC-223`).
+                let key = new_doc_key.id();
                 self.install_key(document_id, new_doc_key, [link], None);
                 self.send_to_logic(LogicEvent::KeyRotated { document_id });
+                self.snapshot_after_rotation(document_id, key);
                 self.reply(id, RestEvent::RevocationComplete { document_id });
                 // The relay may push no frame of the removal: the call of the channel reads
                 // the log this client just signed into (`CALL-136`).
@@ -1361,8 +1492,10 @@ impl SyncState {
                 link,
                 departed,
             } => {
+                let key = new_doc_key.id();
                 self.install_key(document_id, new_doc_key, [link], departed);
                 self.send_to_logic(LogicEvent::KeyRotated { document_id });
+                self.snapshot_after_rotation(document_id, key);
             }
             SyncEvent::DebtGone { document_id } => self.fetch_rotated_key(document_id),
             SyncEvent::DebtUnsettled {
@@ -1390,11 +1523,19 @@ impl SyncState {
                 revoked,
                 root,
             } => {
+                // The `meta` of a channel never opened walked its log: its
+                // light subscriptions count the summaries of its writers
+                // alone from now on (`RESID-032`).
+                if !self.documents.contains_key(&document_id) {
+                    self.light_walked(document_id, &writers);
+                }
                 // Keep presence resolvable as membership evolves. A document that
                 // is not open locally has no session to refresh -- the next open
                 // rebuilds the directory from scratch. An answer older than the
                 // directory held changes nothing (`SYNC-037`).
                 let mut word_changed = false;
+                let mut reread = false;
+                let log_document = self.log_document(document_id);
                 let fresh = match self.documents.get_mut(&document_id) {
                     Some(doc_state) if asked > doc_state.directory_held => {
                         doc_state.directory_held = asked;
@@ -1403,6 +1544,16 @@ impl SyncState {
                         // the log the open checked: its word changes nothing
                         // (`SYNC-214`).
                         if doc_state.writers.grows_into(&writers) {
+                            // A revoke that caps a writer below a delta this
+                            // document applied leaves a write the log refuses
+                            // in its state. The document is read again
+                            // (`SYNC-300`).
+                            if doc_state.applied_past_cap(&writers) {
+                                reread = true;
+                            }
+                            // A listed name is checked against this walk
+                            // (`SYNC-135`).
+                            self.walked_writers.insert(log_document, writers.clone());
                             doc_state.set_writers(writers);
                             word_changed = doc_state.word != word;
                             doc_state.word = word;
@@ -1462,6 +1613,12 @@ impl SyncState {
                 }
                 if word_changed {
                     self.space_word_changed(document_id);
+                }
+                if reread {
+                    crate::log::warning!(
+                        "[Sync] doc={document_id}: a revoke capped a writer below a delta applied; reading the document again"
+                    );
+                    self.send_to_logic(LogicEvent::DocumentReread { document_id });
                 }
                 match id {
                     Some(id) => self.reply(
@@ -1665,14 +1822,22 @@ impl SyncState {
                     );
                     return;
                 };
-                let opened = doc_state.open_ephemeral_named(&eph);
+                let opened = doc_state
+                    .open_ephemeral_named(&eph)
+                    .and_then(|body| crate::pipeline::split_presence_body(&body));
                 // Anti-replay: reject ephemerals with a non-monotonic counter for
-                // the same author. The counter map is bounded (see
-                // `accept_ephemeral_counter` / `MAX_EPHEMERAL_REMOTE_AUTHORS`).
-                // Only a sample whose signature verified moves the counter, so
-                // a forged one cannot silence its author (`SYNC-216`).
-                if opened.is_ok()
-                    && !doc_state.accept_ephemeral_counter(&author_pk, eph.public_data.counter)
+                // the same open of the same author. The sealed body names the
+                // open, so a reopened author counts from 1 again (`SYNC-287`).
+                // The counter map is bounded (see `accept_ephemeral_counter` /
+                // `MAX_EPHEMERAL_REMOTE_AUTHORS`). Only a sample whose signature
+                // verified moves the counter, so a forged one cannot silence its
+                // author (`SYNC-216`).
+                if let Ok(body) = &opened
+                    && !doc_state.accept_ephemeral_counter(
+                        &author_pk,
+                        &body.session,
+                        eph.public_data.counter,
+                    )
                 {
                     crate::log::debug!(
                         "Sync: dropping replayed ephemeral from {:?} (counter {})",
@@ -1681,6 +1846,7 @@ impl SyncState {
                     );
                     return;
                 }
+                let opened = opened.map(|body| body.sample);
                 self.deliver_remote(doc_id, Some(opened), |payload| {
                     LogicEvent::RemoteEphemeral {
                         document_id: doc_id,
@@ -1873,6 +2039,19 @@ impl SyncState {
 
             WsServerMsg::ThreadActivity { document_id } => self.thread_activity(document_id),
 
+            // A member this user invited lost the address it was invited
+            // under (`SRV-295`). An open document reads its rows again, so the
+            // view shows the member unproven and without the address.
+            WsServerMsg::AddressReclaimed {
+                document_id,
+                member,
+            } => {
+                crate::log::info!("Sync: the address of {member} was reclaimed on {document_id}");
+                if self.documents.contains_key(&document_id) {
+                    self.handle_list_document_members(None, document_id);
+                }
+            }
+
             WsServerMsg::DocumentRevoked { document_id } => {
                 // The server removed us from this document (targeted push on our
                 // personal topic).
@@ -1979,13 +2158,14 @@ impl SyncState {
 
             // The new key was wrapped by the rotator, and the unwrap runs
             // against their exchange key, not our own.
-            let (new_doc_key, anchor) = match Self::unwrap_anchored(&ek, &resp.members) {
-                Ok(unwrapped) => unwrapped,
-                Err(e) => {
-                    crate::log::error!("Sync: KeyRotationRequired unwrap failed: {e}");
-                    return;
-                }
-            };
+            let (new_doc_key, anchor) =
+                match Self::unwrap_anchored(&ek, log_document, &resp.members) {
+                    Ok(unwrapped) => unwrapped,
+                    Err(e) => {
+                        crate::log::error!("Sync: KeyRotationRequired unwrap failed: {e}");
+                        return;
+                    }
+                };
 
             // The link the rotator left reaches back from the new key
             // (`SYNC-117`). It counts only when a writer the log names
@@ -2210,8 +2390,12 @@ mod tests {
             log_head: ambre_protocol::LogHead::EMPTY,
             log_entry: None,
         };
+        let session = ambre_core::FixedBytes::from_array([5; 16]);
         let eph = crate::pipeline::seal_ephemeral(
-            &ambre_core::Payload::new(b"cursor@42".to_vec()),
+            &crate::pipeline::presence_body(
+                &session,
+                &ambre_core::Payload::new(b"cursor@42".to_vec()),
+            ),
             public_data,
             &doc_key,
             &signing,
@@ -2266,7 +2450,10 @@ mod tests {
                 log_entry: None,
             };
             crate::pipeline::seal_ephemeral(
-                &ambre_core::Payload::new(b"cursor".to_vec()),
+                &crate::pipeline::presence_body(
+                    &ambre_core::FixedBytes::from_array([5; 16]),
+                    &ambre_core::Payload::new(b"cursor".to_vec()),
+                ),
                 public_data,
                 &doc_key,
                 by,
@@ -2360,6 +2547,7 @@ mod tests {
             user_id: Id::<User>::mint(),
             display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada").unwrap(),
             email: "ada@example.org".into(),
+            address: ambre_core::AddressStanding::Held,
         });
         assert_eq!(state.socket_opens.get(), 1);
     }

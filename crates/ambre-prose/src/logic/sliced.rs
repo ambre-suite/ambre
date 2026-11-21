@@ -299,7 +299,7 @@ impl ProseState {
                 return self.withdraw_import(flush, &writer, Some(annotations));
             }
             display.push(ProseEvent::CommentsUpdated {
-                threads: crate::comment::threads(&self.doc),
+                threads: crate::comment::threads(&self.doc, &self.roots),
             });
             display.push(self.suggestions_event());
         }

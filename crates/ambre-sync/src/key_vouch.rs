@@ -49,7 +49,7 @@
 //! another type never takes a key a Murmure open brought (`SYNC-260`).
 
 use ambre_core::id::{Document, Id};
-use ambre_core::{ExchangePublicKey, FixedBytes, InviterPin, PublicKey, RotationDebt, Seq};
+use ambre_core::{ExchangePublicKey, FixedBytes, InviterPin, KeyId, PublicKey, RotationDebt, Seq};
 use ambre_crypto::DocumentKey;
 use ambre_protocol::{EntryDigest, KeyLink, LogPlaces};
 
@@ -95,6 +95,10 @@ pub(crate) enum KeyRefusal {
     /// The log heeds a space, and no writer of that space signed its
     /// creation (audit `N16`).
     RootOutsideSpace,
+    /// The catalogue of the space pins a channel key, and no link a writer
+    /// signed walks back from this key to it. The key is older than the
+    /// pin, or off its chain (`SYNC-299`).
+    OffCatalogue,
 }
 
 impl KeyRefusal {
@@ -118,7 +122,8 @@ impl KeyRefusal {
             | Self::Backdated
             | Self::Departed
             | Self::Unfollowed
-            | Self::Behind => ambre_bus::OpenFailure::KeyNotReceived,
+            | Self::Behind
+            | Self::OffCatalogue => ambre_bus::OpenFailure::KeyNotReceived,
         }
     }
 }
@@ -216,6 +221,21 @@ pub(crate) struct Roots {
     pub(crate) session: Vec<FixedBytes<InviterPin>>,
     /// This client's own signing key (`SYNC-210`).
     pub(crate) signer: Option<FixedBytes<PublicKey>>,
+    /// The channel key the catalogue of the space holds for a public
+    /// channel, which the open trusts (`SYNC-299`). `None` for a document
+    /// no catalogue lists.
+    pub(crate) catalogue: Option<CataloguePin>,
+}
+
+/// The channel key a catalogue entry holds, as the Sync worker unsealed it
+/// with the key of the space (`SYNC-299`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CataloguePin {
+    /// The id of the channel key the entry holds.
+    Key(FixedBytes<KeyId>),
+    /// The entry did not unseal under any key of the space this client
+    /// holds. No channel key is trusted, so every one is refused.
+    Unreadable,
 }
 
 /// What one members answer and its log say about the key it hands over.
@@ -237,6 +257,8 @@ pub(crate) struct KeyVouch {
     /// entry. They become a [`Footing`] once the checks pass.
     anchor: Option<FixedBytes<EntryDigest>>,
     walked: LogHead,
+    /// The channel key the catalogue of the space pins (`SYNC-299`).
+    catalogue: Option<CataloguePin>,
 }
 
 impl KeyVouch {
@@ -302,6 +324,7 @@ impl KeyVouch {
             root,
             anchor: log.anchor(),
             walked: log.walked_head(),
+            catalogue: roots.catalogue,
         }
     }
 
@@ -449,7 +472,21 @@ impl KeyVouch {
         if self.root == Root::Stranger {
             return Err(KeyRefusal::RootOutsideSpace);
         }
-        Ok(())
+        // A public channel trusts the channel key its catalogue entry holds,
+        // and a newer key only when links a writer signed walk back to it.
+        // A key older than the pin reaches it by no link (`SYNC-299`).
+        match self.catalogue {
+            Some(CataloguePin::Unreadable) => Err(KeyRefusal::OffCatalogue),
+            Some(CataloguePin::Key(pinned))
+                if id != pinned
+                    && Chain::new(log_document, links.iter().cloned())
+                        .recover(key, pinned)
+                        .is_none() =>
+            {
+                Err(KeyRefusal::OffCatalogue)
+            }
+            None | Some(CataloguePin::Key(_)) => Ok(()),
+        }
     }
 
     /// [`KeyVouch::check`], and the footing of the log of `log_document`
@@ -478,9 +515,11 @@ impl KeyVouch {
 /// `P27`). It holds the anchor that the checks of an open accepted, and the
 /// latest valid head this client walked or signed from that anchor.
 ///
-/// Only three paths build one: the checks of an open, the creation this
-/// client signed, and the anchor a catalogue seals under a space key. The
-/// relay can forge none of them. The fields stay private to this module.
+/// Only four paths build one. They are the checks of an open, the creation
+/// this client signed, and the anchor a catalogue seals under a space key.
+/// The fourth is the footing an earlier session of this client kept
+/// (`SYNC-290`). The relay
+/// can forge none of them. The fields stay private to this module.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Footing {
     /// The document whose log this is: the `meta` of a channel, or the
@@ -561,6 +600,33 @@ impl Footing {
     /// or the document itself (`SYNC-229`).
     pub(crate) fn document(&self) -> Id<Document> {
         self.document
+    }
+
+    /// The footing an earlier session of this client kept for the log of
+    /// `document` (`SYNC-290`). The local store took it from this worker
+    /// alone, so the relay chose none of it.
+    pub(crate) fn kept(document: Id<Document>, kept: &ambre_bus::KeptLog) -> Self {
+        Self {
+            document,
+            anchor: kept.anchor,
+            head: kept.head,
+        }
+    }
+
+    /// What the local store keeps of this footing, beside `key`, the key the
+    /// checks accepted last (`SYNC-290`), and `links`, the chain the log
+    /// held (`SYNC-308`).
+    pub(crate) fn to_kept(
+        self,
+        key: FixedBytes<ambre_core::KeyId>,
+        links: Vec<ambre_protocol::KeyLink>,
+    ) -> ambre_bus::KeptLog {
+        ambre_bus::KeptLog {
+            anchor: self.anchor,
+            head: self.head,
+            key,
+            links,
+        }
     }
 
     /// This footing when it walks from `anchor`, `None` when it walks from
@@ -847,6 +913,32 @@ mod tests {
         }
     }
 
+    impl Shared {
+        /// What Bob's client decides of `key`, opened from Alice's link, in a
+        /// public channel whose catalogue entry pins `catalogue`.
+        fn bob_checks_listed(
+            &self,
+            members: &[http::MemberEntry],
+            key: &DocumentKey,
+            links: &[KeyLink],
+            catalogue: CataloguePin,
+        ) -> Result<(), KeyRefusal> {
+            let roots = Roots {
+                catalogue: Some(catalogue),
+                ..pinned(&self.alice_pin())
+            };
+            KeyVouch::of(
+                &self.log(),
+                &LogRule::document(),
+                &self.bob.exchange(),
+                members,
+                &roots,
+                RotationDebt::Settled,
+            )
+            .check(self.document_id, key, links)
+        }
+    }
+
     /// The row of `member`, its copy of `key` wrapped by `wrapper`.
     fn row(member: &Member, key: &DocumentKey, wrapper: &StaticSecret) -> http::MemberEntry {
         let holder = member.exchange();
@@ -854,7 +946,16 @@ mod tests {
             user_id: member.id(),
             signing_pub_key: http::ServedKey::of(member.person.public()),
             exchange_pub_key: http::ServedKey::of(holder),
-            doc_key_enc: crate::sharing::wrap_anchored_b64(wrapper, &holder, key, None).unwrap(),
+            // No check here unwraps the copy, so the document it binds is
+            // any one.
+            doc_key_enc: crate::sharing::wrap_anchored_b64(
+                wrapper,
+                &holder,
+                Id::<Document>::from_bytes([0x6b; 16]),
+                key,
+                None,
+            )
+            .unwrap(),
             role: Role::Editor,
             wrapper_exchange_pub_key: http::ServedKey::of(crate::sharing::own_exchange_key(
                 wrapper,
@@ -1904,6 +2005,49 @@ mod tests {
         assert_eq!(
             doc.bob_checks(&log, &forked, &k3, &[to_k0]),
             Err(KeyRefusal::Behind)
+        );
+    }
+
+    /// Holds `SYNC-299`: an open of a public channel trusts the channel key
+    /// its catalogue entry pins. A newer key counts when a link a writer
+    /// signed walks back to the pin. A key off that chain, a key older than
+    /// the pin, and any key under a pin that did not unseal are refused.
+    #[test]
+    fn a_channel_open_trusts_the_key_its_catalogue_pins() {
+        let doc = Shared::new();
+        let head = doc.log().next();
+        let alice = &doc.alice.person.key;
+        let k1 = DocumentKey::generate();
+        let rotated = pipeline::seal_link(doc.document_id, &doc.k0, &k1, head, alice).unwrap();
+        let at_k0 = doc.rows(&doc.k0, &doc.alice.xk);
+        let at_k1 = doc.rows(&k1, &doc.alice.xk);
+        let links = std::slice::from_ref(&rotated);
+
+        // The pinned key itself.
+        assert_eq!(
+            doc.bob_checks_listed(&at_k0, &doc.k0, &[], CataloguePin::Key(doc.k0.id())),
+            Ok(())
+        );
+        // A newer key the log links to the pin by a signed rotation.
+        assert_eq!(
+            doc.bob_checks_listed(&at_k1, &k1, links, CataloguePin::Key(doc.k0.id())),
+            Ok(())
+        );
+        // The same key, with a catalogue that pins a key no link reaches.
+        let elsewhere = DocumentKey::generate().id();
+        assert_eq!(
+            doc.bob_checks_listed(&at_k1, &k1, links, CataloguePin::Key(elsewhere)),
+            Err(KeyRefusal::OffCatalogue)
+        );
+        // A key older than the pin: no link walks forward to it.
+        assert_eq!(
+            doc.bob_checks_listed(&at_k0, &doc.k0, &[], CataloguePin::Key(k1.id())),
+            Err(KeyRefusal::OffCatalogue)
+        );
+        // An entry that did not unseal trusts no key.
+        assert_eq!(
+            doc.bob_checks_listed(&at_k0, &doc.k0, &[], CataloguePin::Unreadable),
+            Err(KeyRefusal::OffCatalogue)
         );
     }
 }

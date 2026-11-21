@@ -145,7 +145,7 @@ impl SyncState {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             return;
         };
-        doc_state.writers = crate::membership_log::Writers::Granted(Default::default());
+        doc_state.writers = crate::membership_log::Writers::granted(Default::default());
         doc_state.unvouched.clear();
         doc_state.refused.clear();
         doc_state.gate.end();
@@ -261,7 +261,47 @@ impl SyncState {
                 DocType::Trame | DocType::Toile | DocType::Prose => Vec::new(),
             },
             signer: self.author_pub_key(),
+            catalogue: self.catalogue_pin(document_id),
         }
+    }
+
+    /// The channel key the catalogue pins for the channel whose `meta` logs
+    /// `document_id`, if a catalogue lists it (`SYNC-299`).
+    fn catalogue_pin(&self, document_id: Id<Document>) -> Option<crate::key_vouch::CataloguePin> {
+        let meta = self.log_document(document_id);
+        self.listing_metas
+            .iter()
+            .find(|(_, listed)| **listed == meta)
+            .and_then(|(channel_id, _)| self.catalogue_pins.get(channel_id))
+            .copied()
+    }
+
+    /// Pins the channel key that `listed`, the catalogue entry of `channel_id`
+    /// in its space, holds (`SYNC-299`). The entry unseals under a key of the
+    /// space. One that does not unseal pins no key, so every open of the
+    /// channel fails closed. A channel no catalogue lists drops its pin.
+    pub(crate) fn pin_catalogue(
+        &mut self,
+        channel_id: Id<Channel>,
+        listed: Option<(Id<Space>, &SealedChannelKey)>,
+    ) {
+        let Some((space_id, sealed)) = listed else {
+            self.catalogue_pins.remove(&channel_id);
+            return;
+        };
+        let pin = self
+            .space_keys(space_id)
+            .and_then(|(keys, _)| unseal_channel_key(channel_id, sealed, &keys))
+            .map_or_else(
+                |error| {
+                    crate::log::warning!(
+                        "Sync: the catalogue entry of channel {channel_id} does not unseal: {error}"
+                    );
+                    crate::key_vouch::CataloguePin::Unreadable
+                },
+                |(key, _)| crate::key_vouch::CataloguePin::Key(key.id()),
+            );
+        self.catalogue_pins.insert(channel_id, pin);
     }
 
     /// The answer to a channel creation or a self-join, on the Sync loop.
@@ -522,12 +562,10 @@ impl SyncState {
             .and_then(|tx| {
                 let (space_keys, exchange_key) = self.space_keys(space_id)?;
                 let author = self.author().ok_or(SyncError::SessionLocked)?;
-                let (doc_key_enc, key_id) =
-                    join_key(channel_id, sealed, &space_keys, &exchange_key)?;
-                let exchange = crate::sharing::own_exchange_key(&exchange_key);
-                Ok((tx, doc_key_enc, key_id, (author, exchange)))
+                let unsealed = unseal_channel_key(channel_id, sealed, &space_keys)?;
+                Ok((tx, unsealed, exchange_key, author))
             });
-        let (tx, doc_key_enc, key_id, (author, exchange)) = match prepared {
+        let (tx, unsealed, exchange_key, author) = match prepared {
             Ok(prepared) => prepared,
             Err(message) => return self.channel_answered(channel_id, Err(message.into())),
         };
@@ -540,7 +578,13 @@ impl SyncState {
             let result = async {
                 let head =
                     http::get_json_auth::<http::JoinHeadResponse>(&url, auth.clone()).await?;
-                let entry = self_join_entry(&author, exchange, &head, key_id)?;
+                // The copy lands on the rows of the meta the join head names,
+                // and binds it (audit `P59`). The key is this user's own, so a
+                // meta the relay names wrongly opens nothing for anyone else.
+                let doc_key_enc =
+                    wrap_join_key(head.meta_id.document_id(), &unsealed, &exchange_key)?;
+                let exchange = crate::sharing::own_exchange_key(&exchange_key);
+                let entry = self_join_entry(&author, exchange, &head, unsealed.0.id())?;
                 let body = http::JoinChannelRequest { doc_key_enc, entry };
                 http::post_json_auth_ok(&url, &body, auth).await?;
                 Ok::<_, http::HttpError>(())
@@ -1026,6 +1070,13 @@ impl SyncState {
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
         let exchange_key = self.exchange_key.clone();
+        // A listed name opens under the key the walked or kept log of its
+        // meta accepted alone (`SYNC-291`), from an author it admits
+        // (`SYNC-135`).
+        // A name sealed before the last rotation opens through the chain the
+        // log of its meta kept, with no request (`SYNC-302`).
+        let kept = self.kept_names();
+        let authors = self.name_authors();
         crate::spawn(async move {
             let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route("/channels");
@@ -1034,9 +1085,7 @@ impl SyncState {
                 {
                     Ok(answer) => {
                         let names = match exchange_key.as_ref() {
-                            Some(key) => {
-                                open_channel_names(&answer, key, url_scheme, &api_base, &auth).await
-                            }
+                            Some(key) => open_channel_names(&answer, &authors, key, &kept),
                             None => Vec::new(),
                         };
                         let keys = exchange_key
@@ -1126,6 +1175,7 @@ fn listed_keys(
                 &entry.doc_key_enc,
                 entry.wrapper_exchange_pub_key.as_ref(),
                 exchange_key,
+                entry.meta_id.document_id(),
             )?;
             let listed = ambre_bus::ChannelMeta {
                 channel_id: entry.channel_id,
@@ -1138,14 +1188,16 @@ fn listed_keys(
 }
 
 /// The names sealed beside each meta of `answer`, opened with the user's
-/// wrapped key of that meta (`SYNC-171`). A name that does not open is
-/// none, and so is an empty one: a rename clears a name that way.
-async fn open_channel_names(
+/// wrapped key of that meta (`SYNC-171`). A name opens only from an author
+/// `authors` admits (`SYNC-135`). It opens under the key `kept` holds for it
+/// (`SYNC-291`), or an older key the kept chain of the meta reaches from it
+/// (`SYNC-302`). A name that does not open is none, and so is an empty one:
+/// a rename clears a name that way.
+fn open_channel_names(
     answer: &http::MemberChannelsResponse,
+    authors: &crate::documents::NameAuthors,
     exchange_key: &StaticSecret,
-    url_scheme: crate::http::UrlScheme,
-    api_base: &crate::http::Url<crate::http::RelayHost>,
-    auth: &http::AuthContext,
+    kept: &crate::documents::KeptNames,
 ) -> Vec<ChannelName> {
     let mut names = Vec::new();
     for entry in &answer.channels {
@@ -1157,8 +1209,11 @@ async fn open_channel_names(
             doc_key_enc: &entry.doc_key_enc,
             wrapper_exchange_pub_key: entry.wrapper_exchange_pub_key.as_ref(),
             name_enc,
+            kept: kept.keys.get(&entry.meta_id.document_id()).copied(),
+            chain: kept.chains.get(&entry.meta_id.document_id()),
+            authors,
         };
-        match listed.open(exchange_key, url_scheme, api_base, auth).await {
+        match listed.open(exchange_key) {
             Some(name) if !ambre_core::name_is_empty(&name) => names.push(ChannelName {
                 channel_id: entry.channel_id,
                 name,
@@ -1258,9 +1313,13 @@ pub(crate) fn unseal_channel_key(
 /// The self-join key: the catalogue's key, unsealed and wrapped for this
 /// user alone, as the Murmure spaces spec asks of a self-join, and its id.
 /// The wrap carries the anchor the catalogue sealed, so the joiner replays
-/// meta's log from the word of the member who created the channel.
+/// meta's log from the word of the member who created the channel. It binds
+/// `meta`, whose rows it lands on (audit `P59`). The join task wraps once the
+/// join head names the meta, so only the tests take the two steps at once.
+#[cfg(test)]
 pub(crate) fn join_key(
     channel_id: Id<Channel>,
+    meta: Id<Document>,
     sealed: &SealedChannelKey,
     space_keys: &crate::chain::Keyring,
     exchange_key: &StaticSecret,
@@ -1271,10 +1330,26 @@ pub(crate) fn join_key(
     ),
     SyncError,
 > {
-    let (key, anchor) = unseal_channel_key(channel_id, sealed, space_keys)?;
+    let unsealed = unseal_channel_key(channel_id, sealed, space_keys)?;
+    let wrapped = wrap_join_key(meta, &unsealed, exchange_key)?;
+    Ok((wrapped, unsealed.0.id()))
+}
+
+/// The copy of an unsealed catalogue key and its anchor this user wraps for
+/// itself, bound to `meta`.
+fn wrap_join_key(
+    meta: Id<Document>,
+    (key, anchor): &(DocumentKey, Option<FixedBytes<ambre_protocol::EntryDigest>>),
+    exchange_key: &StaticSecret,
+) -> Result<ambre_core::Encoded<ambre_core::WrappedDocKey>, SyncError> {
     let own_pub = crate::sharing::own_exchange_key(exchange_key);
-    let wrapped = crate::sharing::wrap_anchored_b64(exchange_key, &own_pub, &key, anchor)?;
-    Ok((wrapped, key.id()))
+    Ok(crate::sharing::wrap_anchored_b64(
+        exchange_key,
+        &own_pub,
+        meta,
+        key,
+        *anchor,
+    )?)
 }
 
 /// The `SelfJoin` entry that extends the log the join head names, at the
@@ -1375,7 +1450,7 @@ pub(crate) fn direct_message_request(
     // The creation goes first, so the first digest is the log's root.
     let root = root.ok_or(SyncError::NoDigest)?;
     let wrap = |peer: &FixedBytes<ambre_core::ExchangePublicKey>| {
-        crate::sharing::wrap_anchored_b64(exchange_key, peer, &key, Some(root))
+        crate::sharing::wrap_anchored_b64(exchange_key, peer, document, &key, Some(root))
     };
     let members = members
         .iter()
@@ -1764,20 +1839,17 @@ pub(crate) mod tests {
         StaticSecret::from([byte; 32])
     }
 
-    /// The key a wrapped value opens to, for its holder.
+    /// The meta every self-join test wraps a copy for.
+    const META: Id<Document> = Id::<Document>::from_bytes([0x3e; 16]);
+
+    /// The key a wrapped value of [`META`] opens to, for its holder.
     fn unwrap_own(
         exchange_key: &StaticSecret,
         doc_key_enc: &ambre_core::Encoded<ambre_core::WrappedDocKey>,
     ) -> Option<DocumentKey> {
-        let bytes = doc_key_enc.as_bytes();
-        let (nonce, ciphertext) = FixedBytes::<ambre_core::Nonce>::split_from(bytes)?;
-        let wrapped = ambre_crypto::ecdh::WrappedKey {
-            nonce,
-            ciphertext: Payload::<ambre_core::Ciphertext>::new(ciphertext.to_vec()),
-        };
         let own_pub = crate::sharing::own_exchange_key(exchange_key);
         let (key, anchor) =
-            ambre_crypto::ecdh::unwrap_anchored(exchange_key, &own_pub, &wrapped).ok()?;
+            ambre_crypto::ecdh::unwrap_anchored(exchange_key, &own_pub, META, doc_key_enc).ok()?;
         assert_eq!(anchor, Some(ANCHOR), "every wrap carries meta's anchor");
         Some(key)
     }
@@ -1794,8 +1866,9 @@ pub(crate) mod tests {
         let channel_key = DocumentKey::generate();
         let sealed = seal_channel_key(channel_id, &channel_key, space_key, ANCHOR).expect("seal");
         let own_pub = crate::sharing::own_exchange_key(creator);
-        let own = crate::sharing::wrap_anchored_b64(creator, &own_pub, &channel_key, Some(ANCHOR))
-            .expect("wrap");
+        let own =
+            crate::sharing::wrap_anchored_b64(creator, &own_pub, META, &channel_key, Some(ANCHOR))
+                .expect("wrap");
         (sealed, own)
     }
 
@@ -1834,7 +1907,7 @@ pub(crate) mod tests {
         let channel_key = unwrap_own(&alice, &alice_enc).expect("Alice opens her own wrap");
 
         let (bob_enc, key_id) =
-            join_key(channel_id, &sealed, &ring(&space_key, &[]), &bob).expect("join");
+            join_key(channel_id, META, &sealed, &ring(&space_key, &[]), &bob).expect("join");
         assert_eq!(key_id, channel_key.id());
         let bob_key = unwrap_own(&bob, &bob_enc).expect("Bob opens his wrap");
         assert!(same_key(&bob_key, &channel_key));
@@ -1842,6 +1915,56 @@ pub(crate) mod tests {
             unwrap_own(&eve, &bob_enc).is_none(),
             "the wrap is Bob's alone"
         );
+    }
+
+    /// Holds `SYNC-299` at the worker: an open of a listed channel pins the
+    /// channel key its catalogue entry holds. The roots of each open of its
+    /// `meta` carry the pin. An entry that does not unseal pins no key,
+    /// and a channel no catalogue lists pins nothing.
+    #[test]
+    fn a_listed_channel_open_pins_the_key_its_catalogue_holds() {
+        let mut state = SyncState::new(
+            LogicSink::channel().0,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
+        state.exchange_key = Some(exchange_key(1));
+        let (space_id, space_key) = (Id::<Space>::mint(), DocumentKey::generate());
+        state.documents.insert(
+            space_id.document_id(),
+            crate::SyncDocumentState::new(
+                space_id.document_id(),
+                space_key.clone(),
+                DocType::Murmure,
+                crate::Existence::OnRelay,
+            ),
+        );
+        let (channel_id, meta) = (Id::<Channel>::mint(), Id::<Meta>::mint());
+        let (sealed, own) = new_channel_key(channel_id, &space_key, &exchange_key(1));
+        let channel_key = unwrap_own(&exchange_key(1), &own).expect("own wrap");
+        let open = |state: &mut SyncState, listed: Option<SealedChannelKey>| {
+            state.handle_command(SyncCommand::OpenChannel {
+                channel_id,
+                listed_in: Some(space_id),
+                catalogue_key: listed,
+            });
+            let documents = vec![ambre_bus::ChannelDocument {
+                document_id: meta.document_id(),
+                kind: ChannelDocumentKind::Meta,
+            }];
+            state.channel_listed(channel_id, Some(space_id), Ok(documents));
+            state.roots(meta.document_id(), DocType::Murmure).catalogue
+        };
+
+        assert_eq!(
+            open(&mut state, Some(sealed)),
+            Some(crate::key_vouch::CataloguePin::Key(channel_key.id()))
+        );
+        let foreign = new_channel_key(channel_id, &DocumentKey::generate(), &exchange_key(1)).0;
+        assert_eq!(
+            open(&mut state, Some(foreign)),
+            Some(crate::key_vouch::CataloguePin::Unreadable)
+        );
+        assert_eq!(open(&mut state, None), None);
     }
 
     /// The sealed key opens under the space key of its own channel only: a
@@ -2180,7 +2303,7 @@ pub(crate) mod tests {
         let keys = format!(
             r#""doc_key_enc":{},"wrapper_exchange_pub_key":null"#,
             serde_json::to_string(&ambre_core::Encoded::<ambre_core::WrappedDocKey>::new(
-                vec![0; 72]
+                vec![0; 73]
             ))
             .unwrap()
         );
@@ -2295,10 +2418,10 @@ pub(crate) mod tests {
         let own = exchange_key(1);
         let own_pub = crate::sharing::own_exchange_key(&own);
         let key = DocumentKey::generate();
-        let wrapped = ambre_crypto::ecdh::wrap_document_key(&own, &own_pub, &key).unwrap();
-        let doc_key_enc = ambre_core::Encoded::new(
-            [wrapped.nonce.as_slice(), wrapped.ciphertext.as_bytes()].concat(),
-        );
+        // Each copy binds the meta whose rows carry it (audit `P59`).
+        let doc_key_enc = |meta: Id<Meta>| {
+            ambre_crypto::ecdh::wrap_document_key(&own, &own_pub, meta.document_id(), &key).unwrap()
+        };
         let entry =
             |meta: Id<Meta>, name_enc: Option<ambre_core::Encoded<ambre_core::SealedName>>| {
                 http::MemberChannelEntry {
@@ -2307,7 +2430,7 @@ pub(crate) mod tests {
                     visibility: ambre_core::Visibility::Private,
                     meta_id: meta,
                     name_enc,
-                    doc_key_enc: doc_key_enc.clone(),
+                    doc_key_enc: doc_key_enc(meta),
                     wrapper_exchange_pub_key: None,
                     peers: Vec::new(),
                     meta_last: None,
@@ -2339,15 +2462,26 @@ pub(crate) mod tests {
             ],
             spaces: Vec::new(),
         };
-        let auth = state.auth_context();
-        let names = open_channel_names(
-            &answer,
-            &own,
-            crate::http::UrlScheme::Http,
-            &crate::http::Url::<crate::http::RelayHost>::new(String::new()),
-            &auth,
-        )
-        .await;
+        // Every meta's log accepted `key` at an open (`SYNC-291`).
+        let kept: HashMap<Id<Document>, FixedBytes<KeyId>> = [named, elsewhere, cleared, bare]
+            .into_iter()
+            .map(|meta| (meta.document_id(), key.id()))
+            .collect();
+        let kept = crate::documents::KeptNames {
+            keys: kept,
+            chains: HashMap::new(),
+        };
+        // No log of a listed meta was walked: no name shows (`SYNC-135`).
+        let unwalked = open_channel_names(&answer, &state.name_authors(), &own, &kept);
+        assert!(unwalked.is_empty(), "{unwalked:?}");
+        for meta in [named, elsewhere, cleared] {
+            state.walked_writers.insert(
+                meta.document_id(),
+                crate::membership_log::Writers::Unchecked,
+            );
+        }
+        let authors = state.name_authors();
+        let names = open_channel_names(&answer, &authors, &own, &kept);
         assert_eq!(
             names,
             vec![ChannelName {
@@ -2355,6 +2489,23 @@ pub(crate) mod tests {
                 name: ambre_core::Validated::<ambre_core::Name>::parse("Design").unwrap(),
             }]
         );
+        // `SYNC-291`: a meta this client never walked shows no name, nor
+        // one whose log accepted another key. The relay can wrap a key of
+        // its own, so the copy alone names nothing.
+        assert!(
+            open_channel_names(
+                &answer,
+                &authors,
+                &own,
+                &crate::documents::KeptNames::default()
+            )
+            .is_empty()
+        );
+        let moved = crate::documents::KeptNames {
+            keys: [(named.document_id(), DocumentKey::generate().id())].into(),
+            chains: HashMap::new(),
+        };
+        assert!(open_channel_names(&answer, &authors, &own, &moved).is_empty());
         // Each key opens, and one that does not is left out.
         // Each keeps the last number of its meta, none where none is listed.
         let mut answer = answer;
@@ -2392,8 +2543,15 @@ pub(crate) mod tests {
         let sealed = state.seal_channel_name(meta, &key, &design).unwrap();
         let bytes = sealed.as_bytes().to_vec();
         assert!(!bytes.windows(6).any(|w| w == b"Design"));
-        let open =
-            |document_id| crate::documents::open_name(document_id, &key, &sealed, Vec::new());
+        let open = |document_id| {
+            crate::documents::open_name(
+                document_id,
+                &key,
+                &sealed,
+                Vec::new(),
+                &crate::documents::NameAuthors::unchecked(document_id),
+            )
+        };
         assert_eq!(
             open(meta.document_id())
                 .as_ref()
@@ -2742,17 +2900,17 @@ pub(crate) mod tests {
     fn unwrap_from(
         holder: &StaticSecret,
         sender: &StaticSecret,
+        meta: Id<Meta>,
         doc_key_enc: &ambre_core::Encoded<ambre_core::WrappedDocKey>,
     ) -> Option<(DocumentKey, Option<FixedBytes<ambre_protocol::EntryDigest>>)> {
-        let bytes = doc_key_enc.as_bytes();
-        let (nonce, ciphertext) = FixedBytes::<ambre_core::Nonce>::split_from(bytes)?;
-        let wrapped = ambre_crypto::ecdh::WrappedKey {
-            nonce,
-            ciphertext: Payload::<ambre_core::Ciphertext>::new(ciphertext.to_vec()),
-        };
         let sender_pub = crate::sharing::own_exchange_key(sender);
-        let (key, root) =
-            ambre_crypto::ecdh::unwrap_anchored(holder, &sender_pub, &wrapped).ok()?;
+        let (key, root) = ambre_crypto::ecdh::unwrap_anchored(
+            holder,
+            &sender_pub,
+            meta.document_id(),
+            doc_key_enc,
+        )
+        .ok()?;
         Some((key, root))
     }
 
@@ -2800,7 +2958,8 @@ pub(crate) mod tests {
         .expect("request");
 
         assert_eq!(body.entries.len(), members.len() + 2);
-        let (own_key, root) = unwrap_from(&alice, &alice, &body.doc_key_enc).expect("own wrap");
+        let (own_key, root) =
+            unwrap_from(&alice, &alice, meta, &body.doc_key_enc).expect("own wrap");
         assert_eq!(body.key_id, own_key.id());
         let entries = membership_log::decode(&body.entries);
         // `SYNC-123`: the creation and each invite name the key; the role
@@ -2827,7 +2986,7 @@ pub(crate) mod tests {
 
         for (secret, wrap) in [(&bob, &body.members[0]), (&carol, &body.members[1])] {
             let (key, opened_root) =
-                unwrap_from(secret, &alice, &wrap.doc_key_enc).expect("member wrap");
+                unwrap_from(secret, &alice, meta, &wrap.doc_key_enc).expect("member wrap");
             assert_eq!(opened_root, root);
             assert!(same_key(&key, &own_key));
         }

@@ -414,6 +414,31 @@ pub enum PassphraseWeakness {
     TooShort,
 }
 
+impl PassphraseWeakness {
+    /// The words a person reads for the refusal: what to change, and what
+    /// resists a guess. Every prompt that takes the floor shows these.
+    pub fn message(self) -> &'static str {
+        match self {
+            Self::CommonPassword => {
+                "Choose a stronger passphrase: it is a common password, which a guess tries \
+                 first. Four or more random words resist one."
+            }
+            Self::Repetition => {
+                "Choose a stronger passphrase: it repeats itself. Four or more random words \
+                 resist one."
+            }
+            Self::Sequence => {
+                "Choose a stronger passphrase: it follows the alphabet, the digits or a \
+                 keyboard row. Four or more random words resist one."
+            }
+            Self::TooShort => {
+                "Choose a stronger passphrase: it is too short to resist an offline guess. \
+                 Four or more random words resist one."
+            }
+        }
+    }
+}
+
 /// Why the client refuses the recovery words it was handed
 /// (`ambre-spec-zero-knowledge.md`, `ZK-043`).
 ///
@@ -442,6 +467,7 @@ mod credential_kind {
     impl Sealed for super::OidcState {}
     impl Sealed for super::CallAdmission {}
     impl Sealed for super::TurnPassword {}
+    impl Sealed for super::ScrapeToken {}
 }
 
 /// The role of a bearer credential: a text that grants access to whoever
@@ -647,6 +673,15 @@ impl CredentialKind for TurnPassword {
 }
 
 impl WireCredential for TurnPassword {}
+
+/// The role of the token a scrape of the metrics presents, which the operator
+/// sets for a listener off the loopback. `Credential<ScrapeToken>`. It never
+/// travels in a frame of the workspace, so it has no serde form.
+pub enum ScrapeToken {}
+
+impl CredentialKind for ScrapeToken {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ScrapeToken");
+}
 
 #[cfg(test)]
 mod tests {

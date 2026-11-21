@@ -9,19 +9,19 @@
 
 use ambre_core::id::{Document, Id, User};
 use ambre_core::{
-    Encoded, EncodedLogEntry, ExchangePublicKey, FixedBytes, KeyId, PublicKey, Role, Seq, SeqKind,
-    Wire,
+    Encoded, EncodedLogEntry, ExchangePublicKey, FixedBytes, KeyId, PublicKey, Role, Seq,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::error::SerializationError;
-use crate::messages::Signature;
+use crate::messages::{DeltaAuthor, Signature};
 use crate::transcript::SignedTranscript;
 
 /// The domain the signed bytes open with, so an entry's signature serves no
-/// other use. Version 2 signs the member's exchange key. An entry of
-/// version 1 checks under no key, so a log verifies nothing past one.
-pub const ENTRY_DOMAIN: &[u8] = b"ambre-membership-entry-v2";
+/// other use. Version 2 signs the member's exchange key, and version 3 the
+/// cap of a revoke. An entry of an older version checks under no key, so a
+/// log verifies nothing past one.
+pub const ENTRY_DOMAIN: &[u8] = b"ambre-membership-entry-v3";
 
 /// The length of an Ed25519 signature.
 pub const ENTRY_SIGNATURE_LEN: usize = 64;
@@ -75,21 +75,9 @@ pub fn ownerless_log(
         )))
 }
 
-/// The places of the entries of a document's membership log, from zero:
-/// `Seq<LogPlaces>`. A place is signed with the entry, and the relay appends
-/// an entry at its own place alone. It encodes as the bare `u64` of the
-/// hand-written `LogPosition`, so a stored entry and its digest keep their
-/// bytes, and `Debug` keeps that name.
-pub enum LogPlaces {}
-
-impl SeqKind for LogPlaces {
-    type IssueRight = ();
-    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
-        ambre_core::StaticKey::new("LogPosition");
-}
-
-/// A place crosses the wire and the relay's rows.
-impl Wire for LogPlaces {}
+/// The places of the entries of a document's membership log. A call key
+/// names one too, so `ambre-core` holds the marker (`CALL-159`).
+pub use ambre_core::LogPlaces;
 
 /// The place a log of `length` entries gives its next entry. A length past
 /// `u64::MAX` saturates, which no log reaches.
@@ -171,6 +159,10 @@ pub struct MembershipEntry {
     pub previous: Option<FixedBytes<EntryDigest>>,
     /// The member who made the change and signed it.
     pub author: Id<User>,
+    /// On a revoke, the highest clock of the revoked member's deltas its
+    /// author applied (`SYNC-300`). A delta of that member past the cap
+    /// counts nowhere. `None` on every other act.
+    pub cap: Option<Seq<DeltaAuthor>>,
     /// The author's signature over [`MembershipEntry::signed_bytes`]. It
     /// encodes as its 64 bytes, with no length prefix.
     pub signature: FixedBytes<Signature>,
@@ -189,6 +181,7 @@ struct Signed<'a> {
     key: &'a Option<FixedBytes<KeyId>>,
     previous: &'a Option<FixedBytes<EntryDigest>>,
     author: &'a Id<User>,
+    cap: &'a Option<Seq<DeltaAuthor>>,
 }
 
 impl MembershipEntry {
@@ -210,6 +203,7 @@ impl MembershipEntry {
             key: &self.key,
             previous: &self.previous,
             author: &self.author,
+            cap: &self.cap,
         };
         let mut bytes = ENTRY_DOMAIN.to_vec();
         bytes.extend(postcard::to_allocvec(&signed)?);
@@ -268,6 +262,7 @@ mod tests {
             key: Some(FixedBytes::from_array([4; 16])),
             previous: Some(FixedBytes::from_array([5; 32])),
             author: Id::<User>::from_bytes([6; 16]),
+            cap: None,
             signature: FixedBytes::from_array([7; ENTRY_SIGNATURE_LEN]),
         }
     }
@@ -280,7 +275,7 @@ mod tests {
         let base = entry();
         let signed = base.signed_bytes().unwrap();
         assert!(signed.as_bytes().starts_with(ENTRY_DOMAIN));
-        let changes: [fn(&mut MembershipEntry); 10] = [
+        let changes: [fn(&mut MembershipEntry); 11] = [
             |e| e.document = Id::<Document>::from_bytes([9; 16]),
             |e| e.position = Seq::<LogPlaces>::new(2),
             |e| e.member = Id::<User>::from_bytes([9; 16]),
@@ -291,6 +286,7 @@ mod tests {
             |e| e.key = None,
             |e| e.previous = Some(FixedBytes::from_array([9; 32])),
             |e| e.author = Id::<User>::from_bytes([9; 16]),
+            |e| e.cap = Some(Seq::<DeltaAuthor>::new(9)),
         ];
         for change in changes {
             let mut changed = base.clone();
@@ -316,6 +312,7 @@ mod tests {
         key: &'a Option<FixedBytes<KeyId>>,
         previous: &'a Option<FixedBytes<EntryDigest>>,
         author: &'a Id<User>,
+        cap: &'a Option<Seq<DeltaAuthor>>,
     }
 
     /// A place writes the bytes the hand-written `LogPosition` wrote, so the
@@ -336,6 +333,7 @@ mod tests {
                 key: &sent.key,
                 previous: &sent.previous,
                 author: &sent.author,
+                cap: &sent.cap,
             };
             let mut bytes = ENTRY_DOMAIN.to_vec();
             bytes.extend(postcard::to_allocvec(&old).unwrap());

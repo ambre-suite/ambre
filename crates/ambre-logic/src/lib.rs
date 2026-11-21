@@ -565,16 +565,7 @@ fn peer_unclaimed(
 ) -> bool {
     use ambre_core::crdt::CrdtName as _;
     let registry = doc.get_map(ambre_core::crdt::FoundationRoot::Peers.as_str());
-    let key = ambre_core::PeerKey::of(peer);
-    if registry.get_last_editor(key.as_str()) != Some(peer.get()) {
-        return true;
-    }
-    match registry.get(key.as_str()) {
-        Some(loro::ValueOrContainer::Value(loro::LoroValue::Binary(bytes))) => {
-            ambre_core::PeerEntry::from_bytes(&bytes).is_none_or(|entry| entry.nonce == *nonce)
-        }
-        _ => true,
-    }
+    ambre_crdt::session::peer_unclaimed(&registry, peer, nonce)
 }
 
 /// How a document's window gives up what it holds.
@@ -898,6 +889,11 @@ pub enum PersistWrite<
     /// The inviter an open of the document proved, kept for the sessions
     /// after (`SYNC-238`). A row outside the copy: no eviction reaches it.
     KeepInviter(FixedBytes<ambre_core::InviterPin>),
+    /// Where the membership log of the document stood when the Sync worker
+    /// last accepted a key of it, kept for the sessions after (`SYNC-290`).
+    /// The document is the log's own, the `meta` of a channel. A row
+    /// outside the copy, which a later one replaces: no eviction reaches it.
+    KeepLog(ambre_bus::KeptLog),
 }
 
 /// A [`PersistWrite`] as the store receives it: its snapshot or delta is a
@@ -1671,7 +1667,8 @@ mod pass_tests {
                 | PersistWrite::Hidden
                 | PersistWrite::Sent
                 | PersistWrite::Erase
-                | PersistWrite::KeepInviter(_) => {}
+                | PersistWrite::KeepInviter(_)
+                | PersistWrite::KeepLog(_) => {}
             }
         }
         let (to_persist, _persist) = test_link();

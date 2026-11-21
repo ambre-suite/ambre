@@ -369,16 +369,12 @@ fn CallVolumes(
     // A drag of a slider leaves as one value, the last (`CHROME-015`). A gain moved from the
     // automatic one opens the microphone again, so a drag must not open it at each step. The
     // checkbox goes through the same debouncer, so a drag still pending never lands after it.
+    // The slider holds the debouncer in its own handler, so the gate reads the guard on the
+    // control it guards.
     let gain_drag = ambre_chrome::Debouncer::new();
     let on_gain = Callback::new(move |text: String| {
         if let Some(factor) = gain_from_slider(&text) {
-            later(
-                gain_drag,
-                ambre_chrome::DRAG_DEBOUNCE,
-                Box::new(move || {
-                    crate::call::set_gain(Gain::ByHand(factor));
-                }),
-            );
+            crate::call::set_gain(Gain::ByHand(factor));
         }
     });
     let gain_shown = gain.clone();
@@ -409,13 +405,7 @@ fn CallVolumes(
                 let drag = ambre_chrome::Debouncer::new();
                 let on_volume = Callback::new(move |text: String| {
                     if let Some(volume) = volume_from_slider(&text) {
-                        later(
-                            drag,
-                            ambre_chrome::DRAG_DEBOUNCE,
-                            Box::new(move || {
-                                crate::call::set_volume(member, volume);
-                            }),
-                        );
+                        crate::call::set_volume(member, volume);
                     }
                 });
                 view! {
@@ -424,6 +414,7 @@ fn CallVolumes(
                         of=SliderOf::Volume
                         name=format!("Volume of {name}")
                         value=Signal::derive(move || slider_of_volume(volumes.get().of(member)))
+                        drag=drag
                         on_input=on_volume
                     />
                 }
@@ -438,6 +429,7 @@ fn CallVolumes(
                 of=SliderOf::Gain
                 name="Microphone gain".to_owned()
                 value=Signal::derive(move || slider_of_gain(gain_shown.get().factor()))
+                drag=gain_drag
                 on_input=on_gain
             />
             <label class="murmure-call-choice">
@@ -506,7 +498,9 @@ fn Slider(
     name: String,
     /// The percent the slider shows.
     value: Signal<String>,
-    /// What a move of the slider does with its percent.
+    /// The debouncer of the slider: a drag leaves as one percent, the last (`CHROME-015`).
+    drag: ambre_chrome::Debouncer,
+    /// What a move of the slider does with its percent, once the drag rests.
     on_input: Callback<String>,
 ) -> impl IntoView {
     view! {
@@ -520,7 +514,10 @@ fn Slider(
                 step="5"
                 aria-label=name
                 prop:value=move || value.get()
-                on:input=move |ev| on_input.run(event_target_value(&ev))
+                on:input=move |ev| {
+                    let text = event_target_value(&ev);
+                    later(drag, ambre_chrome::DRAG_DEBOUNCE, Box::new(move || on_input.run(text)));
+                }
             />
         </label>
     }

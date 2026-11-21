@@ -206,19 +206,10 @@ pub enum RestCommand {
         /// once the Sync thread finishes deriving the user key.
         passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
     },
-    /// First-time account setup. -> `AccountCreated { recovery_words }`, then
-    /// `SessionReady` for the user the relay assigned.
-    /// `email`/`display_name` are the user-supplied identity; the server records
-    /// them verbatim instead of a hardcoded placeholder (N3). `email` is the
-    /// handle other members resolve when sharing a document.
-    SetupAccount {
-        passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
-        email: ambre_core::Email,
-        display_name: ambre_core::Validated<ambre_core::DisplayName>,
-    },
     /// Set up the keys of the account this session signed in with the
     /// provider, sealed under `passphrase` (`CHROME-098`). The relay already
-    /// knows who the person is, so no identity travels.
+    /// knows who the person is, so no identity travels. No command creates an
+    /// account no provider vouched for (`SRV-319`).
     /// -> `AccountCreated { recovery_words }`, then `SessionReady`.
     SetUpKeys {
         passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
@@ -353,7 +344,7 @@ pub enum RestCommand {
     // opens their own files (`ambre-spec-docfile.md section 5`).
     //
     /// Seal a plaintext `.ambre` under `passphrase`. -> `DocFileSealed`
-    /// / `DocFileSealFailed`.
+    /// / `DocFileSealFailed` / `DocFileSealRefused`.
     SealDocFile {
         /// A whole plaintext container, header included.
         plaintext: Confidential<Plaintext>,
@@ -406,6 +397,10 @@ pub enum RestCommand {
         code: ambre_core::Credential<ambre_core::OidcCode>,
         state: ambre_core::Credential<ambre_core::OidcState>,
     },
+    /// Open the session this device kept from an earlier page, if any
+    /// (`SRV-323`). The page sends it at boot, when no provider return and no
+    /// development name signs it in. -> `SessionReady`, or `NoKeptSession`.
+    ResumeSession,
 }
 
 // -----------------------------------------------------------------------------
@@ -542,6 +537,12 @@ pub enum RestEvent {
     /// failures reach here: a key derivation out of memory, and a document past
     /// the AEAD size limit. The user acts on neither differently.
     DocFileSealFailed,
+    /// The passphrase falls under the strength floor, for the reason it names,
+    /// so nothing was derived or sealed (`DOCFILE-022`). The prompt shows the
+    /// reason and asks again.
+    DocFileSealRefused {
+        weakness: ambre_core::PassphraseWeakness,
+    },
     /// The plaintext container the sealed file held. The caller reads its
     /// header as it would a file off the disk: the seal changes nothing about
     /// dispatch, version recovery or the schema gate.
@@ -595,4 +596,15 @@ pub enum RestEvent {
         email: ambre_core::Email,
         keys_stored: KeySetup,
     },
+
+    // -- Account -------------------------------------------------------------------
+    /// A provider-verified account reclaimed the address of this session's
+    /// account (`SRV-029`, `SRV-321`). Follows the `SessionReady` it belongs
+    /// to; the launcher names the reclaim (`CHROME-146`). Appended last, so
+    /// the tags of the variants above do not move.
+    AddressReclaimed,
+    /// The device keeps no session that opens, or the relay refused the one it
+    /// kept, which is then erased (`SRV-323`, `SRV-326`). The page stays on
+    /// the sign-in screen.
+    NoKeptSession,
 }
