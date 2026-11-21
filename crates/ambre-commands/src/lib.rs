@@ -41,6 +41,71 @@ impl ambre_core::Free for CommandTitle {}
 
 impl ambre_core::Displayed for CommandTitle {}
 
+/// The name of a home region, which a person reads beside a command in the
+/// palette (`CHROME-157`). `Validated<RegionName>`: no rule bounds it.
+pub enum RegionName {}
+
+impl ambre_core::Free for RegionName {}
+
+impl ambre_core::Displayed for RegionName {}
+
+/// The one region a command lives in (`ambre-spec-shell.md` section 2,
+/// `CHROME-148`). The six homes are the only variants. The context bar and
+/// the palette reach commands but home none, so neither is a variant.
+///
+/// [`Command::home`] is a required field, so a description that names no
+/// region does not compile:
+///
+/// ```compile_fail,E0063
+/// use ambre_commands::{Command, CommandTitle, Locale};
+/// use ambre_core::{Categories, Commands, StaticKey, Validated};
+/// fn title(_: &Locale) -> Validated<CommandTitle> {
+///     Validated::new("Bold")
+/// }
+/// const BOLD: Command = Command {
+///     id: StaticKey::<Commands>::new("t.format.bold"),
+///     title,
+///     icon: None,
+///     keybindings: &[],
+///     category: StaticKey::<Categories>::new("format"),
+/// };
+/// ```
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Home {
+    /// Shows the state of the document and never writes it (`CHROME-149`).
+    StatusBar,
+    /// The tools that act on the selection.
+    ContextPanel,
+    /// The tools that add a new element.
+    CreationBar,
+    /// The verbs on the thing under the pointer.
+    ContextMenu,
+    /// The whole document: the file, the history, the palette.
+    AmbreMenu,
+    /// The person: preferences and identity.
+    AvatarMenu,
+}
+
+impl Home {
+    /// The name a person reads for the region, in one locale.
+    pub fn name(self, locale: &Locale) -> ambre_core::Validated<RegionName> {
+        ambre_core::Validated::new(match (self, locale) {
+            (Self::StatusBar, Locale::Fr) => "Barre d'\u{e9}tat",
+            (Self::StatusBar, Locale::En) => "Status bar",
+            (Self::ContextPanel, Locale::Fr) => "Panneau contextuel",
+            (Self::ContextPanel, Locale::En) => "Context panel",
+            (Self::CreationBar, Locale::Fr) => "Barre de cr\u{e9}ation",
+            (Self::CreationBar, Locale::En) => "Creation bar",
+            (Self::ContextMenu, Locale::Fr) => "Menu contextuel",
+            (Self::ContextMenu, Locale::En) => "Context menu",
+            (Self::AmbreMenu, Locale::Fr) => "Menu Ambre",
+            (Self::AmbreMenu, Locale::En) => "Ambre menu",
+            (Self::AvatarMenu, Locale::Fr) => "Menu de l'avatar",
+            (Self::AvatarMenu, Locale::En) => "Avatar menu",
+        })
+    }
+}
+
 /// Static description of a command. Apps build `const` tables of these and
 /// expose them through [`CommandSource`].
 pub struct Command {
@@ -55,6 +120,9 @@ pub struct Command {
     /// and a legacy one. Empty for a command no chord triggers.
     pub keybindings: &'static [KeyBinding],
     pub category: StaticKey<Categories>,
+    /// The one region the command lives in (`CHROME-148`). A required field,
+    /// so a command without a home does not compile.
+    pub home: Home,
 }
 
 impl Command {
@@ -383,6 +451,7 @@ mod tests {
             icon: Some(StaticKey::<Icons>::new("bold")),
             keybindings: &[KeyBinding::primary(KeyChar::B)],
             category: FORMAT,
+            home: Home::ContextPanel,
         },
         Command {
             id: StaticKey::<Commands>::new("prose.format.italic"),
@@ -390,6 +459,7 @@ mod tests {
             icon: Some(StaticKey::<Icons>::new("italic")),
             keybindings: &[KeyBinding::primary(KeyChar::I)],
             category: FORMAT,
+            home: Home::ContextPanel,
         },
     ];
 
@@ -403,6 +473,7 @@ mod tests {
             icon: None,
             keybindings: shared::REDO_CHORDS,
             category: FORMAT,
+            home: Home::ContextPanel,
         },
         Command {
             id: shared::COPY,
@@ -410,6 +481,7 @@ mod tests {
             icon: None,
             keybindings: shared::COPY_CHORDS,
             category: FORMAT,
+            home: Home::ContextPanel,
         },
         Command {
             id: shared::PASTE,
@@ -417,6 +489,7 @@ mod tests {
             icon: None,
             keybindings: shared::PASTE_CHORDS,
             category: FORMAT,
+            home: Home::ContextPanel,
         },
     ];
 
@@ -523,6 +596,7 @@ mod tests {
                 icon: Some(StaticKey::<Icons>::new(" ")),
                 keybindings: CHORD,
                 category: StaticKey::<Categories>::new(""),
+                home: Home::ContextPanel,
             },
             Command {
                 id: other,
@@ -530,6 +604,7 @@ mod tests {
                 icon: None,
                 keybindings: CHORD,
                 category: FORMAT,
+                home: Home::ContextPanel,
             },
             Command {
                 id: bold,
@@ -537,6 +612,7 @@ mod tests {
                 icon: None,
                 keybindings: &[],
                 category: FORMAT,
+                home: Home::ContextPanel,
             },
         ];
         assert_eq!(

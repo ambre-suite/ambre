@@ -3469,6 +3469,19 @@ body {
     padding-left: var(--space-8);
 }
 
+/* The home region of a command (CHROME-157), right-aligned before its chord. */
+.ambre-palette-home {
+    margin-left: auto;
+    padding-left: var(--space-8);
+    font-size: var(--font-small);
+    color: var(--text-dim);
+}
+
+.ambre-palette-home + .ambre-palette-kbd {
+    margin-left: 0;
+    padding-left: var(--space-5);
+}
+
 /* Phone: the palette takes the width and drops the top inset. */
 @media (max-width: 599px) {
     .ambre-dialog.ambre-palette-modal {

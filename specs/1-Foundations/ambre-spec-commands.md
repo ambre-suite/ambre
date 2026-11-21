@@ -93,7 +93,13 @@ pub struct Command {
     /// Every chord it answers, the announced one first (`UI-THREAD-011`).
     pub keybindings: &'static [KeyBinding],
     pub category: StaticKey<Categories>,
+    /// The one region the command lives in (`ambre-spec-shell.md`, `CHROME-148`).
+    pub home: Home,
 }
+
+/// The six home regions (`ambre-spec-shell.md` section 2). The context bar and the palette
+/// reach commands and home none, so neither is a variant.
+pub enum Home { StatusBar, ContextPanel, CreationBar, ContextMenu, AmbreMenu, AvatarMenu }
 
 /// The marker of a modifier set, `Flags<ModifierKeys>`: three named members, `PRIMARY`, `ALT`
 /// and `SHIFT`. One accelerator member, and no way to name the control and the command keys
@@ -113,7 +119,7 @@ table; the launcher calls both and names no command itself. Two applications dec
 between them -- 26 and 42.
 
 **Both applications describe their commands, and every view derives.** A table holds a `Command`
-per affordance -- label, icon, default chord, category. Trame's context menu, its format toolbar and
+per affordance -- label, icon, default chord, category, home region. Trame's context menu, its format toolbar and
 its chord defaults read it. Toile's context menu, menu bar, tool palette and floating selection bar
 read the same table. Nine of Toile's labels had been written twice, once for the menu
 bar and once for the right-click menu. Trame's toolbar repeated eleven more.

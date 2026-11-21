@@ -6,7 +6,7 @@
 //! table names them. Undo and redo are described here for their menu rows,
 //! and the view decodes their chords too: the shell binds none of them.
 
-use ambre_commands::{Command, KeyBinding, KeyChar, Keymap, Locale};
+use ambre_commands::{Command, Home, KeyBinding, KeyChar, Keymap, Locale};
 use ambre_core::{Categories, Commands, Icons, StaticKey};
 
 use crate::mark::MarkRoot;
@@ -244,6 +244,7 @@ pub const COMMANDS: &[Command] = &[
         icon: Some(StaticKey::<Icons>::new("format-bold")),
         keybindings: &[KeyBinding::primary(KeyChar::B)],
         category: FORMAT,
+        home: Home::ContextPanel,
     },
     Command {
         id: ITALIC,
@@ -251,6 +252,7 @@ pub const COMMANDS: &[Command] = &[
         icon: Some(StaticKey::<Icons>::new("format-italic")),
         keybindings: &[KeyBinding::primary(KeyChar::I)],
         category: FORMAT,
+        home: Home::ContextPanel,
     },
     Command {
         id: UNDERLINE,
@@ -258,6 +260,7 @@ pub const COMMANDS: &[Command] = &[
         icon: Some(StaticKey::<Icons>::new("format-underline")),
         keybindings: &[KeyBinding::primary(KeyChar::U)],
         category: FORMAT,
+        home: Home::ContextPanel,
     },
     Command {
         id: STRIKETHROUGH,
@@ -265,6 +268,7 @@ pub const COMMANDS: &[Command] = &[
         icon: Some(StaticKey::<Icons>::new("format-strikethrough")),
         keybindings: &[KeyBinding::primary_shift(KeyChar::X)],
         category: FORMAT,
+        home: Home::ContextPanel,
     },
     Command {
         id: CODE,
@@ -272,6 +276,7 @@ pub const COMMANDS: &[Command] = &[
         icon: Some(StaticKey::<Icons>::new("code-tags")),
         keybindings: &[KeyBinding::primary(KeyChar::E)],
         category: FORMAT,
+        home: Home::ContextPanel,
     },
     Command {
         id: SAVE_FILE,
@@ -279,6 +284,7 @@ pub const COMMANDS: &[Command] = &[
         icon: Some(StaticKey::<Icons>::new("content-save")),
         keybindings: &[],
         category: FILE,
+        home: Home::AmbreMenu,
     },
     Command {
         id: IMPORT_MARKDOWN,
@@ -286,6 +292,7 @@ pub const COMMANDS: &[Command] = &[
         icon: Some(StaticKey::<Icons>::new("file-import-outline")),
         keybindings: &[],
         category: FILE,
+        home: Home::AmbreMenu,
     },
     Command {
         id: EXPORT_MARKDOWN,
@@ -293,6 +300,7 @@ pub const COMMANDS: &[Command] = &[
         icon: Some(StaticKey::<Icons>::new("file-export-outline")),
         keybindings: &[],
         category: FILE,
+        home: Home::AmbreMenu,
     },
     Command {
         id: IMPORT_WORD,
@@ -300,6 +308,7 @@ pub const COMMANDS: &[Command] = &[
         icon: Some(StaticKey::<Icons>::new("file-import-outline")),
         keybindings: &[],
         category: FILE,
+        home: Home::AmbreMenu,
     },
     Command {
         id: EXPORT_WORD,
@@ -307,6 +316,7 @@ pub const COMMANDS: &[Command] = &[
         icon: Some(StaticKey::<Icons>::new("file-export-outline")),
         keybindings: &[],
         category: FILE,
+        home: Home::AmbreMenu,
     },
     Command {
         id: EXPORT_WORD_REVIEWED,
@@ -314,6 +324,7 @@ pub const COMMANDS: &[Command] = &[
         icon: Some(StaticKey::<Icons>::new("file-export-outline")),
         keybindings: &[],
         category: FILE,
+        home: Home::AmbreMenu,
     },
     Command {
         id: IMPORT_ODT,
@@ -321,6 +332,7 @@ pub const COMMANDS: &[Command] = &[
         icon: Some(StaticKey::<Icons>::new("file-import-outline")),
         keybindings: &[],
         category: FILE,
+        home: Home::AmbreMenu,
     },
     Command {
         id: EXPORT_ODT,
@@ -328,6 +340,7 @@ pub const COMMANDS: &[Command] = &[
         icon: Some(StaticKey::<Icons>::new("file-export-outline")),
         keybindings: &[],
         category: FILE,
+        home: Home::AmbreMenu,
     },
     Command {
         id: EXPORT_ODT_REVIEWED,
@@ -335,6 +348,7 @@ pub const COMMANDS: &[Command] = &[
         icon: Some(StaticKey::<Icons>::new("file-export-outline")),
         keybindings: &[],
         category: FILE,
+        home: Home::AmbreMenu,
     },
     Command {
         id: IMPORT_HTML,
@@ -342,6 +356,7 @@ pub const COMMANDS: &[Command] = &[
         icon: Some(StaticKey::<Icons>::new("file-import-outline")),
         keybindings: &[],
         category: FILE,
+        home: Home::AmbreMenu,
     },
     Command {
         id: EXPORT_HTML,
@@ -349,6 +364,7 @@ pub const COMMANDS: &[Command] = &[
         icon: Some(StaticKey::<Icons>::new("file-export-outline")),
         keybindings: &[],
         category: FILE,
+        home: Home::AmbreMenu,
     },
     Command {
         id: EXPORT_HTML_REVIEWED,
@@ -356,6 +372,7 @@ pub const COMMANDS: &[Command] = &[
         icon: Some(StaticKey::<Icons>::new("file-export-outline")),
         keybindings: &[],
         category: FILE,
+        home: Home::AmbreMenu,
     },
     Command {
         id: INSERT_PICTURE,
@@ -363,6 +380,7 @@ pub const COMMANDS: &[Command] = &[
         icon: Some(StaticKey::<Icons>::new("file-import-outline")),
         keybindings: &[],
         category: FILE,
+        home: Home::CreationBar,
     },
     Command {
         id: EXPORT_PDF,
@@ -370,6 +388,7 @@ pub const COMMANDS: &[Command] = &[
         icon: Some(StaticKey::<Icons>::new("file-export-outline")),
         keybindings: &[],
         category: FILE,
+        home: Home::AmbreMenu,
     },
     Command {
         id: CUT,
@@ -377,6 +396,7 @@ pub const COMMANDS: &[Command] = &[
         icon: Some(StaticKey::<Icons>::new("content-cut")),
         keybindings: ambre_commands::shared::CUT_CHORDS,
         category: CLIPBOARD,
+        home: Home::ContextMenu,
     },
     Command {
         id: COPY,
@@ -384,6 +404,7 @@ pub const COMMANDS: &[Command] = &[
         icon: Some(StaticKey::<Icons>::new("content-copy")),
         keybindings: ambre_commands::shared::COPY_CHORDS,
         category: CLIPBOARD,
+        home: Home::ContextMenu,
     },
     Command {
         id: PASTE,
@@ -391,6 +412,7 @@ pub const COMMANDS: &[Command] = &[
         icon: Some(StaticKey::<Icons>::new("content-paste")),
         keybindings: ambre_commands::shared::PASTE_CHORDS,
         category: CLIPBOARD,
+        home: Home::ContextMenu,
     },
     Command {
         id: PASTE_PLAIN,
@@ -398,6 +420,7 @@ pub const COMMANDS: &[Command] = &[
         icon: Some(StaticKey::<Icons>::new("content-paste")),
         keybindings: ambre_commands::shared::PASTE_PLAIN_CHORDS,
         category: CLIPBOARD,
+        home: Home::ContextMenu,
     },
     Command {
         id: UNDO,
@@ -405,6 +428,7 @@ pub const COMMANDS: &[Command] = &[
         icon: Some(StaticKey::<Icons>::new("undo")),
         keybindings: ambre_commands::shared::UNDO_CHORDS,
         category: HISTORY,
+        home: Home::AmbreMenu,
     },
     Command {
         id: REDO,
@@ -412,6 +436,7 @@ pub const COMMANDS: &[Command] = &[
         icon: Some(StaticKey::<Icons>::new("redo")),
         keybindings: ambre_commands::shared::REDO_CHORDS,
         category: HISTORY,
+        home: Home::AmbreMenu,
     },
     Command {
         id: PALETTE,
@@ -419,6 +444,7 @@ pub const COMMANDS: &[Command] = &[
         icon: None,
         keybindings: &[KeyBinding::primary(KeyChar::K)],
         category: GENERAL,
+        home: Home::AmbreMenu,
     },
 ];
 

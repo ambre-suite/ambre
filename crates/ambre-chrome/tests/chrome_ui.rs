@@ -693,6 +693,7 @@ async fn closing_the_floating_menu_returns_the_focus_to_its_opener() {
         icon: None,
         keybindings: &[],
         category: StaticKey::<Categories>::new(""),
+        home: ambre_commands::Home::ContextPanel,
     };
     let entries = vec![MenuEntry::command(&item, &ambre_commands::Locale::En)];
     let root = mount_in_container(move || {
@@ -817,8 +818,11 @@ const PALETTE_TABLE: &[ambre_commands::Command] = &[
         id: StaticKey::<Commands>::new("t.palette.open"),
         title: palette_title,
         icon: None,
-        keybindings: &[],
+        keybindings: &[ambre_commands::KeyBinding::primary(
+            ambre_commands::KeyChar::K,
+        )],
         category: StaticKey::<Categories>::new("general"),
+        home: ambre_commands::Home::AmbreMenu,
     },
     ambre_commands::Command {
         id: StaticKey::<Commands>::new("t.engine.recalc"),
@@ -826,6 +830,7 @@ const PALETTE_TABLE: &[ambre_commands::Command] = &[
         icon: None,
         keybindings: &[],
         category: StaticKey::<Categories>::new("engine"),
+        home: ambre_commands::Home::ContextPanel,
     },
     ambre_commands::Command {
         id: StaticKey::<Commands>::new("t.merge"),
@@ -833,6 +838,7 @@ const PALETTE_TABLE: &[ambre_commands::Command] = &[
         icon: None,
         keybindings: &[],
         category: StaticKey::<Categories>::new("structure"),
+        home: ambre_commands::Home::ContextPanel,
     },
 ];
 
@@ -872,6 +878,58 @@ fn palette_lists_every_declared_command() {
         labels.contains(&"Recalculate everything".to_owned()),
         "a command no menu shows must still be listed: {labels:?}"
     );
+
+    root.remove();
+}
+
+/// DOM test: each command row shows the name of its home region, and the chord
+/// of a command that has one (`CHROME-157`, `CHROME-158`). A command with no
+/// chord shows no chord chip.
+#[wasm_bindgen_test]
+fn palette_row_shows_home_region_and_chord() {
+    let owner = Owner::new();
+    owner.set();
+    let open = RwSignal::new(Openness::Open);
+    let root = mount_in_container(move || {
+        view! {
+            <ambre_chrome::CommandPalette
+                open=open
+                table=PALETTE_TABLE
+                on_command=Callback::new(move |_| {})
+            />
+        }
+    });
+
+    let rows = root.query_selector_all(".ambre-palette-row").unwrap();
+    assert_eq!(Ok(rows.length()), u32::try_from(PALETTE_TABLE.len()));
+    for (i, command) in (0..rows.length()).zip(PALETTE_TABLE) {
+        let row: web_sys::Element = rows.item(i).unwrap().dyn_into().unwrap();
+        let home = row
+            .query_selector(".ambre-palette-home")
+            .unwrap()
+            .and_then(|n| n.text_content());
+        assert_eq!(
+            home.as_deref(),
+            Some(command.home.name(&ambre_commands::Locale::En).as_str()),
+            "row {i} names its home region"
+        );
+        let chip = row.query_selector(".ambre-palette-kbd").unwrap();
+        assert_eq!(
+            chip.is_some(),
+            command.chord().is_some(),
+            "row {i} shows a chord chip exactly when the command has a chord"
+        );
+    }
+    let chip = rows
+        .item(0)
+        .unwrap()
+        .dyn_into::<web_sys::Element>()
+        .unwrap()
+        .query_selector(".ambre-palette-kbd")
+        .unwrap()
+        .and_then(|n| n.text_content())
+        .unwrap_or_default();
+    assert!(chip.contains('K'), "the chip reads the chord: {chip:?}");
 
     root.remove();
 }
@@ -1326,6 +1384,7 @@ fn ctx_command(
         icon: None,
         keybindings: &[],
         category: StaticKey::<Categories>::new(""),
+        home: ambre_commands::Home::ContextPanel,
     }
 }
 

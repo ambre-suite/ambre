@@ -12,7 +12,7 @@ use crate::message::LogicCommand;
 use crate::message::{HeldReply, HeldSend, Mention, MessageAt, MurmureCommand, StyleMark};
 use ambre_bus::{Authored, Emoji, Instant};
 use ambre_commands::{
-    Command, FunctionKey, Key, KeyBinding, KeyChar, Keymap, Locale, ModifierKeys,
+    Command, FunctionKey, Home, Key, KeyBinding, KeyChar, Keymap, Locale, ModifierKeys,
 };
 use ambre_core::Byte;
 use ambre_core::id::{Channel, Document, Id, Message, User};
@@ -127,6 +127,7 @@ pub const COMMANDS: &[Command] = &[
         icon: None,
         keybindings: &[KeyBinding::primary(KeyChar::K)],
         category: GENERAL,
+        home: Home::AmbreMenu,
     },
     Command {
         id: NEXT_ACTIVITY,
@@ -134,6 +135,7 @@ pub const COMMANDS: &[Command] = &[
         icon: None,
         keybindings: &[KeyBinding::new(ModifierKeys::ALT_SHIFT, Key::ArrowDown)],
         category: NAVIGATE,
+        home: Home::ContextPanel,
     },
     Command {
         id: PREVIOUS_ACTIVITY,
@@ -141,6 +143,7 @@ pub const COMMANDS: &[Command] = &[
         icon: None,
         keybindings: &[KeyBinding::new(ModifierKeys::ALT_SHIFT, Key::ArrowUp)],
         category: NAVIGATE,
+        home: Home::ContextPanel,
     },
     Command {
         id: MARK_ALL_READ,
@@ -153,6 +156,7 @@ pub const COMMANDS: &[Command] = &[
             Key::Char(KeyChar::A),
         )],
         category: UNREAD,
+        home: Home::ContextPanel,
     },
     Command {
         id: SEARCH,
@@ -160,6 +164,7 @@ pub const COMMANDS: &[Command] = &[
         icon: None,
         keybindings: &[KeyBinding::primary(KeyChar::F)],
         category: SEARCH_CATEGORY,
+        home: Home::ContextPanel,
     },
     // No chord: the keymap matches the character a key types, and Ctrl+/
     // needs Shift on a French keyboard. The palette reaches it.
@@ -169,6 +174,7 @@ pub const COMMANDS: &[Command] = &[
         icon: None,
         keybindings: &[],
         category: GENERAL,
+        home: Home::AvatarMenu,
     },
     // The actions of a message take no chord: a chord needs a message to
     // act on, and the keyboard reaches them through the focused one.
@@ -178,6 +184,7 @@ pub const COMMANDS: &[Command] = &[
         icon: None,
         keybindings: &[],
         category: MESSAGE,
+        home: Home::ContextPanel,
     },
     Command {
         id: REPLY,
@@ -185,6 +192,7 @@ pub const COMMANDS: &[Command] = &[
         icon: None,
         keybindings: &[],
         category: MESSAGE,
+        home: Home::ContextPanel,
     },
     Command {
         id: REACT,
@@ -192,6 +200,7 @@ pub const COMMANDS: &[Command] = &[
         icon: None,
         keybindings: &[],
         category: MESSAGE,
+        home: Home::ContextPanel,
     },
     Command {
         id: MARK_UNREAD,
@@ -199,6 +208,7 @@ pub const COMMANDS: &[Command] = &[
         icon: None,
         keybindings: &[],
         category: MESSAGE,
+        home: Home::ContextPanel,
     },
     Command {
         id: COPY_TEXT,
@@ -206,6 +216,7 @@ pub const COMMANDS: &[Command] = &[
         icon: None,
         keybindings: &[],
         category: MESSAGE,
+        home: Home::ContextMenu,
     },
     Command {
         id: EDIT,
@@ -213,6 +224,7 @@ pub const COMMANDS: &[Command] = &[
         icon: None,
         keybindings: &[],
         category: MESSAGE,
+        home: Home::ContextPanel,
     },
     Command {
         id: DELETE,
@@ -220,6 +232,7 @@ pub const COMMANDS: &[Command] = &[
         icon: None,
         keybindings: &[],
         category: MESSAGE,
+        home: Home::ContextPanel,
     },
 ];
 
