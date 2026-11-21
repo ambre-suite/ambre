@@ -20,9 +20,11 @@ Tokens(
             surface_2: "#f0f1f3",
             surface_hover: "#e6e8ec",
             border:    "#d8dade",
+            border_strong: "#bfc3ca",
             text:      "#1f1f1f",
             text_dim:  "#5f6368",
             accent:    "#b45309",
+            accent_soft: "#f7e6d6",
             success:   "#2b9d6a",
             warning:   "#c2410c",
             error:     "#cc4444",
@@ -35,9 +37,11 @@ Tokens(
             surface_2: "#2c2c30",
             surface_hover: "#35353b",
             border:    "#3a3a3f",
+            border_strong: "#4d4d54",
             text:      "#e8e8e8",
             text_dim:  "#9aa0a6",
             accent:    "#f2a93d",
+            accent_soft: "#45372a",
             success:   "#4ad295",
             warning:   "#e8772e",
             error:     "#e05a5a",
@@ -145,5 +149,17 @@ Tokens(
         ("font_heading",    20),
         ("font_display",    26),
         ("font_hero",       32),
+        // The height of a control: a field, a select, a button. A row of
+        // the panel holds the middle one; a dense list the small one.
+        ("control_sm",      24),
+        ("control",         28),
+        ("control_lg",      32),
+        // The box an icon glyph is drawn in, inside its control.
+        ("icon_sm",         14),
+        ("icon",            16),
+        ("icon_lg",         20),
+        // The keyboard focus ring: its width, and its gap to the control.
+        ("focus_width",     2),
+        ("focus_offset",    2),
     ],
 )

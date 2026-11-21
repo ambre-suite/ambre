@@ -60,9 +60,11 @@ pub struct ChromePalette {
     pub surface_2: Color,
     pub surface_hover: Color,
     pub border: Color,
+    pub border_strong: Color,
     pub text: Color,
     pub text_dim: Color,
     pub accent: Color,
+    pub accent_soft: Color,
     pub success: Color,
     pub warning: Color,
     pub error: Color,
@@ -76,9 +78,11 @@ pub const CHROME_LIGHT: ChromePalette = ChromePalette {
     surface_2: Color::from_rgba8(240, 241, 243, 255),
     surface_hover: Color::from_rgba8(230, 232, 236, 255),
     border: Color::from_rgba8(216, 218, 222, 255),
+    border_strong: Color::from_rgba8(191, 195, 202, 255),
     text: Color::from_rgba8(31, 31, 31, 255),
     text_dim: Color::from_rgba8(95, 99, 104, 255),
     accent: Color::from_rgba8(180, 83, 9, 255),
+    accent_soft: Color::from_rgba8(247, 230, 214, 255),
     success: Color::from_rgba8(43, 157, 106, 255),
     warning: Color::from_rgba8(194, 65, 12, 255),
     error: Color::from_rgba8(204, 68, 68, 255),
@@ -92,9 +96,11 @@ pub const CHROME_DARK: ChromePalette = ChromePalette {
     surface_2: Color::from_rgba8(44, 44, 48, 255),
     surface_hover: Color::from_rgba8(53, 53, 59, 255),
     border: Color::from_rgba8(58, 58, 63, 255),
+    border_strong: Color::from_rgba8(77, 77, 84, 255),
     text: Color::from_rgba8(232, 232, 232, 255),
     text_dim: Color::from_rgba8(154, 160, 166, 255),
     accent: Color::from_rgba8(242, 169, 61, 255),
+    accent_soft: Color::from_rgba8(69, 55, 42, 255),
     success: Color::from_rgba8(74, 210, 149, 255),
     warning: Color::from_rgba8(232, 119, 46, 255),
     error: Color::from_rgba8(224, 90, 90, 255),
@@ -131,3 +137,11 @@ pub const FONT_LARGE: ambre_core::Px<ambre_core::View> = ambre_core::Px::new(16.
 pub const FONT_HEADING: ambre_core::Px<ambre_core::View> = ambre_core::Px::new(20.0);
 pub const FONT_DISPLAY: ambre_core::Px<ambre_core::View> = ambre_core::Px::new(26.0);
 pub const FONT_HERO: ambre_core::Px<ambre_core::View> = ambre_core::Px::new(32.0);
+pub const CONTROL_SM: ambre_core::Px<ambre_core::View> = ambre_core::Px::new(24.0);
+pub const CONTROL: ambre_core::Px<ambre_core::View> = ambre_core::Px::new(28.0);
+pub const CONTROL_LG: ambre_core::Px<ambre_core::View> = ambre_core::Px::new(32.0);
+pub const ICON_SM: ambre_core::Px<ambre_core::View> = ambre_core::Px::new(14.0);
+pub const ICON: ambre_core::Px<ambre_core::View> = ambre_core::Px::new(16.0);
+pub const ICON_LG: ambre_core::Px<ambre_core::View> = ambre_core::Px::new(20.0);
+pub const FOCUS_WIDTH: ambre_core::Px<ambre_core::View> = ambre_core::Px::new(2.0);
+pub const FOCUS_OFFSET: ambre_core::Px<ambre_core::View> = ambre_core::Px::new(2.0);

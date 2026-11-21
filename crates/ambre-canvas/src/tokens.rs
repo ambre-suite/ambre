@@ -219,9 +219,15 @@ struct ChromeColors {
     surface_2: OpaqueColour,
     surface_hover: OpaqueColour,
     border: OpaqueColour,
+    /// The border of a control that must stand out of its ground: a field,
+    /// a swatch, a slider track.
+    border_strong: OpaqueColour,
     text: OpaqueColour,
     text_dim: OpaqueColour,
     accent: OpaqueColour,
+    /// The ground of a control the accent marks as on: a pressed toggle, the
+    /// chosen option of a list.
+    accent_soft: OpaqueColour,
     success: OpaqueColour,
     warning: OpaqueColour,
     error: OpaqueColour,
@@ -232,16 +238,18 @@ struct ChromeColors {
 
 impl ChromeColors {
     /// The CSS variable name of each colour, in declaration order.
-    fn vars(&self) -> [(&'static str, OpaqueColour); 13] {
+    fn vars(&self) -> [(&'static str, OpaqueColour); 15] {
         [
             ("bg", self.bg),
             ("surface", self.surface),
             ("surface-2", self.surface_2),
             ("surface-hover", self.surface_hover),
             ("border", self.border),
+            ("border-strong", self.border_strong),
             ("text", self.text),
             ("text-dim", self.text_dim),
             ("accent", self.accent),
+            ("accent-soft", self.accent_soft),
             ("success", self.success),
             ("warning", self.warning),
             ("error", self.error),
