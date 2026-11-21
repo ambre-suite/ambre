@@ -868,9 +868,12 @@ selfhost-up:
     {{selfhost}} up -d --build
     python3 scripts/selfhost_wait.py "{{selfhost}}"
 
-# `SRV-310`: the browser tier against the self-hosted stack, which it then removes.
+# Every browser reaches the stack from the loopback, and the relay admits 10 sockets a
+# minute from one address. So each test runs alone, a minute after the one before it.
+
+# `SRV-310`, `CALL-042`: the browser tier against the self-hosted stack, which it then removes.
 selfhost-test: selfhost-up
-    BELT_CHROME_ARGS=--ignore-certificate-errors SELFHOST_ORIGIN=https://localhost cargo test -p ambre-belt -- --ignored --exact prose::tests::the_self_hosted_stack_serves_two_members_one_document
+    for t in prose::tests::the_self_hosted_stack_serves_two_members_one_document murmure::tests::a_call_on_the_self_hosted_stack_reaches_the_sfu_over_udp murmure::tests::a_call_on_the_self_hosted_stack_reaches_the_sfu_through_turn_on_443; do BELT_CHROME_ARGS=--ignore-certificate-errors SELFHOST_ORIGIN=https://localhost cargo test -p ambre-belt -- --ignored --exact "$t" || exit 1; sleep 61; done
     {{selfhost}} down -v
 
 # Stop the self-hosted stack under test and drop its volumes.

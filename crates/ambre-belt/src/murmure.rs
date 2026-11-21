@@ -4411,4 +4411,93 @@ pub(crate) mod tests {
             click_header(page, ".murmure-call-hang-up").await;
         }
     }
+
+    /// The origin of the self-hosted stack under test: `SELFHOST_ORIGIN`, or `https://localhost`.
+    fn selfhost_origin() -> String {
+        std::env::var("SELFHOST_ORIGIN").unwrap_or_else(|_| "https://localhost".to_owned())
+    }
+
+    /// The media port of the SFU of the self-hosted stack (`deploy/compose/compose.yml`).
+    const SELFHOST_MEDIA_PORT: u64 = 3481;
+
+    /// Makes every peer connection the page opens gather relay candidates alone, as a network
+    /// that opens TCP on port 443 alone allows. The page then reaches the SFU through TURN.
+    const RELAY_ONLY: &str = "const P = window.RTCPeerConnection; \
+        window.RTCPeerConnection = class extends P { \
+          constructor(c, ...a) { super({ ...(c || {}), iceTransportPolicy: 'relay' }, ...a); } }; \
+        return true;";
+
+    /// The type of the local candidate of the pair the first peer connection selected, once one
+    /// is selected: `host`, `srflx` or `relay`.
+    async fn selected_local_type(page: &Page) -> Value {
+        page.browser
+            .script_async(
+                "const done = arguments[arguments.length - 1]; \
+                 const pc = (window.beltPcs || [])[0]; if (!pc) { done(null); return; } \
+                 pc.getStats().then((stats) => { let t = null; \
+                   stats.forEach((s) => { \
+                     const pair = s.type === 'transport' && stats.get(s.selectedCandidatePairId); \
+                     if (pair && pair.state === 'succeeded') { \
+                       const l = stats.get(pair.localCandidateId); if (l) t = l.candidateType; } }); \
+                   done(t); }, () => done(null));",
+                json!([]),
+            )
+            .await
+    }
+
+    /// Ada and Bob, each in Murmure on the self-hosted stack, in one channel of one space.
+    async fn selfhost_pair() -> (Page, Page) {
+        let origin = selfhost_origin();
+        let (ada, bob) = (user(), user());
+        let ada_page = enter(Page::at(&origin).await, &ada).await;
+        let bob_page = enter(Page::at(&origin).await, &bob).await;
+        space_with_channel(&ada_page, "Hosted", "general", &bob, &bob_page).await;
+        open(&bob_page, "general").await;
+        (ada_page, bob_page)
+    }
+
+    /// `SRV-310`: a call on the self-hosted stack. Ada starts it, Bob joins it from the call
+    /// message, and each decodes a second of the other. The one peer of each page is the media
+    /// port the SFU announces on the address of the host.
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "needs the self-hosted stack of deploy/compose; run just selfhost-test"]
+    async fn a_call_on_the_self_hosted_stack_reaches_the_sfu_over_udp() {
+        let (ada_page, bob_page) = selfhost_pair().await;
+        for page in [&ada_page, &bob_page] {
+            page.browser.script(RECORD, json!([])).await;
+        }
+        click_header(&ada_page, ".murmure-call-start").await;
+        join_from_message(&bob_page).await;
+        let seen = decoded_past(&[&ada_page, &bob_page], &[0.0; 2], 48_000.0).await;
+        for stats in &seen {
+            assert_eq!(stats["pcs"], json!(1), "one peer connection: {stats:#}");
+            assert_eq!(
+                stats["remotePort"].as_u64(),
+                Some(SELFHOST_MEDIA_PORT),
+                "the one peer is the SFU: {stats:#}"
+            );
+        }
+    }
+
+    /// `CALL-042`: on the self-hosted stack, a page that may gather relay candidates alone joins
+    /// the call through TURN. Its connection reaches port 443, where the front sends what is no
+    /// TLS hello to coturn, and coturn relays to the SFU. Both pages decode the other.
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "needs the self-hosted stack of deploy/compose; run just selfhost-test"]
+    async fn a_call_on_the_self_hosted_stack_reaches_the_sfu_through_turn_on_443() {
+        let (ada_page, bob_page) = selfhost_pair().await;
+        let forced = bob_page.browser.script(RELAY_ONLY, json!([])).await;
+        assert_eq!(forced, json!(true));
+        for page in [&ada_page, &bob_page] {
+            page.browser.script(RECORD, json!([])).await;
+        }
+        click_header(&ada_page, ".murmure-call-start").await;
+        join_from_message(&bob_page).await;
+        decoded_past(&[&ada_page, &bob_page], &[0.0; 2], 48_000.0).await;
+        assert_eq!(
+            selected_local_type(&bob_page).await,
+            json!("relay"),
+            "Bob reached the SFU through TURN"
+        );
+    }
 }
