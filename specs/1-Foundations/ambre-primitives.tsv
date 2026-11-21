@@ -818,7 +818,6 @@ ambre-chrome | src/app_shell.rs | crate::app_shell | Sidebar.label | field | Str
 ambre-chrome | src/avatar.rs | crate::avatar | avatar_initials() | ret | String	free-text	text, label or user content
 ambre-chrome | src/avatar.rs | crate::avatar | avatar_initials(name) | param | &str	free-text	text, label or user content
 ambre-chrome | src/color.rs | crate::color | ColorPopover(reset_label) | param | &'static str	free-text	text, label or user content
-ambre-chrome | src/color.rs | crate::color | ColorPopover(title) | param | &'static str	free-text	text, label or user content
 ambre-chrome | src/color.rs | crate::color | parse_hex_color(s) | param | &str	foreign-api	the value an `<input type="color">` reports
 ambre-chrome | src/composed.rs | crate::composed | BRAND | const | &str	free-text	UI text/label const
 ambre-chrome | src/composed.rs | crate::composed | ComposedName.0 | field | String	newtype-inner	newtype inner
