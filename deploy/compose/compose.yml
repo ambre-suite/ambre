@@ -1,0 +1,194 @@
+# The self-hosted stack: Ambre on one server (`deploy/README.md`, `SRV-310`).
+#
+#   ./setup.sh ambre.example.org 203.0.113.7 admin@example.org
+#   docker compose up -d --build
+#
+# Two networks. The stores and the relay run on the network of the stack, and
+# publish nothing beyond the loopback of the host. The front, Caddy, coturn and
+# the SFU run on the network of the host: the front owns port 443, and the SFU
+# announces the public address of the host as the one candidate of its media
+# (`CALL-141`). The host opens 80/tcp, 443/tcp and 3481/udp, and nothing else.
+#
+# Each image names one exact release and the digest of its multi-arch index,
+# as `docker-compose.yml` does (`ARCH-087`). The images of Ambre build from
+# `deploy/Dockerfile` until a release publishes them (`SRV-308`).
+
+x-ambre-build: &ambre-build
+  context: ../..
+  dockerfile: deploy/Dockerfile
+
+services:
+  postgres:
+    image: postgres:16.15-alpine@sha256:aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ambre
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run setup.sh first}
+      POSTGRES_DB: ambre
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ambre -d ambre"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:8.10.3-alpine@sha256:71885d8cc6e42f2bc0aa2eb853bfc4be200b5108a46ac50e117ae1df0531fb80
+    restart: unless-stopped
+    # The ephemeral store loses nothing the relay cannot rebuild from Postgres
+    # (`ambre-spec-server.md` section 3), so it keeps no snapshot on disk.
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?run setup.sh first}", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping"]
+      interval: 5s
+      retries: 10
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+
+  garage:
+    image: dxflrs/garage:v2.3.0@sha256:866bd13ed2038ba7e7190e840482bc27234c4afaf77be8cfa439ae088c1e4690
+    restart: unless-stopped
+    environment:
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?run setup.sh first}
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?run setup.sh first}
+    # The S3 API on the loopback of the host alone, for Caddy's `/s3/`.
+    ports:
+      - "127.0.0.1:3900:3900"
+    volumes:
+      - ./garage.toml:/etc/garage.toml:ro
+      - garagemeta:/var/lib/garage/meta
+      - garagedata:/var/lib/garage/data
+    healthcheck:
+      test: ["CMD", "/garage", "status"]
+      interval: 5s
+      retries: 10
+
+  # Gives the store its layout, the key of the stack and the bucket, then
+  # exits. Each step is skipped once done, so every start runs it again.
+  garage-init:
+    build:
+      <<: *ambre-build
+      target: init
+    image: ambre-init:local
+    environment:
+      GARAGE_ADMIN: http://garage:3903
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN}
+      GARAGE_KEY_ID: ${GARAGE_KEY_ID:?run setup.sh first}
+      GARAGE_KEY_SECRET: ${GARAGE_KEY_SECRET:?run setup.sh first}
+      S3_ENDPOINT: http://garage:3900
+      S3_BUCKET: ambre
+    depends_on:
+      garage:
+        condition: service_healthy
+
+  relay:
+    build:
+      <<: *ambre-build
+      target: relay
+    image: ambre-relay:local
+    restart: unless-stopped
+    environment:
+      DEV_MODE: ${AMBRE_DEV_MODE:-}
+      DATABASE_URL: postgres://ambre:${POSTGRES_PASSWORD}@postgres:5432/ambre
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      S3_ENDPOINT: http://garage:3900
+      S3_PUBLIC_ENDPOINT: https://${AMBRE_DOMAIN:?run setup.sh first}/s3
+      S3_BUCKET: ambre
+      S3_ENV_PREFIX: ambre
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: ${GARAGE_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${GARAGE_KEY_SECRET}
+      JWT_SIGNING_SEED: ${JWT_SIGNING_SEED:?run setup.sh first}
+      CALL_ADMISSION_SEED: ${CALL_ADMISSION_SEED:?run setup.sh first}
+      CALL_SFU_URL: wss://${AMBRE_DOMAIN}/sfu/call
+      CORS_ALLOWED_ORIGINS: https://${AMBRE_DOMAIN}
+      # Caddy is the one proxy in front of the relay (`SRV-285`).
+      TRUST_PROXY_HEADERS: "1"
+      OIDC_GOOGLE_CLIENT_ID: ${OIDC_GOOGLE_CLIENT_ID:-}
+      OIDC_GOOGLE_CLIENT_SECRET: ${OIDC_GOOGLE_CLIENT_SECRET:-}
+      OIDC_GOOGLE_REDIRECT_URI: https://${AMBRE_DOMAIN}/signin/google
+    # The relay on the loopback of the host alone, for Caddy's `/api`. Its
+    # metrics port stays inside the network of the stack (`SRV-257`).
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      garage-init:
+        condition: service_completed_successfully
+
+  sfu:
+    build:
+      <<: *ambre-build
+      target: sfu
+    image: ambre-sfu:local
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      SFU_SIGNAL_ADDR: 127.0.0.1:3480
+      SFU_MEDIA_ADDR: ${AMBRE_PUBLIC_IP:?run setup.sh first}:3481
+      SFU_METRICS_ADDR: 127.0.0.1:3482
+      SFU_ADMISSION_KEY: ${SFU_ADMISSION_KEY:?run setup.sh first}
+      SFU_TURN_URLS: turn:${AMBRE_DOMAIN}:443?transport=tcp
+      SFU_TURN_SECRET: ${TURN_SECRET:?run setup.sh first}
+
+  # TURN over TCP, behind the front, for a network that opens TCP 443 alone
+  # (`CALL-042`). It relays to the media address of the SFU.
+  coturn:
+    image: coturn/coturn:4.7.0-alpine@sha256:2a0c41042b02c6daa33f35ce3781da20fe0d08da6cf2746c8ae62a890802cc36
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - -n
+      - --no-udp
+      - --no-tls
+      - --no-dtls
+      - --no-cli
+      - --listening-ip=127.0.0.1
+      - --listening-port=3478
+      - --relay-ip=${AMBRE_PUBLIC_IP}
+      - --external-ip=${AMBRE_PUBLIC_IP}
+      - --use-auth-secret
+      - --static-auth-secret=${TURN_SECRET}
+      - --realm=${AMBRE_DOMAIN}
+      - --min-port=49160
+      - --max-port=49999
+      - --log-file=stdout
+      - ${TURN_LOOPBACK_PEERS:---fingerprint}
+
+  web:
+    build:
+      <<: *ambre-build
+      target: web
+      args:
+        DEV_LOGIN: ${AMBRE_DEV_LOGIN:-}
+    image: ambre-web:local
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      AMBRE_DOMAIN: ${AMBRE_DOMAIN}
+      AMBRE_TLS: ${AMBRE_TLS:?run setup.sh first}
+    volumes:
+      - caddydata:/data
+      - caddyconfig:/config
+    depends_on:
+      - relay
+
+  front:
+    image: nginx:1.29.3-alpine@sha256:b3c656d55d7ad751196f21b7fd2e8d4da9cb430e32f646adcf92441b72f82b14
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - web
+      - coturn
+
+volumes:
+  pgdata:
+  garagemeta:
+  garagedata:
+  caddydata:
+  caddyconfig:

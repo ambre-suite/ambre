@@ -1,0 +1,8 @@
+# The build reads the sources. Build outputs and local state stay out of the
+# context, `target/` first.
+target
+dist
+.git
+**/node_modules
+deploy/compose/.env
+deploy/compose/data

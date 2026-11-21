@@ -85,6 +85,7 @@ SCRIPTS = {
     "merge_generated": TOOL,
     "prose": GATE,
     "schema_freeze": GATE,
+    "selfhost_wait": TOOL,
     "service_pins": GATE,
     "spec_answers": GATE,
     "spec_code": GATE,

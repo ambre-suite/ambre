@@ -53,7 +53,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-251` | `INV` | A seat whose socket stops its heartbeat MUST leave the roster and the cap of its call within the time to live of `ambre-spec-budgets.md section 1`. | this spec section 3; `SRV-248`; `CALL-021` | `ambre_server::ws::handler::call::tests::a_seat_that_stops_its_heartbeat_leaves_the_roster_and_frees_its_place` -- database tier: a seat no socket beats for leaves the roster and frees its place while a beating seat holds the call, and its index is never given again | none | verified |
 | `SRV-308` | `INV` | A release MUST publish the relay, the SFU and the client as container images, each named by its digest. | this spec section 3 | not built | unbuilt -- lands with the `The relay ships as images and a chart any host runs` Story (`ambre-roadmap.md` E6). No image is built: the repository holds a development compose file alone | unimplemented |
 | `SRV-309` | `INV` | The chart of the repository MUST deploy a stack against which the browser tier passes on a local Kubernetes cluster. | this spec section 3; `SRV-308` | not built | unbuilt -- lands with the `The relay ships as images and a chart any host runs` Story (`ambre-roadmap.md` E6). No chart exists | unimplemented |
-| `SRV-310` | `INV` | The self-hosting compose file of the repository MUST deploy, on one host, a stack against which the browser tier passes. | this spec section 3; `SRV-308` | not built | unbuilt -- lands with the `One server runs Ambre from one compose file` Story (`ambre-roadmap.md` E6). The compose file of the repository starts the dependencies of development alone: no relay, no SFU, no TURN and no client | unimplemented |
+| `SRV-310` | `INV` | The self-hosting compose file of the repository MUST deploy, on one host, a stack against which the browser tier passes. | this spec section 3; `SRV-308` | `ambre_belt::prose::tests::the_self_hosted_stack_serves_two_members_one_document` -- browser tier, through the TLS front on port 443 of the stack that `just selfhost-test` builds and starts, in the CI `selfhost` job: the page is cross-origin isolated, and two members edit one document; `ambre_belt::murmure::tests::a_call_on_the_self_hosted_stack_reaches_the_sfu_over_udp` -- the same stack: a call between two members decodes on both, and the one peer of each page is the media port of the SFU | none | verified |
 
 ### 1.2 A request is classified and limited
 
@@ -194,7 +194,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
-* **Verification.** 119 `verified`, 1 `human-review`, 9 `unimplemented`. A request test drives what
+* **Verification.** 120 `verified`, 1 `human-review`, 8 `unimplemented`. A request test drives what
   holds: the roles, the rank clamps, the signature gate, the error mapping, the origin list and the
   delete. No log line can name the payload type. A deployment's isolation is read by hand.
 ---

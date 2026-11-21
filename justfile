@@ -855,6 +855,31 @@ cluster-up:
 services-down:
     docker compose --profile cluster down
 
+# The self-hosted stack of `deploy/compose/` on this machine, for the browser
+# tier (`SRV-310`). It takes ports 80, 443 and 3481 of the host. Its `.env`
+# names `localhost`, a certificate of Caddy's own authority, the sign-in by
+# bare name and loopback peers for TURN, which a deployment never sets.
+selfhost := 'docker compose -f deploy/compose/compose.yml --env-file target/selfhost/.env -p ambre-selfhost-test'
+
+# Build and start the self-hosted stack under test, then wait for its page and its relay.
+selfhost-up:
+    mkdir -p target/selfhost
+    test -e target/selfhost/.env || { AMBRE_ENV_FILE="$PWD/target/selfhost/.env" sh deploy/compose/setup.sh localhost 127.0.0.1 internal && printf 'AMBRE_DEV_MODE=true\nAMBRE_DEV_LOGIN=1\nTURN_LOOPBACK_PEERS=--allow-loopback-peers\n' >> target/selfhost/.env; }
+    {{selfhost}} up -d --build
+    python3 scripts/selfhost_wait.py "{{selfhost}}"
+
+# Every browser reaches the stack from the loopback, and the relay admits 10 sockets a
+# minute from one address. So each test runs alone, a minute after the one before it.
+
+# `SRV-310`, `CALL-042`: the browser tier against the self-hosted stack, which it then removes.
+selfhost-test: selfhost-up
+    for t in prose::tests::the_self_hosted_stack_serves_two_members_one_document murmure::tests::a_call_on_the_self_hosted_stack_reaches_the_sfu_over_udp murmure::tests::a_call_on_the_self_hosted_stack_reaches_the_sfu_through_turn_on_443; do BELT_CHROME_ARGS=--ignore-certificate-errors SELFHOST_ORIGIN=https://localhost cargo test -p ambre-belt -- --ignored --exact "$t" || exit 1; sleep 61; done
+    {{selfhost}} down -v
+
+# Stop the self-hosted stack under test and drop its volumes.
+selfhost-down:
+    {{selfhost}} down -v
+
 # The dev container (`.devcontainer/README.md`): the toolchain, the relay and
 # the client in one container, PostgreSQL, Redis and Garage beside it from the
 # images of `docker-compose.yml`. The container runs as the user of the clone.
