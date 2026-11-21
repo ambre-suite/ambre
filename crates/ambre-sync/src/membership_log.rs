@@ -291,6 +291,18 @@ impl Writers {
         }
     }
 
+    /// Whether a snapshot that folds `folded`, the highest clock of each
+    /// author it holds, holds a delta past a cap. Such a snapshot opens
+    /// nothing, whoever signed it (`SYNC-300`, `SYNC-304`).
+    pub(crate) fn folds_past_cap(
+        &self,
+        folded: &[(FixedBytes<PublicKey>, Seq<DeltaAuthor>)],
+    ) -> bool {
+        folded
+            .iter()
+            .any(|(author, clock)| self.cap(author).is_some_and(|cap| *clock > cap))
+    }
+
     /// Whether a snapshot `signer` signed may stand. A capped writer's
     /// snapshot names no clock, so it is refused whole, and its deltas
     /// replay under the cap instead (`SYNC-300`). A readmitted writer's

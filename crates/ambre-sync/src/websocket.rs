@@ -914,6 +914,7 @@ impl SyncState {
                 snapshot_id,
                 covered_seq,
                 held_snapshot,
+                fallback,
                 doc_type,
                 existence,
                 signing_keys,
@@ -987,16 +988,33 @@ impl SyncState {
                             covered_seq,
                         });
                     }
-                    // A snapshot past a cap is refused, and the open replays
-                    // every delta from the first one under the cap. The
-                    // deltas past it are signed one by one, so they open on
-                    // their own (`SYNC-300`).
+                    // A snapshot past a cap is refused. The open starts from
+                    // the trusted reference when it folds no delta past a
+                    // cap, and replays from its horizon (`SYNC-307`). With
+                    // none, it replays every delta from the first. The
+                    // deltas past either start are signed one by one, so
+                    // they open on their own (`SYNC-300`, `SYNC-304`).
                     Some(Err(pipeline::PipelineError::PastCap)) => {
                         crate::log::warning!(
-                            "Sync: the latest snapshot folds a delta past a revoke cap; replaying from the first delta"
+                            "Sync: the latest snapshot folds a delta past a revoke cap"
                         );
                         doc_state.current_snapshot_id = snapshot_id;
                         doc_state.known_snapshots.insert(snapshot_id);
+                        let earlier = fallback.and_then(|fallback| {
+                            doc_state
+                                .open_start_blob(&fallback.start, fallback.served)
+                                .ok()
+                                .map(|payload| (payload, fallback.served))
+                        });
+                        if let Some((payload, served)) = earlier {
+                            doc_state.known_snapshots.insert(served.snapshot_id);
+                            doc_state.last_seq = served.covered_seq;
+                            self.send_to_logic(LogicEvent::RemoteSnapshot {
+                                document_id,
+                                payload,
+                                covered_seq: served.covered_seq,
+                            });
+                        }
                         self.send_to_logic(LogicEvent::SyncWarning {
                             document_id,
                             code: SyncWarningCode::WriterRefused,

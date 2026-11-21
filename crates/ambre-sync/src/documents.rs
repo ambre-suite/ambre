@@ -806,6 +806,7 @@ mod tests {
             snapshot_id: Id::<Snapshot>::genesis(document_id),
             covered_seq: Seq::<Relay>::ZERO,
             held_snapshot: None,
+            fallback: None,
             doc_type: DocType::Prose,
             existence: crate::Existence::LocalOnly,
             signing_keys: Vec::new(),

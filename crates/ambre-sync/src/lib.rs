@@ -492,6 +492,10 @@ enum SyncEvent {
         /// author is another user. `snapshot_payload` is then the reference,
         /// and this one is checked once the replay is done (`AUTHOR-022`).
         held_snapshot: Option<HeldSnapshot>,
+        /// The trusted reference, fetched when `snapshot_payload` folds a
+        /// delta past a cap. The open starts from it instead, and replays
+        /// from its horizon (`SYNC-307`).
+        fallback: Option<FallbackStart>,
         /// Document kind, carried so a not-yet-on-server doc can be lazily created
         /// with the right type on its first outbound update.
         doc_type: DocType,
@@ -1190,6 +1194,13 @@ pub(crate) struct StartBlob {
     pub author: FixedBytes<PublicKey>,
 }
 
+/// An older trusted snapshot an open starts from when its start folds a
+/// delta past a cap, and what the relay served it as (`SYNC-307`).
+pub(crate) struct FallbackStart {
+    pub start: StartBlob,
+    pub served: pipeline::ServedSnapshot,
+}
+
 impl SyncDocumentState {
     fn new(
         document_id: Id<Document>,
@@ -1454,10 +1465,7 @@ impl SyncDocumentState {
         // write the log refuses, whoever signed it. It is refused whole, and
         // the deltas replay one by one under the cap (`SYNC-300`).
         let folded = &snapshot.public_data.parent_snapshot_update_clocks;
-        if folded
-            .iter()
-            .any(|(author, clock)| self.writers.cap(author).is_some_and(|cap| *clock > cap))
-        {
+        if self.writers.folds_past_cap(folded) {
             return Err(pipeline::PipelineError::PastCap);
         }
         let key = self

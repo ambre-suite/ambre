@@ -971,6 +971,7 @@ impl SyncState {
         // is held back until the replay is done, then checked. The open starts
         // from a trusted reference, or from the first delta (`AUTHOR-022`).
         let mut held_snapshot = None;
+        let mut fallback = None;
         let (snapshot_payload, downloaded_snapshot_id, covered_seq) = if existence
             == crate::Existence::OnRelay
         {
@@ -1010,7 +1011,7 @@ impl SyncState {
                             &api_base,
                             doc_id,
                             start.named.snapshot_id,
-                            auth,
+                            auth.clone(),
                         )
                         .await
                         {
@@ -1041,6 +1042,39 @@ impl SyncState {
                         },
                         _ => None,
                     };
+                    // A start past a cap opens nothing (`SYNC-304`). The
+                    // reference beside it is fetched, so the open replays
+                    // from its horizon, not from the first delta
+                    // (`SYNC-307`).
+                    if let (Some(start), Some(start_named), Some(reference)) =
+                        (&payload, plan.start, plan.fallback)
+                    {
+                        let served = pipeline::ServedSnapshot {
+                            snapshot_id: start_named.named.snapshot_id,
+                            covered_seq: start_named.named.covered_seq,
+                        };
+                        if start_past_cap(&start.blob, doc_id, served, &writers) {
+                            fallback = http::download_snapshot(
+                                url_scheme,
+                                &api_base,
+                                doc_id,
+                                reference.named.snapshot_id,
+                                auth.clone(),
+                            )
+                            .await
+                            .filter(|blob| reference.holds(doc_id, blob))
+                            .map(|blob| FallbackStart {
+                                start: StartBlob {
+                                    blob,
+                                    author: reference.named.author,
+                                },
+                                served: pipeline::ServedSnapshot {
+                                    snapshot_id: reference.named.snapshot_id,
+                                    covered_seq: reference.named.covered_seq,
+                                },
+                            });
+                        }
+                    }
                     let snap_id = plan.start.map(|s| s.named.snapshot_id);
                     // Only gate on the covered seq if the blob actually
                     // downloaded; otherwise a failed fetch would skip
@@ -1077,6 +1111,7 @@ impl SyncState {
             snapshot_id,
             covered_seq,
             held_snapshot,
+            fallback,
             doc_type,
             existence,
             signing_keys,
@@ -2161,6 +2196,20 @@ pub(crate) enum Vouch {
 /// Posts `vouch` on `snapshot_id` to the relay at `base`, under the
 /// session's token. A confirmation that settled a fold names the amendments
 /// the relay erased (`SRV-211`).
+/// Whether the start blob `blob`, served as `served`, folds a delta past a
+/// cap `writers` sets (`SYNC-304`). A blob that does not decode is no start
+/// past a cap: the Sync worker refuses it on its own.
+fn start_past_cap(
+    blob: &Payload<pipeline::FetchedBlob>,
+    document_id: Id<Document>,
+    served: pipeline::ServedSnapshot,
+    writers: &membership_log::Writers,
+) -> bool {
+    pipeline::decode_snapshot_blob(blob, document_id, served).is_ok_and(|snapshot| {
+        writers.folds_past_cap(&snapshot.public_data.parent_snapshot_update_clocks)
+    })
+}
+
 pub(crate) async fn send_vouch(
     transport: &impl http::Transport,
     auth: &http::AuthContext,
@@ -3265,6 +3314,7 @@ mod tests {
             snapshot_id: Id::<Snapshot>::genesis(segment),
             covered_seq: Seq::<Relay>::ZERO,
             held_snapshot: None,
+            fallback: None,
             doc_type: DocType::Murmure,
             existence: crate::Existence::OnRelay,
             signing_keys: Vec::new(),
@@ -3633,6 +3683,7 @@ mod tests {
             snapshot_id,
             covered_seq: Seq::<Relay>::new(3),
             held_snapshot: None,
+            fallback: None,
             doc_type: DocType::Trame,
             existence: crate::Existence::OnRelay,
             signing_keys: Vec::new(),
@@ -4130,6 +4181,7 @@ mod tests {
             snapshot_id: Id::<Snapshot>::mint(),
             covered_seq: Seq::<Relay>::new(0),
             held_snapshot: None,
+            fallback: None,
             doc_type: DocType::Trame,
             existence: crate::Existence::OnRelay,
             signing_keys: Vec::new(),
@@ -4158,6 +4210,7 @@ mod tests {
             snapshot_id: Id::<Snapshot>::genesis(document_id),
             covered_seq: Seq::<Relay>::ZERO,
             held_snapshot: None,
+            fallback: None,
             doc_type,
             existence: crate::Existence::OnRelay,
             signing_keys: Vec::new(),
@@ -4266,6 +4319,7 @@ mod tests {
             snapshot_id,
             covered_seq: Seq::<Relay>::new(1500),
             held_snapshot: None,
+            fallback: None,
             doc_type: DocType::Trame,
             existence: crate::Existence::OnRelay,
             signing_keys: Vec::new(),
@@ -4308,6 +4362,7 @@ mod tests {
             snapshot_id: Id::<Snapshot>::genesis(doc),
             covered_seq: Seq::<Relay>::new(0),
             held_snapshot: None,
+            fallback: None,
             doc_type: DocType::Trame,
             existence: crate::Existence::OnRelay,
             signing_keys: Vec::new(),
@@ -4678,6 +4733,7 @@ mod tests {
                 snapshot_id,
                 covered_seq: Seq::<Relay>::new(3),
                 held_snapshot: None,
+                fallback: None,
                 doc_type: DocType::Trame,
                 existence: crate::Existence::OnRelay,
                 signing_keys: Vec::new(),
@@ -4720,6 +4776,7 @@ mod tests {
             snapshot_id,
             covered_seq: Seq::<Relay>::new(0),
             held_snapshot: None,
+            fallback: None,
             doc_type: DocType::Trame,
             existence: crate::Existence::OnRelay,
             signing_keys: Vec::new(),
@@ -4791,6 +4848,7 @@ mod tests {
                 covered_seq: Seq::<Relay>::new(9),
                 blob: snapshot_blob(doc, served(held, 9), b"latest", &key, &sk),
             }),
+            fallback: None,
             doc_type: DocType::Trame,
             existence: crate::Existence::OnRelay,
             signing_keys: Vec::new(),
@@ -4876,6 +4934,7 @@ mod tests {
                 covered_seq: Seq::<Relay>::new(9),
                 blob: swapped(9),
             }),
+            fallback: None,
             doc_type: DocType::Trame,
             existence: crate::Existence::OnRelay,
             signing_keys: Vec::new(),
@@ -4976,6 +5035,7 @@ mod tests {
                     covered_seq: Seq::<Relay>::new(covered),
                     blob: sealed(held),
                 }),
+                fallback: None,
                 doc_type: DocType::Trame,
                 existence: crate::Existence::OnRelay,
                 signing_keys: Vec::new(),
@@ -5035,6 +5095,7 @@ mod tests {
             snapshot_id: Id::<Snapshot>::genesis(doc),
             covered_seq: Seq::<Relay>::new(0),
             held_snapshot: None,
+            fallback: None,
             doc_type: DocType::Trame,
             existence: crate::Existence::OnRelay,
             signing_keys: Vec::new(),
@@ -5077,6 +5138,7 @@ mod tests {
             snapshot_id: Id::<Snapshot>::genesis(doc),
             covered_seq: Seq::<Relay>::new(0),
             held_snapshot: None,
+            fallback: None,
             doc_type: DocType::Trame,
             existence: crate::Existence::OnRelay,
             signing_keys: Vec::new(),
@@ -5106,6 +5168,7 @@ mod tests {
             snapshot_id: Id::<Snapshot>::genesis(doc),
             covered_seq: Seq::<Relay>::new(0),
             held_snapshot: None,
+            fallback: None,
             doc_type: DocType::Trame,
             existence: crate::Existence::OnRelay,
             signing_keys: Vec::new(),
@@ -6543,6 +6606,7 @@ mod tests {
                 snapshot_id: Id::<Snapshot>::genesis(doc),
                 covered_seq: Seq::<Relay>::new(0),
                 held_snapshot: None,
+                fallback: None,
                 doc_type: DocType::Trame,
                 existence: crate::Existence::OnRelay,
                 signing_keys: Vec::new(),
@@ -6629,6 +6693,7 @@ mod tests {
                 },
                 covered_seq: Seq::<Relay>::new(u64::from(with_snapshot)),
                 held_snapshot: None,
+                fallback: None,
                 doc_type: DocType::Trame,
                 existence: crate::Existence::OnRelay,
                 signing_keys: Vec::new(),
@@ -7632,6 +7697,7 @@ mod tests {
                 snapshot_id,
                 covered_seq: Seq::<Relay>::new(3),
                 held_snapshot: None,
+                fallback: None,
                 doc_type: DocType::Trame,
                 existence: crate::Existence::OnRelay,
                 signing_keys: Vec::new(),
@@ -7682,6 +7748,139 @@ mod tests {
             assert_eq!(warned, [SyncWarningCode::WriterRefused]);
             assert!(!state.documents[&doc].applied_past_cap(&capped));
         }
+    }
+
+    /// Holds `SYNC-307`. Bob is capped at clock 2. The latest snapshot
+    /// folds his clock 3, so it opens nothing. The trusted reference folds
+    /// his clocks up to 2 and horizon 2: the open starts from it and asks
+    /// for the deltas past seq 2 alone. A full replay of the same log from
+    /// the first delta reaches the same clocks, and applies the same deltas
+    /// past the horizon. A reference past the cap too opens nothing, and the
+    /// open replays from the first delta.
+    #[test]
+    fn a_snapshot_past_a_cap_starts_from_the_reference_as_a_full_replay_does() {
+        use crate::membership_log::Writers;
+        use crate::membership_log::tests::Person;
+        let (alice, bob) = (Person::new(0x61), Person::new(0x62));
+        let at = Seq::<DeltaAuthor>::new;
+        let capped = Writers::capped(
+            HashSet::from([alice.public(), bob.public()]),
+            HashMap::from([(bob.public(), at(2))]),
+        );
+        let doc = Id::<Document>::mint();
+        let key = DocumentKey::generate();
+        let genesis = Id::<Snapshot>::genesis(doc);
+        // The log: Bob's clocks 1 to 3, then Alice's clock 1.
+        let log: [(u64, &[u8], &Person, u64); 4] = [
+            (1, b"one", &bob, 1),
+            (2, b"two", &bob, 2),
+            (3, b"three", &bob, 3),
+            (4, b"a", &alice, 1),
+        ];
+        let (latest, reference) = (Id::<Snapshot>::mint(), Id::<Snapshot>::mint());
+        let latest_blob = snapshot_blob_folding(
+            doc,
+            served(latest, 4),
+            b"latest",
+            (&key, &alice.key),
+            vec![(bob.public(), at(3)), (alice.public(), at(1))],
+        );
+        let fallback = |folded: u64| FallbackStart {
+            start: started(
+                snapshot_blob_folding(
+                    doc,
+                    served(reference, 2),
+                    b"reference",
+                    (&key, &alice.key),
+                    vec![(bob.public(), at(folded))],
+                ),
+                &alice.key,
+            ),
+            served: served(reference, 2),
+        };
+        let open = |start: Option<StartBlob>, covered: u64, fallback: Option<FallbackStart>| {
+            let (mut state, rx, _doc, _key, _sk, _snap) = setup();
+            state.handle_sync_event(SyncEvent::OpenDocumentReady {
+                document_id: doc,
+                doc_key: key.clone(),
+                snapshot_payload: start,
+                snapshot_id: if covered == 0 { genesis } else { latest },
+                covered_seq: Seq::<Relay>::new(covered),
+                held_snapshot: None,
+                fallback,
+                doc_type: DocType::Trame,
+                existence: crate::Existence::OnRelay,
+                signing_keys: Vec::new(),
+                role: Role::Owner,
+                rotation_owed: ambre_core::RotationDebt::Settled,
+                links: Vec::new(),
+                writers: capped.clone(),
+                departed: None,
+            });
+            (state, rx)
+        };
+        // Replays the deltas of the log past `from`, and answers what
+        // reached the document.
+        let replay = |state: &mut SyncState, from: u64| {
+            for (seq, body, by, clock) in log.iter().filter(|entry| entry.0 > from) {
+                state.handle_ws_message(WsServerMsg::Update {
+                    seq: Seq::<Relay>::new(*seq),
+                    update: make_update(doc, genesis, at(*clock), body, &key, &by.key),
+                });
+            }
+        };
+
+        // From the reference.
+        let (mut state, rx) = open(
+            Some(started(latest_blob.clone(), &alice.key)),
+            4,
+            Some(fallback(2)),
+        );
+        let events = drain(&rx);
+        let snapshots: Vec<_> = events
+            .iter()
+            .filter_map(|e| match e {
+                LogicEvent::RemoteSnapshot {
+                    payload,
+                    covered_seq,
+                    ..
+                } => Some((payload.as_bytes().to_vec(), *covered_seq)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(snapshots, [(b"reference".to_vec(), Seq::<Relay>::new(2))]);
+        assert_eq!(
+            state.documents[&doc].last_seq,
+            Seq::<Relay>::new(2),
+            "the replay asks past the horizon of the reference"
+        );
+        replay(&mut state, 2);
+        let (from_reference, warned) = applied_and_warned(&drain(&rx));
+        assert_eq!(from_reference, [b"a".to_vec()]);
+        assert_eq!(warned, [SyncWarningCode::WriterRefused]);
+
+        // A full replay of the same log.
+        let (mut full, full_rx) = open(None, 0, None);
+        drain(&full_rx);
+        replay(&mut full, 0);
+        let (whole, _) = applied_and_warned(&drain(&full_rx));
+        assert_eq!(whole, [b"one".to_vec(), b"two".to_vec(), b"a".to_vec()]);
+        assert_eq!(&whole[2..], from_reference.as_slice(), "the same tail");
+        assert_eq!(
+            state.documents[&doc].applied_clocks(),
+            full.documents[&doc].applied_clocks(),
+            "the same clocks"
+        );
+        assert!(!state.documents[&doc].applied_past_cap(&capped));
+
+        // A reference past the cap too: the replay starts at the first delta.
+        let (state, rx) = open(Some(started(latest_blob, &alice.key)), 4, Some(fallback(3)));
+        assert!(
+            !drain(&rx)
+                .iter()
+                .any(|e| matches!(e, LogicEvent::RemoteSnapshot { .. }))
+        );
+        assert_eq!(state.documents[&doc].last_seq, Seq::<Relay>::ZERO);
     }
 
     /// Holds `SYNC-306` at the worker. A departure names the last clock this
@@ -7753,6 +7952,7 @@ mod tests {
             snapshot_id,
             covered_seq: Seq::<Relay>::ZERO,
             held_snapshot: None,
+            fallback: None,
             doc_type: DocType::Murmure,
             existence: crate::Existence::OnRelay,
             signing_keys: Vec::new(),
@@ -7809,6 +8009,7 @@ mod tests {
                 snapshot_id,
                 covered_seq: Seq::<Relay>::new(3),
                 held_snapshot: None,
+                fallback: None,
                 doc_type: DocType::Trame,
                 existence: crate::Existence::OnRelay,
                 signing_keys: Vec::new(),

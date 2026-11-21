@@ -154,7 +154,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-301` | `FAIL` | Given a writer capped by a revoke and granted a writing role again by a later entry, a delta of that writer past the cap MUST reach a document only when it signs a head the valid walk passes through at or past that entry. A snapshot that writer signs MUST stand nowhere. | this spec section 3; `SYNC-300`, `SYNC-206` | `ambre_sync::membership_log::tests::a_re_invite_admits_only_the_writes_past_its_own_entry` -- under the cap any head counts, and past it a head of the exclusion, a head the walk never passed and a forged digest are refused, the head after the invite counts, a second exclusion stacks on the first, and the readmitted writer's snapshot stands nowhere; `ambre_sync::updates::tests::a_re_invite_admits_no_write_of_the_exclusion` -- a peer that applied a write of the exclusion reads the document again, and read again it lands the history and the write after the invite alone | none | verified |
 | `SYNC-306` | `FAIL` | Given a departure of a document, its entry MUST cap the leaver at the last clock this client wrote in it, under the leaver's signature, and a delta of the leaver past the cap MUST reach no document. A later grant readmits the leaver as `SYNC-301` states. | this spec section 3; `SYNC-300`, `SYNC-301`, `SYNC-127` | `ambre_sync::membership_log::tests::a_departure_caps_the_clock_of_its_leaver` -- a delta at the cap counts, one past it and a snapshot do not, a raised cap breaks the signature, and a later invite readmits only the writes past it; `ambre_sync::sharing::tests::leaving_posts_the_removal_alone_and_chooses_no_key` -- the posted departure signs its cap; `ambre_sync::updates::tests::a_departure_caps_the_leaver_at_the_last_clock_it_wrote` -- the cap is the clock sealed last or a higher one applied, and a document not open fails the leave closed; `ambre_sync::sharing::tests::leaving_a_channel_posts_this_users_removal_on_its_meta` -- a channel departure names no cap | none | verified |
 | `SYNC-303` | `FAIL` | Given a document of a Murmure channel that applied a delta past the cap of a revoke, the client MUST end the whole channel, erase the local copy of each of its documents and open the channel again. | this spec section 3; `SYNC-300`, `SYNC-233` | `ambre_logic::channels::tests::a_channel_read_again_drops_each_copy_and_opens_anew` -- each document closes in Sync and leaves the store, the channel then asks the relay again, and a document no channel holds reads nothing | none | verified |
-| `SYNC-304` | `FAIL` | Given an open, a snapshot that folds a delta past the cap of its writer MUST open nothing, and the open MUST replay from the first delta under the cap. A reopen whose local copy applied such a delta MUST read the document again. | this spec section 3; `SYNC-300`, `RESID-010` | `ambre_sync::updates::tests::an_open_refuses_a_delta_past_the_cap_of_its_writer` -- the owner's snapshot that folds a clock past the cap opens nothing, the replay starts at the first delta and lands the clock at the cap alone, and a snapshot under the cap opens; `ambre_sync::light::tests::a_reopen_past_a_revoke_cap_reads_the_document_again` -- the clocks of an evicted session travel to its reopen, which reads the document again past a cap and not under one | none | verified |
+| `SYNC-304` | `FAIL` | Given an open, a snapshot that folds a delta past the cap of its writer MUST open nothing, and the open MUST replay from a start under every cap (`SYNC-307`). A reopen whose local copy applied such a delta MUST read the document again. | this spec section 3; `SYNC-300`, `RESID-010` | `ambre_sync::updates::tests::an_open_refuses_a_delta_past_the_cap_of_its_writer` -- the owner's snapshot that folds a clock past the cap opens nothing, the replay starts at the first delta and lands the clock at the cap alone, and a snapshot under the cap opens; `ambre_sync::light::tests::a_reopen_past_a_revoke_cap_reads_the_document_again` -- the clocks of an evicted session travel to its reopen, which reads the document again past a cap and not under one | none | verified |
+| `SYNC-307` | `FAIL` | Given an open whose start folds a delta past a cap, the open MUST start from the trusted reference when the reference folds none, and replay the deltas past its horizon alone; with no such reference, it MUST replay from the first delta. Either start MUST reach the clocks a full replay of the same log reaches. | this spec section 3; `SYNC-304`, `AUTHOR-030`, `SRV-127` | `ambre_sync::updates::tests::a_snapshot_past_a_cap_starts_from_the_reference_as_a_full_replay_does` -- the open starts from the reference and asks past its horizon, applies the deltas a full replay applies past it and reaches its clocks, and a reference past the cap replays from the first delta; `ambre_sync::snapshot_trust::tests::a_trusted_latest_keeps_the_trusted_reference_to_fall_back_on` -- only a trusted reference older than the start is a fallback | none | verified |
 
 * **Budget.** the key exchange costs one elliptic-curve operation per member at open, charged to
   the crypto rows of `ambre-spec-budgets.md section 1`. The directory and the role are read off an
@@ -162,7 +163,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 103 `verified`. Every pure transform holds, out of the browser: the wrap, the
+* **Verification.** 104 `verified`. Every pure transform holds, out of the browser: the wrap, the
   weak key, the pin, the invitee, the role and the log walk. What is loose is the branches that only
   run against a live relay.
 ---
@@ -581,6 +582,13 @@ of any copy to skip the check.
 A rotation of such a document wraps the new key for the rotator alone, and reports every other
 member (`SYNC-198`).
 
+**A snapshot past a cap starts from the reference.** A start that folds a delta past a cap opens
+nothing (`SYNC-304`). The open task reads the clocks the start folds, and fetches the trusted
+reference beside it. A reference that folds no delta past a cap starts the open, and the replay
+asks for the deltas past its horizon alone (`SYNC-307`). The relay keeps every delta past the
+reference (`SRV-127`), so the replay costs those deltas and no more. A replay from the first delta
+remains the last resort, and the relay may have trimmed the deltas under the reference.
+
 **A departure names its cap.** A leaver signs the last clock it wrote, the clock it sealed last or
 a higher one an echo or a snapshot held (`SYNC-306`). Only an open document knows that clock, so a
 leave of a document not open fails closed. A cap read from nothing would refuse the leaver's own
@@ -689,6 +697,11 @@ authority: the role here hides what the relay would refuse anyway.
   when its signer held a writing role at any point (`SYNC-211`). A departure of a document caps its
   leaver (`SYNC-306`), but a demoted writer holds the current key. No rule yet binds such a delta
   to the role of its signer at the head it signs.
+* **A snapshot past a cap with no reference under the caps replays from the first delta.** The
+  relay trims the deltas under the oldest confirmed snapshot, so that replay can lack history. No
+  rule yet fetches an older snapshot, and none states what the open shows then.
+* **A snapshot that folds a write of a readmitted writer opens.** The fold names a clock and no
+  head, and a readmission lifts the cap the check reads (`SYNC-301`).
 * **A departure cap is the leaver's own word.** A leaver who names a clock past its writes keeps
   writing up to it. An honest leaver names its last clock, so a key stolen later writes nothing.
   A departure with no cap caps nothing.

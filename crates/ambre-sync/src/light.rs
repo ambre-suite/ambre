@@ -969,6 +969,7 @@ mod tests {
                 snapshot_id,
                 covered_seq: Seq::<Relay>::new(9),
                 held_snapshot: None,
+                fallback: None,
                 doc_type: DocType::Trame,
                 existence: crate::Existence::OnRelay,
                 signing_keys: Vec::new(),

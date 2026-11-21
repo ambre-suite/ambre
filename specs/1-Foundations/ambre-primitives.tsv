@@ -4875,9 +4875,11 @@ ambre-sync | src/membership_log.rs | crate::membership_log | Writers::admits_del
 ambre-sync | src/membership_log.rs | crate::membership_log | Writers::admits_snapshot() | ret | bool	generic	predicate result
 ambre-sync | src/membership_log.rs | crate::membership_log | Readmitted::admits() | ret | bool	generic	predicate result
 ambre-sync | src/membership_log.rs | crate::membership_log | Writers::readmits() | ret | bool	generic	predicate result
+ambre-sync | src/membership_log.rs | crate::membership_log | Writers::folds_past_cap() | ret | bool	generic	predicate result: whether a snapshot fold passes a cap, selects no mode
 ambre-sync | src/snapshot_trust.rs | crate::snapshot_trust | Trusted::holds() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/snapshot_trust.rs | crate::snapshot_trust | confirmation_admitted() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/updates.rs | crate::updates | absent_opens_local() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-sync | src/updates.rs | crate::updates | start_past_cap() | ret | bool	generic	predicate result: whether a start blob folds a delta past a cap, selects no mode
 ambre-sync | src/websocket.rs | crate::websocket | frame_fits() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/documents.rs | crate::documents | NameAuthors::admits() | ret | bool	generic	predicate result
 ambre-toile | src/ui/embed.rs | crate::ui::embed | <SiteHost as ambre_core::Rule>::admit() | ret | Result<String,SiteError>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
