@@ -119,10 +119,10 @@ impl<V> std::fmt::Debug for Setting<V> {
 impl<V: SettingValue> Setting<V> {
     /// Declares a setting. The key is frozen once released (`SETTINGS-020`).
     #[must_use]
-    pub const fn new(section: SettingsSection, key: &'static str) -> Self {
+    pub const fn new(section: SettingsSection, key: StaticKey<SettingKeys>) -> Self {
         Self {
             section,
-            key: StaticKey::new(key),
+            key,
             value: PhantomData,
         }
     }
@@ -307,33 +307,37 @@ pub enum PanelApplication {
 pub mod catalogue {
     use super::{
         DocumentLocale, NumberConvention, PanelApplication, PanelFold, PanelSide, Setting,
-        SettingEntry, SettingsSection, ThemeChoice,
+        SettingEntry, SettingsSection, StaticKey, ThemeChoice,
     };
 
     /// The theme (`SETTINGS-023`).
-    pub const THEME: Setting<ThemeChoice> = Setting::new(SettingsSection::Shell, "theme");
+    pub const THEME: Setting<ThemeChoice> =
+        Setting::new(SettingsSection::Shell, StaticKey::new("theme"));
     /// The side of the context panel, one for every application
     /// (`SETTINGS-025`).
-    pub const PANEL_SIDE: Setting<PanelSide> = Setting::new(SettingsSection::Shell, "panel.side");
+    pub const PANEL_SIDE: Setting<PanelSide> =
+        Setting::new(SettingsSection::Shell, StaticKey::new("panel.side"));
     /// The fold of the context panel in Prose (`SETTINGS-026`).
     pub const PANEL_FOLD_PROSE: Setting<PanelFold> =
-        Setting::new(SettingsSection::Shell, "panel.fold.prose");
+        Setting::new(SettingsSection::Shell, StaticKey::new("panel.fold.prose"));
     /// The fold of the context panel in Trame (`SETTINGS-026`).
     pub const PANEL_FOLD_TRAME: Setting<PanelFold> =
-        Setting::new(SettingsSection::Shell, "panel.fold.trame");
+        Setting::new(SettingsSection::Shell, StaticKey::new("panel.fold.trame"));
     /// The fold of the context panel in Toile (`SETTINGS-026`).
     pub const PANEL_FOLD_TOILE: Setting<PanelFold> =
-        Setting::new(SettingsSection::Shell, "panel.fold.toile");
+        Setting::new(SettingsSection::Shell, StaticKey::new("panel.fold.toile"));
     /// The interface language; no locale means the browser's language
     /// (`SETTINGS-024`).
-    pub const INTERFACE_LANGUAGE: Setting<DocumentLocale> =
-        Setting::new(SettingsSection::Locale, "interface.language");
+    pub const INTERFACE_LANGUAGE: Setting<DocumentLocale> = Setting::new(
+        SettingsSection::Locale,
+        StaticKey::new("interface.language"),
+    );
     /// The reader's own locale (`SETTINGS-027`).
     pub const READER_LOCALE: Setting<DocumentLocale> =
-        Setting::new(SettingsSection::Locale, "reader.locale");
+        Setting::new(SettingsSection::Locale, StaticKey::new("reader.locale"));
     /// The reader's number convention (`SETTINGS-027`).
     pub const NUMBER_CONVENTION: Setting<NumberConvention> =
-        Setting::new(SettingsSection::Locale, "number.convention");
+        Setting::new(SettingsSection::Locale, StaticKey::new("number.convention"));
 
     /// The fold setting of one application's panel.
     #[must_use]
@@ -399,16 +403,6 @@ impl UserSettings {
             theme: self.theme,
             interface_language: self.interface_language.clone(),
         }
-    }
-
-    /// Whether `change` moves the boot hint, which the device then writes
-    /// again (`SETTINGS-037`).
-    #[must_use]
-    pub const fn moves_boot_hint(change: &SettingChange) -> bool {
-        matches!(
-            change,
-            SettingChange::Theme(_) | SettingChange::InterfaceLanguage(_)
-        )
     }
 }
 

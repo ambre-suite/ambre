@@ -308,6 +308,15 @@ impl SettingsDoc {
     }
 }
 
+/// Whether the session identity of the settings document arrived.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Identity {
+    /// Not yet: a change waits.
+    Awaited,
+    /// The session writes under its PeerID.
+    Known,
+}
+
 /// The settings document of this session, with what a write waits on: the
 /// PeerID of the session, and the end of the coalescing delay.
 pub struct SettingsSession {
@@ -315,7 +324,7 @@ pub struct SettingsSession {
     doc: SettingsDoc,
     /// Whether the session identity arrived. No write lands before it
     /// (`AUTHOR-009`): the changes wait in `pending`.
-    identified: bool,
+    identity: Identity,
     pending: Vec<SettingChange>,
     /// The instant the coalesced writes leave (`SETTINGS-036`).
     due: Option<Instant<PageLoad>>,
@@ -328,7 +337,7 @@ impl SettingsSession {
         Self {
             document_id,
             doc: SettingsDoc::opened(),
-            identified: false,
+            identity: Identity::Awaited,
             pending: Vec::new(),
             due: None,
         }
@@ -368,7 +377,7 @@ impl SettingsSession {
         if self.doc.adopt_session(peer, entry).is_err() {
             return;
         }
-        self.identified = true;
+        self.identity = Identity::Known;
         for change in std::mem::take(&mut self.pending) {
             let _ = self.doc.apply(&change);
         }
@@ -378,7 +387,7 @@ impl SettingsSession {
     /// One change of the view. It lands now, or once the identity arrives,
     /// and leaves at the end of the coalescing delay (`SETTINGS-036`).
     pub fn change(&mut self, change: SettingChange, now: Option<Instant<PageLoad>>) {
-        if self.identified {
+        if self.identity == Identity::Known {
             if self.doc.apply(&change).is_err() {
                 return;
             }

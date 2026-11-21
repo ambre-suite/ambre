@@ -4884,3 +4884,16 @@ ambre-sync | src/websocket.rs | crate::websocket | frame_fits() | ret | bool	gen
 ambre-sync | src/documents.rs | crate::documents | NameAuthors::admits() | ret | bool	generic	predicate result
 ambre-toile | src/ui/embed.rs | crate::ui::embed | <SiteHost as ambre_core::Rule>::admit() | ret | Result<String,SiteError>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-toile | src/ui/embed.rs | crate::ui::embed | <SiteHost as ambre_core::Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-client-core | src/settings.rs | crate::settings | BOOT_HINT_VERSION | const | &str	generic	the version word that opens a boot hint text, which BootHint::decode matches back: part of the codec of the hint
+ambre-client-core | src/settings.rs | crate::settings | BootHintText.0 | field | String	newtype-inner	the stored text of the boot hint the newtype wraps
+ambre-client-core | src/settings.rs | crate::settings | BootHintText::as_str() | ret | &str	newtype-inner	the stored text the newtype wraps, handed to the one storage call that keeps it
+ambre-client-core | src/settings.rs | crate::settings | BootHintText::new(text) | param | impl Into<String>	newtype-inner	the text read back from the storage, which BootHint::decode parses
+ambre-client-core | src/settings.rs | crate::settings | SettingWord.0 | field | String	newtype-inner	the word a setting value takes in the settings document, which the newtype wraps
+ambre-client-core | src/settings.rs | crate::settings | SettingWord::as_str() | ret | &str	newtype-inner	the stored word the newtype wraps, which each value type matches back and Loro stores
+ambre-client-core | src/settings.rs | crate::settings | SettingWord::new(text) | param | impl Into<String>	newtype-inner	the word a value type spells or the document holds; reading it is the value type's job
+ambre-client-core | src/settings.rs | crate::settings | SettingsSection::word() | ret | &'static str	newtype-inner	closed-set enum word codec: the frozen name of the section's map
+ambre-core | src/static_key.rs | crate::static_key | <SettingKeys as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
+ambre-logic | src/settings.rs | crate::settings | KIND | const | &str	generic	the key of the kind marker in the settings document, which the open reads back: part of its codec
+ambre-logic | src/settings.rs | crate::settings | META | const | &str	generic	the name of the map that holds the kind marker, which the open reads back: part of the codec of the settings document
+ambre-logic | src/settings.rs | crate::settings | SETTINGS_KIND | const | &str	generic	the word the kind marker holds, which the open matches back: part of the codec of the settings document
+ambre-logic | src/settings_flow.rs | crate::settings_flow | LogicState::is_settings() | ret | bool	generic	predicate result

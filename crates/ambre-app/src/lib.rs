@@ -218,8 +218,8 @@ type Slot<T> = Rc<RefCell<Option<T>>>;
 struct Wiring {
     to_logic: outbox::ShellOutbox,
     theme_ctl: ambre_canvas::ThemeControl,
-    /// The glyph of the theme switch.
-    theme_sig: RwSignal<ambre_canvas::Theme>,
+    /// The theme of the account, which the header glyph follows.
+    account_theme: RwSignal<ambre_client_core::ThemeChoice>,
     /// The active app's command toggle signals (the store's reactive view,
     /// chrome side). Opaque to the launcher -- the app's chrome reads its own.
     toggles: trame_chrome::Toggles,
@@ -777,9 +777,13 @@ pub fn main() {
     let theme_ctl =
         ambre_canvas::ThemeControl::new(settings_view::boot_theme(platform::boot_hint().as_ref()));
     inject_theme(theme_ctl.get());
-    // The glyph of the theme switch, which a setting of another device
-    // moves too.
-    let theme_sig = RwSignal::new(theme_ctl.get());
+    // The theme of the account, which the header follows to redraw the glyph
+    // of the theme switch when another device moves it.
+    let account_theme = RwSignal::new(
+        platform::boot_hint()
+            .map(|hint| hint.theme)
+            .unwrap_or_default(),
+    );
     // The handle the settings of the account move the theme through.
     let settings_theme = theme_ctl.clone();
 
@@ -943,7 +947,7 @@ pub fn main() {
         clipboard_paste: paste_tx,
         raf: raf.clone(),
         theme_ctl: theme_ctl.clone(),
-        theme_sig,
+        account_theme,
         boot_doc,
         booted,
         slots: shell::ShellSlots {
@@ -1252,8 +1256,8 @@ pub fn main() {
                         let theme = settings_view::rendered(settings.theme, settings_theme.get());
                         if theme != settings_theme.get() {
                             platform::set_theme(&settings_theme, theme);
-                            theme_sig.set(theme);
                         }
+                        account_theme.set(settings.theme);
                         platform::keep_boot_hint(&settings.boot_hint());
                     }
                     switchboard::Effect::Send(command) => {

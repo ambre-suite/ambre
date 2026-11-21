@@ -235,7 +235,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
     let Wiring {
         to_logic,
         theme_ctl,
-        theme_sig,
+        account_theme,
         toggles,
         toile_toggles,
         style_state,
@@ -312,8 +312,18 @@ pub(crate) fn AppRoot() -> impl IntoView {
         )
     };
 
-    // `theme_sig` drives only the button glyph; `theme_ctl` (canvas) and the
+    // Theme toggle drives only the button glyph; `theme_ctl` (canvas) and the
     // document `data-theme` (CSS custom properties) are the real switches.
+    let theme_sig = RwSignal::new(theme_ctl.get());
+    // A theme of the account another device chose moves the switches first;
+    // the glyph then reads them again (`SETTINGS-012`).
+    {
+        let theme_ctl = theme_ctl.clone();
+        Effect::new(move |_| {
+            account_theme.track();
+            theme_sig.set(theme_ctl.get());
+        });
+    }
     // The kind of the view this page booted, fixed per page load.
     let boot_is_toile = booted == DocType::Toile;
     let boot_is_prose = booted == DocType::Prose;
