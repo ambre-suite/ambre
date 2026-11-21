@@ -2024,6 +2024,12 @@ pub enum ToileCommand {
         node: NodeId,
         to: ZTarget,
     },
+    /// Move each node in turn, in the order given, as one undo item
+    /// (`CHROME-173`). A z-order entry on a selection of many sends this.
+    ReorderAll {
+        nodes: Vec<NodeId>,
+        to: ZTarget,
+    },
 
     // -- Groups (`toile-groups`) --
     /// Bind a set of elements into a fresh group element (selects/transforms as
@@ -2142,6 +2148,12 @@ pub enum ToileCommand {
     /// derived on read, never stored. One commit = one undo item.
     React {
         target: Id<Element>,
+        reaction: Option<Reaction>,
+    },
+    /// The same reaction on each of `targets`, as one undo item
+    /// (`CHROME-173`). A reaction entry on a selection of many sends this.
+    ReactAll {
+        targets: Vec<Id<Element>>,
         reaction: Option<Reaction>,
     },
 
@@ -2382,6 +2394,7 @@ impl fmt::Debug for ToileCommand {
                 .finish(),
             Self::LockElements { ids, lock } => fields!("LockElements", ids, lock),
             Self::Reorder { node, to } => fields!("Reorder", node, to),
+            Self::ReorderAll { nodes, to } => fields!("ReorderAll", nodes, to),
             Self::GroupElements { ids } => fields!("GroupElements", ids),
             Self::UngroupElements { groups } => fields!("UngroupElements", groups),
             Self::SetFrameChildren { frame, add, remove } => {
@@ -2410,6 +2423,7 @@ impl fmt::Debug for ToileCommand {
                 .finish(),
             Self::SetAutoLayout { frame, layout } => fields!("SetAutoLayout", frame, layout),
             Self::React { target, reaction } => fields!("React", target, reaction),
+            Self::ReactAll { targets, reaction } => fields!("ReactAll", targets, reaction),
             Self::CreateComment { anchor, body, ts } => f
                 .debug_struct("CreateComment")
                 .field("anchor", anchor)
@@ -2509,6 +2523,7 @@ impl ambre_bus::Mutation for ToileCommand {
             | Self::SetText { .. }
             | Self::LockElements { .. }
             | Self::Reorder { .. }
+            | Self::ReorderAll { .. }
             | Self::GroupElements { .. }
             | Self::UngroupElements { .. }
             | Self::SetFrameChildren { .. }
@@ -2526,6 +2541,7 @@ impl ambre_bus::Mutation for ToileCommand {
             | Self::EditNotes { .. }
             | Self::SetAutoLayout { .. }
             | Self::React { .. }
+            | Self::ReactAll { .. }
             | Self::CreateComment { .. }
             | Self::ReplyComment { .. }
             | Self::EditComment { .. }

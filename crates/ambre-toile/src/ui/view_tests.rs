@@ -3296,3 +3296,193 @@ fn a_zoom_chord_steps_the_camera_and_sends_only_a_cull() {
         "a zoom sent {sent:?}"
     );
 }
+
+// -- Home regions (`ambre-spec-shell.md` section 2) ---------------------------
+
+/// A board view wired to a real Logic state. What the view sends runs against
+/// the state, and what the state answers goes back to the view.
+struct Wired {
+    rig: Rig,
+    state: crate::logic::ToileState,
+}
+
+impl Wired {
+    /// A board of three rectangles, all shown, the first `selected` of them
+    /// selected, settled.
+    fn selecting(selected: usize) -> Self {
+        use crate::logic::{InitContent, ToileState};
+        let mut state = ToileState::new();
+        state.set_user_id(Id::<User>::mint());
+        let mut ids = Vec::new();
+        for (x, y) in [(0.0, 0.0), (200.0, 50.0), (450.0, 20.0)] {
+            let out = state.handle_command(ToileCommand::CreateElement {
+                kind: ElementKind::Shape(ShapeKind::Rect),
+                at: kurbo::Point::new(x, y),
+                size: kurbo::Size::new(100.0, 80.0),
+                content: InitContent::None,
+                fill: None,
+                correlate: None,
+            });
+            ids.extend(out.display.into_iter().filter_map(|e| match e {
+                ToileEvent::ElementCreated { id, .. } => Some(id),
+                _ => None,
+            }));
+        }
+        assert_eq!(ids.len(), 3, "the three rectangles are created");
+        ids.truncate(selected);
+        let mut wired = Self {
+            rig: Rig::new(),
+            state,
+        };
+        // A zoom off 100 %, so a write that reset it would show.
+        wired.rig.view.cam.zoom =
+            ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(1.5);
+        wired.pump();
+        wired.rig.view.selection = ids;
+        wired.rig.frame();
+        wired.pump();
+        // A copy writes nothing and arms the paste entry.
+        wired.rig.view.apply_menu_command(crate::ui::menu::COPY);
+        assert!(!wired.pump(), "a copy wrote");
+        wired
+    }
+
+    /// Run what the view sent until it sends nothing more. True when a
+    /// command the state ran emitted a CRDT delta.
+    fn pump(&mut self) -> bool {
+        let mut wrote = false;
+        for _ in 0..8 {
+            self.rig.view.update();
+            let sent = self.rig.sent();
+            if sent.is_empty() {
+                break;
+            }
+            for cmd in sent {
+                let out = self.state.handle_command(cmd);
+                wrote |= out.update.is_some();
+                for ev in out.display {
+                    self.rig.answer(ev);
+                }
+            }
+        }
+        wrote
+    }
+}
+
+/// The document with each empty map and empty list left out. A command may
+/// leave behind an empty container it touched, and its undo cannot remove the
+/// container. An empty container reads as an absent one.
+fn settled(value: loro::LoroValue) -> loro::LoroValue {
+    use loro::LoroValue;
+    match value {
+        LoroValue::Map(map) => LoroValue::Map(
+            map.iter()
+                .map(|(k, v)| (k.clone(), settled(v.clone())))
+                .filter(|(_, v)| !matches!(v, LoroValue::Map(m) if m.is_empty()))
+                .filter(|(_, v)| !matches!(v, LoroValue::List(l) if l.is_empty()))
+                .collect::<loro::LoroMapValue>(),
+        ),
+        LoroValue::List(list) => {
+            LoroValue::List(list.iter().cloned().map(settled).collect::<Vec<_>>().into())
+        }
+        other => other,
+    }
+}
+
+/// `CHROME-149`, `CHROME-172`, `CHROME-173`, `CHROME-174`: every command of
+/// the table runs through the one sink every region hands an id to. The run
+/// goes against a real Logic state, on a selection of one and of three. A
+/// command whose home is the status bar emits no delta. A command that writes
+/// leaves the zoom where it was, and one undo brings the whole document back.
+/// Undo and redo are the history itself, so the undo check skips them.
+#[test]
+fn each_command_keeps_the_rules_of_its_home() {
+    use crate::ui::commands::COMMANDS;
+    use crate::ui::menu_bar::{REDO, UNDO};
+    use ambre_commands::Home;
+    let mut writers = Vec::new();
+    for (selected, command) in [1, 3]
+        .into_iter()
+        .flat_map(|n| COMMANDS.iter().map(move |c| (n, c)))
+    {
+        let mut wired = Wired::selecting(selected);
+        let before = settled(wired.state.deep_value());
+        let zoom = wired.rig.view.cam.zoom;
+        wired.rig.view.apply_menu_command(command.id);
+        let wrote = wired.pump();
+        if command.home == Home::StatusBar {
+            assert!(
+                !wrote,
+                "{:?} is homed in the status bar and wrote",
+                command.id
+            );
+        }
+        if wrote {
+            writers.push(command.id);
+            assert_eq!(
+                wired.rig.view.cam.zoom, zoom,
+                "{:?} wrote and moved the zoom",
+                command.id
+            );
+            if command.id == UNDO || command.id == REDO {
+                continue;
+            }
+            wired.rig.view.apply_menu_command(UNDO);
+            wired.pump();
+            assert_eq!(
+                settled(wired.state.deep_value()),
+                before,
+                "one undo does not take {:?} back whole",
+                command.id
+            );
+        }
+    }
+    // The loop is not vacuous: the writers of the selection ran and wrote.
+    for id in [
+        crate::ui::menu::DELETE,
+        crate::ui::menu::DUPLICATE,
+        crate::ui::menu::PASTE,
+        crate::ui::menu::CUT,
+        crate::ui::menu::GROUP,
+        crate::ui::menu::ALIGN_LEFT,
+        crate::ui::menu::ALIGN_TOP,
+        crate::ui::menu::DISTRIBUTE_H,
+        crate::ui::menu::BRING_FRONT,
+        crate::ui::menu::LOCK,
+        crate::ui::menu::REACT_HEART,
+    ] {
+        assert!(writers.contains(&id), "{id:?} wrote nothing: {writers:?}");
+    }
+}
+
+/// `CHROME-173`, `CHROME-174`: the embed entries write once their dialog
+/// resolves, through the one placement write. That write leaves the zoom
+/// where it was, and one undo takes it back whole.
+#[test]
+fn a_placed_embed_keeps_the_zoom_and_is_one_undo_item() {
+    use crate::message::WebAddress;
+    use crate::ui::embed::{EmbedTarget, PlacedEmbed, placement};
+    let url =
+        ambre_core::Validated::<WebAddress>::parse("https://example.com").expect("a safe address");
+    for target in [
+        EmbedTarget::Web(url),
+        EmbedTarget::Document {
+            document_id: Id::<Document>::mint(),
+            doc_type: ambre_bus::DocType::Trame,
+        },
+    ] {
+        let mut wired = Wired::selecting(1);
+        let before = settled(wired.state.deep_value());
+        let zoom = wired.rig.view.cam.zoom;
+        let write = placement(PlacedEmbed { target, at: None }, &wired.rig.view.cam);
+        assert!(wired.rig.view.send_edit(write));
+        assert!(wired.pump(), "the placement wrote nothing");
+        assert_eq!(
+            wired.rig.view.cam.zoom, zoom,
+            "the placement moved the zoom"
+        );
+        wired.rig.view.apply_menu_command(crate::ui::menu_bar::UNDO);
+        wired.pump();
+        assert_eq!(settled(wired.state.deep_value()), before);
+    }
+}

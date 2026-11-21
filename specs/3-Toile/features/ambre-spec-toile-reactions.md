@@ -126,7 +126,9 @@ pub struct ReactionCounts {
 ```
 
 **Command** (`ambre-bus`): `React { target, reaction }`, where an absent reaction removes this user's
-own entry. One commit, so one undo item (`TOILE-FEAT-023`).
+own entry. One commit, so one undo item (`TOILE-FEAT-023`). `ReactAll { targets, reaction }` takes
+the same steps for each target. It refuses the whole command when one target is gone, and commits
+once, so the whole selection is one undo item (`CHROME-173`).
 
 **Event** (`ambre-bus`): `ReactionsUpdated(target)`.
 

@@ -77,16 +77,17 @@ fn accumulate(
 }
 
 impl ToileState {
-    /// Place, change or remove the local user's reaction on `target`.
-    /// Keyed by the canonical `Id<User>`, so a re-vote is LWW on this peer's own
-    /// key. `reaction: None` deletes the user's own entry. No target-existence
-    /// check happens here (a dangling target is skipped only at derivation, like
-    /// a dangling connector). CRDT and undoable: one `doc.commit()` is one
-    /// undo item. A pure no-op (removing an absent entry, or re-writing a
-    /// byte-identical value) produces neither a commit nor a delta.
+    /// Place, change or remove the local user's reaction on each of
+    /// `targets`. Keyed by the canonical `Id<User>`, so a re-vote is LWW on
+    /// this peer's own key. `reaction: None` deletes the user's own entry. A
+    /// target the board no longer holds refuses the whole command, and nothing
+    /// is written. CRDT and undoable: the targets share one `doc.commit()`, so
+    /// the command is one undo item (`CHROME-173`). A pure no-op (removing an
+    /// absent entry, or re-writing a byte-identical value) produces neither a
+    /// commit nor a delta.
     pub(super) fn react(
         &mut self,
-        target: &Id<Element>,
+        targets: &[Id<Element>],
         reaction: Option<Reaction>,
     ) -> ToileOutcome {
         // Without an authenticated identity there is no key to write the per-user
@@ -95,38 +96,46 @@ impl ToileState {
             return ToileOutcome::display_only(Vec::new());
         };
         // The caller MUST name a target the board still holds (`TOILE-FEAT-060`).
-        if self.element_map(target).is_none() {
-            return self.err_no_element(target);
+        if let Some(gone) = targets.iter().find(|t| self.element_map(t).is_none()) {
+            return self.err_no_element(gone);
         }
-        let key = ReactionKey::of(target, &user_id);
+        let bytes = match reaction.as_ref().map(encode).transpose() {
+            Ok(bytes) => bytes,
+            Err(e) => return ToileOutcome::display_only(vec![ToileEvent::Error(e)]),
+        };
         let map = self.doc.get_map(Root::Reactions.as_str());
-
-        match reaction {
-            Some(r) => {
-                let bytes = match encode(&r) {
-                    Ok(b) => b,
-                    Err(e) => return ToileOutcome::display_only(vec![ToileEvent::Error(e)]),
-                };
-                // Skip a byte-identical re-write so an unchanged reaction is not a
-                // spurious commit / undo item.
-                if let Some(cur) = map.get(key.as_str()).and_then(|v| v.into_value().ok())
-                    && let LoroValue::Binary(cur) = cur
-                    && cur.as_slice() == bytes.as_slice()
-                {
-                    return ToileOutcome::display_only(Vec::new());
+        let mut touched = Vec::new();
+        for target in targets {
+            let key = ReactionKey::of(target, &user_id);
+            let current = map.get(key.as_str()).and_then(|v| v.into_value().ok());
+            let changed = match &bytes {
+                // Skip a byte-identical re-write so an unchanged reaction is not
+                // a spurious commit / undo item.
+                Some(bytes) => {
+                    let same = matches!(&current, Some(LoroValue::Binary(cur)) if cur.as_slice() == bytes.as_slice());
+                    if !same {
+                        let _ = map.insert(key.as_str(), bytes.clone());
+                    }
+                    !same
                 }
-                let _ = map.insert(key.as_str(), bytes);
-            }
-            None => {
                 // Nothing to remove if the user has no entry on this target.
-                if map.get(key.as_str()).is_none() {
-                    return ToileOutcome::display_only(Vec::new());
+                None => {
+                    let present = current.is_some();
+                    if present {
+                        let _ = map.delete(key.as_str());
+                    }
+                    present
                 }
-                let _ = map.delete(key.as_str());
+            };
+            if changed {
+                touched.push(ToileEvent::ReactionsUpdated(target.clone()));
             }
+        }
+        if touched.is_empty() {
+            return ToileOutcome::display_only(Vec::new());
         }
         self.doc.commit();
-        self.emit_with_update(vec![ToileEvent::ReactionsUpdated(target.clone())])
+        self.emit_with_update(touched)
     }
 
     /// The read-time reaction count of `target`, aggregated from the
