@@ -23,6 +23,7 @@
 //   - context_menu -- canvas right-click DOM menu (flip, keyboard nav)
 //   - context_panel -- the one frame of the context panel: sections, rail, dock
 //   - controls     -- the control primitives of the visual system, none generic
+//   - gallery      -- the test page of every primitive in each state (feature `gallery`)
 //   - kit          -- the typed widgets a panel section is written from
 //   - menu         -- the key map every menu shares, and two-state ARIA values
 //   - handler      -- what an application hands the shell for its commands
@@ -47,6 +48,8 @@ mod debounce;
 mod dialog;
 mod font;
 mod format;
+#[cfg(feature = "gallery")]
+mod gallery;
 mod handler;
 mod kit;
 mod menu;
@@ -78,6 +81,8 @@ pub use font::{FONT_FAMILIES, FamilyChoice, FontPicker};
 pub use format::{
     FONT_SIZES, FORMAT_BAR_LIFT, FontSizeSelect, FormatBar, FormatControl, FormatToggle, Pressed,
 };
+#[cfg(feature = "gallery")]
+pub use gallery::Gallery;
 pub use handler::{CommandHandler, FileAccept, FilePick, KeyRoute, KeyTarget, ShellAction};
 pub use kit::{
     Choice, ColourField, CommandButton, Field, FieldLength, FontField, Labelled, LengthField,

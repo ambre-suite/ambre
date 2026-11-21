@@ -119,8 +119,11 @@ mod console_trace;
 // The development sign-in, behind the `dev-login` feature (`ZK-045`).
 #[cfg(target_arch = "wasm32")]
 mod dev_login;
+// The gallery page of the visual system, behind `chrome-gallery`.
 #[cfg(any(target_arch = "wasm32", test))]
 mod doc_list;
+#[cfg(all(feature = "chrome-gallery", target_arch = "wasm32"))]
+mod gallery;
 #[cfg(target_arch = "wasm32")]
 mod host;
 /// The inviters earlier opens proved, which the route sends ahead of an open.
@@ -520,6 +523,13 @@ pub fn main() {
             let _ = f.call1(&window, &msg.into());
         }
     }));
+
+    // A test build serves the gallery of the visual system at its own path,
+    // with no thread behind it.
+    #[cfg(feature = "chrome-gallery")]
+    if gallery::mount_if_asked() == gallery::Mounted::Yes {
+        return;
+    }
 
     // Inter-thread queues (`ambre_bus::conduit`, in this Main instance's shared heap).
     //   UI    --LogicCommand--> Logic      Logic --UiEvent--> UI

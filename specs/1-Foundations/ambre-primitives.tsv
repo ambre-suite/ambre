@@ -833,6 +833,7 @@ ambre-chrome | src/format.rs | crate::format | FormatControl.label | field | Str
 ambre-chrome | src/format.rs | crate::format | FormatToggle(label) | param | String	free-text	text, label or user content
 ambre-chrome | src/format.rs | crate::format | Pressed::aria() | ret | &'static str	newtype-inner	the enum's own aria-pressed value, which the DOM attribute takes
 ambre-chrome | src/format.rs | crate::format | Pressed::from_bool(on) | param | bool	newtype-inner	the enum's own constructor from the bool it replaces, On or Off
+ambre-chrome | src/gallery.rs | crate::gallery | Specimen(name) | param | &'static str	free-text	the name of a specimen a person reads, and the snapshot of the browser tier prints
 ambre-chrome | src/handler.rs | crate::handler | FilePick.unreadable | field | &'static str	free-text	text, label or user content
 ambre-chrome | src/handler.rs | crate::handler | ShellAction::CopyText.0 | field | String	newtype-inner	newtype inner
 ambre-chrome | src/handler.rs | crate::handler | FileAccept::as_attr() | ret | &'static str	newtype-inner	the enum's own accept filter, unwrapped at the DOM set_attribute call
@@ -4887,6 +4888,7 @@ ambre-app | src/platform.rs | crate::platform | keep_word(word) | param | &str	f
 ambre-app | src/platform.rs | crate::platform | stored_word() | ret | Option<String>	foreign-api	the word the local storage API returns, which the caller parses into its type
 ambre-app | src/shell/panel.rs | crate::shell::panel | keep(word) | param | &str	local	the stored word of one panel setting, handed straight to the storage call; private
 ambre-app | src/shell/panel.rs | crate::shell::panel | read() | ret | Option<String>	local	the stored word of one panel setting, parsed by the caller at once; private
+ambre-app | src/gallery.rs | crate::gallery | GALLERY_PATH | const | &str	foreign-api	the path the location of the page holds, which the one pathname read compares
 ambre-chrome | src/color.rs | crate::color | ColorPopover(title) | param | String	free-text	text, label or user content
 ambre-chrome | src/context_panel.rs | crate::context_panel | ContextPanel(title) | param | Signal<String>	free-text	the header a person reads, naming the selection
 ambre-chrome | src/context_panel.rs | crate::context_panel | DockSide::as_str() | ret | &'static str	newtype-inner	the enum's own word on data-side and in the store, which the stylesheet and from_stored read back
