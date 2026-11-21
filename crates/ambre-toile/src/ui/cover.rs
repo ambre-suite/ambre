@@ -9,7 +9,7 @@
 use ambre_core::{Css, Point, Px};
 
 /// The gap a fit leaves between the framed content and a surface beside it.
-pub const COVER_GAP: f64 = 8.0;
+pub const COVER_GAP: Px<Css> = Px::<Css>::new(8.0);
 
 /// What the floating surfaces cover, as the chrome last measured it. `None`
 /// on a side means nothing covers it, and the fit takes that side whole. The
@@ -33,11 +33,12 @@ impl Cover {
     #[must_use]
     pub fn clearance(self, canvas_origin: Point<Px<Css>>) -> kurbo::Insets {
         let left = self.palette_right.map_or(0.0, |right| {
-            (f64::from(right.get()) - f64::from(canvas_origin.x.get())).max(0.0) + COVER_GAP
+            (f64::from(right.get()) - f64::from(canvas_origin.x.get())).max(0.0)
+                + f64::from(COVER_GAP.get())
         });
-        let top = self
-            .bar_reach
-            .map_or(0.0, |reach| f64::from(reach.get()).max(0.0) + COVER_GAP);
+        let top = self.bar_reach.map_or(0.0, |reach| {
+            f64::from(reach.get()).max(0.0) + f64::from(COVER_GAP.get())
+        });
         kurbo::Insets {
             x0: left,
             y0: top,
@@ -68,10 +69,10 @@ mod tests {
             bar_reach: None,
         };
         let clear = cover.clearance(Point::new(css(0.0), css(80.0)));
-        assert!((clear.x0 - (70.0 + COVER_GAP)).abs() < 1e-9);
+        assert!((clear.x0 - (70.0 + f64::from(COVER_GAP.get()))).abs() < 1e-9);
         // A canvas that starts right of the palette is not covered by it.
         let beside = cover.clearance(Point::new(css(100.0), css(80.0)));
-        assert!((beside.x0 - COVER_GAP).abs() < 1e-9);
+        assert!((beside.x0 - f64::from(COVER_GAP.get())).abs() < 1e-9);
     }
 
     #[test]
@@ -81,7 +82,7 @@ mod tests {
             bar_reach: Some(css(79.0)),
         };
         let clear = cover.clearance(Point::new(css(0.0), css(80.0)));
-        assert!((clear.y0 - (79.0 + COVER_GAP)).abs() < 1e-9);
+        assert!((clear.y0 - (79.0 + f64::from(COVER_GAP.get()))).abs() < 1e-9);
         assert!(clear.x0.abs() < 1e-9 && clear.x1.abs() < 1e-9 && clear.y1.abs() < 1e-9);
     }
 }

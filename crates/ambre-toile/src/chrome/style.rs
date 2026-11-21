@@ -26,8 +26,8 @@ use std::time::Duration;
 use crate::message::{ElementStyle, FontFamily, FontSizeChoice};
 use ambre_chrome::commands::Reading;
 use ambre_chrome::{
-    ColourField, CommandButton, Debouncer, Field, FontField, FontSizeSelect, LengthField,
-    PanelContent, PanelSection, Pressed, PropertyToggle, Row,
+    ColourField, CommandButton, DRAG_DEBOUNCE, Debouncer, Field, FontField, FontSizeSelect,
+    LengthField, PanelContent, PanelSection, Pressed, PropertyToggle, Row,
 };
 use ambre_core::Flag as _;
 use ambre_core::{Commands, FontSize, Px, Rgba, StaticKey, StoredBoard};
@@ -345,6 +345,9 @@ fn stroke_fields(
             |(b, m)| reading(b.opacity, m.opacity),
         )
     });
+    // The slider reports every pixel of a drag: the burst leaves as one
+    // edit, the last (`CHROME-015`).
+    let opacity_drag = Debouncer::new();
     view! {
         <Field label="Stroke">
             <ColourField
@@ -374,7 +377,8 @@ fn stroke_fields(
                     on:mousedown=move |ev| ev.prevent_default()
                     on:input=move |ev| {
                         if let Ok(v) = event_target_value(&ev).parse::<f32>() {
-                            commit(StyleEdit::Opacity(ambre_core::Bounded::<ambre_core::Opacity>::clamped(v / 100.0)));
+                            let opacity = ambre_core::Bounded::<ambre_core::Opacity>::clamped(v / 100.0);
+                            opacity_drag.call(DRAG_DEBOUNCE, move || commit(StyleEdit::Opacity(opacity)));
                         }
                     }
                 />

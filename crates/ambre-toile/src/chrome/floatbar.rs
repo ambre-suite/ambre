@@ -55,11 +55,7 @@ pub fn SelectionToolbar(
 ) -> impl IntoView {
     let node = NodeRef::<leptos::html::Div>::new();
     if let Some(cover) = cover {
-        super::cover::watch_bar(
-            node,
-            move || bar.get_untracked().map(|b| b.at.y.get()),
-            cover,
-        );
+        super::cover::watch_bar(node, move || bar.get_untracked().map(|b| b.at.y), cover);
         Effect::new(move |_| {
             if bar.with(Option::is_none) {
                 super::cover::clear_bar(cover);
