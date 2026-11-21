@@ -17,7 +17,7 @@ use std::collections::{HashMap, HashSet};
 use ambre_bus::{
     DocType, Relay, Request, RestCommand, RestEvent, Role, Seq, SnapshotVerdict, SyncCommand,
 };
-use ambre_core::id::{Channel, Document, Id, Message, Meta, Segment, Snapshot, Space, User};
+use ambre_core::id::{Call, Channel, Document, Id, Message, Meta, Segment, Snapshot, Space, User};
 use ambre_crdt::ledger::SeqLedger;
 
 use crate::Order;
@@ -145,6 +145,9 @@ pub struct Runtime<D> {
     /// The declines of a ring whose channel was not open, each held until the
     /// channel opens (the Murmure calls spec, the ring).
     declines: HashMap<Id<Channel>, Vec<crate::message::MurmureCommand>>,
+    /// The asks of a join for the `meta` of a channel still opening, each answered once the
+    /// open ends (`CALL-149`).
+    meta_asks: Vec<(Id<Call>, Id<Channel>)>,
     /// The members of each open or opening channel, as Sync lists them for
     /// its `meta` (`SYNC-150`). The `@` list offers them, and a mention of
     /// anyone else notifies no one (the Murmure mentions spec). Removed with
@@ -221,6 +224,7 @@ impl<D> Runtime<D> {
             channel_watchers: HashMap::new(),
             call_asks: HashMap::new(),
             declines: HashMap::new(),
+            meta_asks: Vec::new(),
             channel_members: HashMap::new(),
             spaces: HashMap::new(),
             space_opening: HashMap::new(),
@@ -242,6 +246,7 @@ impl<D> Runtime<D> {
     /// What the handlers owe the other threads since the last call, in the
     /// order they owe it. The dispatcher fans it out after each handler.
     pub fn take_outcome(&mut self) -> Vec<Effect<D>> {
+        self.settle_meta_asks();
         self.outcome.take()
     }
 

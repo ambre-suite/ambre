@@ -12,7 +12,7 @@ use std::collections::HashSet;
 use crate::message::{MurmureCommand, MurmureEvent};
 use ambre_bus::UiEvent;
 use ambre_bus::{CallMembers, SyncCommand};
-use ambre_core::id::{Call, Channel, Id};
+use ambre_core::id::{Call, Channel, Document, Id};
 use ambre_core::{Authored, Instant};
 
 use super::Runtime;
@@ -44,14 +44,44 @@ impl<D> Runtime<D> {
     /// names `channel` (`MURMURE-027`). A channel it never opened has none, and the join ends.
     /// The relay never names it, so it cannot seat a join under another channel's log
     /// (`CALL-149`, audit `P24`).
+    ///
+    /// A channel still opening answers once its open ends, either way. A join pressed as the
+    /// channel shows waits for its state rather than end.
     pub fn call_meta_asked(&mut self, call: Id<Call>, channel: Id<Channel>) {
-        let meta = self
-            .channels
+        if self.opening.contains_key(&channel) {
+            self.meta_asks.push((call, channel));
+            return;
+        }
+        let meta = self.call_meta_of(channel);
+        self.ask(SyncCommand::CallMeta { call, meta });
+    }
+
+    /// The `meta` document of the channel state this thread holds for `channel`, open or
+    /// closed (`CALL-149`).
+    fn call_meta_of(&self, channel: Id<Channel>) -> Option<Id<Document>> {
+        self.channels
             .get(&channel)
             .map(crate::ChannelState::meta_id)
             .or_else(|| self.closed_channels.get(&channel).map(|c| c.meta()))
-            .map(|meta| meta.document_id());
-        self.ask(SyncCommand::CallMeta { call, meta });
+            .map(|meta| meta.document_id())
+    }
+
+    /// Answers each held ask of a `meta` whose channel no longer opens: the open named it,
+    /// or the open failed and names none (`CALL-149`). It runs after each handler, so no
+    /// path out of an open leaves a join waiting.
+    pub(super) fn settle_meta_asks(&mut self) {
+        if self.meta_asks.is_empty() {
+            return;
+        }
+        let asks = std::mem::take(&mut self.meta_asks);
+        for (call, channel) in asks {
+            if self.opening.contains_key(&channel) {
+                self.meta_asks.push((call, channel));
+            } else {
+                let meta = self.call_meta_of(channel);
+                self.ask(SyncCommand::CallMeta { call, meta });
+            }
+        }
     }
 
     /// The relay answered who is in `call`. The view shows it, and a call the relay holds no
