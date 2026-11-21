@@ -229,7 +229,7 @@ takes is `crates/ambre-toile/src/chrome/cover.rs`. No region has code beyond it.
 * **The side, the width and the fold of the panel stay on the device.** No setting of the account
   travels between devices yet, and the theme itself is read from the system at each boot
   (`UI-THREAD-066`). A setting that follows the account needs a sealed store of its own, which no
-  spec owns yet: `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP).
+  spec owns yet. That store is the work of a branch of its own, which brings its spec and its story.
 * **The board's tool palette docks to the left today.** A panel docked to the left would cover it
   until `The creation bar` Story (`ambre-roadmap.md` MVP) moves it to the bottom.
 * **The sheet tabs in the status bar are a trial.** The owner chose on 2026-11-21 to try them there.
