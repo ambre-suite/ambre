@@ -15,7 +15,7 @@ This is the step that makes a substitution visible to a person.
 
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`. The prefix is `CHROME`, shared with the
-other five documents of the DOM side.
+other six documents of the DOM side.
 
 ### 1.1 The state
 

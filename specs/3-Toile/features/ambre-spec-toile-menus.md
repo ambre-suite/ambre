@@ -7,6 +7,7 @@
 
 A menu owns no behaviour: every entry names a command another feature specifies. What this document
 holds is the scope, the layout and the dispatch. The zoom shows in the status bar alone (`CHROME-147`).
+The menu bar leaves the board, and each of its commands moves to a home region (`CHROME-160`).
 
 ---
 
