@@ -16,6 +16,11 @@
 
 ARG UBUNTU=ubuntu:24.04@sha256:2198e4c65076e9cb0b3d695219df667c0e3b0072da64ca3c2648aca17dcecaf5
 
+# The cargo caches. The server and the client build at once, and two cargo
+# runs that unpack into one shared registry collide on the same crate, so each
+# run takes a registry of its own while another holds it. Each build keeps its
+# own target directory, locked against a second build of the same stage.
+
 # ---------------------------------------------------------------------------
 # The toolchain: the packages, rustup and the nightly of `rust-toolchain.toml`.
 FROM ${UBUNTU} AS toolchain
@@ -62,8 +67,8 @@ RUN cd /src && cargo --version
 FROM toolchain AS server-build
 WORKDIR /src
 COPY . .
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/src/target \
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=private \
+    --mount=type=cache,target=/src/target,id=target-server,sharing=locked \
     set -eu; \
     cargo build --release --locked -p ambre-server -p ambre-sfu; \
     mkdir -p /out; \
@@ -79,12 +84,12 @@ FROM toolchain AS web-build
 ARG TRUNK_VERSION=0.22.1
 # In /src, where `rust-toolchain.toml` names the toolchain: rustup has no default.
 WORKDIR /src
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=private \
     cargo install --locked trunk --version "${TRUNK_VERSION}"
 COPY . .
 ARG DEV_LOGIN=
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/src/target \
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=private \
+    --mount=type=cache,target=/src/target,id=target-web,sharing=locked \
     set -eu; \
     if [ -n "${DEV_LOGIN}" ]; then \
         trunk build --cargo-profile=wasm-release --features dev-login --dist /out/dist; \
