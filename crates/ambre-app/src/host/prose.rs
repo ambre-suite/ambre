@@ -339,15 +339,10 @@ impl ProseView {
         if self.fatal || self.outbox.is_busy() {
             return;
         }
-        let Some(format) = self.annotations.page_write.get_untracked() else {
+        let Some(command) = self.annotations.take_page_write() else {
             return;
         };
-        self.annotations.page_write.set(None);
-        send_edit(
-            &mut self.outbox,
-            self.document_id,
-            ambre_prose::ProseCommand::SetPageFormat { format },
-        );
+        send_edit(&mut self.outbox, self.document_id, command);
         self.busy_pub
             .publish(BusyLevel::from_busy(self.outbox.is_busy()));
     }

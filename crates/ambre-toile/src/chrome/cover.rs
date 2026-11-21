@@ -97,13 +97,13 @@ pub(super) fn watch_palette(node: NodeRef<html::Div>, cover: RwSignal<Cover>) {
 /// leaves the page.
 pub(super) fn watch_bar(
     node: NodeRef<html::Div>,
-    anchor_top: impl Fn() -> Option<f32> + 'static,
+    anchor_top: impl Fn() -> Option<Px<Css>> + 'static,
     cover: RwSignal<Cover>,
 ) {
     watch_box(node, move |rect| {
         let reach = anchor_top()
             .filter(|_| shown(&rect))
-            .map(|top| Px::<Css>::new(top - rect.top() as f32));
+            .map(|top| Px::<Css>::new(top.get() - rect.top() as f32));
         publish(cover, bar_side, reach);
     });
     on_cleanup(move || publish(cover, bar_side, None));
