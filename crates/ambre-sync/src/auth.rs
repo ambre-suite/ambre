@@ -541,7 +541,14 @@ impl SyncState {
     /// `LoggedOut` response -- when there is a request to answer -- is sent by the
     /// caller (`Shutdown` performs the teardown without replying).
     pub(crate) fn handle_logout(&mut self) {
+        // The handlers are detached before the close, since the closures drop
+        // just below. The close event fires later, and a dropped closure
+        // throws in the worker.
         if let Some(ws) = self.ws.take() {
+            ws.set_onmessage(None);
+            ws.set_onclose(None);
+            ws.set_onerror(None);
+            ws.set_onopen(None);
             let _ = ws.close();
         }
         self.mock_ws_tx = None;

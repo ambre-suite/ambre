@@ -50,8 +50,8 @@
   branch, `git merge origin/main` says what the merge resolved, or
   `chore: bring main into the branch` when it resolved nothing.
 * **A hook holds the two rules that carry a number**, because an author estimates a character count
-  instead of measuring it. Turn it on once per clone -- git never ships a hook inside a clone, so
-  this is an adoption, not an imposition:
+  instead of measuring it. It holds the type prefix too, a closed list. Turn it on once per clone
+  -- git never ships a hook inside a clone, so this is an adoption, not an imposition:
 
   ```bash
   git config core.hooksPath .githooks
