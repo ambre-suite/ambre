@@ -49,6 +49,14 @@
   `feat(server): expose relay and SFU metrics`, not `Merge relay-metrics: ...`. Inside a child
   branch, `git merge origin/main` says what the merge resolved, or
   `chore: bring main into the branch` when it resolved nothing.
+* **A parent session's branch lands on `main` with `git merge --no-ff`, when every commit on it
+  stands alone.** Such a branch carries many unrelated changes, which a reader of `main` bisects
+  and reverts one by one. Every commit on it follows
+  Conventional Commits, its merges included, which read `chore: bring main into the branch` or say
+  what they resolved. Land it once CI is green on its tip after `git merge origin/main`. The merge
+  commit takes a Conventional subject that states what the branch brings, so
+  `git log --first-parent main` reads as it would after a squash. A branch with a commit that does
+  not stand alone is squashed instead.
 * **A hook holds the two rules that carry a number**, because an author estimates a character count
   instead of measuring it. Turn it on once per clone -- git never ships a hook inside a clone, so
   this is an adoption, not an imposition:
