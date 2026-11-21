@@ -33,7 +33,7 @@ other six documents of the DOM side.
 | `CHROME-156` | `INV` | A command that acts on the account of the user MUST have the avatar menu as its home region. | this spec section 2 | not built | unbuilt -- lands with the `The Ambre and avatar menus` Story (`ambre-roadmap.md` MVP) | unimplemented |
 | `CHROME-157` | `OBS` | The command palette MUST show the home region of each command it lists. | this spec section 2; `CHROME-008` | `ambre_chrome::chrome_ui::palette_row_shows_home_region_and_chord` -- wasm tier, each row of the palette shows the name of its command's home | none | verified |
 | `CHROME-158` | `OBS` | The command palette MUST show the chord of each command that has one. | this spec section 2; `CHROME-008` | `ambre_chrome::chrome_ui::palette_row_shows_home_region_and_chord` -- wasm tier, a row shows a chord chip exactly when its command has a chord, and the chip names the key | none | verified |
-| `CHROME-159` | `INV` | In Prose, Trame and Toile, the shell MUST NOT lay out a docked toolbar. | this spec section 2; this spec section 4 | not built | unbuilt -- lands with the `The context panel, bar and menu` Story (`ambre-roadmap.md` MVP). Trame docks its format toolbar in the command bar, and it leaves once the panel carries its commands | unimplemented |
+| `CHROME-159` | `INV` | In Prose, Trame and Toile, the shell MUST NOT lay out a docked toolbar. | this spec section 2; this spec section 4 | `ambre_app::shell::app_root::tests::the_formula_bar_is_trames_alone_and_prose_has_no_command_bar` -- wasm tier, Trame and Prose lay out no command bar; `ambre_trame::tests::chrome_ui::the_panel_announces_the_registry_labels` -- the controls the toolbar held answer in the sheet's context panel | none | verified |
 | `CHROME-160` | `INV` | In Prose, Trame and Toile, the shell MUST NOT lay out a bar of drop-down menus. | this spec section 2; this spec section 4 | not built | unbuilt -- lands with the `The Ambre and avatar menus` Story (`ambre-roadmap.md` MVP). Toile docks a bar of five menus in the command bar | unimplemented |
 | `CHROME-161` | `INV` | In Prose, Trame and Toile, the shell MUST NOT lay out a button whose only role is to open a list of commands. | this spec section 2; this spec section 4 | not built | unbuilt -- lands with the `The Ambre and avatar menus` Story (`ambre-roadmap.md` MVP) | unimplemented |
 | `CHROME-162` | `OBS` | In Trame, the sheet tabs MUST sit in the status bar, before the zoom. | this spec section 2; `CHROME-206` | `ambre_trame::tests::chrome_ui::the_sheet_tabs_sit_in_the_status_bar_before_the_zoom` -- wasm tier, the tabs and the zoom share one band, the zoom after the tabs, and a tab and the add button still act; `ambre_app::shell::app_root::tests::the_formula_bar_is_trames_alone_and_prose_has_no_command_bar` -- Trame lays out no tab strip | none | verified |
@@ -105,7 +105,7 @@ other six documents of the DOM side.
   chrome operation. A cover a surface publishes is read by a fit, which is a zoom cost.
 * **Boundary.** none: a region holds commands, and a command reaches the Logic thread as every
   command does. Nothing here opens a socket or holds a key.
-* **Verification.** 22 `verified`, 2 `failing`, 34 `unimplemented`, and the type holds the home of
+* **Verification.** 23 `verified`, 2 `failing`, 33 `unimplemented`, and the type holds the home of
   each command. Host tests run each table through the one sink of every region, on a real Logic
   state. Wasm tests hold the palette and the sheet tabs. A hover-only control of Prose and a paste
   over a text selection fail. The rest waits on the regions, which no application lays out.
@@ -268,10 +268,6 @@ takes is `crates/ambre-toile/src/chrome/cover.rs`. No region has code beyond it.
   `TOILE-UI-418` bind its menus. They stay `verified` while the bar ships. The
   `The Ambre and avatar menus` Story (`ambre-roadmap.md` MVP) moves each command to its home and
   rewrites them.
-* **Trame's toolbar holds verified rows.** `TRAME-097`, `TRAME-186` and `TRAME-188` name the
-  toolbar as the control that reports a style. The
-  `The context panel, bar and menu` Story (`ambre-roadmap.md` MVP) rewrites them
-  against the panel.
 * **The context menu has no shared design.** Each application lays out its own: Trame's in
   `ambre-spec-trame-context-menu.md`, the board's in `ambre-spec-toile-menus.md`, and a page menu in
   Prose. Beyond the clipboard first, no rule says which selection commands it reaches, nor in

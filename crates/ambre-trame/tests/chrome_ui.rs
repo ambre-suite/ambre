@@ -33,9 +33,9 @@ use ambre_core::id::Sheet;
 use ambre_core::id::{Document, Id};
 use ambre_core::index::{Len, Pos};
 use ambre_trame::chrome::{
-    self, BOLD, COPY, CUT, EXPORT_CSV, FIND, FindMode, FindReplace, FindReplaceState, FormatBar,
-    IMPORT_CSV, ITALIC, MERGE, PASTE, REDO, ReorderSheet, ReplaceRequest, SAVE_FILE, SelStats,
-    SheetTabs, SortApply, SortDialog, SortDialogState, StatusBar, StyleState, Toggles, UNDO,
+    self, BOLD, FindMode, FindReplace, FindReplaceState, ITALIC, MERGE, REDO, ReorderSheet,
+    ReplaceRequest, SelStats, SheetTabs, SortApply, SortDialog, SortDialogState, StatusBar,
+    StyleState, UNDO,
 };
 use ambre_trame::message::{
     CellFormat, CellStyle, HAlign, SheetName, SheetTab, TrameCommand, TrameEvent, VAlign,
@@ -787,42 +787,49 @@ async fn sheet_tabs_refuse_a_name_the_rule_refuses() {
     container.remove();
 }
 
-/// DOM test: every command button of the `FormatBar` announces the label the
-/// registry declares (`ambre-spec-commands.md`, UI-THREAD-036).
+/// DOM test: every command button of the sheet's context panel announces the
+/// label the registry declares (`ambre-spec-commands.md`, UI-THREAD-036).
 ///
-/// This is the belt over the toolbar, the surface that repeated "Copy", "Bold"
-/// and "Undo" as literals beside the table that declares them. It reads the
-/// rendered `aria-label` out of the DOM, so a literal written back into the
-/// markup fails here rather than drifting in silence.
+/// It reads the rendered `aria-label` out of the DOM, so a literal written
+/// back into the markup fails here rather than drifting in silence. Every
+/// control names a declared command or property.
 #[wasm_bindgen_test]
-fn the_toolbar_announces_the_registry_labels() {
+async fn the_panel_announces_the_registry_labels() {
+    use ambre_chrome::{ContextPanel, DockSide, Fold, PanelPrefs, PanelWidth};
+    use ambre_trame::ui::panel;
     let container = mount_in_container(|| {
-        let store = CommandStates::new(chrome::COMMANDS.iter().map(|c| c.id));
-        chrome::init_command_states(&store);
-        let toggles = Toggles::from_store(&store);
-        let style = StyleState::new();
-        let theme = RwSignal::new(ambre_canvas::Theme::Dark);
-        view! {
-            <FormatBar
-                toggles=toggles
-                style=style
-                theme=theme
-                on_command=Callback::new(|_| {})
-                on_style=Callback::new(|_| {})
-            />
-        }
+        let content = chrome::trame_panel(chrome::TramePanelSignals {
+            style: StyleState::new(),
+            theme: RwSignal::new(ambre_canvas::Theme::Dark),
+            on_command: Callback::new(|_| {}),
+            on_style: Callback::new(|_| {}),
+        });
+        let prefs = PanelPrefs::new(DockSide::Right, PanelWidth::DEFAULT, Fold::Open);
+        view! { <ContextPanel prefs=prefs title=content.title sections=content.sections /> }
     });
+    leptos::task::tick().await;
 
-    for id in [
-        COPY, CUT, PASTE, FIND, IMPORT_CSV, EXPORT_CSV, SAVE_FILE, BOLD, ITALIC, MERGE, UNDO, REDO,
-    ] {
+    let shown = panel::SHEET_COMMANDS
+        .iter()
+        .chain(panel::ROW_COL_COMMANDS.iter())
+        .chain(panel::SORT_FILTER_COMMANDS.iter())
+        .chain([BOLD, ITALIC, MERGE].iter());
+    for &id in shown {
         let expected = registry::title(id, &Locale::En).expect("described");
         let found = container
             .query_selector(&format!("[aria-label=\"{expected}\"]"))
             .unwrap();
         assert!(found.is_some(), "{id:?}: no control announces {expected:?}");
     }
-
+    for marker in ambre_chrome::reach_markers(&container) {
+        let declared = chrome::COMMANDS
+            .iter()
+            .any(|c| ambre_chrome::commands::Reach::Command(c.id).matches_marker(&marker))
+            || panel::PROPERTIES
+                .iter()
+                .any(|p| ambre_chrome::commands::Reach::Property(p.id).matches_marker(&marker));
+        assert!(declared, "{marker} is declared");
+    }
     container.remove();
 }
 

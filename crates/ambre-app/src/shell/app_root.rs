@@ -193,13 +193,14 @@ fn ShellHeader(
 /// The optional rows of the shell each application lays out (`CHROME-199`).
 /// The formula bar is Trame's alone. No application lays out the tab strip:
 /// Trame's sheet tabs sit in the status bar (`CHROME-162`). A Toile board docks
-/// its menus in the command bar. A Prose page formats from the bar over its
-/// selection, so it lays out no command bar. Murmure builds its own shell.
+/// its menus in the command bar. A Prose page and a Trame sheet format from
+/// the context panel, so neither lays out a command bar (`CHROME-159`).
+/// Murmure builds its own shell.
 pub(crate) fn shell_rows(kind: DocType) -> ambre_chrome::ShellRows {
     use ambre_chrome::RowShown::{Absent, Shown};
     match kind {
         DocType::Trame => ambre_chrome::ShellRows {
-            toolbar: Shown,
+            toolbar: Absent,
             formula_bar: Shown,
             tabs: Absent,
         },
@@ -313,7 +314,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
     let Wiring {
         to_logic,
         theme_ctl,
-        toggles,
+        toggles: _,
         toile_toggles,
         style_state,
         toasts,
@@ -773,6 +774,13 @@ pub(crate) fn AppRoot() -> impl IntoView {
         })
     } else if boot_is_prose {
         ambre_prose::chrome::prose_panel(prose_signals)
+    } else if boot_is_trame {
+        trame_chrome::trame_panel(trame_chrome::TramePanelSignals {
+            style: style_state,
+            theme: theme_sig,
+            on_command,
+            on_style,
+        })
     } else {
         ambre_chrome::PanelContent::empty()
     };
@@ -836,15 +844,6 @@ pub(crate) fn AppRoot() -> impl IntoView {
             // bar is Trame's alone, and its sheet tabs sit in the status bar. A Prose page has no
             // command bar. Gated on the booted app kind, fixed per page load.
             <Toolbar slot>
-                {boot_is_trame.then(|| view! {
-                    <trame_chrome::FormatBar
-                        toggles=toggles
-                        style=style_state
-                        theme=theme_sig
-                        on_command=on_command
-                        on_style=on_style
-                    />
-                })}
                 // Toile docks its menus and its zoom in the command bar, under
                 // the header, so neither covers the header (`CHROME-200`).
                 {boot_is_toile.then(|| view! {
@@ -1367,7 +1366,8 @@ mod tests {
     /// Each application lays out its own rows (`CHROME-199`). The formula bar
     /// is Trame's alone. No application lays out the tab strip, since Trame's
     /// sheet tabs sit in the status bar (`CHROME-162`). A Prose page lays out
-    /// no command bar.
+    /// no command bar, and a Trame sheet none since its format toolbar left
+    /// for the context panel (`CHROME-159`).
     #[wasm_bindgen_test]
     fn the_formula_bar_is_trames_alone_and_prose_has_no_command_bar() {
         use ambre_chrome::RowShown::{Absent, Shown};
@@ -1375,7 +1375,7 @@ mod tests {
             let r = shell_rows(kind);
             (r.toolbar, r.formula_bar, r.tabs)
         };
-        assert_eq!(rows(DocType::Trame), (Shown, Shown, Absent));
+        assert_eq!(rows(DocType::Trame), (Absent, Shown, Absent));
         assert_eq!(rows(DocType::Toile), (Shown, Absent, Absent));
         assert_eq!(rows(DocType::Prose), (Absent, Absent, Absent));
     }

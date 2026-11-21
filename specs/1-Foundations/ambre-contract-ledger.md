@@ -21,14 +21,14 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**5003 rows: 4565 shipped, of which 16 loose. 438 unbuilt.**
+**5003 rows: 4566 shipped, of which 16 loose. 437 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1628 | 583 | 995 | 817 | 526 | 4549 |
+| `verified` | 1629 | 583 | 995 | 817 | 526 | 4550 |
 | `failing` | 2 |  |  |  |  | 2 |
 | `human-review` | 14 |  |  |  |  | 14 |
-| `unimplemented` | 194 | 42 | 21 | 24 | 157 | 438 |
+| `unimplemented` | 193 | 42 | 21 | 24 | 157 | 437 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -76,7 +76,7 @@
 | `ambre-spec-sequencer.md` | 83 | 82 | 82 |  | 1 |
 | `ambre-spec-server.md` | 134 | 126 | 125 | 1 | 8 |
 | `ambre-spec-session.md` | 46 | 46 | 46 |  |  |
-| `ambre-spec-shell.md` | 58 | 24 | 22 | 2 | 34 |
+| `ambre-spec-shell.md` | 58 | 25 | 23 | 2 | 33 |
 | `ambre-spec-sync.md` | 90 | 89 | 89 |  | 1 |
 | `ambre-spec-text-editor.md` | 20 | 18 | 18 |  | 2 |
 | `ambre-spec-text-input.md` | 15 | 15 | 15 |  |  |
