@@ -175,6 +175,20 @@ impl Bounded<Opacity> {
         }
     }
 
+    /// The share of the full opacity this one is, as a fraction from 0 to 1:
+    /// the place of a slider that edits it.
+    #[must_use]
+    pub fn fraction(self) -> Bounded<crate::UnitFraction> {
+        Bounded::<crate::UnitFraction>::new(self.get())
+            .unwrap_or(Bounded::<crate::UnitFraction>::ONE)
+    }
+
+    /// The opacity that is the fraction `share` of the full opacity.
+    #[must_use]
+    pub fn of_fraction(share: Bounded<crate::UnitFraction>) -> Self {
+        Self::clamped(share.get())
+    }
+
     /// The opacity multiplied by `factor`, held in range: a fade at `factor`.
     #[must_use]
     pub fn scaled(self, factor: f32) -> Self {
@@ -212,6 +226,15 @@ impl Bounded<Opacity> {
 mod tests {
     use super::{Alpha, Opacity, Rgb, Rgba};
     use crate::Bounded;
+
+    #[test]
+    fn an_opacity_reads_back_through_its_fraction() {
+        for raw in [0.0_f32, 0.25, 0.5, 1.0] {
+            let o = Bounded::<Opacity>::clamped(raw);
+            assert_eq!(Bounded::<Opacity>::of_fraction(o.fraction()), o);
+            assert_eq!(o.fraction().get(), raw);
+        }
+    }
 
     // One orange in the two packings: red 0xff, green 0x80, blue 0x20,
     // alpha 0x40.

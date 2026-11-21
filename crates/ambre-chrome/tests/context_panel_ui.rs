@@ -348,6 +348,6 @@ async fn each_kit_control_carries_what_it_reaches_and_shows_a_mixed_value() {
     let checked = q(&root, ".ambre-kit-segmented [aria-checked=\"true\"]");
     assert_eq!(checked.get_attribute("aria-label").unwrap(), "Landscape");
     // A stepper writes the length alone, one step on.
-    click(&q(&root, ".ambre-kit-length button:last-of-type"));
+    click(&q(&root, ".ambre-stepper .ambre-stepper-step:last-of-type"));
     assert_eq!(written.get_untracked(), Some(PrintLength::<Mm>::new(21.0)));
 }
