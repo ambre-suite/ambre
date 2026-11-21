@@ -200,7 +200,8 @@ without the four columns a review reads. It writes nothing, and the file stays t
 - `rustup`. The first `cargo` command installs the pinned nightly of `rust-toolchain.toml`, with its
   `wasm32-unknown-unknown` target and `rust-src`. No other toolchain builds Ambre (`ARCH-075`).
 - `trunk` for building and serving the WASM frontend
-- PostgreSQL and Redis 7.4 or later (for the server)
+- Docker, for the server and the db tier. PostgreSQL, Redis and Garage run from the images
+  `docker-compose.yml` pins, never on the host, whatever version the host offers
 
 ### Building
 
@@ -219,13 +220,16 @@ trunk build --release
 ./run_server.sh
 ```
 
-The script runs `cargo run -p ambre-server` against the local stack. Bring the backing services up
-first with `just services-up`: it also creates the Garage layout, key and bucket, which
-`docker compose up -d` alone does not. The script sets `DEV_MODE=1` unless the shell sets it, and
-`.cargo/config.toml` gives the addresses, so no `.env` is needed; an optional `.env` overrides
-them. Outside development
-mode, the server needs its signing seeds, its database address and its object store keys. The server starts on `http://localhost:3000`. The frontend is served
-by `./trunk_serve.sh` (default port `8080`).
+The script runs `just docker-up`, then `cargo run -p ambre-server` against the local stack.
+`just docker-up` starts the Docker daemon when it is down, as in a cloud session, then the backing
+services. It also creates the Garage layout, key and bucket, which `docker compose up -d` alone does
+not. A screenshot of the running application takes the same path: no backing service ever runs on
+the host.
+
+The script sets `DEV_MODE=1` unless the shell sets it, and `.cargo/config.toml` gives the
+addresses, so no `.env` is needed; an optional `.env` overrides them. Outside development mode, the
+server needs its signing seeds, its database address and its object store keys. The server starts
+on `http://localhost:3000`. The frontend is served by `./trunk_serve.sh` (default port `8080`).
 
 The script turns on the `dev-login` feature, the sign-in by a bare name that a development relay
 accepts. No release build carries it (`ZK-045`).
@@ -239,7 +243,7 @@ accepts. No release build carries it (`ZK-045`).
 
 The `justfile` holds the exact command lines CI runs, one recipe per tier. It does nothing else:
 the db tier fails when called through `just` alone, because the recipe does not start the backing
-services. `run_tests.sh` wraps the same recipes and starts the services first, then tears them down
+services. `run_tests.sh` wraps the same recipes and runs `just docker-up` first, then tears them down
 on exit unless `KEEP_SERVICES=1`. The addresses of the services come from `.cargo/config.toml`, so
 no `.env` is necessary; a `.env` overrides them. Use the script locally and `just` to reproduce a
 CI job bit-for-bit.

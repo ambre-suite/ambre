@@ -75,6 +75,7 @@ SCRIPTS = {
     "crate_boundaries": GATE,
     "crate_table": GATE,
     "dev_stack": TOOL,
+    "docker_up": TOOL,
     "feature_inventory": GENERATOR,
     "fixture_provenance": GATE,
     "freeze_provenance": GATE,
