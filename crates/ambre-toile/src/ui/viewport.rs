@@ -23,6 +23,25 @@ use ambre_draw::{Affine, Point, Rect, Size, Vec2};
 /// axis, so it never touches the viewport edge.
 pub const FIT_PAD: f64 = 0.08;
 
+/// The strips of the canvas that the shell's floating surfaces cover, in
+/// screen pixels, which a fit keeps the framed content out of (`ZOOM-011`).
+///
+/// * left: the tool palette, `left: 8px` plus its 62px stack in
+///   `.ambre-tool-palette`, and a gap;
+/// * top: the selection bar, which `.ambre-selbar` lifts 36px above the
+///   selection's top edge, plus its own 43px, and a gap;
+/// * right and bottom: the same gap, so the frame stays centred on what shows.
+///
+/// The figures are declared here, once, rather than measured. The fit runs on
+/// a reply from the Logic thread, with no element at hand to measure. A test
+/// reads `styles.css`, so a change to either surface fails until this moves.
+pub const FIT_CLEARANCE: kurbo::Insets = kurbo::Insets {
+    x0: 8.0 + 62.0 + 8.0,
+    y0: 36.0 + 43.0 + 8.0,
+    x1: 8.0,
+    y1: 8.0,
+};
+
 /// The world <-> screen camera. `center` is the world point under the screen
 /// center; `zoom` is world-units-per... no: screen = (world - center) * zoom +
 /// size/2, so `zoom` is screen-pixels per world-unit. `size` is logical pixels.
@@ -146,7 +165,13 @@ impl ViewportTransform {
     /// `pad_frac` grows the target extent so the content occupies `1 / (1 +
     /// pad_frac)` of the axis.
     pub fn fit_bounds(&mut self, world: Rect, pad_frac: f64) {
-        if let Some((center, zoom)) = self.fit_target(world, pad_frac) {
+        self.fit_bounds_clear_of(world, pad_frac, kurbo::Insets::ZERO);
+    }
+
+    /// [`fit_bounds`](Self::fit_bounds) into the part of the canvas that
+    /// `clear` leaves uncovered (`ZOOM-011`).
+    pub fn fit_bounds_clear_of(&mut self, world: Rect, pad_frac: f64, clear: kurbo::Insets) {
+        if let Some((center, zoom)) = self.fit_target_clear_of(world, pad_frac, clear) {
             self.center = center;
             self.zoom = zoom;
         }
@@ -157,18 +182,42 @@ impl ViewportTransform {
     /// or non-finite rect (nothing to frame). Shared by the instant Fit and by
     /// the presentation camera glide, which lerps toward this target.
     pub fn fit_target(&self, world: Rect, pad_frac: f64) -> Option<(Point, Scale<Board, View>)> {
+        self.fit_target_clear_of(world, pad_frac, kurbo::Insets::ZERO)
+    }
+
+    /// The fit of [`fit_target`](Self::fit_target) into the part of the canvas
+    /// that `clear` leaves uncovered (`ZOOM-011`). The camera is offset so the
+    /// box is centred on that part, not on the canvas. A clearance that leaves
+    /// no room on an axis is dropped, and the fit takes the whole canvas.
+    pub fn fit_target_clear_of(
+        &self,
+        world: Rect,
+        pad_frac: f64,
+        clear: kurbo::Insets,
+    ) -> Option<(Point, Scale<Board, View>)> {
+        let canvas = Rect::from_origin_size(Point::ZERO, self.size);
+        let inset = canvas - clear;
+        let room = if inset.width() > 0.0 && inset.height() > 0.0 {
+            inset
+        } else {
+            canvas
+        };
         let pad = 1.0 + pad_frac.max(0.0);
         let content = Vector::new(
             Px::<Board>::new(world.width() * pad),
             Px::<Board>::new(world.height() * pad),
         );
         let view = Vector::new(
-            Px::<View>::new(self.size.width as f32),
-            Px::<View>::new(self.size.height as f32),
+            Px::<View>::new(room.width() as f32),
+            Px::<View>::new(room.height() as f32),
         );
         // An empty or non-finite box frames nothing (`ZOOM-009`).
-        let framed = self.zoom_engine().framing(content, view)?;
-        Some((world.center(), framed.factor()))
+        let zoom = self.zoom_engine().framing(content, view)?.factor();
+        // The camera centre is the board point under the canvas centre. It
+        // sits off the box centre by the room's offset from that centre.
+        let off = room.center() - canvas.center();
+        let center = world.center() - off / zoom.get();
+        Some((center, zoom))
     }
 
     /// Interpolate the camera from `from` toward a target center + zoom at phase
@@ -490,5 +539,69 @@ mod tests {
             vt.fit_bounds(world, FIT_PAD);
             assert_eq!(vt, before, "{world:?}");
         }
+    }
+
+    /// The room a fit frames into: the canvas less the strips the shell's
+    /// floating surfaces cover.
+    fn room(size: Size) -> Rect {
+        Rect::from_origin_size(Point::ZERO, size) - FIT_CLEARANCE
+    }
+
+    proptest::proptest! {
+        /// A fit lands the whole box inside the uncovered part of the canvas,
+        /// centred on it (`ZOOM-011`). That holds for any box, and any canvas
+        /// the clearance leaves room in. When the clamp binds the box is not fitted, and
+        /// then its centre alone is held at the centre of that part.
+        #[test]
+        fn a_fit_lands_clear_of_the_floating_surfaces(
+            x in -1.0e5..1.0e5f64,
+            y in -1.0e5..1.0e5f64,
+            w in 1.0e-3..1.0e5f64,
+            h in 1.0e-3..1.0e5f64,
+            cw in 200.0..4000.0f64,
+            ch in 200.0..3000.0f64,
+        ) {
+            let mut vt = ViewportTransform::new(Size::new(cw, ch));
+            let world = Rect::new(x, y, x + w, y + h);
+            vt.fit_bounds_clear_of(world, FIT_PAD, FIT_CLEARANCE);
+            let on_screen = vt.world_to_screen().transform_rect_bbox(world);
+            let room = room(vt.size);
+            let tol = 1e-6 * (1.0 + on_screen.width().max(on_screen.height()));
+            proptest::prop_assert!((on_screen.center() - room.center()).hypot() < 1e-3 + tol);
+            let clamped = vt.zoom == MIN_ZOOM || vt.zoom == MAX_ZOOM;
+            if !clamped {
+                proptest::prop_assert!(on_screen.x0 >= room.x0 - tol && on_screen.x1 <= room.x1 + tol);
+                proptest::prop_assert!(on_screen.y0 >= room.y0 - tol && on_screen.y1 <= room.y1 + tol);
+            }
+        }
+    }
+
+    #[test]
+    fn a_canvas_too_small_for_the_clearance_frames_on_the_whole_of_it() {
+        let mut vt = ViewportTransform::new(Size::new(60.0, 50.0));
+        let world = Rect::new(0.0, 0.0, 10.0, 10.0);
+        vt.fit_bounds_clear_of(world, FIT_PAD, FIT_CLEARANCE);
+        // No room is left once the strips are taken, so the box is centred on
+        // the canvas, as a fit without clearance would place it.
+        assert!(approx(vt.center, world.center()));
+    }
+
+    /// The clearance carries the figures of the two surfaces it keeps clear
+    /// of. A change to either one in the stylesheet fails here, until
+    /// `FIT_CLEARANCE` moves with it.
+    #[test]
+    fn the_clearance_matches_the_stylesheet() {
+        let css = include_str!("../../../ambre-app/styles.css");
+        let rule = |selector: &str| -> &str {
+            let start = css
+                .find(&format!("\n{selector} {{"))
+                .unwrap_or_else(|| panic!("{selector} is styled"));
+            let body = &css[start..];
+            &body[..body.find('}').unwrap_or(body.len())]
+        };
+        assert!(rule(".ambre-tool-palette").contains("left: 8px;"));
+        assert!(rule(".ambre-selbar").contains("calc(-100% - 36px)"));
+        assert!((FIT_CLEARANCE.x0 - (8.0 + 62.0 + 8.0)).abs() < f64::EPSILON);
+        assert!((FIT_CLEARANCE.y0 - (36.0 + 43.0 + 8.0)).abs() < f64::EPSILON);
     }
 }

@@ -83,7 +83,10 @@ impl PresenceSender {
         sample: PresencePayload,
         now: Instant<PageLoad>,
     ) -> Option<PresencePayload> {
-        let changed = !self.last.as_ref().is_some_and(|last| same_sample(last, &sample));
+        let changed = !self
+            .last
+            .as_ref()
+            .is_some_and(|last| same_sample(last, &sample));
         let heartbeat = now - self.last_sent >= PRESENCE_HEARTBEAT;
         if !changed && !heartbeat {
             return None;

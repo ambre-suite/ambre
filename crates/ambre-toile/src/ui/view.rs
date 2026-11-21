@@ -1161,7 +1161,13 @@ impl ToileView {
                     if std::mem::take(&mut self.pending_fit)
                         && let Some(bounds) = stats.bounds
                     {
-                        self.cam.fit_bounds(bounds, super::viewport::FIT_PAD);
+                        // A fit lands clear of the palette and the selection
+                        // bar the board shows over the canvas (`ZOOM-011`).
+                        self.cam.fit_bounds_clear_of(
+                            bounds,
+                            super::viewport::FIT_PAD,
+                            super::viewport::FIT_CLEARANCE,
+                        );
                         self.needs_full = true;
                         self.queue_viewport();
                     }

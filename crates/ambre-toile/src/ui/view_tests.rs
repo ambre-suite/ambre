@@ -1877,7 +1877,10 @@ fn a_ctrl_wheel_zooms_about_the_pointer() {
     for dy in [-120.0, -400.0, 90.0, 5000.0, -9000.0] {
         wheel(&mut rig, (0.0, dy), 0, ModifierKeys::PRIMARY);
         let (x, y) = rig.screen(under.x, under.y);
-        assert!((x - 300.0).abs() < 1e-3 && (y - 220.0).abs() < 1e-3, "{x} {y}");
+        assert!(
+            (x - 300.0).abs() < 1e-3 && (y - 220.0).abs() < 1e-3,
+            "{x} {y}"
+        );
         let zoom = rig.view.cam.zoom;
         assert!(zoom >= crate::ui::viewport::MIN_ZOOM && zoom <= crate::ui::viewport::MAX_ZOOM);
     }
@@ -1896,7 +1899,9 @@ fn a_zoom_about_the_pointer_broadcasts_no_presence_sample() {
         .plan_repaint(Instant::<PageLoad>::new(100.0), ambre_canvas::HudTick::Idle);
     let first = rig.sent();
     assert!(
-        first.iter().any(|c| matches!(c, ToileCommand::Presence { .. })),
+        first
+            .iter()
+            .any(|c| matches!(c, ToileCommand::Presence { .. })),
         "the pointer's first sample goes out: {first:?}"
     );
     let mut t = 116.0;
@@ -1909,7 +1914,9 @@ fn a_zoom_about_the_pointer_broadcasts_no_presence_sample() {
     assert_ne!(rig.view.cam.zoom.get(), 1.0, "the wheel zoomed");
     let after = rig.sent();
     assert!(
-        !after.iter().any(|c| matches!(c, ToileCommand::Presence { .. })),
+        !after
+            .iter()
+            .any(|c| matches!(c, ToileCommand::Presence { .. })),
         "a zoom broadcast {after:?}"
     );
 }

@@ -44,6 +44,7 @@ The user asks for the selection to fill the view. The target may be empty.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `ZOOM-007` | `POST` | A zoom to a selection MUST frame it and clamp. | this spec section 3 | `ambre_core::zoom::tests::a_box_is_framed_whole_and_an_empty_one_is_ignored` -- the frame fits the box whole, clamped; `ambre_toile::ui::view::view_tests::a_zoom_to_the_selection_frames_it_and_keeps_the_selection`; `ambre_trame::ui::grid::tests::viewport::a_zoom_to_the_selection_shows_it_whole_and_keeps_it`; `ambre_trame::ui::grid::tests::viewport::a_zoom_to_the_selection_clamps_to_the_grid_range` | none | verified |
+| `ZOOM-011` | `POST` | A zoom to a selection MUST frame it in the part of the view that no floating surface of the shell covers. | this spec section 3; `ambre-spec-chrome.md` | `ambre_toile::ui::viewport::tests::a_fit_lands_clear_of_the_floating_surfaces` -- the box lands whole inside the uncovered part and centred on it, and centred alone when the clamp binds; `ambre_toile::ui::viewport::tests::the_clearance_matches_the_stylesheet` -- the strips carry the offsets the stylesheet gives the palette and the selection bar | none | verified |
 | `ZOOM-010` | `FRAME` | A zoom to a selection MUST NOT change the selection. | this spec section 3; derived | `ambre_toile::ui::view::view_tests::a_zoom_to_the_selection_frames_it_and_keeps_the_selection`; `ambre_trame::ui::grid::tests::viewport::a_zoom_to_the_selection_shows_it_whole_and_keeps_it` -- the selection compares equal before and after | none | verified |
 | `ZOOM-009` | `FAIL` | A zoom to an empty target MUST be ignored, never applied as a degenerate factor. | this spec section 3 | `ambre_core::zoom::tests::a_box_is_framed_whole_and_an_empty_one_is_ignored` -- a box with no width or no height, or one not finite, gives no frame; `ambre_toile::ui::view::view_tests::a_zoom_to_the_selection_frames_it_and_keeps_the_selection` -- a box of no area moves nothing, and an empty selection publishes a notice and asks nothing | none | verified |
 
@@ -53,9 +54,9 @@ The user asks for the selection to fill the view. The target may be empty.
 * **Boundary.** none: a zoom is local view state. It writes no document, so nothing here reaches the
   relay, holds a key or opens a socket. `ambre-spec-zero-knowledge.md` seals every payload that does
   leave the client.
-* **Verification.** 10 `verified`. The three editors share the engine, the ladder, the clamp, the
-  keys and the chip. They also share the wheel under `Ctrl` and the zoom about a point. The zoom to a
-  selection is shared by the board and the grid. Section 5 names what is left.
+* **Verification.** 11 `verified`. The three editors share the engine, the ladder, the clamp, the
+  keys and the chip. They also share the wheel under `Ctrl` and the zoom about a point. The zoom to
+  a selection is shared by the board and the grid. Section 5 names what is left.
 
   Writing the rules before the code is what makes the three added ones cheap. `ZOOM-008`, because
   reaching no collaborator is not the same rule as emitting no delta once presence exists.
@@ -118,7 +119,7 @@ still lives in each application's viewport (section 5).
 | `Ctrl` with `0` | return to a hundred per cent (`ZOOM-005`) |
 | `Ctrl` with the wheel, a trackpad pinch | zoom about the pointer (`ZOOM-003`, `ZOOM-004`) |
 | a click on the zoom chip | the shared preset ladder opens, the current factor marked (`ambre-spec-chrome.md`) |
-| a zoom-to-selection command | frame the selection and clamp; an empty target does nothing (`ZOOM-007`) |
+| a zoom-to-selection command | frame the selection clear of the floating surfaces and clamp; an empty target does nothing (`ZOOM-007`, `ZOOM-011`) |
 | the zoom entries in a menu | the same intents, through a command (`ambre-spec-commands.md`) |
 
 The user reads the factor from one chip, and the keys, the wheel and the pinch behave the same in
@@ -146,6 +147,9 @@ every editor.
 * **Prose frames no selection.** No command of the page asks for one, so `ZOOM-007` holds on the
   board and the grid alone. A key and the chip keep the top of the canvas in place; the anchor on
   the caret is not ruled (`4-Prose/features/ambre-spec-prose-viewport.md`).
+* **The grid frames with no strip.** No floating surface sits over the cells of a grid: its bars are
+  docked above it. `ZOOM-011` holds there with nothing to keep clear, and no test of the grid reads
+  it.
 
 ---
 

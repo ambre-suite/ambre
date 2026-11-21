@@ -37,7 +37,7 @@
 | `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | implemented | 82 |  |
 | `text-input` | A text area that shows nothing, sits under the caret, and is the real keyboard focus of the canvas. | implemented | 15 |  |
 | `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 23 |  |
-| `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | implemented | 10 |  |
+| `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | implemented | 11 |  |
 | `accessibility` | What a screen reader and a keyboard reach. | partial | 15 |  |
 | `adaptive-layout` | How the interface changes with the width of the window. | partial | 9 |  |
 | `chrome` | Everything around the document: the frame the canvas sits in, the menus, the modals and the toasts. | partial | 40 |  |
@@ -65,4 +65,4 @@
 | `macros` | A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. | design-only | 54 |  |
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 
-**49 features: 23 implemented, 23 partial, 3 design-only. 1688 contract rows, 16 loose.**
+**49 features: 23 implemented, 23 partial, 3 design-only. 1689 contract rows, 16 loose.**
