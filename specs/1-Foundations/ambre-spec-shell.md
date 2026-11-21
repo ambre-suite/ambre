@@ -52,6 +52,11 @@ other six documents of the DOM side.
 | `CHROME-180` | `OBS` | In Prose, the creation bar MUST offer text, a picture, a table, a separator and a comment. | this spec section 2 | not built | unbuilt -- lands with the `The creation bar` Story (`ambre-roadmap.md` MVP). Prose inserts each from a chord or the format bar | unimplemented |
 | `CHROME-181` | `OBS` | In Trame, the creation bar MUST offer a function, a chart, a picture and a comment. | this spec section 2 | not built | unbuilt -- lands with the `The creation bar` Story (`ambre-roadmap.md` MVP). A filter acts on a range and creates nothing, so its home is the context panel | unimplemented |
 | `CHROME-171` | `INV` | Each floating surface of the shell MUST publish the part of the canvas it covers. | this spec section 2; `ambre-spec-zoom.md section 3` (`ZOOM-011`) | not built | unbuilt -- lands with the `The floating cover` Story (`ambre-roadmap.md` MVP). `CHROME-170` holds the two surfaces of the board; the format bar of Prose publishes nothing | unimplemented |
+| `CHROME-185` | `OBS` | A control of the shell that shows an icon and no text MUST show a tooltip with the name of its command, and the chord when the command has one. | this spec section 2; `ambre-spec-chrome.md section 2`, the shortcut chip | not built | unbuilt -- lands with the `Command tooltips` Story (`ambre-roadmap.md` MVP). Icon buttons carry a native title, without the chord | unimplemented |
+| `CHROME-186` | `INV` | A tooltip MUST take its name, its chord and its description from the description of the command. | this spec section 2; `UI-THREAD-019` | not built | unbuilt -- lands with the `Command tooltips` Story (`ambre-roadmap.md` MVP). The description of a command carries no sentence that describes it | unimplemented |
+| `CHROME-187` | `OBS` | A tooltip MUST show when its control takes the keyboard focus, as it does under the pointer. | this spec section 2; `CHROME-165` | not built | unbuilt -- lands with the `Command tooltips` Story (`ambre-roadmap.md` MVP) | unimplemented |
+| `CHROME-188` | `OBS` | On a phone, a long press on an icon MUST show its tooltip in place of running its command. | this spec section 2, the placement table | not built | unbuilt -- lands with the `Command tooltips` Story (`ambre-roadmap.md` MVP) | unimplemented |
+| `CHROME-189` | `OBS` | A screen reader MUST announce the name and the chord of a control that shows an icon and no text. | this spec section 2; `ambre-spec-accessibility.md` | not built | unbuilt -- lands with the `Command tooltips` Story (`ambre-roadmap.md` MVP) | unimplemented |
 
 ### 1.2 Run a command of the status bar
 
@@ -79,7 +84,7 @@ other six documents of the DOM side.
   chrome operation. A cover a surface publishes is read by a fit, which is a zoom cost.
 * **Boundary.** none: a region holds commands, and a command reaches the Logic thread as every
   command does. Nothing here opens a socket or holds a key.
-* **Verification.** 10 `verified`, 2 `failing`, 25 `unimplemented`, and the type holds the home
+* **Verification.** 10 `verified`, 2 `failing`, 30 `unimplemented`, and the type holds the home
   of each command. Host tests run each table through the one sink of every region, on a real Logic
   state. Wasm tests hold the palette and the sheet tabs. A hover-only control of Prose and a
   paste over a text selection fail. The rest waits on the regions, which no application lays out.
@@ -146,6 +151,14 @@ edits the content of the active cell, and holds no command.
 | avatar menu | the avatar, top right of the header | the avatar |
 | command palette | `Ctrl+K` | an entry of the Ambre menu |
 
+**An icon names itself.** A bar of icons alone teaches nothing, so each icon shows a tooltip. It
+holds the name of its command, its chord as the shortcut chip, and one line of description where
+the name is not enough (`CHROME-185`). The tooltip reads the description of the command, as the
+palette and the context menu do, so no tooltip is written by hand (`CHROME-186`). It shows under
+the keyboard focus as under the pointer (`CHROME-187`), and a screen reader hears the same name and
+chord (`CHROME-189`). A tooltip waits about half a second, then shows at once while the pointer
+moves to the next icon.
+
 **A floating surface publishes what it covers.** The context bar, the creation bar and the
 context panel float over the canvas, so a fit must frame the selection clear of them (`ZOOM-011`).
 Each surface measures the part of the canvas it covers, and a fit reads the latest measure
@@ -166,6 +179,8 @@ takes is `crates/ambre-toile/src/chrome/cover.rs`. No region has code beyond it.
 | `Ctrl+.`, or a click on the rail | the panel opens again as it was |
 | a click on the Ambre logo | the Ambre menu opens, the way home first |
 | a click on the avatar | the avatar menu opens |
+| the pointer or the focus held on an icon | its tooltip shows the name, the chord and, if useful, a description |
+| a long press on an icon, on a phone | its tooltip shows, and the command does not run |
 | a selection made | the context bar floats over it, and the panel shows what applies to it |
 | the selection cleared | the bar leaves, and the panel shows the document |
 | a mode of the creation bar | the next press on the content inserts that object |
