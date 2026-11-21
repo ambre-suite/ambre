@@ -54,7 +54,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-188` | `POST` | The link control MUST apply a link to the whole selection, or remove the one it carries. | this spec section 3 | not built | unbuilt -- lands with the `The format bar's other controls` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-189` | `POST` | A heading or quote control MUST set its style on every block the selection covers. | this spec section 3; `PROSE-UI-102` | not built | unbuilt -- lands with the `The format bar's other controls` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-190` | `POST` | A colour or size control MUST apply its value to the whole selection, and a value the registry refuses MUST be shown to the author. | this spec section 3; `PROSE-FEAT-022` | not built | unbuilt -- lands with the `The format bar's other controls` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-191` | `POST` | Superscript, subscript and clearing the formatting MUST each reach a control of the context panel. | `ambre-spec-prose-schema.md section 3`; `CHROME-164` | not built | unbuilt -- lands with the `The context panel and the near-selection bar` Story (`ambre-roadmap.md` V1) | unimplemented |
+| `PROSE-UI-191` | `POST` | Superscript, subscript and clearing the formatting MUST each reach a control of the context panel. | `ambre-spec-prose-schema.md section 3`; `CHROME-164` | not built | unbuilt -- lands with the `The context panel and the near-selection bar` Story (`ambre-roadmap.md` MVP) | unimplemented |
 
 * **Budget.** none of its own. The bar is repositioned inside the frame that paints the page, the
   row of `ambre-spec-budgets.md section 2`. A static element over the canvas costs a compositor
