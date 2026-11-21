@@ -342,7 +342,7 @@ pub fn ContextPanel(
                         size=crate::ControlSize::Large
                                                 on_press=Callback::new(move |()| open_at(key))
                         {..}
-                        class="ambre-ctx-rail-icon"
+                        class:ambre-ctx-rail-icon=true
                         data-section=key.as_str()
                     />
                 }
@@ -384,7 +384,7 @@ pub fn ContextPanel(
                             size=crate::ControlSize::Large
                                                         on_press=Callback::new(move |()| fold.set(Fold::Open))
                             {..}
-                            class="ambre-ctx-open"
+                            class:ambre-ctx-open=true
                         />
                     }
                 }}
@@ -401,7 +401,7 @@ pub fn ContextPanel(
                                 chord=Some(PANEL_CHORD)
                                                                 on_press=Callback::new(move |()| fold.set(Fold::Rail))
                                 {..}
-                                class="ambre-ctx-collapse"
+                                class:ambre-ctx-collapse=true
                             />
                         }
                     }}

@@ -239,6 +239,15 @@ async fn every_icon_of_the_panel_sits_in_a_box_of_one_size() {
             "no native frame"
         );
     }
+    // The frame's own buttons are icon buttons too, and keep their hook.
+    for hook in [
+        ".ambre-ctx-collapse",
+        ".ambre-ctx-open",
+        ".ambre-ctx-rail-icon",
+    ] {
+        let class = q(&root, hook).get_attribute("class").unwrap();
+        assert!(class.contains("ambre-icon-button"), "{hook}: {class}");
+    }
     assert_eq!(native_controls(&root), Vec::<String>::new());
     root.remove();
 }
