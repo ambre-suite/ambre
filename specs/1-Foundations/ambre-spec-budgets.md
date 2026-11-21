@@ -367,6 +367,24 @@
   is most of each: 166 KB and 287 KB of brotli for the files alone. Their budgets are 300 000 and
   450 000 bytes of brotli, by the The spell checker Story (`ambre-roadmap.md`).
 
+* **The ceiling of Main went up to 10 710 000 on 2026-11-21.** The context panel, bar and menu
+  took Main over its ceiling of 10 470 000. It read 10 333 174 raw bytes on `main` at `f525473`,
+  and 10 533 657 on the branch. `twiggy` found no dead code and no duplicated table.
+* **One cut came first.** The colour popover built one copy of its view per colour packing, 44 KB,
+  and the zoom chip one per space, 23 KB. Each is now a thin generic wrapper over one view. Main
+  then read 10 498 772.
+* **The rest is the feature itself.** The ceiling sits 2 % above the cut figure, by the Main
+  ceiling has room after the context panel Story (`ambre-roadmap.md`). The table below is
+  `twiggy top` on a build that keeps the name section, `main` against the branch before the cut.
+
+| Instance | What grew | Raw growth | Why |
+|---|---|---|---|
+| Main | `tachys`, `reactive_graph`, `leptos`, `alloc` | +60 KB | The views of the panel, its sections and the kit, each a type of its own |
+| Main | `ambre-chrome` | +52 KB | The context panel, 33 KB, and the kit of typed controls, 19 KB |
+| Main | `ambre-trame`, `ambre-prose`, `ambre-toile` | +43 KB | The sections each application writes; Trame's docked bars left, 37 KB less |
+| Main | `ambre-commands`, `ambre-core` | +24 KB | A signal of a reading per value type a control edits, and the section keys |
+| Main | `.rodata` | +14 KB | The labels and the icons of the sections |
+
 * **A budget or the Main ceiling rises only through a story of its own (`ARCH-095`).** The ceiling
   of Main rose twice in a row, to 2.73 MB and then 2.74 MB, each time inside the merge of a feature
   story. A raise needs a story row of the roadmap or of the journal that names the new figure and

@@ -60,6 +60,8 @@ foldhash  = { workspace = true }
 getrandom = { workspace = true }
 
 [dev-dependencies]
+# The properties of the zoom engine (`src/zoom.rs`, `ambre-spec-zoom.md`).
+proptest = { workspace = true }
 postcard = { workspace = true }
 serde_json = { workspace = true }
 # `tests/testing_feature.rs` reads every workspace manifest, so the `testing`

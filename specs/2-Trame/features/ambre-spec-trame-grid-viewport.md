@@ -48,7 +48,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TRAME-UI-147` | `POST` | A wheel notch, a line delta or a page delta MUST be applied once and in full, keeping the sub-cell remainder. | this spec section 3 | `ambre_trame::ui::view::view_tests::a_wheel_delta_lands_once_and_keeps_its_remainder` | none | verified |
 | `TRAME-UI-026` | `FRAME` | A single wheel notch MUST NOT start a momentum coast. | this spec section 3 | `ambre_trame::ui::view::view_tests::a_wheel_notch_starts_no_coast` | none | verified |
-| `TRAME-UI-146` | `FRAME` | The wheel held with `Ctrl` MUST NOT scroll the grid. | this spec section 3 | `ambre_trame::ui::view::view_tests::a_ctrl_wheel_scrolls_nothing` | none | verified |
+| `TRAME-UI-146` | `POST` | The wheel held with `Ctrl` MUST zoom the grid about the cell under the pointer. | this spec section 3; `1-Foundations/ambre-spec-zoom.md`, `ZOOM-003` | `ambre_trame::ui::view::view_tests::a_ctrl_wheel_zooms_about_the_cell_under_the_pointer` -- the row stays under the pointer, and the column unless the grid is at its first column, and the selection stays | none | verified |
 
 ### 1.4 An answer arrives
 
@@ -161,7 +161,8 @@ active filter hides, so the axis closes over it (`features/ambre-spec-trame-shar
 | a finger dragged on the grid | the grid follows it by whole cells, and a flick keeps it moving; a finger that barely moves is a click |
 | a selection or a fill handle dragged past the edge of the cells | the grid scrolls towards that edge, faster the deeper, and the range follows to the edge cell (`TRAME-UI-175`) |
 | a wheel notch, a line delta or a page delta | applied once, with no coast (`TRAME-UI-026`) |
-| `Ctrl` with the wheel | left to the browser: the page zooms, the grid does not |
+| `Ctrl` with the wheel, a trackpad pinch | zooms the grid about the cell under the pointer (`TRAME-UI-146`); the browser does not zoom the page |
+| "Zoom to selection" in the cell or header menu | zooms so the selection shows whole, its first cell at the top-left, clamped to the grid's range; the selection stays (`1-Foundations/ambre-spec-zoom.md`, `ZOOM-007`) |
 | the zoom menu in the status bar | scales the cells, both header strips and the cell font together, and re-requests the window |
 | a navigation or a selection that leaves the screen | scrolls the target into view (`features/ambre-spec-trame-selection.md section 3`) |
 | the first frame after the sheet opens | one request, with a full repaint |
@@ -206,10 +207,12 @@ painter never leaves it (`TRAME-UI-013`). Every fill comes from the theme palett
 * **A pixel-smooth axis** (`TRAME-UI-049`). The remainder is accumulated but never drawn: the grid
   still steps by a whole row. A smooth axis means offsetting the painted content by the remainder,
   which the `Post-V1 surface` Story (`ambre-roadmap.md` POST-V1) carries.
-* **Touch and pinch to zoom** carry no rule here, and none is owed. Touch input is horizontal:
-  `Ctrl` with the wheel is handed to the browser and no two-finger gesture reaches the grid, in
-  Trame as in Toile. The rule is `UI-THREAD-013`, on the shared zoom engine, and it ships with
-  "One zoom model" at V1.
+* **A touch pinch** carries no rule here, and none is owed. A trackpad pinch zooms, as a wheel
+  with `Ctrl`. A touch pinch reaches no editor: the rule is `UI-THREAD-013`, on the shared zoom
+  engine, and it ships with "One zoom model" at V1.
+* **The zoom about the pointer keeps a cell, not a pixel.** The grid scrolls by whole cells, so
+  the cell under the pointer stays and the point within it may shift. It is not the engine's
+  transform (`UI-THREAD-012`).
 * **Two implementations of one geometry** (`TRAME-UI-143`). Hit-testing walks the sizes in
   `ui/grid/geometry.rs` and drawing walks them again in `render/layout.rs`. A test compares the two
   under a zoom, resized axes, hidden rows and a scroll. One of them calling the other would make

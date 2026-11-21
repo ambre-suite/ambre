@@ -6,7 +6,8 @@
 > top and finds everything else, each entry showing the shortcut that reaches it faster.
 
 A menu owns no behaviour: every entry names a command another feature specifies. What this document
-holds is the scope, the layout and the dispatch, plus the zoom control that rides the same bar.
+holds is the scope, the layout and the dispatch. The zoom shows in the status bar alone (`CHROME-206`).
+The menu bar leaves the board, and each of its commands moves to a home region (`CHROME-160`).
 
 ---
 
@@ -66,10 +67,10 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-140` | `POST` | Duplicate MUST offset the copy so it is visibly distinct from its source. | this spec section 2 | `ambre_toile::ui::menu::tests::duplicate_carries_nudge` -- the delta as the diagonal nudge on both axes | none | verified |
 | `TOILE-UI-141` | `POST` | Group MUST emit one binding over the whole selection. | this spec section 2 | `ambre_toile::ui::menu::tests::group_ungroup_resolve` -- a single group command for a two-element selection | none | verified |
 | `TOILE-UI-142` | `POST` | Ungroup MUST emit only for the selected nodes that are groups. | this spec section 2 | `ambre_toile::ui::menu::tests::group_ungroup_resolve` -- a selection of a group and a sticky yielding one ungroup, naming the group | none | verified |
-| `TOILE-UI-143` | `POST` | A z-order entry MUST emit one move per selected element. | this spec section 2 | `ambre_toile::ui::menu::tests::reorder_one_per_element` -- two moves for two elements, each to the front | none | verified |
+| `TOILE-UI-143` | `POST` | A z-order entry MUST emit one move over the whole selection, so one undo takes it back (`CHROME-173`). | this spec section 2 | `ambre_toile::ui::menu::tests::reorder_is_one_command_for_the_selection` -- one move for two elements, both to the front | none | verified |
 | `TOILE-UI-144` | `POST` | Lock and unlock MUST emit the same command with the opposite flag. | this spec section 2 | `ambre_toile::ui::menu::tests::lock_unlock_resolve` -- both flags off the two ids | none | verified |
-| `TOILE-UI-145` | `POST` | A reaction entry MUST emit one reaction per selected target, carrying the glyph of the entry. | this spec section 2 | `ambre_toile::ui::menu::tests::react_emoji_resolves_to_one_react_per_target` -- one command per target and the glyph on each | none | verified |
-| `TOILE-UI-146` | `POST` | The clear entry MUST emit an empty reaction per selected target. | this spec section 2 | `ambre_toile::ui::menu::tests::react_clear_resolves_to_none_reaction` -- the command carrying no reaction | none | verified |
+| `TOILE-UI-145` | `POST` | A reaction entry MUST emit one reaction over the whole selection, carrying the glyph of the entry. | this spec section 2 | `ambre_toile::ui::menu::tests::react_emoji_resolves_to_one_command_for_the_selection` -- one command for every target, with the glyph | none | verified |
+| `TOILE-UI-146` | `POST` | The clear entry MUST emit one empty reaction over the whole selection. | this spec section 2 | `ambre_toile::ui::menu::tests::react_clear_resolves_to_none_reaction` -- the command carrying no reaction | none | verified |
 | `TOILE-UI-147` | `POST` | Paste and select-all MUST stay in the view: they MUST emit no board command. | this spec section 2 | `ambre_toile::ui::menu::tests::paste_and_select_all_are_ui_only` -- both resolving to nothing | none | verified |
 | `TOILE-UI-148` | `POST` | Add-to-frame MUST target the frame that geometrically contains the selection. | this spec section 2 | `ambre_toile::ui::menu::tests::add_to_frame_targets_container` -- the frame, the added ids and an empty removal list | none | verified |
 | `TOILE-UI-149` | `POST` | Remove-from-frame MUST take each selected element out of the frame that holds it, whatever frame contains its box. | this spec section 3 | `ambre_toile::ui::menu::tests::remove_from_frame_names_no_frame` -- the entry names the selection and no frame; `ambre_toile::logic::convergence_tests::remove_from_frames_targets_the_real_parent` -- a box inside one frame leaves the other frame that lists it | none | verified |
@@ -98,7 +99,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-158` | `POST` | A fit MUST ask the Logic thread for the extent before it moves the camera. | this spec section 3 | `ambre_toile::ui::view::view_tests::a_fit_asks_for_the_extent_before_it_moves` -- both fits send the request with the camera still, and move it on the answer | none | verified |
 | `TOILE-UI-159` | `POST` | A pointer-mode entry MUST stay in the view: it MUST change no camera and reach no thread. | this spec section 3 | `ambre_toile::ui::view::view_tests::a_pointer_mode_entry_stays_in_the_view` | none | verified |
 | `TOILE-UI-160` | `FAIL` | A fit to the selection with nothing selected MUST tell the user why nothing happened. | this spec section 5 | `ambre_toile::ui::view::view_tests::zoom_to_selection_with_nothing_selected_says_so` -- one notice and no request, then a selected sticky asks for its extent with no notice | none | verified |
-| `TOILE-UI-416` | `POST` | The zoom-in button of the menu bar MUST report the zoom-in command. | this spec section 3 | `ambre_toile::tests::chrome_ui::top_menu_bar_zoom_in_fires_command` -- wasm tier: a click on the mounted bar's Zoom in button reports `ZOOM_IN` | none | verified |
+| `TOILE-UI-416` | `POST` | The zoom-in entry of the View menu MUST report the zoom-in command. | this spec section 3 | `ambre_toile::tests::chrome_ui::the_view_menu_reports_zoom_in_and_the_bar_holds_no_zoom_control` -- wasm tier: the View title opens its menu on the mounted bar, and its Zoom in row reports `ZOOM_IN` | none | verified |
 
 * **Budget.** none: a menu is built from a static entry set on the UI thread, and
   `ambre-spec-budgets.md` budgets no menu operation. What an entry commits is budgeted
@@ -208,10 +209,11 @@ does not apply is disabled by its command state, so the layout never moves under
 | File | bringing a file onto the board, saving the board as a native `.ambre` file, and taking it out as a lossy one -- the save above the separator, the exports below it (`features/ambre-spec-toile-import-export.md section 4`) -- then the presentation entry point |
 | Present | the presentation entry point, listed in both, and the deck panel (`features/ambre-spec-toile-presentation.md section 4`) |
 
-**The zoom control.** Zoom out, the current percentage, zoom in, fit, and fit the selection. Each moves the
-camera and forwards one cull request (`TOILE-UI-157`); the percentage mirrors what the status bar reports
-(`features/ambre-spec-toile-status-bar.md`). Neither fit moves the camera on its own. Both ask the Logic
-thread for the extent first, because the UI holds the culled set alone (`TOILE-UI-158`,
+**The zoom entries.** Zoom out, zoom in, 100 %, fit, and fit the selection sit in the View menu
+and the palette. The menu bar carries no zoom control: the zoom chip of the status bar shows the
+percentage (`features/ambre-spec-toile-status-bar.md`, `CHROME-206`). Each entry moves the camera
+and forwards one cull request (`TOILE-UI-157`). Neither fit moves the camera on its own. Both ask
+the Logic thread for the extent first, because the UI holds the culled set alone (`TOILE-UI-158`,
 `features/ambre-spec-toile-viewport.md`).
 
 **Where each entry is specified.** The command an entry names is owned by the feature that implements it. The

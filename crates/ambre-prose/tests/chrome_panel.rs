@@ -29,14 +29,6 @@ use wasm_bindgen_test::*;
 /// The events the chrome reads in these tests: ProseEvent documents, no channel.
 type Event = UiEvent<ProseEvent>;
 
-/// The page point at `(x, y)`, in CSS px.
-fn css_point(x: f32, y: f32) -> ambre_core::Point<ambre_core::Px<ambre_core::Css>> {
-    ambre_core::Point::new(
-        ambre_core::Px::<ambre_core::Css>::new(x),
-        ambre_core::Px::<ambre_core::Css>::new(y),
-    )
-}
-
 wasm_bindgen_test_configure!(run_in_browser);
 
 fn mount_in_container<F, N>(f: F) -> web_sys::Element
@@ -350,62 +342,209 @@ async fn the_format_bar_announces_the_registry_labels() {
     root.remove();
 }
 
-/// The labels of the menu rows the user cannot pick.
-fn disabled_rows(root: &web_sys::Element) -> Vec<String> {
-    let rows = root.query_selector_all("[aria-disabled=\"true\"]").unwrap();
-    (0..rows.length())
-        .filter_map(|i| rows.item(i))
-        .map(|row| row.text_content().unwrap_or_default())
-        .collect()
-}
-
-/// `UNDO-006`: the page menu's undo and redo rows follow the history state the
-/// Logic thread reports. The menu counts nothing itself: an event that is not
-/// a history state leaves the rows as they were.
+/// `UNDO-006`: the history the shell's undo and redo affordances read follows
+/// the state the Logic thread reports. The page counts nothing itself: an
+/// event that is not a history state leaves it as it was. Undo and redo live
+/// in the Ambre menu, outside the page's context menu.
 #[wasm_bindgen_test]
-async fn the_history_rows_follow_the_reported_state() {
+async fn the_history_follows_the_reported_state() {
     let signals = ProseSignals::new();
-    let pos = RwSignal::new(Some(css_point(10.0, 10.0)));
-    let entries = Signal::derive(move || chrome::context_entries(signals.history.get()));
-    let root = mount_in_container(move || {
-        view! { <ambre_chrome::ContextMenu pos=pos entries=entries on_command=Callback::new(|_| ()) /> }
-    });
     let report = |event: ProseEvent| {
         signals.mirror_event(&Event::Viewport {
             document_id: Id::<Document>::mint(),
             event,
         });
     };
-    leptos::task::tick().await;
-    assert!(
-        disabled_rows(&root).iter().any(|row| row.contains("Undo"))
-            && disabled_rows(&root).iter().any(|row| row.contains("Redo")),
-        "a fresh page has no history: {:?}",
-        disabled_rows(&root)
+    let disabled = ambre_core::Availability::Disabled;
+    let enabled = ambre_core::Availability::Enabled;
+    assert_eq!(
+        signals.history.get_untracked().undo,
+        disabled,
+        "a fresh page has no history"
     );
-
+    assert_eq!(signals.history.get_untracked().redo, disabled);
     report(ProseEvent::UndoState {
-        undo: ambre_core::Availability::Enabled,
-        redo: ambre_core::Availability::Disabled,
+        undo: enabled,
+        redo: disabled,
     });
-    leptos::task::tick().await;
-    let rows = disabled_rows(&root);
-    assert!(!rows.iter().any(|row| row.contains("Undo")), "{rows:?}");
-    assert!(rows.iter().any(|row| row.contains("Redo")), "{rows:?}");
-
+    assert_eq!(signals.history.get_untracked().undo, enabled);
+    assert_eq!(signals.history.get_untracked().redo, disabled);
+    let before = signals.history.get_untracked();
     report(ProseEvent::Synced {
         acked: ambre_core::Seq::<ambre_prose::message::TextAck>::nth(1),
     });
-    leptos::task::tick().await;
-    assert_eq!(disabled_rows(&root), rows);
+    assert_eq!(signals.history.get_untracked(), before);
+    // The page's context menu holds no history entry.
+    assert!(
+        chrome::context_entries()
+            .iter()
+            .all(|e| !matches!(e, ambre_chrome::MenuEntry::Item(i) if i.label() == "Undo" || i.label() == "Redo"))
+    );
+}
 
-    report(ProseEvent::UndoState {
-        undo: ambre_core::Availability::Disabled,
-        redo: ambre_core::Availability::Enabled,
-    });
+// -- The context panel (`ambre-spec-shell.md` section 2) ---------------------
+
+/// Mount the page's context panel over `signals`, and return the container.
+fn mount_prose_panel(signals: ProseSignals) -> web_sys::Element {
+    use ambre_chrome::{ContextPanel, DockSide, Fold, PanelPrefs, PanelWidth};
+    let content = chrome::prose_panel(signals);
+    let prefs = PanelPrefs::new(DockSide::Right, PanelWidth::DEFAULT, Fold::Open);
+    mount_in_container(move || {
+        view! { <ContextPanel prefs=prefs title=content.title sections=content.sections /> }
+    })
+}
+
+/// With no text selected the panel shows the page: its paper, its
+/// orientation and its four margins, as the layout holds them.
+#[wasm_bindgen_test]
+async fn with_no_selection_the_panel_shows_the_page_the_layout_holds() {
+    use ambre_core::{Mm, PrintLength};
+    use ambre_prose::doc::PageFormat;
+    use ambre_prose::view::panel;
+    let signals = ProseSignals::new();
+    let wide = PageFormat {
+        width: PrintLength::<Mm>::new(297.0),
+        height: PrintLength::<Mm>::new(210.0),
+        margin_left: PrintLength::<Mm>::new(31.0),
+        ..PageFormat::default()
+    };
+    signals.page.set(Some(wide));
+    let root = mount_prose_panel(signals);
     leptos::task::tick().await;
-    let rows = disabled_rows(&root);
-    assert!(rows.iter().any(|row| row.contains("Undo")), "{rows:?}");
-    assert!(!rows.iter().any(|row| row.contains("Redo")), "{rows:?}");
+    assert_eq!(
+        root.query_selector(".ambre-ctx-title")
+            .unwrap()
+            .unwrap()
+            .text_content()
+            .unwrap(),
+        "Page"
+    );
+    assert_eq!(
+        ambre_chrome::unreached_controls(&root),
+        Vec::<String>::new()
+    );
+    let markers = ambre_chrome::reach_markers(&root);
+    for id in [
+        panel::PAPER,
+        panel::ORIENTATION,
+        panel::MARGIN_TOP,
+        panel::MARGIN_BOTTOM,
+        panel::MARGIN_LEFT,
+        panel::MARGIN_RIGHT,
+    ] {
+        let reach = ambre_chrome::commands::Reach::Property(id);
+        assert!(
+            markers.iter().any(|m| reach.matches_marker(m)),
+            "{id:?} shows"
+        );
+    }
+    let checked = root
+        .query_selector(".ambre-kit-segmented [aria-checked=\"true\"]")
+        .unwrap()
+        .unwrap();
+    assert_eq!(checked.get_attribute("aria-label").unwrap(), "Landscape");
+    let left: web_sys::HtmlInputElement = root
+        .query_selector("[aria-label=\"Left margin\"]")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    assert_eq!(left.value(), "31.0");
+    root.remove();
+}
+
+/// A page control hands the whole format back to the view, one field changed.
+#[wasm_bindgen_test]
+async fn a_page_control_hands_the_whole_format_to_the_view() {
+    use ambre_core::{Mm, PrintLength};
+    use ambre_prose::doc::PageFormat;
+    let signals = ProseSignals::new();
+    signals.page.set(Some(PageFormat::default()));
+    let root = mount_prose_panel(signals);
+    leptos::task::tick().await;
+    let more: web_sys::HtmlElement = root
+        .query_selector("[aria-label=\"Top margin: more\"]")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    more.click();
+    let asked = signals
+        .page_write
+        .get_untracked()
+        .expect("a format is asked for");
+    assert_eq!(
+        asked,
+        PageFormat {
+            margin_top: PageFormat::default().margin_top + PrintLength::<Mm>::new(1.0),
+            ..PageFormat::default()
+        }
+    );
+    // The orientation turns the page whole: the dimensions swap.
+    let landscape: web_sys::HtmlElement = root
+        .query_selector("[aria-label=\"Landscape\"]")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    landscape.click();
+    let turned = signals.page_write.get_untracked().unwrap();
+    assert_eq!(turned.width, PageFormat::default().height);
+    root.remove();
+}
+
+/// With a selection the panel shows the text: the marks, superscript,
+/// subscript and clearing the formatting, each handing its id to the view
+/// (`PROSE-UI-191`).
+#[wasm_bindgen_test]
+async fn superscript_subscript_and_clearing_reach_a_control_of_the_panel() {
+    use ambre_prose::commands::{CLEAR_FORMATTING, SUBSCRIPT, SUPERSCRIPT};
+    use ambre_prose::view::panel::{PanelKind, TEXT_COMMANDS};
+    let signals = ProseSignals::new();
+    signals
+        .toolbar
+        .set(ambre_prose::view::toolbar::ToolbarState {
+            anchor: Some(ambre_core::Point::default()),
+            active: None,
+        });
+    let root = mount_prose_panel(signals);
+    leptos::task::tick().await;
+    assert_eq!(
+        root.query_selector(".ambre-ctx-title")
+            .unwrap()
+            .unwrap()
+            .text_content()
+            .unwrap(),
+        "Text"
+    );
+    assert_eq!(
+        ambre_chrome::unreached_controls(&root),
+        Vec::<String>::new()
+    );
+    let markers = ambre_chrome::reach_markers(&root);
+    for id in TEXT_COMMANDS {
+        let reach = ambre_chrome::commands::Reach::Command(id);
+        assert!(
+            markers.iter().any(|m| reach.matches_marker(m)),
+            "{id:?} shows"
+        );
+    }
+    for entry in PanelKind::Text.bar() {
+        assert!(
+            markers.iter().any(|m| entry.matches_marker(m)),
+            "{entry:?} is in the panel"
+        );
+    }
+    for id in [SUPERSCRIPT, SUBSCRIPT, CLEAR_FORMATTING] {
+        let reach = ambre_chrome::commands::Reach::Command(id).marker();
+        let button: web_sys::HtmlElement = root
+            .query_selector(&format!("[data-reach=\"{reach}\"]"))
+            .unwrap()
+            .unwrap()
+            .dyn_into()
+            .unwrap();
+        button.click();
+        assert_eq!(signals.format.get_untracked(), Some(id));
+    }
     root.remove();
 }

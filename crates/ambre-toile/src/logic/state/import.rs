@@ -457,7 +457,7 @@ impl ToileState {
     /// Apply a batch whole, in one call, and hand back its report: the tests'
     /// way past the media round trip and the slicing.
     #[cfg(test)]
-    pub(super) fn apply_import(&mut self, batch: ImportBatch) -> (ImportReport, ToileOutcome) {
+    pub(crate) fn apply_import(&mut self, batch: ImportBatch) -> (ImportReport, ToileOutcome) {
         let outcome = self.start_import(batch, ImportPace::Whole);
         let report = outcome
             .display

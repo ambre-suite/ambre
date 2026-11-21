@@ -48,6 +48,13 @@
 | command | a user intent travelling to the Logic thread | | `1-Foundations/ambre-spec-commands.md` |
 | chord | a key combination bound to a command | | `1-Foundations/ambre-spec-commands.md` |
 | chrome | the interface around a document | | `1-Foundations/ambre-spec-chrome.md` |
+| home region | the one region of the shell where a command lives | | `1-Foundations/ambre-spec-shell.md` |
+| context panel | the region showing the document, or what applies to the selection | | `1-Foundations/ambre-spec-shell.md` |
+| context bar | the floating bar of frequent panel actions over a selection | mini-bar, near-selection bar | `1-Foundations/ambre-spec-shell.md` |
+| context menu | the menu a right click opens: the clipboard, then panel actions | | `1-Foundations/ambre-spec-shell.md` |
+| creation bar | the region holding the modes that insert a new object | | `1-Foundations/ambre-spec-shell.md` |
+| Ambre menu | the menu of file actions behind the logo | | `1-Foundations/ambre-spec-shell.md` |
+| cover | the part of the canvas a floating surface hides | | `1-Foundations/ambre-spec-shell.md` |
 | launcher | the surface that opens and lists documents | | `1-Foundations/ambre-spec-launcher.md` |
 | view | the UI-thread object painting one document | | `1-Foundations/ambre-spec-ui.md` |
 

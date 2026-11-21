@@ -15,23 +15,8 @@
 // ============================================================================
 
 use ambre_core::Flag as _;
-use ambre_core::{Scale, ScalesTo, View};
+use ambre_core::{Scale, ScalesTo, View, ZoomRange};
 use leptos::prelude::*;
-
-/// Zoom presets offered by [`ZoomChip`] when the app supplies none, for the
-/// zoom from the space `S` into the view. The canvas apps (Trame grid zoom,
-/// Toile board zoom) share the same ladder so the menu reads identically.
-#[must_use]
-pub const fn zoom_presets<S: ScalesTo<View>>() -> [Scale<S, View>; 6] {
-    [
-        Scale::positive(0.5),
-        Scale::positive(0.75),
-        Scale::ONE,
-        Scale::positive(1.25),
-        Scale::positive(1.5),
-        Scale::positive(2.0),
-    ]
-}
 
 /// The app-name caption pinned to the left of a status bar (for example "Trame",
 /// "Toile"): a dim, small label, styled by the shared `statusbar-label` class.
@@ -41,40 +26,47 @@ pub fn StatusLabel(#[prop(into)] label: String) -> impl IntoView {
 }
 
 /// Interactive zoom chip: a button showing `<pct> %` that opens a preset menu.
-/// `zoom` is the shared zoom factor (`1.0` = 100%) the canvas view publishes
-/// each frame; the menu writes it and the view polls it. Shared by Trame (grid
-/// zoom) and Toile (board zoom, `toile-status-bar`) so the two read
-/// identically. `S` is the space the zoom scales into the view: [`ambre_core::Doc`]
-/// for a grid, [`ambre_core::Board`] for a board.
+/// `zoom` is the factor (`1.0` = 100%) the canvas view publishes each frame;
+/// the menu writes it and the view polls it. Every application that zooms
+/// shows this chip (`CHROME-206`). The menu lists the stops of the one ladder
+/// inside `range`, so every chip reads the same ladder (`ZOOM-006`). `S` is
+/// the space the zoom scales into the view: [`ambre_core::Doc`] for a grid or
+/// a page, [`ambre_core::Board`] for a board.
 #[component]
 pub fn ZoomChip<S: ScalesTo<View>>(
     /// The live zoom factor (`1.0` = 100%). The menu sets it; the view mirrors it.
     zoom: RwSignal<Scale<S, View>>,
-    /// Preset factors offered by the menu, low-to-high. Defaults to [`zoom_presets`].
-    /// The first and the last bound what the menu writes.
-    #[prop(optional, into)]
-    presets: Option<Vec<Scale<S, View>>>,
+    /// The application's own clamp. The menu offers the ladder stops inside
+    /// it, and a pick lands inside it (`ZOOM-002`).
+    range: ZoomRange<S>,
     /// Tooltip for the button (app-specific wording). Defaults to `"Zoom"`.
     #[prop(optional, into)]
     title: Option<String>,
 ) -> impl IntoView {
+    // The space stops at this wrapper. The menu below reads bare factors, so
+    // the main instance carries one copy of its view. A stop reads back as
+    // the scale it came from.
+    let factors = range.presets().map(Scale::get).collect();
+    let pick = Callback::new(move |factor: f64| {
+        if let Some(z) = Scale::new(factor) {
+            zoom.set(range.clamp(z));
+        }
+    });
+    zoom_chip(
+        Signal::derive(move || zoom.get().get()),
+        factors,
+        pick,
+        title.unwrap_or_else(|| "Zoom".to_owned()),
+    )
+}
+
+/// The chip of [`ZoomChip`], over bare factors. `factors` lists the stops
+/// of the menu, and `pick` receives the stop a person picks.
+fn zoom_chip(zoom: Signal<f64>, factors: Vec<f64>, pick: Callback<f64>, title: String) -> AnyView {
     // The preset menu is collapsed by default: only the readout shows.
     let show = RwSignal::new(crate::Openness::Closed);
     // Stored so the (repeatable) `Show` child can iterate it without moving it.
-    let presets = presets.unwrap_or_else(|| zoom_presets::<S>().to_vec());
-    // The presets may run either way, so the range is their extremes.
-    let lo = presets
-        .iter()
-        .copied()
-        .reduce(|a, b| if b < a { b } else { a })
-        .unwrap_or(Scale::ONE);
-    let hi = presets
-        .iter()
-        .copied()
-        .reduce(|a, b| if b > a { b } else { a })
-        .unwrap_or(Scale::ONE);
-    let presets = StoredValue::new(presets);
-    let title = title.unwrap_or_else(|| "Zoom".to_owned());
+    let presets = StoredValue::new(factors);
     let menu_ref = NodeRef::<leptos::html::Ul>::new();
     // An opened menu takes the focus, so the keys reach it (`CHROME-026`).
     Effect::new(move |_| {
@@ -92,7 +84,7 @@ pub fn ZoomChip<S: ScalesTo<View>>(
                 aria-expanded=move || show.get().aria()
                 on:click=move |_| show.update(|v| *v = v.toggled())
             >
-                {move || format!("{:.0} %", zoom.get().get() * 100.0)}
+                {move || format!("{:.0} %", zoom.get() * 100.0)}
             </button>
             <Show when=move || show.get() == crate::Openness::Open fallback=|| ()>
                 <ul
@@ -110,10 +102,9 @@ pub fn ZoomChip<S: ScalesTo<View>>(
                         .into_iter()
                         .rev()
                         .map(|z| {
-                            let pct = format!("{:.0} %", z.get() * 100.0);
+                            let pct = format!("{:.0} %", z * 100.0);
                             // `selected` highlights the row matching the live zoom.
-                            let selected =
-                                move || (zoom.get().get() - z.get()).abs() < f64::EPSILON;
+                            let selected = move || (zoom.get() - z).abs() < f64::EPSILON;
                             view! {
                                 <li role="none">
                                     <button
@@ -122,7 +113,7 @@ pub fn ZoomChip<S: ScalesTo<View>>(
                                         class:selected=selected
                                         aria-checked=move || crate::Checked::from_bool(selected()).aria()
                                         on:click=move |_| {
-                                            zoom.set(z.clamped(lo, hi));
+                                            pick.run(z);
                                             show.set(crate::Openness::Closed);
                                         }
                                     >
@@ -136,6 +127,7 @@ pub fn ZoomChip<S: ScalesTo<View>>(
             </Show>
         </div>
     }
+    .into_any()
 }
 
 /// The expandable render-diagnostics panel behind [`PerfChip`]. App-supplied so

@@ -15,6 +15,7 @@
 pub mod commands;
 pub mod grid;
 pub mod locale;
+pub mod panel;
 pub mod renderer;
 pub mod view;
 

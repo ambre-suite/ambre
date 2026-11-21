@@ -572,15 +572,30 @@ impl ToileState {
 
     // -- z-order --------------------------------------------------------
 
-    pub(super) fn reorder(&mut self, node: NodeId, to: ZTarget) -> ToileOutcome {
-        let Some(from_idx) = self.layers.iter().position(|n| n == &node) else {
+    /// Move each of `nodes` in turn, in one commit, so the whole move is one
+    /// undo item (`CHROME-173`).
+    pub(super) fn reorder(&mut self, nodes: &[NodeId], to: ZTarget) -> ToileOutcome {
+        let mut moved = false;
+        for node in nodes {
+            moved |= self.move_in_layers(node, to);
+        }
+        if !moved {
             return ToileOutcome::display_only(Vec::new());
+        }
+        self.doc.commit();
+        self.emit_with_update(vec![self.viewport_event()])
+    }
+
+    /// Move one node in the layer list, uncommitted. False when it stays.
+    fn move_in_layers(&mut self, node: &NodeId, to: ZTarget) -> bool {
+        let Some(from_idx) = self.layers.iter().position(|n| n == node) else {
+            return false;
         };
         // A locked element keeps its place in the order (`TOILE-033`).
-        if let NodeId::Element(id) = &node
+        if let NodeId::Element(id) = node
             && self.holds_a_lock(id)
         {
-            return ToileOutcome::display_only(Vec::new());
+            return false;
         }
         let last = self.layers.len().saturating_sub(1);
         let to_idx = match to {
@@ -591,15 +606,14 @@ impl ToileState {
             ZTarget::Index(i) => i.to_usize().min(last),
         };
         if to_idx == from_idx {
-            return ToileOutcome::display_only(Vec::new());
+            return false;
         }
         let _ = self
             .doc
             .get_movable_list(Root::Layers.as_str())
             .mov(from_idx, to_idx);
-        self.doc.commit();
         self.rematerialize_layers();
-        self.emit_with_update(vec![self.viewport_event()])
+        true
     }
 
     // -- freehand ---------------------------------------------------------

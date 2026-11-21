@@ -1,0 +1,887 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ambre Shared Chrome</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&family=Noto+Serif:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: control strip, then one live mock of the Ambre shell (desktop or phone), then the placement rules it embodies. */
+:root{
+  --bg:#f6f4f0; --surface:#ffffff; --sunken:#efece6; --line:#e3ddd3; --line-strong:#cfc7ba;
+  --ink:#1f1b16; --muted:#6f675c; --faint:#9a9184;
+  --accent:#b4530b; --accent-ink:#ffffff; --accent-soft:#f6e3d1; --sel:#b4530b22;
+  --ok:#2f8f5b;
+  --role-file:#2f6fd6; --role-me:#8a4fd1; --role-view:#138a86; --role-doc:#b4530b; --role-near:#c23a78; --role-modes:#3f8a2f; --role-cat:#5b6472; --role-ctx:#8f6a00;
+  --shadow:0 1px 2px #1f1b1614, 0 6px 20px #1f1b1617;
+  --font-ui:"Noto Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-page:"Noto Serif", Georgia, serif;
+  --font-mono:"JetBrains Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#13110e; --surface:#1d1a16; --sunken:#171511; --line:#312c25; --line-strong:#453e35;
+  --ink:#eee8df; --muted:#a59a89; --faint:#7b7266;
+  --accent:#ec8a3c; --accent-ink:#1d1206; --accent-soft:#3a2614; --sel:#ec8a3c2e;
+  --ok:#4fbf83;
+  --role-file:#6ea0f0; --role-me:#b48af0; --role-view:#3fc2bd; --role-doc:#ec8a3c; --role-near:#ec6aa6; --role-modes:#7cc46a; --role-cat:#9aa3b2; --role-ctx:#d9b040;
+  --shadow:0 1px 2px #0006, 0 8px 24px #0008; color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#13110e; --surface:#1d1a16; --sunken:#171511; --line:#312c25; --line-strong:#453e35;
+  --ink:#eee8df; --muted:#a59a89; --faint:#7b7266;
+  --accent:#ec8a3c; --accent-ink:#1d1206; --accent-soft:#3a2614; --sel:#ec8a3c2e;
+  --ok:#4fbf83;
+  --role-file:#6ea0f0; --role-me:#b48af0; --role-view:#3fc2bd; --role-doc:#ec8a3c; --role-near:#ec6aa6; --role-modes:#7cc46a; --role-cat:#9aa3b2; --role-ctx:#d9b040;
+  --shadow:0 1px 2px #0006, 0 8px 24px #0008; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-ui);font-size:14px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+button:focus-visible,[contenteditable]:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+svg.i{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.wrap{max-width:1280px;margin:0 auto;display:grid;gap:18px}
+header.top h1{font-size:22px;margin:0;font-weight:700;letter-spacing:-.01em;text-wrap:balance}
+header.top p{margin:4px 0 0;color:var(--muted);max-width:70ch}
+.banner{margin:10px 0 6px;padding:10px 14px;background:var(--accent-soft);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:10px;color:var(--ink);font-size:13px;max-width:100ch}
+.banner code{font-family:var(--font-mono);font-size:12px}
+
+/* control strip */
+.controls{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.seg{display:inline-flex;background:var(--sunken);border:1px solid var(--line);border-radius:10px;padding:3px;gap:2px}
+.seg button{padding:5px 12px;border-radius:7px;color:var(--muted);font-weight:500}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px #0002}
+.ctl-label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);margin-right:6px}
+.ctl{display:flex;align-items:center}
+.switch{display:inline-flex;align-items:center;gap:8px;color:var(--muted);font-weight:500}
+.switch .knob{width:34px;height:20px;border-radius:99px;background:var(--line-strong);position:relative;transition:background .15s}
+.switch .knob::after{content:"";position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:var(--surface);transition:left .15s}
+.switch[aria-pressed="true"] .knob{background:var(--accent)}
+.switch[aria-pressed="true"] .knob::after{left:17px}
+
+/* stage */
+.stage{overflow-x:auto;border-radius:14px}
+.stage.phone{display:flex;justify-content:center;padding:8px 0}
+
+/* ---------- desktop mock ---------- */
+.mock{min-width:980px;height:660px;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--surface);
+  display:grid;grid-template-columns:1fr auto;grid-template-rows:48px auto 1fr 32px;position:relative;box-shadow:var(--shadow)}
+.topbar{grid-column:1/-1;display:flex;align-items:center;gap:10px;padding:0 10px 0 8px;border-bottom:1px solid var(--line);position:relative;background:var(--surface)}
+.logo{display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:8px;font-weight:700;position:relative}
+.logo:hover,.logo[aria-expanded="true"]{background:var(--sunken)}
+.mark{width:20px;height:20px;border-radius:6px;background:linear-gradient(140deg,#f2a24a,var(--accent));position:relative}
+.mark::after{content:"";position:absolute;inset:5px;border-radius:50%;border:2px solid #fff9;border-right-color:transparent}
+.docname{padding:4px 6px;border-radius:6px;font-weight:500;min-width:40px;white-space:nowrap}
+.docname:hover{background:var(--sunken)}
+.sync{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12.5px}
+.sync::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--ok)}
+.cmdk{margin:0 auto;display:flex;align-items:center;gap:8px;width:300px;padding:6px 10px;border:1px solid var(--line);border-radius:9px;color:var(--faint);background:var(--sunken);position:relative}
+.cmdk kbd,.kbd{font-family:var(--font-mono);font-size:11px;border:1px solid var(--line-strong);border-bottom-width:2px;border-radius:5px;padding:0 5px;color:var(--muted);background:var(--surface)}
+.cmdk kbd{margin-left:auto}
+.right{display:flex;align-items:center;gap:8px}
+.share{display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;background:var(--accent);color:var(--accent-ink);font-weight:600}
+.peers{display:flex}
+.av{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;color:#fff;border:2px solid var(--surface)}
+.peers .av{margin-left:-8px}
+.me{position:relative;border-radius:50%}
+.me .av{background:#c9a227}
+
+.formula{grid-column:1;display:flex;align-items:center;gap:8px;padding:0 10px;height:32px;border-bottom:1px solid var(--line);font-family:var(--font-mono);font-size:12.5px;position:relative}
+.formula .name{width:78px;color:var(--muted);border-right:1px solid var(--line);padding-right:8px}
+.formula .fx{font-style:italic;color:var(--faint);font-family:var(--font-page)}
+
+.content{grid-column:1;grid-row:3;position:relative;overflow:hidden;background:var(--sunken)}
+.status{grid-column:1;grid-row:4;display:flex;align-items:center;gap:14px;padding:0 8px 0 12px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);position:relative;background:var(--surface)}
+.status .stat{white-space:nowrap}
+.status .spacer{flex:1}
+.anchor{position:relative;display:inline-flex}
+.vt{display:flex;align-items:center;gap:5px;padding:3px 7px;border-radius:6px;color:var(--muted)}
+.vt:hover{background:var(--sunken)}
+.vt[aria-pressed="true"]{color:var(--ink);background:var(--sunken)}
+.zoom{position:relative;font-variant-numeric:tabular-nums;font-weight:600;color:var(--ink);padding:3px 8px;border-radius:6px;display:flex;gap:4px;align-items:center}
+.zoom:hover,.zoom[aria-expanded="true"]{background:var(--sunken)}
+.tabs{display:flex;gap:2px}
+.tab{padding:3px 10px;border-radius:6px}
+.tab.on{background:var(--sunken);color:var(--ink);font-weight:600;box-shadow:inset 0 -2px 0 var(--accent)}
+
+.panel{grid-column:2;grid-row:2/5;width:284px;border-left:1px solid var(--line);background:var(--surface);display:flex;flex-direction:column;position:relative;transition:width .18s}
+.panel.closed{width:46px}
+.panel-head{display:flex;align-items:center;gap:8px;padding:12px 12px 10px 14px;border-bottom:1px solid var(--line)}
+.panel-head h3{margin:0;font-size:13px;font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.panel-head .ctx{font-size:11px;color:var(--faint);font-weight:500}
+.icobtn{width:28px;height:28px;display:grid;place-items:center;border-radius:7px;color:var(--muted)}
+.icobtn:hover{background:var(--sunken);color:var(--ink)}
+.panel-body{overflow:auto;padding:4px 0 16px}
+.sec{padding:12px 14px;border-bottom:1px solid var(--line)}
+.sec h4{margin:0 0 10px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);font-weight:600}
+.row{display:grid;grid-template-columns:84px 1fr;align-items:center;gap:8px;margin-top:7px;font-size:12.5px}
+.row>span{color:var(--muted)}
+.field{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:4px 8px;border:1px solid var(--line);border-radius:7px;background:var(--sunken);min-height:28px;font-variant-numeric:tabular-nums}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.mini{display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--faint)}
+.mini .field{font-size:12.5px;color:var(--ink)}
+.chips{display:flex;gap:4px;flex-wrap:wrap}
+.chip{padding:3px 8px;border:1px solid var(--line);border-radius:7px;background:var(--sunken);font-size:12px;display:flex;align-items:center;gap:4px}
+.chip.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.sw{width:18px;height:18px;border-radius:5px;border:1px solid #0002}
+.act{display:flex;align-items:center;gap:8px;width:100%;padding:7px 8px;border-radius:7px;font-size:12.5px;text-align:left}
+.act:hover{background:var(--sunken)}
+.act .kbd{margin-left:auto}
+.hint{font-size:12px;color:var(--faint);margin:8px 0 0}
+.rail{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 0}
+
+/* floating near-caret bar and creation tools */
+.float{position:absolute;display:flex;align-items:center;gap:2px;padding:4px;background:var(--surface);border:1px solid var(--line);border-radius:11px;box-shadow:var(--shadow);z-index:5;white-space:nowrap}
+.float .b{height:30px;min-width:30px;padding:0 7px;display:flex;align-items:center;justify-content:center;gap:4px;border-radius:7px;font-size:12.5px;color:var(--ink)}
+.float .b:hover{background:var(--sunken)}
+.float .b.on{background:var(--accent-soft);color:var(--accent)}
+.float .sep{width:1px;height:20px;background:var(--line);margin:0 3px}
+.near{bottom:calc(100% + 10px);left:50%;transform:translateX(-50%)}
+.tools{bottom:14px;left:50%;transform:translateX(-50%);padding:5px}
+.tools .b{height:36px;min-width:36px}
+.tools .b.on{background:var(--accent);color:var(--accent-ink)}
+.tools .lbl{font-size:12px;color:var(--muted);padding:0 6px 0 2px}
+
+/* popovers */
+.pop{position:absolute;z-index:30;min-width:230px;background:var(--surface);border:1px solid var(--line);border-radius:11px;box-shadow:var(--shadow);padding:6px}
+.pop .it{display:flex;align-items:center;gap:10px;width:100%;padding:7px 9px;border-radius:7px;text-align:left;font-size:13px}
+.pop .it:hover{background:var(--sunken)}
+.pop .it .kbd,.pop .it .sub{margin-left:auto;color:var(--faint);font-size:11.5px}
+.kbd{white-space:nowrap}
+.pop .it .sub{text-align:right}
+.pop hr{border:0;border-top:1px solid var(--line);margin:5px 4px}
+.pop .who{padding:8px 9px 6px}
+.pop .who b{display:block}
+.pop .who small{color:var(--muted)}
+.pop .it.cur{color:var(--accent);font-weight:600}
+.pop .note{font-size:11.5px;color:var(--faint);padding:4px 9px 6px;max-width:240px}
+.pop .it:disabled,.mlist .it:disabled{color:var(--faint);cursor:default;background:none}
+.pop .it:disabled svg.i{opacity:.55}
+/* context menu: a .pop placed at the pointer, never inside a button */
+.ctxmenu{min-width:252px;animation:ctxin .09s ease-out}
+.ctxmenu .it{padding:6px 9px}
+.ctxmenu .note{border-top:1px solid var(--line);margin-top:5px;padding-top:7px;width:0;min-width:100%;max-width:none}
+@keyframes ctxin{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:none}}
+
+.scrim{position:absolute;inset:0;z-index:40;background:#1f1b1640;display:flex;justify-content:center;align-items:flex-start;padding-top:70px}
+.palette{width:560px;max-width:92%;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+.palette input{width:100%;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--ink);font:inherit;font-size:15px;padding:14px 16px;outline:none}
+.palette ul{list-style:none;margin:0;padding:6px;max-height:330px;overflow:auto}
+.palette li{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;font-size:13.5px}
+.palette li.hl{background:var(--sunken)}
+.palette li .tag{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;padding:1px 6px;border-radius:5px;border:1px solid currentColor;margin-left:auto;white-space:nowrap}
+.palette .foot{display:flex;gap:14px;padding:8px 14px;border-top:1px solid var(--line);font-size:11.5px;color:var(--faint)}
+
+/* ---------- app canvases ---------- */
+/* Prose */
+.prose-scroll{position:absolute;inset:0;overflow:hidden;display:flex;justify-content:center;padding-top:28px}
+.page{width:500px;height:707px;background:#fffdf9;color:#29241e;box-shadow:0 1px 3px #0002,0 10px 30px #0001;padding:62px 64px;font-family:var(--font-page);font-size:14.5px;line-height:1.7;transform-origin:top center;flex:none;position:relative}
+:root[data-theme="dark"] .page{background:#fbf8f2}
+.page h2{font-family:var(--font-ui);font-size:21px;margin:0 0 14px;letter-spacing:-.01em;color:#1f1b16}
+.page p{margin:0 0 12px}
+.margins{position:absolute;inset:44px 46px;border:1px dashed #b4530b55;pointer-events:none}
+.hit{position:relative;cursor:text;border-radius:2px}
+.hit.on{background:#b4530b2e;box-shadow:0 0 0 1px #b4530b40}
+.caret{display:inline-block;width:2px;height:1.15em;background:var(--accent);vertical-align:-2px;margin-left:1px}
+
+/* Trame */
+.sheet{position:absolute;inset:0;background:var(--surface);overflow:hidden;font-variant-numeric:tabular-nums;font-size:12.5px}
+.sheet table{border-collapse:collapse;table-layout:fixed}
+.sheet td,.sheet th{height:26px;border:1px solid var(--line);padding:0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sheet th{background:var(--sunken);color:var(--muted);font-weight:500;font-size:11.5px}
+.sheet td.n{text-align:right}
+.sheet tr.h td{font-weight:600}
+.selbox{position:absolute;border:2px solid var(--accent);background:var(--sel);z-index:3;cursor:cell}
+.selbox::after{content:"";position:absolute;right:-4px;bottom:-4px;width:7px;height:7px;background:var(--accent);border:1px solid var(--surface)}
+.cellcur{position:absolute;border:2px solid var(--accent);z-index:3}
+
+/* Toile */
+.board{position:absolute;inset:0;background-color:var(--sunken);background-image:radial-gradient(var(--line-strong) 1px,transparent 1.2px);background-size:22px 22px}
+.shape{position:absolute;display:grid;place-items:center;font-size:13px;font-weight:500;cursor:default}
+.shape.rect{border-radius:10px;background:#fbe7d2;border:2px solid #d98a3d;color:#5b3412}
+.shape.ell{border-radius:50%;background:#dbe9f7;border:2px solid #5d8fc9;color:#1d3c63}
+.shape.note{background:#fff3a8;color:#4a4020;box-shadow:0 4px 10px #0002;transform:rotate(-2deg);padding:12px;font-family:var(--font-page);place-items:start}
+.shape.on{outline:2px solid var(--accent);outline-offset:4px}
+.shape.on .h{position:absolute;width:9px;height:9px;background:var(--surface);border:2px solid var(--accent);border-radius:2px}
+.board svg.link{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+
+/* ---------- roles overlay ---------- */
+.roles [data-role]{outline:2px dashed var(--rc);outline-offset:-2px}
+.roles [data-role]::after{content:attr(data-role);position:absolute;z-index:20;font:600 10.5px/1 var(--font-ui);letter-spacing:.04em;text-transform:uppercase;color:#fff;background:var(--rc);padding:4px 6px;border-radius:5px;white-space:nowrap;pointer-events:none}
+.roles [data-rc="file"]{--rc:var(--role-file)} .roles [data-rc="me"]{--rc:var(--role-me)}
+.roles [data-rc="view"]{--rc:var(--role-view)} .roles [data-rc="doc"]{--rc:var(--role-doc)}
+.roles [data-rc="near"]{--rc:var(--role-near)} .roles [data-rc="modes"]{--rc:var(--role-modes)}
+.roles [data-rc="cat"]{--rc:var(--role-cat)} .roles [data-rc="ctx"]{--rc:var(--role-ctx)}
+.roles .logo::after{top:calc(100% + 4px);left:4px}
+.roles .me::after{top:calc(100% + 4px);right:0}
+.roles .cmdk::after{top:calc(100% + 4px);left:50%;transform:translateX(-50%)}
+.roles .status::after{bottom:calc(100% + 6px);right:8px}
+.roles .panel::after{top:8px;right:calc(100% + 8px)}
+.roles .near::after{bottom:calc(100% + 4px);left:50%;transform:translateX(-50%)}
+.roles .tools::after{bottom:calc(100% + 6px);left:50%;transform:translateX(-50%)}
+.roles .formula::after{top:4px;right:10px}
+.roles .ctxmenu::after{bottom:calc(100% + 4px);left:0}
+.roles .sheetp::after{bottom:calc(100% + 6px);left:14px}
+.roles .sysmenu::after{bottom:calc(100% + 4px);left:0}
+
+/* ---------- phone mock ---------- */
+.phone-frame{width:390px;height:780px;border-radius:44px;border:10px solid #1a1814;background:var(--surface);position:relative;overflow:hidden;box-shadow:var(--shadow);flex:none;display:flex;flex-direction:column}
+.os{height:34px;display:flex;align-items:center;justify-content:space-between;padding:0 26px;font-size:12.5px;font-weight:600;flex:none}
+.os .notch{width:110px;height:26px;border-radius:14px;background:#1a1814}
+.ptop{height:48px;display:flex;align-items:center;gap:8px;padding:0 10px;border-bottom:1px solid var(--line);position:relative;flex:none}
+.ptop .docname{flex:1;overflow:hidden;text-overflow:ellipsis}
+.pcontent{flex:1;position:relative;overflow:hidden;background:var(--sunken)}
+.pcontent .page{width:330px;height:470px;padding:34px 30px;font-size:12.5px;line-height:1.65}
+.pcontent .page h2{font-size:17px}
+.fab{position:absolute;right:16px;bottom:18px;width:52px;height:52px;border-radius:16px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;box-shadow:var(--shadow);z-index:6}
+.fab svg.i{width:22px;height:22px}
+.pinch{position:absolute;left:12px;bottom:22px;font-size:11.5px;color:var(--faint);background:var(--surface);border:1px solid var(--line);border-radius:99px;padding:4px 10px;z-index:4}
+.acc{flex:none;display:flex;align-items:center;gap:2px;padding:5px 6px;border-top:1px solid var(--line);background:var(--surface);position:relative}
+.acc .b{height:34px;min-width:36px;display:grid;place-items:center;border-radius:8px}
+.acc .b.on{background:var(--accent-soft);color:var(--accent)}
+.acc .grow{flex:1}
+.kb{flex:none;height:214px;background:#d4d1cc;padding:8px 4px;display:grid;grid-template-rows:repeat(4,1fr);gap:8px}
+:root[data-theme="dark"] .kb{background:#2a2723}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .kb{background:#2a2723}}
+.kb div{display:flex;gap:5px;justify-content:center}
+.kb span{flex:1;max-width:32px;border-radius:5px;background:var(--surface);box-shadow:0 1px 0 #0003}
+.kb .wide{max-width:180px}
+.sheetp{position:absolute;left:0;right:0;bottom:0;background:var(--surface);border-radius:18px 18px 0 0;box-shadow:0 -6px 24px #0002;z-index:8;display:flex;flex-direction:column;transition:height .2s}
+.sheetp .grab{width:40px;height:5px;border-radius:9px;background:var(--line-strong);margin:8px auto 4px;flex:none}
+.sheetp .sh-head{display:flex;align-items:center;gap:8px;padding:2px 14px 8px;flex:none}
+.sheetp .sh-head b{flex:1;font-size:14px}
+.sheetp .sh-body{overflow:auto;flex:1}
+.quick{display:flex;gap:6px;padding:0 14px 12px;overflow-x:auto;flex:none}
+.quick .b{flex:none;height:38px;min-width:42px;padding:0 10px;display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:10px;background:var(--sunken);font-size:13px}
+.toolgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:6px 14px 18px}
+.toolgrid .b{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 4px;border:1px solid var(--line);border-radius:12px;background:var(--sunken);font-size:12px}
+.toolgrid svg.i{width:22px;height:22px}
+.pscrim{position:absolute;inset:0;background:#1f1b1633;z-index:7}
+.ptabs{flex:none;display:flex;align-items:center;gap:4px;padding:6px 8px;border-top:1px solid var(--line);background:var(--surface);overflow-x:auto;font-size:13px;color:var(--muted);position:relative}
+.ptabs .tab{padding:6px 12px;border-radius:8px;white-space:nowrap}
+.ptabs .tab.on{background:var(--sunken);color:var(--ink);font-weight:600;box-shadow:inset 0 -2px 0 var(--accent)}
+.ptabs .zl{margin-left:auto;font-variant-numeric:tabular-nums;color:var(--faint);font-size:12px;white-space:nowrap;padding-left:8px}
+.phone-frame .pop{min-width:250px}
+.mlist{padding:0 8px 14px}
+.mlist .it{display:flex;align-items:center;gap:12px;width:100%;padding:10px 10px;border-radius:9px;text-align:left;font-size:14px}
+.mlist .it:active{background:var(--sunken)}
+.mlist .it .kbd{margin-left:auto}
+.mlist hr{border:0;border-top:1px solid var(--line);margin:4px 6px}
+.mlist .note{font-size:11.5px;color:var(--faint);padding:6px 10px 0}
+.lp-hint{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:6;display:flex;align-items:center;gap:6px;white-space:nowrap;font-size:12px;font-weight:500;color:var(--ink);background:var(--surface);border:1px solid var(--line-strong);border-radius:99px;padding:6px 12px;box-shadow:var(--shadow)}
+.lp-hint .dot2{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px var(--accent-soft)}
+.sysmenu{position:absolute;top:-17px;left:50%;transform:translateX(-50%);display:flex;background:#2b2824;color:#fff;border-radius:9px;font:500 12px/1 var(--font-ui);box-shadow:0 4px 14px #0004;white-space:nowrap;z-index:5;overflow:visible}
+.sysmenu span{padding:8px 10px}
+.sysmenu span+span{border-left:1px solid #ffffff2e}
+.pnote{position:absolute;left:10px;right:10px;bottom:10px;z-index:4;font-size:11px;line-height:1.35;color:var(--muted);background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:6px 9px;box-shadow:var(--shadow)}
+
+/* ---------- rules ---------- */
+.rules{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:18px}
+@media (max-width:860px){.rules{grid-template-columns:1fr}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 18px;min-width:0}
+.card h2{font-size:15px;margin:0 0 10px}
+.tbl{overflow-x:auto}
+.card table{border-collapse:collapse;width:100%;font-size:13px}
+.card th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--faint);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line)}
+.card td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+.card tr:last-child td{border-bottom:0}
+.dot{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:6px;vertical-align:0}
+.card ul{margin:0;padding-left:18px}
+.card li{margin:6px 0}
+.gone{color:var(--muted)}
+.gone s{color:var(--faint)}
+/* ---------- tooltip: one element, fixed to the viewport, filled from CMD ---------- */
+.tip{position:fixed;left:0;top:0;z-index:1000;pointer-events:none;max-width:280px;background:var(--ink);color:var(--bg);border-radius:8px;padding:6px 9px 7px;font:500 12.5px/1.35 var(--font-ui);box-shadow:0 2px 6px #0003,0 8px 22px #0003;animation:tipin .09s ease-out}
+.tip[hidden]{display:none}
+.tip-l1{display:flex;align-items:center;gap:12px;white-space:nowrap}
+.tip .kbd{margin-left:auto;background:transparent;color:inherit;opacity:.8;border-color:color-mix(in srgb,var(--bg) 45%,transparent)}
+.tip-l2{margin-top:3px;font-weight:400;font-size:12px;color:color-mix(in srgb,var(--bg) 72%,var(--ink))}
+@keyframes tipin{from{opacity:0;transform:translateY(var(--tip-dy,2px))}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}.tip{animation:none}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <h1>Ambre shared chrome</h1>
+    <div class="banner" role="note"><b>Non-normative.</b> Snapshot of a design discussion held on 2026-11-21. The decisions it led to live in the shell spec (<code>specs/1-Foundations/ambre-spec-shell.md</code>) and the application specs; where this page and a spec disagree, the spec wins. This file is frozen: it is not updated when the specs change.</div>
+    <p>One grammar for Prose, Trame and Toile. Each action has one place, chosen by what it touches: the view, the document, the file or the account. Everything is clickable. <span class="kbd">Ctrl</span> <span class="kbd">K</span> opens the command palette, and a right click on the content (or <span class="kbd">Shift F10</span>) opens the context menu. Hovering an icon, or reaching it with the keyboard, shows its name and its shortcut.</p>
+  </header>
+
+  <div class="controls" role="toolbar" aria-label="Mockup settings">
+    <div class="ctl"><span class="ctl-label">App</span>
+      <div class="seg" id="seg-app"><button data-v="prose">Prose</button><button data-v="trame">Trame</button><button data-v="toile">Toile</button></div></div>
+    <div class="ctl"><span class="ctl-label">Screen</span>
+      <div class="seg" id="seg-dev"><button data-v="desktop">Desktop</button><button data-v="phone">Phone</button></div></div>
+    <div class="ctl"><span class="ctl-label">Selection</span>
+      <div class="seg" id="seg-sel"><button data-v="0">None</button><button data-v="1">A selection</button></div></div>
+    <button class="switch" id="sw-roles" aria-pressed="false"><span class="knob"></span>Show roles</button>
+  </div>
+
+  <div class="stage" id="stage"></div>
+
+  <section class="rules">
+    <div class="card">
+      <h2>Where each action goes</h2>
+      <div class="tbl"><table>
+        <thead><tr><th>Region</th><th>What it holds</th><th>Criterion</th></tr></thead>
+        <tbody>
+          <tr><td><span class="dot" style="background:var(--role-view)"></span>Status bar</td><td>zoom, ruler, gridlines, page breaks, statistics, sheet tabs</td><td><b>My view</b>: writes nothing to the document</td></tr>
+          <tr><td><span class="dot" style="background:var(--role-doc)"></span>Context panel</td><td>formatting, merge, sort, filter; with no selection: margins, format, background</td><td><b>The document</b>: writes to the CRDT; the home of every command of the selection</td></tr>
+          <tr><td><span class="dot" style="background:var(--role-near)"></span>Context bar</td><td>the 5 or 6 most frequent actions, near the selection</td><td><b>Frequency</b>: a shortcut to the panel, nothing the panel lacks</td></tr>
+          <tr><td><span class="dot" style="background:var(--role-ctx)"></span>Context menu</td><td>right click: cut, copy, paste, then the panel commands that apply under the pointer</td><td><b>The clipboard first</b>, then panel commands: nothing the panel lacks, except the clipboard</td></tr>
+          <tr><td><span class="dot" style="background:var(--role-modes)"></span>Creation bar</td><td>insert text, a picture, a table, a shape, a chart, a comment</td><td><b>A mode</b>: creates, does not modify</td></tr>
+          <tr><td><span class="dot" style="background:var(--role-file)"></span>Ambre menu ▾</td><td>home, import, export, print, versions</td><td><b>The file</b>: nothing visual</td></tr>
+          <tr><td><span class="dot" style="background:var(--role-me)"></span>Avatar menu</td><td>account, settings, theme, sign out</td><td><b>Me</b></td></tr>
+          <tr><td><span class="dot" style="background:var(--ink)"></span>Tooltip</td><td>every bare icon shows its name, its shortcut and, where useful, a description</td><td><b>Read, never written</b>: read from the description of the command, never written by hand</td></tr>
+          <tr><td><span class="dot" style="background:var(--role-cat)"></span>Command palette <span class="kbd">Ctrl K</span></td><td>every command of the registry, with its shortcut</td><td><b>The catalogue</b>: replaces the menus</td></tr>
+        </tbody>
+      </table></div>
+      <p class="hint" style="font-size:12.5px;color:var(--muted);margin-top:12px"><b style="color:var(--ink)">What is contextual repeats the panel.</b> The context panel, the context bar and the context menu show the commands of the context panel; the panel is their one home. Only the clipboard (cut, copy, paste) has its home in the context menu.</p>
+    </div>
+    <div class="card">
+      <h2>What goes away</h2>
+      <ul class="gone">
+        <li><s>Docked toolbar</s>: replaced by the context bar and the panel.</li>
+        <li><s>Drop-down menus of Toile</s>: replaced by the command palette.</li>
+        <li><s>Vertical tool palette of Toile</s>: becomes the creation bar, shared by the three apps.</li>
+        <li><s>Hamburger menu</s>: the Ambre ▾ logo plays that role.</li>
+      </ul>
+      <h2 style="margin-top:16px">Three rules for the phone</h2>
+      <ul>
+        <li>One panel carries the formatting: it rises from the bottom and replaces the keyboard.</li>
+        <li>No action exists on hover alone.</li>
+        <li>On text, the context bar leaves cut, copy and paste to the system menu; on a cell or a shape, a long press opens the context menu as a bottom sheet.</li>
+      </ul>
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+const P={
+ chev:"M6 9l6 6 6-6",bold:"M6 4h8a4 4 0 0 1 0 8H6z M6 12h9a4 4 0 0 1 0 8H6z",italic:"M19 4h-9 M14 20H5 M15 4 9 20",
+ underline:"M6 4v6a6 6 0 0 0 12 0V4 M4 20h16",link:"M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7 M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7",
+ image:"M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z M9 8.5a1.5 1.5 0 1 0 0 .01 M21 15l-5-5L5 21",
+ table:"M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z M3 9h18 M3 15h18 M9 3v18 M15 3v18",
+ sep:"M3 12h18 M8 7h8 M8 17h8",comment:"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z",
+ cursor:"M4 4l7 17 2.5-7.5L21 11z",hand:"M18 11V6a2 2 0 0 0-4 0v5 M14 10V4a2 2 0 0 0-4 0v6 M10 10.5V6a2 2 0 0 0-4 0v8 M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.9-6-2.3l-3.6-3.6a2 2 0 0 1 2.8-2.8L7 15",
+ square:"M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z",circle:"M12 3a9 9 0 1 0 .01 0",arrow:"M5 19L19 5 M9 5h10v10",
+ pen:"M12 20h9 M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z",type:"M4 7V4h16v3 M9 20h6 M12 4v16",
+ sticky:"M15 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h9l7-7V5a2 2 0 0 0-2-2z M14 21v-5a2 2 0 0 1 2-2h5",chart:"M3 3v18h18 M7 16v-5 M12 16V7 M17 16v-3",
+ sigma:"M18 7V4H6l6 8-6 8h12v-3",filter:"M22 3H2l8 9.5V19l4 2v-8.5z",merge:"M8 6H4v12h4 M16 6h4v12h-4 M9 12h6 M12 9l3 3-3 3",
+ sort:"M3 6h12 M3 12h8 M3 18h4 M18 4v16 M15 17l3 3 3-3",search:"M11 4a7 7 0 1 0 .01 0 M21 21l-4.3-4.3",
+ share:"M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7 M16 6l-4-4-4 4 M12 2v13",panel:"M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z M15 3v18",
+ plus:"M12 5v14 M5 12h14",x:"M18 6 6 18 M6 6l12 12",ruler:"M3 8h18v8H3z M7 8v3 M11 8v4 M15 8v3 M19 8v4",
+ pagebreak:"M5 3v6h14V3 M5 21v-6h14v6 M3 12h2 M8 12h2 M14 12h2 M19 12h2",grid:"M4 4h16v16H4z M4 10h16 M4 16h16 M10 4v16 M16 4v16",
+ home:"M3 10l9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z",up:"M12 15V3 M7 8l5-5 5 5 M5 21h14",down:"M12 3v12 M7 10l5 5 5-5 M5 21h14",
+ print:"M6 9V3h12v6 M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2 M6 14h12v7H6z",
+ history:"M3 12a9 9 0 1 0 3-6.7L3 8 M3 3v5h5 M12 7v5l4 2",sliders:"M4 21v-7 M4 10V3 M12 21v-9 M12 8V3 M20 21v-5 M20 12V3 M1 14h6 M9 8h6 M17 16h6",
+ logout:"M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4 M16 17l5-5-5-5 M21 12H9",copy:"M8 8h12v12H8z M4 16V4h12",trash:"M3 6h18 M8 6V4h8v2 M19 6l-1 14H6L5 6",
+ align:"M3 6h18 M3 12h12 M3 18h18",fill:"M19 11l-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2a2 2 0 0 0 2.8 0z M5 2l5 5 M2 13h15",
+ aa:"M3 18l5-12 5 12 M5 14h6 M15 18v-6a2.5 2.5 0 0 1 5 0v6 M15 15h5",keyboard:"M2 6h20v12H2z M6 10h.01 M10 10h.01 M14 10h.01 M18 10h.01 M7 14h10",
+ moon:"M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z",help:"M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3 M12 17h.01",
+ heading:"M6 4v16 M18 4v16 M6 12h12",list:"M8 6h13 M8 12h13 M8 18h13 M3 6h.01 M3 12h.01 M3 18h.01",lock:"M5 11h14v10H5z M8 11V7a4 4 0 0 1 8 0v4",
+ front:"M8 8h12v12H8z M4 4h10v2 M4 4v10h2",back:"M4 4h12v12H4z M20 10v10H10v-2 M20 10h-2",
+ cut:"M6 3a3 3 0 1 0 .01 0 M6 15a3 3 0 1 0 .01 0 M20 4 8.1 15.9 M14.5 14.5 20 20 M8.1 8.1 12 12",paste:"M9 3h6v3H9z M9 4.5H6a1 1 0 0 0-1 1V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V5.5a1 1 0 0 0-1-1h-3",
+ dup:"M8 8h12v12H8z M4 16V4h12 M14 11v6 M11 14h6",erase:"M4 7V4h16v3 M5 20h6 M13 4 8 20 M15 15l5 5 M20 15l-5 5",group:"M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z",
+ rowup:"M3 13h18v7H3z M12 3v7 M9 6.5h6",rowdn:"M3 4h18v7H3z M12 14v7 M9 17.5h6",colins:"M13 3h7v18h-7z M3 12h7 M6.5 9v6",rowdel:"M3 9h18v6H3z M9 4l6 0 M9 20h6",coldel:"M9 3h6v18H9z",sortd:"M3 6h4 M3 12h8 M3 18h12 M18 4v16 M15 17l3 3 3-3",pct:"M19 5 5 19 M6.5 6.5h.01 M17.5 17.5h.01",rename:"M12 20h9 M4 16l10-10 4 4-10 10H4z"
+};
+const ic=(n)=>`<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="${P[n]||""}"/></svg>`;
+
+const LADDER=[10,25,50,67,75,90,100,110,125,150,200,400,1000];
+const RANGE={prose:[25,400],trame:[50,200],toile:[10,1000]};
+const S={app:"prose",dev:"desktop",sel:true,roles:false,panel:true,menu:null,ctx:null,palette:false,q:"",hl:0,
+  zoom:{prose:100,trame:100,toile:75},view:{ruler:true,breaks:true,grid:true,heads:true,snap:true},
+  phoneSheet:null,kb:true,docName:{prose:"Letter to members",trame:"Budget 2027",toile:"Customer journey workshop"}};
+try{const r=localStorage.getItem("ambre-mock");if(r)Object.assign(S,JSON.parse(r),{menu:null,ctx:null,palette:false,phoneSheet:null});}catch(e){}
+const save=()=>{try{localStorage.setItem("ambre-mock",JSON.stringify({app:S.app,dev:S.dev,sel:S.sel,roles:S.roles,panel:S.panel}));}catch(e){}};
+
+/* ---------- the command registry: ONE entry per command ----------
+   name, chord and description are read by the tooltips, the palette, the context menu and the panel; nothing is written twice */
+const CMD={};
+function def(home,role,rows){rows.forEach(([id,icon,name,chord,desc])=>CMD[id]={id,icon,name,chord:chord||"",desc:desc||"",home,role});}
+def("Context menu","ctx",[["cut","cut","Cut","Ctrl X"],["copy","copy","Copy","Ctrl C"],["paste","paste","Paste","Ctrl V"]]);
+def("File","file",[["home","home","Back to home"],["import","up","Import a file…","Ctrl O"],["export","down","Export…","Ctrl Shift E"],["print","print","Print","Ctrl P"],
+ ["history","history","Version history"],["rename","rename","Rename the document","F2"],["ambre","chev","Ambre menu","","Home, import, export, print, versions"]]);
+def("View","view",[["zin","plus","Zoom in","Ctrl ="],["zout","sep","Zoom out","Ctrl -"],["z100","search","Zoom to 100%","Ctrl 0"],["zsel","search","Zoom to selection","Shift 2"],
+ ["ruler","ruler","Show the ruler"],["gridv","grid","Show gridlines"],["panel","panel","Collapse the panel","Ctrl ."],["panelopen","panel","Show the panel","Ctrl ."],
+ ["addsheet","plus","Add a sheet","Shift F11"],["kb","keyboard","Hide the keyboard"],["close","x","Close","Esc"]]);
+def("Selection","doc",[["bold","bold","Bold","Ctrl B"],["italic","italic","Italic","Ctrl I"],["underline","underline","Underline","Ctrl U"],
+ ["link","link","Link","Ctrl K K","Links the text to an address or to another document"],["comment","comment","Comment","Ctrl Alt M","Opens a discussion thread in the margin"],
+ ["erase","erase","Clear formatting","Ctrl Space","Gives the text back the style of its paragraph"],["heading","heading","Heading","","Changes the paragraph style"],
+ ["alignl","align","Align left","Ctrl Shift L"],["list","list","Bulleted list","Ctrl Shift 8"],["aa","aa","Formatting","","Opens the context panel"],["layout","sliders","Arrange"],
+ ["showall","chev","Show all","","Opens the whole context panel"],
+ ["fill","fill","Fill","","Colours the background of the cells"],["numfmt","pct","Format","","Currency, percentage, date…"],
+ ["merge","merge","Merge cells","Ctrl Shift M","Joins the range into one cell"],["sort","sort","Sort A to Z","Alt S","Sorts the rows of the range by its first column"],
+ ["sortd","sortd","Sort Z to A","Alt Shift S"],["filter","filter","Filter the column","Ctrl Shift F","Shows only the rows that match"],
+ ["rowup","rowup","Insert a row above"],["rowdn","rowdn","Insert a row below"],["colins","colins","Insert a column to the left"],
+ ["rowdel","rowdel","Delete the row"],["coldel","coldel","Delete the column"],["bordout","square","Outside border"],["bordall","grid","All borders"],
+ ["chartsel","chart","Chart of the selection","","Plots the selected range"],
+ ["tfill","fill","Fill","","Background colour of the shape"],["stroke","pen","Stroke","","Width, colour and style of the outline"],["ttext","type","Text","Enter","Edits the text of the shape"],
+ ["dup","dup","Duplicate","Ctrl D"],["del","trash","Delete","Del"],["front","front","Bring to front","Ctrl ]","Puts the shape in front of the others"],
+ ["back","back","Send to back","Ctrl [","Puts the shape behind the others"],["group","group","Group","Ctrl G","Joins the shapes so they move together"],
+ ["lock","lock","Lock","Ctrl Shift L","Stops the shape from being moved or edited"]]);
+def("Document","doc",[["margins","sliders","Page margins"],["pageformat","square","Page format"],["docprops","sliders","Document properties","","Format, margins, default styles"]]);
+def("Creation","modes",[["ptext","type","Write text","","The default mode: the keyboard writes into the page"],["pimage","image","Insert a picture","/image"],["ptable","table","Insert a table","/table"],
+ ["psep","sep","Insert a separator","/separator","A line between two sections"],["addcomment","comment","Add a comment","","Pins a comment where you click"],
+ ["fx","sigma","Insert a function","=","Sum, average, lookup… in the active cell"],["chart","chart","Insert a chart","","Plots a chart from the selected range"],
+ ["tsel","cursor","Select","V"],["hand","hand","Hand","H","Drags the board"],["rect","square","Rectangle","R"],["ell","circle","Ellipse","O"],["arrow","arrow","Arrow","A","Connects two shapes"],
+ ["pencil","pen","Pencil","P","Freehand drawing"],["ttool","type","Text","T","A free text block"],["note","sticky","Note","N","A sticky note on the board"],["fab","plus","Insert","","Opens the creation modes"]]);
+def("Account","me",[["theme","moon","Dark theme"],["settings","sliders","Settings","Ctrl ,"],["logout","logout","Sign out"],["account","sliders","Account","","Settings, theme, sign out"]]);
+/* aria-keyshortcuts wants Control+B; a sequence such as Ctrl K K or a slash command has no ARIA form */
+function ariaKeys(ch){if(!ch||ch[0]==="/")return "";const M={Ctrl:"Control",Shift:"Shift",Alt:"Alt",Del:"Delete",Space:"Space",Enter:"Enter",Esc:"Escape"};
+  const t=ch.split(" ").map(x=>M[x]||x);const mods=t.filter(x=>["Control","Shift","Alt"].includes(x));return t.length-mods.length===1?t.join("+"):"";}
+function tipAttrs(id){const c=CMD[id],k=ariaKeys(c.chord);return `data-tip="${id}" aria-label="${c.name}"${k?` aria-keyshortcuts="${k}"`:""}`;}
+function iconBtn(id,cls,extra=""){return `<button class="${cls}" ${tipAttrs(id)} ${extra}>${ic(CMD[id].icon)}</button>`;}
+const chipBtn=(id,on)=>iconBtn(id,"chip"+(on?" on":""));
+const cmdOf=it=>CMD[typeof it==="string"?it:it[0]];
+const kbdHTML=ch=>ch?`<span class="kbd">${ch}</span>`:"";
+
+/* ---------- per-app data: lists of command ids ---------- */
+const APP={
+ prose:{
+  near:[["bold",1],"italic","underline","link","|",["heading",0,1],"comment"],
+  ctx:["bold","italic","link","|","comment","erase"],
+  tools:[["ptext",1],"pimage","ptable","psep","addcomment"],
+  stats:()=>`<span class="stat">Prose</span><span class="stat">312 words</span><span class="stat">1,840 characters</span><span class="stat">page 1 of 2</span>`,
+  views:[["ruler","ruler","Ruler"],["breaks","pagebreak","Page breaks"]],
+  selTitle:"Selection",selCtx:"4 words",docTitle:"Document",docCtx:"nothing selected",
+  selPanel:()=>sec("Text",row("Font",field("Noto Serif ▾"))+row("Size",`<div class="grid2">${field("14.5 pt")}${field("Normal ▾")}</div>`)+row("Style",`<div class="chips">${chipBtn("bold",1)}${chipBtn("italic")}${chipBtn("underline")}</div>`)+row("Colour",`<div class="chips"><span class="sw" style="background:#29241e"></span><span class="sw" style="background:#b4530b"></span><span class="sw" style="background:#2f6fd6"></span><span class="sw" style="background:#2f8f5b"></span></div>`))
+   +sec("Paragraph",row("Alignment",`<div class="chips">${chipBtn("alignl",1)}<span class="chip">Centre</span><span class="chip">Justified</span></div>`)+row("Line spacing",field("1.5 ▾"))+row("Indents",`<div class="grid2">${mini("Left","0 cm")}${mini("First line","0.5 cm")}</div>`))
+   +sec("Paragraph style",`<div class="chips"><span class="chip on">Body</span><span class="chip">Heading 1</span><span class="chip">Heading 2</span><span class="chip">Quote</span><span class="chip">${ic("list")} List</span></div>`)
+   +sec("Actions",acts(["link","comment","erase"])),
+  docPanel:()=>sec("Page",row("Format",field("A4 · 21 × 29.7 cm ▾"))+row("Orientation",`<div class="chips"><span class="chip on">Portrait</span><span class="chip">Landscape</span></div>`))
+   +sec("Margins",`<div class="grid4">${mini("Top","2.5")}${mini("Bottom","2.5")}${mini("Left","2.5")}${mini("Right","2.5")}</div><p class="hint">In centimetres. The margins are written to the document: every collaborator sees them change.</p>`)
+   +sec("Default styles",row("Body",field("Noto Serif 14.5 ▾"))+row("Headings",field("Noto Sans 600 ▾")))
+ },
+ trame:{
+  near:["bold","fill",["numfmt",0,1],"|","merge","sort"],
+  ctx:["rowup","rowdn","colins","rowdel","coldel","|","sort","sortd","filter","merge"],
+  tools:["fx","chart","pimage","addcomment"],
+  stats:()=>`<div class="tabs"><span class="tab on">Expenses</span><span class="tab">Income</span><span class="tab">Summary</span>${iconBtn("addsheet","icobtn",'style="width:22px;height:22px"')}</div><span class="stat" style="margin-left:8px">Sum €18,960</span><span class="stat">Average €1,580</span>`,
+  views:[["grid","grid","Gridlines"],["heads","table","Headers"]],
+  selTitle:"Cells",selCtx:"B2:D5 · 12 cells",docTitle:"Sheet “Expenses”",docCtx:"nothing selected",
+  selPanel:()=>sec("Number",row("Format",field("Currency · € ▾"))+row("Decimals",`<div class="grid2">${field("0")}${field("1,234 ▾")}</div>`))
+   +sec("Cell",row("Font",field("Noto Sans 11 ▾"))+row("Style",`<div class="chips">${chipBtn("bold")}${chipBtn("italic")}</div>`)+row("Fill",`<div class="chips"><span class="sw" style="background:transparent"></span><span class="sw" style="background:#fbe7d2"></span><span class="sw" style="background:#dbe9f7"></span><span class="sw" style="background:#dff0e3"></span></div>`)+row("Borders",`<div class="chips">${chipBtn("bordout")}${chipBtn("bordall")}<span class="chip">None</span></div>`)+row("Alignment",`<div class="chips"><span class="chip">Left</span><span class="chip on">Right</span></div>`))
+   +sec("Rows and columns",acts(["rowup","rowdn","colins","rowdel","coldel"]))
+   +sec("Sort and filter",acts(["sort","sortd","filter"]))
+   +sec("Actions",acts(["merge","chartsel"])),
+  docPanel:()=>sec("Sheet",row("Name",field("Expenses"))+row("Tab",`<div class="chips"><span class="sw" style="background:#b4530b"></span><span class="sw" style="background:#2f6fd6"></span><span class="sw" style="background:#2f8f5b"></span></div>`))
+   +sec("Freeze",row("Rows",field("1 ▾"))+row("Columns",field("1 ▾")))
+   +sec("Workbook",row("Locale",field("French · € ▾"))+row("Calculation",field("Automatic ▾")))
+ },
+ toile:{
+  near:["tfill","stroke","ttext","|","dup","front","lock","del"],
+  ctx:["dup","del","|","front","back","group","lock"],
+  tools:[["tsel",1],"hand","rect","ell","arrow","pencil","ttool","note","pimage"],
+  stats:()=>`<span class="stat">Toile</span><span class="stat">1 item</span><span class="stat">x 240 · y 120 · 220 × 120</span>`,
+  views:[["grid","grid","Grid"],["snap","ruler","Snap"]],
+  selTitle:"Rectangle",selCtx:"“Discovery”",docTitle:"Board",docCtx:"nothing selected",
+  selPanel:()=>sec("Position",`<div class="grid4">${mini("X","240")}${mini("Y","120")}${mini("W","220")}${mini("H","120")}</div>`+row("Rotation",field("0°")))
+   +sec("Appearance",row("Fill",`<div class="chips"><span class="sw" style="background:#fbe7d2"></span><span class="sw" style="background:#dbe9f7"></span><span class="sw" style="background:#fff3a8"></span><span class="sw" style="background:#dff0e3"></span></div>`)+row("Stroke",`<div class="grid2">${field("2 px")}${field("Solid ▾")}</div>`)+row("Corners",field("10 px")))
+   +sec("Text",row("Font",field("Noto Sans 13 ▾"))+row("Alignment",`<div class="chips"><span class="chip">Top</span><span class="chip on">Centre</span></div>`))
+   +sec("Arrange",acts(["dup","del","front","back","group","lock"])),
+  docPanel:()=>sec("Board",row("Background",`<div class="chips"><span class="sw" style="background:#efece6"></span><span class="sw" style="background:#ffffff"></span><span class="sw" style="background:#1d1a16"></span></div>`)+row("Grid",field("Dots · 22 px ▾"))+row("Snap",field("On ▾")))
+   +sec("Frames",`<button class="act">${ic("square")}Customer journey<span class="sub" style="margin-left:auto;color:var(--faint);font-size:11.5px">5 items</span></button><button class="act">${ic("square")}Loose ideas<span class="sub" style="margin-left:auto;color:var(--faint);font-size:11.5px">9 items</span></button>`)
+ }
+};
+function sec(t,b){return `<div class="sec"><h4>${t}</h4>${b}</div>`}
+function row(l,v){return `<div class="row"><span>${l}</span>${v}</div>`}
+function field(v){return `<div class="field">${v}</div>`}
+function mini(l,v){return `<div class="mini">${l}<div class="field">${v}</div></div>`}
+/* the panel and the context menu read the same entries: the panel is the one home */
+function acts(ids){return ids.map(id=>{const c=CMD[id];return `<button class="act">${ic(c.icon)}${c.name}${kbdHTML(c.chord)}</button>`;}).join("")}
+const CLIP=["cut","copy","paste"];
+
+/* ---------- commands for the palette ---------- */
+const CMDS=["cut","copy","paste","home","import","export","print","history","rename","zin","zout","z100","zsel","ruler","gridv","panelopen",
+ "bold","italic","underline","link","comment","merge","sort","sortd","filter","dup","group","lock","margins","pageformat","pimage","ptable","rect","chart","fx","theme","settings","logout"].map(id=>CMD[id]);
+
+/* ---------- builders ---------- */
+const roleAttr=(rc,label)=>`data-rc="${rc}" data-role="${label}"`;
+function floatBar(items,cls,rc,label){
+  return `<span class="float ${cls}" ${roleAttr(rc,label)}>`+items.map(it=>{
+    if(it==="|")return `<span class="sep"></span>`;
+    const [id,on,txt]=typeof it==="string"?[it]:it, c=CMD[id];
+    return txt?`<button class="b${on?" on":""}">${ic(c.icon)}<span style="font-size:12px">${c.name} ▾</span></button>`:iconBtn(id,"b"+(on?" on":""),on?'aria-pressed="true"':"");
+  }).join("")+`</span>`;
+}
+function zoomMenu(){
+  const [lo,hi]=RANGE[S.app];const z=S.zoom[S.app];
+  return `<div class="pop" style="right:0;bottom:calc(100% + 6px);min-width:250px;max-height:430px;overflow:auto">`+
+    LADDER.filter(v=>v>=lo&&v<=hi).reverse().map(v=>`<button class="it${v===z?" cur":""}" data-zoom="${v}">${v}%</button>`).join("")+
+    `<hr><button class="it" data-act="fit">Fit to window<span class="kbd">Shift 1</span></button>${S.sel?`<button class="it" data-act="fitsel">Zoom to selection<span class="kbd">Shift 2</span></button>`:""}
+    <div class="note">The same ladder of steps everywhere; ${S.app[0].toUpperCase()+S.app.slice(1)} shows only ${lo}% to ${hi}%.</div></div>`;
+}
+function fileMenu(pos){
+  const exp={prose:"PDF, DOCX, Markdown",trame:"XLSX, CSV, PDF",toile:"PNG, SVG, PDF"}[S.app];
+  return `<div class="pop" style="${pos}">
+    <button class="it" data-act="home">${ic("home")}Ambre home</button><hr>
+    <button class="it">${ic("plus")}New document<span class="sub">▸</span></button>
+    <button class="it">${ic("up")}Import…<span class="kbd">Ctrl O</span></button>
+    <button class="it">${ic("down")}Export<span class="sub">${exp}</span></button>
+    <button class="it">${ic("print")}Print<span class="kbd">Ctrl P</span></button>
+    <button class="it">${ic("history")}Version history</button>
+    <button class="it">${ic("rename")}Rename<span class="kbd">F2</span></button><hr>
+    ${S.dev==="phone"?`<button class="it" data-act="palette">${ic("search")}Search for a command</button>`:""}
+    <button class="it">${ic("keyboard")}Keyboard shortcuts<span class="kbd">Ctrl /</span></button>
+    <button class="it">${ic("help")}Help</button></div>`;
+}
+function accountMenu(pos){
+  return `<div class="pop" style="${pos}"><div class="who"><b>Alice Martin</b><small>alice@example.org</small></div><hr>
+    <button class="it">${ic("sliders")}Settings<span class="kbd">Ctrl ,</span></button>
+    <button class="it" data-act="theme">${ic("moon")}Theme<span class="sub">${document.documentElement.dataset.theme==="dark"?"dark":document.documentElement.dataset.theme==="light"?"light":"system"}</span></button>
+    <hr><button class="it">${ic("logout")}Sign out</button></div>`;
+}
+
+/* context menu: the clipboard first, then commands whose home is the panel */
+function ctxItems(phone){
+  const full=S.sel;
+  const item=(id,clip,off)=>{const c=CMD[id];return `<button class="it" role="menuitem" data-ctx="${id}"${clip?' data-clip="1"':""}${off?" disabled":""}>${ic(c.icon)}${c.name}${phone?"":kbdHTML(c.chord)}</button>`;};
+  const clip=CLIP.map(id=>item(id,true,!full&&id!=="paste")).join("");
+  const rest=full?`<hr>`+APP[S.app].ctx.map(id=>id==="|"?`<hr>`:item(id)).join(""):"";
+  return clip+rest+`<div class="note">${full?"After the clipboard, each row is also in the context panel.":"Nothing selected: only the clipboard applies."}</div>`;
+}
+function ctxMenu(){
+  return `<div class="pop ctxmenu" role="menu" aria-label="Context menu" style="left:${S.ctx.x}px;top:${S.ctx.y}px" ${roleAttr("ctx","Context menu")}>${ctxItems(false)}</div>`;
+}
+/* app canvases */
+function proseCanvas(phone){
+  const w=phone?330:500, z=S.zoom.prose/100;
+  const sys=`<span class="sysmenu" aria-hidden="true" ${roleAttr("cat","System menu")}><span>Cut</span><span>Copy</span><span>Paste</span><span>Select all</span></span>`;
+  const selSpan=S.sel?`<span class="hit on" data-hit>the workshop calendar${!phone?floatBar(APP.prose.near,"near","near","Context bar"):""}</span>`:`<span class="hit" data-hit>the workshop calendar</span>`;
+  return `<div class="prose-scroll" data-bg><div class="page" style="transform:scale(${phone?1:z})">
+    ${S.view.ruler&&!phone?`<div class="margins"></div>`:""}
+    <h2>Meeting of 12 December</h2>
+    <p>Dear members, the autumn workshop showed that several people can write one document without ever waiting for anyone. Each keeps their own copy, and convergence without a server reconciles the changes as soon as the machines meet again.</p>
+    <p style="position:relative">${phone&&S.sel?sys:""}We propose three topics for the session: next year's budget, ${selSpan} and the welcome of new members.${S.sel?"":`<span class="caret"></span>`}</p>
+    ${phone?"":`<p>The minutes will be shared in Ambre the same evening. You can comment on them right in the margin, with no attachment and no message thread.</p><p style="color:#8a8174">The committee</p>`}
+  </div></div>`;
+}
+function trameCanvas(phone){
+  const cols=phone?["A","B","C","D"]:["A","B","C","D","E","F","G","H","I","J"];
+  const z=S.zoom.trame/100, cw=Math.round(92*z), rh=Math.round(26*z), hw=40;
+  const data=[["Item","Q1","Q2","Q3","Q4","Total"],["Rent","2,400","2,400","2,400","2,400","9,600"],["Energy","610","380","290","720","2,000"],["Equipment","1,150","300","0","900","2,350"],["Workshops","800","1,200","650","1,400","4,050"],["Communication","240","180","300","240","960"],["Total","5,200","4,460","3,640","5,660","18,960"]];
+  let h=`<div class="sheet" data-bg><table style="width:${hw+cw*cols.length}px"><colgroup><col style="width:${hw}px">${cols.map(()=>`<col style="width:${cw}px">`).join("")}</colgroup>`;
+  if(S.view.heads)h+=`<tr><th></th>${cols.map(c=>`<th>${c}</th>`).join("")}</tr>`;
+  for(let r=1;r<=24;r++){
+    h+=`<tr class="${r===1||r===7?"h":""}" style="height:${rh}px">${S.view.heads?`<th>${r}</th>`:""}`;
+    cols.forEach((c,ci)=>{const v=(data[r-1]||[])[ci]||"";h+=`<td class="${ci>0?"n":""}" style="${S.view.grid?"":"border-color:transparent"}">${v}</td>`;});
+    h+=`</tr>`;
+  }
+  h+=`</table>`;
+  const top=(S.view.heads?26:0)+rh, left=(S.view.heads?hw:0)+cw;
+  if(S.sel)h+=`<div class="selbox" data-hit style="top:${top}px;left:${left}px;width:${cw*3}px;height:${rh*4}px">${!phone?floatBar(APP.trame.near,"near","near","Context bar"):""}</div>`;
+  else h+=`<div class="cellcur" style="top:${top}px;left:${left}px;width:${cw}px;height:${rh}px"></div>`;
+  return h+`</div>`;
+}
+function toileCanvas(phone){
+  const z=S.zoom.toile/100, s=v=>Math.round(v*z);
+  const ox=phone?-40:60, oy=phone?40:50;
+  const R={x:ox+s(240),y:oy+s(120),w:s(220),h:s(120)};
+  const handles=S.sel?["0%,0%","100%,0%","0%,100%","100%,100%"].map(p=>{const [x,y]=p.split(",");return `<span class="h" style="left:calc(${x} - 5px);top:calc(${y} - 5px)"></span>`}).join(""):"";
+  return `<div class="board" data-bg style="background-size:${s(22)}px ${s(22)}px">
+    <svg class="link" aria-hidden="true"><path d="M${R.x+R.w} ${R.y+R.h/2} C ${R.x+R.w+s(80)} ${R.y+R.h/2}, ${ox+s(560)} ${oy+s(80)}, ${ox+s(600)} ${oy+s(80)}" stroke="var(--muted)" stroke-width="2" fill="none" marker-end="url(#ah)"/><defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--muted)"/></marker></defs></svg>
+    <div class="shape note" style="left:${ox+s(10)}px;top:${oy+s(300)}px;width:${s(170)}px;height:${s(130)}px;font-size:${Math.max(10,s(13))}px">Customers find the offer mostly by word of mouth.</div>
+    <div class="shape rect${S.sel?" on":""}" data-hit style="left:${R.x}px;top:${R.y}px;width:${R.w}px;height:${R.h}px;font-size:${Math.max(10,s(14))}px">Discovery${handles}${S.sel&&!phone?floatBar(APP.toile.near,"near","near","Context bar"):""}</div>
+    <div class="shape ell" style="left:${ox+s(600)}px;top:${oy+s(30)}px;width:${s(170)}px;height:${s(110)}px;font-size:${Math.max(10,s(14))}px">First trial</div>
+    <div class="shape rect" style="left:${ox+s(560)}px;top:${oy+s(260)}px;width:${s(200)}px;height:${s(100)}px;font-size:${Math.max(10,s(14))}px;background:#dff0e3;border-color:#4f9a62;color:#1f4a2b">Retention</div>
+  </div>`;
+}
+const canvas=(phone)=>({prose:proseCanvas,trame:trameCanvas,toile:toileCanvas})[S.app](phone);
+
+/* ---------- desktop ---------- */
+function desktop(){
+  const A=APP[S.app];
+  const panelBody=S.sel?A.selPanel():A.docPanel();
+  const panel=S.panel?`<aside class="panel" ${roleAttr("doc",S.sel?"Document · the selection":"Document · no selection")}>
+      <div class="panel-head"><h3>${S.sel?A.selTitle:A.docTitle}<br><span class="ctx">${S.sel?A.selCtx:A.docCtx}</span></h3>
+      ${iconBtn("panel","icobtn",'data-act="panel"')}</div>
+      <div class="panel-body">${panelBody}</div></aside>`
+    :`<aside class="panel closed" ${roleAttr("doc","Collapsed panel")}><div class="rail">${iconBtn("panelopen","icobtn",'data-act="panel"')}
+      ${iconBtn("aa","icobtn",'data-act="panel"')}${iconBtn("layout","icobtn",'data-act="panel"')}</div></aside>`;
+  const z=S.zoom[S.app];
+  return `<div class="mock${S.roles?" roles":""}" id="mock">
+    <div class="topbar">
+      <span class="anchor"><button class="logo" data-menu="file" aria-haspopup="menu" aria-expanded="${S.menu==="file"}" ${roleAttr("file","The file")}><span class="mark"></span>Ambre ${ic("chev")}</button>${S.menu==="file"?fileMenu("top:calc(100% + 6px);left:0"):""}</span>
+      <span class="docname" contenteditable="true" spellcheck="false" data-doc>${S.docName[S.app]}</span>
+      <span class="sync">Synced</span>
+      <button class="cmdk" data-act="palette" ${roleAttr("cat","The catalogue")}>${ic("search")}Search for a command<kbd>Ctrl K</kbd></button>
+      <div class="right">
+        <div class="peers" title="Also in the document: Bruno, Chloé"><span class="av" style="background:#2f6fd6">BR</span><span class="av" style="background:#2f8f5b">CH</span></div>
+        <button class="share">${ic("share")}Share</button>
+        <span class="anchor"><button class="me" data-menu="account" aria-haspopup="menu" aria-expanded="${S.menu==="account"}" ${tipAttrs("account")} ${roleAttr("me","Moi")}><span class="av">AL</span></button>${S.menu==="account"?accountMenu("top:calc(100% + 6px);right:0"):""}</span>
+      </div>
+    </div>
+    ${S.app==="trame"?`<div class="formula" ${roleAttr("doc","Cell content")}><span class="name">${S.sel?"B2:D5":"B2"}</span><span class="fx">fx</span><span>2400</span></div>`:""}
+    <div class="content" style="grid-row:3">
+      ${canvas(false)}
+      ${floatBar(APP[S.app].tools.map(t=>t),"tools","modes","Creation bar")}
+    </div>
+    <div class="status" ${roleAttr("view","My view")}>
+      ${A.stats()}<span class="spacer"></span>
+      ${A.views.map(([k,i,t])=>`<button class="vt" data-view="${k}" aria-pressed="${!!S.view[k]}">${ic(i)}<span>${t}</span></button>`).join("")}
+      <span class="anchor"><button class="zoom" data-menu="zoom" aria-haspopup="menu" aria-expanded="${S.menu==="zoom"}" title="Zoom (Ctrl wheel, Ctrl = / - / 0)">${z}%${ic("chev")}</button>${S.menu==="zoom"?zoomMenu():""}</span>
+    </div>
+    ${panel}
+    ${S.ctx?ctxMenu():""}
+    ${S.palette?paletteHTML():""}
+  </div>`;
+}
+
+/* ---------- phone ---------- */
+function phone(){
+  const A=APP[S.app];
+  let bottom="", overlay="";
+  const proseEditing=S.app==="prose"&&S.sel;
+  if(S.phoneSheet==="format"){
+    overlay=`<div class="pscrim" data-act="closesheet"></div><div class="sheetp" style="height:62%"><div class="grab"></div>
+      <div class="sh-head"><b>${A.selTitle} <span style="color:var(--faint);font-weight:500;font-size:12px">${A.selCtx}</span></b>${iconBtn("close","icobtn",'data-act="closesheet"')}</div>
+      <div class="sh-body">${A.selPanel()}</div></div>`;
+  }else if(S.phoneSheet==="doc"){
+    overlay=`<div class="pscrim" data-act="closesheet"></div><div class="sheetp" style="height:58%"><div class="grab"></div>
+      <div class="sh-head"><b>${A.docTitle}</b>${iconBtn("close","icobtn",'data-act="closesheet"')}</div>
+      <div class="sh-body">${A.docPanel()}</div></div>`;
+  }else if(S.phoneSheet==="ctx"){
+    overlay=`<div class="pscrim" data-act="closesheet"></div><div class="sheetp" style="height:auto;max-height:92%" role="menu" aria-label="Context menu" ${roleAttr("ctx","Context menu")}><div class="grab"></div>
+      <div class="sh-head"><b>${A.selTitle} <span style="color:var(--faint);font-weight:500;font-size:12px">${A.selCtx}</span></b>${iconBtn("close","icobtn",'data-act="closesheet"')}</div>
+      <div class="sh-body"><div class="mlist">${ctxItems(true)}</div></div></div>`;
+  }else if(S.phoneSheet==="tools"){
+    overlay=`<div class="pscrim" data-act="closesheet"></div><div class="sheetp" style="height:auto"><div class="grab"></div>
+      <div class="sh-head"><b>Insert</b>${iconBtn("close","icobtn",'data-act="closesheet"')}</div>
+      <div class="toolgrid">${A.tools.map(it=>{const c=cmdOf(it);return `<button class="b">${ic(c.icon)}${c.name}</button>`;}).join("")}</div></div>`;
+  }
+  if(proseEditing&&S.phoneSheet!=="format"){
+    bottom=`<div class="acc" ${roleAttr("near","Context bar")}>
+      ${["bold","italic","underline","link","list"].map((id,k)=>iconBtn(id,"b"+(k===0?" on":""))).join("")}
+      <span class="grow"></span>${iconBtn("aa","b",'data-act="sheet-format" style="color:var(--accent)"')}
+      ${iconBtn("kb","b",'data-act="kb"')}</div>
+      ${S.kb?`<div class="kb" aria-hidden="true"><div>${"<span></span>".repeat(10)}</div><div>${"<span></span>".repeat(9)}</div><div>${"<span></span>".repeat(7)}</div><div><span></span><span class="wide"></span><span></span></div></div>`:""}`;
+  }else if(S.sel&&!S.phoneSheet){
+    overlay+=`<div class="sheetp" style="height:auto" ${roleAttr("doc","Document · the selection")}><div class="grab" data-act="sheet-format"></div>
+      <div class="sh-head"><b>${A.selTitle} <span style="color:var(--faint);font-weight:500;font-size:12px">${A.selCtx}</span></b>${iconBtn("showall","icobtn",'data-act="sheet-format"')}</div>
+      <div class="quick">${A.near.filter(x=>x!=="|").map(it=>{const c=cmdOf(it);return `<button class="b">${ic(c.icon)}<span>${c.name}</span></button>`;}).join("")}</div></div>`;
+  }
+  const showFab=!S.sel&&!S.phoneSheet;
+  const lpHint=S.app!=="prose"&&S.sel&&!S.phoneSheet?`<button class="lp-hint" data-act="sheet-ctx" title="Simulates a long press on the selection"><span class="dot2"></span>Long press on the ${S.app==="trame"?"cell":"shape"}: context menu</button>`:"";
+  const proseNote=S.app==="prose"&&S.sel&&S.phoneSheet!=="format"?`<span class="pnote">On text, the system menu carries cut, copy and paste: Ambre draws no context menu there.</span>`:"";
+  return `<div class="phone-frame${S.roles?" roles":""}" id="mock">
+    <div class="os"><span>9:41</span><span class="notch"></span><span>5G ▮▮▮</span></div>
+    <div class="ptop">
+      <span class="anchor"><button class="logo" data-menu="file" aria-expanded="${S.menu==="file"}" ${tipAttrs("ambre")} ${roleAttr("file","The file")}><span class="mark"></span>${ic("chev")}</button>${S.menu==="file"?fileMenu("top:calc(100% + 6px);left:0"):""}</span>
+      <span class="docname">${S.docName[S.app]}</span>
+      ${S.sel?"":`${iconBtn("docprops","icobtn",'data-act="sheet-doc"')}`}
+      <span class="anchor"><button class="me" data-menu="account" aria-expanded="${S.menu==="account"}" ${tipAttrs("account")} ${roleAttr("me","Moi")}><span class="av">AL</span></button>${S.menu==="account"?accountMenu("top:calc(100% + 6px);right:0"):""}</span>
+    </div>
+    <div class="pcontent">${canvas(true)}${lpHint}${proseNote}
+      ${showFab?`${iconBtn("fab","fab",'data-act="sheet-tools" '+roleAttr("modes","Modes"))}${S.app==="trame"?"":`<span class="pinch" ${roleAttr("view","My view")}>${S.zoom[S.app]}% · pinch to zoom</span>`}`:""}
+      ${overlay}
+    </div>
+    ${S.app==="trame"&&!S.phoneSheet?`<div class="ptabs" ${roleAttr("view","My view")}><span class="tab on">Expenses</span><span class="tab">Income</span><span class="tab">Summary</span>${iconBtn("addsheet","icobtn")}<span class="zl">${S.zoom.trame}%</span></div>`:""}
+    ${bottom}
+    ${S.palette?paletteHTML():""}
+  </div>`;
+}
+
+/* ---------- palette ---------- */
+function paletteList(){
+  const q=S.q.trim().toLowerCase();
+  const norm=s=>s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+  const nq=norm(q);
+  return CMDS.filter(c=>!nq||norm(c.name+" "+c.home).includes(nq)).slice(0,12);
+}
+function paletteHTML(){
+  const list=paletteList();
+  return `<div class="scrim" data-act="closepal"><div class="palette" role="dialog" aria-label="Command palette">
+    <input id="palq" placeholder="Search for a command or a setting…" value="${S.q.replace(/"/g,"&quot;")}" autocomplete="off">
+    <ul>${list.length?list.map((c,k)=>`<li class="${k===S.hl?"hl":""}" style="--rc:var(--role-${c.role})">${ic(c.icon)}${c.name}${c.chord?`<span class="kbd" style="margin-left:auto">${c.chord}</span>`:""}<span class="tag" style="color:var(--role-${c.role});${c.chord?"margin-left:8px":""}">${c.home}</span></li>`).join(""):`<li style="color:var(--faint)">No command matches “${S.q}”.</li>`}</ul>
+    <div class="foot"><span><span class="kbd">↑</span> <span class="kbd">↓</span> navigate</span><span><span class="kbd">Enter</span> run</span><span><span class="kbd">Esc</span> close</span><span style="margin-left:auto">The tag says where the command lives outside the palette.</span></div>
+  </div></div>`;
+}
+
+/* ---------- render + events ---------- */
+const stage=document.getElementById("stage");
+function render(){
+  hideTip();
+  for(const [id,key] of [["seg-app","app"],["seg-dev","dev"],["seg-sel","sel"]]){
+    document.querySelectorAll(`#${id} button`).forEach(b=>b.setAttribute("aria-pressed",String(String(key==="sel"?(S.sel?1:0):S[key])===b.dataset.v)));
+  }
+  document.getElementById("sw-roles").setAttribute("aria-pressed",String(S.roles));
+  stage.className="stage"+(S.dev==="phone"?" phone":"");
+  stage.innerHTML=S.dev==="phone"?phone():desktop();
+  placeCtx();
+  if(S.palette){const q=document.getElementById("palq");if(q){q.focus();q.setSelectionRange(q.value.length,q.value.length);}}
+  save();
+}
+function seg(id,fn){document.getElementById(id).addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;fn(b.dataset.v);S.menu=null;S.ctx=null;S.phoneSheet=null;render();});}
+/* keep the open context menu inside the mock: flip left or up like a native menu */
+function placeCtx(){
+  if(!S.ctx||S.dev!=="desktop")return;
+  const m=document.getElementById("mock"),el=m&&m.querySelector(".ctxmenu");if(!el)return;
+  const W=m.clientWidth,H=m.clientHeight,w=el.offsetWidth,h=el.offsetHeight;
+  let x=S.ctx.x,y=S.ctx.y;
+  if(x+w>W-8)x=Math.max(8,(S.ctx.left??x)-w);
+  if(y+h>H-8)y=Math.max(8,(S.ctx.up??y)-h);
+  if(y+h>H-8)y=Math.max(8,H-h-8);
+  el.style.left=x+"px";el.style.top=y+"px";
+}
+function openCtx(x,y,up,left){S.menu=null;S.palette=false;S.ctx={x,y,up,left};render();}
+/* Shift+F10 or the ContextMenu key: open at the selection, not at the pointer */
+function openCtxAtSelection(){
+  if(S.dev==="phone"){if(S.app!=="prose"){S.sel=true;S.phoneSheet="ctx";render();}return;}
+  if(S.app==="trame")S.sel=true;
+  render();
+  const m=document.getElementById("mock"),mr=m.getBoundingClientRect();
+  const h=m.querySelector(".hit.on,.selbox,.shape.on");
+  if(!h){openCtx(mr.width/2-120,mr.height/2-80);return;}
+  const r=h.getBoundingClientRect();
+  openCtx(r.right-mr.left+10,Math.max(8,r.top-mr.top),r.bottom-mr.top,r.left-mr.left-10);
+}
+function runCtx(label,clip){
+  S.ctx=null;S.phoneSheet=null;render();
+  flash(clip?`“${label}”: the clipboard, the one home the context menu owns.`:`“${label}” run from the context menu. Its home: the context panel.`);
+}
+seg("seg-app",v=>S.app=v);seg("seg-dev",v=>S.dev=v);seg("seg-sel",v=>{S.sel=v==="1";S.kb=true;});
+document.getElementById("sw-roles").addEventListener("click",()=>{S.roles=!S.roles;S.ctx=null;render();if(S.roles&&S.dev==="desktop"&&S.sel)openCtxAtSelection();});
+
+stage.addEventListener("click",e=>{
+  const t=e.target;
+  if(lpFired){lpFired=false;return;}
+  const ci=t.closest("[data-ctx]");
+  if(ci){if(!ci.disabled)runCtx(CMD[ci.dataset.ctx].name,!!ci.dataset.clip);return;}
+  if(S.ctx){if(!t.closest(".ctxmenu")){S.ctx=null;render();}return;}
+  if(t.closest(".palette")&&!t.closest("[data-act]")) return;
+  const zb=t.closest("[data-zoom]"); if(zb){S.zoom[S.app]=+zb.dataset.zoom;S.menu=null;render();return;}
+  const a=t.closest("[data-act]");
+  if(a){const act=a.dataset.act;
+    if(act==="closepal"&&t.closest(".palette"))return;
+    if(act==="panel")S.panel=!S.panel;
+    else if(act==="palette"){S.palette=true;S.q="";S.hl=0;S.menu=null;}
+    else if(act==="closepal")S.palette=false;
+    else if(act==="fit"){S.zoom[S.app]={prose:100,trame:100,toile:75}[S.app];}
+    else if(act==="fitsel"){S.zoom[S.app]={prose:150,trame:150,toile:150}[S.app];}
+    else if(act==="theme"){const r=document.documentElement;const cur=r.dataset.theme||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");r.dataset.theme=cur==="dark"?"light":"dark";}
+    else if(act==="home"){S.menu=null;render();flash("The Ambre home would open here.");return;}
+    else if(act==="sheet-format"){S.phoneSheet="format";S.kb=false;}
+    else if(act==="sheet-doc")S.phoneSheet="doc";
+    else if(act==="sheet-tools")S.phoneSheet="tools";
+    else if(act==="sheet-ctx")S.phoneSheet="ctx";
+    else if(act==="closesheet"){S.phoneSheet=null;if(S.app==="prose"&&S.sel)S.kb=true;}
+    else if(act==="kb")S.kb=!S.kb;
+    if(act!=="theme")S.menu=null; else S.menu=null;
+    render();return;}
+  const m=t.closest("[data-menu]");
+  if(m&&!t.closest(".pop")){S.menu=S.menu===m.dataset.menu?null:m.dataset.menu;render();return;}
+  if(t.closest(".pop"))return;
+  const v=t.closest("[data-view]"); if(v){S.view[v.dataset.view]=!S.view[v.dataset.view];render();return;}
+  if(t.closest("[data-doc]"))return;
+  if(S.menu){S.menu=null;render();return;}
+  if(t.closest(".float,.panel,.sheetp,.acc,.status,.topbar,.ptop,.formula"))return;
+  if(t.closest("[data-hit]")){if(!S.sel){S.sel=true;S.kb=true;render();}return;}
+  if(t.closest("[data-bg]")){if(S.sel){S.sel=false;S.phoneSheet=null;render();}}
+});
+/* right-click on the content opens the menu at the pointer */
+stage.addEventListener("contextmenu",e=>{
+  const t=e.target;
+  if(S.dev==="phone"){
+    if(S.app!=="prose"&&t.closest("[data-hit]")){e.preventDefault();S.sel=true;S.phoneSheet="ctx";render();}
+    return;
+  }
+  if(!t.closest(".content")||t.closest(".float")||t.closest(".ctxmenu"))return;
+  e.preventDefault();
+  if(t.closest("[data-hit]")||S.app==="trame")S.sel=true; else S.sel=false;
+  const mr=document.getElementById("mock").getBoundingClientRect();
+  openCtx(e.clientX-mr.left,e.clientY-mr.top);
+});
+/* phone: a long press on a cell or a shape opens the menu as a bottom sheet */
+let lpTimer=null,lpFired=false;
+stage.addEventListener("pointerdown",e=>{
+  if(S.dev!=="phone"||S.app==="prose"||!e.target.closest("[data-hit]"))return;
+  lpTimer=setTimeout(()=>{lpTimer=null;lpFired=true;S.sel=true;S.phoneSheet="ctx";render();},550);
+});
+["pointerup","pointerleave","pointercancel","pointermove"].forEach(n=>stage.addEventListener(n,e=>{if(lpTimer&&(n!=="pointermove"||Math.abs(e.movementX)+Math.abs(e.movementY)>4)){clearTimeout(lpTimer);lpTimer=null;}}));
+stage.addEventListener("input",e=>{
+  if(e.target.id==="palq"){S.q=e.target.value;S.hl=0;const ul=stage.querySelector(".palette ul");const tmp=document.createElement("div");tmp.innerHTML=paletteHTML();ul.replaceWith(tmp.querySelector("ul"));}
+  if(e.target.matches("[data-doc]"))S.docName[S.app]=e.target.textContent;
+});
+document.addEventListener("keydown",e=>{
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k"){e.preventDefault();S.palette=!S.palette;S.q="";S.hl=0;S.menu=null;render();return;}
+  if((e.ctrlKey||e.metaKey)&&e.key==="."){e.preventDefault();S.panel=!S.panel;render();return;}
+  if(e.key==="Escape"){if(S.palette||S.menu||S.ctx||S.phoneSheet){S.palette=false;S.menu=null;S.ctx=null;S.phoneSheet=null;render();}return;}
+  if(((e.shiftKey&&e.key==="F10")||e.key==="ContextMenu")&&!S.palette&&!e.target.closest?.("[contenteditable],input")){e.preventDefault();openCtxAtSelection();return;}
+  if(S.palette&&(e.key==="ArrowDown"||e.key==="ArrowUp")){e.preventDefault();const n=paletteList().length;if(!n)return;S.hl=(S.hl+(e.key==="ArrowDown"?1:n-1))%n;stage.querySelectorAll(".palette li").forEach((li,k)=>li.classList.toggle("hl",k===S.hl));return;}
+  if(S.palette&&e.key==="Enter"){const c=paletteList()[S.hl];S.palette=false;render();if(c)flash(`“${c.name}” run. Outside the palette, it lives in: ${c.home}.`);return;}
+  if((e.ctrlKey||e.metaKey)&&!S.palette&&(e.key==="="||e.key==="+"||e.key==="-"||e.key==="0")&&!e.target.closest?.("[contenteditable]")){
+    e.preventDefault();const [lo,hi]=RANGE[S.app];const stops=LADDER.filter(v=>v>=lo&&v<=hi);const z=S.zoom[S.app];
+    if(e.key==="0")S.zoom[S.app]=100;else if(e.key==="-")S.zoom[S.app]=[...stops].reverse().find(v=>v<z)??lo;else S.zoom[S.app]=stops.find(v=>v>z)??hi;render();}
+});
+/* ---------- tooltips ----------
+   ~500 ms for the first one; within 300 ms of a hide the next shows at once (warm-up).
+   Above the bottom bars, left of the panel, below everything else; clamped to the viewport. */
+const tip=document.createElement("div");tip.className="tip";tip.setAttribute("role","tooltip");tip.hidden=true;document.body.appendChild(tip);
+const TIP_DELAY=500,TIP_WARM=300;
+let tipEl=null,tipTimer=null,lastHide=0,muted=null,lpTip=null,lpTipShown=false;
+function showTip(el){
+  clearTimeout(tipTimer);tipTimer=null;
+  const c=CMD[el.dataset.tip];if(!c||!el.isConnected)return;
+  tip.innerHTML=`<div class="tip-l1"><span>${c.name}</span>${kbdHTML(c.chord)}</div>${c.desc?`<div class="tip-l2" id="tip-desc">${c.desc}</div>`:""}`;
+  tip.hidden=false;tipEl=el;if(c.desc)el.setAttribute("aria-describedby","tip-desc");
+  const r=el.getBoundingClientRect(),w=tip.offsetWidth,h=tip.offsetHeight,W=innerWidth,H=innerHeight,g=8;
+  let side=el.closest(".tools,.status,.acc,.ptabs,.fab")?"top":el.closest(".panel")?"left":"bottom";
+  if(side==="left"&&r.left-w-g<8)side="bottom";
+  if(side==="top"&&r.top-h-g<8)side="bottom";
+  if(side==="bottom"&&r.bottom+h+g>H-8)side="top";
+  let x=side==="left"?r.left-w-g:r.left+r.width/2-w/2;
+  let y=side==="top"?r.top-h-g:side==="bottom"?r.bottom+g:r.top+r.height/2-h/2;
+  const fr=el.closest(".phone-frame")?.getBoundingClientRect(); /* inside the phone, stay inside the phone */
+  const L=Math.max(8,fr?fr.left+14:0),Rt=Math.min(W-8,fr?fr.right-14:W),T=Math.max(8,fr?fr.top+14:0),B=Math.min(H-8,fr?fr.bottom-14:H);
+  x=Math.min(Math.max(L,x),Rt-w);y=Math.min(Math.max(T,y),B-h);
+  tip.style.setProperty("--tip-dy",side==="top"?"3px":side==="bottom"?"-3px":"0");
+  tip.style.transform="";tip.style.left=x+"px";tip.style.top=y+"px";tip.dataset.side=side;
+}
+function hideTip(){
+  clearTimeout(tipTimer);tipTimer=null;
+  if(!tip.hidden){tip.hidden=true;lastHide=Date.now();}
+  if(tipEl){tipEl.removeAttribute("aria-describedby");tipEl=null;}
+}
+function armTip(el){
+  if(tipEl===el||muted===el||el.disabled)return;
+  const warm=!tip.hidden||Date.now()-lastHide<TIP_WARM;
+  hideTip();
+  if(warm)showTip(el);else tipTimer=setTimeout(()=>showTip(el),TIP_DELAY);
+}
+document.addEventListener("pointerover",e=>{
+  if(e.pointerType==="touch")return;
+  const el=e.target.closest?.("[data-tip]");if(!el||el.closest(".phone-frame"))return; /* a phone has no hover */
+  armTip(el);
+});
+document.addEventListener("pointerout",e=>{
+  const el=e.target.closest?.("[data-tip]");if(!el||(e.relatedTarget&&el.contains(e.relatedTarget)))return;
+  if(muted===el)muted=null;
+  if(tipEl===el||tipTimer)hideTip();
+});
+document.addEventListener("focusin",e=>{const el=e.target.closest?.("[data-tip]");if(el&&el.matches(":focus-visible"))armTip(el);});
+document.addEventListener("focusout",e=>{const el=e.target.closest?.("[data-tip]");if(el&&(tipEl===el||tipTimer))hideTip();});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&(tipEl||tipTimer)){if(tipEl)muted=tipEl;hideTip();}},true);
+addEventListener("scroll",hideTip,true);addEventListener("resize",hideTip);
+/* phone: a long press on an icon shows its tooltip and does not run it; release hides it */
+document.addEventListener("pointerdown",e=>{
+  const el=e.target.closest?.("[data-tip]");
+  if(!el||!el.closest(".phone-frame")){if(el){muted=el;hideTip();}return;}
+  lpTipShown=false;clearTimeout(lpTip);
+  lpTip=setTimeout(()=>{lpTipShown=true;showTip(el);},TIP_DELAY);
+},true);
+["pointerup","pointercancel"].forEach(n=>document.addEventListener(n,()=>{clearTimeout(lpTip);lpTip=null;if(lpTipShown)hideTip();},true));
+document.addEventListener("click",e=>{
+  if(lpTipShown){lpTipShown=false;e.preventDefault();e.stopPropagation();return;}
+  const el=e.target.closest?.("[data-tip]");if(el){muted=el;}hideTip();
+},true);
+document.addEventListener("contextmenu",e=>{if(e.target.closest?.(".phone-frame [data-tip]"))e.preventDefault();},true);
+function flash(msg){const d=document.createElement("div");d.textContent=msg;d.setAttribute("role","status");
+  Object.assign(d.style,{position:"absolute",left:"50%",top:"62px",transform:"translateX(-50%)",background:"var(--ink)",color:"var(--bg)",padding:"8px 14px",borderRadius:"9px",fontSize:"13px",zIndex:60,boxShadow:"var(--shadow)",maxWidth:"80%"});
+  const m=document.getElementById("mock");m.appendChild(d);setTimeout(()=>d.remove(),2200);}
+render();
+})();
+</script>

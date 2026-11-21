@@ -191,6 +191,31 @@ impl ProseState {
         self.commit_bands()
     }
 
+    /// Write the page format whole: the orientation and the two dimensions
+    /// together, then the four margins, in one commit (`PROSE-032`,
+    /// `PROSE-144`). The view lays out again on the next read.
+    pub(super) fn set_page_format(&mut self, format: doc::PageFormat) -> ProseOutcome {
+        if doc::read_page_format(&self.doc, &self.roots) == format {
+            return ProseOutcome::nothing();
+        }
+        if !doc::write_whole_page_format(&self.doc, format) {
+            return ProseOutcome::refused(crate::events::ProseRefusal::PageWithoutContent);
+        }
+        self.commit_with(Vec::new())
+    }
+
+    /// The page format the document holds now, in millimetres.
+    #[must_use]
+    pub fn page_format(&self) -> doc::PageFormat {
+        doc::read_page_format(&self.doc, &self.roots)
+    }
+
+    /// The orientation the document stores, `None` for none it can read.
+    #[must_use]
+    pub fn page_orientation(&self) -> Option<doc::Orientation> {
+        doc::read_orientation(&self.doc, &self.roots)
+    }
+
     /// This session's own operation counter: how far its PeerID has written.
     fn own_counter(&self) -> ambre_core::OpCounter {
         ambre_core::OpCounter::new(
@@ -258,6 +283,56 @@ impl ProseState {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+
+    /// A page of `width` by `height`, margins of `margin`, in millimetres.
+    fn page(width: f32, height: f32, margin: f32) -> doc::PageFormat {
+        use ambre_core::{Mm, PrintLength};
+        doc::PageFormat {
+            width: PrintLength::<Mm>::new(width),
+            height: PrintLength::<Mm>::new(height),
+            margin_top: PrintLength::<Mm>::new(margin),
+            margin_bottom: PrintLength::<Mm>::new(margin),
+            margin_left: PrintLength::<Mm>::new(margin),
+            margin_right: PrintLength::<Mm>::new(margin),
+        }
+    }
+
+    #[test]
+    fn a_page_write_sets_the_whole_format_and_one_undo_takes_it_back() {
+        let mut state = ProseState::new().expect("a fresh document");
+        let before = state.page_format();
+        let wide = page(297.0, 210.0, 12.0);
+        let out = state.handle_command(ProseCommand::SetPageFormat { format: wide });
+        assert!(out.update.is_some(), "the write reaches the peers");
+        assert_eq!(state.page_format(), wide);
+        let Some(ProseEvent::LayoutShaped { layout }) = state.layout_event() else {
+            panic!("the page is laid out again");
+        };
+        let laid = layout
+            .get::<crate::layout::run::ShapedLayout>()
+            .expect("a shaped layout")
+            .layout
+            .format;
+        assert_eq!(laid, wide, "the layout is measured on the new page");
+        state.handle_command(ProseCommand::Undo);
+        assert_eq!(state.page_format(), before);
+    }
+
+    #[test]
+    fn a_page_with_no_room_for_text_is_refused_and_writes_nothing() {
+        let mut state = ProseState::new().expect("a fresh document");
+        let before = state.page_format();
+        for format in [
+            page(210.0, 297.0, 105.0),
+            page(210.0, 297.0, -1.0),
+            page(f32::NAN, 297.0, 10.0),
+            page(0.0, 297.0, 0.0),
+        ] {
+            let out = state.handle_command(ProseCommand::SetPageFormat { format });
+            assert!(out.update.is_none(), "{format:?} writes nothing");
+            assert_eq!(state.page_format(), before);
+        }
+    }
     use crate::events::{BlockId, DateFieldFormat, Page, ProseCommand};
     use crate::message::DocChar;
     use ambre_core::index::{Len, Span};

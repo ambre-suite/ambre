@@ -1519,6 +1519,30 @@ mod tests {
         assert!(matches!(state.shown(&hash_of('f')), PictureShown::Ready(_)));
     }
 
+    /// `CHROME-173`: the block a picture from a file writes, once its address
+    /// comes back, is one undo item. The undo takes the whole block back: it
+    /// reads as gone, as an undone block does.
+    #[test]
+    fn a_picture_from_a_file_is_one_undo_item() {
+        let mut state = ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document");
+        let first = state.root_blocks()[0];
+        let _ = state.handle_command(ProseCommand::InsertImageFile {
+            parent_id: None,
+            after_id: Some(first),
+            data: Payload::new(png(30, 20)),
+            alt: ambre_core::Validated::new("chosen"),
+        });
+        let [(id, _)] = &uploads(&mut state)[..] else {
+            panic!("one upload");
+        };
+        let _ = state.handle_media_event(*id, uploaded(&hash_of('f')));
+        assert_eq!(state.root_blocks().len(), 2, "the picture is written");
+        state.handle_command(ProseCommand::Undo);
+        assert_eq!(state.root_blocks(), vec![first]);
+        state.handle_command(ProseCommand::Redo);
+        assert_eq!(state.root_blocks().len(), 2, "one redo writes it back");
+    }
+
     /// `PROSE-FEAT-314`, `PROSE-FEAT-318`: a file this build cannot read is
     /// refused before any byte leaves. One the media flow did not store is
     /// named to the author and writes nothing.

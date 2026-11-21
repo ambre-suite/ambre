@@ -143,7 +143,8 @@ peer and a counter, which is why two concurrent creates cannot collide (`TRAME-0
 
 ## 4. SURFACE
 
-The tab strip is DOM chrome along the bottom edge, not painted on the canvas.
+The tab strip is DOM chrome in the status bar, before the zoom (`ambre-spec-shell.md`, `CHROME-162`),
+not painted on the canvas.
 
 | Part | Behaviour |
 |---|---|

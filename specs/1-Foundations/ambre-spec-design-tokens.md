@@ -35,12 +35,21 @@ The user flips the theme control. One act must move both halves, and it must mov
 | `UI-THREAD-032` | `POST` | A theme switch MUST reach the browser half and the drawing half together, from one act. | this spec section 2 | `ambre_app::platform::tests::a_theme_switch_reaches_both_halves` -- one switch, read back from the control and the document attribute, in the browser tier | none | verified |
 | `UI-THREAD-034` | `FRAME` | A theme switch MUST NOT change a spacing, a radius or a type size. | this spec section 2; section 4, row 5 | `ambre_canvas::theme::stylesheet_tests::a_theme_switch_changes_no_scale` -- the dark block declares colours and effects alone | none | verified |
 
+### 1.3 Boot the theme
+
+A page opens. It takes the theme the system asks for, before the first frame.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `UI-THREAD-065` | `POST` | A page MUST boot in the theme the system asks for, and in the light theme when the system answers nothing. | this spec section 2 | `ambre_app::platform::tests::a_page_boots_in_the_theme_the_system_asks_for` -- wasm tier, each scheme maps to its theme, and the scheme read matches the media query of the browser | none | verified |
+| `UI-THREAD-066` | `FRAME` | The boot MUST NOT read a theme an earlier session chose: the theme it takes depends on the system scheme alone. | this spec section 2; `UI-THREAD-004` | type-level -- `boot_theme` takes the system scheme as its one argument, so no stored value reaches it; `ambre_app::platform::tests::a_page_boots_in_the_theme_the_system_asks_for` | none | verified |
+
 * **Budget.** none: a token is a constant compiled into the binary, so it costs nothing at run time.
   A theme switch repaints the content once, which is the frame budget of
   `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: a token is a colour and a number, generated into the binary. Nothing here
   reaches the relay, holds a key or opens a socket, and the chosen theme is never sent anywhere.
-* **Verification.** 6 `verified`. A drift check keeps the two committed sides on one source; host
+* **Verification.** 8 `verified`. A drift check keeps the two committed sides on one source; host
   tests read the generated sheets, and a browser test drives a switch.
 
 ---
@@ -59,7 +68,7 @@ theme is a property of the machine.
 3. `just tokens-check` fails when either file is not what the source generates (`UI-THREAD-030`).
    The drawing crate declares the module and embeds the sheet as text;
 4. the launcher injects the stylesheet into the page at startup and sets the document's theme
-   attribute;
+   attribute to the theme the system asks for (`UI-THREAD-065`);
 5. a switch flips one control; the browser half re-resolves its properties and the drawing half
    reads the control on the next frame (`UI-THREAD-032`).
 

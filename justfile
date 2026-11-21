@@ -869,9 +869,19 @@ proverif model="crates/ambre-crypto/proofs/call_sender_keys.pv":
 fuzz seconds="60":
     cd fuzz && host="$(rustc -vV | sed -n 's/^host: //p')" && for target in wire_decode docfile formula markdown sealed trame_file toile_file prose_import; do cargo fuzz run --target "$host" "$target" -- -max_total_time={{seconds}} -rss_limit_mb=2048 || exit 1; done
 
+# The Docker daemon, started when it is down (`scripts/docker_up.py`), then the
+# backing services. The one entry point of a cloud session, where the daemon is
+# stopped and Docker Hub refuses anonymous pulls: the script routes them through
+# Google's mirror.
+docker-up:
+    python3 scripts/docker_up.py
+    just services-up
+
 # Local convenience: bring the db-tier backing services up, the object store
-# prepared.
+# prepared. A stopped daemon is named, with the recipe that starts it: no backing
+# service ever runs on the host in its place (`ai/ambre-testing.md`).
 services-up:
+    @docker info > /dev/null 2>&1 || { echo "error: the Docker daemon is not running. Run 'just docker-up', which starts it and the services. Never run postgres or redis on the host instead (ai/ambre-testing.md)." >&2; exit 1; }
     docker compose up -d postgres redis
     just garage-up
 

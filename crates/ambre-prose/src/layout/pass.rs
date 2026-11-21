@@ -47,6 +47,8 @@ pub struct PageLayout {
     /// Where the content box starts on the sheet.
     pub margin_left: Px<Doc>,
     pub margin_top: Px<Doc>,
+    /// The page format the layout was measured on, in millimetres.
+    pub format: doc::PageFormat,
     pub page_count: Len<Page>,
     pub blocks: Vec<BlockLayout>,
     pub header_height: Px<Doc>,
@@ -417,6 +419,7 @@ pub(crate) fn layout_of(page_box: PageBox, placement: &Placement) -> PageLayout 
         content_height: page_box.content_height,
         margin_left: page_box.margin_left,
         margin_top: page_box.margin_top,
+        format: page_box.format,
         page_count: placement.page_count,
         blocks: placement.blocks.clone(),
         header_height: Px::<Doc>::ZERO,

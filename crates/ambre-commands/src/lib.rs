@@ -19,7 +19,7 @@ mod mode;
 pub use keybinding::{FunctionKey, Key, KeyBinding, KeyChar, KeyState, ModifierFold, ModifierKeys};
 pub use mode::{ClipboardWrite, PasteForm, SelectionMode};
 
-use ambre_core::{Categories, Commands, Count, Icons, NarrowCount, StaticKey};
+use ambre_core::{Categories, Commands, Count, Icons, NarrowCount, Properties, StaticKey};
 
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -41,6 +41,71 @@ impl ambre_core::Free for CommandTitle {}
 
 impl ambre_core::Displayed for CommandTitle {}
 
+/// The name of a home region, which a person reads beside a command in the
+/// palette (`CHROME-157`). `Validated<RegionName>`: no rule bounds it.
+pub enum RegionName {}
+
+impl ambre_core::Free for RegionName {}
+
+impl ambre_core::Displayed for RegionName {}
+
+/// The one region a command lives in (`ambre-spec-shell.md` section 2,
+/// `CHROME-148`). The six homes are the only variants. The context bar and
+/// the palette reach commands but home none, so neither is a variant.
+///
+/// [`Command::home`] is a required field, so a description that names no
+/// region does not compile:
+///
+/// ```compile_fail,E0063
+/// use ambre_commands::{Command, CommandTitle, Locale};
+/// use ambre_core::{Categories, Commands, StaticKey, Validated};
+/// fn title(_: &Locale) -> Validated<CommandTitle> {
+///     Validated::new("Bold")
+/// }
+/// const BOLD: Command = Command {
+///     id: StaticKey::<Commands>::new("t.format.bold"),
+///     title,
+///     icon: None,
+///     keybindings: &[],
+///     category: StaticKey::<Categories>::new("format"),
+/// };
+/// ```
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Home {
+    /// Shows the state of the document and never writes it (`CHROME-149`).
+    StatusBar,
+    /// The tools that act on the selection.
+    ContextPanel,
+    /// The tools that add a new element.
+    CreationBar,
+    /// The verbs on the thing under the pointer.
+    ContextMenu,
+    /// The whole document: the file, the history, the palette.
+    AmbreMenu,
+    /// The person: preferences and identity.
+    AvatarMenu,
+}
+
+impl Home {
+    /// The name a person reads for the region, in one locale.
+    pub fn name(self, locale: &Locale) -> ambre_core::Validated<RegionName> {
+        ambre_core::Validated::new(match (self, locale) {
+            (Self::StatusBar, Locale::Fr) => "Barre d'\u{e9}tat",
+            (Self::StatusBar, Locale::En) => "Status bar",
+            (Self::ContextPanel, Locale::Fr) => "Panneau contextuel",
+            (Self::ContextPanel, Locale::En) => "Context panel",
+            (Self::CreationBar, Locale::Fr) => "Barre de cr\u{e9}ation",
+            (Self::CreationBar, Locale::En) => "Creation bar",
+            (Self::ContextMenu, Locale::Fr) => "Menu contextuel",
+            (Self::ContextMenu, Locale::En) => "Context menu",
+            (Self::AmbreMenu, Locale::Fr) => "Menu Ambre",
+            (Self::AmbreMenu, Locale::En) => "Ambre menu",
+            (Self::AvatarMenu, Locale::Fr) => "Menu de l'avatar",
+            (Self::AvatarMenu, Locale::En) => "Avatar menu",
+        })
+    }
+}
+
 /// Static description of a command. Apps build `const` tables of these and
 /// expose them through [`CommandSource`].
 pub struct Command {
@@ -55,6 +120,9 @@ pub struct Command {
     /// and a legacy one. Empty for a command no chord triggers.
     pub keybindings: &'static [KeyBinding],
     pub category: StaticKey<Categories>,
+    /// The one region the command lives in (`CHROME-148`). A required field,
+    /// so a command without a home does not compile.
+    pub home: Home,
 }
 
 impl Command {
@@ -62,6 +130,174 @@ impl Command {
     /// declares. `None` for a command no chord triggers.
     pub fn chord(&self) -> Option<KeyBinding> {
         self.keybindings.first().copied()
+    }
+}
+
+/// Static description of a property (`ambre-spec-shell.md` section 2, the
+/// property model). A property is a value of the selection that a control of
+/// the context panel reads and writes. A colour, a font or a size is a
+/// property; bold is a command.
+///
+/// A property has no `home` field: the context panel is its one home by
+/// construction, so no description can file it elsewhere.
+pub struct Property {
+    pub id: StaticKey<Properties>,
+    /// Localized label, as a command's.
+    pub title: fn(&Locale) -> ambre_core::Validated<CommandTitle>,
+    pub icon: Option<StaticKey<Icons>>,
+}
+
+/// What one entry of a contextual surface reaches: a command, or a property
+/// (`CHROME-207`). The context bar and the context menu are lists of these,
+/// and each control of the context panel carries one.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Reach {
+    /// A command, run with no argument.
+    Command(StaticKey<Commands>),
+    /// A property, written with a value.
+    Property(StaticKey<Properties>),
+}
+
+impl Reach {
+    /// The prefix of [`Reach::marker`] for a command.
+    const COMMAND: &'static str = "command:";
+    /// The prefix of [`Reach::marker`] for a property.
+    const PROPERTY: &'static str = "property:";
+
+    /// The word a control writes on its `data-reach` attribute, which a test
+    /// reads back with [`Reach::matches_marker`].
+    #[must_use]
+    pub fn marker(self) -> String {
+        match self {
+            Self::Command(id) => format!("{}{}", Self::COMMAND, id.as_str()),
+            Self::Property(id) => format!("{}{}", Self::PROPERTY, id.as_str()),
+        }
+    }
+
+    /// Whether `marker`, read off a `data-reach` attribute, names this entry.
+    #[must_use]
+    pub fn matches_marker(self, marker: &str) -> bool {
+        let (prefix, id) = match self {
+            Self::Command(id) => (Self::COMMAND, id.as_str()),
+            Self::Property(id) => (Self::PROPERTY, id.as_str()),
+        };
+        marker.strip_prefix(prefix) == Some(id)
+    }
+}
+
+/// The value a property reads off the selection (`CHROME-210`).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Reading<T> {
+    /// Every selected element holds this value.
+    Uniform(T),
+    /// The selected elements disagree.
+    Mixed,
+}
+
+impl<T> Reading<T> {
+    /// The one value, or `None` when the selection is mixed.
+    pub fn uniform(self) -> Option<T> {
+        match self {
+            Self::Uniform(value) => Some(value),
+            Self::Mixed => None,
+        }
+    }
+
+    /// Whether the selected elements disagree.
+    pub fn is_mixed(&self) -> bool {
+        matches!(self, Self::Mixed)
+    }
+}
+
+/// Look up a property by id in a table.
+pub fn find_property(properties: &[Property], id: StaticKey<Properties>) -> Option<&Property> {
+    properties.iter().find(|p| p.id == id)
+}
+
+/// Why an entry of a contextual surface breaks the rules of its region
+/// (`CHROME-150`, `CHROME-151`, `CHROME-182`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ReachDefect {
+    /// The entry names a command no table describes.
+    Undeclared(Reach),
+    /// The command lives in another region than the context panel.
+    NotPanelHomed(StaticKey<Commands>, Home),
+    /// The context bar holds a clipboard command.
+    ClipboardInBar(StaticKey<Commands>),
+    /// The context menu does not open on cut, copy and paste, in that order.
+    ClipboardNotFirst,
+}
+
+/// The order of the three clipboard entries a context menu opens on
+/// (`CHROME-179`).
+pub const MENU_CLIPBOARD: [Reach; 3] = [
+    Reach::Command(shared::CUT),
+    Reach::Command(shared::COPY),
+    Reach::Command(shared::PASTE),
+];
+
+/// Every defect of a context bar. Each entry is a declared property, or a
+/// command whose home is the context panel. No entry is a clipboard command.
+pub fn bar_defects(
+    bar: &[Reach],
+    commands: &[Command],
+    properties: &[Property],
+) -> Vec<ReachDefect> {
+    bar.iter()
+        .filter_map(|&entry| match entry {
+            Reach::Command(id) if shared::BROWSER_SERVICED.contains(&id) => {
+                Some(ReachDefect::ClipboardInBar(id))
+            }
+            _ => panel_defect(entry, commands, properties),
+        })
+        .collect()
+}
+
+/// Every defect of a context menu (`CHROME-179`, `CHROME-182`). Its clipboard
+/// entries come first, and cut, copy and paste keep that order among those
+/// the menu shows. Every other entry is a declared property, or a command
+/// whose home is the context panel.
+pub fn menu_defects(
+    menu: &[Reach],
+    commands: &[Command],
+    properties: &[Property],
+) -> Vec<ReachDefect> {
+    let clipboard = |entry: &Reach| matches!(entry, Reach::Command(id) if shared::BROWSER_SERVICED.contains(id));
+    let lead = menu.iter().take_while(|e| clipboard(e)).count();
+    let order: Vec<usize> = menu
+        .iter()
+        .filter_map(|e| MENU_CLIPBOARD.iter().position(|c| c == e))
+        .collect();
+    let mut defects = Vec::new();
+    if menu.iter().skip(lead).any(clipboard)
+        || order.windows(2).any(|w| matches!(w, [a, b] if a >= b))
+    {
+        defects.push(ReachDefect::ClipboardNotFirst);
+    }
+    defects.extend(
+        menu.iter()
+            .skip(lead)
+            .filter(|e| !clipboard(e))
+            .filter_map(|&entry| panel_defect(entry, commands, properties)),
+    );
+    defects
+}
+
+/// The defect of one entry that must reach the context panel, if any.
+fn panel_defect(
+    entry: Reach,
+    commands: &[Command],
+    properties: &[Property],
+) -> Option<ReachDefect> {
+    match entry {
+        Reach::Command(id) => match find(commands, id) {
+            None => Some(ReachDefect::Undeclared(entry)),
+            Some(c) if c.home != Home::ContextPanel => Some(ReachDefect::NotPanelHomed(id, c.home)),
+            Some(_) => None,
+        },
+        Reach::Property(id) => find_property(properties, id)
+            .is_none()
+            .then_some(ReachDefect::Undeclared(entry)),
     }
 }
 
@@ -122,6 +358,36 @@ pub mod shared {
     /// Paste as plain text: the chord Chrome, Edge, Firefox, Word and Google
     /// Docs share.
     pub const PASTE_PLAIN_CHORDS: &[KeyBinding] = &[KeyBinding::primary_shift(KeyChar::V)];
+
+    /// Collapse an open context panel to its rail, or open a collapsed one
+    /// (`CHROME-175`, `CHROME-176`). The panel is the shell's in every
+    /// application, so the chord is shared.
+    pub const PANEL_TOGGLE_CHORDS: &[KeyBinding] = &[KeyBinding::primary(KeyChar::new('.'))];
+
+    /// The zoom step a chord asks for, in every application (`ZOOM-004`,
+    /// `ZOOM-005`). `Ctrl` with `=` or `+` zooms in, and with `-` zooms out.
+    /// `Ctrl` with `0` returns to one. Shift is free, as `+` is a shifted `=` on most
+    /// layouts. Any other chord is `None`, so it stays the caller's.
+    #[must_use]
+    pub fn zoom_step(
+        key: Key,
+        mods: ambre_core::Flags<ModifierKeys>,
+    ) -> Option<ambre_core::ZoomStep> {
+        use ambre_core::ZoomStep;
+        let held = mods.without(ModifierKeys::SHIFT);
+        if held != ModifierKeys::PRIMARY {
+            return None;
+        }
+        match key {
+            Key::Char(c) => match c.get() {
+                '=' | '+' => Some(ZoomStep::In),
+                '-' => Some(ZoomStep::Out),
+                '0' => Some(ZoomStep::Reset),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
 }
 
 /// Runtime state of a command, derived from app state on each interrogation
@@ -311,6 +577,30 @@ impl Keymap {
 mod tests {
     use super::*;
 
+    /// `ZOOM-004`, `ZOOM-005`: the zoom chords are one decision, read by
+    /// every application. A plain key and another modifier are no zoom.
+    #[test]
+    fn the_zoom_chords_step_the_zoom_in_every_application() {
+        use ambre_core::ZoomStep;
+        let ctrl = ModifierKeys::PRIMARY;
+        for (c, step) in [
+            ('=', ZoomStep::In),
+            ('+', ZoomStep::In),
+            ('-', ZoomStep::Out),
+            ('0', ZoomStep::Reset),
+        ] {
+            let key = Key::Char(KeyChar::new(c));
+            assert_eq!(shared::zoom_step(key, ctrl), Some(step), "{c}");
+            assert_eq!(
+                shared::zoom_step(key, ctrl.with(ModifierKeys::SHIFT)),
+                Some(step)
+            );
+            assert_eq!(shared::zoom_step(key, ModifierKeys::NONE), None);
+            assert_eq!(shared::zoom_step(key, ctrl.with(ModifierKeys::ALT)), None);
+        }
+        assert_eq!(shared::zoom_step(Key::Char(KeyChar::Z), ctrl), None);
+    }
+
     fn bold_title(l: &Locale) -> ambre_core::Validated<CommandTitle> {
         match l {
             Locale::Fr => ambre_core::Validated::new("Gras"),
@@ -334,6 +624,7 @@ mod tests {
             icon: Some(StaticKey::<Icons>::new("bold")),
             keybindings: &[KeyBinding::primary(KeyChar::B)],
             category: FORMAT,
+            home: Home::ContextPanel,
         },
         Command {
             id: StaticKey::<Commands>::new("prose.format.italic"),
@@ -341,6 +632,7 @@ mod tests {
             icon: Some(StaticKey::<Icons>::new("italic")),
             keybindings: &[KeyBinding::primary(KeyChar::I)],
             category: FORMAT,
+            home: Home::ContextPanel,
         },
     ];
 
@@ -354,6 +646,7 @@ mod tests {
             icon: None,
             keybindings: shared::REDO_CHORDS,
             category: FORMAT,
+            home: Home::ContextPanel,
         },
         Command {
             id: shared::COPY,
@@ -361,6 +654,7 @@ mod tests {
             icon: None,
             keybindings: shared::COPY_CHORDS,
             category: FORMAT,
+            home: Home::ContextPanel,
         },
         Command {
             id: shared::PASTE,
@@ -368,6 +662,7 @@ mod tests {
             icon: None,
             keybindings: shared::PASTE_CHORDS,
             category: FORMAT,
+            home: Home::ContextPanel,
         },
     ];
 
@@ -474,6 +769,7 @@ mod tests {
                 icon: Some(StaticKey::<Icons>::new(" ")),
                 keybindings: CHORD,
                 category: StaticKey::<Categories>::new(""),
+                home: Home::ContextPanel,
             },
             Command {
                 id: other,
@@ -481,6 +777,7 @@ mod tests {
                 icon: None,
                 keybindings: CHORD,
                 category: FORMAT,
+                home: Home::ContextPanel,
             },
             Command {
                 id: bold,
@@ -488,6 +785,7 @@ mod tests {
                 icon: None,
                 keybindings: &[],
                 category: FORMAT,
+                home: Home::ContextPanel,
             },
         ];
         assert_eq!(
@@ -542,5 +840,100 @@ mod tests {
         assert_eq!(s.enabled, ambre_core::Availability::Enabled);
         assert_eq!(s.visible, Listing::Listed);
         assert_eq!(s.toggled, ambre_core::Toggle::Off);
+    }
+
+    fn t(_: &Locale) -> ambre_core::Validated<CommandTitle> {
+        ambre_core::Validated::new("x")
+    }
+
+    const BOLD: StaticKey<Commands> = StaticKey::<Commands>::new("t.bold");
+    const SAVE: StaticKey<Commands> = StaticKey::<Commands>::new("t.save");
+    const FILL: StaticKey<Properties> = StaticKey::<Properties>::new("t.fill");
+
+    const TABLE: &[Command] = &[
+        Command {
+            id: BOLD,
+            title: t,
+            icon: None,
+            keybindings: &[],
+            category: StaticKey::<Categories>::new("format"),
+            home: Home::ContextPanel,
+        },
+        Command {
+            id: SAVE,
+            title: t,
+            icon: None,
+            keybindings: &[],
+            category: StaticKey::<Categories>::new("file"),
+            home: Home::AmbreMenu,
+        },
+    ];
+
+    const PROPS: &[Property] = &[Property {
+        id: FILL,
+        title: t,
+        icon: None,
+    }];
+
+    #[test]
+    fn a_bar_of_panel_commands_and_properties_has_no_defect() {
+        let bar = [Reach::Command(BOLD), Reach::Property(FILL)];
+        assert!(bar_defects(&bar, TABLE, PROPS).is_empty());
+    }
+
+    #[test]
+    fn a_bar_refuses_the_clipboard_and_a_command_of_another_home() {
+        let bar = [Reach::Command(shared::COPY), Reach::Command(SAVE)];
+        assert_eq!(
+            bar_defects(&bar, TABLE, PROPS),
+            vec![
+                ReachDefect::ClipboardInBar(shared::COPY),
+                ReachDefect::NotPanelHomed(SAVE, Home::AmbreMenu),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_menu_opens_on_cut_copy_paste_then_reaches_the_panel_alone() {
+        let mut menu = MENU_CLIPBOARD.to_vec();
+        menu.push(Reach::Command(BOLD));
+        assert!(menu_defects(&menu, TABLE, PROPS).is_empty());
+        // A menu that shows copy and paste alone keeps them first.
+        let locked = [
+            Reach::Command(shared::COPY),
+            Reach::Command(shared::PASTE),
+            Reach::Command(BOLD),
+        ];
+        assert!(menu_defects(&locked, TABLE, PROPS).is_empty());
+        let late = [Reach::Command(BOLD), Reach::Command(shared::PASTE)];
+        assert_eq!(
+            menu_defects(&late, TABLE, PROPS),
+            vec![ReachDefect::ClipboardNotFirst]
+        );
+        let swapped = [
+            Reach::Command(shared::COPY),
+            Reach::Command(shared::CUT),
+            Reach::Command(shared::PASTE),
+            Reach::Command(SAVE),
+        ];
+        assert_eq!(
+            menu_defects(&swapped, TABLE, PROPS),
+            vec![
+                ReachDefect::ClipboardNotFirst,
+                ReachDefect::NotPanelHomed(SAVE, Home::AmbreMenu),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_reach_marker_reads_back_as_its_entry_alone() {
+        let cmd = Reach::Command(BOLD);
+        let prop = Reach::Property(FILL);
+        assert!(cmd.matches_marker(&cmd.marker()));
+        assert!(prop.matches_marker(&prop.marker()));
+        assert!(!cmd.matches_marker(&prop.marker()));
+        assert!(
+            !Reach::Property(StaticKey::<Properties>::new("t.bold")).matches_marker(&cmd.marker())
+        );
     }
 }

@@ -21,9 +21,11 @@ use leptos::prelude::*;
 mod handler;
 mod menu;
 mod notify;
+mod panel;
 pub use handler::ProseHandler;
 pub use menu::context_entries;
 pub use notify::notify_event;
+pub use panel::prose_panel;
 
 use ambre_chrome::{FormatBar, FormatControl, Pressed};
 
@@ -94,6 +96,12 @@ pub struct ProseSignals {
     /// the Logic thread last reported it. The chrome counts nothing
     /// (`UNDO-006`).
     pub history: RwSignal<History>,
+    /// The page format the layout was measured on, which the context panel
+    /// shows (`PROSE-UI-253`). `None` before the first layout.
+    pub page: RwSignal<Option<crate::doc::PageFormat>>,
+    /// A page format a control of the context panel asked for, until the
+    /// view drains it into one command (`PROSE-UI-252`).
+    pub page_write: RwSignal<Option<crate::doc::PageFormat>>,
 }
 
 /// What the local history holds, as the Logic thread last reported it. A
@@ -130,7 +138,18 @@ impl ProseSignals {
             ruler: RwSignal::new(RulerState::default()),
             ruler_release: RwSignal::new(None),
             history: RwSignal::new(History::default()),
+            page: RwSignal::new(None),
+            page_write: RwSignal::new(None),
         }
+    }
+
+    /// The command of the page format the context panel asked for, taken
+    /// out of its signal. One command carries the whole format, so one undo
+    /// takes it back (`PROSE-UI-252`). `None` when no write waits.
+    pub fn take_page_write(&self) -> Option<crate::message::ProseCommand> {
+        let format = self.page_write.get_untracked()?;
+        self.page_write.set(None);
+        Some(crate::message::ProseCommand::SetPageFormat { format })
     }
 
     /// Take in the history's availability from a Prose
@@ -439,6 +458,21 @@ pub fn ProseFormatBar(signals: ProseSignals) -> impl IntoView {
             .to_vec();
         Some(view! { <FormatBar anchor=anchor controls=controls /> })
     }
+}
+
+/// The glyph a command of the page declares, resolved to its asset.
+pub(crate) fn icon_of(command: &ambre_commands::Command) -> Option<icondata::Icon> {
+    Some(match command.icon?.as_str() {
+        "format-bold" => icondata::BsTypeBold,
+        "format-italic" => icondata::BsTypeItalic,
+        "format-underline" => icondata::BsTypeUnderline,
+        "format-strikethrough" => icondata::BsTypeStrikethrough,
+        "code-tags" => icondata::MdiCodeTags,
+        "format-superscript" => icondata::MdiFormatSuperscript,
+        "format-subscript" => icondata::MdiFormatSubscript,
+        "format-clear" => icondata::MdiFormatClear,
+        _ => return None,
+    })
 }
 
 /// One control, announced by its command's title.

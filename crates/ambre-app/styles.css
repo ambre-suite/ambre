@@ -13,10 +13,17 @@
    properties. Only layout constants specific to the shell live here. */
 :root {
     --header-h: 44px;
+    /* The one family of the chrome. The page loads no web face for the chrome,
+       so the stack names the platform's interface face alone. */
+    --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+    --commandbar-h: 38px;
     --status-h: 26px;
     --sidebar-w: 260px;
     --sidebar-strip: 44px;
     --panel-w: 380px;
+    /* The context panel's width; the panel overrides it inline with the
+       width the user dragged (`CHROME-198`). */
+    --ctx-panel-w: 300px;
     /* 1 at the desktop width, where a chord shows. The host reads it for the
        canvas, so no width lives outside this sheet. */
     --desktop: 0;
@@ -34,6 +41,15 @@ input[type="radio"] {
     color-scheme: dark;
 }
 
+/* Every surface mounted outside the shell, a toast, a menu or a dialog,
+   inherits the chrome family from the body, never the serif face of the
+   browser (`CHROME-201`). */
+body {
+    font-family: var(--font-sans);
+    font-size: var(--font-ui);
+    color: var(--text);
+}
+
 /* The shell fills the viewport; rows = header, command bar, formula bar,
    body, tab strip, status. Each row is placed by name, so an absent one leaves
    its track empty: an `auto` track then collapses to 0. */
@@ -45,7 +61,7 @@ input[type="radio"] {
     height: 100%;
     background: var(--bg);
     color: var(--text);
-    font-family: system-ui, -apple-system, sans-serif;
+    font-family: var(--font-sans);
     font-size: var(--font-ui);
 }
 
@@ -62,6 +78,28 @@ input[type="radio"] {
 .ambre-header .title {
     font-weight: 600;
     letter-spacing: 0.2px;
+}
+
+/* The way home reads as the title, not as a link of the page (`CHROME-203`). */
+.ambre-header .ambre-home {
+    color: var(--text);
+    text-decoration: none;
+    border-radius: var(--radius-sm);
+    padding: var(--space-1) var(--space-2);
+}
+
+.ambre-header .ambre-home:hover {
+    background: var(--surface-hover);
+}
+
+.ambre-header .ambre-doc-name {
+    color: var(--text-dim);
+    padding-left: var(--space-4);
+    border-left: 1px solid var(--border);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
 }
 
 .ambre-header .spacer {
@@ -121,7 +159,7 @@ input[type="radio"] {
     padding: var(--space-2) var(--space-5);
     background: var(--surface-2);
     border-bottom: 1px solid var(--border);
-    min-height: 38px;
+    min-height: var(--commandbar-h);
 }
 
 .ambre-commandbar button {
@@ -129,7 +167,7 @@ input[type="radio"] {
     border: 1px solid transparent;
     background: transparent;
     color: var(--text);
-    font-family: Roboto, system-ui, -apple-system, sans-serif;
+    font-family: var(--font-sans);
     font-size: var(--font-body);
     font-weight: 400;
     padding: var(--space-2) calc(var(--space-4) + 1px);
@@ -170,12 +208,14 @@ input[type="radio"] {
 /* Toolbar tooltips: a discreet, theme-aware replacement for the native `title`
    bubble (small muted text, thin border, surface background). Driven by
    `aria-label` so the accessible name and the visual hint share one source. The
-   bubble fades in after a short delay so it stays out of the way. */
-.ambre-commandbar [aria-label] {
+   bubble fades in after a short delay so it stays out of the way. A control
+   alone carries the bubble: a floating menu the bar opens keeps its own fixed
+   position (`CHROME-200`). */
+.ambre-commandbar :is(button, select)[aria-label]:not(.ambre-ctx-menu *) {
     position: relative;
 }
 
-.ambre-commandbar [aria-label]::after {
+.ambre-commandbar :is(button, select)[aria-label]:not(.ambre-ctx-menu *)::after {
     content: attr(aria-label);
     position: absolute;
     top: calc(100% + 6px);
@@ -197,17 +237,17 @@ input[type="radio"] {
     transition: opacity 0.1s ease 0.45s;
 }
 
-.ambre-commandbar [aria-label]:hover::after {
+.ambre-commandbar :is(button, select)[aria-label]:not(.ambre-ctx-menu *):hover::after {
     opacity: 1;
 }
 
 /* Toile tool palette / primary toolbar (toile-ui SS5quinquies.A). It carries the
    `.ambre-commandbar` class too, so every button / hover / active-fill / `.sep` /
    tooltip rule above applies unchanged -- visually identical to the Trame bar. This
-   modifier only re-docks it as a floating vertical palette (Trame's bar is docked
-   horizontally along the top). */
+   modifier only re-docks it as a floating vertical palette. It floats inside the
+   content cell, so a context panel docked to the left covers none of it. */
 .ambre-tool-palette {
-    position: fixed;
+    position: absolute;
     top: 50%;
     left: 8px;
     transform: translateY(-50%);
@@ -230,49 +270,68 @@ input[type="radio"] {
 
 /* The shared tooltip sits below the button in the docked bar; on a left-docked
    vertical palette it reads better to its right. */
-.ambre-tool-palette [aria-label]::after {
+.ambre-tool-palette :is(button, select)[aria-label]:not(.ambre-ctx-menu *)::after {
     top: 50%;
     left: calc(100% + 6px);
     transform: translateY(-50%);
 }
 
-/* Toile top menu bar (toile-ui SS5quinquies.E). Reuses `.ambre-commandbar` for
-   buttons / hover / active-fill; this modifier only docks it top-center. */
-.ambre-toile-menubar {
-    position: fixed;
-    top: 8px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 60;
+/* The format bar over a selection (`CHROME-105`), which Prose and Murmure hand
+   their controls. The component sets its position; this sheet gives it the
+   frame of a floating bar, so it never shows the raw buttons of the browser
+   (`CHROME-202`). */
+.ambre-format-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-2);
+    background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
-    box-shadow: var(--shadow-low);
+    box-shadow: var(--shadow-mid);
+}
+
+.ambre-format-control {
+    appearance: none;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: var(--font-ui);
+    padding: var(--space-2) var(--space-4);
+    cursor: pointer;
+}
+
+.ambre-format-control:hover {
+    background: var(--surface-hover);
+}
+
+.ambre-format-control[aria-pressed="true"] {
+    background: var(--accent);
+    color: var(--on-accent);
+}
+
+.ambre-format-control[aria-pressed="mixed"] {
+    border-color: var(--accent);
+}
+
+/* Toile top menu bar (toile-ui SS5quinquies.E): a group inside the command
+   bar row, under the header (`CHROME-200`). It reuses `.ambre-commandbar` for
+   its buttons, so the nested group drops the frame of a bar. The zoom is not
+   here: it closes the status bar (`CHROME-206`). */
+.ambre-commandbar > .ambre-toile-menubar {
+    padding: 0;
+    min-height: 0;
+    background: none;
+    border: 0;
 }
 
 /* Menu titles are text, not icons: give them horizontal padding and normal
    text sizing (the shared bar is sized for square icon buttons). */
 .ambre-menu-title {
     padding: 0 var(--space-4);
-    font: var(--font-body) Roboto, system-ui, -apple-system, sans-serif;
-}
-
-/* Toile zoom control (toile-ui SS5quinquies.E): docked top-right, same chrome. */
-.ambre-toile-zoom {
-    position: fixed;
-    top: 8px;
-    right: 8px;
-    z-index: 60;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-low);
-}
-
-/* The `%` readout doubles as the reset-to-100% button: a fixed-width numeric
-   label so the bar does not reflow as the zoom changes. */
-.ambre-zoom-readout {
-    min-width: 48px;
-    font: var(--font-ui) ui-monospace, monospace;
-    color: var(--text);
+    font-size: var(--font-body);
 }
 
 /* Toile style / property inspector (toile-ui SS5quinquies.B): a floating side
@@ -281,7 +340,7 @@ input[type="radio"] {
    buttons, so only the panel frame and the appearance rows are styled here. */
 .ambre-inspector {
     position: fixed;
-    top: 56px;
+    top: calc(var(--header-h) + var(--commandbar-h) + 8px);
     right: 8px;
     z-index: 60;
     display: flex;
@@ -293,7 +352,7 @@ input[type="radio"] {
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-low);
-    font: var(--font-ui) Roboto, system-ui, -apple-system, sans-serif;
+    font: var(--font-ui) var(--font-sans);
     color: var(--text);
 }
 
@@ -385,7 +444,7 @@ input[type="radio"] {
     background-color: transparent;
     color: var(--text);
     color-scheme: light;
-    font-family: Roboto, system-ui, -apple-system, sans-serif;
+    font-family: var(--font-sans);
     font-size: var(--font-body);
     font-weight: 400;
     height: 28px;
@@ -1011,6 +1070,290 @@ input[type="radio"] {
     border-left: 1px solid var(--border);
 }
 
+/* The context panel (`ambre-spec-shell.md` section 2): one frame for Prose,
+   Trame and Toile. It sits in the body beside the content, so the canvas ends
+   where the panel starts (`CHROME-198`). `order` puts it on the side the user
+   chose (`CHROME-193`). Collapsed, it keeps its body in the page and shows the
+   rail alone, so a section's scroll and edit survive (`CHROME-177`). */
+.ambre-body > .ambre-ctx-panel {
+    position: relative;
+    display: flex;
+    flex: 0 0 var(--ctx-panel-w);
+    min-width: 0;
+    min-height: 0;
+    order: 2;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+}
+
+.ambre-body > .ambre-ctx-panel[data-side="left"] {
+    order: -1;
+    border-left: 0;
+    border-right: 1px solid var(--border);
+}
+
+.ambre-body > .ambre-ctx-panel[data-fold="rail"] {
+    flex-basis: var(--sidebar-strip);
+}
+
+/* The edge that drags the width. A phone's sheet takes the full width, so
+   the edge shows from the tablet up (`CHROME-167`). */
+.ambre-ctx-edge {
+    display: none;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -3px;
+    width: 6px;
+    cursor: col-resize;
+    z-index: 2;
+    touch-action: none;
+}
+
+@media (min-width: 600px) {
+    .ambre-ctx-edge {
+        display: block;
+    }
+}
+
+.ambre-ctx-panel[data-side="left"] > .ambre-ctx-edge {
+    left: auto;
+    right: -3px;
+}
+
+.ambre-ctx-edge:hover,
+.ambre-ctx-edge:focus-visible {
+    background: var(--accent);
+    outline: none;
+}
+
+.ambre-ctx-panel[data-fold="rail"] > .ambre-ctx-edge,
+.ambre-ctx-panel[data-fold="open"] > .ambre-ctx-rail {
+    display: none;
+}
+
+/* The rail hides the body without taking its layout away: a box that leaves
+   the layout loses its scroll, and the panel keeps it (`CHROME-177`). */
+.ambre-body > .ambre-ctx-panel[data-fold="rail"] {
+    overflow: hidden;
+}
+
+.ambre-ctx-panel[data-fold="rail"] > .ambre-ctx-body {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: var(--ctx-panel-w);
+    visibility: hidden;
+}
+
+.ambre-ctx-rail {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    padding: var(--space-3) 0;
+}
+
+.ambre-ctx-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+}
+
+.ambre-ctx-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--border);
+}
+
+.ambre-ctx-title {
+    flex: 1 1 auto;
+    margin: 0;
+    font-size: var(--font-ui);
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ambre-ctx-sections {
+    flex: 1 1 auto;
+    overflow: auto;
+}
+
+.ambre-ctx-section {
+    border-bottom: 1px solid var(--border);
+}
+
+.ambre-ctx-section-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    width: 100%;
+    padding: var(--space-3) var(--space-4);
+    border: 0;
+    background: transparent;
+    color: var(--text-dim);
+    font: inherit;
+    font-size: var(--font-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    cursor: pointer;
+}
+
+.ambre-ctx-section-head:hover {
+    color: var(--text);
+}
+
+.ambre-ctx-section-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: 0 var(--space-4) var(--space-4);
+}
+
+.ambre-ctx-section[data-folded="true"] > .ambre-ctx-section-body {
+    display: none;
+}
+
+/* The kit: a label before a control, controls side by side. */
+.ambre-kit-field {
+    display: grid;
+    grid-template-columns: 88px 1fr;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.ambre-kit-label {
+    color: var(--text-dim);
+    font-size: var(--font-small);
+}
+
+.ambre-kit-control,
+.ambre-kit-row,
+.ambre-kit-length,
+.ambre-kit-segmented,
+.ambre-kit-colour,
+.ambre-kit-font {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    min-width: 0;
+}
+
+.ambre-kit-command,
+.ambre-kit-segmented > button,
+.ambre-kit-length > button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    min-width: 30px;
+    height: 30px;
+    padding: 0 var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
+}
+
+.ambre-kit-command:hover,
+.ambre-kit-segmented > button:hover,
+.ambre-kit-length > button:hover {
+    background: var(--surface-hover);
+}
+
+.ambre-kit-command[aria-pressed="true"],
+.ambre-kit-segmented > button[aria-checked="true"] {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--on-accent);
+}
+
+.ambre-kit-segmented {
+    gap: 0;
+}
+
+.ambre-kit-segmented > button {
+    border-radius: 0;
+    margin-left: -1px;
+}
+
+.ambre-kit-segmented > button:first-child {
+    border-radius: var(--radius) 0 0 var(--radius);
+    margin-left: 0;
+}
+
+.ambre-kit-segmented > button:last-of-type {
+    border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.ambre-kit-length > input {
+    width: 64px;
+    height: 30px;
+    padding: 0 var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+    text-align: right;
+}
+
+.ambre-kit-unit,
+.ambre-kit-mixed {
+    color: var(--text-dim);
+    font-size: var(--font-xs);
+}
+
+.ambre-kit-select {
+    height: 30px;
+    min-width: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+}
+
+/* On a phone the panel is a sheet from the bottom edge, whatever its side
+   (`CHROME-167`): it floats over the content and takes the full width. */
+@media (max-width: 599px) {
+    .ambre-body > .ambre-ctx-panel,
+    .ambre-body > .ambre-ctx-panel[data-side="left"] {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 40;
+        max-height: 50vh;
+        border: 0;
+        border-top: 1px solid var(--border);
+        border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+        box-shadow: var(--shadow-high);
+    }
+
+    .ambre-body > .ambre-ctx-panel[data-fold="rail"] {
+        max-height: none;
+    }
+
+    .ambre-ctx-rail {
+        flex-direction: row;
+        justify-content: center;
+        padding: var(--space-2) var(--space-3);
+    }
+}
+
 /* Content: the wgpu canvas cell. */
 .ambre-content {
     position: relative;
@@ -1173,9 +1516,9 @@ input[type="radio"] {
     gap: var(--space-7);
 }
 
-/* Sheet-tab strip (Trame, trame-sheets): the app-agnostic <Tabs> slot, below
-   the canvas and above the status bar. Trame fills it with its SheetTabs DOM
-   component (migrated off the canvas so it shares the chrome's hover/tokens). */
+/* The app-agnostic <Tabs> slot, below the canvas and above the status bar.
+   No application lays it out today: Trame's sheet tabs sit in the status bar
+   (CHROME-162). */
 .ambre-tabstrip {
     display: flex;
     align-items: stretch;
@@ -1187,7 +1530,19 @@ input[type="radio"] {
     overflow-y: hidden;
 }
 
-.ambre-tabstrip .tab {
+/* Trame's sheet tabs, in the status bar before the zoom (CHROME-162). They
+   take the room the band leaves and scroll when they overflow it. */
+.ambre-statusbar .statusbar-tabs {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    align-self: stretch;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+}
+
+.statusbar-tabs .tab {
     display: inline-flex;
     align-items: center;
     gap: var(--space-3);
@@ -1204,20 +1559,20 @@ input[type="radio"] {
     user-select: none;
 }
 
-.ambre-tabstrip .tab:hover {
+.statusbar-tabs .tab:hover {
     background: var(--surface-hover);
 }
 
 /* Active tab: flush with the strip (no contrasting fill), marked only by the
    amber top accent and a brighter label -- the design decision from the canvas
    era, carried over verbatim. */
-.ambre-tabstrip .tab.active {
+.statusbar-tabs .tab.active {
     color: var(--text);
     border-top-color: var(--accent);
 }
 
 /* In-place rename input, shown over the tab being renamed. */
-.ambre-tabstrip .tab-rename {
+.statusbar-tabs .tab-rename {
     width: 92px;
     border: 1px solid var(--accent);
     border-radius: var(--radius-sm);
@@ -1229,7 +1584,7 @@ input[type="radio"] {
 }
 
 /* Trailing "+" add-sheet button: same flat-on-strip treatment as a tab. */
-.ambre-tabstrip .tab-add {
+.statusbar-tabs .tab-add {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1244,17 +1599,17 @@ input[type="radio"] {
     cursor: pointer;
 }
 
-.ambre-tabstrip .tab-add:hover {
+.statusbar-tabs .tab-add:hover {
     background: var(--surface-hover);
 }
 
 /* Drag-reorder: the dragged tab dims; the drop target shows an amber left edge
    marking where the tab would land. */
-.ambre-tabstrip .tab.dragging {
+.statusbar-tabs .tab.dragging {
     opacity: 0.5;
 }
 
-.ambre-tabstrip .tab.drop-before {
+.statusbar-tabs .tab.drop-before {
     box-shadow: inset 2px 0 0 var(--accent);
 }
 
@@ -1410,7 +1765,7 @@ input[type="radio"] {
     border-radius: var(--radius-lg);
     background: var(--surface);
     color: var(--text);
-    font-family: Roboto, system-ui, -apple-system, sans-serif;
+    font-family: var(--font-sans);
     font-size: var(--font-body);
     font-weight: 400;
     max-width: min(90vw, 460px);
@@ -1765,7 +2120,7 @@ input[type="radio"] {
     margin: 0;
     padding: var(--space-2);
     list-style: none;
-    font-family: Roboto, system-ui, -apple-system, sans-serif;
+    font-family: var(--font-sans);
     font-size: var(--font-body);
     font-weight: 400;
     background: var(--surface-2);
@@ -1991,7 +2346,7 @@ input[type="radio"] {
     overflow: auto;
     background: var(--bg);
     color: var(--text);
-    font-family: system-ui, sans-serif;
+    font-family: var(--font-sans);
 }
 
 /* Content blocks are centred in a readable column. The `<dialog>` is excluded:
@@ -2299,7 +2654,7 @@ input[type="radio"] {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     max-width: 380px;
-    font-family: system-ui, sans-serif;
+    font-family: var(--font-sans);
 }
 
 .ambre-confirm-dialog .ambre-dialog-body {
@@ -2447,7 +2802,7 @@ input[type="radio"] {
     border-radius: var(--radius);
     max-width: 520px;
     padding: 0;
-    font-family: system-ui, sans-serif;
+    font-family: var(--font-sans);
 }
 
 .ambre-words-dialog .ambre-keys {
@@ -2538,7 +2893,7 @@ input[type="radio"] {
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-mid);
     padding: var(--space-4);
-    font-family: Roboto, system-ui, -apple-system, sans-serif;
+    font-family: var(--font-sans);
     font-size: var(--font-ui);
     color: var(--text);
 }
@@ -3094,7 +3449,7 @@ input[type="radio"] {
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-mid);
     padding: var(--space-4);
-    font-family: Roboto, system-ui, -apple-system, sans-serif;
+    font-family: var(--font-sans);
     font-size: var(--font-ui);
     color: var(--text);
 }
@@ -3210,7 +3565,7 @@ input[type="radio"] {
 }
 .ambre-sort-dialog {
     padding: var(--space-7) var(--space-8);
-    font-family: Roboto, system-ui, -apple-system, sans-serif;
+    font-family: var(--font-sans);
     font-size: var(--font-ui);
     color: var(--text);
 }
@@ -3362,7 +3717,7 @@ input[type="radio"] {
 .ambre-palette {
     display: flex;
     flex-direction: column;
-    font-family: Roboto, system-ui, -apple-system, sans-serif;
+    font-family: var(--font-sans);
     background: var(--surface-2);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
@@ -3413,6 +3768,19 @@ input[type="radio"] {
     padding-left: var(--space-8);
 }
 
+/* The home region of a command (CHROME-157), right-aligned before its chord. */
+.ambre-palette-home {
+    margin-left: auto;
+    padding-left: var(--space-8);
+    font-size: var(--font-small);
+    color: var(--text-dim);
+}
+
+.ambre-palette-home + .ambre-palette-kbd {
+    margin-left: 0;
+    padding-left: var(--space-5);
+}
+
 /* Phone: the palette takes the width and drops the top inset. */
 @media (max-width: 599px) {
     .ambre-dialog.ambre-palette-modal {
@@ -3451,7 +3819,7 @@ input[type="radio"] {
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-mid);
     padding: var(--space-4);
-    font-family: Roboto, system-ui, -apple-system, sans-serif;
+    font-family: var(--font-sans);
     font-size: var(--font-ui);
     color: var(--text);
 }
@@ -3565,7 +3933,7 @@ input[type="radio"] {
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-mid);
     padding: var(--space-3);
-    font-family: Roboto, system-ui, -apple-system, sans-serif;
+    font-family: var(--font-sans);
 }
 .ambre-comment-composer-post {
     appearance: none;
@@ -3597,7 +3965,7 @@ input[type="radio"] {
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-mid);
     padding: var(--space-4);
-    font-family: Roboto, system-ui, -apple-system, sans-serif;
+    font-family: var(--font-sans);
     font-size: var(--font-ui);
     color: var(--text);
 }

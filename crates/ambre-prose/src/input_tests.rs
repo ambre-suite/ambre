@@ -2387,6 +2387,51 @@ fn a_drag_past_the_edge_scrolls_and_the_selection_follows() {
     assert_eq!(rig.caret().anchor, Some((first, Pos::<DocChar>::new(2))));
 }
 
+/// `PROSE-UI-025`: the offset stays inside the column after each path that
+/// moves it. Those are a scroll, a zoom, a zoom about a point, a relayout
+/// and an autoscroll tick held past the end.
+#[test]
+fn the_offset_stays_in_the_column_after_every_path() {
+    use ambre_core::Scale;
+    let lines: Vec<String> = (0..80).map(|i| format!("line {i}")).collect();
+    let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+    let mut rig = Rig::new(&refs);
+    let inside = |ui: &ProseUiState| {
+        ui.viewport.scroll_y >= Px::<Doc>::ZERO
+            && ui.viewport.scroll_y <= ui.column.max_scroll(&ui.viewport)
+            && ui.viewport.scroll_x >= Px::<Doc>::ZERO
+            && ui.viewport.scroll_x <= ui.column.max_scroll_x(&ui.viewport)
+    };
+    rig.ui.scroll_by(down(1.0e7));
+    assert!(inside(&rig.ui), "after a scroll");
+    let _ = rig.ui.zoom_to(Scale::positive(0.25));
+    assert!(inside(&rig.ui), "after a zoom out at the bottom");
+    let _ = rig.ui.zoom_about(Scale::positive(4.0), view_at(5.0, 5.0));
+    assert!(inside(&rig.ui), "after a zoom about a point");
+    rig.lay();
+    assert!(inside(&rig.ui), "after a relayout");
+    let first = rig.blocks()[0];
+    let _ = rig.ui.zoom_to(Scale::ONE);
+    rig.ui.scroll_by(down(-1.0e7));
+    rig.press(rig.point_of(first, 2), false, Instant::<PageLoad>::new(0.0));
+    let (x, _) = rig.point_of(first, 2);
+    let bottom = rig.ui.viewport.height + Px::<View>::new(400.0);
+    rig.input(ProseInput::Drag {
+        at: view_at(x, bottom.get()),
+    });
+    let mut now = 0.0;
+    for _ in 0..400 {
+        now += 16.0;
+        rig.ui.tick_autoscroll(Instant::<PageLoad>::new(now));
+        assert!(inside(&rig.ui), "after an autoscroll tick at {now}");
+    }
+    assert_eq!(
+        rig.ui.viewport.scroll_y,
+        rig.ui.column.max_scroll(&rig.ui.viewport),
+        "the autoscroll reached the end and stopped there"
+    );
+}
+
 /// `PROSE-UI-163`: once released, no tick scrolls, and nothing is armed.
 #[test]
 fn a_released_drag_leaves_nothing_armed() {
@@ -3149,4 +3194,185 @@ fn a_side_drag_sends_one_free_resize_of_that_side() {
         rig.ui.picture_box(picture).map(|frame| frame.size),
         Some(size)
     );
+}
+
+/// `PROSE-UI-129`, `PROSE-UI-250`: `Ctrl` with `=`, `-` and `0` step the zoom
+/// and leave the caret, the selection and the document alone.
+#[test]
+fn a_zoom_key_steps_the_zoom_and_moves_nothing_else() {
+    use crate::view::zoom::{ZoomStep, zoom_stop};
+    use ambre_commands::{Key, KeyChar};
+
+    let ctrl = ambre_commands::ModifierKeys::PRIMARY;
+    for (c, step) in [
+        ('=', ZoomStep::In),
+        ('+', ZoomStep::In),
+        ('-', ZoomStep::Out),
+        ('0', ZoomStep::Reset),
+    ] {
+        assert_eq!(
+            ProseKey::from_key(Key::Char(KeyChar::new(c)), ctrl),
+            Some(ProseKey::Zoom(step))
+        );
+    }
+    assert_eq!(
+        ProseKey::from_key(Key::Char(KeyChar::new('=')), ModifierKeys::NONE),
+        None,
+        "a plain `=` is typed text"
+    );
+
+    let mut rig = Rig::new(&["hello world"]);
+    let block = rig.blocks()[0];
+    rig.press(rig.point_of(block, 2), false, Instant::<PageLoad>::new(0.0));
+    rig.key(ProseKey::Right, true, false);
+    let (caret, selection) = (rig.caret(), rig.ui.selection());
+    let sent = rig.sent.len();
+    let zoom = |rig: &mut Rig, step| rig.key(ProseKey::Zoom(step), false, true);
+    assert!(zoom(&mut rig, ZoomStep::In));
+    assert_eq!(rig.ui.viewport.zoom, zoom_stop(4));
+    assert!(zoom(&mut rig, ZoomStep::Out));
+    assert!(zoom(&mut rig, ZoomStep::Out));
+    assert_eq!(rig.ui.viewport.zoom, zoom_stop(2));
+    assert!(zoom(&mut rig, ZoomStep::Reset));
+    assert_eq!(rig.ui.viewport.zoom.get(), 1.0);
+    assert_eq!(rig.caret(), caret);
+    assert_eq!(rig.ui.selection(), selection);
+    assert_eq!(rig.sent.len(), sent, "a zoom sent {:?}", &rig.sent[sent..]);
+    assert!(rig.outbox.is_empty());
+}
+
+// -- The rules of a command's home --------------------------------------------
+
+/// The document with each empty map and empty list left out. A command may
+/// leave behind an empty container it touched, and its undo cannot remove the
+/// container. An empty container reads as an absent one.
+fn settled(value: loro::LoroValue) -> loro::LoroValue {
+    use loro::LoroValue;
+    match value {
+        LoroValue::Map(map) => LoroValue::Map(
+            map.iter()
+                .map(|(k, v)| (k.clone(), settled(v.clone())))
+                .filter(|(_, v)| !matches!(v, LoroValue::Map(m) if m.is_empty()))
+                .filter(|(_, v)| !matches!(v, LoroValue::List(l) if l.is_empty()))
+                .collect::<loro::LoroMapValue>(),
+        ),
+        LoroValue::List(list) => {
+            LoroValue::List(list.iter().cloned().map(settled).collect::<Vec<_>>().into())
+        }
+        other => other,
+    }
+}
+
+/// The document, and the marks of each block, which the deep value leaves
+/// out.
+fn snapshot(rig: &Rig) -> (loro::LoroValue, Vec<Option<loro::LoroValue>>) {
+    let marks = rig
+        .logic
+        .root_blocks()
+        .iter()
+        .map(|block| rig.logic.marks_of(block))
+        .collect();
+    (settled(rig.logic.document().get_deep_value()), marks)
+}
+
+/// `CHROME-173`, `CHROME-174`: each command of the Prose table that the view
+/// runs writes, keeps the zoom, and one undo takes it back whole. These are
+/// the format marks, the cut and the two pastes at a caret. The format bar, a chord and
+/// the palette hand the same id to the same path, so the region never
+/// changes the result. The imports and the picture insert run on the Logic
+/// thread from a file the host reads. Their tests are
+/// `logic::interop::tests::one_undo_takes_the_import_back` and
+/// `logic::pictures::tests::a_picture_from_a_file_is_one_undo_item`.
+#[test]
+fn each_command_the_view_runs_keeps_the_zoom_and_is_one_undo_item() {
+    use crate::commands::{CUT, PASTE, PASTE_PLAIN, mark_key};
+    let zoom = ambre_core::Scale::<Doc, View>::positive(1.5);
+    let mut ran = Vec::new();
+    for command in crate::commands::COMMANDS {
+        let id = command.id;
+        let mut rig = Rig::new(&["hello world", "second"]);
+        let block = rig.blocks()[0];
+        rig.ui.viewport.zoom = zoom;
+        rig.select(block, 0, 5);
+        let before = snapshot(&rig);
+        if mark_key(id).is_some() {
+            rig.read_marks();
+            let _ = rig.format(id);
+        } else if id == CUT {
+            rig.input(ProseInput::Copy(ClipboardWrite::Cut));
+            rig.deliver();
+        } else if id == PASTE || id == PASTE_PLAIN {
+            // At a caret: a paste over a selection takes the selection out
+            // first, as a step of its own.
+            rig.ui.cursor = Some(CursorPosition {
+                block_id: block,
+                offset: Pos::<DocChar>::new(5),
+                anchor: None,
+            });
+            let (html, form) = if id == PASTE {
+                (
+                    Some("<b>pasted</b>".to_owned()),
+                    ambre_core::PasteForm::Rich,
+                )
+            } else {
+                (None, ambre_core::PasteForm::Plain)
+            };
+            let blob = ambre_bus::ClipboardBlob {
+                text: "pasted".to_owned(),
+                html,
+                ambre: None,
+                form,
+            };
+            let input = rig.ui.paste_input(blob, PasteSource::Foreign);
+            rig.input(input);
+            rig.deliver();
+        } else {
+            continue;
+        }
+        rig.lay();
+        ran.push(id);
+        assert_ne!(snapshot(&rig), before, "{id:?} writes");
+        assert_eq!(rig.ui.viewport.zoom, zoom, "{id:?} keeps the zoom");
+        rig.logic.handle_command(ProseCommand::Undo);
+        assert_eq!(snapshot(&rig), before, "one undo takes {id:?} back");
+    }
+    // Seven marks, the cut and the two pastes. Clearing the formatting
+    // writes nothing over unformatted text: its undo is held in
+    // `logic::marks::tests::clearing_a_selection_over_two_blocks_is_one_undo_item`.
+    assert_eq!(ran.len(), 10, "{ran:?}");
+    // `CHROME-149`: Prose homes no command in the status bar. A new one
+    // fails here until it runs above and shows that it writes nothing.
+    assert!(
+        crate::commands::COMMANDS
+            .iter()
+            .all(|command| command.home != ambre_commands::Home::StatusBar)
+    );
+}
+
+/// `CHROME-174`: an import writes once its file is read, on the Logic
+/// thread. The view takes every event of the import and keeps its zoom.
+#[test]
+fn an_import_keeps_the_zoom() {
+    use crate::message::{ImportFormat, ProseImport};
+    use ambre_bus::interop::InteropRequest;
+    let mut rig = Rig::new(&["kept"]);
+    let zoom = ambre_core::Scale::<Doc, View>::positive(1.5);
+    rig.ui.viewport.zoom = zoom;
+    let before = snapshot(&rig);
+    let outcome = rig
+        .logic
+        .handle_converted(ProseCommand::Interop(InteropRequest::Import(ProseImport {
+            format: ImportFormat::Markdown,
+            data: ambre_core::Payload::<ambre_client_core::FileBytes>::new(
+                b"# Title\n\nA paragraph.\n".to_vec(),
+            ),
+            now: Instant::<ambre_core::Authored>::new(0),
+            zone: crate::message::TimeZone::UTC,
+        })));
+    for event in &outcome.display {
+        rig.ui.apply_event(event);
+    }
+    rig.lay();
+    assert_ne!(snapshot(&rig), before, "the import wrote nothing");
+    assert_eq!(rig.ui.viewport.zoom, zoom, "the import moved the zoom");
 }
