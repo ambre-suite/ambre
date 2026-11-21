@@ -454,6 +454,11 @@ pub(crate) struct AuthContext {
     /// the next renewal ahead of the expiry. `None` for a context whose
     /// store is not the worker's yet.
     pub renewed: Option<ambre_bus::conduit::UnboundedSender<crate::SyncEvent>>,
+    /// The record the device keeps of this session, which every tab of the
+    /// origin shares. `None` for a session the device does not keep. A
+    /// renewal of a kept session runs under the lock of that record and
+    /// sends the refresh token it holds (`SRV-330`).
+    pub kept: Option<crate::kept::KeptLink>,
 }
 
 #[derive(Serialize)]
@@ -461,14 +466,10 @@ struct RefreshRequest {
     refresh_token: Credential<RefreshToken>,
 }
 
-/// Renews the refresh token a device kept into a pair, through `transport`
-/// to the relay at `api` (`SRV-323`). The page just booted, so no pair is
-/// held, and no gate orders the renewal. The relay honours the token once
-/// (`SRV-009`).
-#[cfg_attr(
-    all(not(target_arch = "wasm32"), not(test)),
-    expect(dead_code, reason = "only the worker resumes a kept session")
-)]
+/// Renews `refresh_token` into a pair, through `transport` to the relay at
+/// `api`. The relay honours the token once (`SRV-009`), so the caller orders
+/// the renewals of one token: the gate of a session, and the lock of the
+/// kept record across tabs (`SRV-330`).
 pub(crate) async fn redeem_via(
     transport: &impl Transport,
     api: &Url<ApiRoot>,
@@ -536,7 +537,7 @@ impl AuthContext {
     /// renewal of one pair would be refused and fail its caller. An answer
     /// that lands after a sign-out is dropped, so the sign-out leaves no
     /// token (`SYNC-100`).
-    async fn renew_via(
+    pub(crate) async fn renew_via(
         &self,
         transport: &impl Transport,
         stale: &Credential<AccessToken>,
@@ -545,11 +546,11 @@ impl AuthContext {
         if !self.holds(stale) {
             return Ok(());
         }
-        let url = self.api_root().route("/auth/refresh");
-        let body = RefreshRequest {
-            refresh_token: self.refresh_token()?,
+        let held = self.refresh_token()?;
+        let next = match &self.kept {
+            Some(link) => link.rotate_via(transport, &self.api_root(), held).await?,
+            None => redeem_via(transport, &self.api_root(), &held).await?,
         };
-        let next = post_json_via::<_, TokenPair>(transport, &url, &body).await?;
         if !self.holds(stale) {
             return Ok(());
         }
@@ -1305,6 +1306,24 @@ pub(crate) async fn get_json_auth_via<T: serde::de::DeserializeOwned>(
 ) -> Result<T, HttpError> {
     let mut request = Outgoing::new(Method::Get, url.into());
     let resp = exchange_auth(transport, auth, &mut request).await?;
+    read_json(&request, &resp)
+}
+
+/// A GET of JSON under the access token `access` alone, with no renewal on a
+/// refusal: the caller minted the pair a moment before, and orders its own
+/// retries (`SRV-329`).
+#[cfg_attr(
+    all(not(target_arch = "wasm32"), not(test)),
+    expect(dead_code, reason = "only the worker resumes a kept session")
+)]
+pub(crate) async fn get_json_bearer_via<T: serde::de::DeserializeOwned>(
+    transport: &impl Transport,
+    url: &Url<Route>,
+    access: &Credential<AccessToken>,
+) -> Result<T, HttpError> {
+    let mut request = Outgoing::new(Method::Get, url.into());
+    request.bearer = Some(access.clone());
+    let resp = exchange(transport, &request).await?;
     read_json(&request, &resp)
 }
 
@@ -2563,6 +2582,7 @@ pub(crate) mod scripted {
             )))),
             renewing: Rc::new(futures_util::lock::Mutex::new(())),
             renewed: None,
+            kept: None,
         }
     }
 

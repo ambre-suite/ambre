@@ -47,7 +47,7 @@ lint-wasm:
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-trame -p ambre-toile --tests
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-prose --test chrome_panel --test chrome_ui
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-murmure --test chrome_relay
-    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-sync --test metered_fetch --test worker_log
+    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-sync --test metered_fetch --test worker_log --test renewal_lock
     # Each converter module as `scripts/converter_build.py` builds it: one
     # family's engine and the exports, with no loader. No line above turns an
     # engine on for wasm, so these read the exports (`ARCH-079`), and each
@@ -460,8 +460,9 @@ test-wasm:
     {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-crypto --test phone_bench
     # The metered read of a `fetch` body runs on a browser stream alone
     # (`SYNC-278`), and the worker hands its log to the browser console and
-    # profile (`SYNC-305`). The crate's other tests run on the host.
-    {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-sync --test metered_fetch --test worker_log
+    # profile (`SYNC-305`). The Web Lock that orders the renewals of the kept
+    # session runs in a browser alone (`SRV-330`). The crate's other tests run on the host.
+    {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-sync --test metered_fetch --test worker_log --test renewal_lock
     # Threaded: the converter respawn test spawns real workers from a Logic
     # worker (`ARCH-108`). The Logic thread runs on a shared memory in the
     # product too.

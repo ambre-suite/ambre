@@ -228,6 +228,11 @@ mod worker;
 #[doc(hidden)]
 pub use http::metered_body_len;
 pub use http::{RelayHost, Url, UrlKind};
+/// The lock every tab takes to renew the kept session, for the wasm-tier
+/// test of `SRV-330`.
+#[cfg(target_arch = "wasm32")]
+#[doc(hidden)]
+pub use kept::web::strictly_exclusive;
 
 // -----------------------------------------------------------------------------
 // Quarantine bounds (`ambre-spec-delta-order.md`)
@@ -1906,6 +1911,7 @@ impl SyncState {
             tokens: self.tokens.clone(),
             renewing: self.renewing.clone(),
             renewed: self.event_tx.clone(),
+            kept: self.kept_link(),
         }
     }
 

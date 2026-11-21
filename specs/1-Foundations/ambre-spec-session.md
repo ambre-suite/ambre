@@ -79,9 +79,12 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-323` | `POST` | A page reload of a provider session MUST sign the same person in again with no provider round trip, by one renewal of the refresh token the device kept. | this spec section 3, the kept session; `SRV-009`; `ambre-spec-zero-knowledge.md`, `ZK-051` | `ambre_sync::kept::tests::a_kept_record_opens_as_the_same_person_token_and_seed`; `::a_kept_session_resumes_with_the_renewed_pair` -- the one request is the renewal, with the kept token alone; `::a_session_is_kept_and_a_sign_out_erases_it`; `ambre_belt::provider::tests::a_reload_resumes_the_session_with_no_provider_round_trip` -- browser tier: the reload renews the kept token, asks no provider route, and shows the list of the same person | none | verified |
 | `SRV-324` | `POST` | A sign-out MUST erase the kept session from the device, its key with it, so nothing left on the device opens a session. | this spec section 3, the kept session; `SRV-026` | `ambre_sync::kept::tests::a_session_is_kept_and_a_sign_out_erases_it` -- the record is gone, and a late renewal keeps nothing again; `ambre_belt::provider::tests::a_sign_out_leaves_nothing_that_opens` -- browser tier: the record is erased, and a copy taken before the sign-out opens no session after it | none | verified |
 | `SRV-325` | `FRAME` | A sign-in MUST keep its session under a key generated for it, in place of the session of any other account on the device. | this spec section 3, the kept session; `ambre-spec-zero-knowledge.md`, `ZK-051` | `ambre_sync::kept::tests::another_account_keeps_its_session_under_a_fresh_key` -- the second account replaces the record of the first, under a fresh key | none | verified |
-| `SRV-326` | `FAIL` | Given a kept refresh token the relay refuses at boot, the client MUST erase the kept session and stay on the sign-in screen. | this spec section 3, the kept session | `ambre_sync::kept::tests::a_refused_or_unreadable_record_is_erased_and_resumes_nothing` -- a refusal and a record that does not open are erased, and a relay that does not answer keeps the record; `::a_resume_with_no_relay_answers_no_kept_session`; `ambre_belt::provider::tests::a_sign_out_leaves_nothing_that_opens` -- browser tier: the revoked token put back is refused at boot, the record erased, and the sign-in screen stays | none | verified |
-| `SRV-327` | `POST` | Each renewal of a kept session MUST keep the refresh token it received. | this spec section 3, the kept session; `SRV-009` | `ambre_sync::kept::tests::a_renewal_keeps_the_next_refresh_token` -- the record holds the next token, under the key held | none | verified |
+| `SRV-326` | `FAIL` | Given a kept refresh token the relay refuses at boot with `401`, the client MUST erase the kept session and stay on the sign-in screen. | this spec section 3, the kept session; `SRV-009` | `ambre_sync::kept::tests::a_refused_or_unreadable_record_is_erased_and_resumes_nothing` -- a `401` and a record that does not open are erased with no retry, and no record sends nothing; `::a_resume_with_no_relay_answers_no_kept_session`; `ambre_belt::provider::tests::a_sign_out_leaves_nothing_that_opens` -- browser tier: the revoked token put back is refused at boot, the record erased, and the sign-in screen stays | none | verified |
+| `SRV-327` | `POST` | Each renewal of a kept session MUST keep the refresh token it received, before another renewal reads the record. | this spec section 3, the kept session; `SRV-009`; `SRV-330` | `ambre_sync::kept::tests::a_renewal_keeps_the_next_refresh_token` -- the renewal of a running session writes the next token under the key held, and the renewed event writes nothing after it; `::a_kept_session_resumes_with_the_renewed_pair` -- a resume writes it too | none | verified |
 | `SRV-328` | `FRAME` | A development session MUST NOT be kept on the device. | this spec section 3, the kept session; `SRV-023` | `ambre_sync::kept::tests::a_development_session_keeps_nothing` -- neither the session nor a renewal writes a record | none | verified |
+| `SRV-329` | `POST` | A resumed session MUST read the account answer under its renewed token, and MUST name a reclaim of its address as a sign-in does. | this spec section 3, the kept session; `SRV-321`; `ambre-spec-launcher.md`, `CHROME-146` | `ambre_sync::kept::tests::a_resumed_session_reads_the_reclaim_of_its_address` -- the resume asks `/auth/me` under the renewed access token, its flag reaches the session event, and the worker tells `AddressReclaimed` after the session for a reclaim alone | none | verified |
+| `SRV-330` | `INV` | Every renewal of a kept session MUST run under one lock that every tab of the origin shares, and MUST send the refresh token the device keeps at that instant. | this spec section 3, the kept session; `SRV-009`; `SRV-327` | `ambre_sync::kept::tests::two_tabs_renew_one_kept_token_in_turn` -- two tabs renew at once against a relay that honours a token once: the second sends the token the first kept, and neither is refused; `::a_tab_behind_the_record_sends_the_kept_token`; `::a_renewal_writes_no_record_another_tab_erased_or_replaced`; `::a_resumed_session_writes_no_second_record`; `renewal_lock::two_renewals_hold_the_lock_in_turn` -- wasm tier: two sections that ask for the Web Lock of the record at once run one after the other | none | verified |
+| `SRV-331` | `FAIL` | Given a renewal at boot that fails with anything but `401`, the client MUST keep the kept session and try again after a delay, within the budget of `ambre-spec-budgets.md` section 8. | this spec section 3, the kept session; `SRV-326` | `ambre_sync::kept::tests::a_transient_failure_keeps_the_record_and_retries` -- a `429`, a `400`, a `403`, a `422`, a `500`, a `503` and a network failure each keep the record and renew the same token again after 1 s; `::a_relay_down_past_the_last_retry_keeps_the_record` -- five delays that double, then the sign-in screen, the record kept | none | verified |
 
 * **Budget.** the provider callback of `ambre-spec-budgets.md section 3`, under 200 ms, which
   reads **none exists**. The token verification carries no budget: it is a local signature check on
@@ -138,12 +141,26 @@ it under an AES-GCM key of WebCrypto, which it generates as non-extractable
 | a provider sign-in, a key setup or a recovery opens a session | the record, under a key generated for it, in place of any other (`SRV-325`) |
 | a renewal | the record again, with the refresh token it received (`SRV-327`) |
 | the page boots with no provider return | the record is opened, and its refresh token renewed once (`SRV-323`) |
-| the relay refuses that renewal, or the record does not open | nothing: the record is erased, and the sign-in screen stays (`SRV-326`) |
+| the relay refuses that renewal with `401`, or the record does not open | nothing: the record is erased, and the sign-in screen stays (`SRV-326`) |
+| that renewal fails in any other way | the record, unchanged: the worker tries again after a delay, then leaves the sign-in screen for the next boot (`SRV-331`) |
+| the renewal succeeded | the record, with the next token, and the account answer read under the new token, so a reclaim reaches the launcher (`SRV-329`) |
 | a sign-out | nothing: the record and its key are erased first, then the token is revoked (`SRV-324`) |
 | a development session | nothing: its name derives it again (`SRV-328`) |
 
 The relay sees a renewal like any other, and the token is still honoured once (`SRV-009`). A
 sign-out revokes the kept token too, so a copy of the record taken before it opens nothing.
+
+**Two tabs, one record.** Each tab of the origin runs its own Sync worker over the one record. The
+relay honours a refresh token once, so two tabs that renew one token at once lose the second
+session. Every renewal therefore takes one Web Lock of the origin, exclusive. Under the lock it
+reads the record again, sends the token the record holds, and writes the next one before it
+releases the lock (`SRV-330`). The lock is one per origin, not one per account: the device keeps
+one record, and a sign-in of another account writes that same record.
+
+**What ends a kept session.** The relay answers `401` alone for a refresh token it no longer
+honours, and never a `400` with `invalid_grant`. Only a `401` erases the record (`SRV-326`). A rate
+limit, any other refusal, a fault of the relay and a network failure say nothing of the token, so
+the worker keeps the record and tries again (`SRV-331`).
 
 **Where a provider is discovered.** The deployment may name the issuer of its provider, and Google's
 own issuer is the default. An issuer is `https`, or plain `http` on the loopback, where a test runs
@@ -309,10 +326,6 @@ where each of those is drawn.
 ---
 
 ## 6. NOT BUILT, AND NOT YET RULED
-
-* **Two tabs share one kept refresh token.** A second tab resumes with the kept token, and the
-  relay honours it once. The first tab then holds a token the relay refuses at its next renewal,
-  and its session ends there. Nothing yet hands the first tab the token the second one kept.
 
 * **One provider is configured, and the corpus names four.** The deployment reads the credentials of
   a single provider.

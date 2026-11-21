@@ -265,6 +265,7 @@ impl SyncState {
                 tokens: Rc::new(RefCell::new(Some(resp.tokens))),
                 renewing: Rc::new(futures_util::lock::Mutex::new(())),
                 renewed: None,
+                kept: None,
             };
             let keys_url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route("/keys/master");
@@ -641,6 +642,7 @@ impl SyncState {
             tokens: Rc::new(RefCell::new(Some(tokens))),
             renewing: Rc::new(futures_util::lock::Mutex::new(())),
             renewed: None,
+            kept: None,
         };
         let logic_tx = self.logic_tx.clone();
         crate::spawn(async move {
@@ -1185,6 +1187,7 @@ async fn store_new_keys(
         tokens: Rc::new(RefCell::new(Some(stored.tokens))),
         renewing: Rc::new(futures_util::lock::Mutex::new(())),
         renewed: None,
+        kept: None,
     };
     let me: http::AuthMeResponse =
         http::get_json_auth_via(transport, &api.route("/auth/me"), &fresh)
