@@ -17,6 +17,8 @@ Run: `just test-scripts`, or `python3 -m unittest discover -s scripts`.
 from __future__ import annotations
 
 import io
+import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -323,6 +325,30 @@ class GatesFailWithNoFlag(unittest.TestCase):
         self.fails("commit_msg", [], str(message))
         message.write_text("Merge branch 'story' into main\n")
         self.fails("commit_msg", [], str(message))
+
+    def test_commit_msg_revs(self) -> None:
+        # The CI mode reads each commit of a range, the merge git words included.
+        repo = self.dir / "repo"
+        env = {**os.environ, "GIT_AUTHOR_NAME": "a", "GIT_AUTHOR_EMAIL": "a@a",
+               "GIT_COMMITTER_NAME": "a", "GIT_COMMITTER_EMAIL": "a@a",
+               "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+
+        def git(*args: str) -> None:
+            subprocess.run(["git", "-C", str(repo), *args], check=True,
+                           capture_output=True, env=env)
+
+        repo.mkdir()
+        git("init", "-q")
+        git("commit", "-q", "--allow-empty", "-m", "Old subject, before the rule")
+        git("tag", "base")
+        git("commit", "-q", "--allow-empty", "-m", "fix(sync): close the socket")
+        with mock.patch.object(
+                commit_msg, "git",
+                lambda *a: subprocess.run(["git", "-C", str(repo), *a], check=True,
+                                          capture_output=True, text=True).stdout):
+            self.assertEqual(commit_msg.revs_defects(["HEAD", "^base"]), [])
+            git("commit", "-q", "--allow-empty", "-m", "Merge branch 'x' into main")
+            self.assertEqual(len(commit_msg.revs_defects(["HEAD", "^base"])), 1)
 
 
 class GeneratorsWriteOnlyWithWrite(unittest.TestCase):

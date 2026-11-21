@@ -451,8 +451,8 @@ holds a duration row of `ambre-spec-budgets.md section 7`.
 | **full** | a push of `main`, a pull request, the nightly schedule, a manual dispatch | the fast lane, then `fuzz`, `instructions`, `test-db-cluster`, `test-browser`, `reproducible` |
 | **nightly** | the nightly schedule, a manual dispatch | the full lane, then `coverage` and `mutants` |
 
-`mutants-diff` runs on a pull request alone. A manual dispatch runs the nightly lane on any branch,
-from the Actions tab.
+`mutants-diff` runs on a pull request alone, and `commits` on a push alone. A manual dispatch runs
+the nightly lane on any branch, from the Actions tab.
 
 One job runs outside the three lanes, in a workflow of its own: `devcontainer`, in
 `.github/workflows/devcontainer.yml`. A push runs it when it changes a file the dev container is
@@ -486,6 +486,7 @@ merge when the change touches what they hold.
 | `size` | the release Trunk build against the download budgets and the raw ceiling of Main, then the change of each artefact against the last measure of `main` (`ARCH-115`). It joined the fast lane on 2026-11-15: it fails on the product budgets alone, so every push can read its change in the run summary for one more parallel runner of about 5 min |
 | `reproducible` | two clean release builds of the commit, on two runners and in two paths, with no cache. `reproducible-compare` then finds one client digest in the two manifests (`ZK-038`) |
 | `deny` | `cargo deny`: advisories, licences, sources, and the capability bans |
+| `commits` | the message of each commit the push brings, held to `ai/ambre-git-strategy.md` by `just commits`: past the previous head on `main`, past `main` and that head elsewhere. The commit hook is adopted per clone, so this job is the one that binds |
 | `coverage` | `cargo-llvm-cov` over the host tier, non-blocking. An `lcov` baseline as an artifact |
 | `mutants` | `cargo-mutants` over the scope of `.cargo/mutants.toml` on the host tier, twelve shards, non-blocking. Each shard uploads its report |
 | `mutants-diff` | `cargo-mutants --in-diff` on the lines a pull request changes in that scope, blocking (`ARCH-069`) |

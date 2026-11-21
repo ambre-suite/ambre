@@ -33,9 +33,15 @@ Install, once per clone:
 Run by hand on any message file:
 
     python3 scripts/commit_msg.py <file>
+
+The hook is an adoption, so a clone without it pushes what it likes. CI holds
+the commits each push brings, with the arguments of `git rev-list`:
+
+    python3 scripts/commit_msg.py --revs <head> ^<base> ...
 """
 
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -159,9 +165,39 @@ def defects(text: str) -> list[str]:
     return out
 
 
+def git(*args: str) -> str:
+    return subprocess.run(["git", *args], check=True, capture_output=True,
+                          text=True).stdout
+
+
+def revs_defects(revs: list[str]) -> list[str]:
+    """One line per commit of `git rev-list <revs>` whose message breaks a rule.
+
+    Merges are read too: a merge that reaches a branch unsquashed carries the
+    message git wrote for it, which is the breach this mode exists to catch.
+    """
+    out = []
+    for commit in git("rev-list", *revs, "--").split():
+        for defect in defects(git("log", "-1", "--format=%B", commit)):
+            subject = git("log", "-1", "--format=%s", commit).strip()
+            out.append(f"{commit[:12]} {subject!r}: {defect}")
+    return out
+
+
 def main() -> int:
+    if len(sys.argv) > 2 and sys.argv[1] == "--revs":
+        found = revs_defects(sys.argv[2:])
+        for line in found:
+            print(f"  * {line}", file=sys.stderr)
+        if found:
+            print("\nA commit message breaks a rule of `ai/ambre-git-strategy.md`. "
+                  "On a branch of your own, reword it before it reaches `main`.\n",
+                  file=sys.stderr)
+        return 1 if found else 0
+
     if len(sys.argv) != 2:
-        print("usage: commit_msg.py <message file>", file=sys.stderr)
+        print("usage: commit_msg.py <message file> | --revs <rev-list args>",
+              file=sys.stderr)
         return 2
 
     found = defects(Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace"))

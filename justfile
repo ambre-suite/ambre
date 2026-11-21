@@ -737,6 +737,11 @@ converter-boundary:
 test-scripts:
     python3 -m unittest discover -s scripts
 
+# Commit messages: each commit `git rev-list` names from these arguments, held to
+# `ai/ambre-git-strategy.md` as the commit hook holds one message.
+commits *revs:
+    python3 scripts/commit_msg.py --revs {{revs}}
+
 # The corpus cites a document by its name and, half the time, by a section of it.
 # Nothing resolved either, so splitting a spec left every stale citation silent:
 # `prose-engine` pointed at no document for as long as three Prose specs have
