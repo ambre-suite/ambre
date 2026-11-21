@@ -249,6 +249,7 @@ impl ProseView {
         self.drop_lost_drafts();
         self.take_intent();
         self.take_format();
+        self.take_page();
         self.take_ruler();
         self.take_slash_pick();
         self.sync_zoom();
@@ -327,6 +328,26 @@ impl ProseView {
         if let Some(command) = self.state.format(id) {
             send_edit(&mut self.outbox, self.document_id, command);
         }
+        self.busy_pub
+            .publish(BusyLevel::from_busy(self.outbox.is_busy()));
+    }
+
+    /// Act on the page format a control of the context panel asked for: one
+    /// command for the whole format, one undo item (`PROSE-UI-252`). One that
+    /// waits behind a busy outbox stays in its signal for a later frame.
+    fn take_page(&mut self) {
+        if self.fatal || self.outbox.is_busy() {
+            return;
+        }
+        let Some(format) = self.annotations.page_write.get_untracked() else {
+            return;
+        };
+        self.annotations.page_write.set(None);
+        send_edit(
+            &mut self.outbox,
+            self.document_id,
+            ambre_prose::ProseCommand::SetPageFormat { format },
+        );
         self.busy_pub
             .publish(BusyLevel::from_busy(self.outbox.is_busy()));
     }
@@ -424,6 +445,12 @@ impl ProseView {
             .with_untracked(|shown| *shown != bar)
         {
             self.annotations.toolbar.set(bar);
+        }
+        // The page the layout was measured on, for the context panel
+        // (`PROSE-UI-253`).
+        let page = Some(self.state.shaped.layout.format);
+        if self.annotations.page.with_untracked(|shown| *shown != page) {
+            self.annotations.page.set(page);
         }
         // The slash menu sits at the caret, and moves when the bar does.
         self.publish_slash();

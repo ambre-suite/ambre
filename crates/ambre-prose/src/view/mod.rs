@@ -15,6 +15,7 @@ pub mod column;
 pub mod fling;
 pub mod hit;
 pub mod paint;
+pub mod panel;
 pub mod picture_handles;
 pub mod print;
 pub mod provisional;

@@ -27,6 +27,9 @@ pub struct PageBox {
     /// Where the content box starts on the sheet.
     pub margin_left: Px<Doc>,
     pub margin_top: Px<Doc>,
+    /// The format the box was read from, in millimetres, which the context
+    /// panel shows (`PROSE-UI-253`).
+    pub format: doc::PageFormat,
 }
 
 impl Default for PageBox {
@@ -63,6 +66,7 @@ impl PageBox {
             content_height: (page_height - vertical).max(Px::<Doc>::ZERO),
             margin_left: format.margin_left.to_doc_px(),
             margin_top: format.margin_top.to_doc_px(),
+            format,
         }
     }
 

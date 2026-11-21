@@ -771,6 +771,8 @@ pub(crate) fn AppRoot() -> impl IntoView {
             on_command,
             restyle: toile_restyle,
         })
+    } else if boot_is_prose {
+        ambre_prose::chrome::prose_panel(prose_signals)
     } else {
         ambre_chrome::PanelContent::empty()
     };

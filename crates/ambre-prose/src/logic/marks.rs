@@ -253,6 +253,39 @@ impl ProseState {
         self.commit_with(Vec::new())
     }
 
+    /// Remove every formatting mark over every block a selection covers, in
+    /// one commit: one gesture is one undo item (`PROSE-UI-254`).
+    pub(super) fn clear_selection_marks(
+        &mut self,
+        anchor: (BlockId, Pos<DocChar>),
+        focus: (BlockId, Pos<DocChar>),
+    ) -> ProseOutcome {
+        let spans: Vec<_> = self
+            .selected_spans(anchor, focus)
+            .into_iter()
+            .filter(|(_, span)| !span.is_empty())
+            .collect();
+        if spans.is_empty() {
+            return Self::err_bad_range();
+        }
+        for (block, range) in spans {
+            let span = ordered(range);
+            let (start, end) = (span.start.to_usize(), span.end.to_usize());
+            let Some(body) = self.body_of(&tree_id(block)) else {
+                return Self::err_no_block(&tree_id(block));
+            };
+            if end > body.len_unicode() {
+                return Self::err_bad_range();
+            }
+            for root in mark::FORMATTING_KEYS {
+                if let Err(e) = body.unmark(start..end, root.as_str()) {
+                    return Self::err_write(e);
+                }
+            }
+        }
+        self.commit_with(self.links_touched(None))
+    }
+
     pub(super) fn selected_spans(
         &self,
         anchor: (BlockId, Pos<DocChar>),
@@ -291,14 +324,16 @@ impl ProseState {
     }
 }
 
-/// The five on-or-off keys of the format bar, in the order of
-/// [`ActiveMarks`].
-const BAR_KEYS: [MarkRoot; 5] = [
+/// The seven on-or-off keys of the format bar and the context panel, in the
+/// order of [`ActiveMarks`].
+const BAR_KEYS: [MarkRoot; 7] = [
     MarkRoot::Bold,
     MarkRoot::Italic,
     MarkRoot::Underline,
     MarkRoot::Strike,
     MarkRoot::Code,
+    MarkRoot::Superscript,
+    MarkRoot::Subscript,
 ];
 
 /// What the runs folded so far say of one bar key. The bar reads whether
@@ -341,7 +376,7 @@ impl KeySeen {
 #[derive(Default)]
 struct MarkFold {
     /// Per bar key: whether the runs carry it.
-    seen: [KeySeen; 5],
+    seen: [KeySeen; 7],
     /// The link every run carries so far: `None` before the first run, and
     /// `Some(None)` once two runs disagree or one carries none.
     link: Option<Option<ambre_core::LinkUrl>>,
@@ -363,13 +398,23 @@ impl MarkFold {
     }
 
     fn finish(self) -> ActiveMarks {
-        let [bold, italic, underline, strikethrough, code] = self.seen.map(KeySeen::state);
+        let [
+            bold,
+            italic,
+            underline,
+            strikethrough,
+            code,
+            superscript,
+            subscript,
+        ] = self.seen.map(KeySeen::state);
         ActiveMarks {
             bold,
             italic,
             underline,
             strikethrough,
             code,
+            superscript,
+            subscript,
             link: self.link.flatten(),
         }
     }
@@ -475,6 +520,70 @@ pub(crate) mod tests {
     }
 
     /// Whether the rich-text value carries `key` anywhere.
+    #[test]
+    fn clearing_a_selection_over_two_blocks_is_one_undo_item() {
+        let (mut state, first) = document_with_text("hello");
+        state.handle_command(ProseCommand::SplitBlock {
+            block_id: first,
+            pos: Pos::<DocChar>::new(5),
+        });
+        let second = state.root_blocks()[1];
+        state.handle_command(ProseCommand::InsertText {
+            block_id: second,
+            pos: Pos::<DocChar>::ZERO,
+            text: "world".to_owned(),
+        });
+        let anchor = (first, Pos::<DocChar>::ZERO);
+        let focus = (second, Pos::<DocChar>::new(5));
+        for key in [crate::mark::MarkRoot::Bold, crate::mark::MarkRoot::Italic] {
+            state.handle_command(ProseCommand::FormatSelection {
+                anchor,
+                focus,
+                key: key.key(),
+                action: crate::message::MarkAction::Apply,
+            });
+        }
+        let out = state.handle_command(ProseCommand::ClearSelectionMarks { anchor, focus });
+        assert!(out.update.is_some());
+        for block in [first, second] {
+            assert!(!carries_mark(&state, &block, "\"b\""), "bold is gone");
+            assert!(!carries_mark(&state, &block, "\"i\""), "italic is gone");
+        }
+        state.handle_command(ProseCommand::Undo);
+        for block in [first, second] {
+            assert!(
+                carries_mark(&state, &block, "\"b\""),
+                "one undo puts bold back"
+            );
+            assert!(carries_mark(&state, &block, "\"i\""));
+        }
+    }
+
+    #[test]
+    fn superscript_from_the_panel_applies_and_reads_back_on() {
+        let (mut state, block) = document_with_text("x2");
+        let anchor = (block, Pos::<DocChar>::new(1));
+        let focus = (block, Pos::<DocChar>::new(2));
+        let out = state.handle_command(ProseCommand::FormatSelection {
+            anchor,
+            focus,
+            key: crate::mark::MarkRoot::Superscript.key(),
+            action: crate::message::MarkAction::Apply,
+        });
+        assert!(out.update.is_some(), "the panel's mark is accepted");
+        let read = state.handle_command(ProseCommand::ReadMarks { anchor, focus });
+        let marks = read
+            .display
+            .iter()
+            .find_map(|e| match e {
+                ProseEvent::SelectionMarks { marks, .. } => Some(marks.clone()),
+                _ => None,
+            })
+            .expect("the marks are read");
+        assert_eq!(marks.superscript, crate::events::TriState::On);
+        assert_eq!(marks.subscript, crate::events::TriState::Off);
+    }
+
     fn carries_mark(state: &ProseState, block: &crate::events::BlockId, key: &str) -> bool {
         format!("{:?}", state.marks_of(block)).contains(key)
     }

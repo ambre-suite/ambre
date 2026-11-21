@@ -3336,8 +3336,10 @@ fn each_command_the_view_runs_keeps_the_zoom_and_is_one_undo_item() {
         rig.logic.handle_command(ProseCommand::Undo);
         assert_eq!(snapshot(&rig), before, "one undo takes {id:?} back");
     }
-    // Five marks, the cut and the two pastes.
-    assert_eq!(ran.len(), 8, "{ran:?}");
+    // Seven marks, the cut and the two pastes. Clearing the formatting
+    // writes nothing over unformatted text: its undo is held in
+    // `logic::marks::tests::clearing_a_selection_over_two_blocks_is_one_undo_item`.
+    assert_eq!(ran.len(), 10, "{ran:?}");
     // `CHROME-149`: Prose homes no command in the status bar. A new one
     // fails here until it runs above and shows that it writes nothing.
     assert!(

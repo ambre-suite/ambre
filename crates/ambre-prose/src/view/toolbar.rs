@@ -44,6 +44,8 @@ pub fn state_of(marks: &ActiveMarks, key: MarkRoot) -> TriState {
         MarkRoot::Underline => marks.underline,
         MarkRoot::Strike => marks.strikethrough,
         MarkRoot::Code => marks.code,
+        MarkRoot::Superscript => marks.superscript,
+        MarkRoot::Subscript => marks.subscript,
         _ => TriState::Off,
     }
 }
@@ -110,8 +112,11 @@ impl ProseUiState {
     /// blocks, so one undo takes the gesture back (`PROSE-UI-192`).
     #[must_use]
     pub fn format(&self, id: StaticKey<Commands>) -> Option<ProseCommand> {
-        let key = crate::commands::mark_key(id)?;
         let (anchor, focus) = self.selection()?;
+        if id == crate::commands::CLEAR_FORMATTING {
+            return Some(ProseCommand::ClearSelectionMarks { anchor, focus });
+        }
+        let key = crate::commands::mark_key(id)?;
         let on = self
             .toolbar()
             .active
