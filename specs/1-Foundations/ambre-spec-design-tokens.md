@@ -39,7 +39,8 @@ The user flips the theme control. One act must move both halves, and it must mov
   A theme switch repaints the content once, which is the frame budget of
   `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: a token is a colour and a number, generated into the binary. Nothing here
-  reaches the relay, holds a key or opens a socket, and the chosen theme is never sent anywhere.
+  reaches the relay, holds a key or opens a socket. The chosen theme leaves sealed, in the user
+  settings (`ZK-053`).
 * **Verification.** 6 `verified`. A drift check keeps the two committed sides on one source; host
   tests read the generated sheets, and a browser test drives a switch.
 
@@ -47,8 +48,8 @@ The user flips the theme control. One act must move both halves, and it must mov
 
 ## 2. MODEL
 
-**CRDT containers.** none. A token is a property of the build, not of the document, and the chosen
-theme is a property of the machine.
+**CRDT containers.** none. A token is a property of the build, not of the document. The chosen
+theme is a setting of the account, kept in the user settings (`ambre-spec-user-settings.md`).
 
 **The pipeline.** One source, one generator, two committed artefacts.
 
