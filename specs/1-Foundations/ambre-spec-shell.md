@@ -33,7 +33,7 @@ other six documents of the DOM side.
 | `CHROME-156` | `INV` | A command that acts on the account of the user MUST have the avatar menu as its home region. | this spec section 2 | not built | unbuilt -- lands with the `The Ambre and avatar menus` Story (`ambre-roadmap.md` MVP) | unimplemented |
 | `CHROME-157` | `OBS` | The command palette MUST show the home region of each command it lists. | this spec section 2; `CHROME-008` | `ambre_chrome::chrome_ui::palette_row_shows_home_region_and_chord` -- wasm tier, each row of the palette shows the name of its command's home | none | verified |
 | `CHROME-158` | `OBS` | The command palette MUST show the chord of each command that has one. | this spec section 2; `CHROME-008` | `ambre_chrome::chrome_ui::palette_row_shows_home_region_and_chord` -- wasm tier, a row shows a chord chip exactly when its command has a chord, and the chip names the key | none | verified |
-| `CHROME-159` | `INV` | In Prose, Trame and Toile, the shell MUST NOT lay out a docked toolbar. | this spec section 2; this spec section 4 | not built | unbuilt -- lands with the `The context panel, bar and menu` Story (`ambre-roadmap.md` MVP). Trame docks its format toolbar in the command bar, and it leaves once the panel carries its commands | unimplemented |
+| `CHROME-159` | `INV` | In Prose, Trame and Toile, the shell MUST NOT lay out a docked toolbar. | this spec section 2; this spec section 4 | `ambre_app::shell::app_root::tests::the_formula_bar_is_trames_alone_and_prose_has_no_command_bar` -- wasm tier, Trame and Prose lay out no command bar; `ambre_trame::tests::chrome_ui::the_panel_announces_the_registry_labels` -- the controls the toolbar held answer in the sheet's context panel | none | verified |
 | `CHROME-160` | `INV` | In Prose, Trame and Toile, the shell MUST NOT lay out a bar of drop-down menus. | this spec section 2; this spec section 4 | not built | unbuilt -- lands with the `The Ambre and avatar menus` Story (`ambre-roadmap.md` MVP). Toile docks a bar of five menus in the command bar | unimplemented |
 | `CHROME-161` | `INV` | In Prose, Trame and Toile, the shell MUST NOT lay out a button whose only role is to open a list of commands. | this spec section 2; this spec section 4 | not built | unbuilt -- lands with the `The Ambre and avatar menus` Story (`ambre-roadmap.md` MVP) | unimplemented |
 | `CHROME-162` | `OBS` | In Trame, the sheet tabs MUST sit in the status bar, before the zoom. | this spec section 2; `CHROME-206` | `ambre_trame::tests::chrome_ui::the_sheet_tabs_sit_in_the_status_bar_before_the_zoom` -- wasm tier, the tabs and the zoom share one band, the zoom after the tabs, and a tab and the add button still act; `ambre_app::shell::app_root::tests::the_formula_bar_is_trames_alone_and_prose_has_no_command_bar` -- Trame lays out no tab strip | none | verified |
@@ -42,7 +42,8 @@ other six documents of the DOM side.
 | `CHROME-165` | `INV` | A command an application declares MUST NOT be reachable by hover alone. | this spec section 2; `ambre-spec-accessibility.md` | `ambre_app::shell::app_root::tests::the_palette_is_fed_the_whole_declared_table` -- wasm tier, the palette lists every command of each table; `ambre_chrome::chrome_ui::the_palette_is_operable_by_keyboard_alone` -- wasm tier, the palette moves and runs a command from the keyboard alone | none | verified |
 | `CHROME-183` | `INV` | A control that writes to the document MUST NOT be reachable by hover alone. | this spec section 2; `CHROME-165`; `ambre-spec-accessibility.md` | none | unheld -- in Prose, the accept and the reject of one suggestion show only while the pointer is over it (`PROSE-UI-148`), and no scan reads the controls a hover reveals; lands with the `No control by hover alone` Story (`ambre-roadmap.md` MVP) | failing |
 | `CHROME-166` | `OBS` | On a phone, one context panel MUST carry every formatting command. | this spec section 2, the placement table; `ambre-spec-adaptive-layout.md` | not built | unbuilt -- lands with the `The context panel, bar and menu` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `CHROME-167` | `OBS` | On a phone, the context panel MUST open from the bottom edge, in place of the keyboard. | this spec section 2, the placement table; `CHROME-032` | not built | unbuilt -- lands with the `The context panel, bar and menu` Story (`ambre-roadmap.md` MVP) | unimplemented |
+| `CHROME-167` | `OBS` | On a phone, the context panel MUST open as a sheet on the bottom edge, whatever its side. | this spec section 2, the placement table; `CHROME-032` | `ambre_app::shell::narrow::a_phone_panel_is_a_sheet_on_the_bottom_edge_whatever_its_side` -- wasm tier, frames of 360 and 599 px under the shell stylesheet: on either side the panel spans the width and meets the bottom edge | none | verified |
+| `CHROME-212` | `OBS` | On a phone, the context panel MUST take the place of the keyboard while it is open. | this spec section 2, the placement table; `CHROME-167` | not built | unheld -- the panel opens over the content, and nothing closes the system keyboard while it shows; no wasm page raises a keyboard to measure, so the rule waits for the browser tier on a phone profile; lands with the `The context panel, bar and menu` Story (`ambre-roadmap.md` MVP) | unimplemented |
 | `CHROME-168` | `OBS` | On a phone, the context bar MUST NOT cover the menu the system raises over a selection. | this spec section 2, the placement table | not built | unbuilt -- lands with the `The context panel, bar and menu` Story (`ambre-roadmap.md` MVP) | unimplemented |
 | `CHROME-169` | `OBS` | On a phone, the Ambre menu MUST offer the command palette. | this spec section 2, the placement table; `CHROME-008` | not built | unbuilt -- lands with the `The Ambre and avatar menus` Story (`ambre-roadmap.md` MVP) | unimplemented |
 | `CHROME-170` | `INV` | In Toile, the tool palette and the selection bar MUST each publish the part of the board they cover. | this spec section 2; `ambre-spec-zoom.md section 3` (`ZOOM-011`) | `ambre_toile::tests::chrome_ui::the_palette_publishes_the_edge_it_covers_and_clears_it_when_it_hides` -- wasm tier, the palette measures itself under the shell stylesheet and clears when it hides; `ambre_toile::tests::chrome_ui::the_selection_bar_publishes_its_reach_and_clears_it_when_it_leaves` -- the bar publishes its height and its lift, and clears when it leaves | none | verified |
@@ -53,10 +54,14 @@ other six documents of the DOM side.
 | `CHROME-181` | `OBS` | In Trame, the creation bar MUST offer a function, a chart, a picture and a comment. | this spec section 2 | not built | unbuilt -- lands with the `The creation bar` Story (`ambre-roadmap.md` MVP). A filter acts on a range and creates nothing, so its home is the context panel | unimplemented |
 | `CHROME-171` | `INV` | Each floating surface of the shell MUST publish the part of the canvas it covers. | this spec section 2; `ambre-spec-zoom.md section 3` (`ZOOM-011`) | not built | unbuilt -- lands with the `The floating cover` Story (`ambre-roadmap.md` MVP). `CHROME-170` holds the two surfaces of the board; the format bar of Prose publishes nothing | unimplemented |
 | `CHROME-190` | `OBS` | In Prose, Trame and Toile, the context panel MUST take one frame: a header naming the selection, then sections that fold. | this spec section 2 | not built | unbuilt -- lands with the `The context panel, bar and menu` Story (`ambre-roadmap.md` MVP). Toile lays out a style inspector of its own, and the two other applications none | unimplemented |
-| `CHROME-191` | `OBS` | The rail of a collapsed panel MUST show one icon for each section of the panel. | this spec section 2 | not built | unbuilt -- lands with the `The context panel, bar and menu` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `CHROME-193` | `OBS` | On a desktop, the context panel MUST dock to the side the user chose, the right by default. | this spec section 2; `ambre-spec-adaptive-layout.md` | not built | unbuilt -- lands with the `The context panel, bar and menu` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `CHROME-194` | `INV` | The side of the context panel MUST be one setting for Prose, Trame and Toile. | this spec section 2 | not built | unbuilt -- lands with the `The context panel, bar and menu` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `CHROME-198` | `OBS` | A docked context panel MUST NOT cover the canvas, on either side. | this spec section 2; `ZOOM-011` | not built | unbuilt -- lands with the `The context panel, bar and menu` Story (`ambre-roadmap.md` MVP). The canvas then ends at the panel, and a fit frames inside it | unimplemented |
+| `CHROME-191` | `OBS` | The rail of a collapsed panel MUST show one icon for each section of the panel. | this spec section 2 | `ambre_chrome::context_panel_ui::the_rail_shows_one_icon_for_each_section` -- wasm tier, one labelled icon per section, in order | none | verified |
+| `CHROME-193` | `OBS` | On a desktop, the context panel MUST dock to the side the user chose, the right by default. | this spec section 2; `ambre-spec-adaptive-layout.md` | `ambre_app::shell::narrow::a_desktop_panel_docks_beside_the_canvas_on_its_side` -- wasm tier, a 1280 px frame under the shell stylesheet: the panel meets the right edge by default and the left edge when the side is left; `ambre_app::shell::panel::tests::the_side_is_one_setting_for_the_three_applications` -- the right by default | none | verified |
+| `CHROME-194` | `INV` | The side of the context panel MUST be one setting for Prose, Trame and Toile. | this spec section 2 | `ambre_app::shell::panel::tests::the_side_is_one_setting_for_the_three_applications` -- wasm tier, a side set in Prose reads back in Trame and Toile | none | verified |
+| `CHROME-198` | `OBS` | A docked context panel MUST NOT cover the canvas, on either side. | this spec section 2; `ZOOM-011` | `ambre_app::shell::narrow::a_desktop_panel_docks_beside_the_canvas_on_its_side` -- wasm tier, on either side the content cell ends where the panel starts, and the canvas sizes to its cell | none | verified |
+| `CHROME-207` | `INV` | Each control of the context panel MUST carry the id of the command or of the property it reaches. | this spec section 2, the property model | not built | unbuilt -- lands with the `The context panel, bar and menu` Story (`ambre-roadmap.md` MVP) | unimplemented |
+| `CHROME-208` | `INV` | For each kind of selection, each entry of the context bar MUST be a control the context panel shows for that kind. | this spec section 2; `CHROME-150`; `CHROME-207` | not built | unbuilt -- lands with the `The context panel, bar and menu` Story (`ambre-roadmap.md` MVP) | unimplemented |
+| `CHROME-209` | `INV` | For each kind of selection, each entry of the context menu besides cut, copy and paste MUST be a control the context panel shows for that kind. | this spec section 2; `CHROME-182`; `CHROME-207` | not built | unbuilt -- lands with the `The context panel, bar and menu` Story (`ambre-roadmap.md` MVP) | unimplemented |
+| `CHROME-210` | `OBS` | A property control MUST show the value the selection holds, or a mixed state when the selected elements disagree. | this spec section 2, the property model | not built | unbuilt -- lands with the `The context panel, bar and menu` Story (`ambre-roadmap.md` MVP) | unimplemented |
 | `CHROME-185` | `OBS` | A control of the shell that shows an icon and no text MUST show a tooltip with the name of its command, and the chord when the command has one. | this spec section 2; `ambre-spec-chrome.md section 2`, the shortcut chip | not built | unbuilt -- lands with the `Command tooltips` Story (`ambre-roadmap.md` MVP). Icon buttons carry a native title, without the chord | unimplemented |
 | `CHROME-186` | `INV` | A tooltip MUST take its name, its chord and its description from the description of the command. | this spec section 2; `UI-THREAD-019` | not built | unbuilt -- lands with the `Command tooltips` Story (`ambre-roadmap.md` MVP). The description of a command carries no sentence that describes it | unimplemented |
 | `CHROME-187` | `OBS` | A tooltip MUST show when its control takes the keyboard focus, as it does under the pointer. | this spec section 2; `CHROME-165` | not built | unbuilt -- lands with the `Command tooltips` Story (`ambre-roadmap.md` MVP) | unimplemented |
@@ -81,22 +86,29 @@ other six documents of the DOM side.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CHROME-175` | `POST` | `Ctrl+.` MUST collapse an open context panel to a rail. | this spec section 3 | not built | unbuilt -- lands with the `The context panel, bar and menu` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `CHROME-176` | `POST` | `Ctrl+.` or a click on the rail MUST open a collapsed context panel. | this spec section 3 | not built | unbuilt -- lands with the `The context panel, bar and menu` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `CHROME-177` | `FRAME` | Collapsing or opening the context panel MUST NOT write to the document, nor drop the open section, the scroll or the edit in progress of the panel. | this spec section 3 | not built | unbuilt -- lands with the `The context panel, bar and menu` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `CHROME-192` | `POST` | A click on an icon of the rail MUST open the panel at the section of that icon. | this spec section 3 | not built | unbuilt -- lands with the `The context panel, bar and menu` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `CHROME-195` | `FRAME` | Collapsing the context panel in one application MUST NOT collapse it in another. | this spec section 2 | not built | unbuilt -- lands with the `The context panel, bar and menu` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `CHROME-196` | `POST` | The context panel MUST open in an application as the user last left it there, collapsed or open. | this spec section 2 | not built | unbuilt -- lands with the `The context panel, bar and menu` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `CHROME-197` | `POST` | A drag of the edge of the context panel MUST set its width, held between the narrowest and the widest width of section 2. | this spec section 2, the placement table | not built | unbuilt -- lands with the `The context panel, bar and menu` Story (`ambre-roadmap.md` MVP) | unimplemented |
+| `CHROME-175` | `POST` | `Ctrl+.` MUST collapse an open context panel to a rail. | this spec section 3 | `ambre_chrome::context_panel_ui::ctrl_period_collapses_an_open_panel_and_opens_a_collapsed_one` -- wasm tier, the chord on the window folds the open frame to its rail | none | verified |
+| `CHROME-176` | `POST` | `Ctrl+.` or a click on the rail MUST open a collapsed context panel. | this spec section 3 | `ambre_chrome::context_panel_ui::ctrl_period_collapses_an_open_panel_and_opens_a_collapsed_one` -- wasm tier, the chord and a click on the rail each open the folded frame | none | verified |
+| `CHROME-177` | `FRAME` | Collapsing or opening the context panel MUST NOT write to the document, nor drop the open section, the scroll or the edit in progress of the panel. | this spec section 3 | `ambre_chrome::context_panel_ui::a_collapse_keeps_the_open_sections_the_scroll_and_the_edit` -- wasm tier under the shell stylesheet: the same field holds its typed text, the list its scroll, a folded section its fold; structural -- the frame takes no command sink, so a collapse has no path to the document | none | verified |
+| `CHROME-192` | `POST` | A click on an icon of the rail MUST open the panel at the section of that icon. | this spec section 3 | `ambre_chrome::context_panel_ui::a_rail_icon_opens_the_panel_at_its_section` -- wasm tier, the icon of a folded section opens the panel with that section unfolded | none | verified |
+| `CHROME-195` | `FRAME` | Collapsing the context panel in one application MUST NOT collapse it in another. | this spec section 2 | `ambre_app::shell::panel::tests::a_fold_in_one_application_leaves_the_others_open` -- wasm tier, a fold kept in Trame leaves Prose and Toile open | none | verified |
+| `CHROME-196` | `POST` | The context panel MUST open in an application as the user last left it there, collapsed or open. | this spec section 2 | `ambre_app::shell::panel::tests::the_panel_opens_as_it_was_last_left_in_that_application` -- wasm tier, the fold and the width read back as they were kept, then open again once opened | none | verified |
+| `CHROME-197` | `POST` | A drag of the edge of the context panel MUST set its width, held between the narrowest and the widest width of section 2. | this spec section 2, the placement table | `ambre_chrome::context_panel_ui::a_drag_of_the_edge_sets_the_width_between_the_two_bounds` -- wasm tier, pointer events on the edge set 360 px, then clamp to 480 and 240, and a move after the release sets nothing; `ambre_chrome::context_panel::tests::a_width_is_held_between_the_two_bounds` | none | verified |
+
+### 1.5 Edit a property of the selection
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `CHROME-211` | `POST` | A write from a property control MUST change that property alone, on each element of the selection. | this spec section 2, the property model; `CHROME-173` | not built | unbuilt -- lands with the `The context panel, bar and menu` Story (`ambre-roadmap.md` MVP) | unimplemented |
+| `CHROME-213` | `FRAME` | A write from a property control MUST NOT change what is selected, nor the zoom. | this spec section 2, the property model; `CHROME-174` | not built | unbuilt -- lands with the `The context panel, bar and menu` Story (`ambre-roadmap.md` MVP) | unimplemented |
 
 * **Budget.** none: the regions are DOM, off the frame loop, and `ambre-spec-budgets.md` budgets no
   chrome operation. A cover a surface publishes is read by a fit, which is a zoom cost.
 * **Boundary.** none: a region holds commands, and a command reaches the Logic thread as every
   command does. Nothing here opens a socket or holds a key.
-* **Verification.** 10 `verified`, 2 `failing`, 39 `unimplemented`, and the type holds the home
-  of each command. Host tests run each table through the one sink of every region, on a real Logic
-  state. Wasm tests hold the palette and the sheet tabs. A hover-only control of Prose and a
-  paste over a text selection fail. The rest waits on the regions, which no application lays out.
+* **Verification.** 23 `verified`, 2 `failing`, 33 `unimplemented`, and the type holds the home of
+  each command. Host tests run each table through the one sink of every region, on a real Logic
+  state. Wasm tests hold the palette and the sheet tabs. A hover-only control of Prose and a paste
+  over a text selection fail. The rest waits on the regions, which no application lays out.
 
 ---
 
@@ -144,6 +156,21 @@ collapses to a rail. Each section declares an icon and a label, and the rail sho
 (`CHROME-191`): a click opens the panel at that section (`CHROME-192`). An application writes the
 content of its sections and nothing else, from the widgets the chrome toolkit shares.
 
+**A value is a property, not a command.** A command runs with no argument: bold, delete, bring
+to front. A colour, a font, a size, a number format or a margin carries a value. The panel edits it
+through a property: a value read from the selection, and a write of a new value. The selection
+holds one value, or a mixed state when its elements disagree (`CHROME-210`).
+
+A write changes that
+property alone, on each element of the selection (`CHROME-211`). A property has no home field: the
+context panel is its home by construction. The context bar and the context menu reach a command or
+a property, and nothing else.
+
+**The panel names what it reaches.** Each control of the panel carries the id of its command or of
+its property (`CHROME-207`). The context bar and the context menu are declared lists of those ids,
+one list per kind of selection. Each entry of either list is a control the panel shows for that
+kind (`CHROME-208`, `CHROME-209`). The clipboard of the menu is the one exception (`CHROME-178`).
+
 **The user chooses the side.** The panel docks to the right by default, or to the left, and the
 choice holds in the three applications (`CHROME-193`, `CHROME-194`). Whether it is collapsed is
 remembered for each application (`CHROME-195`, `CHROME-196`): a writer folds it in Prose and keeps
@@ -167,7 +194,7 @@ edits the content of the active cell, and holds no command.
 |---|---|---|
 | status bar | a band under the content, the zoom at its end | a short band; a pinch zooms |
 | sheet tabs of Trame | in the status bar, before the zoom (`CHROME-162`) | a strip above the status bar |
-| context panel | a column on the side the user chose, the right by default, collapsible to a rail (`CHROME-193`) | a sheet from the bottom edge, in place of the keyboard (`CHROME-167`) |
+| context panel | a column on the side the user chose, the right by default, collapsible to a rail (`CHROME-193`) | a sheet from the bottom edge, in place of the keyboard (`CHROME-167`, `CHROME-212`) |
 | context bar | floating over the selection | a bar above the keyboard, clear of the system menu (`CHROME-168`) |
 | creation bar | floating, centred at the bottom of the content | one add button that opens the modes |
 | Ambre menu | the logo, top left of the header | the logo, which also offers the command palette (`CHROME-169`) |
@@ -241,10 +268,6 @@ takes is `crates/ambre-toile/src/chrome/cover.rs`. No region has code beyond it.
   `TOILE-UI-418` bind its menus. They stay `verified` while the bar ships. The
   `The Ambre and avatar menus` Story (`ambre-roadmap.md` MVP) moves each command to its home and
   rewrites them.
-* **Trame's toolbar holds verified rows.** `TRAME-097`, `TRAME-186` and `TRAME-188` name the
-  toolbar as the control that reports a style. The
-  `The context panel, bar and menu` Story (`ambre-roadmap.md` MVP) rewrites them
-  against the panel.
 * **The context menu has no shared design.** Each application lays out its own: Trame's in
   `ambre-spec-trame-context-menu.md`, the board's in `ambre-spec-toile-menus.md`, and a page menu in
   Prose. Beyond the clipboard first, no rule says which selection commands it reaches, nor in

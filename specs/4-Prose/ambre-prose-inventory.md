@@ -40,8 +40,8 @@
 | `prose-page-rendering` | What a page looks like on the canvas. | partial | 24 |  |
 | `prose-slash-command` | Type a slash at the start of an empty line and a short list appears: a heading, a list, a table, a page break. | partial | 20 |  |
 | `prose-spell-check` | Misspelled words underlined as the document is written, with suggestions, checked on the reader's own machine. | partial | 20 |  |
-| `prose-toolbar` | Select a few words and a small bar appears above them. | partial | 19 |  |
+| `prose-toolbar` | Select a few words and a small bar appears above them. | partial | 22 |  |
 | `prose-track-changes` | A reviewer edits without changing the document. | partial | 40 |  |
 | `prose-accessibility` | A screen reader must be able to read the document and follow the caret through it. | design-only | 9 |  |
 
-**28 features: 19 implemented, 8 partial, 1 design-only. 810 contract rows, 0 loose.**
+**28 features: 19 implemented, 8 partial, 1 design-only. 813 contract rows, 0 loose.**

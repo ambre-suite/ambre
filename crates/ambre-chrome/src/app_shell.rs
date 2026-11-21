@@ -72,6 +72,21 @@ pub struct Panel {
     children: ChildrenFn,
 }
 
+/// The context panel of a document page (`ambre-spec-shell.md` section 2):
+/// the region beside the content, on the side the panel names. The content
+/// ends where the panel starts, so the panel covers no canvas (`CHROME-198`).
+#[slot]
+pub struct ContextRegion {
+    children: ChildrenFn,
+}
+
+/// What floats over the canvas inside the content cell, such as the board's
+/// tool palette. It sits inside the cell, so a docked panel never covers it.
+#[slot]
+pub struct CanvasOverlay {
+    children: ChildrenFn,
+}
+
 /// The region a narrow window shows when it cannot show them all. The
 /// stylesheet decides, at each width, which regions sit beside it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -163,6 +178,8 @@ pub fn AppShell(
     #[prop(optional)] status_bar: Option<StatusBar>,
     #[prop(optional)] sidebar: Option<Sidebar>,
     #[prop(optional)] panel: Option<Panel>,
+    #[prop(optional)] context_region: Option<ContextRegion>,
+    #[prop(optional)] canvas_overlay: Option<CanvasOverlay>,
     /// The region in focus, for the widths that show one region alone. The
     /// content when unset.
     #[prop(optional, into)]
@@ -218,7 +235,9 @@ pub fn AppShell(
                     // it takes the pointer, so an embed nobody has entered leaves
                     // the board's own gestures reachable.
                     <div id="ambre-web-embeds" class="ambre-web-embeds"></div>
+                    {canvas_overlay.map(|overlay| (overlay.children)())}
                 </main>
+                {context_region.map(|region| (region.children)())}
                 {panel.map(|panel| {
                     let label = panel.label;
                     let children = panel.children;

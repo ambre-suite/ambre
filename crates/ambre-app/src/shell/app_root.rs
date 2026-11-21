@@ -121,10 +121,16 @@ fn ShellHeader(
     username: RwSignal<Option<ambre_core::Validated<ambre_core::DisplayName>>>,
     me: RwSignal<Option<Id<User>>>,
     docs: RwSignal<Vec<crate::landing::DocItem>>,
+    /// The side of the context panel, on a page that lays one out.
+    dock_side: Option<RwSignal<ambre_chrome::DockSide>>,
 ) -> impl IntoView {
     view! {
         <HeaderTitle docs=docs current_doc=current_doc />
         <span class="spacer"></span>
+        // The side of the context panel is a setting of the person. It sits
+        // beside the theme switch, the one setting the header holds: no
+        // avatar menu exists yet (`ambre-spec-shell.md` section 2).
+        {dock_side.map(|side| view! { <super::panel::DockSideSwitch side=side /> })}
         <SyncBadge status=chrome_status.into() />
         <button
             class="icon"
@@ -187,13 +193,14 @@ fn ShellHeader(
 /// The optional rows of the shell each application lays out (`CHROME-199`).
 /// The formula bar is Trame's alone. No application lays out the tab strip:
 /// Trame's sheet tabs sit in the status bar (`CHROME-162`). A Toile board docks
-/// its menus in the command bar. A Prose page formats from the bar over its
-/// selection, so it lays out no command bar. Murmure builds its own shell.
+/// its menus in the command bar. A Prose page and a Trame sheet format from
+/// the context panel, so neither lays out a command bar (`CHROME-159`).
+/// Murmure builds its own shell.
 pub(crate) fn shell_rows(kind: DocType) -> ambre_chrome::ShellRows {
     use ambre_chrome::RowShown::{Absent, Shown};
     match kind {
         DocType::Trame => ambre_chrome::ShellRows {
-            toolbar: Shown,
+            toolbar: Absent,
             formula_bar: Shown,
             tabs: Absent,
         },
@@ -307,7 +314,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
     let Wiring {
         to_logic,
         theme_ctl,
-        toggles,
+        toggles: _,
         toile_toggles,
         style_state,
         toasts,
@@ -754,6 +761,30 @@ pub(crate) fn AppRoot() -> impl IntoView {
     };
     let landing_tx = to_logic.clone();
 
+    // The context panel of a document page: one frame for Prose, Trame and
+    // Toile, its view state kept on this device (`ambre-spec-shell.md`
+    // section 2). Murmure lays out no context panel.
+    let panel_prefs = (!boot_is_murmure).then(|| super::panel::panel_prefs(booted));
+    let panel_content = if boot_is_toile {
+        toile_chrome::toile_panel(toile_chrome::ToilePanelSignals {
+            model: toile_style_model,
+            scope: toile_ctx_scope,
+            on_command,
+            restyle: toile_restyle,
+        })
+    } else if boot_is_prose {
+        ambre_prose::chrome::prose_panel(prose_signals)
+    } else if boot_is_trame {
+        trame_chrome::trame_panel(trame_chrome::TramePanelSignals {
+            style: style_state,
+            theme: theme_sig,
+            on_command,
+            on_style,
+        })
+    } else {
+        ambre_chrome::PanelContent::empty()
+    };
+
     let header = {
         let theme_ctl = theme_ctl.clone();
         move || {
@@ -769,6 +800,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     username=username
                     me=me
                     docs=docs
+                    dock_side=panel_prefs.map(|p| p.side)
                 />
             }
         }
@@ -787,19 +819,31 @@ pub(crate) fn AppRoot() -> impl IntoView {
         view! {
         <AppShell rows=shell_rows(booted)>
             <Header slot>{header.clone()}</Header>
+            <ContextRegion slot>
+                // A board that presents shows no editing surface.
+                {panel_prefs.map(|prefs| view! {
+                    <Show when=move || !(boot_is_toile && present_toile.get().is_presenting())>
+                        <ambre_chrome::ContextPanel
+                            prefs=prefs
+                            title=panel_content.title
+                            sections=panel_content.sections
+                        />
+                    </Show>
+                })}
+            </ContextRegion>
+            // The board's tool palette floats inside the content cell, so a
+            // panel docked to the left covers none of it.
+            <CanvasOverlay slot>
+                {boot_is_toile.then(|| view! {
+                    <toile_chrome::EditingSurfaces present=present_toile>
+                        <toile_chrome::ToolPalette active=toile_active_tool cover=toile_cover />
+                    </toile_chrome::EditingSurfaces>
+                })}
+            </CanvasOverlay>
             // Each application lays out its own rows (`CHROME-199`). The formula
             // bar is Trame's alone, and its sheet tabs sit in the status bar. A Prose page has no
             // command bar. Gated on the booted app kind, fixed per page load.
             <Toolbar slot>
-                {boot_is_trame.then(|| view! {
-                    <trame_chrome::FormatBar
-                        toggles=toggles
-                        style=style_state
-                        theme=theme_sig
-                        on_command=on_command
-                        on_style=on_style
-                    />
-                })}
                 // Toile docks its menus and its zoom in the command bar, under
                 // the header, so neither covers the header (`CHROME-200`).
                 {boot_is_toile.then(|| view! {
@@ -1068,30 +1112,6 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 on_intent=on_present_intent
             />
         })}
-        // Toile tool palette / primary toolbar (toile-tools): a floating
-        // vertical bar, mounted only for a Toile board. It writes the shared active-
-        // tool signal the canvas view applies; the keyboard chords write the same one.
-        // Every editing surface below leaves the DOM while the board presents.
-        {boot_is_toile.then(|| view! {
-            <toile_chrome::EditingSurfaces present=present_toile>
-                <toile_chrome::ToolPalette active=toile_active_tool cover=toile_cover />
-            </toile_chrome::EditingSurfaces>
-        })}
-        // Toile style / property inspector (toile-styles): a side panel shown only for
-        // a non-empty selection. It reads the common style the canvas view publishes.
-        // It reuses `toile_ctx_scope` for the lock buttons and the shared `on_command`
-        // path for z-order / lock. It writes debounced whole-style edits into
-        // `toile_restyle`, which the view turns into `RestyleElements`.
-        {boot_is_toile.then(|| view! {
-            <toile_chrome::EditingSurfaces present=present_toile>
-                <toile_chrome::StyleInspector
-                    model=toile_style_model
-                    scope=toile_ctx_scope
-                    on_command=on_command
-                    restyle=toile_restyle
-                />
-            </toile_chrome::EditingSurfaces>
-        })}
         // Toile content-anchored floating selection toolbar (toile-styles): follows
         // the selection as the board pans/zooms (the canvas view republishes its
         // client anchor into `toile_float_bar` each frame). Its command buttons
@@ -1346,7 +1366,8 @@ mod tests {
     /// Each application lays out its own rows (`CHROME-199`). The formula bar
     /// is Trame's alone. No application lays out the tab strip, since Trame's
     /// sheet tabs sit in the status bar (`CHROME-162`). A Prose page lays out
-    /// no command bar.
+    /// no command bar, and a Trame sheet none since its format toolbar left
+    /// for the context panel (`CHROME-159`).
     #[wasm_bindgen_test]
     fn the_formula_bar_is_trames_alone_and_prose_has_no_command_bar() {
         use ambre_chrome::RowShown::{Absent, Shown};
@@ -1354,7 +1375,7 @@ mod tests {
             let r = shell_rows(kind);
             (r.toolbar, r.formula_bar, r.tabs)
         };
-        assert_eq!(rows(DocType::Trame), (Shown, Shown, Absent));
+        assert_eq!(rows(DocType::Trame), (Absent, Shown, Absent));
         assert_eq!(rows(DocType::Toile), (Shown, Absent, Absent));
         assert_eq!(rows(DocType::Prose), (Absent, Absent, Absent));
     }

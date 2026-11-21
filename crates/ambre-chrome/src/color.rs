@@ -146,7 +146,7 @@ fn repaint<C: PickedColour>(current: Option<C>, picked: Pick) -> C {
 /// opacity slider (see the module header).
 #[component]
 pub fn ColorPopover<C: PickedColour>(
-    title: &'static str,
+    #[prop(into)] title: String,
     icon: icondata::Icon,
     current: RwSignal<Option<C>>,
     default: Signal<C>,

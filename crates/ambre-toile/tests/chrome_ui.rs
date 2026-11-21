@@ -557,14 +557,7 @@ fn the_button_bars_announce_the_registry_labels() {
     });
     assert_registry_labels(
         &toolbar,
-        &[
-            menu::DUPLICATE,
-            menu::DELETE,
-            menu::GROUP,
-            menu::UNGROUP,
-            menu::LOCK,
-            menu::UNLOCK,
-        ],
+        &[menu::DUPLICATE, menu::DELETE, menu::LOCK, menu::UNLOCK],
     );
     toolbar.remove();
 }
@@ -1463,4 +1456,140 @@ async fn the_selection_bar_publishes_its_reach_and_clears_it_when_it_leaves() {
 
     root.remove();
     sheet.remove();
+}
+
+// -- The context panel (`ambre-spec-shell.md` section 2) ---------------------
+
+/// A style model of `kind`, nothing mixed.
+fn styled(kind: ambre_toile::ui::style::Styled) -> StyleModel {
+    StyleModel {
+        base: ambre_toile::message::ElementStyle::default(),
+        mixed: Default::default(),
+        kind,
+    }
+}
+
+/// Mount the board's context panel on `model`. The scope holds a locked and
+/// an unlocked member of a group of two, so every conditional control shows.
+/// Return the container.
+fn mount_toile_panel(model: Option<StyleModel>) -> web_sys::Element {
+    use ambre_chrome::{ContextPanel, DockSide, Fold, PanelPrefs, PanelWidth};
+    let model = RwSignal::new(model);
+    let scope = RwSignal::new(CtxScope {
+        site: ClickSite::Selection,
+        count: Count::<Elements>::new(2),
+        groups: GroupHeld::Group,
+        locks: LockMix::Both,
+        ..Default::default()
+    });
+    let content = ambre_toile::chrome::toile_panel(ambre_toile::chrome::ToilePanelSignals {
+        model,
+        scope,
+        on_command: Callback::new(|_| {}),
+        restyle: RwSignal::new(None),
+    });
+    let prefs = PanelPrefs::new(DockSide::Right, PanelWidth::DEFAULT, Fold::Open);
+    mount_in_container(move || {
+        view! { <ContextPanel prefs=prefs title=content.title sections=content.sections /> }
+    })
+}
+
+/// With nothing selected the panel shows the board. With a selection it shows
+/// the sections that apply to it, in the one frame.
+#[wasm_bindgen_test]
+async fn the_board_panel_shows_the_board_then_what_applies_to_the_selection() {
+    use ambre_toile::ui::panel::{self, PanelKind};
+    use ambre_toile::ui::style::Styled;
+    let board = mount_toile_panel(None);
+    leptos::task::tick().await;
+    assert_eq!(
+        board
+            .query_selector(".ambre-ctx-title")
+            .unwrap()
+            .unwrap()
+            .text_content()
+            .unwrap(),
+        "Board"
+    );
+    let markers = ambre_chrome::reach_markers(&board);
+    assert!(
+        ambre_chrome::commands::Reach::Command(menu::SELECT_ALL).matches_marker(&markers[0]),
+        "{markers:?}"
+    );
+    board.remove();
+
+    for (kind, model) in [
+        (PanelKind::Shape, styled(Styled::Elements)),
+        (PanelKind::Connector, styled(Styled::Arrow)),
+    ] {
+        let root = mount_toile_panel(Some(model));
+        leptos::task::tick().await;
+        let shown: Vec<String> = (0..root
+            .query_selector_all(".ambre-ctx-section")
+            .unwrap()
+            .length())
+            .map(|i| {
+                root.query_selector_all(".ambre-ctx-section")
+                    .unwrap()
+                    .item(i)
+                    .unwrap()
+                    .dyn_into::<web_sys::Element>()
+                    .unwrap()
+                    .get_attribute("data-section")
+                    .unwrap()
+            })
+            .collect();
+        let expected: Vec<&str> = kind.sections().iter().map(|k| k.as_str()).collect();
+        assert_eq!(shown, expected, "{kind:?}");
+        // Every control of the panel names a declared command or property.
+        for marker in ambre_chrome::reach_markers(&root) {
+            let declared = ambre_toile::ui::commands::COMMANDS
+                .iter()
+                .any(|c| ambre_chrome::commands::Reach::Command(c.id).matches_marker(&marker))
+                || panel::PROPERTIES
+                    .iter()
+                    .any(|p| ambre_chrome::commands::Reach::Property(p.id).matches_marker(&marker));
+            assert!(declared, "{kind:?}: {marker} is declared");
+        }
+        root.remove();
+    }
+}
+
+/// Each entry of the board's context bar is a control the panel shows for the
+/// same kind. The bar shows its declared list alone.
+#[wasm_bindgen_test]
+async fn each_entry_of_the_board_bar_is_a_control_of_the_panel() {
+    use ambre_toile::ui::panel::PanelKind;
+    use ambre_toile::ui::style::Styled;
+    let root = mount_toile_panel(Some(styled(Styled::Elements)));
+    leptos::task::tick().await;
+    let panel = ambre_chrome::reach_markers(&root);
+    for entry in PanelKind::Shape.bar() {
+        assert!(
+            panel.iter().any(|m| entry.matches_marker(m)),
+            "{entry:?} is in the panel: {panel:?}"
+        );
+    }
+    root.remove();
+
+    let bar = RwSignal::new(Some(FloatBar {
+        at: css_point(40.0, 20.0),
+        count: Count::<Elements>::new(2),
+        groups: GroupHeld::Group,
+        locks: LockMix::Both,
+        fill: None,
+        mixed: Default::default(),
+    }));
+    let model = RwSignal::new(Some(styled(Styled::Elements)));
+    let toolbar = mount_in_container(move || {
+        view! {
+            <SelectionToolbar bar=bar model=model on_command=Callback::new(|_| {}) on_style=Callback::new(|_| {}) />
+        }
+    });
+    let shown = ambre_chrome::reach_markers(&toolbar);
+    assert_eq!(shown.len(), PanelKind::Shape.bar().len());
+    for (marker, entry) in shown.iter().zip(PanelKind::Shape.bar()) {
+        assert!(entry.matches_marker(marker), "{marker} is {entry:?}");
+    }
+    toolbar.remove();
 }

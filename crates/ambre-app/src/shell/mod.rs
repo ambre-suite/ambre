@@ -19,6 +19,7 @@ mod commands;
 mod murmure_regions;
 #[cfg(test)]
 mod narrow;
+mod panel;
 pub(crate) mod prose_status;
 mod share;
 mod sync_badge;

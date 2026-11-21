@@ -230,6 +230,24 @@ pub(crate) fn reader_locale() -> ambre_client_core::ReaderLocale {
     reader
 }
 
+/// The word this browser keeps under `key`, or `None` when the store refuses
+/// or holds nothing. A view setting kept on the device, such as the side of
+/// the context panel (`ambre-spec-shell.md` section 5), reads through here.
+pub(crate) fn stored_word(key: ambre_core::StaticKey<ambre_core::StorageKeys>) -> Option<String> {
+    web_sys::window()
+        .and_then(|window| window.local_storage().ok().flatten())
+        .and_then(|storage| storage.get_item(key.as_str()).ok().flatten())
+}
+
+/// Keep `word` under `key` on this browser. A refused write keeps nothing.
+pub(crate) fn keep_word(key: ambre_core::StaticKey<ambre_core::StorageKeys>, word: &str) {
+    if let Some(storage) =
+        web_sys::window().and_then(|window| window.local_storage().ok().flatten())
+    {
+        let _ = storage.set_item(key.as_str(), word);
+    }
+}
+
 /// The device of `kind` that the member chose for a call on this browser. The choice lives on
 /// the device and in no document, since a list of devices nearly names a machine (`ZK-026`).
 pub(crate) fn device_choice(

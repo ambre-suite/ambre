@@ -32,6 +32,7 @@ pub mod link;
 pub mod menu;
 pub mod menu_bar;
 pub mod palette;
+pub mod panel;
 pub mod presence;
 pub mod present;
 pub mod presenter;

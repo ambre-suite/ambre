@@ -14,7 +14,7 @@
 //         waste for a developer read-out.
 //
 // DOM Leptos, like every other E3 chrome surface (context menu, filter popover,
-// FormatBar, Find&Replace) -- not a canvas `DrawSurface` band.
+// the context panel, Find&Replace) -- not a canvas `DrawSurface` band.
 // ============================================================================
 
 use crate::message::CellFloat;

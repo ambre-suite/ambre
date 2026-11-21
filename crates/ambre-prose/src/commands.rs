@@ -110,6 +110,14 @@ pub const STRIKETHROUGH: StaticKey<Commands> =
     StaticKey::<Commands>::new("prose.format.strikethrough");
 pub const CODE: StaticKey<Commands> = StaticKey::<Commands>::new("prose.format.code");
 
+/// Superscript and subscript, two marks of the context panel
+/// (`PROSE-UI-191`).
+pub const SUPERSCRIPT: StaticKey<Commands> = StaticKey::<Commands>::new("prose.format.superscript");
+pub const SUBSCRIPT: StaticKey<Commands> = StaticKey::<Commands>::new("prose.format.subscript");
+/// Remove every formatting mark of the selection (`PROSE-UI-191`,
+/// `PROSE-UI-254`).
+pub const CLEAR_FORMATTING: StaticKey<Commands> = StaticKey::<Commands>::new("prose.format.clear");
+
 /// Each control of the format bar, in the order the bar shows them, with the
 /// mark key it applies or removes.
 pub const FORMAT_BAR: [(StaticKey<Commands>, MarkRoot); 5] = [
@@ -120,13 +128,32 @@ pub const FORMAT_BAR: [(StaticKey<Commands>, MarkRoot); 5] = [
     (CODE, MarkRoot::Code),
 ];
 
+/// The two marks the context panel adds to the five of the bar.
+pub const PANEL_MARKS: [(StaticKey<Commands>, MarkRoot); 2] = [
+    (SUPERSCRIPT, MarkRoot::Superscript),
+    (SUBSCRIPT, MarkRoot::Subscript),
+];
+
 /// The mark key a formatting command applies, or `None` for any other id.
 #[must_use]
 pub fn mark_key(id: StaticKey<Commands>) -> Option<MarkRoot> {
     FORMAT_BAR
         .iter()
+        .chain(PANEL_MARKS.iter())
         .find(|(bar, _)| *bar == id)
         .map(|(_, key)| *key)
+}
+
+fn superscript_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Superscript")
+}
+
+fn subscript_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Subscript")
+}
+
+fn clear_formatting_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Clear formatting")
 }
 
 fn bold_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
@@ -275,6 +302,30 @@ pub const COMMANDS: &[Command] = &[
         title: code_title,
         icon: Some(StaticKey::<Icons>::new("code-tags")),
         keybindings: &[KeyBinding::primary(KeyChar::E)],
+        category: FORMAT,
+        home: Home::ContextPanel,
+    },
+    Command {
+        id: SUPERSCRIPT,
+        title: superscript_title,
+        icon: Some(StaticKey::<Icons>::new("format-superscript")),
+        keybindings: &[],
+        category: FORMAT,
+        home: Home::ContextPanel,
+    },
+    Command {
+        id: SUBSCRIPT,
+        title: subscript_title,
+        icon: Some(StaticKey::<Icons>::new("format-subscript")),
+        keybindings: &[],
+        category: FORMAT,
+        home: Home::ContextPanel,
+    },
+    Command {
+        id: CLEAR_FORMATTING,
+        title: clear_formatting_title,
+        icon: Some(StaticKey::<Icons>::new("format-clear")),
+        keybindings: &[KeyBinding::primary(KeyChar::new('\\'))],
         category: FORMAT,
         home: Home::ContextPanel,
     },

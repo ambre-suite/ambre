@@ -880,3 +880,60 @@ fn an_echo_of_this_peers_own_change_answers_nothing() {
     // The relay hands the writer its own change back.
     assert!(alice.apply_remote(&own).is_empty());
 }
+
+/// A landscape page with margins of `margin` millimetres.
+fn landscape(margin: f32) -> crate::doc::PageFormat {
+    use ambre_core::Mm;
+    crate::doc::PageFormat {
+        width: PrintLength::<Mm>::new(297.0),
+        height: PrintLength::<Mm>::new(210.0),
+        margin_top: PrintLength::<Mm>::new(margin),
+        margin_bottom: PrintLength::<Mm>::new(margin),
+        margin_left: PrintLength::<Mm>::new(margin),
+        margin_right: PrintLength::<Mm>::new(margin),
+    }
+}
+
+/// Two peers change the page at once, one of them further along its own
+/// history. Both end on one page, whose orientation agrees with its
+/// dimensions (`PROSE-145`).
+#[test]
+fn two_peers_setting_the_page_at_once_converge_on_one_agreeing_page() {
+    use ambre_core::Mm;
+    let (mut alice, mut bob, block) = two_peers();
+    // Bob writes first, so his clock runs ahead of Alice's.
+    let typed = bob
+        .handle_command(ProseCommand::InsertText {
+            block_id: block,
+            pos: Pos::<DocChar>::ZERO,
+            text: "Ahead".to_owned(),
+        })
+        .update
+        .expect("a delta");
+    let tall = crate::doc::PageFormat {
+        width: PrintLength::<Mm>::new(200.0),
+        height: PrintLength::<Mm>::new(320.0),
+        ..crate::doc::PageFormat::default()
+    };
+    let from_alice = alice
+        .handle_command(ProseCommand::SetPageFormat {
+            format: landscape(15.0),
+        })
+        .update
+        .expect("a delta");
+    let from_bob = bob
+        .handle_command(ProseCommand::SetPageFormat { format: tall })
+        .update
+        .expect("a delta");
+    alice.apply_remote(&typed);
+    exchange(&mut alice, &mut bob, &from_alice, &from_bob);
+    let (a, b) = (alice.page_format(), bob.page_format());
+    assert_eq!(a, b, "both peers hold one page");
+    for state in [&alice, &bob] {
+        let orientation = state.page_orientation().expect("an orientation is stored");
+        assert!(
+            orientation.agrees_with(a.width, a.height),
+            "{orientation:?} for {a:?}"
+        );
+    }
+}

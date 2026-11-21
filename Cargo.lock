@@ -520,6 +520,7 @@ dependencies = [
  "ambre-prose-form",
  "cap",
  "criterion",
+ "icondata",
  "image",
  "leptos",
  "lopdf",

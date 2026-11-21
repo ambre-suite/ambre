@@ -12,28 +12,28 @@
 // The launcher (`ambre-app`) stays app-agnostic. It owns the generic AppShell,
 // the `CommandStates` store, and the switchboard. It reaches into this module
 // for the Trame pieces (`COMMANDS`, `bind_keys`, `TrameHandler`,
-// `mirror_event`, the `<FormatBar>` / `<SelectionBar>` components, ...).
+// `mirror_event`, the context panel sections, ...).
 //
 // Wasm-only, like the rest of the chrome stack (leptos CSR + DOM).
 //
 // Split across submodules (all part of the same flat `chrome::` API via the
-// re-exports below, so call sites name `chrome::FormatBar`, `chrome::BOLD`, ...):
+// re-exports below, so call sites name `chrome::trame_panel`, `chrome::BOLD`, ...):
 //   - `commands`    : command ids, keymap, dispatch, inbound-event mirroring;
 //   - `handler`     : what each command means, for the shell (`ARCH-018`);
 //   - `style`       : `Toggles` / `StyleState` and the style-event mirror;
-//   - `bars`        : the `FormatBar` toolbar;
+//   - `panel`       : the sheet's sections of the context panel;
 //   - `popovers`    : the borders / colour / filter popovers;
 //   - `formula_bar` : the editable formula bar;
 //   - `color`       : shared hex/theme colour helpers (module-private).
 // ============================================================================
 
-mod bars;
 mod color;
 mod commands;
 mod find_replace;
 mod formula_bar;
 mod handler;
 mod icons;
+mod panel;
 mod popovers;
 mod relay;
 mod sheet_tabs;
@@ -41,7 +41,6 @@ mod sort_dialog;
 mod status;
 mod style;
 
-pub use bars::FormatBar;
 pub use commands::{
     BOLD, CLEAR_FILTER, COMMANDS, COPY, CUT, CtxScope, DELETE_COLS, DELETE_ROWS, DOC_TYPE,
     EXPORT_CSV, FILTER_COLUMN, FIND, IMPORT_CSV, INSERT_COL_LEFT, INSERT_COL_RIGHT,
@@ -54,6 +53,7 @@ pub use commands::{
 pub use find_replace::{FindMode, FindPosition, FindReplace, FindReplaceState, ReplaceRequest};
 pub use formula_bar::FormulaBar;
 pub use handler::TrameHandler;
+pub use panel::{TramePanelSignals, trame_panel};
 pub use popovers::{FilterPopover, FilterPopoverState, SheetFilter};
 pub use relay::{TrameIntent, TrameRelay};
 pub use sheet_tabs::{ReorderSheet, SheetTabs};

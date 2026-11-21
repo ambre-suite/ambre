@@ -82,6 +82,28 @@ impl KeyKind for Commands {
     const NAME: &'static str = "CommandId";
 }
 
+/// Stable, namespaced identifier of a property: a value of the selection
+/// that a control of the context panel reads and writes, for example
+/// `StaticKey::<Properties>::new("toile.style.fill")`. A property takes a
+/// value, so a property key never stands in for a command key.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Properties {}
+
+impl sealed::Sealed for Properties {}
+impl KeyKind for Properties {
+    const NAME: &'static str = "PropertyId";
+}
+
+/// The key of one section of the context panel, which the rail names by
+/// its icon, for example `StaticKey::<PanelSections>::new("toile.shape")`.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PanelSections {}
+
+impl sealed::Sealed for PanelSections {}
+impl KeyKind for PanelSections {
+    const NAME: &'static str = "PanelSection";
+}
+
 /// The name a family of the core prints through `Debug` for one marker:
 /// `Rows` in `Pos<Rows>(3)`. Each marker of a family names itself by one,
 /// and only a log line reads it.
