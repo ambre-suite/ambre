@@ -68,6 +68,18 @@ fn status(reports: &[Value]) -> String {
 
 /// Waits until `done` holds of the reports, printing their state every 10 s.
 async fn until(host: &Host, what: &str, within: Duration, done: impl Fn(&[Value]) -> bool) {
+    until_seen(host, what, within, &[], done).await;
+}
+
+/// Waits as [`until`] does. A timeout also prints the console of each page of `pages`, so a
+/// page that never connected says why.
+async fn until_seen(
+    host: &Host,
+    what: &str,
+    within: Duration,
+    pages: &[&Page],
+    done: impl Fn(&[Value]) -> bool,
+) {
     let deadline = Instant::now() + within;
     let mut spoke = Instant::now();
     loop {
@@ -75,11 +87,18 @@ async fn until(host: &Host, what: &str, within: Duration, done: impl Fn(&[Value]
         if done(&reports) {
             return;
         }
-        assert!(
-            Instant::now() < deadline,
-            "within {within:?}, no {what}: {}",
-            status(&reports)
-        );
+        if Instant::now() >= deadline {
+            let mut consoles = Vec::new();
+            for (i, page) in pages.iter().enumerate() {
+                let lines = page.browser.console().await;
+                consoles.push(format!("page {i} said:\n{}", lines.join("\n")));
+            }
+            panic!(
+                "within {within:?}, no {what}: {}\n{}",
+                status(&reports),
+                consoles.join("\n")
+            );
+        }
         if spoke.elapsed() >= Duration::from_secs(10) {
             say(&format!("waiting for {what}: {}", status(&reports)));
             spoke = Instant::now();
@@ -383,10 +402,12 @@ async fn run(plan: &Plan) -> Outcome {
         }
     }
     let videos = plan.videos();
-    until(
+    let watched: Vec<&Page> = receiver.iter().chain(senders.iter()).collect();
+    until_seen(
         &host,
         &format!("{videos} videos decoding and the camera sent"),
         Duration::from_secs(900),
+        &watched,
         |r| {
             let Some(now) = r.last() else { return false };
             let before = r.len().checked_sub(3).and_then(|i| r.get(i)).unwrap_or(now);
