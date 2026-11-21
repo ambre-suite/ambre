@@ -1517,8 +1517,10 @@ async fn the_board_panel_shows_the_board_then_what_applies_to_the_selection() {
             .unwrap()
             .text_content()
             .unwrap(),
-        "Board"
+        "Document"
     );
+    assert_eq!(ambre_chrome::repeated_title(&board), None);
+    assert_eq!(ambre_chrome::native_controls(&board), Vec::<String>::new());
     let markers = ambre_chrome::reach_markers(&board);
     assert!(
         markers.first().is_some_and(

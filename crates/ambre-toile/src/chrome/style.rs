@@ -27,10 +27,10 @@ use crate::message::{ElementStyle, FontFamily, FontSizeChoice};
 use ambre_chrome::commands::Reading;
 use ambre_chrome::{
     ColourField, CommandButton, Debouncer, Field, FontField, FontSizeSelect, LengthField,
-    PanelContent, PanelSection, Pressed, PropertyToggle, Row,
+    PanelContent, PanelSection, Pressed, PropertyToggle, Row, Slider,
 };
 use ambre_core::Flag as _;
-use ambre_core::{Commands, FontSize, Px, Rgba, StaticKey, StoredBoard};
+use ambre_core::{Bounded, Commands, FontSize, Px, Rgba, StaticKey, StoredBoard, UnitFraction};
 use leptos::prelude::*;
 
 use crate::ui::commands as registry;
@@ -364,21 +364,14 @@ fn stroke_fields(
             />
         </Field>
         <Field label="Opacity">
-            <span class="ambre-kit-control" data-reach=ambre_chrome::commands::Reach::Property(panel::OPACITY).marker()>
-                <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    aria-label="Opacity"
-                    prop:value=move || opacity.get().uniform().map(|o| format!("{:.0}", o.get() * 100.0)).unwrap_or_default()
-                    on:mousedown=move |ev| ev.prevent_default()
-                    on:input=move |ev| {
-                        if let Ok(v) = event_target_value(&ev).parse::<f32>() {
-                            commit(StyleEdit::Opacity(ambre_core::Bounded::<ambre_core::Opacity>::clamped(v / 100.0)));
-                        }
-                    }
-                />
-            </span>
+            <Slider
+                label="Opacity"
+                value=Signal::derive(move || opacity.get().uniform().map(Bounded::<ambre_core::Opacity>::fraction))
+                on_write=Callback::new(move |p: Bounded<UnitFraction>| {
+                    commit(StyleEdit::Opacity(Bounded::<ambre_core::Opacity>::of_fraction(p)));
+                })
+                reach=ambre_chrome::commands::Reach::Property(panel::OPACITY)
+            />
         </Field>
     }
 }

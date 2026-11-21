@@ -132,9 +132,9 @@ impl PanelKind {
     #[must_use]
     pub fn title(self) -> &'static str {
         match self {
-            Self::Board => "Board",
+            Self::Board => "Document",
             Self::Shape => "Selection",
-            Self::Connector => "Connector",
+            Self::Connector => "Selection",
         }
     }
 
