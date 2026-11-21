@@ -241,10 +241,10 @@ body {
 /* Toile tool palette / primary toolbar (toile-ui SS5quinquies.A). It carries the
    `.ambre-commandbar` class too, so every button / hover / active-fill / `.sep` /
    tooltip rule above applies unchanged -- visually identical to the Trame bar. This
-   modifier only re-docks it as a floating vertical palette (Trame's bar is docked
-   horizontally along the top). */
+   modifier only re-docks it as a floating vertical palette. It floats inside the
+   content cell, so a context panel docked to the left covers none of it. */
 .ambre-tool-palette {
-    position: fixed;
+    position: absolute;
     top: 50%;
     left: 8px;
     transform: translateY(-50%);

@@ -764,7 +764,16 @@ pub(crate) fn AppRoot() -> impl IntoView {
     // Toile, its view state kept on this device (`ambre-spec-shell.md`
     // section 2). Murmure lays out no context panel.
     let panel_prefs = (!boot_is_murmure).then(|| super::panel::panel_prefs(booted));
-    let panel_content = ambre_chrome::PanelContent::empty();
+    let panel_content = if boot_is_toile {
+        toile_chrome::toile_panel(toile_chrome::ToilePanelSignals {
+            model: toile_style_model,
+            scope: toile_ctx_scope,
+            on_command,
+            restyle: toile_restyle,
+        })
+    } else {
+        ambre_chrome::PanelContent::empty()
+    };
 
     let header = {
         let theme_ctl = theme_ctl.clone();
@@ -801,14 +810,26 @@ pub(crate) fn AppRoot() -> impl IntoView {
         <AppShell rows=shell_rows(booted)>
             <Header slot>{header.clone()}</Header>
             <ContextRegion slot>
+                // A board that presents shows no editing surface.
                 {panel_prefs.map(|prefs| view! {
-                    <ambre_chrome::ContextPanel
-                        prefs=prefs
-                        title=panel_content.title
-                        sections=panel_content.sections
-                    />
+                    <Show when=move || !(boot_is_toile && present_toile.get().is_presenting())>
+                        <ambre_chrome::ContextPanel
+                            prefs=prefs
+                            title=panel_content.title
+                            sections=panel_content.sections
+                        />
+                    </Show>
                 })}
             </ContextRegion>
+            // The board's tool palette floats inside the content cell, so a
+            // panel docked to the left covers none of it.
+            <CanvasOverlay slot>
+                {boot_is_toile.then(|| view! {
+                    <toile_chrome::EditingSurfaces present=present_toile>
+                        <toile_chrome::ToolPalette active=toile_active_tool cover=toile_cover />
+                    </toile_chrome::EditingSurfaces>
+                })}
+            </CanvasOverlay>
             // Each application lays out its own rows (`CHROME-199`). The formula
             // bar is Trame's alone, and its sheet tabs sit in the status bar. A Prose page has no
             // command bar. Gated on the booted app kind, fixed per page load.
@@ -1089,30 +1110,6 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 presenter_peer=presenter_peer_toile
                 on_intent=on_present_intent
             />
-        })}
-        // Toile tool palette / primary toolbar (toile-tools): a floating
-        // vertical bar, mounted only for a Toile board. It writes the shared active-
-        // tool signal the canvas view applies; the keyboard chords write the same one.
-        // Every editing surface below leaves the DOM while the board presents.
-        {boot_is_toile.then(|| view! {
-            <toile_chrome::EditingSurfaces present=present_toile>
-                <toile_chrome::ToolPalette active=toile_active_tool cover=toile_cover />
-            </toile_chrome::EditingSurfaces>
-        })}
-        // Toile style / property inspector (toile-styles): a side panel shown only for
-        // a non-empty selection. It reads the common style the canvas view publishes.
-        // It reuses `toile_ctx_scope` for the lock buttons and the shared `on_command`
-        // path for z-order / lock. It writes debounced whole-style edits into
-        // `toile_restyle`, which the view turns into `RestyleElements`.
-        {boot_is_toile.then(|| view! {
-            <toile_chrome::EditingSurfaces present=present_toile>
-                <toile_chrome::StyleInspector
-                    model=toile_style_model
-                    scope=toile_ctx_scope
-                    on_command=on_command
-                    restyle=toile_restyle
-                />
-            </toile_chrome::EditingSurfaces>
         })}
         // Toile content-anchored floating selection toolbar (toile-styles): follows
         // the selection as the board pans/zooms (the canvas view republishes its

@@ -4925,3 +4925,5 @@ ambre-commands | src/lib.rs | crate | Reach::matches_marker(marker) | param | &s
 ambre-commands | src/lib.rs | crate | Reading<T>::is_mixed() | ret | bool	generic	predicate result
 ambre-core | src/static_key.rs | crate::static_key | <PanelSections as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
 ambre-core | src/static_key.rs | crate::static_key | <Properties as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
+ambre-toile | src/chrome/style.rs | crate::chrome::style | pressed(on) | param | bool	generic	the state a style field reads, computed by the caller, never a literal
+ambre-toile | src/ui/panel.rs | crate::ui::panel | PanelKind::title() | ret | &'static str	free-text	the header a person reads

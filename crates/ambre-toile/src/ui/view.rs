@@ -2305,6 +2305,36 @@ impl ToileView {
         if self.float_bar.get_untracked() != next {
             self.float_bar.set(next);
         }
+        self.publish_panel_models();
+    }
+
+    /// Republish what the context panel reads: the common style and the
+    /// scope of the selection (`ambre-spec-shell.md` section 2). Each is a
+    /// pure function of the selection and its data, written only on change,
+    /// so a steady selection wakes nothing. A point a key placed the menu at
+    /// stays as it was.
+    #[cfg(target_arch = "wasm32")]
+    fn publish_panel_models(&self) {
+        let model = match self.arrow.as_ref() {
+            Some(c) if self.selection.is_empty() => {
+                super::style::arrow_style_scope(c, &self.display)
+            }
+            _ => super::style::style_scope_for(&self.selection, &self.selection_data),
+        };
+        if self.style_model.get_untracked() != model {
+            self.style_model.set(model);
+        }
+        let mut scope = super::menu::ctx_scope_for(
+            &self.selection,
+            self.group_scope.as_ref(),
+            &self.selection_data,
+            &self.selection_framed,
+            &self.display,
+        );
+        scope.keyed = self.ctx_scope.get_untracked().keyed;
+        if self.ctx_scope.get_untracked() != scope {
+            self.ctx_scope.set(scope);
+        }
     }
     #[cfg(not(target_arch = "wasm32"))]
     fn publish_float_bar(&self) {}
