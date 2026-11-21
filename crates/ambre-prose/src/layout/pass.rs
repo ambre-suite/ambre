@@ -11,6 +11,7 @@ use ambre_core::index::{IdxVec, Len, Pos, Span};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use crate::logic::Roots;
 use crate::message::{
     BlockType, DocChar, FootnoteCall, KeepTogether, KeepWithNext, Page, ParagraphStyle,
 };
@@ -125,14 +126,14 @@ impl PageLayout {
 /// The one entry point of a full recomputation: read the page box, measure
 /// every block, then place them. The bands are measured before the first
 /// block is placed (`PROSE-076`).
-pub fn lay_out(measurer: &mut Measurer, document: &LoroDoc) -> PageLayout {
-    let page_box = PageBox::read(document);
-    let bands = BandHeights::measure(measurer, document, page_box.content_width);
-    let notes = NotePlan::read(measurer, document, page_box.content_width);
+pub fn lay_out(measurer: &mut Measurer, document: &LoroDoc, roots: &Roots) -> PageLayout {
+    let page_box = PageBox::read(document, roots);
+    let bands = BandHeights::measure(measurer, document, roots, page_box.content_width);
+    let notes = NotePlan::read(measurer, document, roots, page_box.content_width);
     let blocks = measure_document_with(
         measurer,
-        document,
-        (page_box.content_width, &doc::read_defaults(document)),
+        (document, roots),
+        (page_box.content_width, &doc::read_defaults(document, roots)),
         (&HashMap::new(), &HashMap::new()),
         &HashMap::new(),
         &notes,
@@ -202,16 +203,16 @@ pub(crate) struct NotePlan {
 impl NotePlan {
     /// What the plan of `document` would be read from, without shaping a
     /// note. The cheap half a reflow runs on every edit (`PROSE-035`).
-    pub(crate) fn key_of(document: &LoroDoc) -> Vec<NoteKey> {
+    pub(crate) fn key_of(document: &LoroDoc, roots: &Roots) -> Vec<NoteKey> {
         // A document with no tree holds no call, and reading one would mint
         // the tree (`PROSE-079`).
-        if doc::blocks_read(document).is_none() {
+        if doc::blocks_read(document, roots).is_none() {
             return Vec::new();
         }
-        note::ordinals(document)
+        note::ordinals(document, roots)
             .into_iter()
             .map(|(id, ordinal)| {
-                let (text, marks) = note::body(document, &id)
+                let (text, marks) = note::body(document, roots, &id)
                     .map(|body| crate::layout::measure::marked_text(&body))
                     .unwrap_or_default();
                 NoteKey {
@@ -229,13 +230,14 @@ impl NotePlan {
     pub(crate) fn read(
         measurer: &mut Measurer,
         document: &LoroDoc,
+        roots: &Roots,
         content_width: Px<Doc>,
     ) -> Self {
-        let key = Self::key_of(document);
+        let key = Self::key_of(document, roots);
         if key.is_empty() {
             return Self::default();
         }
-        let defaults = doc::read_defaults(document);
+        let defaults = doc::read_defaults(document, roots);
         let style = EffectiveStyle::from_parts(
             &defaults,
             &ParagraphStyle::default(),
@@ -252,7 +254,7 @@ impl NotePlan {
             marks,
         } in &key
         {
-            let Some(block) = note::block(document, id) else {
+            let Some(block) = note::block(document, roots, id) else {
                 continue;
             };
             let (number_metrics, number) =
@@ -276,7 +278,7 @@ impl NotePlan {
             reason = "the axis argument of the index family lengthens a tuple shape that predates it"
         )]
         let mut calls: HashMap<TreeID, Vec<(Pos<DocChar>, Id<Footnote>)>> = HashMap::new();
-        for anchor in note::footnote_calls(document) {
+        for anchor in note::footnote_calls(document, roots) {
             let id = anchor.value;
             if notes.contains_key(&id) {
                 calls
@@ -348,13 +350,14 @@ impl BandHeights {
     pub(crate) fn measure(
         measurer: &mut Measurer,
         document: &LoroDoc,
+        roots: &Roots,
         content_width: Px<Doc>,
     ) -> Self {
-        let bands = doc::read_bands(document);
+        let bands = doc::read_bands(document, roots);
         let mut runs = Vec::new();
         let mut height = |band: doc::Band, shown: bool| match band.block {
             Some(id) if shown => {
-                let measured = measure_band(measurer, document, &id, content_width);
+                let measured = measure_band(measurer, document, roots, &id, content_width);
                 if let Some(run) = measured.run {
                     runs.push((id, run));
                 }
@@ -434,10 +437,11 @@ pub(crate) fn layout_of(page_box: PageBox, placement: &Placement) -> PageLayout 
 pub(crate) fn measure_band(
     measurer: &mut Measurer,
     document: &LoroDoc,
+    roots: &Roots,
     id: &TreeID,
     content_width: Px<Doc>,
 ) -> MeasuredBlock {
-    let Some(tree) = doc::blocks_read(document) else {
+    let Some(tree) = doc::blocks_read(document, roots) else {
         return MeasuredBlock {
             block_id: *id,
             block_type: BlockType::Paragraph,
@@ -454,7 +458,7 @@ pub(crate) fn measure_band(
             picture: None,
         };
     };
-    let defaults = doc::read_defaults(document);
+    let defaults = doc::read_defaults(document, roots);
     let (cached, toc_pages) = (HashMap::new(), HashMap::new());
     let scope = Walk {
         document,
@@ -477,13 +481,14 @@ pub(crate) fn measure_band(
 pub fn measure_document(
     measurer: &mut Measurer,
     document: &LoroDoc,
+    roots: &Roots,
     content_width: Px<Doc>,
 ) -> Vec<MeasuredBlock> {
-    let notes = NotePlan::read(measurer, document, content_width);
+    let notes = NotePlan::read(measurer, document, roots, content_width);
     measure_document_with(
         measurer,
-        document,
-        (content_width, &doc::read_defaults(document)),
+        (document, roots),
+        (content_width, &doc::read_defaults(document, roots)),
         (&HashMap::new(), &HashMap::new()),
         &HashMap::new(),
         &notes,
@@ -504,7 +509,7 @@ pub fn measure_document(
 #[must_use]
 pub(crate) fn measure_document_with(
     measurer: &mut Measurer,
-    document: &LoroDoc,
+    (document, roots): (&LoroDoc, &Roots),
     (content_width, defaults): (Px<Doc>, &doc::DocDefaults),
     (cached, previous): (
         &HashMap<TreeID, &MeasuredBlock>,
@@ -514,7 +519,7 @@ pub(crate) fn measure_document_with(
     notes: &NotePlan,
     keep: Option<&Keep<'_>>,
 ) -> Vec<MeasuredBlock> {
-    let Some(tree) = doc::blocks_read(document) else {
+    let Some(tree) = doc::blocks_read(document, roots) else {
         return Vec::new();
     };
     let mut measured = Vec::new();
@@ -1161,7 +1166,8 @@ mod tests {
             return;
         };
         let mut measurer = crate::layout::measure::shipped_measurer();
-        let measured = measure_document(&mut measurer, &document, Px::<Doc>::new(400.0));
+        let roots = crate::logic::Roots::watch(&document);
+        let measured = measure_document(&mut measurer, &document, &roots, Px::<Doc>::new(400.0));
         let mut expected = vec![first];
         expected.extend(nested);
         expected.extend(deeper);
@@ -1173,7 +1179,8 @@ mod tests {
     fn a_page_break_costs_nothing_and_a_rule_costs_one_pixel() {
         let (document, _) = document_of(&[BlockType::PageBreak, BlockType::HRule]);
         let mut measurer = crate::layout::measure::shipped_measurer();
-        let measured = measure_document(&mut measurer, &document, Px::<Doc>::new(400.0));
+        let roots = crate::logic::Roots::watch(&document);
+        let measured = measure_document(&mut measurer, &document, &roots, Px::<Doc>::new(400.0));
         assert_eq!(measured.len(), 2);
         assert_eq!(measured[0].height, Px::<Doc>::new(0.0));
         assert_eq!(measured[1].height, Px::<Doc>::new(RULE_HEIGHT.get()));
@@ -1183,7 +1190,8 @@ mod tests {
     fn an_image_that_declares_no_size_is_measured_on_what_it_carries() {
         let (document, _) = document_of(&[BlockType::Image]);
         let mut measurer = crate::layout::measure::shipped_measurer();
-        let measured = measure_document(&mut measurer, &document, Px::<Doc>::new(400.0));
+        let roots = crate::logic::Roots::watch(&document);
+        let measured = measure_document(&mut measurer, &document, &roots, Px::<Doc>::new(400.0));
         assert_eq!(measured.len(), 1);
         // Nothing here decodes the file, so an image with no display height
         // and no caption takes no room at all.
@@ -1211,7 +1219,8 @@ mod tests {
             write_text(&document, &paragraph, "a cell of one short line");
         }
         let mut measurer = crate::layout::measure::shipped_measurer();
-        let measured = measure_document(&mut measurer, &document, Px::<Doc>::new(400.0));
+        let roots = crate::logic::Roots::watch(&document);
+        let measured = measure_document(&mut measurer, &document, &roots, Px::<Doc>::new(400.0));
         // The rows and the cells are inside the table's own height, so the
         // walk emits the table and stops there.
         assert_eq!(ids_of(&measured), vec![table]);
@@ -1229,9 +1238,13 @@ mod tests {
         for id in &ids {
             write_text(&document, id, "a line of text long enough to be shaped");
         }
+        // Every document past its first operation carries its version in `meta`
+        // (`PROSE-028`), and the reader of `meta` takes the root it holds.
+        crate::schema::stamp(&document);
         let before = format!("{:?}", document.get_deep_value());
         let mut measurer = crate::layout::measure::shipped_measurer();
-        let _ = lay_out(&mut measurer, &document);
+        let roots = crate::logic::Roots::watch(&document);
+        let _ = lay_out(&mut measurer, &document, &roots);
         // `PROSE-079`: laying out reads, and reading never mints a container.
         assert_eq!(format!("{:?}", document.get_deep_value()), before);
     }
@@ -1241,7 +1254,8 @@ mod tests {
         let document = LoroDoc::new();
         let before = format!("{:?}", document.get_deep_value());
         let mut measurer = crate::layout::measure::shipped_measurer();
-        let layout = lay_out(&mut measurer, &document);
+        let roots = crate::logic::Roots::watch(&document);
+        let layout = lay_out(&mut measurer, &document, &roots);
         // A document with no register at all is the case a reader that mints
         // one would be caught by (`PROSE-079`).
         assert_eq!(format!("{:?}", document.get_deep_value()), before);
@@ -1267,7 +1281,8 @@ mod tests {
             write_text(&document, id, "a paragraph of one line");
         }
         let mut measurer = crate::layout::measure::shipped_measurer();
-        let layout = lay_out(&mut measurer, &document);
+        let roots = crate::logic::Roots::watch(&document);
+        let layout = lay_out(&mut measurer, &document, &roots);
         assert_eq!(layout.page_count, Len::<crate::events::Page>::new(2));
         let Some(last) = layout.blocks.last() else {
             return;
@@ -1289,7 +1304,8 @@ mod tests {
             write_text(&document, id, "a paragraph that takes a line of its own");
         }
         let mut measurer = crate::layout::measure::shipped_measurer();
-        let layout = lay_out(&mut measurer, &document);
+        let roots = crate::logic::Roots::watch(&document);
+        let layout = lay_out(&mut measurer, &document, &roots);
         assert!(layout.page_count.get() > 1);
         // Every page the layout reports is one a reader can ask for
         // (`PROSE-011`).
@@ -1324,8 +1340,10 @@ mod tests {
                 }
             }
             let mut measurer = crate::layout::measure::shipped_measurer();
-            let measured = measure_document(&mut measurer, &document, Px::<Doc>::new(400.0));
-            let count = crate::count::compute_word_count(&document);
+            let roots = crate::logic::Roots::watch(&document);
+            let measured =
+                measure_document(&mut measurer, &document, &roots, Px::<Doc>::new(400.0));
+            let count = crate::count::compute_word_count(&document, &roots);
             (measured.len(), count.paragraphs)
         });
         assert_eq!(measured, 10_000);
@@ -1348,7 +1366,8 @@ mod tests {
                     row.and_then(|r| doc::create_block(&document, Some(r), BlockType::TableCell));
             }
             let mut measurer = crate::layout::measure::shipped_measurer();
-            measure_document(&mut measurer, &document, Px::<Doc>::new(400.0)).len()
+            let roots = crate::logic::Roots::watch(&document);
+            measure_document(&mut measurer, &document, &roots, Px::<Doc>::new(400.0)).len()
         });
         assert_eq!(measured, 1, "the outer table is one block of the flow");
     }

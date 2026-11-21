@@ -81,7 +81,7 @@ impl ProseState {
 
     /// Rewrite the body of note `id`, and nothing else.
     pub(super) fn edit_footnote(&mut self, id: &Id<Footnote>, text: &str) -> ProseOutcome {
-        let Some(body) = note::body(&self.doc, id) else {
+        let Some(body) = note::body(&self.doc, &self.roots, id) else {
             return ProseOutcome::refused(ProseRefusal::NoSuchFootnote(*id));
         };
         if let Err(e) = body.update(text, UpdateOptions::default()) {
@@ -96,10 +96,10 @@ impl ProseState {
     /// (`PROSE-FEAT-101`). The calls are removed from the last one back, so an
     /// earlier offset still names its character.
     pub(super) fn delete_footnote(&mut self, id: &Id<Footnote>) -> ProseOutcome {
-        if note::entry(&self.doc, id).is_none() {
+        if note::entry(&self.doc, &self.roots, id).is_none() {
             return ProseOutcome::refused(ProseRefusal::NoSuchFootnote(*id));
         }
-        let calls: Vec<doc::Anchor<Id<Footnote>>> = note::footnote_calls(&self.doc)
+        let calls: Vec<doc::Anchor<Id<Footnote>>> = note::footnote_calls(&self.doc, &self.roots)
             .into_iter()
             .filter(|anchor| anchor.value == *id)
             .collect();
@@ -109,7 +109,7 @@ impl ProseState {
                 return Self::err_write(e);
             }
         }
-        if let Some(block) = note::block(&self.doc, id)
+        if let Some(block) = note::block(&self.doc, &self.roots, id)
             && let Err(e) = doc::blocks(&self.doc).delete(block)
         {
             return Self::err_write(e);
@@ -123,7 +123,7 @@ impl ProseState {
     /// Every note, numbered or orphaned, as the view lists it.
     #[must_use]
     pub fn footnotes(&self) -> Vec<crate::events::FootnoteEntry> {
-        note::entries(&self.doc)
+        note::entries(&self.doc, &self.roots)
     }
 
     /// The entry of a new note, and the block holding its text. That block is a
@@ -158,7 +158,7 @@ impl ProseState {
 
     /// Commit a footnote command and answer the list it leaves.
     fn commit_notes(&mut self) -> ProseOutcome {
-        let notes = note::entries(&self.doc);
+        let notes = note::entries(&self.doc, &self.roots);
         self.commit_with(vec![ProseEvent::FootnotesUpdated { notes }])
     }
 }
@@ -264,9 +264,12 @@ mod tests {
         body.insert(0, "\u{fffc}").expect("the carrier lands");
         body.mark(0..1, MarkRoot::Footnote.as_str(), upper)
             .expect("the call lands");
-        assert_eq!(note::footnote_calls(state.document()).len(), 2);
+        assert_eq!(
+            note::footnote_calls(state.document(), state.roots()).len(),
+            2
+        );
         state.handle_command(ProseCommand::DeleteFootnote { footnote_id: id });
-        assert!(note::footnote_calls(state.document()).is_empty());
+        assert!(note::footnote_calls(state.document(), state.roots()).is_empty());
         assert_eq!(state.text_of(&ids[0]).as_deref(), Some("Hello world"));
     }
 
@@ -279,12 +282,12 @@ mod tests {
             Some("Hello\u{fffc} world"),
             "the block holds the call and none of the note's text"
         );
-        let calls = note::footnote_calls(state.document());
+        let calls = note::footnote_calls(state.document(), state.roots());
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].offset, Pos::<DocChar>::new(5));
         assert_eq!(calls[0].value, id);
         assert_eq!(
-            note::body(state.document(), &id).map(|t| t.to_string()),
+            note::body(state.document(), state.roots(), &id).map(|t| t.to_string()),
             Some("A note.".to_owned())
         );
     }
@@ -293,9 +296,11 @@ mod tests {
     fn a_note_touches_no_other_note() {
         let (mut state, ids) = document(ambre_core::PeerId::new(1), &["abc"]);
         let first = add(&mut state, ids[0], Pos::<DocChar>::new(3), "one");
-        let before = note::body(state.document(), &first).map(|t| t.get_richtext_value());
+        let before =
+            note::body(state.document(), state.roots(), &first).map(|t| t.get_richtext_value());
         add(&mut state, ids[0], Pos::<DocChar>::ZERO, "two");
-        let after = note::body(state.document(), &first).map(|t| t.get_richtext_value());
+        let after =
+            note::body(state.document(), state.roots(), &first).map(|t| t.get_richtext_value());
         assert_eq!(before, after);
     }
 
@@ -413,9 +418,9 @@ mod tests {
         let (mut state, ids) = document(ambre_core::PeerId::new(1), &["abcdef"]);
         let gone = add(&mut state, ids[0], Pos::<DocChar>::new(2), "gone");
         let kept = add(&mut state, ids[0], Pos::<DocChar>::new(5), "kept");
-        let kept_body = note::body(state.document(), &kept).map(|t| t.to_string());
+        let kept_body = note::body(state.document(), state.roots(), &kept).map(|t| t.to_string());
         let outcome = state.handle_command(ProseCommand::DeleteFootnote { footnote_id: gone });
-        assert!(note::entry(state.document(), &gone).is_none());
+        assert!(note::entry(state.document(), state.roots(), &gone).is_none());
         assert_eq!(state.text_of(&ids[0]).as_deref(), Some("abcd\u{fffc}ef"));
         assert_eq!(
             listed(&outcome),
@@ -426,7 +431,7 @@ mod tests {
             }]
         );
         assert_eq!(
-            note::body(state.document(), &kept).map(|t| t.to_string()),
+            note::body(state.document(), state.roots(), &kept).map(|t| t.to_string()),
             kept_body
         );
     }
@@ -476,7 +481,7 @@ mod tests {
             .insert(doc::AnnotKey::NoteBlock, "a comment")
             .expect("a block name");
         state.document().commit();
-        assert_eq!(note::all(state.document()), vec![real]);
+        assert_eq!(note::all(state.document(), state.roots()), vec![real]);
     }
 
     #[test]
@@ -485,7 +490,7 @@ mod tests {
         state.handle_command(ProseCommand::SetFooterEnabled {
             shown: crate::events::BandState::On,
         });
-        let footer = doc::read_bands(state.document())
+        let footer = doc::read_bands(state.document(), state.roots())
             .footer
             .block
             .expect("the footer block");
@@ -506,7 +511,7 @@ mod tests {
     fn a_note_holds_its_text_in_a_block_out_of_the_flow() {
         let (mut state, ids) = document(ambre_core::PeerId::new(1), &["text"]);
         let id = add(&mut state, ids[0], Pos::<DocChar>::new(4), "a note");
-        let block = note::block(state.document(), &id).expect("the note's block");
+        let block = note::block(state.document(), state.roots(), &id).expect("the note's block");
         assert_eq!(state.text_of(&block_id(block)).as_deref(), Some("a note"));
         assert_eq!(state.root_blocks(), ids, "the flow holds no note");
         // Typing in the note is typing in any block.
@@ -516,7 +521,7 @@ mod tests {
             text: " more".to_owned(),
         });
         assert_eq!(
-            note::body(state.document(), &id).map(|t| t.to_string()),
+            note::body(state.document(), state.roots(), &id).map(|t| t.to_string()),
             Some("a note more".to_owned())
         );
         state.handle_command(ProseCommand::DeleteFootnote { footnote_id: id });
@@ -533,7 +538,8 @@ mod tests {
     fn a_note_refuses_a_note_a_comment_and_a_split() {
         let (mut state, ids) = document(ambre_core::PeerId::new(1), &["text"]);
         let id = add(&mut state, ids[0], Pos::<DocChar>::new(4), "a note");
-        let block = block_id(note::block(state.document(), &id).expect("the note's block"));
+        let block =
+            block_id(note::block(state.document(), state.roots(), &id).expect("the note's block"));
         let outcome = state.handle_command(ProseCommand::InsertFootnote {
             block_id: block,
             pos: Pos::<DocChar>::new(1),
@@ -561,21 +567,24 @@ mod tests {
     fn a_reloaded_note_keeps_its_text_and_its_marks() {
         let (mut author, ids) = document(ambre_core::PeerId::new(1), &["text"]);
         let id = add(&mut author, ids[0], Pos::<DocChar>::new(4), "a note");
-        let block = block_id(note::block(author.document(), &id).expect("the note's block"));
+        let block = block_id(
+            note::block(author.document(), author.roots(), &id).expect("the note's block"),
+        );
         author.handle_command(ProseCommand::ApplyMark {
             block_id: block,
             range: Span::<DocChar>::from_usize_range(0..1),
             key: "b".into(),
             value: None,
         });
-        let marked = note::body(author.document(), &id).map(|t| t.get_richtext_value());
+        let marked =
+            note::body(author.document(), author.roots(), &id).map(|t| t.get_richtext_value());
 
         let mut reader = ProseState::with_peer(ambre_core::PeerId::new(2)).expect("a reader");
         reader
             .import_snapshot(&author.export_snapshot())
             .expect("the reload");
         assert_eq!(
-            note::body(reader.document(), &id).map(|t| t.get_richtext_value()),
+            note::body(reader.document(), reader.roots(), &id).map(|t| t.get_richtext_value()),
             marked
         );
         assert_eq!(

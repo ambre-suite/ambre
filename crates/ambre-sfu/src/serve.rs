@@ -10,18 +10,27 @@
 //! A seat lives while the relay renews its admission (audit `N25`). The client hands each
 //! renewal on the same socket, and the SFU ends a seat whose last admission expired. It
 //! seats one connection per member of a room: a join of a member ends the older seat.
+//!
+//! A renewal that keeps its seat also answers a fresh TURN credential once the last one nears
+//! its expiry (audit `P60`). The page restarts ICE with it, so its next allocation opens under
+//! a credential coturn still admits (`CALL-154`).
+//!
+//! One socket costs the SFU a bounded share (audit `N39`). A message past
+//! [`SIGNAL_MESSAGE_MAX`] closes the socket. An admission serves one socket alone, so it mints
+//! one TURN credential. A socket waits [`ADMISSION_DEADLINE`] for its admission, then as long
+//! again for its offer.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use ambre_core::{
-    Count, FixedBytes, MemberPseudonym, ParticipantPseudonym, Payload, RoomPseudonym, SenderIndex,
-    Seq, TimeSpan, UnixSec, Validated,
+    Count, FixedBytes, MemberPseudonym, Octets, ParticipantPseudonym, Payload, RoomPseudonym,
+    SenderIndex, Seq, TimeSpan, UnixSec, Validated,
 };
 use ambre_protocol::signaling::{
-    Admission as Claims, CallParticipants, PARTICIPANT_CAP, SessionDescription, SfuMsg as Wire,
-    VideoChoice,
+    Admission as Claims, CallParticipants, PARTICIPANT_CAP, SESSION_DESCRIPTION_MAX,
+    SessionDescription, SfuMsg as Wire, VideoChoice,
 };
 use axum::Router;
 use axum::extract::State;
@@ -37,7 +46,7 @@ use crate::forward::{Participant, Room, Sfu, Signal};
 use crate::metrics::{Admission, Direction, SFU};
 use crate::turn::TurnServers;
 use ambre_core::NarrowCount;
-use ambre_metrics::Whole;
+use ambre_metrics::{ScrapeAccess, Whole};
 
 /// Where the SFU listens.
 #[derive(Clone, Copy, Debug)]
@@ -59,10 +68,19 @@ pub struct Admitting {
     /// The TURN servers, and the secret their credentials are minted under. `None` when the
     /// deployment runs none.
     pub turn: Option<TurnServers>,
+    /// Who may read a scrape of the metrics listener (`CALL-153`).
+    pub scrape: ScrapeAccess,
 }
 
 /// What a signalling session asks of the task that owns the SFU.
 enum Command {
+    /// A socket verified an admission: the media loop marks it spent, and answers whether no
+    /// socket spent it before. Only then does the socket mint a TURN credential (audit `N39`).
+    Spend {
+        participant: FixedBytes<ParticipantPseudonym>,
+        expires: ambre_core::Instant<UnixSec>,
+        fresh: oneshot::Sender<Freshness>,
+    },
     Join {
         room: Validated<Room>,
         participant: FixedBytes<ParticipantPseudonym>,
@@ -81,8 +99,8 @@ enum Command {
     /// A later offer of the participant, which adds its screen section (`CALL-112`).
     Offer(Seq<Participant>, SdpOffer),
     /// A renewal of the participant's admission, verified: it keeps the seat while it names
-    /// the seat (audit `N25`).
-    Renew(Seq<Participant>, Claims),
+    /// the seat (audit `N25`). The media loop answers whether it kept it.
+    Renew(Seq<Participant>, Claims, oneshot::Sender<Renewal>),
     Leave(Seq<Participant>),
 }
 
@@ -96,7 +114,8 @@ pub async fn run(addresses: Addresses, admitting: Admitting) -> std::io::Result<
     let media = udp.local_addr()?;
     let listener = TcpListener::bind(addresses.signal).await?;
     let metrics = TcpListener::bind(addresses.metrics).await?;
-    tokio::spawn(async move { axum::serve(metrics, crate::metrics::router()).await });
+    let scrape = crate::metrics::router(admitting.scrape.clone());
+    tokio::spawn(async move { axum::serve(metrics, scrape).await });
     let (commands, inbox) = mpsc::channel(64);
     let app = Router::new().route("/call", get(upgrade)).with_state(Gate {
         commands,
@@ -114,6 +133,24 @@ impl NarrowCount for Datagrams {
         ambre_core::StaticKey::new("DatagramCount");
 }
 
+/// Whether an admission opened a socket before.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Freshness {
+    /// A socket spent the admission already: it serves this one nothing.
+    Spent,
+    /// No socket spent it before: this socket holds it now.
+    Fresh,
+}
+
+/// What a verified renewal did to the seat of its socket.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Renewal {
+    /// The renewal names another seat, or the seat ended: it keeps nothing.
+    Ignored,
+    /// The renewal names the seat, which lives to its expiry now.
+    Kept,
+}
+
 /// The most datagrams one turn of the media loop reads before it polls the SFU.
 const BATCH: Count<Datagrams> = Count::new(64);
 
@@ -125,8 +162,8 @@ const EXPIRY_SWEEP: Duration = Duration::from_secs(1);
 async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver<Command>) {
     let mut sfu = Sfu::new(media);
     let mut sessions: Vec<Session> = Vec::new();
-    // Every participant pseudonym seated, until its admission expires. A token whose
-    // connection left seats nobody again: one admission seats one connection (`CALL-117`).
+    // Every participant pseudonym a socket spent, until its admission expires. A token whose
+    // socket closed serves no other socket: one admission seats one connection (`CALL-117`).
     let mut spent: Vec<(
         FixedBytes<ParticipantPseudonym>,
         ambre_core::Instant<UnixSec>,
@@ -184,30 +221,36 @@ async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver
                 }
             }
             command = inbox.recv() => match command {
-                Some(Command::Join { room, participant, member, sender, expires, offer, signals, joined }) => {
-                    // The cap holds here too, and one admission seats one connection. A
-                    // refusal drops `joined`, which closes the socket.
+                Some(Command::Spend { participant, expires, fresh }) => {
+                    // One admission serves one socket: a second socket under it, after the
+                    // first closed too, reads nothing (`CALL-117`, audit `N39`).
                     let now = unix_now();
                     spent.retain(|(_, until)| *until >= now);
-                    let seated = spent.iter().any(|(p, _)| *p == participant);
+                    let answer = if spent.iter().any(|(p, _)| *p == participant) {
+                        Freshness::Spent
+                    } else {
+                        spent.push((participant, expires));
+                        Freshness::Fresh
+                    };
+                    let _ = fresh.send(answer);
+                }
+                Some(Command::Join { room, participant, member, sender, expires, offer, signals, joined }) => {
+                    // The socket spent its admission before it sent the offer, so the cap
+                    // alone refuses here. A refusal drops `joined`, which closes the socket.
                     // One seat per member: a later join of the member ends the older seat,
                     // so a member who rejoins holds no stale seat (audit `N25`).
-                    if !seated {
-                        let older: Vec<Seq<Participant>> = sessions
-                            .iter()
-                            .filter(|s| s.room == room && s.member == member)
-                            .map(|s| s.id)
-                            .collect();
-                        end(&mut sfu, &mut sessions, &older);
-                    }
+                    let older: Vec<Seq<Participant>> = sessions
+                        .iter()
+                        .filter(|s| s.room == room && s.member == member)
+                        .map(|s| s.id)
+                        .collect();
+                    end(&mut sfu, &mut sessions, &older);
                     let in_room = Count::<CallParticipants>::of(
                         sessions.iter().filter(|s| s.room == room).count(),
                     );
                     if in_room < PARTICIPANT_CAP
-                        && !seated
                         && let Ok((id, answer)) = sfu.join(Instant::now(), room.clone(), sender, offer)
                     {
-                        spent.push((participant, expires));
                         if let Ok(answer) = Validated::<SessionDescription>::parse(answer.to_sdp_string()) {
                             let _ = signals.send(Wire::Answer(answer));
                         }
@@ -219,10 +262,12 @@ async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver
                     }
                     occupancy(&sessions);
                 }
-                Some(Command::Renew(id, claims)) => {
+                Some(Command::Renew(id, claims, kept)) => {
                     // A renewal keeps the seat it names alone. One for another room,
                     // participant, member or sender index keeps nothing (audit `N25`).
+                    let mut renewal = Renewal::Ignored;
                     if let Some(session) = sessions.iter_mut().find(|s| s.id == id && s.renewed_by(&claims)) {
+                        renewal = Renewal::Kept;
                         session.expires = session.expires.max(claims.expires);
                         // The token of a renewal admits the participant too: it stays spent
                         // while it is valid, so it seats no second connection (`CALL-117`).
@@ -232,6 +277,7 @@ async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver
                             }
                         }
                     }
+                    let _ = kept.send(renewal);
                 }
                 Some(Command::Answer(id, answer)) => sfu.accept_answer(id, answer),
                 Some(Command::Share(id)) => sfu.share_started(Instant::now(), id),
@@ -321,12 +367,21 @@ struct Gate {
     admitting: Arc<Admitting>,
 }
 
-/// How long an open socket may wait for its admission.
+/// How long an open socket may wait for its admission, and then for its offer (audit `N39`).
 const ADMISSION_DEADLINE: Duration = Duration::from_secs(10);
 
-/// Opens the signalling session of one browser.
+/// The largest message, and the largest frame, the signalling socket reads (audit `N39`). It
+/// holds an offer at the cap of a session description, each of its bytes escaped once in JSON.
+/// Past it the socket closes, so one socket holds that much of the SFU at most.
+pub const SIGNAL_MESSAGE_MAX: Count<Octets> =
+    Count::new(SESSION_DESCRIPTION_MAX.get().saturating_mul(2));
+
+/// Opens the signalling session of one browser, under the message bound.
 async fn upgrade(ws: WebSocketUpgrade, State(gate): State<Gate>) -> Response {
-    ws.on_upgrade(move |socket| session(socket, gate))
+    let max = SIGNAL_MESSAGE_MAX.saturating_len().to_usize();
+    ws.max_message_size(max)
+        .max_frame_size(max)
+        .on_upgrade(move |socket| session(socket, gate))
 }
 
 /// The instant of the wall clock, in Unix seconds, which an admission expires on.
@@ -352,6 +407,14 @@ async fn next_wire(socket: &mut WebSocket) -> Option<Option<Wire>> {
     }
 }
 
+/// Sends `wire` on `socket` as JSON text. Answers whether it left.
+async fn send_wire(socket: &mut WebSocket, wire: &Wire) -> bool {
+    match serde_json::to_string(wire) {
+        Ok(text) => socket.send(Message::Text(text.into())).await.is_ok(),
+        Err(_) => false,
+    }
+}
+
 /// One browser's signalling: its admission, the TURN servers, its offer, then the SFU's
 /// offers and its answers. A socket without a valid admission closes before the SFU reads an
 /// offer.
@@ -369,19 +432,33 @@ async fn session(mut socket: WebSocket, gate: Gate) {
         SFU.admissions.inc(Admission::Refused);
         return;
     };
+    // The socket spends the admission before the SFU mints a credential. A second socket
+    // under it gets no TURN credential, and holds no unfinished message (audit `N39`).
+    let (fresh, answer) = oneshot::channel();
+    let spend = Command::Spend {
+        participant: admission.participant,
+        expires: admission.expires,
+        fresh,
+    };
+    if gate.commands.send(spend).await.is_err() || answer.await != Ok(Freshness::Fresh) {
+        SFU.admissions.inc(Admission::Refused);
+        return;
+    }
+    let minted = unix_now();
+    // When the last credential the socket read expires. A renewal near it mints a fresh one.
+    let mut held = gate.admitting.turn.as_ref().map(|turn| turn.expiry(minted));
     let ice = gate
         .admitting
         .turn
         .iter()
-        .map(|turn| turn.credential(admission.participant, unix_now()))
+        .map(|turn| turn.credential(admission.participant, minted))
         .collect();
-    let Ok(text) = serde_json::to_string(&Wire::Ice(ice)) else {
-        return;
-    };
-    if socket.send(Message::Text(text.into())).await.is_err() {
+    if !send_wire(&mut socket, &Wire::Ice(ice)).await {
         return;
     }
-    let Some(Some(Wire::Offer(offer))) = next_wire(&mut socket).await else {
+    // An admitted socket that sends no offer within the deadline closes (audit `N39`).
+    let offered = tokio::time::timeout(ADMISSION_DEADLINE, next_wire(&mut socket)).await;
+    let Ok(Some(Some(Wire::Offer(offer)))) = offered else {
         return;
     };
     let Ok(offer) = SdpOffer::from_sdp_string(offer.as_str()) else {
@@ -432,7 +509,24 @@ async fn session(mut socket: WebSocket, gate: Gate) {
                     let Ok(claims) = admitting.key.admit(&token, unix_now()) else {
                         continue;
                     };
-                    if commands.send(Command::Renew(id, claims)).await.is_err() {
+                    let (kept, renewal) = oneshot::channel();
+                    if commands.send(Command::Renew(id, claims, kept)).await.is_err() {
+                        break;
+                    }
+                    // A renewal that kept the seat answers a fresh credential once the last
+                    // one nears its expiry, under the pseudonym of the seat (`CALL-154`).
+                    let kept = renewal.await == Ok(Renewal::Kept);
+                    let now = unix_now();
+                    let fresh = match (admitting.turn.as_ref(), held) {
+                        (Some(turn), Some(last)) if kept && turn.is_due(last, now) => {
+                            held = Some(turn.expiry(now));
+                            Some(turn.credential(admission.participant, now))
+                        }
+                        _ => None,
+                    };
+                    if let Some(fresh) = fresh
+                        && !send_wire(&mut socket, &Wire::Ice(vec![fresh])).await
+                    {
                         break;
                     }
                 }

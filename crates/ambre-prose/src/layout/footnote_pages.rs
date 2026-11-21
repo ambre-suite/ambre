@@ -47,7 +47,7 @@ fn document(texts: &[String]) -> (ProseState, Vec<BlockId>) {
 }
 
 fn add(state: &mut ProseState, block: BlockId, pos: Pos<DocChar>, text: &str) -> Id<Footnote> {
-    let before: Vec<Id<Footnote>> = note::ordinals(state.document())
+    let before: Vec<Id<Footnote>> = note::ordinals(state.document(), state.roots())
         .into_iter()
         .map(|(id, _)| id)
         .collect();
@@ -56,7 +56,7 @@ fn add(state: &mut ProseState, block: BlockId, pos: Pos<DocChar>, text: &str) ->
         pos,
         note_text: text.to_owned(),
     });
-    note::all(state.document())
+    note::all(state.document(), state.roots())
         .into_iter()
         .find(|id| !before.contains(id))
         .expect("a new note")
@@ -127,11 +127,13 @@ fn every_note_is_numbered_from_its_call_before_any_block_is_placed() {
     let (mut state, ids) = document(&["first".to_owned(), "second".to_owned()]);
     let later = add(&mut state, ids[1], Pos::<DocChar>::new(6), "later");
     let earlier = add(&mut state, ids[0], Pos::<DocChar>::new(5), "earlier");
-    let layout = shipped_paginator().full(state.document()).clone();
+    let layout = shipped_paginator()
+        .full(state.document(), state.roots())
+        .clone();
     let ordinals: Vec<(Id<Footnote>, u32)> =
         placed(&layout).iter().map(|(id, n, _)| (*id, *n)).collect();
     assert_eq!(ordinals, vec![(earlier, 1), (later, 2)]);
-    let counted: Vec<(Id<Footnote>, u32)> = note::ordinals(state.document())
+    let counted: Vec<(Id<Footnote>, u32)> = note::ordinals(state.document(), state.roots())
         .into_iter()
         .map(|(id, n)| (id, n.get()))
         .collect();
@@ -143,7 +145,11 @@ fn a_note_moved_to_another_page_keeps_its_ordinal() {
     let (mut state, ids) = document(&["intro".to_owned(), "body".to_owned()]);
     let first = add(&mut state, ids[0], Pos::<DocChar>::new(5), "one");
     let second = add(&mut state, ids[1], Pos::<DocChar>::new(4), "two");
-    let before = placed(&shipped_paginator().full(state.document()).clone());
+    let before = placed(
+        &shipped_paginator()
+            .full(state.document(), state.roots())
+            .clone(),
+    );
     assert_eq!(before, vec![(first, 1, 0), (second, 2, 0)]);
     state.handle_command(ProseCommand::InsertBlock {
         parent_id: None,
@@ -151,7 +157,11 @@ fn a_note_moved_to_another_page_keeps_its_ordinal() {
         init: BlockInit::PageBreak,
         style_id: None,
     });
-    let after = placed(&shipped_paginator().full(state.document()).clone());
+    let after = placed(
+        &shipped_paginator()
+            .full(state.document(), state.roots())
+            .clone(),
+    );
     assert_eq!(after, vec![(first, 1, 0), (second, 2, 1)]);
 }
 
@@ -233,12 +243,16 @@ fn a_call_added_or_removed_lays_out_what_a_full_recomputation_would() {
     let _ = state.paginate(&[]);
     let first = add(&mut state, ids[0], Pos::<DocChar>::new(5), "first");
     let reflowed = state.paginate(&[tree_id(ids[0])]).clone();
-    let full = shipped_paginator().full(state.document()).clone();
+    let full = shipped_paginator()
+        .full(state.document(), state.roots())
+        .clone();
     assert_eq!(placed(&reflowed), placed(&full));
     assert_eq!(reflowed.blocks, full.blocks);
     state.handle_command(ProseCommand::DeleteFootnote { footnote_id: first });
     let reflowed = state.paginate(&[tree_id(ids[0])]).clone();
-    let full = shipped_paginator().full(state.document()).clone();
+    let full = shipped_paginator()
+        .full(state.document(), state.roots())
+        .clone();
     assert_eq!(placed(&reflowed), placed(&full));
     assert_eq!(placed(&reflowed)[0].1, 1, "the last note is note one again");
 }
@@ -248,7 +262,7 @@ fn text_typed_anywhere_lays_out_what_a_full_recomputation_would() {
     let (mut state, ids) = document(&[long_text(), "beta".to_owned(), long_text()]);
     let call = add(&mut state, ids[1], Pos::<DocChar>::new(2), "a note");
     let _ = state.paginate(&[]);
-    let body = note::block(state.document(), &call).expect("a note block");
+    let body = note::block(state.document(), state.roots(), &call).expect("a note block");
     let typed_in = [ids[0], ids[1], crate::events::block_id(body), ids[2]];
     for block in typed_in {
         state.handle_command(ProseCommand::InsertText {
@@ -257,7 +271,9 @@ fn text_typed_anywhere_lays_out_what_a_full_recomputation_would() {
             text: "Typed at the head, long enough to push a line further on. ".repeat(3),
         });
         let reflowed = state.paginate(&[]).clone();
-        let full = shipped_paginator().full(state.document()).clone();
+        let full = shipped_paginator()
+            .full(state.document(), state.roots())
+            .clone();
         assert_eq!(placed(&reflowed), placed(&full), "{block:?}");
         assert_eq!(reflowed.blocks, full.blocks, "{block:?}");
     }

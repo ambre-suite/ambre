@@ -180,6 +180,13 @@ impl SyncState {
             exchange_key,
             doc_key,
             expect_exchange_pub_key,
+            // The signing key the confirmed fingerprint covered, when this
+            // session showed it for that very exchange key (audit `P44`).
+            expect_signing_pub_key: self
+                .shown_identities
+                .get(&invitee)
+                .filter(|shown| shown.exchange == expect_exchange_pub_key)
+                .map(|shown| shown.signing),
             author,
             footing,
             rule: self.log_rule(document_id),
@@ -303,6 +310,11 @@ impl SyncState {
             author,
             footing,
             rule: self.log_rule(document_id),
+            applied: self
+                .documents
+                .get(&document_id)
+                .map(SyncDocumentState::applied_clocks)
+                .unwrap_or_default(),
         };
         let http = sharing::GlooHttp { auth };
         crate::spawn(async move {
@@ -346,6 +358,98 @@ impl SyncState {
             .find_map(|footing| footing.sealed_at(anchor))
     }
 
+    /// Holds `kept`, where the log of `log_document` stood in an earlier
+    /// session (`SYNC-290`). Its footing roots every later walk of that log
+    /// in the session. A log the relay cut before an entry walked then
+    /// installs no key. A footing this session holds already moves on to it
+    /// only when it is later.
+    ///
+    /// The chain it stored is rebuilt, so a listed name opens through it
+    /// with no request (`SYNC-308`). A chain the kept log no longer extends
+    /// is refused, and so is one of a log this session walked from another
+    /// anchor. A chain this session already holds is the later one, and
+    /// stays.
+    pub(crate) fn hold_kept_log(&mut self, log_document: Id<Document>, kept: ambre_bus::KeptLog) {
+        let footing = crate::key_vouch::Footing::kept(log_document, &kept);
+        let other_anchor = self
+            .log_footings
+            .get(&log_document)
+            .is_some_and(|held| held.sealed_at(kept.anchor).is_none());
+        self.log_walked_to(footing);
+        match crate::chain::Chain::kept(log_document, &kept) {
+            Some(chain) if !other_anchor => {
+                self.kept_chains.entry(log_document).or_insert(chain);
+            }
+            _ => crate::log::warning!(
+                "Sync: the kept chain of {log_document:?} is refused: its log no longer extends it"
+            ),
+        }
+        self.kept_logs.entry(log_document).or_insert(kept);
+    }
+
+    /// Records where the log of `document_id` stands now, with the key and
+    /// the chain the document holds. It hands that to the local store when
+    /// it moved (`SYNC-290`, `SYNC-308`). It is a no-op before a footing or a
+    /// key exists.
+    pub(crate) fn keep_log(&mut self, document_id: Id<Document>) {
+        let (Some(footing), Some((key, links))) = (
+            self.footing(document_id),
+            self.documents
+                .get(&document_id)
+                .map(|doc| (doc.doc_key.id(), doc.chain.links())),
+        ) else {
+            return;
+        };
+        let kept = footing.to_kept(key, links);
+        let log_document = footing.document();
+        self.keep_chain(document_id);
+        if self.kept_logs.get(&log_document) == Some(&kept) {
+            return;
+        }
+        self.kept_logs.insert(log_document, kept.clone());
+        self.send_to_logic(LogicEvent::LogKept {
+            document_id: log_document,
+            kept,
+        });
+    }
+
+    /// Keeps the links `document_id` holds as the chain of its log, which a
+    /// listed name walks with no request (`SYNC-302`). The open kept only
+    /// the links a writer of the log signed (`SYNC-121`, `SYNC-204`).
+    pub(crate) fn keep_chain(&mut self, document_id: Id<Document>) {
+        let log_document = self.log_document(document_id);
+        if let Some(doc) = self.documents.get(&document_id) {
+            self.kept_chains.insert(log_document, doc.chain.clone());
+        }
+    }
+
+    /// The chain of links each log kept, by the log's document (`SYNC-302`).
+    #[cfg(test)]
+    pub(crate) fn kept_chains(&self) -> &HashMap<Id<Document>, crate::chain::Chain> {
+        &self.kept_chains
+    }
+
+    /// What a listed name opens under, for a listing task that outlives the
+    /// borrow. It holds the key each log accepted last (`SYNC-291`) and the
+    /// chain each log kept (`SYNC-302`).
+    pub(crate) fn kept_names(&self) -> crate::documents::KeptNames {
+        crate::documents::KeptNames {
+            keys: self.kept_keys(),
+            chains: self.kept_chains.clone(),
+        }
+    }
+
+    /// The key id each log accepted last, by the log's document, for a
+    /// listing task that outlives the borrow (`SYNC-291`).
+    pub(crate) fn kept_keys(
+        &self,
+    ) -> HashMap<Id<Document>, ambre_core::FixedBytes<ambre_core::KeyId>> {
+        self.kept_logs
+            .iter()
+            .map(|(document, kept)| (*document, kept.key))
+            .collect()
+    }
+
     /// The signer of the entries this user appends to a membership log
     /// (`SYNC-132`), once signed in.
     pub(crate) fn author(&self) -> Option<sharing::Author> {
@@ -370,6 +474,17 @@ impl SyncState {
             });
             return;
         };
+        // The departure caps this user at the last clock they wrote, which
+        // only an open document knows (`SYNC-306`). A cap read from nothing
+        // would refuse their own history, so the leave fails closed.
+        let Some(cap) = self.leaving_cap(document_id, &author) else {
+            let _ = self.logic_tx.send(LogicEvent::ApiError {
+                id: Some(id),
+                request: ApiRequest::LeaveDocument,
+                failure: ApiFailure::Local(ambre_core::LocalFailure::DocumentNotOpen),
+            });
+            return;
+        };
         let logic_tx = self.logic_tx.clone();
         let params = sharing::LeaveParams {
             id,
@@ -378,6 +493,7 @@ impl SyncState {
             url_scheme: self.url_scheme,
             api_base: self.api_base.clone(),
             exchange_key,
+            cap,
         };
         let http = sharing::GlooHttp {
             auth: self.auth_context(),
@@ -385,6 +501,20 @@ impl SyncState {
         crate::spawn(async move {
             sharing::leave_task(&http, params, &tx, &logic_tx).await;
         });
+    }
+
+    /// The cap a departure of `document_id` by `author` names: the last
+    /// clock the open document knows that author wrote (`SYNC-306`). `None`
+    /// when the document is not open here.
+    pub(crate) fn leaving_cap(
+        &self,
+        document_id: Id<Document>,
+        author: &sharing::Author,
+    ) -> Option<Seq<DeltaAuthor>> {
+        let key = author.public();
+        self.documents
+            .get(&document_id)
+            .map(|doc| doc.own_last_clock(&key))
     }
 
     /// Fetches the member list for a document via `GET /api/documents/{id}/members`,
@@ -535,7 +665,10 @@ impl SyncState {
                 }
             });
         } else {
-            crate::log::info!("Sync: SearchUsers '{}'", query.as_str());
+            // The query is now a whole address, so no log line names it
+            // (`SYNC-292`).
+            drop(query);
+            crate::log::info!("Sync: SearchUsers with no relay");
             self.reply(id, RestEvent::UserSearchResults { users: Vec::new() });
         }
     }
@@ -592,6 +725,221 @@ mod tests {
             .expect("the creator's footing");
         state.log_walked_to(walked);
         assert_eq!(state.footing(DOC), Some(walked));
+    }
+
+    /// Holds `SYNC-290` in the worker. A footing this session walks goes to
+    /// the local store with its key, once, and again only when it moves. The
+    /// kept log the store hands the next session roots its walks. A log the
+    /// relay cut before the kept head diverges, and the whole log walks.
+    #[test]
+    fn a_log_head_outlives_the_session_through_the_local_store() {
+        use crate::key_vouch::Footing;
+        use crate::membership_log::tests::{DOC, Person, append, created};
+        use crate::membership_log::{LogRule, digest, encode};
+        let (mut state, rx) = bare_state();
+        let alice = Person::new(1);
+        let mut entries = created(&alice, &Person::new(2));
+        append(
+            &mut entries,
+            &alice,
+            &Person::new(3),
+            ambre_protocol::MembershipAct::Invite,
+            Role::Editor,
+        );
+        let texts: Vec<_> = entries.iter().map(|e| encode(e).unwrap()).collect();
+        let anchor = digest(&entries[0]).expect("an anchor");
+        let key = DocumentKey::from_array([0x41; 32]);
+        state.documents.insert(
+            DOC,
+            SyncDocumentState::new(
+                DOC,
+                key.clone(),
+                DocType::Prose,
+                crate::Existence::LocalOnly,
+            ),
+        );
+        let walked = Footing::sealed_in_catalogue(DOC, anchor)
+            .walk(&texts, &LogRule::document())
+            .expect("the whole log walks")
+            .footing();
+        for _ in 0..2 {
+            state.handle_sync_event(SyncEvent::FootingAdvanced {
+                document_id: DOC,
+                footing: walked,
+            });
+        }
+        let kept: Vec<_> = rx
+            .try_iter()
+            .filter_map(|event| match event {
+                LogicEvent::LogKept { document_id, kept } => Some((document_id, kept)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(kept, [(DOC, walked.to_kept(key.id(), Vec::new()))]);
+
+        // The next session: the store hands the kept log back first.
+        let (mut next, _rx) = bare_state();
+        next.handle_command(SyncCommand::KeepLog {
+            document_id: DOC,
+            kept: kept[0].1.clone(),
+        });
+        let held = next.log_footings.get(&DOC).copied();
+        assert_eq!(held, Some(walked));
+        assert_eq!(next.kept_keys().get(&DOC), Some(&key.id()));
+        let walk = |served: &[ambre_core::Encoded<ambre_core::EncodedLogEntry>]| {
+            crate::sharing::walk_from_footing(held, DOC, Some(anchor), served, &LogRule::document())
+        };
+        assert!(
+            matches!(walk(&texts[..2]), Err(crate::error::SyncError::LogDiverged)),
+            "a log cut before the kept head installs nothing"
+        );
+        assert!(walk(&texts).is_ok());
+    }
+
+    /// Holds `SYNC-308`. The chain an open holds goes to the local store
+    /// beside its kept log. The next session rebuilds it from the row, and
+    /// a name sealed two rotations back opens through it. The worker refuses
+    /// a stored chain with a link signed past the kept head, or with a link
+    /// the kept key does not walk to. It refuses the chain of a log this
+    /// session walked from another anchor too. The kept footing still holds.
+    #[test]
+    fn a_kept_chain_outlives_the_session_and_one_its_log_no_longer_extends_is_refused() {
+        use crate::key_vouch::Footing;
+        use crate::membership_log::tests::{DOC, Person, append, created};
+        use crate::membership_log::{LogRule, digest, encode};
+        let (mut state, rx) = bare_state();
+        let alice = Person::new(1);
+        let mut entries = created(&alice, &Person::new(2));
+        append(
+            &mut entries,
+            &alice,
+            &Person::new(3),
+            ambre_protocol::MembershipAct::Invite,
+            Role::Editor,
+        );
+        let texts: Vec<_> = entries.iter().map(|e| encode(e).unwrap()).collect();
+        let anchor = digest(&entries[0]).expect("an anchor");
+        let keys: Vec<DocumentKey> = (0..3).map(|_| DocumentKey::generate()).collect();
+        let links: Vec<_> = keys
+            .windows(2)
+            .map(|pair| {
+                crate::pipeline::seal_link(
+                    DOC,
+                    &pair[0],
+                    &pair[1],
+                    ambre_protocol::LogHead::EMPTY,
+                    &alice.key,
+                )
+                .unwrap()
+            })
+            .collect();
+        let mut doc = SyncDocumentState::new(
+            DOC,
+            keys[2].clone(),
+            DocType::Prose,
+            crate::Existence::LocalOnly,
+        );
+        doc.chain = crate::chain::Chain::new(DOC, links.clone());
+        state.documents.insert(DOC, doc);
+        let walked = Footing::sealed_in_catalogue(DOC, anchor)
+            .walk(&texts, &LogRule::document())
+            .expect("the whole log walks")
+            .footing();
+        state.handle_sync_event(SyncEvent::FootingAdvanced {
+            document_id: DOC,
+            footing: walked,
+        });
+        let kept = rx
+            .try_iter()
+            .find_map(|event| match event {
+                LogicEvent::LogKept { kept, .. } => Some(kept),
+                _ => None,
+            })
+            .expect("the log is kept");
+        assert_eq!(kept.links.len(), 2, "the chain rides beside the head");
+
+        // The next session reads the row back and rebuilds the chain.
+        let row = ambre_bus::KeptLog::from_row(&kept.to_row().unwrap()).expect("a row");
+        let (mut next, _rx) = bare_state();
+        next.handle_command(SyncCommand::KeepLog {
+            document_id: DOC,
+            kept: row.clone(),
+        });
+        let rebuilt = next.kept_chains().get(&DOC).expect("the chain is rebuilt");
+        assert_eq!(
+            rebuilt.recover(&keys[2], keys[0].id()).map(|k| k.id()),
+            Some(keys[0].id()),
+            "two rotations back"
+        );
+
+        let refused = |kept: ambre_bus::KeptLog, walked_elsewhere: bool| {
+            let (mut next, _rx) = bare_state();
+            if walked_elsewhere {
+                next.log_walked_to(Footing::sealed_in_catalogue(
+                    DOC,
+                    ambre_core::FixedBytes::from_array([0xEE; 32]),
+                ));
+            }
+            next.handle_command(SyncCommand::KeepLog {
+                document_id: DOC,
+                kept,
+            });
+            assert_eq!(next.kept_keys().get(&DOC), Some(&keys[2].id()));
+            next.kept_chains().get(&DOC).is_none()
+        };
+        let mut past_head = row.clone();
+        if let Some(link) = past_head.links.last_mut() {
+            link.head.position = ambre_core::Seq::new(99);
+        }
+        assert!(refused(past_head, false), "a link past the kept head");
+        let mut left_over = row.clone();
+        left_over.links.push(
+            crate::pipeline::seal_link(
+                DOC,
+                &DocumentKey::generate(),
+                &DocumentKey::generate(),
+                ambre_protocol::LogHead::EMPTY,
+                &alice.key,
+            )
+            .unwrap(),
+        );
+        assert!(
+            refused(left_over, false),
+            "a link the kept key never reaches"
+        );
+        assert!(
+            refused(row.clone(), true),
+            "a log walked from another anchor"
+        );
+        assert!(!refused(row, false), "the honest chain holds");
+    }
+
+    /// `SYNC-292`: a user search with no relay logs that it ran, and never
+    /// the address it searched.
+    #[test]
+    fn a_user_search_logs_no_searched_address() {
+        let (state, rx) = bare_state();
+        let logged = crate::log::tests::logged_by("SearchUsers", || {
+            let query = ambre_core::Validated::<ambre_core::UserSearch>::parse("ada@example.org")
+                .expect("a search");
+            state.handle_search_users(ambre_bus::next_request(), query);
+        });
+        for message in &logged {
+            assert!(
+                !message.contains("ada") && !message.contains("example.org"),
+                "{message}"
+            );
+        }
+        assert!(
+            rx.try_iter().any(|e| matches!(
+                e,
+                LogicEvent::Rest {
+                    evt: RestEvent::UserSearchResults { .. },
+                    ..
+                }
+            )),
+            "the search went unanswered"
+        );
     }
 
     /// How the Sync worker ended a waiting invite, if it did.

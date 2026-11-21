@@ -29,6 +29,7 @@ impl Member {
 
     fn signer(&self) -> Signer {
         Signer {
+            nonce: crate::logic::delta::TEST_NONCE,
             peer: self
                 .state
                 .peer(self.segment().document_id())

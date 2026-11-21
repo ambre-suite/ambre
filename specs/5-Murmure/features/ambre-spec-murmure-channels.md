@@ -50,6 +50,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-579` | `FAIL` | Given a channel, a direct message, a space or a category named past the budget of a name, the client MUST write nothing and tell the user why. | `ambre-spec-budgets.md section 6`; `SYNC-178` | `ambre_murmure::logic::channel_tests::a_channel_takes_the_longest_name` -- a public and a private channel, the longest name taken, and the engine takes a name only as a `Validated<Name>`, which no text past the cap makes; type-level -- every bus command that names a space, a category or a channel carries a `Validated<Name>`, which no text past the cap makes, so none reaches the Logic thread; `ambre_logic::direct::tests::a_name_leaves_on_meta_and_reaches_the_view` -- a direct message too, and the name sealed is the trimmed one `meta` holds | none | verified |
 | `MURMURE-055` | `FRAME` | Clearing a name MUST remove its key, and MUST NOT store an empty or a composed name. | this spec section 3; `MURMURE-016` | `ambre_murmure::logic::channel_tests::clearing_a_name_removes_its_key` -- a cleared or blank name leaves no `name` key; `ambre_murmure::logic::channel_tests::clearing_an_absent_name_writes_nothing` -- clearing a name the channel does not carry writes no operation | none | verified |
 | `MURMURE-491` | `POST` | Every name written into a channel's `meta` MUST also be sealed beside it on the relay, under the channel key. | this spec section 3; `features/ambre-spec-murmure-layout.md`, `MURMURE-490`; `ambre-spec-sync.md`, `SYNC-171` | `ambre_logic::direct::tests::a_name_leaves_on_meta_and_reaches_the_view` -- each name, and its clearing, also leaves to be sealed beside meta; `ambre_logic::spaces::tests::a_private_channel_writes_no_catalogue` -- a private channel's creation carries its name; `ambre_sync::channels::tests::a_channel_name_is_sealed_under_the_channel_key_for_its_meta` -- the seal opens under that key for meta alone | none | verified |
+| `MURMURE-682` | `POST` | Given an open channel whose `meta` reads another name than the hint of the latest listing, the client MUST seal the name `meta` reads beside it again. | `features/ambre-spec-murmure-layout.md` section 3; `MURMURE-491`; `MURMURE-490` | `ambre_logic::channels::tests::an_open_channel_seals_its_name_again_when_the_hint_is_stale` -- the open seals what `meta` reads once, a hint that matches seals nothing, and a later listing with the stale hint seals it again | none | verified |
 
 ### 1.5 Invite a member
 
@@ -129,7 +130,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   rotation costs one close and one wrap per remaining member.
 * **Boundary.** the relay learns the members of each channel, which `ambre-spec-zero-knowledge.md`
   accepts as the membership graph. The name of a direct message is sealed in `meta`.
-* **Verification.** 41 `verified`, 15 `unimplemented`. The relay holds a private channel, its leave,
+* **Verification.** 42 `verified`, 15 `unimplemented`. The relay holds a private channel, its leave,
   its delete and its key links. A client creates, deletes and leaves one, and learns its user's
   channels. A direct message opens, is reused and takes a name; an invite opens a channel, and
   announces a third member. A rotation closes the active segment and locks the ones it leaves;

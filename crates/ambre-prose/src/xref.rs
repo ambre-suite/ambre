@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::doc;
 use crate::events::{CrossRefKind, ResolvedCrossRef, block_id};
 use crate::layout::pass::PageLayout;
+use crate::logic::Roots;
 use crate::numbering;
 
 /// The record's wire form. `postcard` prefixes a label with its length, so
@@ -82,10 +83,12 @@ pub fn decode(value: &str) -> Option<(TreeID, CrossRefKind)> {
 /// target is read by its own id and no other: a gone target is broken, never
 /// a neighbour's value (`PROSE-FEAT-132`). A page is the one the target starts
 /// on in `layout` (`PROSE-FEAT-130`); a section is the number its heading is
-/// drawn with (`PROSE-FEAT-131`).
+/// drawn with (`PROSE-FEAT-131`). A document without the tree holds no
+/// target, and the read attaches nothing (`PROSE-142`).
 #[must_use]
 pub fn resolve(
     document: &LoroDoc,
+    roots: &Roots,
     layout: Option<&PageLayout>,
     target: &TreeID,
     kind: &CrossRefKind,
@@ -93,7 +96,7 @@ pub fn resolve(
     if let CrossRefKind::CustomText(label) = kind {
         return Some(label.clone());
     }
-    let tree = doc::blocks(document);
+    let tree = doc::blocks_read(document, roots)?;
     doc::node_of(&tree, target)?;
     match kind {
         CrossRefKind::PageNumber => layout?
@@ -109,10 +112,15 @@ pub fn resolve(
 }
 
 /// Every reference of the document, in document order, resolved against
-/// `layout`.
+/// `layout`. A document without the tree holds no reference, and the read
+/// attaches nothing (`PROSE-142`).
 #[must_use]
-pub fn resolve_all(document: &LoroDoc, layout: Option<&PageLayout>) -> Vec<ResolvedCrossRef> {
-    doc::anchors(document, crate::mark::MarkRoot::CrossRef, decode)
+pub fn resolve_all(
+    document: &LoroDoc,
+    roots: &Roots,
+    layout: Option<&PageLayout>,
+) -> Vec<ResolvedCrossRef> {
+    doc::anchors(document, roots, crate::mark::MarkRoot::CrossRef, decode)
         .into_iter()
         .map(|anchor| {
             let (target, kind) = anchor.value;
@@ -120,7 +128,7 @@ pub fn resolve_all(document: &LoroDoc, layout: Option<&PageLayout>) -> Vec<Resol
                 block_id: block_id(anchor.block),
                 offset: anchor.offset,
                 target: block_id(target),
-                shown: resolve(document, layout, &target, &kind),
+                shown: resolve(document, roots, layout, &target, &kind),
             }
         })
         .collect()

@@ -59,8 +59,9 @@ RELAY_WAIT_SECONDS = 120
 STORE_PATH = "/s3"
 # The account the media probe signs in as, through the login of development mode.
 PROBE_USER = "dev-stack-probe"
-# A sealed document key holds a nonce, a key and a tag: 24, 32 and 16 bytes.
-WRAPPED_KEY_BYTES = 72
+# A sealed document key holds a version byte, a nonce, a key and a tag:
+# 1, 24, 32 and 16 bytes (`ZK-047`).
+WRAPPED_KEY_BYTES = 73
 PROBE_OBJECT_BYTES = 64
 
 # What the authority may sign: the private ranges of RFC 1918, loopback, and the

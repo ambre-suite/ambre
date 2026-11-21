@@ -3,7 +3,7 @@
 // The top menu bar (`toile-menus`), wasm-only. A horizontal
 // `.ambre-commandbar` group in the command bar row, with one title per
 // top-level menu (File / Edit / View / Object / Present). The zoom lives in the
-// status bar alone (`CHROME-147`); the View menu and the palette carry its
+// status bar alone (`CHROME-206`); the View menu and the palette carry its
 // commands.
 //
 // Styling is SHARED with the tool palette and the Trame command bar. The

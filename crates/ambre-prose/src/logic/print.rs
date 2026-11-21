@@ -192,8 +192,8 @@ impl ProseState {
                 Count::of(missing),
             );
         }
-        let title = doc::read_title(&self.doc);
-        let stored = doc::read_locale(&self.doc);
+        let title = doc::read_title(&self.doc, &self.roots);
+        let stored = doc::read_locale(&self.doc, &self.roots);
         let document_locale =
             DocumentLocale::from_register(stored.as_ref().map(ambre_core::Validated::as_str));
         let mut document = PrintDocument::new(PrintPage {
@@ -225,7 +225,7 @@ impl ProseState {
     /// may open, and each cross reference.
     fn link_sources(&self) -> HashMap<TreeID, Vec<LinkSource>> {
         let mut sources: HashMap<TreeID, Vec<LinkSource>> = HashMap::new();
-        for link in crate::link::links(&self.doc) {
+        for link in crate::link::links(&self.doc, &self.roots) {
             // A target the view would not open is no link in the file
             // either (`PROSE-UI-153`).
             if !crate::link::openable(&link.url) {
@@ -241,6 +241,7 @@ impl ProseState {
         }
         for anchor in doc::anchors(
             &self.doc,
+            &self.roots,
             crate::mark::MarkRoot::CrossRef,
             crate::xref::decode,
         ) {

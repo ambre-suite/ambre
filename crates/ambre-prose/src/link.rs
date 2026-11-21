@@ -12,15 +12,17 @@ use loro::{LoroDoc, LoroValue, TextDelta};
 use crate::comment::text_blocks;
 use crate::doc;
 use crate::events::{LinkSpan, block_id};
+use crate::logic::Roots;
 use crate::mark::MarkRoot;
 use ambre_core::crdt::CrdtName as _;
 
 /// Every run of a link mark, in document order. Two runs side by side with
-/// one target read as one link.
+/// one target read as one link. A document without the tree holds no link,
+/// and the read attaches nothing (`PROSE-142`).
 #[must_use]
-pub fn links(document: &LoroDoc) -> Vec<LinkSpan> {
+pub fn links(document: &LoroDoc, roots: &Roots) -> Vec<LinkSpan> {
     let mut out: Vec<LinkSpan> = Vec::new();
-    for id in text_blocks(document) {
+    for id in text_blocks(document, roots) {
         let block = block_id(id);
         let mut offset = Pos::<DocChar>::ZERO;
         for delta in doc::get_block_text(document, &id).to_delta() {
@@ -113,7 +115,7 @@ mod tests {
                 .iter()
                 .all(|e| !matches!(e, ProseEvent::LinksUpdated { .. }))
         );
-        assert_eq!(super::links(state.document()), expected);
+        assert_eq!(super::links(state.document(), state.roots()), expected);
     }
 
     #[test]

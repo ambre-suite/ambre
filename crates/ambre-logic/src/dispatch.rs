@@ -104,6 +104,18 @@ impl LogicState {
         self.route(|m| m.adopt_murmure_session(document_id, peer, entry));
     }
 
+    /// Whether no other session of the space that holds `document_id` holds
+    /// `peer` (`AUTHOR-033`). A document no open space holds reads as
+    /// unclaimed: no registry of this thread names its PeerIDs.
+    pub(crate) fn murmure_peer_unclaimed(
+        &mut self,
+        document_id: Id<Document>,
+        peer: ambre_core::PeerId,
+        nonce: &ambre_core::FixedBytes<ambre_core::SessionNonce>,
+    ) -> bool {
+        self.route(|m| m.space_peer_unclaimed(document_id, peer, nonce))
+    }
+
     /// Apply signed deltas to the channel that holds `document_id`. Returns
     /// `false` when no open or opening channel holds it.
     pub(crate) fn murmure_signed(
@@ -315,6 +327,10 @@ impl LogicState {
             }),
             LogicCommand::PinMurmureInviter { inviter } => {
                 self.send_to_sync(SyncCommand::PinMurmureInviter { inviter })
+            }
+            // The kept log is the Sync worker's to hold (`SYNC-290`).
+            LogicCommand::KeepLog { document_id, kept } => {
+                self.send_to_sync(SyncCommand::KeepLog { document_id, kept });
             }
             LogicCommand::OpenDocument {
                 document_id,
@@ -673,6 +689,11 @@ impl LogicState {
                 inviter,
             } => self.send_to_persist(document_id, PersistWrite::KeepInviter(inviter)),
 
+            // The local store keeps where the log stands (`SYNC-290`).
+            LogicEvent::LogKept { document_id, kept } => {
+                self.send_to_persist(document_id, PersistWrite::KeepLog(kept));
+            }
+
             // Initial hydration complete: any snapshot was applied by the
             // preceding RemoteSnapshot arm (queue order is preserved), so the
             // UI can dismiss its loading overlay.
@@ -835,6 +856,14 @@ impl LogicState {
                 self.route(|m| m.document_gone(document_id))
             }
             LogicEvent::KeyRotated { document_id } => self.route(|m| m.key_rotated(document_id)),
+            // A revoke capped a writer below a delta the document applied
+            // (`SYNC-300`). A document of a channel reads its whole channel
+            // again in the Murmure runtime, and any other reads alone.
+            LogicEvent::DocumentReread { document_id } => {
+                if !self.route(|m| m.channel_reread(document_id)) {
+                    self.reread(document_id);
+                }
+            }
             LogicEvent::ConverterFetched { family, module } => {
                 self.converter_fetched(family, module);
             }
@@ -875,10 +904,12 @@ impl LogicState {
                 self.send_to_ui(UiEvent::MemberChannels {
                     channels,
                     spaces,
-                    names,
+                    names: names.clone(),
                     peers,
                 });
-                self.route(|m| m.channels_listed(&metas));
+                // The names stay hints: an open channel seals what its
+                // `meta` reads when they differ.
+                self.route(|m| m.channels_listed(&metas, &names));
             }
 
             // -- Meetings (participant push) -----------------------------------
@@ -936,6 +967,9 @@ impl LogicState {
                 channel,
                 members,
             } => self.route(|m| m.call_roster(call, channel, members)),
+            LogicEvent::CallMetaAsked { call, channel } => {
+                self.route(|m| m.call_meta_asked(call, channel))
+            }
             LogicEvent::ApiError {
                 id,
                 request,
@@ -1659,6 +1693,44 @@ mod tests {
         }
     }
 
+    /// `DOCFILE-022`: a seal the Sync worker refused for a weak passphrase
+    /// reaches the UI as that refusal, so the prompt asks again. The
+    /// application raises no failure and no file, and the seal waits no more.
+    #[test]
+    fn a_weak_seal_passphrase_reaches_the_prompt_and_no_file() {
+        for doc_type in [DocType::Trame, DocType::Toile] {
+            let (mut state, ui, id, _plaintext) = sealing(doc_type);
+            let weakness = ambre_core::PassphraseWeakness::TooShort;
+            state.handle_logic_event(LogicEvent::Rest {
+                id: Some(id),
+                evt: RestEvent::DocFileSealRefused { weakness },
+            });
+            let events: Vec<UiEvent> = std::iter::from_fn(|| ui.try_recv().ok()).collect();
+            assert!(
+                events.iter().any(|e| matches!(
+                    e,
+                    UiEvent::Rest {
+                        evt: RestEvent::DocFileSealRefused { weakness: named },
+                        ..
+                    } if *named == weakness
+                )),
+                "{doc_type:?}: the refusal did not reach the UI",
+            );
+            assert!(
+                !events.iter().any(|e| matches!(
+                    e,
+                    UiEvent::Viewport { event, .. }
+                        if event.interop_failure().is_some() || event.exported_file().is_some()
+                )),
+                "{doc_type:?}: a refused seal raised a failure or a file",
+            );
+            assert!(
+                state.pending_seals.is_empty(),
+                "{doc_type:?}: the seal still waits"
+            );
+        }
+    }
+
     /// The passphrase never reaches the engine: the dispatcher intercepts the
     /// command by value and moves the secret straight to Sync. A document
     /// closed mid-seal has nothing left to answer.
@@ -1779,6 +1851,91 @@ mod tests {
             persist_rx.try_iter().collect::<Vec<_>>(),
             [(document_id, PersistWrite::KeepInviter(pin))]
         );
+    }
+
+    /// Holds `SYNC-290` on the Logic side. A kept log goes to the local store
+    /// as a row of its document. One the store hands back reaches the Sync
+    /// worker unchanged.
+    #[test]
+    fn a_kept_log_goes_to_the_store_and_back_to_sync() {
+        let (to_ui, _ui) = test_link();
+        let (to_sync, sync_rx) = test_link();
+        let (to_persist, persist_rx) = test_link();
+        let mut state = LogicState::new(to_ui, to_sync, to_persist);
+        let document_id = Id::<Document>::mint();
+        let kept = ambre_bus::KeptLog {
+            anchor: ambre_core::FixedBytes::from_array([1; 32]),
+            head: ambre_bus::LogHead {
+                position: ambre_core::Seq::new(4),
+                previous: Some(ambre_core::FixedBytes::from_array([2; 32])),
+            },
+            key: ambre_core::FixedBytes::from_array([3; 16]),
+            links: Vec::new(),
+        };
+        state.handle_logic_event(LogicEvent::LogKept {
+            document_id,
+            kept: kept.clone(),
+        });
+        assert_eq!(
+            persist_rx.try_iter().collect::<Vec<_>>(),
+            [(document_id, PersistWrite::KeepLog(kept.clone()))]
+        );
+        state.handle_logic_command(LogicCommand::KeepLog {
+            document_id,
+            kept: kept.clone(),
+        });
+        let sent: Vec<SyncCommand> = std::iter::from_fn(|| sync_rx.try_recv().ok()).collect();
+        assert!(
+            sent.iter().any(|cmd| matches!(
+                cmd,
+                SyncCommand::KeepLog { document_id: d, kept: k } if *d == document_id && *k == kept
+            )),
+            "{sent:?}"
+        );
+    }
+
+    /// Holds `SYNC-300` on the Logic side. A document read again loses its
+    /// state and its local copy, then closes and opens again in Sync. The
+    /// relay replays it under the cap. One this thread does not hold
+    /// reads nothing.
+    #[test]
+    fn a_document_read_again_drops_its_copy_and_opens_anew() {
+        let (to_ui, _ui) = test_link();
+        let (to_sync, sync_rx) = test_link();
+        let (to_persist, persist_rx) = test_link();
+        let mut state = LogicState::new(to_ui, to_sync, to_persist);
+        let document_id = Id::<Document>::mint();
+        state.handle_logic_command(LogicCommand::OpenDocument {
+            document_id,
+            doc_type: DocType::Prose,
+        });
+        let _ = std::iter::from_fn(|| sync_rx.try_recv().ok()).count();
+        let _ = persist_rx.try_iter().count();
+
+        state.handle_logic_event(LogicEvent::DocumentReread { document_id });
+        let written: Vec<_> = persist_rx.try_iter().collect();
+        assert!(
+            written.contains(&(document_id, PersistWrite::Erase)),
+            "{written:?}"
+        );
+        let sent: Vec<SyncCommand> = std::iter::from_fn(|| sync_rx.try_recv().ok()).collect();
+        let closed = sent.iter().position(
+            |cmd| matches!(cmd, SyncCommand::CloseDocument { document_id: d } if *d == document_id),
+        );
+        let opened = sent.iter().position(
+            |cmd| matches!(cmd, SyncCommand::OpenDocument { document_id: d, .. } if *d == document_id),
+        );
+        assert!(
+            closed.is_some_and(|c| opened.is_some_and(|o| c < o)),
+            "{sent:?}"
+        );
+
+        let stranger = Id::<Document>::mint();
+        state.handle_logic_event(LogicEvent::DocumentReread {
+            document_id: stranger,
+        });
+        assert!(persist_rx.try_iter().next().is_none());
+        assert!(sync_rx.try_recv().is_err());
     }
 
     /// Holds `SYNC-209` on the Logic side: a pin reaches the Sync worker
@@ -2669,11 +2826,6 @@ mod tests {
             RestCommand::Unlock {
                 passphrase: typed(),
             },
-            RestCommand::SetupAccount {
-                passphrase: typed(),
-                email: ambre_core::Email::from("a@b.c"),
-                display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("A").unwrap(),
-            },
             RestCommand::SetUpKeys {
                 passphrase: typed(),
             },
@@ -2781,12 +2933,12 @@ mod tests {
                 code: ambre_core::Credential::new("c".to_owned()),
                 state: ambre_core::Credential::new("s".to_owned()),
             },
+            RestCommand::ResumeSession,
         ];
         for cmd in &all {
             let removes = match cmd {
                 RestCommand::Logout | RestCommand::DeleteDocument { .. } => true,
                 RestCommand::Unlock { .. }
-                | RestCommand::SetupAccount { .. }
                 | RestCommand::SetUpKeys { .. }
                 | RestCommand::DevLogin { .. }
                 | RestCommand::ChangePassphrase { .. }
@@ -2814,7 +2966,8 @@ mod tests {
                 | RestCommand::LeaveMeeting { .. }
                 | RestCommand::EndMeeting { .. }
                 | RestCommand::ProviderSignIn { .. }
-                | RestCommand::ProviderReturn { .. } => false,
+                | RestCommand::ProviderReturn { .. }
+                | RestCommand::ResumeSession => false,
             };
             assert!(
                 !removes,

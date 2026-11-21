@@ -11,8 +11,8 @@
 //! the open the browser runs. The wasm entry in `worker.rs` carries the frames and the port.
 
 use ambre_core::{
-    ClearChunk, Instant, KeyIdentifier, MediaSlot, PageLoad, Payload, PictureKind, SealedChunk,
-    SenderIndex, Seq, SlotSender, Track,
+    ClearChunk, Instant, KeyGeneration, KeyIdentifier, MediaSlot, PageLoad, Payload, PictureKind,
+    SealedChunk, SenderIndex, Seq, SlotSender, Track,
 };
 use ambre_crypto::call::{ChunkError, ChunkSealer, KeyHandoff, ReceiveKeys};
 
@@ -32,6 +32,10 @@ pub struct CallWorker {
     screen: Option<ChunkSealer>,
     /// The keys of the other participants of the call.
     receive: ReceiveKeys,
+    /// The sender index and the generation of the last `Seal` handoff the worker took. A new
+    /// sealer issues its counters from 1 again. So a `Seal` at or below this generation would
+    /// seal a chunk under a key and a nonce already used (`CALL-147`).
+    sealed: Option<(Seq<SenderIndex>, Seq<KeyGeneration>)>,
 }
 
 /// One chunk the worker opened: the sender its key identifier names, and the clear chunk for
@@ -91,15 +95,21 @@ pub enum Unsealed {
 pub enum Handled {
     /// The worker took the key, or dropped the keys of one sender.
     Kept,
+    /// The worker dropped a `Seal` that does not move its generation up: it keeps sealing
+    /// under the sealers it holds (`CALL-147`).
+    Refused,
     /// The call ended, and the worker holds no key of it any more (`CALL-029`).
     Erased,
 }
 
 impl CallWorker {
     /// Takes one handoff of the Sync worker at `now`, on the monotonic clock of the worker. A
-    /// `Seal` replaces the sealer, so the next chunk seals under the new key; an `End` drops
-    /// every key of the call. An `Open` of a fresh epoch closes the older epochs of its sender
-    /// once the switch delay passed after `now` (`CALL-135`).
+    /// `Seal` of a higher generation replaces the sealer, so the next chunk seals under the new
+    /// key. A `Seal` at or below the last one is refused, so no counter starts again under a key
+    /// identifier already sealed under (`CALL-147`). An `End` drops every key of the call. An `Open` of a fresh epoch closes the older epochs of its sender
+    /// once the switch delay passed after `now` (`CALL-135`). A `Close` of a removal closes the
+    /// epochs it names once its delay passed after `now`, whether a fresh key arrives or not
+    /// (`CALL-157`).
     pub fn hand(&mut self, handoff: KeyHandoff, now: Instant<PageLoad>) -> Handled {
         match handoff {
             KeyHandoff::Seal {
@@ -107,6 +117,13 @@ impl CallWorker {
                 generation,
                 key,
             } => {
+                if self
+                    .sealed
+                    .is_some_and(|(held, top)| held == sender && generation <= top)
+                {
+                    return Handled::Refused;
+                }
+                self.sealed = Some((sender, generation));
                 let sealer_of = |track| {
                     let kid = KeyIdentifier {
                         track,
@@ -132,6 +149,14 @@ impl CallWorker {
             }
             KeyHandoff::Forget { sender } => {
                 self.receive.forget(sender);
+                Handled::Kept
+            }
+            KeyHandoff::Close {
+                sender,
+                generation,
+                within,
+            } => {
+                self.receive.close(sender, generation, within, now);
                 Handled::Kept
             }
             KeyHandoff::End => {
@@ -209,6 +234,7 @@ impl CallWorker {
             camera,
             screen,
             receive,
+            sealed: _,
         } = self;
         sealer.is_none() && camera.is_none() && screen.is_none() && receive.is_empty()
     }

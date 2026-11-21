@@ -39,6 +39,14 @@ reads the page as the build left it, so the digests name the bytes it ships.
 It writes the policy into the page's `Content-Security-Policy` meta, last of
 the edits to the page.
 
+**The sites a web embed may load, named by the deployment.** A Toile web embed
+frames a page of another site (`TOILE-088`). The deployment names the sites it
+admits in `AMBRE_EMBED_SITES`, at build time: hosts or `https` origins, split by
+spaces or commas, each host with an optional `*.` prefix. The hook writes each
+one into `frame-src` as an `https` origin. A deployment that names no site
+admits no frame (`SRV-312`). A value that is not a site fails the build, so no
+source of another kind reaches the policy.
+
 **The headers each answer carries.** A meta policy governs the page alone, and
 it cannot refuse a page that frames this one. A worker takes its policy from
 the answer that serves its script (`SRV-281`, `SRV-282`). So the hook writes `_headers`
@@ -59,11 +67,13 @@ every key of an account from its bare name (`ZK-045`, audit `P28`). A release
 build whose wasm carries a mark of it fails here, before any copy is written.
 The hook reads the bytes the build wrote, so the check holds whatever turned
 the feature on: a flag, an attribute of the page or a manifest. No variable
-opens the gate. The call proofs sign in by a bare name, so they build without
-`--release`, under the cargo profile of the release (`justfile`, `proof_build`).
+opens the gate. The gate guards every optimised build, not only a build Trunk
+calls a release: a wasm with no `name` section comes from the profile of the
+release, whatever profile name Trunk was given (`ZK-049`, audit `W209`).
 
-Run by Trunk only. It reads `TRUNK_STAGING_DIR`, `TRUNK_PROFILE` and
-`TRUNK_PUBLIC_URL` from the environment Trunk gives its hooks.
+Run by Trunk only. It reads `TRUNK_STAGING_DIR`, `TRUNK_PROFILE`,
+`TRUNK_PUBLIC_URL` and `AMBRE_EMBED_SITES` from the environment Trunk gives its
+hooks.
 """
 
 from __future__ import annotations
@@ -102,6 +112,8 @@ GLUE, WASM, LOADER = worker_files()
 # The modules and their digests, as the pre-build hook writes them, one pair
 # per family of `scripts/converter_build.py`.
 CONVERTER_DIR = Path(__file__).resolve().parent.parent / "target" / "converter"
+# The prefix every converter module of the staging directory carries.
+CONVERTER_PREFIX = "ambre-convert-"
 CONVERTER_FAMILIES = (
     "tables",
     "pdf",
@@ -264,13 +276,41 @@ def inline_digests(html: str) -> tuple[list[str], list[str]]:
     return scripts, styles
 
 
-def policy(scripts: list[str], styles: list[str]) -> str:
+# The variable in which a deployment names the sites a web embed may load.
+EMBED_SITES_VAR = "AMBRE_EMBED_SITES"
+
+# One host: labels of letters, digits and inner hyphens, an optional `*.`
+# prefix and an optional port. Nothing else can stand in a source of the policy.
+LABEL = r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?"
+SITE = re.compile(rf"(?:\*\.)?{LABEL}(?:\.{LABEL})*(?::[0-9]{{1,5}})?")
+
+
+def embed_sites(value: str) -> list[str]:
+    """The `frame-src` sources of the sites `value` names, each as an `https` origin.
+
+    `value` holds hosts or `https` origins, split by spaces or commas. Any other
+    scheme, a path, a quoted keyword or a bare wildcard fails: the deployment
+    names sites, never a source of another kind.
+    """
+    sources: list[str] = []
+    for site in re.split(r"[\s,]+", value.strip().lower()):
+        if not site:
+            continue
+        host = site.removeprefix("https://").removesuffix("/")
+        if not SITE.fullmatch(host):
+            raise HookError(f"{EMBED_SITES_VAR} names {site!r}, which is not a host or an https origin")
+        sources.append(f"https://{host}")
+    return list(dict.fromkeys(sources))
+
+
+def policy(scripts: list[str], styles: list[str], frames: list[str] | None = None) -> str:
     """The content policy that admits the shipped files and the inline texts named by digest.
 
     No `unsafe-inline` and no `unsafe-eval`: an injected script or an evaluated
     string runs nowhere. `wasm-unsafe-eval` admits the compile of a wasm module
     alone. The workers come from the page's own origin, never from `blob:`. A
-    web embed is a sandboxed frame of any `https` page (`TOILE-088`). A picture
+    web embed is a sandboxed frame (`TOILE-088`) of one of the sites in
+    `frames`, and no frame loads when `frames` is empty (`SRV-312`). A picture
     the page shows from memory is a `blob:` or `data:` address.
     """
     return "; ".join(
@@ -280,7 +320,7 @@ def policy(scripts: list[str], styles: list[str]) -> str:
             " ".join(["style-src 'self'", *dict.fromkeys(styles)]),
             "img-src 'self' blob: data:",
             "media-src 'self' blob:",
-            "frame-src https:",
+            " ".join(["frame-src", *(dict.fromkeys(frames or []) or ["'none'"])]),
             "worker-src 'self'",
             "object-src 'none'",
             "base-uri 'none'",
@@ -365,8 +405,13 @@ def settle_autoreload(html: str, public_url: str) -> str:
     )
 
 
-def fill_policy(staging: Path, theme_css: Path = THEME_CSS, public_url: str = "/") -> str:
-    """Write the content policy of the page as it stands into its meta, and return it."""
+def fill_policy(
+    staging: Path, theme_css: Path = THEME_CSS, public_url: str = "/", frames: list[str] | None = None
+) -> str:
+    """Write the content policy of the page as it stands into its meta, and return it.
+
+    `frames` holds the sources of the sites a web embed may load (`embed_sites`).
+    """
     if not theme_css.is_file():
         raise HookError(f"{theme_css} is missing: the policy cannot name the token stylesheet")
     page = staging / "index.html"
@@ -374,7 +419,7 @@ def fill_policy(staging: Path, theme_css: Path = THEME_CSS, public_url: str = "/
     if html.count(POLICY_PLACEHOLDER) != 1:
         raise HookError(f"{page} carries {html.count(POLICY_PLACEHOLDER)} empty content policy metas, not one")
     scripts, styles = inline_digests(html)
-    text = policy(scripts, [*styles, digest(theme_css.read_text(encoding="utf-8"))])
+    text = policy(scripts, [*styles, digest(theme_css.read_text(encoding="utf-8"))], frames)
     page.write_text(
         html.replace(POLICY_PLACEHOLDER, f'<meta http-equiv="Content-Security-Policy" content="{text}">'),
         encoding="utf-8",
@@ -417,15 +462,73 @@ def refuse_dev_login(staging: Path) -> None:
         )
 
 
-def guards_dev_login(env: Mapping[str, str]) -> bool:
-    """Whether the build `env` describes must carry no development sign-in."""
-    return env.get("TRUNK_PROFILE") == "release"
+def wasm_sections(data: bytes) -> list[bytes] | None:
+    """The names of the custom sections of the wasm `data`, or `None` when it is no wasm.
+
+    A section is one id byte, a LEB128 size and its body. A custom section
+    (id 0) opens its body with a LEB128 length and its name. A truncated file
+    stops the walk at the last whole section.
+    """
+    if data[:4] != b"\0asm":
+        return None
+
+    def leb(at: int) -> tuple[int, int]:
+        value, shift = 0, 0
+        while at < len(data):
+            byte = data[at]
+            at += 1
+            value |= (byte & 0x7F) << shift
+            if byte < 0x80:
+                return value, at
+            shift += 7
+        return -1, at
+
+    names: list[bytes] = []
+    at = 8
+    while at < len(data):
+        kind = data[at]
+        size, body = leb(at + 1)
+        if size < 0 or body + size > len(data):
+            break
+        if kind == 0:
+            length, name = leb(body)
+            if length >= 0:
+                names.append(data[name : name + length])
+        at = body + size
+    return names
+
+
+def optimised_wasm_in(staging: Path) -> list[str]:
+    """The wasm files of `staging` a build of the release profile wrote.
+
+    The `wasm-release` profile strips symbols, so its wasm carries no `name`
+    section (`Cargo.toml`). A debug build keeps one. The test reads the bytes,
+    so it holds whatever profile name Trunk was given. A converter module is
+    always built under that profile, so it says nothing of this build.
+    """
+    return sorted(
+        path.name
+        for path in staging.rglob("*.wasm")
+        if not path.name.startswith(CONVERTER_PREFIX)
+        and (sections := wasm_sections(path.read_bytes())) is not None
+        and b"name" not in sections
+    )
+
+
+def guards_dev_login(env: Mapping[str, str], staging: Path) -> bool:
+    """Whether the build in `staging` must carry no development sign-in (`ZK-049`).
+
+    A release of Trunk is guarded, and so is every optimised build: the call
+    proofs once built the profile of the release without `--release`, and the
+    gate let them carry the sign-in (audit `W209`).
+    """
+    return env.get("TRUNK_PROFILE") == "release" or bool(optimised_wasm_in(staging))
 
 
 def main() -> int:
     staging = Path(os.environ["TRUNK_STAGING_DIR"])
     try:
-        if guards_dev_login(os.environ):
+        if guards_dev_login(os.environ, staging):
             refuse_dev_login(staging)
         for worker in WORKERS:
             hash_worker(staging, worker)
@@ -433,7 +536,11 @@ def main() -> int:
         write_thread_script(staging, os.environ.get("TRUNK_PUBLIC_URL", "/"))
         for family in CONVERTER_FAMILIES:
             copy_converter(staging, CONVERTER_DIR, family)
-        fill_policy(staging, public_url=os.environ.get("TRUNK_PUBLIC_URL", "/"))
+        fill_policy(
+            staging,
+            public_url=os.environ.get("TRUNK_PUBLIC_URL", "/"),
+            frames=embed_sites(os.environ.get(EMBED_SITES_VAR, "")),
+        )
         write_headers(staging, os.environ.get("TRUNK_PUBLIC_URL", "/"))
         if os.environ.get("TRUNK_PROFILE") == "release":
             write_brotli(compressible(staging))

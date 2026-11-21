@@ -53,7 +53,7 @@ pub struct MemberWithUserRow {
     pub user_id: Id<User>,
     pub email: ambre_core::Email,
     /// Whether the member's email was provider-verified vs self-asserted at
-    /// `/auth/setup` (#3). Lets the member list flag an unverified peer for the
+    /// the retired account setup (#3). Lets the member list flag an unverified peer for the
     /// TOFU out-of-band key check.
     pub email_verified: super::EmailProof,
     pub display_name: ambre_core::Validated<ambre_core::DisplayName>,

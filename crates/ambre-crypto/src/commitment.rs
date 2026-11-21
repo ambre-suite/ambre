@@ -5,6 +5,7 @@
 //! message to a specific key, defeating inter-document substitution by a
 //! compromised relay. Distinct from the Poly1305 tag carried inside the AEAD.
 
+use ambre_core::id::{Document, Id};
 use ambre_core::{Ciphertext, CommitmentTag, FixedBytes, Nonce, Payload, Secret};
 use hmac::digest::FixedOutput;
 use hmac::{Hmac, Mac};
@@ -62,28 +63,36 @@ pub fn commitment_tag(
 }
 
 /// Domain-separation tag of the media-address subkey. The subkey keeps the
-/// address apart from the commitment tag, which takes the document key directly.
-const MEDIA_ADDRESS_DOMAIN: &[u8] = b"ambre-media-address-v1";
+/// address apart from the commitment tag, which takes the document key
+/// directly. Version 2 binds the document (`SYNC-288`, audit `P20`).
+const MEDIA_ADDRESS_DOMAIN: &[u8] = b"ambre-media-address-v2";
 
-/// The address of a media blob: `HMAC(HMAC(key, domain), plaintext)`
-/// (`ambre-spec-media.md`, `SYNC-050`).
+/// The address of a media blob of `document_id`:
+/// `HMAC(HMAC(key, domain || document_id), plaintext)` (`ambre-spec-media.md`,
+/// `SYNC-050`, `SYNC-288`).
 ///
-/// Equal bytes under one document key yield one address, so a picture used
-/// ten times is one object. Without the key, nobody can compute the address
-/// of a file they hold, so the relay cannot ask whether a document holds it.
+/// Equal bytes under one document key in one document yield one address, so
+/// a picture used ten times is one object. Without the key, nobody can
+/// compute the address of a file they hold, so the relay cannot ask whether
+/// a document holds it. Two documents under one key give one file two
+/// addresses, so the relay cannot tell that both hold it.
 ///
 /// # Panics
 ///
 /// Never. HMAC accepts a key of any length, so its constructor cannot fail.
 pub fn media_address(
     key: &DocumentKey,
+    document_id: Id<Document>,
     plaintext: &ambre_core::Payload<ambre_core::MediaBytes>,
 ) -> FixedBytes<ambre_core::MediaAddress> {
     // The subkey is key material, so the HMAC writes it in place under the
-    // wiping wrapper, and no bare copy of it leaves this function.
+    // wiping wrapper, and no bare copy of it leaves this function. An
+    // identifier has one length, so the domain and the identifier never
+    // read as another pair.
     let subkey: Secret<[u8; TAG_LEN]> = Secret::filled(|out: &mut [u8; TAG_LEN]| {
         let mut m = keyed(key.as_bytes());
         m.update(MEDIA_ADDRESS_DOMAIN);
+        m.update(document_id.as_bytes());
         FixedOutput::finalize_into(m, out.into());
     });
     let mut m = keyed(subkey.expose());

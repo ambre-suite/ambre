@@ -128,7 +128,7 @@ pub fn StatusBar(
             </PerfDetail>
         </PerfChip>
         // The zoom closes the band, at its right end, in every application
-        // that zooms (`CHROME-147`).
+        // that zooms (`CHROME-206`).
         <ZoomChip
             zoom=zoom
             range=crate::ui::grid::TrameUiState::ZOOM_RANGE

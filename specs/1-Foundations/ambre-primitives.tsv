@@ -3,6 +3,7 @@
 # Answer the five questions of ai/ambre-rust-style.md ("A type is the default") before adding a line.
 key	category	note
 ambre-app | src/account.rs | crate::account | KeysSignals::has_form() | ret | bool	generic	predicate result
+ambre-app | src/account.rs | crate::account | ReclaimLine::text() | ret | &'static str	free-text	the words of one line of the reclaim notice, which a person reads and no code matches back
 ambre-app | src/doc_list.rs | crate::doc_list | Recency::heading() | ret | &'static str	free-text	the display label of a band of the document list, which a person reads and no code matches back
 ambre-app | src/doc_list.rs | crate::doc_list | arrange(query) | param | &str	free-text	the search a person types into the launcher: free text with no rule, matched as the palette matches its query
 ambre-app | src/host/cell.rs | crate::host::cell | Bound.listeners | field | Vec<Listener>	foreign-api	the DOM event name each closure was added under, which removeEventListener takes as &str
@@ -851,6 +852,7 @@ ambre-chrome | src/palette.rs | crate::palette | matches(label) | param | &str	f
 ambre-chrome | src/palette.rs | crate::palette | matches(query) | param | &str	free-text	text, label or user content
 ambre-chrome | src/palette.rs | crate::palette | rows(query) | param | &str	free-text	text, label or user content
 ambre-chrome | src/passphrase.rs | crate::passphrase | PassphraseRefusal::message() | ret | &'static str	free-text	PassphraseRefusal message text
+ambre-chrome | src/passphrase.rs | crate::passphrase | prompt_line() | ret | &'static str	free-text	the line a person reads under the passphrase fields
 ambre-chrome | src/status.rs | crate::status | StatusLabel(label) | param | String	free-text	text, label or user content
 ambre-chrome | src/status.rs | crate::status | ZoomChip(title) | param | Option<String>	free-text	text, label or user content
 ambre-chrome | src/toast.rs | crate::toast | Toast.message | field | String	free-text	text, label or user content
@@ -1170,9 +1172,7 @@ ambre-crypto | src/keys.rs | crate::keys | EXCH_DOMAIN | const | &[u8]	generic	g
 ambre-crypto | src/keys.rs | crate::keys | FILE_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/keys.rs | crate::keys | FileKey::as_bytes() | ret | &[u8;32]	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/keys.rs | crate::keys | KEY_ID_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/keys.rs | crate::keys | LEGACY_SEED_AAD | const | &[u8]	generic	the fixed associated data of a seed sealed before the version byte, read alone; Aad::of takes the bytes
 ambre-crypto | src/keys.rs | crate::keys | SEED_AAD_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/keys.rs | crate::keys | SEED_LEGACY_LEN | const | usize	generic	crate-internal length of the sealed-seed layout before its version byte, which open_from_storage matches a length against; Encoded<WrappedMasterKey>::LENGTHS holds the same two lengths for other crates
 ambre-crypto | src/keys.rs | crate::keys | SEED_V1_LEN | const | usize	generic	crate-internal length of the versioned sealed-seed layout, which open_from_storage matches a length against; Encoded<WrappedMasterKey>::LENGTHS holds the same two lengths for other crates
 ambre-crypto | src/keys.rs | crate::keys | SeedVersion::byte() | ret | u8	newtype-inner	the byte a fieldless enum spells its version with, the first byte of a sealed seed
 ambre-crypto | src/keys.rs | crate::keys | SeedVersion::from_byte(byte) | param | u8	newtype-inner	the first byte of a sealed seed a fieldless enum reads its version from
@@ -1262,9 +1262,11 @@ ambre-murmure | src/logic/runtime/channels.rs | crate::logic::runtime::channels 
 ambre-murmure | src/logic/runtime/channels.rs | crate::logic::runtime::channels | Runtime<D>::murmure_writable() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-murmure | src/logic/runtime/channels.rs | crate::logic::runtime::channels | Runtime<D>::murmure_writable(identified) | param | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-murmure | src/logic/runtime/channels.rs | crate::logic::runtime::channels | Runtime<D>::reads_channel_copy() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-murmure | src/logic/runtime/channels.rs | crate::logic::runtime::channels | Runtime<D>::channel_reread() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/dispatch.rs | crate::dispatch | LogicState::murmure_remote() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/dispatch.rs | crate::dispatch | LogicState::murmure_replay() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/dispatch.rs | crate::dispatch | LogicState::murmure_signed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-logic | src/dispatch.rs | crate::dispatch | LogicState::murmure_peer_unclaimed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/data.rs | crate::data | LogicState::has_pending_work() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/data.rs | crate::data | LogicState::peer_unclaimed() | ret | bool	generic	yes/no fact or predicate answer: whether no other session holds the PeerID of a delta, selects no mode
 ambre-logic | src/data.rs | crate::data | LogicState::resolve_pending_seal() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -1324,6 +1326,7 @@ ambre-murmure | src/logic/runtime/spaces.rs | crate::logic::runtime::spaces | Ru
 ambre-murmure | src/logic/runtime/spaces.rs | crate::logic::runtime::spaces | Runtime<D>::space_members_changed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-murmure | src/logic/runtime/spaces.rs | crate::logic::runtime::spaces | Runtime<D>::space_peer_left() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-murmure | src/logic/runtime/spaces.rs | crate::logic::runtime::spaces | Runtime<D>::space_presence_heard() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-murmure | src/logic/runtime/spaces.rs | crate::logic::runtime::spaces | Runtime<D>::space_peer_unclaimed() | ret | bool	generic	predicate result
 ambre-logic | src/store_ledger.rs | crate::store_ledger | Meta::LEN | const | usize	generic	generic byte/text API or codec
 ambre-logic | src/store_ledger.rs | crate::store_ledger | Meta::decode(row) | param | &[u8]	generic	generic byte/text API or codec
 ambre-logic | src/store_ledger.rs | crate::store_ledger | Meta::encode() | ret | [u8;Self::LEN]	generic	generic byte/text API or codec
@@ -1440,6 +1443,7 @@ ambre-murmure | src/logic/delta.rs | crate::logic::delta | check(call_ends) | pa
 ambre-murmure | src/logic/delta.rs | crate::logic::delta | creates() | ret | bool	generic	state flag/predicate: whether a container is the one its operation creates
 ambre-murmure | src/logic/delta.rs | crate::logic::delta | held_elsewhere() | ret | bool	generic	state flag/predicate: whether another message map holds an identifier
 ambre-murmure | src/logic/delta.rs | crate::logic::delta | Held.elsewhere | field | &'a dyn Fn(Id<Message>,&ContainerID)->bool	generic	a predicate the caller passes: whether another message map holds an identifier
+ambre-murmure | src/logic/delta.rs | crate::logic::delta | peer_unclaimed() | ret | bool	generic	predicate result
 ambre-murmure | src/ui/drafts.rs | crate::ui::drafts | Row.text | field | String	free-text	text, label or user content
 ambre-murmure | src/ui/drafts.rs | crate::ui::drafts | SEPARATOR | const | char	generic	the char that parts the user, the channel and the thread root in the spelling of a DraftKey
 ambre-murmure | src/ui/emoji.rs | crate::ui::emoji | EmojiEntry.name | field | &'static str	free-text	the English name of an emoji, shown as is
@@ -1578,6 +1582,7 @@ ambre-murmure | src/ui/sidebar.rs | crate::ui::sidebar | Sidebar::is_member() | 
 ambre-murmure | src/ui/sidebar.rs | crate::ui::sidebar | SpaceHead::is_admin() | ret | bool	generic	predicate result
 ambre-murmure | src/ui/sidebar.rs | crate::ui::sidebar | SpaceHead::is_owner() | ret | bool	generic	predicate result
 ambre-murmure | src/logic/space.rs | crate::logic::space | SpaceState::identified() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/space.rs | crate::logic::space | SpaceState::peer_unclaimed() | ret | bool	generic	predicate result
 ambre-murmure | src/logic/style.rs | crate::logic::style | fits() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/logic/style.rs | crate::logic::style | fits(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/logic/style.rs | crate::logic::style | linkable() | ret | bool	generic	predicate result
@@ -1982,11 +1987,13 @@ ambre-server | src/error.rs | crate::error | AppError::Conflict.detail | field |
 ambre-server | src/error.rs | crate::error | AppError::Internal.0 | field | String	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | AppError::Oidc.0 | field | String	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | AppError::PayloadTooLarge.0 | field | String	free-text	user text or error message
-ambre-server | src/error.rs | crate::error | AppError::Redis.0 | field | String	free-text	user text or error message
-ambre-server | src/error.rs | crate::error | AppError::S3.0 | field | String	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | AppError::UnknownProvider.0 | field | String	generic	the path segment that named no provider, echoed in the refusal
 ambre-server | src/error.rs | crate::error | AppError::caller_message() | ret | String	free-text	message
 ambre-server | src/error.rs | crate::error | AppError::is_infrastructure() | ret | bool	generic	predicate result
+ambre-server | src/error.rs | crate::error | FaultText.0 | field | String	newtype-inner	the text of a store failure, each identifier taken out by the constructor (SRV-316)
+ambre-server | src/error.rs | crate::error | FaultText::of(what) | param | &str	newtype-inner	the label of the failed store step, which the constructor redacts with its cause
+ambre-server | src/error.rs | crate::error | FaultText::bare(what) | param | &str	newtype-inner	the failure the relay states alone, which the constructor redacts
+ambre-server | src/error.rs | crate::error | FaultText::redacted(text) | param | &str	newtype-inner	the text the constructor takes every identifier out of
 ambre-server | src/error.rs | crate::error | ErrorBody.message | field | String	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | ErrorBody::json(message) | param | impl Into<String>	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | Resource::as_str() | ret | &'static str	free-text	the words a refusal message names the resource by
@@ -2070,7 +2077,11 @@ ambre-server | src/redis_keys.rs | crate::redis_keys | FlushDirtySet::as_str() |
 ambre-server | src/redis_keys.rs | crate::redis_keys | PendingKey.text | field | String	generic	the key text of PendingKey, beside its document and read back by PendingKey::parse
 ambre-server | src/redis_keys.rs | crate::redis_keys | PendingKey::as_str() | ret | &str	generic	the key text of PendingKey, its own codec, read back by PendingKey::parse
 ambre-server | src/redis_keys.rs | crate::redis_keys | PendingKey::parse(text) | param | &str	foreign-api	a dirty-set member or scanned key the store hands back as text
+ambre-server | src/redis_keys.rs | crate::redis_keys | RateKey.0 | field | String	newtype-inner	the key text of one sliding window of the rate limiter
+ambre-server | src/redis_keys.rs | crate::redis_keys | RateKey::of(tier) | param | &str	newtype-inner	the word of the rate tier, RateLimitCategory::prefix, which the constructor writes into the key
+ambre-server | src/redis_keys.rs | crate::redis_keys | RateKey::as_str() | ret | &str	newtype-inner	the key text, as a store command takes it
 ambre-sync | src/call.rs | crate::call | CallKeys::switch_pending() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-sync | src/call.rs | crate::call | RemovalMark::clears() | ret | bool	generic	predicate result
 ambre-sync | src/fuzz.rs | crate::fuzz | open_authenticated() | ret | Result<Vec<u8>,PipelineError>	generic	generic byte/text API or codec
 ambre-sync | src/fuzz.rs | crate::fuzz | open_authenticated(plaintext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/fuzz.rs | crate::fuzz | open_relayed_update() | ret | Result<Vec<u8>,PipelineError>	generic	generic byte/text API or codec
@@ -2179,6 +2190,7 @@ ambre-sync | src/withheld.rs | crate::withheld | HeadWatch::asks() | ret | bool	
 ambre-sync | src/withheld.rs | crate::withheld | HeadWatch::holds_edits() | ret | bool	generic	predicate: does an edit wait while a signed head is under check
 ambre-sync | src/withheld.rs | crate::withheld | HeadWatch::settled() | ret | bool	generic	predicate: does no edit wait on the head check
 ambre-sync | src/withheld.rs | crate::withheld | HeadFrame<'_>::signed() | ret | bool	generic	predicate: did the signer the frame names sign it
+ambre-sync | src/withheld.rs | crate::withheld | HeadWatch::writes_behind() | ret | bool	generic	predicate result
 ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | place_web_embed(typed) | param | RwSignal<String>	free-text	text the user is typing
 ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | set_web_link(typed) | param | RwSignal<String>	free-text	text the user is typing
 ambre-toile | src/chrome/comments.rs | crate::chrome::comments | clock_label() | ret | String	free-text	label, message or user text
@@ -2964,7 +2976,11 @@ ambre-core | src/secret.rs | crate::secret | Credential<OidcState>::present_stat
 ambre-core | src/secret.rs | crate::secret | Confidential<RecoveryWords>::present_words(show) | param | impl FnOnce(&str)->R	generic	lends the recovery words to the one foreign call that writes them on the setup screen (ARCH-049, CHROME-099)
 ambre-core | src/secret.rs | crate::secret | Credential<PresignedUrl>::object_address() | ret | &str	newtype-inner	the object address before the signed query, for a log or an error
 ambre-core | src/secret.rs | crate::secret | Credential<PresignedUrl>::present_link(send) | param | impl FnOnce(&str)->R	generic	lends the signed address to the one foreign call that fetches it (ARCH-049)
+ambre-core | src/secret.rs | crate::secret | PassphraseWeakness::message() | ret | &'static str	free-text	the words a person reads for a passphrase the strength floor refuses
 ambre-crypto | src/ecdh.rs | crate::ecdh | SharedSecret.0 | field | Secret<[u8;32]>	newtype-inner	newtype field, constructor or accessor
+ambre-crypto | src/ecdh.rs | crate::ecdh | WRAP_AAD_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
+ambre-crypto | src/ecdh.rs | crate::ecdh | WrapVersion::byte() | ret | u8	newtype-inner	the byte a fieldless enum spells its version with, the first byte of a key wrap
+ambre-crypto | src/ecdh.rs | crate::ecdh | WrapVersion::from_byte(byte) | param | u8	newtype-inner	the first byte of a key wrap a fieldless enum reads its version from
 ambre-crypto | src/keys.rs | crate::keys | DocumentKey.0 | field | Arc<Secret<[u8;32]>>	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/keys.rs | crate::keys | DocumentKey::from_secret(key) | param | Secret<[u8;32]>	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/keys.rs | crate::keys | FileKey.0 | field | Secret<[u8;32]>	newtype-inner	newtype field, constructor or accessor
@@ -3077,6 +3093,7 @@ ambre-core | src/encoded.rs | crate::encoded | SEALED_NAME_MAX_CHARS | const | u
 ambre-core | src/encoded.rs | crate::encoded | SEALED_NAME_MAX_LEN | const | usize	generic	length constant
 ambre-core | src/encoded.rs | crate::encoded | WRAPPED_DOC_KEY_LENGTHS | const | &[usize]	generic	length constants
 ambre-core | src/encoded.rs | crate::encoded | WRAPPED_MASTER_KEY_LENGTHS | const | &[usize]	generic	length constants
+ambre-core | src/encoded.rs | crate::encoded | VERSION_LEN | const | usize	generic	envelope byte-layout constant
 ambre-sync | src/pipeline.rs | crate::pipeline | StoredObject::object() | ret | &[u8]	generic	the laid-out bytes the header readers split, from any role that holds an object
 ambre-murmure | src/logic/members.rs | crate::logic::members | SAMPLE | const | [u8;2]	generic	the two wire bytes of the space presence sample, its tag then its state
 ambre-murmure | src/logic/members.rs | crate::logic::members | SampleState::byte() | ret | u8	newtype-inner	byte codec of the private state byte of a presence sample
@@ -3430,6 +3447,10 @@ ambre-sfu | src/forward.rs | crate::forward | <Room as Rule>::Error | assoc | &'
 ambre-sfu | src/forward.rs | crate::forward | <Room as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
 ambre-sfu | src/forward.rs | crate::forward | <Room as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-sfu | src/forward.rs | crate::forward | <Room as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-sfu | src/forward.rs | crate::forward | <Ufrag as Rule>::Error | assoc | &'static str	free-text	the fixed message a rule refuses a text with, which a decode prints
+ambre-sfu | src/forward.rs | crate::forward | <Ufrag as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
+ambre-sfu | src/forward.rs | crate::forward | <Ufrag as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-sfu | src/forward.rs | crate::forward | <Ufrag as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-sfu | src/main.rs | crate | Setting::read() | ret | Result<SocketAddr,String>	free-text	the words of the error the binary prints when a variable holds no socket address
 ambre-sfu | src/main.rs | crate | Setting::variable() | ret | &'static str	newtype-inner	the fieldless enum's own spelling, the name of the environment variable std::env::var takes
 ambre-trame | src/logic/locale.rs | crate::logic::locale | canonical_formula() | ret | String	local	the formula text in the canonical separators, which typed_source() stores
@@ -3801,6 +3822,8 @@ ambre-protocol | src/signaling.rs | crate::signaling | ADMISSION_DOMAIN | const 
 ambre-server | src/db/calls.rs | crate::db::calls | is_channel_member() | ret | Result<bool,AppError>	generic	predicate result
 ambre-sfu | src/main.rs | crate | admission_key() | ret | Result<AdmissionKey,String>	free-text	the words of the error the binary prints when SFU_ADMISSION_KEY holds no key
 ambre-sfu | src/main.rs | crate | turn_servers() | ret | Result<Option<TurnServers>,String>	free-text	the words of the error the binary prints when a TURN variable is wrong or missing
+ambre-sfu | src/main.rs | crate | seconds() | ret | Result<TimeSpan<Sec>,String>	free-text	the boot error the operator reads when a variable is no count of seconds
+ambre-sfu | src/main.rs | crate | seconds(name) | param | &str	foreign-api	the name of an environment variable, handed to std::env::var
 ambre-sfu | src/secrets/mod.rs | crate::secrets | TurnSecret.0 | field | Secret<String>	newtype-inner	the SFU_TURN_SECRET text the newtype wraps
 ambre-sfu | src/secrets/mod.rs | crate::secrets | TurnSecret::new(text) | param | String	newtype-inner	the SFU_TURN_SECRET text the newtype wraps
 ambre-draw | src/cluster.rs | crate::cluster | LayoutText.text | field | &'a str	free-text	the text a layout was shaped from, or its tail, the user's words with no rule
@@ -4246,6 +4269,7 @@ ambre-protocol | src/signaling.rs | crate::signaling | <TurnUrl as Rule>::Error 
 ambre-protocol | src/signaling.rs | crate::signaling | <TurnUrl as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
 ambre-protocol | src/signaling.rs | crate::signaling | <TurnUrl as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-protocol | src/signaling.rs | crate::signaling | <TurnUrl as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-protocol | src/key_registration.rs | crate::key_registration | REGISTRATION_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-server | src/redis_keys.rs | crate::redis_keys | <CallKnown as CallSlot>::SLOT | const | &'static str	generic	the last segment of the store key of this slot, which CallKey::of writes after call:{id}:
 ambre-server | src/redis_keys.rs | crate::redis_keys | <CallJoins as CallSlot>::SLOT | const | &'static str	generic	the last segment of the store key of this slot, which CallKey::of writes after call:{id}:
 ambre-server | src/redis_keys.rs | crate::redis_keys | <CallSeats as CallSlot>::SLOT | const | &'static str	generic	the last segment of the store key of this slot, which CallKey::of writes after call:{id}:
@@ -4498,6 +4522,12 @@ ambre-core | src/call.rs | crate::call | PictureKind::from_word(word) | param | 
 ambre-crypto | src/call.rs | crate::call | HANDOFF_LEN | const | usize	generic	module-private length of a handoff on the port, a fixed layout this module writes and reads itself
 ambre-crypto | src/call.rs | crate::call | HandoffKind::from_byte(byte) | param | u8	newtype-inner	the kind byte of a handoff, the spelling of a fieldless enum this module writes and reads back
 ambre-crypto | src/call.rs | crate::call | ReceiveKeys::is_empty() | ret | bool	generic	predicate
+ambre-crypto | src/call.rs | crate::call | DEPARTURE_SLOTS | const | usize	generic	wrap byte-layout constant: the departure slots a call key wrap carries
+ambre-crypto | src/call.rs | crate::call | Departures::names_any() | ret | bool	generic	predicate result
+ambre-crypto | src/call.rs | crate::call | Departures::read(bytes) | param | &[u8]	newtype-inner	the opened plaintext of a wrap the departures are parsed from
+ambre-crypto | src/call.rs | crate::call | Departures::write(out) | param | &mut Vec<u8>	generic	the opaque plaintext buffer of a wrap, sealed whole after the write
+ambre-crypto | src/call.rs | crate::call | WRAP_PLAIN_LEN | const | usize	generic	wrap byte-layout constant
+ambre-crypto | src/call.rs | crate::call | DEPARTURES_LEN | const | usize	generic	wrap byte-layout constant
 ambre-app | src/console_trace.rs | crate::console_trace | <ConsoleTrace as Subscriber>::enabled() | ret | bool	trait	signature fixed by foreign trait
 ambre-app | src/console_trace.rs | crate::console_trace | ConsoleLine.level_style | field | &'static str	foreign-api	a CSS declaration the browser console applies to the first segment of the line
 ambre-app | src/console_trace.rs | crate::console_trace | ConsoleLine.text | field | String	foreign-api	the console line with its %c directives, as console.log takes it
@@ -4573,6 +4603,7 @@ ambre-prose-form | src/lib.rs | crate | IrLook::is_plain() | ret | bool	generic	
 ambre-prose-form | src/lib.rs | crate | IrRun::carries_look() | ret | bool	generic	predicate
 ambre-crdt | src/session.rs | crate::session | session_runs() | ret | bool	generic	predicate: whether the session behind a PeerID runs, a fact that selects no mode
 ambre-crdt | src/session.rs | crate::session | session_runs(live) | param | impl Fn(&Id<User>)->bool	generic	a predicate the caller passes: whether a user has a session open on the document
+ambre-crdt | src/session.rs | crate::session | peer_unclaimed() | ret | bool	generic	predicate result
 ambre-trame | src/logic/schema.rs | crate::logic::schema | hidden_lines_v5() | ret | Result<(),String>	free-text	step failure reason, wrapped into MigrationFailed
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::drop_filter_of() | ret | bool	generic	did-it-change return: whether the active filter went with a removed or hidden column
 ambre-trame | src/logic/sweep.rs | crate::logic::sweep | TrameState::sweeping() | ret | bool	generic	predicate: whether a sweep runs
@@ -4653,6 +4684,7 @@ ambre-core | src/static_key.rs | crate::static_key | <LabelValues as KeyKind>::N
 ambre-core | src/static_key.rs | crate::static_key | <MetricNames as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
 ambre-crypto | src/hash.rs | crate::hash | INVITER_PIN_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/hash.rs | crate::hash | snapshot_digest(object) | param | &[u8]	generic	the opaque bytes of a sealed snapshot blob, read in two roles: SealedBlob and Payload<FetchedBlob>; ambre-sync types the call through its StoredObject trait
+ambre-crypto | src/hash.rs | crate::hash | object_checksum(object) | param | &[u8]	generic	the opaque bytes of a sealed blob an upload link writes; ambre-sync types the call through SealedBlob
 ambre-metrics | src/lib.rs | crate | <Events as CountKind>::Repr | assoc | u64	newtype-inner	the number a count of this kind holds, the inside of Count
 ambre-metrics | src/lib.rs | crate | Counter.cells | field | Vec<AtomicU64>	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock, one per series
 ambre-metrics | src/lib.rs | crate | Gauge.cells | field | Vec<AtomicU64>	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock, one per series
@@ -4791,9 +4823,12 @@ ambre-core | src/call.rs | crate::call | <MemberPseudonym as FixedRole>::Array |
 ambre-server | src/jwt.rs | crate::jwt | MEMBER_DOMAIN | const | &[u8]	generic	domain-separation tag or length constant
 ambre-sfu | src/forward.rs | crate::forward | names_its_seat() | ret | bool	generic	predicate
 ambre-sfu | src/serve.rs | crate::serve | Session::renewed_by() | ret | bool	generic	predicate
+ambre-sfu | src/serve.rs | crate::serve | send_wire() | ret | bool	generic	predicate result
+ambre-sfu | src/turn.rs | crate::turn | TurnServers::is_due() | ret | bool	generic	predicate result
 ambre-convert | src/spelling.rs | crate::spelling | <SpellWord as Rule>::admit() | ret | Result<String,NotAWord>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-convert | src/spelling.rs | crate::spelling | <SpellWord as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-prose | src/logic/spelling.rs | crate::logic::spelling | words(text) | param | &str	free-text	one block's text, cut into the words a spell check carries
+ambre-prose | src/logic/roots.rs | crate::logic::roots | Roots::holds() | ret | bool	generic	predicate result
 ambre-trame | src/logic/schema.rs | crate::logic::schema | <FrozenKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-trame | src/logic/schema.rs | crate::logic::schema | frozen_v7() | ret | Result<(),String>	free-text	step failure reason, wrapped into MigrationFailed
 ambre-trame | src/message/command.rs | crate::message::command | FrozenPane::is_none() | ret | bool	generic	predicate or did-it-change return
@@ -4804,18 +4839,49 @@ ambre-xlsx | src/model.rs | crate::model | FrozenPane::is_none() | ret | bool	ge
 ambre-xlsx | src/ods/write.rs | crate::ods::write | settings_xml() | ret | Option<String>	free-text	a whole markup document: the view settings part, absent when no table freezes a pane
 ambre-xlsx | src/write.rs | crate::write | sheet_view_xml(out) | param | &mut String	generic	the worksheet part being written, its sheet view appended
 ambre-core | src/envelope.rs | crate::envelope | <SnapshotDigest as FixedRole>::Array | assoc | [u8;32]	newtype-inner	the storage of FixedBytes<SnapshotDigest>, which states its width
+ambre-core | src/envelope.rs | crate::envelope | <ObjectChecksum as FixedRole>::Array | assoc | [u8;32]	newtype-inner	the storage of FixedBytes<ObjectChecksum>, which states its width
 ambre-murmure | src/logic/schema.rs | crate::logic::schema | held_root_map(name) | param | &str	foreign-api	the name of a Loro root, which the path lookup of loro takes as text
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | blank() | ret | bool	generic	predicate result
 ambre-server | src/s3.rs | crate::s3 | holds_object() | ret | Result<bool,AppError>	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | read_metered() | ret | Result<Vec<u8>,TransportError>	generic	opaque bytes of a response body, read under its byte cap and handed to a parser
+ambre-sync | src/http.rs | crate::http | read_body() | ret | Result<Vec<u8>,TransportError>	generic	opaque bytes of a response body, read under its byte cap and handed to a parser
 ambre-sync | src/lib.rs | crate | SyncDocumentState::quarantine_overflows() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-sync | src/lib.rs | crate | SyncDocumentState::applied_past_cap() | ret | bool	generic	predicate result
+ambre-sync | src/lib.rs | crate | Applied::is_empty() | ret | bool	generic	predicate result
+ambre-sync | src/lib.rs | crate | Applied::past_cap() | ret | bool	generic	predicate result
+ambre-sync | src/log.rs | crate::log::console | MARKS | static | AtomicU64	foreign-api	the std atomic, which takes the primitive it counts the performance marks of the worker with
+ambre-sync | src/log.rs | crate::log::console | ORIGIN_STYLE | const | &str	foreign-api	a CSS declaration the browser console applies to the second segment of a line
+ambre-sync | src/log.rs | crate::log::console | TEXT_STYLE | const | &str	foreign-api	a CSS declaration the browser console applies to the third segment of a line
+ambre-sync | src/log.rs | crate::log::console | Printed.level_style | field | &'static str	foreign-api	a CSS declaration the browser console applies to the first segment of the line
+ambre-sync | src/log.rs | crate::log::console | Printed.line | field | String	foreign-api	the console line with its %c directives, as console.log takes it
+ambre-sync | src/log.rs | crate::log::console | Printed.mark | field | String	foreign-api	the name of a performance mark, as the browser takes it
+ambre-sync | src/log.rs | crate::log::console | Printed.measure | field | String	foreign-api	the name of a performance measure, as the browser takes it
+ambre-sync | src/log.rs | crate::log::console | Printed::new(marks) | param | &AtomicU64	foreign-api	the std atomic, which takes the primitive it counts the performance marks of the worker with
+ambre-sync | src/log.rs | crate::log::console | Printed::new(message) | param | &str	free-text	the message of a log line, for a person
+ambre-sync | src/log.rs | crate::log::console | console_log(level_style) | param | &str	foreign-api	a CSS declaration the browser console applies to its first segment
+ambre-sync | src/log.rs | crate::log::console | console_log(line) | param | &str	foreign-api	the console line with its %c directives, as console.log takes it
+ambre-sync | src/log.rs | crate::log::console | console_log(origin_style) | param | &str	foreign-api	a CSS declaration the browser console applies to its second segment
+ambre-sync | src/log.rs | crate::log::console | console_log(text_style) | param | &str	foreign-api	a CSS declaration the browser console applies to its third segment
+ambre-sync | src/log.rs | crate::log::console | performance_mark(name) | param | &str	foreign-api	the name of a performance mark, as the browser takes it
+ambre-sync | src/log.rs | crate::log::console | performance_measure(name) | param | &str	foreign-api	the name of a performance measure, as the browser takes it
+ambre-sync | src/log.rs | crate::log::console | performance_measure(start) | param | &str	foreign-api	the name of the mark a measure starts at, as the browser takes it
+ambre-sync | src/log.rs | crate::log::console | style() | ret | &'static str	foreign-api	a CSS declaration that console.log alone reads
+ambre-sync | src/log.rs | crate::log::console | word() | ret | &'static str	free-text	the level word that opens a log line, for a person
 ambre-sync | src/membership_log.rs | crate::membership_log | Log::binds_elsewhere() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | ServedHeads::walked_through() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | SpaceWord::writes_under() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | key_held_elsewhere() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-sync | src/membership_log.rs | crate::membership_log | Writers::admits_delta() | ret | bool	generic	predicate result
+ambre-sync | src/membership_log.rs | crate::membership_log | Writers::admits_snapshot() | ret | bool	generic	predicate result
+ambre-sync | src/membership_log.rs | crate::membership_log | Readmitted::admits() | ret | bool	generic	predicate result
+ambre-sync | src/membership_log.rs | crate::membership_log | Writers::readmits() | ret | bool	generic	predicate result
+ambre-sync | src/membership_log.rs | crate::membership_log | Writers::folds_past_cap() | ret | bool	generic	predicate result: whether a snapshot fold passes a cap, selects no mode
 ambre-sync | src/snapshot_trust.rs | crate::snapshot_trust | Trusted::holds() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/snapshot_trust.rs | crate::snapshot_trust | confirmation_admitted() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/updates.rs | crate::updates | absent_opens_local() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-sync | src/updates.rs | crate::updates | start_past_cap() | ret | bool	generic	predicate result: whether a start blob folds a delta past a cap, selects no mode
 ambre-sync | src/websocket.rs | crate::websocket | frame_fits() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-sync | src/documents.rs | crate::documents | NameAuthors::admits() | ret | bool	generic	predicate result
 ambre-toile | src/ui/embed.rs | crate::ui::embed | <SiteHost as ambre_core::Rule>::admit() | ret | Result<String,SiteError>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-toile | src/ui/embed.rs | crate::ui::embed | <SiteHost as ambre_core::Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-app | src/platform.rs | crate::platform | keep_word(word) | param | &str	foreign-api	the word the local storage API takes, a view setting the shell spells

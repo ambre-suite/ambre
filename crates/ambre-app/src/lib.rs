@@ -290,7 +290,7 @@ struct Wiring {
     /// (`PROSE-FEAT-040`). Published by the Prose view.
     prose_figures: RwSignal<Option<ambre_prose::ui::StatusFigures>>,
     /// The page zoom of the open Prose document, for the zoom chip of the
-    /// status bar slot (`CHROME-147`). The chip writes it, the view applies it.
+    /// status bar slot (`CHROME-206`). The chip writes it, the view applies it.
     prose_zoom: RwSignal<Scale<Doc, View>>,
     /// The comment panel and the suggestion popover of the open Prose
     /// document (`PROSE-UI-050`, `PROSE-UI-052`). Published by the Prose view.
@@ -888,8 +888,13 @@ pub fn main() {
                 state: ret.state,
             },
         });
-    } else {
-        dev_login::sign_in_at_boot(&shell_outbox);
+    } else if dev_login::sign_in_at_boot(&shell_outbox) == dev_login::BootSignIn::None {
+        // No other sign-in: the Sync worker resumes the session this device
+        // kept, or answers that it keeps none (`SRV-323`).
+        shell_outbox.send(LogicCommand::Rest {
+            id: ambre_bus::next_request(),
+            cmd: RestCommand::ResumeSession,
+        });
     }
 
     // Spawn the Sync worker: a SEPARATE wasm instance in its own Web Worker. Its
@@ -1279,6 +1284,11 @@ pub fn main() {
                         gate.refusal.set(None);
                         gate.face.set(Some(face));
                     }
+                    switchboard::Effect::Identify {
+                        display_name,
+                        email,
+                    } => gate.identify(display_name.clone(), email.clone()),
+                    switchboard::Effect::RefuseSeal(weakness) => commands.refuse_seal(weakness),
                     switchboard::Effect::RefuseKeys(cause) => {
                         gate.refusal
                             .set(Some(keys_gate::GateRefusal::Worker(cause)));
@@ -1326,6 +1336,7 @@ pub fn main() {
                     switchboard::Effect::ShowWords(words) => keys.show_words(words.clone()),
                     switchboard::Effect::Refused(cause) => keys.refuse(cause),
                     switchboard::Effect::CloseKeys => keys.close(),
+                    switchboard::Effect::AddressReclaimed => keys.address_reclaimed(),
                 }
             }
             match switchboard::destination(ev) {

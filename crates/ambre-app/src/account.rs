@@ -2,19 +2,29 @@
 // ============================================================================
 // The account keys on the launcher (`ambre-spec-launcher.md` section 1.6).
 //
-// A setup creates the keys, then shows the recovery words once (`CHROME-098`,
-// `CHROME-099`). A recovery reads the words back and hands them to the Sync
-// worker. The worker refuses a phrase that spells no seed, and the form shows
-// why (`ZK-043`, `CHROME-128`, `CHROME-130`).
+// A key setup on the gate creates the keys, then the words show here once
+// (`CHROME-098`, `CHROME-099`). A recovery reads the words back and hands them
+// to the Sync worker. The worker refuses a phrase that spells no seed, and the
+// form shows why (`ZK-043`, `CHROME-128`, `CHROME-130`). No face creates an account: an
+// account comes from a provider, or from the development sign-in (`SRV-319`).
+//
+// The passphrase form of the account settings changes the passphrase of a
+// session. It takes the current passphrase, then the new one twice, and shows
+// each refusal of the Sync worker in its own words (`CHROME-145`).
 //
 // The words reach this thread inside a `Confidential<RecoveryWords>`. Only
 // `present_words` writes them, into the list of the face. They leave this
 // thread with the face: no signal, store or log keeps them (`CHROME-099`). A
 // passphrase leaves its field with the submission (`CHROME-129`).
+//
+// A provider sign-in may reclaim the address of the account (`SRV-029`). The
+// launcher then says so, and says that shares to the address now reach the
+// verified account (`CHROME-146`).
 // ============================================================================
 
 use ambre_bus::{AuthFailure, RestCommand};
-use ambre_core::{Confidential, DisplayName, Email, Passphrase, RecoveryWords, Validated};
+use ambre_chrome::commands::Locale;
+use ambre_core::{AddressStanding, Confidential, Passphrase, RecoveryWords};
 use ambre_logic::app::LogicCommand;
 use leptos::prelude::*;
 
@@ -26,13 +36,14 @@ pub enum KeysFace {
     /// No face: the launcher shows its sign-in panel or its list.
     #[default]
     Closed,
-    /// The setup form: a name, an address and a passphrase (`CHROME-098`).
-    Setup,
-    /// The recovery words of the account the setup created, shown once
+    /// The recovery words of the keys a setup created, shown once
     /// (`CHROME-099`). The face holds the one copy of this thread.
     Words(Confidential<RecoveryWords>),
     /// The recovery form: the words and a new passphrase (`CHROME-128`).
     Recover,
+    /// The passphrase form of the account settings: the current passphrase
+    /// and a new one (`CHROME-145`).
+    ChangePassphrase,
 }
 
 ambre_core::define_flag! {
@@ -40,7 +51,7 @@ ambre_core::define_flag! {
     pub enum Launcher {
         /// The launcher shows: no face, or the words in a modal over it.
         Shown,
-        /// The setup or the recovery form replaces it.
+        /// The recovery form replaces it.
         Covered,
     }
 }
@@ -52,6 +63,10 @@ pub struct KeysSignals {
     pub face: RwSignal<KeysFace>,
     /// The last refusal the Sync worker answered to the form shown.
     pub refusal: RwSignal<Option<AuthFailure>>,
+    /// Whether a provider sign-in reclaimed the address of the account
+    /// (`CHROME-146`). A page boots afresh on a sign-out, so a new session
+    /// starts from `Held`.
+    pub address: RwSignal<AddressStanding>,
 }
 
 impl Default for KeysSignals {
@@ -66,7 +81,14 @@ impl KeysSignals {
         Self {
             face: RwSignal::new(KeysFace::Closed),
             refusal: RwSignal::new(None),
+            address: RwSignal::new(AddressStanding::Held),
         }
+    }
+
+    /// The relay said that a provider sign-in reclaimed the address of the
+    /// account: the launcher names the reclaim (`CHROME-146`).
+    pub fn address_reclaimed(self) {
+        self.address.set(AddressStanding::Reclaimed);
     }
 
     /// Shows `face`, with no refusal of an earlier form.
@@ -96,11 +118,11 @@ impl KeysSignals {
         self.open(KeysFace::Closed);
     }
 
-    /// Whether the setup or the recovery form shows: a refusal of the Sync
-    /// worker then reads on that form.
+    /// Whether a form shows, the recovery or the passphrase change:
+    /// a refusal of the Sync worker then reads on that form.
     pub fn has_form(self) -> bool {
         self.face
-            .with_untracked(|face| matches!(face, KeysFace::Setup | KeysFace::Recover))
+            .with_untracked(|face| matches!(face, KeysFace::Recover | KeysFace::ChangePassphrase))
     }
 
     /// Whether a form replaces the launcher. The recovery words show in a
@@ -108,9 +130,61 @@ impl KeysSignals {
     /// them (`CHROME-137`).
     pub fn launcher(self) -> Launcher {
         self.face.with(|face| match face {
-            KeysFace::Setup | KeysFace::Recover => Launcher::Covered,
+            KeysFace::Recover | KeysFace::ChangePassphrase => Launcher::Covered,
             KeysFace::Closed | KeysFace::Words(_) => Launcher::Shown,
         })
+    }
+}
+
+/// One line of the reclaim notice (`CHROME-146`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum ReclaimLine {
+    /// The fact: the address left the account.
+    Title,
+    /// What the fact means for a share to the address.
+    Meaning,
+}
+
+impl ReclaimLine {
+    /// The words of the line in `locale`. A function of the locale, as a
+    /// command title is (`ambre-spec-commands.md`): the view supplies the
+    /// language, and this table owns the words.
+    fn text(self, locale: Locale) -> &'static str {
+        match (self, locale) {
+            (Self::Title, Locale::En) => "Your address was reclaimed",
+            (Self::Title, Locale::Fr) => "Votre adresse a \u{e9}t\u{e9} reprise",
+            (Self::Meaning, Locale::En) => {
+                "An account that its provider verified now holds this address. Documents \
+                 shared with the address now reach that account, not yours. Your documents \
+                 and keys stay with you."
+            }
+            (Self::Meaning, Locale::Fr) => {
+                "Un compte v\u{e9}rifi\u{e9} par son fournisseur d\u{e9}tient \
+                 d\u{e9}sormais cette adresse. Les documents partag\u{e9}s avec cette \
+                 adresse parviennent \u{e0} ce compte, plus au v\u{f4}tre. Vos documents \
+                 et vos cl\u{e9}s restent les v\u{f4}tres."
+            }
+        }
+    }
+}
+
+/// The reclaim notice of the launcher, or nothing while the account holds its
+/// address (`CHROME-146`). It names the reclaim, then what a share to the
+/// address now reaches. It stays for the whole session: a toast would leave
+/// before a person reads it.
+pub fn reclaim_notice(keys: KeysSignals) -> impl IntoView {
+    // No setting supplies the reader's language yet (`ambre-spec-commands.md`
+    // section 6). Every view of the launcher shows English.
+    let locale = Locale::En;
+    move || match keys.address.get() {
+        AddressStanding::Held => ().into_any(),
+        AddressStanding::Reclaimed => view! {
+            <section class="ambre-address-reclaimed" role="alert">
+                <h2>{ReclaimLine::Title.text(locale)}</h2>
+                <p>{ReclaimLine::Meaning.text(locale)}</p>
+            </section>
+        }
+        .into_any(),
     }
 }
 
@@ -121,17 +195,15 @@ enum FieldRefusal {
     Empty,
     /// The passphrase and its confirmation differ.
     Mismatch,
-    /// The display name breaks the account rule.
-    Name,
 }
 
 /// The face of the account keys, or nothing when it is closed.
 pub fn keys_view(keys: KeysSignals, to_logic: ShellOutbox) -> impl IntoView {
     move || match keys.face.get() {
         KeysFace::Closed => ().into_any(),
-        KeysFace::Setup => setup_form(keys, to_logic.clone()).into_any(),
         KeysFace::Words(words) => words_dialog(keys, words).into_any(),
         KeysFace::Recover => recovery_form(keys, to_logic.clone()).into_any(),
+        KeysFace::ChangePassphrase => change_form(keys, to_logic.clone()).into_any(),
     }
 }
 
@@ -142,7 +214,6 @@ fn refusal_line(keys: KeysSignals, local: RwSignal<Option<FieldRefusal>>) -> imp
     let text = move || match local.try_get().flatten() {
         Some(FieldRefusal::Empty) => "Type a passphrase.".to_owned(),
         Some(FieldRefusal::Mismatch) => "The two passphrases do not match.".to_owned(),
-        Some(FieldRefusal::Name) => "Type a display name.".to_owned(),
         None => keys
             .refusal
             .get()
@@ -177,62 +248,75 @@ fn take_passphrase(
     Ok(typed)
 }
 
-/// The setup form (`CHROME-098`). The Sync worker answers with the words, or
-/// with the refusal the form shows.
-fn setup_form(keys: KeysSignals, to_logic: ShellOutbox) -> impl IntoView {
-    let name = NodeRef::<leptos::html::Input>::new();
-    let email = NodeRef::<leptos::html::Input>::new();
+/// Reads the current passphrase out of its field, and empties it: the text
+/// leaves the page with the submission (`CHROME-129`).
+fn take_current(
+    field: NodeRef<leptos::html::Input>,
+) -> Result<Confidential<Passphrase>, FieldRefusal> {
+    let Some(input) = field.get_untracked() else {
+        return Err(FieldRefusal::Empty);
+    };
+    let typed = Confidential::<Passphrase>::new(input.value());
+    input.set_value("");
+    if typed.is_empty() {
+        return Err(FieldRefusal::Empty);
+    }
+    Ok(typed)
+}
+
+/// The passphrase form of the account settings (`CHROME-145`). The Sync
+/// worker answers `PassphraseChanged`, which closes the form. Or it answers a
+/// refusal the form shows (`CHROME-143`). That is a wrong current passphrase,
+/// a weak new one, or a stale seal, which asks for a new try (`SYNC-295`).
+fn change_form(keys: KeysSignals, to_logic: ShellOutbox) -> impl IntoView {
+    let current = NodeRef::<leptos::html::Input>::new();
     let first = NodeRef::<leptos::html::Input>::new();
     let second = NodeRef::<leptos::html::Input>::new();
     let local = RwSignal::new(None::<FieldRefusal>);
     let submit = move |ev: leptos::ev::SubmitEvent| {
         ev.prevent_default();
         keys.refusal.set(None);
-        let passphrase = match take_passphrase(first, second) {
-            Ok(passphrase) => passphrase,
-            Err(refusal) => {
+        // Every field empties, a refused one included (`CHROME-129`).
+        let current_passphrase = take_current(current);
+        let new_passphrase = take_passphrase(first, second);
+        let (current_passphrase, new_passphrase) = match (current_passphrase, new_passphrase) {
+            (Ok(current), Ok(new)) => (current, new),
+            (Err(refusal), _) | (_, Err(refusal)) => {
                 local.set(Some(refusal));
                 return;
             }
         };
-        let (Some(name), Some(email)) = (name.get_untracked(), email.get_untracked()) else {
-            return;
-        };
-        let Ok(display_name) = Validated::<DisplayName>::parse(name.value()) else {
-            local.set(Some(FieldRefusal::Name));
-            return;
-        };
         local.set(None);
         to_logic.send(LogicCommand::Rest {
             id: ambre_bus::next_request(),
-            cmd: RestCommand::SetupAccount {
-                passphrase,
-                email: Email::from(email.value()),
-                display_name,
+            cmd: RestCommand::ChangePassphrase {
+                current_passphrase,
+                new_passphrase,
             },
         });
     };
     view! {
-        <form class="ambre-keys ambre-keys-setup" on:submit=submit>
-            <h2>"Set up your account"</h2>
+        <form class="ambre-keys ambre-keys-change" on:submit=submit>
+            <h2>"Change your passphrase"</h2>
             <p class="ambre-keys-note">
-                "Your passphrase opens your keys on this device. Ambre never sees it."
+                "Type your current passphrase, then choose a new one. Your recovery words \
+                 stay the same."
             </p>
-            <input node_ref=name class="ambre-keys-name" aria-label="Display name"
-                placeholder="Display name" autocomplete="name" />
-            <input node_ref=email class="ambre-keys-email" type="email" aria-label="Email address"
-                placeholder="Email address" autocomplete="email" />
+            <input node_ref=current class="ambre-keys-current" type="password"
+                aria-label="Current passphrase" placeholder="Current passphrase"
+                autocomplete="current-password" />
             <input node_ref=first class="ambre-keys-passphrase" type="password"
-                aria-label="Passphrase" placeholder="Passphrase" autocomplete="new-password" />
+                aria-label="New passphrase" placeholder="New passphrase"
+                autocomplete="new-password" />
             <input node_ref=second class="ambre-keys-confirm" type="password"
-                aria-label="Confirm the passphrase" placeholder="Confirm the passphrase"
+                aria-label="Confirm the new passphrase" placeholder="Confirm the new passphrase"
                 autocomplete="new-password" />
             {refusal_line(keys, local)}
             <div class="ambre-keys-actions">
                 <button type="button" class="ambre-keys-cancel" on:click=move |_| keys.close()>
                     "Cancel"
                 </button>
-                <button type="submit" class="ambre-keys-submit">"Create the account"</button>
+                <button type="submit" class="ambre-keys-submit">"Change the passphrase"</button>
             </div>
         </form>
     }
@@ -475,7 +559,7 @@ mod tests {
     /// `CHROME-137`: the words show in an open modal over the launcher,
     /// which they leave in place. A native close, the one Escape performs,
     /// keeps them on screen. Only their confirmation closes the modal. The
-    /// setup and the recovery forms still replace the launcher.
+    /// recovery form still replaces the launcher.
     #[wasm_bindgen_test]
     async fn the_words_open_in_a_modal_that_only_their_confirmation_closes() {
         let owner = Owner::new();
@@ -483,8 +567,6 @@ mod tests {
         let keys = KeysSignals::new();
         let (to_logic, _rx) = outbox();
         let container = mount_in_container(move || keys_view(keys, to_logic));
-        keys.open(KeysFace::Setup);
-        assert_eq!(keys.launcher(), Launcher::Covered, "the setup");
         keys.open(KeysFace::Recover);
         assert_eq!(keys.launcher(), Launcher::Covered, "the recovery");
 
@@ -527,53 +609,104 @@ mod tests {
         container.remove();
     }
 
-    /// The setup form sends one setup, and its passphrase leaves both fields
-    /// with the submission (`CHROME-098`, `CHROME-129`).
+    /// `CHROME-145`, `CHROME-143`, `CHROME-129`: the passphrase form sends
+    /// the current and the new passphrase once, and empties its three fields.
+    /// Each refusal of the Sync worker reads on the form in its own words. The
+    /// refusals are a wrong current passphrase, a weak new one and a stale
+    /// re-seal. Fields that refuse send nothing.
     #[wasm_bindgen_test]
-    async fn the_setup_sends_the_passphrase_and_empties_its_fields() {
+    async fn the_passphrase_change_sends_both_passphrases_and_shows_each_refusal() {
         let owner = Owner::new();
         owner.set();
         let keys = KeysSignals::new();
         let (to_logic, rx) = outbox();
         let container = mount_in_container(move || keys_view(keys, to_logic));
-        keys.open(KeysFace::Setup);
+        keys.open(KeysFace::ChangePassphrase);
         tick().await;
+        assert_eq!(keys.launcher(), Launcher::Covered);
+        assert!(keys.has_form());
 
-        type_into(&container, ".ambre-keys-name", "Ada");
-        type_into(&container, ".ambre-keys-email", "ada@test.local");
-        type_into(
-            &container,
-            ".ambre-keys-passphrase",
-            "correct horse battery staple",
+        let fill = |current: &str, new: &str, again: &str| {
+            type_into(&container, ".ambre-keys-current", current);
+            type_into(&container, ".ambre-keys-passphrase", new);
+            type_into(&container, ".ambre-keys-confirm", again);
+        };
+        fill(
+            "pelican harbor voltage minnow",
+            "anchovy glider ruckus tadpole",
+            "anchovy glider ruckus tadpole",
         );
-        type_into(
-            &container,
+        submit(&container);
+        tick().await;
+        for field in [
+            ".ambre-keys-current",
+            ".ambre-keys-passphrase",
             ".ambre-keys-confirm",
-            "correct horse battery staple",
-        );
-        submit(&container);
-        tick().await;
-
-        assert_eq!(value(&container, ".ambre-keys-passphrase"), "");
-        assert_eq!(value(&container, ".ambre-keys-confirm"), "");
+        ] {
+            assert_eq!(
+                value(&container, field),
+                "",
+                "{field} outlived the submission"
+            );
+        }
         let sent: Vec<LogicCommand> = rx.try_iter().collect();
-        assert!(matches!(
-            sent.as_slice(),
-            [LogicCommand::Rest { cmd: RestCommand::SetupAccount { display_name, .. }, .. }]
-                if display_name.as_str() == "Ada"
-        ));
+        match sent.as_slice() {
+            [
+                LogicCommand::Rest {
+                    cmd:
+                        RestCommand::ChangePassphrase {
+                            current_passphrase,
+                            new_passphrase,
+                        },
+                    ..
+                },
+            ] => {
+                assert!(current_passphrase.matches(&Confidential::<Passphrase>::new(
+                    "pelican harbor voltage minnow".to_owned()
+                )));
+                assert!(new_passphrase.matches(&Confidential::<Passphrase>::new(
+                    "anchovy glider ruckus tadpole".to_owned()
+                )));
+            }
+            _ => panic!("the form did not send one change"),
+        }
 
-        // A confirmation that differs sends nothing, and says why.
-        type_into(
-            &container,
-            ".ambre-keys-passphrase",
-            "correct horse battery staple",
+        for cause in [
+            AuthFailure::BadPassphrase,
+            AuthFailure::WeakPassphrase(ambre_core::PassphraseWeakness::TooShort),
+            AuthFailure::StaleReseal,
+        ] {
+            keys.refuse(cause);
+            tick().await;
+            assert_eq!(
+                find(&container, ".ambre-keys-refusal")
+                    .unwrap()
+                    .text_content()
+                    .unwrap(),
+                cause.to_string()
+            );
+        }
+        assert!(AuthFailure::StaleReseal.to_string().contains("Try again"));
+
+        // No current passphrase, or two new ones that differ, send nothing.
+        fill(
+            "",
+            "anchovy glider ruckus tadpole",
+            "anchovy glider ruckus tadpole",
         );
-        type_into(&container, ".ambre-keys-confirm", "correct horse battery");
         submit(&container);
         tick().await;
-        assert_eq!(value(&container, ".ambre-keys-passphrase"), "");
-        assert!(rx.try_iter().next().is_none());
+        fill(
+            "pelican harbor voltage minnow",
+            "anchovy glider",
+            "anchovy glide",
+        );
+        submit(&container);
+        tick().await;
+        assert!(
+            rx.try_iter().next().is_none(),
+            "a refused form sent a change"
+        );
         assert_eq!(
             find(&container, ".ambre-keys-refusal")
                 .unwrap()
@@ -581,6 +714,11 @@ mod tests {
                 .unwrap(),
             "The two passphrases do not match."
         );
+
+        // The answer closes the form.
+        keys.close();
+        tick().await;
+        assert!(find(&container, ".ambre-keys-change").is_none());
         container.remove();
     }
 

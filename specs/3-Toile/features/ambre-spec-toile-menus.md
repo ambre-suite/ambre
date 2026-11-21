@@ -6,7 +6,7 @@
 > top and finds everything else, each entry showing the shortcut that reaches it faster.
 
 A menu owns no behaviour: every entry names a command another feature specifies. What this document
-holds is the scope, the layout and the dispatch. The zoom shows in the status bar alone (`CHROME-147`).
+holds is the scope, the layout and the dispatch. The zoom shows in the status bar alone (`CHROME-206`).
 The menu bar leaves the board, and each of its commands moves to a home region (`CHROME-160`).
 
 ---
@@ -211,7 +211,7 @@ does not apply is disabled by its command state, so the layout never moves under
 
 **The zoom entries.** Zoom out, zoom in, 100 %, fit, and fit the selection sit in the View menu
 and the palette. The menu bar carries no zoom control: the zoom chip of the status bar shows the
-percentage (`features/ambre-spec-toile-status-bar.md`, `CHROME-147`). Each entry moves the camera
+percentage (`features/ambre-spec-toile-status-bar.md`, `CHROME-206`). Each entry moves the camera
 and forwards one cull request (`TOILE-UI-157`). Neither fit moves the camera on its own. Both ask
 the Logic thread for the extent first, because the UI holds the culled set alone (`TOILE-UI-158`,
 `features/ambre-spec-toile-viewport.md`).

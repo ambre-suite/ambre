@@ -12,6 +12,7 @@ use super::{
 };
 use crate::murmure::tests as murmure;
 use crate::page::Page;
+use crate::provider::{Provider, sign_in};
 use crate::relay::Relay;
 
 /// The space and the channel the senders and the receiver share.
@@ -130,6 +131,16 @@ fn read_only(figures: Vec<Figure>) -> Vec<Figure> {
         .collect()
 }
 
+/// A sender of the run: a headless page that signs `name` in through
+/// `provider`, then opens Murmure. The open reloads the page, and the session
+/// the Sync worker kept survives it (`SRV-323`).
+async fn sender(relay: Arc<Relay>, provider: &Provider, name: &str) -> Page {
+    let page = Page::home(relay).await;
+    sign_in(&page, provider, name).await;
+    murmure::open_murmure(&page).await;
+    page
+}
+
 /// A headed Chrome on this machine, with its GPU: the receiver of a desktop proof.
 async fn desktop_receiver(relay: Arc<Relay>, origin: &str) -> Page {
     let downloads = std::env::temp_dir().join(format!("proof-{}", uuid::Uuid::new_v4()));
@@ -232,7 +243,12 @@ async fn run(plan: &Plan) -> Outcome {
     let sfu = crate::call::Sfu::start_on(None, plan.host).await;
     let bound = Bound::bind(plan).await;
     let origin = bound.origin.clone();
-    let relay = Arc::new(Relay::start_with(&sfu.relay_env_at(&bound.sfu_url())).await);
+    // Each participant signs in through the provider of the belt, as a
+    // release build does: the build holds no development sign-in (`ZK-050`).
+    let provider = Provider::spawn().await;
+    let mut env: Vec<(&str, String)> = sfu.relay_env_at(&bound.sfu_url()).to_vec();
+    env.extend(provider.relay_env());
+    let relay = Arc::new(Relay::start_with(&env).await);
     let host = Arc::new(Host::default());
     let sfu_base = sfu
         .signal
@@ -255,8 +271,10 @@ async fn run(plan: &Plan) -> Outcome {
     // The receiver signs in first, so the senders can invite it.
     let receiver = match plan.receiver {
         Receiver::Phone => {
+            host.sign_in_phone(provider.clone(), receiver_name.clone());
             say(&format!(
-                "on the phone, open {origin}/ and sign in as `{receiver_name}`"
+                "on the phone, open {origin}/proof/sign-in, then set a passphrase of your \
+                 choice and confirm the recovery words: it signs in as `{receiver_name}`"
             ));
             None
         }
@@ -275,7 +293,7 @@ async fn run(plan: &Plan) -> Outcome {
         }
     };
     if let Some(page) = &receiver {
-        page.sign_in(&receiver_name).await;
+        sign_in(page, &provider, &receiver_name).await;
     }
     until(&host, "a signed-in page", Duration::from_secs(900), |r| {
         r.iter().any(|r| r["home"].as_bool() == Some(true))
@@ -289,7 +307,7 @@ async fn run(plan: &Plan) -> Outcome {
     let senders: Vec<Page> = futures_util::future::join_all(
         names
             .iter()
-            .map(|name| murmure::murmure(Arc::clone(&relay), name)),
+            .map(|name| sender(Arc::clone(&relay), &provider, name)),
     )
     .await;
     let first = senders.first().expect("one sender at least");
@@ -493,10 +511,10 @@ async fn a_call_proof_on_one_receiver() {
     }
 }
 
-/// `PROOF-002` to `PROOF-005`, in the browser.
+/// `PROOF-002` to `PROOF-005`, and `ZK-050`, in the browser.
 ///
 /// The proof host serves the build to a headless receiver, which two senders call, over two
-/// phases of 10 s. The probe reports the paints and the counters of both videos, and the timer
+/// phases of 10 s. Each participant signs in through the provider of the belt. The probe reports the paints and the counters of both videos, and the timer
 /// reports the chunks of the call worker. The receiver decodes both videos through the timer.
 /// The Sync worker seals files in the worker phase alone. No figure is held against its budget:
 /// a container of the belt measures no device.
@@ -515,7 +533,24 @@ async fn the_proof_host_reads_a_call_through_its_probe() {
         window: Duration::from_secs(10),
         decode: Duration::ZERO,
     };
+    // The paths of the earlier tests of the process stay out of the count.
+    let before = crate::serve::asked().len();
     let outcome = run(&plan).await;
+    // `ZK-050`: each sender signed in through the provider of the belt, and
+    // none through the development sign-in.
+    let asked = crate::serve::asked().split_off(before);
+    let returns = asked
+        .iter()
+        .filter(|path| *path == "/api/auth/google/callback")
+        .count();
+    assert!(
+        returns >= plan.senders,
+        "{returns} provider returns: {asked:?}"
+    );
+    assert!(
+        !asked.iter().any(|path| path == "/api/auth/dev/login"),
+        "a participant signed in by a name: {asked:?}"
+    );
     let paint = outcome.window(outcome.paint);
     let worker = outcome.window(outcome.worker);
     assert!(!paint.paints().is_empty(), "no paint reported");

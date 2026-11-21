@@ -148,7 +148,7 @@ pub struct Property {
 }
 
 /// What one entry of a contextual surface reaches: a command, or a property
-/// (`CHROME-199`). The context bar and the context menu are lists of these,
+/// (`CHROME-207`). The context bar and the context menu are lists of these,
 /// and each control of the context panel carries one.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Reach {
@@ -185,7 +185,7 @@ impl Reach {
     }
 }
 
-/// The value a property reads off the selection (`CHROME-202`).
+/// The value a property reads off the selection (`CHROME-210`).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Reading<T> {
     /// Every selected element holds this value.

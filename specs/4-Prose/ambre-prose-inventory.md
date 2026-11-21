@@ -24,7 +24,7 @@
 | `prose-images` | A picture in the document. | implemented | 69 |  |
 | `prose-import-export` | A user opens a document that came from Word, from a web page or from a Markdown file. | implemented | 104 |  |
 | `prose-lists` | Bulleted, numbered and checkbox lists, nested to any depth. | implemented | 17 |  |
-| `prose-pagination` | A document becomes a sequence of measured pages. | implemented | 56 |  |
+| `prose-pagination` | A document becomes a sequence of measured pages. | implemented | 59 |  |
 | `prose-pdf-export` | Prose's half of the shared PDF export (`ambre-spec-pdf-export.md`): the pagination the file reuses, the links it carries, and the language it declares. | implemented | 10 |  |
 | `prose-ruler` | A horizontal scale above the page, carrying three handles. | implemented | 8 |  |
 | `prose-selection` | Where the caret is, where it goes, and what a drag selects. | implemented | 38 |  |
@@ -44,4 +44,4 @@
 | `prose-track-changes` | A reviewer edits without changing the document. | partial | 40 |  |
 | `prose-accessibility` | A screen reader must be able to read the document and follow the caret through it. | design-only | 9 |  |
 
-**28 features: 19 implemented, 8 partial, 1 design-only. 807 contract rows, 0 loose.**
+**28 features: 19 implemented, 8 partial, 1 design-only. 810 contract rows, 0 loose.**

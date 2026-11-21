@@ -10,9 +10,9 @@ use proptest::prelude::*;
 
 use super::{
     AUDIO_CHUNK_SIZE, CONFIG_BYTE, CallExchangeKey, ChunkError, ChunkHeader, ChunkSealer,
-    HEADER_LEN, JoinClaim, KeyHandoff, MAX_RATCHETS, OPENERS_PER_SENDER, ReceiveKeys, ReplayWindow,
-    SWITCH_DELAY, SenderKey, SignedJoin, TAG_LEN, VIDEO_OVERHEAD, WrapBinding, unwrap_sender_key,
-    wrap_sender_key,
+    DEPARTURE_SLOTS, Departures, HEADER_LEN, JoinClaim, KeyHandoff, MAX_RATCHETS,
+    OPENERS_PER_SENDER, ReceiveKeys, ReplayWindow, SWITCH_DELAY, SenderKey, SignedJoin, TAG_LEN,
+    VIDEO_OVERHEAD, WrapBinding, unwrap_sender_key, wrap_sender_key,
 };
 
 fn kid(sender: u64, generation: u64) -> KeyIdentifier {
@@ -475,8 +475,8 @@ fn binding(sender: u64, recipient: u64) -> WrapBinding {
     }
 }
 
-/// A wrap opens for its recipient alone, under its own binding alone, and carries the
-/// generation and the key.
+/// A wrap opens for its recipient alone, under its own binding alone. It carries the
+/// generation, the departures, the place of the log its sender heeded and the key.
 #[test]
 fn a_wrap_opens_for_its_recipient_and_binding_alone() {
     let alice = CallExchangeKey::generate();
@@ -484,13 +484,24 @@ fn a_wrap_opens_for_its_recipient_and_binding_alone() {
     let carol = CallExchangeKey::generate();
     let key = SenderKey::generate();
     let generation = Seq::<KeyGeneration>::new(9);
-    let wrapped = wrap_sender_key(&alice, &bob.public(), binding(1, 2), generation, &key)
+    let mut departures = Departures::default();
+    departures.depart(Seq::new(7));
+    let wrapped = wrap_sender_key(
+        &alice,
+        &bob.public(),
+        binding(1, 2),
+        generation,
+        &departures,
+        Seq::new(11),
+        &key,
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    let opened = unwrap_sender_key(&bob, &alice.public(), binding(1, 2), &wrapped)
         .unwrap_or_else(|e| panic!("{e}"));
-    let (opened_generation, opened) =
-        unwrap_sender_key(&bob, &alice.public(), binding(1, 2), &wrapped)
-            .unwrap_or_else(|e| panic!("{e}"));
-    assert_eq!(opened_generation, generation);
-    assert_eq!(opened.bytes(), key.bytes());
+    assert_eq!(opened.generation, generation);
+    assert_eq!(opened.departures, departures);
+    assert_eq!(opened.heeded, Seq::new(11));
+    assert_eq!(opened.key.bytes(), key.bytes());
     assert!(unwrap_sender_key(&carol, &alice.public(), binding(1, 2), &wrapped).is_err());
     assert!(unwrap_sender_key(&bob, &alice.public(), binding(1, 3), &wrapped).is_err());
     assert!(unwrap_sender_key(&bob, &alice.public(), binding(4, 2), &wrapped).is_err());
@@ -550,24 +561,33 @@ fn a_signed_join_reads_back_from_its_bytes_and_a_changed_byte_refuses_it() {
     assert!(SignedJoin::from_bytes(&Payload::new(long)).is_err());
 }
 
-/// A wrap reads back from the 80 bytes the relay forwards and opens for its recipient.
+/// A wrap reads back from the 217 bytes the relay forwards and opens for its recipient.
 /// Bytes of another length read as no wrap.
 #[test]
 fn a_wrap_reads_back_from_its_bytes() {
     let alice = CallExchangeKey::generate();
     let bob = CallExchangeKey::generate();
     let key = SenderKey::generate();
-    let wrapped = wrap_sender_key(&alice, &bob.public(), binding(1, 2), Seq::new(3), &key)
-        .unwrap_or_else(|e| panic!("{e}"));
+    let none = Departures::default();
+    let wrapped = wrap_sender_key(
+        &alice,
+        &bob.public(),
+        binding(1, 2),
+        Seq::new(3),
+        &none,
+        Seq::ZERO,
+        &key,
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
     let bytes = wrapped.to_bytes();
-    assert_eq!(bytes.len().get(), 80);
-    assert_eq!(wrapped.size().get(), 80);
+    assert_eq!(bytes.len().get(), 217);
+    assert_eq!(wrapped.size().get(), 217);
     let read = super::WrappedSenderKey::from_bytes(&bytes).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(read, wrapped);
-    let (_, opened) = unwrap_sender_key(&bob, &alice.public(), binding(1, 2), &read)
+    let opened = unwrap_sender_key(&bob, &alice.public(), binding(1, 2), &read)
         .unwrap_or_else(|e| panic!("{e}"));
-    assert_eq!(opened.bytes(), key.bytes());
-    let short = Payload::new(bytes.as_bytes().get(..79).unwrap_or_default().to_vec());
+    assert_eq!(opened.key.bytes(), key.bytes());
+    let short = Payload::new(bytes.as_bytes().get(..216).unwrap_or_default().to_vec());
     assert!(super::WrappedSenderKey::from_bytes(&short).is_err());
 }
 
@@ -650,12 +670,17 @@ fn a_handoff_crosses_the_port_whole() {
             sender: Seq::new(4),
         },
         KeyHandoff::End,
+        KeyHandoff::Close {
+            sender: Seq::new(4),
+            generation: Seq::new(2),
+            within: SWITCH_DELAY,
+        },
     ];
     let sizes: Vec<usize> = handoffs
         .iter()
         .map(|h| h.to_port().with_plaintext(<[u8]>::len))
         .collect();
-    assert_eq!(sizes, [49, 49, 49, 49]);
+    assert_eq!(sizes, [49, 49, 49, 49, 49]);
     let read: Vec<KeyHandoff> = handoffs
         .iter()
         .map(|h| KeyHandoff::from_port(&h.to_port()).unwrap_or_else(|e| panic!("{e}")))
@@ -669,14 +694,26 @@ fn a_handoff_crosses_the_port_whole() {
         KeyHandoff::Seal { key: sealing, .. },
         KeyHandoff::Forget { sender: gone },
         KeyHandoff::End,
+        KeyHandoff::Close {
+            sender: closed,
+            generation: through,
+            within,
+        },
     ] = read.as_slice()
     else {
         panic!("the kinds came back as {read:?}");
     };
     assert_eq!(
-        (*sender, *generation, *gone),
-        (Seq::new(4), Seq::new(2), Seq::new(4))
+        (*sender, *generation, *gone, *closed, *through),
+        (
+            Seq::new(4),
+            Seq::new(2),
+            Seq::new(4),
+            Seq::new(4),
+            Seq::new(2)
+        )
     );
+    assert_eq!(*within, SWITCH_DELAY);
     let mut keys = ReceiveKeys::default();
     keys.insert(*sender, *generation, opened_key.clone(), T0);
     let (_, clear) = keys.open_audio(chunk, T0).unwrap_or_else(|e| panic!("{e}"));
@@ -1193,4 +1230,183 @@ fn a_step_of_the_current_epoch_keeps_the_deadline_a_late_key_set() {
             .map(|(s, _)| s),
         Err(ChunkError::Retired)
     );
+}
+
+/// The Project Wycheproof vectors of ChaCha20-Poly1305 with a 96-bit nonce, vendored from
+/// `testvectors_v1/chacha20_poly1305_test.json` (`fixtures/THIRD_PARTY.md`). The file holds
+/// 87 of the 316 vectors of that group, under the 64 KiB cap of a fixture. The cut takes, for
+/// each flag in turn, the shortest vector left, until the next would pass the cap. Every flag
+/// of the group is there, the RFC 8439 vector and 16 forged tags included.
+const WYCHEPROOF: &str = include_str!("../tests/fixtures/wycheproof/chacha20_poly1305_test.json");
+
+/// The bytes of one hex field of a vector.
+fn hex_field(test: &serde_json::Value, field: &str) -> Vec<u8> {
+    let text = test[field]
+        .as_str()
+        .unwrap_or_else(|| panic!("a vector with no `{field}`"));
+    data_encoding::HEXLOWER
+        .decode(text.as_bytes())
+        .unwrap_or_else(|e| panic!("`{field}` is no hex: {e}"))
+}
+
+/// `CALL-148`: the key and the nonce a chunk seals under drive the AEAD as a reference does.
+/// Each vector of Project Wycheproof goes through the key and the nonce of the chunk format,
+/// at counter 0, where the nonce is the salt. A valid vector seals to its ciphertext and its
+/// tag, and opens back. An invalid one opens to nothing.
+#[test]
+fn the_chunk_aead_passes_the_wycheproof_vectors() {
+    use chacha20poly1305::aead::AeadInPlace;
+
+    let suite: serde_json::Value =
+        serde_json::from_str(WYCHEPROOF).unwrap_or_else(|e| panic!("the vectors parse: {e}"));
+    assert_eq!(suite["algorithm"], "CHACHA20-POLY1305");
+    let mut counted = (0, 0);
+    for group in suite["testGroups"].as_array().into_iter().flatten() {
+        assert_eq!(group["ivSize"], 96, "a group of another nonce size");
+        for test in group["tests"].as_array().into_iter().flatten() {
+            let id = &test["tcId"];
+            let key: [u8; 32] = hex_field(test, "key")
+                .try_into()
+                .unwrap_or_else(|_| panic!("vector {id}: a key of another size"));
+            let salt: [u8; 12] = hex_field(test, "iv")
+                .try_into()
+                .unwrap_or_else(|_| panic!("vector {id}: a nonce of another size"));
+            let (aad, msg, ct, tag) = (
+                hex_field(test, "aad"),
+                hex_field(test, "msg"),
+                hex_field(test, "ct"),
+                hex_field(test, "tag"),
+            );
+            let chunk_key = super::ChunkKey::from_parts(key, salt);
+            let nonce = chunk_key.nonce(Seq::<ChunkCounter>::new(0));
+            assert_eq!(
+                nonce.as_slice(),
+                &salt[..],
+                "vector {id}: the nonce at counter 0"
+            );
+            let cipher = chunk_key.cipher();
+            let mut opened = ct.clone();
+            let open = cipher.decrypt_in_place_detached(
+                &nonce,
+                &aad,
+                &mut opened,
+                chacha20poly1305::Tag::from_slice(&tag),
+            );
+            match test["result"].as_str() {
+                Some("valid") => {
+                    let mut sealed = msg.clone();
+                    let got = cipher
+                        .encrypt_in_place_detached(&nonce, &aad, &mut sealed)
+                        .unwrap_or_else(|e| panic!("vector {id}: {e}"));
+                    assert_eq!(sealed, ct, "vector {id}: the ciphertext");
+                    assert_eq!(got.as_slice(), tag.as_slice(), "vector {id}: the tag");
+                    assert!(open.is_ok(), "vector {id}: a valid vector does not open");
+                    assert_eq!(opened, msg, "vector {id}: the opened text");
+                    counted.0 += 1;
+                }
+                Some("invalid") => {
+                    assert!(open.is_err(), "vector {id}: an invalid vector opens");
+                    counted.1 += 1;
+                }
+                other => panic!("vector {id}: a result of {other:?}"),
+            }
+        }
+    }
+    assert_eq!(
+        counted,
+        (71, 16),
+        "the vendored file holds 71 valid and 16 invalid vectors"
+    );
+}
+
+/// `CALL-157`: Eve is removed while Alice talks under her key of epoch zero. The relay
+/// withholds the wrap of the fresh key of Alice from Roger. No fresh key reaches him, and no
+/// deadline of a fresh key starts. Once the switch delay passed, the close of the removal still
+/// shuts every chunk Eve seals under the older key. That holds for the same step, a step up
+/// and a camera chunk. A late handoff of that key opens nothing either.
+#[test]
+fn a_removal_closes_the_older_epochs_with_no_fresh_key() {
+    let old = SenderKey::generate();
+    let mut roger = receiver(1, 0, &old);
+    let removal = Instant::<PageLoad>::new(1_000.0);
+    roger.close(Seq::new(1), Seq::ZERO, SWITCH_DELAY, removal);
+    let delay = SWITCH_DELAY.to_fractional();
+    let just_before = removal.after(delay).before(TimeSpan::new(1.0));
+    let mut eve = sealer(&old, 1, 0);
+    assert!(
+        roger
+            .open_audio(seal(&mut eve, b"in time"), just_before)
+            .is_ok()
+    );
+
+    let due = removal.after(delay);
+    let mut eve_ahead = sealer(&old.ratcheted(), 1, 1);
+    let mut eve_camera = ChunkSealer::new(&old, camera(1, 0)).unwrap_or_else(|e| panic!("{e}"));
+    for forged in [
+        roger.open_audio(seal(&mut eve, b"forged"), due),
+        roger.open_audio(seal(&mut eve_ahead, b"forged"), due),
+        roger.open_video(
+            seal_video(&mut eve_camera, &keyframe(b"forged"), PictureKind::Keyframe),
+            due,
+        ),
+    ] {
+        assert!(forged.is_err(), "a chunk under the older key opened");
+    }
+    roger.insert(Seq::new(1), Seq::ZERO, old.clone(), due);
+    assert_eq!(
+        roger
+            .open_audio(seal(&mut eve, b"replayed key"), due)
+            .map(|(s, _)| s),
+        Err(ChunkError::Retired)
+    );
+
+    let fresh = SenderKey::generate();
+    let fresh_epoch = Seq::<KeyGeneration>::ZERO.next_epoch().map_or(0, Seq::get);
+    roger.insert(Seq::new(1), Seq::new(fresh_epoch), fresh.clone(), due);
+    let mut alice = sealer(&fresh, 1, fresh_epoch);
+    assert!(roger.open_audio(seal(&mut alice, b"fresh"), due).is_ok());
+}
+
+/// `CALL-157`: a second removal inside the delay keeps the time of the first close, and moves
+/// it to the newer epoch. A key of Alice drawn between the two removals closes at that time
+/// too.
+#[test]
+fn a_second_removal_keeps_the_time_of_the_first_close() {
+    let old = SenderKey::generate();
+    let middle = SenderKey::generate();
+    let middle_epoch = Seq::<KeyGeneration>::ZERO.next_epoch().map_or(0, Seq::get);
+    let mut roger = receiver(1, 0, &old);
+    let first = Instant::<PageLoad>::new(1_000.0);
+    roger.close(Seq::new(1), Seq::ZERO, SWITCH_DELAY, first);
+    let second = Instant::<PageLoad>::new(3_000.0);
+    roger.insert(Seq::new(1), Seq::new(middle_epoch), middle.clone(), second);
+    roger.close(Seq::new(1), Seq::new(middle_epoch), SWITCH_DELAY, second);
+    let due = first.after(SWITCH_DELAY.to_fractional());
+    let mut eve_old = sealer(&old, 1, 0);
+    let mut eve_middle = sealer(&middle, 1, middle_epoch);
+    assert!(
+        roger
+            .open_audio(seal(&mut eve_old, b"forged"), due)
+            .is_err()
+    );
+    assert!(
+        roger
+            .open_audio(seal(&mut eve_middle, b"forged"), due)
+            .is_err()
+    );
+}
+
+/// `CALL-157`: the departures of a wrap keep the newest indexes past the slots, and name an
+/// index alone once it was departed.
+#[test]
+fn the_departures_keep_the_newest_indexes() {
+    let mut departures = Departures::default();
+    let slots = u64::try_from(DEPARTURE_SLOTS).unwrap_or(0);
+    for index in 1..=slots + 1 {
+        departures.depart(Seq::new(index));
+    }
+    assert!(!departures.names_any(&[Seq::new(1)]));
+    assert!(departures.names_any(&[Seq::new(2), Seq::new(99)]));
+    assert!(departures.names_any(&[Seq::new(slots + 1)]));
+    assert!(!departures.names_any(&[]));
 }

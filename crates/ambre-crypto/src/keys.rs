@@ -160,22 +160,21 @@ impl MasterSeed {
     /// seed opens into a [`Secret`] and is copied from there into its own, so
     /// no bare copy of it is left behind.
     ///
-    /// Two layouts open (`ZK-047`):
-    /// * [`SeedVersion::V1`] and its nonce and ciphertext, under the additional
-    ///   data of `salt` and `account`. The opened seed must derive `account`.
-    /// * The layout before it, a nonce and a ciphertext alone, under the fixed
-    ///   additional data [`LEGACY_SEED_AAD`]. An account sealed before the
-    ///   version byte existed still unlocks, and its next re-seal writes the
-    ///   versioned layout.
+    /// One layout opens: [`SeedVersion::V1`], its nonce and its ciphertext,
+    /// under the additional data of `salt` and `account` (`ZK-047`). The
+    /// opened seed must derive `account`. MVP has not shipped, so no reader
+    /// accepts the layout before the version byte (audit `P59`).
     ///
     /// # Errors
     ///
     /// * [`CryptoError::AeadFailed`] when `key`, `salt` or `account` is not
     ///   the one that sealed the seed, or the bytes were changed.
-    /// * [`CryptoError::UnboundSeed`] when a versioned seed comes with no
-    ///   `account`, or opens to a seed that derives another signing key.
-    /// * [`CryptoError::InvalidKeyLength`] when `wrapped` has neither layout,
-    ///   or the opened seed is not 32 bytes long.
+    /// * [`CryptoError::UnboundSeed`] when the seed comes with no `account`,
+    ///   or opens to a seed that derives another signing key.
+    /// * [`CryptoError::UnversionedWrap`] when the first byte names no
+    ///   version.
+    /// * [`CryptoError::InvalidKeyLength`] when `wrapped` is not the length
+    ///   of the versioned layout, or the opened seed is not 32 bytes long.
     pub fn open_from_storage(
         wrapped: &Encoded<WrappedMasterKey>,
         key: &crate::passphrase::UserKey,
@@ -183,32 +182,31 @@ impl MasterSeed {
         account: Option<&FixedBytes<PublicKey>>,
     ) -> Result<Self, CryptoError> {
         let bytes = wrapped.as_bytes();
-        let versioned = bytes
-            .split_first()
-            .and_then(|(&byte, sealed)| Some((SeedVersion::from_byte(byte)?, sealed)));
-        let (sealed, aad, bound) = match (bytes.len(), versioned) {
-            (SEED_V1_LEN, Some((SeedVersion::V1, sealed))) => {
-                let account = account.ok_or(CryptoError::UnboundSeed)?;
-                (sealed, seed_aad(salt, account), Some(account))
-            }
-            (SEED_LEGACY_LEN, _) => (bytes, ambre_core::Aad::of(LEGACY_SEED_AAD), None),
-            _ => return Err(CryptoError::InvalidKeyLength),
-        };
+        if bytes.len() != SEED_V1_LEN {
+            return Err(CryptoError::InvalidKeyLength);
+        }
+        let (&byte, sealed) = bytes.split_first().ok_or(CryptoError::InvalidKeyLength)?;
+        match SeedVersion::from_byte(byte) {
+            Some(SeedVersion::V1) => {}
+            None => return Err(CryptoError::UnversionedWrap),
+        }
+        let account = account.ok_or(CryptoError::UnboundSeed)?;
         let (nonce, ciphertext) = sealed
             .split_first_chunk::<{ aead::NONCE_LEN }>()
             .ok_or(CryptoError::InvalidKeyLength)?;
         let opened = aead::open(
             &FixedBytes::from_array(*nonce),
             &ambre_core::Payload::<ambre_core::Ciphertext>::new(ciphertext.to_vec()),
-            &aad,
+            &seed_aad(salt, account),
             &key.document_key(),
         )?;
         let seed = key_of(opened.secret().expose())
             .map(Self)
             .ok_or(CryptoError::InvalidKeyLength)?;
-        match bound {
-            Some(account) if seed.signing_public_key() != *account => Err(CryptoError::UnboundSeed),
-            _ => Ok(seed),
+        if seed.signing_public_key() == *account {
+            Ok(seed)
+        } else {
+            Err(CryptoError::UnboundSeed)
         }
     }
 
@@ -248,18 +246,12 @@ impl SeedVersion {
     }
 }
 
-/// The fixed additional data of a seed sealed before [`SeedVersion`]
-/// existed. Read alone: no seal writes it any more.
-pub const LEGACY_SEED_AAD: &[u8] = b"ambre-master-seed";
-
 /// The domain the additional data of a versioned seal opens with.
 const SEED_AAD_DOMAIN: &[u8] = b"ambre-sealed-seed";
 
-/// A seed sealed before the version byte: a nonce, the seed and the 16 bytes
-/// of the XChaCha20-Poly1305 tag.
-const SEED_LEGACY_LEN: usize = aead::NONCE_LEN + 32 + 16;
-/// A versioned seed: the version byte, then the legacy layout.
-const SEED_V1_LEN: usize = 1 + SEED_LEGACY_LEN;
+/// A versioned seed: the version byte, a nonce, the seed and the 16 bytes of
+/// the XChaCha20-Poly1305 tag.
+const SEED_V1_LEN: usize = 1 + aead::NONCE_LEN + 32 + 16;
 
 /// The additional data of a versioned seal: its domain, the version, the
 /// salt and the signing key of the account. Each field has a fixed width.
@@ -429,11 +421,15 @@ impl FileKey {
     ///
     /// [`CryptoError::Argon2Failed`] from [`Self::from_passphrase`]. The salt it
     /// draws is [`SALT_LEN`] bytes wide, which Argon2id accepts.
+    ///
+    /// The passphrase is a [`crate::strength::ChosenPassphrase`]: whoever
+    /// holds the file guesses offline, so a seal takes the floor of the
+    /// account passphrase (`DOCFILE-022`, `ZK-035`). The open takes any text.
     pub fn for_new_file(
-        passphrase: &ambre_core::Confidential<ambre_core::Passphrase>,
+        passphrase: &crate::strength::ChosenPassphrase,
     ) -> Result<(Self, FixedBytes<FileSalt>), CryptoError> {
         let salt = FixedBytes::from_array(random::bytes::<SALT_LEN>());
-        let key = Self::from_passphrase(passphrase, &salt)?;
+        let key = Self::from_passphrase(passphrase.passphrase(), &salt)?;
         Ok((key, salt))
     }
 

@@ -212,7 +212,7 @@ impl VersionKind for Protocol {
 }
 
 impl Current for Protocol {
-    const CURRENT: Version<Self> = Version::V4;
+    const CURRENT: Version<Self> = Version::V5;
 }
 
 impl Version<Protocol> {
@@ -240,6 +240,10 @@ impl Version<Protocol> {
     /// Version 4 - a presence sample carries the log head its sender read
     /// and the entry that head names (`SYNC-262`).
     pub const V4: Self = Self::at(4);
+
+    /// Version 5 - a revoke entry of the membership log signs its cap
+    /// (`SYNC-300`), and the relay tells a member an address was reclaimed.
+    pub const V5: Self = Self::at(5);
 
     /// Creates a version from a `u8`, returning an error if the value exceeds
     /// 127.
@@ -281,7 +285,7 @@ mod tests {
         assert_eq!(Version::<Protocol>::MAX.get(), 127);
         assert_eq!(Version::<Protocol>::V0.get(), 0);
         assert_eq!(Version::<Protocol>::V1.get(), 1);
-        assert_eq!(Version::<Protocol>::CURRENT, Version::V4);
+        assert_eq!(Version::<Protocol>::CURRENT, Version::V5);
     }
 
     #[test]

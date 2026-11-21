@@ -65,6 +65,7 @@ fn peer_of(state: &ChannelState) -> ChannelState {
 
 fn signer(state: &ChannelState, document_id: Id<Document>, user: Id<User>) -> Signer {
     Signer {
+        nonce: crate::logic::delta::TEST_NONCE,
         peer: state.peer(document_id).expect("a session"),
         user: Some(user),
     }

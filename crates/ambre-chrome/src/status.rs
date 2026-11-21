@@ -28,7 +28,7 @@ pub fn StatusLabel(#[prop(into)] label: String) -> impl IntoView {
 /// Interactive zoom chip: a button showing `<pct> %` that opens a preset menu.
 /// `zoom` is the factor (`1.0` = 100%) the canvas view publishes each frame;
 /// the menu writes it and the view polls it. Every application that zooms
-/// shows this chip (`CHROME-147`). The menu lists the stops of the one ladder
+/// shows this chip (`CHROME-206`). The menu lists the stops of the one ladder
 /// inside `range`, so every chip reads the same ladder (`ZOOM-006`). `S` is
 /// the space the zoom scales into the view: [`ambre_core::Doc`] for a grid or
 /// a page, [`ambre_core::Board`] for a board.

@@ -10,7 +10,7 @@ use leptos::prelude::*;
 
 /// The Prose content of the shared status bar slot: its label and the five
 /// figures the page view last published. The page zoom closes the band
-/// (`CHROME-147`).
+/// (`CHROME-206`).
 #[component]
 pub(crate) fn ProseFigures(
     figures: RwSignal<Option<StatusFigures>>,

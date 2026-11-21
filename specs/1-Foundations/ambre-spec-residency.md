@@ -62,6 +62,7 @@ prefix is `RESID`, and it belongs to this document alone.
 | `RESID-029` | `POST` | Given a delta whose number passes the next one a light subscription expects, the client MUST ask the relay once for the deltas after its cursor. | this spec section 3; `RESID-014`; `ambre-spec-sequencer.md` | `ambre_sync::light::tests::a_lost_broadcast_is_asked_for_and_counted_once` -- a skipped number asks once after the cursor, a later number and the same one again ask nothing, and the holes kept stay at their bound | none | verified |
 | `RESID-031` | `POST` | A delta that fills a hole of a light subscription MUST advance its counters once. | this spec section 3; `RESID-014`; `RESID-029` | `ambre_sync::light::tests::a_lost_broadcast_is_asked_for_and_counted_once` -- the replay counts each missing delta once and nothing else, and a hole split by a late delta counts each part once | none | verified |
 | `RESID-030` | `FRAME` | A light subscription watched from the head MUST NOT ask for the deltas before its first number. | this spec section 3; `RESID-022`; `RESID-029` | `ambre_sync::light::tests::a_document_watched_from_the_head_asks_for_nothing_before_its_first_delta` -- a first delta at 500 asks nothing and counts, and a later skipped number asks after it | none | verified |
+| `RESID-032` | `FAIL` | Given an update whose signer the walk of its log granted no writing role, a light subscription MUST count nothing of it; until that log walks, it MUST count a summary as activity alone. | this spec section 3; `RESID-014`; `SYNC-211` | `ambre_sync::light::tests::a_light_subscription_counts_the_summaries_of_writers_alone` -- an unwalked channel marks activity with no mention, a non-writer's summary counts nothing once the log walks, and a writer's summary counts its mention | none | verified |
 
 ### 1.5 Meet the browser quota
 
@@ -85,7 +86,7 @@ A row sealed under one session may meet another.
   store, and one light subscription. All three wait on a measure.
 * **Boundary.** the summary rides inside the ciphertext (`SYNC-113`), so the relay learns nothing
   of it. The local store stays on the device, owned by the launcher (`ambre-spec-launcher.md`).
-* **Verification.** 31 `verified`, by host tests on the Logic, Sync and ledger states. The browser
+* **Verification.** 32 `verified`, by host tests on the Logic, Sync and ledger states. The browser
   tier holds the quota refusal and the persistent storage request.
 
 ---
@@ -141,6 +142,11 @@ bound, so the seal checks it again and drops one past the bound.
 The Sync worker reads the summary with no Loro document and advances the counters (`RESID-014`).
 A member can lie in a summary. The lie costs one false badge, and the document corrects it on open
 (`RESID-011`).
+
+**A summary counts from a writer alone** (`RESID-032`, audit `P23`). A light subscription keeps
+the writers its last walk of the log granted. A viewer and the relay therefore inflate no mention
+and ring no call. A channel never opened walks the log of its `meta` first. Until that walk
+answers, a summary marks its document active and counts nothing else.
 
 **A lost delta.** The relay numbers the deltas of a document one by one, so a light subscription
 reads the number of each delta it receives. A number past the next one leaves a hole. The worker

@@ -295,6 +295,7 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
             toasts,
             palette_open: RwSignal::new(ambre_chrome::Openness::Closed),
             seal_open: RwSignal::new(ambre_chrome::Openness::Closed),
+            seal_refusal: RwSignal::new(None),
         };
         *commands_slot.borrow_mut() = Some(commands.clone());
 

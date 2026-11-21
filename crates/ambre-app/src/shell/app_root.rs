@@ -190,7 +190,7 @@ fn ShellHeader(
     }
 }
 
-/// The optional rows of the shell each application lays out (`CHROME-140`).
+/// The optional rows of the shell each application lays out (`CHROME-199`).
 /// The formula bar is Trame's alone. No application lays out the tab strip:
 /// Trame's sheet tabs sit in the status bar (`CHROME-162`). A Toile board docks
 /// its menus in the command bar. A Prose page formats from the bar over its
@@ -222,7 +222,7 @@ pub(crate) fn shell_rows(kind: DocType) -> ambre_chrome::ShellRows {
 }
 
 /// The way home and the name of the open document, at the start of the
-/// header (`CHROME-144`, `CHROME-145`). A plain click goes home in place. It
+/// header (`CHROME-203`, `CHROME-204`). A plain click goes home in place. It
 /// takes the navigation the launcher opens a document with, so the address bar
 /// and the frame loop follow. The router's own anchor handling moves its state and
 /// leaves the address unchanged, as no `Routes` completes the navigation. A
@@ -630,6 +630,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
     // `Copy`, so it is handed to each app-chrome component below.
     let palette_open = commands.palette_open;
     let seal_open = commands.seal_open;
+    let seal_refusal = commands.seal_refusal;
     let on_command = Callback::new({
         let commands = commands.clone();
         move |id: StaticKey<Commands>| commands.run(id)
@@ -808,7 +809,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     />
                 })}
             </ContextRegion>
-            // Each application lays out its own rows (`CHROME-140`). The formula
+            // Each application lays out its own rows (`CHROME-199`). The formula
             // bar is Trame's alone, and its sheet tabs sit in the status bar. A Prose page has no
             // command bar. Gated on the booted app kind, fixed per page load.
             <Toolbar slot>
@@ -822,7 +823,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     />
                 })}
                 // Toile docks its menus and its zoom in the command bar, under
-                // the header, so neither covers the header (`CHROME-141`).
+                // the header, so neither covers the header (`CHROME-200`).
                 {boot_is_toile.then(|| view! {
                     <toile_chrome::EditingSurfaces present=present_toile>
                         <toile_chrome::TopMenuBar on_command=on_command toggles=toile_toggles />
@@ -891,6 +892,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         <ambre_chrome::PassphraseDialog
             open=seal_open
             intent=ambre_chrome::PassphraseIntent::Seal
+            weakness=seal_refusal
             on_submit=Callback::new({
                 // The application wraps the passphrase in its sealed-save
                 // command, and nothing else holds it (`ARCH-004`).
@@ -1296,9 +1298,9 @@ mod tests {
         assert!(fed(DocType::Toile).len() > ambre_toile::ui::menu::COMMANDS.len());
     }
 
-    /// The header names the open document (`CHROME-144`), and its way home
-    /// moves the address bar home (`CHROME-145`) with no reload
-    /// (`CHROME-146`). A page with no document
+    /// The header names the open document (`CHROME-203`), and its way home
+    /// moves the address bar home (`CHROME-204`) with no reload
+    /// (`CHROME-205`). A page with no document
     /// shows the way home alone.
     #[wasm_bindgen_test]
     async fn the_header_links_home_and_names_the_open_document() {
@@ -1358,12 +1360,12 @@ mod tests {
         assert_eq!(path, "/", "the address bar goes home");
         assert!(
             home.is_connected(),
-            "the page did not reload (`CHROME-146`)"
+            "the page did not reload (`CHROME-205`)"
         );
         container.remove();
     }
 
-    /// Each application lays out its own rows (`CHROME-140`). The formula bar
+    /// Each application lays out its own rows (`CHROME-199`). The formula bar
     /// is Trame's alone. No application lays out the tab strip, since Trame's
     /// sheet tabs sit in the status bar (`CHROME-162`). A Prose page lays out
     /// no command bar.

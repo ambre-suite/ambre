@@ -119,9 +119,6 @@ pub struct Gate {
     bench: Option<names::Bench>,
     /// Whether each type named holds the document (`UI-THREAD-020`).
     documents: rustc_data_structures::fx::FxHashMap<DefId, bool>,
-    /// What each file holds of the chrome rules read per file
-    /// (`CHROME-015`, `ARCH-001`).
-    chrome: chrome::Files,
 }
 
 rustc_lint::impl_lint_pass!(Gate => [AMBRE_PRIMITIVE_GATE]);
@@ -145,7 +142,6 @@ impl Gate {
             setters: BTreeSet::new(),
             bench: bench.then(names::Bench::default),
             documents: Default::default(),
-            chrome: chrome::Files::new(),
         }
     }
 
@@ -424,7 +420,6 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
             };
             if let Some(reached) = resolved {
                 self.bound_check(cx.tcx, reached, segment.ident.span);
-                self.chrome_reach(cx.tcx, reached, segment.ident.span);
                 self.walk_reach(cx.tcx, reached, segment.ident.span);
                 self.reach_rules(cx, reached, path.span, None);
             }
@@ -466,7 +461,6 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
                 self.canvas_element(tcx, seg.ident.as_str(), args, expr.span);
                 if let Some(callee) = callee {
                     self.bound_check(tcx, callee, seg.ident.span);
-                    self.chrome_reach(tcx, callee, seg.ident.span);
                     self.walk_reach(tcx, callee, seg.ident.span);
                     self.reach_rules(cx, callee, seg.ident.span, args.first());
                     self.page_point(tcx, Some(callee), None, seg.ident.span);
@@ -564,7 +558,6 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
         self.bench_rates();
         self.page_points_post();
         self.scroll_setters_post(tcx);
-        self.chrome_post();
         self.logic_view_listed();
         for file in tcx.sess.source_map().files().iter() {
             if let rustc_span::FileName::Real(ref real) = file.name {

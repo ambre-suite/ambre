@@ -113,7 +113,7 @@ impl ProseState {
     /// Every pending suggestion, as the view lists it.
     #[must_use]
     pub fn suggestions(&self) -> Vec<crate::events::Suggestion> {
-        suggest::pending(&self.doc)
+        suggest::pending(&self.doc, &self.roots)
     }
 
     pub(super) fn suggestions_event(&self) -> ProseEvent {
@@ -285,11 +285,12 @@ impl ProseState {
         id: &Id<Suggestion>,
         verdict: Verdict,
     ) -> Result<Settled, doc::WriteError> {
-        let spans: Vec<_> = suggest::spans(&self.doc, &suggest::text_blocks(&self.doc))
-            .into_iter()
-            .filter(|(other, ..)| other == id)
-            .collect();
-        let entry = suggest::entry(&self.doc, id);
+        let spans: Vec<_> =
+            suggest::spans(&self.doc, &suggest::text_blocks(&self.doc, &self.roots))
+                .into_iter()
+                .filter(|(other, ..)| other == id)
+                .collect();
+        let entry = suggest::entry(&self.doc, &self.roots, id);
         if spans.is_empty() && entry.is_none() {
             return Ok(Settled::Gone);
         }
@@ -387,7 +388,7 @@ impl ProseState {
     /// at and never from where the run sits (`PROSE-FEAT-260`).
     fn treatment(&self, run: &suggest::Run, me: Option<Id<ambre_core::id::User>>) -> Treatment {
         let owned_by_me = |id: &Id<Suggestion>| {
-            suggest::entry(&self.doc, id)
+            suggest::entry(&self.doc, &self.roots, id)
                 .and_then(|entry| suggest::owner(&entry))
                 .is_some_and(|owner| Some(owner) == me)
         };
@@ -422,7 +423,7 @@ impl ProseState {
         let burst = self.burst?;
         let touches =
             burst.kind == kind && burst.block == *block && start <= burst.end && end >= burst.start;
-        (touches && suggest::entry(&self.doc, &burst.id).is_some()).then_some(burst.id)
+        (touches && suggest::entry(&self.doc, &self.roots, &burst.id).is_some()).then_some(burst.id)
     }
 
     fn extend_burst(
@@ -1072,7 +1073,10 @@ mod tests {
         state.handle_command(ProseCommand::Undo);
         assert_eq!(text(&state, ids[0]), "Hello");
         assert!(state.suggestions().is_empty());
-        assert!(crate::suggest::entry(&state.doc, &Id::<id::Suggestion>::mint()).is_none());
+        assert!(
+            crate::suggest::entry(&state.doc, &state.roots, &Id::<id::Suggestion>::mint())
+                .is_none()
+        );
         assert_eq!(doc::annots(&state.doc).len(), 0);
     }
 

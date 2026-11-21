@@ -1,7 +1,8 @@
 //! The relay, run as a deployment runs it: the `ambre-server` binary.
 //!
 //! The belt starts the binary on a free port in dev mode, so the page signs in
-//! with a name and no provider. The page reaches it through the belt's own
+//! with a name and no provider. A relay started with the variables of the
+//! belt's identity provider signs a page in through it (`crate::provider`). The page reaches it through the belt's own
 //! server, which forwards `/api` there, as Trunk's proxy does in development.
 //! The relay needs its three backing services (`just services-up`). It signs
 //! its object store requests with the keys of the local store, never with the
@@ -14,8 +15,23 @@ use std::time::{Duration, Instant};
 /// One running relay process, killed when the test ends.
 pub struct Relay {
     pub base: String,
+    /// Who answers the exchange of a provider return for a page of this relay.
+    pub exchange: Exchange,
     process: Child,
 }
+
+/// Who answers the exchange of a provider return.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Exchange {
+    /// The belt's server stands in for it: the relay holds no provider
+    /// (`crate::serve`).
+    StandIn,
+    /// The relay exchanges the code with the provider it was configured with.
+    Relay,
+}
+
+/// The variable whose value configures the provider of the relay.
+const PROVIDER_CLIENT: &str = "OIDC_GOOGLE_CLIENT_ID";
 
 /// The relay binary: `BELT_RELAY`, or the debug build of the workspace.
 fn binary() -> String {
@@ -82,6 +98,11 @@ impl Relay {
             .spawn()
             .expect("start the relay: run `cargo build -p ambre-server`, or set BELT_RELAY");
         let base = format!("http://127.0.0.1:{port}");
+        let exchange = if env.iter().any(|(name, _)| *name == PROVIDER_CLIENT) {
+            Exchange::Relay
+        } else {
+            Exchange::StandIn
+        };
         let http = reqwest::Client::builder()
             .no_proxy()
             .build()
@@ -103,7 +124,11 @@ impl Relay {
             );
             tokio::time::sleep(Duration::from_millis(250)).await;
         }
-        Self { base, process }
+        Self {
+            base,
+            exchange,
+            process,
+        }
     }
 }
 

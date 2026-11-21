@@ -13,16 +13,18 @@
 //! | the open-time create that sends a name | `CHROME-037` |
 //! | a content view that reads the window | `CHROME-034` |
 //! | a modal outside the shared dialog | `CHROME-011` |
-//! | a drag control in a file that names no `Debouncer` | `CHROME-015` |
-//! | a frame created in a file that never sandboxes one | `ARCH-001` |
+//! | a drag control whose own handler reaches no `Debouncer` | `CHROME-015` |
+//! | a frame that is not sandboxed itself | `ARCH-001` |
 //! | a media query read outside the density module, the motion query aside | `CHROME-056` |
 //! | a two-state attribute whose false state drops it | `CHROME-066` |
-//! | a menu in a file that names no key handler of the shared menu | `CHROME-026` |
+//! | a menu whose own handler reaches no key handler of the shared menu | `CHROME-026` |
+//!
+//! The three guards are read on the element they guard, never on its file
+//! (`Guards`). So a second control in a file never rides the guard of the
+//! first.
 //!
 //! The crypto crate a manifest declares (`CHROME-049`) is the judge's, read
 //! from `cargo metadata`.
-
-use std::collections::BTreeMap;
 
 use rustc_hir as hir;
 use rustc_hir::def::{DefKind, Res};
@@ -101,6 +103,17 @@ const MENU_KEYS: &[&str] = &["on_menu_keydown", "menu_key", "event_menu_key"];
 /// The type that coalesces a burst into one command (`CHROME-015`).
 const DEBOUNCER: &str = "Debouncer";
 
+/// The crate of the debouncer and of the key handlers of the shared menu.
+const CHROME_CRATE: &str = "ambre_chrome";
+
+/// The toolkit method whose arguments are the children of an element. A
+/// child is another element, so its handlers guard nothing of its parent.
+const CHILD: &str = "child";
+
+/// How many bindings the read of a guard follows, one through the other: a
+/// handler that calls a closure that a binding holds, for example.
+const FOLLOW: usize = 4;
+
 /// The fact of an open-time create that sends no name. The judge refuses a
 /// workspace that records none (`CHROME-037`).
 const LAZY_CREATE: &str = "lazy-create-unnamed";
@@ -159,21 +172,212 @@ pub(crate) const BOUNDS: &[Bound] = &[
     },
 ];
 
-/// What one file holds of the chrome rules that read a whole file.
+/// The guards read on one element (`CHROME-015`, `CHROME-026`,
+/// `ARCH-001`). The element is the chain of calls that builds it, and the
+/// binding it is made into when it has one. A guard counts as a call of that
+/// chain or on that binding. It also counts when an argument of such a call
+/// reaches it, through closures and bindings. A child of the element guards
+/// nothing of it.
 #[derive(Default)]
-pub struct File {
-    /// Each drag control, where it sits (`CHROME-015`).
-    drags: Vec<String>,
-    /// Whether the file names the debouncer (`CHROME-015`).
-    debounces: bool,
-    /// Each frame the file creates, where it sits (`ARCH-001`).
-    frames: Vec<String>,
-    /// Whether the file sandboxes a frame (`ARCH-001`).
-    sandboxes: bool,
-    /// Each menu the file renders, where it sits (`CHROME-026`).
-    menus: Vec<String>,
-    /// Whether the file names a key handler of the shared menu (`CHROME-026`).
+struct Guards {
+    /// Whether a handler of the element reaches the debouncer.
+    debounced: bool,
+    /// Whether a handler of the element reaches a key handler of the shared
+    /// menu.
     keyed: bool,
+    /// Whether a call of the element sets its sandbox.
+    sandboxed: bool,
+}
+
+/// Whether `r` is a key handler of the shared menu (`CHROME-026`).
+fn menu_key(r: &Reached) -> bool {
+    r.krate == CHROME_CRATE && matches!(r.kind, DefKind::Fn) && MENU_KEYS.contains(&r.name.as_str())
+}
+
+/// Whether `ty` is the debouncer, behind any reference (`CHROME-015`).
+fn debouncer(tcx: TyCtxt<'_>, ty: ty::Ty<'_>) -> bool {
+    matches!(ty.peel_refs().kind(), ty::Adt(adt, _)
+        if tcx.item_name(adt.did()).as_str() == DEBOUNCER
+            && tcx.crate_name(adt.did().krate).as_str() == CHROME_CRATE)
+}
+
+/// The expression a binding was made from: `let x = <init>;`.
+fn binding_init<'tcx>(tcx: TyCtxt<'tcx>, id: hir::HirId) -> Option<&'tcx hir::Expr<'tcx>> {
+    match tcx.parent_hir_node(id) {
+        hir::Node::LetStmt(local) => local.init,
+        _ => None,
+    }
+}
+
+/// The binding `expr` reads, when it is a bare path to one.
+fn local_of(expr: &hir::Expr<'_>) -> Option<hir::HirId> {
+    match expr.kind {
+        hir::ExprKind::Path(hir::QPath::Resolved(_, path)) => match path.res {
+            Res::Local(id) => Some(id),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// The binding of the `let` that `expr` is the value of, through the calls
+/// and the `?` that wrap it. A closure, a block or a statement ends the
+/// search.
+fn let_of(tcx: TyCtxt<'_>, expr: &hir::Expr<'_>) -> Option<hir::HirId> {
+    for (_, node) in tcx.hir_parent_iter(expr.hir_id) {
+        match node {
+            hir::Node::LetStmt(local) => {
+                return match local.pat.kind {
+                    hir::PatKind::Binding(_, id, _, None) => Some(id),
+                    _ => None,
+                };
+            }
+            hir::Node::Expr(e)
+                if !matches!(e.kind, hir::ExprKind::Closure(_) | hir::ExprKind::Block(..)) => {}
+            _ => return None,
+        }
+    }
+    None
+}
+
+/// What the arguments of an element reach: the debouncer and a key handler
+/// of the shared menu. The walk enters each closure, and each binding it
+/// reads, to the depth [`FOLLOW`].
+struct Seek<'a, 'tcx> {
+    cx: &'a LateContext<'tcx>,
+    depth: usize,
+    guards: Guards,
+}
+
+impl<'tcx> Visitor<'tcx> for Seek<'_, 'tcx> {
+    type NestedFilter = rustc_middle::hir::nested_filter::OnlyBodies;
+
+    fn maybe_tcx(&mut self) -> TyCtxt<'tcx> {
+        self.cx.tcx
+    }
+
+    fn visit_expr(&mut self, expr: &'tcx hir::Expr<'tcx>) {
+        let tcx = self.cx.tcx;
+        let typeck = tcx.typeck(expr.hir_id.owner.def_id);
+        if typeck.expr_ty_opt(expr).is_some_and(|t| debouncer(tcx, t)) {
+            self.guards.debounced = true;
+        }
+        if let hir::ExprKind::Path(ref qpath) = expr.kind {
+            match typeck.qpath_res(qpath, expr.hir_id) {
+                Res::Def(_, def) if menu_key(&reached(tcx, def)) => self.guards.keyed = true,
+                Res::Local(id) if self.depth < FOLLOW => {
+                    if let Some(init) = binding_init(tcx, id) {
+                        self.depth += 1;
+                        self.visit_expr(init);
+                        self.depth -= 1;
+                    }
+                }
+                _ => {}
+            }
+        }
+        intravisit::walk_expr(self, expr);
+    }
+}
+
+/// Each method call on the binding `id` in the body that holds `at`.
+fn calls_on<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    at: &hir::Expr<'_>,
+    id: hir::HirId,
+) -> Vec<&'tcx hir::Expr<'tcx>> {
+    struct On<'tcx> {
+        tcx: TyCtxt<'tcx>,
+        id: hir::HirId,
+        found: Vec<&'tcx hir::Expr<'tcx>>,
+    }
+    impl<'tcx> Visitor<'tcx> for On<'tcx> {
+        type NestedFilter = rustc_middle::hir::nested_filter::OnlyBodies;
+
+        fn maybe_tcx(&mut self) -> TyCtxt<'tcx> {
+            self.tcx
+        }
+
+        fn visit_expr(&mut self, expr: &'tcx hir::Expr<'tcx>) {
+            if let hir::ExprKind::MethodCall(_, receiver, _, _) = expr.kind
+                && local_of(receiver) == Some(self.id)
+            {
+                self.found.push(expr);
+            }
+            intravisit::walk_expr(self, expr);
+        }
+    }
+    let Some(body) = tcx.hir_maybe_body_owned_by(at.hir_id.owner.def_id) else {
+        return Vec::new();
+    };
+    let mut on = On {
+        tcx,
+        id,
+        found: Vec::new(),
+    };
+    on.visit_expr(body.value);
+    on.found
+}
+
+/// The guards of the element that the call `marked` builds or marks. When
+/// `marked` creates the element, the chain starts at it, and its receiver is
+/// the document, never the element. Otherwise the chain runs down to its
+/// root, and a root that is a binding is the element.
+fn guards<'tcx>(cx: &LateContext<'tcx>, marked: &'tcx hir::Expr<'tcx>, creates: bool) -> Guards {
+    let tcx = cx.tcx;
+    let mut top = marked;
+    while let hir::Node::Expr(parent) = tcx.parent_hir_node(top.hir_id)
+        && let hir::ExprKind::MethodCall(_, receiver, _, _) = parent.kind
+        && receiver.hir_id == top.hir_id
+    {
+        top = parent;
+    }
+    let mut chain = Vec::new();
+    let mut at = top;
+    while let hir::ExprKind::MethodCall(_, receiver, _, _) = at.kind
+        && !(creates && at.hir_id == marked.hir_id)
+    {
+        chain.push(at);
+        at = receiver;
+    }
+    let binding = local_of(at)
+        .filter(|_| !creates)
+        .or_else(|| let_of(tcx, top));
+    if let Some(id) = binding {
+        chain.extend(calls_on(tcx, top, id));
+    }
+    let mut seek = Seek {
+        cx,
+        depth: 0,
+        guards: Guards::default(),
+    };
+    for call in chain {
+        let hir::ExprKind::MethodCall(seg, _, args, _) = call.kind else {
+            continue;
+        };
+        let name = seg.ident.as_str();
+        if name == CHILD {
+            continue;
+        }
+        let first = held(cx, args).strings.into_iter().next();
+        if name == "sandbox"
+            || (["attr", "set_attribute"].contains(&name) && first.as_deref() == Some("sandbox"))
+        {
+            seek.guards.sandboxed = true;
+        }
+        for arg in args {
+            seek.visit_expr(arg);
+        }
+    }
+    seek.guards
+}
+
+/// Whether each `<iframe>` tag of the static subtree `html` carries a
+/// `sandbox` attribute of its own (`ARCH-001`).
+fn each_frame_sandboxed(html: &str) -> bool {
+    html.split("<iframe").skip(1).all(|rest| {
+        let tag = rest.split('>').next().unwrap_or_default();
+        tag.contains(" sandbox")
+    })
 }
 
 /// What the arguments of a call hold, at any depth, closures included. The
@@ -228,28 +432,6 @@ fn held<'a, 'tcx>(cx: &'a LateContext<'tcx>, args: &'tcx [hir::Expr<'tcx>]) -> H
 }
 
 impl Gate {
-    /// The file `span` sits in, from the workspace root.
-    fn chrome_file(&mut self, tcx: TyCtxt<'_>, span: Span) -> (String, String) {
-        let at = place::position(tcx, &self.unit, span);
-        (at.shown.clone(), at.at())
-    }
-
-    /// Notes a file that names the debouncer (`CHROME-015`).
-    pub fn chrome_reach(&mut self, tcx: TyCtxt<'_>, def: DefId, span: Span) {
-        if self.test {
-            return;
-        }
-        let r = reached(tcx, def);
-        let debouncer = r.named_by(|n| n == DEBOUNCER);
-        let keys = matches!(r.kind, DefKind::Fn) && MENU_KEYS.contains(&r.name.as_str());
-        if r.krate == "ambre_chrome" && (debouncer || keys) {
-            let (file, _) = self.chrome_file(tcx, span);
-            let entry = self.chrome.entry(file).or_default();
-            entry.debounces |= debouncer;
-            entry.keyed |= keys;
-        }
-    }
-
     /// The chrome rules of one expression. A call can build a drag control,
     /// a frame, a sandbox, a modal or a media query. A struct can be the body
     /// of the open-time create.
@@ -257,14 +439,14 @@ impl Gate {
         match expr.kind {
             hir::ExprKind::MethodCall(seg, _, args, _) => {
                 let callee = cx.typeck_results().type_dependent_def_id(expr.hir_id);
-                self.chrome_call(cx, callee, seg.ident.as_str(), args, seg.ident.span);
+                self.chrome_call(cx, expr, callee, seg.ident.as_str(), args, seg.ident.span);
             }
             hir::ExprKind::Call(func, args) => {
                 if let hir::ExprKind::Path(ref qpath) = func.kind
                     && let Res::Def(_, callee) = cx.typeck_results().qpath_res(qpath, func.hir_id)
                 {
                     let name = cx.tcx.item_name(callee).to_string();
-                    self.chrome_call(cx, Some(callee), &name, args, func.span);
+                    self.chrome_call(cx, expr, Some(callee), &name, args, func.span);
                 }
             }
             hir::ExprKind::Struct(_, fields, tail) => self.lazy_create(cx, expr, fields, tail),
@@ -272,11 +454,12 @@ impl Gate {
         }
     }
 
-    /// Notes or refuses one call by the name it resolves to and the literals
-    /// it takes.
+    /// Refuses one call by the name it resolves to, the literals it takes,
+    /// and the guards of the element it builds.
     fn chrome_call<'tcx>(
         &mut self,
         cx: &LateContext<'tcx>,
+        expr: &'tcx hir::Expr<'tcx>,
         callee: Option<DefId>,
         name: &str,
         args: &'tcx [hir::Expr<'tcx>],
@@ -331,13 +514,10 @@ impl Gate {
                     .get(1)
                     .is_some_and(|l| DRAG_TYPES.contains(&l.as_str())));
         let created = (name == "create_element").then_some(first).flatten();
-        let frame = created == Some("iframe")
-            || in_html("<iframe")
-            || (TOOLKIT.contains(&r.krate.as_str())
-                && matches!(r.kind, DefKind::Fn)
-                && name == "iframe");
-        let sandbox =
-            name == "sandbox" || (set_attribute && first == Some("sandbox")) || in_html(" sandbox");
+        let toolkit_frame = TOOLKIT.contains(&r.krate.as_str())
+            && matches!(r.kind, DefKind::Fn)
+            && name == "iframe";
+        let frame = created == Some("iframe") || in_html("<iframe") || toolkit_frame;
         let menu = in_html("role=\"menu\"")
             || (name == "role" && first == Some("menu"))
             || (set_attribute
@@ -365,22 +545,43 @@ impl Gate {
                 "a modal outside the shared dialog: `<dialog>`",
             );
         }
-        if !(drag || frame || sandbox || menu) {
+        if !(drag || frame || menu) {
             return;
         }
-        let (file, at) = self.chrome_file(tcx, span);
-        let entry = self.chrome.entry(file).or_default();
-        if drag {
-            entry.drags.push(at.clone());
+        // A static subtree carries no handler, so its own tags hold each
+        // guard it can: the sandbox of a frame alone.
+        let guarded = if inert.is_empty() {
+            guards(cx, expr, created.is_some() || toolkit_frame)
+        } else {
+            Guards {
+                sandboxed: each_frame_sandboxed(&inert),
+                ..Guards::default()
+            }
+        };
+        let at = place::position(tcx, &self.unit, span);
+        let file = at.shown.clone();
+        let at = at.at();
+        if drag && ui_thread(&file) && !guarded.debounced {
+            self.refuse(
+                "boundary",
+                format!("{at}: a drag control that is not debounced (CHROME-015)"),
+            );
         }
-        if frame {
-            entry.frames.push(at.clone());
+        if menu && ui_thread(&file) && !guarded.keyed {
+            self.refuse(
+                "boundary",
+                format!("{at}: a menu with no keyboard: no handler of its own reaches a key handler of the shared menu (CHROME-026)"),
+            );
         }
-        if sandbox {
-            entry.sandboxes = true;
-        }
-        if menu {
-            entry.menus.push(at);
+        if frame
+            && file.starts_with("crates/")
+            && !file.starts_with("crates/ambre-server/")
+            && !guarded.sandboxed
+        {
+            self.refuse(
+                "boundary",
+                format!("{at}: creates a frame and never sandboxes it (ARCH-001)"),
+            );
         }
     }
 
@@ -427,42 +628,6 @@ impl Gate {
             );
         }
     }
-
-    /// Refuses what a file holds without its guard (`CHROME-015`,
-    /// `CHROME-026`, `ARCH-001`). A drag control needs the debouncer, a menu
-    /// a key handler, and a frame a sandbox.
-    pub fn chrome_post(&mut self) {
-        let files = std::mem::take(&mut self.chrome);
-        for (file, held) in files {
-            if ui_thread(&file) && !held.debounces {
-                for at in held.drags {
-                    self.refuse(
-                        "boundary",
-                        format!("{at}: a drag control that is not debounced (CHROME-015)"),
-                    );
-                }
-            }
-            if ui_thread(&file) && !held.keyed {
-                for at in held.menus {
-                    self.refuse(
-                        "boundary",
-                        format!("{at}: a menu with no keyboard: it names no key handler of the shared menu (CHROME-026)"),
-                    );
-                }
-            }
-            if file.starts_with("crates/")
-                && !file.starts_with("crates/ambre-server/")
-                && !held.sandboxes
-            {
-                for at in held.frames {
-                    self.refuse(
-                        "boundary",
-                        format!("{at}: creates a frame and never sandboxes it (ARCH-001)"),
-                    );
-                }
-            }
-        }
-    }
 }
 
 /// Whether `expr` is the `None` of `Option`.
@@ -478,6 +643,3 @@ fn none(cx: &LateContext<'_>, expr: &hir::Expr<'_>) -> bool {
         _ => false,
     }
 }
-
-/// The files of a unit, as the chrome rules read them.
-pub type Files = BTreeMap<String, File>;

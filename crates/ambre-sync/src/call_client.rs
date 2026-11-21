@@ -205,7 +205,7 @@ impl CallClient {
                 }
                 steps
             }
-            CallServerMsg::Joined(seated) => self.meet(&seated, log, Arrival::New),
+            CallServerMsg::Joined(seated) => self.meet(&seated, log, Arrival::New, now),
             CallServerMsg::Left(sender) => self.part(sender, now),
             CallServerMsg::Wrap { from, to, wrap } => {
                 let mut steps = Steps::default();
@@ -218,8 +218,8 @@ impl CallClient {
                 let Ok(wrapped) = WrappedSenderKey::from_bytes(&wrap) else {
                     return steps;
                 };
-                match keys.receive(from, &wrapped) {
-                    Ok(handoff) => steps.handoffs.push(handoff),
+                match keys.receive(from, &wrapped, now) {
+                    Ok(handoffs) => steps.handoffs.extend(handoffs),
                     // The join of `from` comes on the same topic before its wraps. A relay
                     // of several processes may still reorder them, so the wrap waits.
                     Err(Refusal::UnknownSender)
@@ -260,7 +260,7 @@ impl CallClient {
             sender,
             at: Instant::<Authored>::after_epoch(now.since_epoch()),
         };
-        let Ok((keys, handoff)) = CallKeys::start(identity, joining) else {
+        let Ok((keys, handoff)) = CallKeys::start(identity, joining, log) else {
             self.phase = Phase::Ended;
             return Steps::ended(CallEnd::Exhausted);
         };
@@ -282,7 +282,7 @@ impl CallClient {
             steps.started = Some(self.target);
         }
         for seated in &roster {
-            let more = self.meet(seated, log, Arrival::Present);
+            let more = self.meet(seated, log, Arrival::Present, now);
             steps.relay.extend(more.relay);
             steps.handoffs.extend(more.handoffs);
             steps.page.extend(more.page);
@@ -292,7 +292,13 @@ impl CallClient {
     }
 
     /// Admits the session that announced `seated`, and wraps the keys of this session to it.
-    fn meet(&mut self, seated: &Seated, log: &Log, arrival: Arrival) -> Steps {
+    fn meet(
+        &mut self,
+        seated: &Seated,
+        log: &Log,
+        arrival: Arrival,
+        now: Instant<UnixMs>,
+    ) -> Steps {
         let mut steps = Steps::default();
         let Phase::Seated { keys, held } = &mut self.phase else {
             return steps;
@@ -330,7 +336,8 @@ impl CallClient {
         steps.handoffs.extend(
             theirs
                 .iter()
-                .filter_map(|(from, wrapped)| keys.receive(*from, wrapped).ok()),
+                .filter_map(|(from, wrapped)| keys.receive(*from, wrapped, now).ok())
+                .flatten(),
         );
         steps
     }

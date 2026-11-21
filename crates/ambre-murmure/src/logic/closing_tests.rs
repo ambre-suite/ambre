@@ -205,6 +205,7 @@ fn a_successor_that_fails_to_open_is_fetched_again() {
     assert_eq!(bob.successor_to_retry(at(7_000)), Some(successor));
 
     let signer = Signer {
+        nonce: crate::logic::delta::TEST_NONCE,
         peer: alice.peer(successor.document_id()).expect("a session"),
         user: Some(author),
     };
@@ -386,6 +387,7 @@ fn a_remote_close_is_followed_once_its_successor_arrives() {
     );
 
     let signer = Signer {
+        nonce: crate::logic::delta::TEST_NONCE,
         peer: alice.peer(successor.document_id()).expect("a session"),
         user: Some(author),
     };
@@ -426,6 +428,7 @@ fn a_close_finalized_in_the_same_batch_still_opens_its_successor() {
     assert_eq!(bob.settle_final(), None, "the old segment is still active");
     assert_eq!(bob.successor_to_open(), Some(successor));
     let signer = Signer {
+        nonce: crate::logic::delta::TEST_NONCE,
         peer: alice.peer(successor.document_id()).expect("a session"),
         user: Some(author),
     };
@@ -534,6 +537,7 @@ fn move_refused_message(reversed: bool) {
         .expect("react")
         .expect("a reaction");
     let signer = Signer {
+        nonce: crate::logic::delta::TEST_NONCE,
         peer: alice.peer(successor.document_id()).expect("a session"),
         user: Some(alice_user),
     };
@@ -583,6 +587,7 @@ fn move_refused_message(reversed: bool) {
     );
 
     let signer = Signer {
+        nonce: crate::logic::delta::TEST_NONCE,
         peer,
         user: Some(bob_user),
     };
@@ -675,6 +680,7 @@ fn an_identity_issued_before_the_successor_arrives_is_adopted_on_admission() {
     );
     assert!(!bob.identified(successor.document_id()), "not held yet");
     let signer = Signer {
+        nonce: crate::logic::delta::TEST_NONCE,
         peer: alice.peer(successor.document_id()).expect("a session"),
         user: Some(author),
     };

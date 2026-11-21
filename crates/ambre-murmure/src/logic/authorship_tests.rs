@@ -37,7 +37,7 @@ fn draft(text: &str) -> MessageDraft {
 fn entry(user: Id<User>) -> Payload<PeerEntryBytes> {
     Payload::<PeerEntryBytes>::from(&PeerEntry {
         user,
-        nonce: FixedBytes::from_array([7; 16]),
+        nonce: crate::logic::delta::TEST_NONCE,
         signature: FixedBytes::from_array([9; 64]),
     })
 }
@@ -74,6 +74,7 @@ impl Member {
     /// Who signs what this member writes in the active segment.
     fn signer(&self) -> Signer {
         Signer {
+            nonce: crate::logic::delta::TEST_NONCE,
             peer: self.state.peer(self.segment()).expect("a session"),
             user: Some(self.user),
         }
@@ -102,14 +103,23 @@ impl Member {
         message
     }
 
-    /// Every document of the channel, as it reads now.
-    fn everything(&self) -> Vec<LoroValue> {
+    /// Every document of the channel, as it reads now: its operations and its
+    /// value. A root a read attached holds no operation, so no update carries
+    /// it, and it stays out of the value.
+    fn everything(&self) -> Vec<(loro::VersionVector, LoroValue)> {
         self.state
             .document_ids()
             .into_iter()
-            .filter_map(|id| self.state.doc(id).map(LoroDoc::get_deep_value))
+            .filter_map(|id| self.state.doc(id).map(written))
             .collect()
     }
+}
+
+/// What `doc` holds that an update would carry: its operations, and its value
+/// without the empty roots a read attaches with no operation.
+fn written(doc: &LoroDoc) -> (loro::VersionVector, LoroValue) {
+    doc.set_hide_empty_root_containers(true);
+    (doc.oplog_vv(), doc.get_deep_value())
 }
 
 /// A channel just created by a member of its own.
@@ -637,6 +647,7 @@ fn a_meta_delta_under_another_peer_is_refused() {
         .expect("name");
     let meta = named.meta.document_id();
     let by = Signer {
+        nonce: crate::logic::delta::TEST_NONCE,
         peer: alice.state.peer(meta).expect("a session"),
         user: Some(alice.user),
     };
@@ -655,6 +666,90 @@ fn a_meta_delta_under_another_peer_is_refused() {
     bob.state
         .apply_signed(meta, Seq::<Relay>::new(2), &named.delta, by)
         .expect("accepted");
+    assert_eq!(
+        bob.state.name().as_ref().map(ambre_core::Validated::as_str),
+        Some("us")
+    );
+}
+
+// --- AUTHOR-033 ---
+
+/// The nonce of another session, which a second preimage of a member's PeerID
+/// would carry.
+const OTHER_NONCE: ambre_core::FixedBytes<ambre_core::SessionNonce> =
+    ambre_core::FixedBytes::from_array([8; 16]);
+
+/// A segment delta under Alice's PeerID carries another nonce than her entry
+/// registered. It is refused whole, and the document stays as it was. Her own
+/// session's next delta lands.
+#[test]
+fn a_segment_delta_under_a_peer_id_another_session_registered_is_refused() {
+    let mut alice = founder(ChannelType::Public);
+    let mut bob = join(&alice);
+    let segment = bob.segment();
+    let first = alice
+        .state
+        .send(&draft("first"), alice.user, NOW)
+        .expect("send");
+    bob.state
+        .apply_signed(segment, Seq::<Relay>::new(1), &first.delta, alice.signer())
+        .expect("her session registers her PeerID");
+    let second = alice
+        .state
+        .send(&draft("second"), alice.user, NOW)
+        .expect("send");
+    let claimed = Signer {
+        nonce: OTHER_NONCE,
+        ..alice.signer()
+    };
+    let was = bob.everything();
+    assert_eq!(
+        refusal(
+            bob.state
+                .apply_signed(segment, Seq::<Relay>::new(2), &second.delta, claimed)
+        ),
+        Some(Refusal::PeerClaimed)
+    );
+    assert_eq!(bob.everything(), was);
+    bob.state
+        .apply_signed(segment, Seq::<Relay>::new(3), &second.delta, alice.signer())
+        .expect("her own session writes on");
+}
+
+/// A `meta` delta under Alice's PeerID, signed for another session, is
+/// refused, and the name stays the one her session wrote.
+#[test]
+fn a_meta_delta_under_a_peer_id_another_session_registered_is_refused() {
+    let mut alice = founder(ChannelType::Direct);
+    let mut bob = join(&alice);
+    let named = alice
+        .state
+        .name_direct(Some(&crate::logic::fit_name("us")))
+        .expect("name");
+    let meta = named.meta.document_id();
+    let by = Signer {
+        nonce: crate::logic::delta::TEST_NONCE,
+        peer: alice.state.peer(meta).expect("a session"),
+        user: Some(alice.user),
+    };
+    bob.state
+        .apply_signed(meta, Seq::<Relay>::new(1), &named.delta, by)
+        .expect("accepted");
+    let renamed = alice
+        .state
+        .name_direct(Some(&crate::logic::fit_name("them")))
+        .expect("name");
+    let claimed = Signer {
+        nonce: OTHER_NONCE,
+        ..by
+    };
+    assert_eq!(
+        refusal(
+            bob.state
+                .apply_signed(meta, Seq::<Relay>::new(2), &renamed.delta, claimed)
+        ),
+        Some(Refusal::PeerClaimed)
+    );
     assert_eq!(
         bob.state.name().as_ref().map(ambre_core::Validated::as_str),
         Some("us")
@@ -922,7 +1017,7 @@ fn a_delta_loro_refuses_is_left_out_of_an_opening_document() {
     let doc = LoroDoc::new();
     doc.import(&bob.doc().export(ExportMode::Snapshot).expect("export"))
         .expect("import");
-    let was = doc.get_deep_value();
+    let was = written(&doc);
     crate::logic::delta::import_arrivals(
         &doc,
         vec![crate::logic::delta::Arrival::Signed {
@@ -933,5 +1028,5 @@ fn a_delta_loro_refuses_is_left_out_of_an_opening_document() {
         crate::logic::delta::Rules::Segment,
     )
     .expect("the document opens");
-    assert_eq!(doc.get_deep_value(), was);
+    assert_eq!(written(&doc), was);
 }

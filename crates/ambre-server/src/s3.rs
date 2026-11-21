@@ -287,10 +287,11 @@ impl PublicEndpoint {
             None => format!("{prefix}{path}"),
         };
         let path_and_query = PathAndQuery::try_from(joined)
-            .map_err(|e| AppError::S3(format!("public link path: {e}")))?;
+            .map_err(|e| AppError::S3(crate::error::FaultText::of("public link path", e)))?;
         let mut parts = self.base.clone().into_parts();
         parts.path_and_query = Some(path_and_query);
-        Uri::from_parts(parts).map_err(|e| AppError::S3(format!("public link: {e}")))
+        Uri::from_parts(parts)
+            .map_err(|e| AppError::S3(crate::error::FaultText::of("public link", e)))
     }
 }
 
@@ -306,7 +307,7 @@ fn published_link(
     let signed = request
         .uri()
         .parse::<Uri>()
-        .map_err(|e| AppError::S3(format!("presigned link: {e}")))?;
+        .map_err(|e| AppError::S3(crate::error::FaultText::of("presigned link", e)))?;
     Ok(ambre_core::Credential::new(
         public.rebase(&signed)?.to_string(),
     ))
@@ -322,7 +323,7 @@ fn presign_lifetime(ttl: TimeSpan<Sec>) -> Duration {
 }
 
 /// Generates a presigned S3 PUT URL valid for `ttl`, bound to exactly
-/// `content_length` bytes.
+/// `content_length` bytes. A `checksum` binds it to one body too.
 ///
 /// The client uploads the encrypted blob directly to S3; the server never sees
 /// the plaintext body. Setting `content_length` puts `Content-Length` into the
@@ -330,25 +331,35 @@ fn presign_lifetime(ttl: TimeSpan<Sec>) -> Duration {
 /// from the size the caller declared (and the caller validated against its cap).
 /// This stops a member from writing an arbitrarily large object to the bucket
 /// through an otherwise key-only presigned URL.
+///
+/// The checksum goes into the signed headers as `x-amz-checksum-sha256`. A
+/// store that verifies it refuses any other body through the link. That
+/// holds for a second put of the link holder too (audit `P40`, `SRV-313`).
+/// Garage 2.3 verifies it.
 pub async fn generate_presigned_upload_url(
     s3: &S3Client,
     bucket: &StoreText<BucketName>,
     key: &ambre_core::ObjectKey,
     ttl: TimeSpan<Sec>,
     content_length: ambre_core::Count<ambre_core::Octets>,
+    checksum: Option<&ambre_core::FixedBytes<ambre_core::ObjectChecksum>>,
     public: Option<&PublicEndpoint>,
 ) -> Result<ambre_core::Credential<ambre_core::PresignedUrl>, AppError> {
+    use base64::Engine as _;
     let config = PresigningConfig::expires_in(presign_lifetime(ttl))
-        .map_err(|e| AppError::S3(format!("presigning config: {e}")))?;
+        .map_err(|e| AppError::S3(crate::error::FaultText::of("presigning config", e)))?;
 
     let request = s3
         .put_object()
         .bucket(bucket.as_str())
         .key(key.as_str())
         .content_length(i64::try_from(content_length.get()).unwrap_or(i64::MAX))
+        .set_checksum_sha256(
+            checksum.map(|c| base64::engine::general_purpose::STANDARD.encode(c.as_array())),
+        )
         .presigned(config)
         .await
-        .map_err(|e| AppError::S3(format!("presigned upload URL: {e}")))?;
+        .map_err(|e| AppError::S3(crate::error::FaultText::of("presigned upload URL", e)))?;
     published_link(&request, public)
 }
 
@@ -362,7 +373,7 @@ pub async fn generate_presigned_download_url(
     public: Option<&PublicEndpoint>,
 ) -> Result<ambre_core::Credential<ambre_core::PresignedUrl>, AppError> {
     let config = PresigningConfig::expires_in(presign_lifetime(ttl))
-        .map_err(|e| AppError::S3(format!("presigning config: {e}")))?;
+        .map_err(|e| AppError::S3(crate::error::FaultText::of("presigning config", e)))?;
 
     let request = s3
         .get_object()
@@ -370,7 +381,7 @@ pub async fn generate_presigned_download_url(
         .key(key.as_str())
         .presigned(config)
         .await
-        .map_err(|e| AppError::S3(format!("presigned download URL: {e}")))?;
+        .map_err(|e| AppError::S3(crate::error::FaultText::of("presigned download URL", e)))?;
     published_link(&request, public)
 }
 
@@ -402,34 +413,39 @@ pub async fn delete_prefix(
             .set_continuation_token(token.take())
             .send()
             .await
-            .map_err(|e| AppError::S3(format!("list a document prefix: {e}")))?;
+            .map_err(|e| AppError::S3(crate::error::FaultText::of("list a document prefix", e)))?;
         let objects = page
             .contents()
             .iter()
             .filter_map(|o| o.key())
             .map(|key| ObjectIdentifier::builder().key(key).build())
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| AppError::S3(format!("object identifier: {e}")))?;
+            .map_err(|e| AppError::S3(crate::error::FaultText::of("object identifier", e)))?;
         if !objects.is_empty() {
             let count = objects.len();
             let delete = Delete::builder()
                 .set_objects(Some(objects))
                 .quiet(true)
                 .build()
-                .map_err(|e| AppError::S3(format!("delete request: {e}")))?;
+                .map_err(|e| AppError::S3(crate::error::FaultText::of("delete request", e)))?;
             let out = s3
                 .delete_objects()
                 .bucket(bucket.as_str())
                 .delete(delete)
                 .send()
                 .await
-                .map_err(|e| AppError::S3(format!("delete under a document prefix: {e}")))?;
+                .map_err(|e| {
+                    AppError::S3(crate::error::FaultText::of(
+                        "delete under a document prefix",
+                        e,
+                    ))
+                })?;
             if let Some(failed) = out.errors().first() {
                 // The key names the document: the error is logged, so it
                 // carries the store's refusal alone (`ZK-030`, `SRV-298`).
-                return Err(AppError::S3(format!(
-                    "delete under a document prefix: {}",
-                    failed.message().unwrap_or("refused")
+                return Err(AppError::S3(crate::error::FaultText::of(
+                    "delete under a document prefix",
+                    failed.message().unwrap_or("refused"),
                 )));
             }
             // A sum of object counts across the pages of one prefix. No bucket
@@ -464,7 +480,7 @@ pub async fn holds_object(
         // `as_service_error` and never `into_service_error`, which panics on a
         // dispatch failure, as in `fetch_object`.
         Err(e) if e.as_service_error().is_some_and(|se| se.is_not_found()) => Ok(false),
-        Err(e) => Err(AppError::S3(format!("head object: {e}"))),
+        Err(e) => Err(AppError::S3(crate::error::FaultText::of("head object", e))),
     }
 }
 
@@ -488,7 +504,7 @@ pub async fn fetch_object(
         Ok(out) => StoredPayload::read_body(out.body)
             .await
             .map(Some)
-            .map_err(|e| AppError::S3(format!("read object body: {e}"))),
+            .map_err(|e| AppError::S3(crate::error::FaultText::of("read object body", e))),
         Err(e) => {
             // A missing key is an expected miss (not-yet-flushed), not an error.
             // Use `as_service_error` (non-consuming, returns Option) rather than
@@ -500,7 +516,7 @@ pub async fn fetch_object(
             {
                 Ok(None)
             } else {
-                Err(AppError::S3(format!("get object: {e}")))
+                Err(AppError::S3(crate::error::FaultText::of("get object", e)))
             }
         }
     }
@@ -1143,6 +1159,7 @@ mod tests {
             TimeSpan::<Sec>::new(900),
             ambre_core::Count::<ambre_core::Octets>::new(4096),
             None,
+            None,
         )
         .await
         .expect("presign")
@@ -1162,6 +1179,36 @@ mod tests {
         );
     }
 
+    /// `SRV-313`, audit `P40`: an upload link that names a checksum signs it
+    /// as `x-amz-checksum-sha256`, and a link with none signs no checksum.
+    #[tokio::test]
+    async fn an_upload_link_signs_the_checksum_of_its_bytes() {
+        let s3 = test_s3_client();
+        let checksum = ambre_core::FixedBytes::<ambre_core::ObjectChecksum>::from_array([7; 32]);
+        for (named, signed) in [(Some(&checksum), true), (None, false)] {
+            let url = generate_presigned_upload_url(
+                &s3,
+                &StoreText::<BucketName>::new("bucket".to_owned()),
+                &ambre_core::ObjectKey::from("dev/documents/x/snapshots/y"),
+                TimeSpan::<Sec>::new(900),
+                ambre_core::Count::<ambre_core::Octets>::new(16),
+                named,
+                None,
+            )
+            .await
+            .expect("presign")
+            .secret()
+            .expose()
+            .to_owned();
+            let headers = url
+                .to_lowercase()
+                .split(['?', '&'])
+                .find_map(|kv| kv.strip_prefix("x-amz-signedheaders=").map(str::to_owned))
+                .expect("signed headers present");
+            assert_eq!(headers.contains("x-amz-checksum-sha256"), signed, "{url}");
+        }
+    }
+
     /// `ZK-014`, `SRV-052`: a configured lifetime above 15 minutes is signed
     /// as 15 minutes, on both the upload and the download URL.
     #[tokio::test]
@@ -1174,6 +1221,7 @@ mod tests {
             &ambre_core::ObjectKey::from("k"),
             TimeSpan::<Sec>::new(day),
             ambre_core::Count::<ambre_core::Octets>::new(1),
+            None,
             None,
         )
         .await
@@ -1245,6 +1293,7 @@ mod tests {
             TimeSpan::<Sec>::new(900),
             ambre_core::Count::<ambre_core::Octets>::new(16),
             None,
+            None,
         )
         .await
         .expect("presign")
@@ -1284,7 +1333,7 @@ mod tests {
         let base = public("https://localhost:8443/s3");
         let size = ambre_core::Count::<ambre_core::Octets>::new(1);
         for endpoint in [Some(&base), None] {
-            let up = generate_presigned_upload_url(&s3, &bucket, &key, ttl, size, endpoint)
+            let up = generate_presigned_upload_url(&s3, &bucket, &key, ttl, size, None, endpoint)
                 .await
                 .expect("presign")
                 .secret()

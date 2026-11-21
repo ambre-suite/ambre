@@ -71,7 +71,7 @@ impl ProseState {
             return Vec::new();
         }
         vec![ProseEvent::LinksUpdated {
-            links: crate::link::links(&self.doc),
+            links: crate::link::links(&self.doc, &self.roots),
         }]
     }
 
@@ -139,7 +139,7 @@ impl ProseState {
             heading_level: doc::heading_level_of(&tree, &tree_id(*id))
                 .map(doc::StoredLevel::clamped),
         };
-        let defaults = doc::read_defaults(&self.doc);
+        let defaults = doc::read_defaults(&self.doc, &self.roots);
         let Some(LoroValue::List(runs)) = self.marks_of(id) else {
             return Vec::new();
         };

@@ -415,17 +415,23 @@ impl From<&ambre_core::Credential<ambre_core::PresignedUrl>> for Target {
     }
 }
 
+/// A target shows its address without its query. A relay query carries what a
+/// user typed, a searched address among it, and a log line keeps none of it
+/// (`SYNC-292`). An object link's query is its credential.
 impl std::fmt::Display for Target {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Relay(url) => url.fmt(f),
+            Self::Relay(url) => {
+                let text = url.as_str();
+                f.write_str(text.split_once('?').map_or(text, |(path, _)| path))
+            }
             Self::Object(link) => f.write_str(link.object_address()),
         }
     }
 }
 
-/// A [`Target`] as a log and an error show it: a relay route whole, an
-/// object link without its query. It holds no credential, so an error that
+/// A [`Target`] as a log and an error show it: a relay route or an object
+/// link, each without its query. It holds no credential, so an error that
 /// keeps it compares and clones freely.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ShownTarget(String);
@@ -448,11 +454,32 @@ pub(crate) struct AuthContext {
     /// the next renewal ahead of the expiry. `None` for a context whose
     /// store is not the worker's yet.
     pub renewed: Option<ambre_bus::conduit::UnboundedSender<crate::SyncEvent>>,
+    /// The record the device keeps of this session, which every tab of the
+    /// origin shares. `None` for a session the device does not keep. A
+    /// renewal of a kept session runs under the lock of that record and
+    /// sends the refresh token it holds (`SRV-330`).
+    pub kept: Option<crate::kept::KeptLink>,
 }
 
 #[derive(Serialize)]
 struct RefreshRequest {
     refresh_token: Credential<RefreshToken>,
+}
+
+/// Renews `refresh_token` into a pair, through `transport` to the relay at
+/// `api`. The relay honours the token once (`SRV-009`), so the caller orders
+/// the renewals of one token. A session orders them through its gate, and
+/// the tabs through the lock of the kept record (`SRV-330`).
+pub(crate) async fn redeem_via(
+    transport: &impl Transport,
+    api: &Url<ApiRoot>,
+    refresh_token: &Credential<RefreshToken>,
+) -> Result<TokenPair, HttpError> {
+    let url = api.route("/auth/refresh");
+    let body = RefreshRequest {
+        refresh_token: refresh_token.clone(),
+    };
+    post_json_via::<_, TokenPair>(transport, &url, &body).await
 }
 
 impl AuthContext {
@@ -510,7 +537,7 @@ impl AuthContext {
     /// renewal of one pair would be refused and fail its caller. An answer
     /// that lands after a sign-out is dropped, so the sign-out leaves no
     /// token (`SYNC-100`).
-    async fn renew_via(
+    pub(crate) async fn renew_via(
         &self,
         transport: &impl Transport,
         stale: &Credential<AccessToken>,
@@ -519,11 +546,11 @@ impl AuthContext {
         if !self.holds(stale) {
             return Ok(());
         }
-        let url = self.api_root().route("/auth/refresh");
-        let body = RefreshRequest {
-            refresh_token: self.refresh_token()?,
+        let held = self.refresh_token()?;
+        let next = match &self.kept {
+            Some(link) => link.rotate_via(transport, &self.api_root(), held).await?,
+            None => redeem_via(transport, &self.api_root(), &held).await?,
         };
-        let next = post_json_via::<_, TokenPair>(transport, &url, &body).await?;
         if !self.holds(stale) {
             return Ok(());
         }
@@ -532,6 +559,14 @@ impl AuthContext {
             let _ = renewed.send(crate::SyncEvent::TokensRenewed);
         }
         Ok(())
+    }
+
+    /// Renews the pair the store holds now, through `transport`. A key store
+    /// that finds the keys stored already renews its keyless pair, and the
+    /// relay mints the next one under the registered key (`SRV-320`).
+    pub(crate) async fn renew_held_via(&self, transport: &impl Transport) -> Result<(), HttpError> {
+        let stale = self.access_token()?;
+        self.renew_via(transport, &stale).await
     }
 
     /// Revokes the session's refresh token at the relay over the browser's
@@ -648,6 +683,9 @@ pub(crate) struct Outgoing {
     pub bearer: Option<Credential<AccessToken>>,
     /// The content type and the bytes of the body, if any.
     pub body: Option<(ContentType, Payload<HttpBody>)>,
+    /// The SHA-256 digest of the body that an upload link signs. The
+    /// transport sends it as `x-amz-checksum-sha256` (`SRV-313`).
+    pub checksum: Option<ambre_core::FixedBytes<ambre_core::ObjectChecksum>>,
     /// How long the transport waits before it aborts the request.
     pub timeout: TimeSpan<Ms>,
     /// The most bytes the answer's body may hold. The transport stops
@@ -664,6 +702,7 @@ impl Outgoing {
             url,
             bearer: None,
             body: None,
+            checksum: None,
             timeout: REQUEST_TIMEOUT,
             ceiling: ANSWER_CEILING,
         }
@@ -828,6 +867,38 @@ async fn read_metered(
     }
 }
 
+/// Reads the body of an answer under `ceiling`. A length `stated` past the
+/// ceiling is refused before any byte is read (`SYNC-277`). The bytes are
+/// then counted as they arrive, since a length header can lie or be absent
+/// (`SYNC-278`).
+async fn read_body(
+    stated: Option<ambre_core::Count<ambre_core::Octets>>,
+    stream: Option<web_sys::ReadableStream>,
+    ceiling: ambre_core::Count<ambre_core::Octets>,
+) -> Result<Vec<u8>, TransportError> {
+    if let Some(stated) = stated {
+        BodyMeter::new(ceiling).take(stated)?;
+    }
+    match stream {
+        Some(stream) => read_metered(stream, BodyMeter::new(ceiling)).await,
+        None => Ok(Vec::new()),
+    }
+}
+
+/// The count of bytes [`read_body`] keeps of `stream`, or `None` when it stops
+/// the read past `ceiling`. The wasm-tier test of `SYNC-278` reads it: the
+/// metered read runs only on a browser stream.
+#[cfg(target_arch = "wasm32")]
+#[doc(hidden)]
+pub async fn metered_body_len(
+    stated: Option<ambre_core::Count<ambre_core::Octets>>,
+    stream: web_sys::ReadableStream,
+    ceiling: ambre_core::Count<ambre_core::Octets>,
+) -> Option<ambre_core::Count<ambre_core::Octets>> {
+    let body = read_body(stated, Some(stream), ceiling).await.ok()?;
+    Some(ambre_core::Count::new(u64::try_from(body.len()).ok()?))
+}
+
 impl Method {
     /// The same method, as gloo-net names it.
     fn gloo(self) -> gloo_net::http::Method {
@@ -858,6 +929,13 @@ impl Transport for Fetch {
             // The value is wiped once the request holds its copy.
             builder = token.present_bearer(|value| builder.header("Authorization", value));
         }
+        if let Some(checksum) = &request.checksum {
+            // The link signs this header, so the store checks the body
+            // against it and refuses any other (`SRV-313`).
+            use base64::Engine as _;
+            let value = base64::engine::general_purpose::STANDARD.encode(checksum.as_array());
+            builder = builder.header("x-amz-checksum-sha256", &value);
+        }
         let sent = match &request.body {
             Some((content_type, bytes)) => {
                 let content_type = match content_type {
@@ -874,21 +952,12 @@ impl Transport for Fetch {
             None => builder.send().await,
         };
         let resp = sent.map_err(|e| TransportError::Fetch(e.to_string()))?;
-        let mut meter = BodyMeter::new(request.ceiling);
-        // A length the answer states past the ceiling is refused before any
-        // byte is read (`SYNC-277`).
-        if let Some(stated) = resp
+        let stated = resp
             .headers()
             .get("content-length")
             .and_then(|text| text.trim().parse::<u64>().ok())
-        {
-            meter.take(ambre_core::Count::new(stated))?;
-            meter = BodyMeter::new(request.ceiling);
-        }
-        let body = match resp.body() {
-            Some(stream) => read_metered(stream, meter).await?,
-            None => Vec::new(),
-        };
+            .map(ambre_core::Count::new);
+        let body = read_body(stated, resp.body(), request.ceiling).await?;
         Ok(Incoming {
             status: HttpStatus::new(resp.status()),
             body: Payload::<HttpBody>::new(body),
@@ -1240,6 +1309,24 @@ pub(crate) async fn get_json_auth_via<T: serde::de::DeserializeOwned>(
     read_json(&request, &resp)
 }
 
+/// A GET of JSON under the access token `access` alone, with no renewal on a
+/// refusal. The caller minted the pair a moment before, and orders its own
+/// retries (`SRV-329`).
+#[cfg_attr(
+    all(not(target_arch = "wasm32"), not(test)),
+    expect(dead_code, reason = "only the worker resumes a kept session")
+)]
+pub(crate) async fn get_json_bearer_via<T: serde::de::DeserializeOwned>(
+    transport: &impl Transport,
+    url: &Url<Route>,
+    access: &Credential<AccessToken>,
+) -> Result<T, HttpError> {
+    let mut request = Outgoing::new(Method::Get, url.into());
+    request.bearer = Some(access.clone());
+    let resp = exchange(transport, &request).await?;
+    read_json(&request, &resp)
+}
+
 /// A POST of JSON that carries no credential, answered with JSON.
 pub(crate) async fn post_json_via<T: Serialize, R: serde::de::DeserializeOwned>(
     transport: &impl Transport,
@@ -1390,6 +1477,23 @@ pub(crate) async fn put_sealed_via(
     expect_ok(&request, &resp)
 }
 
+/// A sealed blob to a presigned link that signs its SHA-256 digest: the
+/// request carries the digest the link names, as the store requires
+/// (`SRV-313`).
+pub(crate) async fn put_checked_via(
+    transport: &impl Transport,
+    url: &ambre_core::Credential<ambre_core::PresignedUrl>,
+    blob: &crate::pipeline::SealedBlob,
+) -> Result<(), HttpError> {
+    let request = Outgoing {
+        body: Some((ContentType::Octets, blob.to_body())),
+        checksum: Some(blob.checksum()),
+        ..Outgoing::new(Method::Put, url.into())
+    };
+    let resp = exchange(transport, &request).await?;
+    expect_ok(&request, &resp)
+}
+
 pub(crate) async fn patch_json_auth<T: Serialize>(
     url: &Url<Route>,
     body: &T,
@@ -1438,31 +1542,6 @@ pub(crate) async fn fetch_bytes(
     let resp = exchange(&Fetch, &request).await?;
     expect_ok(&request, &resp)?;
     Ok(resp.body.into_role())
-}
-
-/// Account-setup payload. Zero-Knowledge invariant (N4): the passphrase NEVER
-/// leaves the client. The server only receives the wrapped master key and the
-/// Argon2 salt needed to re-derive the unwrap key locally on future unlocks.
-#[derive(Serialize)]
-pub(crate) struct SetupAccountRequest {
-    pub email: ambre_core::Email,
-    pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
-    pub master_key_enc: ambre_core::Encoded<ambre_core::WrappedMasterKey>,
-    pub master_key_salt: ambre_core::FixedBytes<ambre_core::MasterKeySalt>,
-    pub signing_pubkey: ambre_core::FixedBytes<ambre_core::PublicKey>,
-    pub exchange_pubkey: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
-}
-
-/// The relay's answer to an account setup: the user it assigned, and the
-/// session's tokens. The worker announces the session with that user
-/// (`SYNC-261`).
-#[derive(Deserialize)]
-pub(crate) struct SetupAccountResponse {
-    #[serde(with = "ambre_core::serde_id::text")]
-    pub user_id: Id<User>,
-    /// The pair, with the lifetime of its access token.
-    #[serde(flatten)]
-    pub tokens: TokenPair,
 }
 
 #[cfg(feature = "dev-login")]
@@ -1521,14 +1600,18 @@ pub(crate) struct MasterKeyResponse {
 }
 
 /// The first key store of a signed-in account (`PUT /api/keys/master`). It
-/// holds the sealed seed, its salt and the two public keys the seed derives.
-/// No seed, word or passphrase is representable here (`SYNC-256`).
+/// holds the sealed seed, its salt, the two public keys the seed derives and
+/// the proof of the signing key. No seed, word or passphrase is representable
+/// here (`SYNC-256`).
 #[derive(Serialize)]
 pub(crate) struct StoreMasterKeysRequest {
     pub master_key_enc: ambre_core::Encoded<ambre_core::WrappedMasterKey>,
     pub master_key_salt: ambre_core::FixedBytes<ambre_core::MasterKeySalt>,
     pub signing_pubkey: ambre_core::FixedBytes<ambre_core::PublicKey>,
     pub exchange_pubkey: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
+    /// The signature of the signing key over the account and the two keys
+    /// (`ambre_protocol::key_registration`, `SRV-294`).
+    pub signature: ambre_core::FixedBytes<ambre_core::Signature>,
 }
 
 /// The relay's answer to a first key store: a fresh pair, bound to the new
@@ -1554,6 +1637,10 @@ pub(crate) struct AuthMeResponse {
     pub user_id: Id<User>,
     pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
     pub email: ambre_core::Email,
+    /// Whether a provider sign-in reclaimed the address (`SRV-321`). A relay
+    /// that predates the field answers none, which reads as held.
+    #[serde(default)]
+    pub address_reclaimed: ambre_core::AddressStanding,
 }
 
 /// `GET /api/channels/{id}/documents`: the documents a channel groups.
@@ -2070,16 +2157,35 @@ pub(crate) struct ReportSnapshotRequest {
     pub signature: ambre_core::FixedBytes<ambre_core::Signature>,
 }
 
+/// Response of `POST /api/documents/{id}/snapshot/upload-id`: the id the
+/// relay mints for a snapshot, which the blob seals before its digest is
+/// known (`SYNC-258`, `SRV-313`).
+#[derive(Deserialize)]
+pub(crate) struct SnapshotUploadIdResponse {
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub snapshot_id: Id<Snapshot>,
+}
+
+/// Body of `POST /api/documents/{id}/snapshot/upload-url`: the size of the
+/// sealed blob, the id it seals, and its SHA-256 digest, which the link signs
+/// (`SRV-313`).
+#[derive(Serialize)]
+pub(crate) struct SnapshotUploadUrlRequest {
+    #[serde(rename = "size_bytes")]
+    pub size: ambre_core::Count<ambre_core::Octets>,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub snapshot_id: Id<Snapshot>,
+    #[serde(rename = "sha256")]
+    pub checksum: ambre_core::FixedBytes<ambre_core::ObjectChecksum>,
+}
+
 /// Response of `POST /api/documents/{id}/snapshot/upload-url`. It holds a
-/// presigned PUT URL and the S3 key the confirmation names. It also holds
-/// the id the relay minted for the snapshot, which the blob seals
-/// (`SYNC-258`).
+/// presigned PUT URL and the S3 key the confirmation names. The id the blob
+/// seals came from `upload-id` already (`SYNC-258`).
 #[derive(Deserialize)]
 pub(crate) struct SnapshotUploadUrlResponse {
     pub upload_url: ambre_core::Credential<ambre_core::PresignedUrl>,
     pub s3_key: ambre_core::ObjectKey,
-    #[serde(with = "ambre_core::serde_id::text")]
-    pub snapshot_id: Id<Snapshot>,
 }
 
 /// Body of `POST /api/documents/{id}/snapshot` (confirm upload + insert metadata).
@@ -2235,25 +2341,8 @@ pub(crate) fn decode_links(resp: KeyLinksResponse) -> Vec<ambre_protocol::KeyLin
         .collect()
 }
 
-/// The links of `document_id`, or none when the relay cannot serve them: the
-/// frames sealed under a key older than the cache then stay closed.
-pub(crate) async fn fetch_key_links(
-    url_scheme: crate::http::UrlScheme,
-    api_base: &crate::http::Url<crate::http::RelayHost>,
-    document_id: Id<Document>,
-    auth: AuthContext,
-) -> Vec<ambre_protocol::KeyLink> {
-    match try_fetch_key_links(url_scheme, api_base, document_id, auth).await {
-        Ok(links) => links,
-        Err(e) => {
-            crate::log::warning!("Sync: key links of {document_id:?} unavailable: {e}");
-            Vec::new()
-        }
-    }
-}
-
-/// [`fetch_key_links`], with the failure of the request kept. A check that
-/// needs the links tells a relay out of reach apart from a link it lacks
+/// The links of `document_id`, with the failure of the request kept. A check
+/// that needs the links tells a relay out of reach apart from a link it lacks
 /// (`SYNC-200`).
 pub(crate) async fn try_fetch_key_links(
     url_scheme: crate::http::UrlScheme,
@@ -2261,9 +2350,20 @@ pub(crate) async fn try_fetch_key_links(
     document_id: Id<Document>,
     auth: AuthContext,
 ) -> Result<Vec<ambre_protocol::KeyLink>, HttpError> {
+    try_fetch_key_links_via(&Fetch, url_scheme, api_base, document_id, &auth).await
+}
+
+/// [`try_fetch_key_links`] over `transport`, which a host test scripts.
+pub(crate) async fn try_fetch_key_links_via(
+    transport: &impl Transport,
+    url_scheme: crate::http::UrlScheme,
+    api_base: &crate::http::Url<crate::http::RelayHost>,
+    document_id: Id<Document>,
+    auth: &AuthContext,
+) -> Result<Vec<ambre_protocol::KeyLink>, HttpError> {
     let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, api_base)
         .route(format!("/documents/{document_id}/key-links"));
-    get_json_auth::<KeyLinksResponse>(&url, auth)
+    get_json_auth_via::<KeyLinksResponse>(transport, &url, auth)
         .await
         .map(decode_links)
 }
@@ -2482,6 +2582,7 @@ pub(crate) mod scripted {
             )))),
             renewing: Rc::new(futures_util::lock::Mutex::new(())),
             renewed: None,
+            kept: None,
         }
     }
 
@@ -2694,6 +2795,26 @@ mod tests {
             url.as_str(),
             "https://relay.test/api/users/search?query=a%26b%3Dc%23d%2Be%25f%20g%40h-%C3%A9~"
         );
+    }
+
+    /// `SYNC-292`: an error on a search shows the route, never the address
+    /// the query searched, encoded or not.
+    #[test]
+    fn an_error_on_a_search_shows_no_searched_address() {
+        let url = Url::<ApiRoot>::of(
+            UrlScheme::Https,
+            &Url::<RelayHost>::new("relay.test".to_owned()),
+        )
+        .route("/users/search")
+        .query(QueryKey::Query, "ada@example.org");
+        let target = Target::from(&url);
+        let refused = HttpError::refused(Method::Get, &target, HttpStatus::new(500), None);
+        for shown in [refused.to_string(), target.shown().to_string()] {
+            assert!(shown.contains("/api/users/search"), "{shown}");
+            for leak in ["ada", "example.org", "%40", "query="] {
+                assert!(!shown.contains(leak), "{shown} shows {leak}");
+            }
+        }
     }
 
     fn is_setup_refusal(error: &HttpError) -> bool {
@@ -3429,7 +3550,7 @@ mod tests {
             serde_json::from_str(r#"{"master_key_enc":null,"master_key_salt":null}"#).unwrap();
         assert!(owed.setup_owed());
         let stored = serde_json::json!({
-            "master_key_enc": ambre_core::Encoded::<ambre_core::WrappedMasterKey>::new(vec![1; 72]),
+            "master_key_enc": ambre_core::Encoded::<ambre_core::WrappedMasterKey>::new(vec![1; 73]),
             "master_key_salt": ambre_core::FixedBytes::<ambre_core::MasterKeySalt>::from_array([2; 32]),
         });
         let stored: MasterKeyResponse = serde_json::from_value(stored).unwrap();

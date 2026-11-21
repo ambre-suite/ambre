@@ -125,7 +125,7 @@ pub async fn move_to_batch(
         .await
         // The key names the document, and the caller logs this error at warn,
         // so the text carries the store's cause alone (`ZK-030`, `SRV-298`).
-        .map_err(|e| AppError::S3(format!("batch put: {e}")))?;
+        .map_err(|e| AppError::S3(crate::error::FaultText::of("batch put", e)))?;
     let seqs: Vec<ambre_core::Seq<ambre_core::Relay>> = moved.iter().map(|(seq, _)| *seq).collect();
     crate::db::point_rows_at_batch(&mut tx, document_id, &seqs, &key).await?;
     tx.commit().await?;

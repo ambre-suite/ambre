@@ -72,13 +72,14 @@ the cipher never leave the Sync worker (`DOCFILE-014`).
 |---|---|---|---|---|---|---|
 | `DOCFILE-015` | `FRAME` | The seal prompt MUST take the passphrase twice, and MUST NOT seal on a mismatch. | this spec section 4 | `ambre_chrome::passphrase::tests::sealing_needs_the_two_fields_to_agree`; `::nothing_is_submitted_from_an_empty_prompt`; `::opening_asks_once_and_ignores_the_second_field` -- the rule is the prompt's one decision, so it is a pure function of the two fields and tested on host, and the two inputs around it stay DOM glue | none | verified |
 | `DOCFILE-016` | `FAIL` | A file that does not open MUST report the same failure whether the passphrase is wrong or the file was modified. | this spec section 5 | `ambre_sync::integration::a_wrong_passphrase_and_a_tampered_file_fail_the_same_way` -- three inputs, a wrong passphrase, an edited ciphertext and an edited salt, against one variant; type-level -- `RestEvent::DocFileOpenFailed` is a unit variant, so a message that distinguished the two causes would have nothing to read | none | verified |
+| `DOCFILE-022` | `FAIL` | Given a passphrase that `ChosenPassphrase::check` refuses, a seal MUST derive no key and write no file, and the seal prompt MUST show the weakness it names. | this spec section 4; `ambre-spec-zero-knowledge.md`, `ZK-035`, `ZK-036`; `DOCFILE-014` | type-level -- `FileKey::for_new_file` takes a `ChosenPassphrase`, which `ChosenPassphrase::check` alone builds; `ambre_sync::integration::a_weak_passphrase_seals_no_file_and_names_its_weakness` -- a common password and a short one each draw `DocFileSealRefused` with their weakness, and a passphrase the floor admits seals; `ambre_logic::dispatch::tests::a_weak_seal_passphrase_reaches_the_prompt_and_no_file` -- the refusal reaches the UI, with no file and no failure of the application; `ambre_app::switchboard::tests::a_weak_seal_passphrase_reopens_its_prompt` -- wasm tier, the refusal reopens the prompt with its weakness; `ambre_chrome::passphrase::tests::the_prompt_shows_the_weakness_the_worker_named` -- the prompt line reads the words of the weakness | none | verified |
 
 * **Budget.** none, and `ambre-spec-budgets.md` records that: the container adds a 22-byte write,
   a 22-byte parse, and a few dozen bytes in `ambre-client-core`, shared rather than duplicated.
 * **Boundary.** the container holds no key (`DOCFILE-006`), and it keeps the bytes it produces on a
   local disk (`DOCFILE-011`). The seal is the one place a key appears, in the Sync worker for one
   call, and no application links against a cipher (`DOCFILE-014`, `ARCH-004`).
-* **Verification.** 21 `verified`. This is pure byte handling on the host tier, so a test reaches
+* **Verification.** 22 `verified`. This is pure byte handling on the host tier, so a test reaches
   every rule the container makes about bytes. What the wire must not carry is held one crate away,
   at the single seam that hands a snapshot to Sync. The fixtures gate refuses a superseded version
   with no frozen artifact, and a history gate reads the commit that froze it.
@@ -401,6 +402,7 @@ seal and in `src/landing.rs` for an open.
 | export a plaintext file | a statement that the file carries no encryption of its own (`DOCFILE-009`) |
 | export a sealed file | a passphrase prompt, typed twice, then the same download the plaintext export produces -- one command per application, beside the plaintext save (`DOCFILE-010`, `DOCFILE-014`) |
 | type two different passphrases at the prompt | nothing is sealed and nothing is written: the prompt says they differ and keeps both fields (`DOCFILE-015`) |
+| seal under a passphrase the strength floor refuses | nothing is sealed and nothing is written: the prompt opens again and names the weakness, as the account setup does (`DOCFILE-022`) |
 | open a sealed file | the same file picker, then a passphrase prompt: the version byte decides which of the two the bytes need, never the filename |
 | open a sealed file with a wrong passphrase, or one that was modified | one message for both, naming neither cause, and the session untouched (`DOCFILE-016`) |
 | a seal that fails outright | one failure message and no file. The reachable causes are a key derivation that ran out of memory and a cipher that refused; neither produces bytes worth writing |
@@ -476,11 +478,6 @@ plaintext path above. So a sealed file whose *inner* container is older migrates
   rather than re-derived for a file. No criterion benchmark runs the derivation on the target
   tier. A mid-range phone that takes three seconds per export would go unnoticed until a user says
   so.
-* **Nothing rules on the strength of what the user types.** The prompt refuses an empty passphrase
-  and a mismatched confirmation, and nothing else. No length floor, no estimate shown, no refusal
-  of a passphrase a wordlist holds. Argon2id's work factor is the whole defence, and it is a
-  constant -- a four-character passphrase seals as readily as a good one. The account passphrase
-  has a floor (`ambre-spec-zero-knowledge.md`, `ZK-035`), and the file seal does not take it yet.
 * **No gesture suspends a document while its file seals.** The user keeps editing during the
   derivation. The sealed file holds the state as of the moment the command left, not the moment
   the download lands. That is the same semantics as the plaintext save, and no rule states

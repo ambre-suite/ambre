@@ -1084,6 +1084,7 @@ mod tests {
                 ambre_core::FixedBytes::<ambre_protocol::EntryDigest>::from_array([1; 32]),
             ),
             author: who,
+            cap: None,
             signature: ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array([0; 64]),
         };
         entry.signature = ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array(
@@ -2742,6 +2743,7 @@ mod tests {
                 ambre_core::FixedBytes::<ambre_protocol::EntryDigest>::from_array([1; 32]),
             ),
             author,
+            cap: None,
             signature: ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array([0; 64]),
         };
         entry.signature = ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array(

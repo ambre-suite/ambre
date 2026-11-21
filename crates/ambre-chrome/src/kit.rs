@@ -6,12 +6,12 @@
 // Two kinds of widget. Structure lays a section out: `Field` puts a label
 // before a control, `Row` puts controls side by side. A control edits one
 // value type, or runs one command. Each control carries the id it reaches on
-// its `data-reach` attribute (`CHROME-199`). A test then reads what a panel
+// its `data-reach` attribute (`CHROME-207`). A test then reads what a panel
 // offers, and holds the context bar and the context menu to it.
 //
 // A property control reads a `Reading`: one value, or a mixed selection
-// (`CHROME-202`). It writes back through one callback, which carries the new
-// value alone (`CHROME-203`). The colour and the font controls are the ones
+// (`CHROME-210`). It writes back through one callback, which carries the new
+// value alone (`CHROME-211`). The colour and the font controls are the ones
 // every application already shares, so one colour picker serves the suite.
 //
 // Every control prevents the default of `mousedown`. A button that takes the
@@ -400,7 +400,7 @@ pub fn SelectField<T: Copy + PartialEq + Send + Sync + 'static>(
 }
 
 /// The `data-reach` markers of every control under `root`, in document order:
-/// what the panel offers, as a test reads it (`CHROME-199`).
+/// what the panel offers, as a test reads it (`CHROME-207`).
 pub fn reach_markers(root: &web_sys::Element) -> Vec<String> {
     let Ok(list) = root.query_selector_all("[data-reach]") else {
         return Vec::new();

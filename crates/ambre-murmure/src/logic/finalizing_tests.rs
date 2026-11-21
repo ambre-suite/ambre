@@ -407,6 +407,7 @@ fn finalized_for(
     let segment = alice.active_id();
     let author = Id::<User>::mint();
     let signer = Signer {
+        nonce: crate::logic::delta::TEST_NONCE,
         peer: alice.peer(segment.document_id()).expect("a session"),
         user: Some(author),
     };

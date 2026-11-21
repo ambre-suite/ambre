@@ -70,6 +70,14 @@ impl Worker {
                     .insert(sender, generation, key, Instant::<PageLoad>::default());
             }
             KeyHandoff::Forget { sender } => self.receive.forget(sender),
+            // The receiver clock of this model stays at zero, as for each `Open`.
+            KeyHandoff::Close {
+                sender,
+                generation,
+                within,
+            } => self
+                .receive
+                .close(sender, generation, within, Instant::<PageLoad>::default()),
             // A curious member keeps every key it held past the end of the call.
             KeyHandoff::End => {}
         }
@@ -273,11 +281,18 @@ impl World {
             .get(session)
             .and_then(|s| s.seat)
             .expect("a seat");
+        // A wrap of the length the client reads: the nonce, the sender index, the key, the
+        // departures and the place, then the tag (`CALL-159`).
+        let stranger_wrap = Payload::new(vec![7; 24 + 8 + 32 + (1 + 8 * 16) + 8 + 16]);
+        assert!(
+            ambre_crypto::call::WrappedSenderKey::from_bytes(&stranger_wrap).is_ok(),
+            "a stranger's wrap has the length of a wrap"
+        );
         for stranger in 0..count {
             let wrap = CallServerMsg::Wrap {
                 from: Seq::new(10_000 + stranger),
                 to,
-                wrap: Payload::new(vec![7; 80]),
+                wrap: stranger_wrap.clone(),
             };
             self.deliver(session, wrap);
         }

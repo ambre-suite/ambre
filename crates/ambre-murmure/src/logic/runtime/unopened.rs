@@ -6,7 +6,10 @@
 // ============================================================================
 
 use super::*;
-use ambre_bus::{ChannelDocumentKind, ChannelMeta, DocumentActivity};
+use ambre_bus::{ChannelDocumentKind, ChannelMeta, ChannelName, DocumentActivity};
+
+/// A name of a channel, as `meta` holds it or as the seal beside `meta` holds it.
+type HeldName = Option<ambre_core::Validated<ambre_core::Name>>;
 
 /// The segments of a channel, each with the last number the activity
 /// answer gave, if any.
@@ -27,6 +30,10 @@ pub(crate) struct ListedChannels {
     segments: Option<HashMap<Id<Channel>, Segments>>,
     /// The channels watched unopened, so a listing that drops one ends it.
     watched: HashSet<Id<Channel>>,
+    /// The name sealed beside the `meta` of each channel of the latest
+    /// listing, `None` for a channel listed with no name that opened. It is a
+    /// hint: a seal that failed, or two renames racing, leave an older one.
+    hints: HashMap<Id<Channel>, HeldName>,
 }
 
 impl ListedChannels {
@@ -35,6 +42,7 @@ impl ListedChannels {
     pub(crate) fn forget(&mut self, channel_id: Id<Channel>) {
         self.metas.remove(&channel_id);
         self.watched.remove(&channel_id);
+        self.hints.remove(&channel_id);
     }
 }
 
@@ -43,7 +51,7 @@ impl<D> Runtime<D> {
     /// key opened. A channel the listing drops is no longer the user's, and
     /// its watch ends. A channel joined since the last listing has segments
     /// no activity answer named yet, so the activity is asked again.
-    pub fn channels_listed(&mut self, metas: &[ChannelMeta]) {
+    pub fn channels_listed(&mut self, metas: &[ChannelMeta], names: &[ChannelName]) {
         let fresh: HashMap<Id<Channel>, ChannelMeta> =
             metas.iter().map(|m| (m.channel_id, *m)).collect();
         let listed = &mut self.listed_channels;
@@ -55,6 +63,16 @@ impl<D> Runtime<D> {
             .copied()
             .collect();
         listed.listed = true;
+        listed.hints = fresh
+            .keys()
+            .map(|channel_id| {
+                let hint = names
+                    .iter()
+                    .find(|n| n.channel_id == *channel_id)
+                    .map(|n| n.name.clone());
+                (*channel_id, hint)
+            })
+            .collect();
         listed.metas = fresh;
         for channel_id in gone {
             self.listed_channels.watched.remove(&channel_id);
@@ -64,6 +82,39 @@ impl<D> Runtime<D> {
             self.ask(SyncCommand::FetchActivity);
         }
         self.watch_unheld();
+        let open: Vec<Id<Channel>> = self.channels.keys().copied().collect();
+        for channel_id in open {
+            self.reseal_stale_name(channel_id);
+        }
+    }
+
+    /// Seal the name `meta` reads beside it again when the hint of the latest
+    /// listing differs (`MURMURE-682`). A failed seal, two renames racing, or
+    /// an older seal the relay served leave a stale hint. An open channel
+    /// reads the true name. A channel no listing named, or one not open, seals
+    /// nothing.
+    pub(crate) fn reseal_stale_name(&mut self, channel_id: Id<Channel>) {
+        let Some(channel) = self.channels.get(&channel_id) else {
+            return;
+        };
+        let (meta, name) = (channel.meta_id(), channel.name());
+        let Some(hint) = self.listed_channels.hints.get_mut(&channel_id) else {
+            return;
+        };
+        if *hint == name {
+            return;
+        }
+        // The hint takes the name sealed now, so a later open seals it once.
+        hint.clone_from(&name);
+        self.ask(SyncCommand::NameChannel { meta, name });
+    }
+
+    /// Note the name this client just sealed beside the `meta` of a listed
+    /// channel, so an open does not seal it twice.
+    pub(crate) fn note_sealed_name(&mut self, channel_id: Id<Channel>, name: &HeldName) {
+        if let Some(hint) = self.listed_channels.hints.get_mut(&channel_id) {
+            hint.clone_from(name);
+        }
     }
 
     /// The relay's activity answer named the segments of each channel.

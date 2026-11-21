@@ -157,7 +157,7 @@ impl ProseState {
     /// The dictionary the document's language names, else the reader's
     /// (`PROSE-FEAT-111`).
     fn spelling_dictionary(&self) -> Option<Dictionary> {
-        doc::read_locale(&self.doc)
+        doc::read_locale(&self.doc, &self.roots)
             .or_else(|| self.spelling.reader.clone())
             .and_then(|tag| Dictionary::of_language(&tag))
     }

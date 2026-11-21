@@ -189,6 +189,35 @@ impl IdbKey {
         Self::document_of(rest.strip_prefix(':')?)
     }
 
+    /// The row of the log `user` kept for `document` (`SYNC-290`). It
+    /// starts with the prefix `log:`, which no user's 32 hex digits start
+    /// with, as [`IdbKey::inviter`] does.
+    fn kept_log(user: Id<User>, document: Id<Document>) -> Self {
+        Self(format!(
+            "log:{}:{}",
+            Self::user(user),
+            Self::document(document)
+        ))
+    }
+
+    /// Every key [`IdbKey::kept_log`] writes for `user`, and no other.
+    fn kept_logs(user: Id<User>) -> Result<web_sys::IdbKeyRange, JsValue> {
+        let user = Self::user(user);
+        web_sys::IdbKeyRange::bound(
+            &JsValue::from_str(&format!("log:{user}:")),
+            &JsValue::from_str(&format!("log:{user};")),
+        )
+    }
+
+    /// The document whose kept log IndexedDB keyed `key` for `user`, as
+    /// [`IdbKey::kept_log`] wrote it. `None` for any other key.
+    fn kept_log_of(user: Id<User>, key: &JsValue) -> Option<Id<Document>> {
+        let text = key.as_string()?;
+        let rest = text.strip_prefix("log:")?;
+        let rest = rest.strip_prefix(Self::user(user).0.as_str())?;
+        Self::document_of(rest.strip_prefix(':')?)
+    }
+
     /// A key no other delta of `document` holds. It is the document's key,
     /// then the time and a counter for this page. A random draw last parts
     /// another tab writing in the same millisecond.
@@ -484,6 +513,91 @@ impl PersistenceStore {
         {
             tracing::warn!("Persistence: inviter add failed for {key}: {e:?}");
         }
+    }
+
+    /// Keep `kept`, where the log of `document_id` stood for `user`
+    /// (`SYNC-290`, fire-and-forget). A later head replaces the row.
+    pub fn save_kept_log(
+        &self,
+        user: Id<User>,
+        document_id: Id<Document>,
+        kept: &ambre_bus::KeptLog,
+    ) {
+        let key = IdbKey::kept_log(user, document_id);
+        let Ok(row) = kept.to_row() else {
+            tracing::warn!("Persistence: kept log of {key} does not encode");
+            return;
+        };
+        if let Err(e) = self
+            .db
+            .transaction_with_str_and_mode(
+                IdbStore::TrustedKeys.name(),
+                IdbTransactionMode::Readwrite,
+            )
+            .and_then(|txn| txn.object_store(IdbStore::TrustedKeys.name()))
+            .and_then(|store| {
+                store.put_with_key(Uint8Array::from(row.as_bytes()).as_ref(), &key.to_js())
+            })
+        {
+            tracing::warn!("Persistence: kept log put failed for {key}: {e:?}");
+        }
+    }
+
+    /// Load every log `user` kept, keyed by its document (`SYNC-290`).
+    /// Another user's row is never read. Resolves to an empty list when the
+    /// read failed; a row that is no kept log is skipped.
+    pub fn load_kept_logs(
+        &self,
+        user: Id<User>,
+    ) -> oneshot::Receiver<Vec<(Id<Document>, ambre_bus::KeptLog)>> {
+        let (tx, rx) = answer();
+        let Ok(txn) = self.db.transaction_with_str(IdbStore::TrustedKeys.name()) else {
+            tx.send(Vec::new());
+            return rx;
+        };
+        let requests = IdbKey::kept_logs(user).and_then(|range| {
+            let store = txn.object_store(IdbStore::TrustedKeys.name())?;
+            Ok((
+                store.get_all_keys_with_key(&range)?,
+                store.get_all_with_key(&range)?,
+            ))
+        });
+        let Ok((keys, rows)) = requests else {
+            tx.send(Vec::new());
+            return rx;
+        };
+        let tx_ok = tx.clone();
+        let on_complete =
+            Closure::<dyn FnMut(web_sys::Event)>::new(move |_event: web_sys::Event| {
+                let as_array = |r: &web_sys::IdbRequest| {
+                    r.result()
+                        .ok()
+                        .and_then(|v| v.dyn_into::<js_sys::Array>().ok())
+                };
+                let (Some(keys), Some(rows)) = (as_array(&keys), as_array(&rows)) else {
+                    tx_ok.send(Vec::new());
+                    return;
+                };
+                let kept = keys
+                    .iter()
+                    .zip(rows.iter())
+                    .filter_map(|(key, row)| {
+                        let id = IdbKey::kept_log_of(user, &key)?;
+                        let row = row.dyn_into::<Uint8Array>().ok()?.to_vec();
+                        let row = ambre_core::Payload::<ambre_bus::KeptLogRow>::new(row);
+                        Some((id, ambre_bus::KeptLog::from_row(&row)?))
+                    })
+                    .collect();
+                tx_ok.send(kept);
+            });
+        txn.set_oncomplete(Some(on_complete.as_ref().unchecked_ref()));
+        on_complete.forget();
+        let on_abort = Closure::<dyn FnMut(web_sys::Event)>::new(move |_event: web_sys::Event| {
+            tx.send(Vec::new());
+        });
+        txn.set_onabort(Some(on_abort.as_ref().unchecked_ref()));
+        on_abort.forget();
+        rx
     }
 
     /// Load every inviter `user` kept, keyed by its document (`SYNC-238`).
@@ -1382,6 +1496,42 @@ mod wasm_tests {
         let mut kept = later.load_inviters(me).await.unwrap();
         kept.sort_by_key(|(id, _)| *id.as_bytes());
         assert_eq!(kept, vec![(doc, pin([0xA1; 32])), (other, pin([0xB1; 32]))]);
+    }
+
+    /// Holds `SYNC-290` at rest. A kept log reads back for its user alone,
+    /// and a later head replaces the row. No pin of the same user reads as a
+    /// log.
+    #[wasm_bindgen_test]
+    async fn a_kept_log_reads_back_for_its_user_and_a_later_head_replaces_it() {
+        let name = "ambre-test-kept-logs";
+        delete_db(name).await;
+        let store = PersistenceStore::open_named(DbName(name))
+            .await
+            .expect("channel")
+            .expect("store opens");
+        let (me, other) = (
+            Id::<User>::from_bytes([0x01; 16]),
+            Id::<User>::from_bytes([0x02; 16]),
+        );
+        let doc = Id::<Document>::from_bytes([0x11; 16]);
+        let kept = |position: u64| ambre_bus::KeptLog {
+            anchor: FixedBytes::from_array([0xA1; 32]),
+            head: ambre_bus::LogHead {
+                position: ambre_core::Seq::new(position),
+                previous: Some(FixedBytes::from_array([0xA2; 32])),
+            },
+            key: FixedBytes::from_array([0xA3; 16]),
+            links: Vec::new(),
+        };
+        store.save_inviter(me, doc, &FixedBytes::from_array([0xB1; 32]));
+        store.save_kept_log(me, doc, &kept(2));
+        store.save_kept_log(me, doc, &kept(5));
+        assert_eq!(
+            store.load_kept_logs(me).await.unwrap(),
+            vec![(doc, kept(5))]
+        );
+        assert_eq!(store.load_kept_logs(other).await.unwrap(), Vec::new());
+        assert_eq!(store.load_inviters(me).await.unwrap().len(), 1);
     }
 
     /// Holds `SYNC-244` at rest. Two accounts of one browser share the

@@ -5,7 +5,8 @@
 //! the built application boots under it, and that an injected script runs
 //! nowhere. A policy violation fires `securitypolicyviolation` at the document,
 //! so a listener installed before the first script of the page records each
-//! one.
+//! one. Chrome installs it through the DevTools Protocol, Firefox through
+//! WebDriver BiDi (`Browser::preload`), so both engines run the test.
 
 use std::sync::Arc;
 
@@ -44,12 +45,7 @@ async fn violations(page: &Page) -> Vec<String> {
 /// the first script of every document it loads.
 async fn watched_home() -> Page {
     let page = Page::home(Arc::new(Relay::start().await)).await;
-    page.browser
-        .cdp(
-            "Page.addScriptToEvaluateOnNewDocument",
-            json!({ "source": RECORD_VIOLATIONS }),
-        )
-        .await;
+    page.browser.preload(RECORD_VIOLATIONS).await;
     page.browser.goto(&format!("{}/", page.origin)).await;
     page
 }
@@ -64,16 +60,12 @@ mod tests {
     /// from the page's own origin alone, and none of its code evaluates a
     /// string. A script injected into the page, an injected event handler and
     /// a `blob:` worker each run nowhere. Chrome exempts the driver's own code
-    /// from the policy, so the probe cannot try an eval. The empty list of
-    /// violations holds that half.
+    /// from the policy, so the probe tries no eval under either engine. The
+    /// empty list of violations holds that half. Chrome and Firefox both run it.
     #[tokio::test(flavor = "multi_thread")]
     #[cfg_attr(
         not(feature = "browser"),
         ignore = "needs a build and chromedriver; run just test-browser"
-    )]
-    #[cfg_attr(
-        feature = "firefox",
-        ignore = "installs its violation listener through the DevTools Protocol, which Firefox does not speak"
     )]
     async fn the_page_runs_the_scripts_it_ships_and_no_other() {
         let page = watched_home().await;

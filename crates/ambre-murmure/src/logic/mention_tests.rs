@@ -68,6 +68,7 @@ fn draft(text: &str, mentions: Vec<Mention>) -> MessageDraft {
 fn deliver(to: &mut ChannelState, from: &ChannelState, author: Id<User>, sent: &Sent, seq: u64) {
     let document_id = sent.segment.document_id();
     let signer = Signer {
+        nonce: crate::logic::delta::TEST_NONCE,
         peer: from.peer(document_id).expect("a session"),
         user: Some(author),
     };
