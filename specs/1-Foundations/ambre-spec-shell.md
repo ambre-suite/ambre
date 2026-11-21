@@ -70,7 +70,7 @@ other six documents of the DOM side.
 | `CHROME-219` | `OBS` | A control of the context panel MUST NOT show the native list or the native range of the browser. | this spec section 2, the visual system | `ambre_chrome::controls_ui::every_icon_of_the_panel_sits_in_a_box_of_one_size`; Toile `ambre_toile::tests::chrome_ui::the_board_panel_shows_the_board_then_what_applies_to_the_selection`; Prose `ambre_prose::tests::chrome_panel::with_no_selection_the_panel_shows_the_page_the_layout_holds`; Trame `ambre_trame::tests::chrome_ui::the_panel_announces_the_registry_labels` -- wasm tier, each mounted panel holds no select element and no range input outside the shared slider, read through `ambre_chrome::native_controls` | none | verified |
 | `CHROME-220` | `OBS` | Every icon control of the context panel MUST draw its glyph at one size, in a box of one size, with no native frame. | this spec section 2, the visual system; `UI-THREAD-068` | `ambre_chrome::controls_ui::every_icon_of_the_panel_sits_in_a_box_of_one_size` -- wasm tier under the shell and token sheets: a command, a property toggle and the frame's own button, each box and each glyph measured, and no border drawn | none | verified |
 | `CHROME-221` | `OBS` | An icon button of the chrome toolkit MUST show its name, and its chord when it has one, in a tooltip while it holds the keyboard focus. | this spec section 2, the visual system; `CHROME-187` | `ambre_chrome::controls_ui::an_icon_button_names_itself_and_its_chord_in_a_tooltip_under_the_focus` -- wasm tier, the focus shows the name and the chord chip, the accessible name and the chord match, and a press hides the tooltip | none | verified |
-| `CHROME-223` | `INV` | The look of the context panel of Prose, Trame and Toile, light and dark, MUST be the look a reviewer last accepted. | this spec section 2, the visual system; `ambre-spec-testing.md` | not built | unbuilt -- lands with the `The visual system of the chrome` Story (`ambre-roadmap.md` MVP). The method has no visual tier, and a golden image is a rejected routine mechanism (`ambre-spec-testing.md section 10`): the owner chooses the mechanism first | unimplemented |
+| `CHROME-223` | `INV` | Each control primitive and the frame of the context panel, in each state, light and dark, MUST keep the look a reviewer last accepted. | this spec section 2, the visual system; `ambre-spec-testing.md section 2` | `ambre_belt::gallery::tests::the_gallery_keeps_the_look_a_reviewer_accepted` -- browser tier, the gallery page of the test build: each pointer and focus state forced through the DevTools Protocol, the computed style of each probe held against one text snapshot, which a reviewer accepts | none | verified |
 | `CHROME-185` | `OBS` | A control of the shell that shows an icon and no text MUST show a tooltip with the name of its command, and the chord when the command has one. | this spec section 2; `ambre-spec-chrome.md section 2`, the shortcut chip | not built | unbuilt -- lands with the `Command tooltips` Story (`ambre-roadmap.md` MVP). Icon buttons carry a native title, without the chord | unimplemented |
 | `CHROME-186` | `INV` | A tooltip MUST take its name, its chord and its description from the description of the command. | this spec section 2; `UI-THREAD-019` | not built | unbuilt -- lands with the `Command tooltips` Story (`ambre-roadmap.md` MVP). The description of a command carries no sentence that describes it | unimplemented |
 | `CHROME-187` | `OBS` | A tooltip MUST show when its control takes the keyboard focus, as it does under the pointer. | this spec section 2; `CHROME-165` | not built | unbuilt -- lands with the `Command tooltips` Story (`ambre-roadmap.md` MVP) | unimplemented |
@@ -123,7 +123,7 @@ The user opens a list of the panel and picks a choice, with the pointer or the k
   chrome operation. A cover a surface publishes is read by a fit, which is a zoom cost.
 * **Boundary.** none: a region holds commands, and a command reaches the Logic thread as every
   command does. Nothing here opens a socket or holds a key.
-* **Verification.** 47 `verified`, 2 `failing`, 20 `unimplemented`, and the type holds the home of
+* **Verification.** 48 `verified`, 2 `failing`, 19 `unimplemented`, and the type holds the home of
   each command. Host tests run each table through the one sink of every region, on a real Logic
   state. Wasm tests hold the palette and the sheet tabs. A hover-only control of Prose and a paste
   over a text selection fail. The rest waits on the regions, which no application lays out.
@@ -198,8 +198,10 @@ research mockup `research/mockups/shared-chrome.html` is the agreed starting poi
 rule.
 
 A section is a grid of two columns. Every label sits in the label column, and every control starts
-in the second (`CHROME-218`). A command with its label takes a whole line, so a row never mixes a text
-button and an icon. The header names the selection, and never repeats a section (`CHROME-217`).
+in the second (`CHROME-218`). A command with its label takes a whole line, so a row never mixes a
+text button and an icon. The header names the selection, and never repeats a section (`CHROME-217`).
+A gallery page of the test build shows each primitive in each state, and the browser tier records
+its look (`CHROME-223`).
 
 **What a primitive costs.** None is generic. A control primitive names a choice by its place, and a thin
 property shim maps a value to its place. A generic control compiles once per value type, and the
