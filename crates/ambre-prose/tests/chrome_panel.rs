@@ -29,14 +29,6 @@ use wasm_bindgen_test::*;
 /// The events the chrome reads in these tests: ProseEvent documents, no channel.
 type Event = UiEvent<ProseEvent>;
 
-/// The page point at `(x, y)`, in CSS px.
-fn css_point(x: f32, y: f32) -> ambre_core::Point<ambre_core::Px<ambre_core::Css>> {
-    ambre_core::Point::new(
-        ambre_core::Px::<ambre_core::Css>::new(x),
-        ambre_core::Px::<ambre_core::Css>::new(y),
-    )
-}
-
 wasm_bindgen_test_configure!(run_in_browser);
 
 fn mount_in_container<F, N>(f: F) -> web_sys::Element
