@@ -185,13 +185,18 @@ fn ShellHeader(
 }
 
 /// The optional rows of the shell each application lays out (`CHROME-140`).
-/// The formula bar and the sheet tabs are Trame's alone. A Toile board docks
+/// The formula bar is Trame's alone. No application lays out the tab strip:
+/// Trame's sheet tabs sit in the status bar (`CHROME-162`). A Toile board docks
 /// its menus in the command bar. A Prose page formats from the bar over its
 /// selection, so it lays out no command bar. Murmure builds its own shell.
 pub(crate) fn shell_rows(kind: DocType) -> ambre_chrome::ShellRows {
     use ambre_chrome::RowShown::{Absent, Shown};
     match kind {
-        DocType::Trame => ambre_chrome::ShellRows::ALL,
+        DocType::Trame => ambre_chrome::ShellRows {
+            toolbar: Shown,
+            formula_bar: Shown,
+            tabs: Absent,
+        },
         DocType::Toile => ambre_chrome::ShellRows {
             toolbar: Shown,
             formula_bar: Absent,
@@ -782,7 +787,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         <AppShell rows=shell_rows(booted)>
             <Header slot>{header.clone()}</Header>
             // Each application lays out its own rows (`CHROME-140`). The formula
-            // bar and the sheet tabs are Trame's alone. A Prose page has no
+            // bar is Trame's alone, and its sheet tabs sit in the status bar. A Prose page has no
             // command bar. Gated on the booted app kind, fixed per page load.
             <Toolbar slot>
                 {boot_is_trame.then(|| view! {
@@ -812,19 +817,6 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     />
                 })}
             </FormulaBar>
-            <Tabs slot>
-                {boot_is_trame.then(|| view! {
-                    <trame_chrome::SheetTabs
-                        sheets=sheets
-                        active=active_sheet
-                        on_activate=on_sheet_activate
-                        on_create=on_sheet_create
-                        on_rename=on_sheet_rename
-                        on_delete=on_sheet_delete
-                        on_reorder=on_sheet_reorder
-                    />
-                })}
-            </Tabs>
             <StatusBar slot>
                 {if boot_is_prose {
                     // The five figures of the Prose document
@@ -843,11 +835,24 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     .into_any()
                 } else {
                     view! {
+                        // The sheet tabs sit in the band, before the
+                        // zoom (`CHROME-162`).
                         <trame_chrome::StatusBar
                             stats=sel_stats
                             perf=perf_snap
                             zoom=zoom
                             locale=trame_locale
+                            tabs=move || view! {
+                                <trame_chrome::SheetTabs
+                                    sheets=sheets
+                                    active=active_sheet
+                                    on_activate=on_sheet_activate
+                                    on_create=on_sheet_create
+                                    on_rename=on_sheet_rename
+                                    on_delete=on_sheet_delete
+                                    on_reorder=on_sheet_reorder
+                                />
+                            }
                         />
                     }
                     .into_any()
@@ -1337,16 +1342,17 @@ mod tests {
     }
 
     /// Each application lays out its own rows (`CHROME-140`). The formula bar
-    /// and the sheet tabs are Trame's alone. A Prose page lays out no command
-    /// bar.
+    /// is Trame's alone. No application lays out the tab strip, since Trame's
+    /// sheet tabs sit in the status bar (`CHROME-162`). A Prose page lays out
+    /// no command bar.
     #[wasm_bindgen_test]
-    fn the_formula_bar_and_the_tabs_are_trames_alone_and_prose_has_no_command_bar() {
+    fn the_formula_bar_is_trames_alone_and_prose_has_no_command_bar() {
         use ambre_chrome::RowShown::{Absent, Shown};
         let rows = |kind| {
             let r = shell_rows(kind);
             (r.toolbar, r.formula_bar, r.tabs)
         };
-        assert_eq!(rows(DocType::Trame), (Shown, Shown, Shown));
+        assert_eq!(rows(DocType::Trame), (Shown, Shown, Absent));
         assert_eq!(rows(DocType::Toile), (Shown, Absent, Absent));
         assert_eq!(rows(DocType::Prose), (Absent, Absent, Absent));
     }

@@ -319,6 +319,82 @@ fn the_zoom_chip_closes_the_status_bar() {
     container.remove();
 }
 
+/// The sheet tabs sit in the status bar, before its zoom (`CHROME-162`). A
+/// tab in the band still activates its sheet, and the add button still adds
+/// one.
+#[wasm_bindgen_test]
+fn the_sheet_tabs_sit_in_the_status_bar_before_the_zoom() {
+    let activated = RwSignal::new(None::<Id<Sheet>>);
+    let created = RwSignal::new(0_u32);
+    let container = mount_in_container(move || {
+        let tab = |id: &str, name: &str| SheetTab {
+            id: Id::<Sheet>::from_text(id.to_owned()),
+            name: SheetName::new(name).unwrap(),
+        };
+        let sheets = RwSignal::new(vec![tab("s0", "One"), tab("s1", "Two")]);
+        let active = RwSignal::new(Id::<Sheet>::from_text("s0".to_owned()));
+        let stats = RwSignal::new(None);
+        let perf = RwSignal::new(PerfSnapshot::default());
+        let zoom = RwSignal::new(ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::ONE);
+        let locale = RwSignal::new(None);
+        view! {
+            <StatusBar
+                stats=stats
+                perf=perf
+                zoom=zoom
+                locale=locale
+                tabs=move || view! {
+                    <SheetTabs
+                        sheets=sheets
+                        active=active
+                        on_activate=Callback::new(move |id| activated.set(Some(id)))
+                        on_create=Callback::new(move |()| created.update(|n| *n += 1))
+                        on_rename=Callback::new(move |_: (Id<Sheet>, SheetName)| {})
+                        on_delete=Callback::new(move |_: Id<Sheet>| {})
+                        on_reorder=Callback::new(move |_: ReorderSheet| {})
+                    />
+                }
+            />
+        }
+    });
+
+    let band = container
+        .query_selector(".statusbar-tabs")
+        .unwrap()
+        .expect("the band holds the tabs");
+    let zoom = container
+        .query_selector(".statusbar-zoom")
+        .unwrap()
+        .expect("the band holds the zoom");
+    assert_eq!(band.parent_element(), zoom.parent_element(), "one band");
+    // The zoom follows the tabs in the band.
+    let following = band.compare_document_position(&zoom);
+    assert_ne!(following & web_sys::Node::DOCUMENT_POSITION_FOLLOWING, 0);
+    assert_eq!(band.query_selector_all(".tab").unwrap().length(), 2);
+
+    let second: web_sys::HtmlElement = band
+        .query_selector_all(".tab")
+        .unwrap()
+        .item(1)
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    second.click();
+    assert_eq!(
+        activated.get_untracked(),
+        Some(Id::<Sheet>::from_text("s1".to_owned()))
+    );
+    let add: web_sys::HtmlElement = band
+        .query_selector(".tab-add")
+        .unwrap()
+        .expect("the add button")
+        .dyn_into()
+        .unwrap();
+    add.click();
+    assert_eq!(created.get_untracked(), 1);
+    container.remove();
+}
+
 /// The find counter is built from the reply's zero-based index, and an index
 /// past the matches focuses nothing (`UI-THREAD-060`).
 #[wasm_bindgen_test]

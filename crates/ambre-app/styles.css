@@ -1223,9 +1223,9 @@ body {
     gap: var(--space-7);
 }
 
-/* Sheet-tab strip (Trame, trame-sheets): the app-agnostic <Tabs> slot, below
-   the canvas and above the status bar. Trame fills it with its SheetTabs DOM
-   component (migrated off the canvas so it shares the chrome's hover/tokens). */
+/* The app-agnostic <Tabs> slot, below the canvas and above the status bar.
+   No application lays it out today: Trame's sheet tabs sit in the status bar
+   (CHROME-162). */
 .ambre-tabstrip {
     display: flex;
     align-items: stretch;
@@ -1237,7 +1237,19 @@ body {
     overflow-y: hidden;
 }
 
-.ambre-tabstrip .tab {
+/* Trame's sheet tabs, in the status bar before the zoom (CHROME-162). They
+   take the room the band leaves and scroll when they overflow it. */
+.ambre-statusbar .statusbar-tabs {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    align-self: stretch;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+}
+
+.statusbar-tabs .tab {
     display: inline-flex;
     align-items: center;
     gap: var(--space-3);
@@ -1254,20 +1266,20 @@ body {
     user-select: none;
 }
 
-.ambre-tabstrip .tab:hover {
+.statusbar-tabs .tab:hover {
     background: var(--surface-hover);
 }
 
 /* Active tab: flush with the strip (no contrasting fill), marked only by the
    amber top accent and a brighter label -- the design decision from the canvas
    era, carried over verbatim. */
-.ambre-tabstrip .tab.active {
+.statusbar-tabs .tab.active {
     color: var(--text);
     border-top-color: var(--accent);
 }
 
 /* In-place rename input, shown over the tab being renamed. */
-.ambre-tabstrip .tab-rename {
+.statusbar-tabs .tab-rename {
     width: 92px;
     border: 1px solid var(--accent);
     border-radius: var(--radius-sm);
@@ -1279,7 +1291,7 @@ body {
 }
 
 /* Trailing "+" add-sheet button: same flat-on-strip treatment as a tab. */
-.ambre-tabstrip .tab-add {
+.statusbar-tabs .tab-add {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1294,17 +1306,17 @@ body {
     cursor: pointer;
 }
 
-.ambre-tabstrip .tab-add:hover {
+.statusbar-tabs .tab-add:hover {
     background: var(--surface-hover);
 }
 
 /* Drag-reorder: the dragged tab dims; the drop target shows an amber left edge
    marking where the tab would land. */
-.ambre-tabstrip .tab.dragging {
+.statusbar-tabs .tab.dragging {
     opacity: 0.5;
 }
 
-.ambre-tabstrip .tab.drop-before {
+.statusbar-tabs .tab.drop-before {
     box-shadow: inset 2px 0 0 var(--accent);
 }
 

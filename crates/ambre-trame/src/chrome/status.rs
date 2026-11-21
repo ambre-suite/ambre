@@ -1,6 +1,7 @@
 // ambre-trame/src/chrome/status.rs
 // ============================================================================
-// The status bar (`trame-status-bar`): a thin band above the sheet-tab strip.
+// The status bar (`trame-status-bar`): a thin band under the grid, which
+// holds the sheet tabs before its zoom (`CHROME-162`).
 //
 // Left  : selection aggregates (Sum / Average / Count / Min / Max), Excel/Sheets
 //         style. A lone cell shows nothing. The Logic thread computes the totals
@@ -62,6 +63,10 @@ pub fn StatusBar(
     /// The workbook's locale and the reader's half, mirrored from
     /// `TrameEvent::LocaleState` by the relay.
     locale: RwSignal<Option<crate::ui::locale::LocaleView>>,
+    /// The sheet tabs, which the band holds before its zoom (`CHROME-162`).
+    /// A band given none keeps the room empty.
+    #[prop(optional, into)]
+    tabs: ViewFn,
 ) -> impl IntoView {
     // A view in another locale than the workbook's says so (`LOCALE-021`).
     let notice = move || {
@@ -92,9 +97,11 @@ pub fn StatusBar(
 
     view! {
         <StatusLabel label=status_label() />
+        // The sheet tabs take the room the band leaves, so a long list
+        // scrolls and never pushes the zoom off the band (`CHROME-162`).
+        <div class="statusbar-tabs">{tabs.run()}</div>
         <span class="statusbar-stats">{aggregates}</span>
         {notice}
-        <span class="spacer"></span>
         // Shared interactive zoom + fps chips (identical to Toile,
         // `toile-status-bar`). The
         // grid-zoom ladder stays Trame's own so it never diverges from the
