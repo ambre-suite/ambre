@@ -230,6 +230,45 @@ pub(crate) fn reader_locale() -> ambre_client_core::ReaderLocale {
     reader
 }
 
+/// localStorage key of the boot hint: the theme and the interface language
+/// of the account, in the clear, read before the unlock (`SETTINGS-028`).
+const BOOT_HINT_KEY: ambre_core::StaticKey<ambre_core::StorageKeys> =
+    ambre_core::StaticKey::new("ambre.boot_hint");
+
+/// The boot hint this device keeps, or `None` for a fresh device, a
+/// signed-out one or a hint of another version. Read with no wait
+/// (`SETTINGS-034`).
+pub(crate) fn boot_hint() -> Option<ambre_client_core::BootHint> {
+    let text = web_sys::window()
+        .and_then(|window| window.local_storage().ok().flatten())
+        .and_then(|storage| storage.get_item(BOOT_HINT_KEY.as_str()).ok().flatten())?;
+    ambre_client_core::BootHint::decode(&ambre_client_core::BootHintText::new(text))
+}
+
+/// Keeps `hint` on this device, and nowhere else (`SETTINGS-029`).
+pub(crate) fn keep_boot_hint(hint: &ambre_client_core::BootHint) {
+    if let Some(storage) =
+        web_sys::window().and_then(|window| window.local_storage().ok().flatten())
+    {
+        let _ = storage.set_item(BOOT_HINT_KEY.as_str(), hint.encode().as_str());
+    }
+}
+
+/// Deletes the boot hint: the device signs out (`SETTINGS-039`).
+pub(crate) fn forget_boot_hint() {
+    if let Some(storage) =
+        web_sys::window().and_then(|window| window.local_storage().ok().flatten())
+    {
+        let _ = storage.remove_item(BOOT_HINT_KEY.as_str());
+    }
+}
+
+/// Moves both halves of the theme to `theme`, as a switch does.
+pub(crate) fn set_theme(control: &ambre_canvas::ThemeControl, theme: ambre_canvas::Theme) {
+    control.set(theme);
+    apply_theme_attr(theme);
+}
+
 /// The device of `kind` that the member chose for a call on this browser. The choice lives on
 /// the device and in no document, since a list of devices nearly names a machine (`ZK-026`).
 pub(crate) fn device_choice(

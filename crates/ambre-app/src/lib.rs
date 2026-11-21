@@ -151,6 +151,9 @@ mod route;
 /// The route binding, polled each frame.
 #[cfg(target_arch = "wasm32")]
 mod route_binding;
+/// What the page makes of the user settings, testable on the host.
+#[cfg(any(target_arch = "wasm32", test))]
+mod settings_view;
 #[cfg(target_arch = "wasm32")]
 mod signin;
 /// What the switchboard decides, testable on the host.
@@ -215,6 +218,8 @@ type Slot<T> = Rc<RefCell<Option<T>>>;
 struct Wiring {
     to_logic: outbox::ShellOutbox,
     theme_ctl: ambre_canvas::ThemeControl,
+    /// The glyph of the theme switch.
+    theme_sig: RwSignal<ambre_canvas::Theme>,
     /// The active app's command toggle signals (the store's reactive view,
     /// chrome side). Opaque to the launcher -- the app's chrome reads its own.
     toggles: trame_chrome::Toggles,
@@ -766,10 +771,17 @@ pub fn main() {
     };
 
     // Design tokens: inject the generated CSS custom properties (theme.css) and
-    // boot the dark theme. `theme_ctl` is the single source of truth for the
+    // boot the theme of the boot hint, read with no wait (`SETTINGS-032`,
+    // `SETTINGS-034`). `theme_ctl` is the single source of truth for the
     // active scheme, shared with the chrome toggle and the canvas view.
-    let theme_ctl = ambre_canvas::ThemeControl::new(ambre_canvas::Theme::Dark);
+    let theme_ctl =
+        ambre_canvas::ThemeControl::new(settings_view::boot_theme(platform::boot_hint().as_ref()));
     inject_theme(theme_ctl.get());
+    // The glyph of the theme switch, which a setting of another device
+    // moves too.
+    let theme_sig = RwSignal::new(theme_ctl.get());
+    // The handle the settings of the account move the theme through.
+    let settings_theme = theme_ctl.clone();
 
     // Resolve the boot route once. `/` is the landing (document list); a
     // `/trame/<id>` deep-link boots straight onto that document. After boot the
@@ -795,6 +807,8 @@ pub fn main() {
         ambre_bus::DocType::Prose => ambre_prose::commands::bind_keys(&mut keymap),
         ambre_bus::DocType::Murmure => ambre_murmure::ui::commands::bind_keys(&mut keymap),
         ambre_bus::DocType::Trame => trame_chrome::bind_keys(&mut keymap),
+        // No route boots the settings document (`route::parse`).
+        ambre_bus::DocType::Settings => {}
     }
     // The canvas needs a document from frame 0. Boot onto the routed one, or a
     // throwaway id on the landing route. The canvas is hidden there, and the
@@ -929,6 +943,7 @@ pub fn main() {
         clipboard_paste: paste_tx,
         raf: raf.clone(),
         theme_ctl: theme_ctl.clone(),
+        theme_sig,
         boot_doc,
         booted,
         slots: shell::ShellSlots {
@@ -1233,6 +1248,14 @@ pub fn main() {
                     switchboard::Effect::Notice(notice) => {
                         toasts.raise(notice.kind, notice.voice, notice.text)
                     }
+                    switchboard::Effect::ApplySettings(settings) => {
+                        let theme = settings_view::rendered(settings.theme, settings_theme.get());
+                        if theme != settings_theme.get() {
+                            platform::set_theme(&settings_theme, theme);
+                            theme_sig.set(theme);
+                        }
+                        platform::keep_boot_hint(&settings.boot_hint());
+                    }
                     switchboard::Effect::Send(command) => {
                         relay_tx.send(command);
                     }
@@ -1254,6 +1277,9 @@ pub fn main() {
                         persist.signed_in(user_id);
                     }
                     switchboard::Effect::LeaveSession => {
+                        // Nothing of the account stays in the clear on the
+                        // device (`SETTINGS-039`).
+                        platform::forget_boot_hint();
                         let keeper = draft_keeper.clone();
                         wasm_bindgen_futures::spawn_local(async move {
                             keeper.written().await;

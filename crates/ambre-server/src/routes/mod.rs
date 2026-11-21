@@ -7,6 +7,7 @@ mod keys;
 mod media;
 mod orgs;
 mod read_cursors;
+mod settings;
 mod share;
 mod sync;
 
@@ -22,6 +23,7 @@ pub use keys::*;
 pub use media::*;
 pub use orgs::*;
 pub use read_cursors::*;
+pub use settings::*;
 pub use share::*;
 pub use sync::*;
 
@@ -56,6 +58,10 @@ pub fn api_router(
         )
         .route("/users/search", axum::routing::get(search_users))
         .route("/users/{id}/pubkeys", axum::routing::get(get_pubkeys))
+        .route(
+            "/settings",
+            axum::routing::get(get_settings_document).post(claim_settings_document),
+        )
         .route(
             "/documents",
             axum::routing::get(list_documents).post(create_document),

@@ -153,6 +153,16 @@ impl KeyKind for StorageKeys {
     const NAME: &'static str = "StorageKey";
 }
 
+/// The key of one setting inside its section of the user settings. The key
+/// is frozen once released: a new meaning takes a new key (`SETTINGS-020`).
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SettingKeys {}
+
+impl sealed::Sealed for SettingKeys {}
+impl KeyKind for SettingKeys {
+    const NAME: &'static str = "SettingKey";
+}
+
 /// A class that the code puts on an element and a stylesheet selects. The
 /// stylesheet matches the class back, so it is no text a person reads.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]

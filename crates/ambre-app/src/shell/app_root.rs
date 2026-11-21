@@ -27,6 +27,8 @@ pub(crate) fn palette_table(kind: DocType) -> &'static [ambre_chrome::commands::
         DocType::Prose => ambre_prose::commands::COMMANDS,
         DocType::Trame => trame_chrome::COMMANDS,
         DocType::Murmure => ambre_murmure::ui::commands::COMMANDS,
+        // No page shows the settings document, so no table serves it.
+        DocType::Settings => &[],
     }
 }
 
@@ -112,6 +114,7 @@ pub(crate) fn MurmureShell(
 #[component]
 fn ShellHeader(
     theme_ctl: ambre_canvas::ThemeControl,
+    to_logic: crate::outbox::ShellOutbox,
     theme_sig: RwSignal<ambre_canvas::Theme>,
     toasts: Toasts,
     chrome_status: RwSignal<ChromeStatus>,
@@ -132,6 +135,12 @@ fn ShellHeader(
             on:click=move |_| {
                 let next = switch_theme(&theme_ctl);
                 theme_sig.set(next);
+                // The theme follows the account (`SETTINGS-023`).
+                to_logic.send(LogicCommand::ChangeSetting {
+                    change: ambre_client_core::SettingChange::Theme(
+                        crate::settings_view::chosen(next),
+                    ),
+                });
                 let label = if next == ambre_canvas::Theme::Dark {
                     "Dark theme"
                 } else {
@@ -226,6 +235,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
     let Wiring {
         to_logic,
         theme_ctl,
+        theme_sig,
         toggles,
         toile_toggles,
         style_state,
@@ -302,9 +312,8 @@ pub(crate) fn AppRoot() -> impl IntoView {
         )
     };
 
-    // Theme toggle drives only the button glyph; `theme_ctl` (canvas) and the
+    // `theme_sig` drives only the button glyph; `theme_ctl` (canvas) and the
     // document `data-theme` (CSS custom properties) are the real switches.
-    let theme_sig = RwSignal::new(theme_ctl.get());
     // The kind of the view this page booted, fixed per page load.
     let boot_is_toile = booted == DocType::Toile;
     let boot_is_prose = booted == DocType::Prose;
@@ -673,10 +682,12 @@ pub(crate) fn AppRoot() -> impl IntoView {
 
     let header = {
         let theme_ctl = theme_ctl.clone();
+        let header_tx = to_logic.clone();
         move || {
             view! {
                 <ShellHeader
                     theme_ctl=theme_ctl.clone()
+                    to_logic=header_tx.clone()
                     theme_sig=theme_sig
                     toasts=toasts
                     chrome_status=chrome_status

@@ -2427,7 +2427,7 @@ fn roots_vouched(
 ) -> Option<SyncEvent> {
     match doc_type {
         DocType::Murmure => Some(SyncEvent::RootsVouched { roots: members }),
-        DocType::Prose | DocType::Trame | DocType::Toile => None,
+        DocType::Prose | DocType::Trame | DocType::Toile | DocType::Settings => None,
     }
 }
 

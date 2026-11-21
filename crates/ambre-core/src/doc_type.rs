@@ -23,6 +23,9 @@ pub enum DocType {
     Toile = 2,
     /// Murmure - end-to-end encrypted messaging channels.
     Murmure = 3,
+    /// The settings of one user: a document with one member, opened by no
+    /// application (`ambre-spec-user-settings.md`).
+    Settings = 4,
 }
 
 impl DocType {
@@ -33,6 +36,7 @@ impl DocType {
             1 => Some(Self::Trame),
             2 => Some(Self::Toile),
             3 => Some(Self::Murmure),
+            4 => Some(Self::Settings),
             _ => None,
         }
     }
@@ -50,6 +54,7 @@ impl DocType {
             Self::Trame => "trame",
             Self::Toile => "toile",
             Self::Murmure => "murmure",
+            Self::Settings => "settings",
         }
     }
 
@@ -60,6 +65,7 @@ impl DocType {
             Self::Trame => "Trame",
             Self::Toile => "Toile",
             Self::Murmure => "Murmure",
+            Self::Settings => "Settings",
         }
     }
 
@@ -72,6 +78,7 @@ impl DocType {
             Self::Trame => "Tr",
             Self::Toile => "To",
             Self::Murmure => "Mu",
+            Self::Settings => "Se",
         }
     }
 
@@ -85,6 +92,7 @@ impl DocType {
             Self::Trame => "Spreadsheet",
             Self::Toile => "Whiteboard",
             Self::Murmure => "Channel",
+            Self::Settings => "Settings",
         }
     }
 
@@ -108,6 +116,7 @@ impl DocType {
             Self::Trame => "Spreadsheet with formulas and real-time collaboration",
             Self::Toile => "Infinite canvas whiteboard and presentations",
             Self::Murmure => "End-to-end encrypted messaging channels",
+            Self::Settings => "The settings of one user",
         }
     }
 }
@@ -139,6 +148,7 @@ impl FromStr for DocType {
             "trame" => Ok(Self::Trame),
             "toile" => Ok(Self::Toile),
             "murmure" => Ok(Self::Murmure),
+            "settings" => Ok(Self::Settings),
             _ => Err(DocTypeError::InvalidString(word.to_string())),
         }
     }
@@ -162,7 +172,8 @@ mod tests {
         assert_eq!(DocType::from_u8(1), Some(DocType::Trame));
         assert_eq!(DocType::from_u8(2), Some(DocType::Toile));
         assert_eq!(DocType::from_u8(3), Some(DocType::Murmure));
-        assert_eq!(DocType::from_u8(4), None);
+        assert_eq!(DocType::from_u8(4), Some(DocType::Settings));
+        assert_eq!(DocType::from_u8(5), None);
         assert_eq!(DocType::from_u8(255), None);
     }
 
@@ -201,6 +212,7 @@ mod tests {
             DocType::Trame,
             DocType::Toile,
             DocType::Murmure,
+            DocType::Settings,
         ] {
             assert_eq!(doc_type.as_str().parse(), Ok(doc_type));
             assert!(doc_type.name().parse::<DocType>().is_err());

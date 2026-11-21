@@ -212,6 +212,7 @@ pub mod mock_relay;
 mod pipeline;
 mod rekey;
 mod renewal;
+mod settings;
 mod sharing;
 mod snapshot_trust;
 mod space_rotation;
@@ -380,6 +381,10 @@ enum SyncEvent {
     /// A renewal replaced the pair in the store, on any path: arm the
     /// renewal of the new pair (`SYNC-183`).
     TokensRenewed,
+    /// The relay named the settings document of the account (`SETTINGS-007`).
+    SettingsDocumentFound {
+        document_id: Id<Document>,
+    },
     /// The membership log of the channel of the call was read (`CALL-060`). `None` for a
     /// log that stands on no root (`CALL-134`).
     CallLog {

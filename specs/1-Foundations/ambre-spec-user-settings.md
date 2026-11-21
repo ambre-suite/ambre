@@ -21,73 +21,74 @@ prefix is `SETTINGS`, and it belongs to this document alone.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SETTINGS-001` | `INV` | The settings of a user MUST live in one document whose only member is that user. | this spec section 3, the store; `ambre-spec-membership.md` | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `SETTINGS-002` | `INV` | The relay MUST hold at most one settings document per user. | this spec section 3, the store | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `SETTINGS-003` | `INV` | Each setting MUST belong to exactly one section, and each section to one owning document. | this spec section 3, the catalogue | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `SETTINGS-004` | `INV` | A setting MUST be one last-writer-wins entry, keyed by what it configures. | this spec section 3, the merge | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `SETTINGS-005` | `INV` | The settings document MUST stay pinned while its user is signed in. | this spec section 3, the store; `RESID-003` | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
+| `SETTINGS-001` | `INV` | The settings of a user MUST live in one document whose only member is that user. | this spec section 3, the store; `ambre-spec-membership.md` | `ambre_server::routes::tests::handler_tests::the_settings_document_takes_no_member_and_is_never_listed` -- the invite answers 409; `ambre_logic::settings_flow::tests::a_delta_of_the_user_moves_the_view_and_another_users_does_not` -- another user's delta changes nothing | none | verified |
+| `SETTINGS-002` | `INV` | The relay MUST hold at most one settings document per user. | this spec section 3, the store | `ambre_server::routes::tests::handler_tests::an_account_holds_one_settings_document` -- a second claim stores nothing | none | verified |
+| `SETTINGS-003` | `INV` | Each setting MUST belong to exactly one section, and each section to one owning document. | this spec section 3, the catalogue | `ambre_client_core::settings::tests::each_setting_belongs_to_one_section_under_one_key` | none | verified |
+| `SETTINGS-004` | `INV` | A setting MUST be one last-writer-wins entry, keyed by what it configures. | this spec section 3, the merge | `ambre_logic::settings::tests::two_devices_converge_after_writing_apart` | none | verified |
+| `SETTINGS-005` | `INV` | The settings document MUST stay pinned while its user is signed in. | this spec section 3, the store; `RESID-003` | structural -- the Logic thread holds the settings session beside the document table that residency evicts, and no eviction reads it | none | verified |
 | `SETTINGS-006` | `INV` | The settings document MUST stay within its byte budget. | this spec section 3, the store; `ambre-spec-budgets.md section 6` | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `SETTINGS-009` | `CONC` | Two devices signing in for the first time at once MUST converge on one settings document. | this spec section 3, the store; `SETTINGS-002` | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `SETTINGS-016` | `CONC` | Two devices that change one setting, one of them offline, MUST converge on one value once both reach the relay. | this spec section 3, the merge; `ambre-spec-delta-order.md` | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `SETTINGS-017` | `INV` | The key of the settings document MUST be wrapped for the exchange key of its user, as the key of any document. | this spec section 3, the key; `ambre-spec-membership.md section 3` | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `SETTINGS-018` | `INV` | The settings document MUST declare its kind inside its sealed content. | this spec section 3, the store | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `SETTINGS-019` | `INV` | Every setting MUST declare a default value. | this spec section 3, the catalogue | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `SETTINGS-020` | `INV` | A setting whose meaning or type changes MUST take a new key, and never reuse the old one. | this spec section 3, the catalogue | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `SETTINGS-021` | `INV` | A setting whose stored value a client cannot decode MUST read as its default on that client. | this spec section 3, the merge | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `SETTINGS-022` | `INV` | The width of the context panel MUST stay on the device, outside the settings document. | this spec section 3, the catalogue | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP). The context panel that reads it is specified with the shell, and lands with that work | unimplemented |
-| `SETTINGS-023` | `INV` | The theme MUST be a setting of the account. | this spec section 3, the catalogue; `ambre-spec-design-tokens.md section 2` | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `SETTINGS-024` | `INV` | The interface language MUST be a setting of the account. | this spec section 3, the catalogue; `ambre-spec-locale.md section 3` | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `SETTINGS-025` | `INV` | The side of the context panel MUST be a setting of the account. | this spec section 3, the catalogue | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP). The context panel that reads it is specified with the shell, and lands with that work | unimplemented |
-| `SETTINGS-026` | `INV` | The fold of the context panel MUST be a setting of the account, one value per application. | this spec section 3, the catalogue | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP). The context panel that reads it is specified with the shell, and lands with that work | unimplemented |
-| `SETTINGS-027` | `INV` | The number convention of a reader and their own locale MUST be settings of the account. | this spec section 3, the catalogue; `ambre-spec-locale.md section 3` | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `SETTINGS-028` | `INV` | The boot hint MUST carry the theme and the interface language, and no other setting. | this spec section 3, the boot | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
+| `SETTINGS-009` | `CONC` | Two devices signing in for the first time at once MUST converge on one settings document. | this spec section 3, the store; `SETTINGS-002` | `ambre_server::routes::tests::handler_tests::two_first_claims_at_once_converge_on_one_document` | none | verified |
+| `SETTINGS-016` | `CONC` | Two devices that change one setting, one of them offline, MUST converge on one value once both reach the relay. | this spec section 3, the merge; `ambre-spec-delta-order.md` | `ambre_logic::settings::tests::two_devices_converge_after_writing_apart` | none | verified |
+| `SETTINGS-017` | `INV` | The key of the settings document MUST be wrapped for the exchange key of its user, as the key of any document. | this spec section 3, the key; `ambre-spec-membership.md section 3` | `ambre_sync::settings::tests::an_account_with_none_claims_one_and_opens_the_relay_answer` -- the self-wrap of the creation rides the claim | none | verified |
+| `SETTINGS-018` | `INV` | The settings document MUST declare its kind inside its sealed content. | this spec section 3, the store | `ambre_logic::settings::tests::a_created_document_names_its_kind_in_its_first_delta`; `ambre_logic::settings_flow::tests::a_burst_of_changes_leaves_as_one_delta_after_the_delay` -- the first delta names the kind | none | verified |
+| `SETTINGS-019` | `INV` | Every setting MUST declare a default value. | this spec section 3, the catalogue | type-level -- `SettingValue` requires `Default`, and `Setting::read` falls back on it | none | verified |
+| `SETTINGS-020` | `INV` | A setting whose meaning or type changes MUST take a new key, and never reuse the old one. | this spec section 3, the catalogue | `ambre_client_core::settings::tests::every_released_key_keeps_its_section_and_its_name` | none | verified |
+| `SETTINGS-021` | `INV` | A setting whose stored value a client cannot decode MUST read as its default on that client. | this spec section 3, the merge | `ambre_client_core::settings::tests::an_absent_or_unknown_word_reads_as_the_default`; `ambre_logic::settings::tests::an_unknown_setting_survives_an_older_client` | none | verified |
+| `SETTINGS-022` | `INV` | The width of the context panel MUST stay on the device, outside the settings document. | this spec section 3, the catalogue | `ambre_client_core::settings::tests::every_released_key_keeps_its_section_and_its_name` -- the frozen catalogue holds no width | none | verified |
+| `SETTINGS-023` | `INV` | The theme MUST be a setting of the account. | this spec section 3, the catalogue; `ambre-spec-design-tokens.md section 2` | `ambre_client_core::settings::tests::every_released_key_keeps_its_section_and_its_name` | none | verified |
+| `SETTINGS-024` | `INV` | The interface language MUST be a setting of the account. | this spec section 3, the catalogue; `ambre-spec-locale.md section 3` | `ambre_client_core::settings::tests::every_released_key_keeps_its_section_and_its_name` | none | verified |
+| `SETTINGS-025` | `INV` | The side of the context panel MUST be a setting of the account. | this spec section 3, the catalogue | `ambre_client_core::settings::tests::every_released_key_keeps_its_section_and_its_name` | none | verified |
+| `SETTINGS-026` | `INV` | The fold of the context panel MUST be a setting of the account, one value per application. | this spec section 3, the catalogue | `ambre_client_core::settings::tests::every_released_key_keeps_its_section_and_its_name` | none | verified |
+| `SETTINGS-027` | `INV` | The number convention of a reader and their own locale MUST be settings of the account. | this spec section 3, the catalogue; `ambre-spec-locale.md section 3` | `ambre_client_core::settings::tests::every_released_key_keeps_its_section_and_its_name` | none | verified |
+| `SETTINGS-028` | `INV` | The boot hint MUST carry the theme and the interface language, and no other setting. | this spec section 3, the boot | type-level -- `BootHint` holds the theme and the interface language alone | none | verified |
 
 ### 1.2 Open the settings on a device
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SETTINGS-007` | `POST` | A client that unlocks its account MUST ask the relay for its settings document and open it like any document. | this spec section 3, the store | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `SETTINGS-008` | `POST` | A user with no settings document MUST get one at the first unlock. | this spec section 3, the store | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `SETTINGS-010` | `POST` | Until the settings document is loaded, every setting the boot hint does not carry MUST read as its default. | this spec section 3, the boot | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `SETTINGS-029` | `POST` | Once the settings document is loaded, the client MUST write the boot hint from it. | this spec section 3, the boot | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `SETTINGS-011` | `FRAME` | Opening the settings MUST NOT hold back the open of another document. | this spec section 3, the store | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `SETTINGS-030` | `FAIL` | Given a settings document whose sealed kind is not the settings kind, the client MUST refuse it, write nothing into it and keep the defaults. | this spec section 3, the store; `SETTINGS-018` | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `SETTINGS-031` | `FAIL` | Given a device that already opened the settings document of its user, a relay answer naming another one MUST be refused, and the device MUST keep the one it opened. | this spec section 3, the store; `SETTINGS-002` | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
+| `SETTINGS-007` | `POST` | A client that unlocks its account MUST ask the relay for its settings document and open it like any document. | this spec section 3, the store | `ambre_sync::settings::tests::a_known_settings_document_is_opened_without_a_claim`; `ambre_logic::settings_flow::tests::the_named_settings_document_opens_and_the_view_reads_the_defaults` | none | verified |
+| `SETTINGS-008` | `POST` | A user with no settings document MUST get one at the first unlock. | this spec section 3, the store | `ambre_sync::settings::tests::an_account_with_none_claims_one_and_opens_the_relay_answer`; `ambre_server::routes::tests::handler_tests::an_account_holds_one_settings_document` | none | verified |
+| `SETTINGS-010` | `POST` | Until the settings document is loaded, every setting the boot hint does not carry MUST read as its default. | this spec section 3, the boot | `ambre_client_core::settings::tests::an_absent_or_unknown_word_reads_as_the_default`; `ambre_logic::settings_flow::tests::the_named_settings_document_opens_and_the_view_reads_the_defaults` | none | verified |
+| `SETTINGS-029` | `POST` | Once the settings document is loaded, the client MUST write the boot hint from it. | this spec section 3, the boot | none | unheld -- the page writes the hint on the effect `ambre_app::switchboard::tests::the_settings_of_the_account_reach_the_page_as_one_effect` holds, and no wasm test reads the storage; lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | failing |
+| `SETTINGS-011` | `FRAME` | Opening the settings MUST NOT hold back the open of another document. | this spec section 3, the store | none | unheld -- the settings open is a command of its own, and no test shows another open going ahead of it; lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | failing |
+| `SETTINGS-030` | `FAIL` | Given a settings document whose sealed kind is not the settings kind, the client MUST refuse it, write nothing into it and keep the defaults. | this spec section 3, the store; `SETTINGS-018` | `ambre_logic::settings::tests::a_document_with_no_settings_marker_takes_no_write` | none | verified |
+| `SETTINGS-031` | `FAIL` | Given a device that already opened the settings document of its user, a relay answer naming another one MUST be refused, and the device MUST keep the one it opened. | this spec section 3, the store; `SETTINGS-002` | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP). A device keeps no record of the document it opened in an earlier session; within one session `SETTINGS-040` holds. | unimplemented |
+| `SETTINGS-040` | `FAIL` | Given a second settings document named in one session, the client MUST refuse it and keep the one it opened. | this spec section 3, the store; `SETTINGS-031` | `ambre_logic::settings_flow::tests::a_second_settings_document_named_in_a_session_is_refused` | none | verified |
 
 ### 1.3 Boot a page before the unlock
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SETTINGS-032` | `POST` | A page with a boot hint MUST boot in the theme the hint names. | this spec section 3, the boot | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `SETTINGS-033` | `POST` | A page with a boot hint MUST boot in the interface language the hint names. | this spec section 3, the boot | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `SETTINGS-034` | `FRAME` | Reading the boot hint MUST NOT wait on the network, on a key or on the local store. | this spec section 3, the boot | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
+| `SETTINGS-032` | `POST` | A page with a boot hint MUST boot in the theme the hint names. | this spec section 3, the boot | none | unheld -- `ambre_app::settings_view::tests::a_page_boots_in_the_theme_of_its_boot_hint` holds the choice, and no wasm test reads the hint from the storage; lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | failing |
+| `SETTINGS-033` | `POST` | A page with a boot hint MUST boot in the interface language the hint names. | this spec section 3, the boot | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP). No command title reads the interface language yet. | unimplemented |
+| `SETTINGS-034` | `FRAME` | Reading the boot hint MUST NOT wait on the network, on a key or on the local store. | this spec section 3, the boot | structural -- the page reads the hint through the synchronous local storage, before the first frame and before any wait | none | verified |
 
 ### 1.4 Change a setting
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SETTINGS-012` | `POST` | A change MUST reach every other signed-in device of the user as a delta of the settings document. | this spec section 3, the merge | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `SETTINGS-035` | `POST` | A change made while the socket is down MUST reach the relay once the socket is back. | this spec section 3, the merge; `RESID-019` | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `SETTINGS-036` | `POST` | Changes made within one coalescing delay MUST leave the device as one delta. | this spec section 3, the budget; `ambre-spec-budgets.md section 8` | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `SETTINGS-037` | `POST` | A change of the theme or of the interface language MUST rewrite the boot hint of the device. | this spec section 3, the boot | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `SETTINGS-013` | `FRAME` | Changing a setting MUST NOT change a setting of another section. | this spec section 3, the catalogue; `SETTINGS-003` | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `SETTINGS-038` | `FRAME` | Changing a setting MUST NOT remove or rewrite a setting the client does not know. | this spec section 3, the merge; `SETTINGS-021` | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
+| `SETTINGS-012` | `POST` | A change MUST reach every other signed-in device of the user as a delta of the settings document. | this spec section 3, the merge | `ambre_logic::settings::tests::a_change_reaches_the_other_device_as_one_delta`; `ambre_logic::settings_flow::tests::a_burst_of_changes_leaves_as_one_delta_after_the_delay` -- a second device takes the delta | none | verified |
+| `SETTINGS-035` | `POST` | A change made while the socket is down MUST reach the relay once the socket is back. | this spec section 3, the merge; `RESID-019` | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP). The settings document keeps no local copy, so a change made offline lives until the page closes. | unimplemented |
+| `SETTINGS-036` | `POST` | Changes made within one coalescing delay MUST leave the device as one delta. | this spec section 3, the budget; `ambre-spec-budgets.md section 8` | `ambre_logic::settings::tests::a_burst_of_writes_leaves_as_one_delta`; `ambre_logic::settings_flow::tests::a_burst_of_changes_leaves_as_one_delta_after_the_delay` | none | verified |
+| `SETTINGS-037` | `POST` | A change of the theme or of the interface language MUST rewrite the boot hint of the device. | this spec section 3, the boot | none | unheld -- the page rewrites the hint on each settings change, and no wasm test reads the storage; lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | failing |
+| `SETTINGS-013` | `FRAME` | Changing a setting MUST NOT change a setting of another section. | this spec section 3, the catalogue; `SETTINGS-003` | `ambre_logic::settings::tests::a_write_changes_no_other_section` | none | verified |
+| `SETTINGS-038` | `FRAME` | Changing a setting MUST NOT remove or rewrite a setting the client does not know. | this spec section 3, the merge; `SETTINGS-021` | `ambre_logic::settings::tests::an_unknown_setting_survives_an_older_client` | none | verified |
 
 ### 1.5 Sign out
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SETTINGS-014` | `POST` | Signing out MUST delete the local copy of the settings document. | this spec section 3, the store; `ambre-spec-residency.md` | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `SETTINGS-039` | `POST` | Signing out MUST delete the boot hint. | this spec section 3, the boot | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `SETTINGS-015` | `FRAME` | Signing out MUST NOT delete the settings document on the relay. | this spec section 3, the store | not built | unbuilt -- lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | unimplemented |
+| `SETTINGS-014` | `POST` | Signing out MUST delete the local copy of the settings document. | this spec section 3, the store; `ambre-spec-residency.md` | structural -- the settings document never reaches the local store: the Logic thread holds it outside the document table the store persists | none | verified |
+| `SETTINGS-039` | `POST` | Signing out MUST delete the boot hint. | this spec section 3, the boot | none | unheld -- the sign-out effect deletes the hint, and no wasm test reads the storage; lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | failing |
+| `SETTINGS-015` | `FRAME` | Signing out MUST NOT delete the settings document on the relay. | this spec section 3, the store | none | unheld -- the sign-out sends no delete, and no test asserts that the relay keeps the document; lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | failing |
 
 * **Budget.** the settings document row of `ambre-spec-budgets.md section 6`, and the coalescing
   delay of `ambre-spec-budgets.md section 8`. Both wait on a measure.
 * **Boundary.** the settings document is sealed like any document (`ZK-001`), and no setting leaves
   in another field (`ZK-053`). The relay learns which document holds the settings, and the size and
   time of each delta (`ZK-054`).
-* **Verification.** 39 `unimplemented`: no settings document exists. Every row lands with one
-  Story.
+* **Verification.** 30 `verified`, 6 `failing`, 4 `unimplemented`: no settings document exists.
+  Every row lands with one Story.
 
 ---
 
@@ -156,8 +157,8 @@ winner is the same on both devices. It is not always the later write by the wall
 others alone (`SETTINGS-038`). A value it cannot decode, such as a theme a later release added,
 reads as the default on that client, and stays stored (`SETTINGS-021`).
 
-**The boot.** The local copy of the settings document is sealed under a key of the session
-(`RESID-025`). Before the unlock, no page can read it. So each device keeps a boot hint: the theme
+**The boot.** The settings document opens only once the account unlocks, and a local copy would be
+sealed under a key of the session too (`RESID-025`). So each device keeps a boot hint: the theme
 and the interface language, in the clear, in the browser's local storage (`SETTINGS-028`).
 
 1. The page reads the hint before the first frame, with no wait (`SETTINGS-034`).
@@ -170,7 +171,7 @@ A kept session unlocks a reload with no passphrase (`ambre-spec-session.md`). Th
 ends after the first frame, so the hint serves it too.
 
 The hint mirrors two settings of the account, and holds no choice of its own. It names no document
-and no user. A sign-out deletes it with the local copy (`SETTINGS-039`). The panel shows only once
+and no user. A sign-out deletes it (`SETTINGS-039`). The panel shows only once
 a document opens, which is after the unlock, so no panel setting enters the hint.
 
 **The catalogue.**
@@ -201,23 +202,33 @@ device (`SETTINGS-022`).
 
 ```rust
 pub enum SettingsSection { Shell, Locale, Prose, Trame, Toile, Murmure, Macros }
-pub enum DocumentKind { Settings }      // joins the kinds each application declares
+pub enum DocType { Prose, Trame, Toile, Murmure, Settings }  // Settings: no page shows it
 
-/// One entry of the settings document. The key is frozen once released (`SETTINGS-020`).
-pub trait Setting {
-    const SECTION: SettingsSection;
-    const KEY: StaticKey<Settings>;     // "panel.side": unique inside its section
-    type Value: SettingValue;           // decodes to None on a value it does not know
-    fn default_value() -> Self::Value;  // SETTINGS-019
+/// A value of a setting: a word in the document, and a default (`SETTINGS-019`).
+pub trait SettingValue: Default + Clone + PartialEq {
+    fn to_word(&self) -> SettingWord;
+    fn from_word(word: &SettingWord) -> Option<Self>;  // None: a word this release does not know
 }
 
-pub enum Theme { System, Light, Dark }
+/// One entry: its section and its frozen key (`SETTINGS-020`).
+pub struct Setting<V> { section: SettingsSection, key: StaticKey<SettingKeys>, value: PhantomData<fn() -> V> }
+
+pub enum ThemeChoice { System, Light, Dark }
 pub enum PanelSide { Left, Right }
 pub enum PanelFold { Open, Folded }
 
+/// What the shell reads: every setting, read whole (`SETTINGS-010`).
+pub struct UserSettings { pub theme: ThemeChoice, pub panel_side: PanelSide, /* one field per setting */ }
+/// What the shell writes, through `LogicCommand::ChangeSetting` (`SETTINGS-012`).
+pub enum SettingChange { Theme(ThemeChoice), PanelSide(PanelSide), PanelFold(PanelApplication, PanelFold), /* ... */ }
+
 /// The two settings a page reads before the unlock (`SETTINGS-028`).
-pub struct BootHint { pub theme: Theme, pub interface_language: Option<LanguageTag> }
+pub struct BootHint { pub theme: ThemeChoice, pub interface_language: DocumentLocale }
 ```
+
+The view receives `UiEvent::SettingsChanged` after every change, here or on another device. The
+shell reads the side and the fold from it once the panel lands, and writes them through
+`LogicCommand::ChangeSetting`.
 
 **The budget.** The catalogue above weighs under 1 KB, against the row of
 `ambre-spec-budgets.md section 6`. A burst of changes leaves as one delta per coalescing delay of
@@ -229,7 +240,14 @@ it keeps. It learns the size and the instant of each delta, as for any document 
 can tell which setting changed, since a client of known code writes it. That is the timing and size
 metadata `ambre-spec-zero-knowledge.md` accepts (`ZK-054`).
 
-**Code.** not built.
+**Code.**
+
+* `crates/ambre-client-core/src/settings.rs` -- the catalogue, the values, the boot hint;
+* `crates/ambre-logic/src/settings.rs` -- the document, its checks and the coalescing delay;
+* `crates/ambre-logic/src/settings_flow.rs` -- the open, the imports, the writes and the view;
+* `crates/ambre-sync/src/settings.rs` -- the read or the claim at each unlock;
+* `crates/ambre-server/src/routes/settings.rs` and `src/db/settings.rs` -- the pointer and the claim;
+* `crates/ambre-app/src/settings_view.rs` and `src/platform.rs` -- the boot and the hint.
 
 ---
 
@@ -241,10 +259,10 @@ changes them. The theme sits in the avatar menu, and the side and the fold on th
 | Trigger | Behaviour |
 |---|---|
 | a page boots | it takes the theme and the language of the boot hint, or the default theme without one |
-| the account unlocks | the settings open from the local copy, then from the relay, and replace the defaults |
+| the account unlocks | the settings open from the relay, and replace the defaults |
 | a setting changed on one device | the other signed-in devices show it at their next delta |
 | a setting changed offline | the change waits in the local store and leaves once the socket is back |
-| a sign-out | the local copy and the boot hint go, and the relay copy stays |
+| a sign-out | the boot hint goes, and the relay copy stays |
 
 ---
 
@@ -272,9 +290,10 @@ changes them. The theme sits in the avatar menu, and the side and the fold on th
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **Nothing is built.** No settings document exists, and the theme starts at its default at each
-  boot. The reader's own locale sits in the browser's local
-  storage.
+* **The settings keep no local copy.** A change made offline lives until the page closes, and a
+  device does not recall across sessions which document it opened (`SETTINGS-031`, `SETTINGS-035`).
+* **The reader's locale still reads the device.** The locale and the convention are settings of the
+  account, and the boot still reads the reader's locale from the browser's local storage.
 * **No control returns the theme to `system`.** The theme switch has two values. A third entry of
   the avatar menu, or a long press, is the owner's to rule (`ambre-spec-design-tokens.md`).
 * **Nothing translates the interface yet.** The setting stores a language, and no command title
