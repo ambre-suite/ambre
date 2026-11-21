@@ -44,7 +44,7 @@ The user asks for the selection to fill the view. The target may be empty.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `ZOOM-007` | `POST` | A zoom to a selection MUST frame it and clamp. | this spec section 3 | `ambre_core::zoom::tests::a_box_is_framed_whole_and_an_empty_one_is_ignored` -- the frame fits the box whole, clamped; `ambre_toile::ui::view::view_tests::a_zoom_to_the_selection_frames_it_and_keeps_the_selection`; `ambre_trame::ui::grid::tests::viewport::a_zoom_to_the_selection_shows_it_whole_and_keeps_it`; `ambre_trame::ui::grid::tests::viewport::a_zoom_to_the_selection_clamps_to_the_grid_range` | none | verified |
-| `ZOOM-011` | `POST` | A zoom to a selection MUST frame it in the part of the view that no floating surface of the shell covers. | this spec section 3; `ambre-spec-chrome.md` | `ambre_toile::ui::viewport::tests::a_fit_lands_clear_of_the_floating_surfaces` -- the box lands whole inside the uncovered part and centred on it, and centred alone when the clamp binds; `ambre_toile::ui::viewport::tests::the_clearance_matches_the_stylesheet` -- the strips carry the offsets the stylesheet gives the palette and the selection bar | none | verified |
+| `ZOOM-011` | `POST` | A zoom to a selection MUST frame it in the part of the view that no floating surface of the shell covers. | this spec section 3; `ambre-spec-chrome.md` | `ambre_toile::ui::viewport::tests::a_fit_lands_clear_of_the_floating_surfaces` -- for any measured strips, the box lands whole inside the uncovered part and centred on it, and centred alone when the clamp binds; `ambre_toile::ui::cover::tests::the_palette_covers_the_canvas_up_to_its_right_edge`; `::the_bar_reach_is_kept_above_the_frame`; `::nothing_measured_leaves_the_whole_canvas` -- the strips follow the palette's edge and the bar's reach, and a side nothing covers keeps none; `ambre_toile::chrome_ui::the_palette_publishes_the_edge_it_covers_and_clears_it_when_it_hides` -- the palette measures itself under the shell stylesheet, tracks a change of width and clears when it hides; `ambre_toile::chrome_ui::the_selection_bar_publishes_its_reach_and_clears_it_when_it_leaves` -- the bar publishes its height and its lift, and clears when it leaves | none | verified |
 | `ZOOM-010` | `FRAME` | A zoom to a selection MUST NOT change the selection. | this spec section 3; derived | `ambre_toile::ui::view::view_tests::a_zoom_to_the_selection_frames_it_and_keeps_the_selection`; `ambre_trame::ui::grid::tests::viewport::a_zoom_to_the_selection_shows_it_whole_and_keeps_it` -- the selection compares equal before and after | none | verified |
 | `ZOOM-009` | `FAIL` | A zoom to an empty target MUST be ignored, never applied as a degenerate factor. | this spec section 3 | `ambre_core::zoom::tests::a_box_is_framed_whole_and_an_empty_one_is_ignored` -- a box with no width or no height, or one not finite, gives no frame; `ambre_toile::ui::view::view_tests::a_zoom_to_the_selection_frames_it_and_keeps_the_selection` -- a box of no area moves nothing, and an empty selection publishes a notice and asks nothing | none | verified |
 
@@ -143,13 +143,17 @@ every editor.
 
 * **A two-finger touch pinch is not built.** A trackpad pinch arrives as a wheel with `Ctrl`, and
   zooms in every editor. A touch screen raises pointer events with no pointer identity, so no editor
-  can tell two fingers apart (`ambre-spec-ui.md`, `UI-THREAD-013`).
+  can tell two fingers apart (`ambre-spec-ui.md`, `UI-THREAD-013`). The One kinetic scroll Story
+  (`ambre-roadmap.md`) carries it, beside a finger's pan and flick.
 * **Prose frames no selection.** No command of the page asks for one, so `ZOOM-007` holds on the
   board and the grid alone. A key and the chip keep the top of the canvas in place; the anchor on
   the caret is not ruled (`4-Prose/features/ambre-spec-prose-viewport.md`).
 * **The grid frames with no strip.** No floating surface sits over the cells of a grid: its bars are
   docked above it. `ZOOM-011` holds there with nothing to keep clear, and no test of the grid reads
   it.
+* **Only the board measures its cover.** Its palette and its selection bar measure what they cover,
+  and a fit reads the latest measure. No figure of their size is declared twice. A surface another
+  editor floats over its canvas would publish its cover the same way. None does today.
 
 ---
 

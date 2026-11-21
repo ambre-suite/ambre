@@ -168,6 +168,7 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
         followed_link: toile_followed_link,
         present_mode: present_toile,
         find_result: find_result_toile,
+        cover: toile_cover,
     } = toile;
     leptos::mount::mount_to_body(move || {
         // The store stays here (in the mount owner, NOT in the view): it is `Rc`
@@ -363,6 +364,7 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
             toile_restyle,
             toile_float_bar,
             toile_quick_style,
+            toile_cover,
             toile_comments,
             toile_deck,
             toile_dropped_file,

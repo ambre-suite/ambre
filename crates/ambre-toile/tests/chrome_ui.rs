@@ -1355,3 +1355,112 @@ fn a_note_edit_with_no_frame_on_screen_is_refused() {
         Some(ToileCommand::EditNotes { frame: f, .. }) if f == frame
     ));
 }
+
+/// Load the shell stylesheet into the page, as the app does, so the floating
+/// surfaces take their real place and size. Remove it with the returned node.
+fn with_shell_stylesheet() -> web_sys::Element {
+    let sheet = document().create_element("style").unwrap();
+    sheet.set_text_content(Some(include_str!("../../ambre-app/styles.css")));
+    document().head().unwrap().append_child(&sheet).unwrap();
+    sheet
+}
+
+/// Let the page lay out and deliver its resize observations: one reactive
+/// tick, then two animation frames.
+async fn settle() {
+    leptos::task::tick().await;
+    for _ in 0..2 {
+        let frame = js_sys::Promise::new(&mut |resolve, _| {
+            web_sys::window()
+                .unwrap()
+                .request_animation_frame(&resolve)
+                .unwrap();
+        });
+        wasm_bindgen_futures::JsFuture::from(frame).await.unwrap();
+    }
+}
+
+/// `ZOOM-011`: the palette publishes the right edge it covers, as the page
+/// lays it out. The edge tracks a change of size, and clears when the palette
+/// hides.
+#[wasm_bindgen_test]
+async fn the_palette_publishes_the_edge_it_covers_and_clears_it_when_it_hides() {
+    let sheet = with_shell_stylesheet();
+    let active = RwSignal::new(Tool::Select);
+    let cover = RwSignal::new(ambre_toile::ui::cover::Cover::default());
+    let root = mount_in_container(move || view! { <ToolPalette active=active cover=cover /> });
+    settle().await;
+    let palette: web_sys::HtmlElement = root
+        .query_selector(".ambre-tool-palette")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    let measured = |cover: RwSignal<ambre_toile::ui::cover::Cover>| {
+        cover
+            .get_untracked()
+            .palette_right
+            .map(|right| f64::from(right.get()))
+    };
+    let right = palette.get_bounding_client_rect().right();
+    assert!(
+        right > 8.0,
+        "the palette sits right of the page edge: {right}"
+    );
+    assert!((measured(cover).unwrap() - right).abs() < 0.5);
+
+    palette.style().set_property("width", "120px").unwrap();
+    settle().await;
+    let wider = palette.get_bounding_client_rect().right();
+    assert!(wider > right);
+    assert!((measured(cover).unwrap() - wider).abs() < 0.5);
+
+    palette.style().set_property("display", "none").unwrap();
+    settle().await;
+    assert_eq!(measured(cover), None);
+
+    root.remove();
+    sheet.remove();
+}
+
+/// `ZOOM-011`: the selection bar publishes how far it reaches above the
+/// selection, its height and its lift, and clears it once it leaves.
+#[wasm_bindgen_test]
+async fn the_selection_bar_publishes_its_reach_and_clears_it_when_it_leaves() {
+    let sheet = with_shell_stylesheet();
+    let bar = RwSignal::new(Some(FloatBar {
+        at: css_point(400.0, 300.0),
+        count: Count::<Elements>::new(1),
+        groups: GroupHeld::NoGroup,
+        locks: LockMix::Unlocked,
+        fill: None,
+        mixed: Default::default(),
+    }));
+    let model = RwSignal::new(None::<StyleModel>);
+    let cover = RwSignal::new(ambre_toile::ui::cover::Cover::default());
+    let on_command = Callback::new(move |_id: StaticKey<Commands>| {});
+    let on_style = Callback::new(move |_e: StyleEdit| {});
+    let root = mount_in_container(move || {
+        view! {
+            <SelectionToolbar bar=bar model=model on_command=on_command on_style=on_style cover=cover />
+        }
+    });
+    settle().await;
+    let selbar = root.query_selector(".ambre-selbar").unwrap().unwrap();
+    let rect = selbar.get_bounding_client_rect();
+    let reach = f64::from(cover.get_untracked().bar_reach.unwrap().get());
+    assert!((reach - (300.0 - rect.top())).abs() < 0.5);
+    // The reach is the bar's own height and the lift above the selection.
+    assert!(
+        reach > rect.height(),
+        "reach {reach}, height {}",
+        rect.height()
+    );
+
+    bar.set(None);
+    settle().await;
+    assert_eq!(cover.get_untracked().bar_reach, None);
+
+    root.remove();
+    sheet.remove();
+}

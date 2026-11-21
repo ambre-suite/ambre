@@ -51,7 +51,24 @@ pub fn SelectionToolbar(
     model: RwSignal<Option<StyleModel>>,
     on_command: Callback<StaticKey<Commands>>,
     on_style: Callback<StyleEdit>,
+    /// Carries how far the bar reaches above the selection to a fit
+    /// (`ZOOM-011`), when given.
+    #[prop(optional)]
+    cover: Option<RwSignal<crate::ui::cover::Cover>>,
 ) -> impl IntoView {
+    let node = NodeRef::<leptos::html::Div>::new();
+    if let Some(cover) = cover {
+        super::cover::watch_bar(
+            node,
+            move || bar.get_untracked().map(|b| b.at.y.get()),
+            cover,
+        );
+        Effect::new(move |_| {
+            if bar.with(Option::is_none) {
+                super::cover::clear_bar(cover);
+            }
+        });
+    }
     // Local working values for the style controls. They are seeded from the
     // published bar / model each time the view republishes them, and updated on
     // every pick so the trigger strips track. Reading `bar` / `model` here never
@@ -176,6 +193,7 @@ pub fn SelectionToolbar(
                             class="ambre-selbar ambre-commandbar"
                             role="toolbar"
                             aria-label="Selection actions"
+                            node_ref=node
                             style:left=left
                             style:top=top
                         >

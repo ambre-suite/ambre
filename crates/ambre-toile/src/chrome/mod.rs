@@ -15,6 +15,7 @@ mod choosers;
 pub use choosers::{DocChoice, ToileChoosers};
 mod commands;
 mod comments;
+mod cover;
 mod deck;
 mod editing;
 pub use editing::EditingSurfaces;

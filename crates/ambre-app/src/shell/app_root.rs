@@ -353,6 +353,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         toile_restyle,
         toile_float_bar,
         toile_quick_style,
+        toile_cover,
         toile_comments,
         toile_deck,
         toile_dropped_file,
@@ -1066,7 +1067,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         // Every editing surface below leaves the DOM while the board presents.
         {boot_is_toile.then(|| view! {
             <toile_chrome::EditingSurfaces present=present_toile>
-                <toile_chrome::ToolPalette active=toile_active_tool />
+                <toile_chrome::ToolPalette active=toile_active_tool cover=toile_cover />
             </toile_chrome::EditingSurfaces>
         })}
         // Toile style / property inspector (toile-styles): a side panel shown only for
@@ -1096,6 +1097,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
             <toile_chrome::EditingSurfaces present=present_toile>
                 <toile_chrome::SelectionToolbar
                     bar=toile_float_bar
+                    cover=toile_cover
                     model=toile_style_model
                     on_command=on_command
                     on_style=Callback::new(move |s: toile_chrome::StyleEdit| {

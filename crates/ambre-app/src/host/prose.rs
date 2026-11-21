@@ -1000,8 +1000,11 @@ mod tests {
         view.state.viewport.scroll_y = Px::new(5_000.0);
         let at = pointer(420.0, 310.0);
         let _ = view.handle_input(&InputEvent::PointerMove { at });
-        let DocPos::OnPage { page, x_in_page, y_in_page } =
-            view.state.column.screen_to_doc(&view.state.viewport, at)
+        let DocPos::OnPage {
+            page,
+            x_in_page,
+            y_in_page,
+        } = view.state.column.screen_to_doc(&view.state.viewport, at)
         else {
             panic!("the pointer is over a page");
         };
@@ -1013,15 +1016,31 @@ mod tests {
             mods: ModifierKeys::PRIMARY,
         };
         for dy in [-120.0, -120.0, -60.0, 120.0, -200.0] {
-            assert!(view.handle_input(&notch(dy)).is_yes(), "the browser must not zoom the tab");
-            let now = view
-                .state
-                .column
-                .doc_to_screen(&view.state.viewport, page, x_in_page, y_in_page);
-            assert!((now.y - at.y).get().abs() < 0.5, "{:?} drifted to {:?}", at.y, now.y);
-            assert!((now.x - at.x).get().abs() < 0.5, "{:?} drifted to {:?}", at.x, now.x);
+            assert!(
+                view.handle_input(&notch(dy)).is_yes(),
+                "the browser must not zoom the tab"
+            );
+            let now =
+                view.state
+                    .column
+                    .doc_to_screen(&view.state.viewport, page, x_in_page, y_in_page);
+            assert!(
+                (now.y - at.y).get().abs() < 0.5,
+                "{:?} drifted to {:?}",
+                at.y,
+                now.y
+            );
+            assert!(
+                (now.x - at.x).get().abs() < 0.5,
+                "{:?} drifted to {:?}",
+                at.x,
+                now.x
+            );
         }
-        assert!(view.state.viewport.zoom.get() > 1.0, "a wheel away from the reader zooms in");
+        assert!(
+            view.state.viewport.zoom.get() > 1.0,
+            "a wheel away from the reader zooms in"
+        );
         assert!(view.dirty, "the zoomed page repaints");
         cell.remove();
     }
