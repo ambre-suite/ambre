@@ -77,7 +77,7 @@ theme is a property of the machine.
 
 | Group | Holds | Reaches |
 |---|---|---|
-| the chrome colours | background, surface, second surface, hover, border, strong border, text, dimmed text, accent, soft accent, the four status colours, and the text drawn on the accent | the browser half, as custom properties |
+| the chrome colours | background, surface, second surface, hover, border, strong border, text, dimmed text, faint text, accent, soft accent, the four status colours, and the text drawn on the accent | the browser half, as custom properties |
 | the chrome effects | three shadows, low, mid and high, and the scrim behind a modal | the browser half, as custom properties |
 | the photo colours | the text, its shadow, the lines, the control and the veil drawn over a picture | the browser half, as custom properties |
 | the content colours | content ground, pending ground, header ground, active and hovered header, grid line, header border, selection, cell text, header text, caret, error | the drawing half, as two palettes |
