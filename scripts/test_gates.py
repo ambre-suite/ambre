@@ -321,6 +321,8 @@ class GatesFailWithNoFlag(unittest.TestCase):
         message = self.dir / "COMMIT_EDITMSG"
         message.write_text("Ends on a period.\n")
         self.fails("commit_msg", [], str(message))
+        message.write_text("Merge branch 'story' into main\n")
+        self.fails("commit_msg", [], str(message))
 
 
 class GeneratorsWriteOnlyWithWrite(unittest.TestCase):

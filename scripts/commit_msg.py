@@ -19,6 +19,9 @@ which is why the trailer that names the assisting tool is deliberately *not*
 checked: its value is the author's to write, and a script asserting one value
 would turn a project rule into a preference for one product.
 
+The type prefix is checked too: it is a closed list, so a match is shape, and a
+merge git words itself reached `main` once with no prefix at all.
+
 What is not checked, and why: whether the subject is imperative. "Fold" and
 "folding" are one dictionary lookup apart and the lookup is wrong on a project
 noun, so a check would refuse correct subjects. That one stays a review rule.
@@ -56,9 +59,15 @@ CO_AUTHORED = re.compile(r"^co-authored-by:", re.IGNORECASE)
 # everywhere: prose, code, comments, commit messages, file names."
 NON_ASCII = re.compile(r"[^\x20-\x7e]")
 
-# Messages git writes itself, or writes for a later rewrite. Their subject is not
-# the author's to shape, so the rules above do not apply.
-GENERATED = ("merge ", "revert ", "fixup!", "squash!", "amend!")
+# `ai/ambre-git-strategy.md`: "The subject reads `<type>(<scope>): <imperative
+# summary>`", with a closed list of types. A merge or a revert git words itself
+# matches none of them, which is the point: the author states what it changed.
+CONVENTIONAL = re.compile(
+    r"^(feat|fix|perf|refactor|test|docs|ci|build|chore)(\([a-z0-9,-]+\))?!?: \S")
+
+# Messages git writes for a later rewrite, which `--autosquash` folds before the
+# commit reaches `main`. Their subject is not the author's to shape.
+GENERATED = ("fixup!", "squash!", "amend!")
 
 
 def strip_comments(text: str) -> list[str]:
@@ -104,8 +113,15 @@ def defects(text: str) -> list[str]:
         return out  # git refuses an empty message on its own
 
     subject, body, _ = split(lines)
-    if subject.lower().startswith(GENERATED):
+    if subject.startswith(GENERATED):
         return out
+
+    if not CONVENTIONAL.match(subject):
+        out.append(
+            "subject MUST read `<type>(<scope>): <summary>`, the type one of "
+            "feat, fix, perf, refactor, test, docs, ci, build or chore. A merge "
+            "states what it resolved, or `chore: bring main into the branch` "
+            "(`ai/ambre-git-strategy.md`)")
 
     if len(subject) > SUBJECT_MAX:
         out.append(
