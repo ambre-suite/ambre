@@ -278,16 +278,10 @@ mod tests {
         wait_refusal(&page, BAD_CHECKSUM).await;
 
         // The words the setup showed, in capitals, draw no refusal: the
-        // session re-seals the seed, and the unlock face comes back.
+        // session re-seals the seed, and the list shows with no second
+        // unlock (`CHROME-133`, `SYNC-293`).
         recover(&page, &phrase.to_uppercase()).await;
-        page.browser
-            .wait_for(
-                "the unlock face after the recovery",
-                "return !document.querySelector('.ambre-keys-words-field') \
-                   && !!document.querySelector('.ambre-keys-recover');",
-                SETUP,
-            )
-            .await;
+        wait_list(&page, &name).await;
     }
 
     /// `CHROME-132`, `SYNC-261`: a setup ends in a session. The words cover
