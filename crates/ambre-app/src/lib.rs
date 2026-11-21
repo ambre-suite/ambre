@@ -215,9 +215,6 @@ type Slot<T> = Rc<RefCell<Option<T>>>;
 struct Wiring {
     to_logic: outbox::ShellOutbox,
     theme_ctl: ambre_canvas::ThemeControl,
-    /// The active app's command toggle signals (the store's reactive view,
-    /// chrome side). Opaque to the launcher -- the app's chrome reads its own.
-    toggles: trame_chrome::Toggles,
     /// Toile's Undo/Redo availability signals, resolved from its own store so the
     /// menu bar disables the two rows from the Logic thread's `UndoState` alone
     /// (`UNDO-006`).

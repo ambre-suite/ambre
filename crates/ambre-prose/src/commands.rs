@@ -97,9 +97,24 @@ pub const PASTE: StaticKey<Commands> = ambre_commands::shared::PASTE;
 /// Paste the text alone, every richer format dropped (`PROSE-UI-227`).
 pub const PASTE_PLAIN: StaticKey<Commands> = ambre_commands::shared::PASTE_PLAIN;
 
-/// The entries of the page's context menu, in the order it shows them. The
-/// history group comes first, then the clipboard group.
-pub const CONTEXT_MENU: [StaticKey<Commands>; 6] = [UNDO, REDO, CUT, COPY, PASTE, PASTE_PLAIN];
+/// The clipboard entries of the page's context menu, which it lists first
+/// (`CHROME-179`).
+pub const MENU_CLIPBOARD: [StaticKey<Commands>; 4] = [CUT, COPY, PASTE, PASTE_PLAIN];
+
+/// The entries of the page's context menu, in the order it shows them: the
+/// clipboard, then the formatting the context panel also holds
+/// (`CHROME-182`, `CHROME-209`).
+pub const CONTEXT_MENU: [StaticKey<Commands>; 9] = [
+    CUT,
+    COPY,
+    PASTE,
+    PASTE_PLAIN,
+    BOLD,
+    ITALIC,
+    UNDERLINE,
+    STRIKETHROUGH,
+    CLEAR_FORMATTING,
+];
 
 /// The five controls of the format bar. A control and its chord invoke the
 /// same id, and the id resolves to one mark key (`PROSE-UI-056`).
@@ -573,6 +588,12 @@ mod tests {
         let mut keymap = Keymap::new();
         bind_keys(&mut keymap);
         for id in CONTEXT_MENU {
+            assert!(
+                ambre_commands::find(COMMANDS, id).is_some(),
+                "{id:?} is declared"
+            );
+        }
+        for id in MENU_CLIPBOARD {
             let command = ambre_commands::find(COMMANDS, id).expect("the entry is declared");
             for chord in command.keybindings {
                 assert_eq!(keymap.resolve(*chord), None);

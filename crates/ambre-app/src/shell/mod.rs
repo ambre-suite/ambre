@@ -178,7 +178,6 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
         let store = CommandStates::new(trame_chrome::COMMANDS.iter().map(|c| c.id));
         // Seed app-specific initial command states (Undo/Redo start disabled).
         trame_chrome::init_command_states(&store);
-        let toggles = trame_chrome::Toggles::from_store(&store);
         *store_slot.borrow_mut() = Some(store);
         // Toile's own store: the two Undo/Redo rows read its enabled signals,
         // fed by `ToileEvent::UndoState` through the launcher's relay.
@@ -315,7 +314,6 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
         provide_context(Wiring {
             to_logic,
             theme_ctl,
-            toggles,
             toile_toggles,
             style_state,
             toasts,

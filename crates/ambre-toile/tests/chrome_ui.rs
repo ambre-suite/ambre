@@ -1473,15 +1473,23 @@ fn styled(kind: ambre_toile::ui::style::Styled) -> StyleModel {
 /// an unlocked member of a group of two, so every conditional control shows.
 /// Return the container.
 fn mount_toile_panel(model: Option<StyleModel>) -> web_sys::Element {
+    mount_toile_panel_on(
+        model,
+        CtxScope {
+            site: ClickSite::Selection,
+            count: Count::<Elements>::new(2),
+            groups: GroupHeld::Group,
+            locks: LockMix::Both,
+            ..Default::default()
+        },
+    )
+}
+
+/// Mount the board's context panel on `model` and `scope`.
+fn mount_toile_panel_on(model: Option<StyleModel>, scope: CtxScope) -> web_sys::Element {
     use ambre_chrome::{ContextPanel, DockSide, Fold, PanelPrefs, PanelWidth};
     let model = RwSignal::new(model);
-    let scope = RwSignal::new(CtxScope {
-        site: ClickSite::Selection,
-        count: Count::<Elements>::new(2),
-        groups: GroupHeld::Group,
-        locks: LockMix::Both,
-        ..Default::default()
-    });
+    let scope = RwSignal::new(scope);
     let content = ambre_toile::chrome::toile_panel(ambre_toile::chrome::ToilePanelSignals {
         model,
         scope,
@@ -1539,6 +1547,11 @@ async fn the_board_panel_shows_the_board_then_what_applies_to_the_selection() {
                     .unwrap()
             })
             .collect();
+        assert_eq!(
+            ambre_chrome::unreached_controls(&root),
+            Vec::<String>::new(),
+            "every control names its reach"
+        );
         let expected: Vec<&str> = kind.sections().iter().map(|k| k.as_str()).collect();
         assert_eq!(shown, expected, "{kind:?}");
         // Every control of the panel names a declared command or property.
@@ -1592,4 +1605,45 @@ async fn each_entry_of_the_board_bar_is_a_control_of_the_panel() {
         assert!(entry.matches_marker(marker), "{marker} is {entry:?}");
     }
     toolbar.remove();
+}
+
+/// Each entry of the board's context menu besides the clipboard is a control
+/// the panel shows for the same selection (`CHROME-209`).
+#[wasm_bindgen_test]
+async fn each_entry_of_the_board_menu_is_a_control_of_the_panel() {
+    use ambre_toile::ui::menu::{FrameHeld, context_menu_ids};
+    use ambre_toile::ui::style::Styled;
+    let frame = Some(Id::<ambre_core::id::Element>::from_text("f1".to_owned()));
+    let mut scopes = vec![CtxScope::default()];
+    for locks in [LockMix::Unlocked, LockMix::Locked, LockMix::Both] {
+        for count in [1, 2] {
+            scopes.push(CtxScope {
+                site: ClickSite::Selection,
+                count: Count::<Elements>::new(count),
+                groups: GroupHeld::Group,
+                locks,
+                framed: FrameHeld::Framed,
+                containing_frame: frame.clone(),
+                frame: frame.clone(),
+                ..Default::default()
+            });
+        }
+    }
+    for scope in scopes {
+        let model = (scope.site == ClickSite::Selection).then(|| styled(Styled::Elements));
+        let root = mount_toile_panel_on(model, scope.clone());
+        leptos::task::tick().await;
+        let panel = ambre_chrome::reach_markers(&root);
+        for id in context_menu_ids(&scope).into_iter().flatten() {
+            if ambre_commands::shared::BROWSER_SERVICED.contains(&id) {
+                continue;
+            }
+            let reach = ambre_chrome::commands::Reach::Command(id);
+            assert!(
+                panel.iter().any(|m| reach.matches_marker(m)),
+                "{id:?} of {scope:?} is in the panel"
+            );
+        }
+        root.remove();
+    }
 }

@@ -289,7 +289,6 @@ pub fn context_layout(scope: CtxScope, filter: SheetFilter) -> Vec<MenuRow> {
             group(&mut rows, MERGE_GROUP);
             rows.push(MenuRow::Separator);
             group(&mut rows, FREEZE_GROUP);
-            group(&mut rows, &[ZOOM_TO_SELECTION]);
         }
         CtxScope::Column => {
             group(&mut rows, COLUMN_STRUCTURAL_GROUP);
@@ -297,7 +296,7 @@ pub fn context_layout(scope: CtxScope, filter: SheetFilter) -> Vec<MenuRow> {
             group(&mut rows, SORT_GROUP);
             group(&mut rows, &[filter_command(filter)]);
             rows.push(MenuRow::Separator);
-            group(&mut rows, &[FREEZE_COLS, UNFREEZE, ZOOM_TO_SELECTION]);
+            group(&mut rows, &[FREEZE_COLS, UNFREEZE]);
         }
         CtxScope::Row => {
             group(&mut rows, ROW_STRUCTURAL_GROUP);
@@ -309,7 +308,7 @@ pub fn context_layout(scope: CtxScope, filter: SheetFilter) -> Vec<MenuRow> {
                 group(&mut rows, &[CLEAR_FILTER]);
             }
             rows.push(MenuRow::Separator);
-            group(&mut rows, &[FREEZE_ROWS, UNFREEZE, ZOOM_TO_SELECTION]);
+            group(&mut rows, &[FREEZE_ROWS, UNFREEZE]);
         }
         CtxScope::Corner => {
             // The corner selects the whole sheet: only whole-sheet ops apply.

@@ -821,6 +821,11 @@ async fn the_panel_announces_the_registry_labels() {
             .unwrap();
         assert!(found.is_some(), "{id:?}: no control announces {expected:?}");
     }
+    assert_eq!(
+        ambre_chrome::unreached_controls(&container),
+        Vec::<String>::new(),
+        "every control names its reach"
+    );
     for marker in ambre_chrome::reach_markers(&container) {
         let declared = chrome::COMMANDS
             .iter()

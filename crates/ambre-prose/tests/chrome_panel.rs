@@ -350,64 +350,44 @@ async fn the_format_bar_announces_the_registry_labels() {
     root.remove();
 }
 
-/// The labels of the menu rows the user cannot pick.
-fn disabled_rows(root: &web_sys::Element) -> Vec<String> {
-    let rows = root.query_selector_all("[aria-disabled=\"true\"]").unwrap();
-    (0..rows.length())
-        .filter_map(|i| rows.item(i))
-        .map(|row| row.text_content().unwrap_or_default())
-        .collect()
-}
-
-/// `UNDO-006`: the page menu's undo and redo rows follow the history state the
-/// Logic thread reports. The menu counts nothing itself: an event that is not
-/// a history state leaves the rows as they were.
+/// `UNDO-006`: the history the shell's undo and redo affordances read follows
+/// the state the Logic thread reports. The page counts nothing itself: an
+/// event that is not a history state leaves it as it was. Undo and redo live
+/// in the Ambre menu, outside the page's context menu.
 #[wasm_bindgen_test]
-async fn the_history_rows_follow_the_reported_state() {
+async fn the_history_follows_the_reported_state() {
     let signals = ProseSignals::new();
-    let pos = RwSignal::new(Some(css_point(10.0, 10.0)));
-    let entries = Signal::derive(move || chrome::context_entries(signals.history.get()));
-    let root = mount_in_container(move || {
-        view! { <ambre_chrome::ContextMenu pos=pos entries=entries on_command=Callback::new(|_| ()) /> }
-    });
     let report = |event: ProseEvent| {
         signals.mirror_event(&Event::Viewport {
             document_id: Id::<Document>::mint(),
             event,
         });
     };
-    leptos::task::tick().await;
-    assert!(
-        disabled_rows(&root).iter().any(|row| row.contains("Undo"))
-            && disabled_rows(&root).iter().any(|row| row.contains("Redo")),
-        "a fresh page has no history: {:?}",
-        disabled_rows(&root)
+    let disabled = ambre_core::Availability::Disabled;
+    let enabled = ambre_core::Availability::Enabled;
+    assert_eq!(
+        signals.history.get_untracked().undo,
+        disabled,
+        "a fresh page has no history"
     );
-
+    assert_eq!(signals.history.get_untracked().redo, disabled);
     report(ProseEvent::UndoState {
-        undo: ambre_core::Availability::Enabled,
-        redo: ambre_core::Availability::Disabled,
+        undo: enabled,
+        redo: disabled,
     });
-    leptos::task::tick().await;
-    let rows = disabled_rows(&root);
-    assert!(!rows.iter().any(|row| row.contains("Undo")), "{rows:?}");
-    assert!(rows.iter().any(|row| row.contains("Redo")), "{rows:?}");
-
+    assert_eq!(signals.history.get_untracked().undo, enabled);
+    assert_eq!(signals.history.get_untracked().redo, disabled);
+    let before = signals.history.get_untracked();
     report(ProseEvent::Synced {
         acked: ambre_core::Seq::<ambre_prose::message::TextAck>::nth(1),
     });
-    leptos::task::tick().await;
-    assert_eq!(disabled_rows(&root), rows);
-
-    report(ProseEvent::UndoState {
-        undo: ambre_core::Availability::Disabled,
-        redo: ambre_core::Availability::Enabled,
-    });
-    leptos::task::tick().await;
-    let rows = disabled_rows(&root);
-    assert!(rows.iter().any(|row| row.contains("Undo")), "{rows:?}");
-    assert!(!rows.iter().any(|row| row.contains("Redo")), "{rows:?}");
-    root.remove();
+    assert_eq!(signals.history.get_untracked(), before);
+    // The page's context menu holds no history entry.
+    assert!(
+        chrome::context_entries()
+            .iter()
+            .all(|e| !matches!(e, ambre_chrome::MenuEntry::Item(i) if i.label() == "Undo" || i.label() == "Redo"))
+    );
 }
 
 // -- The context panel (`ambre-spec-shell.md` section 2) ---------------------
@@ -446,6 +426,10 @@ async fn with_no_selection_the_panel_shows_the_page_the_layout_holds() {
             .text_content()
             .unwrap(),
         "Page"
+    );
+    assert_eq!(
+        ambre_chrome::unreached_controls(&root),
+        Vec::<String>::new()
     );
     let markers = ambre_chrome::reach_markers(&root);
     for id in [
@@ -540,6 +524,10 @@ async fn superscript_subscript_and_clearing_reach_a_control_of_the_panel() {
             .text_content()
             .unwrap(),
         "Text"
+    );
+    assert_eq!(
+        ambre_chrome::unreached_controls(&root),
+        Vec::<String>::new()
     );
     let markers = ambre_chrome::reach_markers(&root);
     for id in TEXT_COMMANDS {

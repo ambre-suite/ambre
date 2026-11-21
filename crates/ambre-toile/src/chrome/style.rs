@@ -259,6 +259,24 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
                 {command(crate::ui::menu_bar::LINK_SET)}
                 {command(crate::ui::menu_bar::LINK_CLEAR)}
             </Row>
+            <Row>
+                <Show when=move || scope.with(|s| s.containing_frame.is_some())>
+                    {command(menu::ADD_TO_FRAME)}
+                </Show>
+                <Show when=move || scope.with(|s| s.framed == menu::FrameHeld::Framed)>
+                    {command(menu::REMOVE_FROM_FRAME)}
+                </Show>
+                <Show when=move || scope.with(|s| s.frame.is_some())>
+                    {command(menu::EXPORT_FRAME_PNG)}
+                </Show>
+            </Row>
+            <Row>
+                {command(menu::REACT_THUMBSUP)}
+                {command(menu::REACT_HEART)}
+                {command(menu::REACT_CHECK)}
+                {command(menu::REACT_PARTY)}
+                {command(menu::REACT_CLEAR)}
+            </Row>
         }
         .into_any()
     };

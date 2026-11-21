@@ -228,7 +228,7 @@ pub enum ReachDefect {
     ClipboardNotFirst,
 }
 
-/// The clipboard entries every context menu opens on, in order
+/// The order of the three clipboard entries a context menu opens on
 /// (`CHROME-179`).
 pub const MENU_CLIPBOARD: [Reach; 3] = [
     Reach::Command(shared::CUT),
@@ -253,20 +253,31 @@ pub fn bar_defects(
         .collect()
 }
 
-/// Every defect of a context menu: it opens on cut, copy and paste, then
-/// holds only declared properties and commands whose home is the panel.
+/// Every defect of a context menu (`CHROME-179`, `CHROME-182`). Its clipboard
+/// entries come first, and cut, copy and paste keep that order among those
+/// the menu shows. Every other entry is a declared property, or a command
+/// whose home is the context panel.
 pub fn menu_defects(
     menu: &[Reach],
     commands: &[Command],
     properties: &[Property],
 ) -> Vec<ReachDefect> {
+    let clipboard = |entry: &Reach| matches!(entry, Reach::Command(id) if shared::BROWSER_SERVICED.contains(id));
+    let lead = menu.iter().take_while(|e| clipboard(e)).count();
+    let order: Vec<usize> = menu
+        .iter()
+        .filter_map(|e| MENU_CLIPBOARD.iter().position(|c| c == e))
+        .collect();
     let mut defects = Vec::new();
-    if menu.get(..MENU_CLIPBOARD.len()) != Some(&MENU_CLIPBOARD[..]) {
+    if menu.iter().skip(lead).any(clipboard)
+        || order.windows(2).any(|w| matches!(w, [a, b] if a >= b))
+    {
         defects.push(ReachDefect::ClipboardNotFirst);
     }
     defects.extend(
         menu.iter()
-            .skip(MENU_CLIPBOARD.len())
+            .skip(lead)
+            .filter(|e| !clipboard(e))
             .filter_map(|&entry| panel_defect(entry, commands, properties)),
     );
     defects
@@ -887,6 +898,18 @@ mod tests {
         let mut menu = MENU_CLIPBOARD.to_vec();
         menu.push(Reach::Command(BOLD));
         assert!(menu_defects(&menu, TABLE, PROPS).is_empty());
+        // A menu that shows copy and paste alone keeps them first.
+        let locked = [
+            Reach::Command(shared::COPY),
+            Reach::Command(shared::PASTE),
+            Reach::Command(BOLD),
+        ];
+        assert!(menu_defects(&locked, TABLE, PROPS).is_empty());
+        let late = [Reach::Command(BOLD), Reach::Command(shared::PASTE)];
+        assert_eq!(
+            menu_defects(&late, TABLE, PROPS),
+            vec![ReachDefect::ClipboardNotFirst]
+        );
         let swapped = [
             Reach::Command(shared::COPY),
             Reach::Command(shared::CUT),

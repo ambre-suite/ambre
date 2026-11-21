@@ -115,10 +115,12 @@ pub const ROW_COL_COMMANDS: [StaticKey<Commands>; 6] = [
 ];
 
 /// The commands the sort and filter section shows.
-pub const SORT_FILTER_COMMANDS: [StaticKey<Commands>; 5] = [
+pub const SORT_FILTER_COMMANDS: [StaticKey<Commands>; 7] = [
     cmd::SORT_RANGE_ASC,
     cmd::SORT_RANGE_DESC,
     cmd::SORT_RANGE_MULTI,
+    cmd::SORT_SHEET_ASC,
+    cmd::SORT_SHEET_DESC,
     cmd::FILTER_COLUMN,
     cmd::CLEAR_FILTER,
 ];
@@ -141,6 +143,73 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(
             ambre_commands::bar_defects(&shown, cmd::COMMANDS, PROPERTIES),
+            vec![]
+        );
+    }
+
+    /// Every scope of the sheet's context menu lists its clipboard entries
+    /// first, in the order cut, copy, paste. Then it lists commands the panel
+    /// shows (`CHROME-179`, `CHROME-182`, `CHROME-209`).
+    #[test]
+    fn the_sheet_menu_opens_on_the_clipboard_then_reaches_the_panel() {
+        use crate::ui::commands::{MenuRow, SheetFilter, context_layout};
+        use crate::ui::grid::CtxScope;
+        let shown: Vec<StaticKey<Commands>> = SHEET_COMMANDS
+            .iter()
+            .chain(ROW_COL_COMMANDS.iter())
+            .chain(SORT_FILTER_COMMANDS.iter())
+            .copied()
+            .chain([cmd::BOLD, cmd::ITALIC, cmd::MERGE, cmd::UNMERGE])
+            .collect();
+        for scope in [
+            CtxScope::Cell,
+            CtxScope::Column,
+            CtxScope::Row,
+            CtxScope::Corner,
+        ] {
+            for filter in [SheetFilter::Unfiltered, SheetFilter::Filtered] {
+                let menu: Vec<Reach> = context_layout(scope, filter)
+                    .into_iter()
+                    .filter_map(|row| match row {
+                        MenuRow::Command(id) => Some(Reach::Command(id)),
+                        MenuRow::Separator => None,
+                    })
+                    .collect();
+                assert_eq!(
+                    ambre_commands::menu_defects(&menu, cmd::COMMANDS, PROPERTIES),
+                    vec![],
+                    "{scope:?}"
+                );
+                for entry in menu {
+                    if let Reach::Command(id) = entry
+                        && !ambre_commands::shared::BROWSER_SERVICED.contains(&id)
+                    {
+                        assert!(shown.contains(&id), "{id:?} is a control of the panel");
+                    }
+                }
+            }
+        }
+    }
+
+    /// Cut, copy and paste live in the context menu (`CHROME-178`). Every
+    /// formatting command of the sheet reaches the cells section
+    /// (`CHROME-166`): bold and italic are commands, the rest properties. The
+    /// sheet's empty bar holds no clipboard entry (`CHROME-151`).
+    #[test]
+    fn the_clipboard_homes_in_the_menu_and_the_panel_holds_every_formatting_command() {
+        use ambre_commands::{Home, shared};
+        for id in [shared::CUT, shared::COPY, shared::PASTE] {
+            let command = ambre_commands::find(cmd::COMMANDS, id).expect("declared");
+            assert_eq!(command.home, Home::ContextMenu, "{id:?}");
+        }
+        let format: Vec<_> = cmd::COMMANDS
+            .iter()
+            .filter(|c| c.category.as_str() == "format")
+            .map(|c| c.id)
+            .collect();
+        assert_eq!(format, vec![cmd::BOLD, cmd::ITALIC]);
+        assert_eq!(
+            ambre_commands::bar_defects(&BAR, cmd::COMMANDS, PROPERTIES),
             vec![]
         );
     }

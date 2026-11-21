@@ -314,7 +314,6 @@ pub(crate) fn AppRoot() -> impl IntoView {
     let Wiring {
         to_logic,
         theme_ctl,
-        toggles: _,
         toile_toggles,
         style_state,
         toasts,
@@ -726,7 +725,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         if boot_is_toile {
             toile_chrome::context_entries_for(&toile_ctx_scope.get())
         } else if boot_is_prose {
-            ambre_prose::chrome::context_entries(prose_signals.history.get())
+            ambre_prose::chrome::context_entries()
         } else if boot_is_murmure {
             murmure_relay.menu_entries().get()
         } else {

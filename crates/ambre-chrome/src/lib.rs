@@ -75,7 +75,7 @@ pub use format::{
 pub use handler::{CommandHandler, FileAccept, FilePick, KeyRoute, KeyTarget, ShellAction};
 pub use kit::{
     Choice, ColourField, CommandButton, Field, FieldLength, FontField, Labelled, LengthField,
-    PropertyToggle, Row, Segmented, SelectField, Step, reach_markers,
+    PropertyToggle, Row, Segmented, SelectField, Step, reach_markers, unreached_controls,
 };
 pub use menu::{
     Checked, MenuKey, MenuRow, Openness, Selected, focus_first_item, initial, menu_key,

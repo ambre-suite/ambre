@@ -411,3 +411,23 @@ pub fn reach_markers(root: &web_sys::Element) -> Vec<String> {
         .filter_map(|e| e.get_attribute("data-reach"))
         .collect()
 }
+
+/// The accessible names of the controls of the panel's sections that carry
+/// no `data-reach` themselves nor inside one (`CHROME-207`). A test holds it
+/// empty: every control names the command or the property it reaches.
+pub fn unreached_controls(root: &web_sys::Element) -> Vec<String> {
+    let Ok(list) = root.query_selector_all(
+        ".ambre-ctx-section-body button, .ambre-ctx-section-body input, .ambre-ctx-section-body select",
+    ) else {
+        return Vec::new();
+    };
+    (0..list.length())
+        .filter_map(|i| list.item(i))
+        .filter_map(|n| leptos::wasm_bindgen::JsCast::dyn_into::<web_sys::Element>(n).ok())
+        .filter(|e| e.closest("[data-reach]").ok().flatten().is_none())
+        .map(|e| {
+            e.get_attribute("aria-label")
+                .unwrap_or_else(|| e.outer_html())
+        })
+        .collect()
+}

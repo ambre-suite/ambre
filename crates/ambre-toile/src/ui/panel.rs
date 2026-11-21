@@ -191,3 +191,84 @@ mod tests {
         assert_eq!(PanelKind::Board.sections(), &[BOARD]);
     }
 }
+
+#[cfg(test)]
+mod menu_tests {
+    use ambre_commands::Reach;
+    use ambre_core::Count;
+
+    use super::*;
+    use crate::message::Elements;
+    use crate::ui::menu::{ClickSite, CtxScope, FrameHeld, GroupHeld, LockMix, context_menu_ids};
+
+    /// Every scope the board's menu knows, each condition on and off.
+    pub(crate) fn scopes() -> Vec<CtxScope> {
+        let mut out = vec![CtxScope::default()];
+        for locks in [LockMix::Unlocked, LockMix::Locked, LockMix::Both] {
+            for count in [1, 2] {
+                out.push(CtxScope {
+                    site: ClickSite::Selection,
+                    count: Count::<Elements>::new(count),
+                    groups: GroupHeld::Group,
+                    locks,
+                    framed: FrameHeld::Framed,
+                    ..CtxScope::default()
+                });
+            }
+        }
+        out
+    }
+
+    /// The board's context menu lists its clipboard entries first, in the
+    /// order cut, copy, paste, then commands of the panel alone
+    /// (`CHROME-179`, `CHROME-182`).
+    #[test]
+    fn the_board_menu_opens_on_the_clipboard_then_reaches_the_panel() {
+        for scope in scopes() {
+            let menu: Vec<Reach> = context_menu_ids(&scope)
+                .into_iter()
+                .flatten()
+                .map(Reach::Command)
+                .collect();
+            assert_eq!(
+                ambre_commands::menu_defects(&menu, crate::ui::commands::COMMANDS, PROPERTIES),
+                vec![],
+                "{scope:?}"
+            );
+        }
+    }
+
+    /// Cut, copy and paste live in the context menu (`CHROME-178`).
+    #[test]
+    fn the_clipboard_homes_in_the_menu() {
+        use ambre_commands::{Home, shared};
+        for id in [shared::CUT, shared::COPY, shared::PASTE] {
+            let command =
+                ambre_commands::find(crate::ui::commands::COMMANDS, id).expect("declared");
+            assert_eq!(command.home, Home::ContextMenu, "{id:?}");
+        }
+    }
+
+    /// The board formats its text through the properties of the text section
+    /// alone: no command of the format group lacks a control there
+    /// (`CHROME-166`).
+    #[test]
+    fn the_board_formats_through_the_text_section() {
+        let format = crate::ui::commands::COMMANDS
+            .iter()
+            .filter(|c| c.category.as_str() == "format")
+            .count();
+        assert_eq!(format, 0, "the board's formatting is properties");
+        for id in [
+            BOLD,
+            ITALIC,
+            UNDERLINE,
+            STRIKETHROUGH,
+            FONT,
+            SIZE,
+            TEXT_COLOUR,
+        ] {
+            assert_eq!(property(id).id, id, "{id:?} is declared");
+        }
+    }
+}

@@ -280,4 +280,52 @@ mod tests {
         assert_eq!(letter.margin_left, a4.margin_left, "the margins stay");
         assert_eq!(with_paper(a4, Paper::Other), None);
     }
+
+    /// The page's context menu lists its clipboard entries first, in the
+    /// order cut, copy, paste, then commands the text section shows
+    /// (`CHROME-179`, `CHROME-182`, `CHROME-209`).
+    #[test]
+    fn the_page_menu_opens_on_the_clipboard_then_reaches_the_panel() {
+        let menu: Vec<Reach> = commands::CONTEXT_MENU
+            .into_iter()
+            .map(Reach::Command)
+            .collect();
+        assert_eq!(
+            ambre_commands::menu_defects(&menu, commands::COMMANDS, PROPERTIES),
+            vec![]
+        );
+        for id in commands::CONTEXT_MENU {
+            assert!(
+                commands::MENU_CLIPBOARD.contains(&id) || TEXT_COMMANDS.contains(&id),
+                "{id:?} is a control of the text section"
+            );
+        }
+    }
+
+    /// Cut, copy and paste live in the context menu (`CHROME-178`). Every
+    /// formatting command of the page reaches the text section
+    /// (`CHROME-166`). The format bar shows the declared list (`CHROME-150`).
+    #[test]
+    fn the_clipboard_homes_in_the_menu_and_the_panel_holds_every_formatting_command() {
+        use ambre_commands::{Home, shared};
+        for id in [shared::CUT, shared::COPY, shared::PASTE] {
+            let command = ambre_commands::find(commands::COMMANDS, id).expect("declared");
+            assert_eq!(command.home, Home::ContextMenu, "{id:?}");
+        }
+        for command in commands::COMMANDS
+            .iter()
+            .filter(|c| c.category.as_str() == "format")
+        {
+            assert!(
+                TEXT_COMMANDS.contains(&command.id),
+                "{:?} is in the panel",
+                command.id
+            );
+        }
+        let bar: Vec<Reach> = commands::FORMAT_BAR
+            .iter()
+            .map(|(id, _)| Reach::Command(*id))
+            .collect();
+        assert_eq!(bar, PanelKind::Text.bar());
+    }
 }
