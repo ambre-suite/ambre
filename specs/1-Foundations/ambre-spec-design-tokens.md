@@ -41,14 +41,15 @@ A page opens. It takes the theme the system asks for, before the first frame.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `UI-THREAD-065` | `POST` | A page MUST boot in the theme the system asks for, and in the light theme when the system answers nothing. | this spec section 2 | `ambre_app::platform::tests::a_page_boots_in_the_theme_the_system_asks_for` -- wasm tier, each scheme maps to its theme, and the scheme read matches the media query of the browser | none | verified |
-| `UI-THREAD-066` | `FRAME` | The boot MUST NOT read a theme an earlier session chose: the theme it takes depends on the system scheme alone. | this spec section 2; `UI-THREAD-004` | type-level -- `boot_theme` takes the system scheme as its one argument, so no stored value reaches it; `ambre_app::platform::tests::a_page_boots_in_the_theme_the_system_asks_for` | none | verified |
+| `UI-THREAD-065` | `POST` | A page with no boot hint MUST boot in the theme the system asks for, and in the light theme when the system answers nothing. | this spec section 2; `ambre-spec-user-settings.md section 3` (`SETTINGS-032`) | `ambre_app::platform::tests::a_page_boots_in_the_theme_the_system_asks_for` -- wasm tier, each scheme maps to its theme, and the scheme read matches the media query of the browser | none | verified |
+| `UI-THREAD-066` | `FRAME` | The boot MUST NOT read a theme from any store but the boot hint of the user settings. | this spec section 2; `UI-THREAD-004`; `ambre-spec-user-settings.md section 3` (`SETTINGS-028`) | type-level -- `boot_theme` takes the system scheme as its one argument, so no stored value reaches it; `ambre_app::platform::tests::a_page_boots_in_the_theme_the_system_asks_for` | none | verified |
 
 * **Budget.** none: a token is a constant compiled into the binary, so it costs nothing at run time.
   A theme switch repaints the content once, which is the frame budget of
   `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: a token is a colour and a number, generated into the binary. Nothing here
-  reaches the relay, holds a key or opens a socket, and the chosen theme is never sent anywhere.
+  reaches the relay, holds a key or opens a socket. The chosen theme leaves sealed, in the user
+  settings (`ZK-053`).
 * **Verification.** 8 `verified`. A drift check keeps the two committed sides on one source; host
   tests read the generated sheets, and a browser test drives a switch.
 
@@ -56,8 +57,8 @@ A page opens. It takes the theme the system asks for, before the first frame.
 
 ## 2. MODEL
 
-**CRDT containers.** none. A token is a property of the build, not of the document, and the chosen
-theme is a property of the machine.
+**CRDT containers.** none. A token is a property of the build, not of the document. The chosen
+theme is a setting of the account, kept in the user settings (`ambre-spec-user-settings.md`).
 
 **The pipeline.** One source, one generator, two committed artefacts.
 
@@ -68,7 +69,8 @@ theme is a property of the machine.
 3. `just tokens-check` fails when either file is not what the source generates (`UI-THREAD-030`).
    The drawing crate declares the module and embeds the sheet as text;
 4. the launcher injects the stylesheet into the page at startup and sets the document's theme
-   attribute to the theme the system asks for (`UI-THREAD-065`);
+   attribute. It takes the theme of the boot hint, or the theme the system asks for without one
+   (`UI-THREAD-065`, `ambre-spec-user-settings.md`);
 5. a switch flips one control; the browser half re-resolves its properties and the drawing half
    reads the control on the next frame (`UI-THREAD-032`).
 

@@ -61,9 +61,9 @@
 | `sync` | The one part of the client that talks to the network. | partial | 84 | 1 |
 | `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 20 |  |
 | `ui` | The page's own thread. | partial | 24 |  |
-| `zero-knowledge` | What the relay is allowed to learn, and what it must never be able to learn. | partial | 48 | 1 |
+| `zero-knowledge` | What the relay is allowed to learn, and what it must never be able to learn. | partial | 50 | 1 |
 | `machine-access` | A program reads or writes a sheet, a board, a text or a conversation only as a sealed client. | design-only | 34 |  |
 | `macros` | A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. | design-only | 54 |  |
-| `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
+| `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 39 |  |
 
-**50 features: 23 implemented, 24 partial, 3 design-only. 1740 contract rows, 18 loose.**
+**50 features: 23 implemented, 24 partial, 3 design-only. 1766 contract rows, 18 loose.**
