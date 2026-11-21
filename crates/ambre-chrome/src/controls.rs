@@ -57,6 +57,27 @@ impl ControlSize {
     }
 }
 
+/// How an [`IconButton`] draws its box.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum IconLook {
+    /// A border on a sunken ground: a toggle or an action of a panel section.
+    #[default]
+    Outlined,
+    /// No border and no ground until the pointer comes: the frame of the
+    /// panel, a rail, a floating bar.
+    Ghost,
+}
+
+impl IconLook {
+    /// The word the stylesheet reads off `data-look`.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Outlined => "outlined",
+            Self::Ghost => "ghost",
+        }
+    }
+}
+
 /// The choices of a [`Select`] or a [`SegmentBar`], in the order they show.
 #[derive(PartialEq, Eq)]
 pub enum ChoiceRow {}
@@ -114,6 +135,7 @@ pub fn IconButton(
     #[prop(optional_no_strip)] pressed: Option<Signal<Pressed>>,
     #[prop(optional, into)] availability: Option<Signal<Availability>>,
     #[prop(optional)] size: ControlSize,
+    #[prop(optional)] look: IconLook,
     #[prop(optional)] reach: Option<Reach>,
 ) -> impl IntoView {
     let tip_at = RwSignal::new(None::<Point<Px<Css>>>);
@@ -131,6 +153,7 @@ pub fn IconButton(
         <button
             class="ambre-icon-button"
             data-size=size.as_str()
+            data-look=look.as_str()
             data-reach=reach.map(|r| r.marker())
             aria-label=label
             aria-keyshortcuts=chord.map(|c| c.to_string())
@@ -566,6 +589,8 @@ mod tests {
             .collect();
         assert_eq!(words, ["sm", "md", "lg"]);
         assert_eq!(ControlSize::default(), ControlSize::Medium);
+        assert_eq!(IconLook::default(), IconLook::Outlined);
+        assert_eq!(IconLook::Ghost.as_str(), "ghost");
     }
 
     #[test]

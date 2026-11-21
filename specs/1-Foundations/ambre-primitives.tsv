@@ -4905,6 +4905,7 @@ ambre-chrome | src/controls.rs | crate::controls | ChoiceView.label | field | St
 ambre-chrome | src/controls.rs | crate::controls | ChoiceView::text(label) | param | impl Into<String>	free-text	the label a person reads of a choice that shows its label
 ambre-chrome | src/controls.rs | crate::controls | ColorSwatch(label) | param | String	free-text	the accessible name and tooltip of a swatch, display text
 ambre-chrome | src/controls.rs | crate::controls | ControlSize::as_str() | ret | &'static str	newtype-inner	the fieldless enum's own data-size word, which the stylesheet reads off the attribute
+ambre-chrome | src/controls.rs | crate::controls | IconLook::as_str() | ret | &'static str	newtype-inner	the fieldless enum's own data-look word, which the stylesheet reads off the attribute
 ambre-chrome | src/controls.rs | crate::controls | IconButton(label) | param | String	free-text	the accessible name and tooltip of an icon button, read from a command or a property description
 ambre-chrome | src/controls.rs | crate::controls | SLIDER_STEPS | const | f32	foreign-api	the max of the range input, which the one foreign call that renders the input reads
 ambre-chrome | src/controls.rs | crate::controls | SegmentBar(label) | param | String	free-text	the accessible name of a radio group, display text

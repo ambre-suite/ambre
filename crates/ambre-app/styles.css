@@ -1197,7 +1197,7 @@ body {
     padding: var(--space-6) var(--space-7) var(--space-4);
     border: 0;
     background: transparent;
-    color: var(--text-dim);
+    color: var(--text-faint);
     font: inherit;
     font-size: var(--font-xs);
     font-weight: 600;
@@ -1252,7 +1252,6 @@ body {
 
 .ambre-kit-row:has(> .ambre-kit-command) {
     grid-column: 1 / -1;
-    gap: 0;
 }
 
 .ambre-kit-control,
@@ -1271,6 +1270,7 @@ body {
    draws it. It takes the whole width of its row, so a row never mixes a
    text button and an icon on one line. */
 .ambre-kit-command {
+    box-sizing: border-box;
     display: flex;
     flex: 1 1 100%;
     /* After the icons of its row, which keep one line of their own. */
@@ -1279,9 +1279,9 @@ body {
     gap: var(--space-4);
     min-height: var(--control);
     padding: 0 var(--space-4);
-    border: 0;
+    border: 1px solid var(--border-strong);
     border-radius: var(--radius-md);
-    background: transparent;
+    background: var(--surface-2);
     color: var(--text);
     font: inherit;
     font-size: var(--font-small);
@@ -1301,6 +1301,7 @@ body {
 }
 
 .ambre-kit-command[aria-pressed="true"] {
+    border-color: var(--accent);
     background: var(--accent-soft);
     color: var(--accent);
 }
@@ -1337,8 +1338,12 @@ body {
 }
 
 /* An icon button: one glyph of the icon size, centred in a square box of a
-   control height, whatever the glyph. */
+   control height, whatever the glyph. Outlined, the default, it is a chip of
+   a panel section: a border on a sunken ground. Ghost, it is a button of the
+   frame or a rail: no border until the pointer comes. The border keeps its
+   width in both, so the two looks share one box. */
 .ambre-icon-button {
+    box-sizing: border-box;
     position: relative;
     display: inline-grid;
     place-items: center;
@@ -1346,12 +1351,18 @@ body {
     width: var(--control);
     height: var(--control);
     padding: 0;
-    border: 0;
+    border: 1px solid var(--border-strong);
     border-radius: var(--radius-md);
-    background: transparent;
-    color: var(--text-dim);
+    background: var(--surface-2);
+    color: var(--text);
     font: inherit;
     cursor: pointer;
+}
+
+.ambre-icon-button[data-look="ghost"] {
+    border-color: transparent;
+    background: transparent;
+    color: var(--text-dim);
 }
 
 .ambre-icon-button[data-size="sm"] {
@@ -1375,15 +1386,24 @@ body {
 }
 
 .ambre-icon-button[aria-pressed="true"] {
+    border-color: var(--accent);
     background: var(--accent-soft);
     color: var(--accent);
 }
 
+.ambre-icon-button[data-look="ghost"][aria-pressed="true"] {
+    border-color: transparent;
+}
+
 .ambre-icon-button:disabled {
-    background: transparent;
+    background: var(--surface-2);
     color: var(--text-dim);
     opacity: 0.45;
     cursor: default;
+}
+
+.ambre-icon-button[data-look="ghost"]:disabled {
+    background: transparent;
 }
 
 /* The tooltip: fixed to the viewport under its button, so the scroll of the
@@ -1430,6 +1450,7 @@ body {
 }
 
 .ambre-select-trigger {
+    box-sizing: border-box;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1438,7 +1459,7 @@ body {
     min-width: 0;
     height: var(--control);
     padding: 0 var(--space-3) 0 var(--space-4);
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-strong);
     border-radius: var(--radius-md);
     background: var(--surface-2);
     color: var(--text);
@@ -1519,10 +1540,11 @@ body {
 
 /* A segment bar: a sunken track, the chosen segment raised off it. */
 .ambre-segments {
+    box-sizing: border-box;
     display: inline-flex;
     gap: var(--space-1);
     padding: var(--space-1);
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-strong);
     border-radius: var(--radius-md);
     background: var(--surface-2);
 }
@@ -1560,10 +1582,11 @@ body {
 
 /* A stepper: one field, the number and its unit between two steps. */
 .ambre-stepper {
+    box-sizing: border-box;
     display: inline-flex;
     align-items: center;
     height: var(--control);
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-strong);
     border-radius: var(--radius-md);
     background: var(--surface-2);
 }
@@ -1585,7 +1608,7 @@ body {
 
 .ambre-stepper-unit {
     padding: 0 var(--space-2) 0 var(--space-1);
-    color: var(--text-dim);
+    color: var(--text-faint);
     font-size: var(--font-xs);
 }
 
@@ -1612,6 +1635,7 @@ body {
 
 /* A swatch: a square of one colour; no colour reads as a struck square. */
 .ambre-swatch {
+    box-sizing: border-box;
     width: 20px;
     height: 20px;
     padding: 0;
@@ -1693,6 +1717,7 @@ body {
    A trigger that shows an icon, the colour or an application's own popover,
    takes the box of an icon button, so a row of icons reads as one toolkit. */
 .ambre-ctx-section-body .ambre-font .font-trigger {
+    box-sizing: border-box;
     display: inline-flex;
     align-items: center;
     justify-content: space-between;
@@ -1700,7 +1725,7 @@ body {
     min-width: 0;
     height: var(--control);
     padding: 0 var(--space-3) 0 var(--space-4);
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-strong);
     border-radius: var(--radius-md);
     background: var(--surface-2);
     color: var(--text);
@@ -1721,6 +1746,7 @@ body {
 .ambre-ctx-section-body .ambre-color > button,
 .ambre-ctx-section-body .ambre-kit-control > span:not(.ambre-select, .ambre-stepper, .ambre-segments, .ambre-swatch) > button:not(.font-trigger),
 .ambre-ctx-section-body .ambre-kit-control > button:not(.ambre-icon-button) {
+    box-sizing: border-box;
     position: relative;
     display: inline-flex;
     flex-direction: column;
@@ -1730,10 +1756,10 @@ body {
     min-width: var(--control);
     height: var(--control);
     padding: 0 var(--space-2);
-    border: 0;
+    border: 1px solid var(--border-strong);
     border-radius: var(--radius-md);
-    background: transparent;
-    color: var(--text-dim);
+    background: var(--surface-2);
+    color: var(--text);
     font: inherit;
     font-size: var(--font-small);
     cursor: pointer;
@@ -1748,6 +1774,7 @@ body {
 
 .ambre-ctx-section-body .ambre-kit-control > span:not(.ambre-select, .ambre-stepper, .ambre-segments) > button[aria-pressed="true"],
 .ambre-ctx-section-body .ambre-kit-control > button[aria-pressed="true"] {
+    border-color: var(--accent);
     background: var(--accent-soft);
     color: var(--accent);
 }

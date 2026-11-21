@@ -337,6 +337,7 @@ pub fn ContextPanel(
                 let key = section.key;
                 view! {
                     <crate::IconButton
+                        look=crate::IconLook::Ghost
                         icon=section.icon
                         label=section.label
                         size=crate::ControlSize::Large
@@ -378,6 +379,7 @@ pub fn ContextPanel(
                 {move || {
                     view! {
                         <crate::IconButton
+                        look=crate::IconLook::Ghost
                             icon=side_icon(side.get(), Fold::Rail)
                             label="Open the panel"
                             chord=Some(PANEL_CHORD)
@@ -396,6 +398,7 @@ pub fn ContextPanel(
                     {move || {
                         view! {
                             <crate::IconButton
+                        look=crate::IconLook::Ghost
                                 icon=side_icon(side.get(), Fold::Open)
                                 label="Collapse the panel"
                                 chord=Some(PANEL_CHORD)

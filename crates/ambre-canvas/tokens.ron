@@ -22,7 +22,9 @@ Tokens(
             surface_2: "#efece6",
             surface_hover: "#e7e3dc",
             border:    "#e3ddd3",
-            border_strong: "#cfc7ba",
+            // A shade darker than the mockup's strong line, so the border of
+            // a control reads on the sunken ground: about 2:1, not 1.4:1.
+            border_strong: "#bdb3a4",
             text:      "#1f1b16",
             text_dim:  "#6f675c",
             text_faint: "#9a9184",
@@ -40,7 +42,8 @@ Tokens(
             surface_2: "#171511",
             surface_hover: "#2a2620",
             border:    "#312c25",
-            border_strong: "#4d453b",
+            // About 2.3:1 on the surface, for the border of a control.
+            border_strong: "#5a5145",
             text:      "#eee8df",
             text_dim:  "#a59a89",
             text_faint: "#7b7266",

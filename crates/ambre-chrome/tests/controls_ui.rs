@@ -233,9 +233,10 @@ async fn every_icon_of_the_panel_sits_in_a_box_of_one_size() {
             .get_computed_style(button)
             .unwrap()
             .unwrap();
+        // The border of the toolkit, never the outset frame of the browser.
         assert_eq!(
             style.get_property_value("border-top-style").unwrap(),
-            "none",
+            "solid",
             "no native frame"
         );
     }
