@@ -1,0 +1,64 @@
+# The web server of the self-hosted stack (`deploy/README.md`). It runs on the
+# network of the host, behind the TLS front of `nginx.conf`:
+#
+# * port 80 answers the ACME challenge and sends every other request to HTTPS;
+# * port 8443, on the loopback alone, takes the connections the front routes
+#   here, each opened by a PROXY header that carries the address of the client.
+#
+# The site serves the client with the headers of its build (`headers.caddy`),
+# forwards `/api` to the relay, `/s3/` to the object store and `/sfu/` to the
+# signalling of the SFU.
+
+{
+	http_port 80
+	https_port 8443
+	# The front owns port 443, so the redirect below names no port.
+	auto_https disable_redirects
+	servers 127.0.0.1:8443 {
+		listener_wrappers {
+			proxy_protocol {
+				allow 127.0.0.1/32
+			}
+			tls
+		}
+	}
+}
+
+http://{$AMBRE_DOMAIN} {
+	redir https://{host}{uri} permanent
+}
+
+{$AMBRE_DOMAIN} {
+	bind 127.0.0.1
+	tls {$AMBRE_TLS}
+
+	# The relay. Caddy sets `X-Forwarded-For` to the address the PROXY header
+	# gave, and drops any value the client sent: the relay trusts one hop.
+	handle /api/* {
+		reverse_proxy 127.0.0.1:3000
+	}
+
+	# The object store, under the origin of the page, so a presigned link
+	# needs no CORS rule. The relay signs each link for `garage:3900`, and a
+	# signature covers the host header, so the proxy sends that host back.
+	handle_path /s3/* {
+		reverse_proxy 127.0.0.1:3900 {
+			header_up Host garage:3900
+		}
+	}
+
+	# The signalling of the SFU. Its media goes straight to the address of
+	# the host, never through this server (`CALL-141`).
+	handle_path /sfu/* {
+		reverse_proxy 127.0.0.1:3480
+	}
+
+	handle {
+		root * /srv/ambre
+		import /etc/caddy/headers.caddy
+		try_files {path} /index.html
+		file_server {
+			precompressed br
+		}
+	}
+}

@@ -1,0 +1,21 @@
+# The object store of the self-hosted stack: one Garage node holding one copy
+# of each block. The RPC secret and the admin token come from the environment
+# (`GARAGE_RPC_SECRET`, `GARAGE_ADMIN_TOKEN`), which `setup.sh` writes into
+# `.env`. No secret sits in this file. The node is reachable on the network of
+# the stack alone, and Caddy forwards `/s3/` from the loopback of the host.
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "sqlite"
+replication_factor = 1
+
+rpc_bind_addr = "0.0.0.0:3901"
+rpc_public_addr = "127.0.0.1:3901"
+
+[s3_api]
+# The relay and `scripts/garage_init.py` sign for this region.
+s3_region = "us-east-1"
+api_bind_addr = "0.0.0.0:3900"
+root_domain = ".s3.garage.localhost"
+
+[admin]
+api_bind_addr = "0.0.0.0:3903"

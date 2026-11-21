@@ -761,4 +761,45 @@ mod tests {
             ["Is this net or gross?", "Net.", "Gross, in fact."]
         );
     }
+
+    /// `SRV-310`: the stack that `deploy/compose/compose.yml` starts on one host serves the
+    /// suite. The page is cross-origin isolated, and two members sign in. The second joins the
+    /// document of the first from the invite link, and both read one text. The stack runs apart,
+    /// behind its TLS front, at `SELFHOST_ORIGIN` (`just selfhost-test`).
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "needs the self-hosted stack of deploy/compose; run just selfhost-test"]
+    async fn the_self_hosted_stack_serves_two_members_one_document() {
+        let origin =
+            std::env::var("SELFHOST_ORIGIN").unwrap_or_else(|_| "https://localhost".to_owned());
+        let alice = Page::at(&origin).await;
+        let isolated = alice
+            .browser
+            .script("return self.crossOriginIsolated === true;", json!([]))
+            .await;
+        assert_eq!(
+            isolated,
+            json!(true),
+            "the page is not cross-origin isolated"
+        );
+        alice
+            .sign_in(&format!("belt-{}", uuid::Uuid::new_v4()))
+            .await;
+        alice.open_new("prose").await;
+        write(&alice, "Hosted").await;
+        wait_counted(&alice, "6 characters").await;
+
+        let bob_name = format!("belt-{}", uuid::Uuid::new_v4());
+        let bob = Page::at(&origin).await;
+        bob.sign_in(&bob_name).await;
+        alice.share_with(&bob_name).await;
+        open_document_of(&bob, &alice).await;
+        wait_counted(&bob, "6 characters").await;
+
+        click_page(&bob).await;
+        press(&bob, &[END]).await;
+        type_text(&bob, " here").await;
+        wait_counted(&alice, "11 with spaces").await;
+        let ours = wait_markdown(&alice, &["Hosted here"]).await;
+        assert_eq!(ours.trim(), "Hosted here", "{ours}");
+    }
 }

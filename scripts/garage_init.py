@@ -20,7 +20,9 @@ Environment, each with the default of the local stack:
 * `GARAGE_ADMIN`: the admin API, `http://localhost:3903`;
 * `GARAGE_ADMIN_TOKEN`: the token of `garage.toml`;
 * `S3_ENDPOINT`: the S3 API, `http://localhost:9000`;
-* `S3_BUCKET`: the bucket, `ambre-dev`.
+* `S3_BUCKET`: the bucket, `ambre-dev`;
+* `GARAGE_KEY_ID` and `GARAGE_KEY_SECRET`: the key, the dev key above. The
+  self-hosted stack names a key of its own (`deploy/compose/compose.yml`).
 
 Run: `just garage-up`, which starts the container first.
 """
@@ -159,18 +161,18 @@ def apply_layout(call: Call, status: object) -> None:
     expect(call("POST", "/v2/ApplyClusterLayout", {"version": version + 1}), "apply the layout")
 
 
-def ensure_key(call: Call) -> None:
-    """Step 2: the dev key, allowed to create a bucket."""
-    reply = call("GET", f"/v2/GetKeyInfo?id={quote(KEY_ID)}", None)
+def ensure_key(call: Call, key_id: str = KEY_ID, secret: str = SECRET) -> None:
+    """Step 2: the key, allowed to create a bucket. The dev key unless a stack names its own."""
+    reply = call("GET", f"/v2/GetKeyInfo?id={quote(key_id)}", None)
     if reply.status != 200:
-        body = {"accessKeyId": KEY_ID, "secretAccessKey": SECRET, "name": KEY_NAME}
-        expect(call("POST", "/v2/ImportKey", body), "import the dev key")
+        body = {"accessKeyId": key_id, "secretAccessKey": secret, "name": KEY_NAME}
+        expect(call("POST", "/v2/ImportKey", body), "import the key")
     allow = {"allow": {"createBucket": True}}
-    expect(call("POST", f"/v2/UpdateKey?id={quote(KEY_ID)}", allow), "allow the dev key")
+    expect(call("POST", f"/v2/UpdateKey?id={quote(key_id)}", allow), "allow the key")
 
 
-def ensure_bucket(call: Call, bucket: str) -> None:
-    """Step 3: the bucket, which the dev key reads, writes and owns."""
+def ensure_bucket(call: Call, bucket: str, key_id: str = KEY_ID) -> None:
+    """Step 3: the bucket, which the key reads, writes and owns."""
     reply = call("GET", f"/v2/GetBucketInfo?globalAlias={quote(bucket)}", None)
     if reply.status == 200:
         info = reply.body
@@ -178,19 +180,21 @@ def ensure_bucket(call: Call, bucket: str) -> None:
         info = expect(call("POST", "/v2/CreateBucket", {"globalAlias": bucket}), "create the bucket")
     grant = {
         "bucketId": field(info, "id"),
-        "accessKeyId": KEY_ID,
+        "accessKeyId": key_id,
         "permissions": {"read": True, "write": True, "owner": True},
     }
-    expect(call("POST", "/v2/AllowBucketKey", grant), "allow the dev key on the bucket")
+    expect(call("POST", "/v2/AllowBucketKey", grant), "allow the key on the bucket")
 
 
-def cors_command(endpoint: str, bucket: str) -> list[str]:
-    """The `curl` line that puts the CORS rule of `bucket`, signed with the dev key."""
+def cors_command(
+    endpoint: str, bucket: str, key_id: str = KEY_ID, secret: str = SECRET
+) -> list[str]:
+    """The `curl` line that puts the CORS rule of `bucket`, signed with the key."""
     md5 = base64.b64encode(hashlib.md5(CORS.encode(), usedforsecurity=False).digest()).decode()
     return [
         "curl", "-sSf", "-o", "/dev/null",
         "--aws-sigv4", f"aws:amz:{REGION}:s3",
-        "--user", f"{KEY_ID}:{SECRET}",
+        "--user", f"{key_id}:{secret}",
         "-X", "PUT",
         "-H", f"Content-MD5: {md5}",
         "-H", "Content-Type: application/xml",
@@ -199,10 +203,17 @@ def cors_command(endpoint: str, bucket: str) -> list[str]:
     ]
 
 
-def put_cors(endpoint: str, bucket: str, sleep: Callable[[float], None] = time.sleep) -> None:
+def put_cors(
+    endpoint: str,
+    bucket: str,
+    sleep: Callable[[float], None] = time.sleep,
+    key_id: str = KEY_ID,
+    secret: str = SECRET,
+) -> None:
     """Step 4: the CORS rule. The S3 API answers once the layout is live, a moment after step 1."""
+    command = cors_command(endpoint, bucket, key_id, secret)
     for _ in range(WAIT_SECONDS):
-        if subprocess.run(cors_command(endpoint, bucket), check=False).returncode == 0:
+        if subprocess.run(command, check=False).returncode == 0:
             return
         sleep(1)
     raise GarageError(f"the store refused the CORS rule of {bucket}")
@@ -213,12 +224,14 @@ def main() -> int:
     token = os.environ.get("GARAGE_ADMIN_TOKEN", ADMIN_TOKEN)
     endpoint = os.environ.get("S3_ENDPOINT", "http://localhost:9000")
     bucket = os.environ.get("S3_BUCKET", "ambre-dev")
+    key_id = os.environ.get("GARAGE_KEY_ID", KEY_ID)
+    secret = os.environ.get("GARAGE_KEY_SECRET", SECRET)
     call = http_call(admin, token)
     try:
         apply_layout(call, wait_for_admin(call))
-        ensure_key(call)
-        ensure_bucket(call, bucket)
-        put_cors(endpoint, bucket)
+        ensure_key(call, key_id, secret)
+        ensure_bucket(call, bucket, key_id)
+        put_cors(endpoint, bucket, key_id=key_id, secret=secret)
     except GarageError as error:
         print(f"garage: {error}", file=sys.stderr)
         return 1
