@@ -2284,6 +2284,7 @@ ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | Toil
 ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | ToileState::restyle_merge_inner() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | ToileState::set_text(base) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | ToileState::set_text(text) | param | &str	free-text	label, message or user text
+ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | ToileState::move_in_layers() | ret | bool	generic	predicate or did-it-change return
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | ToileState::element_matches() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | contains_match() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | contains_match(haystack) | param | &str	free-text	label, message or user text
@@ -2418,6 +2419,8 @@ ambre-toile | src/ui/palette.rs | crate::ui::palette | CanvasCursor::as_str() | 
 ambre-toile | src/ui/palette.rs | crate::ui::palette | CanvasCursor::new(value) | param | Cow<'static,str>	newtype-inner	the constructor of the CanvasCursor newtype
 ambre-toile | src/ui/presence.rs | crate::ui::presence | LASER_TRAIL_MAX | const | usize	local	the most samples a laser trail keeps, read once to bound it
 ambre-toile | src/ui/presence.rs | crate::ui::presence | PeerCursors::is_empty() | ret | bool	generic	predicate or handled-flag result
+ambre-toile | src/ui/presence.rs | crate::ui::presence | CURSOR_GRAIN | const | f64	foreign-api	a distance in the f64 board coordinates of a kurbo point, compared with what Vec2::hypot returns
+ambre-toile | src/ui/presence.rs | crate::ui::presence | same_sample() | ret | bool	generic	predicate result
 ambre-toile | src/ui/presenter.rs | crate::ui::presenter | PresenterIntent::EditNotes.base | field | String	free-text	the speaker note a splice was measured against
 ambre-toile | src/ui/presenter.rs | crate::ui::presenter | caret_through(after) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/presenter.rs | crate::ui::presenter | caret_through(before) | param | &str	free-text	label, message or user text
@@ -2493,7 +2496,8 @@ ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::fit_
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::fit_target(pad_frac) | param | f64	math	a scalar multiplier: the padding fraction forwarded to the same 1 + pad_frac scale
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::zoom_about(factor) | param | f64	math	a scalar multiplier: relative zoom factor, not an absolute zoom
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::zoom_by_center(factor) | param | f64	math	a scalar multiplier: relative zoom factor, not an absolute zoom
-ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ZOOM_STEP | const | f64	math	a scalar multiplier: the multiplier one zoom step applies to the zoom
+ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::fit_bounds_clear_of(pad_frac) | param | f64	math	a scalar multiplier: the padding fraction the bounds are scaled by, as 1 + pad_frac
+ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::fit_target_clear_of(pad_frac) | param | f64	math	a scalar multiplier: the padding fraction forwarded to the same 1 + pad_frac scale
 ambre-toile | src/ui/walk.rs | crate::ui::walk | ELLIPSE_FOUR_CUBICS_MAX_R | const | f64	generic	the widest radius four cubics draw within 0.1 of the ellipse, in the space of the rect ellipse_path fills: the board walk and the screen-space draft both call it, so no one length type fits
 ambre-toile | src/ui/walk.rs | crate::ui::walk | KAPPA | const | f64	math	a scalar multiplier: the multiplier a radius takes to place a quarter-circle Bezier control point
 ambre-toile | src/ui/walk.rs | crate::ui::walk | LINEAR | static | LazyLock<[f64;256]>	math	a term inside a formula: the sRGB transfer table of the luminance formula, one linear value per 8-bit channel
@@ -2501,7 +2505,6 @@ ambre-toile | src/ui/walk.rs | crate::ui::walk | contrast() | ret | f64	math	a t
 ambre-toile | src/ui/walk.rs | crate::ui::walk | luminance() | ret | f64	math	a term inside a formula: the relative luminance, a weighted sum of the linear channels
 ambre-toile | src/ui/walk.rs | crate::ui::walk | paint_text(text) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/walk.rs | crate::ui::walk | roundrect_path(radius) | param | f64	generic	the corner radius, in the space of the kurbo rect it rounds: the board walk passes board units and the link badge passes screen pixels
-ambre-trame | src/chrome/bars.rs | crate::chrome::bars | label() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/commands.rs | crate::chrome::commands | new_doc_label() | ret | &'static str	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/commands.rs | crate::chrome::commands | status_label() | ret | &'static str	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/find_replace.rs | crate::chrome::find_replace | FindPosition::label() | ret | String	free-text	free text: user content, label, message or display string
@@ -2809,6 +2812,9 @@ ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | DIRTY_VEIL_ALPHA | 
 ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | MDI_FILTER_PATH | const | &str	foreign-api	the SVG path data of the MDI filter icon, which kurbo::BezPath::from_svg alone reads
 ambre-trame | src/ui/view/frame.rs | crate::ui::view::frame | TrameView::set_zoom() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/frame.rs | crate::ui::view::frame | waits_for_commit() | ret | bool	generic	predicate result
+ambre-trame | src/ui/view/frame.rs | crate::ui::view::frame | TrameView::step_zoom() | ret | bool	generic	predicate or did-it-change return
+ambre-trame | src/ui/view/frame.rs | crate::ui::view::frame | TrameView::zoom_about() | ret | bool	generic	predicate or did-it-change return
+ambre-trame | src/ui/view/frame.rs | crate::ui::view::frame | TrameView::zoom_to_selection() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::axis_sel_contains() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::copy_selection() | ret | Option<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::cut_selection() | ret | Option<String>	free-text	free text: user content, label, message or display string
@@ -2854,8 +2860,6 @@ ambre-prose | src/band.rs | crate::band | field_of(key) | param | &str	foreign-a
 ambre-prose | src/probe.rs | crate::probe | ProbeName::as_str() | ret | &'static str	newtype-inner	the enum's own word, the name performance.measure and performance.mark take, which the profiler shows
 ambre-core | src/unit.rs | crate::unit | PX_PER_MM | const | f32	math	a scalar multiplier: unit conversion factor, millimetres to pixels
 ambre-core | src/unit.rs | crate::unit | Radians::to_degrees() | ret | f64	newtype-inner	the angle unwrapped in degrees, for a writer whose format takes degrees
-ambre-toile | src/ui/view.rs | crate::ui::view | WheelZoomRate.0 | field | f64	newtype-inner	the log-zoom rate per wheel pixel
-ambre-toile | src/ui/view.rs | crate::ui::view | WheelZoomRate::factor() | ret | f64	math	a scalar multiplier: relative zoom factor, not an absolute zoom: the argument of ViewportTransform::zoom_about
 ambre-prose | src/message/mod.rs | crate::message | LineHeight::from_stored(value) | param | f32	generic	the stored number of the line height codec, a ratio or points by the mode beside it
 ambre-prose | src/message/mod.rs | crate::message | LineHeight::stored_value() | ret | f32	generic	the stored number of the line height codec, a ratio or points by the mode beside it
 ambre-prose-form | src/kinds.rs | crate::kinds | <HeadingLevel as TryFrom<u8>>::try_from(level) | param | u8	newtype-inner	HeadingLevel field, constructor or accessor
@@ -4840,6 +4844,9 @@ ambre-trame | src/message/command.rs | crate::message::command | FrozenPane::is_
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::shows_col() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::shows_row() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::in_frozen_band() | ret | bool	generic	predicate or did-it-change return
+ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::show_from() | ret | bool	generic	predicate or did-it-change return
+ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::zoom_about() | ret | bool	generic	predicate or did-it-change return
+ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::zoom_to_selection() | ret | bool	generic	predicate or did-it-change return
 ambre-xlsx | src/model.rs | crate::model | FrozenPane::is_none() | ret | bool	generic	predicate or did-it-change return
 ambre-xlsx | src/ods/write.rs | crate::ods::write | settings_xml() | ret | Option<String>	free-text	a whole markup document: the view settings part, absent when no table freezes a pane
 ambre-xlsx | src/write.rs | crate::write | sheet_view_xml(out) | param | &mut String	generic	the worksheet part being written, its sheet view appended
@@ -4930,8 +4937,14 @@ ambre-commands | src/lib.rs | crate | Reach::matches_marker(marker) | param | &s
 ambre-commands | src/lib.rs | crate | Reading<T>::is_mixed() | ret | bool	generic	predicate result
 ambre-core | src/static_key.rs | crate::static_key | <PanelSections as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
 ambre-core | src/static_key.rs | crate::static_key | <Properties as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
+ambre-core | src/zoom.rs | crate::zoom | <Zoom<S> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
+ambre-core | src/zoom.rs | crate::zoom | <ZoomRange<S> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
+ambre-core | src/zoom.rs | crate::zoom | STOPS | const | usize	generic	the length of the constant array of the zoom ladder
+ambre-core | src/zoom.rs | crate::zoom | WheelRate.0 | field | f64	newtype-inner	newtype inner
+ambre-core | src/zoom.rs | crate::zoom | WheelRate::ratio() | ret | f64	math	a scalar multiplier: the ratio a wheel step applies to the zoom factor
 ambre-toile | src/chrome/style.rs | crate::chrome::style | pressed(on) | param | bool	generic	the state a style field reads, computed by the caller, never a literal
 ambre-toile | src/ui/panel.rs | crate::ui::panel | PanelKind::title() | ret | &'static str	free-text	the header a person reads
+ambre-toile | src/chrome/cover.rs | crate::chrome::cover | shown() | ret | bool	generic	predicate result
 ambre-prose | src/doc.rs | crate::doc | write_whole_page_format() | ret | bool	generic	whether the whole page register was written; false on a refused format or a refused write
 ambre-prose | src/view/panel.rs | crate::view::panel | PanelKind::title() | ret | &'static str	free-text	the header a person reads
 ambre-prose | src/view/panel.rs | crate::view::panel | Paper::label() | ret | &'static str	free-text	the name of a paper a person reads
