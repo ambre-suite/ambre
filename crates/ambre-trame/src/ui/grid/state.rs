@@ -118,7 +118,12 @@ impl TrameUiState {
             let Some(now) = self.cell_at(at) else {
                 break;
             };
-            if now == cell || !self.scroll_by(cell.row - now.row, cell.col - now.col) {
+            if now == cell
+                || !self.show_from(
+                    self.top_row + (cell.row - now.row),
+                    self.left_col + (cell.col - now.col),
+                )
+            {
                 break;
             }
         }
@@ -176,15 +181,15 @@ impl TrameUiState {
             return false;
         };
         let zoomed = self.set_zoom(framed.factor());
-        let dr = match kind {
-            SelKind::Cols => Delta::<Row>::ZERO,
-            SelKind::Cells | SelKind::Rows => rect.top_left.row - self.top_row,
+        let top = match kind {
+            SelKind::Cols => self.top_row,
+            SelKind::Cells | SelKind::Rows => rect.top_left.row,
         };
-        let dc = match kind {
-            SelKind::Rows => Delta::<Col>::ZERO,
-            SelKind::Cells | SelKind::Cols => rect.top_left.col - self.left_col,
+        let left = match kind {
+            SelKind::Rows => self.left_col,
+            SelKind::Cells | SelKind::Cols => rect.top_left.col,
         };
-        let scrolled = self.scroll_by(dr, dc);
+        let scrolled = self.show_from(top, left);
         zoomed || scrolled
     }
 
@@ -452,12 +457,16 @@ impl TrameUiState {
     /// The whole cells come from the accumulator of model steps alone, so a
     /// distance the grid computed itself does not move it (`KINETIC-001`).
     pub(crate) fn scroll_by(&mut self, dr: Delta<Row>, dc: Delta<Col>) -> bool {
-        let new_top = (self.top_row + dr)
-            .min(LAST_ROW)
-            .max(self.frozen.rows.as_end());
-        let new_left = (self.left_col + dc)
-            .min(LAST_COL)
-            .max(self.frozen.cols.as_end());
+        self.show_from(self.top_row + dr, self.left_col + dc)
+    }
+
+    /// Put `top` and `left` at the top-left of the scrolled cells, as a zoom
+    /// places them about its anchor. A placement, not a pan: no motion runs
+    /// through it (`KINETIC-001`). Clamps the corner within the grid. Returns
+    /// `true` if the scroll position actually changed.
+    fn show_from(&mut self, top: Pos<Row>, left: Pos<Col>) -> bool {
+        let new_top = top.min(LAST_ROW).max(self.frozen.rows.as_end());
+        let new_left = left.min(LAST_COL).max(self.frozen.cols.as_end());
         // Keep the top edge on a visible row so the collapsed-row slot math stays
         // consistent (`top_row` is slot 0).
         let new_top = self.next_visible_row(new_top);
