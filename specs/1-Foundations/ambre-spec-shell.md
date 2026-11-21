@@ -110,8 +110,10 @@ never makes a second home, so a command keeps one entry in the region map.
 selection. Two surfaces show part of it again, at the pointer, and are the exceptions to one place.
 The context bar gathers the actions a user repeats most, so bold costs no pointer travel
 (`CHROME-150`). After the clipboard, the context menu lists the panel actions that apply under
-the pointer (`CHROME-182`). Each surface shows a command twice, yet files it once. The shared
-word is the rule: a surface named contextual holds nothing the panel lacks, except the clipboard.
+the pointer (`CHROME-182`). Each surface shows a command twice, yet files it once.
+
+The shared word is the rule: a surface named contextual holds nothing the panel lacks, except the
+clipboard.
 
 **The clipboard lives in the context menu.** Copy writes nothing, and cut and paste write, so the
 three fit neither the status bar nor the panel. The context bar holds none of them (`CHROME-151`).
