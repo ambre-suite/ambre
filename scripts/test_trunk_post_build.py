@@ -597,5 +597,24 @@ class CopyConverter(unittest.TestCase):
         self.assertEqual(hook.CONVERTER_FAMILIES, converter_build.FAMILIES)
 
 
+
+class PhoneProfile(unittest.TestCase):
+    """`ZK-053`: the build of a phone is a development build, so the gate passes it."""
+
+    def test_the_phone_profile_is_a_development_build_that_strips_nothing(self) -> None:
+        import tomllib
+
+        manifest = Path(__file__).resolve().parent.parent / "Cargo.toml"
+        profile = tomllib.loads(manifest.read_text())["profile"]["wasm-phone"]
+        self.assertEqual(profile.get("inherits"), "dev")
+        self.assertIn(profile.get("strip", "none"), ("none", False))
+        self.assertNotIn("lto", profile)
+        # A wasm that keeps its name section, under the Trunk profile of a development
+        # build, is not a release: the development sign-in may stay in it.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "ambre-app-0123abcd_bg.wasm").write_bytes(wasm(b"name", b"producers"))
+            self.assertFalse(hook.guards_dev_login({"TRUNK_PROFILE": "debug"}, root))
+
 if __name__ == "__main__":
     unittest.main()
