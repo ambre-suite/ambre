@@ -40,7 +40,7 @@
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | implemented | 11 |  |
 | `accessibility` | What a screen reader and a keyboard reach. | partial | 15 |  |
 | `adaptive-layout` | How the interface changes with the width of the window. | partial | 9 |  |
-| `call-media` | The audio and video of a call, encrypted end to end. | partial | 159 |  |
+| `call-media` | The audio and video of a call, encrypted end to end. | partial | 161 |  |
 | `chrome` | Everything around the document: the frame the canvas sits in, the menus, the modals and the toasts. | partial | 40 |  |
 | `clipboard` | Copy, cut and paste, the same way in every editor. | partial | 20 |  |
 | `drawing-surface` | The dozen calls a renderer may make: a rectangle, a line, a path, a glyph run, an image, a clip, a transform. | partial | 18 |  |
@@ -66,4 +66,4 @@
 | `macros` | A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. | design-only | 54 |  |
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 
-**50 features: 23 implemented, 24 partial, 3 design-only. 1840 contract rows, 16 loose.**
+**50 features: 23 implemented, 24 partial, 3 design-only. 1842 contract rows, 16 loose.**

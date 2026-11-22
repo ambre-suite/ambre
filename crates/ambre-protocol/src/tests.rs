@@ -844,6 +844,7 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
     };
     let server = [
         CallServerMsg::Admitted {
+            call: Id::<ambre_core::id::Call>::from_bytes([19; 16]),
             admission: admission
                 .token(&FixedBytes::from_array([16; 64]))
                 .expect("a token encodes"),
@@ -945,7 +946,7 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
             // seat, under the domain `ambre-call-admission-v3`, and a heartbeat renews it
             // (`CALL-116`, audit `N25`). An admission lives sixty seconds, and no store
             // keeps one.
-            ("signaling", "edf209782b32bc9a7aaf319a3a41956b".to_owned()),
+            ("signaling", "556182ef8014c2b6bef7674e18ed362c".to_owned()),
             (
                 "call message",
                 "414fb3e2c545f7ab6bd80e4003a3b2af".to_owned()

@@ -17,7 +17,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `MURMURE-407` | `INV` | A call started from a channel MUST admit the members of that channel alone. | this spec section 3; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-019`) | `ambre_server::ws::handler::call::tests::a_member_joins_under_pseudonyms_the_relay_draws_per_join` -- database tier: a stranger to the channel takes no seat; `ambre_sync::call::tests::a_joiner_outside_the_channel_gets_no_wrap` -- no key reaches a joiner the log does not hold | none | verified |
-| `MURMURE-594` | `CONC` | Two members who start a call in one channel at once MUST hold two calls, each named by a call message of its own. | this spec section 3, racing starts | `ambre_murmure::logic::call_tests::two_starts_at_once_hold_two_calls`; `ambre_server::ws::handler::call::tests::two_starts_at_once_make_two_calls_each_with_its_starter_alone` -- database tier: two rooms, each roster its starter alone | none | verified |
+| `MURMURE-594` | `CONC` | Two members who start a call in one channel at once MUST sit in one call, named by one call message. | this spec section 3, racing starts; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-160`) | `ambre_server::ws::handler::call::tests::two_starts_at_once_make_one_call_that_holds_both_starters` -- database tier: one room, a roster of both starters, and a new call once the last left; `ambre_sync::call_link::tests::a_start_seated_in_the_live_call_of_its_channel_joins_it` -- the start the relay seats in another call posts no call message | none | verified |
 | `MURMURE-592` | `OBS` | Given a call message with no end written, whose call the relay holds no state of, the reader MUST show the call ended. | this spec section 3, the end of a call; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-070`) | `ambre_murmure::logic::call_tests::a_call_message_shows_who_is_in_it_then_ended_once_the_relay_holds_no_state`; `ambre_server::ws::handler::call::tests::a_call_whose_last_seat_stops_its_heartbeat_reads_as_gone` -- database tier; `ambre_belt::murmure::tests::a_call_whose_last_participant_crashed_reads_ended` -- browser tier, under Chrome and under Firefox | none | verified |
 | `MURMURE-602` | `OBS` | Given a microphone that the browser refuses or does not have, the header MUST show that the call did not start, and why. | this spec section 3, the call controls | `ambre_murmure::ui::call_controls::tests::a_refusal_says_why_and_leaves_the_call_button`; `ambre_app::shell::murmure_regions::the_call_controls_name_themselves_and_take_the_focus` -- wasm tier: the refusal is an alert beside the call button; `ambre_belt::murmure::tests::a_refused_microphone_starts_no_call_and_says_why` -- browser tier, under Chrome and under Firefox: a refusal and a missing device each read their reason | none | verified |
 | `MURMURE-605` | `INV` | Each call control MUST carry an accessible name and take the keyboard focus, and mute MUST carry its pressed state. | this spec section 3, the call controls; `1-Foundations/ambre-spec-accessibility.md section 2` (`CHROME-022`) | `ambre_app::shell::murmure_regions::the_call_controls_name_themselves_and_take_the_focus` -- wasm tier: each control is a button with its name that takes the focus, and mute reads its pressed state; `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` -- browser tier, under Chrome and under Firefox: the call button names itself and takes the focus | none | verified |
@@ -184,7 +184,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | calls Bob from the header of their direct message | reads another channel | a call message | Bob's page rings, with an accept and a decline (`MURMURE-641`) | `ambre_app::shell::murmure_regions::the_ring_alert_names_the_caller_and_offers_accept_and_decline` |
 | waits | declines | the message and Bob's end | Ada's call ends, and her header says the call was declined (`MURMURE-644`, `MURMURE-645`) | `ambre_murmure::ui::call_ring::tests::a_decline_or_the_timeout_ends_the_ring_of_the_caller` |
 | waits | does not answer | the message and Ada's end | the ring stops on both pages at the timeout, and Ada's header says no answer (`MURMURE-643`, `MURMURE-644`) | `ambre_murmure::ui::call_ring::tests::a_decline_or_the_timeout_ends_the_ring_of_the_caller` |
-| starts a call | starts a call at the same instant | two call messages | two calls, each with its own members (`MURMURE-594`) | `ambre_murmure::logic::call_tests::two_starts_at_once_hold_two_calls` |
+| starts a call | starts a call at the same instant | one call message | one call that holds both (`MURMURE-594`) | `ambre_server::ws::handler::call::tests::two_starts_at_once_make_one_call_that_holds_both_starters` |
 
 ---
 
@@ -204,9 +204,14 @@ So a call message never names a call the relay did not hold. A join from the mes
 the relay refuses it once the state of the call is gone (`CALL-068`). The membership of the channel
 admits the call, and the start writes nothing to it (`MURMURE-407`, `MURMURE-410`).
 
-**Racing starts.** Each start draws its own identifier, so two starts at one instant make two calls
-and two messages (`MURMURE-594`). Each message shows the members of its own call alone. One call per
-channel would need an index of the live call of each channel on the relay.
+**Racing starts.** The relay holds one key per channel that names its live call. A start takes
+that key in one script, and creates its call. A start that finds the key on another call joins
+that call in its place (`CALL-160`). The admission names that call, and the start posts no call
+message (`MURMURE-594`).
+
+A join of that call refused as ended frees the key, so a call lost with no last leave never
+holds the channel (`CALL-161`). The heartbeat of each seat refreshes the key, and the last leave
+deletes it. The relay learns nothing new: the state of each call already names its channel.
 
 **Who is in the call.** The relay holds the signed join of each seat (`ZK-022`). A reader asks the
 relay for them, and verifies each against the membership log of the channel (`MURMURE-596`). The
@@ -243,6 +248,9 @@ control is a button with an icon of its own and an accessible name (`MURMURE-605
 | in no call, a channel shown | the call button (`MURMURE-599`) |
 | asking for the microphone | no control |
 | in a call | mute and hang up, whatever channel it shows (`MURMURE-603`) |
+
+A start in a channel whose call runs sits in that call: the relay holds one call per channel
+(`CALL-160`). So the call button joins a call that runs, and the page reads no list to decide it.
 
 A call gesture is the call button, or Join call in the menu of a call message. The page asks the
 browser for the microphone first. Only once it holds the microphone does the page start or join
@@ -511,7 +519,7 @@ region.
 | Join call, in the menu of a live call message | the member joins the call |
 | the tick of a channel the view shows | each live call of the held segments is asked for, once per interval |
 | the last leave | the call message shows the call ended |
-| the call button in the header | the microphone opens, then a call starts in the shown channel |
+| the call button in the header | the microphone opens, then a call starts in the shown channel, or the relay seats the member in its call |
 | mute, during a call | the others hear silence from the member, until a second press |
 | hang up, during a call | the member leaves the call |
 | a refused microphone | the header shows why the call did not start |
@@ -546,7 +554,7 @@ region.
 | A call message in the channel | a call outside any channel | the members would share a link by hand, and anyone holding it could join |
 | A call message in the channel | a voice room that stays open in the channel | a room shows presence at every instant, and it holds a connection to the SFU for each member who waits in it |
 | Calls are a feature of Murmure | a separate application for calls | a call has no document of its own, and it starts only from a channel. Its admission is the membership of that channel |
-| Two racing starts make two calls | one live call per channel | the relay would keep an index of the live call of each channel, and a start that lost the race would have to join the other call |
+| One live call per channel, held by a key of the relay | two racing starts make two calls | two members who press at one instant would each wait alone in a call of their own |
 | Who is in the call comes from the relay | each participant writes its join and leave into the message | every join would be a write into a message of another author, and the history of the channel would hold who was in each call |
 | The end is written by the last leave | the relay keeps that a call ended | the relay would hold the call history of the channel past the time to live (`ZK-022`) |
 | The microphone opens before the start or the join | a call that starts, then asks for the microphone | a refusal would leave a call message and a seat that no sound reaches, a silent call |

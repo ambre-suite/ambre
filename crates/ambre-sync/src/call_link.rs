@@ -1054,6 +1054,7 @@ mod tests {
 
         let sfu = Validated::parse("wss://sfu.example/call").expect("an address");
         state.call_relay(CallServerMsg::Admitted {
+            call: TARGET.call,
             admission: ambre_core::Credential::new("admission".to_owned()),
             sfu: Some(sfu.clone()),
             sender: ambre_core::Seq::new(3),
@@ -1104,6 +1105,7 @@ mod tests {
         let link = state.call.as_ref().expect("a call");
         assert!(link.sent.sfu.is_empty(), "no seat, so no renewal leaves");
         state.call_relay(CallServerMsg::Admitted {
+            call: TARGET.call,
             admission: ambre_core::Credential::new("admission".to_owned()),
             sfu: Some(Validated::parse("wss://sfu.example/call").expect("an address")),
             sender: ambre_core::Seq::new(3),
@@ -1134,6 +1136,7 @@ mod tests {
         state.join_call(TARGET, META, port, Opening::Join);
         state.call_log(META, Some(log_of(&alice)));
         state.call_relay(CallServerMsg::Admitted {
+            call: TARGET.call,
             admission: ambre_core::Credential::new("admission".to_owned()),
             sfu: Some(Validated::parse("wss://sfu.example/call").expect("an address")),
             sender: ambre_core::Seq::new(3),
@@ -1213,6 +1216,7 @@ mod tests {
         state.call_channel(TARGET.call, Some(META));
         state.call_log(META, Some(log_of(&alice)));
         state.call_relay(CallServerMsg::Admitted {
+            call: TARGET.call,
             admission: ambre_core::Credential::new("admission".to_owned()),
             sfu: Some(Validated::parse("wss://sfu.example/call").expect("an address")),
             sender: ambre_core::Seq::new(3),
@@ -1262,6 +1266,7 @@ mod tests {
         state.call_channel(TARGET.call, Some(META));
         state.call_log(META, Some(log_of(&alice)));
         state.call_relay(CallServerMsg::Admitted {
+            call: TARGET.call,
             admission: ambre_core::Credential::new("admission".to_owned()),
             sfu: Some(Validated::parse("wss://sfu.example/call").expect("an address")),
             sender: ambre_core::Seq::new(3),
@@ -1304,6 +1309,7 @@ mod tests {
         let former = VideoChoice::new(vec![ambre_core::Seq::new(4)], None).expect("a choice");
         state.handle_command(SyncCommand::ChooseVideos(former));
         state.call_relay(CallServerMsg::Admitted {
+            call: TARGET.call,
             admission: ambre_core::Credential::new("admission".to_owned()),
             sfu: Some(Validated::parse("wss://sfu.example/call").expect("an address")),
             sender: ambre_core::Seq::new(3),
@@ -1375,6 +1381,7 @@ mod tests {
         );
         state.call_log(META, Some(log_of(&alice)));
         state.call_relay(CallServerMsg::Admitted {
+            call: TARGET.call,
             admission: ambre_core::Credential::new("admission".to_owned()),
             sfu: Some(Validated::parse("wss://sfu.example/call").expect("an address")),
             sender: ambre_core::Seq::new(3),
@@ -1416,6 +1423,7 @@ mod tests {
     /// Seats `state` in its call, admitted under the sender index 0.
     fn admit(state: &mut SyncState) {
         state.call_relay(CallServerMsg::Admitted {
+            call: TARGET.call,
             admission: ambre_core::Credential::new("admission".to_owned()),
             sfu: None,
             sender: ambre_core::Seq::new(0),
@@ -1468,6 +1476,54 @@ mod tests {
             })
         ));
         assert!(state.call.is_none());
+    }
+
+    /// `CALL-160`: a start that the relay seats in the live call of its channel joins that
+    /// call. It posts no call message, and its last leave writes the end of that call. A join
+    /// seated in a call it did not name ends.
+    #[test]
+    fn a_start_seated_in_the_live_call_of_its_channel_joins_it() {
+        let live = Id::<Call>::from_bytes([33; 16]);
+        let seated_in = |state: &mut SyncState, call| {
+            state.call_relay(CallServerMsg::Admitted {
+                call,
+                admission: ambre_core::Credential::new("admission".to_owned()),
+                sfu: None,
+                sender: ambre_core::Seq::new(1),
+                roster: Vec::new(),
+            });
+        };
+        let alice = Person::new(1);
+        let (mut state, _, port, rx) = worker_heard(&alice);
+        state.join_call(TARGET, META, port.clone(), Opening::Start);
+        state.call_log(META, Some(log_of(&alice)));
+        seated_in(&mut state, live);
+        assert!(
+            rx.try_recv().is_err(),
+            "no call message for a call of another start"
+        );
+        assert_eq!(
+            state.call.as_ref().map(|link| link.client.target().call),
+            Some(live)
+        );
+        state.leave_call();
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(LogicEvent::Call(ambre_bus::CallSignal::Ended))
+        ));
+        state.call_relay(CallServerMsg::Departed(Departure::Last));
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(LogicEvent::CallEnded { call, .. }) if call == live
+        ));
+
+        state.join_call(TARGET, META, port, Opening::Join);
+        state.call_log(META, Some(log_of(&alice)));
+        seated_in(&mut state, live);
+        assert!(
+            state.call.is_none(),
+            "a join sits in the call it named or in none"
+        );
     }
 
     /// A leave the relay never answers ends the call at the leave delay and
@@ -1674,6 +1730,7 @@ mod tests {
             state.join_call(TARGET, META, port, Opening::Join);
             state.call_log(META, Some(log_of_all(&[&alice, &bob])));
             state.call_relay(CallServerMsg::Admitted {
+                call: TARGET.call,
                 admission: ambre_core::Credential::new("admission".to_owned()),
                 sfu: None,
                 sender: ambre_core::Seq::new(sender),

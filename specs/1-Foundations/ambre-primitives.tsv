@@ -2082,6 +2082,8 @@ ambre-server | src/redis_keys.rs | crate::redis_keys | FlushDirtySet::as_str() |
 ambre-server | src/redis_keys.rs | crate::redis_keys | PendingKey.text | field | String	generic	the key text of PendingKey, beside its document and read back by PendingKey::parse
 ambre-server | src/redis_keys.rs | crate::redis_keys | PendingKey::as_str() | ret | &str	generic	the key text of PendingKey, its own codec, read back by PendingKey::parse
 ambre-server | src/redis_keys.rs | crate::redis_keys | PendingKey::parse(text) | param | &str	foreign-api	a dirty-set member or scanned key the store hands back as text
+ambre-server | src/redis_keys.rs | crate::redis_keys | ChannelCallKey.0 | field | String	newtype-inner	the key text of the live call of one channel
+ambre-server | src/redis_keys.rs | crate::redis_keys | ChannelCallKey::as_str() | ret | &str	newtype-inner	the key text, as a store command takes it
 ambre-server | src/redis_keys.rs | crate::redis_keys | RateKey.0 | field | String	newtype-inner	the key text of one sliding window of the rate limiter
 ambre-server | src/redis_keys.rs | crate::redis_keys | RateKey::of(tier) | param | &str	newtype-inner	the word of the rate tier, RateLimitCategory::prefix, which the constructor writes into the key
 ambre-server | src/redis_keys.rs | crate::redis_keys | RateKey::as_str() | ret | &str	newtype-inner	the key text, as a store command takes it
@@ -4287,8 +4289,11 @@ ambre-server | src/redis_keys.rs | crate::redis_keys | CallStateKeys::texts() | 
 ambre-server | src/redis_ops.rs | crate::redis_ops | announce_join() | ret | Result<bool,AppError>	generic	predicate result: whether the store kept the join, as its script answers
 ambre-server | src/redis_ops.rs | crate::redis_ops | announce_join::LUA | const | &str	foreign-api	Lua script text sent to Redis
 ambre-server | src/redis_ops.rs | crate::redis_ops | hold_call::LUA | const | &str	foreign-api	Lua script text sent to Redis
+ambre-server | src/redis_ops.rs | crate::redis_ops | claim_channel_call::LUA | const | &str	foreign-api	Lua script text sent to Redis
+ambre-server | src/redis_ops.rs | crate::redis_ops | hold_channel_call::LUA | const | &str	foreign-api	Lua script text sent to Redis
 ambre-server | src/redis_ops.rs | crate::redis_ops | join_call::LUA | const | &str	foreign-api	Lua script text sent to Redis
 ambre-server | src/redis_ops.rs | crate::redis_ops | leave_call::LUA | const | &str	foreign-api	Lua script text sent to Redis
+ambre-server | src/redis_ops.rs | crate::redis_ops | release_channel_call::LUA | const | &str	foreign-api	Lua script text sent to Redis
 ambre-server | src/redis_ops.rs | crate::redis_ops | CallOpening::word() | ret | &'static str	newtype-inner	enum/newtype own accessor: the word of a CallOpening the join script matches back
 ambre-server | src/redis_ops.rs | crate::redis_ops | call_roster::LUA | const | &str	foreign-api	Lua script text sent to Redis
 ambre-sync | src/call_client.rs | crate::call_client | <HeldWraps as CountKind>::Repr | assoc | u64	newtype-inner	the number a count of this kind holds
