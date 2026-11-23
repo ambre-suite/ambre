@@ -126,6 +126,17 @@ impl LogicState {
         self.route(|m| m.apply_channel_signed(document_id, deltas))
     }
 
+    /// Keep signed deltas, with their signers, for the space still opening
+    /// that holds `document_id` (`AUTHOR-037`). Returns `false` when no
+    /// opening space holds it.
+    pub(crate) fn murmure_space_signed(
+        &mut self,
+        document_id: Id<Document>,
+        deltas: &[SignedDelta],
+    ) -> bool {
+        self.route(|m| m.keep_space_signed(document_id, deltas))
+    }
+
     /// Apply a trusted payload the relay placed at `seq` to the channel or
     /// the space that holds `document_id`. Returns `false` when neither does.
     pub(crate) fn murmure_remote(

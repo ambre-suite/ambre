@@ -835,6 +835,53 @@ pub(crate) enum Arrival {
     Signed { update: JsonSchema, signer: Signer },
 }
 
+/// One payload of a binary document, a channel `meta` or a space, kept until
+/// the document opens. The signer of a delta stays with its bytes, so the
+/// open checks its PeerID (`AUTHOR-037`).
+#[derive(Debug, Clone)]
+pub(crate) enum Kept {
+    /// A snapshot, or a delta read back from the local store: Loro bytes,
+    /// checked where they came from.
+    Bytes(LoroPayload),
+    /// A delta a member signed, whose PeerID is not checked yet.
+    Signed {
+        payload: Payload<DeltaBytes>,
+        signer: Signer,
+    },
+}
+
+/// Import `kept` into `doc`, in order. A signed delta passes the PeerID check
+/// first, against the registry `doc` holds so far. A refused one is left out
+/// and changes nothing (`AUTHOR-037`). So the first session that registers a
+/// PeerID keeps it, as in an open document.
+///
+/// # Errors
+/// [`MurmureError::Schema`] for Loro bytes the engine refuses.
+pub(crate) fn import_kept(
+    doc: &LoroDoc,
+    kept: &[Kept],
+    document_id: Id<Document>,
+) -> Result<(), MurmureError> {
+    for payload in kept {
+        match payload {
+            Kept::Bytes(bytes) => {
+                crate::logic::schema::import_bytes(doc, bytes.borrowed(), document_id)?;
+            }
+            Kept::Signed { payload, signer } => {
+                if !peer_unclaimed(doc, *signer) {
+                    tracing::warn!(
+                        "[Murmure] a delta for {document_id} refused: {}",
+                        Refusal::PeerClaimed
+                    );
+                    continue;
+                }
+                crate::logic::schema::import_bytes(doc, payload.into(), document_id)?;
+            }
+        }
+    }
+    Ok(())
+}
+
 /// What the deltas of a document are checked against.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Rules<'a> {
