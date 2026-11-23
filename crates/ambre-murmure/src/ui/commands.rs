@@ -67,6 +67,20 @@ pub const JOIN_CALL: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.m
 /// Open the list of the keys Murmure takes (`MURMURE-540`).
 pub const KEYS: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.general.keys");
 
+/// The modifiers of the chord of each space of the switcher, with the digit of its rank. This
+/// is the one place the chord is chosen. The browser takes Ctrl and a digit (`MURMURE-171`).
+/// The switcher shows each chord as the command table states it.
+pub const SPACE_MODIFIERS: ambre_core::Flags<ModifierKeys> = ModifierKeys::ALT_SHIFT;
+
+/// The chord of the command `id`, as the command table states it: its first binding.
+#[must_use]
+pub fn chord_of(id: StaticKey<Commands>) -> Option<KeyBinding> {
+    COMMANDS
+        .iter()
+        .find(|c| c.id == id)
+        .and_then(|c| c.keybindings.first().copied())
+}
+
 /// Show the space of each rank of the switcher, the first nine (`MURMURE-712`).
 pub const SHOW_SPACE: [StaticKey<Commands>; 9] = [
     StaticKey::<Commands>::new("murmure.navigate.space_1"),
@@ -283,7 +297,7 @@ pub const COMMANDS: &[Command] = &[
         title: show_space_1_title,
         icon: None,
         keybindings: &[KeyBinding::new(
-            ModifierKeys::ALT_SHIFT,
+            SPACE_MODIFIERS,
             Key::Char(KeyChar::new('1')),
         )],
         category: NAVIGATE,
@@ -294,7 +308,7 @@ pub const COMMANDS: &[Command] = &[
         title: show_space_2_title,
         icon: None,
         keybindings: &[KeyBinding::new(
-            ModifierKeys::ALT_SHIFT,
+            SPACE_MODIFIERS,
             Key::Char(KeyChar::new('2')),
         )],
         category: NAVIGATE,
@@ -305,7 +319,7 @@ pub const COMMANDS: &[Command] = &[
         title: show_space_3_title,
         icon: None,
         keybindings: &[KeyBinding::new(
-            ModifierKeys::ALT_SHIFT,
+            SPACE_MODIFIERS,
             Key::Char(KeyChar::new('3')),
         )],
         category: NAVIGATE,
@@ -316,7 +330,7 @@ pub const COMMANDS: &[Command] = &[
         title: show_space_4_title,
         icon: None,
         keybindings: &[KeyBinding::new(
-            ModifierKeys::ALT_SHIFT,
+            SPACE_MODIFIERS,
             Key::Char(KeyChar::new('4')),
         )],
         category: NAVIGATE,
@@ -327,7 +341,7 @@ pub const COMMANDS: &[Command] = &[
         title: show_space_5_title,
         icon: None,
         keybindings: &[KeyBinding::new(
-            ModifierKeys::ALT_SHIFT,
+            SPACE_MODIFIERS,
             Key::Char(KeyChar::new('5')),
         )],
         category: NAVIGATE,
@@ -338,7 +352,7 @@ pub const COMMANDS: &[Command] = &[
         title: show_space_6_title,
         icon: None,
         keybindings: &[KeyBinding::new(
-            ModifierKeys::ALT_SHIFT,
+            SPACE_MODIFIERS,
             Key::Char(KeyChar::new('6')),
         )],
         category: NAVIGATE,
@@ -349,7 +363,7 @@ pub const COMMANDS: &[Command] = &[
         title: show_space_7_title,
         icon: None,
         keybindings: &[KeyBinding::new(
-            ModifierKeys::ALT_SHIFT,
+            SPACE_MODIFIERS,
             Key::Char(KeyChar::new('7')),
         )],
         category: NAVIGATE,
@@ -360,7 +374,7 @@ pub const COMMANDS: &[Command] = &[
         title: show_space_8_title,
         icon: None,
         keybindings: &[KeyBinding::new(
-            ModifierKeys::ALT_SHIFT,
+            SPACE_MODIFIERS,
             Key::Char(KeyChar::new('8')),
         )],
         category: NAVIGATE,
@@ -371,7 +385,7 @@ pub const COMMANDS: &[Command] = &[
         title: show_space_9_title,
         icon: None,
         keybindings: &[KeyBinding::new(
-            ModifierKeys::ALT_SHIFT,
+            SPACE_MODIFIERS,
             Key::Char(KeyChar::new('9')),
         )],
         category: NAVIGATE,

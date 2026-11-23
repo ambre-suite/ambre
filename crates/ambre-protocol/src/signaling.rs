@@ -377,21 +377,9 @@ impl Rule for SessionDescription {
 /// stay far under it.
 pub const SESSION_DESCRIPTION_MAX: Count<Octets> = Count::new(64 * 1024);
 
-/// How many videos one receiver of a call gets.
-pub enum ReceivedVideos {}
-
-impl NarrowCount for ReceivedVideos {
-    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
-        ambre_core::StaticKey::new("ReceivedVideos");
-}
-
-/// The count of videos the SFU forwards one receiver at most, the desktop count of the call row
-/// of `ambre-spec-budgets.md section 1`. A choice names this many senders at most (`CALL-131`).
-pub const VIDEOS_PER_RECEIVER: Count<ReceivedVideos> = Count::new(11);
-
-/// The count of videos a page under the phone width asks for: the phone count of the call row of
-/// `ambre-spec-budgets.md section 1`.
-pub const PHONE_VIDEOS: Count<ReceivedVideos> = Count::new(9);
+/// The counts of videos a receiver gets: one constant each, in `ambre_core::call`, which the SFU,
+/// the wire and the layout of Murmure all read (`CALL-131`).
+pub use ambre_core::call::{PHONE_VIDEOS, ReceivedVideos, VIDEOS_PER_RECEIVER};
 
 /// The senders whose video a receiver asks of the SFU, by the sender index of each
 /// (`CALL-126`). The choice also names the count of videos its receiver lays out. The SFU fills the slots the

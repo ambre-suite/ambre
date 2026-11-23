@@ -1784,9 +1784,11 @@ fn space_choice(
     let name = head
         .name
         .map_or_else(|| UNNAMED_SPACE.to_owned(), Validated::into_string);
-    let chord = (rank < SPACE_CHORDS).then(|| {
-        view! { <kbd class="murmure-space-chord">{format!("Alt+Shift+{}", rank.number())}</kbd> }
-    });
+    // The switcher shows the chord the command table states, so a rebinding moves no view.
+    let chord = SHOW_SPACE
+        .get(rank.to_usize())
+        .and_then(|id| crate::ui::commands::chord_of(*id))
+        .map(|chord| view! { <kbd class="murmure-space-chord">{chord.to_string()}</kbd> });
     let here = (Some(head.space) == current).then_some("true");
     view! {
         <li>
@@ -1803,9 +1805,6 @@ fn space_choice(
         </li>
     }
 }
-
-/// The first rank no chord reaches: Alt+Shift reaches 1 to 9.
-const SPACE_CHORDS: Pos<SpaceRanks> = Pos::<SpaceRanks>::new(9);
 
 /// The controls of the space shown, as its role allows.
 fn space_view(

@@ -68,6 +68,9 @@ impl ambre_core::NarrowCount for Tiles {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Tiles");
 }
 
+/// A video the SFU forwards becomes the tile that draws it, one for one.
+impl ambre_core::Recounts<ambre_core::ReceivedVideos> for Tiles {}
+
 /// The share of the band's area a pinned tile takes at most, at its start (`MURMURE-668`).
 const PINNED_SHARE: f32 = 0.5;
 
@@ -145,14 +148,19 @@ impl Layout {
     }
 
     /// The most other participants a page of this layout shows at `width` (the Murmure calls
-    /// spec, section 3, the video region). The fill grid keeps one cell more for the own tile.
+    /// spec, section 3, the video region). The fill grid shows as many as the SFU forwards a
+    /// desktop, and keeps one cell more for the own tile. On a phone its cells are the videos the
+    /// phone asks for, the own tile among them. Both read the call row of the budgets, written
+    /// once in `ambre_core::call`.
     #[must_use]
     pub const fn page_size(self, width: Width) -> Count<Tiles> {
         match (self, width) {
             (Self::Band, Width::Wider) => Count::<Tiles>::new(5),
             (Self::Band, Width::Phone) => Count::<Tiles>::new(3),
-            (Self::Grid, Width::Wider) => Count::<Tiles>::new(11),
-            (Self::Grid, Width::Phone) => Count::<Tiles>::new(8),
+            (Self::Grid, Width::Wider) => Count::<Tiles>::recount(ambre_core::VIDEOS_PER_RECEIVER),
+            (Self::Grid, Width::Phone) => {
+                Count::<Tiles>::recount(ambre_core::PHONE_VIDEOS).minus(Count::<Tiles>::new(1))
+            }
             (Self::Scene, _) => Count::<Tiles>::new(4),
         }
     }
