@@ -545,8 +545,8 @@ impl TrameState {
         TrameEvent::SheetList {
             sheets,
             active: self.active_sheet.clone(),
-            page: self.page_setup(&self.active_sheet),
-            frozen: self.frozen_pane(&self.active_sheet),
+            page: self.stored_page_setup(&self.active_sheet),
+            frozen: self.stored_frozen_pane(&self.active_sheet),
         }
     }
 

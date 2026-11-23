@@ -58,6 +58,18 @@ impl TrameState {
         }
     }
 
+    /// The frozen pane `sheet` stores, read without adding its container to
+    /// the document: a sheet that stores none freezes nothing.
+    #[must_use]
+    pub(crate) fn stored_frozen_pane(&self, sheet: &Id<Sheet>) -> FrozenPane {
+        let name = SheetContainer::of(SheetRoot::Frozen, sheet);
+        if self.doc.get_by_str_path(name.as_str()).is_some() {
+            self.frozen_pane(sheet)
+        } else {
+            FrozenPane::NONE
+        }
+    }
+
     /// Run `intent` against the active cell of the active sheet
     /// (`TRAME-UI-029`).
     pub(super) fn freeze(&mut self, intent: FreezeIntent) -> TrameOutcome {
@@ -319,5 +331,34 @@ mod tests {
                 cols: Len::<Col>::ZERO,
             }
         );
+    }
+
+    /// The sheet list carries the page setup and the frozen pane of the
+    /// active sheet. Reading them adds neither container to the document.
+    #[test]
+    fn a_sheet_list_reads_the_sheet_setup_and_writes_nothing() {
+        let mut state = TrameState::new();
+        // The tab strip's own reads, which register its containers.
+        let _ = (
+            state.sheet_names(),
+            state.hidden_sheet_ids(),
+            state.sheet_order_ids(),
+        );
+        let before = state.doc.export(loro::ExportMode::Snapshot).unwrap();
+        let TrameEvent::SheetList { page, frozen, .. } = state.sheet_list_event() else {
+            panic!("a sheet list");
+        };
+        assert_eq!(page, crate::message::PageSetup::default());
+        assert_eq!(frozen, FrozenPane::NONE);
+        let after = state.doc.export(loro::ExportMode::Snapshot).unwrap();
+        assert_eq!(
+            before, after,
+            "a read of the sheet setup wrote to the document"
+        );
+        freeze(&mut state, 2, 0, FreezeIntent::RowsThroughActive);
+        let TrameEvent::SheetList { frozen, .. } = state.sheet_list_event() else {
+            panic!("a sheet list");
+        };
+        assert_eq!(frozen, pane(3, 0));
     }
 }
