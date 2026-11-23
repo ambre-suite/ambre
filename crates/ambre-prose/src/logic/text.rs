@@ -89,21 +89,11 @@ impl ProseState {
 
     /// Delete a range inside one block.
     pub(super) fn delete_text(&mut self, id: &TreeID, range: Span<DocChar>) -> ProseOutcome {
-        let Some(body) = self.body_of(id) else {
-            return Self::err_no_block(id);
-        };
-        let range = normalize(range);
-        if range.end > Len::<DocChar>::of(body.len_unicode()).as_end() {
-            return Self::err_bad_range();
+        if let Err(refused) = self.take_text(id, range) {
+            return refused;
         }
-        if range.is_empty() {
+        if normalize(range).is_empty() {
             return ProseOutcome::nothing();
-        }
-        // The view reads its clusters on a layout that may be older than the
-        // body, so the range is widened against the body itself (`PROSE-124`).
-        let range = whole_graphemes(&body.to_string(), range);
-        if let Err(e) = body.delete(range.start.to_usize(), range.len().to_usize()) {
-            return Self::err_write(e);
         }
         self.commit_with(Vec::new())
     }
@@ -121,15 +111,57 @@ impl ProseState {
         if anchor.0 == focus.0 {
             return self.delete_text(&anchor.0, Span::<DocChar>::new(anchor.1, focus.1));
         }
+        if let Err(refused) = self.take_range(anchor, focus) {
+            return refused;
+        }
+        self.commit_with(Vec::new())
+    }
+
+    /// [`Self::delete_text`], uncommitted. Answers where the deletion
+    /// collapsed: the start of the range, widened to a whole cluster. An
+    /// empty range writes nothing.
+    fn take_text(
+        &mut self,
+        id: &TreeID,
+        range: Span<DocChar>,
+    ) -> Result<(TreeID, Pos<DocChar>), ProseOutcome> {
+        let Some(body) = self.body_of(id) else {
+            return Err(Self::err_no_block(id));
+        };
+        let range = normalize(range);
+        if range.end > Len::<DocChar>::of(body.len_unicode()).as_end() {
+            return Err(Self::err_bad_range());
+        }
+        if range.is_empty() {
+            return Ok((*id, range.start));
+        }
+        // The view reads its clusters on a layout that may be older than the
+        // body, so the range is widened against the body itself (`PROSE-124`).
+        let range = whole_graphemes(&body.to_string(), range);
+        body.delete(range.start.to_usize(), range.len().to_usize())
+            .map_err(Self::err_write)?;
+        Ok((*id, range.start))
+    }
+
+    /// [`Self::delete_range`], uncommitted. Answers where the deletion
+    /// collapsed: the head block, at the start of the range.
+    pub(super) fn take_range(
+        &mut self,
+        anchor: (TreeID, Pos<DocChar>),
+        focus: (TreeID, Pos<DocChar>),
+    ) -> Result<(TreeID, Pos<DocChar>), ProseOutcome> {
+        if anchor.0 == focus.0 {
+            return self.take_text(&anchor.0, Span::<DocChar>::new(anchor.1, focus.1));
+        }
         let order = self.document_order();
         let anchor_at = order.iter().position(|id| *id == anchor.0);
         let focus_at = order.iter().position(|id| *id == focus.0);
         let (Some(anchor_at), Some(focus_at)) = (anchor_at, focus_at) else {
-            return Self::err_no_block(if anchor_at.is_none() {
+            return Err(Self::err_no_block(if anchor_at.is_none() {
                 &anchor.0
             } else {
                 &focus.0
-            });
+            }));
         };
         let ((head, head_off), (tail, tail_off)) = if anchor_at <= focus_at {
             (anchor, focus)
@@ -137,12 +169,12 @@ impl ProseState {
             (focus, anchor)
         };
         let (Some(head_body), Some(tail_body)) = (self.body_of(&head), self.body_of(&tail)) else {
-            return Self::err_no_block(&head);
+            return Err(Self::err_no_block(&head));
         };
         let head_len = Len::<DocChar>::of(head_body.len_unicode()).as_end();
         let tail_len = Len::<DocChar>::of(tail_body.len_unicode()).as_end();
         if head_off > head_len || tail_off > tail_len {
-            return Self::err_bad_range();
+            return Err(Self::err_bad_range());
         }
         // Neither endpoint cuts a cluster in two (`PROSE-124`).
         let head_off = whole_graphemes(
@@ -158,14 +190,10 @@ impl ProseState {
         // What survives of the last paragraph, before anything is written
         // (`PROSE-037`), with the marks it carries (`PROSE-042`).
         let surviving = marked_runs(&tail_body, Span::<DocChar>::new(tail_off, tail_len));
-        if let Err(e) =
-            head_body.delete(head_off.to_usize(), head_len.len_from(head_off).to_usize())
-        {
-            return Self::err_write(e);
-        }
-        if let Err(e) = write_runs(&head_body, head_off, &surviving) {
-            return Self::err_write(e);
-        }
+        head_body
+            .delete(head_off.to_usize(), head_len.len_from(head_off).to_usize())
+            .map_err(Self::err_write)?;
+        write_runs(&head_body, head_off, &surviving).map_err(Self::err_write)?;
         // Every block the deletion emptied goes (`PROSE-101`). The head is the
         // exception the frame condition names: it keeps its identity and its
         // paragraph style whether or not it is left empty (`PROSE-041`). An
@@ -200,7 +228,7 @@ impl ProseState {
                 tracing::warn!("Prose: the tree refused to hide an emptied block: {e}");
             }
         }
-        self.commit_with(Vec::new())
+        Ok((head, head_off))
     }
 
     /// Split a paragraph at the caret.
