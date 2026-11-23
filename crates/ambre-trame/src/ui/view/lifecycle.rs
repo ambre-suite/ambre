@@ -31,6 +31,8 @@ impl TrameView {
         #[cfg(target_arch = "wasm32")]
         let TrameSignals {
             formula_ref,
+            selection_ref,
+            sheet_setup,
             formula_text,
             formula_action,
             sel_stats,
@@ -73,6 +75,10 @@ impl TrameView {
             theme,
             #[cfg(target_arch = "wasm32")]
             formula_ref,
+            #[cfg(target_arch = "wasm32")]
+            selection_ref,
+            #[cfg(target_arch = "wasm32")]
+            sheet_setup,
             #[cfg(target_arch = "wasm32")]
             formula_text,
             formula: FormulaBar::default(),
@@ -290,6 +296,33 @@ impl TrameView {
             crate::columns::col_to_alpha(self.state.active_col()),
             crate::columns::row_label(self.state.active_row())
         )
+    }
+
+    /// The reference of the whole selection, which the header of the
+    /// context panel shows. It names the bounds of the live rectangle, such
+    /// as `B2:D5`, or the active cell alone.
+    #[cfg_attr(
+        all(not(target_arch = "wasm32"), not(test)),
+        expect(dead_code, reason = "the browser frame alone publishes it")
+    )]
+    pub(crate) fn selection_ref(&self) -> ambre_core::Validated<crate::ui::panel::RangeLabel> {
+        let bounds = self.state.selection.bounds();
+        let corner = |at: CellPos| {
+            format!(
+                "{}{}",
+                crate::columns::col_to_alpha(at.col),
+                crate::columns::row_label(at.row)
+            )
+        };
+        ambre_core::Validated::new(if bounds.is_single_cell() {
+            corner(bounds.top_left)
+        } else {
+            format!(
+                "{}:{}",
+                corner(bounds.top_left),
+                corner(bounds.bottom_right)
+            )
+        })
     }
 
     /// Recompute the active cell's on-screen anchor and publish it for the

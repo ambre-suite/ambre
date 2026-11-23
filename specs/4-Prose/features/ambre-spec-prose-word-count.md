@@ -23,6 +23,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-FEAT-018` | `INV` | The document MUST hold none of the five figures. | this spec section 2; this spec section 4 | `ambre_prose::logic::derived::tests::the_document_holds_none_of_the_five_figures`; `ambre_prose::count::tests::counting_writes_nothing_to_the_document` | none | verified |
 | `PROSE-FEAT-119` | `OBS` | The four text counts shown MUST be those of the document's text, once they have settled. | this spec section 2 | `ambre_prose::logic::derived::tests::the_counts_shown_are_those_of_the_text_once_settled` | none | verified |
 | `PROSE-FEAT-038` | `OBS` | The page count shown MUST be the number of pages of the layout that is applied. | this spec section 2 | `ambre_prose::logic::derived::tests::the_page_count_is_the_one_of_the_layout_taken` | none | verified |
+| `PROSE-FEAT-336` | `OBS` | An empty document MUST count one page, before any layout and after one. | this spec section 2; `PROSE-FEAT-038` | `ambre_prose::logic::derived::tests::an_empty_document_counts_one_page` -- before the first layout, the layout of an empty document, and a recount | none | verified |
 | `PROSE-FEAT-039` | `INV` | The character count MUST be taken over grapheme clusters, never over bytes or code points. | this spec section 2; `PROSE-FEAT-006` | `ambre_prose::count::tests::a_character_is_a_grapheme_cluster_and_not_a_code_point` | none | verified |
 | `PROSE-FEAT-120` | `INV` | The character count MUST exclude every whitespace cluster, including the break between two paragraphs. | this spec section 2 | `ambre_prose::count::tests::whitespace_and_the_break_between_paragraphs_count_only_with_the_spaces` | none | verified |
 | `PROSE-FEAT-121` | `OBS` | A second character count, taken over the same clusters and including the whitespace, MUST be shown beside it. | this spec section 2; this spec section 4 | `ambre_prose::count::tests::whitespace_and_the_break_between_paragraphs_count_only_with_the_spaces` | none | verified |
@@ -49,7 +50,7 @@ status values are normative in `ambre-spec-template.md`.
   delay below exists to keep off the keystroke path.
 * **Boundary.** none: the count is derived in the Logic thread from the document already there,
   and it reaches the chrome as an event.
-* **Verification.** 14 `verified`: host tests in `crates/ambre-prose`. `PROSE-FEAT-123` holds by
+* **Verification.** 15 `verified`: host tests in `crates/ambre-prose`. `PROSE-FEAT-123` holds by
   the crate graph. `PROSE-FEAT-040` is held in the browser tier, where the page view publishes
   into the mounted slot.
 
@@ -92,8 +93,8 @@ pub fn compute_word_count(document: &LoroDoc) -> WordCount;
 | word | a UAX #29 word segment holding a letter or a digit: `well-known` is two, `3.14` is one |
 | paragraph | a text block holding a visible character; an empty one, an image and a page break are none |
 
-An empty document answers zero for the four counts (`PROSE-FEAT-122`); section 5 leaves its page
-count open.
+An empty document answers zero for the four counts (`PROSE-FEAT-122`). It lays out one blank page,
+so it counts one page (`PROSE-FEAT-336`).
 
 **Where it goes.** One event, `WordCountUpdated`, declared in
 `features/ambre-spec-prose-engine.md section 3`. The view feeds it into the slot the shared status bar
@@ -136,7 +137,3 @@ The status bar itself, its slots and its placement are the shared chrome's
 
 * **The count over a selection is not built.** No command carries a set of blocks, and no gesture
   would produce one, so the common "words in the selection" reading is unreachable.
-* **Nothing says how many pages an empty document has.** `PROSE-FEAT-038` reads the page count off
-  the applied layout, and `features/ambre-spec-prose-pagination.md` has no rule for a document with
-  no content. One page or zero is undecided, so `PROSE-FEAT-122` is stated over the four text
-  counts alone rather than contradicting the layout.

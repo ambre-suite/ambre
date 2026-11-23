@@ -433,6 +433,7 @@ async fn with_no_selection_the_panel_shows_the_page_the_layout_holds() {
         panel::MARGIN_BOTTOM,
         panel::MARGIN_LEFT,
         panel::MARGIN_RIGHT,
+        panel::MARGINS,
     ] {
         let reach = ambre_chrome::commands::Reach::Property(id);
         assert!(
@@ -451,7 +452,62 @@ async fn with_no_selection_the_panel_shows_the_page_the_layout_holds() {
         .unwrap()
         .dyn_into()
         .unwrap();
-    assert_eq!(left.value(), "31.0");
+    assert_eq!(left.value(), "31", "a whole length shows no decimal");
+    // Margins no preset names read as custom, and the four steppers show.
+    let preset = root
+        .query_selector("[aria-label=\"Margins\"] .ambre-select-value")
+        .unwrap()
+        .unwrap()
+        .text_content()
+        .unwrap();
+    assert_eq!(preset, "Custom...");
+    // Portrait and landscape draw two glyphs of distinct shapes.
+    let glyph = |name: &str| {
+        root.query_selector(&format!("[role=\"radio\"][aria-label=\"{name}\"] svg"))
+            .unwrap()
+            .unwrap()
+            .inner_html()
+    };
+    assert_ne!(glyph("Portrait"), glyph("Landscape"));
+    root.remove();
+}
+
+/// The margins show as one list of presets. A preset hides the four
+/// steppers and hands its four margins to the view; custom shows them.
+#[wasm_bindgen_test]
+async fn a_margin_preset_hides_the_steppers_and_custom_shows_them() {
+    use ambre_core::{Mm, PrintLength};
+    use ambre_prose::doc::PageFormat;
+    let signals = ProseSignals::new();
+    signals.page.set(Some(PageFormat::default()));
+    let root = mount_prose_panel(signals);
+    leptos::task::tick().await;
+    let steppers = || {
+        root.query_selector("[aria-label=\"Top margin\"]")
+            .unwrap()
+            .is_some()
+    };
+    assert!(!steppers(), "a preset hides the steppers");
+    let option = |label: &str| -> web_sys::HtmlElement {
+        let list = root
+            .query_selector("[role=\"listbox\"][aria-label=\"Margins\"]")
+            .unwrap()
+            .unwrap();
+        let found = list.query_selector_all("[role=\"option\"]").unwrap();
+        (0..found.length())
+            .filter_map(|i| found.item(i))
+            .filter_map(|n| n.dyn_into::<web_sys::HtmlElement>().ok())
+            .find(|o| o.text_content().unwrap_or_default() == label)
+            .unwrap()
+    };
+    option("Wide").click();
+    let asked = signals.page_write.get_untracked().expect("a format");
+    assert_eq!(asked.margin_left, PrintLength::<Mm>::new(50.8));
+    assert_eq!(asked.margin_top, PrintLength::<Mm>::new(25.4));
+    assert_eq!(asked.width, PageFormat::default().width, "the paper stays");
+    option("Custom...").click();
+    leptos::task::tick().await;
+    assert!(steppers(), "custom shows the steppers");
     root.remove();
 }
 
@@ -463,6 +519,20 @@ async fn a_page_control_hands_the_whole_format_to_the_view() {
     let signals = ProseSignals::new();
     signals.page.set(Some(PageFormat::default()));
     let root = mount_prose_panel(signals);
+    leptos::task::tick().await;
+    // A pick of custom shows the steppers before any margin moves.
+    let custom: web_sys::HtmlElement = root
+        .query_selector("[role=\"listbox\"][aria-label=\"Margins\"] [role=\"option\"]:last-child")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    custom.click();
+    assert_eq!(
+        signals.page_write.get_untracked(),
+        None,
+        "custom writes nothing"
+    );
     leptos::task::tick().await;
     let more: web_sys::HtmlElement = root
         .query_selector("[aria-label=\"Top margin: more\"]")

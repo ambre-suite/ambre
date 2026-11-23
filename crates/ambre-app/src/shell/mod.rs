@@ -140,6 +140,8 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
     } = slots;
     let ambre_trame::ui::TrameSignals {
         formula_ref,
+        selection_ref,
+        sheet_setup,
         formula_text,
         formula_action,
         sel_stats,
@@ -333,6 +335,8 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
             prose_zoom,
             prose_signals,
             formula_ref,
+            selection_ref,
+            sheet_setup,
             formula_text,
             formula_action,
             tofu_prompt,
