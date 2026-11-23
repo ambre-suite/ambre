@@ -291,6 +291,50 @@ impl ProseState {
         self.paste_text(at, text)
     }
 
+    /// Take the selection from `anchor` to `focus` out, then paste where it
+    /// collapsed, as one undo item (`CHROME-184`). The ends arrive in either
+    /// order.
+    ///
+    /// A paste that writes nothing takes the deletion back, so the selection
+    /// text stands as it did, and the history keeps no step of it.
+    pub(super) fn paste_over(
+        &mut self,
+        anchor: (TreeID, Pos<DocChar>),
+        focus: (TreeID, Pos<DocChar>),
+        text: &str,
+        html: Vec<ClipItem>,
+        bytes: Option<&ambre_core::Payload<ambre_core::ClipboardBytes>>,
+    ) -> ProseOutcome {
+        // The deletion and the paste each commit, and the hold makes the two
+        // commits one step. The steps before it stay aside, so a refusal
+        // gives both sides of the history back (`UNDO-021`).
+        self.history.hold();
+        let outcome = match self.take_range(anchor, focus) {
+            Ok(at) => {
+                self.doc.commit();
+                self.paste(at, text, html, bytes)
+            }
+            Err(refused) => refused,
+        };
+        if outcome.update.is_some() {
+            self.history.release();
+            return outcome;
+        }
+        // A write left pending joins the held step, so the inverse takes it
+        // back with the deletion.
+        self.doc.commit();
+        let _ = self.history.withdraw(&self.doc);
+        self.doc
+            .set_next_commit_origin(ambre_core::crdt::CommitOrigin::Recorded.as_str());
+        self.doc.commit();
+        self.history.restore();
+        // The deletion and its inverse are operations of the log all the
+        // same: they leave as a delta, and the view hears of the text.
+        let mut flushed = self.commit_with(Vec::new());
+        flushed.display.extend(outcome.display);
+        flushed
+    }
+
     fn paste_blocks(&mut self, at: (TreeID, Pos<DocChar>), payload: Payload) -> ProseOutcome {
         let Some(body) = self.body_of(&at.0) else {
             return Self::err_no_block(&at.0);
@@ -486,6 +530,7 @@ mod tests {
         let target = append(&mut state, BlockInit::Paragraph, "");
         state.handle_converted(ProseCommand::Paste {
             at: (target, Pos::<DocChar>::ZERO),
+            over: None,
             text,
             html: None,
             payload: Some(payload),
@@ -527,6 +572,7 @@ mod tests {
         let bytes = postcard::to_allocvec(&payload).expect("a payload encodes");
         state.handle_converted(ProseCommand::Paste {
             at: (first, Pos::<DocChar>::ZERO),
+            over: None,
             text: "x".repeat(len),
             html: None,
             payload: Some(ambre_core::Payload::<ambre_core::ClipboardBytes>::new(
@@ -674,6 +720,7 @@ mod tests {
         let (mut state, first) = document();
         state.handle_converted(ProseCommand::Paste {
             at: (first, Pos::<DocChar>::ZERO),
+            over: None,
             text: "one\ntwo".to_owned(),
             html: None,
             payload: Some(ambre_core::Payload::<ambre_core::ClipboardBytes>::new(
@@ -695,6 +742,7 @@ mod tests {
         let after = append(&mut state, BlockInit::Paragraph, "after");
         let outcome = state.handle_converted(ProseCommand::Paste {
             at: (middle, Pos::<DocChar>::new(4)),
+            over: None,
             text: "A\nB".to_owned(),
             html: None,
             payload: None,
@@ -793,6 +841,7 @@ mod tests {
         let rich = append(&mut state, BlockInit::Paragraph, "");
         state.handle_converted(ProseCommand::Paste {
             at: (rich, Pos::<DocChar>::ZERO),
+            over: None,
             text: text.clone(),
             html: None,
             payload: Some(payload),
@@ -801,6 +850,7 @@ mod tests {
         let from_html = append(&mut state, BlockInit::Paragraph, "");
         state.handle_converted(ProseCommand::Paste {
             at: (from_html, Pos::<DocChar>::ZERO),
+            over: None,
             text,
             html: Some(html),
             payload: None,
@@ -897,6 +947,7 @@ mod tests {
                 let target = append(state, BlockInit::Paragraph, "");
                 state.handle_converted(ProseCommand::Paste {
                     at: (target, Pos::<DocChar>::ZERO),
+                    over: None,
                     text: "plain".to_owned(),
                     html: html.map(str::to_owned),
                     payload,
@@ -1019,6 +1070,7 @@ mod tests {
             let (mut state, first) = document();
             state.handle_converted(ProseCommand::Paste {
                 at: (first, Pos::<DocChar>::ZERO),
+                over: None,
                 text: String::new(),
                 html: Some(html),
                 payload: None,
@@ -1047,6 +1099,7 @@ mod tests {
     fn paste_html(state: &mut ProseState, at: (BlockId, u32), html: &str) -> ProseOutcome {
         state.handle_converted(ProseCommand::Paste {
             at: (at.0, Pos::<DocChar>::new(at.1)),
+            over: None,
             text: String::new(),
             html: Some(html.to_owned()),
             payload: None,
@@ -1177,6 +1230,50 @@ mod tests {
                 .filter(|block| state.block_type_of(block) == Some(BlockType::Table))
                 .count(),
             1
+        );
+    }
+
+    /// `CHROME-184`: a paste over a selection that writes nothing
+    /// takes the deletion back. The selected text stands, and both sides of
+    /// the history stand as they did before the paste.
+    #[test]
+    fn a_paste_over_a_selection_that_writes_nothing_leaves_the_selection() {
+        let (mut state, _) = document();
+        let block = append(&mut state, BlockInit::Paragraph, "hello world");
+        state.handle_command(ProseCommand::InsertText {
+            block_id: block,
+            pos: Pos::<DocChar>::new(11),
+            text: "!".into(),
+        });
+        let _ = state.handle_command(ProseCommand::Undo);
+        let empty = postcard::to_allocvec(&Payload {
+            magic: MAGIC,
+            blocks: Vec::new(),
+        })
+        .expect("an empty payload encodes");
+        let outcome = state.handle_command(ProseCommand::Paste {
+            at: (block, Pos::<DocChar>::ZERO),
+            over: Some((block, Pos::<DocChar>::new(5))),
+            text: String::new(),
+            html: None,
+            payload: Some(ambre_core::Payload::new(empty)),
+        });
+        assert_eq!(state.text_of(&block).as_deref(), Some("hello world"));
+        assert!(
+            outcome.update.is_some(),
+            "the deletion and its inverse leave as a delta"
+        );
+        let _ = state.handle_command(ProseCommand::Redo);
+        assert_eq!(
+            state.text_of(&block).as_deref(),
+            Some("hello world!"),
+            "the redo side stands"
+        );
+        let _ = state.handle_command(ProseCommand::Undo);
+        assert_eq!(
+            state.text_of(&block).as_deref(),
+            Some("hello world"),
+            "the undo side stands"
         );
     }
 }

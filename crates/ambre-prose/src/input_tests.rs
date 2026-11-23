@@ -3302,8 +3302,8 @@ fn each_command_the_view_runs_keeps_the_zoom_and_is_one_undo_item() {
             rig.input(ProseInput::Copy(ClipboardWrite::Cut));
             rig.deliver();
         } else if id == PASTE || id == PASTE_PLAIN {
-            // At a caret: a paste over a selection takes the selection out
-            // first, as a step of its own.
+            // At a caret: `a_paste_over_a_selection_is_one_undo_item` holds
+            // the paste over a selection (`CHROME-184`).
             rig.ui.cursor = Some(CursorPosition {
                 block_id: block,
                 offset: Pos::<DocChar>::new(5),
@@ -3347,6 +3347,94 @@ fn each_command_the_view_runs_keeps_the_zoom_and_is_one_undo_item() {
             .iter()
             .all(|command| command.home != ambre_commands::Home::StatusBar)
     );
+}
+
+/// `CHROME-184`: a paste over a text selection leaves as one command, and one
+/// undo takes back the paste and the text it replaced. Four forms of paste
+/// run: one plain line, several lines, an HTML half and this application's
+/// own bytes. Each runs over a selection in one block and across two.
+#[test]
+fn a_paste_over_a_selection_is_one_undo_item() {
+    enum Over {
+        OneBlock,
+        TwoBlocks,
+    }
+    let plain = |text: &str| ProseInput::Paste {
+        text: text.to_owned(),
+        html: None,
+        rich: None,
+    };
+    for over in [Over::OneBlock, Over::TwoBlocks] {
+        let own = {
+            let mut source = Rig::new(&["copied"]);
+            let block = source.blocks()[0];
+            let copied = source.logic.handle_command(ProseCommand::CopyRange {
+                anchor: (block, Pos::<DocChar>::ZERO),
+                focus: (block, Pos::<DocChar>::new(6)),
+            });
+            let Some(ProseEvent::Clipboard { payload, .. }) = copied.display.into_iter().next()
+            else {
+                panic!("a copy answers with the clipboard");
+            };
+            ProseInput::Paste {
+                text: "copied".to_owned(),
+                html: None,
+                rich: Some(payload),
+            }
+        };
+        let html = ProseInput::Paste {
+            text: "pasted".to_owned(),
+            html: Some("<b>pasted</b>".to_owned()),
+            rich: None,
+        };
+        for (name, paste) in [
+            ("one line", plain("pasted")),
+            ("lines", plain("one\ntwo")),
+            ("html", html),
+            ("own bytes", own),
+        ] {
+            let mut rig = Rig::new(&["hello world", "second"]);
+            let blocks = rig.blocks();
+            match over {
+                Over::OneBlock => rig.select(blocks[0], 0, 5),
+                Over::TwoBlocks => {
+                    rig.ui.cursor = Some(CursorPosition {
+                        block_id: blocks[1],
+                        offset: Pos::<DocChar>::new(3),
+                        anchor: Some((blocks[0], Pos::<DocChar>::new(6))),
+                    });
+                }
+            }
+            let before = snapshot(&rig);
+            rig.input(paste);
+            let [command @ ProseCommand::Paste { over: Some(_), .. }] = &rig.sent[..] else {
+                panic!(
+                    "{name}: a paste over a selection is one command: {:?}",
+                    rig.sent
+                );
+            };
+            // The HTML half waits on the markup module, as the Logic
+            // dispatcher runs it.
+            let outcome = rig.logic.handle_converted_in_family(command.clone());
+            rig.outbox.clear();
+            for event in &outcome.display {
+                rig.ui.apply_event(event);
+            }
+            rig.lay();
+            let text = rig.logic.text_of(&blocks[0]).unwrap_or_default();
+            match over {
+                Over::OneBlock => assert!(!text.contains("hello"), "{name}: {text:?}"),
+                Over::TwoBlocks => assert!(!text.contains("world"), "{name}: {text:?}"),
+            }
+            assert_ne!(snapshot(&rig), before, "{name} writes");
+            rig.logic.handle_command(ProseCommand::Undo);
+            assert_eq!(
+                snapshot(&rig),
+                before,
+                "{name}: one undo takes back the paste and the text it replaced"
+            );
+        }
+    }
 }
 
 /// `CHROME-174`: an import writes once its file is read, on the Logic

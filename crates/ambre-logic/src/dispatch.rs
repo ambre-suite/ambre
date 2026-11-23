@@ -3947,6 +3947,7 @@ mod tests {
             document_id,
             command: AppCommand::Prose(ProseCommand::Paste {
                 at: (block, Pos::<DocChar>::ZERO),
+                over: None,
                 text: "plain".to_owned(),
                 html: Some("<h1>Title</h1>".to_owned()),
                 payload: None,
@@ -3998,6 +3999,7 @@ mod tests {
             document_id,
             command: AppCommand::Prose(ProseCommand::Paste {
                 at: (block, Pos::<DocChar>::ZERO),
+                over: None,
                 text: "plain".to_owned(),
                 html: Some("<h1>Title</h1>".to_owned()),
                 payload: None,
@@ -4045,6 +4047,7 @@ mod tests {
             document_id,
             command: AppCommand::Prose(ProseCommand::Paste {
                 at: (block, Pos::<DocChar>::ZERO),
+                over: None,
                 text: "plain".to_owned(),
                 html: Some("<h1>Title</h1>".to_owned()),
                 payload: None,
