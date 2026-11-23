@@ -75,6 +75,14 @@ The relay signs a user in through an identity provider, and Google is the one it
 `https://<domain>/signin/google` as the redirect address of the client. Without them, no user can
 sign in.
 
+## Web embeds
+
+A Toile web embed loads a page of another site only when the deployment names that site. Set
+`AMBRE_EMBED_SITES` in `.env` to the hosts or `https` origins it admits, split by spaces or commas,
+for example `AMBRE_EMBED_SITES=www.youtube.com player.vimeo.com`. Then run
+`docker compose up -d --build`: the build writes the sites into the policy of the page. Without the
+variable, no embed loads (`SRV-312`).
+
 ## The stack under test
 
 `just selfhost-test` builds the images, starts the stack on this machine for `localhost` and runs

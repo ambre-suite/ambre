@@ -344,6 +344,20 @@ class EmbedSites(unittest.TestCase):
             ):
                 self.assertEqual(hook.main(), 1)
 
+    def test_the_self_hosted_image_hands_the_sites_to_the_build(self) -> None:
+        # A build argument reaches a `RUN` only when its own stage declares it,
+        # before that `RUN`: an argument of another stage is empty there.
+        root = Path(__file__).resolve().parent.parent
+        dockerfile = (root / "deploy" / "Dockerfile").read_text(encoding="utf-8")
+        stage = dockerfile.split("FROM toolchain AS web-build", 1)[1].split("\nFROM ", 1)[0]
+        declared = stage.find(f"\nARG {hook.EMBED_SITES_VAR}=")
+        built = stage.find("trunk build")
+        self.assertNotEqual(declared, -1, "the web-build stage declares no embed sites")
+        self.assertLess(declared, built, "the embed sites are declared after the client build")
+        compose = (root / "deploy" / "compose" / "compose.yml").read_text(encoding="utf-8")
+        web = compose.split("\n  web:\n", 1)[1].split("\n    image:", 1)[0]
+        self.assertIn(f"{hook.EMBED_SITES_VAR}: ${{{hook.EMBED_SITES_VAR}:-}}", web)
+
 
 class Headers(unittest.TestCase):
     """`SRV-281`, `SRV-282`: the headers file of the build refuses any frame on every answer,
