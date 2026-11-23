@@ -177,10 +177,7 @@ impl SyncState {
                 held.seen = floor;
             }
             doc_state.unvouched.extend(refused);
-            let overflow = doc_state.unvouched.len().saturating_sub(
-                usize::try_from(crate::QUARANTINE_LIMIT.get()).unwrap_or(usize::MAX),
-            );
-            doc_state.unvouched.drain(..overflow);
+            crate::trim_held(&mut doc_state.unvouched);
             self.handle_list_document_members(None, document_id);
             // Until the answer, the document lands no delta and seals no
             // frame: the walk may find the log rooted outside (`SYNC-232`).

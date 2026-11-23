@@ -600,12 +600,7 @@ impl SyncState {
                 seq,
                 update,
             }));
-        let overflow = doc_state
-            .unvouched
-            .len()
-            .saturating_sub(usize::try_from(QUARANTINE_LIMIT.get()).unwrap_or(usize::MAX));
-        doc_state.unvouched.drain(..overflow);
-        if overflow > 0 {
+        if !crate::trim_held(&mut doc_state.unvouched).is_zero() {
             self.send_to_logic(LogicEvent::SyncWarning {
                 document_id,
                 code: SyncWarningCode::WriterRefused,
@@ -662,11 +657,7 @@ impl SyncState {
             }
             results.push(opened);
         }
-        let overflow = doc_state
-            .refused
-            .len()
-            .saturating_sub(usize::try_from(QUARANTINE_LIMIT.get()).unwrap_or(usize::MAX));
-        doc_state.refused.drain(..overflow);
+        crate::trim_held(&mut doc_state.refused);
         for opened in results {
             self.deliver_remote(document_id, Some(opened), |delta| {
                 LogicEvent::RemoteUpdate { document_id, delta }
@@ -4124,6 +4115,52 @@ mod tests {
             .map(|(_, u)| u.public_data.clock.get())
             .collect();
         assert_eq!(held, std::collections::BTreeSet::from([2, 3]));
+    }
+
+    /// `SYNC-310`: the deltas held for a listing, and those a listing
+    /// refused, keep the byte cap of the quarantine. Three of 12 MiB pass
+    /// 32 MiB under the count cap: the oldest leaves, and one warning is
+    /// raised.
+    #[test]
+    fn a_hold_past_its_bytes_drops_the_oldest() {
+        let (mut state, rx, doc, key, sk, snap) = setup();
+        let big = |clock: u64| {
+            let mut update =
+                make_update(doc, snap, Seq::<DeltaAuthor>::new(clock), b"x", &key, &sk);
+            update.ciphertext = Payload::new(vec![0; 12 * 1024 * 1024]);
+            (Seq::<Relay>::new(clock), update)
+        };
+        state.hold_unvouched(doc, (1..=3).map(big));
+        let held: Vec<u64> = state.documents[&doc]
+            .unvouched
+            .iter()
+            .map(|held| held.seq.get())
+            .collect();
+        assert_eq!(held, [2, 3]);
+        let warnings = drain(&rx)
+            .into_iter()
+            .filter(|e| matches!(e, LogicEvent::SyncWarning { code, .. } if *code == SyncWarningCode::WriterRefused))
+            .count();
+        assert_eq!(warnings, 1);
+
+        // The refused hold goes through the same trim.
+        let seen = ambre_core::Seq::nth(1);
+        let mut refused: Vec<crate::Unvouched> = (4..=6)
+            .map(big)
+            .map(|(seq, update)| crate::Unvouched { seen, seq, update })
+            .collect();
+        assert_eq!(crate::trim_held(&mut refused).get(), 1);
+        assert_eq!(
+            refused
+                .iter()
+                .map(|held| held.seq.get())
+                .collect::<Vec<_>>(),
+            [5, 6]
+        );
+        assert!(
+            crate::trim_held(&mut refused).is_zero(),
+            "a hold that fits loses nothing"
+        );
     }
 
     /// `SYNC-007`: the overflow drops the update with the lowest clock, across
@@ -7748,6 +7785,95 @@ mod tests {
             assert_eq!(warned, [SyncWarningCode::WriterRefused]);
             assert!(!state.documents[&doc].applied_past_cap(&capped));
         }
+    }
+
+    /// Holds `SYNC-309`. A fresh open with no snapshot replays the whole log
+    /// in one batch. A revoke caps Bob at clock 1, and the relay replays his
+    /// clocks 1 to 3 beside Alice's clock 1. The batch hands Logic his clock
+    /// 1 and Alice's alone, and warns once per refused delta. The open is
+    /// then ready with no write past the cap applied.
+    #[test]
+    fn an_open_replay_refuses_a_delta_past_the_cap_of_its_writer() {
+        use crate::membership_log::Writers;
+        use crate::membership_log::tests::Person;
+        use ambre_protocol::SeqUpdate;
+        let (alice, bob) = (Person::new(0x71), Person::new(0x72));
+        let at = Seq::<DeltaAuthor>::new;
+        let capped = Writers::capped(
+            HashSet::from([alice.public(), bob.public()]),
+            HashMap::from([(bob.public(), at(1))]),
+        );
+        let (mut state, rx, _doc, _key, _sk, _snap) = setup();
+        let (ws_tx, _ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        let doc = Id::<Document>::mint();
+        let key = DocumentKey::generate();
+        let genesis = Id::<Snapshot>::genesis(doc);
+        state.handle_sync_event(SyncEvent::OpenDocumentReady {
+            document_id: doc,
+            doc_key: key.clone(),
+            snapshot_payload: None,
+            snapshot_id: genesis,
+            covered_seq: Seq::<Relay>::ZERO,
+            held_snapshot: None,
+            fallback: None,
+            doc_type: DocType::Trame,
+            existence: crate::Existence::OnRelay,
+            signing_keys: Vec::new(),
+            role: Role::Owner,
+            rotation_owed: ambre_core::RotationDebt::Settled,
+            links: Vec::new(),
+            writers: capped.clone(),
+            departed: None,
+        });
+        assert_eq!(
+            ready_count(&drain(&rx), doc),
+            0,
+            "the open waits on the replay"
+        );
+
+        let log: [(u64, &[u8], &Person, u64); 4] = [
+            (1, b"one", &bob, 1),
+            (2, b"two", &bob, 2),
+            (3, b"three", &bob, 3),
+            (4, b"a", &alice, 1),
+        ];
+        let updates = log
+            .iter()
+            .map(|(seq, body, by, clock)| SeqUpdate {
+                seq: Seq::<Relay>::new(*seq),
+                update: make_update(doc, genesis, at(*clock), body, &key, &by.key),
+            })
+            .collect();
+        state.handle_ws_message(WsServerMsg::MissingUpdates {
+            document_id: doc,
+            updates,
+        });
+        let events = drain(&rx);
+        let batched: Vec<Vec<u8>> = events
+            .iter()
+            .filter_map(|e| match e {
+                LogicEvent::RemoteUpdateBatch { deltas, .. } => Some(deltas),
+                _ => None,
+            })
+            .flatten()
+            .map(|delta| delta.payload.as_bytes().to_vec())
+            .collect();
+        assert_eq!(batched, [b"one".to_vec(), b"a".to_vec()]);
+        let (single, warned) = applied_and_warned(&events);
+        assert!(single.is_empty(), "the replay lands as one batch");
+        assert_eq!(
+            warned,
+            [
+                SyncWarningCode::WriterRefused,
+                SyncWarningCode::WriterRefused
+            ],
+            "each delta past the cap is refused aloud"
+        );
+        assert_eq!(ready_count(&events, doc), 1, "the open is ready once");
+        let doc_state = &state.documents[&doc];
+        assert_eq!(doc_state.applied_clock(&bob.public()), at(1));
+        assert!(!doc_state.applied_past_cap(&capped));
     }
 
     /// Holds `SYNC-307`. Bob is capped at clock 2. The latest snapshot
