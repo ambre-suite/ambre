@@ -1090,6 +1090,111 @@ return answer
     }
 }
 
+/// What the key of the live call of a channel answers a start (`CALL-160`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChannelCall {
+    /// The key now names the call of the start: the start creates that call.
+    Taken,
+    /// The key names another call: the start joins that call in its place.
+    Held(Id<ambre_core::id::Call>),
+}
+
+/// Makes `call` the live call of `channel`, unless the key names another call (`CALL-160`).
+///
+/// The key takes `call` when it names no call, names `call` already, or names `stale`. The
+/// caller passes as `stale` a call that the store refused as ended. So a call lost with no last
+/// leave never holds the channel (`CALL-161`). The key takes the time to live `ttl`. One key in
+/// one script, so two racing starts never both take it.
+///
+/// # Errors
+/// A store error, or a key that holds no call identifier.
+pub async fn claim_channel_call(
+    redis: &Client,
+    channel: &Id<Channel>,
+    call: &Id<ambre_core::id::Call>,
+    stale: Option<&Id<ambre_core::id::Call>>,
+    ttl: TimeSpan<Sec>,
+) -> Result<ChannelCall, AppError> {
+    const LUA: &str = r#"
+local held = redis.call('GET', KEYS[1])
+if held == false or held == ARGV[1] or held == ARGV[2] then
+    redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[3])
+    return {'taken'}
+end
+return {'held', held}
+"#;
+    let key = crate::redis_keys::ChannelCallKey::of(channel);
+    let answer: Vec<String> = redis
+        .eval(
+            LUA,
+            [key.as_str()],
+            [
+                call.to_string(),
+                stale.map(ToString::to_string).unwrap_or_default(),
+                ttl.get().to_string(),
+            ],
+        )
+        .await
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("channel call claim", e)))?;
+    let malformed = || AppError::Internal(format!("a channel call claim answered {answer:?}"));
+    match answer.as_slice() {
+        [word] if word == "taken" => Ok(ChannelCall::Taken),
+        [word, held] if word == "held" => Id::<ambre_core::id::Call>::parse_str(held)
+            .map(ChannelCall::Held)
+            .map_err(|_| malformed()),
+        _ => Err(malformed()),
+    }
+}
+
+/// Refreshes the time to live of the key of the live call of `channel` while it names `call`.
+/// The heartbeat of each seat runs it, so the key lives as long as the state of the call.
+///
+/// # Errors
+/// A store error.
+pub async fn hold_channel_call(
+    redis: &Client,
+    channel: &Id<Channel>,
+    call: &Id<ambre_core::id::Call>,
+    ttl: TimeSpan<Sec>,
+) -> Result<(), AppError> {
+    const LUA: &str = r#"
+if redis.call('GET', KEYS[1]) == ARGV[1] then redis.call('EXPIRE', KEYS[1], ARGV[2]) end
+return 0
+"#;
+    let key = crate::redis_keys::ChannelCallKey::of(channel);
+    let _: i64 = redis
+        .eval(
+            LUA,
+            [key.as_str()],
+            [call.to_string(), ttl.get().to_string()],
+        )
+        .await
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("channel call hold", e)))?;
+    Ok(())
+}
+
+/// Deletes the key of the live call of `channel` while it names `call`. The last leave of
+/// `call` runs it, so the next start of the channel creates a call.
+///
+/// # Errors
+/// A store error.
+pub async fn release_channel_call(
+    redis: &Client,
+    channel: &Id<Channel>,
+    call: &Id<ambre_core::id::Call>,
+) -> Result<(), AppError> {
+    const LUA: &str = r#"
+if redis.call('GET', KEYS[1]) == ARGV[1] then redis.call('DEL', KEYS[1]) end
+return 0
+"#;
+    let key = crate::redis_keys::ChannelCallKey::of(channel);
+    let _: i64 = redis
+        .eval(LUA, [key.as_str()], [call.to_string()])
+        .await
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("channel call release", e)))?;
+    Ok(())
+}
+
 /// Takes the seat of `sender` out of `call`, and answers whether it was the last
 /// (`CALL-069`). The last one out deletes every key of the call: a later join is refused as
 /// ended (`CALL-068`). A seat already gone counts as no last leave, so one end is written once.

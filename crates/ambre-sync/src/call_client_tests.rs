@@ -240,6 +240,7 @@ impl World {
             .collect();
         self.sessions.get_mut(session).expect("a session").seat = Some(sender);
         let admitted = CallServerMsg::Admitted {
+            call: TARGET.call,
             admission: ambre_core::Credential::new("admission".to_owned()),
             sfu: Some(Validated::parse("wss://sfu.example/call").expect("an address")),
             sender,
@@ -500,6 +501,7 @@ fn a_join_signed_under_another_index_than_its_seat_gets_no_wrap() {
     let mut client = CallClient::new(TARGET, bob.id);
     let steps = client.on_relay(
         CallServerMsg::Admitted {
+            call: TARGET.call,
             admission: ambre_core::Credential::new("admission".to_owned()),
             sfu: None,
             sender: Seq::new(7),
