@@ -328,6 +328,22 @@ impl CallSlot for CallKnown {
     const SLOT: &'static str = "known";
 }
 
+/// The key of the live call of one channel, `channel:{id}:call` (`CALL-160`). It holds the
+/// identifier of the call alone. One key, so a script on it runs in one slot of a cluster.
+pub struct ChannelCallKey(String);
+
+impl ChannelCallKey {
+    /// The key of `channel`.
+    pub fn of(channel: &Id<ambre_core::id::Channel>) -> Self {
+        Self(format!("channel:{{{channel}}}:call"))
+    }
+
+    /// The key text, as a store command takes it.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 /// Every key of one call. The scripts of a call take all four, in this order.
 pub struct CallStateKeys {
     pub state: CallKey<CallState>,

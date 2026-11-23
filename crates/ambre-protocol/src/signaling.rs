@@ -12,7 +12,7 @@
 
 use std::fmt;
 
-use ambre_core::id::{Channel, Id};
+use ambre_core::id::{Call, Channel, Id};
 use ambre_core::{
     AccessToken, ByteArray, CallAdmission, Count, Credential, FixedBytes, FixedRole, Instant,
     MemberPseudonym, Octets, ParticipantPseudonym, Payload, PayloadKind, RoomPseudonym, Rule, Sec,
@@ -215,6 +215,9 @@ pub enum CallServerMsg {
     /// of the SFU when the deployment runs one. It holds the sender index of this session, and
     /// each session in the call that announced its join (`CALL-056`, `CALL-057`).
     Admitted {
+        /// The call of the seat. A start that found a live call in its channel sits in that
+        /// call, and this field names it (`CALL-160`).
+        call: Id<Call>,
         admission: Credential<CallAdmission>,
         sfu: Option<Validated<SfuSocket>>,
         sender: Seq<SenderIndex>,

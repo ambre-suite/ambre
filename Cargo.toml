@@ -419,6 +419,17 @@ opt-level = 3
 lto = true
 codegen-units = 1
 
+# The development build a phone runs: `./trunk_serve.sh --phone`. A phone in a
+# call cannot keep up with the crates of the workspace at level 0, so they take
+# level 2 here, and the dependencies keep the level 3 of `dev`. It keeps the
+# development sign-in, so it never ships. It strips nothing, so each wasm keeps
+# its `name` section, the mark of a development build that the gate of the
+# release reads (`ZK-049`). No LTO, so a saved edit rebuilds in seconds.
+[profile.wasm-phone]
+inherits = "dev"
+opt-level = 2
+debug = false
+
 # The two wasm builds Trunk ships (`crates/ambre-app/index.html`). The download
 # is the budget there (`ambre-spec-budgets.md` section 5), so every crate is
 # built for size, and the name section goes: 1 MB gzip of function names. "z"

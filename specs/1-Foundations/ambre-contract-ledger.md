@@ -21,11 +21,11 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**5027 rows: 4604 shipped, of which 16 loose. 423 unbuilt.**
+**5030 rows: 4607 shipped, of which 16 loose. 423 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1666 | 583 | 995 | 818 | 526 | 4588 |
+| `verified` | 1669 | 583 | 995 | 818 | 526 | 4591 |
 | `failing` | 2 |  |  |  |  | 2 |
 | `human-review` | 14 |  |  |  |  | 14 |
 | `unimplemented` | 179 | 42 | 21 | 24 | 157 | 423 |
@@ -40,7 +40,7 @@
 | `ambre-spec-adaptive-layout.md` | 9 | 7 | 7 |  | 2 |
 | `ambre-spec-architecture.md` | 132 | 132 | 124 | 8 |  |
 | `ambre-spec-broadcast.md` | 31 | 31 | 31 |  |  |
-| `ambre-spec-call-media.md` | 159 | 158 | 158 |  | 1 |
+| `ambre-spec-call-media.md` | 161 | 160 | 160 |  | 1 |
 | `ambre-spec-call-proofs.md` | 20 | 20 | 20 |  |  |
 | `ambre-spec-chrome.md` | 40 | 39 | 39 |  | 1 |
 | `ambre-spec-clipboard.md` | 20 | 19 | 19 |  | 1 |
@@ -82,7 +82,7 @@
 | `ambre-spec-text-input.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-ui.md` | 24 | 18 | 18 |  | 6 |
 | `ambre-spec-undo.md` | 23 | 23 | 23 |  |  |
-| `ambre-spec-zero-knowledge.md` | 52 | 51 | 50 | 1 | 1 |
+| `ambre-spec-zero-knowledge.md` | 53 | 52 | 51 | 1 | 1 |
 | `ambre-spec-zoom.md` | 11 | 11 | 11 |  |  |
 | `ambre-spec-trame-schema.md` | 17 | 17 | 17 |  |  |
 | `ambre-spec-trame-autofill.md` | 11 | 11 | 11 |  |  |
@@ -205,7 +205,7 @@
 | `ambre-spec-adaptive-layout.md` | CHROME-030..034,056..058,117 |
 | `ambre-spec-architecture.md` | ARCH-001..132 |
 | `ambre-spec-broadcast.md` | SRV-010,042..051,072..073,087..089,097..099,102,161..162,164,166,183,185..186,237,258,269,301 |
-| `ambre-spec-call-media.md` | CALL-001..159 |
+| `ambre-spec-call-media.md` | CALL-001..161 |
 | `ambre-spec-call-proofs.md` | PROOF-001..020 |
 | `ambre-spec-chrome.md` | CHROME-001..005,008..015,085..094,105..106,109..115,199..206 |
 | `ambre-spec-clipboard.md` | UI-THREAD-006..010,022..025,043..047,053..057,061 |
@@ -367,5 +367,5 @@
 | `ambre-spec-ui.md` | UI-THREAD-001..005,012..013,015..017,020..021,048..052,058..060,062..064,067 |
 | `ambre-spec-undo.md` | UNDO-001..023 |
 | `ambre-spec-user-settings.md` | SETTINGS-001..015 |
-| `ambre-spec-zero-knowledge.md` | ZK-001..052 |
+| `ambre-spec-zero-knowledge.md` | ZK-001..053 |
 | `ambre-spec-zoom.md` | ZOOM-001..011 |
