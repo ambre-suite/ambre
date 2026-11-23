@@ -412,9 +412,12 @@ pub enum SnapshotCustody {
     RelayCopies,
 }
 
-/// The body the start-up probe puts, and the body whose digest it forges.
-const PROBE_BODY: &[u8] = b"ambre checksum probe";
-const PROBE_OTHER: &[u8] = b"ambre checksum forge";
+/// The digest a probe put names: that of its own body, or that of other bytes.
+#[derive(Clone, Copy)]
+enum ProbeDigest {
+    OtherBytes,
+    OwnBody,
+}
 
 /// Reads from the store whether it verifies `x-amz-checksum-sha256`.
 ///
@@ -430,8 +433,8 @@ pub async fn read_snapshot_custody(
     env_prefix: &StoreText<EnvPrefix>,
 ) -> SnapshotCustody {
     let key = ambre_core::ObjectKey::new(format!("{env_prefix}/probe/checksum"));
-    let forged = probe_put(s3, bucket, &key, PROBE_OTHER).await;
-    let honest = probe_put(s3, bucket, &key, PROBE_BODY).await;
+    let forged = probe_put(s3, bucket, &key, ProbeDigest::OtherBytes).await;
+    let honest = probe_put(s3, bucket, &key, ProbeDigest::OwnBody).await;
     if let Err(e) = s3
         .delete_object()
         .bucket(bucket.as_str())
@@ -454,22 +457,25 @@ pub async fn read_snapshot_custody(
     }
 }
 
-/// Puts [`PROBE_BODY`] under the SHA-256 digest of `digest_of`.
+/// Puts the probe body under the SHA-256 digest `digest` names.
 async fn probe_put(
     s3: &S3Client,
     bucket: &StoreText<BucketName>,
     key: &ambre_core::ObjectKey,
-    digest_of: &[u8],
+    digest: ProbeDigest,
 ) -> Result<(), AppError> {
     use base64::Engine as _;
     use sha2::Digest as _;
+    let body = b"ambre checksum probe";
+    let digest = match digest {
+        ProbeDigest::OtherBytes => sha2::Sha256::digest(b"ambre checksum forge"),
+        ProbeDigest::OwnBody => sha2::Sha256::digest(body),
+    };
     s3.put_object()
         .bucket(bucket.as_str())
         .key(key.as_str())
-        .checksum_sha256(
-            base64::engine::general_purpose::STANDARD.encode(sha2::Sha256::digest(digest_of)),
-        )
-        .body(aws_sdk_s3::primitives::ByteStream::from_static(PROBE_BODY))
+        .checksum_sha256(base64::engine::general_purpose::STANDARD.encode(digest))
+        .body(aws_sdk_s3::primitives::ByteStream::from_static(body))
         .send()
         .await
         .map(|_| ())
