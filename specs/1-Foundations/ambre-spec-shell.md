@@ -65,6 +65,12 @@ other six documents of the DOM side.
 | `CHROME-208` | `INV` | For each kind of selection, each entry of the context bar MUST be a control the context panel shows for that kind. | this spec section 2; `CHROME-150`; `CHROME-207` | Toile `ambre_toile::tests::chrome_ui::each_entry_of_the_board_bar_is_a_control_of_the_panel` -- wasm tier; Prose `ambre_prose::tests::chrome_panel::superscript_subscript_and_clearing_reach_a_control_of_the_panel` -- each entry of the text bar in the panel; Trame `ambre_trame::ui::panel::tests::the_clipboard_homes_in_the_menu_and_the_panel_holds_every_formatting_command` -- the sheet's bar is empty | none | verified |
 | `CHROME-209` | `INV` | For each kind of selection, each entry of the context menu besides cut, copy and paste MUST be a control the context panel shows for that kind. | this spec section 2; `CHROME-182`; `CHROME-207` | Toile `ambre_toile::tests::chrome_ui::each_entry_of_the_board_menu_is_a_control_of_the_panel` -- wasm tier, every scope of the board's menu; Prose `ambre_prose::view::panel::tests::the_page_menu_opens_on_the_clipboard_then_reaches_the_panel`; Trame `ambre_trame::ui::panel::tests::the_sheet_menu_opens_on_the_clipboard_then_reaches_the_panel` -- each entry a command of the panel's lists | none | verified |
 | `CHROME-210` | `OBS` | A property control MUST show the value the selection holds, or a mixed state when the selected elements disagree. | this spec section 2, the property model | `ambre_chrome::context_panel_ui::each_kit_control_carries_what_it_reaches_and_shows_a_mixed_value` -- wasm tier, a mixed colour says so and a uniform choice is checked; Toile `ambre_toile::ui::style::tests::differing_fill_flags_only_fill_mixed` -- the readings the board's controls take; Prose `ambre_prose::tests::chrome_panel::with_no_selection_the_panel_shows_the_page_the_layout_holds` -- the page's values; Trame `ambre_trame::tests::chrome_ui::style_applied_mirrors_into_style_state` -- the style of the active cell the controls read | none | verified |
+| `CHROME-217` | `OBS` | The header of the context panel MUST NOT repeat the label of a section the panel shows. | this spec section 2, the visual system; `CHROME-190` | Toile `ambre_toile::tests::chrome_ui::the_board_panel_shows_the_board_then_what_applies_to_the_selection`; Prose `ambre_prose::tests::chrome_panel::with_no_selection_the_panel_shows_the_page_the_layout_holds`; Trame `ambre_trame::tests::chrome_ui::the_panel_announces_the_registry_labels` -- wasm tier, each reads the header and every section label of its mounted panel through `ambre_chrome::repeated_title` | none | verified |
+| `CHROME-218` | `OBS` | In a section of the context panel, every label MUST start on one line, and every control MUST start on one line after the widest label. | this spec section 2, the visual system | `ambre_chrome::controls_ui::every_label_of_a_section_sits_in_one_column_and_every_control_in_the_next` -- wasm tier under the shell and token sheets: three fields of unequal labels, the left edge of each label and of each control measured | none | verified |
+| `CHROME-219` | `OBS` | A control of the context panel MUST NOT show the native list or the native range of the browser. | this spec section 2, the visual system | `ambre_chrome::controls_ui::every_icon_of_the_panel_sits_in_a_box_of_one_size`; Toile `ambre_toile::tests::chrome_ui::the_board_panel_shows_the_board_then_what_applies_to_the_selection`; Prose `ambre_prose::tests::chrome_panel::with_no_selection_the_panel_shows_the_page_the_layout_holds`; Trame `ambre_trame::tests::chrome_ui::the_panel_announces_the_registry_labels` -- wasm tier, each mounted panel holds no select element and no range input outside the shared slider, read through `ambre_chrome::native_controls` | none | verified |
+| `CHROME-220` | `OBS` | Every icon control of the context panel MUST draw its glyph at one size, in a box of one size, with no native frame. | this spec section 2, the visual system; `UI-THREAD-068` | `ambre_chrome::controls_ui::every_icon_of_the_panel_sits_in_a_box_of_one_size` -- wasm tier under the shell and token sheets: a command, a property toggle and the frame's own button, each box and each glyph measured, and no border drawn | none | verified |
+| `CHROME-221` | `OBS` | An icon button of the chrome toolkit MUST show its name, and its chord when it has one, in a tooltip while it holds the keyboard focus. | this spec section 2, the visual system; `CHROME-187` | `ambre_chrome::controls_ui::an_icon_button_names_itself_and_its_chord_in_a_tooltip_under_the_focus` -- wasm tier, the focus shows the name and the chord chip, the accessible name and the chord match, and a press hides the tooltip | none | verified |
+| `CHROME-223` | `INV` | Each control primitive and the frame of the context panel, in each state, light and dark, MUST keep the look a reviewer last accepted. | this spec section 2, the visual system; `ambre-spec-testing.md section 2` | `ambre_belt::gallery::tests::the_gallery_keeps_the_look_a_reviewer_accepted` -- browser tier, the gallery page of the test build: each pointer and focus state forced through the DevTools Protocol, the computed style of each probe held against one text snapshot, which a reviewer accepts | none | verified |
 | `CHROME-185` | `OBS` | A control of the shell that shows an icon and no text MUST show a tooltip with the name of its command, and the chord when the command has one. | this spec section 2; `ambre-spec-chrome.md section 2`, the shortcut chip | not built | unbuilt -- lands with the `Command tooltips` Story (`ambre-roadmap.md` MVP). Icon buttons carry a native title, without the chord | unimplemented |
 | `CHROME-186` | `INV` | A tooltip MUST take its name, its chord and its description from the description of the command. | this spec section 2; `UI-THREAD-019` | not built | unbuilt -- lands with the `Command tooltips` Story (`ambre-roadmap.md` MVP). The description of a command carries no sentence that describes it | unimplemented |
 | `CHROME-187` | `OBS` | A tooltip MUST show when its control takes the keyboard focus, as it does under the pointer. | this spec section 2; `CHROME-165` | not built | unbuilt -- lands with the `Command tooltips` Story (`ambre-roadmap.md` MVP) | unimplemented |
@@ -104,11 +110,20 @@ other six documents of the DOM side.
 | `CHROME-211` | `POST` | A write from a property control MUST change that property alone, on each element of the selection. | this spec section 2, the property model; `CHROME-173` | `ambre_chrome::context_panel_ui::each_kit_control_carries_what_it_reaches_and_shows_a_mixed_value` -- a stepper writes its length alone; Toile `ambre_toile::ui::floatbar::tests::a_panel_edit_keeps_every_field_it_did_not_edit`; Prose `ambre_prose::tests::chrome_panel::a_page_control_hands_the_whole_format_to_the_view` -- one field of the format changed; Trame `ambre_trame::logic::tests::group13::a_border_preset_reaches_only_its_edges`; `ambre_trame::logic::tests::group13::an_empty_style_patch_writes_nothing` -- a patch writes the fields it names alone | none | verified |
 | `CHROME-213` | `FRAME` | A write from a property control MUST NOT change what is selected, nor the zoom. | this spec section 2, the property model; `CHROME-174` | not built | unheld -- the board holds it (`TOILE-UI-176`, `TOILE-UI-181`), but no test runs a page write of Prose or a style patch of Trame from a zoom off one hundred per cent; lands with the `The context panel, bar and menu` Story (`ambre-roadmap.md` MVP) | unimplemented |
 
+### 1.6 Pick a choice from a list
+
+The user opens a list of the panel and picks a choice, with the pointer or the keyboard.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `CHROME-224` | `FRAME` | Opening a list of the chrome toolkit with the pointer MUST NOT move the keyboard focus. | this spec section 2, the visual system; `CHROME-222` | `ambre_chrome::controls_ui::a_select_is_operable_from_the_keyboard_alone` -- wasm tier, a click opens the list and the focus stays where it was, so a canvas text pipe keeps it | none | verified |
+| `CHROME-222` | `POST` | A list of choices of the chrome toolkit MUST be operable from the keyboard alone: Enter, Space or the down arrow open it on the current choice, the arrows and a first letter move, Enter picks, and Escape closes with nothing picked. | this spec section 2, the visual system; `ambre-spec-accessibility.md` | `ambre_chrome::controls_ui::a_select_is_operable_from_the_keyboard_alone` -- wasm tier, keys raised on the list: the focus follows, a pick returns it to the button, Escape picks nothing, and a mixed reading selects no choice | none | verified |
+
 * **Budget.** none: the regions are DOM, off the frame loop, and `ambre-spec-budgets.md` budgets no
   chrome operation. A cover a surface publishes is read by a fit, which is a zoom cost.
 * **Boundary.** none: a region holds commands, and a command reaches the Logic thread as every
   command does. Nothing here opens a socket or holds a key.
-* **Verification.** 40 `verified`, 2 `failing`, 19 `unimplemented`, and the type holds the home of
+* **Verification.** 48 `verified`, 2 `failing`, 19 `unimplemented`, and the type holds the home of
   each command. Host tests run each table through the one sink of every region, on a real Logic
   state. Wasm tests hold the palette and the sheet tabs. A hover-only control of Prose and a paste
   over a text selection fail. The rest waits on the regions, which no application lays out.
@@ -173,6 +188,27 @@ a property, and nothing else.
 its property (`CHROME-207`). The context bar and the context menu are declared lists of those ids,
 one list per kind of selection. Each entry of either list is a control the panel shows for that
 kind (`CHROME-208`, `CHROME-209`). The clipboard of the menu is the one exception (`CHROME-178`).
+
+**One visual system.** The three panels draw their controls from one set of shared control
+primitives, on the scales of the design tokens (`ambre-spec-design-tokens.md`, `UI-THREAD-068`). An
+icon sits in a box of one size, and names itself and its chord in a tooltip (`CHROME-220`,
+`CHROME-221`). A stylesheet cannot dress the native controls of the browser. Five primitives replace
+them: a list, a row of segments, a stepper, a swatch and a slider (`CHROME-219`, `CHROME-222`). The
+research mockup `research/mockups/shared-chrome.html` is the agreed starting point, and it states no
+rule.
+
+A section is a grid of two columns. Every label sits in the label column, and every control starts
+in the second (`CHROME-218`). A command with its label takes a whole line, so a row never mixes a
+text button and an icon. The header names the selection, and never repeats a section (`CHROME-217`).
+A gallery page of the test build shows each primitive in each state, and the browser tier records
+its look (`CHROME-223`).
+
+A toggle or an action of a section is outlined: a border on a sunken ground. The frame of the panel
+and its rail draw ghost buttons, with no border until the pointer comes.
+
+**What a primitive costs.** None is generic. A control primitive names a choice by its place, and a thin
+property shim maps a value to its place. A generic control compiles once per value type, and the
+main wasm sits near its ceiling (`ambre-spec-budgets.md section 5`).
 
 **The user chooses the side.** The panel docks to the right by default, or to the left, and the
 choice holds in the three applications (`CHROME-193`, `CHROME-194`). Whether it is collapsed is
@@ -250,6 +286,8 @@ takes is `crates/ambre-toile/src/chrome/cover.rs`. No region has code beyond it.
 | One region per subject | a hamburger button | it is a drawer of everything, so it answers no question. The Ambre menu holds the file and the avatar menu holds the account, each with a subject |
 | The margins live in the panel | the margins in the status bar | margins are document state and every peer sees them. The zoom is view state and only this user sees it. One band holding both mixes what writes the document with what does not |
 | A context bar beside the panel | the formatting in the side panel alone | bold and italic are the actions a user repeats most. The pointer would cross the screen to the panel for each one |
+| Shared primitives for every control of the panel | the native select and range input, dressed by the stylesheet | the list a native select opens and the track of a native range keep the look of the browser, whatever the sheet says. Two controls in one row then read as two toolkits |
+| A primitive names a choice by its place | one generic control per value type | each value type compiles its own copy of the control. The main wasm sits near its ceiling, and a property shim that maps a value to its place costs a few lines |
 | One map for three applications | one chrome per application | a user would learn three places for the same command. Each application keeps its commands, and the map of regions is shared |
 
 ---

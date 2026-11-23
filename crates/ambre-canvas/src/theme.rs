@@ -537,6 +537,64 @@ mod stylesheet_tests {
         );
     }
 
+    /// The rules of the control primitives, each with the box it sizes.
+    const CONTROL_BOXES: [&str; 6] = [
+        ".ambre-icon-button",
+        ".ambre-select-trigger",
+        ".ambre-select-option",
+        ".ambre-stepper",
+        ".ambre-kit-command",
+        ".ambre-segments > button",
+    ];
+
+    /// `UI-THREAD-068`: every control primitive takes its height from the
+    /// control scale, and every glyph inside one takes the icon scale. A
+    /// height spelled out in pixels, or a missing one, fails with its rule.
+    #[test]
+    fn every_control_reads_the_control_scale_and_every_glyph_the_icon_scale() {
+        let all = rules(SHELL_CSS);
+        for wanted in CONTROL_BOXES {
+            let body = all
+                .iter()
+                .find(|(selector, _)| selector == wanted)
+                .map(|(_, body)| body.as_str())
+                .unwrap_or_else(|| panic!("a `{wanted}` rule"));
+            let height = value_of(body, "height").or_else(|| value_of(body, "min-height"));
+            assert!(
+                height.is_some_and(|h| h.starts_with("var(--control")),
+                "`{wanted}` sets its height from the control scale, not `{height:?}`"
+            );
+        }
+        for (selector, body) in &all {
+            let sizes_a_glyph = selector.ends_with("svg")
+                && CONTROL_BOXES
+                    .iter()
+                    .chain(&[".ambre-ctx-section-body"])
+                    .any(|c| selector.contains(c));
+            if !sizes_a_glyph {
+                continue;
+            }
+            for property in ["width", "height"] {
+                if let Some(v) = value_of(body, property) {
+                    assert!(
+                        v.starts_with("var(--icon"),
+                        "`{selector}` sizes a glyph at `{property}: {v}`"
+                    );
+                }
+            }
+        }
+        let tokens: BTreeSet<&str> = declared(THEME_CSS);
+        for name in [
+            "--control-sm",
+            "--control",
+            "--control-lg",
+            "--icon",
+            "--focus-width",
+        ] {
+            assert!(tokens.contains(name), "the source emits {name}");
+        }
+    }
+
     /// `CHROME-202`: the format bar carries the frame of a floating bar. Each
     /// control carries the look of a chrome button, not the raw button of the
     /// browser.

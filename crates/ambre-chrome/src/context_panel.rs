@@ -225,6 +225,18 @@ impl PanelContent {
 /// How far one arrow key moves the edge of the panel.
 const KEY_STEP: Px<Css> = Px::<Css>::new(16.0);
 
+/// The chord the tooltips of the frame name: the first of the toggle chords.
+const PANEL_CHORD: KeyBinding = KeyBinding::primary(ambre_commands::KeyChar::new('.'));
+
+/// The icon of the button that leaves `fold`, on `side`: it points the way
+/// the panel moves.
+fn side_icon(side: DockSide, fold: Fold) -> icondata::Icon {
+    match (side, fold) {
+        (DockSide::Right, Fold::Open) | (DockSide::Left, Fold::Rail) => icondata::LuPanelRightClose,
+        (DockSide::Left, Fold::Open) | (DockSide::Right, Fold::Rail) => icondata::LuPanelRightOpen,
+    }
+}
+
 /// Whether `chord` collapses or opens the panel.
 fn is_toggle(chord: KeyBinding) -> bool {
     shared::PANEL_TOGGLE_CHORDS.contains(&chord)
@@ -324,16 +336,16 @@ pub fn ContextPanel(
             .map(|section| {
                 let key = section.key;
                 view! {
-                    <button
-                        class="icon ambre-ctx-rail-icon"
+                    <crate::IconButton
+                        look=crate::IconLook::Ghost
+                        icon=section.icon
+                        label=section.label
+                        size=crate::ControlSize::Large
+                                                on_press=Callback::new(move |()| open_at(key))
+                        {..}
+                        class:ambre-ctx-rail-icon=true
                         data-section=key.as_str()
-                        title=section.label
-                        aria-label=section.label
-                        on:mousedown=move |ev| ev.prevent_default()
-                        on:click=move |_| open_at(key)
-                    >
-                        <leptos_icons::Icon icon=section.icon />
-                    </button>
+                    />
                 }
             })
             .collect_view()
@@ -364,36 +376,38 @@ pub fn ContextPanel(
                 on:keydown=on_edge_key
             ></div>
             <nav class="ambre-ctx-rail" aria-label="Panel sections">
-                <button
-                    class="icon ambre-ctx-open"
-                    aria-label="Open the panel"
-                    aria-keyshortcuts="Control+."
-                    on:mousedown=move |ev| ev.prevent_default()
-                    on:click=move |_| fold.set(Fold::Open)
-                >
-                    {move || match side.get() {
-                        DockSide::Right => "\u{2039}",
-                        DockSide::Left => "\u{203a}",
-                    }}
-                </button>
+                {move || {
+                    view! {
+                        <crate::IconButton
+                        look=crate::IconLook::Ghost
+                            icon=side_icon(side.get(), Fold::Rail)
+                            label="Open the panel"
+                            chord=Some(PANEL_CHORD)
+                            size=crate::ControlSize::Large
+                                                        on_press=Callback::new(move |()| fold.set(Fold::Open))
+                            {..}
+                            class:ambre-ctx-open=true
+                        />
+                    }
+                }}
                 {rail}
             </nav>
             <div class="ambre-ctx-body">
                 <header class="ambre-ctx-head">
                     <h2 class="ambre-ctx-title">{move || title.get()}</h2>
-                    <button
-                        class="icon ambre-ctx-collapse"
-                        aria-label="Collapse the panel"
-                        aria-keyshortcuts="Control+."
-                        title="Collapse the panel (Ctrl+.)"
-                        on:mousedown=move |ev| ev.prevent_default()
-                        on:click=move |_| fold.set(Fold::Rail)
-                    >
-                        {move || match side.get() {
-                            DockSide::Right => "\u{203a}",
-                            DockSide::Left => "\u{2039}",
-                        }}
-                    </button>
+                    {move || {
+                        view! {
+                            <crate::IconButton
+                        look=crate::IconLook::Ghost
+                                icon=side_icon(side.get(), Fold::Open)
+                                label="Collapse the panel"
+                                chord=Some(PANEL_CHORD)
+                                                                on_press=Callback::new(move |()| fold.set(Fold::Rail))
+                                {..}
+                                class:ambre-ctx-collapse=true
+                            />
+                        }
+                    }}
                 </header>
                 <div class="ambre-ctx-sections">
                     <For

@@ -4,3 +4,4 @@
 # Add a line by hand only; a reviewer reads it.
 feature	reason
 ambre-core/fixed-hash-key	the fixed hash key of the instruction benches (ARCH-089): a shipped build never turns it on, and the one function it swaps in holds no primitive site
+ambre-sync/chrome-gallery	an empty feature: Trunk hands the features of the page build to the Sync worker too, and the gallery page is the Main instance's alone, so the feature gates no code of the worker

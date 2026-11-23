@@ -417,8 +417,10 @@ async fn with_no_selection_the_panel_shows_the_page_the_layout_holds() {
             .unwrap()
             .text_content()
             .unwrap(),
-        "Page"
+        "Document"
     );
+    assert_eq!(ambre_chrome::repeated_title(&root), None);
+    assert_eq!(ambre_chrome::native_controls(&root), Vec::<String>::new());
     assert_eq!(
         ambre_chrome::unreached_controls(&root),
         Vec::<String>::new()
@@ -515,8 +517,9 @@ async fn superscript_subscript_and_clearing_reach_a_control_of_the_panel() {
             .unwrap()
             .text_content()
             .unwrap(),
-        "Text"
+        "Selection"
     );
+    assert_eq!(ambre_chrome::repeated_title(&root), None);
     assert_eq!(
         ambre_chrome::unreached_controls(&root),
         Vec::<String>::new()

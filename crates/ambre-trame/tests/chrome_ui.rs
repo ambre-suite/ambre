@@ -821,6 +821,11 @@ async fn the_panel_announces_the_registry_labels() {
             .unwrap();
         assert!(found.is_some(), "{id:?}: no control announces {expected:?}");
     }
+    assert_eq!(ambre_chrome::repeated_title(&container), None);
+    assert_eq!(
+        ambre_chrome::native_controls(&container),
+        Vec::<String>::new()
+    );
     assert_eq!(
         ambre_chrome::unreached_controls(&container),
         Vec::<String>::new(),

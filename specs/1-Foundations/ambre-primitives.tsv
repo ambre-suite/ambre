@@ -794,7 +794,7 @@ ambre-canvas | src/tokens.rs | crate::tokens | <ScaleName as Rule>::admit(text) 
 ambre-canvas | src/tokens.rs | crate::tokens | <TokenColour as TryFrom<String>>::Error | assoc | String	generic	an error that echoes the refused colour text
 ambre-canvas | src/tokens.rs | crate::tokens | <TokenColour as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the colour text of the source that the fallible constructor of TokenColour parses into its channels
 ambre-canvas | src/tokens.rs | crate::tokens | CanvasColors::fields() | ret | [(&'static str,OpaqueColour);13]	generic	the codec of a struct that is no newtype: the Palette field name of each typed colour, which the generated Rust module spells and the compiler matches back
-ambre-canvas | src/tokens.rs | crate::tokens | ChromeColors::vars() | ret | [(&'static str,OpaqueColour);13]	generic	the codec of a struct that is no newtype: the CSS variable name of each typed colour, written into the generated files the stylesheets read
+ambre-canvas | src/tokens.rs | crate::tokens | ChromeColors::vars() | ret | [(&'static str,OpaqueColour);16]	generic	the codec of a struct that is no newtype: the CSS variable name of each typed colour, written into the generated files the stylesheets read
 ambre-canvas | src/tokens.rs | crate::tokens | Effects::vars() | ret | [(&'static str,&dyn fmt::Display);4]	generic	the codec of a struct that is no newtype: the CSS variable name of each typed effect, written into the generated stylesheet
 ambre-canvas | src/tokens.rs | crate::tokens | Generated.css | field | String	free-text	a whole generated file: the stylesheet or the Rust module
 ambre-canvas | src/tokens.rs | crate::tokens | Generated.rust | field | String	free-text	a whole generated file: the stylesheet or the Rust module
@@ -835,6 +835,7 @@ ambre-chrome | src/format.rs | crate::format | FormatControl.label | field | Str
 ambre-chrome | src/format.rs | crate::format | FormatToggle(label) | param | String	free-text	text, label or user content
 ambre-chrome | src/format.rs | crate::format | Pressed::aria() | ret | &'static str	newtype-inner	the enum's own aria-pressed value, which the DOM attribute takes
 ambre-chrome | src/format.rs | crate::format | Pressed::from_bool(on) | param | bool	newtype-inner	the enum's own constructor from the bool it replaces, On or Off
+ambre-chrome | src/gallery.rs | crate::gallery | Specimen(name) | param | &'static str	free-text	the name of a specimen a person reads, and the snapshot of the browser tier prints
 ambre-chrome | src/handler.rs | crate::handler | FilePick.unreadable | field | &'static str	free-text	text, label or user content
 ambre-chrome | src/handler.rs | crate::handler | ShellAction::CopyText.0 | field | String	newtype-inner	newtype inner
 ambre-chrome | src/handler.rs | crate::handler | FileAccept::as_attr() | ret | &'static str	newtype-inner	the enum's own accept filter, unwrapped at the DOM set_attribute call
@@ -4905,6 +4906,7 @@ ambre-app | src/platform.rs | crate::platform | keep_word(word) | param | &str	f
 ambre-app | src/platform.rs | crate::platform | stored_word() | ret | Option<String>	foreign-api	the word the local storage API returns, which the caller parses into its type
 ambre-app | src/shell/panel.rs | crate::shell::panel | keep(word) | param | &str	local	the stored word of one panel setting, handed straight to the storage call; private
 ambre-app | src/shell/panel.rs | crate::shell::panel | read() | ret | Option<String>	local	the stored word of one panel setting, parsed by the caller at once; private
+ambre-app | src/gallery.rs | crate::gallery | GALLERY_PATH | const | &str	foreign-api	the path the location of the page holds, which the one pathname read compares
 ambre-chrome | src/color.rs | crate::color | ColorPopover(title) | param | String	free-text	text, label or user content
 ambre-chrome | src/context_panel.rs | crate::context_panel | ContextPanel(title) | param | Signal<String>	free-text	the header a person reads, naming the selection
 ambre-chrome | src/context_panel.rs | crate::context_panel | DockSide::as_str() | ret | &'static str	newtype-inner	the enum's own word on data-side and in the store, which the stylesheet and from_stored read back
@@ -4917,6 +4919,23 @@ ambre-chrome | src/context_panel.rs | crate::context_panel | PanelSection::new(l
 ambre-chrome | src/context_panel.rs | crate::context_panel | PanelWidth::from_stored(word) | param | Option<&str>	newtype-inner	the newtype's own number read back from the local store
 ambre-chrome | src/context_panel.rs | crate::context_panel | PanelWidth::to_stored() | ret | String	newtype-inner	the newtype's own number as the local store keeps it
 ambre-chrome | src/context_panel.rs | crate::context_panel | is_toggle() | ret | bool	generic	predicate result
+ambre-chrome | src/controls.rs | crate::controls | ChoiceView.label | field | String	free-text	the label a person reads, or the tooltip of an icon segment: display text no code matches back
+ambre-chrome | src/controls.rs | crate::controls | ChoiceView::text(label) | param | impl Into<String>	free-text	the label a person reads of a choice that shows its label
+ambre-chrome | src/controls.rs | crate::controls | ColorSwatch(label) | param | String	free-text	the accessible name and tooltip of a swatch, display text
+ambre-chrome | src/controls.rs | crate::controls | ControlSize::as_str() | ret | &'static str	newtype-inner	the fieldless enum's own data-size word, which the stylesheet reads off the attribute
+ambre-chrome | src/controls.rs | crate::controls | IconLook::as_str() | ret | &'static str	newtype-inner	the fieldless enum's own data-look word, which the stylesheet reads off the attribute
+ambre-chrome | src/controls.rs | crate::controls | IconButton(label) | param | String	free-text	the accessible name and tooltip of an icon button, read from a command or a property description
+ambre-chrome | src/controls.rs | crate::controls | SLIDER_STEPS | const | f32	foreign-api	the max of the range input, which the one foreign call that renders the input reads
+ambre-chrome | src/controls.rs | crate::controls | SegmentBar(label) | param | String	free-text	the accessible name of a radio group, display text
+ambre-chrome | src/controls.rs | crate::controls | Select(label) | param | String	free-text	the accessible name of a list, display text
+ambre-chrome | src/controls.rs | crate::controls | Select(placeholder) | param | &'static str	free-text	the words a list shows for a mixed selection
+ambre-chrome | src/controls.rs | crate::controls | Slider(label) | param | String	free-text	the accessible name of a range input, display text
+ambre-chrome | src/controls.rs | crate::controls | Stepper(label) | param | String	free-text	the accessible name of a stepper, display text
+ambre-chrome | src/controls.rs | crate::controls | Stepper(on_text) | param | Callback<String>	foreign-api	the value an `<input>` reports; the property shim of `kit` parses it into its length at once
+ambre-chrome | src/controls.rs | crate::controls | Stepper(text) | param | Signal<Option<String>>	foreign-api	the text an `<input>` shows; the property shim of `kit` writes it from a typed length
+ambre-chrome | src/controls.rs | crate::controls | Stepper(unit) | param | &'static str	free-text	the unit a person reads after the number
+ambre-chrome | src/controls.rs | crate::controls | list_key(initials) | param | &[char]	free-text	text, label or user content
+ambre-chrome | src/controls.rs | crate::controls | readout_text() | ret | String	free-text	the readout a person reads beside a slider track
 ambre-chrome | src/kit.rs | crate::kit | <PrintLength<Mm> as FieldLength>::UNIT | const | &'static str	free-text	the unit a person reads after the number
 ambre-chrome | src/kit.rs | crate::kit | <PrintLength<Mm> as FieldLength>::field_text() | ret | String	foreign-api	the text an `<input>` shows
 ambre-chrome | src/kit.rs | crate::kit | <PrintLength<Mm> as FieldLength>::from_field(text) | param | &str	foreign-api	the value an `<input>` reports
@@ -4934,6 +4953,8 @@ ambre-chrome | src/kit.rs | crate::kit | field_number(text) | param | &str	forei
 ambre-chrome | src/kit.rs | crate::kit | mixed_hint(mixed) | param | bool	generic	state flag/predicate
 ambre-chrome | src/kit.rs | crate::kit | property_label() | ret | String	free-text	text, label or user content
 ambre-chrome | src/kit.rs | crate::kit | reach_markers() | ret | Vec<String>	foreign-api	the data-reach attributes the DOM holds, which a test reads back with Reach::matches_marker
+ambre-chrome | src/kit.rs | crate::kit | repeated_title() | ret | Option<String>	foreign-api	the text the DOM holds for a section label the header repeats, which a test prints
+ambre-chrome | src/kit.rs | crate::kit | native_controls() | ret | Vec<String>	foreign-api	the accessible names the DOM holds for native controls a primitive replaces, which a test prints
 ambre-commands | src/lib.rs | crate | Reach::COMMAND | const | &'static str	generic	the prefix of the codec of an enum that carries data, on the data-reach attribute
 ambre-commands | src/lib.rs | crate | Reach::PROPERTY | const | &'static str	generic	the prefix of the codec of an enum that carries data, on the data-reach attribute
 ambre-commands | src/lib.rs | crate | Reach::marker() | ret | String	generic	the codec of an enum that carries data: its data-reach attribute, read back by matches_marker

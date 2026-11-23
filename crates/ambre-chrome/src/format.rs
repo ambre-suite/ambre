@@ -4,7 +4,7 @@
 // text-format cluster promoted out of Trame's cell toolbar. Trame cells and Toile
 // elements drive the SAME controls (mirrors `FontPicker` / `ColorPopover`):
 //
-//   FontSizeSelect -- the point-size dropdown (a curated preset list + an "unset"
+//   FontSizeSelect -- the point-size list (a curated preset list + an "unset"
 //                     entry), value-agnostic (`Option<FontSize>`, `None` = the unset /
 //                     auto entry). The caller maps `None` to its own meaning
 //                     (Trame: the body default; Toile: auto-size to the card).
@@ -20,12 +20,11 @@
 //
 // `FormatToggle` does `on:mousedown prevent_default` so a click never steals focus
 // from the host's text pipe (the palette / grid-focus hazard both apps guard
-// against). `FontSizeSelect` must NOT: on a native <select>, preventing the mousedown
-// default suppresses the browser's opening of the option list, so the dropdown never
-// appears. It relies on `on:change` instead.
+// against). `FontSizeSelect` draws the styled `Select`, which does the same.
 // ============================================================================
 
 use ambre_core::FontSize;
+use ambre_core::index::Pos;
 use ambre_core::{Css, Point, Px};
 use leptos::prelude::*;
 use leptos_icons::Icon;
@@ -45,44 +44,51 @@ pub const FONT_SIZES: &[FontSize] = &[
     FontSize::from_whole_points(36),
 ];
 
-/// The shared font-size dropdown. `current` is the active explicit size (`None` =
-/// unset -> the `auto_label` entry is selected). `on_pick` receives the chosen size
-/// (`None` when the unset entry is picked). `auto_label` names the unset entry
-/// ("Auto" for Toile's card auto-size, "Default" for Trame's body default).
+/// The shared font-size list, in the styled [`Select`](crate::Select).
+/// `current` is the active explicit size (`None` = unset -> the `auto_label`
+/// entry is selected). `on_pick` receives the chosen size (`None` when the
+/// unset entry is picked). `auto_label` names the unset entry ("Auto" for
+/// Toile's card auto-size, "Default" for Trame's body default).
 #[component]
 pub fn FontSizeSelect(
     current: Signal<Option<FontSize>>,
     on_pick: Callback<Option<FontSize>>,
     #[prop(default = "Auto")] auto_label: &'static str,
 ) -> impl IntoView {
-    view! {
-        <select
-            class="ambre-font-size"
-            aria-label="Font size"
-            // The unset entry has an empty value, so `None` selects it.
-            prop:value=move || {
-                current.get().map(|s| s.whole_points().to_string()).unwrap_or_default()
-            }
-            // NOTE: unlike the toggle buttons, a native <select> must NOT
-            // preventDefault on mousedown. Doing so suppresses the browser's own
-            // opening of the option list, so the dropdown never appears. The pick is
-            // committed by on:change, which fires regardless of focus movement.
-            on:change=move |ev| {
-                // An empty value (the unset entry) parses to `None`.
-                let points = event_target_value(&ev).parse::<u16>().ok();
-                on_pick.run(points.map(FontSize::from_whole_points));
-            }
-        >
-            <option value="">{auto_label}</option>
-            {FONT_SIZES
+    // The unset entry comes first, then each preset in order.
+    let choices: Vec<crate::ChoiceView> = std::iter::once(crate::ChoiceView::text(auto_label))
+        .chain(
+            FONT_SIZES
                 .iter()
-                .map(|s| {
-                    let points = s.whole_points().to_string();
-                    let label = points.clone();
-                    view! { <option value=points>{label}</option> }
-                })
-                .collect_view()}
-        </select>
+                .map(|s| crate::ChoiceView::text(s.whole_points().to_string())),
+        )
+        .collect();
+    let selected = Signal::derive(move || {
+        let place = match current.get() {
+            None => Some(0),
+            Some(size) => FONT_SIZES.iter().position(|s| *s == size).map(|i| i + 1),
+        };
+        place.map(Pos::<crate::ChoiceRow>::from_usize)
+    });
+    let pick = Callback::new(move |p: Pos<crate::ChoiceRow>| match p.to_index() {
+        Some(0) => on_pick.run(None),
+        Some(i) => {
+            if let Some(size) = i.checked_sub(1).and_then(|i| FONT_SIZES.get(i)) {
+                on_pick.run(Some(*size));
+            }
+        }
+        None => {}
+    });
+    view! {
+        <span class="ambre-font-size">
+            <crate::Select
+                label="Font size"
+                choices=choices
+                selected=selected
+                on_pick=pick
+                placeholder="Custom"
+            />
+        </span>
     }
 }
 

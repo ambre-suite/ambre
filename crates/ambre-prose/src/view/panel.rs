@@ -101,8 +101,8 @@ impl PanelKind {
     #[must_use]
     pub fn title(self) -> &'static str {
         match self {
-            Self::Page => "Page",
-            Self::Text => "Text",
+            Self::Page => "Document",
+            Self::Text => "Selection",
         }
     }
 

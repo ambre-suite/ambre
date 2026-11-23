@@ -13,12 +13,12 @@
 use crate::message::{DecimalsStep, StylePatch};
 use ambre_chrome::commands::Reach;
 use ambre_chrome::{
-    CommandButton, Field, FontSizeSelect, Labelled, PanelContent, PanelSection, Pressed, Row,
+    Availability, CommandButton, Field, FontSizeSelect, IconButton, Labelled, PanelContent,
+    PanelSection, Pressed, Row,
 };
 use ambre_core::Flag as _;
 use ambre_core::{Commands, FontSize, Rgb, StaticKey};
 use leptos::prelude::*;
-use leptos_icons::Icon;
 
 use super::color::{theme_bg_default, theme_fg_default};
 use super::popovers::{
@@ -82,28 +82,31 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
                 view! { <CommandButton command=c icon=icon on_command=on_command pressed=pressed /> }
             })
         };
+        let decimals = Signal::derive(move || {
+            if style.format.get().has_decimals() {
+                Availability::Enabled
+            } else {
+                Availability::Disabled
+            }
+        });
         view! {
             <Field label="Format">
                 <span class="ambre-kit-control" data-reach=reach(panel::NUMBER_FORMAT)>
                     <NumberFormatPopover style=style on_style=on_style />
                 </span>
                 <span class="ambre-kit-control" data-reach=reach(panel::DECIMALS)>
-                    <button
-                        aria-label="Decrease decimals"
-                        disabled=move || !style.format.get().has_decimals()
-                        on:mousedown=move |ev| ev.prevent_default()
-                        on:click=move |_| on_style.run(StylePatch { decimals_step: Some(DecimalsStep::FEWER), ..Default::default() })
-                    >
-                        <Icon icon=icondata::LuDecimalsArrowLeft />
-                    </button>
-                    <button
-                        aria-label="Increase decimals"
-                        disabled=move || !style.format.get().has_decimals()
-                        on:mousedown=move |ev| ev.prevent_default()
-                        on:click=move |_| on_style.run(StylePatch { decimals_step: Some(DecimalsStep::MORE), ..Default::default() })
-                    >
-                        <Icon icon=icondata::LuDecimalsArrowRight />
-                    </button>
+                    <IconButton
+                        icon=icondata::LuDecimalsArrowLeft
+                        label="Decrease decimals"
+                        availability=decimals
+                        on_press=Callback::new(move |()| on_style.run(StylePatch { decimals_step: Some(DecimalsStep::FEWER), ..Default::default() }))
+                    />
+                    <IconButton
+                        icon=icondata::LuDecimalsArrowRight
+                        label="Increase decimals"
+                        availability=decimals
+                        on_press=Callback::new(move |()| on_style.run(StylePatch { decimals_step: Some(DecimalsStep::MORE), ..Default::default() }))
+                    />
                 </span>
             </Field>
             <Field label="Font">
@@ -124,22 +127,22 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
                 {toggle(registry::BOLD, Signal::derive(move || Pressed::from_bool(style.bold.get().as_bool())))}
                 {toggle(registry::ITALIC, Signal::derive(move || Pressed::from_bool(style.italic.get().as_bool())))}
                 <span class="ambre-kit-control" data-reach=reach(panel::UNDERLINE)>
-                    <ambre_chrome::FormatToggle
-                        label="Underline"
+                    <IconButton
                         icon=icondata::BsTypeUnderline
-                        pressed=Signal::derive(move || Pressed::from_bool(style.underline.get().as_bool()))
-                        on_toggle=Callback::new(move |()| on_style.run(StylePatch {
+                        label="Underline"
+                        pressed=Some(Signal::derive(move || Pressed::from_bool(style.underline.get().as_bool())))
+                        on_press=Callback::new(move |()| on_style.run(StylePatch {
                             underline: Some(style.underline.get_untracked().flipped()),
                             ..Default::default()
                         }))
                     />
                 </span>
                 <span class="ambre-kit-control" data-reach=reach(panel::STRIKETHROUGH)>
-                    <ambre_chrome::FormatToggle
-                        label="Strikethrough"
+                    <IconButton
                         icon=icondata::BsTypeStrikethrough
-                        pressed=Signal::derive(move || Pressed::from_bool(style.strikethrough.get().as_bool()))
-                        on_toggle=Callback::new(move |()| on_style.run(StylePatch {
+                        label="Strikethrough"
+                        pressed=Some(Signal::derive(move || Pressed::from_bool(style.strikethrough.get().as_bool())))
+                        on_press=Callback::new(move |()| on_style.run(StylePatch {
                             strikethrough: Some(style.strikethrough.get_untracked().flipped()),
                             ..Default::default()
                         }))
@@ -180,17 +183,15 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
                     <VAlignPopover style=style on_style=on_style />
                 </span>
                 <span class="ambre-kit-control" data-reach=reach(panel::WRAP)>
-                    <button
-                        aria-label="Wrap text"
-                        aria-pressed=move || Pressed::from_bool(style.wrap.get().as_bool()).aria()
-                        on:mousedown=move |ev| ev.prevent_default()
-                        on:click=move |_| on_style.run(StylePatch {
+                    <IconButton
+                        icon=icondata::BsTextWrap
+                        label="Wrap text"
+                        pressed=Some(Signal::derive(move || Pressed::from_bool(style.wrap.get().as_bool())))
+                        on_press=Callback::new(move |()| on_style.run(StylePatch {
                             wrap: Some(style.wrap.get_untracked().flipped()),
                             ..Default::default()
-                        })
-                    >
-                        <Icon icon=icondata::BsTextWrap />
-                    </button>
+                        }))
+                    />
                 </span>
             </Field>
             <Field label="Borders">
@@ -237,7 +238,7 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
         ]
     });
     PanelContent {
-        title: Signal::stored("Sheet".to_owned()),
+        title: Signal::stored("Workbook".to_owned()),
         sections,
     }
 }
