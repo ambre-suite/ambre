@@ -31,6 +31,7 @@ impl TrameView {
         #[cfg(target_arch = "wasm32")]
         let TrameSignals {
             formula_ref,
+            selection_ref,
             formula_text,
             formula_action,
             sel_stats,
@@ -74,8 +75,11 @@ impl TrameView {
             #[cfg(target_arch = "wasm32")]
             formula_ref,
             #[cfg(target_arch = "wasm32")]
+            selection_ref,
+            #[cfg(target_arch = "wasm32")]
             formula_text,
             formula: FormulaBar::default(),
+            selection_label: String::new(),
             #[cfg(target_arch = "wasm32")]
             formula_action,
             #[cfg(target_arch = "wasm32")]
@@ -290,6 +294,29 @@ impl TrameView {
             crate::columns::col_to_alpha(self.state.active_col()),
             crate::columns::row_label(self.state.active_row())
         )
+    }
+
+    /// The reference of the whole selection, which the header of the
+    /// context panel shows. It names the bounds of the live rectangle, such
+    /// as `B2:D5`, or the active cell alone.
+    fn selection_ref(&self) -> String {
+        let bounds = self.state.selection.bounds();
+        let corner = |at: CellPos| {
+            format!(
+                "{}{}",
+                crate::columns::col_to_alpha(at.col),
+                crate::columns::row_label(at.row)
+            )
+        };
+        if bounds.is_single_cell() {
+            corner(bounds.top_left)
+        } else {
+            format!(
+                "{}:{}",
+                corner(bounds.top_left),
+                corner(bounds.bottom_right)
+            )
+        }
     }
 
     /// Recompute the active cell's on-screen anchor and publish it for the
@@ -547,6 +574,7 @@ impl TrameView {
     /// value when no session is open (`TRAME-UI-055`).
     pub(crate) fn sync_formula_bar(&mut self) {
         self.formula.reference = self.active_cell_ref();
+        self.selection_label = self.selection_ref();
         if self.formula.focused == BarFocus::Focused {
             let text = self.formula.text.clone();
             if let Some(ed) = self.editor.as_mut() {

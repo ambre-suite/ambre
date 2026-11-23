@@ -77,6 +77,10 @@ pub struct ChoiceView {
     pub label: String,
     /// The icon of a segment. A choice with none shows its label.
     pub icon: Option<icondata::Icon>,
+    /// The command a pick of this choice runs, when the list runs one
+    /// command per choice (`CHROME-207`). `None` for a choice that writes a
+    /// value of the property the control names.
+    pub reach: Option<Reach>,
 }
 
 impl ChoiceView {
@@ -85,6 +89,24 @@ impl ChoiceView {
         Self {
             label: label.into(),
             icon: None,
+            reach: None,
+        }
+    }
+
+    /// A choice that shows `icon`, its label the tooltip.
+    pub fn icon(label: impl Into<String>, icon: icondata::Icon) -> Self {
+        Self {
+            icon: Some(icon),
+            ..Self::text(label)
+        }
+    }
+
+    /// The same choice, naming the command its pick runs.
+    #[must_use]
+    pub fn reaching(self, reach: Reach) -> Self {
+        Self {
+            reach: Some(reach),
+            ..self
         }
     }
 }
@@ -324,6 +346,7 @@ pub fn Select(
                     class="ambre-select-option"
                     role="option"
                     tabindex="-1"
+                    data-reach=choice.reach.map(|r| r.marker())
                     aria-selected=move || Selected::from_bool(is()).aria()
                     on:mousedown=move |ev| ev.prevent_default()
                     on:click=move |_| pick(p)
@@ -391,6 +414,7 @@ pub fn SegmentBar(
             view! {
                 <button
                     role="radio"
+                    data-reach=choice.reach.map(|r| r.marker())
                     aria-checked=move || crate::Checked::from_bool(checked()).aria()
                     aria-label=name.clone()
                     title=name

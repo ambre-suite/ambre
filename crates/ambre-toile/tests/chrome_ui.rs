@@ -1528,7 +1528,34 @@ async fn the_board_panel_shows_the_board_then_what_applies_to_the_selection() {
         ),
         "{markers:?}"
     );
+    // Find has no control in the board section: the palette and its chord
+    // reach it, and no icon row mixes it with the board's commands.
+    let find = ambre_chrome::commands::Reach::Command(ambre_toile::ui::find::FIND);
+    assert!(
+        !markers.iter().any(|m| find.matches_marker(m)),
+        "{markers:?}"
+    );
     board.remove();
+
+    // The link of an element sits in its shape section, out of the arrangement.
+    let shape = mount_toile_panel(Some(styled(Styled::Elements)));
+    leptos::task::tick().await;
+    for (id, section) in [
+        (ambre_toile::ui::menu_bar::LINK_SET, panel::SHAPE),
+        (ambre_toile::ui::menu_bar::LINK_CLEAR, panel::SHAPE),
+    ] {
+        let reach = ambre_chrome::commands::Reach::Command(id).marker();
+        let host = shape
+            .query_selector(&format!("[data-reach=\"{reach}\"]"))
+            .unwrap()
+            .expect("the link control")
+            .closest(".ambre-ctx-section")
+            .unwrap()
+            .expect("in a section")
+            .get_attribute("data-section");
+        assert_eq!(host.as_deref(), Some(section.as_str()), "{id:?}");
+    }
+    shape.remove();
 
     for (kind, model) in [
         (PanelKind::Shape, styled(Styled::Elements)),

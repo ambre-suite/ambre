@@ -246,6 +246,12 @@ pub enum TrameEvent {
     SheetList {
         sheets: Vec<SheetTab>,
         active: Id<Sheet>,
+        /// The page setup of the active sheet, which the print group of the
+        /// context panel shows.
+        page: super::PageSetup,
+        /// The frozen pane of the active sheet, which the freeze control of
+        /// the context panel shows.
+        frozen: super::FrozenPane,
     },
 
     /// The workbook's locale and the reader's half it is read under. Sent on
@@ -614,7 +620,12 @@ impl std::fmt::Debug for TrameEvent {
                 covered_col
             ),
             Self::UndoState { undo, redo } => fields!("UndoState", undo, redo),
-            Self::SheetList { sheets, active } => fields!("SheetList", sheets, active),
+            Self::SheetList {
+                sheets,
+                active,
+                page,
+                frozen,
+            } => fields!("SheetList", sheets, active, page, frozen),
             Self::LocaleState { document, reader } => fields!("LocaleState", document, reader),
             Self::Error { refusal } => fields!("Error", refusal),
             Self::EditTargetMoved { session, row, col } => {

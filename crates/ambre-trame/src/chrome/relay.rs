@@ -70,6 +70,19 @@ pub struct TrameRelay {
     /// The workbook's locale and the reader's half, which the status bar and
     /// the formula bar read (`LOCALE-021`, `LOCALE-022`).
     pub locale: RwSignal<Option<crate::ui::locale::LocaleView>>,
+    /// The print setup and the frozen pane of the active sheet, which the
+    /// context panel reads. `None` before the first sheet list.
+    pub sheet: RwSignal<Option<ActiveSheet>>,
+}
+
+/// What the context panel shows of the active sheet: its page setup and its
+/// frozen pane.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ActiveSheet {
+    /// The paper, the orientation and the margins it prints on.
+    pub page: crate::message::PageSetup,
+    /// The rows and the columns that stay in view.
+    pub frozen: crate::message::FrozenPane,
 }
 
 impl TrameRelay {
@@ -144,7 +157,21 @@ impl TrameRelay {
                 self.filter_popover.set(None);
             }
             // The view publishes the active sheet it adopts.
-            TrameEvent::SheetList { sheets, .. } => self.sheets.set(sheets.clone()),
+            TrameEvent::SheetList {
+                sheets,
+                page,
+                frozen,
+                ..
+            } => {
+                self.sheets.set(sheets.clone());
+                let next = Some(ActiveSheet {
+                    page: *page,
+                    frozen: *frozen,
+                });
+                if self.sheet.get_untracked() != next {
+                    self.sheet.set(next);
+                }
+            }
             TrameEvent::LocaleState { document, reader } => {
                 self.locale.set(Some(crate::ui::locale::LocaleView {
                     document: document.clone(),

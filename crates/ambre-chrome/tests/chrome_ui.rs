@@ -483,6 +483,8 @@ async fn the_format_bar_hangs_its_controls_and_reports_a_press() {
         label: label.to_owned(),
         pressed: state,
         on_press: Callback::new(move |()| pressed.update(|p| p.push(label))),
+        icon: None,
+        chord: None,
     };
     let controls = vec![
         control("Bold", Pressed::On),

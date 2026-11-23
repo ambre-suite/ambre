@@ -182,6 +182,9 @@ pub struct PanelSection {
     pub icon: icondata::Icon,
     /// The content, written by the application from the kit.
     pub body: ViewFn,
+    /// Whether the section shows its body the first time the panel shows it.
+    /// A group a user seldom edits, such as print setup, starts folded.
+    pub opens: crate::Openness,
 }
 
 impl PanelSection {
@@ -197,6 +200,17 @@ impl PanelSection {
             label,
             icon,
             body: ViewFn::from(body),
+            opens: crate::Openness::Open,
+        }
+    }
+
+    /// The same section, folded the first time the panel shows it. A fold
+    /// the user sets afterwards wins.
+    #[must_use]
+    pub fn folded_first(self) -> Self {
+        Self {
+            opens: crate::Openness::Closed,
+            ..self
         }
     }
 }
@@ -255,6 +269,9 @@ pub fn ContextPanel(
     // The sections a person folded. A key outlives the section it names, so a
     // section that leaves and comes back keeps its fold.
     let folded = RwSignal::new(HashSet::<StaticKey<PanelSections>>::new());
+    // The sections the panel has shown once: a section that starts folded
+    // folds on its first showing alone, so a user's unfold holds.
+    let seen = StoredValue::new(HashSet::<StaticKey<PanelSections>>::new());
     let panel_ref = NodeRef::<leptos::html::Aside>::new();
 
     // `Ctrl+.` collapses an open panel and opens a collapsed one
@@ -412,6 +429,12 @@ pub fn ContextPanel(
                         key=|section| section.key
                         children=move |section| {
                             let key = section.key;
+                            let first = seen.try_update_value(|s| s.insert(key)).unwrap_or(false);
+                            if first && section.opens == crate::Openness::Closed {
+                                folded.update_untracked(|f| {
+                                    f.insert(key);
+                                });
+                            }
                             let is_folded = move || folded.with(|f| f.contains(&key));
                             view! {
                                 <section

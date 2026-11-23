@@ -107,8 +107,8 @@ commands! {
     SORT_RANGE_MULTI = StaticKey::<Commands>::new("trame.sort.range_multi"), "Sort range...", Some(StaticKey::<Icons>::new("sort-variant")), &[], SORT, ContextPanel;
     FILTER_COLUMN = StaticKey::<Commands>::new("trame.filter.column"), "Filter by column", Some(StaticKey::<Icons>::new("filter")), &[], FILTER, ContextPanel;
     CLEAR_FILTER = StaticKey::<Commands>::new("trame.filter.clear"), "Remove filter", Some(StaticKey::<Icons>::new("filter-off")), &[], FILTER, ContextPanel;
-    FIND = StaticKey::<Commands>::new("trame.find.open"), "Find and replace", Some(StaticKey::<Icons>::new("search")), &[KeyBinding::primary(KeyChar::F)], FIND_REPLACE, ContextPanel;
-    REPLACE = StaticKey::<Commands>::new("trame.find.replace"), "Replace", None, &[KeyBinding::primary(KeyChar::H)], FIND_REPLACE, ContextPanel;
+    FIND = StaticKey::<Commands>::new("trame.find.open"), "Find and replace", Some(StaticKey::<Icons>::new("search")), &[KeyBinding::primary(KeyChar::F)], FIND_REPLACE, AmbreMenu;
+    REPLACE = StaticKey::<Commands>::new("trame.find.replace"), "Replace", None, &[KeyBinding::primary(KeyChar::H)], FIND_REPLACE, AmbreMenu;
     COPY = shared::COPY, "Copy", Some(StaticKey::<Icons>::new("content-copy")), shared::COPY_CHORDS, CLIPBOARD, ContextMenu;
     CUT = shared::CUT, "Cut", Some(StaticKey::<Icons>::new("content-cut")), shared::CUT_CHORDS, CLIPBOARD, ContextMenu;
     PASTE = shared::PASTE, "Paste", Some(StaticKey::<Icons>::new("content-paste")), shared::PASTE_CHORDS, CLIPBOARD, ContextMenu;

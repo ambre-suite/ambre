@@ -555,6 +555,22 @@ mod tests {
         assert_eq!(view.word_count.paragraphs, text.paragraphs);
     }
 
+    /// An empty document lays out one blank page, so it counts one page,
+    /// before any layout and after one.
+    #[test]
+    fn an_empty_document_counts_one_page() {
+        let mut state = fresh();
+        assert_eq!(state.word_count().pages.get(), 1, "before any layout");
+        assert_eq!(state.paginate(&[]).page_count.get(), 1, "the layout");
+        assert_eq!(state.word_count().pages.get(), 1, "after the layout");
+        let outcome = state.handle_command(ProseCommand::CountWords);
+        let reported = outcome.display.iter().find_map(|event| match event {
+            ProseEvent::WordCountUpdated { count } => Some(count.pages.get()),
+            _ => None,
+        });
+        assert_eq!(reported, Some(1));
+    }
+
     #[test]
     fn the_page_count_is_the_one_of_the_layout_taken() {
         let mut state = fresh();

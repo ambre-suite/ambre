@@ -140,6 +140,7 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
     } = slots;
     let ambre_trame::ui::TrameSignals {
         formula_ref,
+        selection_ref,
         formula_text,
         formula_action,
         sel_stats,
@@ -217,6 +218,7 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
             sheets,
             sel_stats,
             locale: trame_locale,
+            sheet: RwSignal::new(None),
         };
         let toile_relay = toile_chrome::ToileRelay {
             sel_stats: sel_stats_toile,
@@ -333,6 +335,7 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
             prose_zoom,
             prose_signals,
             formula_ref,
+            selection_ref,
             formula_text,
             formula_action,
             tofu_prompt,

@@ -112,9 +112,10 @@ impl TrameState {
         self.write_frozen_pane(sheet, next);
         self.doc.commit();
         let update = self.flush_delta();
-        // The window re-fetches, and its answer carries the new pane.
+        // The window re-fetches, and its answer carries the new pane. The
+        // sheet list carries it to the freeze control of the panel.
         let display = if *sheet == self.active_sheet {
-            vec![TrameEvent::DataReset]
+            vec![TrameEvent::DataReset, self.sheet_list_event()]
         } else {
             vec![]
         };

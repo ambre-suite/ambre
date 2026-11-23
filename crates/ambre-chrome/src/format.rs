@@ -158,6 +158,11 @@ pub struct FormatControl {
     pub label: String,
     pub pressed: Pressed,
     pub on_press: Callback<()>,
+    /// The glyph the control shows in place of its label, which becomes the
+    /// tooltip. `None` shows the label.
+    pub icon: Option<icondata::Icon>,
+    /// The chord the tooltip names beside the label.
+    pub chord: Option<ambre_commands::KeyBinding>,
 }
 
 /// The format bar over a selection, centred on `anchor` in the viewport
@@ -169,19 +174,39 @@ pub fn FormatBar(anchor: Point<Px<Css>>, controls: Vec<FormatControl>) -> impl I
         "{}px",
         (anchor.y - FORMAT_BAR_LIFT).max(Px::<Css>::ZERO).get()
     );
+    // An icon control is the one icon button of the toolkit. The bar then
+    // shows the glyphs of the context panel, at the size of a bar.
     let controls = controls.into_iter().map(|control| {
         let on_press = control.on_press;
-        let text = control.label.clone();
-        view! {
-            <button
-                class="ambre-format-control"
-                aria-pressed=control.pressed.aria()
-                aria-label=control.label
-                on:mousedown=|ev: web_sys::MouseEvent| ev.prevent_default()
-                on:click=move |_| on_press.run(())
-            >
-                {text}
-            </button>
+        match control.icon {
+            Some(icon) => view! {
+                <crate::IconButton
+                    icon=icon
+                    label=control.label
+                    chord=control.chord
+                    pressed=Some(Signal::stored(control.pressed))
+                    size=crate::ControlSize::Large
+                    on_press=Callback::new(move |()| on_press.run(()))
+                    {..}
+                    class:ambre-format-control=true
+                />
+            }
+            .into_any(),
+            None => {
+                let text = control.label.clone();
+                view! {
+                    <button
+                        class="ambre-format-control"
+                        aria-pressed=control.pressed.aria()
+                        aria-label=control.label
+                        on:mousedown=|ev: web_sys::MouseEvent| ev.prevent_default()
+                        on:click=move |_| on_press.run(())
+                    >
+                        {text}
+                    </button>
+                }
+                .into_any()
+            }
         }
     });
     view! {

@@ -468,13 +468,16 @@ pub(crate) fn icon_of(command: &ambre_commands::Command) -> Option<icondata::Ico
 
 /// One control, announced by its command's title.
 fn control(signals: ProseSignals, id: StaticKey<Commands>, pressed: Pressed) -> FormatControl {
-    let label = ambre_commands::find(crate::commands::COMMANDS, id)
+    let command = ambre_commands::find(crate::commands::COMMANDS, id);
+    let label = command
         .map(|command| (command.title)(&ambre_commands::Locale::En).into_string())
         .unwrap_or_default();
     FormatControl {
         label,
         pressed,
         on_press: Callback::new(move |()| signals.format.set(Some(id))),
+        icon: command.and_then(icon_of),
+        chord: command.and_then(ambre_commands::Command::chord),
     }
 }
 

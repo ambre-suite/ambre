@@ -217,6 +217,16 @@ pub trait FieldLength: Copy + PartialEq + Send + Sync + 'static {
     fn from_field(text: &str) -> Option<Self>;
 }
 
+/// The text of `value` to one decimal, with no decimal when it is whole:
+/// "20", never "20.0", and "12.7".
+fn tenths(value: f32) -> String {
+    let text = format!("{value:.1}");
+    match text.strip_suffix(".0") {
+        Some(whole) => whole.to_owned(),
+        None => text,
+    }
+}
+
 /// The number a field reads, when it is a finite length of zero or more.
 fn field_number(text: &str) -> Option<f32> {
     text.trim()
@@ -238,7 +248,7 @@ impl FieldLength for PrintLength<Mm> {
     }
 
     fn field_text(self) -> String {
-        format!("{:.1}", self.get())
+        tenths(self.get())
     }
 
     fn from_field(text: &str) -> Option<Self> {
@@ -258,7 +268,7 @@ impl FieldLength for Px<StoredBoard> {
     }
 
     fn field_text(self) -> String {
-        format!("{:.1}", self.get())
+        tenths(self.get())
     }
 
     fn from_field(text: &str) -> Option<Self> {
@@ -315,6 +325,7 @@ fn choice_views<T>(choices: &[Choice<T>]) -> Vec<crate::ChoiceView> {
         .map(|c| crate::ChoiceView {
             label: c.label.to_owned(),
             icon: c.icon,
+            reach: None,
         })
         .collect()
 }
@@ -456,4 +467,17 @@ pub fn unreached_controls(root: &web_sys::Element) -> Vec<String> {
                 .unwrap_or_else(|| e.outer_html())
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_length_shows_a_decimal_only_when_it_has_one() {
+        assert_eq!(PrintLength::<Mm>::new(20.0).field_text(), "20");
+        assert_eq!(PrintLength::<Mm>::new(12.7).field_text(), "12.7");
+        assert_eq!(PrintLength::<Mm>::new(0.04).field_text(), "0");
+        assert_eq!(Px::<StoredBoard>::new(1.5).field_text(), "1.5");
+    }
 }

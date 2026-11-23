@@ -231,8 +231,15 @@ impl TrameState {
         }
         self.doc.commit();
         let update = self.flush_delta();
+        // The sheet list carries the setup of the active sheet to the print
+        // group of the panel.
+        let display = if sheet == self.active_sheet {
+            vec![self.sheet_list_event()]
+        } else {
+            vec![]
+        };
         TrameOutcome {
-            display: vec![],
+            display,
             update,
             ephemeral: None,
         }

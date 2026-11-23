@@ -371,6 +371,9 @@ impl TrameView {
             if self.formula_ref.get_untracked() != self.formula.reference {
                 self.formula_ref.set(self.formula.reference.clone());
             }
+            if self.selection_ref.get_untracked() != self.selection_label {
+                self.selection_ref.set(self.selection_label.clone());
+            }
             if self.formula_text.get_untracked() != self.formula.text {
                 self.formula_text.set(self.formula.text.clone());
             }
