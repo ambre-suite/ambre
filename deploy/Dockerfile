@@ -79,6 +79,8 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=private \
 # bare name that the browser tier uses, under the cargo profile of the release
 # and without `--release`, as the call proofs do (`justfile`, `proof_build`):
 # the release hook refuses that feature in a release (`ZK-045`).
+# `AMBRE_EMBED_SITES` names the sites a Toile web embed may load: the hook
+# writes them into the page policy, and no frame loads without one (`SRV-312`).
 FROM toolchain AS web-build
 # The trunk that `scripts/client_digest.py` pins: another trunk writes another page.
 ARG TRUNK_VERSION=0.22.1
@@ -88,6 +90,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=private \
     cargo install --locked trunk --version "${TRUNK_VERSION}"
 COPY . .
 ARG DEV_LOGIN=
+ARG AMBRE_EMBED_SITES=
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=private \
     --mount=type=cache,target=/src/target,id=target-web,sharing=locked \
     set -eu; \

@@ -168,6 +168,7 @@ services:
       target: web
       args:
         DEV_LOGIN: ${AMBRE_DEV_LOGIN:-}
+        AMBRE_EMBED_SITES: ${AMBRE_EMBED_SITES:-}
     image: ambre-web:local
     restart: unless-stopped
     network_mode: host
