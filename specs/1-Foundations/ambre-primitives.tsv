@@ -2958,7 +2958,6 @@ ambre-toile | src/message/mod.rs | crate::message | VoteWeight::new(weight) | pa
 ambre-chrome | src/font.rs | crate::font | DEFAULT_LABEL | const | &str	free-text	UI label of the picker entry that names no family
 ambre-chrome | src/font.rs | crate::font | FamilyChoice.css | field | &'static str	foreign-api	the CSS font-family stack the browser previews the entry in
 ambre-chrome | src/font.rs | crate::font | FamilyChoice::label() | ret | &'static str	free-text	the closed set's display label
-ambre-chrome | src/font.rs | crate::font | shown_label() | ret | String	free-text	UI label the font picker trigger shows
 ambre-core | src/mode.rs | crate::mode | LinkState::connected_if(open) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-core | src/mode.rs | crate::mode | LinkState::is_connected() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-core | src/mode.rs | crate::mode | ThreadState::is_resolved() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
@@ -4922,6 +4921,8 @@ ambre-chrome | src/context_panel.rs | crate::context_panel | is_toggle() | ret |
 ambre-chrome | src/controls.rs | crate::controls | ChoiceView.label | field | String	free-text	the label a person reads, or the tooltip of an icon segment: display text no code matches back
 ambre-chrome | src/controls.rs | crate::controls | ChoiceView::text(label) | param | impl Into<String>	free-text	the label a person reads of a choice that shows its label
 ambre-chrome | src/controls.rs | crate::controls | ChoiceView::icon(label) | param | impl Into<String>	free-text	the label a person reads as the tooltip of a choice that shows its icon
+ambre-chrome | src/controls.rs | crate::controls | ChoiceView.face | field | Option<&'static str>	foreign-api	the CSS font-family stack the browser shows the choice in
+ambre-chrome | src/controls.rs | crate::controls | ChoiceView::in_face(css) | param | &'static str	foreign-api	the CSS font-family stack the browser shows the choice in
 ambre-chrome | src/kit.rs | crate::kit | tenths() | ret | String	free-text	the number a length field shows, which a person reads and edits
 ambre-chrome | src/kit.rs | crate::kit | tenths(value) | param | f32	math	the raw number of a length, which each length type unwraps to format
 ambre-trame | src/chrome/panel.rs | crate::chrome::panel | command_choices(labels) | param | &[&str]	free-text	the labels a person reads of the choices of a list
@@ -4933,7 +4934,7 @@ ambre-chrome | src/controls.rs | crate::controls | IconButton(label) | param | S
 ambre-chrome | src/controls.rs | crate::controls | SLIDER_STEPS | const | f32	foreign-api	the max of the range input, which the one foreign call that renders the input reads
 ambre-chrome | src/controls.rs | crate::controls | SegmentBar(label) | param | String	free-text	the accessible name of a radio group, display text
 ambre-chrome | src/controls.rs | crate::controls | Select(label) | param | String	free-text	the accessible name of a list, display text
-ambre-chrome | src/controls.rs | crate::controls | Select(placeholder) | param | &'static str	free-text	the words a list shows for a mixed selection
+ambre-chrome | src/controls.rs | crate::controls | Select(placeholder) | param | Signal<String>	free-text	the words a list shows for a mixed selection, or for a value no choice names
 ambre-chrome | src/controls.rs | crate::controls | Slider(label) | param | String	free-text	the accessible name of a range input, display text
 ambre-chrome | src/controls.rs | crate::controls | Stepper(label) | param | String	free-text	the accessible name of a stepper, display text
 ambre-chrome | src/controls.rs | crate::controls | Stepper(on_text) | param | Callback<String>	foreign-api	the value an `<input>` reports; the property shim of `kit` parses it into its length at once
