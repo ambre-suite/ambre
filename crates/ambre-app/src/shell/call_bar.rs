@@ -22,7 +22,8 @@ use leptos_icons::Icon;
 
 use crate::{call_devices, call_volumes};
 
-/// The call controls of the header: the call button, or mute and hang up during a call. Each
+/// The call controls of the header: the call button, or mute and hang up in the channel of a
+/// call. Another channel offers none during a call, and the call bubble holds them. Each
 /// is a button with an icon and an accessible name, and mute carries its pressed state. A
 /// refused microphone shows why the call did not start, as an alert. The alert stays until the
 /// next call gesture (the Murmure calls spec, section 3, the call controls).
@@ -35,7 +36,12 @@ pub(super) fn CallBar(
     /// The members of the spaces, which name each participant of the volumes.
     relay: MurmureRelay,
 ) -> impl IntoView {
-    let controls = move || CallControls::of(phase.get(), pane.get().shown_channel());
+    let from = crate::call::where_from();
+    let controls = Signal::derive(move || {
+        let call = from.get().map(|(channel, _)| channel);
+        CallControls::of(phase.get(), pane.get().shown_channel(), call)
+    });
+    let controls = move || controls.get();
     let offers_devices = move || !matches!(controls(), CallControls::None);
     let open = RwSignal::new(ambre_chrome::Openness::Closed);
     let fallback: Signal<Option<ambre_murmure::ui::call_devices::Fallback>> =

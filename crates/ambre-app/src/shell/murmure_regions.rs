@@ -2191,7 +2191,7 @@ async fn a_live_call_shows_its_mark_its_count_and_its_faces_on_the_channel_shown
 /// tests move the phase of the page while this one waits.
 #[wasm_bindgen_test]
 async fn the_call_floats_away_from_its_channel_and_brings_it_back() {
-    use super::call_bar::CallFloat;
+    use super::call_bar::{CallBar, CallFloat};
     use ambre_murmure::ui::call_controls::{CallPhase, Microphone};
     let acme = Acme::new();
     for width in [1025, 390] {
@@ -2208,7 +2208,16 @@ async fn the_call_floats_away_from_its_channel_and_brings_it_back() {
         let handle = mount_to(root.clone().unchecked_into(), move || {
             view! { <CallFloat pane=pane phase=Signal::from(phase) relay=relay /> }
         });
+        // The header of another channel offers no call control: the float holds them
+        // (`MURMURE-728`).
+        let bar_root = frame.inner.create_element("div").unwrap();
+        frame.inner.body().unwrap().append_child(&bar_root).unwrap();
+        let bar = mount_to(bar_root.clone().unchecked_into(), move || {
+            view! { <CallBar pane=pane phase=Signal::from(phase) relay=relay /> }
+        });
         leptos::task::tick().await;
+        let in_bar = |selector: &str| bar_root.query_selector(selector).unwrap().is_some();
+        assert!(!in_bar(".murmure-call-mute") && !in_bar(".murmure-call-hang-up"));
         let within = |selector: &str| root.query_selector(selector).unwrap();
         let float = within(".murmure-call-float").expect("the call floats");
         assert_eq!(
@@ -2242,12 +2251,17 @@ async fn the_call_floats_away_from_its_channel_and_brings_it_back() {
             within(".murmure-call-float").is_none(),
             "its channel in view"
         );
+        assert!(
+            in_bar(".murmure-call-mute") && in_bar(".murmure-call-hang-up"),
+            "the header of the channel of the call holds them again"
+        );
         assert_eq!(
             frame.sent.get_untracked().len(),
             before,
             "the way back sends nothing"
         );
         crate::call::where_from().set(None);
+        drop(bar);
         drop(handle);
     }
 }
