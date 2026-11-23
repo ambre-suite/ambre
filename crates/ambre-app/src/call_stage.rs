@@ -195,8 +195,8 @@ pub(crate) fn stage(
     let CallPhase::InCall(microphone) = crate::call::phase().get_untracked() else {
         return None;
     };
-    // Another channel shows no video region: the call floats over it instead, and its choice of
-    // videos stays as it was (the Murmure calls spec, away from the channel of the call).
+    // Another channel shows no video region, since the call floats over it. Its choice of videos
+    // stays as it was (the Murmure calls spec, section 3).
     let call = crate::call::where_from()
         .get_untracked()
         .map(|(channel, _)| channel);
@@ -335,8 +335,8 @@ mod tests {
     use wasm_bindgen::JsCast;
     use wasm_bindgen_test::wasm_bindgen_test;
 
-    /// Another channel than the channel of the call shows no video region, and the channel of the
-    /// call shows it (the Murmure calls spec, away from the channel of the call).
+    /// Another channel than the channel of the call shows no video region. The channel of the call
+    /// shows it (the Murmure calls spec, section 3).
     #[wasm_bindgen_test]
     fn another_channel_shows_no_video_region() {
         use ambre_core::id::{Channel, Id};
