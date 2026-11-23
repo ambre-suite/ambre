@@ -1180,6 +1180,7 @@ mod handler_tests {
             ),
             author,
             cap: None,
+            document_caps: Vec::new(),
             signature: ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array([0; 64]),
         }
     }

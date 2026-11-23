@@ -315,6 +315,15 @@ impl SyncState {
                 .get(&document_id)
                 .map(SyncDocumentState::applied_clocks)
                 .unwrap_or_default(),
+            channel_applied: self
+                .open_channel_documents(document_id)
+                .into_iter()
+                .filter_map(|other| {
+                    self.documents
+                        .get(&other)
+                        .map(|doc| (other, doc.applied_clocks()))
+                })
+                .collect(),
         };
         let http = sharing::GlooHttp { auth };
         crate::spawn(async move {

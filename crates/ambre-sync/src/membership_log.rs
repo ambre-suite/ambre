@@ -175,6 +175,17 @@ pub(crate) struct Readmission {
     pub(crate) from: Seq<LogPlaces>,
 }
 
+/// The cap of one key in each document a revoke named (`SYNC-311`).
+type CapsByDocument = HashMap<Id<Document>, Seq<DeltaAuthor>>;
+
+/// One set of caps a later grant lifted, which [`Writers::of_in`] reads as
+/// a [`Readmission`] in each document it names (`SYNC-301`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Lifted {
+    caps: CapsByDocument,
+    from: Seq<LogPlaces>,
+}
+
 impl Readmitted {
     /// Whether a delta `signer` signed at `clock` under `head` passes every
     /// readmission of its key. It passes at or below the cap, or under a head
@@ -196,19 +207,51 @@ impl Readmitted {
 }
 
 impl Writers {
-    /// What the walked `log` grants.
+    /// What the walked `log` grants in the document of the log itself.
+    #[cfg(test)]
     pub(crate) fn of(log: &Log) -> Self {
-        log.signers().map_or(Self::Unchecked, |keys| Self::Granted {
-            keys: keys.clone(),
-            caps: log.caps.clone(),
-            readmitted: Readmitted {
-                heads: if log.readmitted.is_empty() {
-                    Vec::new()
-                } else {
-                    log.history.heads.clone()
+        Self::of_in(log, log.document)
+    }
+
+    /// What the walked `log` grants in `document`: the document of the log,
+    /// or a document of the channel whose `meta` keeps the log. Each
+    /// document numbers the clocks of an author on its own, so a cap binds
+    /// the document its revoke names alone (`SYNC-311`).
+    pub(crate) fn of_in(log: &Log, document: Id<Document>) -> Self {
+        log.signers().map_or(Self::Unchecked, |keys| {
+            let caps: HashMap<_, _> = log
+                .caps
+                .iter()
+                .filter_map(|(key, caps)| caps.get(&document).map(|cap| (*key, *cap)))
+                .collect();
+            let by_key: HashMap<_, Vec<_>> = log
+                .readmitted
+                .iter()
+                .filter_map(|(key, lifted)| {
+                    let readmissions: Vec<_> = lifted
+                        .iter()
+                        .filter_map(|lift| {
+                            lift.caps.get(&document).map(|cap| Readmission {
+                                cap: *cap,
+                                from: lift.from,
+                            })
+                        })
+                        .collect();
+                    (!readmissions.is_empty()).then_some((*key, readmissions))
+                })
+                .collect();
+            Self::Granted {
+                keys: keys.clone(),
+                caps,
+                readmitted: Readmitted {
+                    heads: if by_key.is_empty() {
+                        Vec::new()
+                    } else {
+                        log.history.heads.clone()
+                    },
+                    by_key,
                 },
-                by_key: log.readmitted.clone(),
-            },
+            }
         })
     }
 
@@ -230,12 +273,19 @@ impl Writers {
         }
     }
 
-    /// What the walked `log` grants under `rule`. A log a space lists, and
-    /// whose creation no writer of that space signed, grants no writer
-    /// (audit `N16`, `SYNC-230`). An empty word is a space this client has
-    /// not walked yet, and decides nothing.
+    /// What the walked `log` grants under `rule`, in the document of the log.
+    #[cfg(test)]
     pub(crate) fn under(log: &Log, rule: &LogRule) -> Self {
-        match Self::of(log) {
+        Self::under_in(log, rule, log.document)
+    }
+
+    /// What the walked `log` grants under `rule`, in `document` as
+    /// [`Self::of_in`] reads it. A log a space lists, and whose creation no
+    /// writer of that space signed, grants no writer (audit `N16`,
+    /// `SYNC-230`). An empty word is a space this client has not walked yet,
+    /// and decides nothing.
+    pub(crate) fn under_in(log: &Log, rule: &LogRule, document: Id<Document>) -> Self {
+        match Self::of_in(log, document) {
             Self::Granted { .. } if rule.root_of(log) == Root::Stranger => {
                 Self::granted(HashSet::new())
             }
@@ -720,13 +770,18 @@ pub(crate) struct Log {
     /// The keys that signed a binding of each key, every binding kept
     /// (`AUTHOR-034`).
     binders: HashMap<FixedBytes<PublicKey>, HashSet<FixedBytes<PublicKey>>>,
-    /// The lowest cap a revoke set on each key, until a later entry grants
-    /// that key a writing role again. A revoke another member signed names
-    /// it (`SYNC-300`), and a departure names its leaver's own (`SYNC-306`).
-    caps: HashMap<FixedBytes<PublicKey>, Seq<DeltaAuthor>>,
-    /// Each cap a later grant lifted, with the place of the head after that
-    /// grant (`SYNC-301`).
-    readmitted: HashMap<FixedBytes<PublicKey>, Vec<Readmission>>,
+    /// The document whose log this is.
+    #[cfg(test)]
+    document: Id<Document>,
+    /// The lowest cap a revoke set on each key in each document, until a
+    /// later entry grants that key a writing role again. A revoke another
+    /// member signed names it (`SYNC-300`), and a departure names its
+    /// leaver's own (`SYNC-306`). A revoke on the log of a channel's `meta`
+    /// names one per document of the channel (`SYNC-311`).
+    caps: HashMap<FixedBytes<PublicKey>, CapsByDocument>,
+    /// Each set of caps a later grant lifted, with the place of the head
+    /// after that grant (`SYNC-301`).
+    readmitted: HashMap<FixedBytes<PublicKey>, Vec<Lifted>>,
     /// The key that signed the valid first entry, the creation.
     creator: Option<FixedBytes<PublicKey>>,
     /// Whether the wrapped key carried an anchor at all.
@@ -761,6 +816,8 @@ impl Log {
             authors: HashSet::new(),
             bound: HashMap::new(),
             binders: HashMap::new(),
+            #[cfg(test)]
+            document,
             caps: HashMap::new(),
             readmitted: HashMap::new(),
             creator: None,
@@ -949,25 +1006,36 @@ impl Log {
         // the author's signature. Another member names the clock it applied
         // (`SYNC-300`). A leaver names the last clock it wrote, so a key it
         // loses later writes nothing past its departure (`SYNC-306`).
-        let capped = (entry.act == MembershipAct::Revoke)
+        // A revoke on the log of a channel's `meta` also caps the key in
+        // each document it names, at the clock of that document
+        // (`SYNC-311`).
+        let named: CapsByDocument = entry
+            .cap
+            .map(|cap| (entry.document, cap))
+            .into_iter()
+            .chain(entry.document_caps.iter().map(|c| (c.document, c.cap)))
+            .collect();
+        let capped = (entry.act == MembershipAct::Revoke && !named.is_empty())
             .then(|| self.held.get(&entry.member).map(|held| held.key))
-            .flatten()
-            .zip(entry.cap);
+            .flatten();
         self.apply_act(entry);
         let after = self.writer_key(entry.member);
-        if let Some((key, cap)) = capped {
-            self.caps
-                .entry(key)
-                .and_modify(|held| *held = (*held).min(cap))
-                .or_insert(cap);
+        if let Some(key) = capped {
+            let held = self.caps.entry(key).or_default();
+            for (document, cap) in named {
+                held.entry(document)
+                    .and_modify(|held| *held = (*held).min(cap))
+                    .or_insert(cap);
+            }
         }
         // A later grant of a writing role lifts the cap. The writer is
         // readmitted from the head after this entry alone, so no write of the
         // exclusion counts (`SYNC-301`).
-        if let Some((key, cap)) = after.and_then(|key| self.caps.remove(&key).map(|cap| (key, cap)))
+        if let Some((key, caps)) =
+            after.and_then(|key| self.caps.remove(&key).map(|caps| (key, caps)))
         {
-            self.readmitted.entry(key).or_default().push(Readmission {
-                cap,
+            self.readmitted.entry(key).or_default().push(Lifted {
+                caps,
                 from: entry.position.next(),
             });
         }
@@ -1343,6 +1411,32 @@ pub(crate) fn sign_capped(
     author: Id<User>,
     signing_key: &SigningKey,
 ) -> Result<MembershipEntry, SerializationError> {
+    sign_channel_capped(draft, cap, Vec::new(), next, author, signing_key)
+}
+
+/// Signs `draft` as [`sign_capped`] does, with the cap of the member in each
+/// other document of a channel whose `meta` keeps the log (`SYNC-311`). The
+/// caps are put in ascending document order.
+///
+/// # Errors
+///
+/// The encoder's error, which a well-formed entry never reaches.
+pub(crate) fn sign_channel_capped(
+    draft: Draft,
+    cap: Option<Seq<DeltaAuthor>>,
+    mut document_caps: Vec<ambre_protocol::DocumentCap>,
+    next: LogHead,
+    author: Id<User>,
+    signing_key: &SigningKey,
+) -> Result<MembershipEntry, SerializationError> {
+    // Past the bound the relay and every peer refuse the entry, so the
+    // revoke fails here instead (`SYNC-311`).
+    if ambre_core::Count::<ambre_protocol::DocumentCaps>::of(document_caps.len())
+        > ambre_protocol::DOCUMENT_CAPS_MAX
+    {
+        return Err(SerializationError::NotCanonical);
+    }
+    document_caps.sort_by_key(|c| *c.document.as_bytes());
     let mut entry = MembershipEntry {
         document: draft.document,
         position: next.position,
@@ -1355,6 +1449,7 @@ pub(crate) fn sign_capped(
         previous: next.previous,
         author,
         cap,
+        document_caps,
         signature: FixedBytes::<Signature>::from_array([0; ENTRY_SIGNATURE_LEN]),
     };
     let bytes = entry.signed_bytes()?;
@@ -2152,6 +2247,88 @@ pub(crate) mod tests {
         assert!(writers.admits_delta(&carol.public(), at(4), back));
         assert!(!writers.admits_delta(&carol.public(), at(4), left));
         assert!(!writers.admits_snapshot(&carol.public()));
+    }
+
+    /// Holds `SYNC-311` at the walk. A revoke on the log of a channel's
+    /// `meta` caps Bob in the `meta` and in each document it names, each at
+    /// its own clock. A later invite readmits him in each document past its
+    /// own cap alone. A document cap on another act, or one naming the
+    /// document of the log, stops the walk, and a raised one breaks the
+    /// signature.
+    #[test]
+    fn a_channel_revoke_caps_each_document_at_its_own_clock() {
+        let (alice, bob) = (Person::new(1), Person::new(2));
+        let at = Seq::<DeltaAuthor>::new;
+        let (segment, thread) = (
+            Id::<Document>::from_bytes([0xd0; 16]),
+            Id::<Document>::from_bytes([0x10; 16]),
+        );
+        let named = |document, clock| ambre_protocol::DocumentCap {
+            document,
+            cap: at(clock),
+        };
+        let mut log = created(&alice, &bob);
+        let next = |log: &[MembershipEntry]| LogHead {
+            position: place_after(log.len()),
+            previous: log.last().and_then(digest),
+        };
+        let revoke = Draft {
+            key: Some(FixedBytes::from_array([9; 16])),
+            ..draft(&bob, MembershipAct::Revoke, Role::Editor)
+        };
+        let caps = vec![named(segment, 30), named(thread, 0)];
+        let head = next(&log);
+        log.push(
+            sign_channel_capped(revoke, Some(at(4)), caps, head, alice.id, &alice.key).unwrap(),
+        );
+        assert_eq!(walk(&log).walked_head().position, place_after(3), "walks");
+        let excluded = walk(&log).walked_head();
+        let admits = |log: &[MembershipEntry], document, clock, head| {
+            Writers::of_in(&walk(log), document).admits_delta(&bob.public(), at(clock), head)
+        };
+        assert!(admits(&log, DOC, 4, excluded) && !admits(&log, DOC, 5, excluded));
+        assert!(admits(&log, segment, 30, excluded) && !admits(&log, segment, 31, excluded));
+        assert!(
+            !admits(&log, thread, 1, excluded),
+            "no write past a zero cap"
+        );
+        assert!(!Writers::of_in(&walk(&log), segment).admits_snapshot(&bob.public()));
+
+        // A raised cap no longer verifies: the walk stops before it.
+        let mut raised = log.clone();
+        if let Some(entry) = raised.last_mut() {
+            entry.document_caps[1].cap = at(99);
+        }
+        assert!(admits(&raised, segment, 99, excluded), "no revoke stands");
+        assert_eq!(walk(&raised).walked_head().position, place_after(2));
+
+        // Alice invites Bob back: each document readmits past its own cap.
+        append(&mut log, &alice, &bob, MembershipAct::Invite, Role::Editor);
+        let back = walk(&log).walked_head();
+        assert!(admits(&log, segment, 30, LogHead::EMPTY), "history");
+        assert!(
+            !admits(&log, segment, 31, excluded),
+            "a write of the exclusion"
+        );
+        assert!(admits(&log, segment, 31, back), "a write past the invite");
+        assert!(!admits(&log, thread, 1, excluded) && admits(&log, thread, 1, back));
+
+        // A document cap on an invite, or one naming the log's own document,
+        // makes an entry no log holds.
+        for (act, document) in [
+            (MembershipAct::Invite, segment),
+            (MembershipAct::Revoke, DOC),
+        ] {
+            let mut bad = created(&alice, &bob);
+            let head = next(&bad);
+            let draft = Draft {
+                key: Some(FixedBytes::from_array([9; 16])),
+                ..draft(&bob, act, Role::Editor)
+            };
+            let caps = vec![named(document, 1)];
+            bad.push(sign_channel_capped(draft, None, caps, head, alice.id, &alice.key).unwrap());
+            assert_eq!(walk(&bad).walked_head().position, place_after(2), "{act:?}");
+        }
     }
 
     /// Holds `SYNC-301` at the walk. Alice revokes Bob at cap 4, then
