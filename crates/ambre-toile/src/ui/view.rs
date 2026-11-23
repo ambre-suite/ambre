@@ -4143,7 +4143,7 @@ impl ToileView {
             content,
             content_strip: None,
             overlay,
-            backdrop: self.theme.palette().content_bg,
+            backdrop: self.theme.palette().ground,
         }
     }
 

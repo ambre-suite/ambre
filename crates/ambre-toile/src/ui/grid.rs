@@ -4,8 +4,8 @@
 // on-screen spacing stays in a comfortable pixel band as `zoom` changes (powers
 // of the board `grid_size`). `snap_world` quantizes a world point to the current
 // step for drag / resize snapping. Step selection is pure and host-tested; the
-// paint helper emits screen-space `stroke_line` calls through the abstract
-// DrawSurface.
+// paint helper emits one screen-space dot per grid crossing through the
+// abstract DrawSurface.
 // ============================================================================
 
 use ambre_canvas::Palette;
@@ -87,7 +87,10 @@ pub fn snap_world(p: Point, step: Px<Board>) -> Point {
     Point::new((p.x / step).round() * step, (p.y / step).round() * step)
 }
 
-/// Fill the board background only, without grid lines. Used by presentation
+/// The side of a grid dot, in screen pixels, at every zoom (`TOILE-UI-280`).
+const DOT: f64 = 1.5;
+
+/// Fill the board background only, without the grid. Used by presentation
 /// focus mode (`toile-presentation`), which hides the grid so the audience sees
 /// a clean slide.
 pub fn paint_background<S: DrawSurface>(
@@ -97,13 +100,14 @@ pub fn paint_background<S: DrawSurface>(
 ) {
     surface.fill_rect(
         ambre_draw::Rect::new(0.0, 0.0, cam.size.width, cam.size.height),
-        palette.content_bg,
+        palette.ground,
     );
 }
 
-/// Paint the board background and the adaptive grid lines for `cam`, on the
-/// board's `unit`. Lines are emitted in screen space. The surface transform
-/// stack is left untouched here, so the hairline width does not scale with zoom.
+/// Paint the board background and the adaptive dot grid for `cam`, on the
+/// board's `unit`: one discreet dot at each crossing of the grid (`TOILE-UI-424`).
+/// The dots are emitted in screen space. The surface transform stack is left
+/// untouched here, so a dot keeps its size at every zoom.
 pub fn paint_grid<S: DrawSurface>(
     surface: &mut S,
     cam: &ViewportTransform,
@@ -123,28 +127,26 @@ pub fn paint_grid<S: DrawSurface>(
     let (min_x, max_x) = (tl.x.min(br.x), tl.x.max(br.x));
     let (min_y, max_y) = (tl.y.min(br.y), tl.y.max(br.y));
 
-    let color = palette.grid_line;
-    // Vertical lines at each world-x multiple of `step`.
-    let mut x = (min_x / step).ceil() * step;
-    while x <= max_x {
-        let sx = (w2s * Point::new(x, 0.0)).x;
-        surface.stroke_line(
-            ambre_draw::Line::new((sx, 0.0), (sx, cam.size.height)),
-            color,
-            ambre_core::Px::<ambre_core::Surface>::new(1.0),
-        );
-        x += step;
-    }
-    // Horizontal lines at each world-y multiple of `step`.
-    let mut y = (min_y / step).ceil() * step;
-    while y <= max_y {
-        let sy = (w2s * Point::new(0.0, y)).y;
-        surface.stroke_line(
-            ambre_draw::Line::new((0.0, sy), (cam.size.width, sy)),
-            color,
-            ambre_core::Px::<ambre_core::Surface>::new(1.0),
-        );
-        y += step;
+    // The screen position of each world multiple of `step` the canvas shows.
+    let crossings = |min: f64, max: f64, axis: fn(Point) -> f64, to_point: fn(f64) -> Point| {
+        let mut at = (min / step).ceil() * step;
+        let mut found = Vec::new();
+        while at <= max {
+            found.push(axis(w2s * to_point(at)));
+            at += step;
+        }
+        found
+    };
+    let xs = crossings(min_x, max_x, |p| p.x, |x| Point::new(x, 0.0));
+    let ys = crossings(min_y, max_y, |p| p.y, |y| Point::new(0.0, y));
+    let half = DOT / 2.0;
+    for &sy in &ys {
+        for &sx in &xs {
+            surface.fill_rect(
+                ambre_draw::Rect::new(sx - half, sy - half, sx + half, sy + half),
+                palette.grid_dot,
+            );
+        }
     }
 }
 
@@ -205,13 +207,25 @@ mod tests {
         surface.ops().to_vec()
     }
 
-    /// The screen x of each vertical grid line.
-    fn columns(ops: &[DrawOp]) -> Vec<f64> {
+    /// Each grid dot as its screen rectangle.
+    fn dots(ops: &[DrawOp]) -> Vec<ambre_draw::Rect> {
         ops.iter()
             .filter_map(|o| match o {
-                DrawOp::StrokeLine { line, .. } if line.p0.x == line.p1.x => Some(line.p0.x),
+                DrawOp::FillRect { rect, color } if *color == palette().grid_dot => Some(*rect),
                 _ => None,
             })
+            .collect()
+    }
+
+    /// The screen x of each column of grid dots.
+    fn columns(ops: &[DrawOp]) -> Vec<f64> {
+        let all = dots(ops);
+        let Some(top) = all.first().map(|d| d.y0) else {
+            return Vec::new();
+        };
+        all.iter()
+            .filter(|d| d.y0 == top)
+            .map(|d| d.center().x)
             .collect()
     }
 
@@ -260,26 +274,53 @@ mod tests {
         assert!(step.get() >= f64::from(MIN_SPACING.get()));
     }
 
-    /// `TOILE-UI-280`: a grid line is one pixel wide at every zoom, and the
-    /// paint pushes no transform that could scale it.
+    /// `TOILE-UI-280`: a grid dot keeps its screen size at every zoom, and
+    /// the paint pushes no transform that could scale it.
     #[test]
-    fn a_grid_line_is_one_pixel_at_every_zoom() {
+    fn a_grid_dot_keeps_its_size_at_every_zoom() {
         for zoom in [0.1, 0.5, 1.0, 3.0, 10.0] {
             let mut cam = ViewportTransform::new(ambre_draw::Size::new(1000.0, 800.0));
             cam.zoom = ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(zoom);
             let ops = grid_ops(&cam, BASE_GRID.get());
-            let mut lines = 0;
-            for op in &ops {
-                match op {
-                    DrawOp::StrokeLine { width, .. } => {
-                        assert_eq!(width.get(), 1.0, "zoom {zoom}");
-                        lines += 1;
-                    }
-                    DrawOp::PushTransform { .. } => panic!("zoom {zoom}: a scaled line"),
-                    _ => {}
-                }
+            assert!(
+                !ops.iter()
+                    .any(|op| matches!(op, DrawOp::PushTransform { .. })),
+                "zoom {zoom}: a scaled dot"
+            );
+            let all = dots(&ops);
+            assert!(!all.is_empty(), "zoom {zoom} paints dots");
+            for dot in all {
+                assert_eq!((dot.width(), dot.height()), (DOT, DOT), "zoom {zoom}");
             }
-            assert!(lines > 0, "zoom {zoom} paints lines");
+        }
+    }
+
+    /// `TOILE-UI-424`: the default grid is dots at the crossings, in the dot
+    /// colour, on the warm ground: no line is drawn. Between two crossings the
+    /// ground shows, so the grid stays discreet.
+    #[test]
+    fn the_default_grid_is_dots_at_the_crossings_on_the_ground() {
+        let cam = ViewportTransform::new(ambre_draw::Size::new(1000.0, 800.0));
+        let ops = grid_ops(&cam, BASE_GRID.get());
+        assert!(
+            !ops.iter().any(|op| matches!(op, DrawOp::StrokeLine { .. })),
+            "a dot grid draws no line"
+        );
+        let step = grid_step(cam.zoom, GridUnit::BASE).get();
+        let xs = columns(&ops);
+        let rows = dots(&ops).len() / xs.len();
+        assert_eq!(dots(&ops).len(), xs.len() * rows, "one dot per crossing");
+        for pair in xs.windows(2) {
+            assert!((pair[1] - pair[0] - step).abs() < 1e-9);
+        }
+        for theme in [ambre_canvas::Theme::Light, ambre_canvas::Theme::Dark] {
+            let p = theme.palette();
+            assert_ne!(p.grid_dot, p.ground, "{theme:?}: a dot reads on the ground");
+            assert_eq!(
+                p.ground,
+                theme.chrome_palette().surface_2,
+                "{theme:?}: the board lies on the sunken ground of the chrome"
+            );
         }
     }
 
@@ -294,7 +335,7 @@ mod tests {
             match ops.first() {
                 Some(DrawOp::FillRect { rect, color }) => {
                     assert_eq!(*rect, ambre_draw::Rect::new(0.0, 0.0, 640.0, 480.0));
-                    assert_eq!(*color, palette().content_bg);
+                    assert_eq!(*color, palette().ground);
                 }
                 other => panic!("the background comes first: {other:?}"),
             }
