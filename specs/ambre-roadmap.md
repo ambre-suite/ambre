@@ -344,6 +344,8 @@ The test of section 1: a team that lacks one of these stories keeps its old suit
 | `[x]` A Prose read writes nothing into the document | MVP | a document that holds operations but no block tree gets an empty tree attached by the read that looks for it, so a read changes the local state. Done when a read of such a document leaves its frontiers and its pending operations as they were, held by a test |
 | `[x]` A Prose read of annotations and styles attaches nothing | MVP | since `PROSE-142` the readers of the tree and of `meta` ask `ambre_prose::logic::Roots` first, and the readers of `annots` and `styles` (`note::entry`, the comments) still open their roots, so a document without them gets the root attached. Done when those readers ask `Roots` first, and a row reads `verified` |
 | `[x]` A paste over a selection is one undo item | MVP | a paste over a text selection in Prose takes the selection out and then pastes, as two commands. The first undo puts the paste back and leaves the selected text deleted. Done when one undo takes back the paste and the text it replaced, and `CHROME-184` reads `verified` |
+| `[ ]` An undo across a split at a join restores both blocks | MVP | a delete across two blocks, then a split at the join, then two undos, read `helloworld ond` where the two blocks `hello world` and `second` stood. A paste of several lines across two blocks takes the same path, so `CHROME-184` leaves that case out. Done when the undo history of `ambre-crdt` replays that sequence back to both blocks, and a row binding it reads `verified` |
+| `[ ]` An undo of the author's own typing over restored text takes it back | MVP | delete a word, type a letter, delete it, then undo three times: the text reads `hello xworld`. After an undo puts text back, the guard of `UNDO-018` treats the author's own typing over it as a peer's and keeps it. Done when that sequence ends on the original text, and a row binding it reads `verified` |
 
 ### Murmure
 
@@ -578,6 +580,7 @@ row reads `V1`.
 | `[ ]` A selected picture answers its keys | V1 | a press selects a picture and draws its handles, and no key acts on it: Delete leaves it, and no arrow resizes it. Done when Delete removes a selected picture, Escape cancels a handle drag, and a row binding each reads `verified` |
 | `[ ]` A picture handle shows its cursor | V1 | a pointer over a picture handle keeps the text cursor, so nothing shows that a drag resizes. Done when the hover of each handle asks the host for its directional cursor, and a row reads `verified` |
 | `[ ]` The string arena of Loro keeps no doubled chunks | V1 | the string arena of the oplog holds 8.4 MB in 9 chunks for 3.7 MB of text on 2026-11-17: each chunk doubles the one before, and a slice keeps its chunk. Done when `PROSE-IO-119` reads the arena at most 1.2 times the text it holds |
+| `[ ]` A paste stays where it was aimed under remote edits | V1 | a paste at a caret passes through the catch-up with the position it came with, and an HTML paste lands later through the converter. A remote edit in between moves the text under it, so the paste lands at a stale position. Done when both pastes are caught up like a paste over a selection, and a row binding it reads `verified` |
 
 ### Murmure
 
