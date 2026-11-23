@@ -931,6 +931,17 @@ async fn the_sheet_panel_names_the_selection_and_folds_its_print_group() {
         .expect("a landscape segment")
         .get_attribute("aria-checked");
     assert_eq!(landscape.as_deref(), Some("true"));
+    // Portrait and landscape draw two glyphs of distinct shapes.
+    let glyph = |name: &str| {
+        container
+            .query_selector(&format!(
+                "[role=\"radiogroup\"][aria-label=\"Orientation\"] [aria-label=\"{name}\"] svg"
+            ))
+            .unwrap()
+            .unwrap_or_else(|| panic!("{name}"))
+            .inner_html()
+    };
+    assert_ne!(glyph("Portrait"), glyph("Landscape"));
 
     let find = ambre_chrome::commands::Reach::Command(chrome::FIND);
     assert!(
