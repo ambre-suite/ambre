@@ -227,8 +227,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let trust_proxy_headers =
         state::ProxyTrust::from_setting(std::env::var("TRUST_PROXY_HEADERS").ok().as_deref());
 
+    // The store answers whether it verifies the digest a link signs. Set here
+    // and never through the default, which serves tests alone (`SRV-315`).
+    let snapshot_custody = s3::read_snapshot_custody(&s3, &s3_bucket, &s3_env_prefix).await;
+
     let config = Config {
         s3_env_prefix,
+        snapshot_custody,
         oidc_google,
         dev_mode: dev,
         trust_proxy_headers,
