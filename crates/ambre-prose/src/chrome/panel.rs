@@ -11,7 +11,7 @@
 
 use ambre_chrome::commands::Reading;
 use ambre_chrome::{
-    Choice, CommandButton, Field, LengthField, PanelContent, PanelSection, Pressed, Row, Segmented,
+    Choice, CommandButton, Field, LengthField, PanelContent, PanelSection, Pressed, Segmented,
     SelectField,
 };
 use ambre_core::{Mm, PrintLength};
@@ -137,7 +137,8 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
     };
 
     let text_section = move || {
-        let buttons = panel::TEXT_COMMANDS
+        let buttons = move |ids: &'static [ambre_core::StaticKey<ambre_core::Commands>]| {
+            ids
             .iter()
             .filter_map(|&id| {
                 let command = ambre_commands::find(crate::commands::COMMANDS, id)?;
@@ -163,8 +164,18 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
                     .into_any(),
                 })
             })
-            .collect_view();
-        view! { <Row>{buttons}</Row> }.into_any()
+            .collect_view()
+        };
+        // Each group of the text section carries a label (`CHROME-218`).
+        let all: &'static [ambre_core::StaticKey<ambre_core::Commands>] = &panel::TEXT_COMMANDS;
+        let (marks, rest) = all.split_at(5);
+        let (script, clear) = rest.split_at(2);
+        view! {
+            <Field label="Style">{buttons(marks)}</Field>
+            <Field label="Script">{buttons(script)}</Field>
+            <Field label="Clear">{buttons(clear)}</Field>
+        }
+        .into_any()
     };
 
     let sections = Signal::derive(move || {

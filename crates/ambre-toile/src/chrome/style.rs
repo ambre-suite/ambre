@@ -27,7 +27,7 @@ use crate::message::{ElementStyle, FontFamily, FontSizeChoice};
 use ambre_chrome::commands::Reading;
 use ambre_chrome::{
     ColourField, CommandButton, Debouncer, Field, FontField, FontSizeSelect, Labelled, LengthField,
-    PanelContent, PanelSection, Pressed, PropertyToggle, Slider,
+    PanelContent, PanelSection, Pressed, PropertyToggle, Row, Slider,
 };
 use ambre_core::Flag as _;
 use ambre_core::{Bounded, Commands, FontSize, Px, Rgba, StaticKey, StoredBoard, UnitFraction};
@@ -130,9 +130,11 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
     // Find has no control here: the palette and its chord reach it.
     let board = move || {
         view! {
-            {labelled(menu::SELECT_ALL)}
-            {labelled(crate::ui::menu_bar::COMMENTS)}
-            {labelled(crate::ui::menu_bar::DECK)}
+            <Row>
+                {labelled(menu::SELECT_ALL)}
+                {labelled(crate::ui::menu_bar::COMMENTS)}
+                {labelled(crate::ui::menu_bar::DECK)}
+            </Row>
         }
         .into_any()
     };
@@ -302,7 +304,7 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
     let connector = move || {
         view! {
             {stroke_fields(base, commit)}
-            {labelled(menu::DELETE)}
+            <Row>{labelled(menu::DELETE)}</Row>
         }
         .into_any()
     };

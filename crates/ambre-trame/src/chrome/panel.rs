@@ -15,7 +15,7 @@ use crate::message::{DecimalsStep, StylePatch};
 use ambre_chrome::commands::Reach;
 use ambre_chrome::{
     Availability, ChoiceRow, ChoiceView, CommandButton, Field, FontSizeSelect, IconButton,
-    Labelled, PanelContent, PanelSection, Pressed, SegmentBar, Select,
+    Labelled, PanelContent, PanelSection, Pressed, Row, SegmentBar, Select,
 };
 use ambre_core::Flag as _;
 use ambre_core::index::Pos;
@@ -364,6 +364,7 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
             </Field>
             // The label and the reach name the command the click will send,
             // so a merged cell announces "Unmerge cells".
+            <Row>
             {move || {
                 let id = merge_command(style.merged.get());
                 ambre_chrome::commands::find(registry::COMMANDS, id).map(|c| {
@@ -371,6 +372,7 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
                     view! { <CommandButton command=c icon=icon on_command=on_command labelled=Labelled::Text /> }
                 })
             }}
+            </Row>
         }
         .into_any()
     };
