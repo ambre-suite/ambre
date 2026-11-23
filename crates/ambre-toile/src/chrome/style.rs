@@ -26,11 +26,11 @@ use std::time::Duration;
 use crate::message::{ElementStyle, FontFamily, FontSizeChoice};
 use ambre_chrome::commands::Reading;
 use ambre_chrome::{
-    ColourField, CommandButton, DRAG_DEBOUNCE, Debouncer, Field, FontField, FontSizeSelect,
-    LengthField, PanelContent, PanelSection, Pressed, PropertyToggle, Row,
+    ColourField, CommandButton, Debouncer, Field, FontField, FontSizeSelect, Labelled, LengthField,
+    PanelContent, PanelSection, Pressed, PropertyToggle, Row, Slider,
 };
 use ambre_core::Flag as _;
-use ambre_core::{Commands, FontSize, Px, Rgba, StaticKey, StoredBoard};
+use ambre_core::{Bounded, Commands, FontSize, Px, Rgba, StaticKey, StoredBoard, UnitFraction};
 use leptos::prelude::*;
 
 use crate::ui::commands as registry;
@@ -119,14 +119,21 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
             view! { <CommandButton command=c icon=icon on_command=on_command /> }
         })
     };
+    // A command with its label takes a whole line (`CHROME-218`).
+    let labelled = move |id: StaticKey<Commands>| {
+        ambre_chrome::commands::find(registry::COMMANDS, id).map(|c| {
+            let icon = c.icon.and_then(super::icons::resolve);
+            view! { <CommandButton command=c icon=icon on_command=on_command labelled=Labelled::Text /> }
+        })
+    };
 
+    // Find has no control here: the palette and its chord reach it.
     let board = move || {
         view! {
             <Row>
-                {command(menu::SELECT_ALL)}
-                {command(crate::ui::find::FIND)}
-                {command(crate::ui::menu_bar::COMMENTS)}
-                {command(crate::ui::menu_bar::DECK)}
+                {labelled(menu::SELECT_ALL)}
+                {labelled(crate::ui::menu_bar::COMMENTS)}
+                {labelled(crate::ui::menu_bar::DECK)}
             </Row>
         }
         .into_any()
@@ -145,6 +152,12 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
                 />
             </Field>
             {stroke_fields(base, commit)}
+            // The link of an element is a property of the element, never of
+            // its arrangement.
+            <Field label="Link">
+                {command(crate::ui::menu_bar::LINK_SET)}
+                {command(crate::ui::menu_bar::LINK_CLEAR)}
+            </Field>
         }
         .into_any()
     };
@@ -209,7 +222,7 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
                     />
                 </span>
             </Field>
-            <Row>
+            <Field label="Style">
                 {toggle(panel::BOLD, icondata::BsTypeBold, |s| s.font.weight.is_bold(), |m| m.bold,
                     |on| StyleEdit::Bold(ambre_core::Weight::from_bool(on)))}
                 {toggle(panel::ITALIC, icondata::BsTypeItalic, |s| s.font.italic.as_bool(), |m| m.italic,
@@ -218,7 +231,7 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
                     |on| StyleEdit::Underline(ambre_core::Underline::from_bool(on)))}
                 {toggle(panel::STRIKETHROUGH, icondata::BsTypeStrikethrough, |s| s.font.strikethrough.as_bool(), |m| m.strikethrough,
                     |on| StyleEdit::Strikethrough(ambre_core::Strikethrough::from_bool(on)))}
-            </Row>
+            </Field>
         }
         .into_any()
     };
@@ -228,55 +241,62 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
         let any_unlocked = move || scope.with(|s| s.locks.any_unlocked());
         let multi = move || scope.with(CtxScope::multi);
         let grouped = move || scope.with(|s| s.groups == menu::GroupHeld::Group);
+        let framing = move || {
+            scope.with(|s| {
+                s.containing_frame.is_some()
+                    || s.framed == menu::FrameHeld::Framed
+                    || s.frame.is_some()
+            })
+        };
         view! {
-            <Row>
+            <Field label="Order">
                 {command(menu::BRING_FRONT)}
                 {command(menu::FORWARD)}
                 {command(menu::BACKWARD)}
                 {command(menu::SEND_BACK)}
-            </Row>
-            <Row>
+            </Field>
+            <Field label="Edit">
                 <Show when=multi>{command(menu::GROUP)}</Show>
                 <Show when=grouped>{command(menu::UNGROUP)}</Show>
                 <Show when=any_unlocked>{command(menu::LOCK)}</Show>
                 <Show when=any_locked>{command(menu::UNLOCK)}</Show>
                 {command(menu::DUPLICATE)}
                 {command(menu::DELETE)}
-            </Row>
+            </Field>
             <Show when=multi>
-                <Row>
+                <Field label="Align">
                     {command(menu::ALIGN_LEFT)}
                     {command(menu::ALIGN_HCENTER)}
                     {command(menu::ALIGN_RIGHT)}
                     {command(menu::ALIGN_TOP)}
                     {command(menu::ALIGN_VCENTER)}
                     {command(menu::ALIGN_BOTTOM)}
+                </Field>
+                <Field label="Distribute">
                     {command(menu::DISTRIBUTE_H)}
                     {command(menu::DISTRIBUTE_V)}
-                </Row>
+                </Field>
             </Show>
-            <Row>
-                {command(crate::ui::menu_bar::LINK_SET)}
-                {command(crate::ui::menu_bar::LINK_CLEAR)}
-            </Row>
-            <Row>
-                <Show when=move || scope.with(|s| s.containing_frame.is_some())>
-                    {command(menu::ADD_TO_FRAME)}
-                </Show>
-                <Show when=move || scope.with(|s| s.framed == menu::FrameHeld::Framed)>
-                    {command(menu::REMOVE_FROM_FRAME)}
-                </Show>
-                <Show when=move || scope.with(|s| s.frame.is_some())>
-                    {command(menu::EXPORT_FRAME_PNG)}
-                </Show>
-            </Row>
-            <Row>
+            <Show when=framing>
+                <Field label="Frame">
+                    <Show when=move || scope.with(|s| s.containing_frame.is_some())>
+                        {command(menu::ADD_TO_FRAME)}
+                    </Show>
+                    <Show when=move || scope.with(|s| s.framed == menu::FrameHeld::Framed)>
+                        {command(menu::REMOVE_FROM_FRAME)}
+                    </Show>
+                    <Show when=move || scope.with(|s| s.frame.is_some())>
+                        {command(menu::EXPORT_FRAME_PNG)}
+                    </Show>
+                </Field>
+            </Show>
+            <Field label="React">
                 {command(menu::REACT_THUMBSUP)}
                 {command(menu::REACT_HEART)}
                 {command(menu::REACT_CHECK)}
                 {command(menu::REACT_PARTY)}
                 {command(menu::REACT_CLEAR)}
-            </Row>
+            </Field>
         }
         .into_any()
     };
@@ -284,7 +304,7 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
     let connector = move || {
         view! {
             {stroke_fields(base, commit)}
-            <Row>{command(menu::DELETE)}</Row>
+            <Row>{labelled(menu::DELETE)}</Row>
         }
         .into_any()
     };
@@ -345,9 +365,6 @@ fn stroke_fields(
             |(b, m)| reading(b.opacity, m.opacity),
         )
     });
-    // The slider reports every pixel of a drag: the burst leaves as one
-    // edit, the last (`CHROME-015`).
-    let opacity_drag = Debouncer::new();
     view! {
         <Field label="Stroke">
             <ColourField
@@ -367,22 +384,14 @@ fn stroke_fields(
             />
         </Field>
         <Field label="Opacity">
-            <span class="ambre-kit-control" data-reach=ambre_chrome::commands::Reach::Property(panel::OPACITY).marker()>
-                <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    aria-label="Opacity"
-                    prop:value=move || opacity.get().uniform().map(|o| format!("{:.0}", o.get() * 100.0)).unwrap_or_default()
-                    on:mousedown=move |ev| ev.prevent_default()
-                    on:input=move |ev| {
-                        if let Ok(v) = event_target_value(&ev).parse::<f32>() {
-                            let opacity = ambre_core::Bounded::<ambre_core::Opacity>::clamped(v / 100.0);
-                            opacity_drag.call(DRAG_DEBOUNCE, move || commit(StyleEdit::Opacity(opacity)));
-                        }
-                    }
-                />
-            </span>
+            <Slider
+                label="Opacity"
+                value=Signal::derive(move || opacity.get().uniform().map(Bounded::<ambre_core::Opacity>::fraction))
+                on_write=Callback::new(move |p: Bounded<UnitFraction>| {
+                    commit(StyleEdit::Opacity(Bounded::<ambre_core::Opacity>::of_fraction(p)));
+                })
+                reach=ambre_chrome::commands::Reach::Property(panel::OPACITY)
+            />
         </Field>
     }
 }

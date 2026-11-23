@@ -15,6 +15,11 @@ crate-type = ["cdylib"]
 # the call proofs. No release build turns it on, and the post-build hook
 # refuses one that does.
 dev-login = []
+# The gallery page of the visual system at `/gallery`: every control primitive
+# in each state, which the browser tier records as a computed-style snapshot
+# (`ambre-spec-testing.md` section 2). The belt's build turns it on beside
+# `dev-login`; no release build does.
+chrome-gallery = ["ambre-chrome/gallery"]
 
 [dependencies]
 ambre-bus    = { path = "../ambre-bus" }

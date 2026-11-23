@@ -165,6 +165,19 @@ impl TrameState {
         .printable()
     }
 
+    /// The page setup `sheet` stores, read without adding its container to
+    /// the document: a sheet that stores none reads as the default. An event
+    /// reads it on every sheet list, and a read MUST write nothing.
+    #[must_use]
+    pub(crate) fn stored_page_setup(&self, sheet: &Id<Sheet>) -> PageSetup {
+        let name = SheetContainer::of(SheetRoot::PageSetup, sheet);
+        if self.doc.get_by_str_path(name.as_str()).is_some() {
+            self.page_setup(sheet)
+        } else {
+            PageSetup::default()
+        }
+    }
+
     /// Apply `patch` to the page setup of `sheet_id`, the active sheet when
     /// `None` (`TRAME-IO-022`). One commit, so one undo item. Only the fields
     /// that change are written (`TRAME-IO-086`). A patch whose result leaves
@@ -231,8 +244,15 @@ impl TrameState {
         }
         self.doc.commit();
         let update = self.flush_delta();
+        // The sheet list carries the setup of the active sheet to the print
+        // group of the panel.
+        let display = if sheet == self.active_sheet {
+            vec![self.sheet_list_event()]
+        } else {
+            vec![]
+        };
         TrameOutcome {
-            display: vec![],
+            display,
             update,
             ephemeral: None,
         }

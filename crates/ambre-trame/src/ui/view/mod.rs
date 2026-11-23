@@ -394,6 +394,12 @@ pub enum PendingCommit {
 pub struct TrameSignals {
     /// The reference of the active cell, shown in the formula bar.
     pub formula_ref: RwSignal<String>,
+    /// The reference of the whole selection, such as `B2:D5`, which the
+    /// header of the context panel shows.
+    pub selection_ref: RwSignal<ambre_core::Validated<crate::ui::panel::RangeLabel>>,
+    /// The page setup and the frozen pane of the active sheet, which the
+    /// context panel shows. `None` before the first sheet list.
+    pub sheet_setup: RwSignal<Option<crate::ui::panel::ActiveSheet>>,
     /// The text of the formula bar.
     pub formula_text: RwSignal<String>,
     /// What the formula bar asks the view to do.
@@ -507,6 +513,10 @@ pub struct TrameView {
     /// Only present in the browser; native headless tests skip them.
     #[cfg(target_arch = "wasm32")]
     formula_ref: RwSignal<String>,
+    #[cfg(target_arch = "wasm32")]
+    selection_ref: RwSignal<ambre_core::Validated<crate::ui::panel::RangeLabel>>,
+    #[cfg(target_arch = "wasm32")]
+    sheet_setup: RwSignal<Option<crate::ui::panel::ActiveSheet>>,
     #[cfg(target_arch = "wasm32")]
     formula_text: RwSignal<String>,
     /// The formula bar the sync reads and writes. In the browser the frame

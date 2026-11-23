@@ -119,8 +119,11 @@ mod console_trace;
 // The development sign-in, behind the `dev-login` feature (`ZK-045`).
 #[cfg(target_arch = "wasm32")]
 mod dev_login;
+// The gallery page of the visual system, behind `chrome-gallery`.
 #[cfg(any(target_arch = "wasm32", test))]
 mod doc_list;
+#[cfg(all(feature = "chrome-gallery", target_arch = "wasm32"))]
+mod gallery;
 #[cfg(target_arch = "wasm32")]
 mod host;
 /// The inviters earlier opens proved, which the route sends ahead of an open.
@@ -262,6 +265,12 @@ struct Wiring {
     current_doc: RwSignal<Option<Id<Document>>>,
     /// Formula bar: active cell reference label (for example "B2").
     formula_ref: RwSignal<String>,
+    /// The reference of the selection the context panel names (for example
+    /// "B2:D5").
+    selection_ref: RwSignal<ambre_core::Validated<ambre_trame::ui::panel::RangeLabel>>,
+    /// The page setup and the frozen pane of the active Trame sheet, which
+    /// the context panel shows.
+    sheet_setup: RwSignal<Option<ambre_trame::ui::panel::ActiveSheet>>,
     /// Formula bar: cell raw text / live edit buffer.
     formula_text: RwSignal<String>,
     /// Formula bar: commit/cancel action from the HTML input.
@@ -521,6 +530,13 @@ pub fn main() {
         }
     }));
 
+    // A test build serves the gallery of the visual system at its own path,
+    // with no thread behind it.
+    #[cfg(feature = "chrome-gallery")]
+    if gallery::mount_if_asked() == gallery::Mounted::Yes {
+        return;
+    }
+
     // Inter-thread queues (`ambre_bus::conduit`, in this Main instance's shared heap).
     //   UI    --LogicCommand--> Logic      Logic --UiEvent--> UI
     //   Logic --SyncCommand---> [main relay] --postMessage--> Sync worker
@@ -622,6 +638,8 @@ pub fn main() {
     // Formula bar signals (HTML input -> TrameView sync). RwSignal is Copy, so
     // we create them once and pass clones to both TrameView and the Leptos shell.
     let formula_ref = RwSignal::new(String::new());
+    let selection_ref = RwSignal::new(ambre_core::Validated::new(""));
+    let sheet_setup = RwSignal::new(None);
     let formula_text = RwSignal::new(String::new());
     let formula_action = RwSignal::new(None::<FormulaAction>);
 
@@ -741,6 +759,8 @@ pub fn main() {
     // Each set the shell shares with one view, handed to both.
     let trame_signals = ambre_trame::ui::TrameSignals {
         formula_ref,
+        selection_ref,
+        sheet_setup,
         formula_text,
         formula_action,
         sel_stats,
@@ -1527,6 +1547,8 @@ pub fn main() {
                     clock: Box::new(host::PageClock),
                     signals: ambre_trame::ui::TrameSignals {
                         formula_ref: ch_formula_ref,
+                        selection_ref: RwSignal::new(ambre_core::Validated::new("")),
+                        sheet_setup: RwSignal::new(None),
                         formula_text: ch_formula_text,
                         formula_action: ch_formula_action,
                         sel_stats: ch_tr_sel_stats,

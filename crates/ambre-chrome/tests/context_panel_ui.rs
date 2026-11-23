@@ -348,6 +348,73 @@ async fn each_kit_control_carries_what_it_reaches_and_shows_a_mixed_value() {
     let checked = q(&root, ".ambre-kit-segmented [aria-checked=\"true\"]");
     assert_eq!(checked.get_attribute("aria-label").unwrap(), "Landscape");
     // A stepper writes the length alone, one step on.
-    click(&q(&root, ".ambre-kit-length button:last-of-type"));
+    click(&q(&root, ".ambre-stepper .ambre-stepper-step:last-of-type"));
     assert_eq!(written.get_untracked(), Some(PrintLength::<Mm>::new(21.0)));
+}
+
+/// A section that starts folded folds on its first showing alone: a user's
+/// unfold holds when the sections are handed again.
+#[wasm_bindgen_test]
+async fn a_section_folded_first_folds_once_and_an_unfold_holds() {
+    let sections = RwSignal::new(vec![
+        PanelSection::new(PAGE, "Page", icondata::MdiFileDocumentOutline, || {
+            view! { <span>"page"</span> }.into_any()
+        }),
+        PanelSection::new(TEXT, "Text", icondata::MdiFormatText, || {
+            view! { <span>"text"</span> }.into_any()
+        })
+        .folded_first(),
+    ]);
+    let prefs = PanelPrefs::new(DockSide::Right, PanelWidth::DEFAULT, Fold::Open);
+    let root = mount_in_container(move || {
+        view! { <ContextPanel prefs=prefs title="Nothing selected" sections=sections /> }
+    });
+    leptos::task::tick().await;
+    let folded = |key: &str| {
+        q(
+            &root,
+            &format!(".ambre-ctx-section[data-section=\"{key}\"]"),
+        )
+        .get_attribute("data-folded")
+        .unwrap()
+    };
+    assert_eq!(folded("t.page"), "false");
+    assert_eq!(folded("t.text"), "true", "folded on its first showing");
+    click(&q(
+        &root,
+        ".ambre-ctx-section[data-section=\"t.text\"] .ambre-ctx-section-head",
+    ));
+    leptos::task::tick().await;
+    assert_eq!(folded("t.text"), "false");
+    // The selection moves and the application hands its sections again.
+    sections.update(|s| s.reverse());
+    leptos::task::tick().await;
+    assert_eq!(folded("t.text"), "false", "the user's unfold holds");
+}
+
+/// A format control that names a glyph shows it as the toolkit's icon button.
+/// Its label is the tooltip and the accessible name, and it keeps its state.
+#[wasm_bindgen_test]
+async fn a_format_bar_control_shows_its_glyph_as_an_icon_button() {
+    use ambre_chrome::{FormatBar, FormatControl, Pressed};
+    let root = mount_in_container(move || {
+        let controls = vec![FormatControl {
+            label: "Bold".to_owned(),
+            pressed: Pressed::On,
+            on_press: Callback::new(|()| {}),
+            icon: Some(icondata::BsTypeBold),
+            chord: None,
+        }];
+        view! { <FormatBar anchor=ambre_core::Point::default() controls=controls /> }
+    });
+    leptos::task::tick().await;
+    let control = q(&root, ".ambre-format-bar .ambre-icon-button");
+    assert_eq!(control.get_attribute("aria-label").unwrap(), "Bold");
+    assert_eq!(control.get_attribute("aria-pressed").unwrap(), "true");
+    assert!(control.query_selector("svg").unwrap().is_some(), "a glyph");
+    assert_eq!(
+        q(&control, ".ambre-tip").text_content().unwrap(),
+        "Bold",
+        "the label is the tooltip"
+    );
 }

@@ -483,6 +483,8 @@ async fn the_format_bar_hangs_its_controls_and_reports_a_press() {
         label: label.to_owned(),
         pressed: state,
         on_press: Callback::new(move |()| pressed.update(|p| p.push(label))),
+        icon: None,
+        chord: None,
     };
     let controls = vec![
         control("Bold", Pressed::On),
@@ -768,7 +770,7 @@ async fn a_toast_leaves_the_focus_where_it_was() {
 }
 
 #[wasm_bindgen_test]
-fn font_size_select_lists_presets_plus_auto_entry() {
+async fn font_size_select_lists_presets_plus_auto_entry() {
     let owner = Owner::new();
     owner.set();
     let picked = RwSignal::new(Some(FontSize::from_whole_points(999)));
@@ -782,14 +784,26 @@ fn font_size_select_lists_presets_plus_auto_entry() {
         }
     });
 
-    let select = root.query_selector("select").unwrap().unwrap();
+    let select = root.query_selector("[role=listbox]").unwrap().unwrap();
     // The unset ("Auto") entry plus every preset size.
-    let options = select.get_elements_by_tag_name("option");
+    let options = select.query_selector_all("[role=option]").unwrap();
     assert_eq!(options.length() as usize, FONT_SIZES.len() + 1);
     assert_eq!(
         select.get_attribute("aria-label").as_deref(),
         Some("Font size")
     );
+    // The current size is the selected option, and the trigger shows it.
+    let trigger = root
+        .query_selector(".ambre-select-trigger")
+        .unwrap()
+        .unwrap();
+    assert_eq!(trigger.text_content().unwrap().trim(), "12");
+    // A pick of the unset entry reports `None`.
+    let auto: web_sys::HtmlElement = options.item(0).unwrap().dyn_into().unwrap();
+    auto.click();
+    assert_eq!(picked.get_untracked(), None);
+    // The close the pick schedules runs before the owner goes.
+    leptos::task::tick().await;
 
     root.remove();
 }

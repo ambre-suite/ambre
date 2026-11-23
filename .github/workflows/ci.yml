@@ -681,6 +681,24 @@ jobs:
         if: matrix.engine == 'firefox'
         env:
           BELT_FIREFOX: ${{ steps.firefox.outputs.firefox-path }}
+      # The screenshots of the three context panels at a device scale of 2,
+      # light and dark, for a person to look at (`ambre-spec-testing.md`
+      # section 2). Nothing compares them, so this step fails no build.
+      - name: Panel screenshots
+        if: matrix.engine == 'chrome' && matrix.part == 'rest'
+        continue-on-error: true
+        run: cargo test -p ambre-belt -- --ignored --exact gallery::tests::write_the_screenshots_of_the_three_panels
+        env:
+          CHROMEDRIVER: ${{ steps.chrome.outputs.chromedriver-path }}
+          BELT_CHROME: ${{ steps.chrome.outputs.chrome-path }}
+          S3_ENDPOINT: http://localhost:9000
+      - name: Keep the panel screenshots
+        if: matrix.engine == 'chrome' && matrix.part == 'rest'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: panel-screenshots
+          path: target/belt-shots
+          if-no-files-found: ignore
       - name: Prune the cache
         if: env.CACHE_WRITE == 'true' && matrix.engine == 'chrome' && matrix.part == 'murmure'
         run: just ci-cache prune
