@@ -249,7 +249,7 @@ pub enum CallServerMsg {
 }
 
 /// What the relay answers an ask of who is in a call (`CALL-070`), as the JSON of
-/// `GET /api/calls/{call}/roster`.
+/// `GET /api/call-rosters/{call}`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CallRoster {

@@ -506,7 +506,7 @@ no start, so the relay refuses it as ended (`CALL-068`). So a call whose state i
 no two senders share an index under one call. Whether a call ended is no fact the relay keeps:
 the call message of the channel holds it.
 
-**The roster.** `GET /api/calls/{call}/roster?channel={channel}` answers a member of the channel
+**The roster.** `GET /api/call-rosters/{call}?channel={channel}` answers a member of the channel
 with the signed join of each seat, or with no state (`CALL-070`). An asker who is no member, and
 a call of another channel, read the same answer as a call the relay holds none of (`CALL-071`).
 The route reads the state of the call and writes nothing (`CALL-072`, `ZK-024`). The reader
