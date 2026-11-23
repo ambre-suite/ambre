@@ -426,8 +426,6 @@ pub struct MurmureRelay {
     pub calls: RwSignal<LiveCalls>,
     /// The space the user chose in the switcher, `None` for the first (`MURMURE-712`).
     pub space: RwSignal<Option<Id<Space>>>,
-    /// Whether the space switcher lists the spaces (`MURMURE-714`).
-    pub switcher: RwSignal<ambre_chrome::Openness>,
     /// The tab of the bar of the phone (`MURMURE-717`).
     pub tab: RwSignal<PhoneTab>,
 }
@@ -574,7 +572,6 @@ impl MurmureRelay {
             folds: RwSignal::new(Folds::default()),
             calls: RwSignal::new(LiveCalls::default()),
             space: RwSignal::new(None),
-            switcher: RwSignal::new(ambre_chrome::Openness::Closed),
             tab: RwSignal::new(PhoneTab::Channels),
         }
     }
@@ -594,7 +591,6 @@ impl MurmureRelay {
         {
             self.space.set(Some(space));
         }
-        self.switcher.set(ambre_chrome::Openness::Closed);
     }
 
     /// Folds the group `group`, or unfolds it. Nothing leaves the page (`MURMURE-720`,
@@ -1723,86 +1719,44 @@ pub fn SpaceList(
         let shown = shown.get();
         heads.get().into_iter().find(|h| Some(h.space) == shown)
     };
-    let shown_name = move || {
-        head_shown().map_or_else(
-            || "No space yet".to_owned(),
-            |h| {
+    // The list rebuilds when the spaces change, never on a choice. So a pick keeps the focus
+    // on the switcher, which shows the space it picked.
+    let switcher = move || {
+        let names: Vec<String> = heads
+            .get()
+            .into_iter()
+            .map(|h| {
                 h.name
                     .map_or_else(|| UNNAMED_SPACE.to_owned(), Validated::into_string)
-            },
-        )
+            })
+            .collect();
+        let selected = Signal::derive(move || {
+            let shown = shown.get();
+            heads
+                .with(|heads| heads.iter().position(|h| Some(h.space) == shown))
+                .map(Pos::<ambre_chrome::ChoiceRow>::from_usize)
+        });
+        let on_pick = Callback::new(move |p: Pos<ambre_chrome::ChoiceRow>| {
+            if let Some(rank) = p.to_index().and_then(Pos::<SpaceRanks>::from_index) {
+                relay.show_space(rank);
+            }
+        });
+        view! {
+            <ambre_chrome::Select
+                label="Switch space"
+                choices=names.into_iter().map(ambre_chrome::ChoiceView::text).collect()
+                selected=selected
+                on_pick=on_pick
+                placeholder="No space yet"
+            />
+        }
     };
-    let open = relay.switcher;
     view! {
         <section class="murmure-spaces" aria-label="Spaces">
-            <button
-                r#type="button"
-                class="murmure-space-switch"
-                aria-label=move || format!("Space: {}. Switch space", shown_name())
-                aria-expanded=move || open.get().aria()
-                on:click=move |_| open.update(|o| *o = o.toggled())
-            >
-                <span class="murmure-space-mark" aria-hidden="true">
-                    {move || crate::ui::call_videos::initials_of(&shown_name())}
-                </span>
-                <span class="murmure-space-switch-name">{shown_name}</span>
-                <span class="murmure-section-chevron" aria-hidden="true"></span>
-            </button>
-            {move || {
-                (open.get() == ambre_chrome::Openness::Open)
-                    .then(|| {
-                        let current = shown.get();
-                        view! {
-                            <ul class="murmure-space-menu">
-                                {heads
-                                    .get()
-                                    .into_iter()
-                                    .enumerate()
-                                    .filter_map(|(rank, head)| Pos::<SpaceRanks>::from_index(rank).map(|rank| (rank, head)))
-                                    .map(|(rank, head)| {
-                                        space_choice(relay, rank, head, current)
-                                    })
-                                    .collect_view()}
-                            </ul>
-                        }
-                    })
-            }}
+            <div class="murmure-space-switch">{switcher}</div>
             {move || head_shown().map(|head| space_view(relay, send, now, head))}
             <PromptControl words=NEW_SPACE send=send on_submit=new_space />
         </section>
-    }
-}
-
-/// One space of the switcher: its name, and its chord for the first nine
-/// (`ambre-spec-murmure-keyboard.md`).
-fn space_choice(
-    relay: MurmureRelay,
-    rank: Pos<SpaceRanks>,
-    head: SpaceHead,
-    current: Option<Id<Space>>,
-) -> impl IntoView {
-    let name = head
-        .name
-        .map_or_else(|| UNNAMED_SPACE.to_owned(), Validated::into_string);
-    // The switcher shows the chord the command table states, so a rebinding moves no view.
-    let chord = SHOW_SPACE
-        .get(rank.to_usize())
-        .and_then(|id| crate::ui::commands::chord_of(*id))
-        .map(|chord| view! { <kbd class="murmure-space-chord">{chord.to_string()}</kbd> });
-    let here = (Some(head.space) == current).then_some("true");
-    view! {
-        <li>
-            <button
-                r#type="button"
-                class="murmure-space-choice"
-                aria-current=here
-                on:click=move |_| relay.show_space(rank)
-            >
-                <span class="murmure-space-mark" aria-hidden="true">{crate::ui::call_videos::initials_of(&name)}</span>
-                <span>{name}</span>
-                {chord}
-            </button>
-        </li>
     }
 }
 
@@ -1836,28 +1790,25 @@ fn space_view(
 /// shows its view, and nothing leaves the page (`MURMURE-717`, `MURMURE-718`).
 #[component]
 pub fn PhoneTabs(relay: MurmureRelay) -> impl IntoView {
+    let choices = PhoneTab::ALL
+        .into_iter()
+        .map(|tab| ambre_chrome::ChoiceView::text(tab.label()))
+        .collect();
+    let selected = Signal::derive(move || {
+        let tab = relay.tab.get();
+        PhoneTab::ALL
+            .iter()
+            .position(|t| *t == tab)
+            .map(Pos::<ambre_chrome::ChoiceRow>::from_usize)
+    });
+    let on_pick = Callback::new(move |p: Pos<ambre_chrome::ChoiceRow>| {
+        if let Some(tab) = p.to_index().and_then(|i| PhoneTab::ALL.get(i)) {
+            relay.choose_tab(*tab);
+        }
+    });
     view! {
         <nav class="murmure-tabs" aria-label="Murmure">
-            {PhoneTab::ALL
-                .into_iter()
-                .map(|tab| {
-                    let selected = move || {
-                        if relay.tab.get() == tab { "true" } else { "false" }
-                    };
-                    view! {
-                        <button
-                            r#type="button"
-                            class="murmure-tab"
-                            data-tab=tab.word()
-                            aria-pressed=selected
-                            on:click=move |_| relay.choose_tab(tab)
-                        >
-                            <span class="murmure-tab-icon" aria-hidden="true"></span>
-                            <span class="murmure-tab-label">{tab.label()}</span>
-                        </button>
-                    }
-                })
-                .collect_view()}
+            <ambre_chrome::SegmentBar label="Murmure views" choices=choices selected=selected on_pick=on_pick />
         </nav>
     }
 }

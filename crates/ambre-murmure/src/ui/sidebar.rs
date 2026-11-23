@@ -651,16 +651,6 @@ impl PhoneTab {
         }
     }
 
-    /// The word of the tab in the markup, which the stylesheet reads for its icon.
-    #[must_use]
-    pub const fn word(self) -> &'static str {
-        match self {
-            Self::Channels => "channels",
-            Self::Direct => "direct",
-            Self::Search => "search",
-        }
-    }
-
     /// The sections the channel list shows under this tab: every one, or the direct messages
     /// alone (`MURMURE-717`). The search tab keeps the list under the search box.
     #[must_use]

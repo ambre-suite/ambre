@@ -745,7 +745,7 @@ async fn the_participants_button_names_itself_and_lists_each_participant() {
     leptos::task::tick().await;
     assert_eq!(read("aria-expanded"), "true");
     assert_eq!(
-        frame.texts(".murmure-call-roster-list li"),
+        frame.texts(".murmure-call-roster-list .murmure-call-roster-name"),
         ["You", "A participant", "A participant"]
     );
     button.click();
@@ -2041,7 +2041,7 @@ async fn a_folded_group_keeps_the_channel_shown_and_counts_the_rest() {
 async fn the_space_switcher_names_the_space_and_lists_each_one() {
     let acme = Acme::new();
     let frame = acme.frame().await;
-    let switch = ".murmure-space-switch";
+    let switch = ".murmure-space-switch .ambre-select-trigger";
     assert!(
         frame.texts(switch).concat().contains("Acme"),
         "{:?}",
@@ -2056,12 +2056,18 @@ async fn the_space_switcher_names_the_space_and_lists_each_one() {
         attribute(&frame, switch, "aria-expanded").as_deref(),
         Some("true")
     );
-    assert_eq!(frame.texts(".murmure-space-chord"), ["Alt+Shift+1"]);
+    assert_eq!(
+        frame.texts(".murmure-space-switch .ambre-select-option"),
+        ["Acme"]
+    );
     let before = frame.sent.get_untracked().len();
-    frame.click(".murmure-space-choice").await;
+    frame
+        .click(".murmure-space-switch .ambre-select-option")
+        .await;
     assert_eq!(frame.relay.space.get_untracked(), Some(acme.space));
-    assert!(
-        frame.query(".murmure-space-menu").is_none(),
+    assert_eq!(
+        attribute(&frame, switch, "aria-expanded").as_deref(),
+        Some("false"),
         "the list closes"
     );
     assert_eq!(
@@ -2087,18 +2093,18 @@ async fn the_bar_of_tabs_shows_on_the_phone_list_alone() {
         "the list carries the bar"
     );
     assert_eq!(
-        frame.texts(".murmure-tab-label"),
+        frame.texts(".murmure-tabs [role=\"radio\"]"),
         ["Channels", "Direct messages", "Search"]
     );
-    let tab = ".murmure-tab[data-tab=\"direct\"]";
+    let tab = ".murmure-tabs [aria-label=\"Direct messages\"]";
     assert_eq!(
-        attribute(&frame, tab, "aria-pressed").as_deref(),
+        attribute(&frame, tab, "aria-checked").as_deref(),
         Some("false")
     );
     let before = frame.sent.get_untracked().len();
     frame.click(tab).await;
     assert_eq!(
-        attribute(&frame, tab, "aria-pressed").as_deref(),
+        attribute(&frame, tab, "aria-checked").as_deref(),
         Some("true")
     );
     assert_eq!(frame.texts(".murmure-entry-name"), ["Direct message"]);

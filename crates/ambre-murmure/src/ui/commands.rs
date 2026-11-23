@@ -69,17 +69,8 @@ pub const KEYS: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.genera
 
 /// The modifiers of the chord of each space of the switcher, with the digit of its rank. This
 /// is the one place the chord is chosen. The browser takes Ctrl and a digit (`MURMURE-171`).
-/// The switcher shows each chord as the command table states it.
+/// The list of keys shows each chord as the command table states it (`MURMURE-540`).
 pub const SPACE_MODIFIERS: ambre_core::Flags<ModifierKeys> = ModifierKeys::ALT_SHIFT;
-
-/// The chord of the command `id`, as the command table states it: its first binding.
-#[must_use]
-pub fn chord_of(id: StaticKey<Commands>) -> Option<KeyBinding> {
-    COMMANDS
-        .iter()
-        .find(|c| c.id == id)
-        .and_then(|c| c.keybindings.first().copied())
-}
 
 /// Show the space of each rank of the switcher, the first nine (`MURMURE-712`).
 pub const SHOW_SPACE: [StaticKey<Commands>; 9] = [

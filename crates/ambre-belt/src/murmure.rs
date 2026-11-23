@@ -3511,7 +3511,7 @@ pub(crate) mod tests {
                 "the pin button of Bob",
                 &format!(
                     "const item = [...document.querySelectorAll('.murmure-call-roster-list li')] \
-                       .find((li) => li.textContent === {}); \
+                       .find((li) => li.querySelector('.murmure-call-roster-name')?.textContent === {}); \
                      const pin = item && item.querySelector('.murmure-call-pin'); \
                      if (!pin) return null; pin.click(); return true;",
                     Value::String(bob.clone())

@@ -4929,7 +4929,8 @@ ambre-trame | src/chrome/panel.rs | crate::chrome::panel | label() | ret | Strin
 ambre-chrome | src/controls.rs | crate::controls | ColorSwatch(label) | param | String	free-text	the accessible name and tooltip of a swatch, display text
 ambre-chrome | src/controls.rs | crate::controls | ControlSize::as_str() | ret | &'static str	newtype-inner	the fieldless enum's own data-size word, which the stylesheet reads off the attribute
 ambre-chrome | src/controls.rs | crate::controls | IconLook::as_str() | ret | &'static str	newtype-inner	the fieldless enum's own data-look word, which the stylesheet reads off the attribute
-ambre-chrome | src/controls.rs | crate::controls | IconButton(label) | param | String	free-text	the accessible name and tooltip of an icon button, read from a command or a property description
+ambre-chrome | src/controls.rs | crate::controls | IconButton(label) | param | Signal<String>	free-text	the accessible name and tooltip of an icon button, read from a command or a property description, or following the state of a toggle
+ambre-chrome | src/controls.rs | crate::controls | IconButton(class) | param | Option<&'static str>	free-text	the class an application gives the button for its own stylesheet and its tests
 ambre-chrome | src/controls.rs | crate::controls | SLIDER_STEPS | const | f32	foreign-api	the max of the range input, which the one foreign call that renders the input reads
 ambre-chrome | src/controls.rs | crate::controls | SegmentBar(label) | param | String	free-text	the accessible name of a radio group, display text
 ambre-chrome | src/controls.rs | crate::controls | Select(label) | param | String	free-text	the accessible name of a list, display text
@@ -4992,6 +4993,5 @@ ambre-murmure | src/ui/sidebar.rs | crate::ui::sidebar | Folding::expanded() | r
 ambre-murmure | src/ui/sidebar.rs | crate::ui::sidebar | Kept<'_>::keeps() | ret | bool	generic	predicate result
 ambre-murmure | src/ui/sidebar.rs | crate::ui::sidebar | PhoneTab::keeps() | ret | bool	generic	predicate result
 ambre-murmure | src/ui/sidebar.rs | crate::ui::sidebar | PhoneTab::label() | ret | &'static str	free-text	the name of a tab a person reads and hears, which no code matches back
-ambre-murmure | src/ui/sidebar.rs | crate::ui::sidebar | PhoneTab::word() | ret | &'static str	newtype-inner	the fieldless enum's own word in the data-tab attribute, which the stylesheet matches back
 ambre-chrome | src/command.rs | crate::command | digit_of_code(code) | param | &str	generic	the codec of a Key: the DOM KeyboardEvent.code name, which the caller reads and this parses into the digit it names
 ambre-core | src/call.rs | crate::call | FORWARDED | const | u32	generic	the one written figure of the call row of the budgets, which the forwarded count and the slots past it are built on

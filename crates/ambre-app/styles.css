@@ -726,8 +726,7 @@ body {
     font-weight: 600;
 }
 
-.murmure-call-live-icon,
-.murmure-tab-icon {
+.murmure-call-live-icon {
     width: 14px;
     height: 14px;
     background: currentColor;
@@ -753,85 +752,10 @@ body {
     font-weight: 700;
 }
 
-/* The space switcher at the top of the sidebar (`MURMURE-711`): the space
-   shown, then the list of every space with its chord. */
+/* The space switcher at the top of the sidebar (`MURMURE-711`): the select
+   of the visual system, the width of the sidebar. */
 .murmure-space-switch {
     display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    width: 100%;
-    padding: var(--space-2) var(--space-3);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--surface);
-    color: var(--text);
-    font: inherit;
-    font-weight: 600;
-    cursor: pointer;
-}
-
-.murmure-space-switch:hover {
-    background: var(--surface-hover);
-}
-
-.murmure-space-switch-name {
-    flex: 1 1 auto;
-    overflow: hidden;
-    text-align: left;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.murmure-space-mark {
-    display: inline-grid;
-    flex: none;
-    place-items: center;
-    width: 22px;
-    height: 22px;
-    border-radius: var(--radius-sm);
-    background: var(--accent);
-    color: var(--on-accent);
-    font-size: var(--font-xs);
-    font-weight: 700;
-}
-
-.murmure-spaces .murmure-space-menu {
-    margin: var(--space-1) 0;
-    padding: var(--space-1);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--bg);
-    box-shadow: var(--shadow-mid);
-}
-
-.murmure-space-choice {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    width: 100%;
-    padding: var(--space-2);
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: none;
-    color: var(--text);
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
-}
-
-.murmure-space-choice:hover {
-    background: var(--surface-hover);
-}
-
-.murmure-space-choice[aria-current="true"] {
-    background: var(--surface-2);
-}
-
-.murmure-space-chord {
-    margin-left: auto;
-    color: var(--text-dim);
-    font-family: inherit;
-    font-size: var(--font-xs);
 }
 
 .murmure-section ul {
@@ -908,7 +832,8 @@ body {
     margin-left: var(--space-2);
 }
 
-.murmure-call-hang-up {
+.ambre-icon-button.murmure-call-hang-up,
+.ambre-icon-button.murmure-call-hang-up:hover {
     color: var(--error);
 }
 
@@ -4671,7 +4596,7 @@ body {
     display: none;
 }
 
-.murmure-float-controls .murmure-call-hang-up {
+.murmure-float-controls .ambre-icon-button.murmure-call-hang-up {
     margin-left: auto;
     background: var(--error);
     color: var(--on-accent);
@@ -4692,44 +4617,19 @@ body {
 .murmure-tabs {
     position: sticky;
     bottom: 0;
-    justify-content: space-around;
     border-top: 1px solid var(--border);
     background: var(--surface);
 }
 
-.murmure-tab {
-    display: flex;
+/* The tabs are the segments of the visual system, one per view, across the
+   width of the phone. */
+.murmure-tabs .ambre-segments {
+    flex: 1 1 auto;
+    margin: var(--space-2) var(--space-3);
+}
+
+.murmure-tabs .ambre-segments > button {
     flex: 1 1 0;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-1);
-    padding: var(--space-2) 0;
-    border: 0;
-    background: none;
-    color: var(--text-dim);
-    font: inherit;
-    font-size: var(--font-xs);
-}
-
-.murmure-tab[aria-pressed="true"] {
-    color: var(--accent);
-}
-
-.murmure-tab .murmure-tab-icon {
-    width: 20px;
-    height: 20px;
-}
-
-.murmure-tab[data-tab="channels"] .murmure-tab-icon {
-    --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 9h14v2H5zm0 4h14v2H5zM9.6 3h2l-2.4 18h-2zm6 0h2l-2.4 18h-2z'/%3E%3C/svg%3E");
-}
-
-.murmure-tab[data-tab="direct"] .murmure-tab-icon {
-    --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4 4h16v12H8l-4 4z'/%3E%3C/svg%3E");
-}
-
-.murmure-tab[data-tab="search"] .murmure-tab-icon {
-    --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M10 3a7 7 0 0 1 5.6 11.2l5.1 5.1-1.4 1.4-5.1-5.1A7 7 0 1 1 10 3zm0 2a5 5 0 1 0 0 10 5 5 0 0 0 0-10z'/%3E%3C/svg%3E");
 }
 
 @media (min-width: 600px) {

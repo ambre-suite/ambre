@@ -1889,21 +1889,17 @@ impl Spaces {
     fn names(&self) -> Vec<String> {
         let list = self
             .root
-            .query_selector_all(".murmure-space-choice span:nth-child(2)")
+            .query_selector_all(".murmure-space-switch .ambre-select-option span")
             .unwrap();
         (0..list.length())
             .filter_map(|i| list.item(i)?.text_content())
             .collect()
     }
 
-    /// The names of the spaces the switcher lists, read with its list open (`MURMURE-711`).
+    /// The names of the spaces the switcher lists (`MURMURE-711`).
     async fn listed(&self) -> Vec<String> {
-        self.relay.switcher.set(ambre_chrome::Openness::Open);
         settle().await;
-        let names = self.names();
-        self.relay.switcher.set(ambre_chrome::Openness::Closed);
-        settle().await;
-        names
+        self.names()
     }
 
     /// Opens the control of `class`, types `text` and submits it.
