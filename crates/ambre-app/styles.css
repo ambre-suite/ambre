@@ -717,7 +717,7 @@ body {
 .murmure-call-live {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
+    gap: var(--space-1);
     color: var(--success);
     font-size: var(--font-xs);
     font-weight: 600;
@@ -741,12 +741,12 @@ body {
     place-items: center;
     width: 16px;
     height: 16px;
-    margin-left: -4px;
+    margin-left: calc(-1 * var(--space-2));
     border: 1px solid var(--surface);
     border-radius: 50%;
     background: var(--surface-2);
     color: var(--text);
-    font-size: 8px;
+    font-size: var(--font-xs);
     font-weight: 700;
 }
 
@@ -4222,40 +4222,24 @@ body {
 }
 
 /* The call away from its channel (the Murmure calls spec, section 3): a
-   bubble in a corner of the content over the phone width, a pill under the
-   header below it. */
+   pill under the header on a phone, the base, and a bubble in a corner of
+   the content from the phone width up. */
 .murmure-call-float {
     position: fixed;
     z-index: 30;
-    right: var(--space-6);
-    bottom: var(--space-6);
+    top: calc(var(--header-h) + var(--space-2));
+    right: var(--space-3);
+    left: var(--space-3);
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
+    align-items: center;
     gap: var(--space-2);
-    width: 260px;
-    padding: var(--space-3);
+    padding: var(--space-2) var(--space-3);
     border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    background: var(--surface);
+    border-radius: var(--radius-full);
+    background: color-mix(in srgb, var(--success) 14%, var(--surface));
     box-shadow: var(--shadow-high);
     touch-action: none;
-}
-
-.murmure-call-float[data-corner="top-left"] {
-    top: calc(var(--header-h) + var(--commandbar-h) + var(--space-6));
-    right: auto;
-    bottom: auto;
-    left: var(--space-6);
-}
-
-.murmure-call-float[data-corner="top-right"] {
-    top: calc(var(--header-h) + var(--commandbar-h) + var(--space-6));
-    bottom: auto;
-}
-
-.murmure-call-float[data-corner="bottom-left"] {
-    right: auto;
-    left: var(--space-6);
 }
 
 .murmure-call-float[data-dragging] {
@@ -4265,8 +4249,10 @@ body {
 
 .murmure-float-grip {
     display: flex;
+    flex: 1 1 auto;
     align-items: center;
     gap: var(--space-2);
+    min-width: 0;
     padding: 0;
     border: 0;
     background: none;
@@ -4297,12 +4283,12 @@ body {
     place-items: center;
     width: 24px;
     height: 24px;
-    margin-left: -6px;
+    margin-left: calc(-1 * var(--space-3));
     border: 2px solid var(--surface);
     border-radius: 50%;
     background: var(--surface-2);
     color: var(--text);
-    font-size: 9px;
+    font-size: var(--font-xs);
     font-weight: 700;
 }
 
@@ -4313,83 +4299,109 @@ body {
     gap: var(--space-2);
 }
 
+/* The pill keeps mute and hang up alone (`MURMURE-697`). */
+.murmure-float-wide {
+    display: none;
+}
+
 .murmure-float-controls .murmure-call-hang-up {
     margin-left: auto;
     background: var(--error);
-    color: #fff;
+    color: var(--on-accent);
 }
 
-/* The bar of tabs of the phone list (`MURMURE-715`): absent over the phone
-   width, and absent over a channel or a thread, which keep their height. */
+/* The bar of tabs of the phone list (`MURMURE-715`), on the list alone:
+   a channel and a thread keep their height. */
 .murmure-tabs {
     display: none;
 }
 
 @media (max-width: 599px) {
-    .murmure-call-float,
-    .murmure-call-float[data-corner] {
-        top: calc(var(--header-h) + var(--space-2));
-        right: var(--space-3);
-        bottom: auto;
-        left: var(--space-3);
-        flex-direction: row;
-        align-items: center;
-        width: auto;
-        padding: var(--space-2) var(--space-3);
-        border-radius: 999px;
-        background: color-mix(in srgb, var(--success) 14%, var(--surface));
-    }
-
-    .murmure-float-grip {
-        flex: 1 1 auto;
-        min-width: 0;
-    }
-
-    .murmure-float-wide {
-        display: none;
-    }
-
     .ambre-body[data-focus="sidebar"] .murmure-tabs {
-        position: sticky;
-        bottom: 0;
         display: flex;
-        justify-content: space-around;
-        border-top: 1px solid var(--border);
+    }
+}
+
+.murmure-tabs {
+    position: sticky;
+    bottom: 0;
+    justify-content: space-around;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+}
+
+.murmure-tab {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-2) 0;
+    border: 0;
+    background: none;
+    color: var(--text-dim);
+    font: inherit;
+    font-size: var(--font-xs);
+}
+
+.murmure-tab[aria-pressed="true"] {
+    color: var(--accent);
+}
+
+.murmure-tab .murmure-tab-icon {
+    width: 20px;
+    height: 20px;
+}
+
+.murmure-tab[data-tab="channels"] .murmure-tab-icon {
+    --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 9h14v2H5zm0 4h14v2H5zM9.6 3h2l-2.4 18h-2zm6 0h2l-2.4 18h-2z'/%3E%3C/svg%3E");
+}
+
+.murmure-tab[data-tab="direct"] .murmure-tab-icon {
+    --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4 4h16v12H8l-4 4z'/%3E%3C/svg%3E");
+}
+
+.murmure-tab[data-tab="search"] .murmure-tab-icon {
+    --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M10 3a7 7 0 0 1 5.6 11.2l5.1 5.1-1.4 1.4-5.1-5.1A7 7 0 1 1 10 3zm0 2a5 5 0 1 0 0 10 5 5 0 0 0 0-10z'/%3E%3C/svg%3E");
+}
+
+@media (min-width: 600px) {
+    .murmure-call-float {
+        top: auto;
+        right: var(--space-6);
+        bottom: var(--space-6);
+        left: auto;
+        flex-direction: column;
+        align-items: stretch;
+        width: 260px;
+        padding: var(--space-3);
+        border-radius: var(--radius-lg);
         background: var(--surface);
     }
 
-    .murmure-tab {
+    .murmure-call-float[data-corner="top-left"] {
+        top: calc(var(--header-h) + var(--commandbar-h) + var(--space-6));
+        right: auto;
+        bottom: auto;
+        left: var(--space-6);
+    }
+
+    .murmure-call-float[data-corner="top-right"] {
+        top: calc(var(--header-h) + var(--commandbar-h) + var(--space-6));
+        bottom: auto;
+    }
+
+    .murmure-call-float[data-corner="bottom-left"] {
+        right: auto;
+        left: var(--space-6);
+    }
+
+    .murmure-float-grip {
+        flex: none;
+    }
+
+    .murmure-float-wide {
         display: flex;
-        flex: 1 1 0;
-        flex-direction: column;
-        align-items: center;
-        gap: 2px;
-        padding: var(--space-2) 0;
-        border: 0;
-        background: none;
-        color: var(--text-dim);
-        font: inherit;
-        font-size: var(--font-xs);
     }
 
-    .murmure-tab[aria-pressed="true"] {
-        color: var(--accent);
-    }
-
-    .murmure-tab-icon {
-        width: 20px;
-        height: 20px;
-    }
-
-    .murmure-tab[data-tab="channels"] .murmure-tab-icon {
-        --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 9h14v2H5zm0 4h14v2H5zM9.6 3h2l-2.4 18h-2zm6 0h2l-2.4 18h-2z'/%3E%3C/svg%3E");
-    }
-
-    .murmure-tab[data-tab="direct"] .murmure-tab-icon {
-        --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4 4h16v12H8l-4 4z'/%3E%3C/svg%3E");
-    }
-
-    .murmure-tab[data-tab="search"] .murmure-tab-icon {
-        --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M10 3a7 7 0 0 1 5.6 11.2l5.1 5.1-1.4 1.4-5.1-5.1A7 7 0 1 1 10 3zm0 2a5 5 0 1 0 0 10 5 5 0 0 0 0-10z'/%3E%3C/svg%3E");
-    }
 }

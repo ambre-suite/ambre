@@ -1887,10 +1887,23 @@ impl Spaces {
     }
 
     fn names(&self) -> Vec<String> {
-        let list = self.root.query_selector_all(".murmure-space-name").unwrap();
+        let list = self
+            .root
+            .query_selector_all(".murmure-space-choice span:nth-child(2)")
+            .unwrap();
         (0..list.length())
             .filter_map(|i| list.item(i)?.text_content())
             .collect()
+    }
+
+    /// The names of the spaces the switcher lists, read with its list open (`MURMURE-711`).
+    async fn listed(&self) -> Vec<String> {
+        self.relay.switcher.set(ambre_chrome::Openness::Open);
+        settle().await;
+        let names = self.names();
+        self.relay.switcher.set(ambre_chrome::Openness::Closed);
+        settle().await;
+        names
     }
 
     /// Opens the control of `class`, types `text` and submits it.
@@ -1970,7 +1983,7 @@ async fn a_space_created_from_the_sidebar_shows_in_it() {
 
     // The Logic thread shows the new space at once, its creator the owner.
     spaces.catalogue(space_id, "Acme", Role::Owner).await;
-    assert_eq!(spaces.names(), ["Acme"]);
+    assert_eq!(spaces.listed().await, ["Acme"]);
 }
 
 /// A space offers its owner and its editors a control that creates a public
@@ -1983,7 +1996,7 @@ async fn an_admin_creates_a_public_channel_that_opens_once_created() {
     let (acme, kept) = (Id::<Space>::mint(), Id::<Space>::mint());
     spaces.catalogue(acme, "Acme", Role::Editor).await;
     spaces.catalogue(kept, "Kept", Role::Viewer).await;
-    assert_eq!(spaces.names(), ["Acme", "Kept"]);
+    assert_eq!(spaces.listed().await, ["Acme", "Kept"]);
     let toggles = spaces
         .root
         .query_selector_all(".murmure-new-channel-toggle")

@@ -673,10 +673,13 @@ pub(super) fn CallFloat(
     // The pointer offset of a drag in progress, and the place of the bubble during it.
     let dragged = RwSignal::new(None::<(f64, f64)>);
     let tick = RwSignal::new(crate::host::now());
-    let _ = set_interval_with_handle(
+    // The clock ticks while the float is mounted, and stops with it.
+    if let Ok(handle) = set_interval_with_handle(
         move || tick.set(crate::host::now()),
         std::time::Duration::from_secs(1),
-    );
+    ) {
+        on_cleanup(move || handle.clear());
+    }
     let from_clock = from.clone();
     let elapsed = Signal::derive(move || {
         from_clock
