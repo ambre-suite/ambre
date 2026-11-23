@@ -437,6 +437,7 @@ row reads `V1`.
 | `[ ]` A snapshot upload compresses and seals once | V1 | the upload link binds the size before the client knows the id it seals, so each snapshot upload compresses and seals twice and holds a copy of the payload until it leaves. Done when the size is derived from one compression and the blob is sealed once, and a test pins the derived size to the sealed one |
 | `[ ]` A presence sample carries its head only when it moved | V1 | each presence sample carries the log head and its entry, 264 B per sample below 128 entries (`SYNC-262`). Done when a sample carries them only after the head moved, a row proves a hidden revoke still warns, and the budget row reads the new cost |
 | `[ ]` A REST answer names the API version a client must speak | V1 | the socket tells a client that the relay moved to a newer wire version (`SYNC-137`), and a REST answer tells it nothing. A client on an older version then reads an answer it may not parse. Done when each REST answer names the API version, a client past it stops as on the socket, and a row reads `verified` |
+| `[ ]` A meta or space delta Loro refuses leaves the rest of an opening | V1 | a message segment that Loro refuses is left out of an opening document (`MURMURE-680`), but a meta or space delta that the authorship check accepts and Loro refuses still fails the whole open. Done when such a delta is left out and the rest opens, and a row reads `verified` |
 
 ### Foundations: security and zero knowledge
 
