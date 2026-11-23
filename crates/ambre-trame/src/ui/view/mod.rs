@@ -396,7 +396,10 @@ pub struct TrameSignals {
     pub formula_ref: RwSignal<String>,
     /// The reference of the whole selection, such as `B2:D5`, which the
     /// header of the context panel shows.
-    pub selection_ref: RwSignal<String>,
+    pub selection_ref: RwSignal<ambre_core::Validated<crate::ui::panel::RangeLabel>>,
+    /// The page setup and the frozen pane of the active sheet, which the
+    /// context panel shows. `None` before the first sheet list.
+    pub sheet_setup: RwSignal<Option<crate::ui::panel::ActiveSheet>>,
     /// The text of the formula bar.
     pub formula_text: RwSignal<String>,
     /// What the formula bar asks the view to do.
@@ -511,15 +514,14 @@ pub struct TrameView {
     #[cfg(target_arch = "wasm32")]
     formula_ref: RwSignal<String>,
     #[cfg(target_arch = "wasm32")]
-    selection_ref: RwSignal<String>,
+    selection_ref: RwSignal<ambre_core::Validated<crate::ui::panel::RangeLabel>>,
+    #[cfg(target_arch = "wasm32")]
+    sheet_setup: RwSignal<Option<crate::ui::panel::ActiveSheet>>,
     #[cfg(target_arch = "wasm32")]
     formula_text: RwSignal<String>,
     /// The formula bar the sync reads and writes. In the browser the frame
     /// copies the signals in before the sync and back out after it.
     formula: FormulaBar,
-    /// The reference of the whole selection, which the header of the
-    /// context panel names. The frame keeps it with the formula bar.
-    selection_label: String,
     #[cfg(target_arch = "wasm32")]
     formula_action: RwSignal<Option<FormulaAction>>,
     /// Grid zoom factor (`1.0` = 100%) shared with the status-bar zoom menu

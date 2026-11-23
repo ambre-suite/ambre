@@ -32,6 +32,7 @@ impl TrameView {
         let TrameSignals {
             formula_ref,
             selection_ref,
+            sheet_setup,
             formula_text,
             formula_action,
             sel_stats,
@@ -77,9 +78,10 @@ impl TrameView {
             #[cfg(target_arch = "wasm32")]
             selection_ref,
             #[cfg(target_arch = "wasm32")]
+            sheet_setup,
+            #[cfg(target_arch = "wasm32")]
             formula_text,
             formula: FormulaBar::default(),
-            selection_label: String::new(),
             #[cfg(target_arch = "wasm32")]
             formula_action,
             #[cfg(target_arch = "wasm32")]
@@ -299,7 +301,11 @@ impl TrameView {
     /// The reference of the whole selection, which the header of the
     /// context panel shows. It names the bounds of the live rectangle, such
     /// as `B2:D5`, or the active cell alone.
-    fn selection_ref(&self) -> String {
+    #[cfg_attr(
+        all(not(target_arch = "wasm32"), not(test)),
+        expect(dead_code, reason = "the browser frame alone publishes it")
+    )]
+    pub(crate) fn selection_ref(&self) -> ambre_core::Validated<crate::ui::panel::RangeLabel> {
         let bounds = self.state.selection.bounds();
         let corner = |at: CellPos| {
             format!(
@@ -308,7 +314,7 @@ impl TrameView {
                 crate::columns::row_label(at.row)
             )
         };
-        if bounds.is_single_cell() {
+        ambre_core::Validated::new(if bounds.is_single_cell() {
             corner(bounds.top_left)
         } else {
             format!(
@@ -316,7 +322,7 @@ impl TrameView {
                 corner(bounds.top_left),
                 corner(bounds.bottom_right)
             )
-        }
+        })
     }
 
     /// Recompute the active cell's on-screen anchor and publish it for the
@@ -574,7 +580,6 @@ impl TrameView {
     /// value when no session is open (`TRAME-UI-055`).
     pub(crate) fn sync_formula_bar(&mut self) {
         self.formula.reference = self.active_cell_ref();
-        self.selection_label = self.selection_ref();
         if self.formula.focused == BarFocus::Focused {
             let text = self.formula.text.clone();
             if let Some(ed) = self.editor.as_mut() {

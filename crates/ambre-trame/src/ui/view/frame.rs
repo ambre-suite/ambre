@@ -86,9 +86,23 @@ impl TrameView {
             // decided by the Logic thread); adopt it so edits target the right
             // sheet. The tab strip reads it from here (`UI-THREAD-003`). A
             // separate DataReset re-fetches the viewport.
-            TrameEvent::SheetList { active, .. } => {
+            TrameEvent::SheetList {
+                active,
+                page,
+                frozen,
+                ..
+            } => {
                 #[cfg(target_arch = "wasm32")]
-                self.active_sheet.set(active.clone());
+                {
+                    self.active_sheet.set(active.clone());
+                    // The context panel shows the setup of the sheet shown.
+                    let setup = Some(crate::ui::panel::ActiveSheet { page, frozen });
+                    if self.sheet_setup.get_untracked() != setup {
+                        self.sheet_setup.set(setup);
+                    }
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                let _ = (page, frozen);
                 self.state.active_sheet = active;
                 self.needs_full = true;
             }
@@ -371,8 +385,9 @@ impl TrameView {
             if self.formula_ref.get_untracked() != self.formula.reference {
                 self.formula_ref.set(self.formula.reference.clone());
             }
-            if self.selection_ref.get_untracked() != self.selection_label {
-                self.selection_ref.set(self.selection_label.clone());
+            let selection = self.selection_ref();
+            if self.selection_ref.get_untracked() != selection {
+                self.selection_ref.set(selection);
             }
             if self.formula_text.get_untracked() != self.formula.text {
                 self.formula_text.set(self.formula.text.clone());

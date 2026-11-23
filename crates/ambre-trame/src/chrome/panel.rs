@@ -26,10 +26,10 @@ use super::color::{theme_bg_default, theme_fg_default};
 use super::popovers::{
     BordersPopover, ColorPopover, FontPopover, H_ALIGNS, NUMBER_FORMATS, V_ALIGNS,
 };
-use super::relay::ActiveSheet;
 use super::style::{Flip, StyleState};
 use crate::ui::commands as registry;
 use crate::ui::panel;
+use crate::ui::panel::{ActiveSheet, RangeLabel};
 
 /// What the sheet's panel reads and where its controls write.
 #[derive(Clone, Copy)]
@@ -43,7 +43,7 @@ pub struct TramePanelSignals {
     /// The style patch sink.
     pub on_style: Callback<StylePatch>,
     /// The reference of the selection, which the header names.
-    pub selection: RwSignal<String>,
+    pub selection: RwSignal<ambre_core::Validated<RangeLabel>>,
     /// The page setup and the frozen pane of the active sheet.
     pub sheet: RwSignal<Option<ActiveSheet>>,
 }
@@ -113,8 +113,15 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
             .filter_map(|&id| icon_command(id, id))
             .collect_view()
     };
-    let place = move |f: fn(ActiveSheet) -> Option<usize>| {
-        Signal::derive(move || sheet.get().and_then(f).map(Pos::<ChoiceRow>::from_usize))
+    // The place in `ids` of the choice the active sheet reads.
+    let place = move |ids: &'static [StaticKey<Commands>],
+                      f: fn(ActiveSheet) -> Option<StaticKey<Commands>>| {
+        Signal::derive(move || {
+            let id = sheet.get().and_then(f)?;
+            ids.iter()
+                .position(|&c| c == id)
+                .map(Pos::<ChoiceRow>::from_usize)
+        })
     };
 
     let sheet_section = move || {
@@ -126,7 +133,7 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
                         &panel::FREEZE_COMMANDS,
                         &["None", "Up to this row", "Up to this column"],
                     )
-                    selected=place(|s| panel::freeze_place(s.frozen))
+                    selected=place(&panel::FREEZE_COMMANDS, |s| panel::freeze_choice(s.frozen))
                     on_pick=run_place(&panel::FREEZE_COMMANDS, on_command)
                     placeholder="Rows and columns"
                     reach=Reach::Property(panel::FREEZE)
@@ -142,7 +149,7 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
                 <Select
                     label=label(panel::PAPER)
                     choices=command_choices(&panel::PAPER_COMMANDS, &["A4", "A3", "Letter", "Legal"])
-                    selected=place(|s| Some(panel::paper_place(s.page.paper)))
+                    selected=place(&panel::PAPER_COMMANDS, |s| Some(panel::paper_choice(s.page.paper)))
                     on_pick=run_place(&panel::PAPER_COMMANDS, on_command)
                     reach=Reach::Property(panel::PAPER)
                 />
@@ -156,7 +163,7 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
                         ChoiceView::icon("Landscape", icondata::LuRectangleHorizontal)
                             .reaching(Reach::Command(registry::PAGE_LANDSCAPE)),
                     ]
-                    selected=place(|s| Some(panel::orientation_place(s.page.orientation)))
+                    selected=place(&panel::ORIENTATION_COMMANDS, |s| Some(panel::orientation_choice(s.page.orientation)))
                     on_pick=run_place(&panel::ORIENTATION_COMMANDS, on_command)
                     reach=Reach::Property(panel::ORIENTATION)
                 />
@@ -165,7 +172,7 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
                 <Select
                     label=label(panel::MARGINS)
                     choices=command_choices(&panel::MARGIN_COMMANDS, &["Normal", "Narrow", "Wide"])
-                    selected=place(|s| panel::margin_place(s.page.margins))
+                    selected=place(&panel::MARGIN_COMMANDS, |s| panel::margin_choice(s.page.margins))
                     on_pick=run_place(&panel::MARGIN_COMMANDS, on_command)
                     placeholder="Custom"
                     reach=Reach::Property(panel::MARGINS)
@@ -423,7 +430,7 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
         ]
     });
     PanelContent {
-        title: Signal::derive(move || selection.get()),
+        title: Signal::derive(move || selection.get().into_string()),
         sections,
     }
 }

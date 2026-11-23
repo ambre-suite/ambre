@@ -803,7 +803,7 @@ async fn the_panel_announces_the_registry_labels() {
             theme: RwSignal::new(ambre_canvas::Theme::Dark),
             on_command: Callback::new(|_| {}),
             on_style: Callback::new(|_| {}),
-            selection: RwSignal::new("B2:D5".to_owned()),
+            selection: RwSignal::new(ambre_core::Validated::new("B2:D5")),
             sheet: RwSignal::new(None),
         });
         let prefs = PanelPrefs::new(DockSide::Right, PanelWidth::DEFAULT, Fold::Open);
@@ -860,8 +860,8 @@ async fn the_sheet_panel_names_the_selection_and_folds_its_print_group() {
     use ambre_chrome::{ContextPanel, DockSide, Fold, PanelPrefs, PanelWidth};
     use ambre_trame::message::{FrozenPane, PageMargins, PageOrientation, PageSetup, PaperSize};
     use ambre_trame::ui::panel;
-    let selection = RwSignal::new("B2:D5".to_owned());
-    let sheet = RwSignal::new(Some(chrome::ActiveSheet {
+    let selection = RwSignal::new(ambre_core::Validated::new("B2:D5"));
+    let sheet = RwSignal::new(Some(panel::ActiveSheet {
         page: PageSetup {
             paper: PaperSize::Letter,
             orientation: PageOrientation::Landscape,
@@ -894,7 +894,7 @@ async fn the_sheet_panel_names_the_selection_and_folds_its_print_group() {
             .unwrap_or_default()
     };
     assert_eq!(text(".ambre-ctx-title"), "B2:D5");
-    selection.set("C3".to_owned());
+    selection.set(ambre_core::Validated::new("C3"));
     leptos::task::tick().await;
     assert_eq!(text(".ambre-ctx-title"), "C3");
 
@@ -1184,7 +1184,6 @@ fn relay() -> chrome::TrameRelay {
         sheets: RwSignal::new(Vec::new()),
         sel_stats: RwSignal::new(None),
         locale: RwSignal::new(None),
-        sheet: RwSignal::new(None),
     }
 }
 

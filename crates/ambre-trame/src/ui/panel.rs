@@ -102,6 +102,24 @@ properties! {
 /// The sections the panel shows, in order.
 pub const SECTIONS: [StaticKey<PanelSections>; 5] = [SHEET, CELLS, ROWS_COLS, SORT_FILTER, PRINT];
 
+/// The reference of a selection the header of the panel names, such as
+/// `B2:D5`. `Validated<RangeLabel>`: the view writes it, no rule bounds it.
+pub enum RangeLabel {}
+
+impl ambre_core::Free for RangeLabel {}
+
+impl ambre_core::Displayed for RangeLabel {}
+
+/// What the context panel shows of the active sheet: its page setup and its
+/// frozen pane. The view publishes it from the sheet list (`UI-THREAD-003`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ActiveSheet {
+    /// The paper, the orientation and the margins it prints on.
+    pub page: crate::message::PageSetup,
+    /// The rows and the columns that stay in view.
+    pub frozen: crate::message::FrozenPane,
+}
+
 /// The choices of the freeze list of the sheet section, in order: no pane,
 /// the rows through the active cell, the columns through it.
 pub const FREEZE_COMMANDS: [StaticKey<Commands>; 3] =
@@ -139,48 +157,51 @@ pub const SHEET_COMMANDS: [StaticKey<Commands>; 12] = [
     cmd::MARGINS_WIDE,
 ];
 
-/// The place of the choice of the freeze list that `pane` reads: none, the
-/// rows, or the columns. `None` when both axes freeze, which no single
-/// choice names.
+/// The choice of the freeze list that `pane` reads: none, the rows, or the
+/// columns. `None` when both axes freeze, which no single choice names.
 #[must_use]
-pub fn freeze_place(pane: crate::message::FrozenPane) -> Option<usize> {
-    match (pane.rows.get() > 0, pane.cols.get() > 0) {
-        (false, false) => Some(0),
-        (true, false) => Some(1),
-        (false, true) => Some(2),
-        (true, true) => None,
+pub fn freeze_choice(pane: crate::message::FrozenPane) -> Option<StaticKey<Commands>> {
+    match (pane.rows.is_zero(), pane.cols.is_zero()) {
+        (true, true) => Some(cmd::UNFREEZE),
+        (false, true) => Some(cmd::FREEZE_ROWS),
+        (true, false) => Some(cmd::FREEZE_COLS),
+        (false, false) => None,
     }
 }
 
-/// The place of `paper` in the paper list.
+/// The choice of the paper list that `paper` reads.
 #[must_use]
-pub fn paper_place(paper: crate::message::PaperSize) -> usize {
+pub fn paper_choice(paper: crate::message::PaperSize) -> StaticKey<Commands> {
     use crate::message::PaperSize;
     match paper {
-        PaperSize::A4 => 0,
-        PaperSize::A3 => 1,
-        PaperSize::Letter => 2,
-        PaperSize::Legal => 3,
+        PaperSize::A4 => cmd::PAPER_A4,
+        PaperSize::A3 => cmd::PAPER_A3,
+        PaperSize::Letter => cmd::PAPER_LETTER,
+        PaperSize::Legal => cmd::PAPER_LEGAL,
     }
 }
 
-/// The place of `orientation` in the orientation bar.
+/// The segment of the orientation bar that `orientation` reads.
 #[must_use]
-pub fn orientation_place(orientation: crate::message::PageOrientation) -> usize {
+pub fn orientation_choice(orientation: crate::message::PageOrientation) -> StaticKey<Commands> {
     match orientation {
-        crate::message::PageOrientation::Portrait => 0,
-        crate::message::PageOrientation::Landscape => 1,
+        crate::message::PageOrientation::Portrait => cmd::PAGE_PORTRAIT,
+        crate::message::PageOrientation::Landscape => cmd::PAGE_LANDSCAPE,
     }
 }
 
-/// The place of `margins` in the margins list, or `None` for margins no
-/// preset names, set by an import.
+/// The choice of the margins list that `margins` reads, or `None` for
+/// margins no preset names, set by an import.
 #[must_use]
-pub fn margin_place(margins: crate::message::PageMargins) -> Option<usize> {
+pub fn margin_choice(margins: crate::message::PageMargins) -> Option<StaticKey<Commands>> {
     use crate::message::PageMargins;
-    [PageMargins::NORMAL, PageMargins::NARROW, PageMargins::WIDE]
-        .iter()
-        .position(|m| *m == margins)
+    [
+        (PageMargins::NORMAL, cmd::MARGINS_NORMAL),
+        (PageMargins::NARROW, cmd::MARGINS_NARROW),
+        (PageMargins::WIDE, cmd::MARGINS_WIDE),
+    ]
+    .into_iter()
+    .find_map(|(m, id)| (m == margins).then_some(id))
 }
 
 /// The commands the rows and columns section shows.
@@ -216,32 +237,25 @@ mod tests {
     fn each_list_reads_the_setup_it_writes() {
         use crate::message::{FrozenPane, PageMargins, PageOrientation, PaperSize};
         use ambre_core::index::Len;
-        assert_eq!(freeze_place(FrozenPane::NONE), Some(0));
+        assert_eq!(freeze_choice(FrozenPane::NONE), Some(cmd::UNFREEZE));
         let rows = FrozenPane {
             rows: Len::new(2),
             ..FrozenPane::NONE
         };
-        assert_eq!(freeze_place(rows), Some(1));
+        assert_eq!(freeze_choice(rows), Some(cmd::FREEZE_ROWS));
         let both = FrozenPane {
             cols: Len::new(1),
             ..rows
         };
-        assert_eq!(freeze_place(both), None, "no one choice names both axes");
-        assert_eq!(FREEZE_COMMANDS[1], cmd::FREEZE_ROWS);
+        assert_eq!(freeze_choice(both), None, "no one choice names both axes");
+        assert_eq!(paper_choice(PaperSize::Letter), cmd::PAPER_LETTER);
         assert_eq!(
-            PAPER_COMMANDS[paper_place(PaperSize::Letter)],
-            cmd::PAPER_LETTER
-        );
-        assert_eq!(
-            ORIENTATION_COMMANDS[orientation_place(PageOrientation::Landscape)],
+            orientation_choice(PageOrientation::Landscape),
             cmd::PAGE_LANDSCAPE
         );
+        assert_eq!(margin_choice(PageMargins::WIDE), Some(cmd::MARGINS_WIDE));
         assert_eq!(
-            margin_place(PageMargins::WIDE).map(|p| MARGIN_COMMANDS[p]),
-            Some(cmd::MARGINS_WIDE)
-        );
-        assert_eq!(
-            margin_place(PageMargins::even(ambre_core::PrintLength::new(3.0))),
+            margin_choice(PageMargins::even(ambre_core::PrintLength::new(3.0))),
             None
         );
     }

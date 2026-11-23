@@ -4916,6 +4916,11 @@ ambre-chrome | src/context_panel.rs | crate::context_panel | PanelWidth::to_stor
 ambre-chrome | src/context_panel.rs | crate::context_panel | is_toggle() | ret | bool	generic	predicate result
 ambre-chrome | src/controls.rs | crate::controls | ChoiceView.label | field | String	free-text	the label a person reads, or the tooltip of an icon segment: display text no code matches back
 ambre-chrome | src/controls.rs | crate::controls | ChoiceView::text(label) | param | impl Into<String>	free-text	the label a person reads of a choice that shows its label
+ambre-chrome | src/controls.rs | crate::controls | ChoiceView::icon(label) | param | impl Into<String>	free-text	the label a person reads as the tooltip of a choice that shows its icon
+ambre-chrome | src/kit.rs | crate::kit | tenths() | ret | String	free-text	the number a length field shows, which a person reads and edits
+ambre-chrome | src/kit.rs | crate::kit | tenths(value) | param | f32	math	the raw number of a length, which each length type unwraps to format
+ambre-trame | src/chrome/panel.rs | crate::chrome::panel | command_choices(labels) | param | &[&str]	free-text	the labels a person reads of the choices of a list
+ambre-trame | src/chrome/panel.rs | crate::chrome::panel | label() | ret | String	free-text	the label of a property a person reads, from its description
 ambre-chrome | src/controls.rs | crate::controls | ColorSwatch(label) | param | String	free-text	the accessible name and tooltip of a swatch, display text
 ambre-chrome | src/controls.rs | crate::controls | ControlSize::as_str() | ret | &'static str	newtype-inner	the fieldless enum's own data-size word, which the stylesheet reads off the attribute
 ambre-chrome | src/controls.rs | crate::controls | IconLook::as_str() | ret | &'static str	newtype-inner	the fieldless enum's own data-look word, which the stylesheet reads off the attribute
@@ -4969,5 +4974,6 @@ ambre-toile | src/chrome/cover.rs | crate::chrome::cover | shown() | ret | bool	
 ambre-prose | src/doc.rs | crate::doc | write_whole_page_format() | ret | bool	generic	whether the whole page register was written; false on a refused format or a refused write
 ambre-prose | src/view/panel.rs | crate::view::panel | PanelKind::title() | ret | &'static str	free-text	the header a person reads
 ambre-prose | src/view/panel.rs | crate::view::panel | Paper::label() | ret | &'static str	free-text	the name of a paper a person reads
+ambre-prose | src/view/panel.rs | crate::view::panel | Margins::label() | ret | &'static str	free-text	the name of a margin preset a person reads
 ambre-trame | src/chrome/panel.rs | crate::chrome::panel | reach() | ret | String	generic	the codec of a property reach on the data-reach attribute, as Reach::marker writes it
 ambre-chrome | src/kit.rs | crate::kit | unreached_controls() | ret | Vec<String>	foreign-api	the accessible names the DOM holds for controls with no data-reach, which a test prints

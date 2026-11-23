@@ -55,7 +55,7 @@ pub use formula_bar::FormulaBar;
 pub use handler::TrameHandler;
 pub use panel::{TramePanelSignals, trame_panel};
 pub use popovers::{FilterPopover, FilterPopoverState, SheetFilter};
-pub use relay::{ActiveSheet, TrameIntent, TrameRelay};
+pub use relay::{TrameIntent, TrameRelay};
 pub use sheet_tabs::{ReorderSheet, SheetTabs};
 pub use sort_dialog::{SortApply, SortDialog, SortDialogState};
 pub use status::{SelStats, StatusBar};
