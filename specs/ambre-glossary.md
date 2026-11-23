@@ -77,6 +77,7 @@
 | forum | a Murmure channel of titled, tagged posts, each with its thread | | `5-Murmure/features/ambre-spec-murmure-forums.md` |
 | space | a group of Murmure channels, itself a document | | `5-Murmure/ambre-spec-murmure-schema.md` |
 | catalogue | the sealed list of the public channels of a space | | `5-Murmure/ambre-spec-murmure-schema.md` |
+| category | a named group of the public channels of a space | sidebar section, channel section, channel folder, sidebar folder | `5-Murmure/features/ambre-spec-murmure-sidebar.md` |
 | segment | one time slice of a Murmure channel, held as one document | | `5-Murmure/ambre-spec-murmure-schema.md` |
 | finalize | close a segment for good, as one immutable snapshot | | `5-Murmure/features/ambre-spec-murmure-segments.md` |
 | amendment | a late edit or delete of a final segment | | `5-Murmure/ambre-spec-murmure-schema.md` |

@@ -245,7 +245,7 @@ fn the_sequence_numbers_stay_continuous_across_a_layer_switch() {
     }
 }
 
-/// `CALL-041`: of twelve senders, a receiver gets the video of nine, and the one who spoke
+/// Of twelve senders, a receiver gets the video of nine, and the one who spoke
 /// last is among them even though it joined last.
 #[test]
 fn a_receiver_gets_the_video_of_the_most_recent_speakers_alone() {
@@ -336,7 +336,7 @@ fn a_receiver_gets_the_video_of_the_senders_it_chose() {
     );
 }
 
-/// `CALL-041`, under a choice: the speakers fill the seven slots a choice of two leaves. The
+/// Under a choice, the speakers fill the seven slots a choice of two leaves. The
 /// speaker stays, the two who joined last of the fillers give way, and a receiver who chose
 /// nothing keeps the nine speakers.
 #[test]
@@ -492,7 +492,7 @@ fn speaker_joins_the_nine() -> (Net, Vec<usize>) {
     (net, offers)
 }
 
-/// `CALL-045`: in a call of twelve, a receiver gets three audio tracks, nine video tracks and
+/// In a call of twelve, a receiver gets three audio tracks, nine video tracks and
 /// one screen track from the SFU. The count holds whatever the count of senders.
 #[test]
 fn a_receiver_holds_a_fixed_count_of_slots() {

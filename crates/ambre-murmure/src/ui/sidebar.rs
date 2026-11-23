@@ -663,7 +663,7 @@ mod tests {
 
     /// The joined public channels of a space are grouped by category, in
     /// the rank of the catalogue. The private channels and the direct
-    /// messages follow (`MURMURE-163`).
+    /// messages follow.
     #[test]
     fn the_sidebar_groups_public_channels_by_category_then_private_then_direct() {
         let space = Id::<Space>::mint();

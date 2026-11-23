@@ -795,7 +795,7 @@ async fn the_participants_button_names_itself_and_lists_each_participant() {
     phase.set(CallPhase::Idle);
 }
 
-/// The page buttons of a call (`MURMURE-654`, `MURMURE-669`). A grid of one page offers none.
+/// The page buttons of a call (`MURMURE-669`). A grid of one page offers none.
 /// Past nine other participants, the header offers the two, each a button with an accessible
 /// name that takes the focus. Each is disabled at the end it turns to, and a press turns the
 /// page.
@@ -1029,7 +1029,7 @@ fn opened(commands: &[LogicCommand]) -> Vec<Option<Id<Channel>>> {
 }
 
 /// The sidebar draws the joined public channels of the space by category,
-/// then the private channels and the direct messages (`MURMURE-163`). The
+/// then the private channels and the direct messages. The
 /// channel to join is in a section apart (`MURMURE-164`).
 #[wasm_bindgen_test]
 async fn the_sidebar_draws_its_sections_in_order() {

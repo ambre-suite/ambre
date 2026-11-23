@@ -4625,7 +4625,7 @@ mod tests {
         assert!(!full && !overlay, "an idle region reuses its paint");
     }
 
-    /// `MURMURE-654`, `MURMURE-668`: a press on an arrow asks the page for the next page. A press
+    /// `MURMURE-668`: a press on an arrow asks the page for the next page. A press
     /// on the tile of a participant asks for its pin. Neither sends a command
     /// to the Logic thread.
     #[test]

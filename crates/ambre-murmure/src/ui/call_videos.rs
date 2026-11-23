@@ -1140,7 +1140,7 @@ mod tests {
         surface
     }
 
-    /// `MURMURE-652`: the member's own tile is small and apart from the grid, says "You", and
+    /// `MURMURE-684`, `MURMURE-685`: the member's own tile is small and apart from the grid, says "You", and
     /// marks a mute.
     #[test]
     fn the_own_tile_is_small_and_marks_a_mute() {
@@ -1200,7 +1200,7 @@ mod tests {
         assert!(initials.contains(&"AL".to_owned()), "{initials:?}");
     }
 
-    /// `MURMURE-654`: past nine participants, the grid shows pages of nine, in the order the call
+    /// Past nine participants, the grid shows pages of nine, in the order the call
     /// admitted them, with an arrow to each other page. The turns stop at the first and at the
     /// last page, and a page past the last shows the last.
     #[test]

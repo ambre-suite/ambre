@@ -22,6 +22,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-276` | `INV` | A hidden channel MUST stay a channel the user belongs to. | this spec section 3 | not built | unbuilt -- lands with the `Mute and hide` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-277` | `INV` | The personal groups, the order and the bookmarks MUST be the same on every device of the user. | this spec section 3; `SETTINGS-012` | not built | unbuilt -- lands with the `The personal sidebar` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-282` | `OBS` | The hide action MUST say that the user stays a member, and offer to leave instead. | this spec section 3 | not built | unbuilt -- lands with the `Mute and hide` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-721` | `OBS` | A folded group MUST still show the channel the view shows, a channel with a live call and each channel that mentions the user. | this spec section 3, a folded group | not built | unbuilt -- lands with the `The Murmure call and sidebar rework` Story (`ambre-roadmap.md` V1) | unimplemented |
+| `MURMURE-722` | `OBS` | The head of a folded group MUST show the count of the channels it hides, and a mark while one of them has activity. | this spec section 3, a folded group | not built | unbuilt -- lands with the `The Murmure call and sidebar rework` Story (`ambre-roadmap.md` V1) | unimplemented |
+| `MURMURE-723` | `INV` | The fold of each group MUST be a setting of the account, in the Murmure section of the settings document. | this spec section 3, a folded group; `1-Foundations/ambre-spec-user-settings.md section 3` (`SETTINGS-003`) | not built | unbuilt -- lands with the `User settings` Story (`ambre-roadmap.md` V1) | unimplemented |
+| `MURMURE-725` | `INV` | The head of each group MUST carry an accessible name, take the keyboard focus and carry its expanded state. | this spec section 3, a folded group; `1-Foundations/ambre-spec-accessibility.md section 2` (`CHROME-022`) | not built | unbuilt -- lands with the `The Murmure call and sidebar rework` Story (`ambre-roadmap.md` V1) | unimplemented |
 
 ### 1.2 Mute a channel
 
@@ -54,11 +58,18 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-288` | `FAIL` | Given a bookmark whose message was deleted or expired, or whose channel the user lost, the list MUST show it as gone. | this spec section 3 | not built | unbuilt -- lands with the `The personal sidebar` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-289` | `FRAME` | Bookmarking a message MUST NOT change the message. | this spec section 3 | not built | unbuilt -- lands with the `The personal sidebar` Story (`ambre-roadmap.md` E5) | unimplemented |
 
+### 1.6 Fold a group
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-720` | `POST` | A press on the head of a sidebar group MUST fold it, and a second press MUST unfold it. | this spec section 3, a folded group | not built | unbuilt -- lands with the `The Murmure call and sidebar rework` Story (`ambre-roadmap.md` V1) | unimplemented |
+| `MURMURE-724` | `FRAME` | Folding or unfolding a group MUST NOT change the catalogue of a space, nor move a read cursor. | this spec section 3, a folded group; `MURMURE-286` | not built | unbuilt -- lands with the `The Murmure call and sidebar rework` Story (`ambre-roadmap.md` V1) | unimplemented |
+
 * **Budget.** none of its own: every entry is a small value in the settings document, which the
   row of `ambre-spec-budgets.md section 6` bounds.
 * **Boundary.** every choice here lives in the sealed settings document (`SETTINGS-001`). The one
   that leaves it is the notification level of a muted channel, whose copy `ZK-016` bounds.
-* **Verification.** 16 `unimplemented`: no settings document exists.
+* **Verification.** 22 `unimplemented`: no settings document exists.
 
 ---
 
@@ -110,7 +121,22 @@ pub enum SidebarGroup {
 message, so the client loads that segment alone to show it (`MURMURE-287`). A pin is the
 `Pinned messages` Story (`ambre-roadmap.md` E5).
 
-**Code.** not built.
+**A folded group.** Each group of the sidebar folds from its head: a category, the private
+channels, the direct messages and the channels to join (`MURMURE-720`). A category is the space's,
+and its fold is the user's own, so folding writes no catalogue and moves no cursor
+(`MURMURE-724`). A folded group keeps in view what the user must not lose:
+
+1. the channel the view shows;
+2. a channel with a live call, which the user may join (`MURMURE-689`);
+3. each channel that mentions the user.
+
+Its head counts the channels it hides, with a mark while one of them has activity
+(`MURMURE-722`). The fold follows the account, as the fold of the context panel does. Each group keeps
+one value in the `murmure` section of the settings (`MURMURE-723`). Until the settings document
+exists, a fold lasts the page. The head names itself and carries its expanded state
+(`MURMURE-725`).
+
+**Code.** the fold is `crates/ambre-murmure/src/ui/sidebar.rs`. The rest is not built.
 
 ---
 
@@ -122,6 +148,7 @@ message, so the client loads that segment alone to show it (`MURMURE-287`). A pi
 | hide, in the channel menu | a notice that the user stays a member, with leave as the other choice |
 | a drag in the sidebar | the channel moves, within a group or to another |
 | new group, in the sidebar menu | a group named by the user |
+| a press on the head of a group | the group folds to the channels it must keep in view, or unfolds |
 | bookmark, on a message | the message joins the bookmarks view |
 
 ---
@@ -132,6 +159,8 @@ message, so the client loads that segment alone to show it (`MURMURE-287`). A pi
 | :--- | :--- | :--- |
 | The personal state lives in the user settings | local storage in the browser | a new device starts empty, and a new device is where the user needs the arrangement most |
 | The personal state lives in the user settings | a Murmure document of its own | one user would hold two sealed stores and two sources of truth |
+| A folded group keeps the channel shown, a live call and the mentions | a folded group hides every channel | the user would lose the channel they read, a call they could join and a question put to them |
+| The fold follows the account | the fold kept per space in its catalogue | the catalogue is shared, and one member folding a category would fold it for every member |
 | Mute keeps the mentions | mute silences everything | a user who mutes a busy room still wants to know when someone asks them directly |
 | Hide says the user stays a member | hide and leave as one action | a hidden channel keeps its key and its traffic, which a user who meant to leave would not expect |
 

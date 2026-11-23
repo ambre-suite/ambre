@@ -290,7 +290,7 @@ fn a_message_of_the_sfu_socket_is_json_of_one_key() {
     assert!(Validated::<SessionDescription>::parse(&long).is_err());
 }
 
-/// `CALL-131`: a choice of videos reads as JSON of one key. The SFU reads none of a choice that
+/// A choice of videos reads as JSON of one key. The SFU reads none of a choice that
 /// names more senders than a receiver gets videos, a sender twice, or a stray large sender.
 #[test]
 fn a_choice_of_too_many_videos_or_a_stray_large_sender_reads_as_nothing() {
