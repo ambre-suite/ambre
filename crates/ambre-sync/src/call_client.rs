@@ -181,11 +181,25 @@ impl CallClient {
     ) -> Steps {
         match msg {
             CallServerMsg::Admitted {
+                call,
                 admission,
                 sfu,
                 sender,
                 roster,
-            } => self.seat(identity, sender, now, log, roster, sfu, admission),
+            } => {
+                if call != self.target.call {
+                    // A start that found a live call in its channel sits in that call, as a
+                    // join: it posts no call message (`CALL-160`). A join sits in the call
+                    // it named or in none.
+                    if self.opening == Opening::Join || !matches!(self.phase, Phase::Admitting) {
+                        self.phase = Phase::Ended;
+                        return Steps::ended(CallEnd::Lost);
+                    }
+                    self.target.call = call;
+                    self.opening = Opening::Join;
+                }
+                self.seat(identity, sender, now, log, roster, sfu, admission)
+            }
             CallServerMsg::Refused(refusal) => {
                 self.phase = Phase::Ended;
                 Steps::ended(CallEnd::Refused(refusal))

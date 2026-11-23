@@ -13,14 +13,10 @@
 use crate::message::Viewport;
 /// Minimum / maximum zoom: the bounds the culling type clamps to
 /// (`TOILE-UI-281`), so the camera and the Logic thread share one range.
-pub use crate::message::{MAX_ZOOM, MIN_ZOOM};
-use ambre_core::{Board, Px, Scale, View};
+pub use crate::message::{MAX_ZOOM, MIN_ZOOM, ZOOM_RANGE};
+use ambre_core::{Board, Px, Scale, Vector, View};
 use ambre_draw::kinetic::ScrollStep;
 use ambre_draw::{Affine, Point, Rect, Size, Vec2};
-
-/// One press of the zoom-in / zoom-out button multiplies (or divides) the zoom
-/// by this factor. A discrete notch, coarser than a wheel tick.
-pub const ZOOM_STEP: f64 = 1.2;
 
 /// Fractional breathing room left around the fitted content on a Fit /
 /// Zoom-to-selection. The content occupies `1 / (1 + FIT_PAD)` of each
@@ -88,9 +84,24 @@ impl ViewportTransform {
         self.world_to_screen().inverse()
     }
 
-    /// Clamp a zoom request to the supported range.
+    /// Clamp a zoom request to the supported range, through the one engine
+    /// (`UI-THREAD-012`, `ZOOM-002`).
     fn clamp_zoom(z: f64) -> Scale<Board, View> {
-        Scale::<Board, View>::positive(z).clamped(MIN_ZOOM, MAX_ZOOM)
+        ZOOM_RANGE.clamp(Scale::<Board, View>::positive(z))
+    }
+
+    /// The camera's zoom, read through the one engine (`UI-THREAD-012`).
+    #[must_use]
+    pub fn zoom_engine(&self) -> ambre_core::Zoom<Board> {
+        ambre_core::Zoom::at(ZOOM_RANGE, self.zoom)
+    }
+
+    /// Step the zoom along the one ladder, or back to one, about the
+    /// viewport center (`ZOOM-004`, `ZOOM-005`). The world point under the
+    /// screen center stays there.
+    pub fn step_zoom(&mut self, step: ambre_core::ZoomStep) {
+        let next = self.zoom_engine().step(step).factor();
+        self.zoom_by_center(next.get() / self.zoom.get());
     }
 
     /// Zoom by `factor` about a screen anchor (typically the cursor), keeping the
@@ -98,14 +109,26 @@ impl ViewportTransform {
     /// zooms in. The zoom is clamped; at a clamp boundary the anchor still holds
     /// (the recomputed center uses the clamped zoom).
     pub fn zoom_about(&mut self, screen_anchor: Point, factor: f64) {
-        let world_anchor = self.screen_to_world() * screen_anchor;
-        let new_zoom = Self::clamp_zoom(self.zoom.get() * factor);
-        // Solve `(world_anchor - center) * new_zoom + size/2 == screen_anchor`
-        // for center so the anchored world point stays under the cursor.
-        let half = Vec2::new(self.size.width / 2.0, self.size.height / 2.0);
-        let offset = (screen_anchor.to_vec2() - half) / new_zoom.get();
-        self.zoom = new_zoom;
-        self.center = world_anchor - offset;
+        let asked = Scale::<Board, View>::positive(self.zoom.get() * factor);
+        self.zoom_to_about(screen_anchor, asked);
+    }
+
+    /// Zoom to `asked` about a screen anchor through the one engine
+    /// (`UI-THREAD-012`, `ZOOM-003`). The engine clamps the factor and
+    /// solves each axis so the board point under the anchor stays there.
+    pub fn zoom_to_about(&mut self, screen_anchor: Point, asked: Scale<Board, View>) {
+        let engine = self.zoom_engine();
+        let axis = |center: f64, half: f64, at: f64| {
+            // The board coordinate at the view's left or top edge.
+            let origin = Px::<Board>::new(center) - Px::<View>::new(half as f32) / self.zoom;
+            let moved = engine.about(asked, origin, Px::<View>::new(at as f32));
+            let zoom = moved.zoom.factor();
+            (moved.origin + Px::<View>::new(half as f32) / zoom, zoom)
+        };
+        let (x, zoom) = axis(self.center.x, self.size.width / 2.0, screen_anchor.x);
+        let (y, _) = axis(self.center.y, self.size.height / 2.0, screen_anchor.y);
+        self.zoom = zoom;
+        self.center = Point::new(x.get(), y.get());
     }
 
     /// Zoom by `factor` about the viewport center: the zoom-in / zoom-out button
@@ -116,12 +139,6 @@ impl ViewportTransform {
         self.zoom_about(center_screen, factor);
     }
 
-    /// Reset to 100% (1 screen-pixel per world-unit) keeping the current center
-    /// under the screen center (the `%` chip click,).
-    pub fn reset_zoom(&mut self) {
-        self.zoom = Scale::<Board, View>::ONE;
-    }
-
     /// Fit `world` into the viewport with `pad_frac` breathing room on each axis,
     /// centering the camera on the rect (Fit / Zoom-to-selection). A zero-area or
     /// non-finite rect is a no-op (nothing to frame). The fit zoom is clamped to
@@ -129,7 +146,13 @@ impl ViewportTransform {
     /// `pad_frac` grows the target extent so the content occupies `1 / (1 +
     /// pad_frac)` of the axis.
     pub fn fit_bounds(&mut self, world: Rect, pad_frac: f64) {
-        if let Some((center, zoom)) = self.fit_target(world, pad_frac) {
+        self.fit_bounds_clear_of(world, pad_frac, kurbo::Insets::ZERO);
+    }
+
+    /// [`fit_bounds`](Self::fit_bounds) into the part of the canvas that
+    /// `clear` leaves uncovered (`ZOOM-011`).
+    pub fn fit_bounds_clear_of(&mut self, world: Rect, pad_frac: f64, clear: kurbo::Insets) {
+        if let Some((center, zoom)) = self.fit_target_clear_of(world, pad_frac, clear) {
             self.center = center;
             self.zoom = zoom;
         }
@@ -140,14 +163,42 @@ impl ViewportTransform {
     /// or non-finite rect (nothing to frame). Shared by the instant Fit and by
     /// the presentation camera glide, which lerps toward this target.
     pub fn fit_target(&self, world: Rect, pad_frac: f64) -> Option<(Point, Scale<Board, View>)> {
-        let (bw, bh) = (world.width(), world.height());
-        if !(bw.is_finite() && bh.is_finite()) || bw <= 0.0 || bh <= 0.0 {
-            return None;
-        }
+        self.fit_target_clear_of(world, pad_frac, kurbo::Insets::ZERO)
+    }
+
+    /// The fit of [`fit_target`](Self::fit_target) into the part of the canvas
+    /// that `clear` leaves uncovered (`ZOOM-011`). The camera is offset so the
+    /// box is centred on that part, not on the canvas. A clearance that leaves
+    /// no room on an axis is dropped, and the fit takes the whole canvas.
+    pub fn fit_target_clear_of(
+        &self,
+        world: Rect,
+        pad_frac: f64,
+        clear: kurbo::Insets,
+    ) -> Option<(Point, Scale<Board, View>)> {
+        let canvas = Rect::from_origin_size(Point::ZERO, self.size);
+        let inset = canvas - clear;
+        let room = if inset.width() > 0.0 && inset.height() > 0.0 {
+            inset
+        } else {
+            canvas
+        };
         let pad = 1.0 + pad_frac.max(0.0);
-        let fit_x = self.size.width / (bw * pad);
-        let fit_y = self.size.height / (bh * pad);
-        Some((world.center(), Self::clamp_zoom(fit_x.min(fit_y))))
+        let content = Vector::new(
+            Px::<Board>::new(world.width() * pad),
+            Px::<Board>::new(world.height() * pad),
+        );
+        let view = Vector::new(
+            Px::<View>::new(room.width() as f32),
+            Px::<View>::new(room.height() as f32),
+        );
+        // An empty or non-finite box frames nothing (`ZOOM-009`).
+        let zoom = self.zoom_engine().framing(content, view)?.factor();
+        // The camera centre is the board point under the canvas centre. It
+        // sits off the box centre by the room's offset from that centre.
+        let off = room.center() - canvas.center();
+        let center = world.center() - off / zoom.get();
+        Some((center, zoom))
     }
 
     /// Interpolate the camera from `from` toward a target center + zoom at phase
@@ -312,11 +363,14 @@ mod tests {
         let mut vt = ViewportTransform::new(Size::new(1000.0, 800.0));
         vt.center = Point::new(42.0, -13.0);
         let center_before = vt.center;
-        vt.zoom_by_center(ZOOM_STEP);
+        vt.step_zoom(ambre_core::ZoomStep::In);
         // The world point under the screen center is the camera center itself; it
         // must not move when zooming about the center.
         assert!(approx(vt.center, center_before));
-        assert!((vt.zoom.get() - ZOOM_STEP).abs() < 1e-9);
+        assert!(
+            (vt.zoom.get() - 1.25).abs() < 1e-9,
+            "the next stop of the ladder"
+        );
     }
 
     #[test]
@@ -324,7 +378,7 @@ mod tests {
         let mut vt = ViewportTransform::new(Size::new(1000.0, 800.0));
         vt.zoom = ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(4.7);
         vt.center = Point::new(10.0, 20.0);
-        vt.reset_zoom();
+        vt.step_zoom(ambre_core::ZoomStep::Reset);
         assert!((vt.zoom.get() - 1.0).abs() < 1e-9);
         // Center is preserved (the chip resets scale, not position).
         assert!(approx(vt.center, Point::new(10.0, 20.0)));
@@ -466,5 +520,61 @@ mod tests {
             vt.fit_bounds(world, FIT_PAD);
             assert_eq!(vt, before, "{world:?}");
         }
+    }
+
+    /// The room a fit frames into: the canvas less the strips `clear` covers.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn room(size: Size, clear: kurbo::Insets) -> Rect {
+        Rect::from_origin_size(Point::ZERO, size) - clear
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    proptest::proptest! {
+        /// A fit lands the whole box inside the uncovered part of the canvas,
+        /// centred on it (`ZOOM-011`). That holds for any box, any measured
+        /// clearance, and any canvas it leaves room in. When the clamp binds
+        /// the box is not fitted, and then its centre alone is held at the
+        /// centre of that part.
+        #[test]
+        fn a_fit_lands_clear_of_the_floating_surfaces(
+            x in -1.0e5..1.0e5f64,
+            y in -1.0e5..1.0e5f64,
+            w in 1.0e-3..1.0e5f64,
+            h in 1.0e-3..1.0e5f64,
+            cw in 200.0..4000.0f64,
+            ch in 200.0..3000.0f64,
+            left in 0.0..150.0f64,
+            top in 0.0..150.0f64,
+        ) {
+            let mut vt = ViewportTransform::new(Size::new(cw, ch));
+            let world = Rect::new(x, y, x + w, y + h);
+            let clear = kurbo::Insets { x0: left, y0: top, x1: 0.0, y1: 0.0 };
+            vt.fit_bounds_clear_of(world, FIT_PAD, clear);
+            let on_screen = vt.world_to_screen().transform_rect_bbox(world);
+            let room = room(vt.size, clear);
+            let tol = 1e-6 * (1.0 + on_screen.width().max(on_screen.height()));
+            proptest::prop_assert!((on_screen.center() - room.center()).hypot() < 1e-3 + tol);
+            let clamped = vt.zoom == MIN_ZOOM || vt.zoom == MAX_ZOOM;
+            if !clamped {
+                proptest::prop_assert!(on_screen.x0 >= room.x0 - tol && on_screen.x1 <= room.x1 + tol);
+                proptest::prop_assert!(on_screen.y0 >= room.y0 - tol && on_screen.y1 <= room.y1 + tol);
+            }
+        }
+    }
+
+    #[test]
+    fn a_canvas_too_small_for_the_clearance_frames_on_the_whole_of_it() {
+        let mut vt = ViewportTransform::new(Size::new(60.0, 50.0));
+        let world = Rect::new(0.0, 0.0, 10.0, 10.0);
+        let clear = kurbo::Insets {
+            x0: 78.0,
+            y0: 87.0,
+            x1: 0.0,
+            y1: 0.0,
+        };
+        vt.fit_bounds_clear_of(world, FIT_PAD, clear);
+        // No room is left once the strips are taken, so the box is centred on
+        // the canvas, as a fit without clearance would place it.
+        assert!(approx(vt.center, world.center()));
     }
 }

@@ -16,8 +16,8 @@ thread reported. That is what keeps one toolkit serving a spreadsheet, a board a
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`. The prefix is `CHROME`, shared with
 `ambre-spec-text-input.md`, `ambre-spec-accessibility.md`, `ambre-spec-adaptive-layout.md`,
-`ambre-spec-launcher.md` and `ambre-spec-key-verification.md`: one numbering over the six documents
-the DOM side produces.
+`ambre-spec-launcher.md`, `ambre-spec-key-verification.md` and `ambre-spec-shell.md`: one
+numbering over the seven documents the DOM side produces.
 
 ### 1.1 The state
 
@@ -32,6 +32,12 @@ the DOM side produces.
 | `CHROME-094` | `INV` | A palette query that starts with `>` MUST list the commands alone. | this spec section 2; `CHROME-008` | `ambre_chrome::palette::tests::a_query_that_starts_with_a_chevron_lists_the_commands_alone` -- the bare chevron and one followed by a query, over entries that would match it | none | verified |
 | `CHROME-114` | `INV` | The command palette MUST be operable from the keyboard: the arrows move the highlight and wrap, Enter runs the highlighted row, and Escape closes it. | this spec section 2; `CHROME-008` | `ambre_chrome::chrome_ui::the_palette_is_operable_by_keyboard_alone` -- keys raised on the query: each arrow wraps at its end, Enter runs the highlighted command and closes the palette, and Escape closes it with nothing run | none | verified |
 | `CHROME-115` | `INV` | Each opening of the command palette MUST start from a blank query, on the first row, with the caret in the query. | this spec section 2; `CHROME-008` | `ambre_chrome::chrome_ui::a_reopened_palette_starts_blank_on_the_first_row` -- a query typed and a row highlighted, then a close and an open: the query reads empty, every row is back, the first is highlighted and the query holds the focus | none | verified |
+| `CHROME-199` | `INV` | Each application MUST lay out only the optional rows it declares, and an absent row MUST render no element. | this spec section 2 | `ambre_chrome::chrome_ui::an_absent_row_renders_no_element_and_a_shown_row_keeps_its_content` -- wasm tier, a formula bar, a tab strip and a command bar marked absent leave no element; `ambre_app::shell::app_root::tests::the_formula_bar_is_trames_alone_and_prose_has_no_command_bar` -- the rows each application declares | none | verified |
+| `CHROME-200` | `INV` | A bar of the chrome MUST NOT cover the header. | this spec section 2 | `ambre_canvas::theme::stylesheet_tests::no_fixed_surface_covers_the_header` -- every fixed surface of the shell sheet that sets its top sits under the header or is centred, the Toile groups set no position, and the tooltip anchor of the command bar leaves its floating menu fixed | none | verified |
+| `CHROME-201` | `INV` | Every surface of the chrome MUST render in the chrome family, a surface mounted outside the shell included. | this spec section 2 | `ambre_canvas::theme::stylesheet_tests::every_family_the_chrome_names_is_the_chrome_family_or_a_monospace_one` -- the body carries the chrome family, and no declaration names a family the page does not load | none | verified |
+| `CHROME-202` | `OBS` | The format bar MUST show the frame of a floating bar, and its controls MUST NOT show the native button of the browser. | this spec section 2; `CHROME-105` | `ambre_canvas::theme::stylesheet_tests::the_format_bar_has_the_frame_of_a_floating_bar` -- the bar sets a ground, a border, a radius and a shadow, and a control drops the native look | none | verified |
+| `CHROME-203` | `OBS` | The header of a document page MUST name the open document. | this spec section 2; `CHROME-080` | `ambre_app::shell::app_root::tests::the_header_links_home_and_names_the_open_document` -- wasm tier, the name the list holds shows once a document is open, and no name shows without one | none | verified |
+| `CHROME-206` | `OBS` | An application that zooms MUST show its zoom in the status bar, at the end of the band, and in no other bar. | this spec section 2; `ambre-spec-zoom.md` | `ambre_toile::tests::chrome_ui::the_zoom_chip_closes_the_status_bar` -- wasm tier, the board band ends on the zoom chip; `ambre_trame::tests::chrome_ui::the_zoom_chip_closes_the_status_bar` -- the same read over the grid band; `ambre_app::host::prose::tests::the_zoom_chip_closes_the_band_and_zooms_the_page` -- the same read over the page band; `ambre_toile::tests::chrome_ui::the_view_menu_reports_zoom_in_and_the_bar_holds_no_zoom_control` -- the menu bar holds no zoom control | none | verified |
 
 ### 1.2 A floating menu is placed
 
@@ -80,13 +86,21 @@ the DOM side produces.
 |---|---|---|---|---|---|---|
 | `CHROME-015` | `POST` | A control driven by a drag MUST coalesce the burst into one command. | this spec section 2 | `ambre_chrome::chrome_ui::a_burst_runs_once_with_its_last_value`; ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads each path once it resolves, so an alias, a re-export and a macro name what they reach. It refuses a range or colour input type, read where the attribute call takes it, on a UI-thread control whose own handler reaches no `Debouncer`, through closures and bindings (`ambre_primitives::driver::chrome::a_drag_control_a_macro_writes_is_refused_unless_its_handler_debounces`, `ambre_primitives::driver::chrome::a_static_subtree_the_toolkit_writes_as_html_is_read_where_the_inert_element_takes_it`). A debounced control in the same file frees no other control (`ambre_primitives::driver::chrome::a_second_control_in_a_file_rides_no_guard_of_the_first`) | none | verified |
 | `CHROME-090` | `FRAME` | Coalescing a burst MUST NOT drop its last value. | this spec section 2 | `ambre_chrome::chrome_ui::a_burst_runs_once_with_its_last_value` | none | verified |
+
+### 1.7 Go back home
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `CHROME-204` | `POST` | A click on the way home in the header MUST move the address bar to the home screen, from any page. | this spec section 2; `ambre-spec-launcher.md`, `CHROME-042` | `ambre_app::shell::app_root::tests::the_header_links_home_and_names_the_open_document` -- wasm tier, a click from a document address leaves the address bar on `/`, which the frame loop reads | none | verified |
+| `CHROME-205` | `FRAME` | Going home from the header MUST NOT reload the page. | this spec section 2; `ambre-spec-launcher.md`, `CHROME-042` | `ambre_app::shell::app_root::tests::the_header_links_home_and_names_the_open_document` -- wasm tier, the header mounted before the click is still in the page after it, which a reload would remove | none | verified |
+
 * **Budget.** none: the chrome renders in the DOM, off the frame loop, and
   `ambre-spec-budgets.md` budgets no chrome operation. What it does spend on the frame is the pause
   of `CHROME-011`, which saves rather than costs.
 * **Boundary.** none: `UI-THREAD-004` and `UI-THREAD-049` ban a network, crypto and persistence
   path on this thread, and the toolkit adds no exception. Its manifest names no transport and no
   crypto crate, which is the crate-graph fact `CHROME-001` and `CHROME-002` are read off.
-* **Verification.** 31 `verified`, 1 `unimplemented`. What holds is a crate-graph fact, placement
+* **Verification.** 39 `verified`, 1 `unimplemented`. What holds is a crate-graph fact, placement
   arithmetic, or a component mounted in a headless document and driven past its mount. The modal
   rows rest on one shared element, which a gate keeps the only one, and on a hold the loop counts.
   The drag rows rest on one debouncer, which a gate keeps every drag control behind.
@@ -102,17 +116,23 @@ whatever it is handed and names no application.
 
 | Row | Holds | Optional |
 |---|---|---|
-| header | the title, the sync state, the share action, the account | no |
-| command bar | the contextual toolbar the application builds from its commands | no |
+| header | the Ambre menu with the way home, the name of the open document, the sync state, the share action, the avatar menu | no |
+| command bar | the channel header of Murmure; Prose, Trame and Toile lay out none (`CHROME-159`) | yes |
 | formula bar | a reference box and a content input | yes |
 | content | one canvas element, or several side by side, plus the input pipe of `ambre-spec-text-input.md` | no |
 | tab strip | a band of document tabs, such as a spreadsheet's sheets | yes |
-| status bar | the caption, the counters, the zoom chip and the frame chip | yes |
+| status bar | the caption, the counters, the frame chip and, at its end, the zoom chip | yes |
 
 The content row owns the canvas element, so the drawing buffer is sized to a grid cell rather than
 to the window (`CHROME-009`). A view that shows several lists, such as a channel and a thread in
-Murmure, puts one canvas in each cell of the row. Each canvas is sized by its own cell. An absent
-optional row collapses and costs no height.
+Murmure, puts one canvas in each cell of the row. Each canvas is sized by its own cell.
+
+Each application declares the optional rows it lays out, and an absent row renders no element
+(`CHROME-199`). The formula bar is Trame's alone. No application lays out the tab strip: Trame's
+sheet tabs sit in the status bar (`CHROME-162`). Which region holds each
+command, and which bars no application lays out, is `ambre-spec-shell.md`. Trame, Toile and
+Prose show their zoom at the end of the status bar alone (`CHROME-206`). A Prose page formats
+from the bar over its selection, so it lays out no command bar.
 
 **What the toolkit ships.**
 
@@ -128,7 +148,7 @@ optional row collapses and costs no height.
 | the keybinding half | a key event to a modelled chord, for a keymap to resolve | built |
 | the shortcut chip | one chord, rendered the same way in a menu, a tooltip and a palette | built |
 | the command palette | one overlay listing every command the application declares, filtered by a substring of the label | built; the entries of an application and the `>` prefix are design |
-| the sidebar and the panels | a resizable region beside the content | design |
+| the sidebar and the panels | a resizable region beside the content, such as the context panel of `ambre-spec-shell.md` | design |
 
 **The command path, and the one direction it runs.** A trigger names a command, and the command
 reaches the Logic thread. The mutation comes back as an event, the dispatcher writes the store, and

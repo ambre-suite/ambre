@@ -19,6 +19,7 @@ mod commands;
 mod murmure_regions;
 #[cfg(test)]
 mod narrow;
+mod panel;
 pub(crate) mod prose_status;
 mod share;
 mod sync_badge;
@@ -63,6 +64,7 @@ pub(crate) struct ShellWiring {
     pub(crate) booted: ambre_bus::DocType,
     pub(crate) slots: ShellSlots,
     pub(crate) prose_figures: RwSignal<Option<ambre_prose::ui::StatusFigures>>,
+    pub(crate) prose_zoom: RwSignal<Scale<ambre_core::Doc, ambre_core::View>>,
     pub(crate) prose_signals: crate::host::ProseSignals,
     pub(crate) tofu_prompt: RwSignal<Option<TofuPrompt>>,
     pub(crate) tofu_confirm: RwSignal<Option<TofuPrompt>>,
@@ -100,6 +102,7 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
         booted,
         slots,
         prose_figures,
+        prose_zoom,
         prose_signals,
         tofu_prompt,
         tofu_confirm,
@@ -145,6 +148,7 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
         active_sheet,
         filter_active,
         find_result,
+        view_cmd: trame_view_cmd,
     } = trame;
     let ambre_toile::ui::ToileSignals {
         ctx_scope: toile_ctx_scope,
@@ -165,6 +169,7 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
         followed_link: toile_followed_link,
         present_mode: present_toile,
         find_result: find_result_toile,
+        cover: toile_cover,
     } = toile;
     leptos::mount::mount_to_body(move || {
         // The store stays here (in the mount owner, NOT in the view): it is `Rc`
@@ -173,7 +178,6 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
         let store = CommandStates::new(trame_chrome::COMMANDS.iter().map(|c| c.id));
         // Seed app-specific initial command states (Undo/Redo start disabled).
         trame_chrome::init_command_states(&store);
-        let toggles = trame_chrome::Toggles::from_store(&store);
         *store_slot.borrow_mut() = Some(store);
         // Toile's own store: the two Undo/Redo rows read its enabled signals,
         // fed by `ToileEvent::UndoState` through the launcher's relay.
@@ -279,6 +283,7 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
                 filter_values,
                 style: style_state,
                 anchor: anchor_pos,
+                view_cmd: trame_view_cmd,
             })
         };
         let commands = CommandPath {
@@ -309,7 +314,6 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
         provide_context(Wiring {
             to_logic,
             theme_ctl,
-            toggles,
             toile_toggles,
             style_state,
             toasts,
@@ -326,6 +330,7 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
             find_result_toile,
             booted,
             prose_figures,
+            prose_zoom,
             prose_signals,
             formula_ref,
             formula_text,
@@ -359,6 +364,7 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
             toile_restyle,
             toile_float_bar,
             toile_quick_style,
+            toile_cover,
             toile_comments,
             toile_deck,
             toile_dropped_file,

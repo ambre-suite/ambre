@@ -439,4 +439,131 @@ mod stylesheet_tests {
             "the unmarked block carries the scales"
         );
     }
+
+    /// Every rule of `css` as (selector list, body), comments blanked. A rule
+    /// nested in an at-rule keeps its own selector.
+    fn rules(css: &str) -> Vec<(String, String)> {
+        let css = uncommented(css);
+        let mut found = Vec::new();
+        let mut rest = css.as_str();
+        while let Some(open) = rest.find('{') {
+            let head = &rest[..open];
+            let selector = head.rsplit(['}', '{', ';']).next().unwrap_or(head).trim();
+            let Some(close) = rest[open + 1..].find(['{', '}']) else {
+                break;
+            };
+            let body = &rest[open + 1..open + 1 + close];
+            if !rest[open + 1 + close..].starts_with('{') {
+                found.push((selector.to_owned(), body.to_owned()));
+            }
+            rest = &rest[open + 1..];
+        }
+        found
+    }
+
+    /// The value `body` gives `property`, if it sets it.
+    fn value_of<'a>(body: &'a str, property: &str) -> Option<&'a str> {
+        body.split(';').find_map(|declaration| {
+            let (name, value) = declaration.split_once(':')?;
+            (name.trim() == property).then(|| value.trim())
+        })
+    }
+
+    /// `CHROME-201`: every family the chrome names is the chrome family, or a
+    /// monospace one, and the body carries the chrome family. A toast or a
+    /// dialog mounted outside the shell then never falls back to the serif
+    /// face of the browser.
+    #[test]
+    fn every_family_the_chrome_names_is_the_chrome_family_or_a_monospace_one() {
+        let body = rules(SHELL_CSS)
+            .into_iter()
+            .find(|(selector, _)| selector == "body")
+            .map(|(_, body)| body)
+            .expect("a body rule");
+        assert_eq!(value_of(&body, "font-family"), Some("var(--font-sans)"));
+        for (line, property, value) in declarations(&uncommented(SHELL_CSS)) {
+            if property != "font-family" && property != "font" {
+                continue;
+            }
+            assert!(
+                ["var(--font-sans)", "inherit", "monospace"]
+                    .iter()
+                    .any(|allowed| value.contains(allowed)),
+                "line {line}: `{property}: {value}` names a family the page may not load"
+            );
+        }
+    }
+
+    /// `CHROME-200`: a fixed surface that sets its top sits under the header,
+    /// or is centred on the viewport. A call ring is an alert that covers the
+    /// header on purpose, for the seconds it rings.
+    #[test]
+    fn no_fixed_surface_covers_the_header() {
+        const ALERTS: [&str; 1] = [".murmure-ring"];
+        for (selector, body) in rules(SHELL_CSS) {
+            if value_of(&body, "position") != Some("fixed") || ALERTS.contains(&selector.as_str()) {
+                continue;
+            }
+            if let Some(top) = value_of(&body, "top") {
+                assert!(
+                    top.contains("var(--header-h)") || top.ends_with('%') || top == "0",
+                    "`{selector}` is fixed at `top: {top}`, over the header"
+                );
+            }
+        }
+        let toile = rules(SHELL_CSS)
+            .into_iter()
+            .filter(|(selector, _)| selector.contains("ambre-toile-menubar"))
+            .collect::<Vec<_>>();
+        // The command bar hosts a floating menu: a rule that positions what
+        // carries a name must leave that menu fixed.
+        for (selector, body) in rules(SHELL_CSS) {
+            if selector.contains(".ambre-commandbar")
+                && selector.contains("[aria-label]")
+                && value_of(&body, "position").is_some()
+            {
+                assert!(
+                    selector.contains(":not(.ambre-ctx-menu *)"),
+                    "`{selector}` positions the floating menu of the bar"
+                );
+            }
+        }
+        assert!(!toile.is_empty(), "the Toile menu bar keeps a rule");
+        assert!(
+            toile
+                .iter()
+                .all(|(_, body)| value_of(body, "position").is_none()),
+            "the Toile menu bar leaves the command bar"
+        );
+    }
+
+    /// `CHROME-202`: the format bar carries the frame of a floating bar. Each
+    /// control carries the look of a chrome button, not the raw button of the
+    /// browser.
+    #[test]
+    fn the_format_bar_has_the_frame_of_a_floating_bar() {
+        let all = rules(SHELL_CSS);
+        let body_of = |wanted: &str| {
+            all.iter()
+                .find(|(selector, _)| selector == wanted)
+                .map(|(_, body)| body.clone())
+                .unwrap_or_else(|| panic!("a `{wanted}` rule"))
+        };
+        let bar = body_of(".ambre-format-bar");
+        for property in ["background", "border", "border-radius", "box-shadow"] {
+            assert!(
+                value_of(&bar, property).is_some(),
+                "the bar sets {property}"
+            );
+        }
+        let control = body_of(".ambre-format-control");
+        assert_eq!(value_of(&control, "appearance"), Some("none"));
+        assert!(
+            value_of(
+                &body_of(".ambre-format-control[aria-pressed=\"true\"]"),
+                "background"
+            )
+            .is_some()
+        );
+    }
 }

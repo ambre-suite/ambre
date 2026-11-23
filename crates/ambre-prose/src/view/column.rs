@@ -20,6 +20,10 @@ pub const GUTTER: Px<Doc> = Px::<Doc>::new(24.0);
 pub struct Viewport {
     /// From the top of the column, in document pixels.
     pub scroll_y: Px<Doc>,
+    /// How far the canvas's left edge sits past the page's, in document
+    /// pixels. Zero while the page fits the canvas, which centres it
+    /// (`PROSE-UI-026`, `PROSE-UI-125`).
+    pub scroll_x: Px<Doc>,
     /// The canvas, in screen pixels.
     pub width: Px<View>,
     pub height: Px<View>,
@@ -31,6 +35,7 @@ impl Default for Viewport {
     fn default() -> Self {
         Self {
             scroll_y: Px::<Doc>::ZERO,
+            scroll_x: Px::<Doc>::ZERO,
             width: Px::<View>::ZERO,
             height: Px::<View>::ZERO,
             zoom: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::ONE,
@@ -51,6 +56,12 @@ impl Viewport {
         } else {
             1.0
         }
+    }
+
+    /// How much of a page's width the canvas shows, in document pixels.
+    #[must_use]
+    pub fn visible_width(&self) -> Px<Doc> {
+        Px::<Doc>::new((self.width.get() / self.scale()).max(0.0))
     }
 
     /// How much of the column the canvas shows, in document pixels.
@@ -130,6 +141,23 @@ impl PageColumn {
         scroll_y.clamp(Px::<Doc>::ZERO, self.max_scroll(viewport))
     }
 
+    /// The last horizontal offset: the page's right edge at the canvas's.
+    /// Zero while the page fits the canvas.
+    #[must_use]
+    pub fn max_scroll_x(&self, viewport: &Viewport) -> Px<Doc> {
+        (self.page_width - viewport.visible_width()).max(Px::<Doc>::ZERO)
+    }
+
+    /// A horizontal offset brought inside the page (`PROSE-UI-251`). One that
+    /// is not a number goes back to the left edge.
+    #[must_use]
+    pub fn clamp_scroll_x(&self, viewport: &Viewport, scroll_x: Px<Doc>) -> Px<Doc> {
+        if scroll_x.get().is_nan() {
+            return Px::<Doc>::ZERO;
+        }
+        scroll_x.clamp(Px::<Doc>::ZERO, self.max_scroll_x(viewport))
+    }
+
     /// The page a column offset belongs to, and the offset within it.
     ///
     /// An offset in a gutter goes to the nearer of the two page edges
@@ -185,11 +213,34 @@ impl PageColumn {
     }
 
     /// The left edge of the column on the canvas, in screen pixels. A page
-    /// wider than the canvas pins the column to the left edge.
+    /// that fits is centred (`PROSE-UI-026`). A wider one starts at the
+    /// horizontal offset, so its whole width can be reached (`PROSE-UI-251`).
     #[must_use]
     pub fn left(&self, viewport: &Viewport) -> Px<View> {
-        Px::<View>::new(
-            ((viewport.width.get() - self.page_width.get() * viewport.scale()) / 2.0).max(0.0),
+        let scale = viewport.scale();
+        let spare = viewport.width.get() - self.page_width.get() * scale;
+        if spare >= 0.0 {
+            return Px::<View>::new(spare / 2.0);
+        }
+        let past = self.clamp_scroll_x(viewport, viewport.scroll_x);
+        Px::<View>::new(-past.get() * scale)
+    }
+
+    /// A point of a page as a canvas point, the inverse of
+    /// [`Self::screen_to_doc`] for a point on a page (`PROSE-UI-023`).
+    #[must_use]
+    pub fn doc_to_screen(
+        &self,
+        viewport: &Viewport,
+        page: Pos<Page>,
+        x_in_page: Px<Doc>,
+        y_in_page: Px<Doc>,
+    ) -> Point<Px<View>> {
+        let scale = viewport.scale();
+        let doc_y = self.page_top_y(page) + y_in_page - viewport.scroll_y;
+        Point::new(
+            self.left(viewport) + Px::<View>::new(x_in_page.get() * scale),
+            Px::<View>::new(doc_y.get() * scale),
         )
     }
 
@@ -235,6 +286,7 @@ mod tests {
     fn viewport(scroll_y: f32, height_px: f32, zoom: f32) -> Viewport {
         Viewport {
             scroll_y: Px::<Doc>::new(scroll_y),
+            scroll_x: Px::<Doc>::ZERO,
             width: Px::<View>::new(1200.0),
             height: Px::<View>::new(height_px),
             zoom: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(f64::from(zoom)),
@@ -242,6 +294,41 @@ mod tests {
     }
 
     proptest! {
+        /// `PROSE-UI-023`: a page point and its canvas point map to each other
+        /// both ways, up to `f32` rounding. It holds at every zoom, offset and
+        /// width, a page wider than the canvas included.
+        #[test]
+        fn a_page_point_and_its_screen_point_map_to_each_other(
+            pages in 1u32..200,
+            page in 0u32..200,
+            x in 0.0f32..800.0,
+            y in 0.0f32..1000.0,
+            scroll_y in 0.0f32..250_000.0,
+            scroll_x in -100.0f32..900.0,
+            width in 50.0f32..3000.0,
+            zoom in 0.25f32..4.0,
+        ) {
+            let column = column(pages);
+            let mut view = viewport(0.0, 900.0, zoom);
+            view.width = Px::<View>::new(width);
+            view.scroll_y = column.clamp_scroll(&view, Px::<Doc>::new(scroll_y));
+            view.scroll_x = column.clamp_scroll_x(&view, Px::<Doc>::new(scroll_x));
+            let page = Pos::<Page>::new(page % pages);
+            let screen = column.doc_to_screen(&view, page, Px::<Doc>::new(x), Px::<Doc>::new(y));
+            let DocPos::OnPage { page: back, x_in_page, y_in_page } = column.screen_to_doc(&view, screen) else {
+                return Err(TestCaseError::fail("a page point resolved to no page"));
+            };
+            // A few `f32` steps of the largest offset the sums carry.
+            let largest = view.scroll_y.get() + column.page_top_y(page).get() + 1000.0;
+            let grain = 8.0 * f32::EPSILON * largest / zoom.min(1.0);
+            let dy = column.page_top_y(back).get() + y_in_page.get() - column.page_top_y(page).get() - y;
+            prop_assert!(dy.abs() <= grain, "y off by {dy}");
+            prop_assert!((x_in_page.get() - x).abs() <= 1e-3, "x {x} came back {x_in_page:?}");
+            let again = column.doc_to_screen(&view, back, x_in_page, y_in_page);
+            prop_assert!((again.x - screen.x).get().abs() <= 1e-2 * zoom);
+            prop_assert!((again.y - screen.y).get().abs() <= grain * zoom * 2.0);
+        }
+
         #[test]
         fn the_visible_range_is_never_inverted_and_names_only_pages_the_layout_has(
             pages in 0u32..40,

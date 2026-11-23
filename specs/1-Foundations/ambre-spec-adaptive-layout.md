@@ -14,18 +14,18 @@ chrome around it.
 
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`. The prefix is `CHROME`, shared with the
-other five documents of the DOM side.
+other six documents of the DOM side.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CHROME-030` | `INV` | The chrome MUST adapt at three declared widths. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py` refuses a width query in the shell stylesheet other than the three it declares | none | verified |
-| `CHROME-056` | `INV` | Each threshold MUST be written once. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py` refuses a width query spelled in any Rust, CSS or HTML file outside the shell stylesheet and the density module, and a `matchMedia` a page or a script spells; ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads each path once it resolves, so an alias, a re-export and a macro name what they reach. It refuses a media query read outside the density module, test code included, unless it asks for the motion setting (`ambre_primitives::driver::chrome::a_media_read_outside_the_density_module_is_refused_in_test_code_too`) | none | verified |
+| `CHROME-056` | `INV` | Each threshold MUST be written once. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py` refuses a width query spelled in any Rust, CSS or HTML file outside the shell stylesheet and the density module, and a `matchMedia` a page or a script spells; ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads each path once it resolves, so an alias, a re-export and a macro name what they reach. It refuses a media query that names a dimension, read outside the density module, test code included: width, height, aspect ratio or resolution, with a `min-`, `max-` or `device-` form, on either side of a comparison. A query it cannot read as a literal is refused too (`ambre_primitives::driver::chrome::a_media_read_that_names_a_dimension_is_refused_in_test_code_too`) | none | verified |
 | `CHROME-031` | `INV` | The narrowest layout MUST be the default: a wider window MUST only add to it. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py` refuses a `display: none` or `visibility: hidden` inside a width query, so a query only adds | none | verified |
 | `CHROME-032` | `OBS` | On a phone, a floating menu MUST become a sheet pinned to the bottom edge. | this spec section 2 | `ambre_app::shell::narrow::a_phone_menu_is_a_sheet_on_the_bottom_edge` -- the context menu opened at a click point in a frame of 360, 599 and 600 pixels, its edges read off the layout | none | verified |
 | `CHROME-057` | `OBS` | A keyboard chord MUST NOT be shown below the desktop width. | this spec section 2, the table of what moves today | `ambre_app::shell::sync_badge::tests::the_sync_label_and_the_chord_appear_with_the_width` -- a chord chip mounted in a frame of 400, 599, 600, 1024 and 1025 pixels, read off the computed style | none | verified |
 | `CHROME-058` | `OBS` | On a phone, the sync state MUST show its icon without its label. | this spec section 2, the table of what moves today | `ambre_app::shell::sync_badge::tests::the_sync_label_and_the_chord_appear_with_the_width` -- the sync badge mounted with the shell stylesheet at each side of 600, the label read off the computed style | none | verified |
 | `CHROME-033` | `OBS` | Navigation and panels MUST stay reachable at every width: a region MUST collapse, never disappear. | this spec section 2 | not built | unbuilt -- lands with the `The adaptive chrome` Story (`ambre-roadmap.md` E6). No sidebar, no drawer and no panel region exists at any width, so there is nothing to collapse yet | unimplemented |
-| `CHROME-117` | `OBS` | A toolbar MUST move the controls its width cannot hold into an overflow menu, never clip them. | this spec section 2 | not built | unbuilt -- lands with the `The adaptive chrome` Story (`ambre-roadmap.md` E6). Each toolbar keeps one row of controls at every width | unimplemented |
+| `CHROME-117` | `OBS` | A bar of the shell MUST move the controls its width cannot hold into an overflow menu, never clip them. | this spec section 2 | not built | unbuilt -- lands with the `The adaptive chrome` Story (`ambre-roadmap.md` E6). Each bar keeps one row of controls at every width | unimplemented |
 | `CHROME-034` | `INV` | A content view MUST lay out from the size it is given, never from a device class. | this spec section 2; `ambre-spec-frame.md` | ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads each path once it resolves, so an alias, a re-export and a macro name what they reach. It refuses a size of the window or of the screen, and a media query, read in a content view (`ambre_primitives::driver::chrome::a_window_read_under_a_re_export_is_refused_in_a_content_view`) | none | verified |
 
 * **Budget.** none: adaptation is style, resolved by the browser, and
@@ -68,7 +68,7 @@ adapts at none (`CHROME-033`).
 | What | Phone | Tablet | Desktop |
 |---|---|---|---|
 | navigation | a drawer plus a bottom bar | a collapsible sidebar | a persistent sidebar |
-| the toolbar | icons alone, overflowing early | icons and short labels | icons, labels and chords |
+| a bar of the shell | icons alone, overflowing early | icons and short labels | icons, labels and chords |
 | the side panels | hidden, opened by a gesture or a control | collapsible | persistent |
 | the command palette | full screen | most of the window | half the window |
 | a wide data view | the priority columns, and horizontal scrolling | every column | every column, with a frozen edge |

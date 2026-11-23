@@ -501,9 +501,22 @@ impl TrameView {
         delta: ambre_canvas::WheelDelta,
         mods: Flags<ModifierKeys>,
     ) -> Consumed {
-        // Leave Ctrl+wheel to the browser (pinch-zoom gesture); not ours yet.
+        // `Ctrl` with the wheel, and a trackpad pinch the browser reports so,
+        // zoom the grid about the pointer and scroll nothing (`ZOOM-004`,
+        // `TRAME-UI-146`).
         if mods.contains(ModifierKeys::PRIMARY) {
-            return Consumed::No;
+            let line = ambre_core::Vector::new(ambre_canvas::WHEEL_LINE, ambre_canvas::WHEEL_LINE);
+            let page = self.state.canvas_height.view_length().css_length();
+            let dy = delta.to_px(line, ambre_core::Vector::new(page, page)).dy;
+            let asked = self.state.zoom_engine().wheeled(dy);
+            let at = self.pointer.unwrap_or_else(|| {
+                ambre_core::Point::new(
+                    self.state.canvas_width.view_length() / 2.0,
+                    self.state.canvas_height.view_length() / 2.0,
+                )
+            });
+            self.zoom_about(asked, at);
+            return Consumed::Yes;
         }
         let outcome = self.scroll.wheel(&mut self.state, delta, self.clock.now());
         self.note_scroll(outcome);

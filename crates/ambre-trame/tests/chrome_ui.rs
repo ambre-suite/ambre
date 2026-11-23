@@ -33,9 +33,9 @@ use ambre_core::id::Sheet;
 use ambre_core::id::{Document, Id};
 use ambre_core::index::{Len, Pos};
 use ambre_trame::chrome::{
-    self, BOLD, COPY, CUT, EXPORT_CSV, FIND, FindMode, FindReplace, FindReplaceState, FormatBar,
-    IMPORT_CSV, ITALIC, MERGE, PASTE, REDO, ReorderSheet, ReplaceRequest, SAVE_FILE, SelStats,
-    SheetTabs, SortApply, SortDialog, SortDialogState, StatusBar, StyleState, Toggles, UNDO,
+    self, BOLD, FindMode, FindReplace, FindReplaceState, ITALIC, MERGE, REDO, ReorderSheet,
+    ReplaceRequest, SelStats, SheetTabs, SortApply, SortDialog, SortDialogState, StatusBar,
+    StyleState, UNDO,
 };
 use ambre_trame::message::{
     CellFormat, CellStyle, HAlign, SheetName, SheetTab, TrameCommand, TrameEvent, VAlign,
@@ -297,6 +297,101 @@ fn status_bar_renders_label_and_aggregates() {
     assert!(text.contains("Sum: 6"), "sum aggregate missing: {text}");
     assert!(text.contains("Count: 3"), "count aggregate missing: {text}");
 
+    container.remove();
+}
+
+/// The zoom chip closes the status bar, at its right end (`CHROME-206`).
+#[wasm_bindgen_test]
+fn the_zoom_chip_closes_the_status_bar() {
+    let container = mount_in_container(|| {
+        let stats = RwSignal::new(None);
+        let perf = RwSignal::new(PerfSnapshot::default());
+        let zoom = RwSignal::new(ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::ONE);
+        let locale = RwSignal::new(None);
+        view! { <StatusBar stats=stats perf=perf zoom=zoom locale=locale /> }
+    });
+    let last = container.last_element_child().expect("a status bar child");
+    assert!(
+        last.class_list().contains("statusbar-zoom"),
+        "the band ends on `{}`",
+        last.class_name()
+    );
+    container.remove();
+}
+
+/// The sheet tabs sit in the status bar, before its zoom (`CHROME-162`). A
+/// tab in the band still activates its sheet, and the add button still adds
+/// one.
+#[wasm_bindgen_test]
+fn the_sheet_tabs_sit_in_the_status_bar_before_the_zoom() {
+    let activated = RwSignal::new(None::<Id<Sheet>>);
+    let created = RwSignal::new(0_u32);
+    let container = mount_in_container(move || {
+        let tab = |id: &str, name: &str| SheetTab {
+            id: Id::<Sheet>::from_text(id.to_owned()),
+            name: SheetName::new(name).unwrap(),
+        };
+        let sheets = RwSignal::new(vec![tab("s0", "One"), tab("s1", "Two")]);
+        let active = RwSignal::new(Id::<Sheet>::from_text("s0".to_owned()));
+        let stats = RwSignal::new(None);
+        let perf = RwSignal::new(PerfSnapshot::default());
+        let zoom = RwSignal::new(ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::ONE);
+        let locale = RwSignal::new(None);
+        view! {
+            <StatusBar
+                stats=stats
+                perf=perf
+                zoom=zoom
+                locale=locale
+                tabs=move || view! {
+                    <SheetTabs
+                        sheets=sheets
+                        active=active
+                        on_activate=Callback::new(move |id| activated.set(Some(id)))
+                        on_create=Callback::new(move |()| created.update(|n| *n += 1))
+                        on_rename=Callback::new(move |_: (Id<Sheet>, SheetName)| {})
+                        on_delete=Callback::new(move |_: Id<Sheet>| {})
+                        on_reorder=Callback::new(move |_: ReorderSheet| {})
+                    />
+                }
+            />
+        }
+    });
+
+    let band = container
+        .query_selector(".statusbar-tabs")
+        .unwrap()
+        .expect("the band holds the tabs");
+    let zoom = container
+        .query_selector(".statusbar-zoom")
+        .unwrap()
+        .expect("the band holds the zoom");
+    assert_eq!(band.parent_element(), zoom.parent_element(), "one band");
+    // The zoom follows the tabs in the band.
+    let following = band.compare_document_position(&zoom);
+    assert_ne!(following & web_sys::Node::DOCUMENT_POSITION_FOLLOWING, 0);
+    assert_eq!(band.query_selector_all(".tab").unwrap().length(), 2);
+
+    let second: web_sys::HtmlElement = band
+        .query_selector_all(".tab")
+        .unwrap()
+        .item(1)
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    second.click();
+    assert_eq!(
+        activated.get_untracked(),
+        Some(Id::<Sheet>::from_text("s1".to_owned()))
+    );
+    let add: web_sys::HtmlElement = band
+        .query_selector(".tab-add")
+        .unwrap()
+        .expect("the add button")
+        .dyn_into()
+        .unwrap();
+    add.click();
+    assert_eq!(created.get_untracked(), 1);
     container.remove();
 }
 
@@ -692,42 +787,54 @@ async fn sheet_tabs_refuse_a_name_the_rule_refuses() {
     container.remove();
 }
 
-/// DOM test: every command button of the `FormatBar` announces the label the
-/// registry declares (`ambre-spec-commands.md`, UI-THREAD-036).
+/// DOM test: every command button of the sheet's context panel announces the
+/// label the registry declares (`ambre-spec-commands.md`, UI-THREAD-036).
 ///
-/// This is the belt over the toolbar, the surface that repeated "Copy", "Bold"
-/// and "Undo" as literals beside the table that declares them. It reads the
-/// rendered `aria-label` out of the DOM, so a literal written back into the
-/// markup fails here rather than drifting in silence.
+/// It reads the rendered `aria-label` out of the DOM, so a literal written
+/// back into the markup fails here rather than drifting in silence. Every
+/// control names a declared command or property.
 #[wasm_bindgen_test]
-fn the_toolbar_announces_the_registry_labels() {
+async fn the_panel_announces_the_registry_labels() {
+    use ambre_chrome::{ContextPanel, DockSide, Fold, PanelPrefs, PanelWidth};
+    use ambre_trame::ui::panel;
     let container = mount_in_container(|| {
-        let store = CommandStates::new(chrome::COMMANDS.iter().map(|c| c.id));
-        chrome::init_command_states(&store);
-        let toggles = Toggles::from_store(&store);
-        let style = StyleState::new();
-        let theme = RwSignal::new(ambre_canvas::Theme::Dark);
-        view! {
-            <FormatBar
-                toggles=toggles
-                style=style
-                theme=theme
-                on_command=Callback::new(|_| {})
-                on_style=Callback::new(|_| {})
-            />
-        }
+        let content = chrome::trame_panel(chrome::TramePanelSignals {
+            style: StyleState::new(),
+            theme: RwSignal::new(ambre_canvas::Theme::Dark),
+            on_command: Callback::new(|_| {}),
+            on_style: Callback::new(|_| {}),
+        });
+        let prefs = PanelPrefs::new(DockSide::Right, PanelWidth::DEFAULT, Fold::Open);
+        view! { <ContextPanel prefs=prefs title=content.title sections=content.sections /> }
     });
+    leptos::task::tick().await;
 
-    for id in [
-        COPY, CUT, PASTE, FIND, IMPORT_CSV, EXPORT_CSV, SAVE_FILE, BOLD, ITALIC, MERGE, UNDO, REDO,
-    ] {
+    let shown = panel::SHEET_COMMANDS
+        .iter()
+        .chain(panel::ROW_COL_COMMANDS.iter())
+        .chain(panel::SORT_FILTER_COMMANDS.iter())
+        .chain([BOLD, ITALIC, MERGE].iter());
+    for &id in shown {
         let expected = registry::title(id, &Locale::En).expect("described");
         let found = container
             .query_selector(&format!("[aria-label=\"{expected}\"]"))
             .unwrap();
         assert!(found.is_some(), "{id:?}: no control announces {expected:?}");
     }
-
+    assert_eq!(
+        ambre_chrome::unreached_controls(&container),
+        Vec::<String>::new(),
+        "every control names its reach"
+    );
+    for marker in ambre_chrome::reach_markers(&container) {
+        let declared = chrome::COMMANDS
+            .iter()
+            .any(|c| ambre_chrome::commands::Reach::Command(c.id).matches_marker(&marker))
+            || panel::PROPERTIES
+                .iter()
+                .any(|p| ambre_chrome::commands::Reach::Property(p.id).matches_marker(&marker));
+        assert!(declared, "{marker} is declared");
+    }
     container.remove();
 }
 

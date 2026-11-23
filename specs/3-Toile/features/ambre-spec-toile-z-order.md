@@ -75,7 +75,9 @@ status values are normative in `ambre-spec-template.md`.
 `ambre-spec-toile-schema.md section 3`. An entry joins a tag and an id, so one list addresses both
 element kinds and connectors; the encoding is that document's section 2.
 
-**Command** (`ambre-bus`): `Reorder { node, to }`, one undo item. The target is absolute or relative:
+**Command** (`ambre-bus`): `Reorder { node, to }`, one undo item. `ReorderAll { nodes, to }` moves
+each node in turn by the same steps, and commits once, so the whole selection is one undo item
+(`CHROME-173`). The target is absolute or relative:
 
 ```rust
 #[derive(Clone, Copy, Debug)]
@@ -118,7 +120,7 @@ than over its own contents. The rule and its cost are
 
 | Trigger | Sends |
 |---|---|
-| Bring to Front, Bring Forward, Send Backward, Send to Back, in the object menu | `Reorder` with the matching target, one per selected element (`features/ambre-spec-toile-menus.md`) |
+| Bring to Front, Bring Forward, Send Backward, Send to Back, in the object menu | `ReorderAll` with the matching target, over the whole selection (`features/ambre-spec-toile-menus.md`) |
 | the same four in the context menu | the same commands |
 | the same four in the style panel | the same commands (`features/ambre-spec-toile-styles.md`) |
 

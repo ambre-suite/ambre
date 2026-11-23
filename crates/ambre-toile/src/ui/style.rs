@@ -105,6 +105,19 @@ impl std::ops::BitOrAssign for Mix {
 pub struct StyleModel {
     pub base: ElementStyle,
     pub mixed: MixedFlags,
+    /// What the selection holds, which picks the sections of the context
+    /// panel: a shape's or a connector's.
+    pub kind: Styled,
+}
+
+/// What a styled selection holds. An arrow is a selection of its own, never
+/// mixed with elements (`toile-connectors`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Styled {
+    /// One or more elements.
+    Elements,
+    /// One arrow.
+    Arrow,
 }
 
 /// Derive the inspector model from the UI selection and the culled viewport, or
@@ -122,6 +135,7 @@ pub fn arrow_style_scope(id: &Id<Connector>, display: &DisplayViewport) -> Optio
     Some(StyleModel {
         base,
         mixed: MixedFlags::default(),
+        kind: Styled::Arrow,
     })
 }
 
@@ -156,7 +170,11 @@ pub fn style_scope_for(
         mixed.strikethrough |= Mix::when(s.font.strikethrough != base.font.strikethrough);
     }
 
-    Some(StyleModel { base, mixed })
+    Some(StyleModel {
+        base,
+        mixed,
+        kind: Styled::Elements,
+    })
 }
 
 #[cfg(test)]

@@ -149,11 +149,19 @@ fn sticky_button(active: RwSignal<Tool>) -> impl IntoView {
 
 /// The Toile tool palette. `active` is the shared active-tool signal, the same
 /// signal the keyboard chords write and the canvas view reads. The buttons write
-/// it on click, and read it for their pressed state.
+/// it on click, and read it for their pressed state. `cover`, when given,
+/// carries the palette's measured right edge to a fit (`ZOOM-011`).
 #[component]
-pub fn ToolPalette(active: RwSignal<Tool>) -> impl IntoView {
+pub fn ToolPalette(
+    active: RwSignal<Tool>,
+    #[prop(optional)] cover: Option<RwSignal<crate::ui::cover::Cover>>,
+) -> impl IntoView {
+    let node = NodeRef::<html::Div>::new();
+    if let Some(cover) = cover {
+        super::cover::watch_palette(node, cover);
+    }
     view! {
-        <div class="ambre-commandbar ambre-tool-palette" role="toolbar" aria-label="Tools">
+        <div class="ambre-commandbar ambre-tool-palette" role="toolbar" aria-label="Tools" node_ref=node>
             {tool_button(active, TOOL_SELECT)}
             <span class="sep"></span>
             {tool_button(active, TOOL_PEN)}

@@ -60,6 +60,8 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-031` | `INV` | An `annots` entry MUST declare its kind in one field of one type; a reader MUST NOT infer the kind from the presence of another field. | this spec section 3 | `ambre_prose::logic::notes::tests::an_entry_is_a_note_by_its_declared_kind_and_by_nothing_else` | none | verified |
 | `PROSE-096` | `INV` | An unset property MUST be the absence of its key; no container MUST carry a "cleared" marker. | this spec section 3 | structural -- `ambre_prose::doc::write_paragraph_style` writes the properties the caller named and no other key, and `ambre_prose::doc::read_paragraph_style` reads an absent key as an unset property rather than a cleared one; `ambre_prose::doc::tests::an_unset_property_is_the_absence_of_its_key` | none | verified |
 | `PROSE-032` | `INV` | `meta.page.orientation` MUST agree with `width_mm` and `height_mm`; a document whose orientation contradicts its two dimensions MUST NOT be written. | this spec section 3 | `ambre_prose::doc::tests::a_portrait_page_wider_than_it_is_tall_is_refused`; structural -- `ambre_prose::doc::write_page_format` is the one path that writes the three keys, and it writes them together | none | verified |
+| `PROSE-144` | `INV` | A page write MUST be refused when its margins leave no content width or no content height, or when a length is not a finite positive number. | this spec section 3; `PROSE-032` | `ambre_prose::logic::bands::tests::a_page_with_no_room_for_text_is_refused_and_writes_nothing` -- margins that fill the page, a negative margin, a length that is not a number and a page of no width each write nothing | none | verified |
+| `PROSE-145` | `CONC` | Two peers that change the page format at once MUST converge on one page whose orientation agrees with its two dimensions. | this spec section 3; `PROSE-032` | `ambre_prose::logic::convergence_tests::two_peers_setting_the_page_at_once_converge_on_one_agreeing_page` -- one peer turns the page landscape while the other, ahead on its clock, sets a tall page, and both end on one page whose stored orientation agrees with its dimensions | none | verified |
 | `PROSE-027` | `INV` | A document MUST hold at least one root body block: an empty `blocks` tree is invalid. | this spec section 4 | `ambre_prose::logic::text::tests::a_deletion_that_empties_the_tree_keeps_one_block`; `ambre_prose::logic::tests::a_fresh_document_holds_one_paragraph_and_a_version` | none | verified |
 | `PROSE-094` | `CONC` | Two peers concurrently emptying the tree MUST converge on one block: each grows one, and the merge MUST keep the grown block whose `TreeID` sorts first. | this spec section 4; this spec section 6 | `ambre_prose::logic::convergence_tests::two_peers_emptying_the_tree_converge_on_one_block` | none | verified |
 | `PROSE-095` | `INV` | A converged document MUST hold only the parentages section 4 declares. | this spec section 4 | `ambre_prose::logic::convergence_tests::a_converged_document_holds_only_the_parentages_the_format_declares`; `ambre_prose::logic::blocks::tests::a_table_row_is_refused_at_the_root`; `::a_block_moved_under_its_own_descendant_is_refused`; `::an_insert_after_a_table_row_does_not_land_a_paragraph_under_the_table`; `::a_move_after_a_table_row_does_not_land_a_paragraph_under_the_table` | none | verified |
@@ -71,10 +73,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the containers this table declares reach the relay as ciphertext alone
   (`ZK-001`), and an image node holds a content hash, never the pixels
   (`features/ambre-spec-prose-images.md`).
-* **Verification.** 26 `verified`. The bump obligation splits in two. A key or a
-  type moving is red against the frozen shape, which a CI gate holds append-only. A meaning moving
-  under an unchanged key is red against the frozen reading (`SCHEMA-017`). The four convergence
-  rows each run a two-peer test.
+* **Verification.** 28 `verified`. The bump obligation splits in two. A key or a type moving is red
+  against the frozen shape, which a CI gate holds append-only. A meaning moving under an unchanged
+  key is red against the frozen reading (`SCHEMA-017`). The four convergence rows each run a
+  two-peer test.
   * The two annotation rows are held by the footnote, the first entry a command writes.
 
 ---

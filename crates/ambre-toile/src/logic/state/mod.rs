@@ -304,6 +304,14 @@ impl ToileState {
         Self::from_doc(LoroDoc::new())
     }
 
+    /// The whole document as one value, for a test that compares the board
+    /// before a command and after its undo (`CHROME-173`). Only the host
+    /// view tests call it, so wasm leaves it out.
+    #[cfg(all(test, not(target_arch = "wasm32")))]
+    pub(crate) fn deep_value(&self) -> loro::LoroValue {
+        self.doc.get_deep_value()
+    }
+
     /// A board with a **pinned** CRDT identity and commit clock, so the same
     /// command sequence produces the same bytes twice (`FIXTURE-001`).
     ///
@@ -610,7 +618,8 @@ impl ToileState {
             ToileCommand::DeleteElements { ids } => self.delete_elements(&ids),
             ToileCommand::SetText { id, base, text } => self.set_text(&id, &base, &text),
             ToileCommand::LockElements { ids, lock } => self.lock_elements(&ids, lock),
-            ToileCommand::Reorder { node, to } => self.reorder(node, to),
+            ToileCommand::Reorder { node, to } => self.reorder(&[node], to),
+            ToileCommand::ReorderAll { nodes, to } => self.reorder(&nodes, to),
             ToileCommand::GroupElements { ids } => self.group_elements(&ids),
             ToileCommand::UngroupElements { groups } => self.ungroup_elements(&groups),
             ToileCommand::SetFrameChildren { frame, add, remove } => {
@@ -631,7 +640,10 @@ impl ToileState {
                 self.edit_notes(&frame, &base, &delta)
             }
             ToileCommand::SetAutoLayout { frame, layout } => self.set_auto_layout(&frame, layout),
-            ToileCommand::React { target, reaction } => self.react(&target, reaction),
+            ToileCommand::React { target, reaction } => {
+                self.react(std::slice::from_ref(&target), reaction)
+            }
+            ToileCommand::ReactAll { targets, reaction } => self.react(&targets, reaction),
             ToileCommand::CreateComment { anchor, body, ts } => {
                 self.create_comment(&anchor, &body, ts)
             }

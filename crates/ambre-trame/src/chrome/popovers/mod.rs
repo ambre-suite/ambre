@@ -3,7 +3,7 @@
 // The composed popover controls of the formatting chrome. The borders popover is
 // a pen + preset grid, and the colour popover a palette + reset + custom. The
 // shared filter popover is by-values / by-condition. The borders and colour
-// popovers are `pub(crate)` so the `FormatBar` toolbar can mount them.
+// popovers are `pub(crate)` so the context panel can mount them.
 // ============================================================================
 
 use crate::message::{
@@ -21,7 +21,7 @@ use super::style::StyleState;
 
 // The colour popover now lives in the shared `ambre-chrome` toolkit. It was
 // promoted so Toile's style inspector reuses the identical control
-// (`toile-styles`). It is re-exported here so the `FormatBar` and the borders
+// (`toile-styles`). It is re-exported here so the context panel and the borders
 // popover mount it unchanged.
 pub use ambre_chrome::ColorPopover;
 

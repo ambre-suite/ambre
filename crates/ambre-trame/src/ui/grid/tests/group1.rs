@@ -424,7 +424,7 @@ fn zoom_scales_metrics_and_round_trips_hit_test() {
 
     // The preset clamp rejects out-of-range factors.
     state.set_zoom(ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(99.0));
-    assert_eq!(state.zoom, *TrameUiState::ZOOM_PRESETS.last().unwrap());
+    assert_eq!(state.zoom, TrameUiState::ZOOM_RANGE.ceiling());
 }
 
 /// A 2x2 merge master at (1,1) covering (1,1)..=(2,2). Selecting any covered

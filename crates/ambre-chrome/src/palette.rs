@@ -15,7 +15,7 @@
 // the DOM half, tested under wasm.
 // ============================================================================
 
-use ambre_commands::{Command, Locale};
+use ambre_commands::{Command, Home, Locale};
 use ambre_core::id::{Channel, Id, User};
 use ambre_core::index::{Axis, Circular, Delta, Len, Pos};
 use ambre_core::{Commands, StaticKey};
@@ -174,11 +174,12 @@ pub fn CommandPalette(
         self::rows(&entries, table, &query.get(), &Locale::En)
             .into_iter()
             .map(|row| match row {
-                PaletteRow::Entry(e) => (Chosen::Entry(e.key), e.label.clone(), e.hint, None),
+                PaletteRow::Entry(e) => (Chosen::Entry(e.key), e.label.clone(), e.hint, None, None),
                 PaletteRow::Command(c) => (
                     Chosen::Command(c.id),
                     (c.title)(&Locale::En).into_string(),
                     None,
+                    Some(c.home),
                     c.chord(),
                 ),
             })
@@ -254,7 +255,7 @@ pub fn CommandPalette(
                         rows.get()
                             .into_iter()
                             .enumerate()
-                            .map(|(i, (chosen, label, hint, chord))| {
+                            .map(|(i, (chosen, label, hint, home, chord))| {
                                 let i = Pos::<PaletteLine>::from_usize(i);
                                 view! {
                                     <li
@@ -279,6 +280,16 @@ pub fn CommandPalette(
                                             .map(|hint| {
                                                 view! {
                                                     <span class="ambre-palette-hint">{hint}</span>
+                                                }
+                                            })}
+                                        // The home region and the chord of a
+                                        // command (`CHROME-157`, `CHROME-158`).
+                                        {home
+                                            .map(|home: Home| {
+                                                view! {
+                                                    <span class="ambre-palette-home">
+                                                        {home.name(&Locale::En).into_string()}
+                                                    </span>
                                                 }
                                             })}
                                         {chord
@@ -323,6 +334,7 @@ mod tests {
             icon: Some(StaticKey::<Icons>::new("format-bold")),
             keybindings: &[KeyBinding::primary(KeyChar::B)],
             category: StaticKey::<Categories>::new("format"),
+            home: ambre_commands::Home::ContextPanel,
         },
         Command {
             id: StaticKey::<Commands>::new("t.sort.asc"),
@@ -330,6 +342,7 @@ mod tests {
             icon: None,
             keybindings: &[],
             category: StaticKey::<Categories>::new("sort"),
+            home: ambre_commands::Home::ContextPanel,
         },
         Command {
             id: StaticKey::<Commands>::new("t.interop.export"),
@@ -337,6 +350,7 @@ mod tests {
             icon: None,
             keybindings: &[],
             category: StaticKey::<Categories>::new("interop"),
+            home: ambre_commands::Home::AmbreMenu,
         },
     ];
 

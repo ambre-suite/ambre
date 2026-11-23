@@ -168,28 +168,43 @@ fn a_window_read_under_a_re_export_is_refused_in_a_content_view() {
 }
 
 // A media read built by `concat!` holds a width no line spells, through a
-// re-export of the window. A test reads the same copy. The motion query and
-// the density module stay free (`CHROME-056`).
+// re-export of the window. A query that names a dimension is refused, test
+// code included, and so is one the driver cannot read as a literal. The
+// colour scheme and the motion setting name no dimension, and the density
+// module stays free (`CHROME-056`).
 #[test]
-fn a_media_read_outside_the_density_module_is_refused_in_test_code_too() {
+fn a_media_read_that_names_a_dimension_is_refused_in_test_code_too() {
     let ws = helpers("media");
     ws.file(
         "crates/ambre-app/src/lib.rs",
-        "pub mod motion;\npub mod narrow;\n",
+        "pub mod narrow;\npub mod settings;\n",
     );
     ws.file(
         "crates/ambre-app/src/narrow.rs",
-        "pub fn narrow(w: &ambre_helpers::Frame) { w.match_media(concat!(\"(max-\", \"width: 599px)\")); }\n",
+        "pub fn narrow(w: &ambre_helpers::Frame) { w.match_media(concat!(\"(max-\", \"width: 599px)\")); }\n\
+         pub fn wide(w: &ambre_helpers::Frame) { w.match_media(concat!(\"screen and (min-\", \"width: 600px)\")); }\n\
+         pub fn short(w: &ambre_helpers::Frame) { w.match_media(\"(max-height: 400px)\"); }\n\
+         pub fn square(w: &ambre_helpers::Frame) { w.match_media(\"(max-aspect-ratio: 1/1)\"); }\n\
+         pub fn ranged(w: &ambre_helpers::Frame) { w.match_media(\"(400px <= device-width)\"); }\n\
+         pub fn built(w: &ambre_helpers::Frame, q: &str) { w.match_media(q); }\n",
     );
     ws.file(
-        "crates/ambre-app/src/motion.rs",
-        "pub fn still(w: &ambre_helpers::Frame) { w.match_media(\"(prefers-reduced-motion: reduce)\"); }\n",
+        "crates/ambre-app/src/settings.rs",
+        "pub fn still(w: &ambre_helpers::Frame) { w.match_media(\"(prefers-reduced-motion: reduce)\"); }\n\
+         pub fn dark(w: &ambre_helpers::Frame) { w.match_media(&\"(prefers-color-scheme: dark)\"); }\n",
     );
     for build in [Build::Shipped, Build::Test] {
         let app = ws.compile("ambre_app", "ambre-app", HELPED, build);
         assert_refused(
             &refused(&app),
-            &["crates/ambre-app/src/narrow.rs:1: a width threshold read outside the stylesheet"],
+            &[
+                "crates/ambre-app/src/narrow.rs:1: a width threshold read outside the stylesheet",
+                "crates/ambre-app/src/narrow.rs:2: a width threshold read outside the stylesheet",
+                "crates/ambre-app/src/narrow.rs:3: a width threshold read outside the stylesheet",
+                "crates/ambre-app/src/narrow.rs:4: a width threshold read outside the stylesheet",
+                "crates/ambre-app/src/narrow.rs:5: a width threshold read outside the stylesheet",
+                "crates/ambre-app/src/narrow.rs:6: a width threshold read outside the stylesheet",
+            ],
         );
     }
     ws.file("crates/ambre-canvas/src/lib.rs", "pub mod density;\n");

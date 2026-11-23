@@ -50,7 +50,6 @@ pub fn StatusBar(
         <span class="spacer"></span>
         // Shared interactive zoom + fps chips (identical to Trame). Toile uses
         // the default preset ladder; the perf panel shows the board frame timings.
-        <ZoomChip zoom=zoom title="Board zoom" />
         <PerfChip fps=Signal::derive(move || perf.get().fps)>
             <PerfDetail slot>
                 {move || {
@@ -68,5 +67,8 @@ pub fn StatusBar(
                 }}
             </PerfDetail>
         </PerfChip>
+        // The zoom closes the band, at its right end, in every application
+        // that zooms (`CHROME-206`).
+        <ZoomChip zoom=zoom range=crate::message::ZOOM_RANGE title="Board zoom" />
     }
 }

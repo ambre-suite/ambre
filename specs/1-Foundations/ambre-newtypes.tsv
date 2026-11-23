@@ -34,6 +34,7 @@ ambre-core | src/span.rs | crate::span | LamportStamp | u64	a Lamport stamp: man
 ambre-core | src/status.rs | crate::status | HttpStatus | u16	an HTTP status the relay answered, a u16 the HTTP standard defines
 ambre-core | src/unit.rs | crate::unit | Radians | f64	the one angle unit of the workspace, with to_degrees for a format that takes degrees
 ambre-core | src/unit.rs | crate::unit | ViewSpeed | f32	view pixels per millisecond, a rate no family holds: Px is a length and TimeSpan a span. Px::per writes it and ViewSpeed::over turns it back into a move
+ambre-core | src/zoom.rs | crate::zoom | WheelRate | f64	a log-zoom rate per CSS pixel of wheel, private to the zoom engine: the exponent of a ratio, an arithmetic no family carries
 ambre-crypto | src/hash.rs | crate::hash | Head | &'a[u8]	the field the chain hash or a keyless digest bounds with its length, borrowed for one call so a swap with the tail does not compile. Every byte family of core owns its bytes
 ambre-crypto | src/hash.rs | crate::hash | Tail | &'a[u8]	the bytes the chain hash or a keyless digest reads after the bounded field, borrowed for one call so a swap with the head does not compile. Every byte family of core owns its bytes
 ambre-crypto | src/call.rs | crate::call | JoinTranscript | Vec<u8>	the bytes one join signature covers, built in its own module alone, while Payload has a public constructor
@@ -73,6 +74,7 @@ ambre-server | src/db/mod.rs | crate::db | PgTimeLeft | Option<i64>	the millisec
 ambre-server | src/payload.rs | crate::payload | StoredPayload | Vec<u8>	payload bytes with a sqlx::Type impl, which the orphan rule bars on ambre_core::Payload
 ambre-server | src/redis_keys.rs | crate::redis_keys | DocKey | String	a generic family over a sealed slot marker, the Redis key doc:{id}:{slot}, with one door that builds it from a document id. Opaque::new would open any text, and Opaque prints the length alone where a log reads the key
 ambre-server | src/redis_keys.rs | crate::redis_keys | CallKey | String	a generic family over a sealed slot marker, the Redis key call:{id}:{slot}, with one door that builds it from a call id. Opaque::new would open any text, and a call is no document, so DocKey cannot hold it
+ambre-server | src/redis_keys.rs | crate::redis_keys | ChannelCallKey | String	the Redis key channel:{id}:call of the live call of one channel, with one door that builds it from a channel id. A channel is no document and no call, so DocKey and CallKey cannot hold it
 ambre-server | src/redis_keys.rs | crate::redis_keys | RateKey | String	the Redis key of one rate window, which names a user or a client address. The type is local so the gate of ZK-030 refuses it in a log line above debug, which a shared text family of core would not tell apart
 ambre-server | src/redis_ops.rs | crate::redis_ops | LockToken | String	the value a lock holder writes, which a release compares. Its one door is fresh, which Opaque::new would open
 ambre-server | src/s3.rs | crate::s3 | StoreText | String	a generic family over a sealed kind, the bucket or a key prefix the relay reads from its settings. OpaqueKind is open, and Opaque prints the length alone where Debug prints the setting
@@ -100,7 +102,6 @@ ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | GraphOffset |
 ambre-toile | src/message/mod.rs | crate::message | VoteTotal | i64	a signed sum that moves by a VoteWeight and is read or printed, an arithmetic no family carries
 ambre-toile | src/message/mod.rs | crate::message | VoteWeight | i32	the signed weight of one vote, any i32, which travels and is stored as the bare i32. No family holds a signed i32 that a sum reads
 ambre-toile | src/ui/palette.rs | crate::ui::palette | CanvasCursor | Cow<'static,str>	a CSS cursor value, a 'static keyword or inlined SVG borrowed with no allocation, or a value built at run time. Every text family of core owns a String
-ambre-toile | src/ui/view.rs | crate::ui::view | WheelZoomRate | f64	a log-zoom rate per pixel of wheel, private to the view
 ambre-trame | src/logic/fill.rs | crate::logic::fill | Term | i64	a signed place in a fill series, from a Delta of either axis: a fill line runs down rows or across columns, and Delta keeps the two axes apart
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer | String	the root name of one sheet's container, joined in one place
 ambre-trame | src/message/calendar.rs | crate::message::calendar | DayOfMonth | i64	a day that may run past either end of its month, as DATE reads it

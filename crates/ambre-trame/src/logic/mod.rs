@@ -384,6 +384,14 @@ impl TrameState {
         Self::from_doc(LoroDoc::new())
     }
 
+    /// The whole document as one value, for a test that compares the
+    /// workbook before a command and after its undo (`CHROME-173`). Only the
+    /// host view tests call it, so wasm leaves it out.
+    #[cfg(all(test, not(target_arch = "wasm32")))]
+    pub(crate) fn deep_value(&self) -> loro::LoroValue {
+        self.doc.get_deep_value()
+    }
+
     /// A workbook whose CRDT identity and commit clock are **pinned**, so the
     /// same command sequence produces the same bytes twice (`FIXTURE-001`).
     ///

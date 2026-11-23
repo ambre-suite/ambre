@@ -123,12 +123,13 @@ read two totals. Excel's own band leaves them out the same way. Every other tota
 
 ## 3. SURFACE
 
-A thin band under the grid and over the sheet tabs. It is Trame's parameterization of the shared
-band specified in `ambre-spec-chrome.md`, which owns the slots below.
+A thin band under the grid. It is Trame's parameterization of the shared band specified in
+`ambre-spec-chrome.md`, which owns the slots below.
 
 | Slot | Holds |
 |---|---|
 | the label | the application name |
+| the sheet tabs | the tab strip of `features/ambre-spec-trame-sheets.md`, in the room the band leaves, before the zoom (`CHROME-162`) |
 | the aggregates | `Count`, and `Sum`, `Avg`, `Min` and `Max` when the selection holds a number (`TRAME-UI-107`) |
 | the zoom chip | the shared zoom model (`ambre-spec-zoom.md`), rendered by the chrome chip (`ambre-spec-chrome.md`, `CHROME-014`) |
 | the frame chip | the frame rate, expanding on click into the frame timings |

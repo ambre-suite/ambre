@@ -15,6 +15,7 @@ pub mod column;
 pub mod fling;
 pub mod hit;
 pub mod paint;
+pub mod panel;
 pub mod picture_handles;
 pub mod print;
 pub mod provisional;
@@ -22,6 +23,7 @@ pub mod ruler;
 pub mod slash;
 pub mod toolbar;
 pub mod walk;
+pub mod zoom;
 
 use ambre_core::index::{Len, Pos, Span};
 use std::collections::HashMap;
@@ -154,11 +156,22 @@ impl ProseUiState {
         self.viewport.scroll_y = self.column.clamp_scroll(&self.viewport, moved);
     }
 
+    /// Move a page wider than the canvas sideways by `dx` screen pixels,
+    /// up to its edges (`PROSE-UI-251`). A page that fits stays centred.
+    pub fn scroll_across(&mut self, dx: Px<View>) {
+        let moved = self.viewport.scroll_x + Px::<Doc>::new(dx.get() / self.viewport.scale());
+        self.viewport.scroll_x = self.column.clamp_scroll_x(&self.viewport, moved);
+    }
+
     /// The canvas took a new size. The offset and the zoom stay
     /// (`PROSE-UI-130`): what was at the top of the canvas still is.
     pub fn resize(&mut self, width: Px<View>, height: Px<View>) {
         self.viewport.width = width.max(Px::<View>::ZERO);
         self.viewport.height = height.max(Px::<View>::ZERO);
+        // A wider canvas may fit the page again, which centres it.
+        self.viewport.scroll_x = self
+            .column
+            .clamp_scroll_x(&self.viewport, self.viewport.scroll_x);
     }
 
     /// Bring the heading a table-of-contents entry reads to the top of the
@@ -197,10 +210,14 @@ impl ProseUiState {
         self.shaped.index_of(block)
     }
 
-    fn clamp_scroll(&mut self) {
+    /// Bring both offsets inside the column (`PROSE-UI-025`, `PROSE-UI-251`).
+    pub(crate) fn clamp_scroll(&mut self) {
         self.viewport.scroll_y = self
             .column
             .clamp_scroll(&self.viewport, self.viewport.scroll_y);
+        self.viewport.scroll_x = self
+            .column
+            .clamp_scroll_x(&self.viewport, self.viewport.scroll_x);
     }
 
     /// Index every inline highlight by the block it sits in, so a paint reads

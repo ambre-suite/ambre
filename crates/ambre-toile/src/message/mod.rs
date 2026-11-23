@@ -734,6 +734,11 @@ pub const MIN_ZOOM: ambre_core::Scale<ambre_core::Board, ambre_core::View> =
 pub const MAX_ZOOM: ambre_core::Scale<ambre_core::Board, ambre_core::View> =
     ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(10.0);
 
+/// The factors the board supports, through the one zoom engine
+/// (`ZOOM-002`). The widest range of the suite: the ladder spans it.
+pub const ZOOM_RANGE: ambre_core::ZoomRange<ambre_core::Board> =
+    ambre_core::ZoomRange::new(MIN_ZOOM, MAX_ZOOM);
+
 /// The camera: a world-space center, a zoom factor, and the physical screen
 /// size. Drives culling via [`to_world_rect`](Viewport::to_world_rect).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -758,7 +763,7 @@ impl Viewport {
     /// The zoom inside `MIN_ZOOM ..= MAX_ZOOM`, so a reader can divide by it
     /// (`TOILE-UI-281`). The fields are public, so the clamp sits on the read.
     pub fn clamped_zoom(&self) -> ambre_core::Scale<ambre_core::Board, ambre_core::View> {
-        self.zoom.clamped(MIN_ZOOM, MAX_ZOOM)
+        ZOOM_RANGE.clamp(self.zoom)
     }
 
     /// The world-space rectangle currently visible: the screen box mapped back
@@ -2019,6 +2024,12 @@ pub enum ToileCommand {
         node: NodeId,
         to: ZTarget,
     },
+    /// Move each node in turn, in the order given, as one undo item
+    /// (`CHROME-173`). A z-order entry on a selection of many sends this.
+    ReorderAll {
+        nodes: Vec<NodeId>,
+        to: ZTarget,
+    },
 
     // -- Groups (`toile-groups`) --
     /// Bind a set of elements into a fresh group element (selects/transforms as
@@ -2137,6 +2148,12 @@ pub enum ToileCommand {
     /// derived on read, never stored. One commit = one undo item.
     React {
         target: Id<Element>,
+        reaction: Option<Reaction>,
+    },
+    /// The same reaction on each of `targets`, as one undo item
+    /// (`CHROME-173`). A reaction entry on a selection of many sends this.
+    ReactAll {
+        targets: Vec<Id<Element>>,
         reaction: Option<Reaction>,
     },
 
@@ -2377,6 +2394,7 @@ impl fmt::Debug for ToileCommand {
                 .finish(),
             Self::LockElements { ids, lock } => fields!("LockElements", ids, lock),
             Self::Reorder { node, to } => fields!("Reorder", node, to),
+            Self::ReorderAll { nodes, to } => fields!("ReorderAll", nodes, to),
             Self::GroupElements { ids } => fields!("GroupElements", ids),
             Self::UngroupElements { groups } => fields!("UngroupElements", groups),
             Self::SetFrameChildren { frame, add, remove } => {
@@ -2405,6 +2423,7 @@ impl fmt::Debug for ToileCommand {
                 .finish(),
             Self::SetAutoLayout { frame, layout } => fields!("SetAutoLayout", frame, layout),
             Self::React { target, reaction } => fields!("React", target, reaction),
+            Self::ReactAll { targets, reaction } => fields!("ReactAll", targets, reaction),
             Self::CreateComment { anchor, body, ts } => f
                 .debug_struct("CreateComment")
                 .field("anchor", anchor)
@@ -2504,6 +2523,7 @@ impl ambre_bus::Mutation for ToileCommand {
             | Self::SetText { .. }
             | Self::LockElements { .. }
             | Self::Reorder { .. }
+            | Self::ReorderAll { .. }
             | Self::GroupElements { .. }
             | Self::UngroupElements { .. }
             | Self::SetFrameChildren { .. }
@@ -2521,6 +2541,7 @@ impl ambre_bus::Mutation for ToileCommand {
             | Self::EditNotes { .. }
             | Self::SetAutoLayout { .. }
             | Self::React { .. }
+            | Self::ReactAll { .. }
             | Self::CreateComment { .. }
             | Self::ReplyComment { .. }
             | Self::EditComment { .. }
