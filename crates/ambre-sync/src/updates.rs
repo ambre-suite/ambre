@@ -4117,7 +4117,7 @@ mod tests {
         assert_eq!(held, std::collections::BTreeSet::from([2, 3]));
     }
 
-    /// `SYNC-309`: the deltas held for a listing, and those a listing
+    /// `SYNC-310`: the deltas held for a listing, and those a listing
     /// refused, keep the byte cap of the quarantine. Three of 12 MiB pass
     /// 32 MiB under the count cap: the oldest leaves, and one warning is
     /// raised.

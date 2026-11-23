@@ -992,14 +992,14 @@ struct SyncDocumentState {
     /// Deltas whose signer no writer of the walk held names, kept sealed
     /// until a listing asked after each arrived answers (`SYNC-211`).
     /// Bounded by [`QUARANTINE_LIMIT`] and [`QUARANTINE_BYTES`], as the
-    /// quarantine is (`SYNC-309`).
+    /// quarantine is (`SYNC-310`).
     unvouched: Vec<Unvouched>,
     /// Deltas of a channel document that a listing refused as no writer's,
     /// kept sealed. A space that lists the channel can open later, or change
     /// its word. The next walk of the log decides them again (`SYNC-230`).
     /// The refusal stands until that walk. Bounded by
     /// [`QUARANTINE_LIMIT`] and [`QUARANTINE_BYTES`], as the quarantine is
-    /// (`SYNC-309`).
+    /// (`SYNC-310`).
     refused: Vec<Unvouched>,
     /// Whether the document may land a delta and seal a frame while its log
     /// walks again under the rule of a space (`SYNC-232`).
@@ -1073,7 +1073,7 @@ impl Unvouched {
 /// Drops the oldest deltas of `held` until it fits both caps of the
 /// quarantine: [`QUARANTINE_LIMIT`] and [`QUARANTINE_BYTES`]. A thousand
 /// slots of the relay's largest frame would otherwise hold gigabytes
-/// (`SYNC-309`, audit `W206`). Returns how many it dropped.
+/// (`SYNC-310`, audit `W206`). Returns how many it dropped.
 fn trim_held(held: &mut Vec<Unvouched>) -> Count<Quarantined> {
     let excess = Count::<Quarantined>::of(held.len()).minus(QUARANTINE_LIMIT);
     let mut bytes: Count<ambre_core::Octets> = held.iter().map(Unvouched::bytes).sum();
