@@ -19,13 +19,14 @@
 // ============================================================================
 
 use ambre_commands::{Command, Locale, Property, Reach, Reading};
-use ambre_core::Flag as _;
 use ambre_core::FontFamily;
 use ambre_core::{Commands, Mm, PrintLength, Px, StaticKey, StoredBoard};
 use leptos::prelude::*;
 
 use crate::color::PickedColour;
+use crate::controls::ChoiceRow;
 use crate::format::Pressed;
+use ambre_core::index::Pos;
 
 /// The label of a command, from its description and never a literal
 /// (`UI-THREAD-036`).
@@ -61,7 +62,9 @@ pub fn Row(children: Children) -> impl IntoView {
 }
 
 /// A button that runs one command. With `pressed`, it is a toggle chip that
-/// shows the state of the command on the selection.
+/// shows the state of the command on the selection. An icon alone is an
+/// [`IconButton`](crate::IconButton): one box, and a tooltip with the name and
+/// the chord of the command.
 #[component]
 pub fn CommandButton(
     command: &'static Command,
@@ -74,21 +77,37 @@ pub fn CommandButton(
 ) -> impl IntoView {
     let label = command_label(command);
     let id = command.id;
-    let show_text = labelled == Labelled::Text || icon.is_none();
-    let (aria, tip) = (label.clone(), label.clone());
-    view! {
-        <button
-            class="ambre-kit-command"
-            data-reach=Reach::Command(id).marker()
-            aria-label=aria
-            title=tip
-            aria-pressed=move || pressed.map(|p| p.get().aria())
-            on:mousedown=move |ev| ev.prevent_default()
-            on:click=move |_| on_command.run(id)
-        >
-            {icon.map(|icon| view! { <leptos_icons::Icon icon=icon /> })}
-            {show_text.then(|| view! { <span>{label}</span> })}
-        </button>
+    let reach = Reach::Command(id);
+    match (icon, labelled) {
+        (Some(icon), Labelled::Icon) => view! {
+            <crate::IconButton
+                icon=icon
+                label=label
+                chord=command.chord()
+                pressed=pressed
+                reach=reach
+                on_press=Callback::new(move |()| on_command.run(id))
+            />
+        }
+        .into_any(),
+        (icon, _) => {
+            let (aria, tip) = (label.clone(), label.clone());
+            view! {
+                <button
+                    class="ambre-kit-command"
+                    data-reach=reach.marker()
+                    aria-label=aria
+                    title=tip
+                    aria-pressed=move || pressed.map(|p| p.get().aria())
+                    on:mousedown=move |ev| ev.prevent_default()
+                    on:click=move |_| on_command.run(id)
+                >
+                    {icon.map(|icon| view! { <leptos_icons::Icon icon=icon /> })}
+                    <span>{label}</span>
+                </button>
+            }
+            .into_any()
+        }
     }
 }
 
@@ -101,20 +120,14 @@ pub fn PropertyToggle(
     #[prop(into)] pressed: Signal<Pressed>,
     on_toggle: Callback<()>,
 ) -> impl IntoView {
-    let label = property_label(property);
-    let tip = label.clone();
     view! {
-        <button
-            class="ambre-kit-command"
-            data-reach=Reach::Property(property.id).marker()
-            aria-label=label
-            title=tip
-            aria-pressed=move || pressed.get().aria()
-            on:mousedown=move |ev| ev.prevent_default()
-            on:click=move |_| on_toggle.run(())
-        >
-            <leptos_icons::Icon icon=icon />
-        </button>
+        <crate::IconButton
+            icon=icon
+            label=property_label(property)
+            pressed=Some(pressed)
+            reach=Reach::Property(property.id)
+            on_press=on_toggle
+        />
     }
 }
 
@@ -204,6 +217,16 @@ pub trait FieldLength: Copy + PartialEq + Send + Sync + 'static {
     fn from_field(text: &str) -> Option<Self>;
 }
 
+/// The text of `value` to one decimal, with no decimal when it is whole:
+/// "20", never "20.0", and "12.7".
+fn tenths(value: f32) -> String {
+    let text = format!("{value:.1}");
+    match text.strip_suffix(".0") {
+        Some(whole) => whole.to_owned(),
+        None => text,
+    }
+}
+
 /// The number a field reads, when it is a finite length of zero or more.
 fn field_number(text: &str) -> Option<f32> {
     text.trim()
@@ -225,7 +248,7 @@ impl FieldLength for PrintLength<Mm> {
     }
 
     fn field_text(self) -> String {
-        format!("{:.1}", self.get())
+        tenths(self.get())
     }
 
     fn from_field(text: &str) -> Option<Self> {
@@ -245,7 +268,7 @@ impl FieldLength for Px<StoredBoard> {
     }
 
     fn field_text(self) -> String {
-        format!("{:.1}", self.get())
+        tenths(self.get())
     }
 
     fn from_field(text: &str) -> Option<Self> {
@@ -253,51 +276,33 @@ impl FieldLength for Px<StoredBoard> {
     }
 }
 
-/// A length of a property: a number, its unit, and two steppers.
+/// A length of a property: a number, its unit, and two steppers, drawn by
+/// the one [`Stepper`](crate::Stepper).
 #[component]
 pub fn LengthField<L: FieldLength>(
     property: &'static Property,
     #[prop(into)] value: Signal<Reading<L>>,
     on_write: Callback<L>,
 ) -> impl IntoView {
-    let label = property_label(property);
-    let step = move |s: Step| {
+    let step = Callback::new(move |s: Step| {
         if let Some(v) = value.get_untracked().uniform() {
             on_write.run(v.stepped(s));
         }
-    };
+    });
+    let typed = Callback::new(move |text: String| {
+        if let Some(v) = L::from_field(&text) {
+            on_write.run(v);
+        }
+    });
     view! {
-        <span class="ambre-kit-length" data-reach=Reach::Property(property.id).marker()>
-            <button
-                class="icon"
-                aria-label=format!("{label}: less")
-                on:mousedown=move |ev| ev.prevent_default()
-                on:click=move |_| step(Step::Down)
-            >
-                "\u{2212}"
-            </button>
-            <input
-                type="text"
-                inputmode="decimal"
-                aria-label=label.clone()
-                placeholder=move || value.get().is_mixed().then_some("Mixed")
-                prop:value=move || value.get().uniform().map(L::field_text).unwrap_or_default()
-                on:change=move |ev| {
-                    if let Some(v) = L::from_field(&event_target_value(&ev)) {
-                        on_write.run(v);
-                    }
-                }
-            />
-            <span class="ambre-kit-unit">{L::UNIT}</span>
-            <button
-                class="icon"
-                aria-label=format!("{label}: more")
-                on:mousedown=move |ev| ev.prevent_default()
-                on:click=move |_| step(Step::Up)
-            >
-                "+"
-            </button>
-        </span>
+        <crate::Stepper
+            label=property_label(property)
+            text=Signal::derive(move || value.get().uniform().map(L::field_text))
+            unit=L::UNIT
+            on_step=step
+            on_text=typed
+            reach=Reach::Property(property.id)
+        />
     }
 }
 
@@ -312,7 +317,41 @@ pub struct Choice<T> {
     pub icon: Option<icondata::Icon>,
 }
 
+/// The views of `choices`, in order, for a control that names a choice by
+/// its place.
+fn choice_views<T>(choices: &[Choice<T>]) -> Vec<crate::ChoiceView> {
+    choices
+        .iter()
+        .map(|c| crate::ChoiceView {
+            label: c.label.to_owned(),
+            icon: c.icon,
+            reach: None,
+        })
+        .collect()
+}
+
+/// The place of the choice `value` reads, or `None` for a mixed reading or a
+/// value no choice names.
+fn place_of<T: PartialEq>(choices: &[Choice<T>], value: &Reading<T>) -> Option<Pos<ChoiceRow>> {
+    match value {
+        Reading::Uniform(v) => choices
+            .iter()
+            .position(|c| c.value == *v)
+            .map(Pos::from_usize),
+        Reading::Mixed => None,
+    }
+}
+
+/// The value at the place `p` of `values`, written through `on_write`.
+fn write_place<T: Copy>(values: &[T], p: Pos<ChoiceRow>, on_write: Callback<T>) {
+    if let Some(v) = p.to_index().and_then(|i| values.get(i)) {
+        on_write.run(*v);
+    }
+}
+
 /// A row of exclusive choices of a property: an alignment, an orientation.
+/// The [`SegmentBar`](crate::SegmentBar) draws it; this shim maps a value to
+/// its place and back, so the bar compiles once for every value type.
 #[component]
 pub fn Segmented<T: Copy + PartialEq + Send + Sync + 'static>(
     property: &'static Property,
@@ -320,41 +359,25 @@ pub fn Segmented<T: Copy + PartialEq + Send + Sync + 'static>(
     #[prop(into)] value: Signal<Reading<T>>,
     on_write: Callback<T>,
 ) -> impl IntoView {
-    let buttons = choices
-        .into_iter()
-        .map(|choice| {
-            let checked = move || value.get().uniform() == Some(choice.value);
-            view! {
-                <button
-                    role="radio"
-                    aria-checked=move || crate::Checked::from_bool(checked()).aria()
-                    aria-label=choice.label
-                    title=choice.label
-                    on:mousedown=move |ev| ev.prevent_default()
-                    on:click=move |_| on_write.run(choice.value)
-                >
-                    {match choice.icon {
-                        Some(icon) => view! { <leptos_icons::Icon icon=icon /> }.into_any(),
-                        None => view! { <span>{choice.label}</span> }.into_any(),
-                    }}
-                </button>
-            }
-        })
-        .collect_view();
+    let views = choice_views(&choices);
+    let values: Vec<T> = choices.iter().map(|c| c.value).collect();
+    let selected = Signal::derive(move || value.with(|v| place_of(&choices, v)));
+    let pick = Callback::new(move |p: Pos<ChoiceRow>| write_place(&values, p, on_write));
     view! {
-        <span
-            class="ambre-kit-segmented"
-            role="radiogroup"
-            aria-label=property_label(property)
-            data-reach=Reach::Property(property.id).marker()
-        >
-            {buttons}
+        <span class="ambre-kit-segmented">
+            <crate::SegmentBar
+                label=property_label(property)
+                choices=views
+                selected=selected
+                on_pick=pick
+                reach=Reach::Property(property.id)
+            />
             {move || mixed_hint(value.get().is_mixed())}
         </span>
     }
 }
 
-/// A list of choices of a property, in a native select.
+/// A list of choices of a property, in the styled [`Select`](crate::Select).
 #[component]
 pub fn SelectField<T: Copy + PartialEq + Send + Sync + 'static>(
     property: &'static Property,
@@ -362,40 +385,18 @@ pub fn SelectField<T: Copy + PartialEq + Send + Sync + 'static>(
     #[prop(into)] value: Signal<Reading<T>>,
     on_write: Callback<T>,
 ) -> impl IntoView {
-    let picked = choices.clone();
-    let selected = move || {
-        value
-            .get()
-            .uniform()
-            .and_then(|v| picked.iter().position(|c| c.value == v))
-            .map(|i| i.to_string())
-            .unwrap_or_default()
-    };
-    let options = choices
-        .iter()
-        .enumerate()
-        .map(|(i, c)| view! { <option value=i.to_string()>{c.label}</option> })
-        .collect_view();
+    let views = choice_views(&choices);
+    let values: Vec<T> = choices.iter().map(|c| c.value).collect();
+    let selected = Signal::derive(move || value.with(|v| place_of(&choices, v)));
+    let pick = Callback::new(move |p: Pos<ChoiceRow>| write_place(&values, p, on_write));
     view! {
-        <select
-            class="ambre-kit-select"
-            aria-label=property_label(property)
-            data-reach=Reach::Property(property.id).marker()
-            prop:value=selected
-            on:change=move |ev| {
-                if let Some(choice) = event_target_value(&ev)
-                    .parse::<usize>()
-                    .ok()
-                    .and_then(|i| choices.get(i))
-                {
-                    on_write.run(choice.value);
-                }
-            }
-        >
-            // The empty entry stands for a mixed selection, which no choice names.
-            <option value="" disabled=true>"Mixed"</option>
-            {options}
-        </select>
+        <crate::Select
+            label=property_label(property)
+            choices=views
+            selected=selected
+            on_pick=pick
+            reach=Reach::Property(property.id)
+        />
     }
 }
 
@@ -410,6 +411,42 @@ pub fn reach_markers(root: &web_sys::Element) -> Vec<String> {
         .filter_map(|n| leptos::wasm_bindgen::JsCast::dyn_into::<web_sys::Element>(n).ok())
         .filter_map(|e| e.get_attribute("data-reach"))
         .collect()
+}
+
+/// The native controls under `root` that a primitive replaces: a select
+/// element, and a range input outside a [`Slider`](crate::Slider). A test
+/// holds the list empty: the panel shows no control in the look of the
+/// browser (`CHROME-219`).
+pub fn native_controls(root: &web_sys::Element) -> Vec<String> {
+    let Ok(list) = root.query_selector_all("select, input[type=\"range\"]") else {
+        return Vec::new();
+    };
+    (0..list.length())
+        .filter_map(|i| list.item(i))
+        .filter_map(|n| leptos::wasm_bindgen::JsCast::dyn_into::<web_sys::Element>(n).ok())
+        .filter(|e| e.closest(".ambre-slider").ok().flatten().is_none())
+        .map(|e| {
+            e.get_attribute("aria-label")
+                .unwrap_or_else(|| e.outer_html())
+        })
+        .collect()
+}
+
+/// The label of a section under `root` that the header of the panel repeats,
+/// or `None`. A test holds it `None`: the header names the selection, and a
+/// section names a group of its controls (`CHROME-217`).
+pub fn repeated_title(root: &web_sys::Element) -> Option<String> {
+    let title = root
+        .query_selector(".ambre-ctx-title")
+        .ok()
+        .flatten()?
+        .text_content()?;
+    let heads = root
+        .query_selector_all(".ambre-ctx-section-head > span")
+        .ok()?;
+    (0..heads.length())
+        .filter_map(|i| heads.item(i)?.text_content())
+        .find(|label| label.trim().eq_ignore_ascii_case(title.trim()))
 }
 
 /// The accessible names of the controls of the panel's sections that carry
@@ -430,4 +467,17 @@ pub fn unreached_controls(root: &web_sys::Element) -> Vec<String> {
                 .unwrap_or_else(|| e.outer_html())
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_length_shows_a_decimal_only_when_it_has_one() {
+        assert_eq!(PrintLength::<Mm>::new(20.0).field_text(), "20");
+        assert_eq!(PrintLength::<Mm>::new(12.7).field_text(), "12.7");
+        assert_eq!(PrintLength::<Mm>::new(0.04).field_text(), "0");
+        assert_eq!(Px::<StoredBoard>::new(1.5).field_text(), "1.5");
+    }
 }

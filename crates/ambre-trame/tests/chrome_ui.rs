@@ -803,15 +803,25 @@ async fn the_panel_announces_the_registry_labels() {
             theme: RwSignal::new(ambre_canvas::Theme::Dark),
             on_command: Callback::new(|_| {}),
             on_style: Callback::new(|_| {}),
+            selection: RwSignal::new(ambre_core::Validated::new("B2:D5")),
+            sheet: RwSignal::new(None),
         });
         let prefs = PanelPrefs::new(DockSide::Right, PanelWidth::DEFAULT, Fold::Open);
         view! { <ContextPanel prefs=prefs title=content.title sections=content.sections /> }
     });
     leptos::task::tick().await;
 
-    let shown = panel::SHEET_COMMANDS
+    // Each choice of the freeze and print lists names the command it runs.
+    let markers = ambre_chrome::reach_markers(&container);
+    for &id in &panel::SHEET_COMMANDS {
+        let reach = ambre_chrome::commands::Reach::Command(id);
+        assert!(
+            markers.iter().any(|m| reach.matches_marker(m)),
+            "{id:?}: no choice reaches it"
+        );
+    }
+    let shown = panel::ROW_COL_COMMANDS
         .iter()
-        .chain(panel::ROW_COL_COMMANDS.iter())
         .chain(panel::SORT_FILTER_COMMANDS.iter())
         .chain([BOLD, ITALIC, MERGE].iter());
     for &id in shown {
@@ -821,6 +831,11 @@ async fn the_panel_announces_the_registry_labels() {
             .unwrap();
         assert!(found.is_some(), "{id:?}: no control announces {expected:?}");
     }
+    assert_eq!(ambre_chrome::repeated_title(&container), None);
+    assert_eq!(
+        ambre_chrome::native_controls(&container),
+        Vec::<String>::new()
+    );
     assert_eq!(
         ambre_chrome::unreached_controls(&container),
         Vec::<String>::new(),
@@ -835,6 +850,113 @@ async fn the_panel_announces_the_registry_labels() {
                 .any(|p| ambre_chrome::commands::Reach::Property(p.id).matches_marker(&marker));
         assert!(declared, "{marker} is declared");
     }
+    container.remove();
+}
+
+/// The header names the selection, and the print group starts folded. Each
+/// list shows the setup of the active sheet, and find has no control here.
+#[wasm_bindgen_test]
+async fn the_sheet_panel_names_the_selection_and_folds_its_print_group() {
+    use ambre_chrome::{ContextPanel, DockSide, Fold, PanelPrefs, PanelWidth};
+    use ambre_trame::message::{FrozenPane, PageMargins, PageOrientation, PageSetup, PaperSize};
+    use ambre_trame::ui::panel;
+    let selection = RwSignal::new(ambre_core::Validated::new("B2:D5"));
+    let sheet = RwSignal::new(Some(panel::ActiveSheet {
+        page: PageSetup {
+            paper: PaperSize::Letter,
+            orientation: PageOrientation::Landscape,
+            margins: PageMargins::WIDE,
+        },
+        frozen: FrozenPane {
+            rows: ambre_core::index::Len::new(1),
+            ..FrozenPane::NONE
+        },
+    }));
+    let container = mount_in_container(move || {
+        let content = chrome::trame_panel(chrome::TramePanelSignals {
+            style: StyleState::new(),
+            theme: RwSignal::new(ambre_canvas::Theme::Dark),
+            on_command: Callback::new(|_| {}),
+            on_style: Callback::new(|_| {}),
+            selection,
+            sheet,
+        });
+        let prefs = PanelPrefs::new(DockSide::Right, PanelWidth::DEFAULT, Fold::Open);
+        view! { <ContextPanel prefs=prefs title=content.title sections=content.sections /> }
+    });
+    leptos::task::tick().await;
+    let text = |selector: &str| {
+        container
+            .query_selector(selector)
+            .unwrap()
+            .unwrap_or_else(|| panic!("{selector}"))
+            .text_content()
+            .unwrap_or_default()
+    };
+    assert_eq!(text(".ambre-ctx-title"), "B2:D5");
+    selection.set(ambre_core::Validated::new("C3"));
+    leptos::task::tick().await;
+    assert_eq!(text(".ambre-ctx-title"), "C3");
+
+    let print = format!(
+        ".ambre-ctx-section[data-section=\"{}\"]",
+        panel::PRINT.as_str()
+    );
+    let folded = container
+        .query_selector(&print)
+        .unwrap()
+        .expect("the print section")
+        .get_attribute("data-folded");
+    assert_eq!(folded.as_deref(), Some("true"), "print starts folded");
+    let sheet_section = format!(
+        ".ambre-ctx-section[data-section=\"{}\"]",
+        panel::SHEET.as_str()
+    );
+    let open = container
+        .query_selector(&sheet_section)
+        .unwrap()
+        .expect("the sheet section")
+        .get_attribute("data-folded");
+    assert_eq!(open.as_deref(), Some("false"));
+
+    let value = |name: &str| text(&format!("[aria-label=\"{name}\"] .ambre-select-value"));
+    assert_eq!(value("Freeze"), "Up to this row");
+    assert_eq!(value("Paper"), "Letter");
+    assert_eq!(value("Margins"), "Wide");
+    let landscape = container
+        .query_selector(
+            "[role=\"radiogroup\"][aria-label=\"Orientation\"] [aria-label=\"Landscape\"]",
+        )
+        .unwrap()
+        .expect("a landscape segment")
+        .get_attribute("aria-checked");
+    assert_eq!(landscape.as_deref(), Some("true"));
+    // Portrait and landscape draw two glyphs of distinct shapes.
+    let glyph = |name: &str| {
+        container
+            .query_selector(&format!(
+                "[role=\"radiogroup\"][aria-label=\"Orientation\"] [aria-label=\"{name}\"] svg"
+            ))
+            .unwrap()
+            .unwrap_or_else(|| panic!("{name}"))
+            .inner_html()
+    };
+    assert_ne!(glyph("Portrait"), glyph("Landscape"));
+
+    let find = ambre_chrome::commands::Reach::Command(chrome::FIND);
+    assert!(
+        !ambre_chrome::reach_markers(&container)
+            .iter()
+            .any(|m| find.matches_marker(m)),
+        "find has no control in the panel"
+    );
+    assert!(
+        container
+            .query_selector("[aria-label=\"Number format\"] .ambre-select-value")
+            .unwrap()
+            .is_some(),
+        "the number format reads as a list of its names"
+    );
     container.remove();
 }
 

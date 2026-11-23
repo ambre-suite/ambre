@@ -336,6 +336,8 @@ pub(crate) fn AppRoot() -> impl IntoView {
         prose_zoom,
         prose_signals,
         formula_ref,
+        selection_ref,
+        sheet_setup,
         formula_text,
         formula_action,
         tofu_prompt,
@@ -782,6 +784,8 @@ pub(crate) fn AppRoot() -> impl IntoView {
             theme: theme_sig,
             on_command,
             on_style,
+            selection: selection_ref,
+            sheet: sheet_setup,
         })
     } else {
         ambre_chrome::PanelContent::empty()

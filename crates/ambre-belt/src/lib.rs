@@ -28,6 +28,8 @@ mod driver;
 #[cfg(test)]
 mod frame;
 #[cfg(test)]
+mod gallery;
+#[cfg(test)]
 mod ime;
 #[cfg(test)]
 mod murmure;

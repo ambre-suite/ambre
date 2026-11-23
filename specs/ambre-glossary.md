@@ -55,6 +55,8 @@
 | creation bar | the region holding the modes that insert a new object | | `1-Foundations/ambre-spec-shell.md` |
 | Ambre menu | the menu of file actions behind the logo | | `1-Foundations/ambre-spec-shell.md` |
 | cover | the part of the canvas a floating surface hides | | `1-Foundations/ambre-spec-shell.md` |
+| control primitive | one shared control of the chrome toolkit, drawn on the token scales | | `1-Foundations/ambre-spec-shell.md` |
+| label column | the first column of a panel section, which holds every label | | `1-Foundations/ambre-spec-shell.md` |
 | launcher | the surface that opens and lists documents | | `1-Foundations/ambre-spec-launcher.md` |
 | view | the UI-thread object painting one document | | `1-Foundations/ambre-spec-ui.md` |
 
@@ -177,6 +179,7 @@
 | back end | one implementation of the drawing surface | | `1-Foundations/ambre-spec-drawing-surface.md` |
 | render asset | a font or a picture the painter needs | | `1-Foundations/ambre-spec-render-assets.md` |
 | design token | a named value of the visual system | | `1-Foundations/ambre-spec-design-tokens.md` |
+| control scale | the heights a control of the chrome takes | | `1-Foundations/ambre-spec-design-tokens.md` |
 | palette | the set of colours one theme resolves to | | `1-Foundations/ambre-spec-design-tokens.md` |
 | theme | the light or dark choice a palette answers | | `1-Foundations/ambre-spec-design-tokens.md` |
 | kinetic scroll | the shared pan, flick and edge scroll of every app | | `1-Foundations/ambre-spec-kinetic-scroll.md` |

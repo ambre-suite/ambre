@@ -73,7 +73,9 @@ lint-wasm:
     # clippy after their `-A warnings`.
     cargo clippy --target wasm32-unknown-unknown -p ambre-logic --tests -- -D warnings
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-app --tests
-    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-app --lib --tests --features ambre-app/dev-login
+    # The test build of the belt: the development sign-in and the gallery page
+    # of the visual system, which no release carries.
+    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-app --lib --tests --features ambre-app/dev-login,ambre-app/chrome-gallery
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-chrome --tests
 
 # **One invocation for the whole tier.** Cargo caches a build per feature set, so
@@ -306,9 +308,10 @@ stdio:
 # belt in two parts, `murmure::` and `--skip murmure::`. The print gate reads
 # the debug Main wasm the build just wrote, so it costs no build of its own.
 # The belt signs in by a bare name, so the build turns on the development
-# sign-in, which no release carries (`ZK-045`).
+# sign-in, which no release carries (`ZK-045`), and the gallery page of the
+# visual system, which no release carries either.
 test-browser *filter:
-    trunk build --features dev-login
+    trunk build --features dev-login,chrome-gallery
     just stdio
     cargo build -p ambre-server
     cargo build -p ambre-sfu
@@ -324,7 +327,7 @@ test-browser *filter:
 # sink first, as CI does; it plays nothing:
 # `pulseaudio --start --exit-idle-time=-1 -n -L "module-null-sink sink_name=null" -L module-native-protocol-unix`.
 test-browser-firefox *filter:
-    trunk build --features dev-login
+    trunk build --features dev-login,chrome-gallery
     cargo build -p ambre-server
     cargo build -p ambre-sfu
     if [ -n "${DISPLAY:-}" ]; then x=""; else x="xvfb-run --auto-servernum"; fi; S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}" $x cargo test -p ambre-belt --features firefox -- --test-threads=1 {{filter}}

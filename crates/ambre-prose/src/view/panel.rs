@@ -34,6 +34,8 @@ pub const MARGIN_BOTTOM: StaticKey<Properties> = StaticKey::new("prose.page.marg
 pub const MARGIN_LEFT: StaticKey<Properties> = StaticKey::new("prose.page.margin_left");
 /// The right margin.
 pub const MARGIN_RIGHT: StaticKey<Properties> = StaticKey::new("prose.page.margin_right");
+/// The four margins, as a preset.
+pub const MARGINS: StaticKey<Properties> = StaticKey::new("prose.page.margins");
 
 /// Describe one property per line: its id, its title function and its label.
 macro_rules! properties {
@@ -63,6 +65,7 @@ properties! {
     MARGIN_BOTTOM: MARGIN_BOTTOM, "Bottom margin";
     MARGIN_LEFT: MARGIN_LEFT, "Left margin";
     MARGIN_RIGHT: MARGIN_RIGHT, "Right margin";
+    MARGINS: MARGINS, "Margins";
 }
 
 /// The title of a property no table describes.
@@ -101,8 +104,8 @@ impl PanelKind {
     #[must_use]
     pub fn title(self) -> &'static str {
         match self {
-            Self::Page => "Page",
-            Self::Text => "Text",
+            Self::Page => "Document",
+            Self::Text => "Selection",
         }
     }
 
@@ -205,6 +208,80 @@ impl Paper {
     }
 }
 
+/// A set of four margins the page section offers in one list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Margins {
+    /// 20 mm on each edge: what a new document holds.
+    Normal,
+    /// 12.7 mm on each edge.
+    Narrow,
+    /// 25.4 mm at the top and the bottom, 50.8 mm at the sides.
+    Wide,
+    /// Margins no preset names: the four steppers show.
+    Custom,
+}
+
+impl Margins {
+    /// The presets, then custom, in the order the list offers them.
+    pub const ALL: [Self; 4] = [Self::Normal, Self::Narrow, Self::Wide, Self::Custom];
+
+    /// The top and bottom margin, and the side margin, or `None` for
+    /// [`Margins::Custom`].
+    #[must_use]
+    pub fn bands(self) -> Option<(PrintLength<Mm>, PrintLength<Mm>)> {
+        let mm = PrintLength::<Mm>::new;
+        match self {
+            Self::Normal => Some((mm(20.0), mm(20.0))),
+            Self::Narrow => Some((mm(12.7), mm(12.7))),
+            Self::Wide => Some((mm(25.4), mm(50.8))),
+            Self::Custom => None,
+        }
+    }
+
+    /// The label a person reads.
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Normal => "Normal",
+            Self::Narrow => "Narrow",
+            Self::Wide => "Wide",
+            Self::Custom => "Custom...",
+        }
+    }
+
+    /// The preset the four margins of `format` match, or custom.
+    #[must_use]
+    pub fn of(format: &PageFormat) -> Self {
+        let near =
+            |a: PrintLength<Mm>, b: PrintLength<Mm>| (a - b).abs() < PrintLength::<Mm>::new(0.05);
+        Self::ALL
+            .into_iter()
+            .find(|m| {
+                m.bands().is_some_and(|(ends, sides)| {
+                    near(format.margin_top, ends)
+                        && near(format.margin_bottom, ends)
+                        && near(format.margin_left, sides)
+                        && near(format.margin_right, sides)
+                })
+            })
+            .unwrap_or(Self::Custom)
+    }
+}
+
+/// The page with the four margins of `margins`, its paper kept. `None` for
+/// [`Margins::Custom`], which names no margins.
+#[must_use]
+pub fn with_margins(format: PageFormat, margins: Margins) -> Option<PageFormat> {
+    let (ends, sides) = margins.bands()?;
+    Some(PageFormat {
+        margin_top: ends,
+        margin_bottom: ends,
+        margin_left: sides,
+        margin_right: sides,
+        ..format
+    })
+}
+
 /// The orientation the panel shows: landscape when the page is wider than
 /// tall.
 #[must_use]
@@ -279,6 +356,19 @@ mod tests {
         assert_eq!(orientation_of(&letter), Orientation::Landscape);
         assert_eq!(letter.margin_left, a4.margin_left, "the margins stay");
         assert_eq!(with_paper(a4, Paper::Other), None);
+    }
+
+    #[test]
+    fn a_margin_preset_reads_back_and_keeps_the_paper() {
+        let a4 = PageFormat::default();
+        assert_eq!(Margins::of(&a4), Margins::Normal, "a new document");
+        let wide = with_margins(a4, Margins::Wide).expect("a preset");
+        assert_eq!(Margins::of(&wide), Margins::Wide);
+        assert_eq!((wide.width, wide.height), (a4.width, a4.height));
+        let mut odd = a4;
+        odd.margin_left = PrintLength::<Mm>::new(31.0);
+        assert_eq!(Margins::of(&odd), Margins::Custom);
+        assert_eq!(with_margins(a4, Margins::Custom), None);
     }
 
     /// The page's context menu lists its clipboard entries first, in the

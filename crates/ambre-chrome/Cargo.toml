@@ -5,6 +5,13 @@ edition.workspace = true
 license.workspace = true
 description = "Shared, app-agnostic Leptos chrome toolkit: AppShell, command palette, menus, dialogs, toolbars, toasts, status bar. Built on leptos + ambre-commands; depends on no app crate."
 
+[features]
+# The gallery page of the visual system (`ambre-spec-testing.md` section 2):
+# every control primitive in each state, which the browser tier records as a
+# computed-style snapshot. A test build turns it on through
+# `ambre-app/chrome-gallery`; no release build does.
+gallery = []
+
 [dependencies]
 ambre-commands = { path = "../ambre-commands" }
 # The colour packings the colour picker edits (`Rgb`, `Rgba`).

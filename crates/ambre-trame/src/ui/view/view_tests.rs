@@ -726,6 +726,24 @@ fn the_bar_names_the_active_cell() {
     assert_eq!(rig.view.formula.reference, "B3");
 }
 
+/// The header of the context panel names the whole selection, such as
+/// `B2:D5`, and a lone cell by its own reference.
+#[test]
+fn the_panel_header_names_the_selection() {
+    let mut rig = Rig::new();
+    rig.frame();
+    assert_eq!(rig.view.selection_ref().as_str(), "A1");
+    let (b2, d5) = (
+        CellPos::new(Pos::new(1), Pos::new(1)),
+        CellPos::new(Pos::new(4), Pos::new(3)),
+    );
+    let mut range = crate::ui::grid::Selection::single(b2);
+    range.extend_to(d5);
+    rig.view.state.selection = range;
+    rig.frame();
+    assert_eq!(rig.view.selection_ref().as_str(), "B2:D5");
+}
+
 /// `TRAME-UI-155` and `TRAME-UI-092`: the focus alone opens nothing. A text
 /// typed in the bar opens a session, and the focus stays in the bar.
 #[test]

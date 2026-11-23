@@ -11,7 +11,7 @@
 
 use ambre_chrome::commands::Reading;
 use ambre_chrome::{
-    Choice, CommandButton, Field, LengthField, PanelContent, PanelSection, Pressed, Row, Segmented,
+    Choice, CommandButton, Field, LengthField, PanelContent, PanelSection, Pressed, Segmented,
     SelectField,
 };
 use ambre_core::{Mm, PrintLength};
@@ -20,7 +20,7 @@ use leptos::prelude::*;
 use super::ProseSignals;
 use crate::doc::{Orientation, PageFormat};
 use crate::events::TriState;
-use crate::view::panel::{self, PanelKind, Paper};
+use crate::view::panel::{self, Margins, PanelKind, Paper};
 use crate::view::toolbar::state_of;
 
 /// The property of `id`. Every id this module names is in the table.
@@ -45,6 +45,25 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
     let page_section = move || {
         let paper = Signal::derive(move || Reading::Uniform(Paper::of(&page())));
         let orientation = Signal::derive(move || Reading::Uniform(panel::orientation_of(&page())));
+        // A pick of custom shows the four steppers before any margin moves;
+        // margins no preset names show them too.
+        let custom = RwSignal::new(false);
+        let margins = Signal::derive(move || {
+            if custom.get() {
+                Reading::Uniform(Margins::Custom)
+            } else {
+                Reading::Uniform(Margins::of(&page()))
+            }
+        });
+        let margin_choices = Margins::ALL
+            .into_iter()
+            .map(|m| Choice {
+                value: m,
+                label: m.label(),
+                icon: None,
+            })
+            .collect::<Vec<_>>();
+        let show_steppers = move || margins.get() == Reading::Uniform(Margins::Custom);
         let margin = move |id,
                            get: fn(&PageFormat) -> PrintLength<Mm>,
                            set: fn(&mut PageFormat, PrintLength<Mm>)| {
@@ -86,23 +105,40 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
                 <Segmented
                     property=prop(panel::ORIENTATION)
                     choices=vec![
-                        Choice { value: Orientation::Portrait, label: "Portrait", icon: Some(icondata::MdiFileDocumentOutline) },
-                        Choice { value: Orientation::Landscape, label: "Landscape", icon: Some(icondata::MdiFileDocumentOutline) },
+                        Choice { value: Orientation::Portrait, label: "Portrait", icon: Some(icondata::LuRectangleVertical) },
+                        Choice { value: Orientation::Landscape, label: "Landscape", icon: Some(icondata::LuRectangleHorizontal) },
                     ]
                     value=orientation
                     on_write=Callback::new(move |o| write(panel::with_orientation(page(), o)))
                 />
             </Field>
-            <Field label="Top">{margin(panel::MARGIN_TOP, |f| f.margin_top, |f, m| f.margin_top = m)}</Field>
-            <Field label="Bottom">{margin(panel::MARGIN_BOTTOM, |f| f.margin_bottom, |f, m| f.margin_bottom = m)}</Field>
-            <Field label="Left">{margin(panel::MARGIN_LEFT, |f| f.margin_left, |f, m| f.margin_left = m)}</Field>
-            <Field label="Right">{margin(panel::MARGIN_RIGHT, |f| f.margin_right, |f, m| f.margin_right = m)}</Field>
+            <Field label="Margins">
+                <SelectField
+                    property=prop(panel::MARGINS)
+                    choices=margin_choices
+                    value=margins
+                    on_write=Callback::new(move |m| match panel::with_margins(page(), m) {
+                        Some(format) => {
+                            custom.set(false);
+                            write(format);
+                        }
+                        None => custom.set(true),
+                    })
+                />
+            </Field>
+            <Show when=show_steppers>
+                <Field label="Top">{margin(panel::MARGIN_TOP, |f| f.margin_top, |f, m| f.margin_top = m)}</Field>
+                <Field label="Bottom">{margin(panel::MARGIN_BOTTOM, |f| f.margin_bottom, |f, m| f.margin_bottom = m)}</Field>
+                <Field label="Left">{margin(panel::MARGIN_LEFT, |f| f.margin_left, |f, m| f.margin_left = m)}</Field>
+                <Field label="Right">{margin(panel::MARGIN_RIGHT, |f| f.margin_right, |f, m| f.margin_right = m)}</Field>
+            </Show>
         }
         .into_any()
     };
 
     let text_section = move || {
-        let buttons = panel::TEXT_COMMANDS
+        let buttons = move |ids: &'static [ambre_core::StaticKey<ambre_core::Commands>]| {
+            ids
             .iter()
             .filter_map(|&id| {
                 let command = ambre_commands::find(crate::commands::COMMANDS, id)?;
@@ -128,8 +164,18 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
                     .into_any(),
                 })
             })
-            .collect_view();
-        view! { <Row>{buttons}</Row> }.into_any()
+            .collect_view()
+        };
+        // Each group of the text section carries a label (`CHROME-218`).
+        let all: &'static [ambre_core::StaticKey<ambre_core::Commands>] = &panel::TEXT_COMMANDS;
+        let (marks, rest) = all.split_at(5);
+        let (script, clear) = rest.split_at(2);
+        view! {
+            <Field label="Style">{buttons(marks)}</Field>
+            <Field label="Script">{buttons(script)}</Field>
+            <Field label="Clear">{buttons(clear)}</Field>
+        }
+        .into_any()
     };
 
     let sections = Signal::derive(move || {

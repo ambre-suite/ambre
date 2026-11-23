@@ -675,7 +675,7 @@ fn two_peers_adding_a_sheet_keep_both() {
 /// The tab strip one peer reads: each sheet's id and name, and the active id.
 fn strip(state: &TrameState) -> (Vec<(Id<Sheet>, String)>, Id<Sheet>) {
     match state.sheet_list_event() {
-        TrameEvent::SheetList { sheets, active } => (
+        TrameEvent::SheetList { sheets, active, .. } => (
             sheets
                 .into_iter()
                 .map(|t| (t.id, t.name.to_string()))

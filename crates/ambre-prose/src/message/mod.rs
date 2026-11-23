@@ -694,7 +694,7 @@ impl ambre_core::NarrowCount for Paragraphs {
 ///
 /// Four are counts of the text. The fifth is read off the layout, and each
 /// half is refreshed by its own trigger.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WordCount {
     pub words: Count<Words>,
     /// Grapheme clusters that are not whitespace (`PROSE-FEAT-039`).
@@ -705,6 +705,20 @@ pub struct WordCount {
     pub paragraphs: Count<Paragraphs>,
     /// From the layout, never from the count (`PROSE-FEAT-038`).
     pub pages: Len<Page>,
+}
+
+/// An empty document lays out one blank page, so a count taken before any
+/// layout reads one page, never zero.
+impl Default for WordCount {
+    fn default() -> Self {
+        Self {
+            words: Count::default(),
+            characters: Count::default(),
+            characters_with_spaces: Count::default(),
+            paragraphs: Count::default(),
+            pages: Len::<Page>::new(1),
+        }
+    }
 }
 
 /// What a format command does to one presence mark over a selection.
