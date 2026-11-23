@@ -581,6 +581,7 @@ dependencies = [
  "hex",
  "jsonwebtoken",
  "openidconnect",
+ "percent-encoding",
  "postcard",
  "reqwest",
  "rsa",

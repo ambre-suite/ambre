@@ -21,14 +21,14 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**5030 rows: 4607 shipped, of which 16 loose. 423 unbuilt.**
+**5031 rows: 4609 shipped, of which 16 loose. 422 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1669 | 583 | 995 | 818 | 526 | 4591 |
+| `verified` | 1671 | 583 | 995 | 818 | 526 | 4593 |
 | `failing` | 2 |  |  |  |  | 2 |
 | `human-review` | 14 |  |  |  |  | 14 |
-| `unimplemented` | 179 | 42 | 21 | 24 | 157 | 423 |
+| `unimplemented` | 178 | 42 | 21 | 24 | 157 | 422 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -63,7 +63,7 @@
 | `ambre-spec-membership.md` | 105 | 105 | 105 |  |  |
 | `ambre-spec-message-bus.md` | 46 | 45 | 45 |  | 1 |
 | `ambre-spec-newtypes.md` | 1 | 1 | 1 |  |  |
-| `ambre-spec-object-store.md` | 24 | 22 | 22 |  | 2 |
+| `ambre-spec-object-store.md` | 25 | 24 | 24 |  | 1 |
 | `ambre-spec-op-authorship.md` | 37 | 36 | 36 |  | 1 |
 | `ambre-spec-organizations.md` | 15 | 13 | 13 |  | 2 |
 | `ambre-spec-pdf-export.md` | 20 | 20 | 20 |  |  |
@@ -260,7 +260,7 @@
 | `ambre-spec-murmure-typing-presence.md` | MURMURE-121..127,296..297,515..518,521,536..537 |
 | `ambre-spec-murmure-unread.md` | MURMURE-113..120,154..156,460,470..471,477,495,499,587 |
 | `ambre-spec-newtypes.md` | NEWTYPE-001 |
-| `ambre-spec-object-store.md` | SRV-002,004,052..059,078..079,121,138..141,158,265,271,292,313..315 |
+| `ambre-spec-object-store.md` | SRV-002,004,052..059,078..079,121,138..141,158,265,271,292,313..315,334 |
 | `ambre-spec-op-authorship.md` | AUTHOR-001..037 |
 | `ambre-spec-organizations.md` | SRV-060..067,071,076..077,229,231,233,305 |
 | `ambre-spec-pdf-export.md` | PDF-001..020 |

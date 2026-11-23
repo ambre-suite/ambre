@@ -326,15 +326,31 @@ pub async fn create_snapshot(
         ));
     }
 
+    // On a store that does not verify the digest of a link, the row names a
+    // copy no link reaches (`SRV-315`). The row lands first: a second record of
+    // the id then fails before it copies over the first one's object.
+    let stored = match state.config.snapshot_custody {
+        s3::SnapshotCustody::StoreVerifies => req.s3_key.clone(),
+        s3::SnapshotCustody::RelayCopies => {
+            s3::format_s3_kept_snapshot_key(&state.config.s3_env_prefix, &doc_id, &minted)
+        }
+    };
     let sid = db::create_snapshot(
         &state.db,
         &doc_id,
         minted,
         &s.signing_pubkey,
-        &req.s3_key,
+        &stored,
         covered,
     )
     .await?;
+    if stored != req.s3_key {
+        // The row is pending, so no open is served it before the copy lands.
+        if let Err(e) = s3::keep_snapshot(&state.s3, &state.s3_bucket, &req.s3_key, &stored).await {
+            db::delete_snapshot(&state.db, &sid).await?;
+            return Err(e);
+        }
+    }
     let msg = crate::payload::StoredPayload::server_msg(
         &ambre_protocol::ws::WsServerMsg::SnapshotAvailable {
             document_id: doc_id,

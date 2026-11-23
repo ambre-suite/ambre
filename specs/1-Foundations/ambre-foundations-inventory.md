@@ -49,7 +49,7 @@
 | `interop` | A user brings a file in, or takes a document out, and reads the conversion report: what the file kept and what it lost. | partial | 26 | 2 |
 | `key-verification` | Before a document is shared with someone, their key is shown as a short readable fingerprint and the user confirms it. | partial | 21 |  |
 | `message-bus` | The contract the three threads talk over. | partial | 46 |  |
-| `object-store` | Everything too large for a wire message lives in object storage, sealed. | partial | 24 |  |
+| `object-store` | Everything too large for a wire message lives in object storage, sealed. | partial | 25 |  |
 | `op-authorship` | Who wrote each operation of a document. | partial | 37 |  |
 | `organizations` | A company that loses an employee must not lose that employee's documents. | partial | 15 |  |
 | `presence` | Where the other collaborators are, right now: a position in each peer's colour, their name beside it, and what they hold selected. | partial | 17 |  |
@@ -66,4 +66,4 @@
 | `macros` | A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. | design-only | 54 |  |
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 
-**50 features: 23 implemented, 24 partial, 3 design-only. 1863 contract rows, 16 loose.**
+**50 features: 23 implemented, 24 partial, 3 design-only. 1864 contract rows, 16 loose.**
