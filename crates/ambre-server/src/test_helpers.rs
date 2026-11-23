@@ -357,6 +357,18 @@ impl S3Stub {
             .headers()
             .get("content-encoding")
             .is_some_and(|v| v.to_str().unwrap_or("").contains("aws-chunked"));
+        // A copy names its source `bucket/key`, percent-encoded, in a header.
+        let copy_source = req
+            .headers()
+            .get("x-amz-copy-source")
+            .and_then(|v| v.to_str().ok())
+            .map(|v| {
+                let v = v.replace("%2F", "/");
+                v.trim_start_matches('/')
+                    .split_once('/')
+                    .map(|(_, k)| k.to_owned())
+                    .unwrap_or_default()
+            });
         let body = axum::body::to_bytes(req.into_body(), 1 << 24)
             .await
             .unwrap()
@@ -370,6 +382,20 @@ impl S3Stub {
         }
         let xmlns = r#"xmlns="http://s3.amazonaws.com/doc/2006-03-01/""#;
         let mut store = held.lock().unwrap();
+        if let Some(source) = copy_source
+            && method == Method::PUT
+        {
+            let Some(bytes) = store.objects.get(&source).cloned() else {
+                return (
+                    StatusCode::NOT_FOUND,
+                    format!("<Error><Code>NoSuchKey</Code><Key>{source}</Key></Error>"),
+                )
+                    .into_response();
+            };
+            store.objects.insert(key, bytes);
+            return format!("<CopyObjectResult {xmlns}><ETag>\"stub\"</ETag></CopyObjectResult>")
+                .into_response();
+        }
         if method == Method::PUT && !key.is_empty() {
             store.objects.insert(key, body);
             return StatusCode::OK.into_response();
