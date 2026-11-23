@@ -203,6 +203,9 @@ text button and an icon. The header names the selection, and never repeats a sec
 A gallery page of the test build shows each primitive in each state, and the browser tier records
 its look (`CHROME-223`).
 
+A toggle or an action of a section is outlined: a border on a sunken ground. The frame of the panel
+and its rail draw ghost buttons, with no border until the pointer comes.
+
 **What a primitive costs.** None is generic. A control primitive names a choice by its place, and a thin
 property shim maps a value to its place. A generic control compiles once per value type, and the
 main wasm sits near its ceiling (`ambre-spec-budgets.md section 5`).

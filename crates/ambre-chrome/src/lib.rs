@@ -72,8 +72,8 @@ pub use context_panel::{
     ContextPanel, DockSide, Fold, PanelContent, PanelPrefs, PanelSection, PanelWidth,
 };
 pub use controls::{
-    ChoiceRow, ChoiceView, ColorSwatch, ControlSize, IconButton, Readout, SegmentBar, Select,
-    Slider, Stepper,
+    ChoiceRow, ChoiceView, ColorSwatch, ControlSize, IconButton, IconLook, Readout, SegmentBar,
+    Select, Slider, Stepper,
 };
 pub use debounce::{DRAG_DEBOUNCE, Debouncer};
 pub use dialog::{Dialog, Dismissal, ModalHold};

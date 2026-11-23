@@ -22,8 +22,8 @@ use ambre_core::{Availability, Bounded, Rgba, UnitFraction};
 use leptos::prelude::*;
 
 use crate::controls::{
-    ChoiceRow, ChoiceView, ColorSwatch, ControlSize, IconButton, Readout, SegmentBar, Select,
-    Slider, Stepper,
+    ChoiceRow, ChoiceView, ColorSwatch, ControlSize, IconButton, IconLook, Readout, SegmentBar,
+    Select, Slider, Stepper,
 };
 use crate::format::Pressed;
 use crate::kit::Step;
@@ -117,6 +117,18 @@ pub fn Gallery() -> impl IntoView {
                     icon=icondata::BsTypeBold
                     label="Bold"
                     availability=Signal::stored(Availability::Disabled)
+                    on_press=no_press
+                />
+            </Specimen>
+            <Specimen name="icon-button.ghost">
+                <IconButton icon=icondata::LuPanelRightClose label="Collapse" look=IconLook::Ghost on_press=no_press />
+            </Specimen>
+            <Specimen name="icon-button.ghost-pressed">
+                <IconButton
+                    icon=icondata::LuPanelRightClose
+                    label="Collapse"
+                    look=IconLook::Ghost
+                    pressed=Some(Signal::stored(Pressed::On))
                     on_press=no_press
                 />
             </Specimen>

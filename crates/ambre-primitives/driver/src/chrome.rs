@@ -15,7 +15,7 @@
 //! | a modal outside the shared dialog | `CHROME-011` |
 //! | a drag control whose own handler reaches no `Debouncer` | `CHROME-015` |
 //! | a frame that is not sandboxed itself | `ARCH-001` |
-//! | a media query read outside the density module, the motion query aside | `CHROME-056` |
+//! | a media query that names a dimension, read outside the density module | `CHROME-056` |
 //! | a two-state attribute whose false state drops it | `CHROME-066` |
 //! | a menu whose own handler reaches no key handler of the shared menu | `CHROME-026` |
 //!
@@ -79,9 +79,58 @@ const DRAG_TYPES: &[&str] = &["range", "color"];
 /// (`CHROME-056`).
 const DENSITY: &str = "crates/ambre-canvas/src/density.rs";
 
-/// The media query that asks for the user's motion setting, which no width
-/// rides (`CHROME-056`).
-const MOTION_QUERY: &str = "(prefers-reduced-motion: reduce)";
+/// The media features that measure the viewport or the screen, a threshold
+/// of the shell when a query names one (`CHROME-056`). Each also reads with a
+/// `min-` or `max-` prefix, and as a `device-` variant.
+const DIMENSIONS: &[&str] = &["width", "height", "aspect-ratio", "resolution"];
+
+/// Whether the media query `query` names a dimension among its features. A
+/// feature is a word inside the parentheses of a query, on either side of a
+/// comparison. `(max-height: 400px)` and `(400px < height)` both name one;
+/// `(prefers-color-scheme: dark)` names none.
+fn names_a_dimension(query: &str) -> bool {
+    let mut depth = 0_usize;
+    let mut word = String::new();
+    let mut found = false;
+    let mut close = |word: &mut String, depth: usize| {
+        if depth > 0 && word.starts_with(|c: char| c.is_ascii_alphabetic()) {
+            let bare = word.trim_start_matches("min-").trim_start_matches("max-");
+            let bare = bare.trim_start_matches("device-");
+            found |= DIMENSIONS.contains(&bare);
+        }
+        word.clear();
+    };
+    for c in query.chars() {
+        if c.is_ascii_alphanumeric() || c == '-' {
+            word.push(c.to_ascii_lowercase());
+            continue;
+        }
+        close(&mut word, depth);
+        match c {
+            '(' => depth += 1,
+            ')' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+    }
+    close(&mut word, depth);
+    found
+}
+
+/// The query a `match_media` call reads, when its argument is a string
+/// literal the driver can read, `&` peeled. `concat!` writes one literal.
+fn literal_query<'tcx>(args: &'tcx [hir::Expr<'tcx>]) -> Option<String> {
+    let mut arg = args.last()?;
+    while let hir::ExprKind::AddrOf(_, _, inner) = arg.kind {
+        arg = inner;
+    }
+    match arg.kind {
+        hir::ExprKind::Lit(lit) => match lit.node {
+            rustc_ast::LitKind::Str(text, _) => Some(text.as_str().to_owned()),
+            _ => None,
+        },
+        _ => None,
+    }
+}
 
 /// The attributes of the toolkit that report one of two states
 /// (`CHROME-066`).
@@ -477,10 +526,12 @@ impl Gate {
         let lits = held.strings;
         let first = lits.first().map(String::as_str);
         // A threshold is written once, test code included: a test that
-        // queries a width holds a second copy of it.
+        // queries a width holds a second copy of it. A threshold measures
+        // the viewport or the screen. A query the driver cannot read as a
+        // literal is refused all the same.
         if r.krate == "web_sys"
             && name == "match_media"
-            && first != Some(MOTION_QUERY)
+            && literal_query(args).is_none_or(|query| names_a_dimension(&query))
             && self.in_file(tcx, span, |f| f.starts_with("crates/") && f != DENSITY)
         {
             self.wired(

@@ -143,6 +143,15 @@ impl ProseSignals {
         }
     }
 
+    /// The command of the page format the context panel asked for, taken
+    /// out of its signal. One command carries the whole format, so one undo
+    /// takes it back (`PROSE-UI-252`). `None` when no write waits.
+    pub fn take_page_write(&self) -> Option<crate::message::ProseCommand> {
+        let format = self.page_write.get_untracked()?;
+        self.page_write.set(None);
+        Some(crate::message::ProseCommand::SetPageFormat { format })
+    }
+
     /// Take in the history's availability from a Prose
     /// [`UndoState`](crate::events::ProseEvent::UndoState). Every other event
     /// leaves it as it was (`UNDO-006`).

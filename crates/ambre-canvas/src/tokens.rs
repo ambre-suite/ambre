@@ -224,6 +224,8 @@ struct ChromeColors {
     border_strong: OpaqueColour,
     text: OpaqueColour,
     text_dim: OpaqueColour,
+    /// The quietest text: a section heading, a unit, a hint.
+    text_faint: OpaqueColour,
     accent: OpaqueColour,
     /// The ground of a control the accent marks as on: a pressed toggle, the
     /// chosen option of a list.
@@ -238,7 +240,7 @@ struct ChromeColors {
 
 impl ChromeColors {
     /// The CSS variable name of each colour, in declaration order.
-    fn vars(&self) -> [(&'static str, OpaqueColour); 15] {
+    fn vars(&self) -> [(&'static str, OpaqueColour); 16] {
         [
             ("bg", self.bg),
             ("surface", self.surface),
@@ -248,6 +250,7 @@ impl ChromeColors {
             ("border-strong", self.border_strong),
             ("text", self.text),
             ("text-dim", self.text_dim),
+            ("text-faint", self.text_faint),
             ("accent", self.accent),
             ("accent-soft", self.accent_soft),
             ("success", self.success),
