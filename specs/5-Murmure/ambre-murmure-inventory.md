@@ -25,7 +25,7 @@
 | `murmure-segments` | A channel grows for years and still opens fast. | implemented | 26 |  |
 | `murmure-unread` | The sidebar shows where something new is, and how much. | implemented | 18 |  |
 | `murmure-attachments` | A member drops a file or an image into a message. | partial | 19 |  |
-| `murmure-calls` | A member starts an audio and video call from a channel in one click. | partial | 97 |  |
+| `murmure-calls` | A member starts an audio and video call from a channel in one click. | partial | 98 |  |
 | `murmure-channels` | A few people talk where nobody else reads: a private channel of a space, or a direct message between two or more members. | partial | 57 |  |
 | `murmure-emoji` | A member writes an emoji in a message, or reacts with one, from a picker. | partial | 14 |  |
 | `murmure-layout` | Murmure shows the channels, the conversation and a thread side by side on a desktop, and one of them at a time on a phone. | partial | 37 |  |
@@ -33,6 +33,7 @@
 | `murmure-message-list` | The conversation of a channel, newest at the bottom. | partial | 40 |  |
 | `murmure-notifications` | A member learns that someone mentioned them or wrote to them directly. | partial | 19 |  |
 | `murmure-search` | A member finds a message by its words, in the channels they have loaded. | partial | 18 |  |
+| `murmure-sidebar` | Each member arranges the channel list for themselves: groups and order of their own, channels muted or hidden, and messages bookmarked. | partial | 22 |  |
 | `murmure-spaces` | A team gathers in a space. | partial | 41 |  |
 | `murmure-threads` | A member replies to a message, and the replies gather in a thread beside the channel. | partial | 29 |  |
 | `murmure-typing-presence` | A member sees who is in the channel and who is typing. | partial | 16 |  |
@@ -43,6 +44,5 @@
 | `murmure-message-links` | A member copies a link to one message and pastes it anywhere. | design-only | 8 |  |
 | `murmure-moderation` | A moderator removes the message of another member. | design-only | 10 |  |
 | `murmure-pins` | A member pins a message for every member of the channel: a decision, a link, the rules of the room. | design-only | 10 |  |
-| `murmure-sidebar` | Each member arranges the channel list for themselves: groups and order of their own, channels muted or hidden, and messages bookmarked. | design-only | 22 |  |
 
-**29 features: 9 implemented, 12 partial, 8 design-only. 701 contract rows, 0 loose.**
+**29 features: 9 implemented, 13 partial, 7 design-only. 702 contract rows, 0 loose.**

@@ -4955,3 +4955,15 @@ ambre-prose | src/view/panel.rs | crate::view::panel | PanelKind::title() | ret 
 ambre-prose | src/view/panel.rs | crate::view::panel | Paper::label() | ret | &'static str	free-text	the name of a paper a person reads
 ambre-trame | src/chrome/panel.rs | crate::chrome::panel | reach() | ret | String	generic	the codec of a property reach on the data-reach attribute, as Reach::marker writes it
 ambre-chrome | src/kit.rs | crate::kit | unreached_controls() | ret | Vec<String>	foreign-api	the accessible names the DOM holds for controls with no data-reach, which a test prints
+ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | STRIP_SHARE | const | f32	math	the share of the width of a wide scene its strip of faces takes, a scalar multiplier of that width
+ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | STRIP_ROW_SHARE | const | f32	math	the share of the height of a narrow scene its strip of faces takes, a scalar multiplier of that height
+ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | initials_of() | ret | String	free-text	the initials a tile or the mark of a space draws for a person to read
+ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | initials_of(text) | param | &str	free-text	the words of a name a person typed, which no rule binds
+ambre-murmure | src/ui/call_float.rs | crate::ui::call_float | Corner::word() | ret | &'static str	newtype-inner	the fieldless enum's own word in the data-corner attribute, which the stylesheet matches back
+ambre-murmure | src/ui/call_float.rs | crate::ui::call_float | clock() | ret | String	free-text	the time in the call a person reads in the bubble, which no code matches back
+ambre-murmure | src/ui/sidebar.rs | crate::ui::sidebar | Folding::expanded() | ret | &'static str	newtype-inner	the fieldless enum's own aria-expanded value, which the DOM attribute takes
+ambre-murmure | src/ui/sidebar.rs | crate::ui::sidebar | Kept<'_>::keeps() | ret | bool	generic	predicate result
+ambre-murmure | src/ui/sidebar.rs | crate::ui::sidebar | PhoneTab::keeps() | ret | bool	generic	predicate result
+ambre-murmure | src/ui/sidebar.rs | crate::ui::sidebar | PhoneTab::label() | ret | &'static str	free-text	the name of a tab a person reads and hears, which no code matches back
+ambre-murmure | src/ui/sidebar.rs | crate::ui::sidebar | PhoneTab::word() | ret | &'static str	newtype-inner	the fieldless enum's own word in the data-tab attribute, which the stylesheet matches back
+ambre-chrome | src/command.rs | crate::command | digit_of_code(code) | param | &str	generic	the codec of a Key: the DOM KeyboardEvent.code name, which the caller reads and this parses into the digit it names

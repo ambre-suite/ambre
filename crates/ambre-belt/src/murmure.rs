@@ -3405,7 +3405,7 @@ pub(crate) mod tests {
     /// `MURMURE-654`, `MURMURE-667`, `MURMURE-668` and `MURMURE-670`, in the browser.
     ///
     /// Ada, Bob and Carol join one call with a fake camera. Ada's page then hears ten more members
-    /// admitted, whom no seat of the SFU carries, so her grid holds two pages. Each choice she
+    /// admitted, whom no seat of the SFU carries, so her band holds three pages. Each choice she
     /// posts names the senders of the tiles her grid shows, in its order. A turn of the page posts
     /// the senders of the next page alone.
     ///
@@ -3468,7 +3468,8 @@ pub(crate) mod tests {
         assert_eq!(both.large(), None, "{both:?}");
         let real = both.senders().to_vec();
 
-        // Ten members more: the first page holds the nine admitted first (`MURMURE-654`).
+        // Ten members more: the first page of the band holds the five admitted first
+        // (`MURMURE-654`).
         for index in 1_000..1_010 {
             let admitted = LogicEvent::Call(CallSignal::Admitted {
                 sender: ambre_core::Seq::new(index),
@@ -3477,8 +3478,8 @@ pub(crate) mod tests {
             from_sync(&ada_page, &admitted).await;
         }
         let mut first: Vec<_> = real.clone();
-        first.extend(senders(1_000, 1_006));
-        let first_page = chosen(&ada_page, "the first page", |c| c.senders().len() == 9).await;
+        first.extend(senders(1_000, 1_002));
+        let first_page = chosen(&ada_page, "the first page", |c| c.senders().len() == 5).await;
         assert_eq!(first_page.senders(), first.as_slice(), "{first_page:?}");
         assert_eq!(first_page.large(), None);
 
@@ -3490,7 +3491,7 @@ pub(crate) mod tests {
             .as_u64()
             .unwrap_or_default();
         click_header(&ada_page, ".murmure-call-page-next").await;
-        let next = senders(1_007, 1_009);
+        let next = senders(1_003, 1_007);
         chosen(&ada_page, "the second page", |c| {
             c.senders() == next.as_slice()
         })
@@ -3501,7 +3502,7 @@ pub(crate) mod tests {
         })
         .await;
 
-        // Ada pins Bob from her list: he leads the choice, large, and the page holds eight
+        // Ada pins Bob from her list: he leads the choice, large, and the band holds four
         // more (`MURMURE-668`).
         click_header(&ada_page, ".murmure-call-roster").await;
         let pinned = ada_page
@@ -3525,7 +3526,7 @@ pub(crate) mod tests {
         let carol_sender = real.iter().copied().find(|s| *s != bob_sender);
         let mut expected = vec![bob_sender];
         expected.extend(carol_sender);
-        expected.extend(senders(1_000, 1_006));
+        expected.extend(senders(1_000, 1_002));
         assert_eq!(with_pin.senders(), expected.as_slice());
 
         // A turn and a pin post a choice of videos, and nothing else but the roster ask. The
@@ -4137,15 +4138,15 @@ pub(crate) mod tests {
     }
 
     /// What the screen slot of `page` decoded: the frames, the width, and whether its receiver
-    /// holds a transform. The screen slot is the tenth video receiver, after the nine video slots
-    /// the SFU offers first.
+    /// holds a transform. The screen slot is the twelfth video receiver, after the eleven video
+    /// slots the SFU offers first.
     async fn screen_received(page: &Page) -> Value {
         page.browser
             .script_async(
                 "const done = arguments[arguments.length - 1]; \
                  const pc = (window.beltPcs || [])[0]; \
                  const t = pc.getTransceivers().filter((t) => t.receiver.track.kind === 'video' \
-                   && /recv/.test(t.currentDirection || ''))[9]; \
+                   && /recv/.test(t.currentDirection || ''))[11]; \
                  if (!t) { done([0, 0, false]); return; } \
                  t.receiver.getStats().then((stats) => { \
                    let frames = 0, width = 0; \

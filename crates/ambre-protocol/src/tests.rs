@@ -290,37 +290,61 @@ fn a_message_of_the_sfu_socket_is_json_of_one_key() {
     assert!(Validated::<SessionDescription>::parse(&long).is_err());
 }
 
-/// A choice of videos reads as JSON of one key. The SFU reads none of a choice that
-/// names more senders than a receiver gets videos, a sender twice, or a stray large sender.
+/// `CALL-131`: a choice of videos reads as JSON of one key, with the count of videos its
+/// receiver lays out. The SFU reads none of a choice that names too many senders. It reads none
+/// whose count is past the desktop count or under its senders, nor a sender twice, nor a stray
+/// large sender.
 #[test]
 fn a_choice_of_too_many_videos_or_a_stray_large_sender_reads_as_nothing() {
-    use ambre_core::Seq;
-    use signaling::{ChoiceError, SfuMsg, VideoChoice};
-    let choice = VideoChoice::new(vec![Seq::new(3), Seq::new(7)], Some(Seq::new(7)))
-        .expect("a choice of two");
+    use ambre_core::{Count, Seq};
+    use signaling::{ChoiceError, PHONE_VIDEOS, SfuMsg, VIDEOS_PER_RECEIVER, VideoChoice};
+    let choice = VideoChoice::new(
+        vec![Seq::new(3), Seq::new(7)],
+        Some(Seq::new(7)),
+        PHONE_VIDEOS,
+    )
+    .expect("a choice of two");
     let text = serde_json::to_string(&SfuMsg::Videos(choice.clone())).expect("a choice encodes");
-    assert_eq!(text, r#"{"videos":{"senders":[3,7],"large":7}}"#);
+    assert_eq!(text, r#"{"videos":{"senders":[3,7],"large":7,"count":9}}"#);
     let read: SfuMsg = serde_json::from_str(&text).expect("a choice decodes");
     assert!(matches!(read, SfuMsg::Videos(c) if c == choice));
-    let nine: Vec<Seq<_>> = (1..=9).map(Seq::new).collect();
-    assert!(VideoChoice::new(nine, None).is_ok(), "nine senders fit");
-    let ten = r#"{"videos":{"senders":[1,2,3,4,5,6,7,8,9,10],"large":null}}"#;
+    let bare: SfuMsg =
+        serde_json::from_str(r#"{"videos":{"senders":[3],"large":null}}"#).expect("no count");
+    assert!(
+        matches!(bare, SfuMsg::Videos(c) if c.count() == VIDEOS_PER_RECEIVER),
+        "a choice with no count asks for the desktop count"
+    );
+    let eleven: Vec<Seq<_>> = (1..=11).map(Seq::new).collect();
+    assert!(
+        VideoChoice::new(eleven, None, VIDEOS_PER_RECEIVER).is_ok(),
+        "eleven senders fit"
+    );
+    let twelve = r#"{"videos":{"senders":[1,2,3,4,5,6,7,8,9,10,11,12],"large":null}}"#;
     let twice = r#"{"videos":{"senders":[4,4],"large":null}}"#;
     let stray = r#"{"videos":{"senders":[4],"large":5}}"#;
-    for refused in [ten, twice, stray] {
+    let past = r#"{"videos":{"senders":[4],"large":null,"count":12}}"#;
+    let under = r#"{"videos":{"senders":[4,5],"large":null,"count":1}}"#;
+    for refused in [twelve, twice, stray, past, under] {
         assert!(
             serde_json::from_str::<SfuMsg>(refused).is_err(),
             "{refused} was read"
         );
     }
-    let ten: Vec<Seq<_>> = (1..=10).map(Seq::new).collect();
-    assert_eq!(VideoChoice::new(ten, None), Err(ChoiceError::TooMany));
+    let twelve: Vec<Seq<_>> = (1..=12).map(Seq::new).collect();
     assert_eq!(
-        VideoChoice::new(vec![Seq::new(4), Seq::new(4)], None),
+        VideoChoice::new(twelve, None, VIDEOS_PER_RECEIVER),
+        Err(ChoiceError::TooMany)
+    );
+    assert_eq!(
+        VideoChoice::new(vec![Seq::new(4)], None, Count::new(12)),
+        Err(ChoiceError::Count)
+    );
+    assert_eq!(
+        VideoChoice::new(vec![Seq::new(4), Seq::new(4)], None, PHONE_VIDEOS),
         Err(ChoiceError::Repeated)
     );
     assert_eq!(
-        VideoChoice::new(vec![Seq::new(4)], Some(Seq::new(5))),
+        VideoChoice::new(vec![Seq::new(4)], Some(Seq::new(5)), PHONE_VIDEOS),
         Err(ChoiceError::LargeNotChosen)
     );
 }

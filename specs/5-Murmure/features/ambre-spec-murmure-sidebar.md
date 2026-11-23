@@ -22,10 +22,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-276` | `INV` | A hidden channel MUST stay a channel the user belongs to. | this spec section 3 | not built | unbuilt -- lands with the `Mute and hide` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-277` | `INV` | The personal groups, the order and the bookmarks MUST be the same on every device of the user. | this spec section 3; `SETTINGS-012` | not built | unbuilt -- lands with the `The personal sidebar` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-282` | `OBS` | The hide action MUST say that the user stays a member, and offer to leave instead. | this spec section 3 | not built | unbuilt -- lands with the `Mute and hide` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-721` | `OBS` | A folded group MUST still show the channel the view shows, a channel with a live call and each channel that mentions the user. | this spec section 3, a folded group | not built | unbuilt -- lands with the `The Murmure call and sidebar rework` Story (`ambre-roadmap.md` V1) | unimplemented |
-| `MURMURE-722` | `OBS` | The head of a folded group MUST show the count of the channels it hides, and a mark while one of them has activity. | this spec section 3, a folded group | not built | unbuilt -- lands with the `The Murmure call and sidebar rework` Story (`ambre-roadmap.md` V1) | unimplemented |
+| `MURMURE-721` | `OBS` | A folded group MUST still show the channel the view shows, a channel with a live call and each channel that mentions the user. | this spec section 3, a folded group | `ambre_murmure::ui::sidebar::tests::a_folded_group_keeps_what_the_user_must_not_lose_and_counts_the_rest`; `ambre_app::shell::murmure_regions::a_folded_group_keeps_the_channel_shown_and_counts_the_rest` -- wasm tier | none | verified |
+| `MURMURE-722` | `OBS` | The head of a folded group MUST show the count of the channels it hides, and a mark while one of them has activity. | this spec section 3, a folded group | `ambre_murmure::ui::sidebar::tests::a_folded_group_keeps_what_the_user_must_not_lose_and_counts_the_rest`; `ambre_app::shell::murmure_regions::a_folded_group_keeps_the_channel_shown_and_counts_the_rest` -- wasm tier: the count and the mark | none | verified |
 | `MURMURE-723` | `INV` | The fold of each group MUST be a setting of the account, in the Murmure section of the settings document. | this spec section 3, a folded group; `1-Foundations/ambre-spec-user-settings.md section 3` (`SETTINGS-003`) | not built | unbuilt -- lands with the `User settings` Story (`ambre-roadmap.md` V1) | unimplemented |
-| `MURMURE-725` | `INV` | The head of each group MUST carry an accessible name, take the keyboard focus and carry its expanded state. | this spec section 3, a folded group; `1-Foundations/ambre-spec-accessibility.md section 2` (`CHROME-022`) | not built | unbuilt -- lands with the `The Murmure call and sidebar rework` Story (`ambre-roadmap.md` V1) | unimplemented |
+| `MURMURE-725` | `INV` | The head of each group MUST carry an accessible name, take the keyboard focus and carry its expanded state. | this spec section 3, a folded group; `1-Foundations/ambre-spec-accessibility.md section 2` (`CHROME-022`) | `ambre_app::shell::murmure_regions::a_folded_group_keeps_the_channel_shown_and_counts_the_rest` -- wasm tier | none | verified |
 
 ### 1.2 Mute a channel
 
@@ -62,14 +62,14 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-720` | `POST` | A press on the head of a sidebar group MUST fold it, and a second press MUST unfold it. | this spec section 3, a folded group | not built | unbuilt -- lands with the `The Murmure call and sidebar rework` Story (`ambre-roadmap.md` V1) | unimplemented |
-| `MURMURE-724` | `FRAME` | Folding or unfolding a group MUST NOT change the catalogue of a space, nor move a read cursor. | this spec section 3, a folded group; `MURMURE-286` | not built | unbuilt -- lands with the `The Murmure call and sidebar rework` Story (`ambre-roadmap.md` V1) | unimplemented |
+| `MURMURE-720` | `POST` | A press on the head of a sidebar group MUST fold it, and a second press MUST unfold it. | this spec section 3, a folded group | `ambre_murmure::ui::sidebar::tests::a_press_on_the_head_folds_the_group_and_a_second_unfolds_it`; `ambre_app::shell::murmure_regions::a_folded_group_keeps_the_channel_shown_and_counts_the_rest` -- wasm tier | none | verified |
+| `MURMURE-724` | `FRAME` | Folding or unfolding a group MUST NOT change the catalogue of a space, nor move a read cursor. | this spec section 3, a folded group; `MURMURE-286` | `ambre_app::shell::murmure_regions::a_folded_group_keeps_the_channel_shown_and_counts_the_rest` -- wasm tier: a fold sends nothing; structural -- `toggle_fold` sets a signal of the relay | none | verified |
 
 * **Budget.** none of its own: every entry is a small value in the settings document, which the
   row of `ambre-spec-budgets.md section 6` bounds.
 * **Boundary.** every choice here lives in the sealed settings document (`SETTINGS-001`). The one
   that leaves it is the notification level of a muted channel, whose copy `ZK-016` bounds.
-* **Verification.** 22 `unimplemented`: no settings document exists.
+* **Verification.** 5 `verified`, 17 `unimplemented`: no settings document exists.
 
 ---
 

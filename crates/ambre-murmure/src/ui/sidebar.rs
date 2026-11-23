@@ -5,17 +5,17 @@
 //! and the names of open channels. It sends nothing, so drawing the
 //! sidebar opens no channel and moves no read cursor.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::message::{CatalogPosition, CatalogueEntry, CategoryView};
 use ambre_bus::{
     ChannelActivity, ChannelName, ChannelPlace, DirectPeers, MemberChannel, Mentions, Role, Unread,
 };
 use ambre_core::StepDirection;
-use ambre_core::id::{Category, Channel, Id, Space};
+use ambre_core::id::{Category, Channel, Id, Space, User};
 
 /// The section of the sidebar an entry sits in.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SidebarGroup {
     /// The joined public channels of one category of a space. `None` holds
     /// the channels outside every category.
@@ -484,6 +484,39 @@ impl Sidebar {
         sections
     }
 
+    /// The space the sidebar shows: the one the user chose while it is still theirs, else the
+    /// first (`MURMURE-711`).
+    #[must_use]
+    pub fn shown_space(&self, chosen: Option<Id<Space>>) -> Option<Id<Space>> {
+        chosen
+            .filter(|space| self.spaces.contains(space))
+            .or_else(|| self.spaces.first().copied())
+    }
+
+    /// The sections of the space `space` alone: its categories, its private channels and its
+    /// channels to join, with the direct messages of every space (`MURMURE-163`).
+    #[must_use]
+    pub fn sections_in(&self, space: Option<Id<Space>>) -> Vec<SidebarSection> {
+        let mine = |channel: Id<Channel>| match self.place_of(channel) {
+            Some(ChannelPlace::Public(s) | ChannelPlace::Private(s)) => Some(s) == space,
+            Some(ChannelPlace::Direct) => true,
+            None => self.listed_in(channel) == space,
+        };
+        self.sections()
+            .into_iter()
+            .filter_map(|mut section| {
+                match section.group {
+                    SidebarGroup::Category { space: s, .. } if Some(s) != space => return None,
+                    SidebarGroup::Category { .. } | SidebarGroup::Direct => {}
+                    SidebarGroup::Private | SidebarGroup::ToJoin => {
+                        section.entries.retain(|e| mine(e.channel));
+                    }
+                }
+                (!section.entries.is_empty()).then_some(section)
+            })
+            .collect()
+    }
+
     /// The channel a jump opens: the next one with activity after `from` in
     /// sidebar order, or the previous one, wrapping round (`MURMURE-176`).
     /// A channel to join is never one, so a jump joins nothing. `None` when
@@ -562,6 +595,271 @@ fn push(
             title,
             entries,
         });
+    }
+}
+
+/// The rank of a space in the switcher, counted from zero: `Pos<SpaceRanks>` (`MURMURE-712`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum SpaceRanks {}
+
+impl ambre_core::index::Axis for SpaceRanks {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("SpaceRank");
+}
+
+/// A rank as the switcher names it: counted from one, as its chord.
+impl ambre_core::OrdinalKind for SpaceRanks {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("SpaceRankNumber");
+}
+
+/// The number the chord of a rank carries: its index plus one.
+impl ambre_core::index::Numbered for SpaceRanks {
+    type Number = ambre_core::Ordinal<SpaceRanks>;
+
+    fn number_of(pos: ambre_core::index::Pos<SpaceRanks>) -> ambre_core::Ordinal<SpaceRanks> {
+        ambre_core::Ordinal::<SpaceRanks>::of_index(pos)
+    }
+}
+
+/// The switcher shows the number of a rank in its chord.
+impl ambre_core::index::Shown for SpaceRanks {}
+
+/// The tab of the bar on the bottom edge of the channel list of a phone (`MURMURE-715`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PhoneTab {
+    /// Every group of the space shown.
+    #[default]
+    Channels,
+    /// The direct messages alone.
+    Direct,
+    /// The search over the loaded segments.
+    Search,
+}
+
+impl PhoneTab {
+    /// The three tabs, in the order the bar shows them.
+    pub const ALL: [Self; 3] = [Self::Channels, Self::Direct, Self::Search];
+
+    /// The name of the tab, which its button shows and announces (`MURMURE-719`).
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Channels => "Channels",
+            Self::Direct => "Direct messages",
+            Self::Search => "Search",
+        }
+    }
+
+    /// The word of the tab in the markup, which the stylesheet reads for its icon.
+    #[must_use]
+    pub const fn word(self) -> &'static str {
+        match self {
+            Self::Channels => "channels",
+            Self::Direct => "direct",
+            Self::Search => "search",
+        }
+    }
+
+    /// The sections the channel list shows under this tab: every one, or the direct messages
+    /// alone (`MURMURE-717`). The search tab keeps the list under the search box.
+    #[must_use]
+    pub fn keeps(self, group: SidebarGroup) -> bool {
+        match self {
+            Self::Channels | Self::Search => true,
+            Self::Direct => group == SidebarGroup::Direct,
+        }
+    }
+}
+
+/// A count of the channels a folded group hides: `Count<Hidden>`.
+pub enum Hidden {}
+
+impl ambre_core::NarrowCount for Hidden {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("HiddenChannels");
+}
+
+/// Whether a group of the sidebar shows every channel, or is folded (`MURMURE-720`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Folding {
+    /// Every channel of the group shows.
+    Open,
+    /// The group shows only the channels it must keep in view (`MURMURE-721`).
+    Folded,
+}
+
+impl Folding {
+    /// The value of `aria-expanded` on the head of the group (`MURMURE-725`).
+    #[must_use]
+    pub const fn expanded(self) -> &'static str {
+        match self {
+            Self::Open => "true",
+            Self::Folded => "false",
+        }
+    }
+}
+
+/// Whether a channel a folded group hides has activity: its head then carries a mark
+/// (`MURMURE-722`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HiddenMark {
+    /// No hidden channel has activity.
+    #[default]
+    Quiet,
+    /// A hidden channel has activity.
+    Active,
+}
+
+/// The groups the user folded. The page keeps them until the settings document of the user
+/// holds them (`MURMURE-723`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Folds(HashSet<SidebarGroup>);
+
+impl Folds {
+    /// The fold of `group`.
+    #[must_use]
+    pub fn of(&self, group: SidebarGroup) -> Folding {
+        if self.0.contains(&group) {
+            Folding::Folded
+        } else {
+            Folding::Open
+        }
+    }
+
+    /// Folds `group`, or unfolds it when it is folded: a press on its head (`MURMURE-720`).
+    pub fn toggle(&mut self, group: SidebarGroup) {
+        if !self.0.remove(&group) {
+            self.0.insert(group);
+        }
+    }
+}
+
+/// What a folded group keeps in view: the channel the view shows and the channels with a live
+/// call (`MURMURE-721`). A channel that mentions the user stays too, read from its activity.
+#[derive(Debug, Clone, Copy)]
+pub struct Kept<'k> {
+    /// The channel the view shows.
+    pub shown: Option<Id<Channel>>,
+    /// The live calls the page knows, by channel.
+    pub calls: &'k LiveCalls,
+}
+
+impl Kept<'_> {
+    /// Whether a folded group keeps `entry` in view.
+    fn keeps(&self, entry: &SidebarEntry) -> bool {
+        let mentions = matches!(
+            entry.activity,
+            Activity::Count { mentions, .. } if mentions != ambre_core::Count::<Mentions>::ZERO
+        );
+        Some(entry.channel) == self.shown || self.calls.of(entry.channel).is_some() || mentions
+    }
+}
+
+/// One group of the sidebar as it is drawn: its entries once folded, and what its head says.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DrawnSection {
+    /// The group, its title and the entries it shows.
+    pub section: SidebarSection,
+    /// Whether the group is folded.
+    pub folding: Folding,
+    /// How many channels the fold hides.
+    pub hidden: ambre_core::Count<Hidden>,
+    /// Whether one of them has activity.
+    pub mark: HiddenMark,
+}
+
+/// The sections as they are drawn under `folds`. A folded group keeps what `kept` names, counts
+/// the channels it hides and marks a hidden one with activity (`MURMURE-721`, `MURMURE-722`).
+#[must_use]
+pub fn fold(sections: Vec<SidebarSection>, folds: &Folds, kept: Kept<'_>) -> Vec<DrawnSection> {
+    sections
+        .into_iter()
+        .map(|mut section| {
+            let folding = folds.of(section.group);
+            if folding == Folding::Open {
+                return DrawnSection {
+                    section,
+                    folding,
+                    hidden: ambre_core::Count::<Hidden>::ZERO,
+                    mark: HiddenMark::Quiet,
+                };
+            }
+            let (shown, gone): (Vec<SidebarEntry>, Vec<SidebarEntry>) =
+                section.entries.into_iter().partition(|e| kept.keeps(e));
+            section.entries = shown;
+            let mark = if gone.iter().any(|e| e.activity != Activity::None) {
+                HiddenMark::Active
+            } else {
+                HiddenMark::Quiet
+            };
+            DrawnSection {
+                section,
+                folding,
+                hidden: ambre_core::Count::<Hidden>::of(gone.len()),
+                mark,
+            }
+        })
+        .collect()
+}
+
+/// The live call of a channel the sidebar marks, as the relay last answered who is in it
+/// (`MURMURE-689`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LiveCall {
+    /// The members seated in the call, each once.
+    pub members: Vec<Id<User>>,
+}
+
+/// A count of the participants of a live call, which the sidebar shows: `Count<Seated>`.
+pub enum Seated {}
+
+impl ambre_core::NarrowCount for Seated {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("SeatedParticipants");
+}
+
+impl LiveCall {
+    /// The count the sidebar shows beside the call mark (`MURMURE-689`).
+    #[must_use]
+    pub fn count(&self) -> ambre_core::Count<Seated> {
+        ambre_core::Count::<Seated>::of(self.members.len())
+    }
+}
+
+/// The live calls the page knows, by channel: the answers of the relay to the asks of who is in
+/// each call (`MURMURE-595`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LiveCalls(HashMap<Id<Channel>, LiveCall>);
+
+impl LiveCalls {
+    /// Takes the answer `members` for the call of `channel`. A call with nobody seated, or one
+    /// the relay holds no state of, leaves the sidebar.
+    pub fn answer(&mut self, channel: Id<Channel>, members: &ambre_bus::CallMembers) {
+        match members {
+            ambre_bus::CallMembers::Live(seated) if !seated.is_empty() => {
+                self.0.insert(
+                    channel,
+                    LiveCall {
+                        members: seated.clone(),
+                    },
+                );
+            }
+            ambre_bus::CallMembers::Live(_) | ambre_bus::CallMembers::Gone => {
+                self.0.remove(&channel);
+            }
+        }
+    }
+
+    /// The live call of `channel`, if the page knows one.
+    #[must_use]
+    pub fn of(&self, channel: Id<Channel>) -> Option<&LiveCall> {
+        self.0.get(&channel)
+    }
+
+    /// Forgets the call of `channel`: the channel left the sidebar.
+    pub fn forget(&mut self, channel: Id<Channel>) {
+        self.0.remove(&channel);
     }
 }
 
@@ -1224,5 +1522,197 @@ mod tests {
             None,
             "the channel it starts from is not a jump"
         );
+    }
+
+    /// Two spaces of the user, with a public and a private channel in each. One direct message,
+    /// and one channel to join in the second space.
+    fn two_spaces() -> (Sidebar, [Id<Space>; 2], [Id<Channel>; 6]) {
+        let (north, south) = (Id::<Space>::mint(), Id::<Space>::mint());
+        let (n_pub, n_pub_m) = public(north);
+        let (s_pub, s_pub_m) = public(south);
+        let (n_priv, s_priv, direct) = (
+            Id::<Channel>::mint(),
+            Id::<Channel>::mint(),
+            Id::<Channel>::mint(),
+        );
+        let join = Id::<Channel>::mint();
+        let mut sidebar = Sidebar::default();
+        sidebar.set_member_channels(
+            vec![
+                n_pub_m,
+                s_pub_m,
+                MemberChannel {
+                    channel_id: n_priv,
+                    place: ChannelPlace::Private(north),
+                },
+                MemberChannel {
+                    channel_id: s_priv,
+                    place: ChannelPlace::Private(south),
+                },
+                MemberChannel {
+                    channel_id: direct,
+                    place: ChannelPlace::Direct,
+                },
+            ],
+            &[north, south],
+        );
+        sidebar.set_catalogue(
+            north,
+            None,
+            Vec::new(),
+            vec![listed(n_pub, "north", None, 0)],
+        );
+        sidebar.set_catalogue(
+            south,
+            None,
+            Vec::new(),
+            vec![
+                listed(s_pub, "south", None, 0),
+                listed(join, "hiring", None, 1),
+            ],
+        );
+        (
+            sidebar,
+            [north, south],
+            [n_pub, s_pub, n_priv, s_priv, direct, join],
+        )
+    }
+
+    /// The channels of `sections`, in the order they are drawn.
+    fn channels_of(sections: &[SidebarSection]) -> Vec<Id<Channel>> {
+        sections
+            .iter()
+            .flat_map(|s| s.entries.iter().map(|e| e.channel))
+            .collect()
+    }
+
+    /// `MURMURE-163`, `MURMURE-711`: the sidebar shows the categories, the private channels and
+    /// the channels to join of the space shown alone, and every direct message. A space the user
+    /// chose shows while it is theirs, else the first.
+    #[test]
+    fn the_sidebar_shows_one_space_and_every_direct_message() {
+        let (sidebar, [north, south], [n_pub, s_pub, n_priv, s_priv, direct, join]) = two_spaces();
+        assert_eq!(sidebar.shown_space(None), Some(north));
+        assert_eq!(sidebar.shown_space(Some(south)), Some(south));
+        assert_eq!(sidebar.shown_space(Some(Id::<Space>::mint())), Some(north));
+        assert_eq!(
+            channels_of(&sidebar.sections_in(Some(north))),
+            vec![n_pub, n_priv, direct]
+        );
+        assert_eq!(
+            channels_of(&sidebar.sections_in(Some(south))),
+            vec![s_pub, s_priv, direct, join]
+        );
+    }
+
+    /// `MURMURE-720`: a press on the head of a group folds it, and a second press unfolds it.
+    /// Each group folds apart.
+    #[test]
+    fn a_press_on_the_head_folds_the_group_and_a_second_unfolds_it() {
+        let mut folds = Folds::default();
+        assert_eq!(folds.of(SidebarGroup::Direct), Folding::Open);
+        folds.toggle(SidebarGroup::Direct);
+        assert_eq!(folds.of(SidebarGroup::Direct), Folding::Folded);
+        assert_eq!(folds.of(SidebarGroup::Private), Folding::Open);
+        folds.toggle(SidebarGroup::Direct);
+        assert_eq!(folds.of(SidebarGroup::Direct), Folding::Open);
+        assert_eq!(Folding::Folded.expanded(), "false");
+        assert_eq!(Folding::Open.expanded(), "true");
+    }
+
+    /// `MURMURE-721`, `MURMURE-722`: a folded group keeps the channel shown, a channel with a
+    /// live call and a channel that mentions the user. Its head counts the channels it hides,
+    /// and marks one with activity.
+    #[test]
+    fn a_folded_group_keeps_what_the_user_must_not_lose_and_counts_the_rest() {
+        let space = Id::<Space>::mint();
+        let ids: Vec<(Id<Channel>, MemberChannel)> = (0..5).map(|_| public(space)).collect();
+        let mut sidebar = Sidebar::default();
+        sidebar.set_member_channels(ids.iter().map(|(_, m)| *m).collect(), &[space]);
+        let channels: Vec<Id<Channel>> = ids.iter().map(|(c, _)| *c).collect();
+        sidebar.set_catalogue(
+            space,
+            None,
+            Vec::new(),
+            channels
+                .iter()
+                .enumerate()
+                .map(|(i, c)| listed(*c, &format!("c{i}"), None, u32::try_from(i).unwrap()))
+                .collect(),
+        );
+        let activity = |channel: Id<Channel>, unread: u32, mentions: u32| ChannelActivity {
+            channel_id: channel,
+            active: ambre_bus::Activity::Active,
+            unread: Some(ambre_core::Count::<Unread>::new(unread)),
+            mentions: Some(ambre_core::Count::<Mentions>::new(mentions)),
+        };
+        sidebar.set_activity(&[activity(channels[2], 3, 1), activity(channels[4], 5, 0)]);
+        let mut calls = LiveCalls::default();
+        calls.answer(
+            channels[1],
+            &ambre_bus::CallMembers::Live(vec![Id::<User>::mint()]),
+        );
+        let mut folds = Folds::default();
+        let group = SidebarGroup::Category {
+            space,
+            category: None,
+        };
+        folds.toggle(group);
+        let kept = Kept {
+            shown: Some(channels[0]),
+            calls: &calls,
+        };
+        let drawn = fold(sidebar.sections_in(Some(space)), &folds, kept);
+        let section = &drawn[0];
+        assert_eq!(section.folding, Folding::Folded);
+        let shown: Vec<Id<Channel>> = section.section.entries.iter().map(|e| e.channel).collect();
+        assert_eq!(
+            shown,
+            channels[..3],
+            "the shown channel, the call and the mention"
+        );
+        assert_eq!(section.hidden, ambre_core::Count::<Hidden>::new(2));
+        assert_eq!(
+            section.mark,
+            HiddenMark::Active,
+            "a hidden channel has unread messages"
+        );
+        folds.toggle(group);
+        let open = fold(sidebar.sections_in(Some(space)), &folds, kept);
+        assert_eq!(open[0].section.entries.len(), 5);
+        assert_eq!(open[0].hidden, ambre_core::Count::<Hidden>::ZERO);
+    }
+
+    /// `MURMURE-689`: a live call counts its participants, and a call with nobody seated, or
+    /// one the relay holds no state of, leaves the sidebar.
+    #[test]
+    fn a_live_call_shows_its_count_and_leaves_once_gone() {
+        let channel = Id::<Channel>::mint();
+        let mut calls = LiveCalls::default();
+        let seated = vec![Id::<User>::mint(), Id::<User>::mint()];
+        calls.answer(channel, &ambre_bus::CallMembers::Live(seated));
+        assert_eq!(
+            calls.of(channel).map(LiveCall::count),
+            Some(ambre_core::Count::<Seated>::new(2))
+        );
+        calls.answer(channel, &ambre_bus::CallMembers::Live(Vec::new()));
+        assert_eq!(calls.of(channel), None);
+        calls.answer(
+            channel,
+            &ambre_bus::CallMembers::Live(vec![Id::<User>::mint()]),
+        );
+        calls.answer(channel, &ambre_bus::CallMembers::Gone);
+        assert_eq!(calls.of(channel), None);
+    }
+
+    /// `MURMURE-717`: the tab of direct messages shows the direct messages alone, and the other
+    /// tabs every group. Each tab names itself.
+    #[test]
+    fn a_tab_shows_its_view_in_place_of_the_list() {
+        assert!(PhoneTab::Direct.keeps(SidebarGroup::Direct));
+        assert!(!PhoneTab::Direct.keeps(SidebarGroup::Private));
+        assert!(PhoneTab::Channels.keeps(SidebarGroup::ToJoin));
+        let labels: Vec<&str> = PhoneTab::ALL.iter().map(|t| t.label()).collect();
+        assert_eq!(labels, ["Channels", "Direct messages", "Search"]);
     }
 }

@@ -27,9 +27,10 @@ use ambre_core::index::Pos;
 use ambre_core::{Bounded, FracMs, Instant, MeterLevel, OWN_SLOT, PageLoad, SCREEN_SLOT, TimeSpan};
 use ambre_murmure::ui::call_controls::CallPhase;
 use ambre_murmure::ui::call_videos::{
-    CallPress, CallStage, Fill, GridPages, Own, Paging, Participant, Turn, Voices, grid,
+    CallPress, CallStage, Fill, GridPages, Layout, Own, Paging, Participant, Subject, Turn, Voices,
+    Width, grid,
 };
-use ambre_protocol::signaling::VideoChoice;
+use ambre_protocol::signaling::{PHONE_VIDEOS, ReceivedVideos, VIDEOS_PER_RECEIVER, VideoChoice};
 use leptos::prelude::{ArcRwSignal, Get, GetUntracked, Set};
 
 use crate::call_volumes;
@@ -56,6 +57,39 @@ thread_local! {
     static PINNED: ArcRwSignal<Option<Id<User>>> = ArcRwSignal::new(None);
     /// The choice of videos the page last handed the Sync worker, so it hands none twice.
     static CHOSEN: RefCell<Option<VideoChoice>> = const { RefCell::new(None) };
+    /// Whether the last stage held a received screen: the first picture of one widens the call
+    /// (the Murmure calls spec, section 3, the video region).
+    static SCREEN: Cell<Subject> = const { Cell::new(Subject::None) };
+    /// The layout and the width of the last stage, which size the pages the header turns.
+    static SHAPE: ArcRwSignal<(Layout, Width)> = ArcRwSignal::new((Layout::Band, Width::Wider));
+}
+
+/// The phone width of the adaptive layout, in CSS pixels: the width the stylesheet switches at
+/// (`ambre-spec-adaptive-layout.md section 2`).
+const PHONE_WIDTH: ambre_core::Px<ambre_core::View> =
+    ambre_core::Px::<ambre_core::View>::new(600.0);
+
+/// The width of the page, read from the window as the stylesheet reads it (the Murmure layout
+/// spec, section 1).
+fn width() -> Width {
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "the width of a window fits an f32"
+    )]
+    let wide = web_sys::window()
+        .and_then(|w| w.inner_width().ok())
+        .and_then(|w| w.as_f64())
+        .is_none_or(|w| ambre_core::Px::<ambre_core::View>::new(w as f32) >= PHONE_WIDTH);
+    if wide { Width::Wider } else { Width::Phone }
+}
+
+/// The count of videos a choice of `width` names. That is the phone count or the desktop count of
+/// the call row of `ambre-spec-budgets.md section 1` (the Murmure calls spec, the video region).
+pub(crate) const fn videos_of(width: Width) -> ambre_core::Count<ReceivedVideos> {
+    match width {
+        Width::Phone => PHONE_VIDEOS,
+        Width::Wider => VIDEOS_PER_RECEIVER,
+    }
 }
 
 /// How much of the channel region the call takes, for the fill button.
@@ -88,7 +122,8 @@ pub(crate) fn pinned() -> ArcRwSignal<Option<Id<User>>> {
 /// admitted them. Read by a reactive view, it tracks the page and the pin.
 pub(crate) fn paging(participants: &[Id<User>]) -> Paging {
     let (page, pinned) = (page().get(), pinned().get());
-    grid(participants, pinned, page).paging
+    let (layout, width) = SHAPE.with(Get::get);
+    grid(participants, pinned, page, layout, width).paging
 }
 
 /// Hands the page a press on the video region (the Murmure calls spec, the video region).
@@ -107,7 +142,10 @@ pub(crate) fn turn(way: Turn) {
         PAGE.with(GetUntracked::get_untracked),
         PINNED.with(GetUntracked::get_untracked),
     );
-    let turned = grid(&participants, pinned, page).paging.turned(way);
+    let (layout, width) = SHAPE.with(GetUntracked::get_untracked);
+    let turned = grid(&participants, pinned, page, layout, width)
+        .paging
+        .turned(way);
     PAGE.with(|p| p.set(turned));
 }
 
@@ -124,14 +162,14 @@ pub(crate) fn toggle_pin(member: Id<User>) {
 /// each member by its sender index (the Murmure calls spec, the video region). A choice the page
 /// made already leaves nothing. A call with no other participant asks nothing yet.
 fn choose(stage: &CallStage) {
-    let wanted = stage.grid().wanted();
+    let wanted = stage.wanted();
     let senders: Vec<_> = wanted
         .members
         .iter()
         .filter_map(|member| call_volumes::sender_of(*member))
         .collect();
     let large = wanted.large.and_then(call_volumes::sender_of);
-    let Ok(choice) = VideoChoice::new(senders, large) else {
+    let Ok(choice) = VideoChoice::new(senders, large, videos_of(wanted.width)) else {
         return;
     };
     let fresh = CHOSEN.with(|chosen| {
@@ -173,18 +211,33 @@ pub(crate) fn stage(me: Option<Id<User>>) -> Option<CallStage> {
     let pinned = PINNED
         .with(GetUntracked::get_untracked)
         .filter(|member| others.iter().any(|p| p.member == *member));
+    let screen = live.contains(&SCREEN_SLOT).then_some(SCREEN_SLOT);
+    // The first picture of a screen widens the call into the scene, once (the Murmure calls
+    // spec, the video region).
+    let now_screen = Subject::of(screen.as_ref());
+    let before = SCREEN.with(|s| s.replace(now_screen));
+    let fill = FILL.with(GetUntracked::get_untracked);
+    let widened = fill.after_screen(before, now_screen);
+    if widened != fill {
+        FILL.with(|f| f.set(widened));
+    }
     let stage = CallStage {
         others,
         page: PAGE.with(GetUntracked::get_untracked),
         pinned,
-        screen: live.contains(&SCREEN_SLOT).then_some(SCREEN_SLOT),
+        screen,
         own: Own {
             member: me,
             video: live.contains(&OWN_SLOT).then_some(OWN_SLOT),
             microphone,
         },
-        fill: FILL.with(GetUntracked::get_untracked),
+        fill: widened,
+        width: width(),
     };
+    let shape = (stage.layout(), stage.width);
+    if SHAPE.with(GetUntracked::get_untracked) != shape {
+        SHAPE.with(|s| s.set(shape));
+    }
     let paging = stage.grid().paging;
     if PAGE.with(GetUntracked::get_untracked) != paging.page {
         PAGE.with(|page| page.set(paging.page));
@@ -261,6 +314,8 @@ pub(crate) fn forget() {
     PAGE.with(|page| page.set(Pos::<GridPages>::new(0)));
     PINNED.with(|pinned| pinned.set(None));
     CHOSEN.with(|chosen| *chosen.borrow_mut() = None);
+    SCREEN.with(|s| s.set(Subject::None));
+    SHAPE.with(|s| s.set((Layout::Band, Width::Wider)));
 }
 
 #[cfg(test)]
@@ -268,6 +323,14 @@ mod tests {
     use super::*;
     use wasm_bindgen::JsCast;
     use wasm_bindgen_test::wasm_bindgen_test;
+
+    /// A page under the phone width asks for the phone count of videos, nine. A wider one asks
+    /// for the desktop count, eleven.
+    #[wasm_bindgen_test]
+    fn the_choice_names_the_count_of_videos_of_its_width() {
+        assert_eq!(videos_of(Width::Phone), ambre_core::Count::new(9));
+        assert_eq!(videos_of(Width::Wider), ambre_core::Count::new(11));
+    }
 
     /// A receiver whose `getSynchronizationSources` answers `sources`, a script.
     fn receiver(sources: &str) -> web_sys::RtcRtpReceiver {

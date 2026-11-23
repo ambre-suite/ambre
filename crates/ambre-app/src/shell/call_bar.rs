@@ -7,7 +7,7 @@
 // header offers (`ambre_murmure::ui::call_controls`), and holds its header.
 // ============================================================================
 
-use ambre_core::Bounded;
+use ambre_core::{Bounded, Validated};
 use ambre_murmure::MurmurePane;
 use ambre_murmure::chrome::MurmureRelay;
 use ambre_murmure::ui::call_controls::{CallControls, CallPhase, Camera, Microphone, Share};
@@ -642,5 +642,180 @@ pub(super) fn RingAlert() -> impl IntoView {
             }
             Ring::Quiet | Ring::Outgoing(_) => ().into_any(),
         }}
+    }
+}
+
+/// The call away from its channel (the Murmure calls spec, section 3, away from the channel of
+/// the call). While Murmure shows another channel, a thread or the list, the page shows a bubble.
+/// Under the phone width the stylesheet turns it into a pill. Each
+/// names the channel of the call and the time in it, with the faces of the participants.
+///
+/// The bubble offers mute, the camera, the share, the way back and hang up, and the pill keeps
+/// mute and hang up. A drag of the bubble moves it, and its release rests it in the nearest
+/// corner. Nothing here writes into a channel or changes the choice of videos.
+#[component]
+pub(super) fn CallFloat(
+    /// The pane the user is in, which names the shown channel.
+    pane: RwSignal<MurmurePane>,
+    /// The phase of the call of the page.
+    phase: Signal<CallPhase>,
+    /// The sidebar names the channel, and the spaces name each participant.
+    relay: MurmureRelay,
+) -> impl IntoView {
+    use ambre_murmure::ui::call_float::{Corner, Float, clock};
+    let from = crate::call::where_from();
+    let from_shown = from.clone();
+    let shown = Signal::derive(move || {
+        let call = from_shown.get().map(|(channel, _)| channel);
+        Float::of(phase.get(), call, pane.get().shown_channel()) == Float::Shown
+    });
+    let corner = RwSignal::new(Corner::default());
+    // The pointer offset of a drag in progress, and the place of the bubble during it.
+    let dragged = RwSignal::new(None::<(f64, f64)>);
+    let tick = RwSignal::new(crate::host::now());
+    let _ = set_interval_with_handle(
+        move || tick.set(crate::host::now()),
+        std::time::Duration::from_secs(1),
+    );
+    let from_clock = from.clone();
+    let elapsed = Signal::derive(move || {
+        from_clock
+            .get()
+            .map_or_else(String::new, |(_, at)| clock(tick.get() - at))
+    });
+    let from_name = from.clone();
+    let channel_name = Signal::derive(move || {
+        from_name
+            .get()
+            .and_then(|(channel, _)| relay.sidebar.with(|s| s.name_of(channel)))
+            .map_or_else(|| "Call".to_owned(), Validated::into_string)
+    });
+    let participants = crate::call_volumes::participants();
+    let faces = Signal::derive(move || {
+        participants
+            .get()
+            .into_iter()
+            .take(4)
+            .map(|member| {
+                let name = relay.member_name(member);
+                ambre_murmure::ui::call_videos::initials(name.as_ref())
+            })
+            .collect::<Vec<String>>()
+    });
+    let back = Callback::new(move |()| {
+        if let Some((channel, _)) = from.get_untracked() {
+            pane.set(MurmurePane::channel(channel));
+        }
+    });
+    let release = move |ev: web_sys::PointerEvent| {
+        if dragged.get_untracked().is_none() {
+            return;
+        }
+        dragged.set(None);
+        let Some(window) = web_sys::window() else {
+            return;
+        };
+        let size = |v: Result<wasm_bindgen::JsValue, wasm_bindgen::JsValue>| {
+            v.ok().and_then(|v| v.as_f64()).unwrap_or_default()
+        };
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "a coordinate of the window fits an f32"
+        )]
+        let area = ambre_core::Size::new(
+            ambre_core::Px::<ambre_core::View>::new(size(window.inner_width()) as f32),
+            ambre_core::Px::<ambre_core::View>::new(size(window.inner_height()) as f32),
+        );
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "a coordinate of the window fits an f32"
+        )]
+        let at = (
+            ambre_core::Px::<ambre_core::View>::new(f64::from(ev.client_x()) as f32),
+            ambre_core::Px::<ambre_core::View>::new(f64::from(ev.client_y()) as f32),
+        );
+        corner.set(Corner::nearest(at, area));
+    };
+    let micro = move || matches!(phase.get(), CallPhase::InCall(Microphone::Muted));
+    view! {
+        <Show when=move || shown.get()>
+            <div
+                class="murmure-call-float"
+                role="region"
+                aria-label="Call in progress"
+                data-corner=move || corner.get().word()
+                data-dragging=move || dragged.get().is_some().then_some("true")
+                style:left=move || dragged.get().map(|(x, _)| format!("{x}px"))
+                style:top=move || dragged.get().map(|(_, y)| format!("{y}px"))
+                style:right=move || dragged.get().map(|_| "auto")
+                style:bottom=move || dragged.get().map(|_| "auto")
+                on:pointermove=move |ev: web_sys::PointerEvent| {
+                    if dragged.get_untracked().is_some() {
+                        let (x, y) = (f64::from(ev.client_x()), f64::from(ev.client_y()));
+                        dragged.set(Some((x - 120.0, y - 18.0)));
+                    }
+                }
+                on:pointerup=release
+            >
+                <button
+                    r#type="button"
+                    class="murmure-float-grip"
+                    aria-label=move || format!("Back to the call of {}", channel_name.get())
+                    on:click=move |_| back.run(())
+                    on:pointerdown=move |ev: web_sys::PointerEvent| {
+                        if ev.pointer_type() == "mouse" {
+                            let (x, y) = (f64::from(ev.client_x()), f64::from(ev.client_y()));
+                            dragged.set(Some((x - 120.0, y - 18.0)));
+                        }
+                    }
+                >
+                    <Icon icon=icondata::MdiPhone />
+                    <span class="murmure-float-channel">{channel_name}</span>
+                    <span class="murmure-float-clock">{elapsed}</span>
+                    <span class="murmure-float-faces">
+                        {move || {
+                            faces
+                                .get()
+                                .into_iter()
+                                .map(|initials| view! {
+                                    <span class="murmure-float-face" aria-hidden="true">{initials}</span>
+                                })
+                                .collect_view()
+                        }}
+                    </span>
+                </button>
+                <div class="murmure-float-controls">
+                    <button
+                        class="icon murmure-call-mute"
+                        title="Mute"
+                        aria-label="Mute"
+                        aria-pressed=move || ambre_chrome::Pressed::from_bool(micro()).aria()
+                        on:click=move |_| crate::call::toggle_mute()
+                    >
+                        <Icon icon=icondata::MdiMicrophoneOff />
+                    </button>
+                    <span class="murmure-float-wide">
+                        <CameraButton />
+                        <ShareButton />
+                        <button
+                            class="icon murmure-float-back"
+                            title="Back to the channel of the call"
+                            aria-label="Back to the channel of the call"
+                            on:click=move |_| back.run(())
+                        >
+                            <Icon icon=icondata::MdiArrowULeftTop />
+                        </button>
+                    </span>
+                    <button
+                        class="icon murmure-call-hang-up"
+                        title="Hang up"
+                        aria-label="Hang up"
+                        on:click=move |_| crate::call::leave_call()
+                    >
+                        <Icon icon=icondata::MdiPhoneHangup />
+                    </button>
+                </div>
+            </div>
+        </Show>
     }
 }

@@ -385,29 +385,54 @@ impl NarrowCount for ReceivedVideos {
         ambre_core::StaticKey::new("ReceivedVideos");
 }
 
-/// The count of videos the SFU forwards one receiver, from the call row of
-/// `ambre-spec-budgets.md section 1`. A choice names this many senders at most (`CALL-131`).
-pub const VIDEOS_PER_RECEIVER: Count<ReceivedVideos> = Count::new(9);
+/// The count of videos the SFU forwards one receiver at most, the desktop count of the call row
+/// of `ambre-spec-budgets.md section 1`. A choice names this many senders at most (`CALL-131`).
+pub const VIDEOS_PER_RECEIVER: Count<ReceivedVideos> = Count::new(11);
+
+/// The count of videos a page under the phone width asks for: the phone count of the call row of
+/// `ambre-spec-budgets.md section 1`.
+pub const PHONE_VIDEOS: Count<ReceivedVideos> = Count::new(9);
 
 /// The senders whose video a receiver asks of the SFU, by the sender index of each
-/// (`CALL-126`). The SFU fills the slots the choice leaves with the most recent speakers
-/// (`CALL-041`). A choice replaces the one before it, and an empty one asks for the speakers
-/// alone.
+/// (`CALL-126`). The choice also names the count of videos its receiver lays out. The SFU fills the slots the
+/// choice leaves with the most recent speakers, up to that count (`CALL-041`). A choice replaces
+/// the one before it, and an empty one asks for the speakers alone.
 ///
-/// The constructor is the one door: a choice names [`VIDEOS_PER_RECEIVER`] senders at most,
-/// each once, and its large sender is one of them. Deserialisation goes through it.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+/// The constructor is the one door, and deserialisation goes through it. A choice names a count
+/// of [`VIDEOS_PER_RECEIVER`] at most, and as many senders at most, each once. Its large sender
+/// is one of them.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "ChoiceFields")]
 pub struct VideoChoice {
     senders: Vec<Seq<SenderIndex>>,
     large: Option<Seq<SenderIndex>>,
+    count: Count<ReceivedVideos>,
 }
 
-/// The fields of a [`VideoChoice`] as the wire spells them, before the check.
+/// No sender chosen: the most recent speakers, up to the desktop count.
+impl Default for VideoChoice {
+    fn default() -> Self {
+        Self {
+            senders: Vec::new(),
+            large: None,
+            count: VIDEOS_PER_RECEIVER,
+        }
+    }
+}
+
+/// The fields of a [`VideoChoice`] as the wire spells them, before the check. A choice with no
+/// count asks for the desktop count.
 #[derive(Deserialize)]
 struct ChoiceFields {
     senders: Vec<Seq<SenderIndex>>,
     large: Option<Seq<SenderIndex>>,
+    #[serde(default = "desktop_count")]
+    count: Count<ReceivedVideos>,
+}
+
+/// The count a choice that names none asks for.
+fn desktop_count() -> Count<ReceivedVideos> {
+    VIDEOS_PER_RECEIVER
 }
 
 /// Why a choice of videos is refused (`CALL-131`).
@@ -415,6 +440,8 @@ struct ChoiceFields {
 pub enum ChoiceError {
     /// The choice names more senders than a receiver gets videos.
     TooMany,
+    /// The count of videos of the choice is past the desktop count, or under its senders.
+    Count,
     /// The choice names one sender twice.
     Repeated,
     /// The large sender is not among the senders of the choice.
@@ -425,6 +452,7 @@ impl fmt::Display for ChoiceError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Self::TooMany => "a choice names more senders than a receiver gets videos",
+            Self::Count => "the count of videos of a choice is past the cap or under its senders",
             Self::Repeated => "a choice names one sender twice",
             Self::LargeNotChosen => "the large sender of a choice is not among its senders",
         })
@@ -433,18 +461,23 @@ impl fmt::Display for ChoiceError {
 
 impl VideoChoice {
     /// A choice of `senders`, the first wanted first, with `large` shown at the top layer
-    /// its downlink holds (`CALL-128`).
+    /// its downlink holds (`CALL-128`), and `count` videos at most.
     ///
     /// # Errors
     ///
-    /// [`ChoiceError`] for more senders than [`VIDEOS_PER_RECEIVER`], a sender named twice,
-    /// or a large sender outside `senders`.
+    /// [`ChoiceError`] for more senders than [`VIDEOS_PER_RECEIVER`], a count past it or under
+    /// the senders, a sender named twice, or a large sender outside `senders`.
     pub fn new(
         senders: Vec<Seq<SenderIndex>>,
         large: Option<Seq<SenderIndex>>,
+        count: Count<ReceivedVideos>,
     ) -> Result<Self, ChoiceError> {
-        if Count::<ReceivedVideos>::of(senders.len()) > VIDEOS_PER_RECEIVER {
+        let named = Count::<ReceivedVideos>::of(senders.len());
+        if named > VIDEOS_PER_RECEIVER {
             return Err(ChoiceError::TooMany);
+        }
+        if count > VIDEOS_PER_RECEIVER || count < named {
+            return Err(ChoiceError::Count);
         }
         let repeated = senders
             .iter()
@@ -456,7 +489,11 @@ impl VideoChoice {
         if large.is_some_and(|l| !senders.contains(&l)) {
             return Err(ChoiceError::LargeNotChosen);
         }
-        Ok(Self { senders, large })
+        Ok(Self {
+            senders,
+            large,
+            count,
+        })
     }
 
     /// The senders of the choice, the first wanted first.
@@ -468,13 +505,18 @@ impl VideoChoice {
     pub fn large(&self) -> Option<Seq<SenderIndex>> {
         self.large
     }
+
+    /// The count of videos the receiver lays out, which bounds the fill (`CALL-041`).
+    pub fn count(&self) -> Count<ReceivedVideos> {
+        self.count
+    }
 }
 
 impl TryFrom<ChoiceFields> for VideoChoice {
     type Error = ChoiceError;
 
     fn try_from(fields: ChoiceFields) -> Result<Self, Self::Error> {
-        Self::new(fields.senders, fields.large)
+        Self::new(fields.senders, fields.large, fields.count)
     }
 }
 
@@ -488,7 +530,7 @@ impl TryFrom<ChoiceFields> for VideoChoice {
 /// A later `{"admission": "<token>"}` renews the seat. The SFU keeps the seat while a renewal
 /// of it arrives before the last admission expires (audit `N25`).
 ///
-/// The client sends `{"videos": {"senders": [..], "large": ..}}` to choose the videos it
+/// The client sends `{"videos": {"senders": [..], "large": .., "count": ..}}` to choose the videos it
 /// receives (`CALL-126`). These are all the SFU reads of a participant (`ZK-023`, `ZK-033`,
 /// `ZK-044`).
 #[derive(Debug, Serialize, Deserialize)]

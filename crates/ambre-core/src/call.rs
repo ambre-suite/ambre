@@ -272,14 +272,14 @@ impl Axis for VideoSlots {
     const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("VideoSlot");
 }
 
-/// The video slot the page gives the screen slot of the SFU. The SFU offers it after the nine
-/// video slots, so the page numbers it tenth (`ambre-spec-call-media.md section 3`, the screen).
-pub const SCREEN_SLOT: Pos<VideoSlots> = Pos::new(9);
+/// The video slot the page gives the screen slot of the SFU. The SFU offers it after the eleven
+/// video slots, so the page numbers it twelfth (`ambre-spec-call-media.md section 3`, the screen).
+pub const SCREEN_SLOT: Pos<VideoSlots> = Pos::new(11);
 
 /// The video slot the page gives its own camera, which its own tile draws mirrored. No receiver
-/// carries it: the SFU offers nine video slots and one screen slot (the Murmure calls spec,
+/// carries it: the SFU offers eleven video slots and one screen slot (the Murmure calls spec,
 /// section 3, the video region).
-pub const OWN_SLOT: Pos<VideoSlots> = Pos::new(10);
+pub const OWN_SLOT: Pos<VideoSlots> = Pos::new(12);
 
 /// The slot of one receive transform: an audio slot or a video slot. The page numbers each kind
 /// apart (`ambre-spec-call-media.md section 3`, the volumes and video on the canvas).

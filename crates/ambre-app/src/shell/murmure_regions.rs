@@ -795,8 +795,8 @@ async fn the_participants_button_names_itself_and_lists_each_participant() {
     phase.set(CallPhase::Idle);
 }
 
-/// The page buttons of a call (`MURMURE-669`). A grid of one page offers none.
-/// Past nine other participants, the header offers the two, each a button with an accessible
+/// The page buttons of a call (`MURMURE-669`, `MURMURE-654`). A band of one page offers none.
+/// Past five other participants, the header offers the two, each a button with an accessible
 /// name that takes the focus. Each is disabled at the end it turns to, and a press turns the
 /// page.
 #[wasm_bindgen_test]
@@ -808,11 +808,11 @@ async fn the_page_buttons_name_themselves_and_turn_the_page() {
     let (phase, participants) = (crate::call::phase(), crate::call_volumes::participants());
     let page = crate::call_stage::page();
     phase.set(CallPhase::InCall(Microphone::Live));
-    participants.set((0..9).map(|_| Id::<User>::mint()).collect());
+    participants.set((0..5).map(|_| Id::<User>::mint()).collect());
     leptos::task::tick().await;
     assert!(
         frame.query(".murmure-call-page-next").is_none(),
-        "nine participants take one page"
+        "five participants take one page of the band"
     );
     participants.set((0..12).map(|_| Id::<User>::mint()).collect());
     leptos::task::tick().await;
@@ -845,9 +845,12 @@ async fn the_page_buttons_name_themselves_and_turn_the_page() {
     next.click();
     leptos::task::tick().await;
     assert_eq!(page.get_untracked(), Pos::<GridPages>::new(1));
-    assert!(next.disabled(), "no page after the last");
     assert!(!previous.disabled());
-    assert_eq!(frame.texts(".murmure-call-page-number"), ["2 / 2"]);
+    assert_eq!(frame.texts(".murmure-call-page-number"), ["2 / 3"]);
+    next.click();
+    leptos::task::tick().await;
+    assert!(next.disabled(), "no page after the last");
+    previous.click();
     previous.click();
     leptos::task::tick().await;
     assert_eq!(page.get_untracked(), Pos::<GridPages>::new(0));
@@ -1959,4 +1962,292 @@ fn the_format_bar_shows_the_prose_controls_of_the_murmure_marks() {
         at.push(prose.iter().position(|shown| *shown == id).unwrap());
     }
     assert!(at.is_sorted(), "the controls keep Prose's order: {at:?}");
+}
+
+/// The attribute `name` of the element `selector` names.
+fn attribute(frame: &Frame, selector: &str, name: &str) -> Option<String> {
+    frame.query(selector).and_then(|el| el.get_attribute(name))
+}
+
+/// A press on the head of a group folds it, and a second unfolds it (`MURMURE-720`). The head
+/// is a button that takes the focus and carries its expanded state (`MURMURE-725`). Folded, the
+/// group keeps the channel shown and counts what it hides (`MURMURE-721`, `MURMURE-722`). A fold
+/// sends nothing to the Logic thread (`MURMURE-724`).
+#[wasm_bindgen_test]
+async fn a_folded_group_keeps_the_channel_shown_and_counts_the_rest() {
+    let acme = Acme::new();
+    let frame = acme.frame().await;
+    frame.relay.pane.set(MurmurePane::channel(acme.board));
+    frame
+        .absorb(activity(acme.direct, ambre_bus::Activity::Active, None))
+        .await;
+    let head = ".murmure-section[data-group=\"private\"] .murmure-section-title";
+    let button: web_sys::HtmlElement = frame.query(head).unwrap().dyn_into().unwrap();
+    assert_eq!(button.tag_name(), "BUTTON");
+    button.focus().unwrap();
+    assert_eq!(
+        frame.inner.active_element().as_ref(),
+        Some(button.unchecked_ref::<web_sys::Element>())
+    );
+    assert_eq!(
+        attribute(&frame, head, "aria-expanded").as_deref(),
+        Some("true")
+    );
+    let before = frame.sent.get_untracked().len();
+    frame.click(head).await;
+    assert_eq!(
+        attribute(&frame, head, "aria-expanded").as_deref(),
+        Some("false")
+    );
+    assert_eq!(
+        frame.texts(".murmure-section[data-group=\"private\"] .murmure-entry-name"),
+        ["Private channel"],
+        "the channel shown stays"
+    );
+    let direct = ".murmure-section[data-group=\"direct\"] .murmure-section-title";
+    frame.click(direct).await;
+    assert!(
+        frame
+            .texts(".murmure-section[data-group=\"direct\"] .murmure-entry-name")
+            .is_empty(),
+        "a quiet direct message folds away"
+    );
+    assert!(
+        frame
+            .query(".murmure-section[data-group=\"direct\"] .murmure-section-hidden .murmure-mark")
+            .is_some(),
+        "the head marks the hidden activity"
+    );
+    assert_eq!(
+        frame.texts(".murmure-section[data-group=\"direct\"] .murmure-section-hidden"),
+        ["1"]
+    );
+    frame.click(direct).await;
+    assert_eq!(
+        frame.texts(".murmure-section[data-group=\"direct\"] .murmure-entry-name"),
+        ["Direct message"]
+    );
+    assert_eq!(
+        frame.sent.get_untracked().len(),
+        before,
+        "a fold sends nothing"
+    );
+}
+
+/// The top of the sidebar holds the space switcher, which names the space shown (`MURMURE-711`).
+/// It is a button that carries its expanded state (`MURMURE-714`). A choice shows that space
+/// and sends nothing (`MURMURE-712`, `MURMURE-713`).
+#[wasm_bindgen_test]
+async fn the_space_switcher_names_the_space_and_lists_each_one() {
+    let acme = Acme::new();
+    let frame = acme.frame().await;
+    let switch = ".murmure-space-switch";
+    assert!(
+        frame.texts(switch).concat().contains("Acme"),
+        "{:?}",
+        frame.texts(switch)
+    );
+    assert_eq!(
+        attribute(&frame, switch, "aria-expanded").as_deref(),
+        Some("false")
+    );
+    frame.click(switch).await;
+    assert_eq!(
+        attribute(&frame, switch, "aria-expanded").as_deref(),
+        Some("true")
+    );
+    assert_eq!(frame.texts(".murmure-space-chord"), ["Alt+Shift+1"]);
+    let before = frame.sent.get_untracked().len();
+    frame.click(".murmure-space-choice").await;
+    assert_eq!(frame.relay.space.get_untracked(), Some(acme.space));
+    assert!(
+        frame.query(".murmure-space-menu").is_none(),
+        "the list closes"
+    );
+    assert_eq!(
+        frame.sent.get_untracked().len(),
+        before,
+        "a switch sends nothing"
+    );
+}
+
+/// Under the phone width, the channel list carries a bar of tabs on its bottom edge
+/// (`MURMURE-715`). Each tab is a button with its name and its selected state (`MURMURE-719`). The tab
+/// of direct messages shows them alone and sends nothing (`MURMURE-717`, `MURMURE-718`). A
+/// channel shows no bar (`MURMURE-716`), and a desktop none either.
+#[wasm_bindgen_test]
+async fn the_bar_of_tabs_shows_on_the_phone_list_alone() {
+    let acme = Acme::new();
+    let frame = Frame::with(390, MurmureRelay::new()).await;
+    frame.absorb(acme.members(&[])).await;
+    frame.absorb(acme.catalogue()).await;
+    leptos::task::tick().await;
+    assert!(
+        frame.width_of(".murmure-tabs") > 0.0,
+        "the list carries the bar"
+    );
+    assert_eq!(
+        frame.texts(".murmure-tab-label"),
+        ["Channels", "Direct messages", "Search"]
+    );
+    let tab = ".murmure-tab[data-tab=\"direct\"]";
+    assert_eq!(
+        attribute(&frame, tab, "aria-pressed").as_deref(),
+        Some("false")
+    );
+    let before = frame.sent.get_untracked().len();
+    frame.click(tab).await;
+    assert_eq!(
+        attribute(&frame, tab, "aria-pressed").as_deref(),
+        Some("true")
+    );
+    assert_eq!(frame.texts(".murmure-entry-name"), ["Direct message"]);
+    assert_eq!(
+        frame.sent.get_untracked().len(),
+        before,
+        "a tab sends nothing"
+    );
+    frame.relay.pane.set(MurmurePane::channel(acme.general));
+    leptos::task::tick().await;
+    assert_eq!(
+        frame.width_of(".murmure-tabs"),
+        0.0,
+        "a channel keeps its height"
+    );
+    let wide = acme.frame().await;
+    assert_eq!(
+        wide.width_of(".murmure-tabs"),
+        0.0,
+        "a desktop shows no bar"
+    );
+}
+
+/// A sidebar entry whose channel holds a live call shows a call mark and the count of its
+/// participants, and no name (`MURMURE-689`). The entry of the channel shown adds their initials
+/// (`MURMURE-690`). An answer of no state takes the mark away.
+#[wasm_bindgen_test]
+async fn a_live_call_shows_its_mark_its_count_and_its_faces_on_the_channel_shown() {
+    let acme = Acme::new();
+    let frame = acme.frame().await;
+    let call = Id::<ambre_core::id::Call>::mint();
+    let seated = vec![Id::<User>::mint(), Id::<User>::mint()];
+    let answer = |members| UiEvent::Channel {
+        channel_id: acme.sales,
+        event: ambre_murmure::message::MurmureEvent::CallMembers { call, members },
+    };
+    frame
+        .absorb(answer(ambre_bus::CallMembers::Live(seated)))
+        .await;
+    let sales = frame.entry("sales");
+    let mark = sales
+        .query_selector(".murmure-call-live")
+        .unwrap()
+        .expect("the call mark");
+    assert_eq!(
+        mark.get_attribute("aria-label").as_deref(),
+        Some("Call in progress, 2 in it")
+    );
+    assert_eq!(
+        mark.query_selector(".murmure-call-live-count")
+            .unwrap()
+            .and_then(|c| c.text_content())
+            .as_deref(),
+        Some("2")
+    );
+    assert_eq!(
+        mark.query_selector_all(".murmure-call-face")
+            .unwrap()
+            .length(),
+        0
+    );
+    frame.select("sales").await;
+    let mark = frame
+        .entry("sales")
+        .query_selector(".murmure-call-live")
+        .unwrap()
+        .expect("the call mark");
+    assert_eq!(
+        mark.query_selector_all(".murmure-call-face")
+            .unwrap()
+            .length(),
+        2
+    );
+    frame.absorb(answer(ambre_bus::CallMembers::Gone)).await;
+    assert!(
+        frame
+            .entry("sales")
+            .query_selector(".murmure-call-live")
+            .unwrap()
+            .is_none(),
+        "a call the relay holds no state of leaves"
+    );
+}
+
+/// While the page is in a call and shows another channel, it shows the call away from its
+/// channel (`MURMURE-696`). Each control names itself, and mute carries its pressed state
+/// (`MURMURE-693`). The way back shows the channel of the call, where the float leaves
+/// (`MURMURE-700`), and nothing is sent (`MURMURE-702`). Under the phone width, the pill keeps
+/// mute and hang up alone (`MURMURE-697`). The float reads a phase of its own here, since other
+/// tests move the phase of the page while this one waits.
+#[wasm_bindgen_test]
+async fn the_call_floats_away_from_its_channel_and_brings_it_back() {
+    use super::call_bar::CallFloat;
+    use ambre_murmure::ui::call_controls::{CallPhase, Microphone};
+    let acme = Acme::new();
+    for width in [1025, 390] {
+        let frame = Frame::with(width, MurmureRelay::new()).await;
+        frame.absorb(acme.members(&[])).await;
+        frame.absorb(acme.catalogue()).await;
+        frame.relay.pane.set(MurmurePane::channel(acme.board));
+        let root = frame.inner.create_element("div").unwrap();
+        root.set_class_name("float-root");
+        frame.inner.body().unwrap().append_child(&root).unwrap();
+        let phase = RwSignal::new(CallPhase::InCall(Microphone::Live));
+        let (pane, relay) = (frame.relay.pane, frame.relay);
+        crate::call::where_from().set(Some((acme.sales, crate::host::now())));
+        let handle = mount_to(root.clone().unchecked_into(), move || {
+            view! { <CallFloat pane=pane phase=Signal::from(phase) relay=relay /> }
+        });
+        leptos::task::tick().await;
+        let within = |selector: &str| root.query_selector(selector).unwrap();
+        let float = within(".murmure-call-float").expect("the call floats");
+        assert_eq!(
+            float.get_attribute("aria-label").as_deref(),
+            Some("Call in progress")
+        );
+        assert_eq!(
+            within(".murmure-float-channel")
+                .and_then(|c| c.text_content())
+                .as_deref(),
+            Some("sales")
+        );
+        let label = |selector: &str| within(selector).and_then(|b| b.get_attribute("aria-label"));
+        assert_eq!(label(".murmure-call-mute").as_deref(), Some("Mute"));
+        assert_eq!(label(".murmure-call-hang-up").as_deref(), Some("Hang up"));
+        let shown = |selector: &str| {
+            within(selector).is_some_and(|el| el.get_bounding_client_rect().width() > 0.0)
+        };
+        assert!(shown(".murmure-call-mute") && shown(".murmure-call-hang-up"));
+        assert_eq!(shown(".murmure-call-camera"), width > 599, "{width}");
+        assert_eq!(shown(".murmure-float-back"), width > 599, "{width}");
+        let before = frame.sent.get_untracked().len();
+        let grip: web_sys::HtmlElement = within(".murmure-float-grip").unwrap().unchecked_into();
+        grip.click();
+        leptos::task::tick().await;
+        assert_eq!(
+            frame.relay.pane.get_untracked().shown_channel(),
+            Some(acme.sales)
+        );
+        assert!(
+            within(".murmure-call-float").is_none(),
+            "its channel in view"
+        );
+        assert_eq!(
+            frame.sent.get_untracked().len(),
+            before,
+            "the way back sends nothing"
+        );
+        crate::call::where_from().set(None);
+        drop(handle);
+    }
 }

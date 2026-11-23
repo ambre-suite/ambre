@@ -109,7 +109,28 @@ impl CommandStates {
 /// Returns `None` for keys not modelled by [`Key`] (dead keys, IME, unknown
 /// named keys), which the caller treats as "no command chord".
 pub fn keybinding_from_event(ev: &web_sys::KeyboardEvent) -> Option<KeyBinding> {
-    Some(KeyBinding::new(modifiers_of(ev), Key::from_dom(&ev.key())?))
+    let mods = modifiers_of(ev);
+    let held =
+        KeyState::from_bool(ev.shift_key() && (ev.alt_key() || ev.ctrl_key() || ev.meta_key()));
+    let key = digit_of_code(&ev.code(), held).or_else(|| Key::from_dom(&ev.key()))?;
+    Some(KeyBinding::new(mods, key))
+}
+
+/// The digit of the key `code` names, `Digit0` to `Digit9`, while Shift and another modifier are
+/// held. Shift changes the character of a digit key on every layout, a symbol on a US keyboard
+/// and the digit itself on a French one. So a chord of Shift and a digit reads the key, never
+/// the character (`ambre-spec-commands.md`).
+fn digit_of_code(code: &str, held: KeyState) -> Option<Key> {
+    if held != KeyState::Held {
+        return None;
+    }
+    let digit = code.strip_prefix("Digit")?;
+    let mut chars = digit.chars();
+    let c = chars.next().filter(char::is_ascii_digit)?;
+    chars
+        .next()
+        .is_none()
+        .then(|| Key::Char(ambre_commands::KeyChar::new(c)))
 }
 
 /// The modifier set of a DOM keyboard event, the control and the command keys
@@ -120,4 +141,22 @@ pub(crate) fn modifiers_of(ev: &web_sys::KeyboardEvent) -> Flags<ModifierKeys> {
         .alt_if(KeyState::from_bool(ev.alt_key()))
         .shift_if(KeyState::from_bool(ev.shift_key()))
         .meta_if(KeyState::from_bool(ev.meta_key()))
+}
+
+#[cfg(test)]
+mod digit_tests {
+    use super::*;
+
+    /// A chord of Shift, another modifier and a digit reads the digit from the key: `Digit1`
+    /// gives `1` whatever the layout types. With Shift alone, or with no digit key, the
+    /// character decides.
+    #[test]
+    fn a_shifted_digit_chord_reads_the_key_and_not_the_character() {
+        let one = Some(Key::Char(ambre_commands::KeyChar::new('1')));
+        assert_eq!(digit_of_code("Digit1", KeyState::Held), one);
+        assert_eq!(digit_of_code("Digit1", KeyState::Released), None);
+        assert_eq!(digit_of_code("KeyA", KeyState::Held), None);
+        assert_eq!(digit_of_code("Digit", KeyState::Held), None);
+        assert_eq!(digit_of_code("Digit12", KeyState::Held), None);
+    }
 }

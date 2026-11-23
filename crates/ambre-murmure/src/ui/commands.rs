@@ -67,6 +67,47 @@ pub const JOIN_CALL: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.m
 /// Open the list of the keys Murmure takes (`MURMURE-540`).
 pub const KEYS: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.general.keys");
 
+/// Show the space of each rank of the switcher, the first nine (`MURMURE-712`).
+pub const SHOW_SPACE: [StaticKey<Commands>; 9] = [
+    StaticKey::<Commands>::new("murmure.navigate.space_1"),
+    StaticKey::<Commands>::new("murmure.navigate.space_2"),
+    StaticKey::<Commands>::new("murmure.navigate.space_3"),
+    StaticKey::<Commands>::new("murmure.navigate.space_4"),
+    StaticKey::<Commands>::new("murmure.navigate.space_5"),
+    StaticKey::<Commands>::new("murmure.navigate.space_6"),
+    StaticKey::<Commands>::new("murmure.navigate.space_7"),
+    StaticKey::<Commands>::new("murmure.navigate.space_8"),
+    StaticKey::<Commands>::new("murmure.navigate.space_9"),
+];
+
+fn show_space_1_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Show space 1")
+}
+fn show_space_2_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Show space 2")
+}
+fn show_space_3_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Show space 3")
+}
+fn show_space_4_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Show space 4")
+}
+fn show_space_5_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Show space 5")
+}
+fn show_space_6_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Show space 6")
+}
+fn show_space_7_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Show space 7")
+}
+fn show_space_8_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Show space 8")
+}
+fn show_space_9_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Show space 9")
+}
+
 fn palette_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
     ambre_core::Validated::new("Command palette")
 }
@@ -232,6 +273,108 @@ pub const COMMANDS: &[Command] = &[
         icon: None,
         keybindings: &[],
         category: MESSAGE,
+        home: Home::ContextPanel,
+    },
+    // The space of each rank of the switcher, on Alt+Shift and its digit: the browser takes
+    // Ctrl and a digit (the Murmure keyboard spec, `MURMURE-171`). The shell reads the digit
+    // from the key, so a French keyboard reaches it too.
+    Command {
+        id: SHOW_SPACE[0],
+        title: show_space_1_title,
+        icon: None,
+        keybindings: &[KeyBinding::new(
+            ModifierKeys::ALT_SHIFT,
+            Key::Char(KeyChar::new('1')),
+        )],
+        category: NAVIGATE,
+        home: Home::ContextPanel,
+    },
+    Command {
+        id: SHOW_SPACE[1],
+        title: show_space_2_title,
+        icon: None,
+        keybindings: &[KeyBinding::new(
+            ModifierKeys::ALT_SHIFT,
+            Key::Char(KeyChar::new('2')),
+        )],
+        category: NAVIGATE,
+        home: Home::ContextPanel,
+    },
+    Command {
+        id: SHOW_SPACE[2],
+        title: show_space_3_title,
+        icon: None,
+        keybindings: &[KeyBinding::new(
+            ModifierKeys::ALT_SHIFT,
+            Key::Char(KeyChar::new('3')),
+        )],
+        category: NAVIGATE,
+        home: Home::ContextPanel,
+    },
+    Command {
+        id: SHOW_SPACE[3],
+        title: show_space_4_title,
+        icon: None,
+        keybindings: &[KeyBinding::new(
+            ModifierKeys::ALT_SHIFT,
+            Key::Char(KeyChar::new('4')),
+        )],
+        category: NAVIGATE,
+        home: Home::ContextPanel,
+    },
+    Command {
+        id: SHOW_SPACE[4],
+        title: show_space_5_title,
+        icon: None,
+        keybindings: &[KeyBinding::new(
+            ModifierKeys::ALT_SHIFT,
+            Key::Char(KeyChar::new('5')),
+        )],
+        category: NAVIGATE,
+        home: Home::ContextPanel,
+    },
+    Command {
+        id: SHOW_SPACE[5],
+        title: show_space_6_title,
+        icon: None,
+        keybindings: &[KeyBinding::new(
+            ModifierKeys::ALT_SHIFT,
+            Key::Char(KeyChar::new('6')),
+        )],
+        category: NAVIGATE,
+        home: Home::ContextPanel,
+    },
+    Command {
+        id: SHOW_SPACE[6],
+        title: show_space_7_title,
+        icon: None,
+        keybindings: &[KeyBinding::new(
+            ModifierKeys::ALT_SHIFT,
+            Key::Char(KeyChar::new('7')),
+        )],
+        category: NAVIGATE,
+        home: Home::ContextPanel,
+    },
+    Command {
+        id: SHOW_SPACE[7],
+        title: show_space_8_title,
+        icon: None,
+        keybindings: &[KeyBinding::new(
+            ModifierKeys::ALT_SHIFT,
+            Key::Char(KeyChar::new('8')),
+        )],
+        category: NAVIGATE,
+        home: Home::ContextPanel,
+    },
+    Command {
+        id: SHOW_SPACE[8],
+        title: show_space_9_title,
+        icon: None,
+        keybindings: &[KeyBinding::new(
+            ModifierKeys::ALT_SHIFT,
+            Key::Char(KeyChar::new('9')),
+        )],
+        category: NAVIGATE,
         home: Home::ContextPanel,
     },
 ];

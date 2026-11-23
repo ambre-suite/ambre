@@ -6,7 +6,7 @@
 use std::time::{Duration, Instant};
 
 use ambre_core::Seq;
-use ambre_protocol::signaling::VideoChoice;
+use ambre_protocol::signaling::{PHONE_VIDEOS, VIDEOS_PER_RECEIVER, VideoChoice};
 use str0m::media::MediaKind;
 
 use super::client::{Arrival, SCREEN_LAYER, VideoRx};
@@ -245,14 +245,14 @@ fn the_sequence_numbers_stay_continuous_across_a_layer_switch() {
     }
 }
 
-/// Of twelve senders, a receiver gets the video of nine, and the one who spoke
-/// last is among them even though it joined last.
+/// `CALL-041`: of thirteen senders, a receiver of no choice gets the video of eleven. The one
+/// who spoke last is among them, though it joined last.
 #[test]
 fn a_receiver_gets_the_video_of_the_most_recent_speakers_alone() {
-    let mut net = call(12, Profile::CLEAN);
+    let mut net = call(14, Profile::CLEAN);
     net.run(Duration::from_secs(4));
     net.member(0).synth.speaking = false;
-    net.member(11).synth.speaking = true;
+    net.member(13).synth.speaking = true;
     net.run(Duration::from_secs(4));
     let from = net.now - Duration::from_secs(1);
     let mut senders: Vec<u16> = net
@@ -268,16 +268,35 @@ fn a_receiver_gets_the_video_of_the_most_recent_speakers_alone() {
     senders.dedup();
     assert_eq!(
         senders.len(),
-        9,
+        11,
         "the receiver got the video of {senders:?}"
     );
     assert!(
-        senders.contains(&11),
+        senders.contains(&13),
         "the last speaker is missing: {senders:?}"
     );
     assert!(
         senders.contains(&0),
         "the speaker before it is missing: {senders:?}"
+    );
+}
+
+/// `CALL-041`, a phone: a receiver whose choice names nine videos gets nine of the thirteen
+/// senders, and the speaker among them.
+#[test]
+fn a_receiver_that_names_nine_videos_gets_nine() {
+    let mut net = call(14, Profile::CLEAN);
+    let id = net.member(1).id;
+    let phone = VideoChoice::new(Vec::new(), None, PHONE_VIDEOS).expect("a phone choice");
+    net.sfu.choose_videos(id, phone);
+    net.run(Duration::from_secs(4));
+    let senders = video_senders(&net, 1, net.now - Duration::from_secs(1));
+    assert_eq!(senders.len(), 9, "the phone got the video of {senders:?}");
+    assert!(senders.contains(&0), "the speaker is missing: {senders:?}");
+    assert_eq!(
+        video_senders(&net, 2, net.now - Duration::from_secs(1)).len(),
+        11,
+        "a desktop beside it"
     );
 }
 
@@ -303,42 +322,43 @@ fn choice(senders: &[u64], large: Option<u64>) -> VideoChoice {
     VideoChoice::new(
         senders.iter().copied().map(Seq::new).collect(),
         large.map(Seq::new),
+        VIDEOS_PER_RECEIVER,
     )
     .expect("a choice under the cap")
 }
 
-/// A call of twelve, participant 0 speaking, over links of 150 ms of round trip with no loss.
-/// Participant 1 then chooses senders 10 and 11, who never spoke and joined last, so neither
-/// is among the nine speakers it got. Answers the network and the instant of the choice.
+/// A call of fourteen, participant 0 speaking, over links of 150 ms of round trip with no loss.
+/// Participant 1 then chooses senders 12 and 13, who never spoke and joined last, so neither
+/// is among the eleven speakers it got. Answers the network and the instant of the choice.
 fn chosen_run() -> (Net, Instant) {
-    let mut net = call(12, Profile::half(Duration::from_millis(150), 0.0));
+    let mut net = call(14, Profile::half(Duration::from_millis(150), 0.0));
     net.run(Duration::from_secs(4));
     assert!(
-        !video_senders(&net, 1, net.now - Duration::from_secs(1)).contains(&11),
-        "before the choice, the receiver got the video of 11"
+        !video_senders(&net, 1, net.now - Duration::from_secs(1)).contains(&13),
+        "before the choice, the receiver got the video of 13"
     );
     let at = net.now;
     let id = net.member(1).id;
-    net.sfu.choose_videos(id, choice(&[10, 11], None));
+    net.sfu.choose_videos(id, choice(&[12, 13], None));
     net.run(Duration::from_secs(3));
     (net, at)
 }
 
-/// `CALL-126`: a receiver of a call of twelve chooses two senders outside the nine it gets.
+/// `CALL-126`: a receiver of a call of fourteen chooses two senders outside the eleven it gets.
 /// It then gets the video of both.
 #[test]
 fn a_receiver_gets_the_video_of_the_senders_it_chose() {
     let (net, _) = chosen_run();
     let senders = video_senders(&net, 1, net.now - Duration::from_secs(1));
     assert!(
-        senders.contains(&10) && senders.contains(&11),
+        senders.contains(&12) && senders.contains(&13),
         "the receiver got {senders:?}"
     );
 }
 
-/// Under a choice, the speakers fill the seven slots a choice of two leaves. The
+/// `CALL-041`, under a choice: the speakers fill the nine slots a choice of two leaves. The
 /// speaker stays, the two who joined last of the fillers give way, and a receiver who chose
-/// nothing keeps the nine speakers.
+/// nothing keeps the eleven speakers.
 #[test]
 fn the_most_recent_speakers_fill_the_slots_a_choice_leaves() {
     let (net, _) = chosen_run();
@@ -346,13 +366,13 @@ fn the_most_recent_speakers_fill_the_slots_a_choice_leaves() {
     let chooser = video_senders(&net, 1, from);
     assert_eq!(
         chooser,
-        vec![0, 2, 3, 4, 5, 6, 7, 10, 11],
+        vec![0, 2, 3, 4, 5, 6, 7, 8, 9, 12, 13],
         "the chooser got"
     );
     let other = video_senders(&net, 2, from);
     assert_eq!(
         other,
-        vec![0, 1, 3, 4, 5, 6, 7, 8, 9],
+        vec![0, 1, 3, 4, 5, 6, 7, 8, 9, 10, 11],
         "a receiver of no choice got"
     );
 }
@@ -363,7 +383,7 @@ fn the_most_recent_speakers_fill_the_slots_a_choice_leaves() {
 #[test]
 fn a_chosen_sender_is_asked_a_keyframe_and_shows_within_the_budget() {
     let (net, at) = chosen_run();
-    for sender in [10, 11] {
+    for sender in [12, 13] {
         let asked = net
             .members
             .get(usize::from(sender))
@@ -402,16 +422,16 @@ fn a_chosen_sender_is_asked_a_keyframe_and_shows_within_the_budget() {
 const CHOSEN_SWITCH: Duration = Duration::from_millis(500);
 
 /// `CALL-127`: a chosen sender who leaves frees its slot. The most recent speaker the choice
-/// had pushed out takes it, and the receiver gets nine videos again.
+/// had pushed out takes it, and the receiver gets eleven videos again.
 #[test]
 fn a_chosen_sender_who_leaves_frees_its_slot_to_a_speaker() {
     let (mut net, _) = chosen_run();
-    net.leave(11);
+    net.leave(13);
     net.run(Duration::from_secs(3));
     let senders = video_senders(&net, 1, net.now - Duration::from_secs(1));
     assert_eq!(
         senders,
-        vec![0, 2, 3, 4, 5, 6, 7, 8, 10],
+        vec![0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12],
         "after the leave, the receiver got"
     );
 }
@@ -447,17 +467,17 @@ fn a_large_sender_gets_the_top_layer_in_place_of_the_speaker() {
 /// keyframe of its lowest layer for all ten, and each receiver decodes it.
 #[test]
 fn ten_receivers_who_choose_one_sender_ask_it_one_keyframe() {
-    let mut net = call(12, Profile::half(Duration::from_millis(150), 0.0));
+    let mut net = call(14, Profile::half(Duration::from_millis(150), 0.0));
     net.run(Duration::from_secs(4));
     let at = net.now;
     for receiver in 1..=10 {
         let id = net.member(receiver).id;
-        net.sfu.choose_videos(id, choice(&[11], None));
+        net.sfu.choose_videos(id, choice(&[13], None));
         net.run(Duration::from_millis(10));
     }
     net.run(Duration::from_millis(500));
     let asks: Vec<Instant> = net
-        .member(11)
+        .member(13)
         .synth
         .keyframe_requests
         .iter()
@@ -473,36 +493,36 @@ fn ten_receivers_who_choose_one_sender_ask_it_one_keyframe() {
     );
     for receiver in 1..=10 {
         assert!(
-            video_senders(&net, receiver, at).contains(&11),
+            video_senders(&net, receiver, at).contains(&13),
             "receiver {receiver} got no picture of the chosen sender"
         );
     }
 }
 
-/// A call of twelve where the speaker moves from participant 0 to participant 11, who joined
+/// A call of fourteen where the speaker moves from participant 0 to participant 13, who joined
 /// last. Answers the network and the offers each participant had before the move. The links
 /// lose nothing, and their 150 ms of round trip let several pictures pass before a keyframe.
-fn speaker_joins_the_nine() -> (Net, Vec<usize>) {
-    let mut net = call(12, Profile::half(Duration::from_millis(150), 0.0));
+fn speaker_joins_the_eleven() -> (Net, Vec<usize>) {
+    let mut net = call(14, Profile::half(Duration::from_millis(150), 0.0));
     net.run(Duration::from_secs(4));
     let offers = net.members.iter().map(|m| m.offers).collect();
     net.member(0).synth.speaking = false;
-    net.member(11).synth.speaking = true;
+    net.member(13).synth.speaking = true;
     net.run(Duration::from_secs(4));
     (net, offers)
 }
 
-/// In a call of twelve, a receiver gets three audio tracks, nine video tracks and
+/// `CALL-045`: in a call of fourteen, a receiver gets three audio tracks, eleven video tracks and
 /// one screen track from the SFU. The count holds whatever the count of senders.
 #[test]
 fn a_receiver_holds_a_fixed_count_of_slots() {
-    let (net, _) = speaker_joins_the_nine();
+    let (net, _) = speaker_joins_the_eleven();
     let receiving = &net.members.get(1).expect("a receiver").synth.receiving;
     let count = |kind| receiving.iter().filter(|(_, k)| *k == kind).count();
     assert_eq!(count(MediaKind::Audio), 3, "audio slots: {receiving:?}");
     assert_eq!(
         count(MediaKind::Video),
-        9 + 1,
+        11 + 1,
         "video and screen slots: {receiving:?}"
     );
 }
@@ -510,7 +530,7 @@ fn a_receiver_holds_a_fixed_count_of_slots() {
 /// `CALL-046`: a change of speaker sends no participant a new offer.
 #[test]
 fn a_change_of_speaker_renegotiates_nothing() {
-    let (net, before) = speaker_joins_the_nine();
+    let (net, before) = speaker_joins_the_eleven();
     let after: Vec<usize> = net.members.iter().map(|m| m.offers).collect();
     assert_eq!(after, before, "offers before and after the move");
     assert!(before.iter().all(|o| *o == 1), "offers: {before:?}");
@@ -525,7 +545,7 @@ fn moved_slot(net: &Net) -> &VideoRx {
         .video
         .values()
         .find(|rx| {
-            rx.arrivals.iter().any(|a| a.sender == 11) && rx.arrivals.iter().any(|a| a.sender != 11)
+            rx.arrivals.iter().any(|a| a.sender == 13) && rx.arrivals.iter().any(|a| a.sender != 13)
         })
         .expect("a slot that moved to the new speaker")
 }
@@ -533,7 +553,7 @@ fn moved_slot(net: &Net) -> &VideoRx {
 /// `CALL-048`: the sequence numbers of a slot stay continuous when it moves to another sender.
 #[test]
 fn the_sequence_numbers_of_a_slot_stay_continuous_across_a_change_of_sender() {
-    let (net, _) = speaker_joins_the_nine();
+    let (net, _) = speaker_joins_the_eleven();
     let rx = moved_slot(&net);
     for pair in rx.arrivals.windows(2) {
         if let [a, b] = pair {
@@ -545,12 +565,12 @@ fn the_sequence_numbers_of_a_slot_stay_continuous_across_a_change_of_sender() {
 /// `CALL-049`: a slot moves to another sender on the first packet of one of its keyframes.
 #[test]
 fn a_slot_moves_to_another_sender_only_on_a_keyframe() {
-    let (net, _) = speaker_joins_the_nine();
+    let (net, _) = speaker_joins_the_eleven();
     let rx = moved_slot(&net);
     let first = rx
         .arrivals
         .iter()
-        .find(|a| a.sender == 11)
+        .find(|a| a.sender == 13)
         .expect("a packet of the new speaker");
     assert!(
         first.keyframe_start && first.index == 0,

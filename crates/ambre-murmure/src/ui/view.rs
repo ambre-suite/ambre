@@ -4504,6 +4504,7 @@ mod tests {
                 microphone: crate::ui::call_controls::Microphone::Live,
             },
             fill: crate::ui::call_videos::Fill::Band,
+            width: crate::ui::call_videos::Width::Wider,
         }
     }
 
@@ -4658,7 +4659,10 @@ mod tests {
             mods: ModifierKeys::NONE,
         };
         while page.commands.try_recv().is_ok() {}
-        assert_eq!(page.view.handle_input(&press(next.center())), Consumed::Yes);
+        assert_eq!(
+            page.view.handle_input(&press(next.frame.center())),
+            Consumed::Yes
+        );
         assert_eq!(
             page.view.handle_input(&press(tile.frame.center())),
             Consumed::Yes
