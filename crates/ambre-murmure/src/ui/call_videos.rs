@@ -5,7 +5,7 @@
 //! call picks and no menu offers:
 //! * the band, a row above the composer: pages of five, or three under the phone width. The
 //!   member's own tile sits apart at its end, smaller (`MURMURE-684`);
-//! * the fill grid, after the fill button: pages of eleven, or eight under the phone width. The
+//! * the fill grid, after the fill button: pages of nine, or eight under the phone width. The
 //!   own tile takes the last cell (`MURMURE-652`, `MURMURE-686`);
 //! * the scene, widened with a received screen or a pin. The screen, else the pinned tile, takes
 //!   the region, and a strip of four faces sits beside it, the own tile last (`MURMURE-687`).
@@ -1414,13 +1414,13 @@ mod tests {
         }
     }
 
-    /// `MURMURE-652`, `MURMURE-686`: on a wide desktop, the fill grid lays out eleven others and
+    /// `MURMURE-652`, `MURMURE-686`: on a wide desktop, the fill grid lays out nine others and
     /// the own tile in four columns of three rows. The own tile takes the last cell, at the size
     /// of each other tile. Under the phone width, eight others and the own tile take three by
     /// three.
     #[test]
     fn the_fill_grid_ends_on_the_own_tile_at_the_size_of_every_cell() {
-        for (width, count, columns) in [(Width::Wider, 11, 4), (Width::Phone, 8, 3)] {
+        for (width, count, columns) in [(Width::Wider, 9, 4), (Width::Phone, 8, 3)] {
             let mut shown = stage(count, 4);
             (shown.fill, shown.width) = (Fill::Region, width);
             let at = match width {
@@ -1681,7 +1681,7 @@ mod tests {
 
     /// `MURMURE-654`: past the page size of its layout and its width, the region shows pages of
     /// that size, in the order of the admission. The band holds five, or three on a phone. The
-    /// fill grid holds eleven, or eight, and the strip of the scene four. An arrow
+    /// fill grid holds nine, or eight, and the strip of the scene four. An arrow
     /// turns to each other page, the turns stop at the ends, and a page past the last shows the
     /// last.
     #[test]
@@ -1689,7 +1689,7 @@ mod tests {
         let sizes = [
             (Fill::Band, None, Width::Wider, 5),
             (Fill::Band, None, Width::Phone, 3),
-            (Fill::Region, None, Width::Wider, 11),
+            (Fill::Region, None, Width::Wider, 9),
             (Fill::Region, None, Width::Phone, 8),
             (Fill::Region, Some(SCREEN_SLOT), Width::Wider, 4),
             (Fill::Region, Some(SCREEN_SLOT), Width::Phone, 4),
@@ -1773,7 +1773,7 @@ mod tests {
                     shown.pinned = pin;
                     let wanted = shown.wanted();
                     assert_eq!(wanted.members, member_ids(&place(at, &shown)));
-                    assert!(wanted.members.len() <= 11, "{count}: {wanted:?}");
+                    assert!(wanted.members.len() <= 9, "{count}: {wanted:?}");
                     assert_eq!(wanted.width, shown.width);
                     let pinned = pin.filter(|m| shown.others.iter().any(|p| p.member == *m));
                     assert_eq!(wanted.large, pinned);

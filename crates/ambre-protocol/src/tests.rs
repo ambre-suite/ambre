@@ -314,29 +314,29 @@ fn a_choice_of_too_many_videos_or_a_stray_large_sender_reads_as_nothing() {
         matches!(bare, SfuMsg::Videos(c) if c.count() == VIDEOS_PER_RECEIVER),
         "a choice with no count asks for the desktop count"
     );
-    let eleven: Vec<Seq<_>> = (1..=11).map(Seq::new).collect();
+    let nine: Vec<Seq<_>> = (1..=9).map(Seq::new).collect();
     assert!(
-        VideoChoice::new(eleven, None, VIDEOS_PER_RECEIVER).is_ok(),
-        "eleven senders fit"
+        VideoChoice::new(nine, None, VIDEOS_PER_RECEIVER).is_ok(),
+        "nine senders fit"
     );
-    let twelve = r#"{"videos":{"senders":[1,2,3,4,5,6,7,8,9,10,11,12],"large":null}}"#;
+    let ten = r#"{"videos":{"senders":[1,2,3,4,5,6,7,8,9,10],"large":null}}"#;
     let twice = r#"{"videos":{"senders":[4,4],"large":null}}"#;
     let stray = r#"{"videos":{"senders":[4],"large":5}}"#;
-    let past = r#"{"videos":{"senders":[4],"large":null,"count":12}}"#;
+    let past = r#"{"videos":{"senders":[4],"large":null,"count":10}}"#;
     let under = r#"{"videos":{"senders":[4,5],"large":null,"count":1}}"#;
-    for refused in [twelve, twice, stray, past, under] {
+    for refused in [ten, twice, stray, past, under] {
         assert!(
             serde_json::from_str::<SfuMsg>(refused).is_err(),
             "{refused} was read"
         );
     }
-    let twelve: Vec<Seq<_>> = (1..=12).map(Seq::new).collect();
+    let ten: Vec<Seq<_>> = (1..=10).map(Seq::new).collect();
     assert_eq!(
-        VideoChoice::new(twelve, None, VIDEOS_PER_RECEIVER),
+        VideoChoice::new(ten, None, VIDEOS_PER_RECEIVER),
         Err(ChoiceError::TooMany)
     );
     assert_eq!(
-        VideoChoice::new(vec![Seq::new(4)], None, Count::new(12)),
+        VideoChoice::new(vec![Seq::new(4)], None, Count::new(10)),
         Err(ChoiceError::Count)
     );
     assert_eq!(

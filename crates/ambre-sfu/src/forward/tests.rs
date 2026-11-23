@@ -45,8 +45,8 @@ struct Client {
 }
 
 /// The section of an offer of the SFU that holds the screen slot: after the three audio slots
-/// and the eleven video slots (`CALL-104`).
-const SCREEN_SECTION: usize = 14;
+/// and the nine video slots (`CALL-104`).
+const SCREEN_SECTION: usize = 12;
 
 impl Client {
     /// Writes one packet on the track of `kind`, and answers what a receiver must read.
@@ -499,7 +499,7 @@ fn share(net: &mut Net, from: usize, count: u8) -> Vec<Got> {
     sent
 }
 
-/// `CALL-104`: the SFU offers each receiver one screen slot after its eleven video slots. The
+/// `CALL-104`: the SFU offers each receiver one screen slot after its nine video slots. The
 /// screen of a sharer reaches every other receiver over that slot, unchanged, and no video
 /// slot carries a packet of it.
 #[test]

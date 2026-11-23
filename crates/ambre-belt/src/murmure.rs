@@ -4138,15 +4138,15 @@ pub(crate) mod tests {
     }
 
     /// What the screen slot of `page` decoded: the frames, the width, and whether its receiver
-    /// holds a transform. The screen slot is the twelfth video receiver, after the eleven video
-    /// slots the SFU offers first.
+    /// holds a transform. The screen slot is the tenth video receiver, after the nine video slots
+    /// the SFU offers first.
     async fn screen_received(page: &Page) -> Value {
         page.browser
             .script_async(
                 "const done = arguments[arguments.length - 1]; \
                  const pc = (window.beltPcs || [])[0]; \
                  const t = pc.getTransceivers().filter((t) => t.receiver.track.kind === 'video' \
-                   && /recv/.test(t.currentDirection || ''))[11]; \
+                   && /recv/.test(t.currentDirection || ''))[9]; \
                  if (!t) { done([0, 0, false]); return; } \
                  t.receiver.getStats().then((stats) => { \
                    let frames = 0, width = 0; \

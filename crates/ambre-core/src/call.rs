@@ -281,7 +281,7 @@ impl NarrowCount for ReceivedVideos {
 
 /// The desktop count of the call row of `ambre-spec-budgets.md section 1`. The one place the
 /// figure is written: the count below and the slots of the page are built on it.
-const FORWARDED: u32 = 11;
+const FORWARDED: u32 = 9;
 
 /// The count of videos the SFU forwards one receiver at most. The SFU, the wire, the slots of the
 /// page and the fill grid of Murmure read it.

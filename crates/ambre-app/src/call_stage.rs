@@ -354,12 +354,12 @@ mod tests {
         assert!(home.is_some(), "the channel of the call");
     }
 
-    /// A page under the phone width asks for the phone count of videos, nine. A wider one asks
-    /// for the desktop count, eleven.
+    /// A page under the phone width asks for the phone count of videos, and a wider one for the
+    /// desktop count. Both are nine today.
     #[wasm_bindgen_test]
     fn the_choice_names_the_count_of_videos_of_its_width() {
         assert_eq!(videos_of(Width::Phone), ambre_core::Count::new(9));
-        assert_eq!(videos_of(Width::Wider), ambre_core::Count::new(11));
+        assert_eq!(videos_of(Width::Wider), ambre_core::Count::new(9));
     }
 
     /// A receiver whose `getSynchronizationSources` answers `sources`, a script.

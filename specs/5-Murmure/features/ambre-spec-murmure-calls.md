@@ -475,13 +475,14 @@ layouts, and none is a menu: the region picks it from the call.
 | Layout | When | Its page of other participants | The member's own tile |
 |---|---|---|---|
 | band | by default, a row above the composer | 5 over the phone width, 3 under it | apart, at the end, smaller (`MURMURE-684`) |
-| fill grid | after the fill button, with no screen and no pin | 11 over the phone width, 8 under it | the last cell, the size of every cell (`MURMURE-652`) |
+| fill grid | after the fill button, with no screen and no pin | 9 over the phone width, 8 under it | the last cell, the size of every cell (`MURMURE-652`) |
 | scene | widened, with a received screen or a pin | 4 in the strip | the last place of the strip (`MURMURE-652`) |
 
 The page sizes follow the room each layout has. Nine tiles in a band of about 200 pixels draw
 faces of 50 pixels, which nobody reads. The fill grid takes the columns that give the largest
-tiles, its own tile counted (`MURMURE-686`). That is four by three on a wide desktop, and three by
-three on a phone. It never sets a column aside for the member. The rules of the tiles:
+tiles, its own tile counted (`MURMURE-686`). That is four by three on a wide desktop, its last row
+short of two cells, and three by three on a phone. It never sets a column aside for the member.
+The rules of the tiles:
 
 1. The participants keep the order the call admitted them, with a video or without one.
 2. A choice of videos moves no tile: a page shows the same members before and after its videos
@@ -494,14 +495,18 @@ The page learns the member of each video slot as it learns the member of an audi
 worker names the sender of the slot at its first chunk (`CALL-084`). The Sync worker names the
 member of that sender. The render runtime draws the picture inside its tile (`CALL-015`).
 
-The SFU forwards eleven videos at most to a desktop and nine to a phone (`CALL-041`). So the
-largest page of each width holds each picture a receiver gets. Past the page size of its layout,
-the region shows the other participants in pages (`MURMURE-654`). An arrow at each end of the band, the
-grid or the strip turns the page. The header offers the same two turns as buttons.
-A participant who speaks on another page marks the arrow toward it (`MURMURE-688`).
+The SFU forwards nine videos at most to a desktop and to a phone (`CALL-041`). So the largest
+page of each width holds each picture a receiver gets. No tile of a page waits on a picture the
+SFU never sends.
 
-The page names the count of videos of its width in each choice (`MURMURE-704`). A phone asks for
-nine, so the fill of the SFU spends no downlink on a video the phone has no tile for.
+Past the page size of its layout, the region shows the other participants in pages
+(`MURMURE-654`). An arrow at each end of the band, the grid or the strip turns the page. The header
+offers the same two turns as buttons. A participant who speaks on another page marks the arrow
+toward it (`MURMURE-688`).
+
+The page names the count of videos of its width in each choice (`MURMURE-704`). The two counts
+are equal today. A desktop count of eleven would fill the grid of four by three. It waits on the
+`Forward eleven videos to a desktop` Story (`ambre-roadmap.md`).
 
 The grid opens on the first page, and the turns stop at the first and at the last. A page past the
 last, after a leave, shows the last. The list of every participant opens from the participants
@@ -693,9 +698,9 @@ sync, under its own key (`MURMURE-709`).
 | Only the member's own tile marks a mute | each tile marks the mute of its member | a mute would travel on the wire, and the SFU would read a mute apart from a silence (`ZK-025`) |
 | The page reads who speaks from the audio level of each received slot | who speaks from the slots of the SFU | a slot changes its sender only when a fourth member speaks, so the slots tell who spoke last, never who speaks now |
 | A page size per layout | pages of nine in every layout | nine tiles in a band of about 200 pixels draw faces of 50 pixels, and a filled desktop leaves a column empty |
-| A page size per layout | a tile for each participant, past the page | the SFU forwards eleven videos, and fifty tiles in one region leave no face readable |
+| A page size per layout | a tile for each participant, past the page | the SFU forwards nine videos, and fifty tiles in one region leave no face readable |
 | A page size per layout | a last tile that counts the others and opens their list | a member past the page would reach no tile and no video, only a name in a list |
-| The own tile is the last cell of the fill grid | the own tile apart from the fill grid, smaller | it keeps a column for one small tile, so a grid of eleven loses a row |
+| The own tile is the last cell of the fill grid | the own tile apart from the fill grid, smaller | it keeps a column for one small tile, so a grid of nine loses a column |
 | Three layouts the call picks | a gallery and speaker menu | the member chooses a layout the content already tells: a screen wants the room, and a pin names its subject |
 | A screen widens the call | the screen waits in the band for the fill button | text in a band cannot be read, and each member would press the button at each share |
 | A bubble away from the channel | the call ends when the member leaves its channel | a member who opens the document under discussion would drop out of the discussion |
@@ -706,7 +711,7 @@ sync, under its own key (`MURMURE-709`).
 | The grid keeps the order of admission | the participants with a video first | each choice brings videos, so the tiles would move under each turn, and a page would not know its senders |
 | The page asks for the tiles it shows | the page lets the SFU pick the speakers | a member on the page who does not speak would show its initials, and a speaker off the page would cost a video that no tile draws |
 | The pinned tile takes a place of the page | a pinned tile beside a full page | the choice would name one sender past the count the SFU forwards |
-| A phone asks for nine videos | a phone receives eleven as a desktop does | the fill would send two videos no tile of the phone draws, over the downlink of a phone |
+| A phone asks for the phone count of videos | a phone receives the desktop count | the desktop count may grow past what a phone lays out, and the fill would then send videos no tile of the phone draws, over the downlink of a phone |
 | The call button starts a call with the camera off | a second button that starts a video call | the header would offer two buttons for one call, and a press of the camera button reaches the same call |
 | A received screen takes the scene | the screen in a tile of the row of the cameras | the tile of a camera is about 160 pixels tall, where the text of a screen cannot be read |
 | A share stops when another member shares | a share that goes on unseen | the member would show a screen that no other member sees |
