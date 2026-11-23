@@ -600,12 +600,7 @@ impl SyncState {
                 seq,
                 update,
             }));
-        let overflow = doc_state
-            .unvouched
-            .len()
-            .saturating_sub(usize::try_from(QUARANTINE_LIMIT.get()).unwrap_or(usize::MAX));
-        doc_state.unvouched.drain(..overflow);
-        if overflow > 0 {
+        if !crate::trim_held(&mut doc_state.unvouched).is_zero() {
             self.send_to_logic(LogicEvent::SyncWarning {
                 document_id,
                 code: SyncWarningCode::WriterRefused,
@@ -662,11 +657,7 @@ impl SyncState {
             }
             results.push(opened);
         }
-        let overflow = doc_state
-            .refused
-            .len()
-            .saturating_sub(usize::try_from(QUARANTINE_LIMIT.get()).unwrap_or(usize::MAX));
-        doc_state.refused.drain(..overflow);
+        crate::trim_held(&mut doc_state.refused);
         for opened in results {
             self.deliver_remote(document_id, Some(opened), |delta| {
                 LogicEvent::RemoteUpdate { document_id, delta }
@@ -4124,6 +4115,52 @@ mod tests {
             .map(|(_, u)| u.public_data.clock.get())
             .collect();
         assert_eq!(held, std::collections::BTreeSet::from([2, 3]));
+    }
+
+    /// `SYNC-309`: the deltas held for a listing, and those a listing
+    /// refused, keep the byte cap of the quarantine. Three of 12 MiB pass
+    /// 32 MiB under the count cap: the oldest leaves, and one warning is
+    /// raised.
+    #[test]
+    fn a_hold_past_its_bytes_drops_the_oldest() {
+        let (mut state, rx, doc, key, sk, snap) = setup();
+        let big = |clock: u64| {
+            let mut update =
+                make_update(doc, snap, Seq::<DeltaAuthor>::new(clock), b"x", &key, &sk);
+            update.ciphertext = Payload::new(vec![0; 12 * 1024 * 1024]);
+            (Seq::<Relay>::new(clock), update)
+        };
+        state.hold_unvouched(doc, (1..=3).map(big));
+        let held: Vec<u64> = state.documents[&doc]
+            .unvouched
+            .iter()
+            .map(|held| held.seq.get())
+            .collect();
+        assert_eq!(held, [2, 3]);
+        let warnings = drain(&rx)
+            .into_iter()
+            .filter(|e| matches!(e, LogicEvent::SyncWarning { code, .. } if *code == SyncWarningCode::WriterRefused))
+            .count();
+        assert_eq!(warnings, 1);
+
+        // The refused hold goes through the same trim.
+        let seen = ambre_core::Seq::nth(1);
+        let mut refused: Vec<crate::Unvouched> = (4..=6)
+            .map(big)
+            .map(|(seq, update)| crate::Unvouched { seen, seq, update })
+            .collect();
+        assert_eq!(crate::trim_held(&mut refused).get(), 1);
+        assert_eq!(
+            refused
+                .iter()
+                .map(|held| held.seq.get())
+                .collect::<Vec<_>>(),
+            [5, 6]
+        );
+        assert!(
+            crate::trim_held(&mut refused).is_zero(),
+            "a hold that fits loses nothing"
+        );
     }
 
     /// `SYNC-007`: the overflow drops the update with the lowest clock, across

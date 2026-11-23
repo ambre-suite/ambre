@@ -991,13 +991,15 @@ struct SyncDocumentState {
     departed: Option<Seq<ambre_protocol::LogPlaces>>,
     /// Deltas whose signer no writer of the walk held names, kept sealed
     /// until a listing asked after each arrived answers (`SYNC-211`).
-    /// Bounded by [`QUARANTINE_LIMIT`], as the quarantine is.
+    /// Bounded by [`QUARANTINE_LIMIT`] and [`QUARANTINE_BYTES`], as the
+    /// quarantine is (`SYNC-309`).
     unvouched: Vec<Unvouched>,
     /// Deltas of a channel document that a listing refused as no writer's,
     /// kept sealed. A space that lists the channel can open later, or change
     /// its word. The next walk of the log decides them again (`SYNC-230`).
     /// The refusal stands until that walk. Bounded by
-    /// [`QUARANTINE_LIMIT`], as the quarantine is.
+    /// [`QUARANTINE_LIMIT`] and [`QUARANTINE_BYTES`], as the quarantine is
+    /// (`SYNC-309`).
     refused: Vec<Unvouched>,
     /// Whether the document may land a delta and seal a frame while its log
     /// walks again under the rule of a space (`SYNC-232`).
@@ -1059,6 +1061,32 @@ struct Unvouched {
     seen: ambre_core::Seq<generation::Listing>,
     seq: Seq<Relay>,
     update: Update,
+}
+
+impl Unvouched {
+    /// The ciphertext bytes this delta holds while it waits.
+    fn bytes(&self) -> Count<ambre_core::Octets> {
+        Count::of(self.update.ciphertext.as_bytes().len())
+    }
+}
+
+/// Drops the oldest deltas of `held` until it fits both caps of the
+/// quarantine: [`QUARANTINE_LIMIT`] and [`QUARANTINE_BYTES`]. A thousand
+/// slots of the relay's largest frame would otherwise hold gigabytes
+/// (`SYNC-309`, audit `W206`). Returns how many it dropped.
+fn trim_held(held: &mut Vec<Unvouched>) -> Count<Quarantined> {
+    let excess = Count::<Quarantined>::of(held.len()).minus(QUARANTINE_LIMIT);
+    let mut bytes: Count<ambre_core::Octets> = held.iter().map(Unvouched::bytes).sum();
+    let mut cut = 0;
+    for entry in held.iter() {
+        if Count::<Quarantined>::of(cut) >= excess && bytes <= QUARANTINE_BYTES {
+            break;
+        }
+        bytes = bytes.minus(entry.bytes());
+        cut = cut.saturating_add(1);
+    }
+    held.drain(..cut);
+    Count::of(cut)
 }
 
 /// A snapshot the Logic thread is checking.
