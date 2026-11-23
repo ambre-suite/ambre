@@ -69,7 +69,9 @@ pub fn page_reads(relay: MurmureRelay, pipe: TextInput, warn: Rc<dyn Fn(&str)>) 
         save_file: Rc::new(save_file),
         warn,
         // The page holds the call, and the render runtime the video of each slot.
-        call: Rc::new(move || crate::call_stage::stage(relay.me())),
+        call: Rc::new(move || {
+            crate::call_stage::stage(relay.me(), relay.pane.get_untracked().shown_channel())
+        }),
         press_call: Rc::new(crate::call_stage::press),
     }
 }

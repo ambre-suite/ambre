@@ -186,12 +186,23 @@ fn choose(stage: &CallStage) {
     }
 }
 
-/// What the video region shows of the call of the page, `None` out of a call. `me` names the
-/// member, whose own tile shows its initials.
-pub(crate) fn stage(me: Option<Id<User>>) -> Option<CallStage> {
+/// What the video region of the channel `shown` shows of the call of the page, `None` out of a
+/// call or in another channel. `me` names the member, whose own tile shows its initials.
+pub(crate) fn stage(
+    me: Option<Id<User>>,
+    shown: Option<ambre_core::id::Id<ambre_core::id::Channel>>,
+) -> Option<CallStage> {
     let CallPhase::InCall(microphone) = crate::call::phase().get_untracked() else {
         return None;
     };
+    // Another channel shows no video region: the call floats over it instead, and its choice of
+    // videos stays as it was (the Murmure calls spec, away from the channel of the call).
+    let call = crate::call::where_from()
+        .get_untracked()
+        .map(|(channel, _)| channel);
+    if call.is_some() && call != shown {
+        return None;
+    }
     let now = crate::host::now();
     hear(now);
     own_camera(crate::call::camera_track());
@@ -323,6 +334,25 @@ mod tests {
     use super::*;
     use wasm_bindgen::JsCast;
     use wasm_bindgen_test::wasm_bindgen_test;
+
+    /// Another channel than the channel of the call shows no video region, and the channel of the
+    /// call shows it (the Murmure calls spec, away from the channel of the call).
+    #[wasm_bindgen_test]
+    fn another_channel_shows_no_video_region() {
+        use ambre_core::id::{Channel, Id};
+        use ambre_murmure::ui::call_controls::Microphone;
+        let (call, other) = (Id::<Channel>::mint(), Id::<Channel>::mint());
+        let phase = crate::call::phase();
+        crate::call::where_from().set(Some((call, crate::host::now())));
+        phase.set(CallPhase::InCall(Microphone::Live));
+        let elsewhere = stage(None, Some(other));
+        let home = stage(None, Some(call));
+        phase.set(CallPhase::Idle);
+        crate::call::where_from().set(None);
+        forget();
+        assert_eq!(elsewhere, None, "another channel");
+        assert!(home.is_some(), "the channel of the call");
+    }
 
     /// A page under the phone width asks for the phone count of videos, nine. A wider one asks
     /// for the desktop count, eleven.

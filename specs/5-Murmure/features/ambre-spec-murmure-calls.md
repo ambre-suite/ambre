@@ -110,6 +110,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 |---|---|---|---|---|---|---|
 | `MURMURE-620` | `OBS` | While the page receives a video of its call, the channel region MUST draw each such video in its video region, above the composer. | this spec section 3, the video region; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-015`) | `ambre_murmure::ui::view::tests::a_received_video_draws_in_a_band_above_the_composer`; `ambre_murmure::ui::call_videos::tests::the_band_places_each_slot_in_its_tile`; `ambre_belt::murmure::tests::a_member_draws_the_video_of_another_on_its_canvas` -- browser tier, under Chrome and under Firefox: the moved pixels of Bob's canvas lie in one band | none | verified |
 | `MURMURE-621` | `OBS` | While the page is in no call, the channel region MUST show no video region. | this spec section 3, the video region | `ambre_murmure::ui::view::tests::no_video_shows_no_video_region` -- the region comes with the call and goes with its end; `ambre_murmure::ui::call_videos::tests::no_call_takes_no_band_and_a_short_region_keeps_its_list` | none | verified |
+| `MURMURE-727` | `OBS` | While the page is in a call, the channel region of another channel MUST show no video region. | this spec section 3, away from the channel of the call; `MURMURE-696` | `ambre_app::call_stage::tests::another_channel_shows_no_video_region` -- wasm tier | none | verified |
 | `MURMURE-651` | `OBS` | During a call, the video region MUST show a tile for each participant of the page it shows: its picture while a video of it arrives, else its initials, and its name below. | this spec section 3, the video region; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-084`) | `ambre_murmure::ui::call_videos::tests::each_participant_of_the_page_takes_a_tile`; `ambre_murmure::ui::call_videos::tests::a_tile_without_video_shows_the_initials_and_each_tile_its_name`; `ambre_murmure::ui::call_volumes::tests::a_video_slot_follows_the_member_of_its_sender`; `ambre_call::tests::a_video_slot_tells_the_page_of_each_new_sender_once`; `ambre_murmure::ui::view::tests::no_video_shows_no_video_region` -- a call with every camera off shows its region | none | verified |
 | `MURMURE-652` | `OBS` | In the fill grid and in the strip of the scene, the member's own tile MUST take the last place, at the size of each other tile. | this spec section 3, the video region | `ambre_murmure::ui::call_videos::tests::the_fill_grid_ends_on_the_own_tile_at_the_size_of_every_cell`; `ambre_murmure::ui::call_videos::tests::a_screen_or_a_pin_widened_lays_out_the_scene` -- the own tile last in the strip, at either width | none | verified |
 | `MURMURE-684` | `OBS` | In the band, the member's own tile MUST sit apart from the other tiles, at the end of the band, smaller than each of them. | this spec section 3, the video region | `ambre_murmure::ui::call_videos::tests::the_own_tile_is_small_and_marks_a_mute` | none | verified |
@@ -203,7 +204,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Boundary.** the call message and its end are sealed like any message (`ZK-001`). A ring
   rides their sealed summaries, so the relay learns no ring and no decline (`MURMURE-647`). What the relay
   learns from an ask of who is in a call is `ZK-024`. `ZK-021` and `ZK-022` bound the rest.
-* **Verification.** 88 `verified`, 10 `unimplemented`. The relay half holds in the database tier.
+* **Verification.** 89 `verified`, 10 `unimplemented`. The relay half holds in the database tier.
   The engine and the two workers hold on the host, and the whole path in the browser tier, under
   Chrome and Firefox.
 
@@ -578,7 +579,8 @@ call where the member is:
 | over the phone width | the call bubble, floating over the content | the channel, the time in the call, the faces, mute, the camera, the share, the way back and hang up (`MURMURE-696`) |
 | under the phone width | the call pill, under the header | the channel, the time in the call, the faces, mute and hang up (`MURMURE-697`) |
 
-The way back of the bubble, and a press on the pill, show the channel of the call in Murmure
+Another channel shows no video region: the call floats over it instead (`MURMURE-727`). The way
+back of the bubble, and a press on the pill, show the channel of the call in Murmure
 (`MURMURE-700`). Neither writes into a channel, moves a read cursor or changes the choice of
 videos (`MURMURE-702`). Each control names itself and takes the focus (`MURMURE-693`).
 
