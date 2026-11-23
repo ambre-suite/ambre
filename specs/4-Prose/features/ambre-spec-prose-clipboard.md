@@ -233,7 +233,7 @@ the paste),
 | the cut chord | the same, then deletes the selection |
 | the paste chord | inserts the rich payload, the HTML, or the plain text |
 | a paste with no selection | inserts at the caret |
-| a paste over a selection | deletes it first (`PROSE-UI-030`) |
+| a paste over a selection | deletes it first, and one undo takes back both (`PROSE-UI-030`, `CHROME-184`) |
 | the paste-as-plain-text chord, or its menu entry | inserts the plain text alone, the kept copy ignored too (`PROSE-UI-227`) |
 | dropping text into the page | inserts at the drop point (`PROSE-UI-204`) |
 | the context-menu key, or `Shift+F10` | opens the page menu under the caret (`PROSE-UI-237`, `PROSE-UI-238`) |

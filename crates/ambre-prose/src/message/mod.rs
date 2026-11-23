@@ -1453,8 +1453,13 @@ pub enum ProseCommand {
     /// kept (`PROSE-UI-107`). The HTML another application wrote comes next,
     /// then the plain text, one paragraph per line. The view only carries the halves
     /// (`PROSE-UI-105`).
+    ///
+    /// A paste over a selection carries the selection's end in `over`, and
+    /// `at` is its start. The Logic thread takes the selection out and
+    /// pastes in its place as one undo item (`CHROME-184`).
     Paste {
         at: (BlockId, Pos<DocChar>),
+        over: Option<(BlockId, Pos<DocChar>)>,
         text: String,
         html: Option<String>,
         payload: Option<ambre_core::Payload<ambre_core::ClipboardBytes>>,
@@ -1852,12 +1857,14 @@ impl fmt::Debug for ProseCommand {
             Self::CopyRange { anchor, focus } => fields!("CopyRange", anchor, focus),
             Self::Paste {
                 at,
+                over,
                 text,
                 html,
                 payload,
             } => f
                 .debug_struct("Paste")
                 .field("at", at)
+                .field("over", over)
                 .field("text", &ambre_core::RedactedChars::of(text))
                 .field("html", &html.as_deref().map(ambre_core::RedactedChars::of))
                 .field("payload", payload)
@@ -3127,6 +3134,7 @@ mod tests {
                 "{:?}",
                 ProseCommand::Paste {
                     at: (block_id, pos),
+                    over: None,
                     text: secret.clone(),
                     html: Some(secret.clone()),
                     payload: None,

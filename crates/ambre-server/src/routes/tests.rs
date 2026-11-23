@@ -3838,6 +3838,147 @@ mod handler_tests {
         );
     }
 
+    // `SRV-315`, `SRV-334`, audit `P40`: the probe reads a store that takes any body
+    // through a link, as the stub does. The record then copies the object to
+    // a key no link names. A later put through the link changes the uploaded
+    // object alone, and the snapshot serves the bytes recorded. A second
+    // record of the id copies nothing over them.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_snapshot_record_keeps_its_object_out_of_the_reach_of_its_link(pool: sqlx::PgPool) {
+        use base64::Engine as _;
+        use sha2::Digest as _;
+        let stub = crate::test_helpers::S3Stub::spawn([]).await;
+        let s3 = crate::test_helpers::offline_s3(Some(&stub.endpoint));
+        let base = test_app_state(pool).await;
+        let custody =
+            crate::s3::read_snapshot_custody(&s3, &base.s3_bucket, &base.config.s3_env_prefix)
+                .await;
+        assert_eq!(custody, crate::s3::SnapshotCustody::RelayCopies);
+        assert!(stub.keys().is_empty(), "the probe leaves no object");
+        let mut state = crate::test_helpers::with_s3(&base, s3);
+        let mut config = (*state.config).clone();
+        config.snapshot_custody = custody;
+        Arc::get_mut(&mut state).unwrap().config = Arc::new(config);
+        let setup = build_test_router(state.clone());
+        let app = shipped_router(state);
+        let owner = setup_and_get_auth(&setup).await;
+        let doc = create_test_doc(&setup, &owner).await;
+        let blob: Vec<u8> = (0..=255u8).cycle().take(1031).collect();
+        let forged: Vec<u8> = blob.iter().map(|b| b ^ 0x5a).collect();
+        let digest = sha2::Sha256::digest(&blob);
+        let http = reqwest::Client::builder().no_proxy().build().unwrap();
+
+        let id = post_for_json(
+            &app,
+            &owner,
+            format!("/api/documents/{doc}/snapshot/upload-id"),
+            serde_json::json!({ "size_bytes": blob.len() }),
+        )
+        .await;
+        let minted = id["snapshot_id"].as_str().unwrap().to_owned();
+        let link = post_for_json(
+            &app,
+            &owner,
+            format!("/api/documents/{doc}/snapshot/upload-url"),
+            serde_json::json!({
+                "size_bytes": blob.len(),
+                "snapshot_id": minted,
+                "sha256": hex::encode(digest),
+            }),
+        )
+        .await;
+        let url = link["upload_url"].as_str().unwrap();
+        let header = base64::engine::general_purpose::STANDARD.encode(digest);
+        let put = |body: Vec<u8>| {
+            http.put(url)
+                .header("x-amz-checksum-sha256", header.clone())
+                .body(body)
+                .send()
+        };
+        let first = put(blob.clone()).await.unwrap();
+        assert!(first.status().is_success(), "upload: {}", first.status());
+
+        let s3_key = link["s3_key"].as_str().unwrap().to_owned();
+        let record = serde_json::json!({
+            "author_pubkey": hex::encode([3u8; 32]),
+            "s3_key": s3_key,
+            "covered_seq": 0,
+        });
+        post_for_json(
+            &app,
+            &owner,
+            format!("/api/documents/{doc}/snapshot"),
+            record.clone(),
+        )
+        .await;
+        let kept = stub
+            .keys()
+            .into_iter()
+            .find(|k| k.contains("/kept/"))
+            .expect("the record copies the object");
+        assert!(kept.ends_with(&minted), "the copy keeps the id: {kept}");
+        assert_eq!(stub.object(&s3_key), None, "the uploaded object goes");
+
+        let second = put(forged.clone()).await.unwrap();
+        assert!(second.status().is_success(), "the stub takes other bytes");
+        assert_eq!(stub.object(&s3_key), Some(forged));
+        let download = post_for_json(
+            &app,
+            &owner,
+            format!("/api/documents/{doc}/snapshot/download-url"),
+            serde_json::json!({ "snapshot_id": minted }),
+        )
+        .await;
+        let get = http
+            .get(download["download_url"].as_str().unwrap())
+            .send()
+            .await
+            .unwrap();
+        assert!(get.status().is_success(), "download: {}", get.status());
+        assert_eq!(get.bytes().await.unwrap().as_ref(), blob.as_slice());
+
+        let again = post_json(
+            &app,
+            &owner,
+            format!("/api/documents/{doc}/snapshot"),
+            record,
+        )
+        .await;
+        assert_eq!(again, StatusCode::CONFLICT);
+        assert_eq!(stub.object(&kept), Some(blob), "the copy stays whole");
+    }
+
+    // `SRV-334`: the pinned Garage refuses a body under the digest of other
+    // bytes. So the probe reads it as a store that verifies, and a record
+    // copies nothing. The probe leaves no object behind.
+    #[tokio::test]
+    #[cfg_attr(
+        not(feature = "db"),
+        ignore = "needs object storage; run with --features db"
+    )]
+    async fn the_pinned_store_reads_as_one_that_verifies_a_signed_digest() {
+        let (s3, bucket) = crate::test_helpers::storage_service().await;
+        let prefix = crate::s3::StoreText::<crate::s3::EnvPrefix>::new(format!(
+            "probe-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let custody = crate::s3::read_snapshot_custody(&s3, &bucket, &prefix).await;
+        assert_eq!(custody, crate::s3::SnapshotCustody::StoreVerifies);
+        let left = s3
+            .list_objects_v2()
+            .bucket(bucket.as_str())
+            .prefix(prefix.as_str())
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            left.key_count().unwrap_or(0),
+            0,
+            "the probe leaves no object"
+        );
+    }
+
     // `ZK-008`: no presigned URL is signed before the document's access check.
     // An outsider gets none of the four (`SRV-002`), a viewer gets neither
     // upload URL (`SRV-056`).

@@ -67,6 +67,10 @@ pub struct Config {
     /// `S3_PUBLIC_ENDPOINT`. `None` hands out each link at the address the
     /// relay signs for (`SRV-265`).
     pub s3_public_endpoint: Option<crate::s3::PublicEndpoint>,
+    /// Whether the store keeps a recorded snapshot fixed, or the record copies
+    /// it (`SRV-315`). The start reads it from the store; the default serves a
+    /// test whose store holds no object to copy.
+    pub snapshot_custody: crate::s3::SnapshotCustody,
     /// The registration with the `google` provider, `None` when provider
     /// sign-in is off.
     pub oidc_google: Option<crate::oidc::OidcRegistration>,
@@ -254,6 +258,7 @@ impl Default for Config {
                 "dev-ambre".to_owned(),
             ),
             s3_public_endpoint: None,
+            snapshot_custody: crate::s3::SnapshotCustody::StoreVerifies,
             oidc_google: None,
             dev_mode: DevMode::Off,
             trust_proxy_headers: ProxyTrust::Direct,

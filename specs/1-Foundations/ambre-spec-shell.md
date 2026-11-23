@@ -98,7 +98,7 @@ other six documents of the DOM side.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CHROME-173` | `POST` | Besides a paste over a text selection, one undo MUST take back the whole of a command that writes to the document, whichever region ran it. | this spec section 2; `ambre-spec-undo.md` | `ambre_toile::ui::view::view_tests::each_command_keeps_the_rules_of_its_home` -- every writer of the board's table, through the one sink, then one undo, compares the whole document; `ambre_toile::ui::view::view_tests::a_placed_embed_keeps_the_zoom_and_is_one_undo_item`; `::a_set_link_keeps_the_zoom_and_is_one_undo_item`; `ambre_toile::logic::state::import::tests::import_is_one_undo_group`; `ambre_trame::ui::view::view_tests::each_command_keeps_the_rules_of_its_home` -- every writer of the Trame table; `ambre_trame::ui::view::view_tests::a_paste_keeps_the_zoom_and_is_one_undo_item`; `::a_resolved_dialog_keeps_the_zoom_and_is_one_undo_item`; `ambre_trame::logic::tests::group12::an_import_is_one_undo_item`; `ambre_trame::logic::xlsx_tests::an_edit_lands_the_import_first_and_undo_removes_it_whole` -- the workbook path, which an ODS file takes too; `ambre_prose::input_tests::each_command_the_view_runs_keeps_the_zoom_and_is_one_undo_item` -- the marks, the cut and the pastes at a caret; `ambre_prose::logic::pictures::tests::a_picture_from_a_file_is_one_undo_item`; `ambre_prose::logic::interop::tests::one_undo_takes_the_import_back` | none | verified |
-| `CHROME-184` | `POST` | One undo MUST take back the whole of a paste over a text selection, the text it replaced included. | this spec section 2; `CHROME-173`; `ambre-spec-undo.md` | none | unheld -- in Prose, the view takes the selection out and then pastes, as two commands, so the first undo puts the paste back and leaves the selection deleted; lands with the `A paste over a selection is one undo item` Story (`ambre-roadmap.md` MVP) | failing |
+| `CHROME-184` | `POST` | One undo MUST take back the whole of a paste over a text selection, the text it replaced included. | this spec section 2; `CHROME-173`; `ambre-spec-undo.md` | `ambre_prose::input_tests::a_paste_over_a_selection_is_one_undo_item` -- one plain line, several lines, an HTML half and the application's own bytes, over a selection in one block and, save several lines, across two, then one undo compares the live blocks; `ambre_prose::logic::clipboard::tests::a_paste_over_a_selection_that_writes_nothing_leaves_the_selection` | none | verified |
 | `CHROME-174` | `FRAME` | A command that writes to the document MUST NOT change the zoom. | this spec section 2; `ambre-spec-zoom.md` | `ambre_toile::ui::view::view_tests::each_command_keeps_the_rules_of_its_home` -- every writer of the board's table, from a zoom off one hundred per cent; `ambre_toile::ui::view::view_tests::a_placed_embed_keeps_the_zoom_and_is_one_undo_item`; `::a_set_link_keeps_the_zoom_and_is_one_undo_item`; `::an_import_keeps_the_zoom`; `ambre_trame::ui::view::view_tests::each_command_keeps_the_rules_of_its_home` -- every writer of the Trame table; `ambre_trame::ui::view::view_tests::a_paste_keeps_the_zoom_and_is_one_undo_item`; `::a_resolved_dialog_keeps_the_zoom_and_is_one_undo_item`; `::an_import_keeps_the_zoom`; `ambre_prose::input_tests::each_command_the_view_runs_keeps_the_zoom_and_is_one_undo_item`; `::an_import_keeps_the_zoom` | none | verified |
 
 ### 1.4 Collapse, open, dock and size the context panel
@@ -134,10 +134,10 @@ The user opens a list of the panel and picks a choice, with the pointer or the k
   chrome operation. A cover a surface publishes is read by a fit, which is a zoom cost.
 * **Boundary.** none: a region holds commands, and a command reaches the Logic thread as every
   command does. Nothing here opens a socket or holds a key.
-* **Verification.** 59 `verified`, 2 `failing`, 19 `unimplemented`, and the type holds the home of
+* **Verification.** 60 `verified`, 1 `failing`, 19 `unimplemented`, and the type holds the home of
   each command. Host tests run each table through the one sink of every region, on a real Logic
-  state. Wasm tests hold the palette and the sheet tabs. A hover-only control of Prose and a paste
-  over a text selection fail. The rest waits on the regions, which no application lays out.
+  state. Wasm tests hold the palette and the sheet tabs. A hover-only control of Prose fails. The
+  rest waits on the regions, which no application lays out.
 
 ---
 

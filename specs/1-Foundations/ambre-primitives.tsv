@@ -1815,6 +1815,7 @@ ambre-prose-form | src/clip.rs | crate::clip | ClipValue::Float.0 | field | f64	
 ambre-prose-form | src/clip.rs | crate::clip | ClipValue::Int.0 | field | i64	generic	an integer mark value as untrusted clipboard bytes carry it, checked under its key before a paste writes it
 ambre-prose-form | src/clip.rs | crate::clip | ClipValue::Text.0 | field | String	generic	a mark value as untrusted clipboard bytes carry it, checked under its key before a paste writes it
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste(text) | param | &str	free-text	the plain-text half of the clipboard, read when no richer half is usable
+ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste_over(text) | param | &str	free-text	the plain-text half of the clipboard, pasted over a selection when no richer half is usable
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste_text(text) | param | &str	free-text	pasted plain text of several lines, one paragraph per line
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | pasted(raw) | param | Option<&str>	generic	a candidate mark value from either half of a paste, None for a flag; the one that passes becomes a MarkValue
 ambre-prose-form | src/clip.rs | crate::clip | safe_family() | ret | bool	generic	whether a paste keeps a family name: not empty, short enough, no control or closing character
