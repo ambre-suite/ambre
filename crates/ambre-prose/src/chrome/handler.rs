@@ -22,7 +22,8 @@ use leptos::prelude::*;
 use crate::commands::{
     COPY, CUT, EXPORT_HTML, EXPORT_HTML_REVIEWED, EXPORT_MARKDOWN, EXPORT_ODT, EXPORT_ODT_REVIEWED,
     EXPORT_PDF, EXPORT_WORD, EXPORT_WORD_REVIEWED, IMPORT_HTML, IMPORT_MARKDOWN, IMPORT_ODT,
-    IMPORT_WORD, INSERT_PICTURE, PALETTE, PASTE, PASTE_PLAIN, REDO, SAVE_FILE, UNDO, mark_key,
+    IMPORT_WORD, INSERT_PICTURE, PALETTE, PASTE, PASTE_PLAIN, REDO, SAVE_FILE, UNDO,
+    formats_selection, mark_key,
 };
 
 /// The signal Prose's chords act through. `Copy`, so the handler is too.
@@ -72,6 +73,12 @@ impl CommandHandler for ProseHandler {
                 }),
             })
         };
+        // A menu entry that formats lands where a control or a chord
+        // leaves its id; the view drains it (`CHROME-214`).
+        if formats_selection(id) {
+            self.format.set(Some(id));
+            return Vec::new();
+        }
         let action = match id {
             PALETTE => ShellAction::OpenPalette,
             SAVE_FILE => ShellAction::Send(export(ExportFormat::Ambre)),

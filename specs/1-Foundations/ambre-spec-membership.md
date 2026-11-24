@@ -791,7 +791,7 @@ authority: the role here hides what the relay would refuse anyway.
 * **A census opens every document of the channel.** The floor caps a thread the member never wrote
   in. The census cannot tell such a thread without opening it.
 * **A removal posts its run of entries in one request.** The relay appends the run whole or not at
-  all (`SRV-338`). A relay that drops part of the run hides entries from every peer, and the head an
+  all (`SRV-339`). A relay that drops part of the run hides entries from every peer, and the head an
   update carries shows it (`SYNC-207`).
 * **A census waits on the socket.** Its replay arrives on the socket, and no timer ends a census
   whose replay never comes. The removal then never posts.

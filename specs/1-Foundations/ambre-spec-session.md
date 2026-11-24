@@ -86,6 +86,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-329` | `POST` | A resumed session MUST read the account answer under its renewed token. | this spec section 3, the kept session; `SRV-321`; `ambre-spec-launcher.md`, `CHROME-146` | `ambre_sync::kept::tests::a_resumed_session_reads_the_reclaim_of_its_address` -- the resume asks `/auth/me` under the renewed access token, its flag reaches the session event, and the worker tells `AddressReclaimed` after the session for a reclaim alone | none | verified |
 | `SRV-332` | `POST` | A resumed session MUST name a reclaim of its address as a sign-in does. | this spec section 3, the kept session; `SRV-321`; `SRV-329`; `ambre-spec-launcher.md`, `CHROME-146` | `ambre_sync::kept::tests::a_resumed_session_reads_the_reclaim_of_its_address` -- the resume asks `/auth/me` under the renewed access token, its flag reaches the session event, and the worker tells `AddressReclaimed` after the session for a reclaim alone | none | verified |
 | `SRV-330` | `POST` | Every renewal of a kept session MUST run under one lock that every tab of the origin shares. | this spec section 3, the kept session; `SRV-009`; `SRV-327` | `ambre_sync::kept::tests::two_tabs_renew_one_kept_token_in_turn` -- two tabs renew at once against a relay that honours a token once: the second sends the token the first kept, and neither is refused; `::a_tab_behind_the_record_sends_the_kept_token`; `::a_renewal_writes_no_record_another_tab_erased_or_replaced`; `::a_resumed_session_writes_no_second_record`; `renewal_lock::two_renewals_hold_the_lock_in_turn` -- wasm tier: two sections that ask for the Web Lock of the record at once run one after the other | none | verified |
+| `SRV-338` | `POST` | A renewal of a kept session dropped before its end MUST release the lock of `SRV-330`. | this spec section 3, the kept session; `SRV-330`; `ambre-spec-architecture.md`, `ARCH-015` | `renewal_lock::a_renewal_dropped_mid_way_releases_the_lock` -- wasm tier, in headless Chrome: a section that never ends is dropped once it holds the Web Lock of the record, and a second section is granted the lock within 2 s | none | verified |
 | `SRV-333` | `POST` | A renewal of a kept session MUST send the refresh token the device keeps at the instant it takes the lock of `SRV-330`. | this spec section 3, the kept session; `SRV-009`; `SRV-330` | `ambre_sync::kept::tests::two_tabs_renew_one_kept_token_in_turn` -- two tabs renew at once against a relay that honours a token once: the second sends the token the first kept, and neither is refused; `::a_tab_behind_the_record_sends_the_kept_token`; `::a_renewal_writes_no_record_another_tab_erased_or_replaced`; `::a_resumed_session_writes_no_second_record`; `renewal_lock::two_renewals_hold_the_lock_in_turn` -- wasm tier: two sections that ask for the Web Lock of the record at once run one after the other | none | verified |
 | `SRV-331` | `FAIL` | Given a renewal at boot that fails with anything but `401`, the client MUST keep the kept session and try again after a delay, within the budget of `ambre-spec-budgets.md` section 8. | this spec section 3, the kept session; `SRV-326` | `ambre_sync::kept::tests::a_transient_failure_keeps_the_record_and_retries` -- a `429`, a `400`, a `403`, a `422`, a `500`, a `503` and a network failure each keep the record and renew the same token again after 1 s; `::a_relay_down_past_the_last_retry_keeps_the_record` -- five delays that double, then the sign-in screen, the record kept | none | verified |
 
@@ -96,7 +97,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   and sees none of the three secrets behind them (`ZK-003`, `SRV-091`). What it mints is its own
   token, and `SRV-012` refuses it every other cryptographic act. The socket takes its token in its
   first frame, so no address carries one (`SRV-031`).
-* **Verification.** 47 `verified`. What holds is what a request test can drive: the token gate, the
+* **Verification.** 48 `verified`. What holds is what a request test can drive: the token gate, the
   address namespace, the one-shot key write and the refresh race. A provider exchange runs against a
   stub that signs its own identity tokens. A real provider never runs under a test.
 ---
@@ -163,6 +164,12 @@ session. Every renewal therefore takes one Web Lock of the origin, exclusive. Un
 reads the record again, sends the token the record holds, and writes the next one before it
 releases the lock (`SRV-330`). The lock is one per origin, not one per account: the device keeps
 one record, and a sign-in of another account writes that same record.
+
+A renewal dropped before its end releases the lock as well (`SRV-338`). The Sync worker writes no
+destructor (`ARCH-015`). So a task of the worker waits until the renewal ends or drops, then
+releases the lock. A lock the dropped renewal kept would hold every other tab until its worker
+ended. The guard of the lock holds the sender of a one-shot channel of `futures-channel`, which the
+worker already builds through `futures-util`.
 
 **What ends a kept session.** The relay answers `401` alone for a refresh token it no longer
 honours, and never a `400` with `invalid_grant`. Only a `401` erases the record (`SRV-326`). A rate

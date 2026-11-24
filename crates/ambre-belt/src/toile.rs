@@ -13,11 +13,13 @@ pub(crate) mod tests {
     /// The release clears the drag's preview, and the shape shows once the
     /// Logic thread answers with it. A click before that hits an empty board,
     /// as no user could click it. So the click waits for the screen to change
-    /// at the centre: geckodriver sends it within the frame of the release.
+    /// on the top edge: geckodriver sends it within the frame of the release.
+    /// The default fill is the white of the board, so only the stroke shows.
     pub(crate) async fn draw_rect(page: &Page, a: (f64, f64), b: (f64, f64)) {
         let (ox, oy) = page.canvas_origin().await;
         let centre = ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
-        let blank = page.color_at(centre).await;
+        let edge = top_edge(a, b);
+        let blank = edge_colors(page, edge).await;
         page.focus_canvas().await;
         page.browser.perform(json!([key("r")])).await;
         // An armed creation tool shows the crosshair (`toile-tools`).
@@ -33,8 +35,8 @@ pub(crate) mod tests {
             .await;
         let deadline = std::time::Instant::now() + STEP;
         loop {
-            let seen = page.color_at(centre).await;
-            if seen.iter().zip(blank).any(|(s, b)| s.abs_diff(b) > 8) {
+            let seen = edge_colors(page, edge).await;
+            if !same_colors(&seen, &blank) {
                 break;
             }
             assert!(
@@ -46,6 +48,30 @@ pub(crate) mod tests {
         page.browser.perform(json!([key("v")])).await;
         click(page, centre).await;
         page.wait_announced("Rectangle").await;
+    }
+
+    /// The middle of the top edge of the rectangle drawn from `a` to `b`, in
+    /// canvas pixels.
+    pub(crate) fn top_edge(a: (f64, f64), b: (f64, f64)) -> (f64, f64) {
+        ((a.0 + b.0) / 2.0, a.1.min(b.1))
+    }
+
+    /// The colours of a vertical strip of five pixels centred on `at`, in
+    /// canvas pixels. The one-pixel stroke of a shape falls in it, wherever
+    /// the rasteriser rounds its half pixel.
+    pub(crate) async fn edge_colors(page: &Page, at: (f64, f64)) -> Vec<[u8; 3]> {
+        let mut seen = Vec::with_capacity(5);
+        for dy in -2..=2 {
+            seen.push(page.color_at((at.0, at.1 + f64::from(dy))).await);
+        }
+        seen
+    }
+
+    /// Whether two strips show the same colours, within a rounding of 8.
+    pub(crate) fn same_colors(a: &[[u8; 3]], b: &[[u8; 3]]) -> bool {
+        a.iter()
+            .zip(b)
+            .all(|(p, q)| p.iter().zip(q).all(|(x, y)| x.abs_diff(*y) <= 8))
     }
 
     /// Clicks the canvas at `at`, in canvas pixels.
@@ -430,9 +456,10 @@ pub(crate) mod tests {
         const DOWN: &str = "\u{E015}";
         const ENTER: &str = "\u{E007}";
         let page = Page::new_document("toile").await;
-        let centre = (360.0, 250.0);
-        let blank = page.color_at(centre).await;
-        draw_rect(&page, (300.0, 200.0), (420.0, 300.0)).await;
+        let (a, b) = ((300.0, 200.0), (420.0, 300.0));
+        let edge = top_edge(a, b);
+        let blank = edge_colors(&page, edge).await;
+        draw_rect(&page, a, b).await;
 
         page.browser
             .perform(json!([{ "type": "key", "id": "keyboard", "actions": [
@@ -474,8 +501,8 @@ pub(crate) mod tests {
             .await;
         let deadline = std::time::Instant::now() + STEP;
         loop {
-            let seen = page.color_at(centre).await;
-            if seen.iter().zip(blank).all(|(s, b)| s.abs_diff(b) <= 8) {
+            let seen = edge_colors(&page, edge).await;
+            if same_colors(&seen, &blank) {
                 break;
             }
             assert!(
