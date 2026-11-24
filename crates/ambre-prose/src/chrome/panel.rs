@@ -273,13 +273,15 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
                 icondata::MdiFormatListChecks,
             ])
             .map(|((style, label), icon)| Choice {
-                value: Some(style),
+                value: Some(ParagraphKind::List(style)),
                 label,
                 icon: Some(icon),
             })
             .collect::<Vec<_>>();
         let list = Signal::derive(move || match values.with(|v| v.kind) {
-            Reading::Uniform(Some(ParagraphKind::List(style))) => Reading::Uniform(Some(style)),
+            Reading::Uniform(Some(ParagraphKind::List(style))) => {
+                Reading::Uniform(Some(ParagraphKind::List(style)))
+            }
             Reading::Uniform(_) => Reading::Uniform(None),
             Reading::Mixed => Reading::Mixed,
         });
@@ -323,9 +325,9 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
                     property=prop(panel::KIND)
                     choices=lists
                     value=list
-                    on_write=Callback::new(move |style: Option<crate::events::ListStyle>| {
-                        if let Some(style) = style {
-                            text_write(TextWrite::Kind(ParagraphKind::List(style)));
+                    on_write=Callback::new(move |kind: Option<ParagraphKind>| {
+                        if let Some(kind) = kind {
+                            text_write(TextWrite::Kind(kind));
                         }
                     })
                 />
