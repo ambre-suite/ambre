@@ -159,6 +159,14 @@ pub fn mark_key(id: StaticKey<Commands>) -> Option<MarkRoot> {
         .map(|(_, key)| *key)
 }
 
+/// Whether `id` formats the selection: a mark, or clearing every mark. The
+/// view drains such an id from the one signal a control, a chord and a menu
+/// entry each set (`PROSE-UI-056`, `CHROME-214`).
+#[must_use]
+pub fn formats_selection(id: StaticKey<Commands>) -> bool {
+    id == CLEAR_FORMATTING || mark_key(id).is_some()
+}
+
 fn superscript_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
     ambre_core::Validated::new("Superscript")
 }
@@ -599,5 +607,19 @@ mod tests {
                 assert_eq!(keymap.resolve(*chord), None);
             }
         }
+    }
+    /// `CHROME-214`: every entry of the context menu past the clipboard
+    /// formats the selection, so the handler hands it to the view. An entry
+    /// that formats nothing would close the menu and change nothing.
+    #[test]
+    fn every_menu_entry_past_the_clipboard_formats_the_selection() {
+        for id in CONTEXT_MENU {
+            assert!(
+                MENU_CLIPBOARD.contains(&id) || formats_selection(id),
+                "{id:?} reaches nothing"
+            );
+        }
+        assert!(!formats_selection(PALETTE));
+        assert!(!formats_selection(CUT));
     }
 }
