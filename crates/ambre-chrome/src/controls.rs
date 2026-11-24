@@ -102,6 +102,9 @@ pub struct ChoiceView {
     /// command per choice (`CHROME-207`). `None` for a choice that writes a
     /// value of the property the control names.
     pub reach: Option<Reach>,
+    /// The CSS `font-family` stack the choice shows in, so a list of fonts
+    /// previews each one. `None` keeps the face of the control.
+    pub face: Option<&'static str>,
 }
 
 impl ChoiceView {
@@ -111,6 +114,7 @@ impl ChoiceView {
             label: label.into(),
             icon: None,
             reach: None,
+            face: None,
         }
     }
 
@@ -119,6 +123,15 @@ impl ChoiceView {
         Self {
             icon: Some(icon),
             ..Self::text(label)
+        }
+    }
+
+    /// The same choice, shown in the face of the CSS `font-family` stack `css`.
+    #[must_use]
+    pub fn in_face(self, css: &'static str) -> Self {
+        Self {
+            face: Some(css),
+            ..self
         }
     }
 
@@ -244,14 +257,16 @@ fn options(list: &web_sys::Element) -> Vec<web_sys::HtmlElement> {
 ///
 /// The keyboard opens it with Enter, Space or the down arrow. The arrows,
 /// Home, End and a first letter move, Enter picks, and Escape or Tab close.
-/// `selected` is `None` for a mixed selection, which shows `placeholder`.
+/// `selected` is `None` for a mixed selection, or for a value no choice
+/// names, which shows `placeholder`. The button shows the face of the
+/// current choice, as each row shows its own.
 #[component]
 pub fn Select(
     #[prop(into)] label: String,
     choices: Vec<ChoiceView>,
     #[prop(into)] selected: Signal<Option<Pos<ChoiceRow>>>,
     on_pick: Callback<Pos<ChoiceRow>>,
-    #[prop(default = "Mixed")] placeholder: &'static str,
+    #[prop(into, default = Signal::stored("Mixed".to_owned()))] placeholder: Signal<String>,
     #[prop(optional)] reach: Option<Reach>,
     #[prop(optional)] size: ControlSize,
 ) -> impl IntoView {
@@ -357,16 +372,18 @@ pub fn Select(
         }
     };
 
-    let shown = {
+    let current = {
         let choices = choices.clone();
         move || {
             selected
                 .get()
                 .and_then(Pos::to_index)
-                .and_then(|i| choices.get(i))
-                .map_or_else(|| placeholder.to_owned(), |c| c.label.clone())
+                .and_then(|i| choices.get(i).cloned())
         }
     };
+    let current_face = current.clone();
+    let shown = move || current().map_or_else(|| placeholder.get(), |c| c.label);
+    let shown_face = move || current_face().and_then(|c| c.face);
     let rows = choices
         .into_iter()
         .enumerate()
@@ -379,6 +396,7 @@ pub fn Select(
                     role="option"
                     tabindex="-1"
                     data-reach=choice.reach.map(|r| r.marker())
+                    style:font-family=choice.face
                     aria-selected=move || Selected::from_bool(is()).aria()
                     on:mousedown=move |ev| ev.prevent_default()
                     on:click=move |_| pick(p)
@@ -406,7 +424,9 @@ pub fn Select(
                 }
                 on:keydown=on_trigger_key
             >
-                <span class="ambre-select-value">{shown}</span>
+                <span class="ambre-select-value" style:font-family=shown_face>
+                    {shown}
+                </span>
                 <Icon icon=icondata::LuChevronDown />
             </button>
             <div

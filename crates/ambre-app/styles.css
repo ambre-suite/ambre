@@ -1811,38 +1811,11 @@ body {
     text-align: right;
 }
 
-/* The shared pickers in a section. The font is a field, as a select is.
-   A trigger that shows an icon, the colour or an application's own popover,
-   takes the box of an icon button, so a row of icons reads as one toolkit. */
-.ambre-ctx-section-body .ambre-font .font-trigger {
-    box-sizing: border-box;
-    display: inline-flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3);
-    min-width: 0;
-    height: var(--control);
-    padding: 0 var(--space-3) 0 var(--space-4);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-md);
-    background: var(--surface-2);
-    color: var(--text);
-    font-size: var(--font-small);
-    cursor: pointer;
-}
-
-.ambre-ctx-section-body .ambre-font .font-trigger .label {
-    font-size: var(--font-small);
-}
-
-.ambre-ctx-section-body .ambre-font .font-trigger svg {
-    width: var(--icon-sm);
-    height: var(--icon-sm);
-    color: var(--text-dim);
-}
-
+/* The shared pickers in a section. A trigger that shows an icon, the colour
+   or an application's own popover, takes the box of an icon button, so a row
+   of icons reads as one toolkit. */
 .ambre-ctx-section-body .ambre-color > button,
-.ambre-ctx-section-body .ambre-kit-control > span:not(.ambre-select, .ambre-stepper, .ambre-segments, .ambre-swatch) > button:not(.font-trigger),
+.ambre-ctx-section-body .ambre-kit-control > span:not(.ambre-select, .ambre-stepper, .ambre-segments, .ambre-swatch) > button,
 .ambre-ctx-section-body .ambre-kit-control > button:not(.ambre-icon-button) {
     box-sizing: border-box;
     position: relative;
@@ -1864,7 +1837,7 @@ body {
 }
 
 .ambre-ctx-section-body .ambre-color > button svg,
-.ambre-ctx-section-body .ambre-kit-control > span:not(.ambre-select, .ambre-stepper, .ambre-segments, .ambre-swatch) > button:not(.font-trigger) svg,
+.ambre-ctx-section-body .ambre-kit-control > span:not(.ambre-select, .ambre-stepper, .ambre-segments, .ambre-swatch) > button svg,
 .ambre-ctx-section-body .ambre-kit-control > button:not(.ambre-icon-button) svg {
     width: var(--icon);
     height: var(--icon);
@@ -1878,9 +1851,8 @@ body {
 }
 
 .ambre-ctx-section-body .ambre-color > button:hover,
-.ambre-ctx-section-body .ambre-kit-control > span:not(.ambre-select, .ambre-stepper, .ambre-segments, .ambre-swatch) > button:not(.font-trigger):hover,
-.ambre-ctx-section-body .ambre-kit-control > button:not(.ambre-icon-button):hover,
-.ambre-ctx-section-body .ambre-font .font-trigger:hover {
+.ambre-ctx-section-body .ambre-kit-control > span:not(.ambre-select, .ambre-stepper, .ambre-segments, .ambre-swatch) > button:hover,
+.ambre-ctx-section-body .ambre-kit-control > button:not(.ambre-icon-button):hover {
     background: var(--surface-hover);
     color: var(--text);
 }
@@ -3623,100 +3595,6 @@ body {
     background: var(--accent);
     border-color: var(--accent);
     color: var(--on-accent);
-}
-
-/* ---------------------------------------------------------------------------
-   Font popover: a borderless toolbar trigger (current family name, previewed in
-   its own typeface, + caret) toggling a list of families each rendered in its
-   font. Trigger blends into the toolbar like the font-size <select>; the list
-   mirrors the number-format popover.
-   --------------------------------------------------------------------------- */
-.ambre-font {
-    position: relative;
-    display: inline-flex;
-}
-
-.ambre-font .font-trigger {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-3);
-    min-width: 92px;
-    height: var(--control);
-    padding: 0 calc(var(--space-4) + 1px);                 /* left breathing room, matches the selects */
-    border: 1px solid transparent;
-    border-radius: var(--radius);
-    background: transparent;
-    color: var(--text);
-    cursor: pointer;
-    text-align: left;
-}
-
-.ambre-font .font-trigger:hover {
-    background: var(--surface);
-}
-
-.ambre-font .font-trigger .label {
-    flex: 1;
-    font-size: var(--font-body);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-/* The discreet caret (BiDownArrowSolid), tinted to --text-dim. */
-.ambre-font .font-trigger svg {
-    flex: 0 0 9px;
-    width: 9px;
-    height: 9px;
-    color: var(--text-dim);
-}
-
-.ambre-font-popover {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    z-index: 30;
-    margin-top: var(--space-2);
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-mid);
-    padding: var(--space-2);
-    min-width: 160px;
-}
-
-.ambre-font-popover .font-item {
-    display: flex;
-    align-items: center;
-    gap: var(--space-4);
-    width: 100%;
-    padding: var(--space-3) var(--space-4);
-    border: none;
-    border-radius: var(--radius);
-    background: transparent;
-    color: var(--text);
-    cursor: pointer;
-    text-align: left;
-}
-
-.ambre-font-popover .font-item:hover {
-    background: var(--accent);
-    color: var(--on-accent);
-}
-
-.ambre-font-popover .font-item .check {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 16px;
-    width: var(--icon);
-    height: var(--icon);
-    font-size: var(--font-large);
-}
-
-.ambre-font-popover .font-item .label {
-    flex: 1;
-    font-size: var(--font-subheading);               /* a touch larger so the typeface reads well */
 }
 
 /* ---------------------------------------------------------------------------
