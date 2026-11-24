@@ -432,10 +432,11 @@ mod tests {
         assert_eq!(text.trim(), "1Firs2t\n\nSecond", "{text}");
     }
 
-    /// `PROSE-UI-237`, `PROSE-UI-238`, `CHROME-027`: with the pointer far from
-    /// the caret, `Shift+F10` opens the page menu under the caret, with the
-    /// focus on Undo. Enter runs it: the last key typed leaves the count, the
-    /// menu closes, and the focus returns to the input pipe.
+    /// `PROSE-UI-237`, `PROSE-UI-238`, `CHROME-179`, `CHROME-027`: the last
+    /// letter is selected, and the pointer rests far from the caret.
+    /// `Shift+F10` opens the page menu under the caret, with the focus on Cut.
+    /// Enter runs it: the letter leaves the count, the menu closes, and the
+    /// focus returns to the input pipe.
     #[tokio::test(flavor = "multi_thread")]
     #[cfg_attr(
         not(feature = "browser"),
@@ -449,6 +450,8 @@ mod tests {
         // A key typed once the run is confirmed is a step of its own.
         type_text(&page, "s").await;
         wait_counted(&page, "6 with spaces").await;
+        // The menu opens on the clipboard (`CHROME-179`): Cut needs a selection.
+        chord(&page, &[SHIFT], LEFT).await;
         // Firefox hands an entry the pointer rests on the focus, so the
         // pointer leaves the place the menu opens at.
         page.browser
@@ -460,13 +463,13 @@ mod tests {
         chord(&page, &[SHIFT], F10).await;
         page.browser
             .wait_for(
-                "the focus on Undo, the menu under the caret",
+                "the focus on Cut, the menu under the caret",
                 "const a = document.activeElement; \
                  const menu = document.querySelector('.ambre-ctx-menu'); \
                  const pipe = document.querySelector('textarea.ambre-input'); \
                  if (!a || !menu || !pipe || !a.closest('.ambre-ctx-menu')) return false; \
                  const m = menu.getBoundingClientRect(), p = pipe.getBoundingClientRect(); \
-                 return a.textContent.includes('Undo') \
+                 return a.textContent.includes('Cut') \
                    && Math.abs(m.left - p.left) < 4 && Math.abs(m.top - p.bottom) < 4;",
                 STEP,
             )
