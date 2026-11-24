@@ -1034,9 +1034,12 @@
 | the decode through `erased-serde` | 2 052 540 | +680 985 | dropped: a full visitor vtable per type |
 | the JSON read through a trait object slot | 1 358 799 | +2 841 | dropped, it grew |
 | `wasm-opt -Oz` of binaryen 124 | 1 201 519 | -119 359 | refused: 24 454 more brotli bytes, and the download is the budget |
+| the merge of `ccr-cd7c4606-wmq4hy` at `9c86491`, by `just size` | 1 328 477 | +6 956 | the confirmed head and the lifted cap; 399 027 brotli |
 
-  The first download reads 3 250 043 bytes of brotli. A cut under the former ceiling of
-  1 310 000 needs a cut that is refused: `wasm-opt`, or the size level of `curve25519-dalek`.
+  After that merge, 2 % above the measure rounds up to 1 360 000. The ceiling holds at 1 350 000,
+  the figure of the W10 raise, with 21 523 bytes of room, 1.6 % of the measure. The first download
+  reads 3 249 391 bytes of brotli. A cut under the former ceiling of 1 310 000 needs a cut that is
+  refused: `wasm-opt`, or the size level of `curve25519-dalek`.
 
 * **The PNG raster raised the PDF module ceiling on 2026-11-15.** The PNG export rasterizes a
   recorded page in the PDF module, on the converter thread
