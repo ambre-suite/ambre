@@ -394,6 +394,12 @@ pub enum PendingCommit {
 pub struct TrameSignals {
     /// The reference of the active cell, shown in the formula bar.
     pub formula_ref: RwSignal<String>,
+    /// The reference of the whole selection, such as `B2:D5`, which the
+    /// header of the context panel shows.
+    pub selection_ref: RwSignal<ambre_core::Validated<crate::ui::panel::RangeLabel>>,
+    /// The page setup and the frozen pane of the active sheet, which the
+    /// context panel shows. `None` before the first sheet list.
+    pub sheet_setup: RwSignal<Option<crate::ui::panel::ActiveSheet>>,
     /// The text of the formula bar.
     pub formula_text: RwSignal<String>,
     /// What the formula bar asks the view to do.
@@ -410,6 +416,8 @@ pub struct TrameSignals {
     pub filter_active: RwSignal<crate::chrome::SheetFilter>,
     /// The find counters.
     pub find_result: RwSignal<Option<crate::chrome::FindPosition>>,
+    /// A command the view performs itself, set by the command handler.
+    pub view_cmd: RwSignal<Option<ambre_core::StaticKey<ambre_core::Commands>>>,
 }
 
 /// The wiring of a sheet view: its channels to the Logic thread, its text
@@ -506,6 +514,10 @@ pub struct TrameView {
     #[cfg(target_arch = "wasm32")]
     formula_ref: RwSignal<String>,
     #[cfg(target_arch = "wasm32")]
+    selection_ref: RwSignal<ambre_core::Validated<crate::ui::panel::RangeLabel>>,
+    #[cfg(target_arch = "wasm32")]
+    sheet_setup: RwSignal<Option<crate::ui::panel::ActiveSheet>>,
+    #[cfg(target_arch = "wasm32")]
     formula_text: RwSignal<String>,
     /// The formula bar the sync reads and writes. In the browser the frame
     /// copies the signals in before the sync and back out after it.
@@ -518,6 +530,8 @@ pub struct TrameView {
     /// formula signals; pure local view state, never synced.
     #[cfg(target_arch = "wasm32")]
     zoom_sig: RwSignal<ambre_core::Scale<ambre_core::Doc, ambre_core::View>>,
+    #[cfg(target_arch = "wasm32")]
+    view_cmd: RwSignal<Option<ambre_core::StaticKey<ambre_core::Commands>>>,
     /// The active sheet, the filter flag and the find counter, published for
     /// the chrome. The view keeps each of them, so it alone writes these
     /// signals (`UI-THREAD-003`). Browser-only, like the formula signals.
@@ -641,6 +655,9 @@ pub struct TrameView {
     scroll: scroll::GridScroll,
     /// Where a held selection or fill drag last pointed.
     drag_point: Option<ambre_core::Point<ambre_core::Px<ambre_core::View>>>,
+    /// The last point the pointer was seen at, the anchor of a wheel zoom
+    /// (`ZOOM-003`).
+    pointer: Option<ambre_core::Point<ambre_core::Px<ambre_core::View>>>,
 
     /// The last grid copy/cut was a cut: the source range
     /// ([`TrameUiState::clipboard_anchor`]) is cleared after the next paste

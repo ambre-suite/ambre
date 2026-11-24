@@ -72,6 +72,9 @@ pub(crate) struct Holder {
 /// refusal.
 pub(crate) enum CallAnswer {
     Admitted {
+        /// The call the seat is in: the live call of the channel, when a start found one
+        /// (`CALL-160`).
+        call: Id<Call>,
         sender: Seq<SenderIndex>,
         room: FixedBytes<RoomPseudonym>,
         admission: ambre_core::Credential<ambre_core::CallAdmission>,
@@ -88,6 +91,62 @@ fn pseudonym<R: ambre_core::FixedRole<Array = [u8; ambre_core::PSEUDONYM_LEN]>>(
     let mut bytes = [0u8; ambre_core::PSEUDONYM_LEN];
     getrandom::fill(&mut bytes).map_err(|e| AppError::Internal(format!("no CSPRNG: {e}")))?;
     Ok(FixedBytes::from_array(bytes))
+}
+
+/// The most times a start reads the key of the live call of its channel. Each try past the
+/// first follows a call that ended or a start that took the key between two reads.
+const CLAIM_TRIES: ambre_core::Count<ClaimTries> = ambre_core::Count::new(3);
+
+/// The reads of the key of the live call of a channel by one start, the first included.
+enum ClaimTries {}
+
+impl ambre_core::NarrowCount for ClaimTries {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ClaimTries");
+}
+
+/// Takes a seat in `call`, or in the live call of `channel` for a start (`CALL-160`).
+/// Answers the call of the seat and the answer of the store.
+///
+/// A start takes the key of the live call of the channel and creates its call. A key that
+/// names another call makes the start a join of that call. A join of that call refused as
+/// ended frees the key for the start.
+async fn seat_in(
+    state: &AppState,
+    call: &Id<Call>,
+    channel: &Id<ambre_core::id::Channel>,
+    key: &FixedBytes<ambre_core::PublicKey>,
+    room: &FixedBytes<RoomPseudonym>,
+    opening: redis_ops::CallOpening,
+    ttl: ambre_core::TimeSpan<ambre_core::Sec>,
+) -> Result<(Id<Call>, redis_ops::CallJoin), AppError> {
+    let redis = &state.redis;
+    if opening == redis_ops::CallOpening::Join {
+        let joined = redis_ops::join_call(redis, call, channel, key, room, opening, ttl).await?;
+        return Ok((*call, joined));
+    }
+    let mut stale = None;
+    let mut tries = ambre_core::Count::<ClaimTries>::ZERO;
+    while tries < CLAIM_TRIES {
+        tries = tries.incremented();
+        match redis_ops::claim_channel_call(redis, channel, call, stale.as_ref(), ttl).await? {
+            redis_ops::ChannelCall::Taken => {
+                let joined =
+                    redis_ops::join_call(redis, call, channel, key, room, opening, ttl).await?;
+                return Ok((*call, joined));
+            }
+            redis_ops::ChannelCall::Held(live) => {
+                let join = redis_ops::CallOpening::Join;
+                match redis_ops::join_call(redis, &live, channel, key, room, join, ttl).await? {
+                    redis_ops::CallJoin::Refused(CallRefusal::Ended) => stale = Some(live),
+                    joined => return Ok((live, joined)),
+                }
+            }
+        }
+    }
+    Err(AppError::Internal(
+        "a start found the live call of its channel changing at each read".into(),
+    ))
 }
 
 /// Answers the first frame of a call socket. A session that joins is in the roster on return,
@@ -114,8 +173,8 @@ pub(crate) async fn answer_join(
     let key = session.signing_pubkey;
     let room = pseudonym::<RoomPseudonym>()?;
     let ttl = state.config.call_state_ttl;
-    let joined =
-        redis_ops::join_call(&state.redis, call, &channel, &key, &room, opening, ttl).await?;
+    let (call, joined) = seat_in(state, call, &channel, &key, &room, opening, ttl).await?;
+    let call = &call;
     let (room, sender) = match joined {
         redis_ops::CallJoin::Admitted { room, sender } => (room, sender),
         redis_ops::CallJoin::Refused(refusal) => return Ok(CallAnswer::Refused(refusal)),
@@ -140,6 +199,7 @@ pub(crate) async fn answer_join(
         }
     };
     Ok(CallAnswer::Admitted {
+        call: *call,
         sender,
         room,
         admission,
@@ -197,14 +257,15 @@ async fn handle_call(mut socket: WebSocket, state: Arc<AppState>, call: Id<Call>
         Some(first) => answer_join(&state, &call, first).await,
         None => Ok(CallAnswer::Refused(CallRefusal::Unauthorized)),
     };
-    let (sender, room, admission, claims, holder) = match answer {
+    let (call, sender, room, admission, claims, holder) = match answer {
         Ok(CallAnswer::Admitted {
+            call: seated,
             sender,
             room,
             admission,
             claims,
             holder,
-        }) => (sender, room, admission, claims, holder),
+        }) => (seated, sender, room, admission, claims, holder),
         Ok(CallAnswer::Refused(refusal)) => {
             // The notice of `CALL-021` and of each other refusal, then the close.
             if let Some(frame) = call_frame(&CallServerMsg::Refused(refusal)) {
@@ -272,6 +333,14 @@ async fn leave(state: &AppState, seat: &Seat) -> Option<Departure> {
     match redis_ops::leave_call(&state.redis, &seat.call, seat.sender).await {
         Ok(departure) => {
             publish(state, &seat.call, &CallServerMsg::Left(seat.sender)).await;
+            // The last leave frees the channel for its next call (`CALL-160`).
+            if departure == Departure::Last
+                && let Err(e) =
+                    redis_ops::release_channel_call(&state.redis, &seat.holder.channel, &seat.call)
+                        .await
+            {
+                tracing::warn!("a channel call was not released: {e}");
+            }
             Some(departure)
         }
         Err(e) => {
@@ -314,6 +383,7 @@ async fn serve_seat(
             }
         };
         let admitted = CallServerMsg::Admitted {
+            call: seat.call,
             admission,
             sfu: state.config.call_sfu.clone(),
             sender: seat.sender,
@@ -353,6 +423,18 @@ async fn serve_seat(
                         // A seat whose field expired had no heartbeat: its leave is announced
                         // once, by the heartbeat that found it (`CALL-063`).
                         Ok(redis_ops::CallHold::Held { gone }) => {
+                            // The key of the live call of the channel lives as long as the
+                            // call (`CALL-160`).
+                            if let Err(e) = redis_ops::hold_channel_call(
+                                &state.redis,
+                                &seat.holder.channel,
+                                &seat.call,
+                                ttl,
+                            )
+                            .await
+                            {
+                                tracing::warn!("a channel call was not held: {e}");
+                            }
                             for sender in gone {
                                 publish(state, &seat.call, &CallServerMsg::Left(sender)).await;
                             }

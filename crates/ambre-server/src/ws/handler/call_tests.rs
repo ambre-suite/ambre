@@ -1211,12 +1211,13 @@ async fn a_call_whose_last_seat_stops_its_heartbeat_reads_as_gone(pool: sqlx::Pg
     assert_eq!(ask(&state, &carol, call, channel).await, CallRoster::Gone);
 }
 
-/// The relay half of racing starts: Alice and Bob start a call in one channel at one instant. Each
-/// start draws its own identifier, so the relay holds two calls under two rooms, and each
-/// roster holds its starter alone.
+/// `CALL-160`: Alice and Bob start a call in one channel at one instant. Each start names an
+/// identifier of its own. The key of the live call of the channel
+/// takes one start, and the other start sits in that call. So the relay holds one call under
+/// one room, and its roster holds both starters. Once the last leaves, a start makes a new call.
 #[sqlx::test]
 #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
-async fn two_starts_at_once_make_two_calls_each_with_its_starter_alone(pool: sqlx::PgPool) {
+async fn two_starts_at_once_make_one_call_that_holds_both_starters(pool: sqlx::PgPool) {
     use ambre_protocol::signaling::CallRoster;
     let state = test_app_state(pool.clone()).await;
     let alice = Member::new(&pool, "alice", 1).await;
@@ -1230,23 +1231,68 @@ async fn two_starts_at_once_make_two_calls_each_with_its_starter_alone(pool: sql
         call_socket(&root, first, &start_a),
         call_socket(&root, second, &start_b),
     );
-    let room = |msg: Option<CallServerMsg>| match msg {
-        Some(CallServerMsg::Admitted { admission, .. }) => verified(&state, &admission).room,
+    let seated = |msg: Option<CallServerMsg>| match msg {
+        Some(CallServerMsg::Admitted {
+            call, admission, ..
+        }) => (call, verified(&state, &admission).room),
         other => panic!("no admission: {other:?}"),
     };
-    let (ra, rb) = (
-        room(next_signal(&mut a).await),
-        room(next_signal(&mut b).await),
+    let ((ca, ra), (cb, rb)) = (
+        seated(next_signal(&mut a).await),
+        seated(next_signal(&mut b).await),
     );
-    assert_ne!(ra, rb, "two calls, two rooms");
+    assert_eq!((ca, ra), (cb, rb), "one call, one room");
+    assert!(
+        ca == first || ca == second,
+        "the call of one of the two starts"
+    );
     send(&mut a, &CallClientMsg::Announce(Payload::new(vec![1; 192]))).await;
     send(&mut b, &CallClientMsg::Announce(Payload::new(vec![2; 192]))).await;
-    for (call, join) in [(first, 1), (second, 2)] {
-        let want = CallRoster::Live(vec![Seated {
-            sender: Seq::new(0),
-            join: Payload::<SignedJoins>::new(vec![join; 192]),
-        }]);
-        ask_until(&state, &carol, call, channel, &want).await;
+    let roster = loop {
+        if let CallRoster::Live(seats) = ask(&state, &carol, ca, channel).await
+            && seats.len() == 2
+        {
+            break seats;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    };
+    let mut joins: Vec<u8> = roster.iter().map(|s| s.join.as_bytes()[0]).collect();
+    joins.sort_unstable();
+    assert_eq!(joins, vec![1, 2]);
+
+    send(&mut a, &CallClientMsg::Leave).await;
+    send(&mut b, &CallClientMsg::Leave).await;
+    ask_until(&state, &carol, ca, channel, &CallRoster::Gone).await;
+    let third = Id::<Call>::mint();
+    let mut c = call_socket(&root, third, &carol.join(&state, channel)).await;
+    assert_eq!(
+        seated(next_signal(&mut c).await).0,
+        third,
+        "a new call once the last left"
+    );
+}
+
+/// `CALL-161`: a call whose state the store lost with no last leave leaves the key of the
+/// live call of its channel behind. A later start reads that call as ended, takes the key, and
+/// creates its own call.
+#[sqlx::test]
+#[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+async fn a_start_takes_the_channel_from_a_call_the_store_lost(pool: sqlx::PgPool) {
+    let state = test_app_state(pool.clone()).await;
+    let alice = Member::new(&pool, "alice", 1).await;
+    let bob = Member::new(&pool, "bob", 2).await;
+    let channel = channel_of(&pool, &alice, &[&bob]).await;
+    let root = served(state.clone()).await;
+    let (lost, fresh) = (Id::<Call>::mint(), Id::<Call>::mint());
+    let mut a = call_socket(&root, lost, &alice.join(&state, channel)).await;
+    let _ = seat_of(&mut a).await;
+    use rustis::commands::GenericCommands;
+    let keys = crate::redis_keys::CallStateKeys::of(&lost);
+    let _: usize = state.redis.del(keys.texts()).await.expect("a loss");
+    let mut b = call_socket(&root, fresh, &bob.join(&state, channel)).await;
+    match next_signal(&mut b).await {
+        Some(CallServerMsg::Admitted { call, .. }) => assert_eq!(call, fresh),
+        other => panic!("no admission: {other:?}"),
     }
 }
 
@@ -1261,19 +1307,22 @@ async fn a_call_socket_silent_for_the_time_to_live_leaves_its_seat(pool: sqlx::P
     let state = with_call_clock(&test_app_state(pool.clone()).await, 2, 1);
     let alice = Member::new(&pool, "alice", 1).await;
     let carol = Member::new(&pool, "carol", 3).await;
+    // Two channels, since a start in a channel with a live call sits in that call
+    // (`CALL-160`).
     let channel = channel_of(&pool, &alice, &[&carol]).await;
+    let other = channel_of(&pool, &alice, &[&carol]).await;
     let root = served(state.clone()).await;
     let (silent, answering) = (Id::<Call>::mint(), Id::<Call>::mint());
     let mut a = call_socket(&root, silent, &alice.join(&state, channel)).await;
     let _ = seat_of(&mut a).await;
-    let mut b = call_socket(&root, answering, &alice.join(&state, channel)).await;
+    let mut b = call_socket(&root, answering, &alice.join(&state, other)).await;
     let _ = seat_of(&mut b).await;
     // Reading the socket answers each ping, as a browser does.
     let reader = tokio::spawn(async move { while b.next().await.is_some() {} });
     tokio::time::sleep(Duration::from_millis(4500)).await;
     assert_eq!(ask(&state, &carol, silent, channel).await, CallRoster::Gone);
     assert!(matches!(
-        ask(&state, &carol, answering, channel).await,
+        ask(&state, &carol, answering, other).await,
         CallRoster::Live(_)
     ));
     reader.abort();

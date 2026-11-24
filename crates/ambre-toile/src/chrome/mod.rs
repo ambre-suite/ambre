@@ -15,6 +15,7 @@ mod choosers;
 pub use choosers::{DocChoice, ToileChoosers};
 mod commands;
 mod comments;
+mod cover;
 mod deck;
 mod editing;
 pub use editing::EditingSurfaces;
@@ -67,7 +68,7 @@ pub use status::StatusBar;
 // `ui::presenter`, like `ui::find`. Re-export it so the launcher and tests
 // name it through `toile_chrome`.
 pub use crate::ui::presenter::{PresenterIntent, notes_delta, slide_counter_label};
-pub use style::StyleInspector;
+pub use style::{ToilePanelSignals, toile_panel};
 
 // The inspector's pure model is host-tested in `ui::style` (like `ui::status` /
 // `ui::palette`); re-export it so the launcher names it through `toile_chrome`.

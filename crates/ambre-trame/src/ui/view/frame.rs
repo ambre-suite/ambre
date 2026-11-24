@@ -86,9 +86,23 @@ impl TrameView {
             // decided by the Logic thread); adopt it so edits target the right
             // sheet. The tab strip reads it from here (`UI-THREAD-003`). A
             // separate DataReset re-fetches the viewport.
-            TrameEvent::SheetList { active, .. } => {
+            TrameEvent::SheetList {
+                active,
+                page,
+                frozen,
+                ..
+            } => {
                 #[cfg(target_arch = "wasm32")]
-                self.active_sheet.set(active.clone());
+                {
+                    self.active_sheet.set(active.clone());
+                    // The context panel shows the setup of the sheet shown.
+                    let setup = Some(crate::ui::panel::ActiveSheet { page, frozen });
+                    if self.sheet_setup.get_untracked() != setup {
+                        self.sheet_setup.set(setup);
+                    }
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                let _ = (page, frozen);
                 self.state.active_sheet = active;
                 self.needs_full = true;
             }
@@ -275,12 +289,19 @@ impl TrameView {
         // queues the viewport re-request flushed just below. The signal is
         // shared with Toile, whose range is wider. The grid writes its own
         // clamp back, so the chip reads the zoom the grid shows.
+        // A zoom to the selection the context menu asked for (`ZOOM-007`).
+        #[cfg(target_arch = "wasm32")]
+        if let Some(id) = self.view_cmd.get_untracked() {
+            self.view_cmd.set(None);
+            if id == crate::chrome::ZOOM_TO_SELECTION {
+                self.zoom_to_selection();
+            }
+        }
         #[cfg(target_arch = "wasm32")]
         {
             let asked = self.zoom_sig.get_untracked();
             self.set_zoom(asked);
-            let [lo, .., hi] = TrameUiState::ZOOM_PRESETS;
-            let shown = self.state.zoom.clamped(lo, hi);
+            let shown = self.state.zoom;
             if shown != asked {
                 self.zoom_sig.set(shown);
             }
@@ -363,6 +384,10 @@ impl TrameView {
         {
             if self.formula_ref.get_untracked() != self.formula.reference {
                 self.formula_ref.set(self.formula.reference.clone());
+            }
+            let selection = self.selection_ref();
+            if self.selection_ref.get_untracked() != selection {
+                self.selection_ref.set(selection);
             }
             if self.formula_text.get_untracked() != self.formula.text {
                 self.formula_text.set(self.formula.text.clone());
@@ -639,17 +664,75 @@ impl TrameView {
         true
     }
 
+    /// Step the zoom along the one ladder, or back to one (`ZOOM-004`,
+    /// `ZOOM-005`). The chip's signal takes the new factor too, so the next
+    /// frame does not pull the grid back to the factor the chip held.
+    pub fn step_zoom(&mut self, step: ambre_core::ZoomStep) -> bool {
+        let next = self.state.zoom_engine().step(step).factor();
+        #[cfg(target_arch = "wasm32")]
+        self.zoom_sig.set(next);
+        self.set_zoom(next)
+    }
+
+    /// Zoom about a point of the canvas, through the one engine
+    /// (`ZOOM-003`). The chip's signal takes the new factor, as for a step.
+    pub fn zoom_about(
+        &mut self,
+        asked: ambre_core::Scale<ambre_core::Doc, ambre_core::View>,
+        at: ambre_core::Point<ambre_core::Px<ambre_core::View>>,
+    ) -> bool {
+        if !self.state.zoom_about(asked, at) {
+            return false;
+        }
+        #[cfg(target_arch = "wasm32")]
+        self.zoom_sig.set(self.state.zoom);
+        self.needs_full = true;
+        self.viewport_changed = true;
+        self.pending_viewport
+            .coalesce(self.state.scroll_viewport_cmd());
+        true
+    }
+
+    /// Zoom so the selection shows whole (`ZOOM-007`). The selection stays
+    /// (`ZOOM-010`), and the chip's signal takes the new factor.
+    pub fn zoom_to_selection(&mut self) -> bool {
+        if !self.state.zoom_to_selection() {
+            return false;
+        }
+        #[cfg(target_arch = "wasm32")]
+        self.zoom_sig.set(self.state.zoom);
+        self.needs_full = true;
+        self.viewport_changed = true;
+        self.pending_viewport
+            .coalesce(self.state.scroll_viewport_cmd());
+        true
+    }
+
     /// The current grid zoom factor (`1.0` = 100%), for the status-bar readout.
     pub fn zoom(&self) -> ambre_core::Scale<ambre_core::Doc, ambre_core::View> {
         self.state.zoom
     }
 
     pub fn handle_input(&mut self, ev: &InputEvent) -> ambre_draw::Consumed {
+        // A wheel carries no position, so a zoom about the pointer reads the
+        // last one the canvas saw (`ZOOM-003`).
+        if let InputEvent::PointerMove { at } | InputEvent::PointerDown { at, .. } = ev {
+            self.pointer = Some(*at);
+        }
         // The outbox holds a command the Logic thread has not taken, so the grid
         // stops accepting input until the queue drains (`BUS-016`). Consuming
         // the event is what makes the refusal visible: a key that fell through
         // to the browser would scroll the page under a frozen grid.
         if self.is_busy() {
+            return ambre_draw::Consumed::Yes;
+        }
+        // A zoom chord steps the zoom in any mode, an open editor included
+        // (`ZOOM-004`, `ZOOM-005`). It writes no command but the cull of the
+        // new view (`ZOOM-001`, `ZOOM-008`).
+        if let InputEvent::Key { key, mods } = ev
+            && let Some(step) = ambre_commands::shared::zoom_step(*key, *mods)
+        {
+            self.step_zoom(step);
             return ambre_draw::Consumed::Yes;
         }
         // Wheel / two-finger touchpad scroll pans the viewport in any mode and

@@ -3,7 +3,7 @@
 //! A setting is one entry of one section of the settings document: a frozen
 //! key, a value type and a default. This module declares the shapes and the
 //! catalogue. The document that stores them lives in the Logic thread, and
-//! the relay never reads a setting (`ZK-053`).
+//! the relay never reads a setting (`ZK-054`).
 
 use std::marker::PhantomData;
 

@@ -103,6 +103,12 @@ pub struct ProseView {
     /// The five figures as the status bar slot shows them.
     figures: RwSignal<Option<ambre_prose::ui::StatusFigures>>,
     shown: Option<WordCount>,
+    /// The zoom chip of the status bar: the chip writes a factor, the view
+    /// applies it and writes back what it shows (`CHROME-206`).
+    zoom: RwSignal<ambre_core::Scale<ambre_core::Doc, View>>,
+    /// The factor the chip last read from the view. A signal that differs
+    /// from it holds a factor the chip asked for.
+    zoom_shown: ambre_core::Scale<ambre_core::Doc, View>,
     annotations: ProseSignals,
     /// The layout context the draft is shaped with.
     layout_cx: LayoutContext<ParleyBrush>,
@@ -111,6 +117,9 @@ pub struct ProseView {
     /// The keystrokes in flight, from their input to their frame.
     probe: KeyProbe,
     timeline: super::probe::Timeline,
+    /// The last pointer over the canvas, the point a `Ctrl` wheel zooms
+    /// about (`ZOOM-003`).
+    pointer: Option<Point<Px<View>>>,
 }
 
 /// The width and the height of a canvas box, as the view pixels the page
@@ -136,6 +145,8 @@ pub struct ProseWiring {
     pub theme_ctl: ThemeControl,
     /// The status bar slot the view fills with its figures.
     pub figures: RwSignal<Option<ambre_prose::ui::StatusFigures>>,
+    /// The zoom chip of the status bar slot.
+    pub zoom: RwSignal<ambre_core::Scale<ambre_core::Doc, View>>,
     /// The annotation signals the view shares with the shell.
     pub annotations: ProseSignals,
     /// The level a full outbox raises.
@@ -153,6 +164,7 @@ impl ProseView {
             text_input,
             theme_ctl,
             figures,
+            zoom,
             annotations,
             busy_pub,
             notices,
@@ -163,6 +175,7 @@ impl ProseView {
         let size = view_size(size);
         let mut state = ProseUiState::default();
         state.resize(size.0, size.1);
+        let zoom_shown = state.viewport.zoom;
         Self {
             document_id,
             outbox: Outbox::new(to_logic),
@@ -179,11 +192,14 @@ impl ProseView {
             fatal: false,
             figures,
             shown: None,
+            zoom,
+            zoom_shown,
             annotations,
             layout_cx: LayoutContext::new(),
             now: Instant::<PageLoad>::new(0.0),
             probe: KeyProbe::default(),
             timeline: super::probe::Timeline::new(),
+            pointer: None,
         }
     }
 
@@ -233,8 +249,10 @@ impl ProseView {
         self.drop_lost_drafts();
         self.take_intent();
         self.take_format();
+        self.take_page();
         self.take_ruler();
         self.take_slash_pick();
+        self.sync_zoom();
         self.publish_toolbar();
         // The input held behind a structural command goes out once the
         // Logic thread answered it, unless an edit still waits in the outbox.
@@ -250,6 +268,23 @@ impl ProseView {
             self.figures
                 .set(Some(status_figures(&self.state.word_count)));
         }
+    }
+
+    /// Apply the factor the zoom chip asked for, then show the chip the
+    /// factor the page is drawn at. A zoom key moves the page alone, so the
+    /// chip learns of it here too.
+    fn sync_zoom(&mut self) {
+        let asked = self.zoom.get_untracked();
+        if asked != self.zoom_shown
+            && self.state.zoom_to(asked) == ambre_prose::view::zoom::ZoomChange::Moved
+        {
+            self.dirty = true;
+        }
+        let shown = self.state.viewport.zoom;
+        if shown != asked {
+            self.zoom.set(shown);
+        }
+        self.zoom_shown = shown;
     }
 
     /// Act on what the panel or the popover asked for. An intent that waits
@@ -293,6 +328,21 @@ impl ProseView {
         if let Some(command) = self.state.format(id) {
             send_edit(&mut self.outbox, self.document_id, command);
         }
+        self.busy_pub
+            .publish(BusyLevel::from_busy(self.outbox.is_busy()));
+    }
+
+    /// Act on the page format a control of the context panel asked for: one
+    /// command for the whole format, one undo item (`PROSE-UI-252`). One that
+    /// waits behind a busy outbox stays in its signal for a later frame.
+    fn take_page(&mut self) {
+        if self.fatal || self.outbox.is_busy() {
+            return;
+        }
+        let Some(command) = self.annotations.take_page_write() else {
+            return;
+        };
+        send_edit(&mut self.outbox, self.document_id, command);
         self.busy_pub
             .publish(BusyLevel::from_busy(self.outbox.is_busy()));
     }
@@ -390,6 +440,12 @@ impl ProseView {
             .with_untracked(|shown| *shown != bar)
         {
             self.annotations.toolbar.set(bar);
+        }
+        // The page the layout was measured on, for the context panel
+        // (`PROSE-UI-253`).
+        let page = Some(self.state.shaped.layout.format);
+        if self.annotations.page.with_untracked(|shown| *shown != page) {
+            self.annotations.page.set(page);
         }
         // The slash menu sits at the caret, and moves when the bar does.
         self.publish_slash();
@@ -574,7 +630,29 @@ impl ProseView {
         if self.outbox.is_busy() {
             return Consumed::Yes;
         }
+        if let InputEvent::PointerMove { at } | InputEvent::PointerDown { at, .. } = ev {
+            self.pointer = Some(*at);
+        }
         match ev {
+            // A wheel held with `Ctrl`, a trackpad pinch included, zooms about
+            // the pointer (`ZOOM-003`, `ZOOM-004`, `PROSE-UI-128`).
+            InputEvent::Wheel { delta, mods } if mods.contains(ModifierKeys::PRIMARY) => {
+                let page = self.state.viewport.height.css_length();
+                let line = ambre_core::Vector::new(ambre_draw::WHEEL_LINE, ambre_draw::WHEEL_LINE);
+                let dy = delta.to_px(line, ambre_core::Vector::new(page, page)).dy;
+                let asked = self.state.wheel_zoom(dy);
+                let at = self.pointer.unwrap_or_else(|| {
+                    let (width, height) = self.size;
+                    Point::new(width / 2.0, height / 2.0)
+                });
+                if self.state.zoom_about(asked, at) == ambre_prose::view::zoom::ZoomChange::Moved {
+                    self.state.hovered = None;
+                    self.publish_hover();
+                    self.publish_toolbar();
+                    self.dirty = true;
+                }
+                Consumed::Yes
+            }
             InputEvent::Wheel { delta, .. } => {
                 // A new scroll stops the motion a flick left, and a glide
                 // may leave its own (`PROSE-UI-218`, `KINETIC-002`).
@@ -874,6 +952,7 @@ mod tests {
                 text_input: pipe.clone(),
                 theme_ctl: ThemeControl::new(Theme::Dark),
                 figures: RwSignal::new(None),
+                zoom: RwSignal::new(ambre_core::Scale::ONE),
                 annotations: ProseSignals::new(),
                 busy_pub: BusyPublisher::new(),
                 notices: NoticePublisher::new(),
@@ -893,6 +972,99 @@ mod tests {
             "{}",
             focused.tag_name()
         );
+    }
+
+    /// `ZOOM-003`, `ZOOM-004`, `PROSE-UI-128`: a wheel held with `Ctrl` over
+    /// the page zooms it, and the document point under the pointer stays
+    /// there. The event is consumed, so the browser does not zoom the tab.
+    #[wasm_bindgen_test]
+    fn a_ctrl_wheel_zooms_the_page_about_the_pointer() {
+        use ambre_prose::layout::pass::PageLayout;
+        use ambre_prose::view::column::{DocPos, PageColumn};
+        let document = web_sys::window()
+            .and_then(|w| w.document())
+            .expect("a page");
+        let cell = document.create_element("div").expect("a cell");
+        document
+            .body()
+            .expect("a body")
+            .append_child(&cell)
+            .expect("attached");
+        let (to_logic, _queue) = ambre_bus::conduit::local(ambre_core::Bounded::<
+            ambre_bus::conduit::ChannelSlots,
+        >::of::<4>());
+        let (_to_ui, from_logic) = ambre_bus::conduit::local(ambre_core::Bounded::<
+            ambre_bus::conduit::ChannelSlots,
+        >::of::<4>());
+        let mut view = ProseView::new(
+            Id::<Document>::mint(),
+            Size::new(Px::new(800), Px::new(600)),
+            ProseWiring {
+                to_logic: Port::direct(to_logic),
+                from_logic: Feed::direct(from_logic),
+                text_input: TextInput::create(&document, &cell),
+                theme_ctl: ThemeControl::new(Theme::Dark),
+                figures: RwSignal::new(None),
+                zoom: RwSignal::new(ambre_core::Scale::ONE),
+                annotations: ProseSignals::new(),
+                busy_pub: BusyPublisher::new(),
+                notices: NoticePublisher::new(),
+            },
+        );
+        view.state.column = PageColumn::of(&PageLayout {
+            // Wider than the canvas at every factor the notches reach, so no
+            // recentring moves the point sideways (`PROSE-UI-026`).
+            page_width: Px::new(1000.0),
+            page_height: Px::new(800.0),
+            page_count: Len::<Page>::new(40),
+            ..PageLayout::default()
+        });
+        view.state.viewport.scroll_y = Px::new(5_000.0);
+        let at = pointer(420.0, 310.0);
+        let _ = view.handle_input(&InputEvent::PointerMove { at });
+        let DocPos::OnPage {
+            page,
+            x_in_page,
+            y_in_page,
+        } = view.state.column.screen_to_doc(&view.state.viewport, at)
+        else {
+            panic!("the pointer is over a page");
+        };
+        let notch = |dy: f64| InputEvent::Wheel {
+            delta: ambre_canvas::WheelDelta::pixels(ambre_core::Vector::new(
+                ambre_canvas::WheelAmount::new(0.0),
+                ambre_canvas::WheelAmount::new(dy),
+            )),
+            mods: ModifierKeys::PRIMARY,
+        };
+        for dy in [-120.0, -120.0, -60.0, 120.0, -200.0] {
+            assert!(
+                view.handle_input(&notch(dy)).is_yes(),
+                "the browser must not zoom the tab"
+            );
+            let now =
+                view.state
+                    .column
+                    .doc_to_screen(&view.state.viewport, page, x_in_page, y_in_page);
+            assert!(
+                (now.y - at.y).get().abs() < 0.5,
+                "{:?} drifted to {:?}",
+                at.y,
+                now.y
+            );
+            assert!(
+                (now.x - at.x).get().abs() < 0.5,
+                "{:?} drifted to {:?}",
+                at.x,
+                now.x
+            );
+        }
+        assert!(
+            view.state.viewport.zoom.get() > 1.0,
+            "a wheel away from the reader zooms in"
+        );
+        assert!(view.dirty, "the zoomed page repaints");
+        cell.remove();
     }
 
     /// `BUS-022`: the page takes no input while its outbox holds a command, and
@@ -924,6 +1096,7 @@ mod tests {
                 text_input: TextInput::create(&document, &cell),
                 theme_ctl: ThemeControl::new(Theme::Dark),
                 figures: RwSignal::new(None),
+                zoom: RwSignal::new(ambre_core::Scale::ONE),
                 annotations: ProseSignals::new(),
                 busy_pub: BusyPublisher::new(),
                 notices: NoticePublisher::new(),
@@ -973,8 +1146,13 @@ mod tests {
         body.append_child(&cell).expect("attached");
         body.append_child(&slot).expect("attached");
         let figures = RwSignal::new(None);
+        let zoom = RwSignal::new(ambre_core::Scale::ONE);
         let target: web_sys::HtmlElement = slot.clone().dyn_into().expect("an element");
-        mount_to(target, move || view! { <ProseFigures figures=figures /> }).forget();
+        mount_to(
+            target,
+            move || view! { <ProseFigures figures=figures zoom=zoom /> },
+        )
+        .forget();
 
         let (to_logic, _queue) = ambre_bus::conduit::local(ambre_core::Bounded::<
             ambre_bus::conduit::ChannelSlots,
@@ -991,6 +1169,7 @@ mod tests {
                 text_input: TextInput::create(&document, &cell),
                 theme_ctl: ThemeControl::new(Theme::Dark),
                 figures,
+                zoom,
                 annotations: ProseSignals::new(),
                 busy_pub: BusyPublisher::new(),
                 notices: NoticePublisher::new(),
@@ -1023,6 +1202,100 @@ mod tests {
                 "2 pages"
             ]
         );
+        cell.remove();
+        slot.remove();
+    }
+
+    /// `CHROME-206`, `PROSE-UI-250`: the Prose band ends on the shared zoom
+    /// chip. A preset picked there zooms the page, and a zoom key moves the
+    /// chip.
+    #[wasm_bindgen_test]
+    async fn the_zoom_chip_closes_the_band_and_zooms_the_page() {
+        use crate::shell::prose_status::ProseFigures;
+        use leptos::mount::mount_to;
+        use leptos::wasm_bindgen::JsCast;
+
+        let document = web_sys::window()
+            .and_then(|w| w.document())
+            .expect("a page");
+        let cell = document.create_element("div").expect("a cell");
+        let slot = document.create_element("div").expect("a slot");
+        let body = document.body().expect("a body");
+        body.append_child(&cell).expect("attached");
+        body.append_child(&slot).expect("attached");
+        let figures = RwSignal::new(None);
+        let zoom = RwSignal::new(ambre_core::Scale::ONE);
+        let target: web_sys::HtmlElement = slot.clone().dyn_into().expect("an element");
+        mount_to(
+            target,
+            move || view! { <ProseFigures figures=figures zoom=zoom /> },
+        )
+        .forget();
+        let last = slot.last_element_child().expect("a band child");
+        assert!(
+            last.class_list().contains("statusbar-zoom"),
+            "the band ends on `{}`",
+            last.class_name()
+        );
+
+        let (to_logic, _queue) = ambre_bus::conduit::local(ambre_core::Bounded::<
+            ambre_bus::conduit::ChannelSlots,
+        >::of::<4>());
+        let (_to_ui, from_logic) = ambre_bus::conduit::local(ambre_core::Bounded::<
+            ambre_bus::conduit::ChannelSlots,
+        >::of::<4>());
+        let mut view = ProseView::new(
+            Id::<Document>::mint(),
+            Size::new(Px::new(800), Px::new(600)),
+            ProseWiring {
+                to_logic: Port::direct(to_logic),
+                from_logic: Feed::direct(from_logic),
+                text_input: TextInput::create(&document, &cell),
+                theme_ctl: ThemeControl::new(Theme::Dark),
+                figures,
+                zoom,
+                annotations: ProseSignals::new(),
+                busy_pub: BusyPublisher::new(),
+                notices: NoticePublisher::new(),
+            },
+        );
+        let click = |selector: &str| {
+            slot.query_selector(selector)
+                .ok()
+                .flatten()
+                .and_then(|el| el.dyn_into::<web_sys::HtmlElement>().ok())
+                .expect("a control")
+                .click();
+        };
+        click(".statusbar-zoom-btn");
+        leptos::task::tick().await;
+        let items = slot
+            .query_selector_all(".statusbar-zoom-item")
+            .expect("a query");
+        let two_hundred = (0..items.length())
+            .filter_map(|i| items.item(i))
+            .filter_map(|n| n.dyn_into::<web_sys::HtmlElement>().ok())
+            .find(|el| el.text_content().as_deref() == Some("200 %"))
+            .expect("a 200 % preset");
+        view.dirty = false;
+        two_hundred.click();
+        view.update();
+        assert_eq!(view.state.viewport.zoom.get(), 2.0);
+        assert!(view.dirty, "the zoomed page repaints");
+
+        let _ = view.handle_input(&InputEvent::Key {
+            key: ambre_chrome::commands::Key::Char(ambre_chrome::commands::KeyChar::new('0')),
+            mods: ModifierKeys::PRIMARY,
+        });
+        view.update();
+        leptos::task::tick().await;
+        assert_eq!(zoom.get_untracked().get(), 1.0);
+        let shown = slot
+            .query_selector(".statusbar-zoom-btn")
+            .ok()
+            .flatten()
+            .and_then(|el| el.text_content());
+        assert_eq!(shown.as_deref(), Some("100 %"));
         cell.remove();
         slot.remove();
     }

@@ -13,10 +13,20 @@
    properties. Only layout constants specific to the shell live here. */
 :root {
     --header-h: 44px;
+    /* The one family of the chrome. The page loads no web face for the chrome,
+       so the stack names the platform's interface face alone. */
+    --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+    --commandbar-h: 38px;
     --status-h: 26px;
     --sidebar-w: 260px;
     --sidebar-strip: 44px;
     --panel-w: 380px;
+    /* The context panel's width; the panel overrides it inline with the
+       width the user dragged (`CHROME-198`). */
+    --ctx-panel-w: 300px;
+    /* The label column of every section of the context panel: one width, so
+       the controls of the three applications start on one line. */
+    --ctx-label-w: 84px;
     /* 1 at the desktop width, where a chord shows. The host reads it for the
        canvas, so no width lives outside this sheet. */
     --desktop: 0;
@@ -34,6 +44,15 @@ input[type="radio"] {
     color-scheme: dark;
 }
 
+/* Every surface mounted outside the shell, a toast, a menu or a dialog,
+   inherits the chrome family from the body, never the serif face of the
+   browser (`CHROME-201`). */
+body {
+    font-family: var(--font-sans);
+    font-size: var(--font-ui);
+    color: var(--text);
+}
+
 /* The shell fills the viewport; rows = header, command bar, formula bar,
    body, tab strip, status. Each row is placed by name, so an absent one leaves
    its track empty: an `auto` track then collapses to 0. */
@@ -45,7 +64,7 @@ input[type="radio"] {
     height: 100%;
     background: var(--bg);
     color: var(--text);
-    font-family: system-ui, -apple-system, sans-serif;
+    font-family: var(--font-sans);
     font-size: var(--font-ui);
 }
 
@@ -62,6 +81,28 @@ input[type="radio"] {
 .ambre-header .title {
     font-weight: 600;
     letter-spacing: 0.2px;
+}
+
+/* The way home reads as the title, not as a link of the page (`CHROME-203`). */
+.ambre-header .ambre-home {
+    color: var(--text);
+    text-decoration: none;
+    border-radius: var(--radius-sm);
+    padding: var(--space-1) var(--space-2);
+}
+
+.ambre-header .ambre-home:hover {
+    background: var(--surface-hover);
+}
+
+.ambre-header .ambre-doc-name {
+    color: var(--text-dim);
+    padding-left: var(--space-4);
+    border-left: 1px solid var(--border);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
 }
 
 .ambre-header .spacer {
@@ -121,7 +162,7 @@ input[type="radio"] {
     padding: var(--space-2) var(--space-5);
     background: var(--surface-2);
     border-bottom: 1px solid var(--border);
-    min-height: 38px;
+    min-height: var(--commandbar-h);
 }
 
 .ambre-commandbar button {
@@ -129,7 +170,7 @@ input[type="radio"] {
     border: 1px solid transparent;
     background: transparent;
     color: var(--text);
-    font-family: Roboto, system-ui, -apple-system, sans-serif;
+    font-family: var(--font-sans);
     font-size: var(--font-body);
     font-weight: 400;
     padding: var(--space-2) calc(var(--space-4) + 1px);
@@ -138,8 +179,8 @@ input[type="radio"] {
 }
 
 .ambre-commandbar button svg {
-    width: 20px;
-    height: 20px;
+    width: var(--icon-lg);
+    height: var(--icon-lg);
     display: block;
 }
 
@@ -170,12 +211,14 @@ input[type="radio"] {
 /* Toolbar tooltips: a discreet, theme-aware replacement for the native `title`
    bubble (small muted text, thin border, surface background). Driven by
    `aria-label` so the accessible name and the visual hint share one source. The
-   bubble fades in after a short delay so it stays out of the way. */
-.ambre-commandbar [aria-label] {
+   bubble fades in after a short delay so it stays out of the way. A control
+   alone carries the bubble: a floating menu the bar opens keeps its own fixed
+   position (`CHROME-200`). */
+.ambre-commandbar :is(button, select)[aria-label]:not(.ambre-ctx-menu *) {
     position: relative;
 }
 
-.ambre-commandbar [aria-label]::after {
+.ambre-commandbar :is(button, select)[aria-label]:not(.ambre-ctx-menu *)::after {
     content: attr(aria-label);
     position: absolute;
     top: calc(100% + 6px);
@@ -197,17 +240,17 @@ input[type="radio"] {
     transition: opacity 0.1s ease 0.45s;
 }
 
-.ambre-commandbar [aria-label]:hover::after {
+.ambre-commandbar :is(button, select)[aria-label]:not(.ambre-ctx-menu *):hover::after {
     opacity: 1;
 }
 
 /* Toile tool palette / primary toolbar (toile-ui SS5quinquies.A). It carries the
    `.ambre-commandbar` class too, so every button / hover / active-fill / `.sep` /
    tooltip rule above applies unchanged -- visually identical to the Trame bar. This
-   modifier only re-docks it as a floating vertical palette (Trame's bar is docked
-   horizontally along the top). */
+   modifier only re-docks it as a floating vertical palette. It floats inside the
+   content cell, so a context panel docked to the left covers none of it. */
 .ambre-tool-palette {
-    position: fixed;
+    position: absolute;
     top: 50%;
     left: 8px;
     transform: translateY(-50%);
@@ -230,49 +273,68 @@ input[type="radio"] {
 
 /* The shared tooltip sits below the button in the docked bar; on a left-docked
    vertical palette it reads better to its right. */
-.ambre-tool-palette [aria-label]::after {
+.ambre-tool-palette :is(button, select)[aria-label]:not(.ambre-ctx-menu *)::after {
     top: 50%;
     left: calc(100% + 6px);
     transform: translateY(-50%);
 }
 
-/* Toile top menu bar (toile-ui SS5quinquies.E). Reuses `.ambre-commandbar` for
-   buttons / hover / active-fill; this modifier only docks it top-center. */
-.ambre-toile-menubar {
-    position: fixed;
-    top: 8px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 60;
+/* The format bar over a selection (`CHROME-105`), which Prose and Murmure hand
+   their controls. The component sets its position; this sheet gives it the
+   frame of a floating bar, so it never shows the raw buttons of the browser
+   (`CHROME-202`). */
+.ambre-format-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-2);
+    background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
-    box-shadow: var(--shadow-low);
+    box-shadow: var(--shadow-mid);
+}
+
+.ambre-format-control {
+    appearance: none;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: var(--font-ui);
+    padding: var(--space-2) var(--space-4);
+    cursor: pointer;
+}
+
+.ambre-format-control:hover {
+    background: var(--surface-hover);
+}
+
+.ambre-format-control[aria-pressed="true"] {
+    background: var(--accent);
+    color: var(--on-accent);
+}
+
+.ambre-format-control[aria-pressed="mixed"] {
+    border-color: var(--accent);
+}
+
+/* Toile top menu bar (toile-ui SS5quinquies.E): a group inside the command
+   bar row, under the header (`CHROME-200`). It reuses `.ambre-commandbar` for
+   its buttons, so the nested group drops the frame of a bar. The zoom is not
+   here: it closes the status bar (`CHROME-206`). */
+.ambre-commandbar > .ambre-toile-menubar {
+    padding: 0;
+    min-height: 0;
+    background: none;
+    border: 0;
 }
 
 /* Menu titles are text, not icons: give them horizontal padding and normal
    text sizing (the shared bar is sized for square icon buttons). */
 .ambre-menu-title {
     padding: 0 var(--space-4);
-    font: var(--font-body) Roboto, system-ui, -apple-system, sans-serif;
-}
-
-/* Toile zoom control (toile-ui SS5quinquies.E): docked top-right, same chrome. */
-.ambre-toile-zoom {
-    position: fixed;
-    top: 8px;
-    right: 8px;
-    z-index: 60;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-low);
-}
-
-/* The `%` readout doubles as the reset-to-100% button: a fixed-width numeric
-   label so the bar does not reflow as the zoom changes. */
-.ambre-zoom-readout {
-    min-width: 48px;
-    font: var(--font-ui) ui-monospace, monospace;
-    color: var(--text);
+    font-size: var(--font-body);
 }
 
 /* Toile style / property inspector (toile-ui SS5quinquies.B): a floating side
@@ -281,7 +343,7 @@ input[type="radio"] {
    buttons, so only the panel frame and the appearance rows are styled here. */
 .ambre-inspector {
     position: fixed;
-    top: 56px;
+    top: calc(var(--header-h) + var(--commandbar-h) + 8px);
     right: 8px;
     z-index: 60;
     display: flex;
@@ -293,7 +355,7 @@ input[type="radio"] {
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-low);
-    font: var(--font-ui) Roboto, system-ui, -apple-system, sans-serif;
+    font: var(--font-ui) var(--font-sans);
     color: var(--text);
 }
 
@@ -385,10 +447,10 @@ input[type="radio"] {
     background-color: transparent;
     color: var(--text);
     color-scheme: light;
-    font-family: Roboto, system-ui, -apple-system, sans-serif;
+    font-family: var(--font-sans);
     font-size: var(--font-body);
     font-weight: 400;
-    height: 28px;
+    height: var(--control);
     padding: 0 var(--space-12) 0 calc(var(--space-4) + 1px);          /* left breathing room + space for the caret */
     border-radius: var(--radius);
     cursor: pointer;
@@ -414,7 +476,7 @@ input[type="radio"] {
 .ambre-formulabar {
     display: flex;
     align-items: center;
-    height: 28px;
+    height: var(--control);
     background: var(--surface);
     border-bottom: 1px solid var(--border);
 }
@@ -488,8 +550,8 @@ input[type="radio"] {
 .ambre-sidebar-fold {
     align-self: flex-end;
     flex: 0 0 auto;
-    width: 26px;
-    height: 26px;
+    width: var(--control-sm);
+    height: var(--control-sm);
     margin: var(--space-2) var(--space-4) 0;
     border: 0;
     border-radius: 50%;
@@ -1011,6 +1073,735 @@ input[type="radio"] {
     border-left: 1px solid var(--border);
 }
 
+/* The context panel (`ambre-spec-shell.md` section 2): one frame for Prose,
+   Trame and Toile. It sits in the body beside the content, so the canvas ends
+   where the panel starts (`CHROME-198`). `order` puts it on the side the user
+   chose (`CHROME-193`). Collapsed, it keeps its body in the page and shows the
+   rail alone, so a section's scroll and edit survive (`CHROME-177`). */
+.ambre-body > .ambre-ctx-panel {
+    position: relative;
+    display: flex;
+    flex: 0 0 var(--ctx-panel-w);
+    min-width: 0;
+    min-height: 0;
+    order: 2;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+}
+
+.ambre-body > .ambre-ctx-panel[data-side="left"] {
+    order: -1;
+    border-left: 0;
+    border-right: 1px solid var(--border);
+}
+
+.ambre-body > .ambre-ctx-panel[data-fold="rail"] {
+    flex-basis: var(--sidebar-strip);
+}
+
+/* The edge that drags the width. A phone's sheet takes the full width, so
+   the edge shows from the tablet up (`CHROME-167`). */
+.ambre-ctx-edge {
+    display: none;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -3px;
+    width: 6px;
+    cursor: col-resize;
+    z-index: 2;
+    touch-action: none;
+}
+
+@media (min-width: 600px) {
+    .ambre-ctx-edge {
+        display: block;
+    }
+}
+
+.ambre-ctx-panel[data-side="left"] > .ambre-ctx-edge {
+    left: auto;
+    right: -3px;
+}
+
+.ambre-ctx-edge:hover,
+.ambre-ctx-edge:focus-visible {
+    background: var(--accent);
+    outline: none;
+}
+
+.ambre-ctx-panel[data-fold="rail"] > .ambre-ctx-edge,
+.ambre-ctx-panel[data-fold="open"] > .ambre-ctx-rail {
+    display: none;
+}
+
+/* The rail hides the body without taking its layout away: a box that leaves
+   the layout loses its scroll, and the panel keeps it (`CHROME-177`). */
+.ambre-body > .ambre-ctx-panel[data-fold="rail"] {
+    overflow: hidden;
+}
+
+.ambre-ctx-panel[data-fold="rail"] > .ambre-ctx-body {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: var(--ctx-panel-w);
+    visibility: hidden;
+}
+
+.ambre-ctx-rail {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    padding: var(--space-3) 0;
+}
+
+.ambre-ctx-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+}
+
+.ambre-ctx-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    min-height: var(--header-h);
+    padding: var(--space-4) var(--space-4) var(--space-4) var(--space-7);
+    border-bottom: 1px solid var(--border);
+}
+
+.ambre-ctx-title {
+    flex: 1 1 auto;
+    margin: 0;
+    font-size: var(--font-ui);
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ambre-ctx-sections {
+    flex: 1 1 auto;
+    overflow: auto;
+    padding-bottom: var(--space-8);
+}
+
+.ambre-ctx-section {
+    border-bottom: 1px solid var(--border);
+}
+
+/* A section heading is a small capital label, as the mockup draws it, and
+   folds its section on a click. */
+.ambre-ctx-section-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    width: 100%;
+    padding: var(--space-6) var(--space-7) var(--space-4);
+    border: 0;
+    background: transparent;
+    color: var(--text-faint);
+    font: inherit;
+    font-size: var(--font-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+}
+
+.ambre-ctx-section-head svg {
+    width: var(--icon-sm);
+    height: var(--icon-sm);
+}
+
+.ambre-ctx-section-head:hover {
+    color: var(--text);
+}
+
+/* The body is a grid of two columns: every label of the panel sits in the
+   first, every control starts in the second (`ambre-spec-shell.md`). */
+.ambre-ctx-section-body {
+    display: grid;
+    grid-template-columns: var(--ctx-label-w) minmax(0, 1fr);
+    align-items: center;
+    gap: var(--space-4) var(--space-4);
+    padding: 0 var(--space-7) var(--space-6);
+    font-size: var(--font-small);
+}
+
+.ambre-ctx-section[data-folded="true"] > .ambre-ctx-section-body {
+    display: none;
+}
+
+/* The kit: a label before a control, controls side by side. A field lays
+   its two parts into the two columns of the section. */
+.ambre-kit-field {
+    display: contents;
+}
+
+.ambre-kit-label {
+    color: var(--text-dim);
+    font-size: var(--font-small);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* A row with no label starts in the control column, under the controls of
+   the fields above it. A text button spans the whole section. */
+.ambre-kit-row {
+    grid-column: 2;
+}
+
+.ambre-kit-row:has(> .ambre-kit-command) {
+    grid-column: 1 / -1;
+}
+
+.ambre-kit-control,
+.ambre-kit-row,
+.ambre-kit-segmented,
+.ambre-kit-colour,
+.ambre-kit-font {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    min-width: 0;
+}
+
+/* A command with its label: one line of an action list, as the mockup
+   draws it. It takes the whole width of its row, so a row never mixes a
+   text button and an icon on one line. */
+.ambre-kit-command {
+    box-sizing: border-box;
+    display: flex;
+    flex: 1 1 100%;
+    /* After the icons of its row, which keep one line of their own. */
+    order: 1;
+    align-items: center;
+    gap: var(--space-4);
+    min-height: var(--control);
+    padding: 0 var(--space-4);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface-2);
+    color: var(--text);
+    font: inherit;
+    font-size: var(--font-small);
+    text-align: left;
+    cursor: pointer;
+}
+
+.ambre-kit-command svg {
+    width: var(--icon);
+    height: var(--icon);
+    flex: none;
+    color: var(--text-dim);
+}
+
+.ambre-kit-command:hover {
+    background: var(--surface-hover);
+}
+
+.ambre-kit-command[aria-pressed="true"] {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+.ambre-kit-command[aria-pressed="true"] svg {
+    color: var(--accent);
+}
+
+.ambre-kit-unit,
+.ambre-kit-mixed {
+    color: var(--text-dim);
+    font-size: var(--font-xs);
+}
+
+/* ---- The control primitives (`ambre-chrome::controls`) ----------------- */
+
+/* The keyboard focus ring, the same on every control of the chrome. */
+.ambre-icon-button:focus-visible,
+.ambre-select-trigger:focus-visible,
+.ambre-select-option:focus-visible,
+.ambre-segments > button:focus-visible,
+.ambre-stepper:focus-within,
+.ambre-swatch:focus-visible,
+.ambre-slider input:focus-visible,
+.ambre-kit-command:focus-visible,
+.ambre-ctx-section-head:focus-visible,
+.ambre-ctx-section-body button:focus-visible {
+    outline: var(--focus-width) solid var(--accent);
+    outline-offset: var(--focus-offset);
+}
+
+.ambre-stepper:focus-within {
+    outline-offset: 0;
+}
+
+/* An icon button: one glyph of the icon size, centred in a square box of a
+   control height, whatever the glyph. Outlined, the default, it is a chip of
+   a panel section: a border on a sunken ground. Ghost, it is a button of the
+   frame or a rail: no border until the pointer comes. The border keeps its
+   width in both, so the two looks share one box. */
+.ambre-icon-button {
+    box-sizing: border-box;
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    width: var(--control);
+    height: var(--control);
+    padding: 0;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface-2);
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
+}
+
+.ambre-icon-button[data-look="ghost"] {
+    border-color: transparent;
+    background: transparent;
+    color: var(--text-dim);
+}
+
+.ambre-icon-button[data-size="sm"] {
+    width: var(--control-sm);
+    height: var(--control-sm);
+}
+
+.ambre-icon-button[data-size="lg"] {
+    width: var(--control-lg);
+    height: var(--control-lg);
+}
+
+.ambre-icon-button > svg {
+    width: var(--icon);
+    height: var(--icon);
+}
+
+.ambre-icon-button:hover {
+    background: var(--surface-hover);
+    color: var(--text);
+}
+
+.ambre-icon-button[aria-pressed="true"] {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+.ambre-icon-button[data-look="ghost"][aria-pressed="true"] {
+    border-color: transparent;
+}
+
+.ambre-icon-button:disabled {
+    background: var(--surface-2);
+    color: var(--text-dim);
+    opacity: 0.45;
+    cursor: default;
+}
+
+.ambre-icon-button[data-look="ghost"]:disabled {
+    background: transparent;
+}
+
+/* The tooltip: fixed to the viewport under its button, so the scroll of the
+   panel never clips it. It waits half a second under the pointer. */
+.ambre-tip {
+    position: fixed;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+    max-width: 280px;
+    margin-top: var(--space-3);
+    padding: var(--space-3) var(--space-5);
+    border-radius: var(--radius-md);
+    background: var(--text);
+    color: var(--surface);
+    font-size: var(--font-small);
+    font-weight: 500;
+    white-space: nowrap;
+    box-shadow: var(--shadow-mid);
+    pointer-events: none;
+    transform: translateX(-50%);
+    opacity: 0;
+    visibility: hidden;
+}
+
+.ambre-tip[data-shown="true"] {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity 0.09s ease-out 0.5s, visibility 0s linear 0.5s;
+}
+
+.ambre-tip .ambre-kbd {
+    border-color: var(--text-dim);
+    background: transparent;
+    color: inherit;
+}
+
+/* A select: a field that shows the current choice and a chevron. */
+.ambre-select {
+    display: inline-flex;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.ambre-select-trigger {
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    width: 100%;
+    min-width: 0;
+    height: var(--control);
+    padding: 0 var(--space-3) 0 var(--space-4);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface-2);
+    color: var(--text);
+    font: inherit;
+    font-size: var(--font-small);
+    text-align: left;
+    cursor: pointer;
+}
+
+.ambre-select-trigger[data-size="sm"] {
+    height: var(--control-sm);
+}
+
+.ambre-select-trigger:hover {
+    border-color: var(--border-strong);
+}
+
+.ambre-select-value {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ambre-select-trigger > svg {
+    width: var(--icon-sm);
+    height: var(--icon-sm);
+    flex: none;
+    color: var(--text-dim);
+}
+
+.ambre-select-list {
+    position: fixed;
+    z-index: 900;
+    min-width: 160px;
+    max-height: 280px;
+    margin-top: var(--space-2);
+    padding: var(--space-3);
+    overflow: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-mid);
+    transform: translateX(-50%);
+}
+
+.ambre-select-list[hidden] {
+    display: none;
+}
+
+.ambre-select-option {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    min-height: var(--control);
+    padding: 0 var(--space-4);
+    border-radius: var(--radius-md);
+    color: var(--text);
+    font-size: var(--font-small);
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.ambre-select-option:hover,
+.ambre-select-option:focus {
+    background: var(--surface-hover);
+    outline: none;
+}
+
+.ambre-select-option[aria-selected="true"] {
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.ambre-select-option > svg {
+    width: var(--icon);
+    height: var(--icon);
+}
+
+/* A segment bar: a sunken track, the chosen segment raised off it. */
+.ambre-segments {
+    box-sizing: border-box;
+    display: inline-flex;
+    gap: var(--space-1);
+    padding: var(--space-1);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface-2);
+}
+
+.ambre-segments > button {
+    display: inline-grid;
+    place-items: center;
+    min-width: var(--control-sm);
+    height: var(--control-sm);
+    padding: 0 var(--space-4);
+    border: 0;
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text-dim);
+    font: inherit;
+    font-size: var(--font-small);
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.ambre-segments > button > svg {
+    width: var(--icon);
+    height: var(--icon);
+}
+
+.ambre-segments > button:hover {
+    color: var(--text);
+}
+
+.ambre-segments > button[aria-checked="true"] {
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: var(--shadow-low);
+}
+
+/* A stepper: one field, the number and its unit between two steps. */
+.ambre-stepper {
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    height: var(--control);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface-2);
+}
+
+.ambre-stepper > input {
+    width: 56px;
+    min-width: 0;
+    height: 100%;
+    padding: 0 var(--space-1);
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: var(--font-small);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    outline: none;
+}
+
+.ambre-stepper-unit {
+    padding: 0 var(--space-2) 0 var(--space-1);
+    color: var(--text-faint);
+    font-size: var(--font-xs);
+}
+
+.ambre-stepper-step {
+    display: inline-grid;
+    place-items: center;
+    width: var(--control-sm);
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+}
+
+.ambre-stepper-step > svg {
+    width: var(--icon-sm);
+    height: var(--icon-sm);
+}
+
+.ambre-stepper-step:hover {
+    color: var(--text);
+}
+
+/* A swatch: a square of one colour; no colour reads as a struck square. */
+.ambre-swatch {
+    box-sizing: border-box;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+
+.ambre-swatch[data-empty="true"] {
+    background: linear-gradient(135deg, transparent 45%, var(--error) 45%, var(--error) 55%, transparent 55%);
+}
+
+.ambre-swatch[aria-pressed="true"] {
+    outline: var(--focus-width) solid var(--accent);
+    outline-offset: var(--focus-offset);
+}
+
+/* A slider: the track fills with the accent up to the thumb. */
+.ambre-slider {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    width: 100%;
+    min-width: 0;
+}
+
+.ambre-slider input {
+    /* The share of the track the accent fills; the slider sets it inline. */
+    --fill: 0%;
+    flex: 1 1 auto;
+    min-width: 0;
+    height: var(--control-sm);
+    margin: 0;
+    background: transparent;
+    appearance: none;
+    cursor: pointer;
+}
+
+.ambre-slider input::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: var(--radius-full);
+    background: linear-gradient(to right, var(--accent) var(--fill), var(--border-strong) var(--fill));
+}
+
+.ambre-slider input::-moz-range-track {
+    height: 4px;
+    border-radius: var(--radius-full);
+    background: linear-gradient(to right, var(--accent) var(--fill), var(--border-strong) var(--fill));
+}
+
+.ambre-slider input::-webkit-slider-thumb {
+    width: 14px;
+    height: 14px;
+    /* Centred on the track: half of the thumb less half of the track. */
+    margin-top: calc(1px - var(--space-3));
+    border: 2px solid var(--accent);
+    border-radius: var(--radius-full);
+    background: var(--surface);
+    appearance: none;
+}
+
+.ambre-slider input::-moz-range-thumb {
+    width: 10px;
+    height: 10px;
+    border: 2px solid var(--accent);
+    border-radius: var(--radius-full);
+    background: var(--surface);
+}
+
+.ambre-slider-readout {
+    min-width: 36px;
+    color: var(--text-dim);
+    font-size: var(--font-xs);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+/* The shared pickers in a section. A trigger that shows an icon, the colour
+   or an application's own popover, takes the box of an icon button, so a row
+   of icons reads as one toolkit. */
+.ambre-ctx-section-body .ambre-color > button,
+.ambre-ctx-section-body .ambre-kit-control > span:not(.ambre-select, .ambre-stepper, .ambre-segments, .ambre-swatch) > button,
+.ambre-ctx-section-body .ambre-kit-control > button:not(.ambre-icon-button) {
+    box-sizing: border-box;
+    position: relative;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    min-width: var(--control);
+    height: var(--control);
+    padding: 0 var(--space-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface-2);
+    color: var(--text);
+    font: inherit;
+    font-size: var(--font-small);
+    cursor: pointer;
+}
+
+.ambre-ctx-section-body .ambre-color > button svg,
+.ambre-ctx-section-body .ambre-kit-control > span:not(.ambre-select, .ambre-stepper, .ambre-segments, .ambre-swatch) > button svg,
+.ambre-ctx-section-body .ambre-kit-control > button:not(.ambre-icon-button) svg {
+    width: var(--icon);
+    height: var(--icon);
+}
+
+.ambre-ctx-section-body .ambre-kit-control > span:not(.ambre-select, .ambre-stepper, .ambre-segments) > button[aria-pressed="true"],
+.ambre-ctx-section-body .ambre-kit-control > button[aria-pressed="true"] {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+.ambre-ctx-section-body .ambre-color > button:hover,
+.ambre-ctx-section-body .ambre-kit-control > span:not(.ambre-select, .ambre-stepper, .ambre-segments, .ambre-swatch) > button:hover,
+.ambre-ctx-section-body .ambre-kit-control > button:not(.ambre-icon-button):hover {
+    background: var(--surface-hover);
+    color: var(--text);
+}
+
+/* The rail and the frame of the panel: icon buttons, never a native box. */
+.ambre-ctx-rail .ambre-icon-button {
+    width: var(--control-lg);
+    height: var(--control-lg);
+}
+
+/* On a phone the panel is a sheet from the bottom edge, whatever its side
+   (`CHROME-167`): it floats over the content and takes the full width. */
+@media (max-width: 599px) {
+    .ambre-body > .ambre-ctx-panel,
+    .ambre-body > .ambre-ctx-panel[data-side="left"] {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 40;
+        max-height: 50vh;
+        border: 0;
+        border-top: 1px solid var(--border);
+        border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+        box-shadow: var(--shadow-high);
+    }
+
+    .ambre-body > .ambre-ctx-panel[data-fold="rail"] {
+        max-height: none;
+    }
+
+    .ambre-ctx-rail {
+        flex-direction: row;
+        justify-content: center;
+        padding: var(--space-2) var(--space-3);
+    }
+}
+
 /* Content: the wgpu canvas cell. */
 .ambre-content {
     position: relative;
@@ -1173,13 +1964,13 @@ input[type="radio"] {
     gap: var(--space-7);
 }
 
-/* Sheet-tab strip (Trame, trame-sheets): the app-agnostic <Tabs> slot, below
-   the canvas and above the status bar. Trame fills it with its SheetTabs DOM
-   component (migrated off the canvas so it shares the chrome's hover/tokens). */
+/* The app-agnostic <Tabs> slot, below the canvas and above the status bar.
+   No application lays it out today: Trame's sheet tabs sit in the status bar
+   (CHROME-162). */
 .ambre-tabstrip {
     display: flex;
     align-items: stretch;
-    height: 28px;
+    height: var(--control);
     padding: 0 var(--space-2);
     background: var(--surface-2);
     border-top: 1px solid var(--border);
@@ -1187,7 +1978,19 @@ input[type="radio"] {
     overflow-y: hidden;
 }
 
-.ambre-tabstrip .tab {
+/* Trame's sheet tabs, in the status bar before the zoom (CHROME-162). They
+   take the room the band leaves and scroll when they overflow it. */
+.ambre-statusbar .statusbar-tabs {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    align-self: stretch;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+}
+
+.statusbar-tabs .tab {
     display: inline-flex;
     align-items: center;
     gap: var(--space-3);
@@ -1204,20 +2007,20 @@ input[type="radio"] {
     user-select: none;
 }
 
-.ambre-tabstrip .tab:hover {
+.statusbar-tabs .tab:hover {
     background: var(--surface-hover);
 }
 
 /* Active tab: flush with the strip (no contrasting fill), marked only by the
    amber top accent and a brighter label -- the design decision from the canvas
    era, carried over verbatim. */
-.ambre-tabstrip .tab.active {
+.statusbar-tabs .tab.active {
     color: var(--text);
     border-top-color: var(--accent);
 }
 
 /* In-place rename input, shown over the tab being renamed. */
-.ambre-tabstrip .tab-rename {
+.statusbar-tabs .tab-rename {
     width: 92px;
     border: 1px solid var(--accent);
     border-radius: var(--radius-sm);
@@ -1229,11 +2032,11 @@ input[type="radio"] {
 }
 
 /* Trailing "+" add-sheet button: same flat-on-strip treatment as a tab. */
-.ambre-tabstrip .tab-add {
+.statusbar-tabs .tab-add {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 28px;
+    min-width: var(--control);
     padding: 0 var(--space-4);
     border: none;
     background: transparent;
@@ -1244,17 +2047,17 @@ input[type="radio"] {
     cursor: pointer;
 }
 
-.ambre-tabstrip .tab-add:hover {
+.statusbar-tabs .tab-add:hover {
     background: var(--surface-hover);
 }
 
 /* Drag-reorder: the dragged tab dims; the drop target shows an amber left edge
    marking where the tab would land. */
-.ambre-tabstrip .tab.dragging {
+.statusbar-tabs .tab.dragging {
     opacity: 0.5;
 }
 
-.ambre-tabstrip .tab.drop-before {
+.statusbar-tabs .tab.drop-before {
     box-shadow: inset 2px 0 0 var(--accent);
 }
 
@@ -1410,7 +2213,7 @@ input[type="radio"] {
     border-radius: var(--radius-lg);
     background: var(--surface);
     color: var(--text);
-    font-family: Roboto, system-ui, -apple-system, sans-serif;
+    font-family: var(--font-sans);
     font-size: var(--font-body);
     font-weight: 400;
     max-width: min(90vw, 460px);
@@ -1739,8 +2542,8 @@ input[type="radio"] {
     background: transparent;
     color: var(--text-dim);
     font: inherit;
-    width: 26px;
-    height: 26px;
+    width: var(--control-sm);
+    height: var(--control-sm);
     border-radius: 50%;
     cursor: pointer;
 }
@@ -1765,7 +2568,7 @@ input[type="radio"] {
     margin: 0;
     padding: var(--space-2);
     list-style: none;
-    font-family: Roboto, system-ui, -apple-system, sans-serif;
+    font-family: var(--font-sans);
     font-size: var(--font-body);
     font-weight: 400;
     background: var(--surface-2);
@@ -1991,7 +2794,7 @@ input[type="radio"] {
     overflow: auto;
     background: var(--bg);
     color: var(--text);
-    font-family: system-ui, sans-serif;
+    font-family: var(--font-sans);
 }
 
 /* Content blocks are centred in a readable column. The `<dialog>` is excluded:
@@ -2299,7 +3102,7 @@ input[type="radio"] {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     max-width: 380px;
-    font-family: system-ui, sans-serif;
+    font-family: var(--font-sans);
 }
 
 .ambre-confirm-dialog .ambre-dialog-body {
@@ -2447,7 +3250,7 @@ input[type="radio"] {
     border-radius: var(--radius);
     max-width: 520px;
     padding: 0;
-    font-family: system-ui, sans-serif;
+    font-family: var(--font-sans);
 }
 
 .ambre-words-dialog .ambre-keys {
@@ -2538,7 +3341,7 @@ input[type="radio"] {
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-mid);
     padding: var(--space-4);
-    font-family: Roboto, system-ui, -apple-system, sans-serif;
+    font-family: var(--font-sans);
     font-size: var(--font-ui);
     color: var(--text);
 }
@@ -2592,8 +3395,8 @@ input[type="radio"] {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: var(--control);
+    height: var(--control);
     padding: 0;
     border: 1px solid var(--border);
     border-radius: var(--radius);
@@ -2645,8 +3448,8 @@ input[type="radio"] {
     align-items: center;
     justify-content: center;
     flex: 0 0 16px;
-    width: 16px;
-    height: 16px;
+    width: var(--icon);
+    height: var(--icon);
     font-size: var(--font-large);
 }
 
@@ -2689,8 +3492,8 @@ input[type="radio"] {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: var(--control);
+    height: var(--control);
     padding: 0;
     border: 1px solid var(--border);
     border-radius: var(--radius);
@@ -2703,209 +3506,6 @@ input[type="radio"] {
     background: var(--accent);
     border-color: var(--accent);
     color: var(--on-accent);
-}
-
-/* ---------------------------------------------------------------------------
-   Font popover: a borderless toolbar trigger (current family name, previewed in
-   its own typeface, + caret) toggling a list of families each rendered in its
-   font. Trigger blends into the toolbar like the font-size <select>; the list
-   mirrors the number-format popover.
-   --------------------------------------------------------------------------- */
-.ambre-font {
-    position: relative;
-    display: inline-flex;
-}
-
-.ambre-font .font-trigger {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-3);
-    min-width: 92px;
-    height: 28px;
-    padding: 0 calc(var(--space-4) + 1px);                 /* left breathing room, matches the selects */
-    border: 1px solid transparent;
-    border-radius: var(--radius);
-    background: transparent;
-    color: var(--text);
-    cursor: pointer;
-    text-align: left;
-}
-
-.ambre-font .font-trigger:hover {
-    background: var(--surface);
-}
-
-.ambre-font .font-trigger .label {
-    flex: 1;
-    font-size: var(--font-body);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-/* The discreet caret (BiDownArrowSolid), tinted to --text-dim. */
-.ambre-font .font-trigger svg {
-    flex: 0 0 9px;
-    width: 9px;
-    height: 9px;
-    color: var(--text-dim);
-}
-
-.ambre-font-popover {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    z-index: 30;
-    margin-top: var(--space-2);
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-mid);
-    padding: var(--space-2);
-    min-width: 160px;
-}
-
-.ambre-font-popover .font-item {
-    display: flex;
-    align-items: center;
-    gap: var(--space-4);
-    width: 100%;
-    padding: var(--space-3) var(--space-4);
-    border: none;
-    border-radius: var(--radius);
-    background: transparent;
-    color: var(--text);
-    cursor: pointer;
-    text-align: left;
-}
-
-.ambre-font-popover .font-item:hover {
-    background: var(--accent);
-    color: var(--on-accent);
-}
-
-.ambre-font-popover .font-item .check {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 16px;
-    width: 16px;
-    height: 16px;
-    font-size: var(--font-large);
-}
-
-.ambre-font-popover .font-item .label {
-    flex: 1;
-    font-size: var(--font-subheading);               /* a touch larger so the typeface reads well */
-}
-
-/* ---------------------------------------------------------------------------
-   Number-format popover: the "123" toolbar button toggling a context-menu list
-   of format families, with a check on the active one. Mirrors the line-style
-   sub-popover.
-   --------------------------------------------------------------------------- */
-.ambre-number-format {
-    position: relative;
-    display: inline-flex;
-}
-
-.ambre-number-format-popover {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    z-index: 30;
-    margin-top: var(--space-2);
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-mid);
-    padding: var(--space-2);
-    min-width: 160px;
-}
-
-.ambre-number-format-popover .number-format-item {
-    display: flex;
-    align-items: center;
-    gap: var(--space-4);
-    width: 100%;
-    padding: var(--space-3) var(--space-4);
-    border: none;
-    border-radius: var(--radius);
-    background: transparent;
-    color: var(--text);
-    cursor: pointer;
-    text-align: left;
-}
-
-.ambre-number-format-popover .number-format-item:hover {
-    background: var(--accent);
-    color: var(--on-accent);
-}
-
-.ambre-number-format-popover .number-format-item .check {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 16px;
-    width: 16px;
-    height: 16px;
-    font-size: var(--font-large);
-}
-
-.ambre-number-format-popover .number-format-item .label {
-    flex: 1;
-}
-
-/* ---------------------------------------------------------------------------
-   Alignment popovers (horizontal & vertical): a toolbar button mirroring the
-   active alignment's icon, toggling a menu of the three alignments with a check
-   on the active one. Mirrors the number-format popover.
-   --------------------------------------------------------------------------- */
-.ambre-align {
-    position: relative;
-    display: inline-flex;
-}
-
-.ambre-align-popover {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    z-index: 30;
-    margin-top: var(--space-2);
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-mid);
-    padding: var(--space-2);
-}
-
-.ambre-align-popover .align-item {
-    display: flex;
-    align-items: center;
-    gap: var(--space-4);
-    width: 100%;
-    padding: var(--space-3) var(--space-4);
-    border: none;
-    border-radius: var(--radius);
-    background: transparent;
-    color: var(--text);
-    cursor: pointer;
-    text-align: left;
-}
-
-.ambre-align-popover .align-item:hover {
-    background: var(--accent);
-    color: var(--on-accent);
-}
-
-.ambre-align-popover .align-item .check {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 16px;
-    width: 16px;
-    height: 16px;
-    font-size: var(--font-large);
 }
 
 /* ---------------------------------------------------------------------------
@@ -3094,7 +3694,7 @@ input[type="radio"] {
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-mid);
     padding: var(--space-4);
-    font-family: Roboto, system-ui, -apple-system, sans-serif;
+    font-family: var(--font-sans);
     font-size: var(--font-ui);
     color: var(--text);
 }
@@ -3180,14 +3780,14 @@ input[type="radio"] {
 /* The chevron sits in a fixed left gutter so it reads as the mode switch. */
 .ambre-find-toggle {
     flex: 0 0 auto;
-    width: 28px;
+    width: var(--control);
     padding: var(--space-1) 0;
     justify-content: center;
 }
 /* Enlarge the chevron glyph (leptos_icons sizes the SVG at 1em). */
 .ambre-find-toggle svg {
-    width: 20px;
-    height: 20px;
+    width: var(--icon-lg);
+    height: var(--icon-lg);
 }
 /* Indent the replace row and the option checkboxes past the chevron gutter
    (toggle width 22px + row gap 6px) so they align vertically with the Find
@@ -3210,7 +3810,7 @@ input[type="radio"] {
 }
 .ambre-sort-dialog {
     padding: var(--space-7) var(--space-8);
-    font-family: Roboto, system-ui, -apple-system, sans-serif;
+    font-family: var(--font-sans);
     font-size: var(--font-ui);
     color: var(--text);
 }
@@ -3362,7 +3962,7 @@ input[type="radio"] {
 .ambre-palette {
     display: flex;
     flex-direction: column;
-    font-family: Roboto, system-ui, -apple-system, sans-serif;
+    font-family: var(--font-sans);
     background: var(--surface-2);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
@@ -3413,6 +4013,19 @@ input[type="radio"] {
     padding-left: var(--space-8);
 }
 
+/* The home region of a command (CHROME-157), right-aligned before its chord. */
+.ambre-palette-home {
+    margin-left: auto;
+    padding-left: var(--space-8);
+    font-size: var(--font-small);
+    color: var(--text-dim);
+}
+
+.ambre-palette-home + .ambre-palette-kbd {
+    margin-left: 0;
+    padding-left: var(--space-5);
+}
+
 /* Phone: the palette takes the width and drops the top inset. */
 @media (max-width: 599px) {
     .ambre-dialog.ambre-palette-modal {
@@ -3451,7 +4064,7 @@ input[type="radio"] {
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-mid);
     padding: var(--space-4);
-    font-family: Roboto, system-ui, -apple-system, sans-serif;
+    font-family: var(--font-sans);
     font-size: var(--font-ui);
     color: var(--text);
 }
@@ -3565,7 +4178,7 @@ input[type="radio"] {
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-mid);
     padding: var(--space-3);
-    font-family: Roboto, system-ui, -apple-system, sans-serif;
+    font-family: var(--font-sans);
 }
 .ambre-comment-composer-post {
     appearance: none;
@@ -3597,7 +4210,7 @@ input[type="radio"] {
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-mid);
     padding: var(--space-4);
-    font-family: Roboto, system-ui, -apple-system, sans-serif;
+    font-family: var(--font-sans);
     font-size: var(--font-ui);
     color: var(--text);
 }
@@ -3687,4 +4300,34 @@ input[type="radio"] {
 .ambre-deck-empty {
     margin: 0;
     color: var(--text-dim);
+}
+
+/* The gallery of the visual system, a test page behind `chrome-gallery`
+   (`ambre-spec-testing.md` section 2): each specimen on a line of its own,
+   its name before it, so a computed-style snapshot reads one control. */
+.ambre-gallery {
+    display: grid;
+    gap: var(--space-6);
+    padding: var(--space-8);
+    background: var(--surface);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: var(--font-ui);
+}
+
+.ambre-gallery-specimen {
+    display: grid;
+    grid-template-columns: 160px minmax(0, 1fr);
+    align-items: center;
+    gap: var(--space-6);
+}
+
+.ambre-gallery-name {
+    color: var(--text-dim);
+    font-size: var(--font-small);
+}
+
+.ambre-gallery-frame {
+    display: flex;
+    height: 220px;
 }

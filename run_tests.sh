@@ -56,7 +56,11 @@ run_native() {
 run_db() {
     echo ">> test-db (postgres/redis/garage)"
     load_env
-    just services-up
+    # Starts the Docker daemon when it is down (a cloud session), then the services.
+    just docker-up
+    # The proxy of a cloud session exports placeholder AWS keys, and Garage refuses
+    # them. CI runs without them.
+    unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
     # Tear services down on exit (success or failure) unless KEEP_SERVICES=1.
     trap services_down EXIT
     just test-db

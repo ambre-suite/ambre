@@ -253,37 +253,6 @@ fn an_end_under_another_members_key_is_refused() {
     );
 }
 
-// --- MURMURE-594 ---
-
-/// Alice and Bob start a call at one instant, each before the other's message arrives. Both
-/// reach two call messages naming two calls, and each call keeps its own message.
-#[test]
-fn two_starts_at_once_hold_two_calls() {
-    let (mut alice, mut bob) = pair();
-    let (first, second) = (Id::<Call>::mint(), Id::<Call>::mint());
-    let from_alice = alice.post(first);
-    let from_bob = bob.post(second);
-    alice.receive(&bob, &from_bob, 2);
-    bob.receive(&alice, &from_alice, 1);
-    for member in [&alice, &bob] {
-        let mut calls: Vec<Id<Call>> = member
-            .messages()
-            .iter()
-            .filter_map(|m| m.call.as_ref().map(|view| view.call))
-            .collect();
-        calls.sort_by(|a, b| a.as_bytes().cmp(b.as_bytes()));
-        let mut want = vec![first, second];
-        want.sort_by(|a, b| a.as_bytes().cmp(b.as_bytes()));
-        assert_eq!(calls, want);
-        assert_eq!(member.state.live_calls().len(), 2);
-    }
-    assert_eq!(
-        alice.doc().get_deep_value(),
-        bob.doc().get_deep_value(),
-        "both converge"
-    );
-}
-
 // --- MURMURE-409, MURMURE-592 ---
 
 /// The list shows on the call message who the relay seats in the call. It shows the call

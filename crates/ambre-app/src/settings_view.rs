@@ -7,24 +7,20 @@
 use ambre_canvas::Theme;
 use ambre_client_core::{BootHint, ThemeChoice};
 
-/// The theme a page shows before it reads any setting: the light set is
-/// the unmarked stylesheet, but the shell boots the dark set today.
-pub(crate) const UNSET_THEME: Theme = Theme::Dark;
-
-/// The theme `choice` draws, `current` standing for the choice that follows
-/// the system, which this page does not read yet.
-pub(crate) const fn rendered(choice: ThemeChoice, current: Theme) -> Theme {
+/// The theme `choice` draws, `system` being the theme the system asks for.
+pub(crate) const fn rendered(choice: ThemeChoice, system: Theme) -> Theme {
     match choice {
         ThemeChoice::Light => Theme::Light,
         ThemeChoice::Dark => Theme::Dark,
-        ThemeChoice::System => current,
+        ThemeChoice::System => system,
     }
 }
 
-/// The theme a page boots in: the one the boot hint names, or the unset
-/// theme without a hint (`SETTINGS-032`).
-pub(crate) fn boot_theme(hint: Option<&BootHint>) -> Theme {
-    hint.map_or(UNSET_THEME, |hint| rendered(hint.theme, UNSET_THEME))
+/// The theme a page boots in: the one the boot hint names, or the theme the
+/// system asks for without one (`SETTINGS-032`, `UI-THREAD-065`). The boot
+/// reads no other store (`UI-THREAD-066`).
+pub(crate) fn boot_theme(hint: Option<&BootHint>, system: Theme) -> Theme {
+    hint.map_or(system, |hint| rendered(hint.theme, system))
 }
 
 /// The choice a click on the theme switch writes: the theme it switched to.
@@ -47,14 +43,22 @@ mod tests {
         }
     }
 
-    /// A page with a boot hint boots in the theme it names, and a page with
-    /// none in the unset theme.
+    /// `UI-THREAD-065`: a page boots in the theme its boot hint names. With
+    /// no hint, or a hint at `system`, it boots in the system's theme.
     #[test]
     fn a_page_boots_in_the_theme_of_its_boot_hint() {
-        assert_eq!(boot_theme(Some(&hint(ThemeChoice::Light))), Theme::Light);
-        assert_eq!(boot_theme(Some(&hint(ThemeChoice::Dark))), Theme::Dark);
-        assert_eq!(boot_theme(Some(&hint(ThemeChoice::System))), UNSET_THEME);
-        assert_eq!(boot_theme(None), UNSET_THEME);
+        for system in [Theme::Light, Theme::Dark] {
+            assert_eq!(
+                boot_theme(Some(&hint(ThemeChoice::Light)), system),
+                Theme::Light
+            );
+            assert_eq!(
+                boot_theme(Some(&hint(ThemeChoice::Dark)), system),
+                Theme::Dark
+            );
+            assert_eq!(boot_theme(Some(&hint(ThemeChoice::System)), system), system);
+            assert_eq!(boot_theme(None, system), system);
+        }
     }
 
     /// A switch writes the theme it shows, and a choice draws the theme it

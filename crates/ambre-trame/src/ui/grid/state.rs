@@ -7,15 +7,12 @@ use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Delta, Len, Pos, Span};
 
 impl TrameUiState {
-    /// Discrete zoom levels cycled by the status-bar zoom control.
-    pub const ZOOM_PRESETS: [ambre_core::Scale<ambre_core::Doc, ambre_core::View>; 6] = [
+    /// The factors the grid supports (`ZOOM-002`). The chip lists the stops
+    /// of the one ladder inside it (`ZOOM-006`).
+    pub const ZOOM_RANGE: ambre_core::ZoomRange<ambre_core::Doc> = ambre_core::ZoomRange::new(
         ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(0.5),
-        ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(0.75),
-        ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::ONE,
-        ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(1.25),
-        ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(1.5),
         ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(2.0),
-    ];
+    );
 
     pub fn new(canvas_width: Px<Surface>, canvas_height: Px<Surface>) -> Self {
         let mut s = Self {
@@ -78,19 +75,122 @@ impl TrameUiState {
         self.viewport_cols = Len::<Col>::new((grid_w / col_w).ceil() as u32);
     }
 
-    /// Set the grid zoom factor (clamped to the preset range), keeping the
+    /// The grid's zoom, read through the one engine (`UI-THREAD-012`).
+    pub fn zoom_engine(&self) -> ambre_core::Zoom<ambre_core::Doc> {
+        ambre_core::Zoom::at(Self::ZOOM_RANGE, self.zoom)
+    }
+
+    /// Set the grid zoom factor (clamped to the grid's range), keeping the
     /// top-left scroll origin pinned. Recomputes the visible range. Returns
     /// `true` when the zoom actually changed, so the caller can repaint and
     /// re-request the (now differently sized) viewport.
     pub fn set_zoom(&mut self, zoom: ambre_core::Scale<ambre_core::Doc, ambre_core::View>) -> bool {
-        let [lo, .., hi] = Self::ZOOM_PRESETS;
-        let z = zoom.clamped(lo, hi);
+        let z = self.zoom_engine().to(zoom).factor();
         if (z.get() - self.zoom.get()).abs() < f64::EPSILON {
             return false;
         }
         self.zoom = z;
         self.recompute_viewport_dims();
         true
+    }
+
+    /// Zoom to `asked` about a point of the canvas (`ZOOM-003`). The factor
+    /// comes from the one engine, and the anchor is the grid's own mapping.
+    /// The grid scrolls by whole cells, so the cell under the point stays.
+    /// The frozen band and the first row and column bound that scroll. A point over a
+    /// header or past the cells keeps the top-left cell. Returns `true`
+    /// when the zoom changed.
+    pub fn zoom_about(
+        &mut self,
+        asked: ambre_core::Scale<ambre_core::Doc, ambre_core::View>,
+        at: ambre_core::Point<Px<ambre_core::View>>,
+    ) -> bool {
+        let under = self.cell_at(at);
+        if !self.set_zoom(asked) {
+            return false;
+        }
+        let Some(cell) = under else {
+            return true;
+        };
+        // Variable sizes and hidden rows can leave the first pan a cell short.
+        // The pan repeats until the cell is back or the grid stops.
+        for _ in 0..4 {
+            let Some(now) = self.cell_at(at) else {
+                break;
+            };
+            if now == cell
+                || !self.show_from(
+                    self.top_row + (cell.row - now.row),
+                    self.left_col + (cell.col - now.col),
+                )
+            {
+                break;
+            }
+        }
+        true
+    }
+
+    /// Zoom so the selection shows whole, its top-left cell at the top-left
+    /// of the cells, through the one engine (`ZOOM-007`). A band of whole
+    /// columns or rows frames its own axis alone. The factor is clamped to
+    /// the grid's range, so a range too large to show stops at the floor.
+    /// The selection stays as it was (`ZOOM-010`). Returns `true` when the
+    /// view moved.
+    pub fn zoom_to_selection(&mut self) -> bool {
+        let rect = self.selection.bounds();
+        let kind = self.selection.kind;
+        let zoom = self.zoom.get();
+        // Past what the floor shows, the sum only proves the floor governs.
+        let floor = Self::ZOOM_RANGE.floor().get();
+        let cap_w = self.canvas_width.get() / floor;
+        let cap_h = self.grid_bottom().get() / floor;
+        let at_one = |len: Px<Doc>| f64::from(len.get());
+        let mut cols = 0.0;
+        for col in rect.top_left.col.through(rect.bottom_right.col) {
+            cols += at_one(self.col_widths.get(&col).copied().unwrap_or(COL_WIDTH));
+            if cols > cap_w {
+                break;
+            }
+        }
+        let mut rows = 0.0;
+        for row in rect.top_left.row.through(rect.bottom_right.row) {
+            if !self.is_row_hidden(row) {
+                rows += at_one(self.row_heights.get(&row).copied().unwrap_or(ROW_HEIGHT));
+            }
+            if rows > cap_h {
+                break;
+            }
+        }
+        // The header strips and the frozen bands zoom with the cells, so they
+        // join the content the canvas must hold.
+        let chrome_w = HEADER_WIDTH.get() + self.frozen_w().get() / zoom;
+        let chrome_h = HEADER_HEIGHT.get() + self.frozen_h().get() / zoom;
+        // A band leaves the other axis free: a sliver there never governs.
+        let (across, down) = match kind {
+            SelKind::Cells => (cols + chrome_w, rows + chrome_h),
+            SelKind::Cols => (cols + chrome_w, f64::from(f32::MIN_POSITIVE)),
+            SelKind::Rows => (f64::from(f32::MIN_POSITIVE), rows + chrome_h),
+        };
+        let content =
+            ambre_core::Vector::new(Px::<Doc>::new(across as f32), Px::<Doc>::new(down as f32));
+        let view = ambre_core::Vector::new(
+            self.canvas_width.view_length(),
+            self.grid_bottom().view_length(),
+        );
+        let Some(framed) = self.zoom_engine().framing(content, view) else {
+            return false;
+        };
+        let zoomed = self.set_zoom(framed.factor());
+        let top = match kind {
+            SelKind::Cols => self.top_row,
+            SelKind::Cells | SelKind::Rows => rect.top_left.row,
+        };
+        let left = match kind {
+            SelKind::Rows => self.left_col,
+            SelKind::Cells | SelKind::Cols => rect.top_left.col,
+        };
+        let scrolled = self.show_from(top, left);
+        zoomed || scrolled
     }
 
     /// The active cell row (the selection's active corner).
@@ -357,12 +457,16 @@ impl TrameUiState {
     /// The whole cells come from the accumulator of model steps alone, so a
     /// distance the grid computed itself does not move it (`KINETIC-001`).
     pub(crate) fn scroll_by(&mut self, dr: Delta<Row>, dc: Delta<Col>) -> bool {
-        let new_top = (self.top_row + dr)
-            .min(LAST_ROW)
-            .max(self.frozen.rows.as_end());
-        let new_left = (self.left_col + dc)
-            .min(LAST_COL)
-            .max(self.frozen.cols.as_end());
+        self.show_from(self.top_row + dr, self.left_col + dc)
+    }
+
+    /// Put `top` and `left` at the top-left of the scrolled cells, as a zoom
+    /// places them about its anchor. A placement, not a pan: no motion runs
+    /// through it (`KINETIC-001`). Clamps the corner within the grid. Returns
+    /// `true` if the scroll position actually changed.
+    fn show_from(&mut self, top: Pos<Row>, left: Pos<Col>) -> bool {
+        let new_top = top.min(LAST_ROW).max(self.frozen.rows.as_end());
+        let new_left = left.min(LAST_COL).max(self.frozen.cols.as_end());
         // Keep the top edge on a visible row so the collapsed-row slot math stays
         // consistent (`top_row` is slot 0).
         let new_top = self.next_visible_row(new_top);

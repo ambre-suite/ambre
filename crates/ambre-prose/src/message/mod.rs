@@ -694,7 +694,7 @@ impl ambre_core::NarrowCount for Paragraphs {
 ///
 /// Four are counts of the text. The fifth is read off the layout, and each
 /// half is refreshed by its own trigger.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WordCount {
     pub words: Count<Words>,
     /// Grapheme clusters that are not whitespace (`PROSE-FEAT-039`).
@@ -705,6 +705,20 @@ pub struct WordCount {
     pub paragraphs: Count<Paragraphs>,
     /// From the layout, never from the count (`PROSE-FEAT-038`).
     pub pages: Len<Page>,
+}
+
+/// An empty document lays out one blank page, so a count taken before any
+/// layout reads one page, never zero.
+impl Default for WordCount {
+    fn default() -> Self {
+        Self {
+            words: Count::default(),
+            characters: Count::default(),
+            characters_with_spaces: Count::default(),
+            paragraphs: Count::default(),
+            pages: Len::<Page>::new(1),
+        }
+    }
 }
 
 /// What a format command does to one presence mark over a selection.
@@ -736,6 +750,8 @@ pub struct ActiveMarks {
     pub underline: TriState,
     pub strikethrough: TriState,
     pub code: TriState,
+    pub superscript: TriState,
+    pub subscript: TriState,
     /// The address, when the whole selection carries one link and the same
     /// one.
     pub link: Option<ambre_core::LinkUrl>,
@@ -1497,6 +1513,19 @@ pub enum ProseCommand {
     SetDocumentLocale {
         locale: ambre_client_core::DocumentLocale,
     },
+    /// Set the page the document lays out on: its size, its orientation and
+    /// its four margins, written together (`PROSE-032`, `PROSE-144`). The
+    /// orientation follows the two dimensions. One undo takes it back
+    /// (`PROSE-UI-252`).
+    SetPageFormat {
+        format: crate::doc::PageFormat,
+    },
+    /// Remove every formatting mark over every block a selection covers, in
+    /// one commit, so one undo takes it back (`PROSE-UI-254`).
+    ClearSelectionMarks {
+        anchor: (BlockId, Pos<DocChar>),
+        focus: (BlockId, Pos<DocChar>),
+    },
 
     // -- Find and replace (`features/ambre-spec-prose-find-replace.md`) --
     /// Open a search, or replace the one open. It writes nothing
@@ -1853,6 +1882,10 @@ impl fmt::Debug for ProseCommand {
             Self::SetBandAlign { block_id, align } => fields!("SetBandAlign", block_id, align),
             Self::StampModified { now } => fields!("StampModified", now),
             Self::SetDocumentLocale { locale } => fields!("SetDocumentLocale", locale),
+            Self::SetPageFormat { format } => fields!("SetPageFormat", format),
+            Self::ClearSelectionMarks { anchor, focus } => {
+                fields!("ClearSelectionMarks", anchor, focus)
+            }
             Self::FindStart { query } => fields!("FindStart", query),
             Self::FindNext => f.write_str("FindNext"),
             Self::FindPrev => f.write_str("FindPrev"),
@@ -2191,6 +2224,8 @@ impl ambre_bus::Mutation for ProseCommand {
             | Self::SetBandAlign { .. }
             | Self::StampModified { .. }
             | Self::SetDocumentLocale { .. }
+            | Self::SetPageFormat { .. }
+            | Self::ClearSelectionMarks { .. }
             | Self::FindStart { .. }
             | Self::FindNext
             | Self::FindPrev
@@ -2327,6 +2362,8 @@ impl ProseCommand {
             Self::SetBandAlign { .. } => "aligning the band",
             Self::StampModified { .. } => "stamping the document",
             Self::SetDocumentLocale { .. } => "setting the document language",
+            Self::SetPageFormat { .. } => "setting the page format",
+            Self::ClearSelectionMarks { .. } => "clearing the formatting",
             Self::FindStart { .. } => "searching",
             Self::FindNext => "going to the next match",
             Self::FindPrev => "going to the previous match",
@@ -2785,6 +2822,10 @@ pub enum ProseRefusal {
     /// store never receives one.
     #[error("a paragraph length must be a finite number")]
     NonFiniteLength,
+    /// A page length that is not a finite positive number, or margins that
+    /// leave no content box (`PROSE-144`).
+    #[error("the page format leaves no room for text")]
+    PageWithoutContent,
     /// A picture command aimed at a block that holds no picture.
     #[error("block {0} holds no picture")]
     NotAPicture(BlockId),
@@ -2841,6 +2882,7 @@ impl fmt::Debug for ProseRefusal {
             Self::NotWhileSuggesting => f.write_str("NotWhileSuggesting"),
             Self::NoCrossRef => f.write_str("NoCrossRef"),
             Self::NonFiniteLength => f.write_str("NonFiniteLength"),
+            Self::PageWithoutContent => f.write_str("PageWithoutContent"),
             Self::NotAPicture(block) => tuple!("NotAPicture", block),
             Self::PictureWithoutArea => f.write_str("PictureWithoutArea"),
             Self::PictureUnreadable => f.write_str("PictureUnreadable"),

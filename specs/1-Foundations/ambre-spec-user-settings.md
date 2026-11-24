@@ -85,8 +85,8 @@ prefix is `SETTINGS`, and it belongs to this document alone.
 * **Budget.** the settings document row of `ambre-spec-budgets.md section 6`, and the coalescing
   delay of `ambre-spec-budgets.md section 8`. Both wait on a measure.
 * **Boundary.** the settings document is sealed like any document (`ZK-001`), and no setting leaves
-  in another field (`ZK-053`). The relay learns which document holds the settings, and the size and
-  time of each delta (`ZK-054`).
+  in another field (`ZK-054`). The relay learns which document holds the settings, and the size and
+  time of each delta (`ZK-055`).
 * **Verification.** 30 `verified`, 6 `failing`, 4 `unimplemented`: no settings document exists.
   Every row lands with one Story.
 
@@ -238,7 +238,7 @@ relay, since the width stays on the device.
 **The boundary.** The relay learns which document holds the settings of a user, from the pointer
 it keeps. It learns the size and the instant of each delta, as for any document (`ZK-007`). A size
 can tell which setting changed, since a client of known code writes it. That is the timing and size
-metadata `ambre-spec-zero-knowledge.md` accepts (`ZK-054`).
+metadata `ambre-spec-zero-knowledge.md` accepts (`ZK-055`).
 
 **Code.**
 
@@ -271,7 +271,7 @@ changes them. The theme sits in the avatar menu, and the side and the fold on th
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
 | An ordinary document with one member | a sealed blob per account, replaced by compare-and-swap | it needs a route, a table and a seal of its own, and a merge of two offline writes the client codes again by hand. No other device learns of a change until it asks. The document pipeline already holds the seal, the order, the offline queue and the push, for one member row and one log entry |
-| An ordinary document with one member | the settings in the clear on the account record | the relay would read every setting, which `ZK-053` refuses |
+| An ordinary document with one member | the settings in the clear on the account record | the relay would read every setting, which `ZK-054` refuses |
 | An ordinary document with one member | a key derived from the Master Seed for the settings alone | a third derivation domain beside the two `ZK-009` freezes, for a document the existing wrap already opens |
 | A pointer the relay keeps | a document identifier derived from the Master Seed | a third derivation domain again, and an identifier derived from a secret where every other is a UUID v7. It hides nothing: a document with one member, opened first at every unlock, names itself |
 | One document per user | one document per application | each application would find, create and pin its own, and a new device would open several to show one screen |

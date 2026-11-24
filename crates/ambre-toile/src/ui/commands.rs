@@ -23,7 +23,7 @@
 // redoes on both.
 // ============================================================================
 
-use ambre_commands::{Command, Key, KeyBinding, KeyChar, Locale, ModifierKeys, shared};
+use ambre_commands::{Command, Home, Key, KeyBinding, KeyChar, Locale, ModifierKeys, shared};
 use ambre_core::{Categories, Commands, Icons, StaticKey};
 
 use crate::ui::find::FIND;
@@ -31,15 +31,16 @@ use crate::ui::menu;
 use crate::ui::menu_bar;
 use crate::ui::palette;
 
-/// Describe one command per line: the name of its title function, the identity
-/// it describes, its label, its icon, the chord it announces, its category.
+/// Describe one command per line. A line names its title function, the
+/// identity it describes, its label, its icon, the chord it announces, its
+/// category and its home region (`CHROME-148`).
 ///
 /// A macro because `Command::title` is a plain `fn` pointer: it captures
 /// nothing, so every command needs a function item of its own. Generating them
 /// from one line each is what makes the single declaration site real. A second
 /// label for a command cannot be written without a second line here.
 macro_rules! describe {
-    ($($title_fn:ident: $id:expr, $label:literal, $icon:expr, $chords:expr, $category:expr;)*) => {
+    ($($title_fn:ident: $id:expr, $label:literal, $icon:expr, $chords:expr, $category:expr, $home:ident;)*) => {
         // The generated title functions. Named after the identities, so the
         // module carries the case exemption rather than every call site.
         #[expect(
@@ -63,6 +64,7 @@ macro_rules! describe {
                 icon: $icon,
                 keybindings: $chords,
                 category: $category,
+                home: Home::$home,
             },)*
         ];
     };
@@ -100,73 +102,73 @@ pub const PALETTE: StaticKey<Commands> = StaticKey::<Commands>::new("toile.palet
 // cluster and the tool buttons of `chrome::palette`. Nine of them were written
 // twice, once for the menu bar and once for the right-click menu.
 describe! {
-    CUT: menu::CUT, "Cut", Some(StaticKey::<Icons>::new("content-cut")), shared::CUT_CHORDS, CLIPBOARD;
-    COPY: menu::COPY, "Copy", Some(StaticKey::<Icons>::new("content-copy")), shared::COPY_CHORDS, CLIPBOARD;
-    PASTE: menu::PASTE, "Paste", Some(StaticKey::<Icons>::new("content-paste")), shared::PASTE_CHORDS, CLIPBOARD;
-    DUPLICATE: menu::DUPLICATE, "Duplicate", Some(StaticKey::<Icons>::new("content-duplicate")), &[KeyBinding::primary(KeyChar::D)], CLIPBOARD;
-    DELETE: menu::DELETE, "Delete", Some(StaticKey::<Icons>::new("delete")), &[DEL], CLIPBOARD;
-    GROUP: menu::GROUP, "Group", Some(StaticKey::<Icons>::new("group")), &[KeyBinding::primary(KeyChar::G)], OBJECT;
-    UNGROUP: menu::UNGROUP, "Ungroup", Some(StaticKey::<Icons>::new("ungroup")), &[KeyBinding::primary_shift(KeyChar::G)], OBJECT;
-    BRING_FRONT: menu::BRING_FRONT, "Bring to front", Some(StaticKey::<Icons>::new("arrange-bring-to-front")), &[], OBJECT;
-    FORWARD: menu::FORWARD, "Bring forward", Some(StaticKey::<Icons>::new("arrange-bring-forward")), &[], OBJECT;
-    BACKWARD: menu::BACKWARD, "Send backward", Some(StaticKey::<Icons>::new("arrange-send-backward")), &[], OBJECT;
-    SEND_BACK: menu::SEND_BACK, "Send to back", Some(StaticKey::<Icons>::new("arrange-send-to-back")), &[], OBJECT;
-    LOCK: menu::LOCK, "Lock", Some(StaticKey::<Icons>::new("lock")), &[], OBJECT;
-    UNLOCK: menu::UNLOCK, "Unlock", Some(StaticKey::<Icons>::new("lock-open-variant")), &[], OBJECT;
-    ALIGN_LEFT: menu::ALIGN_LEFT, "Align left", Some(StaticKey::<Icons>::new("align-horizontal-left")), &[], OBJECT;
-    ALIGN_HCENTER: menu::ALIGN_HCENTER, "Align horizontal centres", Some(StaticKey::<Icons>::new("align-horizontal-center")), &[], OBJECT;
-    ALIGN_RIGHT: menu::ALIGN_RIGHT, "Align right", Some(StaticKey::<Icons>::new("align-horizontal-right")), &[], OBJECT;
-    ALIGN_TOP: menu::ALIGN_TOP, "Align top", Some(StaticKey::<Icons>::new("align-vertical-top")), &[], OBJECT;
-    ALIGN_VCENTER: menu::ALIGN_VCENTER, "Align vertical centres", Some(StaticKey::<Icons>::new("align-vertical-center")), &[], OBJECT;
-    ALIGN_BOTTOM: menu::ALIGN_BOTTOM, "Align bottom", Some(StaticKey::<Icons>::new("align-vertical-bottom")), &[], OBJECT;
-    DISTRIBUTE_H: menu::DISTRIBUTE_H, "Distribute horizontally", Some(StaticKey::<Icons>::new("align-horizontal-distribute")), &[], OBJECT;
-    DISTRIBUTE_V: menu::DISTRIBUTE_V, "Distribute vertically", Some(StaticKey::<Icons>::new("align-vertical-distribute")), &[], OBJECT;
-    ADD_TO_FRAME: menu::ADD_TO_FRAME, "Add to frame", Some(StaticKey::<Icons>::new("image-frame")), &[], OBJECT;
-    REMOVE_FROM_FRAME: menu::REMOVE_FROM_FRAME, "Remove from frame", Some(StaticKey::<Icons>::new("selection-drag")), &[], OBJECT;
-    EXPORT_FRAME_PNG: menu::EXPORT_FRAME_PNG, "Export frame as PNG", Some(StaticKey::<Icons>::new("file-image-outline")), &[], FILE;
-    SELECT_ALL: menu::SELECT_ALL, "Select all", Some(StaticKey::<Icons>::new("select-all")), &[KeyBinding::primary(KeyChar::A)], SELECTION;
-    REACT_THUMBSUP: menu::REACT_THUMBSUP, "React: thumbs up", Some(StaticKey::<Icons>::new("thumb-up")), &[], REACTION;
-    REACT_HEART: menu::REACT_HEART, "React: heart", Some(StaticKey::<Icons>::new("heart")), &[], REACTION;
-    REACT_CHECK: menu::REACT_CHECK, "React: check", Some(StaticKey::<Icons>::new("check")), &[], REACTION;
-    REACT_PARTY: menu::REACT_PARTY, "React: celebrate", Some(StaticKey::<Icons>::new("party-popper")), &[], REACTION;
-    REACT_CLEAR: menu::REACT_CLEAR, "Clear my reaction", Some(StaticKey::<Icons>::new("close")), &[], REACTION;
-    UNDO: menu_bar::UNDO, "Undo", None, shared::UNDO_CHORDS, HISTORY;
-    REDO: menu_bar::REDO, "Redo", None, shared::REDO_CHORDS, HISTORY;
-    ZOOM_IN: menu_bar::ZOOM_IN, "Zoom in", Some(StaticKey::<Icons>::new("plus")), &[], VIEW;
-    ZOOM_OUT: menu_bar::ZOOM_OUT, "Zoom out", Some(StaticKey::<Icons>::new("minus")), &[], VIEW;
-    ZOOM_RESET: menu_bar::ZOOM_RESET, "Zoom to 100%", None, &[], VIEW;
-    ZOOM_FIT: menu_bar::ZOOM_FIT, "Fit to content", Some(StaticKey::<Icons>::new("fit-to-screen-outline")), &[], VIEW;
-    ZOOM_TO_SELECTION: menu_bar::ZOOM_TO_SELECTION, "Zoom to selection", Some(StaticKey::<Icons>::new("selection-search")), &[], VIEW;
-    POINTER_AUTO: menu_bar::POINTER_AUTO, "Pointer: automatic", None, &[], VIEW;
-    POINTER_MOUSE: menu_bar::POINTER_MOUSE, "Pointer: mouse (wheel zooms)", None, &[], VIEW;
-    POINTER_TRACKPAD: menu_bar::POINTER_TRACKPAD, "Pointer: trackpad (wheel pans)", None, &[], VIEW;
-    PRESENT_START: menu_bar::PRESENT, "Start presentation", None, &[], PRESENT;
-    IMPORT_FILE: menu_bar::IMPORT_FILE, "Import a file...", Some(StaticKey::<Icons>::new("file-import-outline")), &[], FILE;
-    EMBED_WEB: menu_bar::EMBED_WEB, "Embed a web page...", Some(StaticKey::<Icons>::new("web")), &[], FILE;
-    EMBED_DOC: menu_bar::EMBED_DOC, "Embed a document...", Some(StaticKey::<Icons>::new("file-document-outline")), &[], FILE;
-    LINK_SET: menu_bar::LINK_SET, "Link...", Some(StaticKey::<Icons>::new("link-variant")), &[], OBJECT;
-    LINK_CLEAR: menu_bar::LINK_CLEAR, "Remove link", Some(StaticKey::<Icons>::new("link-variant-off")), &[], OBJECT;
-    SAVE_FILE: menu_bar::SAVE_FILE, "Save to a file (.ambre, not encrypted)", Some(StaticKey::<Icons>::new("content-save")), &[], FILE;
-    SAVE_SEALED_FILE: menu_bar::SAVE_SEALED_FILE, "Save to an encrypted file (.ambre)...", Some(StaticKey::<Icons>::new("lock-outline")), &[], FILE;
-    EXPORT_SVG: menu_bar::EXPORT_SVG, "Export as SVG", Some(StaticKey::<Icons>::new("file-export-outline")), &[], FILE;
-    EXPORT_PNG: menu_bar::EXPORT_PNG, "Export board as PNG", Some(StaticKey::<Icons>::new("file-image-outline")), &[], FILE;
-    EXPORT_PDF: menu_bar::EXPORT_PDF, "Export deck as PDF", Some(StaticKey::<Icons>::new("file-pdf-box")), &[], FILE;
-    EXPORT_PPTX: menu_bar::EXPORT_PPTX, "Export deck as PowerPoint", Some(StaticKey::<Icons>::new("file-export-outline")), &[], FILE;
-    EXPORT_SHOWCASE: menu_bar::EXPORT_SHOWCASE, "Export a showcase page (.html, not encrypted, readable by anyone)", Some(StaticKey::<Icons>::new("file-export-outline")), &[], FILE;
-    PRESENT_DECK: menu_bar::DECK, "Order the deck", Some(StaticKey::<Icons>::new("view-carousel-outline")), &[], PRESENT;
-    TOOL_SELECT: palette::TOOL_SELECT, "Select", Some(StaticKey::<Icons>::new("cursor-default")), &[letter(KeyChar::V)], TOOL;
-    TOOL_PEN: palette::TOOL_PEN, "Pen", Some(StaticKey::<Icons>::new("vector-polyline")), &[letter(KeyChar::P)], TOOL;
-    TOOL_SHAPE: palette::TOOL_SHAPE, "Shape", Some(StaticKey::<Icons>::new("shape-outline")), &[letter(KeyChar::R)], TOOL;
-    TOOL_CONNECTOR: palette::TOOL_CONNECTOR, "Connector", Some(StaticKey::<Icons>::new("vector-line")), &[letter(KeyChar::C)], TOOL;
-    TOOL_DRAW: palette::TOOL_DRAW, "Draw", Some(StaticKey::<Icons>::new("draw")), &[letter(KeyChar::D)], TOOL;
-    TOOL_STICKY: palette::TOOL_STICKY, "Sticky note", Some(StaticKey::<Icons>::new("note-outline")), &[letter(KeyChar::N)], TOOL;
-    TOOL_TEXT: palette::TOOL_TEXT, "Text", Some(StaticKey::<Icons>::new("format-text")), &[letter(KeyChar::T)], TOOL;
-    TOOL_COMMENT: palette::TOOL_COMMENT, "Comment", Some(StaticKey::<Icons>::new("comment-outline")), &[letter(KeyChar::M)], TOOL;
-    TOOL_LASER: palette::TOOL_LASER, "Highlighter", Some(StaticKey::<Icons>::new("cursor-pointer")), &[letter(KeyChar::L)], TOOL;
-    TOOL_HAND: palette::TOOL_HAND, "Hand", Some(StaticKey::<Icons>::new("hand-back-right")), &[letter(KeyChar::H)], TOOL;
-    FIND_OPEN: FIND, "Find", None, &[KeyBinding::primary(KeyChar::F)], FIND_REPLACE;
-    COMMENTS_OPEN: menu_bar::COMMENTS, "Comments", Some(StaticKey::<Icons>::new("comment-multiple-outline")), &[], VIEW;
-    PALETTE_OPEN: PALETTE, "Command palette", None, &[KeyBinding::primary(KeyChar::K)], GENERAL;
+    CUT: menu::CUT, "Cut", Some(StaticKey::<Icons>::new("content-cut")), shared::CUT_CHORDS, CLIPBOARD, ContextMenu;
+    COPY: menu::COPY, "Copy", Some(StaticKey::<Icons>::new("content-copy")), shared::COPY_CHORDS, CLIPBOARD, ContextMenu;
+    PASTE: menu::PASTE, "Paste", Some(StaticKey::<Icons>::new("content-paste")), shared::PASTE_CHORDS, CLIPBOARD, ContextMenu;
+    DUPLICATE: menu::DUPLICATE, "Duplicate", Some(StaticKey::<Icons>::new("content-duplicate")), &[KeyBinding::primary(KeyChar::D)], CLIPBOARD, ContextPanel;
+    DELETE: menu::DELETE, "Delete", Some(StaticKey::<Icons>::new("delete")), &[DEL], CLIPBOARD, ContextPanel;
+    GROUP: menu::GROUP, "Group", Some(StaticKey::<Icons>::new("group")), &[KeyBinding::primary(KeyChar::G)], OBJECT, ContextPanel;
+    UNGROUP: menu::UNGROUP, "Ungroup", Some(StaticKey::<Icons>::new("ungroup")), &[KeyBinding::primary_shift(KeyChar::G)], OBJECT, ContextPanel;
+    BRING_FRONT: menu::BRING_FRONT, "Bring to front", Some(StaticKey::<Icons>::new("arrange-bring-to-front")), &[], OBJECT, ContextPanel;
+    FORWARD: menu::FORWARD, "Bring forward", Some(StaticKey::<Icons>::new("arrange-bring-forward")), &[], OBJECT, ContextPanel;
+    BACKWARD: menu::BACKWARD, "Send backward", Some(StaticKey::<Icons>::new("arrange-send-backward")), &[], OBJECT, ContextPanel;
+    SEND_BACK: menu::SEND_BACK, "Send to back", Some(StaticKey::<Icons>::new("arrange-send-to-back")), &[], OBJECT, ContextPanel;
+    LOCK: menu::LOCK, "Lock", Some(StaticKey::<Icons>::new("lock")), &[], OBJECT, ContextPanel;
+    UNLOCK: menu::UNLOCK, "Unlock", Some(StaticKey::<Icons>::new("lock-open-variant")), &[], OBJECT, ContextPanel;
+    ALIGN_LEFT: menu::ALIGN_LEFT, "Align left", Some(StaticKey::<Icons>::new("align-horizontal-left")), &[], OBJECT, ContextPanel;
+    ALIGN_HCENTER: menu::ALIGN_HCENTER, "Align horizontal centres", Some(StaticKey::<Icons>::new("align-horizontal-center")), &[], OBJECT, ContextPanel;
+    ALIGN_RIGHT: menu::ALIGN_RIGHT, "Align right", Some(StaticKey::<Icons>::new("align-horizontal-right")), &[], OBJECT, ContextPanel;
+    ALIGN_TOP: menu::ALIGN_TOP, "Align top", Some(StaticKey::<Icons>::new("align-vertical-top")), &[], OBJECT, ContextPanel;
+    ALIGN_VCENTER: menu::ALIGN_VCENTER, "Align vertical centres", Some(StaticKey::<Icons>::new("align-vertical-center")), &[], OBJECT, ContextPanel;
+    ALIGN_BOTTOM: menu::ALIGN_BOTTOM, "Align bottom", Some(StaticKey::<Icons>::new("align-vertical-bottom")), &[], OBJECT, ContextPanel;
+    DISTRIBUTE_H: menu::DISTRIBUTE_H, "Distribute horizontally", Some(StaticKey::<Icons>::new("align-horizontal-distribute")), &[], OBJECT, ContextPanel;
+    DISTRIBUTE_V: menu::DISTRIBUTE_V, "Distribute vertically", Some(StaticKey::<Icons>::new("align-vertical-distribute")), &[], OBJECT, ContextPanel;
+    ADD_TO_FRAME: menu::ADD_TO_FRAME, "Add to frame", Some(StaticKey::<Icons>::new("image-frame")), &[], OBJECT, ContextPanel;
+    REMOVE_FROM_FRAME: menu::REMOVE_FROM_FRAME, "Remove from frame", Some(StaticKey::<Icons>::new("selection-drag")), &[], OBJECT, ContextPanel;
+    EXPORT_FRAME_PNG: menu::EXPORT_FRAME_PNG, "Export frame as PNG", Some(StaticKey::<Icons>::new("file-image-outline")), &[], FILE, ContextPanel;
+    SELECT_ALL: menu::SELECT_ALL, "Select all", Some(StaticKey::<Icons>::new("select-all")), &[KeyBinding::primary(KeyChar::A)], SELECTION, ContextPanel;
+    REACT_THUMBSUP: menu::REACT_THUMBSUP, "React: thumbs up", Some(StaticKey::<Icons>::new("thumb-up")), &[], REACTION, ContextPanel;
+    REACT_HEART: menu::REACT_HEART, "React: heart", Some(StaticKey::<Icons>::new("heart")), &[], REACTION, ContextPanel;
+    REACT_CHECK: menu::REACT_CHECK, "React: check", Some(StaticKey::<Icons>::new("check")), &[], REACTION, ContextPanel;
+    REACT_PARTY: menu::REACT_PARTY, "React: celebrate", Some(StaticKey::<Icons>::new("party-popper")), &[], REACTION, ContextPanel;
+    REACT_CLEAR: menu::REACT_CLEAR, "Clear my reaction", Some(StaticKey::<Icons>::new("close")), &[], REACTION, ContextPanel;
+    UNDO: menu_bar::UNDO, "Undo", None, shared::UNDO_CHORDS, HISTORY, AmbreMenu;
+    REDO: menu_bar::REDO, "Redo", None, shared::REDO_CHORDS, HISTORY, AmbreMenu;
+    ZOOM_IN: menu_bar::ZOOM_IN, "Zoom in", Some(StaticKey::<Icons>::new("plus")), &[], VIEW, StatusBar;
+    ZOOM_OUT: menu_bar::ZOOM_OUT, "Zoom out", Some(StaticKey::<Icons>::new("minus")), &[], VIEW, StatusBar;
+    ZOOM_RESET: menu_bar::ZOOM_RESET, "Zoom to 100%", None, &[], VIEW, StatusBar;
+    ZOOM_FIT: menu_bar::ZOOM_FIT, "Fit to content", Some(StaticKey::<Icons>::new("fit-to-screen-outline")), &[], VIEW, StatusBar;
+    ZOOM_TO_SELECTION: menu_bar::ZOOM_TO_SELECTION, "Zoom to selection", Some(StaticKey::<Icons>::new("selection-search")), &[], VIEW, StatusBar;
+    POINTER_AUTO: menu_bar::POINTER_AUTO, "Pointer: automatic", None, &[], VIEW, AvatarMenu;
+    POINTER_MOUSE: menu_bar::POINTER_MOUSE, "Pointer: mouse (wheel zooms)", None, &[], VIEW, AvatarMenu;
+    POINTER_TRACKPAD: menu_bar::POINTER_TRACKPAD, "Pointer: trackpad (wheel pans)", None, &[], VIEW, AvatarMenu;
+    PRESENT_START: menu_bar::PRESENT, "Start presentation", None, &[], PRESENT, StatusBar;
+    IMPORT_FILE: menu_bar::IMPORT_FILE, "Import a file...", Some(StaticKey::<Icons>::new("file-import-outline")), &[], FILE, AmbreMenu;
+    EMBED_WEB: menu_bar::EMBED_WEB, "Embed a web page...", Some(StaticKey::<Icons>::new("web")), &[], FILE, CreationBar;
+    EMBED_DOC: menu_bar::EMBED_DOC, "Embed a document...", Some(StaticKey::<Icons>::new("file-document-outline")), &[], FILE, CreationBar;
+    LINK_SET: menu_bar::LINK_SET, "Link...", Some(StaticKey::<Icons>::new("link-variant")), &[], OBJECT, ContextPanel;
+    LINK_CLEAR: menu_bar::LINK_CLEAR, "Remove link", Some(StaticKey::<Icons>::new("link-variant-off")), &[], OBJECT, ContextPanel;
+    SAVE_FILE: menu_bar::SAVE_FILE, "Save to a file (.ambre, not encrypted)", Some(StaticKey::<Icons>::new("content-save")), &[], FILE, AmbreMenu;
+    SAVE_SEALED_FILE: menu_bar::SAVE_SEALED_FILE, "Save to an encrypted file (.ambre)...", Some(StaticKey::<Icons>::new("lock-outline")), &[], FILE, AmbreMenu;
+    EXPORT_SVG: menu_bar::EXPORT_SVG, "Export as SVG", Some(StaticKey::<Icons>::new("file-export-outline")), &[], FILE, AmbreMenu;
+    EXPORT_PNG: menu_bar::EXPORT_PNG, "Export board as PNG", Some(StaticKey::<Icons>::new("file-image-outline")), &[], FILE, AmbreMenu;
+    EXPORT_PDF: menu_bar::EXPORT_PDF, "Export deck as PDF", Some(StaticKey::<Icons>::new("file-pdf-box")), &[], FILE, AmbreMenu;
+    EXPORT_PPTX: menu_bar::EXPORT_PPTX, "Export deck as PowerPoint", Some(StaticKey::<Icons>::new("file-export-outline")), &[], FILE, AmbreMenu;
+    EXPORT_SHOWCASE: menu_bar::EXPORT_SHOWCASE, "Export a showcase page (.html, not encrypted, readable by anyone)", Some(StaticKey::<Icons>::new("file-export-outline")), &[], FILE, AmbreMenu;
+    PRESENT_DECK: menu_bar::DECK, "Order the deck", Some(StaticKey::<Icons>::new("view-carousel-outline")), &[], PRESENT, ContextPanel;
+    TOOL_SELECT: palette::TOOL_SELECT, "Select", Some(StaticKey::<Icons>::new("cursor-default")), &[letter(KeyChar::V)], TOOL, CreationBar;
+    TOOL_PEN: palette::TOOL_PEN, "Pen", Some(StaticKey::<Icons>::new("vector-polyline")), &[letter(KeyChar::P)], TOOL, CreationBar;
+    TOOL_SHAPE: palette::TOOL_SHAPE, "Shape", Some(StaticKey::<Icons>::new("shape-outline")), &[letter(KeyChar::R)], TOOL, CreationBar;
+    TOOL_CONNECTOR: palette::TOOL_CONNECTOR, "Connector", Some(StaticKey::<Icons>::new("vector-line")), &[letter(KeyChar::C)], TOOL, CreationBar;
+    TOOL_DRAW: palette::TOOL_DRAW, "Draw", Some(StaticKey::<Icons>::new("draw")), &[letter(KeyChar::D)], TOOL, CreationBar;
+    TOOL_STICKY: palette::TOOL_STICKY, "Sticky note", Some(StaticKey::<Icons>::new("note-outline")), &[letter(KeyChar::N)], TOOL, CreationBar;
+    TOOL_TEXT: palette::TOOL_TEXT, "Text", Some(StaticKey::<Icons>::new("format-text")), &[letter(KeyChar::T)], TOOL, CreationBar;
+    TOOL_COMMENT: palette::TOOL_COMMENT, "Comment", Some(StaticKey::<Icons>::new("comment-outline")), &[letter(KeyChar::M)], TOOL, CreationBar;
+    TOOL_LASER: palette::TOOL_LASER, "Highlighter", Some(StaticKey::<Icons>::new("cursor-pointer")), &[letter(KeyChar::L)], TOOL, CreationBar;
+    TOOL_HAND: palette::TOOL_HAND, "Hand", Some(StaticKey::<Icons>::new("hand-back-right")), &[letter(KeyChar::H)], TOOL, CreationBar;
+    FIND_OPEN: FIND, "Find", None, &[KeyBinding::primary(KeyChar::F)], FIND_REPLACE, AmbreMenu;
+    COMMENTS_OPEN: menu_bar::COMMENTS, "Comments", Some(StaticKey::<Icons>::new("comment-multiple-outline")), &[], VIEW, ContextPanel;
+    PALETTE_OPEN: PALETTE, "Command palette", None, &[KeyBinding::primary(KeyChar::K)], GENERAL, AmbreMenu;
 }
 
 /// The label a view shows for `id`, in `locale`. `None` for a command Toile does

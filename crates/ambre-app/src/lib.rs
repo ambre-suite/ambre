@@ -47,8 +47,8 @@ use ambre_bus::conduit::{self, Marks};
 use ambre_bus::{Embed, LogicEvent, MemberInfo, RestCommand, Role, SyncCommand};
 #[cfg(target_arch = "wasm32")]
 use ambre_chrome::{
-    AppShell, CanvasCell, CommandStates, ContextMenu, Dialog, FormulaBar, Header, Panel, Sidebar,
-    StatusBar, Tabs, ToastHost, Toasts, Toolbar,
+    AppShell, CanvasCell, CanvasOverlay, CommandStates, ContextMenu, ContextRegion, Dialog,
+    FormulaBar, Header, Panel, Sidebar, StatusBar, ToastHost, Toasts, Toolbar,
 };
 #[cfg(target_arch = "wasm32")]
 use ambre_core::id::{Document, Frame, Id, User};
@@ -119,8 +119,11 @@ mod console_trace;
 // The development sign-in, behind the `dev-login` feature (`ZK-045`).
 #[cfg(target_arch = "wasm32")]
 mod dev_login;
+// The gallery page of the visual system, behind `chrome-gallery`.
 #[cfg(any(target_arch = "wasm32", test))]
 mod doc_list;
+#[cfg(all(feature = "chrome-gallery", target_arch = "wasm32"))]
+mod gallery;
 #[cfg(target_arch = "wasm32")]
 mod host;
 /// The inviters earlier opens proved, which the route sends ahead of an open.
@@ -220,9 +223,6 @@ struct Wiring {
     theme_ctl: ambre_canvas::ThemeControl,
     /// The theme of the account, which the header glyph follows.
     account_theme: RwSignal<ambre_client_core::ThemeChoice>,
-    /// The active app's command toggle signals (the store's reactive view,
-    /// chrome side). Opaque to the launcher -- the app's chrome reads its own.
-    toggles: trame_chrome::Toggles,
     /// Toile's Undo/Redo availability signals, resolved from its own store so the
     /// menu bar disables the two rows from the Logic thread's `UndoState` alone
     /// (`UNDO-006`).
@@ -270,6 +270,12 @@ struct Wiring {
     current_doc: RwSignal<Option<Id<Document>>>,
     /// Formula bar: active cell reference label (for example "B2").
     formula_ref: RwSignal<String>,
+    /// The reference of the selection the context panel names (for example
+    /// "B2:D5").
+    selection_ref: RwSignal<ambre_core::Validated<ambre_trame::ui::panel::RangeLabel>>,
+    /// The page setup and the frozen pane of the active Trame sheet, which
+    /// the context panel shows.
+    sheet_setup: RwSignal<Option<ambre_trame::ui::panel::ActiveSheet>>,
     /// Formula bar: cell raw text / live edit buffer.
     formula_text: RwSignal<String>,
     /// Formula bar: commit/cancel action from the HTML input.
@@ -294,6 +300,9 @@ struct Wiring {
     /// The five figures of the open Prose document, for the status bar slot
     /// (`PROSE-FEAT-040`). Published by the Prose view.
     prose_figures: RwSignal<Option<ambre_prose::ui::StatusFigures>>,
+    /// The page zoom of the open Prose document, for the zoom chip of the
+    /// status bar slot (`CHROME-206`). The chip writes it, the view applies it.
+    prose_zoom: RwSignal<Scale<Doc, View>>,
     /// The comment panel and the suggestion popover of the open Prose
     /// document (`PROSE-UI-050`, `PROSE-UI-052`). Published by the Prose view.
     prose_signals: host::ProseSignals,
@@ -347,6 +356,9 @@ struct Wiring {
     /// The canvas view applies it on top of the live common style as one
     /// `RestyleElements` over the selection.
     toile_quick_style: RwSignal<Option<toile_chrome::StyleEdit>>,
+    /// What the palette and the selection bar cover of the board, as they
+    /// measure it. The canvas view reads it when a fit lands (`ZOOM-011`).
+    toile_cover: RwSignal<ambre_toile::ui::cover::Cover>,
     /// The comments panel's signals (`toile-comments`): the canvas view writes
     /// the list, the open thread and the drop composer. It drains the intents
     /// the panel and the composer emit. The panel holds nothing of its own
@@ -523,6 +535,13 @@ pub fn main() {
         }
     }));
 
+    // A test build serves the gallery of the visual system at its own path,
+    // with no thread behind it.
+    #[cfg(feature = "chrome-gallery")]
+    if gallery::mount_if_asked() == gallery::Mounted::Yes {
+        return;
+    }
+
     // Inter-thread queues (`ambre_bus::conduit`, in this Main instance's shared heap).
     //   UI    --LogicCommand--> Logic      Logic --UiEvent--> UI
     //   Logic --SyncCommand---> [main relay] --postMessage--> Sync worker
@@ -624,6 +643,8 @@ pub fn main() {
     // Formula bar signals (HTML input -> TrameView sync). RwSignal is Copy, so
     // we create them once and pass clones to both TrameView and the Leptos shell.
     let formula_ref = RwSignal::new(String::new());
+    let selection_ref = RwSignal::new(ambre_core::Validated::new(""));
+    let sheet_setup = RwSignal::new(None);
     let formula_text = RwSignal::new(String::new());
     let formula_action = RwSignal::new(None::<FormulaAction>);
 
@@ -710,6 +731,9 @@ pub fn main() {
     // `toile_quick_style`, mirroring the inspector's model / restyle pair.
     let toile_float_bar = RwSignal::new(None::<toile_chrome::FloatBar>);
     let toile_quick_style = RwSignal::new(None::<toile_chrome::StyleEdit>);
+    // The palette and the selection bar measure what they cover; a fit reads
+    // it (`ZOOM-011`).
+    let toile_cover = RwSignal::new(ambre_toile::ui::cover::Cover::default());
     // Comments (`toile-comments`): the panel and the drop composer read what
     // the view published. They write back one intent at a time, the same seam
     // as the inspector's model / restyle pair.
@@ -740,6 +764,8 @@ pub fn main() {
     // Each set the shell shares with one view, handed to both.
     let trame_signals = ambre_trame::ui::TrameSignals {
         formula_ref,
+        selection_ref,
+        sheet_setup,
         formula_text,
         formula_action,
         sel_stats,
@@ -748,6 +774,7 @@ pub fn main() {
         active_sheet,
         filter_active,
         find_result,
+        view_cmd: RwSignal::new(None),
     };
     let toile_signals = ambre_toile::ui::ToileSignals {
         ctx_scope: toile_ctx_scope,
@@ -768,14 +795,18 @@ pub fn main() {
         followed_link: toile_followed_link,
         present_mode: present_toile,
         find_result: find_result_toile,
+        cover: toile_cover,
     };
 
-    // Design tokens: inject the generated CSS custom properties (theme.css) and
-    // boot the theme of the boot hint, read with no wait (`SETTINGS-032`,
-    // `SETTINGS-034`). `theme_ctl` is the single source of truth for the
+    // Design tokens: inject the generated CSS custom properties (theme.css).
+    // Boot the theme of the boot hint, read with no wait, or the theme the
+    // system asks for without one (`SETTINGS-032`, `SETTINGS-034`,
+    // `UI-THREAD-065`). `theme_ctl` is the single source of truth for the
     // active scheme, shared with the chrome toggle and the canvas view.
-    let theme_ctl =
-        ambre_canvas::ThemeControl::new(settings_view::boot_theme(platform::boot_hint().as_ref()));
+    let theme_ctl = ambre_canvas::ThemeControl::new(settings_view::boot_theme(
+        platform::boot_hint().as_ref(),
+        platform::boot_theme(platform::system_scheme()),
+    ));
     inject_theme(theme_ctl.get());
     // The theme of the account, which the header follows to redraw the glyph
     // of the theme switch when another device moves it.
@@ -805,6 +836,8 @@ pub fn main() {
     let boot_is_murmure = booted == ambre_bus::DocType::Murmure;
     // The status bar slot the Prose view fills with its five figures.
     let prose_figures = RwSignal::new(None::<ambre_prose::ui::StatusFigures>);
+    // The page zoom the Prose chip and the Prose view share. Defaults to 100%.
+    let prose_zoom = RwSignal::new(Scale::<Doc, View>::ONE);
     let prose_signals = host::ProseSignals::new();
     match booted {
         ambre_bus::DocType::Toile => toile_chrome::bind_keys(&mut keymap),
@@ -966,6 +999,7 @@ pub fn main() {
             commands: Rc::clone(&commands_slot),
         },
         prose_figures,
+        prose_zoom,
         prose_signals,
         tofu_prompt,
         tofu_confirm,
@@ -1253,7 +1287,10 @@ pub fn main() {
                         toasts.raise(notice.kind, notice.voice, notice.text)
                     }
                     switchboard::Effect::ApplySettings(settings) => {
-                        let theme = settings_view::rendered(settings.theme, settings_theme.get());
+                        let theme = settings_view::rendered(
+                            settings.theme,
+                            platform::boot_theme(platform::system_scheme()),
+                        );
                         if theme != settings_theme.get() {
                             platform::set_theme(&settings_theme, theme);
                         }
@@ -1517,6 +1554,9 @@ pub fn main() {
                         followed_link: ch_toile_followed_link,
                         present_mode: ch_toile_present,
                         find_result: ch_toile_find_result,
+                        // An embedded board shows no palette or bar of its
+                        // own, so nothing covers it.
+                        cover: RwSignal::new(ambre_toile::ui::cover::Cover::default()),
                     },
                 },
             )),
@@ -1541,6 +1581,8 @@ pub fn main() {
                     clock: Box::new(host::PageClock),
                     signals: ambre_trame::ui::TrameSignals {
                         formula_ref: ch_formula_ref,
+                        selection_ref: RwSignal::new(ambre_core::Validated::new("")),
+                        sheet_setup: RwSignal::new(None),
                         formula_text: ch_formula_text,
                         formula_action: ch_formula_action,
                         sel_stats: ch_tr_sel_stats,
@@ -1549,6 +1591,7 @@ pub fn main() {
                         active_sheet: ch_tr_active_sheet,
                         filter_active: ch_tr_filter_active,
                         find_result: ch_tr_find_result,
+                        view_cmd: RwSignal::new(None),
                     },
                 },
             )),
@@ -1587,6 +1630,7 @@ pub fn main() {
                         text_input,
                         theme_ctl,
                         figures: prose_figures,
+                        zoom: prose_zoom,
                         annotations: prose_signals,
                         busy_pub: busy_pub.clone(),
                         notices: notice_pub.clone(),

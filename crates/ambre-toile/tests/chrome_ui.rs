@@ -12,8 +12,8 @@
 //! - the right-click context menu end-to-end -- the entry rows a
 //!   [`CtxScope`] renders, and that clicking a row fires its `StaticKey<Commands>`;
 //! - the tool palette -- a click switches the shared active tool;
-//! - the top menu bar zoom cluster and the floating selection
-//!   toolbar -- a click fires its `StaticKey<Commands>` on the shared sink.
+//! - the top menu bar and the floating selection toolbar -- a click fires
+//!   its `StaticKey<Commands>` on the shared sink.
 //!
 //! On the host target the whole file is empty (the `cfg` gate below), so the
 //! native tier (`just test-native`) skips it cleanly.
@@ -105,6 +105,21 @@ fn mount_bar(
     });
     let root = mount_in_container(move || view! { <StatusBar stats=stats perf=perf zoom=zoom /> });
     (root, zoom)
+}
+
+/// `CHROME-206`: the zoom chip closes the status bar, at its right end.
+#[wasm_bindgen_test]
+fn the_zoom_chip_closes_the_status_bar() {
+    let owner = Owner::new();
+    owner.set();
+    let (root, _zoom) = mount_bar(None, 1.0, ambre_core::FrameRate::new(60.0));
+    let last = root.last_element_child().expect("a status bar child");
+    assert!(
+        last.class_list().contains("statusbar-zoom"),
+        "the band ends on `{}`",
+        last.class_name()
+    );
+    root.remove();
 }
 
 /// `TOILE-UI-053`: the mounted band shows the count of a multi-selection.
@@ -373,25 +388,39 @@ fn tool_palette_click_switches_active_tool() {
     root.remove();
 }
 
-// -- Top menu bar zoom cluster, input -------------------------
+// -- Top menu bar, zoom from the View menu -----------------------
 
-/// `TOILE-UI-416`: the zoom-in button of the menu bar reports the zoom-in
-/// command.
+/// `TOILE-UI-416`: the zoom-in entry of the View menu reports the zoom-in
+/// command. The bar itself holds no zoom control: the zoom lives in the status
+/// bar alone (`CHROME-206`).
 #[wasm_bindgen_test]
-fn top_menu_bar_zoom_in_fires_command() {
+async fn the_view_menu_reports_zoom_in_and_the_bar_holds_no_zoom_control() {
     let owner = Owner::new();
     owner.set();
-    let zoom = RwSignal::new(Scale::<Board, View>::ONE);
     let fired = RwSignal::new(None::<StaticKey<Commands>>);
     let on_command = Callback::new(move |id: StaticKey<Commands>| fired.set(Some(id)));
     let store = CommandStates::new(ambre_toile::chrome::COMMANDS.iter().map(|c| c.id));
     ambre_toile::chrome::init_command_states(&store);
     let toggles = Toggles::from_store(&store);
     let root = mount_in_container(move || {
-        view! { <TopMenuBar zoom=zoom on_command=on_command toggles=toggles /> }
+        view! { <TopMenuBar on_command=on_command toggles=toggles /> }
     });
+    assert!(
+        root.query_selector("[aria-label=\"Zoom in\"]")
+            .unwrap()
+            .is_none(),
+        "the menu bar holds a zoom control"
+    );
+    assert!(root.query_selector(".ambre-toile-zoom").unwrap().is_none());
 
-    assert!(click_by_aria(&root, "Zoom in"));
+    assert!(click_by_aria(&root, "View"));
+    leptos::task::tick().await;
+    let rows = root.query_selector_all(".ambre-ctx-item").unwrap();
+    let zoom_in = (0..rows.length())
+        .filter_map(|i| rows.item(i))
+        .find(|row| row.text_content().is_some_and(|t| t.starts_with("Zoom in")))
+        .expect("a Zoom in row in the View menu");
+    zoom_in.dyn_into::<web_sys::HtmlElement>().unwrap().click();
     assert_eq!(fired.get_untracked(), Some(ZOOM_IN));
 
     root.remove();
@@ -480,11 +509,10 @@ fn assert_registry_labels(root: &web_sys::Element, ids: &[StaticKey<Commands>]) 
     }
 }
 
-/// The tool palette, the zoom cluster and the selection toolbar announce the
-/// title each command's description carries (`UI-THREAD-036`).
+/// The tool palette and the selection toolbar announce the title each
+/// command's description carries (`UI-THREAD-036`).
 #[wasm_bindgen_test]
 fn the_button_bars_announce_the_registry_labels() {
-    use ambre_toile::ui::menu_bar::{ZOOM_FIT, ZOOM_OUT, ZOOM_RESET, ZOOM_TO_SELECTION};
     use ambre_toile::ui::palette::{
         TOOL_COMMENT, TOOL_CONNECTOR, TOOL_DRAW, TOOL_HAND, TOOL_LASER, TOOL_PEN, TOOL_SELECT,
         TOOL_SHAPE, TOOL_STICKY, TOOL_TEXT,
@@ -511,20 +539,7 @@ fn the_button_bars_announce_the_registry_labels() {
     );
     palette.remove();
 
-    let store = CommandStates::new(ambre_toile::chrome::COMMANDS.iter().map(|c| c.id));
-    ambre_toile::chrome::init_command_states(&store);
-    let toggles = Toggles::from_store(&store);
-    let zoom = RwSignal::new(Scale::<Board, View>::ONE);
     let on_command = Callback::new(|_: StaticKey<Commands>| {});
-    let menu_bar = mount_in_container(move || {
-        view! { <TopMenuBar zoom=zoom on_command=on_command toggles=toggles /> }
-    });
-    assert_registry_labels(
-        &menu_bar,
-        &[ZOOM_OUT, ZOOM_RESET, ZOOM_IN, ZOOM_FIT, ZOOM_TO_SELECTION],
-    );
-    menu_bar.remove();
-
     // A grouped selection holding a locked and an unlocked element shows every
     // command button the bar has.
     let bar = RwSignal::new(Some(FloatBar {
@@ -542,14 +557,7 @@ fn the_button_bars_announce_the_registry_labels() {
     });
     assert_registry_labels(
         &toolbar,
-        &[
-            menu::DUPLICATE,
-            menu::DELETE,
-            menu::GROUP,
-            menu::UNGROUP,
-            menu::LOCK,
-            menu::UNLOCK,
-        ],
+        &[menu::DUPLICATE, menu::DELETE, menu::LOCK, menu::UNLOCK],
     );
     toolbar.remove();
 }
@@ -1339,4 +1347,334 @@ fn a_note_edit_with_no_frame_on_screen_is_refused() {
         relay.command(edit()),
         Some(ToileCommand::EditNotes { frame: f, .. }) if f == frame
     ));
+}
+
+/// Load the shell stylesheet into the page, as the app does, so the floating
+/// surfaces take their real place and size. Remove it with the returned node.
+fn with_shell_stylesheet() -> web_sys::Element {
+    let sheet = document().create_element("style").unwrap();
+    sheet.set_text_content(Some(include_str!("../../ambre-app/styles.css")));
+    document().head().unwrap().append_child(&sheet).unwrap();
+    sheet
+}
+
+/// Let the page lay out and deliver its resize observations: one reactive
+/// tick, then two animation frames.
+async fn settle() {
+    leptos::task::tick().await;
+    for _ in 0..2 {
+        let frame = js_sys::Promise::new(&mut |resolve, _| {
+            web_sys::window()
+                .unwrap()
+                .request_animation_frame(&resolve)
+                .unwrap();
+        });
+        wasm_bindgen_futures::JsFuture::from(frame).await.unwrap();
+    }
+}
+
+/// `ZOOM-011`: the palette publishes the right edge it covers, as the page
+/// lays it out. The edge tracks a change of size, and clears when the palette
+/// hides.
+#[wasm_bindgen_test]
+async fn the_palette_publishes_the_edge_it_covers_and_clears_it_when_it_hides() {
+    let sheet = with_shell_stylesheet();
+    let active = RwSignal::new(Tool::Select);
+    let cover = RwSignal::new(ambre_toile::ui::cover::Cover::default());
+    let root = mount_in_container(move || view! { <ToolPalette active=active cover=cover /> });
+    settle().await;
+    let palette: web_sys::HtmlElement = root
+        .query_selector(".ambre-tool-palette")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    let measured = |cover: RwSignal<ambre_toile::ui::cover::Cover>| {
+        cover
+            .get_untracked()
+            .palette_right
+            .map(|right| f64::from(right.get()))
+    };
+    let right = palette.get_bounding_client_rect().right();
+    assert!(
+        right > 8.0,
+        "the palette sits right of the page edge: {right}"
+    );
+    assert!((measured(cover).unwrap() - right).abs() < 0.5);
+
+    palette.style().set_property("width", "120px").unwrap();
+    settle().await;
+    let wider = palette.get_bounding_client_rect().right();
+    assert!(wider > right);
+    assert!((measured(cover).unwrap() - wider).abs() < 0.5);
+
+    palette.style().set_property("display", "none").unwrap();
+    settle().await;
+    assert_eq!(measured(cover), None);
+
+    root.remove();
+    sheet.remove();
+}
+
+/// `ZOOM-011`: the selection bar publishes how far it reaches above the
+/// selection, its height and its lift, and clears it once it leaves.
+#[wasm_bindgen_test]
+async fn the_selection_bar_publishes_its_reach_and_clears_it_when_it_leaves() {
+    let sheet = with_shell_stylesheet();
+    let bar = RwSignal::new(Some(FloatBar {
+        at: css_point(400.0, 300.0),
+        count: Count::<Elements>::new(1),
+        groups: GroupHeld::NoGroup,
+        locks: LockMix::Unlocked,
+        fill: None,
+        mixed: Default::default(),
+    }));
+    let model = RwSignal::new(None::<StyleModel>);
+    let cover = RwSignal::new(ambre_toile::ui::cover::Cover::default());
+    let on_command = Callback::new(move |_id: StaticKey<Commands>| {});
+    let on_style = Callback::new(move |_e: StyleEdit| {});
+    let root = mount_in_container(move || {
+        view! {
+            <SelectionToolbar bar=bar model=model on_command=on_command on_style=on_style cover=cover />
+        }
+    });
+    settle().await;
+    let selbar = root.query_selector(".ambre-selbar").unwrap().unwrap();
+    let rect = selbar.get_bounding_client_rect();
+    let reach = f64::from(cover.get_untracked().bar_reach.unwrap().get());
+    assert!((reach - (300.0 - rect.top())).abs() < 0.5);
+    // The reach is the bar's own height and the lift above the selection.
+    assert!(
+        reach > rect.height(),
+        "reach {reach}, height {}",
+        rect.height()
+    );
+
+    bar.set(None);
+    settle().await;
+    assert_eq!(cover.get_untracked().bar_reach, None);
+
+    root.remove();
+    sheet.remove();
+}
+
+// -- The context panel (`ambre-spec-shell.md` section 2) ---------------------
+
+/// A style model of `kind`, nothing mixed.
+fn styled(kind: ambre_toile::ui::style::Styled) -> StyleModel {
+    StyleModel {
+        base: ambre_toile::message::ElementStyle::default(),
+        mixed: Default::default(),
+        kind,
+    }
+}
+
+/// Mount the board's context panel on `model`. The scope holds a locked and
+/// an unlocked member of a group of two, so every conditional control shows.
+/// Return the container.
+fn mount_toile_panel(model: Option<StyleModel>) -> web_sys::Element {
+    mount_toile_panel_on(
+        model,
+        CtxScope {
+            site: ClickSite::Selection,
+            count: Count::<Elements>::new(2),
+            groups: GroupHeld::Group,
+            locks: LockMix::Both,
+            ..Default::default()
+        },
+    )
+}
+
+/// Mount the board's context panel on `model` and `scope`.
+fn mount_toile_panel_on(model: Option<StyleModel>, scope: CtxScope) -> web_sys::Element {
+    use ambre_chrome::{ContextPanel, DockSide, Fold, PanelPrefs, PanelWidth};
+    let model = RwSignal::new(model);
+    let scope = RwSignal::new(scope);
+    let content = ambre_toile::chrome::toile_panel(ambre_toile::chrome::ToilePanelSignals {
+        model,
+        scope,
+        on_command: Callback::new(|_| {}),
+        restyle: RwSignal::new(None),
+    });
+    let prefs = PanelPrefs::new(DockSide::Right, PanelWidth::DEFAULT, Fold::Open);
+    mount_in_container(move || {
+        view! { <ContextPanel prefs=prefs title=content.title sections=content.sections /> }
+    })
+}
+
+/// With nothing selected the panel shows the board. With a selection it shows
+/// the sections that apply to it, in the one frame.
+#[wasm_bindgen_test]
+async fn the_board_panel_shows_the_board_then_what_applies_to_the_selection() {
+    use ambre_toile::ui::panel::{self, PanelKind};
+    use ambre_toile::ui::style::Styled;
+    let board = mount_toile_panel(None);
+    leptos::task::tick().await;
+    assert_eq!(
+        board
+            .query_selector(".ambre-ctx-title")
+            .unwrap()
+            .unwrap()
+            .text_content()
+            .unwrap(),
+        "Document"
+    );
+    assert_eq!(ambre_chrome::repeated_title(&board), None);
+    assert_eq!(ambre_chrome::native_controls(&board), Vec::<String>::new());
+    let markers = ambre_chrome::reach_markers(&board);
+    assert!(
+        markers.first().is_some_and(
+            |m| ambre_chrome::commands::Reach::Command(menu::SELECT_ALL).matches_marker(m)
+        ),
+        "{markers:?}"
+    );
+    // Find has no control in the board section: the palette and its chord
+    // reach it, and no icon row mixes it with the board's commands.
+    let find = ambre_chrome::commands::Reach::Command(ambre_toile::ui::find::FIND);
+    assert!(
+        !markers.iter().any(|m| find.matches_marker(m)),
+        "{markers:?}"
+    );
+    board.remove();
+
+    // The link of an element sits in its shape section, out of the arrangement.
+    let shape = mount_toile_panel(Some(styled(Styled::Elements)));
+    leptos::task::tick().await;
+    for (id, section) in [
+        (ambre_toile::ui::menu_bar::LINK_SET, panel::SHAPE),
+        (ambre_toile::ui::menu_bar::LINK_CLEAR, panel::SHAPE),
+    ] {
+        let reach = ambre_chrome::commands::Reach::Command(id).marker();
+        let host = shape
+            .query_selector(&format!("[data-reach=\"{reach}\"]"))
+            .unwrap()
+            .expect("the link control")
+            .closest(".ambre-ctx-section")
+            .unwrap()
+            .expect("in a section")
+            .get_attribute("data-section");
+        assert_eq!(host.as_deref(), Some(section.as_str()), "{id:?}");
+    }
+    shape.remove();
+
+    for (kind, model) in [
+        (PanelKind::Shape, styled(Styled::Elements)),
+        (PanelKind::Connector, styled(Styled::Arrow)),
+    ] {
+        let root = mount_toile_panel(Some(model));
+        leptos::task::tick().await;
+        let shown: Vec<String> = (0..root
+            .query_selector_all(".ambre-ctx-section")
+            .unwrap()
+            .length())
+            .map(|i| {
+                root.query_selector_all(".ambre-ctx-section")
+                    .unwrap()
+                    .item(i)
+                    .unwrap()
+                    .dyn_into::<web_sys::Element>()
+                    .unwrap()
+                    .get_attribute("data-section")
+                    .unwrap()
+            })
+            .collect();
+        assert_eq!(
+            ambre_chrome::unreached_controls(&root),
+            Vec::<String>::new(),
+            "every control names its reach"
+        );
+        let expected: Vec<&str> = kind.sections().iter().map(|k| k.as_str()).collect();
+        assert_eq!(shown, expected, "{kind:?}");
+        // Every control of the panel names a declared command or property.
+        for marker in ambre_chrome::reach_markers(&root) {
+            let declared = ambre_toile::ui::commands::COMMANDS
+                .iter()
+                .any(|c| ambre_chrome::commands::Reach::Command(c.id).matches_marker(&marker))
+                || panel::PROPERTIES
+                    .iter()
+                    .any(|p| ambre_chrome::commands::Reach::Property(p.id).matches_marker(&marker));
+            assert!(declared, "{kind:?}: {marker} is declared");
+        }
+        root.remove();
+    }
+}
+
+/// Each entry of the board's context bar is a control the panel shows for the
+/// same kind. The bar shows its declared list alone.
+#[wasm_bindgen_test]
+async fn each_entry_of_the_board_bar_is_a_control_of_the_panel() {
+    use ambre_toile::ui::panel::PanelKind;
+    use ambre_toile::ui::style::Styled;
+    let root = mount_toile_panel(Some(styled(Styled::Elements)));
+    leptos::task::tick().await;
+    let panel = ambre_chrome::reach_markers(&root);
+    for entry in PanelKind::Shape.bar() {
+        assert!(
+            panel.iter().any(|m| entry.matches_marker(m)),
+            "{entry:?} is in the panel: {panel:?}"
+        );
+    }
+    root.remove();
+
+    let bar = RwSignal::new(Some(FloatBar {
+        at: css_point(40.0, 20.0),
+        count: Count::<Elements>::new(2),
+        groups: GroupHeld::Group,
+        locks: LockMix::Both,
+        fill: None,
+        mixed: Default::default(),
+    }));
+    let model = RwSignal::new(Some(styled(Styled::Elements)));
+    let toolbar = mount_in_container(move || {
+        view! {
+            <SelectionToolbar bar=bar model=model on_command=Callback::new(|_| {}) on_style=Callback::new(|_| {}) />
+        }
+    });
+    let shown = ambre_chrome::reach_markers(&toolbar);
+    assert_eq!(shown.len(), PanelKind::Shape.bar().len());
+    for (marker, entry) in shown.iter().zip(PanelKind::Shape.bar()) {
+        assert!(entry.matches_marker(marker), "{marker} is {entry:?}");
+    }
+    toolbar.remove();
+}
+
+/// Each entry of the board's context menu besides the clipboard is a control
+/// the panel shows for the same selection (`CHROME-209`).
+#[wasm_bindgen_test]
+async fn each_entry_of_the_board_menu_is_a_control_of_the_panel() {
+    use ambre_toile::ui::menu::{FrameHeld, context_menu_ids};
+    use ambre_toile::ui::style::Styled;
+    let frame = Some(Id::<ambre_core::id::Element>::from_text("f1".to_owned()));
+    let mut scopes = vec![CtxScope::default()];
+    for locks in [LockMix::Unlocked, LockMix::Locked, LockMix::Both] {
+        for count in [1, 2] {
+            scopes.push(CtxScope {
+                site: ClickSite::Selection,
+                count: Count::<Elements>::new(count),
+                groups: GroupHeld::Group,
+                locks,
+                framed: FrameHeld::Framed,
+                containing_frame: frame.clone(),
+                frame: frame.clone(),
+                ..Default::default()
+            });
+        }
+    }
+    for scope in scopes {
+        let model = (scope.site == ClickSite::Selection).then(|| styled(Styled::Elements));
+        let root = mount_toile_panel_on(model, scope.clone());
+        leptos::task::tick().await;
+        let panel = ambre_chrome::reach_markers(&root);
+        for id in context_menu_ids(&scope).into_iter().flatten() {
+            if ambre_commands::shared::BROWSER_SERVICED.contains(&id) {
+                continue;
+            }
+            let reach = ambre_chrome::commands::Reach::Command(id);
+            assert!(
+                panel.iter().any(|m| reach.matches_marker(m)),
+                "{id:?} of {scope:?} is in the panel"
+            );
+        }
+        root.remove();
+    }
 }

@@ -126,22 +126,6 @@ fn send_session(outbox: &mut Outbox<ToileCommand>, fatal: bool, cmd: LogicComman
     outcome.accepted()
 }
 
-/// A log-zoom rate per pixel of wheel `dy`: a step of `dy` zooms by the
-/// factor `exp(-dy * rate)`.
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct WheelZoomRate(f64);
-
-impl WheelZoomRate {
-    /// The relative zoom factor a wheel step of `dy` applies. A step down
-    /// zooms out, a step up zooms in, and no step keeps the zoom.
-    fn factor(self, dy: Px<Css>) -> f64 {
-        (-f64::from(dy.get()) * self.0).exp()
-    }
-}
-
-/// The zoom rate of a wheel notch and of a pinch alike.
-const WHEEL_ZOOM_RATE: WheelZoomRate = WheelZoomRate(0.0018);
-
 /// A wheel `|dy|` at or above this (logical px, a pixel-mode delta) reads as
 /// a discrete mouse notch rather than a fine trackpad glide. This is the auto
 /// heuristic's mouse threshold (`toile-tools`).
@@ -342,6 +326,9 @@ pub struct ToileSignals {
     pub present_mode: RwSignal<crate::message::PresentMode>,
     /// The find counters.
     pub find_result: RwSignal<Option<crate::message::FindResults>>,
+    /// What the shell's floating surfaces cover, as the chrome measures it.
+    /// The view reads it when a fit lands (`ZOOM-011`).
+    pub cover: RwSignal<super::cover::Cover>,
 }
 
 /// The wiring of a board view: its channels to the Logic thread, its text
@@ -649,6 +636,10 @@ pub struct ToileView {
     present_mode: RwSignal<crate::message::PresentMode>,
     #[cfg(target_arch = "wasm32")]
     find_result: RwSignal<Option<crate::message::FindResults>>,
+    /// What the floating surfaces cover, as the chrome last measured it. Read
+    /// when a fit lands, never written here (`ZOOM-011`). Wasm-only.
+    #[cfg(target_arch = "wasm32")]
+    cover: RwSignal<super::cover::Cover>,
 
     /// The element that anchors a thread the panel opened, awaiting the
     /// `SelectionStats` reply that carries its bounds. The camera then comes to
@@ -818,6 +809,7 @@ impl ToileView {
             followed_link,
             present_mode,
             find_result,
+            cover,
         } = signals;
         let (canvas_width, canvas_height) = (canvas.width, canvas.height);
         let embedded = embedding == ambre_canvas::Embedding::Embedded;
@@ -931,6 +923,8 @@ impl ToileView {
             present_mode,
             #[cfg(target_arch = "wasm32")]
             find_result,
+            #[cfg(target_arch = "wasm32")]
+            cover,
             pending_comment_focus: None,
             pending_fit: false,
             last_stats_sel: Vec::new(),
@@ -1177,7 +1171,12 @@ impl ToileView {
                     if std::mem::take(&mut self.pending_fit)
                         && let Some(bounds) = stats.bounds
                     {
-                        self.cam.fit_bounds(bounds, super::viewport::FIT_PAD);
+                        // A fit lands clear of the palette and the selection
+                        // bar the board shows over the canvas, as the chrome
+                        // last measured them (`ZOOM-011`).
+                        let clear = self.fit_clearance();
+                        self.cam
+                            .fit_bounds_clear_of(bounds, super::viewport::FIT_PAD, clear);
                         self.needs_full = true;
                         self.queue_viewport();
                     }
@@ -1443,10 +1442,11 @@ impl ToileView {
         if zoom {
             // A zoom never coasts, and stops a coast under way.
             self.kinetic.stop();
-            // Zoom about the cursor. A trackpad pinch and a mouse notch both land
-            // here; only `dy` drives the factor.
-            let factor = WHEEL_ZOOM_RATE.factor(px.dy);
-            self.cam.zoom_about(self.last_pointer, factor);
+            // Zoom about the cursor, through the one engine (`ZOOM-003`,
+            // `ZOOM-004`). A trackpad pinch and a mouse notch both land here;
+            // only `dy` drives the factor, at the rate every editor shares.
+            let asked = self.cam.zoom_engine().wheeled(px.dy);
+            self.cam.zoom_to_about(self.last_pointer, asked);
         } else {
             // Two-finger scroll pans the 2D plane in both axes. The model
             // applies the step one for one, and lets a glide coast once it
@@ -2305,9 +2305,51 @@ impl ToileView {
         if self.float_bar.get_untracked() != next {
             self.float_bar.set(next);
         }
+        self.publish_panel_models();
+    }
+
+    /// Republish what the context panel reads: the common style and the
+    /// scope of the selection (`ambre-spec-shell.md` section 2). Each is a
+    /// pure function of the selection and its data, written only on change,
+    /// so a steady selection wakes nothing. A point a key placed the menu at
+    /// stays as it was.
+    #[cfg(target_arch = "wasm32")]
+    fn publish_panel_models(&self) {
+        let model = match self.arrow.as_ref() {
+            Some(c) if self.selection.is_empty() => {
+                super::style::arrow_style_scope(c, &self.display)
+            }
+            _ => super::style::style_scope_for(&self.selection, &self.selection_data),
+        };
+        if self.style_model.get_untracked() != model {
+            self.style_model.set(model);
+        }
+        let mut scope = super::menu::ctx_scope_for(
+            &self.selection,
+            self.group_scope.as_ref(),
+            &self.selection_data,
+            &self.selection_framed,
+            &self.display,
+        );
+        scope.keyed = self.ctx_scope.get_untracked().keyed;
+        if self.ctx_scope.get_untracked() != scope {
+            self.ctx_scope.set(scope);
+        }
     }
     #[cfg(not(target_arch = "wasm32"))]
     fn publish_float_bar(&self) {}
+
+    /// The strips a fit keeps clear of, from what the chrome last measured of
+    /// the floating surfaces (`ZOOM-011`). The host build mounts no chrome, so
+    /// nothing covers its canvas.
+    #[cfg(target_arch = "wasm32")]
+    fn fit_clearance(&self) -> kurbo::Insets {
+        self.cover.get_untracked().clearance(canvas_client_offset())
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn fit_clearance(&self) -> kurbo::Insets {
+        kurbo::Insets::ZERO
+    }
 
     /// The floating bar this frame shows, with the canvas at `offset` in the
     /// page. None while a move, a resize or a rotate is in flight, so the bar
@@ -2717,8 +2759,7 @@ impl ToileView {
             self.needs_full = true;
             self.queue_viewport();
         }
-        let (lo, hi) = (super::viewport::MIN_ZOOM, super::viewport::MAX_ZOOM);
-        let shown = self.cam.zoom.clamped(lo, hi);
+        let shown = self.cam.zoom_engine().factor();
         self.zoom_published = shown;
         if self.zoom.get_untracked() != shown {
             self.zoom.set(shown);
@@ -2759,19 +2800,19 @@ impl ToileView {
                 return;
             }
             mb::ZOOM_IN => {
-                self.cam.zoom_by_center(super::viewport::ZOOM_STEP);
+                self.cam.step_zoom(ambre_core::ZoomStep::In);
                 self.needs_full = true;
                 self.queue_viewport();
                 return;
             }
             mb::ZOOM_OUT => {
-                self.cam.zoom_by_center(1.0 / super::viewport::ZOOM_STEP);
+                self.cam.step_zoom(ambre_core::ZoomStep::Out);
                 self.needs_full = true;
                 self.queue_viewport();
                 return;
             }
             mb::ZOOM_RESET => {
-                self.cam.reset_zoom();
+                self.cam.step_zoom(ambre_core::ZoomStep::Reset);
                 self.needs_full = true;
                 self.queue_viewport();
                 return;
@@ -3129,6 +3170,15 @@ impl ToileView {
     fn handle_key(&mut self, key: Key, mods: Flags<ModifierKeys>) -> Consumed {
         let cmd = mods.contains(ModifierKeys::PRIMARY);
         let shift = mods.contains(ModifierKeys::SHIFT);
+        // A zoom chord steps the camera about the screen center, the zoom
+        // entries of the View menu with it (`ZOOM-004`, `ZOOM-005`). The only
+        // message it owes is the cull of the new view (`ZOOM-001`).
+        if let Some(step) = ambre_commands::shared::zoom_step(key, mods) {
+            self.cam.step_zoom(step);
+            self.needs_full = true;
+            self.queue_viewport();
+            return Consumed::Yes;
+        }
         // Command chords first, so a bare-key fallthrough never shadows them.
         if cmd {
             match key {

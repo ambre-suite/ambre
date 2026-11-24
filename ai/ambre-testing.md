@@ -58,35 +58,24 @@ normative in `specs/ambre-spec-template.md`, section 1.
 
 ## The db tier in a cloud session
 
-Docker is installed, but its daemon is not started. Docker Hub also refuses anonymous pulls from
-the session (`429 Too Many Requests`), so route `docker.io` through Google's mirror before you
-start the daemon. The pinned digests resolve unchanged through the mirror.
+Docker is installed, but its daemon is not started, and Docker Hub refuses anonymous pulls from the
+session (`429 Too Many Requests`). `just docker-up` handles both: it routes `docker.io` through
+Google's mirror, starts the daemon, waits for it, then starts the services. It stops on a host
+`postgres` or `redis-server` that holds a port of the stack.
 
 ```bash
-# 1. The mirror, then the daemon.
-mkdir -p /etc/docker
-echo '{"registry-mirrors":["https://mirror.gcr.io"]}' > /etc/docker/daemon.json
-(dockerd > /tmp/dockerd.log 2>&1 &)
-until docker info > /dev/null 2>&1; do sleep 1; done
-
-# 2. The services: postgres, redis, then garage with its layout, key and bucket.
-#    Stop a host redis-server or postgres first, so it does not hold 6379 or 5432.
-just services-up
-
-# 3. The proxy exports placeholder AWS keys, and Garage refuses them. CI runs without them.
-unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
-
-# 4. The tier itself. `.cargo/config.toml` gives cargo the addresses of the stack (`[env]`).
-just test-db
+./run_tests.sh db     # docker-up, the tier, then the services torn down
 ```
 
-If the session may not write `/etc/docker/daemon.json`, give the mirror to the daemon on its command
-line instead. Skip the two first lines of step 1, and start the daemon with this line:
-`(dockerd --registry-mirror=https://mirror.gcr.io > /tmp/dockerd.log 2>&1 &)`.
+To run the tier by hand, `just docker-up`, then `unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY` (the
+proxy exports placeholder keys, and Garage refuses them), then `just test-db`.
 
-`just services-down` tears the services down. If `just` is missing, run the recipe's lines from the
-`justfile` as they stand. The daemon does not survive a restart of the container: when the tests
-fail with `Cannot connect to the Docker daemon`, run steps 1 and 2 again.
+**Running the application takes the same path.** A screenshot or a manual check needs the relay,
+and `./run_server.sh` runs `just docker-up` first. When `just docker-up` fails, report its message.
+Never start a host `redis-server` or `postgres`, never install one, and never skip the check
+without saying so.
+
+The daemon does not survive a restart of the container: `just docker-up` again starts it.
 
 ## The wasm tier in a cloud session
 

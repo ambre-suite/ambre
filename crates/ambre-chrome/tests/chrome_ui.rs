@@ -22,8 +22,9 @@
 
 use ambre_chrome::{
     AppShell, CommandStates, ContextMenu, FONT_SIZES, FontSizeSelect, FormatBar, FormatControl,
-    FormatToggle, Header, MenuEntry, Openness, PerfChip, PerfDetail, Pressed, Sidebar, StatusBar,
-    ToastHost, ToastKind, ToastVoice, Toasts, Toolbar, ZoomChip,
+    FormatToggle, FormulaBar, Header, MenuEntry, Openness, PerfChip, PerfDetail, Pressed, RowShown,
+    ShellRows, Sidebar, StatusBar, Tabs, ToastHost, ToastKind, ToastVoice, Toasts, Toolbar,
+    ZoomChip,
 };
 use ambre_core::FontSize;
 use ambre_core::{Categories, Commands, StaticKey};
@@ -226,7 +227,7 @@ async fn the_zoom_readout_follows_its_signal() {
     let owner = Owner::new();
     owner.set();
     let zoom = RwSignal::new(Scale::<Doc, View>::within(1.25, 0.5, 2.0));
-    let root = mount_in_container(move || view! { <ZoomChip zoom=zoom /> });
+    let root = mount_in_container(move || view! { <ZoomChip zoom=zoom range=GRID /> });
     let btn = root.query_selector(".statusbar-zoom-btn").unwrap().unwrap();
     assert_eq!(btn.text_content().as_deref(), Some("125 %"));
 
@@ -256,6 +257,54 @@ async fn the_fps_readout_follows_its_signal() {
     root.remove();
 }
 
+/// The range of a grid in these tests: the stops from 50 % to 200 %.
+const GRID: ambre_core::ZoomRange<Doc> =
+    ambre_core::ZoomRange::new(Scale::positive(0.5), Scale::positive(2.0));
+
+/// `ZOOM-006`: the chip lists the stops of the one ladder inside the range
+/// it is handed, high to low, and nothing else. A board and a grid read the
+/// same stops where their ranges meet.
+#[wasm_bindgen_test]
+async fn the_zoom_chip_lists_the_one_ladder_inside_its_range() {
+    let owner = Owner::new();
+    owner.set();
+    let listed = |root: &web_sys::Element| -> Vec<String> {
+        let items = root.query_selector_all("[role=menuitemradio]").unwrap();
+        (0..items.length())
+            .filter_map(|i| items.item(i))
+            .filter_map(|n| n.text_content())
+            .collect()
+    };
+    let grid_zoom = RwSignal::new(Scale::<Doc, View>::ONE);
+    let grid = mount_in_container(move || view! { <ZoomChip zoom=grid_zoom range=GRID /> });
+    let board_zoom = RwSignal::new(Scale::<ambre_core::Board, View>::ONE);
+    let board_range = ambre_core::ZoomRange::new(Scale::positive(0.1), Scale::positive(10.0));
+    let board =
+        mount_in_container(move || view! { <ZoomChip zoom=board_zoom range=board_range /> });
+    for root in [&grid, &board] {
+        let btn: web_sys::HtmlElement = root
+            .query_selector(".statusbar-zoom-btn")
+            .unwrap()
+            .unwrap()
+            .unchecked_into();
+        btn.click();
+    }
+    leptos::task::tick().await;
+    let ladder: Vec<String> = ambre_core::zoom_ladder::<Doc>()
+        .into_iter()
+        .rev()
+        .map(|stop| format!("{:.0} %", stop.get() * 100.0))
+        .collect();
+    assert_eq!(listed(&board), ladder);
+    assert_eq!(
+        listed(&grid),
+        ["200 %", "150 %", "125 %", "100 %", "75 %", "50 %"]
+    );
+    assert!(listed(&grid).iter().all(|stop| ladder.contains(stop)));
+    grid.remove();
+    board.remove();
+}
+
 #[wasm_bindgen_test]
 fn zoom_chip_renders_readout_from_signal_and_starts_collapsed() {
     let owner = Owner::new();
@@ -263,7 +312,7 @@ fn zoom_chip_renders_readout_from_signal_and_starts_collapsed() {
     // The readout mirrors the live factor (1.25 -> "125 %") and the preset menu
     // is collapsed on mount (only the button shows).
     let zoom = RwSignal::new(Scale::<Doc, View>::within(1.25, 0.5, 2.0));
-    let root = mount_in_container(move || view! { <ZoomChip zoom=zoom /> });
+    let root = mount_in_container(move || view! { <ZoomChip zoom=zoom range=GRID /> });
 
     let btn = root.query_selector(".statusbar-zoom-btn").unwrap().unwrap();
     assert_eq!(btn.text_content().as_deref(), Some("125 %"));
@@ -434,6 +483,8 @@ async fn the_format_bar_hangs_its_controls_and_reports_a_press() {
         label: label.to_owned(),
         pressed: state,
         on_press: Callback::new(move |()| pressed.update(|p| p.push(label))),
+        icon: None,
+        chord: None,
     };
     let controls = vec![
         control("Bold", Pressed::On),
@@ -500,7 +551,7 @@ async fn a_menu_trigger_reports_open_and_closed() {
     let owner = Owner::new();
     owner.set();
     let zoom = RwSignal::new(Scale::<Doc, View>::ONE);
-    let root = mount_in_container(move || view! { <ZoomChip zoom=zoom /> });
+    let root = mount_in_container(move || view! { <ZoomChip zoom=zoom range=GRID /> });
     let btn: web_sys::HtmlElement = root
         .query_selector(".statusbar-zoom-btn")
         .unwrap()
@@ -526,7 +577,7 @@ async fn a_menu_is_operable_by_keyboard_alone() {
     let owner = Owner::new();
     owner.set();
     let zoom = RwSignal::new(Scale::<Doc, View>::ONE);
-    let root = mount_in_container(move || view! { <ZoomChip zoom=zoom /> });
+    let root = mount_in_container(move || view! { <ZoomChip zoom=zoom range=GRID /> });
     let btn: web_sys::HtmlElement = root
         .query_selector(".statusbar-zoom-btn")
         .unwrap()
@@ -601,7 +652,7 @@ async fn a_key_that_closes_a_trigger_menu_returns_the_focus_to_its_trigger() {
     let owner = Owner::new();
     owner.set();
     let zoom = RwSignal::new(Scale::<Doc, View>::ONE);
-    let root = mount_in_container(move || view! { <ZoomChip zoom=zoom /> });
+    let root = mount_in_container(move || view! { <ZoomChip zoom=zoom range=GRID /> });
     let btn: web_sys::HtmlElement = root
         .query_selector(".statusbar-zoom-btn")
         .unwrap()
@@ -644,6 +695,7 @@ async fn closing_the_floating_menu_returns_the_focus_to_its_opener() {
         icon: None,
         keybindings: &[],
         category: StaticKey::<Categories>::new(""),
+        home: ambre_commands::Home::ContextPanel,
     };
     let entries = vec![MenuEntry::command(&item, &ambre_commands::Locale::En)];
     let root = mount_in_container(move || {
@@ -718,7 +770,7 @@ async fn a_toast_leaves_the_focus_where_it_was() {
 }
 
 #[wasm_bindgen_test]
-fn font_size_select_lists_presets_plus_auto_entry() {
+async fn font_size_select_lists_presets_plus_auto_entry() {
     let owner = Owner::new();
     owner.set();
     let picked = RwSignal::new(Some(FontSize::from_whole_points(999)));
@@ -732,14 +784,26 @@ fn font_size_select_lists_presets_plus_auto_entry() {
         }
     });
 
-    let select = root.query_selector("select").unwrap().unwrap();
+    let select = root.query_selector("[role=listbox]").unwrap().unwrap();
     // The unset ("Auto") entry plus every preset size.
-    let options = select.get_elements_by_tag_name("option");
+    let options = select.query_selector_all("[role=option]").unwrap();
     assert_eq!(options.length() as usize, FONT_SIZES.len() + 1);
     assert_eq!(
         select.get_attribute("aria-label").as_deref(),
         Some("Font size")
     );
+    // The current size is the selected option, and the trigger shows it.
+    let trigger = root
+        .query_selector(".ambre-select-trigger")
+        .unwrap()
+        .unwrap();
+    assert_eq!(trigger.text_content().unwrap().trim(), "12");
+    // A pick of the unset entry reports `None`.
+    let auto: web_sys::HtmlElement = options.item(0).unwrap().dyn_into().unwrap();
+    auto.click();
+    assert_eq!(picked.get_untracked(), None);
+    // The close the pick schedules runs before the owner goes.
+    leptos::task::tick().await;
 
     root.remove();
 }
@@ -768,8 +832,11 @@ const PALETTE_TABLE: &[ambre_commands::Command] = &[
         id: StaticKey::<Commands>::new("t.palette.open"),
         title: palette_title,
         icon: None,
-        keybindings: &[],
+        keybindings: &[ambre_commands::KeyBinding::primary(
+            ambre_commands::KeyChar::K,
+        )],
         category: StaticKey::<Categories>::new("general"),
+        home: ambre_commands::Home::AmbreMenu,
     },
     ambre_commands::Command {
         id: StaticKey::<Commands>::new("t.engine.recalc"),
@@ -777,6 +844,7 @@ const PALETTE_TABLE: &[ambre_commands::Command] = &[
         icon: None,
         keybindings: &[],
         category: StaticKey::<Categories>::new("engine"),
+        home: ambre_commands::Home::ContextPanel,
     },
     ambre_commands::Command {
         id: StaticKey::<Commands>::new("t.merge"),
@@ -784,6 +852,7 @@ const PALETTE_TABLE: &[ambre_commands::Command] = &[
         icon: None,
         keybindings: &[],
         category: StaticKey::<Categories>::new("structure"),
+        home: ambre_commands::Home::ContextPanel,
     },
 ];
 
@@ -823,6 +892,58 @@ fn palette_lists_every_declared_command() {
         labels.contains(&"Recalculate everything".to_owned()),
         "a command no menu shows must still be listed: {labels:?}"
     );
+
+    root.remove();
+}
+
+/// DOM test: each command row shows the name of its home region, and the chord
+/// of a command that has one (`CHROME-157`, `CHROME-158`). A command with no
+/// chord shows no chord chip.
+#[wasm_bindgen_test]
+fn palette_row_shows_home_region_and_chord() {
+    let owner = Owner::new();
+    owner.set();
+    let open = RwSignal::new(Openness::Open);
+    let root = mount_in_container(move || {
+        view! {
+            <ambre_chrome::CommandPalette
+                open=open
+                table=PALETTE_TABLE
+                on_command=Callback::new(move |_| {})
+            />
+        }
+    });
+
+    let rows = root.query_selector_all(".ambre-palette-row").unwrap();
+    assert_eq!(Ok(rows.length()), u32::try_from(PALETTE_TABLE.len()));
+    for (i, command) in (0..rows.length()).zip(PALETTE_TABLE) {
+        let row: web_sys::Element = rows.item(i).unwrap().dyn_into().unwrap();
+        let home = row
+            .query_selector(".ambre-palette-home")
+            .unwrap()
+            .and_then(|n| n.text_content());
+        assert_eq!(
+            home.as_deref(),
+            Some(command.home.name(&ambre_commands::Locale::En).as_str()),
+            "row {i} names its home region"
+        );
+        let chip = row.query_selector(".ambre-palette-kbd").unwrap();
+        assert_eq!(
+            chip.is_some(),
+            command.chord().is_some(),
+            "row {i} shows a chord chip exactly when the command has a chord"
+        );
+    }
+    let chip = rows
+        .item(0)
+        .unwrap()
+        .dyn_into::<web_sys::Element>()
+        .unwrap()
+        .query_selector(".ambre-palette-kbd")
+        .unwrap()
+        .and_then(|n| n.text_content())
+        .unwrap_or_default();
+    assert!(chip.contains('K'), "the chip reads the chord: {chip:?}");
 
     root.remove();
 }
@@ -1277,6 +1398,7 @@ fn ctx_command(
         icon: None,
         keybindings: &[],
         category: StaticKey::<Categories>::new(""),
+        home: ambre_commands::Home::ContextPanel,
     }
 }
 
@@ -1687,5 +1809,53 @@ async fn the_shell_fills_its_toolbar_and_sidebar_and_the_sidebar_folds() {
     fold.click();
     leptos::task::tick().await;
     assert_eq!(nav.get_attribute("data-expanded").as_deref(), Some("true"));
+    root.remove();
+}
+
+/// A row the application marks absent renders no element, though its slot is
+/// handed (`CHROME-199`). A shown row keeps its content.
+#[wasm_bindgen_test]
+fn an_absent_row_renders_no_element_and_a_shown_row_keeps_its_content() {
+    let owner = Owner::new();
+    owner.set();
+    let rows = ShellRows {
+        toolbar: RowShown::Shown,
+        formula_bar: RowShown::Absent,
+        tabs: RowShown::Absent,
+    };
+    let root = mount_in_container(move || {
+        view! {
+            <AppShell rows=rows>
+                <Header slot>"H"</Header>
+                <Toolbar slot><button class="test-tool">"Menu"</button></Toolbar>
+                <FormulaBar slot><input class="test-formula" /></FormulaBar>
+                <Tabs slot><button class="test-tab">"Sheet1"</button></Tabs>
+            </AppShell>
+        }
+    });
+    let present = |selector: &str| root.query_selector(selector).unwrap().is_some();
+    assert!(present(".ambre-commandbar .test-tool"));
+    assert!(!present(".ambre-formulabar"), "an absent formula bar");
+    assert!(!present(".test-formula"));
+    assert!(!present(".ambre-tabstrip"), "an absent tab strip");
+    assert!(!present(".test-tab"));
+    root.remove();
+
+    let none = ShellRows {
+        toolbar: RowShown::Absent,
+        ..rows
+    };
+    let root = mount_in_container(move || {
+        view! {
+            <AppShell rows=none>
+                <Header slot>"H"</Header>
+                <Toolbar slot><button class="test-tool">"Menu"</button></Toolbar>
+            </AppShell>
+        }
+    });
+    assert!(
+        root.query_selector(".ambre-commandbar").unwrap().is_none(),
+        "an absent command bar"
+    );
     root.remove();
 }

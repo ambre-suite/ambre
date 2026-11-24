@@ -51,7 +51,12 @@ impl ProseUiState {
         let page = self.viewport.height.css_length();
 
         let line = Vector::new(WHEEL_LINE, WHEEL_LINE);
-        let dy = delta.to_px(line, Vector::new(page, page)).dy;
+        let px = delta.to_px(line, Vector::new(page, page));
+        let dy = px.dy;
+        // The horizontal half moves a page wider than the canvas, at once.
+        if px.dx != Px::<Css>::ZERO {
+            self.scroll_across(px.dx.view_length());
+        }
         let step = self
             .kinetic
             .wheel(Vector::new(Px::<Css>::ZERO, dy), delta.mode(), now);

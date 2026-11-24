@@ -14,7 +14,7 @@ lists a spreadsheet, a board and a page, and gains the next kind without a chang
 
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`. The prefix is `CHROME`, shared with the
-other five documents of the DOM side.
+other six documents of the DOM side.
 
 ### 1.1 The state
 

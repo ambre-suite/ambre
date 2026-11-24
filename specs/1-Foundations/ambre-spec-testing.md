@@ -61,6 +61,7 @@ compiler needs no test, no run and no reading.
 | `criterion` | a time on the machine of the author, for the figure a budget row quotes | an operation carrying a numbered budget in `ambre-spec-budgets.md`. A time on a shared runner moves by tens of percent between runs, so it never fails a build |
 | `callgrind`, a count of instructions with a CI ceiling | a performance regression never appears in a diff, and a count does not move between runs | every operation carrying a numbered budget in `ambre-spec-budgets.md`. The ceiling is the budget converted at the rate `scripts/instructions.py` states, and the CI `instructions` job fails an operation above it. It counts the native build: the phone figure stays a conversion |
 | `insta` snapshots | read consequences instead of code; reveals unintended blast radius | deterministic structured output: `RecordingSurface` op sequences, wire encodings. **Acceptance stays human** -- `cargo insta accept` accepts blindly |
+| A computed-style snapshot of the gallery page, in the browser tier | the look of the visual system held as text: each control primitive and the frame of the context panel, in each state, light and dark. A diff names the control and the property it moved. **Acceptance stays human** | the look of a shared control, where a pixel would drift with the driver. The gallery holds the primitives, never the content of a section, so a change of content moves no line. The screenshots of the panels stay an artifact of the browser job that nothing compares |
 | `loom`, `miri` | interleavings under the C11 model, undefined behaviour under Stacked and Tree Borrows | **only if hand-written `unsafe` or lock-free atomics appear.** Measured 2026-08: zero `unsafe` in 17 crates, and atomics are flags and counters. Not adopted |
 
 **A measure the CI holds to a ceiling repeats exactly.** Two runs of one build on one input give
@@ -267,7 +268,7 @@ On 2026-11-14 the second obstacle also holds `ZK-040`: the files a deployment se
 | **browser** | `just test-browser` | the whole application, as a user meets it: the Trunk build served in front of a relay, driven by headless Chrome through chromedriver (`ambre-belt`, behind the Cargo feature `browser`), and by headless Firefox through geckodriver under the Cargo feature `firefox` (`just test-browser-firefox`). A canvas surface is read through what the page exposes: the live region, the status bar, the formula bar's name box, an export. A listener, a browser API, a file picker, a download, a queue the Logic thread leaves full | slowest: one Chrome and one relay per test, and the services of the db tier |
 
 **The backing services run in containers, never on the host.** Postgres, Redis and Garage run from
-the images `docker-compose.yml` pins, through `just services-up` on a workstation or a cloud
+the images `docker-compose.yml` pins, through `just docker-up` on a workstation or a cloud
 session, and as `services:` in CI. A package manager installs another version than the code
 targets. Redis 7.0 lacks `HEXPIRE`, and a test that fails there fails for the environment. A tier
 result speaks for the pinned image alone. Production deployment is out of scope of this rule.
@@ -451,8 +452,8 @@ holds a duration row of `ambre-spec-budgets.md section 7`.
 | **full** | a push of `main`, a pull request, the nightly schedule, a manual dispatch | the fast lane, then `fuzz`, `instructions`, `test-db-cluster`, `test-browser`, `reproducible` |
 | **nightly** | the nightly schedule, a manual dispatch | the full lane, then `coverage` and `mutants` |
 
-`mutants-diff` runs on a pull request alone. A manual dispatch runs the nightly lane on any branch,
-from the Actions tab.
+`mutants-diff` runs on a pull request alone, and `commits` on a push alone. A manual dispatch runs
+the nightly lane on any branch, from the Actions tab.
 
 One job runs outside the three lanes, in a workflow of its own: `devcontainer`, in
 `.github/workflows/devcontainer.yml`. A push runs it when it changes a file the dev container is
@@ -486,6 +487,7 @@ merge when the change touches what they hold.
 | `size` | the release Trunk build against the download budgets and the raw ceiling of Main, then the change of each artefact against the last measure of `main` (`ARCH-115`). It joined the fast lane on 2026-11-15: it fails on the product budgets alone, so every push can read its change in the run summary for one more parallel runner of about 5 min |
 | `reproducible` | two clean release builds of the commit, on two runners and in two paths, with no cache. `reproducible-compare` then finds one client digest in the two manifests (`ZK-038`) |
 | `deny` | `cargo deny`: advisories, licences, sources, and the capability bans |
+| `commits` | the message of each commit the push brings, held to `ai/ambre-git-strategy.md` by `just commits`: past the previous head on `main`, past `main` and that head elsewhere. The commit hook is adopted per clone, so this job is the one that binds |
 | `coverage` | `cargo-llvm-cov` over the host tier, non-blocking. An `lcov` baseline as an artifact |
 | `mutants` | `cargo-mutants` over the scope of `.cargo/mutants.toml` on the host tier, twelve shards, non-blocking. Each shard uploads its report |
 | `mutants-diff` | `cargo-mutants --in-diff` on the lines a pull request changes in that scope, blocking (`ARCH-069`) |
@@ -560,4 +562,5 @@ and epic `E9` of `ambre-roadmap.md` schedules them.
 | A "Definition of Done" per component | identical in nineteen files, and its only checkable half is already held by `contracts.py`: no row may lack a `Status` |
 | A coverage percentage as the headline number | it counts lines, not rules. The number that matters is the **loose** column of `ambre-contract-ledger.md`: shipped code that nothing would fail on |
 | Golden-image comparison as a routine mechanism | brittle under antialiasing and driver drift. Reserved for a precise critical need |
+| Pixel goldens of the context panels, and a style snapshot of the whole panel of each application | a pixel moves with the antialiasing and the face of the machine, so a golden fails on noise. A snapshot of a whole panel moves with every change of its content, and a diff that moves on each commit is accepted unread. The gallery snapshot reads the computed style of the primitives alone (`CHROME-223`) |
 | A rendered reference to hold a rendering-quality rule | the drift a golden suffers from is what such a rule measures, so the two would fail together. A quality figure is held instead by a statistic over the rendered pixels -- the count of distinct coverage values across one edge, the measured width of a band -- which is stable across drivers and states the property directly (`ambre-spec-budgets.md sections 1 and 2`, `ambre-spec-drawing-surface.md`) |

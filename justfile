@@ -73,7 +73,9 @@ lint-wasm:
     # clippy after their `-A warnings`.
     cargo clippy --target wasm32-unknown-unknown -p ambre-logic --tests -- -D warnings
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-app --tests
-    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-app --lib --tests --features ambre-app/dev-login
+    # The test build of the belt: the development sign-in and the gallery page
+    # of the visual system, which no release carries.
+    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-app --lib --tests --features ambre-app/dev-login,ambre-app/chrome-gallery
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-chrome --tests
 
 # **One invocation for the whole tier.** Cargo caches a build per feature set, so
@@ -306,9 +308,10 @@ stdio:
 # belt in two parts, `murmure::` and `--skip murmure::`. The print gate reads
 # the debug Main wasm the build just wrote, so it costs no build of its own.
 # The belt signs in by a bare name, so the build turns on the development
-# sign-in, which no release carries (`ZK-045`).
+# sign-in, which no release carries (`ZK-045`), and the gallery page of the
+# visual system, which no release carries either.
 test-browser *filter:
-    trunk build --features dev-login
+    trunk build --features dev-login,chrome-gallery
     just stdio
     cargo build -p ambre-server
     cargo build -p ambre-sfu
@@ -324,7 +327,7 @@ test-browser *filter:
 # sink first, as CI does; it plays nothing:
 # `pulseaudio --start --exit-idle-time=-1 -n -L "module-null-sink sink_name=null" -L module-native-protocol-unix`.
 test-browser-firefox *filter:
-    trunk build --features dev-login
+    trunk build --features dev-login,chrome-gallery
     cargo build -p ambre-server
     cargo build -p ambre-sfu
     if [ -n "${DISPLAY:-}" ]; then x=""; else x="xvfb-run --auto-servernum"; fi; S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}" $x cargo test -p ambre-belt --features firefox -- --test-threads=1 {{filter}}
@@ -737,6 +740,11 @@ converter-boundary:
 test-scripts:
     python3 -m unittest discover -s scripts
 
+# Commit messages: each commit `git rev-list` names from these arguments, held to
+# `ai/ambre-git-strategy.md` as the commit hook holds one message.
+commits *revs:
+    python3 scripts/commit_msg.py --revs {{revs}}
+
 # The corpus cites a document by its name and, half the time, by a section of it.
 # Nothing resolved either, so splitting a spec left every stale citation silent:
 # `prose-engine` pointed at no document for as long as three Prose specs have
@@ -864,9 +872,19 @@ proverif model="crates/ambre-crypto/proofs/call_sender_keys.pv":
 fuzz seconds="60":
     cd fuzz && host="$(rustc -vV | sed -n 's/^host: //p')" && for target in wire_decode docfile formula markdown sealed trame_file toile_file prose_import; do cargo fuzz run --target "$host" "$target" -- -max_total_time={{seconds}} -rss_limit_mb=2048 || exit 1; done
 
+# The Docker daemon, started when it is down (`scripts/docker_up.py`), then the
+# backing services. The one entry point of a cloud session, where the daemon is
+# stopped and Docker Hub refuses anonymous pulls: the script routes them through
+# Google's mirror.
+docker-up:
+    python3 scripts/docker_up.py
+    just services-up
+
 # Local convenience: bring the db-tier backing services up, the object store
-# prepared.
+# prepared. A stopped daemon is named, with the recipe that starts it: no backing
+# service ever runs on the host in its place (`ai/ambre-testing.md`).
 services-up:
+    @docker info > /dev/null 2>&1 || { echo "error: the Docker daemon is not running. Run 'just docker-up', which starts it and the services. Never run postgres or redis on the host instead (ai/ambre-testing.md)." >&2; exit 1; }
     docker compose up -d postgres redis
     just garage-up
 
@@ -895,9 +913,14 @@ services-down:
 selfhost := 'docker compose -f deploy/compose/compose.yml --env-file target/selfhost/.env -p ambre-selfhost-test'
 
 # Build and start the self-hosted stack under test, then wait for its page and its relay.
+# Each run drops the stack left by an earlier one with its volumes, then writes
+# fresh secrets: CI restores `target/` from its cache, and an `.env` kept from an
+# older `setup.sh` lacks the secrets added since.
 selfhost-up:
     mkdir -p target/selfhost
-    test -e target/selfhost/.env || { AMBRE_ENV_FILE="$PWD/target/selfhost/.env" sh deploy/compose/setup.sh localhost 127.0.0.1 internal && printf 'AMBRE_DEV_MODE=true\nAMBRE_DEV_LOGIN=1\nTURN_LOOPBACK_PEERS=--allow-loopback-peers\n' >> target/selfhost/.env; }
+    docker compose -p ambre-selfhost-test down -v --remove-orphans
+    rm -f target/selfhost/.env
+    { AMBRE_ENV_FILE="$PWD/target/selfhost/.env" sh deploy/compose/setup.sh localhost 127.0.0.1 internal && printf 'AMBRE_DEV_MODE=true\nAMBRE_DEV_LOGIN=1\nTURN_LOOPBACK_PEERS=--allow-loopback-peers\n' >> target/selfhost/.env; }
     {{selfhost}} up -d --build
     python3 scripts/selfhost_wait.py "{{selfhost}}"
 

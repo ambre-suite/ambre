@@ -1320,6 +1320,19 @@ pub fn read_page_format(doc: &LoroDoc, roots: &Roots) -> PageFormat {
     }
 }
 
+/// The orientation `meta/page` stores, or `None` for a missing or unknown
+/// word.
+pub(crate) fn read_orientation(doc: &LoroDoc, roots: &Roots) -> Option<Orientation> {
+    let page = meta_read(doc, roots)
+        .and_then(|meta| map_read(&meta, MetaKey::Page))
+        .map(Fields::<PageKey>::new)?;
+    match read_string(&page, PageKey::Orientation)?.as_str() {
+        "portrait" => Some(Orientation::Portrait),
+        "landscape" => Some(Orientation::Landscape),
+        _ => None,
+    }
+}
+
 /// Write the page format, and refuse an orientation its two dimensions
 /// contradict (`PROSE-032`).
 ///
@@ -1358,6 +1371,61 @@ pub(crate) fn write_page_format(
         && page
             .insert(PageKey::HeightMm, f64::from(height.get()))
             .is_ok()
+}
+
+/// Write the whole page format: the orientation the two dimensions name, the
+/// dimensions, and the four margins (`PROSE-144`).
+///
+/// # Errors
+/// `false` when a length is not finite, a dimension is not positive, a margin
+/// is negative, or the margins leave no content box. The register is then
+/// left as it was: every check runs before the first write.
+pub(crate) fn write_whole_page_format(doc: &LoroDoc, format: PageFormat) -> bool {
+    let lengths = [
+        format.width,
+        format.height,
+        format.margin_top,
+        format.margin_bottom,
+        format.margin_left,
+        format.margin_right,
+    ];
+    if lengths
+        .iter()
+        .any(|l| !l.is_finite() || *l < PrintLength::<Mm>::ZERO)
+    {
+        return false;
+    }
+    if format.margin_left + format.margin_right >= format.width
+        || format.margin_top + format.margin_bottom >= format.height
+    {
+        return false;
+    }
+    let orientation = if format.width > format.height {
+        Orientation::Landscape
+    } else {
+        Orientation::Portrait
+    };
+    // A fresh register takes the seven keys. Two peers that set the page at
+    // once then race on one value, and one peer's whole page wins. A write
+    // into the register already there skips a key whose value is unchanged.
+    // That key then survives beside the other peer's keys: a landscape word
+    // over portrait dimensions (`PROSE-145`).
+    let Ok(page) = meta(doc).insert_container(MetaKey::Page, LoroMap::new()) else {
+        return false;
+    };
+    let page = Fields::<PageKey>::new(page);
+    page.insert(PageKey::Orientation, orientation.as_str())
+        .is_ok()
+        && [
+            (PageKey::WidthMm, format.width),
+            (PageKey::HeightMm, format.height),
+            (PageKey::MarginTopMm, format.margin_top),
+            (PageKey::MarginBottomMm, format.margin_bottom),
+            (PageKey::MarginLeftMm, format.margin_left),
+            (PageKey::MarginRightMm, format.margin_right),
+        ]
+        .into_iter()
+        .all(|(key, value)| page.insert(key, f64::from(value.get())).is_ok())
 }
 
 // -----------------------------------------------------------------------------

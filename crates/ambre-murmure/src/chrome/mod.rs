@@ -2009,6 +2009,8 @@ pub fn MarkBarPanel(relay: MurmureRelay) -> impl IntoView {
                         label,
                         pressed,
                         on_press: Callback::new(move |()| relay.press_mark(style.clone())),
+                        icon: None,
+                        chord: None,
                     }
                 })
                 .collect();

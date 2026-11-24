@@ -61,6 +61,8 @@ JWT_SIGNING_SEED=$(hex 32)
 CALL_ADMISSION_SEED=$admission_seed
 SFU_ADMISSION_KEY=$admission_key
 TURN_SECRET=$(hex 32)
+# The bearer token a scrape of the relay metrics presents (\`SRV-318\`).
+METRICS_TOKEN=$(hex 32)
 # The provider sign-in (\`SRV-074\`). Empty turns it off.
 OIDC_GOOGLE_CLIENT_ID=
 OIDC_GOOGLE_CLIENT_SECRET=

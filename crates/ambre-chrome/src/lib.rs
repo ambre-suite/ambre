@@ -21,6 +21,10 @@
 //   - composed     -- a name composed for display, which converts to no `String`
 //   - dialog       -- native <dialog> modal (rAF-suspending)
 //   - context_menu -- canvas right-click DOM menu (flip, keyboard nav)
+//   - context_panel -- the one frame of the context panel: sections, rail, dock
+//   - controls     -- the control primitives of the visual system, none generic
+//   - gallery      -- the test page of every primitive in each state (feature `gallery`)
+//   - kit          -- the typed widgets a panel section is written from
 //   - menu         -- the key map every menu shares, and two-state ARIA values
 //   - handler      -- what an application hands the shell for its commands
 //   - palette      -- the command palette: every declared command, filtered
@@ -38,11 +42,16 @@ mod color;
 mod command;
 mod composed;
 mod context_menu;
+mod context_panel;
+mod controls;
 mod debounce;
 mod dialog;
 mod font;
 mod format;
+#[cfg(feature = "gallery")]
+mod gallery;
 mod handler;
+mod kit;
 mod menu;
 mod palette;
 mod passphrase;
@@ -51,20 +60,35 @@ mod status;
 mod toast;
 
 pub use app_shell::{
-    AppShell, CanvasCell, FormulaBar, Header, Panel, ShellRegion, Sidebar, StatusBar, Tabs, Toolbar,
+    AppShell, CanvasCell, CanvasOverlay, ContextRegion, FormulaBar, Header, Panel, RowShown,
+    ShellRegion, ShellRows, Sidebar, StatusBar, Tabs, Toolbar,
 };
 pub use avatar::{Avatar, avatar_initials};
 pub use color::{AlphaEdit, ColorPopover, PickedColour};
 pub use command::{Availability, CommandStates, Toggle, keybinding_from_event};
 pub use composed::ComposedName;
 pub use context_menu::{ContextMenu, MenuEntry, MenuItem};
+pub use context_panel::{
+    ContextPanel, DockSide, Fold, PanelContent, PanelPrefs, PanelSection, PanelWidth,
+};
+pub use controls::{
+    ChoiceRow, ChoiceView, ColorSwatch, ControlSize, IconButton, IconLook, Readout, SegmentBar,
+    Select, Slider, Stepper,
+};
 pub use debounce::{DRAG_DEBOUNCE, Debouncer};
 pub use dialog::{Dialog, Dismissal, ModalHold};
 pub use font::{FONT_FAMILIES, FamilyChoice, FontPicker};
 pub use format::{
     FONT_SIZES, FORMAT_BAR_LIFT, FontSizeSelect, FormatBar, FormatControl, FormatToggle, Pressed,
 };
+#[cfg(feature = "gallery")]
+pub use gallery::Gallery;
 pub use handler::{CommandHandler, FileAccept, FilePick, KeyRoute, KeyTarget, ShellAction};
+pub use kit::{
+    Choice, ColourField, CommandButton, Field, FieldLength, FontField, Labelled, LengthField,
+    PropertyToggle, Row, Segmented, SelectField, Step, native_controls, reach_markers,
+    repeated_title, unreached_controls,
+};
 pub use menu::{
     Checked, MenuKey, MenuRow, Openness, Selected, focus_first_item, initial, menu_key,
     on_menu_keydown,
@@ -77,5 +101,5 @@ pub use passphrase::{
     PassphraseDialog, PassphraseIntent, PassphraseRefusal, vet as vet_passphrase,
 };
 pub use shortcut::Kbd;
-pub use status::{PerfChip, PerfDetail, StatusLabel, ZoomChip, zoom_presets};
+pub use status::{PerfChip, PerfDetail, StatusLabel, ZoomChip};
 pub use toast::{ToastHost, ToastKind, ToastVoice, Toasts};

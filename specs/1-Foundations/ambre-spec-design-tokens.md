@@ -24,6 +24,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `UI-THREA
 | `UI-THREAD-029` | `INV` | Every colour, spacing, radius and type size the interface uses MUST be declared in the one token source. | this spec section 2 | `ambre_canvas::theme::stylesheet_tests::the_shell_stylesheet_spells_out_no_colour_and_no_scale` -- every declaration of the shell sheet is read, and a colour, a spacing, a radius or a type size spelled out fails it with its line; `ambre_canvas::theme::stylesheet_tests::the_literal_check_catches_each_kind_and_spares_a_token` -- the check catches a literal of each kind and spares a token, a zero, a hairline and a comment | none | verified |
 | `UI-THREAD-030` | `INV` | The stylesheet and the drawing constants MUST both be generated from that source by one generator, and the committed copies MUST be what it writes. | this spec section 2 | `ambre_canvas::tokens::tests::a_token_changed_without_a_rewrite_makes_both_files_stale` -- the committed files match the source, and one changed colour makes both stale; `ambre_canvas::tokens::tests::a_rerun_writes_the_same_bytes`; ci-gate -- `just tokens-check`, run by `just test-native` in the CI `test-native` job, fails when either committed file is not what `tokens.ron` generates | none | verified |
 | `UI-THREAD-031` | `INV` | A stylesheet MUST NOT read a token the source does not emit and the sheet does not declare. | this spec section 2 | `ambre_canvas::theme::stylesheet_tests::the_stylesheet_reads_only_declared_tokens` -- every name the shell sheet reads is checked against the names the token source emits and the sheet declares | none | verified |
+| `UI-THREAD-068` | `INV` | Every control of the chrome MUST take its height from the control scale, and every glyph inside a control its size from the icon scale. | this spec section 2; `ambre-spec-shell.md section 2`, the visual system | `ambre_canvas::theme::stylesheet_tests::every_control_reads_the_control_scale_and_every_glyph_the_icon_scale` -- every rule of a control primitive sets its height from a control step, every glyph rule inside one reads an icon step, and the source emits both scales | none | verified |
 | `UI-THREAD-033` | `INV` | The unmarked stylesheet MUST carry the light set, so a page that never sets the theme attribute renders light rather than unstyled. | this spec section 2; section 4, row 4 | `ambre_canvas::theme::stylesheet_tests::the_unmarked_block_carries_the_light_set` -- reads the generated stylesheet | none | verified |
 
 ### 1.2 Switch the theme
@@ -35,13 +36,22 @@ The user flips the theme control. One act must move both halves, and it must mov
 | `UI-THREAD-032` | `POST` | A theme switch MUST reach the browser half and the drawing half together, from one act. | this spec section 2 | `ambre_app::platform::tests::a_theme_switch_reaches_both_halves` -- one switch, read back from the control and the document attribute, in the browser tier | none | verified |
 | `UI-THREAD-034` | `FRAME` | A theme switch MUST NOT change a spacing, a radius or a type size. | this spec section 2; section 4, row 5 | `ambre_canvas::theme::stylesheet_tests::a_theme_switch_changes_no_scale` -- the dark block declares colours and effects alone | none | verified |
 
+### 1.3 Boot the theme
+
+A page opens. It takes the theme the system asks for, before the first frame.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `UI-THREAD-065` | `POST` | A page whose boot hint names no theme MUST boot in the theme the system asks for, and in the light theme when the system answers nothing. | this spec section 2; `ambre-spec-user-settings.md section 3` (`SETTINGS-032`) | `ambre_app::platform::tests::a_page_boots_in_the_theme_the_system_asks_for` -- wasm tier, each scheme maps to its theme, and the scheme read matches the media query of the browser; `ambre_app::settings_view::tests::a_page_boots_in_the_theme_of_its_boot_hint` -- no hint, and a hint at `system`, take the system's theme | none | verified |
+| `UI-THREAD-066` | `FRAME` | The boot MUST NOT read a theme from any store but the boot hint of the user settings. | this spec section 2; `UI-THREAD-004`; `ambre-spec-user-settings.md section 3` (`SETTINGS-028`) | type-level -- `platform::boot_theme` takes the system scheme as its one argument, and `settings_view::boot_theme` takes the boot hint and that theme alone, so no other stored value reaches the boot; `ambre_app::platform::tests::a_page_boots_in_the_theme_the_system_asks_for` | none | verified |
+
 * **Budget.** none: a token is a constant compiled into the binary, so it costs nothing at run time.
   A theme switch repaints the content once, which is the frame budget of
   `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: a token is a colour and a number, generated into the binary. Nothing here
   reaches the relay, holds a key or opens a socket. The chosen theme leaves sealed, in the user
-  settings (`ZK-053`).
-* **Verification.** 6 `verified`. A drift check keeps the two committed sides on one source; host
+  settings (`ZK-054`).
+* **Verification.** 9 `verified`. A drift check keeps the two committed sides on one source; host
   tests read the generated sheets, and a browser test drives a switch.
 
 ---
@@ -60,7 +70,8 @@ theme is a setting of the account, kept in the user settings (`ambre-spec-user-s
 3. `just tokens-check` fails when either file is not what the source generates (`UI-THREAD-030`).
    The drawing crate declares the module and embeds the sheet as text;
 4. the launcher injects the stylesheet into the page at startup and sets the document's theme
-   attribute;
+   attribute. It takes the theme of the boot hint, or the theme the system asks for without one
+   (`UI-THREAD-065`, `ambre-spec-user-settings.md`);
 5. a switch flips one control; the browser half re-resolves its properties and the drawing half
    reads the control on the next frame (`UI-THREAD-032`).
 
@@ -68,20 +79,21 @@ theme is a setting of the account, kept in the user settings (`ambre-spec-user-s
 
 | Group | Holds | Reaches |
 |---|---|---|
-| the chrome colours | background, surface, second surface, hover, border, text, dimmed text, accent, the four status colours, and the text drawn on the accent | the browser half, as custom properties |
+| the chrome colours | background, surface, second surface, hover, border, strong border, text, dimmed text, faint text, accent, soft accent, the four status colours, and the text drawn on the accent | the browser half, as custom properties |
 | the chrome effects | three shadows, low, mid and high, and the scrim behind a modal | the browser half, as custom properties |
 | the photo colours | the text, its shadow, the lines, the control and the veil drawn over a picture | the browser half, as custom properties |
 | the content colours | content ground, pending ground, header ground, active and hovered header, grid line, header border, selection, cell text, header text, caret, error | the drawing half, as two palettes |
-| the scales | a spacing ladder in steps of two pixels, five radii, nine type sizes | both halves |
+| the scales | a spacing ladder in steps of two pixels, five radii, nine type sizes, three control heights, three icon sizes, and the width and the gap of the focus ring | both halves |
 
 Each colour group is declared twice, light and dark, but the photo colours. Their ground is a
 picture, not the theme, so one set serves both. A scale is declared once: a spacing does not
 change with the theme.
 
 **What the shell may still spell out.** A width, a height and a position are the shape of one
-component, not a shared value. A hairline of one pixel is a border width, not a spacing, and
-zero is no value at all. Everything else the shell sheet sets for a colour, a padding, a margin,
-a gap, a radius or a type size reads a token (`UI-THREAD-029`).
+component, not a shared value. A control is the exception. Its height is a step of the control
+scale, and its glyph a step of the icon scale (`UI-THREAD-068`). A hairline of one pixel is a border
+width, not a spacing, and zero is no value at all. Everything else the shell sheet sets for a
+colour, a padding, a margin, a gap, a radius or a type size reads a token (`UI-THREAD-029`).
 
 **The boot screen is drawn before any token exists.** Its few colours and sizes are written in the
 page itself, and it is gone at readiness. The fatal error overlay comes after the injection, so it

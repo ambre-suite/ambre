@@ -18,7 +18,7 @@ use leptos::prelude::*;
 
 use super::commands::{
     BOLD, COPY, CUT, FILTER_COLUMN, FIND, IMPORT_CSV, IMPORT_ODS, IMPORT_XLSX, ITALIC, PALETTE,
-    PASTE, REPLACE, SAVE_SEALED_FILE, SORT_RANGE_MULTI, command_to_app,
+    PASTE, REPLACE, SAVE_SEALED_FILE, SORT_RANGE_MULTI, ZOOM_TO_SELECTION, command_to_app,
 };
 use super::find_replace::{FindMode, FindReplaceState};
 use super::popovers::FilterPopoverState;
@@ -38,6 +38,10 @@ pub struct TrameHandler {
     pub style: StyleState,
     /// Where the view last drew the active cell, on the canvas.
     pub anchor: RwSignal<Option<Point<Px<View>>>>,
+    /// A command the grid view performs itself, a zoom to the selection
+    /// (`ZOOM-007`). The view takes it on its next frame; nothing reaches the
+    /// Logic thread but the cull of the new view (`ZOOM-001`).
+    pub view_cmd: RwSignal<Option<StaticKey<Commands>>>,
 }
 
 impl TrameHandler {
@@ -95,6 +99,10 @@ impl CommandHandler for TrameHandler {
             }
             REPLACE => {
                 self.open_find(FindMode::Replace);
+                return Vec::new();
+            }
+            ZOOM_TO_SELECTION => {
+                self.view_cmd.set(Some(id));
                 return Vec::new();
             }
             // A band selection has no extent the canvas knows, so the sort

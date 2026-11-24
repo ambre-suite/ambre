@@ -532,7 +532,8 @@ pub fn resolve_menu_command(
                 vec![ToileCommand::UngroupElements { groups }]
             }
         }
-        // One Reorder per selected element over the unified NodeId layer list.
+        // One ReorderAll over the unified NodeId layer list: each selected
+        // element moves in turn, as one undo item.
         BRING_FRONT => reorder_each(selection, ZTarget::Front),
         SEND_BACK => reorder_each(selection, ZTarget::Back),
         FORWARD => reorder_each(selection, ZTarget::Forward),
@@ -596,18 +597,19 @@ pub fn resolve_menu_command(
     })
 }
 
-/// One `React` command per selected element, setting (`Some`) or clearing
-/// (`None`) the local user's reaction. The `Reaction` is cloned per target.
-/// `ts` is left at 0 for the MVP, and the derived count ignores it. Ordering
-/// by time is a later concern, once a UI time source feeds the picker.
+/// One `ReactAll` command for the whole selection, setting (`Some`) or
+/// clearing (`None`) the local user's reaction on each element, as one undo
+/// item (`CHROME-173`). `ts` is left at 0 for the MVP, and the derived count
+/// ignores it. Ordering by time is a later concern, once a UI time source feeds
+/// the picker.
 fn react_each(selection: &[Id<Element>], reaction: Option<Reaction>) -> Vec<ToileCommand> {
-    selection
-        .iter()
-        .map(|id| ToileCommand::React {
-            target: id.clone(),
-            reaction: reaction.clone(),
-        })
-        .collect()
+    if selection.is_empty() {
+        return Vec::new();
+    }
+    vec![ToileCommand::ReactAll {
+        targets: selection.to_vec(),
+        reaction,
+    }]
 }
 
 /// The one align / distribute batch for the whole selection.
@@ -620,13 +622,13 @@ fn align(selection: &[Id<Element>], op: AlignOp) -> Vec<ToileCommand> {
 
 /// One `Reorder` command per selected element, targeting `to`.
 fn reorder_each(selection: &[Id<Element>], to: ZTarget) -> Vec<ToileCommand> {
-    selection
-        .iter()
-        .map(|id| ToileCommand::Reorder {
-            node: NodeId::Element(id.clone()),
-            to,
-        })
-        .collect()
+    if selection.is_empty() {
+        return Vec::new();
+    }
+    vec![ToileCommand::ReorderAll {
+        nodes: selection.iter().cloned().map(NodeId::Element).collect(),
+        to,
+    }]
 }
 
 /// Build the `SetFrameChildren` command adding the selection to its containing
@@ -811,7 +813,7 @@ mod tests {
     }
 
     #[test]
-    fn react_emoji_resolves_to_one_react_per_target() {
+    fn react_emoji_resolves_to_one_command_for_the_selection() {
         let dv = viewport(vec![
             elem(
                 "a",
@@ -829,21 +831,21 @@ mod tests {
         let cmds =
             resolve_menu_command(REACT_THUMBSUP, &[eid("a"), eid("b")], None, &els(&dv), &dv)
                 .unwrap();
-        assert_eq!(cmds.len(), 2);
-        for (cmd, want) in cmds.iter().zip(["a", "b"]) {
-            match cmd {
-                ToileCommand::React {
-                    target,
+        match cmds.as_slice() {
+            [
+                ToileCommand::ReactAll {
+                    targets,
                     reaction: Some(Reaction { kind, .. }),
-                } => {
-                    assert_eq!(target.as_str(), want);
-                    assert_eq!(
-                        *kind,
-                        ReactionKind::Emoji(ambre_bus::Emoji::from("\u{1F44D}"))
-                    );
-                }
-                other => panic!("expected React Some, got {other:?}"),
+                },
+            ] => {
+                let names: Vec<&str> = targets.iter().map(|t| t.as_str()).collect();
+                assert_eq!(names, ["a", "b"]);
+                assert_eq!(
+                    *kind,
+                    ReactionKind::Emoji(ambre_bus::Emoji::from("\u{1F44D}"))
+                );
             }
+            other => panic!("expected one ReactAll Some, got {other:?}"),
         }
     }
 
@@ -859,7 +861,7 @@ mod tests {
         assert_eq!(cmds.len(), 1);
         assert!(matches!(
             &cmds[0],
-            ToileCommand::React { reaction: None, .. }
+            ToileCommand::ReactAll { reaction: None, .. }
         ));
     }
 
@@ -1183,7 +1185,7 @@ mod tests {
     }
 
     #[test]
-    fn reorder_one_per_element() {
+    fn reorder_is_one_command_for_the_selection() {
         let dv = viewport(vec![
             elem(
                 "a",
@@ -1200,14 +1202,13 @@ mod tests {
         ]);
         let out =
             resolve_menu_command(BRING_FRONT, &[eid("a"), eid("b")], None, &els(&dv), &dv).unwrap();
-        assert_eq!(out.len(), 2);
-        assert!(out.iter().all(|c| matches!(
-            c,
-            ToileCommand::Reorder {
+        assert!(matches!(
+            out.as_slice(),
+            [ToileCommand::ReorderAll {
+                nodes,
                 to: ZTarget::Front,
-                ..
-            }
-        )));
+            }] if nodes.len() == 2
+        ));
     }
 
     #[test]

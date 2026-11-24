@@ -160,7 +160,7 @@ mod tests {
         assert_eq!(
             fields,
             ["doc_key_enc", "document_id", "entry"],
-            "no setting rides the claim (`ZK-053`)"
+            "no setting rides the claim (`ZK-054`)"
         );
     }
 }

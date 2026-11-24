@@ -726,6 +726,24 @@ fn the_bar_names_the_active_cell() {
     assert_eq!(rig.view.formula.reference, "B3");
 }
 
+/// The header of the context panel names the whole selection, such as
+/// `B2:D5`, and a lone cell by its own reference.
+#[test]
+fn the_panel_header_names_the_selection() {
+    let mut rig = Rig::new();
+    rig.frame();
+    assert_eq!(rig.view.selection_ref().as_str(), "A1");
+    let (b2, d5) = (
+        CellPos::new(Pos::new(1), Pos::new(1)),
+        CellPos::new(Pos::new(4), Pos::new(3)),
+    );
+    let mut range = crate::ui::grid::Selection::single(b2);
+    range.extend_to(d5);
+    rig.view.state.selection = range;
+    rig.frame();
+    assert_eq!(rig.view.selection_ref().as_str(), "B2:D5");
+}
+
 /// `TRAME-UI-155` and `TRAME-UI-092`: the focus alone opens nothing. A text
 /// typed in the bar opens a session, and the focus stays in the bar.
 #[test]
@@ -1365,25 +1383,54 @@ fn a_wheel_notch_starts_no_coast() {
     assert_eq!(rig.top(), landed, "the grid stays where the notch put it");
 }
 
-/// `TRAME-UI-146`: the wheel held with Ctrl is left to the browser and
-/// scrolls nothing.
+/// `TRAME-UI-146`, `ZOOM-003`, `ZOOM-004`: the wheel held with `Ctrl` zooms
+/// the grid about the pointer. The cell under the pointer stays under it,
+/// the selection stays, and the factor stays inside the grid's range.
 #[test]
-fn a_ctrl_wheel_scrolls_nothing() {
+fn a_ctrl_wheel_zooms_about_the_cell_under_the_pointer() {
     let mut rig = Rig::new();
     rig.frame();
-    rig.sent();
-    assert!(
-        !rig.wheel(5.0, 1, ModifierKeys::PRIMARY),
-        "the browser keeps the gesture"
-    );
+    assert!(rig.wheel(20.0, 1, ModifierKeys::NONE));
     rig.frame();
-    assert_eq!(rig.top(), 0);
-    assert!(
-        !rig.sent()
-            .iter()
-            .any(|c| matches!(c, TrameCommand::ScrollViewport { .. })),
-        "no request for a scroll that did not happen"
-    );
+    rig.sent();
+    let selection = rig.view.state.selection.clone();
+    let at = {
+        let rect = rig
+            .view
+            .state
+            .cell_pixel_rect(CellPos::new(Pos::<Row>::new(30), Pos::<Col>::new(4)))
+            .expect("in view");
+        pointer(rect.center().x, rect.center().y)
+    };
+    let _ = rig.view.handle_input(&InputEvent::PointerMove { at });
+    let under = rig.view.state.cell_at(at);
+    for dy in [-3.0, -3.0, 5.0, -40.0, 60.0] {
+        let zoom = rig.view.zoom();
+        assert!(
+            rig.wheel(dy, 1, ModifierKeys::PRIMARY),
+            "the grid keeps the gesture"
+        );
+        let now = rig.view.zoom();
+        assert!(
+            if dy < 0.0 { now >= zoom } else { now <= zoom },
+            "{dy}: {zoom:?} -> {now:?}"
+        );
+        // The grid cannot scroll left of its first column, so a zoom out at
+        // the left edge keeps the row alone.
+        let now_under = rig.view.state.cell_at(at).expect("on the cells");
+        let under = under.expect("on the cells");
+        assert_eq!(
+            now_under.row, under.row,
+            "{dy}: the row stays under the pointer"
+        );
+        assert!(
+            now_under.col == under.col || rig.view.state.left_col.get() == 0,
+            "{dy}: the column stays under the pointer unless the grid is at its first"
+        );
+        let range = crate::ui::grid::TrameUiState::ZOOM_RANGE;
+        assert!(now >= range.floor() && now <= range.ceiling());
+    }
+    assert_eq!(rig.view.state.selection, selection, "the selection stays");
 }
 
 /// `TRAME-UI-175`: a selection drag held below the cells scrolls the grid
@@ -2196,4 +2243,378 @@ fn an_active_cell_past_the_grid_holds_the_menu_inside_it() {
         Some((header_w, header_h)),
         "above and left"
     );
+}
+
+/// `ZOOM-004`, `ZOOM-005`: the zoom chords step the grid along the one ladder
+/// and return it to one. The grid and an open editor behave alike. `ZOOM-001`,
+/// `ZOOM-008`: the only message a zoom sends is the cull of the new view. No
+/// edit and no presence sample leaves the view.
+#[test]
+fn a_zoom_chord_steps_the_grid_and_sends_only_a_cull() {
+    let ctrl = ModifierKeys::PRIMARY;
+    let mut rig = Rig::new();
+    rig.frame();
+    rig.type_text("x");
+    rig.frame();
+    rig.view.flush_outbox();
+    let _ = rig.to_logic.try_iter().count();
+    assert!(rig.chord(Key::Char(KeyChar::new('=')), ctrl));
+    assert_eq!(rig.view.zoom().get(), 1.25);
+    assert!(rig.chord(Key::Char(KeyChar::new('-')), ctrl));
+    assert!(rig.chord(Key::Char(KeyChar::new('-')), ctrl));
+    assert_eq!(rig.view.zoom().get(), 0.75);
+    assert!(rig.chord(Key::Char(KeyChar::new('0')), ctrl));
+    assert_eq!(rig.view.zoom().get(), 1.0);
+    assert!(rig.view.editor.is_some(), "a zoom closed the editor");
+    rig.frame();
+    rig.view.flush_outbox();
+    let sent: Vec<_> = rig.to_logic.try_iter().collect();
+    assert!(!sent.is_empty(), "a zoom culls the new view");
+    assert!(
+        sent.iter().all(|msg| matches!(
+            msg,
+            LogicCommand::App {
+                command: TrameCommand::ScrollViewport { .. },
+                ..
+            }
+        )),
+        "a zoom sent {sent:?}"
+    );
+}
+
+// -- Home regions (`ambre-spec-shell.md` section 2) ---------------------------
+
+/// The workbook with each empty map and empty list left out. A command may
+/// leave behind an empty container it touched, and its undo cannot remove the
+/// container. An empty container reads as an absent one.
+fn settled(value: loro::LoroValue) -> loro::LoroValue {
+    use loro::LoroValue;
+    match value {
+        LoroValue::Map(map) => LoroValue::Map(
+            map.iter()
+                .map(|(k, v)| (k.clone(), settled(v.clone())))
+                .filter(|(_, v)| !matches!(v, LoroValue::Map(m) if m.is_empty()))
+                .filter(|(_, v)| !matches!(v, LoroValue::List(l) if l.is_empty()))
+                .collect::<loro::LoroMapValue>(),
+        ),
+        LoroValue::List(list) => {
+            LoroValue::List(list.iter().cloned().map(settled).collect::<Vec<_>>().into())
+        }
+        other => other,
+    }
+}
+
+/// A grid view wired to a real Logic state. What the view sends runs against
+/// the state, and what the state answers goes back to the view.
+struct Wired {
+    rig: Rig,
+    state: crate::TrameState,
+}
+
+impl Wired {
+    /// A sheet whose block A1:C3 holds values, with B2:C3 selected, settled.
+    /// A value at J20 grows the sheet first. The lines a write forces into
+    /// being stay out of the undo history by design. That is
+    /// `CommitOrigin::Materialize`. A command run inside the grown sheet
+    /// forces none.
+    fn filled() -> Self {
+        let mut state = crate::TrameState::new();
+        let mut cells: Vec<_> = (0..3u32)
+            .flat_map(|r| (0..3u32).map(move |c| (r, c)))
+            .map(|(r, c)| {
+                (
+                    CellPos::new(Pos::<Row>::new(r), Pos::<Col>::new(c)),
+                    format!("{}", 9 - r * 3 - c),
+                )
+            })
+            .collect();
+        cells.push((
+            CellPos::new(Pos::<Row>::new(19), Pos::<Col>::new(9)),
+            "end".to_owned(),
+        ));
+        state.handle_command(TrameCommand::SetCellsBatch { cells });
+        state.handle_command(TrameCommand::CommitEdit);
+        state.handle_command(TrameCommand::SetActiveCell {
+            row: Pos::<Row>::new(2),
+            col: COL_2,
+            anchor_row: ROW_1,
+            anchor_col: COL_1,
+            extra: vec![],
+            kind: crate::SelectionKind::Cells,
+        });
+        let mut wired = Self {
+            rig: Rig::new(),
+            state,
+        };
+        wired.rig.frame();
+        wired.pump();
+        wired.rig.view.state.select_rect(CellRect::spanning(
+            CellPos::new(ROW_1, COL_1),
+            CellPos::new(Pos::<Row>::new(2), COL_2),
+        ));
+        // A zoom off 100 %, so a write that reset it would show.
+        let _ = wired
+            .rig
+            .view
+            .set_zoom(ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(1.5));
+        wired.rig.frame();
+        wired.pump();
+        wired
+    }
+
+    /// Run one command the shell sends straight to the Logic thread, then
+    /// what the view sends back. True when a command emitted a CRDT delta.
+    fn send(&mut self, cmd: TrameCommand) -> bool {
+        let out = self.state.handle_command(cmd);
+        let wrote = out.update.is_some();
+        for ev in out.display {
+            self.rig.answer(ev);
+        }
+        self.pump() || wrote
+    }
+
+    /// Run what the view sent until it sends nothing more. True when a
+    /// command the state ran emitted a CRDT delta.
+    fn pump(&mut self) -> bool {
+        let mut wrote = false;
+        for _ in 0..8 {
+            self.rig.frame();
+            let sent = self.rig.sent();
+            if sent.is_empty() {
+                break;
+            }
+            for cmd in sent {
+                let out = self.state.handle_command(cmd);
+                wrote |= out.update.is_some();
+                for ev in out.display {
+                    self.rig.answer(ev);
+                }
+            }
+        }
+        wrote
+    }
+}
+
+/// What the shell does with `id` when no dialog, file or clipboard stands
+/// between: the arms of `chrome::handler::TrameHandler::on_command` that a
+/// host test can run. `None` for an id whose run waits on one of those.
+fn route(wired: &mut Wired, id: ambre_core::StaticKey<ambre_core::Commands>) -> Option<bool> {
+    use crate::message::StylePatch;
+    use crate::ui::commands::{BOLD, ITALIC, ZOOM_TO_SELECTION};
+    if id == ZOOM_TO_SELECTION {
+        wired.rig.view.zoom_to_selection();
+        return Some(wired.pump());
+    }
+    let style = |patch: StylePatch| TrameCommand::SetCellStyle { patch };
+    let cmd = if id == BOLD {
+        style(StylePatch {
+            bold: Some(ambre_core::Weight::Bold),
+            ..StylePatch::default()
+        })
+    } else if id == ITALIC {
+        style(StylePatch {
+            italic: Some(ambre_core::Slant::Italic),
+            ..StylePatch::default()
+        })
+    } else {
+        crate::ui::commands::command_to_app(id)?
+    };
+    Some(wired.send(cmd))
+}
+
+/// `CHROME-149`, `CHROME-172`, `CHROME-173`, `CHROME-174`: every command of
+/// the table runs the way the shell runs it, against a real Logic state. A
+/// command whose home is the status bar emits no delta. A command that writes
+/// leaves the zoom where it was, and one undo brings the whole workbook back.
+/// Undo and redo are the history itself, so the undo check skips them. The
+/// ids whose run waits on a dialog, a file or the clipboard are named, so a
+/// new command joins one list or the other.
+#[test]
+fn each_command_keeps_the_rules_of_its_home() {
+    use crate::ui::commands::*;
+    use ambre_commands::Home;
+    let elsewhere = [
+        PALETTE,
+        SAVE_SEALED_FILE,
+        FIND,
+        REPLACE,
+        SORT_RANGE_MULTI,
+        FILTER_COLUMN,
+        COPY,
+        CUT,
+        PASTE,
+        IMPORT_CSV,
+        IMPORT_XLSX,
+        IMPORT_ODS,
+    ];
+    let mut writers = Vec::new();
+    for command in crate::ui::commands::COMMANDS {
+        let mut wired = Wired::filled();
+        let before = settled(wired.state.deep_value());
+        let zoom = wired.rig.view.zoom();
+        let Some(wrote) = route(&mut wired, command.id) else {
+            assert!(
+                elsewhere.contains(&command.id),
+                "{:?} has no route and no named home",
+                command.id
+            );
+            assert_ne!(command.home, Home::StatusBar, "{:?}", command.id);
+            continue;
+        };
+        if command.home == Home::StatusBar {
+            assert!(
+                !wrote,
+                "{:?} is homed in the status bar and wrote",
+                command.id
+            );
+        }
+        if command.id == ZOOM_TO_SELECTION {
+            assert_ne!(wired.rig.view.zoom(), zoom, "the zoom route did not run");
+        }
+        if !wrote {
+            continue;
+        }
+        writers.push(command.id);
+        assert_eq!(
+            wired.rig.view.zoom(),
+            zoom,
+            "{:?} wrote and moved the zoom",
+            command.id
+        );
+        if command.id == UNDO || command.id == REDO {
+            continue;
+        }
+        wired.send(TrameCommand::Undo);
+        assert_eq!(
+            settled(wired.state.deep_value()),
+            before,
+            "one undo does not take {:?} back whole",
+            command.id
+        );
+    }
+    for id in [
+        BOLD,
+        INSERT_ROW_ABOVE,
+        DELETE_COLS,
+        SORT_RANGE_ASC,
+        FREEZE_ROWS,
+        PAPER_A3,
+    ] {
+        assert!(writers.contains(&id), "{id:?} wrote nothing: {writers:?}");
+    }
+}
+
+/// `CHROME-173`, `CHROME-174`: the clipboard entries write through a paste.
+/// A paste, and a paste behind a cut, each leave the zoom where it was and
+/// go back whole on one undo.
+#[test]
+fn a_paste_keeps_the_zoom_and_is_one_undo_item() {
+    for write in [ClipboardWrite::Copy, ClipboardWrite::Cut] {
+        let mut wired = Wired::filled();
+        let before = settled(wired.state.deep_value());
+        let zoom = wired.rig.view.zoom();
+        let _ = wired.rig.view.clipboard_write(write);
+        assert!(!wired.pump(), "{write:?} wrote before any paste");
+        wired.rig.view.state.select_rect(CellRect::spanning(
+            CellPos::new(ROW_5, COL_0),
+            CellPos::new(ROW_5, COL_0),
+        ));
+        let text = ambre_bus::ClipboardBlob {
+            text: "x".to_owned(),
+            html: None,
+            ambre: None,
+            form: ambre_core::PasteForm::Rich,
+        };
+        wired.rig.view.paste_clipboard(text, PasteSource::Foreign);
+        assert!(wired.pump(), "the paste behind {write:?} wrote nothing");
+        assert_eq!(wired.rig.view.zoom(), zoom);
+        wired.send(TrameCommand::Undo);
+        assert_eq!(
+            settled(wired.state.deep_value()),
+            before,
+            "one undo does not take the paste behind {write:?} back whole"
+        );
+    }
+}
+
+/// `CHROME-173`, `CHROME-174`: the entries that wait on a dialog or a file
+/// write once it resolves, through the command the dialog sends. These are
+/// the multi-key sort, the column filter and a replace of every match. Each
+/// leaves the zoom where it was, and one undo takes it back whole. An import is one undo item
+/// too (`logic::tests::group12::an_import_is_one_undo_item`). Its lines stay out
+/// of the history by design, so it is not compared value for value here.
+#[test]
+fn a_resolved_dialog_keeps_the_zoom_and_is_one_undo_item() {
+    use crate::message::{FilterKind, FilterOp, HeaderRow, SortOrder};
+    let sheet = crate::logic::schema::default_sheet();
+    let writes = [
+        TrameCommand::SortRange {
+            sheet_id: sheet.clone(),
+            rect: CellRect::spanning(
+                CellPos::new(ROW_0, COL_0),
+                CellPos::new(Pos::<Row>::new(2), COL_2),
+            ),
+            sort_col: Len::<Col>::new(0),
+            order: SortOrder::Ascending,
+            header: HeaderRow::Absent,
+        },
+        TrameCommand::ApplyFilter {
+            sheet_id: sheet,
+            col: COL_0,
+            kind: FilterKind::Condition {
+                op: FilterOp::Gt,
+                value: "4".to_owned(),
+            },
+        },
+        TrameCommand::ReplaceAll {
+            query: ambre_bus::app::find::FindText::new("9".to_owned()).map(|text| {
+                ambre_bus::app::find::FindQuery::new(text, crate::FindOptions::default())
+            }),
+            replacement: "nine".to_owned(),
+        },
+    ];
+    for write in writes {
+        let name = format!("{write:?}");
+        let mut wired = Wired::filled();
+        let before = settled(wired.state.deep_value());
+        let zoom = wired.rig.view.zoom();
+        assert!(wired.send(write), "{name} wrote nothing");
+        assert_eq!(wired.rig.view.zoom(), zoom, "{name} moved the zoom");
+        wired.send(TrameCommand::Undo);
+        assert_eq!(
+            settled(wired.state.deep_value()),
+            before,
+            "one undo does not take {name} back whole"
+        );
+    }
+}
+
+/// `CHROME-174`: a CSV import, served with the converter linked in place as
+/// the Logic thread serves it, writes and leaves the zoom where it was.
+#[test]
+fn an_import_keeps_the_zoom() {
+    let mut wired = Wired::filled();
+    let zoom = wired.rig.view.zoom();
+    let converter = ambre_convert::Converter::load(
+        ambre_core::ConverterFamily::Tables,
+        &ambre_core::Payload::new(Vec::new()),
+    )
+    .expect("the host links the engine");
+    let out = wired.state.convert_in_place(
+        TrameCommand::import_csv(crate::message::CsvImport {
+            data: b"1,2\n3,4\n".to_vec().into(),
+            delimiter: None,
+            header: crate::message::HeaderRow::Absent,
+            target_sheet_id: None,
+            start_row: Pos::<ambre_bus::Row>::ZERO,
+            start_col: Pos::<ambre_bus::Col>::ZERO,
+        }),
+        &converter,
+    );
+    assert!(out.update.is_some(), "the import wrote nothing");
+    for ev in out.display {
+        wired.rig.answer(ev);
+    }
+    wired.pump();
+    assert_eq!(wired.rig.view.zoom(), zoom, "the import moved the zoom");
 }

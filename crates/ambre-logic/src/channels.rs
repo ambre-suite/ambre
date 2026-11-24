@@ -5256,6 +5256,46 @@ mod tests {
         assert_eq!(metas_named(&sync), [(call, None)]);
     }
 
+    /// `CALL-149`: a join asked while its channel opens waits for the open, then takes the
+    /// `meta` the opened state names. A join asked while an open the relay then refuses ends
+    /// with none. Neither is answered before its open ends.
+    #[test]
+    fn a_join_asked_while_its_channel_opens_waits_for_the_open() {
+        let (mut state, _ui, sync, _store) = harness_with_store();
+        signed_in(&mut state, Id::<User>::mint());
+        let (channel_id, stored) = stored_channel();
+        let meta = stored.meta_id().document_id();
+        let active = stored.active_id().document_id();
+        state.handle_logic_command(LogicCommand::OpenChannel { channel_id });
+        let call = Id::<ambre_core::id::Call>::mint();
+        state.handle_logic_event(LogicEvent::CallMetaAsked {
+            call,
+            channel: channel_id,
+        });
+        state.handle_logic_event(LogicEvent::ChannelDocuments {
+            channel_id,
+            documents: listing(&stored),
+        });
+        serve(&mut state, &stored, meta);
+        assert_eq!(metas_named(&sync), [], "the open has not ended");
+        serve(&mut state, &stored, active);
+        assert_eq!(metas_named(&sync), [(call, Some(meta))]);
+
+        let refused = Id::<Channel>::mint();
+        state.handle_logic_command(LogicCommand::OpenChannel {
+            channel_id: refused,
+        });
+        state.handle_logic_event(LogicEvent::CallMetaAsked {
+            call,
+            channel: refused,
+        });
+        assert_eq!(metas_named(&sync), []);
+        state.handle_logic_event(LogicEvent::ChannelRefused {
+            channel_id: refused,
+        });
+        assert_eq!(metas_named(&sync), [(call, None)]);
+    }
+
     /// The Logic half: the start the Sync worker heard posts the
     /// call message in the active segment, and the view shows it. The last leave it heard
     /// writes the end in the same segment.

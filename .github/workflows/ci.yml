@@ -12,7 +12,7 @@ name: CI
 #
 # * the fast lane, every event: `lint`, `test-native`, `test-wasm`, `test-db`,
 #   `deny`, `proverif` and `size`. A push of a branch other than `main` runs
-#   it alone.
+#   it alone. A push also runs `commits`, which reads the commits it brings.
 # * the full lane: the fast lane plus `fuzz`, `instructions`,
 #   `test-db-cluster`, `test-browser` and `reproducible`. A push of `main`, a pull
 #   request, the nightly schedule and a manual dispatch run it.
@@ -215,6 +215,40 @@ jobs:
         with:
           tool: cargo-deny
       - run: just deny
+
+  # ---------------------------------------------------------------------------
+  # commits -- the message of each commit a push brings, held to the rules of
+  # `ai/ambre-git-strategy.md`. The commit hook holds them too, but a clone
+  # adopts it or not, and two merges reached `main` with the subject git wrote.
+  # On `main` the push brings what lies past its previous head, or past the
+  # merge base when the push rewrote it. On another branch it brings what
+  # neither `main` nor the previous head holds, so a branch cut from `main`
+  # answers for its own commits alone.
+  # ---------------------------------------------------------------------------
+  commits:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install just
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: just
+      - name: Commits of the push
+        env:
+          BEFORE: ${{ github.event.before }}
+          REF: ${{ github.ref }}
+        run: |
+          known() { git cat-file -e "$1^{commit}" 2>/dev/null; }
+          if [ "$REF" = refs/heads/main ]; then
+            if known "$BEFORE"; then just commits HEAD "^$(git merge-base "$BEFORE" HEAD)"
+            else echo "no previous head of main to start from"; fi
+          elif known "$BEFORE"; then just commits HEAD ^origin/main "^$BEFORE"
+          else just commits HEAD ^origin/main; fi
 
   # ---------------------------------------------------------------------------
   # proverif -- the formal model of the call sender keys (`CALL-142`). The job
@@ -647,6 +681,24 @@ jobs:
         if: matrix.engine == 'firefox'
         env:
           BELT_FIREFOX: ${{ steps.firefox.outputs.firefox-path }}
+      # The screenshots of the three context panels at a device scale of 2,
+      # light and dark, for a person to look at (`ambre-spec-testing.md`
+      # section 2). Nothing compares them, so this step fails no build.
+      - name: Panel screenshots
+        if: matrix.engine == 'chrome' && matrix.part == 'rest'
+        continue-on-error: true
+        run: cargo test -p ambre-belt -- --ignored --exact gallery::tests::write_the_screenshots_of_the_three_panels
+        env:
+          CHROMEDRIVER: ${{ steps.chrome.outputs.chromedriver-path }}
+          BELT_CHROME: ${{ steps.chrome.outputs.chrome-path }}
+          S3_ENDPOINT: http://localhost:9000
+      - name: Keep the panel screenshots
+        if: matrix.engine == 'chrome' && matrix.part == 'rest'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: panel-screenshots
+          path: target/belt-shots
+          if-no-files-found: ignore
       - name: Prune the cache
         if: env.CACHE_WRITE == 'true' && matrix.engine == 'chrome' && matrix.part == 'murmure'
         run: just ci-cache prune

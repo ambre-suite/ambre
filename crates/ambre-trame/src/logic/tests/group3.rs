@@ -559,7 +559,7 @@ fn create_sheet_lists_and_isolates() {
     let evts = state.handle_command(TrameCommand::CreateSheet {
         name: crate::test_support::sheet("Data"),
     });
-    let TrameEvent::SheetList { sheets, active } = &evts.display[0] else {
+    let TrameEvent::SheetList { sheets, active, .. } = &evts.display[0] else {
         panic!("expected SheetList")
     };
     assert_eq!(active.as_str(), "s0", "active sheet unchanged by create");
@@ -621,7 +621,7 @@ fn first_scroll_viewport_hydrates_sheet_list_once() {
         .display
         .iter()
         .find(|e| matches!(e, TrameEvent::SheetList { .. }));
-    let Some(TrameEvent::SheetList { sheets, active }) = sheet_list else {
+    let Some(TrameEvent::SheetList { sheets, active, .. }) = sheet_list else {
         panic!("first ScrollViewport must emit a SheetList");
     };
     assert_eq!(active.as_str(), "s0");
@@ -865,7 +865,7 @@ fn delete_active_sheet_falls_back() {
         .display
         .iter()
         .find_map(|e| match e {
-            TrameEvent::SheetList { sheets, active } => Some((sheets.clone(), active.clone())),
+            TrameEvent::SheetList { sheets, active, .. } => Some((sheets.clone(), active.clone())),
             _ => None,
         })
         .expect("SheetList emitted");

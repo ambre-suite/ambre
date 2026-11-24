@@ -269,6 +269,24 @@ pub(crate) fn set_theme(control: &ambre_canvas::ThemeControl, theme: ambre_canva
     apply_theme_attr(theme);
 }
 
+/// The word this browser keeps under `key`, or `None` when the store refuses
+/// or holds nothing. A view setting kept on the device, such as the side of
+/// the context panel (`ambre-spec-shell.md` section 5), reads through here.
+pub(crate) fn stored_word(key: ambre_core::StaticKey<ambre_core::StorageKeys>) -> Option<String> {
+    web_sys::window()
+        .and_then(|window| window.local_storage().ok().flatten())
+        .and_then(|storage| storage.get_item(key.as_str()).ok().flatten())
+}
+
+/// Keep `word` under `key` on this browser. A refused write keeps nothing.
+pub(crate) fn keep_word(key: ambre_core::StaticKey<ambre_core::StorageKeys>, word: &str) {
+    if let Some(storage) =
+        web_sys::window().and_then(|window| window.local_storage().ok().flatten())
+    {
+        let _ = storage.set_item(key.as_str(), word);
+    }
+}
+
 /// The device of `kind` that the member chose for a call on this browser. The choice lives on
 /// the device and in no document, since a list of devices nearly names a machine (`ZK-026`).
 pub(crate) fn device_choice(
@@ -574,6 +592,39 @@ pub(crate) fn inject_theme(theme: ambre_canvas::Theme) {
         let _ = head.append_child(&style);
     }
     apply_theme_attr(theme);
+}
+
+ambre_core::define_flag! {
+    /// The colour scheme the system asks of a page (`prefers-color-scheme`).
+    pub(crate) enum SystemScheme {
+        /// The system asks for light pages, or answers nothing.
+        Light,
+        /// The system asks for dark pages.
+        Dark,
+    }
+}
+
+/// The theme a page boots in: the one the system asks for (`UI-THREAD-065`).
+/// The scheme is the one argument, so no theme a session stored reaches the
+/// boot (`UI-THREAD-066`).
+pub(crate) fn boot_theme(scheme: SystemScheme) -> ambre_canvas::Theme {
+    match scheme {
+        SystemScheme::Light => ambre_canvas::Theme::Light,
+        SystemScheme::Dark => ambre_canvas::Theme::Dark,
+    }
+}
+
+/// The colour scheme the browser reports for the system. A browser that
+/// answers nothing reads as light, the unmarked set of the stylesheet.
+pub(crate) fn system_scheme() -> SystemScheme {
+    let dark = web_sys::window()
+        .and_then(|w| w.match_media("(prefers-color-scheme: dark)").ok().flatten())
+        .is_some_and(|query| query.matches());
+    if dark {
+        SystemScheme::Dark
+    } else {
+        SystemScheme::Light
+    }
 }
 
 /// Flip the theme for both halves at once, and return the new one.
@@ -1113,6 +1164,23 @@ mod tests {
         switch_theme(&control);
         assert_eq!(control.get(), ambre_canvas::Theme::Dark);
         assert_eq!(document_theme().as_deref(), Some("dark"));
+    }
+
+    /// A page boots in the theme the system asks for, light or dark, and in
+    /// the one the browser reports here (`UI-THREAD-065`).
+    #[wasm_bindgen_test]
+    fn a_page_boots_in_the_theme_the_system_asks_for() {
+        assert_eq!(boot_theme(SystemScheme::Light), ambre_canvas::Theme::Light);
+        assert_eq!(boot_theme(SystemScheme::Dark), ambre_canvas::Theme::Dark);
+        let asked = web_sys::window()
+            .and_then(|w| w.match_media("(prefers-color-scheme: dark)").ok().flatten())
+            .expect("a media query");
+        let expected = if asked.matches() {
+            SystemScheme::Dark
+        } else {
+            SystemScheme::Light
+        };
+        assert_eq!(system_scheme(), expected);
     }
 
     /// What `target_is_editable` reads off a real `keydown` dispatched on an
