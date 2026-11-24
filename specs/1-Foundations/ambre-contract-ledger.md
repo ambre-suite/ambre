@@ -21,14 +21,14 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**5093 rows: 4661 shipped, of which 16 loose. 432 unbuilt.**
+**5136 rows: 4718 shipped, of which 16 loose. 418 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1672 | 583 | 996 | 834 | 560 | 4645 |
+| `verified` | 1729 | 583 | 996 | 834 | 560 | 4702 |
 | `failing` | 2 |  |  |  |  | 2 |
 | `human-review` | 14 |  |  |  |  | 14 |
-| `unimplemented` | 179 | 42 | 21 | 22 | 168 | 432 |
+| `unimplemented` | 165 | 42 | 21 | 22 | 168 | 418 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -76,13 +76,14 @@
 | `ambre-spec-sequencer.md` | 83 | 82 | 82 |  | 1 |
 | `ambre-spec-server.md` | 134 | 126 | 125 | 1 | 8 |
 | `ambre-spec-session.md` | 46 | 46 | 46 |  |  |
-| `ambre-spec-shell.md` | 82 | 63 | 61 | 2 | 19 |
+| `ambre-spec-shell.md` | 98 | 81 | 79 | 2 | 17 |
 | `ambre-spec-sync.md` | 90 | 89 | 89 |  | 1 |
 | `ambre-spec-text-editor.md` | 20 | 18 | 18 |  | 2 |
 | `ambre-spec-text-input.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-ui.md` | 24 | 18 | 18 |  | 6 |
 | `ambre-spec-undo.md` | 23 | 23 | 23 |  |  |
-| `ambre-spec-zero-knowledge.md` | 53 | 52 | 51 | 1 | 1 |
+| `ambre-spec-user-settings.md` | 40 | 37 | 37 |  | 3 |
+| `ambre-spec-zero-knowledge.md` | 55 | 54 | 53 | 1 | 1 |
 | `ambre-spec-zoom.md` | 11 | 11 | 11 |  |  |
 | `ambre-spec-trame-schema.md` | 17 | 17 | 17 |  |  |
 | `ambre-spec-trame-autofill.md` | 11 | 11 | 11 |  |  |
@@ -303,7 +304,7 @@
 | `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155,169,184,194..215,259,262..264,274,276..277,284,288..290,300,307 |
 | `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165,167..168,170..171,173..182,187..193,216..228,230,238..257,260..261,266,268,270,272..273,275,280..283,285..287,297..299,302,304,306,308..312,316..318 |
 | `ambre-spec-session.md` | SRV-003,009,022..031,074,090..092,163,172,232,234..236,267,278..279,291,293..296,303,319..333 |
-| `ambre-spec-shell.md` | CHROME-148..198,207..237 |
+| `ambre-spec-shell.md` | CHROME-148..198,207..253 |
 | `ambre-spec-sync.md` | SYNC-002,011,013,056..071,095..100,133..134,136..137,149,152..160,162..167,169..171,177..189,191..196,248..256,261,269..271,275,277..278,281,292..296,305 |
 | `ambre-spec-text-editor.md` | CANVAS-036..042,047..050,077..080,082..083,085; UI-THREAD-014,018 |
 | `ambre-spec-text-input.md` | CHROME-007,016..021,059..064,102..103 |
@@ -367,6 +368,6 @@
 | `ambre-spec-trame-undo.md` | TRAME-017,123..124,151,153..154,286..288,290..291,298..301 |
 | `ambre-spec-ui.md` | UI-THREAD-001..005,012..013,015..017,020..021,048..052,058..060,062..064,067 |
 | `ambre-spec-undo.md` | UNDO-001..023 |
-| `ambre-spec-user-settings.md` | SETTINGS-001..015 |
-| `ambre-spec-zero-knowledge.md` | ZK-001..053 |
+| `ambre-spec-user-settings.md` | SETTINGS-001..040 |
+| `ambre-spec-zero-knowledge.md` | ZK-001..055 |
 | `ambre-spec-zoom.md` | ZOOM-001..011 |

@@ -4925,8 +4925,6 @@ ambre-chrome | src/controls.rs | crate::controls | ChoiceView::text(label) | par
 ambre-chrome | src/controls.rs | crate::controls | ChoiceView::icon(label) | param | impl Into<String>	free-text	the label a person reads as the tooltip of a choice that shows its icon
 ambre-chrome | src/controls.rs | crate::controls | ChoiceView.face | field | Option<&'static str>	foreign-api	the CSS font-family stack the browser shows the choice in
 ambre-chrome | src/controls.rs | crate::controls | ChoiceView::in_face(css) | param | &'static str	foreign-api	the CSS font-family stack the browser shows the choice in
-ambre-chrome | src/kit.rs | crate::kit | tenths() | ret | String	free-text	the number a length field shows, which a person reads and edits
-ambre-chrome | src/kit.rs | crate::kit | tenths(value) | param | f32	math	the raw number of a length, which each length type unwraps to format
 ambre-trame | src/chrome/panel.rs | crate::chrome::panel | command_choices(labels) | param | &[&str]	free-text	the labels a person reads of the choices of a list
 ambre-trame | src/chrome/panel.rs | crate::chrome::panel | label() | ret | String	free-text	the label of a property a person reads, from its description
 ambre-chrome | src/controls.rs | crate::controls | ColorSwatch(label) | param | String	free-text	the accessible name and tooltip of a swatch, display text
@@ -4945,20 +4943,10 @@ ambre-chrome | src/controls.rs | crate::controls | Stepper(text) | param | Signa
 ambre-chrome | src/controls.rs | crate::controls | Stepper(unit) | param | &'static str	free-text	the unit a person reads after the number
 ambre-chrome | src/controls.rs | crate::controls | list_key(initials) | param | &[char]	free-text	text, label or user content
 ambre-chrome | src/controls.rs | crate::controls | readout_text() | ret | String	free-text	the readout a person reads beside a slider track
-ambre-chrome | src/kit.rs | crate::kit | <PrintLength<Mm> as FieldLength>::UNIT | const | &'static str	free-text	the unit a person reads after the number
-ambre-chrome | src/kit.rs | crate::kit | <PrintLength<Mm> as FieldLength>::field_text() | ret | String	foreign-api	the text an `<input>` shows
-ambre-chrome | src/kit.rs | crate::kit | <PrintLength<Mm> as FieldLength>::from_field(text) | param | &str	foreign-api	the value an `<input>` reports
-ambre-chrome | src/kit.rs | crate::kit | <Px<StoredBoard> as FieldLength>::UNIT | const | &'static str	free-text	the unit a person reads after the number
-ambre-chrome | src/kit.rs | crate::kit | <Px<StoredBoard> as FieldLength>::field_text() | ret | String	foreign-api	the text an `<input>` shows
-ambre-chrome | src/kit.rs | crate::kit | <Px<StoredBoard> as FieldLength>::from_field(text) | param | &str	foreign-api	the value an `<input>` reports
 ambre-chrome | src/kit.rs | crate::kit | Choice.label | field | &'static str	free-text	text, label or user content
 ambre-chrome | src/kit.rs | crate::kit | ColourField(reset_label) | param | &'static str	free-text	text, label or user content
 ambre-chrome | src/kit.rs | crate::kit | Field(label) | param | &'static str	free-text	text, label or user content
-ambre-chrome | src/kit.rs | crate::kit | FieldLength::field_text() | ret | String	foreign-api	the text an `<input>` shows
-ambre-chrome | src/kit.rs | crate::kit | FieldLength::from_field(text) | param | &str	foreign-api	the value an `<input>` reports
 ambre-chrome | src/kit.rs | crate::kit | command_label() | ret | String	free-text	text, label or user content
-ambre-chrome | src/kit.rs | crate::kit | field_number() | ret | Option<f32>	local	the number a field reads, wrapped by the caller into its length at once; private
-ambre-chrome | src/kit.rs | crate::kit | field_number(text) | param | &str	foreign-api	the value an `<input>` reports
 ambre-chrome | src/kit.rs | crate::kit | mixed_hint(mixed) | param | bool	generic	state flag/predicate
 ambre-chrome | src/kit.rs | crate::kit | property_label() | ret | String	free-text	text, label or user content
 ambre-chrome | src/kit.rs | crate::kit | reach_markers() | ret | Vec<String>	foreign-api	the data-reach attributes the DOM holds, which a test reads back with Reach::matches_marker
@@ -4990,6 +4978,42 @@ ambre-prose | src/view/panel.rs | crate::view::panel | LINE_SPACINGS | const | [
 ambre-prose | src/view/panel.rs | crate::view::panel | LISTS | const | [(crate::events::ListStyle,&str);3]	free-text	each list marker the paragraph section offers, beside the label a person reads
 ambre-trame | src/chrome/panel.rs | crate::chrome::panel | reach() | ret | String	generic	the codec of a property reach on the data-reach attribute, as Reach::marker writes it
 ambre-chrome | src/kit.rs | crate::kit | unreached_controls() | ret | Vec<String>	foreign-api	the accessible names the DOM holds for controls with no data-reach, which a test prints
+ambre-chrome | src/kit.rs | crate::kit | swatch_row(none_label) | param | &'static str	free-text	text, label or user content
+ambre-chrome | src/color.rs | crate::color | INLINE | const | [(&str,&str,Rgb);7]	free-text	the name a person reads and the CSS text of each inline swatch, beside its colour
+ambre-chrome | src/kit.rs | crate::kit | <PrintLength<Mm> as FieldLength>::to_field() | ret | f64	generic	the number the one length field computes in; each length type converts to it at this boundary alone
+ambre-chrome | src/kit.rs | crate::kit | <PrintLength<Mm> as FieldLength>::of_field(value) | param | f64	generic	the number the one length field computes in; each length type converts to it at this boundary alone
+ambre-chrome | src/kit.rs | crate::kit | <Px<StoredBoard> as FieldLength>::to_field() | ret | f64	generic	the number the one length field computes in; each length type converts to it at this boundary alone
+ambre-chrome | src/kit.rs | crate::kit | <Px<StoredBoard> as FieldLength>::of_field(value) | param | f64	generic	the number the one length field computes in; each length type converts to it at this boundary alone
+ambre-chrome | src/kit.rs | crate::kit | <Px<Board> as FieldLength>::to_field() | ret | f64	generic	the number the one length field computes in; each length type converts to it at this boundary alone
+ambre-chrome | src/kit.rs | crate::kit | <Px<Board> as FieldLength>::of_field(value) | param | f64	generic	the number the one length field computes in; each length type converts to it at this boundary alone
+ambre-chrome | src/kit.rs | crate::kit | <Radians as FieldLength>::to_field() | ret | f64	generic	the number the one length field computes in; each length type converts to it at this boundary alone
+ambre-chrome | src/kit.rs | crate::kit | <Radians as FieldLength>::of_field(value) | param | f64	generic	the number the one length field computes in; each length type converts to it at this boundary alone
+ambre-chrome | src/kit.rs | crate::kit | FieldLength::to_field() | ret | f64	generic	the number the one length field computes in; each length type converts to it at this boundary alone
+ambre-chrome | src/kit.rs | crate::kit | FieldLength::of_field(value) | param | f64	generic	the number the one length field computes in; each length type converts to it at this boundary alone
+ambre-chrome | src/kit.rs | crate::kit | LengthUnit.suffix | field | &'static str	free-text	the unit a person reads after the number
+ambre-chrome | src/kit.rs | crate::kit | LengthUnit.step | field | f64	generic	how far one stepper moves in the shown number, the same for every length type of the field
+ambre-chrome | src/kit.rs | crate::kit | LengthUnit.floor | field | Option<f64>	generic	the least shown number the field accepts, the same for every length type of the field
+ambre-chrome | src/kit.rs | crate::kit | LengthUnit.scale | field | f64	math	the shown number per stored unit, a multiplier
+ambre-chrome | src/kit.rs | crate::kit | LengthUnit::parse() | ret | Option<f64>	generic	the number the one length field computes in; each length type converts to it at this boundary alone
+ambre-chrome | src/kit.rs | crate::kit | LengthUnit::parse(text) | param | &str	foreign-api	the value an `<input>` reports
+ambre-chrome | src/kit.rs | crate::kit | LengthUnit::stepped() | ret | f64	generic	the number the one length field computes in; each length type converts to it at this boundary alone
+ambre-chrome | src/kit.rs | crate::kit | LengthUnit::stepped(value) | param | f64	generic	the number the one length field computes in; each length type converts to it at this boundary alone
+ambre-chrome | src/kit.rs | crate::kit | LengthUnit::text() | ret | String	foreign-api	the text an `<input>` shows
+ambre-chrome | src/kit.rs | crate::kit | LengthUnit::text(value) | param | f64	generic	the number the one length field computes in; each length type converts to it at this boundary alone
+ambre-chrome | src/kit.rs | crate::kit | length_core(value) | param | Signal<Option<f64>>	local	the number the field shows, from the typed adapter of LengthField alone; private
+ambre-chrome | src/kit.rs | crate::kit | length_core(on_write) | param | Callback<f64>	local	the number the field writes, to the typed adapter of LengthField alone; private
+ambre-chrome | src/context_panel.rs | crate::context_panel | ContextPanel(subtitle) | param | Signal<String>	free-text	the count a person reads under the title of the panel
+ambre-chrome | src/context_panel.rs | crate::context_panel | PanelContent.subtitle | field | Signal<String>	free-text	the count a person reads under the title of the panel
+ambre-chrome | src/context_panel.rs | crate::context_panel | dock_label() | ret | &'static str	free-text	the accessible name and tooltip of the control that moves the panel
+ambre-chrome | src/header.rs | crate::header | HeaderMenu(label) | param | String	free-text	the accessible name of the button of a header menu
+ambre-chrome | src/header.rs | crate::header | PrimaryButton(label) | param | &'static str	free-text	the words a person reads on the primary button of the header
+ambre-chrome | src/header.rs | crate::header | SEARCH_LABEL | const | &str	free-text	the words and the accessible name of the search field of the header
+ambre-chrome | src/status.rs | crate::status | Build::shows_diagnostics() | ret | bool	generic	predicate result
+ambre-commands | src/lib.rs | crate | NOTHING_SELECTED | const | &str	free-text	the subtitle a person reads over an empty selection
+ambre-prose | src/count.rs | crate::count | words_in(text) | param | &str	free-text	the text a person wrote, counted in words
+ambre-prose | src/view/panel.rs | crate::view::panel | PanelKind::subtitle() | ret | String	free-text	the count a person reads under the title of the panel
+ambre-toile | src/ui/panel.rs | crate::ui::panel | PanelKind::subtitle() | ret | String	free-text	the count a person reads under the title of the panel
+ambre-trame | src/ui/panel.rs | crate::ui::panel | PanelSelection::subtitle() | ret | String	free-text	the count a person reads under the title of the panel
 ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | STRIP_SHARE | const | f32	math	the share of the width of a wide scene its strip of faces takes, a scalar multiplier of that width
 ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | STRIP_ROW_SHARE | const | f32	math	the share of the height of a narrow scene its strip of faces takes, a scalar multiplier of that height
 ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | initials_of() | ret | String	free-text	the initials a tile or the mark of a space draws for a person to read
@@ -5004,3 +5028,16 @@ ambre-chrome | src/command.rs | crate::command | digit_of_code(code) | param | &
 ambre-core | src/call.rs | crate::call | FORWARDED | const | u32	generic	the one written figure of the call row of the budgets, which the forwarded count and the slots past it are built on
 ambre-chrome | src/controls.rs | crate::controls | ChoiceView.hint | field | Option<String>	free-text	the muted hint at the end of a row of a select, as a chord, display text
 ambre-chrome | src/controls.rs | crate::controls | ChoiceView::hinted(hint) | param | impl Into<String>	free-text	the muted hint at the end of a row of a select, display text
+ambre-client-core | src/settings.rs | crate::settings | BOOT_HINT_VERSION | const | &str	generic	the version word that opens a boot hint text, which BootHint::decode matches back: part of the codec of the hint
+ambre-client-core | src/settings.rs | crate::settings | BootHintText.0 | field | String	newtype-inner	the stored text of the boot hint the newtype wraps
+ambre-client-core | src/settings.rs | crate::settings | BootHintText::as_str() | ret | &str	newtype-inner	the stored text the newtype wraps, handed to the one storage call that keeps it
+ambre-client-core | src/settings.rs | crate::settings | BootHintText::new(text) | param | impl Into<String>	newtype-inner	the text read back from the storage, which BootHint::decode parses
+ambre-client-core | src/settings.rs | crate::settings | SettingWord.0 | field | String	newtype-inner	the word a setting value takes in the settings document, which the newtype wraps
+ambre-client-core | src/settings.rs | crate::settings | SettingWord::as_str() | ret | &str	newtype-inner	the stored word the newtype wraps, which each value type matches back and Loro stores
+ambre-client-core | src/settings.rs | crate::settings | SettingWord::new(text) | param | impl Into<String>	newtype-inner	the word a value type spells or the document holds; reading it is the value type's job
+ambre-client-core | src/settings.rs | crate::settings | SettingsSection::word() | ret | &'static str	newtype-inner	closed-set enum word codec: the frozen name of the section's map
+ambre-core | src/static_key.rs | crate::static_key | <SettingKeys as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
+ambre-logic | src/settings.rs | crate::settings | KIND | const | &str	generic	the key of the kind marker in the settings document, which the open reads back: part of its codec
+ambre-logic | src/settings.rs | crate::settings | META | const | &str	generic	the name of the map that holds the kind marker, which the open reads back: part of the codec of the settings document
+ambre-logic | src/settings.rs | crate::settings | SETTINGS_KIND | const | &str	generic	the word the kind marker holds, which the open matches back: part of the codec of the settings document
+ambre-logic | src/settings_flow.rs | crate::settings_flow | LogicState::is_settings() | ret | bool	generic	predicate result

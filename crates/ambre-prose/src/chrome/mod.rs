@@ -111,6 +111,9 @@ pub struct ProseSignals {
     pub fonts: RwSignal<Option<crate::doc::DocFonts>>,
     /// The field of the format bar a link or a comment press opened.
     pub prompt: RwSignal<Option<crate::view::toolbar::BarPrompt>>,
+    /// The words of the selected text, which the subtitle of the context
+    /// panel shows (`CHROME-241`). `None` with no selection.
+    pub selection_words: RwSignal<Option<ambre_core::Count<crate::events::Words>>>,
 }
 
 /// What the local history holds, as the Logic thread last reported it. A
@@ -152,6 +155,7 @@ impl ProseSignals {
             text_write: RwSignal::new(None),
             fonts: RwSignal::new(None),
             prompt: RwSignal::new(None),
+            selection_words: RwSignal::new(None),
         }
     }
 

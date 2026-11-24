@@ -25,6 +25,8 @@ fn fold_key(kind: DocType) -> StaticKey<StorageKeys> {
         DocType::Trame => StaticKey::new("ambre.panel.fold.trame"),
         DocType::Toile => StaticKey::new("ambre.panel.fold.toile"),
         DocType::Murmure => StaticKey::new("ambre.panel.fold.murmure"),
+        // No route boots the settings document, so no panel reads this key.
+        DocType::Settings => StaticKey::new("ambre.panel.fold.settings"),
     }
 }
 
@@ -53,33 +55,6 @@ pub(crate) fn panel_prefs(kind: DocType) -> PanelPrefs {
     Effect::new(move |_| keep(WIDTH_KEY, &width.get().to_stored()));
     Effect::new(move |_| keep(fold_key(kind), fold.get().as_str()));
     prefs
-}
-
-/// The control that moves the panel to the other side
-/// (`ambre-spec-shell.md` section 2). It sits beside the theme switch, the
-/// one place of the header that holds a setting of the person.
-#[component]
-pub(crate) fn DockSideSwitch(side: RwSignal<DockSide>) -> impl IntoView {
-    let label = move || match side.get() {
-        DockSide::Right => "Dock the panel to the left",
-        DockSide::Left => "Dock the panel to the right",
-    };
-    view! {
-        <button
-            class="icon ambre-dock-side"
-            title=label
-            aria-label=label
-            on:click=move |_| side.update(|s| *s = s.flipped())
-        >
-            {move || {
-                let icon = match side.get() {
-                    DockSide::Right => icondata::LuPanelRight,
-                    DockSide::Left => icondata::LuPanelLeft,
-                };
-                view! { <leptos_icons::Icon icon=icon /> }
-            }}
-        </button>
-    }
 }
 
 #[cfg(test)]

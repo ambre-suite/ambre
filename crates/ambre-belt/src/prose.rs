@@ -432,10 +432,12 @@ mod tests {
         assert_eq!(text.trim(), "1Firs2t\n\nSecond", "{text}");
     }
 
-    /// `PROSE-UI-237`, `PROSE-UI-238`, `CHROME-027`: with the pointer far from
-    /// the caret, `Shift+F10` opens the page menu under the caret, with the
-    /// focus on Undo. Enter runs it: the last key typed leaves the count, the
-    /// menu closes, and the focus returns to the input pipe.
+    /// `PROSE-UI-237`, `PROSE-UI-238`, `CHROME-179`, `CHROME-027`: the pointer
+    /// rests far from the caret. `Shift+F10` opens the page menu under the
+    /// caret, with the focus on Cut, its first entry. Escape closes it.
+    /// Over the last letter selected, the menu opens on Cut again, and Enter
+    /// runs it. The letter leaves the count, the menu closes, and the focus
+    /// returns to the input pipe each time.
     #[tokio::test(flavor = "multi_thread")]
     #[cfg_attr(
         not(feature = "browser"),
@@ -443,6 +445,12 @@ mod tests {
     )]
     async fn the_menu_key_opens_the_page_menu_and_runs_an_entry() {
         const F10: &str = "\u{E03A}";
+        const ESCAPE: &str = "\u{E00C}";
+        const ON_CUT: &str = "const a = document.activeElement; \
+            return !!a && !!a.closest('.ambre-ctx-menu') && a.textContent.includes('Cut');";
+        const CLOSED: &str = "const a = document.activeElement; \
+            return !document.querySelector('.ambre-ctx-menu') && !!a \
+              && a.matches('textarea.ambre-input');";
         let page = Page::new_document("prose").await;
         write(&page, "Hello").await;
         wait_counted(&page, "5 with spaces").await;
@@ -460,25 +468,39 @@ mod tests {
         chord(&page, &[SHIFT], F10).await;
         page.browser
             .wait_for(
-                "the focus on Undo, the menu under the caret",
+                "the focus on Cut, the menu under the caret",
                 "const a = document.activeElement; \
                  const menu = document.querySelector('.ambre-ctx-menu'); \
                  const pipe = document.querySelector('textarea.ambre-input'); \
                  if (!a || !menu || !pipe || !a.closest('.ambre-ctx-menu')) return false; \
                  const m = menu.getBoundingClientRect(), p = pipe.getBoundingClientRect(); \
-                 return a.textContent.includes('Undo') \
+                 return a.textContent.includes('Cut') \
                    && Math.abs(m.left - p.left) < 4 && Math.abs(m.top - p.bottom) < 4;",
                 STEP,
             )
             .await;
-        press(&page, &[ENTER]).await;
-
+        press(&page, &[ESCAPE]).await;
         page.browser
             .wait_for(
                 "the menu closed, and the focus back on the input pipe",
-                "const a = document.activeElement; \
-                 return !document.querySelector('.ambre-ctx-menu') && !!a \
-                   && a.matches('textarea.ambre-input');",
+                CLOSED,
+                STEP,
+            )
+            .await;
+
+        // Cut takes a selection. A selection draws no caret, so the menu
+        // opens at the centre of the canvas (`PROSE-UI-238`).
+        chord(&page, &[SHIFT], LEFT).await;
+        wait_pressed(&page, "Bold", "false").await;
+        chord(&page, &[SHIFT], F10).await;
+        page.browser
+            .wait_for("the focus on Cut over the selection", ON_CUT, STEP)
+            .await;
+        press(&page, &[ENTER]).await;
+        page.browser
+            .wait_for(
+                "the menu closed after Cut, and the focus back on the input pipe",
+                CLOSED,
                 STEP,
             )
             .await;

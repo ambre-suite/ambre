@@ -28,6 +28,8 @@ pub(crate) fn palette_table(kind: DocType) -> &'static [ambre_chrome::commands::
         DocType::Prose => ambre_prose::commands::COMMANDS,
         DocType::Trame => trame_chrome::COMMANDS,
         DocType::Murmure => ambre_murmure::ui::commands::COMMANDS,
+        // No page shows the settings document, so no table serves it.
+        DocType::Settings => &[],
     }
 }
 
@@ -110,11 +112,26 @@ pub(crate) fn MurmureShell(
     }
 }
 
-/// The header every application shares: the title, the sync badge, the theme
-/// switch, the share and about buttons and the avatar.
+/// The palette command of `kind`, which the search field of the header runs
+/// (`CHROME-239`). Each application declares its own under the one palette
+/// chord, so the shell finds it by that chord and names no id of it
+/// (`ARCH-018`).
+pub(crate) fn palette_command(kind: DocType) -> Option<&'static ambre_chrome::commands::Command> {
+    palette_table(kind).iter().find(|c| {
+        c.keybindings
+            .contains(&ambre_chrome::commands::shared::PALETTE_CHORD)
+    })
+}
+
+/// The header every application shares (`ambre-spec-shell.md` section 2).
+/// It holds the Ambre menu, the name of the document and its sync state.
+/// The field that opens the palette follows, then Share and the avatar menu.
+/// The theme sits in the avatar menu and the about dialog in the Ambre menu.
+/// The side of the panel sits in the header of the panel.
 #[component]
 fn ShellHeader(
     theme_ctl: ambre_canvas::ThemeControl,
+    to_logic: crate::outbox::ShellOutbox,
     theme_sig: RwSignal<ambre_canvas::Theme>,
     toasts: Toasts,
     chrome_status: RwSignal<ChromeStatus>,
@@ -124,72 +141,77 @@ fn ShellHeader(
     username: RwSignal<Option<ambre_core::Validated<ambre_core::DisplayName>>>,
     me: RwSignal<Option<Id<User>>>,
     docs: RwSignal<Vec<crate::landing::DocItem>>,
-    /// The side of the context panel, on a page that lays one out.
-    dock_side: Option<RwSignal<ambre_chrome::DockSide>>,
+    /// The palette command of the booted application.
+    palette: Option<&'static ambre_chrome::commands::Command>,
+    /// The one command path of the shell.
+    on_command: Callback<StaticKey<Commands>>,
 ) -> impl IntoView {
+    // The menu redraws its items, so the toggle is `Copy`: the control of the
+    // canvas theme stays on this thread, in a local store.
+    let theme_ctl = StoredValue::new_local(theme_ctl);
+    let to_logic = StoredValue::new_local(to_logic);
+    let toggle_theme = move |_| {
+        let next = theme_ctl.with_value(switch_theme);
+        theme_sig.set(next);
+        // The theme follows the account (`SETTINGS-023`).
+        to_logic.with_value(|outbox| {
+            outbox.send(LogicCommand::ChangeSetting {
+                change: ambre_client_core::SettingChange::Theme(crate::settings_view::chosen(next)),
+            });
+        });
+        let label = if next == ambre_canvas::Theme::Dark {
+            "Dark theme"
+        } else {
+            "Light theme"
+        };
+        toasts.info(label);
+    };
     view! {
-        <HeaderTitle docs=docs current_doc=current_doc />
-        <span class="spacer"></span>
-        // The side of the context panel is a setting of the person. It sits
-        // beside the theme switch, the one setting the header holds: no
-        // avatar menu exists yet (`ambre-spec-shell.md` section 2).
-        {dock_side.map(|side| view! { <super::panel::DockSideSwitch side=side /> })}
+        <HeaderTitle docs=docs current_doc=current_doc palette=palette on_command=on_command about_open=about_open />
         <SyncBadge status=chrome_status.into() />
-        <button
-            class="icon"
-            title="Toggle theme"
-            aria-label="Toggle colour theme"
-            on:click=move |_| {
-                let next = switch_theme(&theme_ctl);
-                theme_sig.set(next);
-                let label = if next == ambre_canvas::Theme::Dark {
-                    "Dark theme"
-                } else {
-                    "Light theme"
-                };
-                toasts.info(label);
-            }
-        >
-            {move || {
-                let icon = if theme_sig.get() == ambre_canvas::Theme::Dark {
-                    icondata::AiMoonFilled
-                } else {
-                    icondata::AiSunFilled
-                };
-                view! { <Icon icon=icon /> }
-            }}
-        </button>
-        <Show when=move || current_doc.get().is_some()>
-            <button
-                class="icon"
-                title="Share"
-                aria-label="Share document"
-                aria-haspopup="dialog"
-                aria-expanded=move || share_open.get().aria()
-                on:click=move |_| share_open.set(ambre_chrome::Openness::Open)
+        {palette.map(|command| view! { <ambre_chrome::CommandSearch command=command on_command=on_command /> })}
+        <div class="ambre-header-end">
+            <Show when=move || current_doc.get().is_some()>
+                <ambre_chrome::PrimaryButton
+                    icon=icondata::LuShare
+                    label="Share"
+                    expanded=share_open
+                    on_press=Callback::new(move |()| share_open.set(ambre_chrome::Openness::Open))
+                />
+            </Show>
+            // The account and the settings of the person (`CHROME-156`).
+            <ambre_chrome::HeaderMenu
+                label="Account"
+                class={StaticKey::<ambre_core::CssClasses>::new("ambre-account-menu")}
+                trigger={move || {
+                    // The user's initials on their identity colour, the
+                    // accent until the session names them (`PROFILE-002`).
+                    view! {
+                        <span
+                            class="ambre-avatar"
+                            title=move || username.get().map(ambre_core::Validated::into_string).unwrap_or_else(|| "Signed out".to_owned())
+                            style:background=move || me.get().map(|user| ambre_draw::peer_rgb(&user).to_string())
+                        >
+                            {move || ambre_chrome::avatar_initials(username.get().as_ref().map_or("", ambre_core::Validated::as_str))}
+                        </span>
+                    }
+                }}
             >
-                <Icon icon=icondata::AiShareAltOutlined />
-            </button>
-        </Show>
-        <button
-            class="icon"
-            title="About"
-            aria-label="About Ambre"
-            aria-haspopup="dialog"
-            aria-expanded=move || about_open.get().aria()
-            on:click=move |_| about_open.set(ambre_chrome::Openness::Open)
-        >
-            "?"
-        </button>
-        // The user's initials on their identity colour, the accent until the
-        // session names them (`PROFILE-002`).
-        <span
-            class="ambre-avatar"
-            title=move || username.get().map(ambre_core::Validated::into_string).unwrap_or_else(|| "Signed out".to_owned())
-            style:background=move || me.get().map(|user| ambre_draw::peer_rgb(&user).to_string())
-        >
-            {move || ambre_chrome::avatar_initials(username.get().as_ref().map_or("", ambre_core::Validated::as_str))}
-        </span>
+                <div class="ambre-menu-who">
+                    {move || username.get().map(ambre_core::Validated::into_string).unwrap_or_else(|| "Signed out".to_owned())}
+                </div>
+                <button role="menuitem" class="ambre-menu-item ambre-menu-theme" on:click=toggle_theme>
+                    {move || {
+                        let (icon, label) = if theme_sig.get() == ambre_canvas::Theme::Dark {
+                            (icondata::LuSun, "Light theme")
+                        } else {
+                            (icondata::LuMoon, "Dark theme")
+                        };
+                        view! { <Icon icon=icon /><span>{label}</span> }
+                    }}
+                </button>
+            </ambre_chrome::HeaderMenu>
+        </div>
     }
 }
 
@@ -222,21 +244,36 @@ pub(crate) fn shell_rows(kind: DocType) -> ambre_chrome::ShellRows {
             formula_bar: Absent,
             tabs: Absent,
         },
+        // No route boots the settings document, so it lays out no row.
+        DocType::Settings => ambre_chrome::ShellRows {
+            toolbar: Absent,
+            formula_bar: Absent,
+            tabs: Absent,
+        },
     }
 }
 
-/// The way home and the name of the open document, at the start of the
-/// header (`CHROME-203`, `CHROME-204`). A plain click goes home in place. It
-/// takes the navigation the launcher opens a document with, so the address bar
-/// and the frame loop follow. The router's own anchor handling moves its state and
-/// leaves the address unchanged, as no `Routes` completes the navigation. A
-/// modified click keeps the browser's own behaviour, a new tab for example.
-/// The name is the one the document list holds, composed at the point of use
-/// (`CHROME-080`).
+/// The Ambre menu on the mark, then the name of the open document, at the
+/// start of the header (`CHROME-203`). The menu opens on the way home
+/// (`CHROME-155`, `CHROME-204`), then offers the command palette
+/// (`CHROME-169`) and the about dialog. The name is the one the document
+/// list holds, composed at the point of use (`CHROME-080`).
+///
+/// A plain click on the way home goes home in place. It takes the
+/// navigation the launcher opens a document with, so the address bar and
+/// the frame loop follow. The router's own anchor handling moves its state
+/// and leaves the address unchanged, as no `Routes` completes the
+/// navigation. A modified click keeps the browser's own behaviour, a new tab
+/// for example.
 #[component]
 pub(crate) fn HeaderTitle(
     docs: RwSignal<Vec<crate::landing::DocItem>>,
     current_doc: RwSignal<Option<Id<Document>>>,
+    /// The palette command of the booted application.
+    palette: Option<&'static ambre_chrome::commands::Command>,
+    /// The one command path of the shell.
+    on_command: Callback<StaticKey<Commands>>,
+    about_open: RwSignal<ambre_chrome::Openness>,
 ) -> impl IntoView {
     let navigate = leptos_router::hooks::use_navigate();
     let go_home = move |ev: web_sys::MouseEvent| {
@@ -248,15 +285,43 @@ pub(crate) fn HeaderTitle(
         }
     };
     view! {
-        <a
-            class="title ambre-home"
-            href="/"
-            title="All documents"
-            aria-label="Ambre, all documents"
-            on:click=go_home
+        <ambre_chrome::HeaderMenu
+            label="Ambre menu"
+            class={StaticKey::<ambre_core::CssClasses>::new("ambre-brand")}
+            trigger={|| view! {
+                <span class="ambre-mark" aria-hidden="true"></span>
+                <span class="ambre-brand-name">"Ambre"</span>
+                <Icon icon=icondata::LuChevronDown />
+            }}
         >
-            "Ambre"
-        </a>
+            <a role="menuitem" class="ambre-menu-item ambre-home" href="/" on:click=go_home.clone()>
+                <Icon icon=icondata::LuLayoutGrid />
+                <span>"All documents"</span>
+            </a>
+            {palette.map(|command| {
+                let id = command.id;
+                view! {
+                    <button
+                        role="menuitem"
+                        class="ambre-menu-item ambre-menu-palette"
+                        data-reach=ambre_chrome::commands::Reach::Command(id).marker()
+                        on:click=move |_| on_command.run(id)
+                    >
+                        <Icon icon=icondata::LuSearch />
+                        <span>{ambre_chrome::SEARCH_LABEL}</span>
+                    </button>
+                }
+            })}
+            <button
+                role="menuitem"
+                class="ambre-menu-item ambre-menu-about"
+                aria-haspopup="dialog"
+                on:click=move |_| about_open.set(ambre_chrome::Openness::Open)
+            >
+                <Icon icon=icondata::AiQuestionCircleOutlined />
+                <span>"About Ambre"</span>
+            </button>
+        </ambre_chrome::HeaderMenu>
         {move || {
             current_doc.get().map(|document_id| {
                 let name = docs.with(|list| {
@@ -317,6 +382,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
     let Wiring {
         to_logic,
         theme_ctl,
+        account_theme,
         toile_toggles,
         style_state,
         toasts,
@@ -337,6 +403,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         prose_signals,
         formula_ref,
         selection_ref,
+        range_bar,
         sheet_setup,
         formula_text,
         formula_action,
@@ -367,6 +434,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         toile_cursor,
         toile_style_model,
         toile_restyle,
+        toile_place,
         toile_float_bar,
         toile_quick_style,
         toile_cover,
@@ -399,6 +467,15 @@ pub(crate) fn AppRoot() -> impl IntoView {
     // Theme toggle drives only the button glyph; `theme_ctl` (canvas) and the
     // document `data-theme` (CSS custom properties) are the real switches.
     let theme_sig = RwSignal::new(theme_ctl.get());
+    // A theme of the account another device chose moves the switches first;
+    // the glyph then reads them again (`SETTINGS-012`).
+    {
+        let theme_ctl = theme_ctl.clone();
+        Effect::new(move |_| {
+            account_theme.track();
+            theme_sig.set(theme_ctl.get());
+        });
+    }
     // The kind of the view this page booted, fixed per page load.
     let boot_is_toile = booted == DocType::Toile;
     let boot_is_prose = booted == DocType::Prose;
@@ -775,6 +852,9 @@ pub(crate) fn AppRoot() -> impl IntoView {
             scope: toile_ctx_scope,
             on_command,
             restyle: toile_restyle,
+            place: toile_place,
+            deck: toile_deck,
+            stats: sel_stats_toile,
         })
     } else if boot_is_prose {
         ambre_prose::chrome::prose_panel(prose_signals)
@@ -786,6 +866,9 @@ pub(crate) fn AppRoot() -> impl IntoView {
             on_style,
             selection: selection_ref,
             sheet: sheet_setup,
+            sheets,
+            active_sheet,
+            on_rename: on_sheet_rename,
         })
     } else {
         ambre_chrome::PanelContent::empty()
@@ -793,10 +876,12 @@ pub(crate) fn AppRoot() -> impl IntoView {
 
     let header = {
         let theme_ctl = theme_ctl.clone();
+        let header_tx = to_logic.clone();
         move || {
             view! {
                 <ShellHeader
                     theme_ctl=theme_ctl.clone()
+                    to_logic=header_tx.clone()
                     theme_sig=theme_sig
                     toasts=toasts
                     chrome_status=chrome_status
@@ -806,7 +891,8 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     username=username
                     me=me
                     docs=docs
-                    dock_side=panel_prefs.map(|p| p.side)
+                    palette=palette_command(booted)
+                    on_command=on_command
                 />
             }
         }
@@ -832,6 +918,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                         <ambre_chrome::ContextPanel
                             prefs=prefs
                             title=panel_content.title
+                            subtitle=panel_content.subtitle
                             sections=panel_content.sections
                         />
                     </Show>
@@ -1164,6 +1251,19 @@ pub(crate) fn AppRoot() -> impl IntoView {
             </toile_chrome::EditingSurfaces>
         })}
 
+        // The Trame range bar over a selection of two cells or more
+        // (`CHROME-246`): the shared format bar, at the anchor the view
+        // publishes.
+        {boot_is_trame.then(|| view! {
+            <trame_chrome::RangeBar
+                anchor=range_bar
+                style=style_state
+                theme=theme_sig
+                on_command=on_command
+                on_style=on_style
+            />
+        })}
+
         // Prose annotations: the comment panel and the suggestion popover,
         // both DOM chrome (`PROSE-UI-050`, `PROSE-UI-052`).
         {boot_is_prose.then(|| view! {
@@ -1300,12 +1400,28 @@ mod tests {
             ids(ambre_murmure::ui::commands::COMMANDS)
         );
         assert!(fed(DocType::Toile).len() > ambre_toile::ui::menu::COMMANDS.len());
+        // The header finds the palette command of each table by its chord.
+        let palette = |kind| palette_command(kind).map(|c| c.id);
+        assert_eq!(
+            palette(DocType::Toile),
+            Some(ambre_toile::ui::commands::PALETTE)
+        );
+        assert_eq!(
+            palette(DocType::Prose),
+            Some(ambre_prose::commands::PALETTE)
+        );
+        assert_eq!(palette(DocType::Trame), Some(trame_chrome::PALETTE));
+        assert_eq!(
+            palette(DocType::Murmure),
+            Some(ambre_murmure::ui::commands::PALETTE)
+        );
     }
 
-    /// The header names the open document (`CHROME-203`), and its way home
-    /// moves the address bar home (`CHROME-204`) with no reload
-    /// (`CHROME-205`). A page with no document
-    /// shows the way home alone.
+    /// The header names the open document (`CHROME-203`). The Ambre menu
+    /// opens on the way home (`CHROME-155`), then offers the palette
+    /// (`CHROME-169`) and the about dialog. The way home moves the address
+    /// bar home (`CHROME-204`) with no reload (`CHROME-205`). A page with no
+    /// document shows the menu alone.
     #[wasm_bindgen_test]
     async fn the_header_links_home_and_names_the_open_document() {
         use wasm_bindgen::JsCast as _;
@@ -1318,6 +1434,8 @@ mod tests {
             member_count: ambre_core::Count::<ambre_core::Members>::ONE,
         }]);
         let current_doc = RwSignal::new(None);
+        let ran = RwSignal::new(None::<StaticKey<Commands>>);
+        let about_open = RwSignal::new(ambre_chrome::Openness::Closed);
         let page = web_sys::window()
             .and_then(|w| w.document())
             .expect("a document");
@@ -1330,15 +1448,60 @@ mod tests {
         leptos::mount::mount_to(target, move || {
             view! {
                 <leptos_router::components::Router>
-                    <HeaderTitle docs=docs current_doc=current_doc />
+                    <HeaderTitle
+                        docs=docs
+                        current_doc=current_doc
+                        palette=palette_command(DocType::Prose)
+                        on_command=Callback::new(move |id| ran.set(Some(id)))
+                        about_open=about_open
+                    />
                 </leptos_router::components::Router>
             }
         })
         .forget();
         let query = |selector: &str| container.query_selector(selector).expect("a selector");
+        let click = |selector: &str| {
+            query(selector)
+                .unwrap_or_else(|| panic!("{selector}"))
+                .dyn_ref::<web_sys::HtmlElement>()
+                .expect("an element")
+                .click();
+        };
+        let brand = ".ambre-brand .ambre-header-menu-button";
+        assert!(query("a.ambre-home").is_none(), "the menu starts closed");
+        assert!(query(".ambre-doc-name").is_none(), "no document, no name");
+
+        // The menu opens on the way home, then the palette, then about.
+        click(brand);
+        leptos::task::tick().await;
+        let items = container
+            .query_selector_all(".ambre-brand [role=\"menuitem\"]")
+            .expect("the items");
+        let class = |i| {
+            items
+                .item(i)
+                .and_then(|n| n.dyn_into::<web_sys::Element>().ok())
+                .map(|e| e.class_name())
+                .unwrap_or_default()
+        };
+        assert_eq!(items.length(), 3);
+        assert!(class(0).contains("ambre-home"), "{}", class(0));
+        assert!(class(1).contains("ambre-menu-palette"), "{}", class(1));
+        assert!(class(2).contains("ambre-menu-about"), "{}", class(2));
+        click(".ambre-menu-palette");
+        leptos::task::tick().await;
+        assert_eq!(ran.get_untracked(), Some(ambre_prose::commands::PALETTE));
+        assert!(query("a.ambre-home").is_none(), "a pick closes the menu");
+        click(brand);
+        leptos::task::tick().await;
+        click(".ambre-menu-about");
+        leptos::task::tick().await;
+        assert_eq!(about_open.get_untracked(), ambre_chrome::Openness::Open);
+
+        click(brand);
+        leptos::task::tick().await;
         let home = query("a.ambre-home").expect("the way home");
         assert_eq!(home.get_attribute("href").as_deref(), Some("/"));
-        assert!(query(".ambre-doc-name").is_none(), "no document, no name");
 
         current_doc.set(Some(document_id));
         leptos::task::tick().await;
@@ -1353,6 +1516,7 @@ mod tests {
         history
             .push_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&doc))
             .expect("a document address");
+        let button = query(brand).expect("the Ambre menu button");
         home.dyn_ref::<web_sys::HtmlElement>()
             .expect("an element")
             .click();
@@ -1363,10 +1527,237 @@ mod tests {
             .expect("the runner address back");
         assert_eq!(path, "/", "the address bar goes home");
         assert!(
-            home.is_connected(),
+            button.is_connected(),
             "the page did not reload (`CHROME-205`)"
         );
         container.remove();
+    }
+
+    /// The header lays out the Ambre menu, the name, the sync state and the
+    /// search field, then Share and the avatar menu alone (`CHROME-243`).
+    /// Share is the primary button and opens the share dialog
+    /// (`CHROME-244`). The theme sits in the avatar menu, the about dialog
+    /// in the Ambre menu, and no icon button of the header holds either.
+    #[wasm_bindgen_test]
+    async fn the_header_ends_on_share_and_the_avatar_menu() {
+        use wasm_bindgen::JsCast as _;
+        let page = web_sys::window()
+            .and_then(|w| w.document())
+            .expect("a page");
+        let container = page.create_element("div").expect("a container");
+        page.body()
+            .expect("a body")
+            .append_child(&container)
+            .expect("appended");
+        let target: web_sys::HtmlElement = container.clone().dyn_into().expect("an element");
+        let theme_sig = RwSignal::new(ambre_canvas::Theme::Light);
+        let share_open = RwSignal::new(ambre_chrome::Openness::Closed);
+        let current_doc = RwSignal::new(Some(Id::<Document>::mint()));
+        let (to_logic, _from_shell) =
+            ambre_bus::conduit::local::<LogicCommand>(ambre_core::Bounded::<
+                ambre_bus::conduit::ChannelSlots,
+            >::of::<8>());
+        let to_logic = crate::outbox::ShellOutbox::new(to_logic);
+        leptos::mount::mount_to(target, move || {
+            view! {
+                <leptos_router::components::Router>
+                    <header class="ambre-header">
+                        <ShellHeader
+                            theme_ctl=ambre_canvas::ThemeControl::new(ambre_canvas::Theme::Light)
+                            to_logic=to_logic.clone()
+                            theme_sig=theme_sig
+                            toasts=Toasts::new()
+                            chrome_status=RwSignal::new(ChromeStatus::default())
+                            current_doc=current_doc
+                            share_open=share_open
+                            about_open=RwSignal::new(ambre_chrome::Openness::Closed)
+                            username=RwSignal::new(None)
+                            me=RwSignal::new(None)
+                            docs=RwSignal::new(Vec::new())
+                            palette=palette_command(DocType::Toile)
+                            on_command=Callback::new(|_| {})
+                        />
+                    </header>
+                </leptos_router::components::Router>
+            }
+        })
+        .forget();
+        leptos::task::tick().await;
+        let header = container
+            .query_selector(".ambre-header")
+            .expect("a selector")
+            .expect("the header");
+        let classes: Vec<String> = (0..header.children().length())
+            .filter_map(|i| header.children().item(i))
+            .map(|el| el.class_name())
+            .collect();
+        let order: Vec<&str> = classes
+            .iter()
+            .map(|c| {
+                c.split_whitespace()
+                    .find(|w| w.starts_with("ambre-"))
+                    .unwrap_or("")
+            })
+            .collect();
+        assert_eq!(
+            order,
+            [
+                "ambre-header-menu",
+                "ambre-doc-name",
+                "ambre-sync",
+                "ambre-command-search",
+                "ambre-header-end"
+            ],
+            "{classes:?}"
+        );
+        let end = container
+            .query_selector(".ambre-header-end")
+            .expect("a selector")
+            .expect("the end");
+        let ends: Vec<String> = (0..end.children().length())
+            .filter_map(|i| end.children().item(i))
+            .map(|el| el.class_name())
+            .collect();
+        assert_eq!(ends.len(), 2, "{ends:?}");
+        assert!(ends[0].contains("ambre-primary-button"), "{ends:?}");
+        assert!(ends[1].contains("ambre-account-menu"), "{ends:?}");
+        assert!(
+            container
+                .query_selector("button.icon")
+                .expect("a selector")
+                .is_none(),
+            "no icon button of its own"
+        );
+
+        let press = |selector: &str| {
+            container
+                .query_selector(selector)
+                .expect("a selector")
+                .unwrap_or_else(|| panic!("{selector}"))
+                .dyn_ref::<web_sys::HtmlElement>()
+                .expect("an element")
+                .click();
+        };
+        press(".ambre-primary-button");
+        leptos::task::tick().await;
+        assert_eq!(share_open.get_untracked(), ambre_chrome::Openness::Open);
+
+        press(".ambre-account-menu .ambre-header-menu-button");
+        leptos::task::tick().await;
+        press(".ambre-menu-theme");
+        leptos::task::tick().await;
+        assert_eq!(theme_sig.get_untracked(), ambre_canvas::Theme::Dark);
+        assert!(
+            container
+                .query_selector(".ambre-menu-theme")
+                .expect("a selector")
+                .is_none(),
+            "a pick closes the avatar menu"
+        );
+        current_doc.set(None);
+        leptos::task::tick().await;
+        assert!(
+            container
+                .query_selector(".ambre-primary-button")
+                .expect("a selector")
+                .is_none(),
+            "no document, nothing to share"
+        );
+        container.remove();
+    }
+
+    /// Mount the start of the header and the search field in a frame of
+    /// `width` pixels, under the shell stylesheet. Open the Ambre menu, then
+    /// read whether the palette entry and the label of the field show.
+    async fn header_shown_at(width: u32) -> (bool, bool) {
+        use wasm_bindgen::JsCast as _;
+        let page = web_sys::window()
+            .and_then(|w| w.document())
+            .expect("a page");
+        let frame: web_sys::HtmlIFrameElement = page
+            .create_element("iframe")
+            .expect("a frame")
+            .dyn_into()
+            .expect("an iframe");
+        let style = format!("width:{width}px;height:400px;border:0");
+        frame.set_attribute("style", &style).expect("a style");
+        page.body()
+            .expect("a body")
+            .append_child(&frame)
+            .expect("appended");
+        let inner = frame.content_document().expect("the frame's page");
+        let sheet = inner.create_element("style").expect("a sheet");
+        sheet.set_text_content(Some(include_str!("../../styles.css")));
+        inner
+            .head()
+            .expect("a head")
+            .append_child(&sheet)
+            .expect("appended");
+        let docs = RwSignal::new(Vec::new());
+        let current_doc = RwSignal::new(None);
+        let palette = palette_command(DocType::Trame);
+        let on_command = Callback::new(|_| {});
+        leptos::mount::mount_to(inner.body().expect("a body"), move || {
+            view! {
+                <leptos_router::components::Router>
+                    <header class="ambre-header">
+                        <HeaderTitle
+                            docs=docs
+                            current_doc=current_doc
+                            palette=palette
+                            on_command=on_command
+                            about_open=RwSignal::new(ambre_chrome::Openness::Closed)
+                        />
+                        {palette.map(|command| view! { <ambre_chrome::CommandSearch command=command on_command=on_command /> })}
+                    </header>
+                </leptos_router::components::Router>
+            }
+        })
+        .forget();
+        let _ = frame.offset_width();
+        inner
+            .query_selector(".ambre-brand .ambre-header-menu-button")
+            .expect("a selector")
+            .expect("the Ambre menu button")
+            .dyn_ref::<web_sys::HtmlElement>()
+            .expect("an element")
+            .click();
+        leptos::task::tick().await;
+        let view = frame.content_window().expect("the frame's window");
+        let shown = |selector: &str| {
+            let el = inner
+                .query_selector(selector)
+                .expect("a selector")
+                .unwrap_or_else(|| panic!("{selector}"));
+            view.get_computed_style(&el)
+                .expect("a style")
+                .expect("a computed style")
+                .get_property_value("display")
+                .expect("a display")
+                != "none"
+        };
+        let out = (
+            shown(".ambre-menu-palette"),
+            shown(".ambre-command-search-label"),
+        );
+        frame.remove();
+        out
+    }
+
+    /// On a phone the search field keeps its icon alone (`CHROME-240`), and
+    /// the Ambre menu offers the palette (`CHROME-169`). A tablet and a
+    /// desktop show the field whole. The menu keeps the entry at every width,
+    /// since the stylesheet hides nothing inside a width query.
+    #[wasm_bindgen_test]
+    async fn a_phone_folds_the_search_field_and_offers_the_palette_in_the_menu() {
+        assert_eq!(header_shown_at(400).await, (true, false), "a phone");
+        assert_eq!(
+            header_shown_at(599).await,
+            (true, false),
+            "the widest phone"
+        );
+        assert_eq!(header_shown_at(600).await, (true, true), "a tablet");
+        assert_eq!(header_shown_at(1280).await, (true, true), "a desktop");
     }
 
     /// Each application lays out its own rows (`CHROME-199`). The formula bar

@@ -10,13 +10,20 @@
 // ============================================================================
 
 use ambre_commands::{Locale, Property, Reach};
-use ambre_core::{PanelSections, Properties, StaticKey};
+use ambre_core::id::{Element, Id};
+use ambre_core::{Board, Count, PanelSections, Properties, Px, Radians, StaticKey};
+
+use crate::message::{Elements, ToileCommand};
 
 use super::menu;
 use super::style::{StyleModel, Styled};
 
 /// The board, with nothing selected.
 pub const BOARD: StaticKey<PanelSections> = StaticKey::new("toile.board");
+/// The frames of the board, with nothing selected.
+pub const FRAMES: StaticKey<PanelSections> = StaticKey::new("toile.frames");
+/// The place, the size and the rotation of a lone selected shape.
+pub const POSITION: StaticKey<PanelSections> = StaticKey::new("toile.position");
 /// The fill, the stroke and the opacity of the selected shapes.
 pub const SHAPE: StaticKey<PanelSections> = StaticKey::new("toile.shape");
 /// The text of the selected shapes.
@@ -48,6 +55,16 @@ pub const ITALIC: StaticKey<Properties> = StaticKey::new("toile.style.italic");
 pub const UNDERLINE: StaticKey<Properties> = StaticKey::new("toile.style.underline");
 /// The strikethrough of a text.
 pub const STRIKETHROUGH: StaticKey<Properties> = StaticKey::new("toile.style.strikethrough");
+/// The left edge of a shape, before its rotation.
+pub const X: StaticKey<Properties> = StaticKey::new("toile.place.x");
+/// The top edge of a shape, before its rotation.
+pub const Y: StaticKey<Properties> = StaticKey::new("toile.place.y");
+/// The width of a shape.
+pub const WIDTH: StaticKey<Properties> = StaticKey::new("toile.place.width");
+/// The height of a shape.
+pub const HEIGHT: StaticKey<Properties> = StaticKey::new("toile.place.height");
+/// The rotation of a shape about its centre.
+pub const ROTATION: StaticKey<Properties> = StaticKey::new("toile.place.rotation");
 
 /// Describe one property per line: its id, its title function and its label.
 macro_rules! properties {
@@ -82,6 +99,73 @@ properties! {
     ITALIC: ITALIC, "Italic";
     UNDERLINE: UNDERLINE, "Underline";
     STRIKETHROUGH: STRIKETHROUGH, "Strikethrough";
+    X: X, "X";
+    Y: Y, "Y";
+    WIDTH: WIDTH, "Width";
+    HEIGHT: HEIGHT, "Height";
+    ROTATION: ROTATION, "Rotation";
+}
+
+/// The box and the rotation of a lone selected shape, as the board stores
+/// them: the box before the rotation, turned about its centre.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Placement {
+    /// The shape.
+    pub id: Id<Element>,
+    /// Its box on the board, before the rotation.
+    pub frame: kurbo::Rect,
+    /// Its rotation about the centre of the box.
+    pub rotation: Radians,
+}
+
+/// One field of the position section, with the value the user wrote.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PlaceField {
+    /// The left edge.
+    X(Px<Board>),
+    /// The top edge.
+    Y(Px<Board>),
+    /// The width, from the left edge.
+    Width(Px<Board>),
+    /// The height, from the top edge.
+    Height(Px<Board>),
+    /// The rotation.
+    Rotation(Radians),
+}
+
+/// A write of the position section: the shape as the panel showed it, and
+/// the one field the user changed.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlaceEdit {
+    /// The shape before the write.
+    pub placement: Placement,
+    /// The field the user changed.
+    pub field: PlaceField,
+}
+
+impl PlaceEdit {
+    /// The one command the write sends, so one write is one undo step
+    /// (`CHROME-248`). A place moves the box and keeps its size; a size keeps
+    /// the top-left corner. `None` for a size of zero or less, which would
+    /// flip the box, and for an angle that is no number.
+    #[must_use]
+    pub fn command(&self) -> Option<ToileCommand> {
+        let r = self.placement.frame;
+        let id = self.placement.id.clone();
+        let new = match self.field {
+            PlaceField::X(x) => r.with_origin((x.get(), r.y0)),
+            PlaceField::Y(y) => r.with_origin((r.x0, y.get())),
+            PlaceField::Width(w) if w.get() > 0.0 => r.with_size((w.get(), r.height())),
+            PlaceField::Height(h) if h.get() > 0.0 => r.with_size((r.width(), h.get())),
+            PlaceField::Width(_) | PlaceField::Height(_) => return None,
+            PlaceField::Rotation(radians) => {
+                return radians
+                    .is_finite()
+                    .then_some(ToileCommand::RotateElement { id, radians });
+            }
+        };
+        Some(ToileCommand::ResizeElement { id, new })
+    }
 }
 
 /// The title of a property no table describes.
@@ -108,23 +192,26 @@ pub fn property(id: StaticKey<Properties>) -> &'static Property {
 pub enum PanelKind {
     /// Nothing is selected: the panel shows the board.
     Board,
-    /// One or more elements.
+    /// Two or more elements, a group or a locked element.
     Shape,
+    /// One shape the user can move, which shows its position too.
+    Placed,
     /// One arrow.
     Connector,
 }
 
 impl PanelKind {
     /// Every kind, for a test that walks them all.
-    pub const ALL: [Self; 3] = [Self::Board, Self::Shape, Self::Connector];
+    pub const ALL: [Self; 4] = [Self::Board, Self::Shape, Self::Placed, Self::Connector];
 
     /// The kind of the selection the style model describes.
     #[must_use]
     pub fn of(model: Option<&StyleModel>) -> Self {
-        match model.map(|m| m.kind) {
+        match model.map(|m| (m.kind, m.placement.is_some())) {
             None => Self::Board,
-            Some(Styled::Elements) => Self::Shape,
-            Some(Styled::Arrow) => Self::Connector,
+            Some((Styled::Elements, true)) => Self::Placed,
+            Some((Styled::Elements, false)) => Self::Shape,
+            Some((Styled::Arrow, _)) => Self::Connector,
         }
     }
 
@@ -133,8 +220,22 @@ impl PanelKind {
     pub fn title(self) -> &'static str {
         match self {
             Self::Board => "Document",
-            Self::Shape => "Selection",
-            Self::Connector => "Selection",
+            Self::Shape | Self::Placed | Self::Connector => "Selection",
+        }
+    }
+
+    /// The subtitle of the panel for this kind (`CHROME-241`): the elements
+    /// the selection holds, as the Logic thread last counted them. A count
+    /// not read yet shows nothing.
+    #[must_use]
+    pub fn subtitle(self, count: Option<Count<Elements>>) -> String {
+        match self {
+            Self::Board => ambre_commands::NOTHING_SELECTED.to_owned(),
+            Self::Connector => "1 connector".to_owned(),
+            Self::Shape | Self::Placed => count.map_or_else(String::new, |n| {
+                let n = n.get();
+                format!("{n} {}", if n == 1 { "element" } else { "elements" })
+            }),
         }
     }
 
@@ -142,8 +243,9 @@ impl PanelKind {
     #[must_use]
     pub fn sections(self) -> &'static [StaticKey<PanelSections>] {
         match self {
-            Self::Board => &[BOARD],
+            Self::Board => &[BOARD, FRAMES],
             Self::Shape => &[SHAPE, TEXT, ARRANGE],
+            Self::Placed => &[POSITION, SHAPE, TEXT, ARRANGE],
             Self::Connector => &[CONNECTOR],
         }
     }
@@ -153,7 +255,7 @@ impl PanelKind {
     #[must_use]
     pub fn bar(self) -> &'static [Reach] {
         match self {
-            Self::Shape => &[
+            Self::Shape | Self::Placed => &[
                 Reach::Property(FILL),
                 Reach::Property(TEXT_COLOUR),
                 Reach::Command(menu::DUPLICATE),
@@ -169,6 +271,17 @@ impl PanelKind {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The subtitle counts what the selection holds, and reads nothing
+    /// selected over the board alone (`CHROME-241`).
+    #[test]
+    fn the_subtitle_counts_the_selection() {
+        assert_eq!(PanelKind::Board.subtitle(None), "nothing selected");
+        assert_eq!(PanelKind::Shape.subtitle(Some(Count::new(1))), "1 element");
+        assert_eq!(PanelKind::Shape.subtitle(Some(Count::new(4))), "4 elements");
+        assert_eq!(PanelKind::Shape.subtitle(None), "");
+        assert_eq!(PanelKind::Connector.subtitle(None), "1 connector");
+    }
 
     #[test]
     fn each_bar_reaches_the_panel_and_holds_no_clipboard() {
@@ -188,7 +301,68 @@ mod tests {
     #[test]
     fn no_selection_shows_the_board() {
         assert_eq!(PanelKind::of(None), PanelKind::Board);
-        assert_eq!(PanelKind::Board.sections(), &[BOARD]);
+        assert_eq!(PanelKind::Board.sections(), &[BOARD, FRAMES]);
+    }
+
+    fn placed() -> Placement {
+        Placement {
+            id: Id::<Element>::from_text("e".to_owned()),
+            frame: kurbo::Rect::new(10.0, 20.0, 110.0, 70.0),
+            rotation: Radians::ZERO,
+        }
+    }
+
+    /// The box a resize writes, or the angle a rotation writes, of the one
+    /// command a write sends.
+    #[derive(Debug, PartialEq)]
+    enum Sent {
+        Resize(kurbo::Rect),
+        Rotate(Radians),
+    }
+
+    /// `CHROME-248`: each field of the position section sends one command,
+    /// which changes that field alone, so one write is one undo step.
+    #[test]
+    fn each_place_field_sends_one_command_that_changes_it_alone() {
+        let edit = |field| {
+            PlaceEdit {
+                placement: placed(),
+                field,
+            }
+            .command()
+            .map(|c| match c {
+                ToileCommand::ResizeElement { id, new } if id == placed().id => Sent::Resize(new),
+                ToileCommand::RotateElement { id, radians } if id == placed().id => {
+                    Sent::Rotate(radians)
+                }
+                other => panic!("unexpected {other:?}"),
+            })
+        };
+        let resized = |x0, y0, x1, y1| Some(Sent::Resize(kurbo::Rect::new(x0, y0, x1, y1)));
+        assert_eq!(
+            edit(PlaceField::X(Px::<Board>::new(-5.0))),
+            resized(-5.0, 20.0, 95.0, 70.0)
+        );
+        assert_eq!(
+            edit(PlaceField::Y(Px::<Board>::new(0.0))),
+            resized(10.0, 0.0, 110.0, 50.0)
+        );
+        assert_eq!(
+            edit(PlaceField::Width(Px::<Board>::new(40.0))),
+            resized(10.0, 20.0, 50.0, 70.0)
+        );
+        assert_eq!(
+            edit(PlaceField::Height(Px::<Board>::new(5.0))),
+            resized(10.0, 20.0, 110.0, 25.0)
+        );
+        assert_eq!(
+            edit(PlaceField::Width(Px::<Board>::new(0.0))),
+            None,
+            "no flip"
+        );
+        let turn = Radians::new(1.0);
+        assert_eq!(edit(PlaceField::Rotation(turn)), Some(Sent::Rotate(turn)));
+        assert_eq!(edit(PlaceField::Rotation(Radians::new(f64::NAN))), None);
     }
 }
 

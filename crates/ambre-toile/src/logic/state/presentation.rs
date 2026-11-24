@@ -128,15 +128,20 @@ impl ToileState {
             .then(|| Id::<Frame>::from_text(id.as_str().to_owned()))
     }
 
-    /// One deck row: the frame's id and its title, empty until it is named.
+    /// One deck row: the frame's id, its title, empty until it is named, and
+    /// how many elements it holds.
     fn deck_frame(&self, id: &Id<Frame>) -> DeckFrame {
+        let element: Id<Element> = id.clone().into();
         let name = self
-            .element_map(&id.clone().into())
+            .element_map(&element)
             .and_then(|em| str_of(&em, ElementKey::Name))
             .unwrap_or_default();
         DeckFrame {
             id: id.clone(),
             name,
+            items: ambre_core::Count::<crate::message::Elements>::of(
+                self.children_of(&element).len(),
+            ),
         }
     }
 

@@ -314,13 +314,13 @@ pub fn draw_overlay<S: DrawSurface>(
         );
     }
 
-    // -- 1b'. Excel-style autofilter buttons on the current region's header row
-    //         (`trame-shared-filter`): each column of the contiguous data block around the
-    //         active cell draws a small button at the right edge of its first-row
-    //         cell -- a plain chevron when the column is unfiltered, a funnel
-    //         when the shared filter targets it. Clicking opens the same
-    //         FilterPopover as the context-menu entry (one filter code path).
-    if let Some(region) = state.current_region() {
+    // -- 1b'. Autofilter buttons on the header row of the filtered block
+    //         (`TRAME-FEAT-027`): while the sheet holds a filter, each column of
+    //         the data block around the active cell draws a small button at the
+    //         right edge of its first-row cell -- a chevron when the column is
+    //         unfiltered, a funnel when the filter targets it. A sheet with no
+    //         filter draws none: the menu and the panel reach the popover.
+    if let Some(region) = state.filter_band() {
         let band_row = region.top_left.row;
         for col in region.cols() {
             let Some(r) = state.filter_button_rect(CellPos::new(band_row, col)) else {

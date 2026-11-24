@@ -764,6 +764,7 @@ fn deck_frame(id: &str, name: &str) -> DeckFrame {
     DeckFrame {
         id: Id::<Frame>::from_text(id.to_owned()),
         name: name.to_owned(),
+        items: ambre_core::Count::<ambre_core::Elements>::new(0),
     }
 }
 
@@ -1466,6 +1467,7 @@ fn styled(kind: ambre_toile::ui::style::Styled) -> StyleModel {
         base: ambre_toile::message::ElementStyle::default(),
         mixed: Default::default(),
         kind,
+        placement: None,
     }
 }
 
@@ -1487,6 +1489,26 @@ fn mount_toile_panel(model: Option<StyleModel>) -> web_sys::Element {
 
 /// Mount the board's context panel on `model` and `scope`.
 fn mount_toile_panel_on(model: Option<StyleModel>, scope: CtxScope) -> web_sys::Element {
+    mount_toile_panel_with(model, scope, panel_deck(), RwSignal::new(None))
+}
+
+/// Deck signals holding no frame.
+fn panel_deck() -> ambre_toile::chrome::DeckSignals {
+    ambre_toile::chrome::DeckSignals {
+        panel: RwSignal::new(ambre_toile::ui::PanelState::Closed),
+        view: RwSignal::new(DeckView::default()),
+        intent: RwSignal::new(None),
+    }
+}
+
+/// Mount the board's context panel on `model` and `scope`, over `deck` and
+/// the position sink `place`.
+fn mount_toile_panel_with(
+    model: Option<StyleModel>,
+    scope: CtxScope,
+    deck: ambre_toile::chrome::DeckSignals,
+    place: RwSignal<Option<ambre_toile::ui::panel::PlaceEdit>>,
+) -> web_sys::Element {
     use ambre_chrome::{ContextPanel, DockSide, Fold, PanelPrefs, PanelWidth};
     let model = RwSignal::new(model);
     let scope = RwSignal::new(scope);
@@ -1495,11 +1517,151 @@ fn mount_toile_panel_on(model: Option<StyleModel>, scope: CtxScope) -> web_sys::
         scope,
         on_command: Callback::new(|_| {}),
         restyle: RwSignal::new(None),
+        place,
+        deck,
+        stats: RwSignal::new(Some(ambre_toile::ui::status::SelStats::from_reply(
+            ambre_core::Count::new(3),
+            None,
+        ))),
     });
     let prefs = PanelPrefs::new(DockSide::Right, PanelWidth::DEFAULT, Fold::Open);
     mount_in_container(move || {
-        view! { <ContextPanel prefs=prefs title=content.title sections=content.sections /> }
+        view! {
+            <ContextPanel
+                prefs=prefs
+                title=content.title
+                subtitle=content.subtitle
+                sections=content.sections
+            />
+        }
     })
+}
+
+/// `CHROME-251`: with nothing selected, the frames section lists each frame
+/// with its count of items, and a press selects the frame.
+#[wasm_bindgen_test]
+async fn the_frames_section_lists_the_frames_and_selects_one() {
+    let deck = panel_deck();
+    deck.view.set(DeckView {
+        slides: vec![DeckFrame {
+            items: Count::<Elements>::new(3),
+            ..deck_frame("f1", "Intro")
+        }],
+        off_deck: vec![deck_frame("f2", "")],
+    });
+    let root = mount_toile_panel_with(None, CtxScope::default(), deck, RwSignal::new(None));
+    leptos::task::tick().await;
+    let rows = root.query_selector_all(".ambre-kit-frame").unwrap();
+    assert_eq!(rows.length(), 2);
+    let text = |i| {
+        rows.item(i)
+            .and_then(|n| n.text_content())
+            .unwrap_or_default()
+    };
+    assert!(
+        text(0).contains("Intro") && text(0).contains("3 items"),
+        "{}",
+        text(0)
+    );
+    assert!(
+        text(1).contains("Untitled frame") && text(1).contains("0 items"),
+        "{}",
+        text(1)
+    );
+    leptos::wasm_bindgen::JsCast::dyn_ref::<web_sys::HtmlElement>(&rows.item(0).unwrap())
+        .unwrap()
+        .click();
+    assert!(
+        matches!(
+            deck.intent.get_untracked(),
+            Some(ambre_toile::ui::deck::DeckIntent::Select(ref f)) if f.as_str() == "f1"
+        ),
+        "the press selects the frame"
+    );
+    root.remove();
+}
+
+/// `CHROME-247`: a lone movable shape shows its position as five length
+/// fields, and a typed value writes an edit of that field alone.
+#[wasm_bindgen_test]
+async fn the_position_section_shows_a_lone_shape_and_writes_one_field() {
+    use ambre_toile::ui::panel::{self, PlaceField, Placement};
+    let mut model = styled(ambre_toile::ui::style::Styled::Elements);
+    model.placement = Some(Placement {
+        id: Id::<ambre_core::id::Element>::from_text("e".to_owned()),
+        frame: kurbo::Rect::new(10.0, 20.0, 110.0, 70.0),
+        rotation: ambre_core::Radians::ZERO,
+    });
+    let place = RwSignal::new(None);
+    let root = mount_toile_panel_with(Some(model), CtxScope::default(), panel_deck(), place);
+    leptos::task::tick().await;
+    let markers = ambre_chrome::reach_markers(&root);
+    for id in [
+        panel::X,
+        panel::Y,
+        panel::WIDTH,
+        panel::HEIGHT,
+        panel::ROTATION,
+    ] {
+        let reach = ambre_chrome::commands::Reach::Property(id);
+        assert!(markers.iter().any(|m| reach.matches_marker(m)), "{id:?}");
+    }
+    let marker = ambre_chrome::commands::Reach::Property(panel::WIDTH).marker();
+    let width = root
+        .query_selector(&format!("[data-reach=\"{marker}\"] input"))
+        .unwrap()
+        .expect("the width field");
+    let width = leptos::wasm_bindgen::JsCast::dyn_into::<web_sys::HtmlInputElement>(width).unwrap();
+    assert_eq!(width.value(), "100");
+    width.set_value("40");
+    width
+        .dispatch_event(&web_sys::Event::new("change").unwrap())
+        .unwrap();
+    leptos::task::tick().await;
+    let sent = place.get_untracked().expect("one write");
+    assert_eq!(
+        sent.field,
+        PlaceField::Width(ambre_core::Px::<ambre_core::Board>::new(40.0))
+    );
+
+    // `CHROME-252`: the fill and the stroke lay out inline swatches, then the
+    // custom-colour button.
+    for id in [panel::FILL, panel::STROKE] {
+        let marker = ambre_chrome::commands::Reach::Property(id).marker();
+        let field = root
+            .query_selector(&format!(".ambre-kit-colour[data-reach=\"{marker}\"]"))
+            .unwrap()
+            .expect("the colour field");
+        assert!(
+            field.query_selector_all(".ambre-swatch").unwrap().length() >= 2,
+            "{id:?}"
+        );
+        assert!(
+            field
+                .query_selector("button[aria-haspopup], .ambre-icon-button, button")
+                .unwrap()
+                .is_some()
+        );
+    }
+    // `CHROME-250`: an arrange row names its command and its chord, and the
+    // link is one compact row of icon buttons.
+    let duplicate = ambre_chrome::commands::Reach::Command(menu::DUPLICATE).marker();
+    assert!(
+        root.query_selector(&format!(
+            ".ambre-kit-command[data-reach=\"{duplicate}\"] .ambre-kbd"
+        ))
+        .unwrap()
+        .is_some(),
+        "duplicate names its chord"
+    );
+    let link = ambre_chrome::commands::Reach::Command(ambre_toile::ui::menu_bar::LINK_SET).marker();
+    assert!(
+        root.query_selector(&format!(".ambre-kit-command[data-reach=\"{link}\"]"))
+            .unwrap()
+            .is_none(),
+        "the link is no full-width row"
+    );
+    root.remove();
 }
 
 /// With nothing selected the panel shows the board. With a selection it shows
@@ -1519,6 +1681,14 @@ async fn the_board_panel_shows_the_board_then_what_applies_to_the_selection() {
             .unwrap(),
         "Document"
     );
+    // The subtitle reads the view state: nothing selected (`CHROME-241`).
+    let subtitle = |root: &web_sys::Element| {
+        root.query_selector(".ambre-ctx-subtitle")
+            .unwrap()
+            .and_then(|el| el.text_content())
+            .unwrap_or_default()
+    };
+    assert_eq!(subtitle(&board), "nothing selected");
     assert_eq!(ambre_chrome::repeated_title(&board), None);
     assert_eq!(ambre_chrome::native_controls(&board), Vec::<String>::new());
     let markers = ambre_chrome::reach_markers(&board);
@@ -1540,6 +1710,7 @@ async fn the_board_panel_shows_the_board_then_what_applies_to_the_selection() {
     // The link of an element sits in its shape section, out of the arrangement.
     let shape = mount_toile_panel(Some(styled(Styled::Elements)));
     leptos::task::tick().await;
+    assert_eq!(subtitle(&shape), "3 elements");
     for (id, section) in [
         (ambre_toile::ui::menu_bar::LINK_SET, panel::SHAPE),
         (ambre_toile::ui::menu_bar::LINK_CLEAR, panel::SHAPE),

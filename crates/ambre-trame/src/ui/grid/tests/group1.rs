@@ -34,8 +34,14 @@ fn filter_button_hit_test_matches_drawn_rect() {
     let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     put(&mut state, 0, 0, "a");
     put(&mut state, 0, 1, "b");
-    // (r1, c1, r2, c2): a one-row, two-column block.
+    // (r1, c1, r2, c2): a one-row, two-column block, filtered on column 0.
     assert_eq!(state.current_region(), Some(rect(0, 0, 0, 1)));
+    assert_eq!(
+        state.filter_button_at(pointer(1.0, 1.0)),
+        None,
+        "no filter, no button to hit"
+    );
+    state.filtered_col = Some(Pos::<Col>::new(0));
 
     // The button for column 1 sits at the right edge of cell (0, 1). Hitting
     // its centre resolves to that column on the region's header row.

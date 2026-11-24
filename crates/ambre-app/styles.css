@@ -68,45 +68,202 @@ body {
     font-size: var(--font-ui);
 }
 
-/* Header: title left, sync + avatar right. */
+/* Header: the Ambre menu, the document and its sync state on the left, the
+   palette field in the centre, Share and the avatar menu on the right
+   (`ambre-spec-shell.md` section 2). */
 .ambre-header {
     display: flex;
     align-items: center;
-    gap: var(--space-6);
-    padding: 0 var(--space-6);
+    gap: var(--space-4);
+    padding: 0 var(--space-5) 0 var(--space-4);
     background: var(--surface);
     border-bottom: 1px solid var(--border);
-}
-
-.ambre-header .title {
-    font-weight: 600;
-    letter-spacing: 0.2px;
-}
-
-/* The way home reads as the title, not as a link of the page (`CHROME-203`). */
-.ambre-header .ambre-home {
-    color: var(--text);
-    text-decoration: none;
-    border-radius: var(--radius-sm);
-    padding: var(--space-1) var(--space-2);
-}
-
-.ambre-header .ambre-home:hover {
-    background: var(--surface-hover);
+    min-width: 0;
 }
 
 .ambre-header .ambre-doc-name {
-    color: var(--text-dim);
-    padding-left: var(--space-4);
-    border-left: 1px solid var(--border);
+    color: var(--text);
+    font-weight: 500;
+    padding: var(--space-1) var(--space-2);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     min-width: 0;
 }
 
-.ambre-header .spacer {
-    flex: 1;
+/* The mark of the brand: an accent square with a ring. The mockup draws a
+   gradient, which no token declares. */
+.ambre-mark {
+    position: relative;
+    width: 20px;
+    height: 20px;
+    flex: 0 0 20px;
+    border-radius: var(--radius-sm);
+    background: var(--accent);
+}
+
+.ambre-mark::after {
+    content: "";
+    position: absolute;
+    inset: 5px;
+    border-radius: 50%;
+    border: 2px solid var(--on-accent);
+    border-right-color: transparent;
+}
+
+/* A header menu: its button, and the list it opens under it. A transparent
+   backdrop catches a press outside the list. */
+.ambre-header-menu {
+    position: relative;
+    display: inline-flex;
+    flex: 0 0 auto;
+}
+
+.ambre-header-menu-button {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border: 0;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.ambre-header-menu-button:hover,
+.ambre-header-menu-button[aria-expanded="true"] {
+    background: var(--surface-hover);
+}
+
+.ambre-account-menu .ambre-header-menu-button {
+    padding: 0;
+    border-radius: var(--radius-full);
+}
+
+.ambre-header-menu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+}
+
+.ambre-header-menu-list {
+    position: absolute;
+    top: calc(100% + var(--space-3));
+    left: 0;
+    z-index: 1001;
+    display: flex;
+    flex-direction: column;
+    min-width: 220px;
+    padding: var(--space-2);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-mid);
+    font-size: var(--font-body);
+}
+
+.ambre-account-menu .ambre-header-menu-list {
+    left: auto;
+    right: 0;
+}
+
+.ambre-menu-item {
+    appearance: none;
+    display: flex;
+    align-items: center;
+    gap: var(--space-5);
+    padding: var(--space-3) var(--space-6);
+    border: 0;
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+    outline: none;
+}
+
+.ambre-menu-item:hover,
+.ambre-menu-item:focus {
+    background: var(--border);
+}
+
+.ambre-menu-who {
+    padding: var(--space-3) var(--space-6);
+    margin-bottom: var(--space-2);
+    border-bottom: 1px solid var(--border);
+    color: var(--text-dim);
+    font-weight: 600;
+}
+
+/* The field that opens the command palette, in the centre of the header
+   (`CHROME-239`). */
+.ambre-command-search {
+    appearance: none;
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    width: 300px;
+    min-width: 0;
+    margin: 0 auto;
+    padding: var(--space-2) var(--space-5);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg);
+    color: var(--text-faint);
+    font: inherit;
+    cursor: pointer;
+}
+
+.ambre-command-search:hover {
+    border-color: var(--border-strong);
+}
+
+.ambre-command-search .ambre-kbd {
+    margin-left: auto;
+}
+
+.ambre-command-search-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ambre-header-end {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    margin-left: auto;
+    flex: 0 0 auto;
+}
+
+.ambre-command-search + .ambre-header-end {
+    margin-left: 0;
+}
+
+/* The primary button of the header: Share, on the accent (`CHROME-240`). */
+.ambre-primary-button {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-6);
+    border: 0;
+    border-radius: var(--radius-md);
+    background: var(--accent);
+    color: var(--on-accent);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.ambre-primary-button:hover {
+    filter: brightness(1.06);
 }
 
 .ambre-sync {
@@ -1326,6 +1483,22 @@ body {
     border-bottom: 1px solid var(--border);
 }
 
+.ambre-ctx-heading {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+/* The count under the title, read from the view state (`CHROME-241`). */
+.ambre-ctx-subtitle {
+    margin: 0;
+    color: var(--text-faint);
+    font-size: var(--font-xs);
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .ambre-ctx-title {
     flex: 1 1 auto;
     margin: 0;
@@ -1459,6 +1632,11 @@ body {
     background: var(--surface-hover);
 }
 
+.ambre-kit-command > .ambre-kbd {
+    margin-left: auto;
+    color: var(--text-dim);
+}
+
 .ambre-kit-command[aria-pressed="true"] {
     border-color: var(--accent);
     background: var(--accent-soft);
@@ -1494,6 +1672,31 @@ body {
 
 .ambre-stepper:focus-within {
     outline-offset: 0;
+}
+
+/* A one-line text field of a panel section, such as the sheet name: the box
+   of a stepper, with the text across it. */
+.ambre-kit-text {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    height: var(--control);
+    padding: 0 var(--space-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface-2);
+    color: var(--text);
+    font: inherit;
+    font-size: var(--font-small);
+}
+
+.ambre-kit-text:focus-visible {
+    outline: var(--focus-width) solid var(--accent);
+    outline-offset: 0;
+}
+
+.ambre-kit-text[aria-invalid="true"] {
+    border-color: var(--error);
 }
 
 /* An icon button: one glyph of the icon size, centred in a square box of a
@@ -2863,6 +3066,27 @@ body {
     display: none;
 }
 
+/* A phone folds the palette field to its icon (`CHROME-240`). The Ambre menu
+   offers the palette at every width (`CHROME-169`). Share and the brand keep
+   their icons. A tablet restores each one below. */
+.ambre-command-search {
+    width: auto;
+    margin: 0 0 0 auto;
+    padding: var(--space-2);
+    border-color: transparent;
+    background: transparent;
+}
+
+.ambre-command-search-label,
+.ambre-brand-name,
+.ambre-primary-button span {
+    display: none;
+}
+
+.ambre-primary-button {
+    padding: var(--space-2) var(--space-3);
+}
+
 /* Phone-only: tighten the chrome and turn the context menu into a full-width
    bottom sheet with larger touch targets (CHROME-032). */
 @media (max-width: 599px) {
@@ -2894,6 +3118,24 @@ body {
 @media (min-width: 600px) {
     .ambre-sync .label {
         display: inline;
+    }
+
+    .ambre-command-search {
+        width: 300px;
+        margin: 0 auto;
+        padding: var(--space-2) var(--space-5);
+        border-color: var(--border);
+        background: var(--bg);
+    }
+
+    .ambre-command-search-label,
+    .ambre-brand-name,
+    .ambre-primary-button span {
+        display: inline;
+    }
+
+    .ambre-primary-button {
+        padding: var(--space-2) var(--space-6);
     }
 
     /* The sidebar joins the region in focus, and folds to a strip. A panel in
@@ -4646,4 +4888,16 @@ body {
 .ambre-gallery-frame {
     display: flex;
     height: 220px;
+}
+
+/* The count of items of a frame row, at its end (`CHROME-251`). */
+.ambre-kit-count {
+    margin-left: auto;
+    color: var(--text-dim);
+}
+
+.ambre-kit-empty {
+    margin: 0;
+    color: var(--text-dim);
+    font-size: var(--font-small);
 }

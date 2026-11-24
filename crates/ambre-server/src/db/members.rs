@@ -268,7 +268,7 @@ pub struct NewMember<'a> {
 }
 
 /// The upsert behind both adds, inside the caller's transaction.
-async fn upsert_member(
+pub(super) async fn upsert_member(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     document_id: &Id<Document>,
     member: &NewMember<'_>,

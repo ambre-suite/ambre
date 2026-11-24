@@ -301,6 +301,10 @@ fn panel_defect(
     }
 }
 
+/// The subtitle of a context panel over an empty selection, the same words
+/// in Prose, Trame and Toile (`CHROME-241`).
+pub const NOTHING_SELECTED: &str = "nothing selected";
+
 /// What every application shares, decided once: the clipboard identities and
 /// the chords the universal operations answer (`ambre-spec-commands.md`,
 /// `UI-THREAD-011`).
@@ -326,6 +330,11 @@ pub mod shared {
     /// The plain paste rides the same `paste` event. The host notes its chord
     /// on the keydown, then strips the richer halves from the event.
     pub const BROWSER_SERVICED: [StaticKey<Commands>; 4] = [CUT, COPY, PASTE, PASTE_PLAIN];
+
+    /// The command palette answers one chord in every application. The
+    /// header finds the palette command of a table by it, so the shell names
+    /// no command id of an application (`ARCH-018`).
+    pub const PALETTE_CHORD: KeyBinding = KeyBinding::primary(KeyChar::K);
 
     /// Undo answers one chord.
     pub const UNDO_CHORDS: &[KeyBinding] = &[KeyBinding::primary(KeyChar::Z)];

@@ -607,4 +607,9 @@ pub enum RestEvent {
     /// kept, which is then erased (`SRV-323`, `SRV-326`). The page stays on
     /// the sign-in screen.
     NoKeptSession,
+    /// The document that holds the settings of the account, found or claimed
+    /// once the session is ready (`SETTINGS-007`). The Logic thread opens it.
+    SettingsDocumentFound {
+        document_id: Id<Document>,
+    },
 }

@@ -201,7 +201,7 @@ impl CommandHandler for TrameHandler {
 
 /// Convert a canvas-relative anchor into client space, by adding the canvas's
 /// offset in the viewport. With no anchor, the canvas's top-left.
-fn client_anchor(anchor: Option<Point<Px<View>>>) -> Point<Px<Css>> {
+pub(super) fn client_anchor(anchor: Option<Point<Px<View>>>) -> Point<Px<Css>> {
     let origin = document()
         .get_element_by_id("ambre-canvas")
         .map(|c| {

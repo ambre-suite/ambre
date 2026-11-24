@@ -167,14 +167,13 @@ pub struct FormatControl {
 
 /// The format bar over a selection, centred on `anchor` in the viewport
 /// (`CHROME-105`). A press keeps the selection: the bar never takes the focus.
+/// `children` follow the controls: a list or a colour, which a press button
+/// cannot hold (`CHROME-246`).
 #[component]
 pub fn FormatBar(
     anchor: Point<Px<Css>>,
-    controls: Vec<FormatControl>,
-    /// What the bar shows after its controls: a list, a field. An
-    /// application that needs no more passes nothing.
-    #[prop(optional)]
-    children: Option<Children>,
+    #[prop(optional)] controls: Vec<FormatControl>,
+    #[prop(optional)] children: Option<Children>,
 ) -> impl IntoView {
     let left = format!("{}px", anchor.x.get());
     let top = format!(
@@ -230,7 +229,7 @@ pub fn FormatBar(
             aria-label="Format"
         >
             {controls.collect_view()}
-            {children.map(|children| children())}
+            {children.map(|c| c())}
         </div>
     }
 }

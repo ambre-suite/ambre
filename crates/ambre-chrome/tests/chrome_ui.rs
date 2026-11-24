@@ -350,6 +350,122 @@ fn perf_chip_renders_fps_from_signal_and_starts_collapsed() {
     root.remove();
 }
 
+/// A release shows no frame rate in the status bar (`CHROME-238`).
+#[wasm_bindgen_test]
+fn a_release_shows_no_perf_chip() {
+    let owner = Owner::new();
+    owner.set();
+    let fps = RwSignal::new(ambre_core::FrameRate::new(58.0));
+    let root = mount_in_container(move || {
+        view! {
+            <span class="test-before"></span>
+            <PerfChip fps=Signal::derive(move || fps.get()) compiled_as=ambre_chrome::Build::Release />
+        }
+    });
+    assert!(root.query_selector(".test-before").unwrap().is_some());
+    assert!(root.query_selector(".statusbar-perf").unwrap().is_none());
+    root.remove();
+}
+
+/// The search field of the header runs the palette command it is handed,
+/// through the one command path, and names it and its chord
+/// (`CHROME-239`).
+#[wasm_bindgen_test]
+async fn the_search_field_runs_the_palette_command() {
+    use ambre_chrome::commands::{Command, Home, KeyBinding, KeyChar, Locale, Reach};
+    static PALETTE: Command = Command {
+        id: StaticKey::<Commands>::new("t.palette.open"),
+        title: |_: &Locale| ambre_core::Validated::new("Command palette"),
+        icon: None,
+        keybindings: &[KeyBinding::primary(KeyChar::K)],
+        category: StaticKey::<Categories>::new("general"),
+        home: Home::AmbreMenu,
+    };
+    let ran = RwSignal::new(None::<StaticKey<Commands>>);
+    let root = mount_in_container(move || {
+        view! {
+            <ambre_chrome::CommandSearch
+                command=&PALETTE
+                on_command=Callback::new(move |id| ran.set(Some(id)))
+            />
+        }
+    });
+    let field = root
+        .query_selector(".ambre-command-search")
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        field.get_attribute("aria-label").as_deref(),
+        Some(ambre_chrome::SEARCH_LABEL)
+    );
+    assert_eq!(
+        field.get_attribute("data-reach"),
+        Some(Reach::Command(PALETTE.id).marker())
+    );
+    assert!(field.query_selector(".ambre-kbd").unwrap().is_some());
+    field.dyn_ref::<web_sys::HtmlElement>().unwrap().click();
+    leptos::task::tick().await;
+    assert_eq!(ran.get_untracked(), Some(PALETTE.id));
+    root.remove();
+}
+
+/// A header menu opens under its button, takes the focus, and closes on
+/// Escape or on a pick.
+#[wasm_bindgen_test]
+async fn a_header_menu_opens_and_closes() {
+    let picked = RwSignal::new(false);
+    let root = mount_in_container(move || {
+        view! {
+            <ambre_chrome::HeaderMenu
+                label="Account"
+                class={StaticKey::<ambre_core::CssClasses>::new("t-menu")}
+                trigger={|| view! { "AL" }}
+            >
+                <button role="menuitem" class="t-item" on:click=move |_| picked.set(true)>"Theme"</button>
+            </ambre_chrome::HeaderMenu>
+        }
+    });
+    let button = root
+        .query_selector(".ambre-header-menu-button")
+        .unwrap()
+        .unwrap();
+    let press = |el: &web_sys::Element| el.dyn_ref::<web_sys::HtmlElement>().unwrap().click();
+    assert_eq!(
+        button.get_attribute("aria-expanded").as_deref(),
+        Some("false")
+    );
+    press(&button);
+    leptos::task::tick().await;
+    assert_eq!(
+        button.get_attribute("aria-expanded").as_deref(),
+        Some("true")
+    );
+    let item = root.query_selector(".t-item").unwrap().unwrap();
+    let focused = document().active_element();
+    assert_eq!(focused.as_ref(), Some(&item), "the menu takes the focus");
+    let init = web_sys::KeyboardEventInit::new();
+    init.set_key("Escape");
+    init.set_bubbles(true);
+    let escape =
+        web_sys::KeyboardEvent::new_with_keyboard_event_init_dict("keydown", &init).unwrap();
+    item.dispatch_event(&escape).unwrap();
+    leptos::task::tick().await;
+    assert!(
+        root.query_selector(".t-item").unwrap().is_none(),
+        "Escape closes it"
+    );
+    press(&button);
+    leptos::task::tick().await;
+    press(&root.query_selector(".t-item").unwrap().unwrap());
+    leptos::task::tick().await;
+    assert!(picked.get_untracked());
+    assert!(
+        root.query_selector(".t-item").unwrap().is_none(),
+        "a pick closes it"
+    );
+    root.remove();
+}
+
 /// Resolve after `ms` milliseconds, on a later task.
 async fn sleep(ms: i32) {
     let promise = js_sys::Promise::new(&mut |resolve, _| {

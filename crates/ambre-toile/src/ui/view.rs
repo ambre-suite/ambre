@@ -306,6 +306,8 @@ pub struct ToileSignals {
     pub style_model: RwSignal<Option<super::style::StyleModel>>,
     /// A whole-style edit from the inspector.
     pub restyle: RwSignal<Option<crate::message::ElementStyle>>,
+    /// A write of the position section (`CHROME-248`).
+    pub place: RwSignal<Option<super::panel::PlaceEdit>>,
     /// The placement of the floating selection toolbar.
     pub float_bar: RwSignal<Option<super::floatbar::FloatBar>>,
     /// A single-field style edit from the floating toolbar.
@@ -582,6 +584,10 @@ pub struct ToileView {
     /// Wasm-only.
     #[cfg(target_arch = "wasm32")]
     restyle: RwSignal<Option<crate::message::ElementStyle>>,
+    /// A write of the position section, which `update` turns into its one
+    /// command (`CHROME-248`). Wasm-only.
+    #[cfg(target_arch = "wasm32")]
+    place: RwSignal<Option<super::panel::PlaceEdit>>,
     /// The content-anchored floating selection toolbar's placement + flags
     /// (`toile-styles`), republished every frame so the bar follows the
     /// selection as the board pans and zooms (transform-synced). `None` hides
@@ -799,6 +805,7 @@ impl ToileView {
             sel_stats,
             style_model,
             restyle,
+            place,
             float_bar,
             quick_style,
             comments,
@@ -903,6 +910,8 @@ impl ToileView {
             style_model,
             #[cfg(target_arch = "wasm32")]
             restyle,
+            #[cfg(target_arch = "wasm32")]
+            place,
             #[cfg(target_arch = "wasm32")]
             float_bar,
             #[cfg(target_arch = "wasm32")]
@@ -1260,6 +1269,9 @@ impl ToileView {
             // frame. `update` asks again once (`TOILE-UI-384`).
             ToileEvent::BoardChanged => {
                 self.selection_stale = !self.selection.is_empty();
+                // The frames section lists the frames and their items while
+                // nothing is selected (`CHROME-251`).
+                self.reread_frames();
                 // The frame under a title editor may have moved or gone: ask
                 // again, so a peer's delete closes the editor (`TOILE-UI-390`).
                 if let Some(frame) = self
@@ -2271,6 +2283,22 @@ impl ToileView {
     #[cfg(not(target_arch = "wasm32"))]
     fn drain_restyle(&mut self) {}
 
+    /// Drain a write of the position section and send its one command, so
+    /// one write is one undo step (`CHROME-248`). Wasm-only.
+    #[cfg(target_arch = "wasm32")]
+    fn drain_place(&mut self) {
+        let Some(edit) = self.place.get_untracked() else {
+            return;
+        };
+        self.place.set(None);
+        if let Some(command) = edit.command() {
+            self.send_edit(command);
+            self.needs_full = true;
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn drain_place(&mut self) {}
+
     /// Apply a whole style from the inspector to the live selection, locked
     /// members included: the refusal belongs to the write (`TOILE-UI-182`).
     /// The selection itself is left as it was (`TOILE-UI-176`).
@@ -2642,6 +2670,17 @@ impl ToileView {
         }
     }
 
+    /// Read the board's frames while nothing is selected: the frames section
+    /// of the context panel lists them (`CHROME-251`).
+    #[cfg(target_arch = "wasm32")]
+    fn reread_frames(&mut self) {
+        if self.selection.is_empty() && self.arrow.is_none() {
+            self.send_edit(ToileCommand::ReadDeck);
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn reread_frames(&mut self) {}
+
     /// Publish the frames the panel renders.
     #[cfg(target_arch = "wasm32")]
     fn publish_deck(&mut self, view: crate::message::DeckView) {
@@ -2684,6 +2723,14 @@ impl ToileView {
                     frame: frame.into(),
                     name,
                 });
+                return;
+            }
+            // The frames section selects the frame, as a click on its title
+            // does (`CHROME-251`).
+            DeckIntent::Select(frame) => {
+                self.arrow = None;
+                self.selection = vec![frame.into()];
+                self.overlay_dirty = true;
                 return;
             }
         };
@@ -3948,6 +3995,7 @@ impl ToileView {
         // Apply any style edit the inspector emitted this frame
         // (`toile-styles`).
         self.drain_restyle();
+        self.drain_place();
 
         // Apply any quick-colour pick the floating bar emitted
         // (`toile-styles`).
@@ -4081,6 +4129,7 @@ impl ToileView {
                 self.selection_data.clear();
                 self.selection_framed.clear();
                 self.announce_selection();
+                self.reread_frames();
             } else {
                 self.send_edit(ToileCommand::RequestSelectionStats {
                     ids: self.selection.clone(),

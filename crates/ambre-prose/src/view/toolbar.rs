@@ -8,10 +8,10 @@
 //! (`PROSE-UI-097`).
 
 use ambre_core::index::Span;
-use ambre_core::{Commands, StaticKey};
+use ambre_core::{Commands, Count, StaticKey};
 use ambre_core::{Doc, Point, Px, View};
 
-use crate::events::{ActiveMarks, MarkAction, ProseCommand, TriState};
+use crate::events::{ActiveMarks, MarkAction, ProseCommand, TriState, Words};
 use crate::layout::run::RunChar;
 use crate::mark::MarkRoot;
 use crate::ui::ProseUiState;
@@ -91,6 +91,35 @@ impl ProseUiState {
             anchor: self.selection_top(selection),
             active,
         }
+    }
+
+    /// The words of the selected text, counted as the word count counts
+    /// them, which the subtitle of the context panel shows (`CHROME-241`).
+    /// `None` with no selection, or for one whose ends the flow of the
+    /// layout in force does not hold, such as a table cell.
+    #[must_use]
+    pub fn selected_words(&self) -> Option<Count<Words>> {
+        let ((first, from), (last, to)) = self.selection()?;
+        let start = self.flow_index(&crate::events::tree_id(first))?;
+        let end = self.flow_index(&crate::events::tree_id(last))?;
+        let words = start
+            .through(end)
+            .into_iter()
+            .filter_map(|at| self.shaped.block(at))
+            .map(|layout| {
+                let block = crate::events::block_id(layout.block_id);
+                let text = self.shown_text(block).unwrap_or_default();
+                let skip = if block == first { from.to_usize() } else { 0 };
+                let chars = text.chars().skip(skip);
+                let selected: String = if block == last {
+                    chars.take(to.to_usize().saturating_sub(skip)).collect()
+                } else {
+                    chars.collect()
+                };
+                crate::count::words_in(&selected)
+            })
+            .fold(Count::<Words>::ZERO, Count::<Words>::plus);
+        Some(words)
     }
 
     /// The read the bar still needs: the selection changed, or the layout
