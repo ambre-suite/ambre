@@ -1001,6 +1001,43 @@
   Sync at 1 328 640 raw bytes in CI. The ceiling went back to 1 350 000, the figure of the W10
   raise.
 
+* **Four cuts took Sync to 1 321 521 raw bytes on 2026-11-24, under its ceiling of 1 350 000.**
+  The W13 stories put Sync at 1 362 315 raw bytes in CI at `63f1cfc`, 12 315 over its ceiling.
+  `twiggy` found the growth spread over some 400 items, and no crate came in whole. It also found
+  that the JSON decode of the relay answers weighed about 150 KB. Each cut removes code that no
+  answer reaches, and every body keeps its bytes on the wire:
+  1. Three request bodies built a `serde_json::Value`. Typed bodies replace them, so the JSON
+     tree, its map and its encoder leave the worker.
+  2. Two token answers decoded through `#[serde(flatten)]`, which buffers the object and links a
+     second decoder of every JSON value. A flat wire struct and a transparent decode replace it.
+  3. The JSON read of an answer keeps `R::deserialize` alone generic.
+  4. `serde_json` reads a struct from a JSON object or from a JSON array. The relay sends objects
+     alone, so the array decoder of each struct was dead code. The wrapper of
+     `crates/ambre-sync/src/json.rs` reads every struct as a map, at any depth, and refuses an
+     array, as any value of the wrong JSON type is refused.
+* **No budget of section 1 moves.** The cuts touch the REST answers and the socket of the SFU,
+  which no hot path reads. No security check moves, and the level of `curve25519-dalek` stays 3.
+* **The method.** The first and last rows are `trunk build --release`, then
+  `scripts/wasm_size.py`, on the session container. The tries are
+  `cargo build --profile wasm-release -p ambre-sync`, then `wasm-bindgen` 0.2.122 with
+  `--target no-modules`: 1 371 596 bytes at `1e07504` by that build.
+
+| Build | Sync raw | Change | Verdict |
+|---|---|---|---|
+| CI at `63f1cfc`, by `just size` | 1 362 315 | -- | before the story; 408 954 brotli |
+| typed bodies in place of `json!` | 1 364 500 | -7 096 | kept; read against 1 371 596 |
+| no `#[serde(flatten)]` | 1 357 641 | -6 859 | kept |
+| `R::deserialize` alone generic | 1 355 958 | -1 683 | kept |
+| the merge of `ccr-cd7c4606-wmq4hy` | 1 356 752 | +794 | the signing key binding |
+| every struct read as a map | 1 320 878 | -35 874 | kept |
+| the kept cuts, by `just size` | 1 321 521 | -40 794 | 398 960 brotli; the ceiling stays 1 350 000 |
+| the decode through `erased-serde` | 2 052 540 | +680 985 | dropped: a full visitor vtable per type |
+| the JSON read through a trait object slot | 1 358 799 | +2 841 | dropped, it grew |
+| `wasm-opt -Oz` of binaryen 124 | 1 201 519 | -119 359 | refused: 24 454 more brotli bytes, and the download is the budget |
+
+  The first download reads 3 250 043 bytes of brotli. A cut under the former ceiling of
+  1 310 000 needs a cut that is refused: `wasm-opt`, or the size level of `curve25519-dalek`.
+
 * **The PNG raster raised the PDF module ceiling on 2026-11-15.** The PNG export rasterizes a
   recorded page in the PDF module, on the converter thread
   (`3-Toile/features/ambre-spec-toile-import-export.md section 3`). Three cuts came before the
