@@ -621,3 +621,70 @@ async fn superscript_subscript_and_clearing_reach_a_control_of_the_panel() {
     }
     root.remove();
 }
+
+/// `PROSE-UI-259`, `CHROME-183`: with the caret in a suggestion and no
+/// pointer over it, the panel shows a section that accepts and rejects that
+/// suggestion. Each button is a declared command the panel names, and a press
+/// hands the view the popover's own intent. The section leaves with the caret.
+#[wasm_bindgen_test]
+async fn the_caret_in_a_suggestion_shows_its_accept_and_reject_in_the_panel() {
+    use ambre_core::id::Suggestion;
+    use ambre_core::{Px, View};
+    use ambre_prose::commands::{ACCEPT_SUGGESTION, REJECT_SUGGESTION};
+    use ambre_prose::events::SuggestionKind;
+    use ambre_prose::view::annotate::{AnnotationIntent, HoveredSuggestion, ScreenRect};
+    let signals = ProseSignals::new();
+    let root = mount_prose_panel(signals);
+    leptos::task::tick().await;
+    let reach = |id| ambre_chrome::commands::Reach::Command(id).marker();
+    let button = |id| {
+        root.query_selector(&format!("[data-reach=\"{}\"]", reach(id)))
+            .unwrap()
+    };
+    assert!(
+        button(ACCEPT_SUGGESTION).is_none(),
+        "no suggestion, no section"
+    );
+
+    let suggestion_id = Id::<Suggestion>::mint();
+    let at = |x: f32| Px::<View>::new(x);
+    signals.at_caret.set(Some(HoveredSuggestion {
+        suggestion_id,
+        kind: SuggestionKind::Insertion,
+        rect: ScreenRect {
+            x0: at(10.0),
+            y0: at(10.0),
+            x1: at(20.0),
+            y1: at(30.0),
+        },
+    }));
+    leptos::task::tick().await;
+    assert_eq!(ambre_chrome::repeated_title(&root), None);
+    assert_eq!(
+        ambre_chrome::unreached_controls(&root),
+        Vec::<String>::new()
+    );
+    for (id, intent) in [
+        (
+            ACCEPT_SUGGESTION,
+            AnnotationIntent::Accept { suggestion_id },
+        ),
+        (
+            REJECT_SUGGESTION,
+            AnnotationIntent::Reject { suggestion_id },
+        ),
+    ] {
+        let control: web_sys::HtmlElement =
+            button(id).expect("the control shows").dyn_into().unwrap();
+        // A control in the tab order is reachable from the keyboard.
+        assert!(control.tab_index() >= 0, "{id:?} takes the focus");
+        control.click();
+        assert_eq!(signals.intent.get_untracked(), Some(intent));
+        signals.intent.set(None);
+    }
+
+    signals.at_caret.set(None);
+    leptos::task::tick().await;
+    assert!(button(REJECT_SUGGESTION).is_none(), "the section leaves");
+    root.remove();
+}

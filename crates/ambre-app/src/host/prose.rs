@@ -451,9 +451,15 @@ impl ProseView {
         self.publish_ruler();
     }
 
-    /// Publish the hovered suggestion, where the popover goes.
+    /// Publish where the popover goes: the hovered suggestion, else the one
+    /// at the caret, which the context panel also reaches (`PROSE-UI-258`,
+    /// `PROSE-UI-259`).
     fn publish_hover(&self) {
-        let hovered = self.state.hovered;
+        let at_caret = self.state.suggestion_at_caret();
+        if self.annotations.at_caret.get_untracked() != at_caret {
+            self.annotations.at_caret.set(at_caret);
+        }
+        let hovered = self.state.popover_suggestion();
         if self.annotations.hovered.get_untracked() != hovered {
             self.annotations.hovered.set(hovered);
         }
@@ -774,6 +780,9 @@ impl ProseView {
         self.busy_pub
             .publish(BusyLevel::from_busy(self.outbox.is_busy()));
         self.publish_toolbar();
+        // A key or a tap that moves the caret into a suggestion raises its
+        // popover (`PROSE-UI-258`).
+        self.publish_hover();
         self.dirty |= consumed.is_yes();
         consumed
     }
