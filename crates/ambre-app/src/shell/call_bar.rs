@@ -680,6 +680,9 @@ pub(super) fn RingAlert() -> impl IntoView {
 /// The bubble offers mute, the camera, the share, the way back and hang up, and the pill keeps
 /// mute and hang up. A drag of the bubble moves it, and its release rests it in the nearest
 /// corner. Nothing here writes into a channel or changes the choice of videos.
+///
+/// The bubble floats over the canvas, so it publishes its box into `cover` each time it rests,
+/// and clears it when it leaves (`CHROME-171`).
 #[component]
 pub(super) fn CallFloat(
     /// The pane the user is in, which names the shown channel.
@@ -688,7 +691,10 @@ pub(super) fn CallFloat(
     phase: Signal<CallPhase>,
     /// The sidebar names the channel, and the spaces name each participant.
     relay: MurmureRelay,
+    /// Where the bubble publishes the box it covers.
+    cover: RwSignal<ambre_client_core::cover::Cover>,
 ) -> impl IntoView {
+    use ambre_client_core::cover::Surface;
     use ambre_murmure::ui::call_float::{Corner, Float, clock};
     let from = crate::call::where_from();
     let from_shown = from.clone();
@@ -697,6 +703,21 @@ pub(super) fn CallFloat(
         Float::of(phase.get(), call, pane.get().shown_channel()) == Float::Shown
     });
     let corner = RwSignal::new(Corner::default());
+    let node = NodeRef::<leptos::html::Div>::new();
+    ambre_chrome::cover::watch_fixed(node, Surface::CallBubble, cover);
+    // A bubble that rests in another corner keeps its size, so the observer
+    // misses the move. The bubble measures again on the next frame, once the
+    // page laid it out. A bubble that leaves covers nothing.
+    Effect::new(move |_| {
+        corner.track();
+        if shown.get() {
+            request_animation_frame(move || {
+                ambre_chrome::cover::measure_fixed(node, Surface::CallBubble, cover);
+            });
+        } else {
+            ambre_chrome::cover::clear(cover, Surface::CallBubble);
+        }
+    });
     // The pointer offset of a drag in progress, and the place of the bubble during it.
     let dragged = RwSignal::new(None::<(f64, f64)>);
     let tick = RwSignal::new(crate::host::now());
@@ -773,6 +794,7 @@ pub(super) fn CallFloat(
     view! {
         <Show when=move || shown.get()>
             <div
+                node_ref=node
                 class="murmure-call-float"
                 role="region"
                 aria-label="Call in progress"

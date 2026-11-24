@@ -193,8 +193,8 @@ impl Press {
 /// A control breaks the rule when it has no tooltip, or when the tooltip does
 /// not name the control as its accessible name does. A control that reaches a
 /// command of `table` breaks it too on a name, a chord or a description that
-/// the command does not describe. A control of a property
-/// reaches no command, so the probe skips it.
+/// the command does not describe. A control of a property reaches no
+/// command, so its tooltip names the control alone.
 pub fn untipped_icons(root: &web_sys::Element, table: &[Command]) -> Vec<String> {
     let Ok(list) = root.query_selector_all("button") else {
         return Vec::new();
@@ -251,12 +251,6 @@ pub fn untipped_icons(root: &web_sys::Element, table: &[Command]) -> Vec<String>
     };
     (0..list.length())
         .filter_map(|i| list.item(i)?.dyn_into::<web_sys::Element>().ok())
-        .filter(|e| {
-            e.closest("[data-reach^=\"property:\"]")
-                .ok()
-                .flatten()
-                .is_none()
-        })
         .filter(|e| shows_an_icon_alone(e) && !tip_holds(e))
         .map(|e| {
             e.get_attribute("aria-label")

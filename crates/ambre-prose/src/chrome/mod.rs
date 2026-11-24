@@ -458,9 +458,12 @@ pub fn ProseSpellingPopover(signals: ProseSignals) -> impl IntoView {
 ///
 /// It holds no document state: it renders what the view published, and a
 /// control hands its command id back to the view (`PROSE-UI-057`,
-/// `PROSE-UI-098`).
+/// `PROSE-UI-098`). It publishes its reach into `cover` (`CHROME-171`).
 #[component]
-pub fn ProseFormatBar(signals: ProseSignals) -> impl IntoView {
+pub fn ProseFormatBar(
+    signals: ProseSignals,
+    cover: RwSignal<ambre_client_core::cover::Cover>,
+) -> impl IntoView {
     move || {
         let bar = signals.toolbar.get();
         let anchor = bar.anchor?.on_page(signals.canvas_origin.get());
@@ -474,7 +477,7 @@ pub fn ProseFormatBar(signals: ProseSignals) -> impl IntoView {
                 control(signals, id, pressed)
             })
             .to_vec();
-        Some(view! { <FormatBar anchor=anchor controls=controls /> })
+        Some(view! { <FormatBar anchor=anchor controls=controls cover=cover /> })
     }
 }
 

@@ -778,7 +778,8 @@ pub(super) struct Scanned {
     amendments: Option<loro::VersionVector>,
 }
 
-fn named_threads(doc: &LoroDoc) -> Vec<(Id<Message>, Id<Document>)> {
+/// The thread each root of the segment `doc` names in its `thread` field.
+pub(super) fn named_threads(doc: &LoroDoc) -> Vec<(Id<Message>, Id<Document>)> {
     let mut named = Vec::new();
     crate::logic::schema::root_list(doc, Root::Messages).for_each(|item| {
         let Some(map) = crate::logic::schema::fields_of(item) else {

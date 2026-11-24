@@ -858,6 +858,145 @@ mod tests {
         )));
     }
 
+    /// A channel whose final segment holds a root with a thread, as the
+    /// relay stores it, with that segment and that thread.
+    fn threaded_channel() -> (Id<Channel>, ChannelState, Id<Segment>, Id<Document>) {
+        let (channel_id, mut stored) = stored_channel();
+        let old = stored.active_id();
+        let root = stored.messages(old).expect("held")[0].id;
+        let ThreadTarget::Create(thread) = stored.reply_target(root, NOW).expect("target") else {
+            panic!("a root with no thread creates one");
+        };
+        let successor = Id::<Segment>::mint();
+        for document_id in [thread, successor.document_id()] {
+            if document_id == successor.document_id() {
+                stored
+                    .close_into(old, successor, ambre_murmure::Successor::Created, NOW)
+                    .expect("close");
+            }
+            let peer = crate::test_peer();
+            stored
+                .adopt_session(
+                    document_id,
+                    peer,
+                    ambre_core::Payload::<ambre_core::PeerEntryBytes>::new(
+                        peer.get().to_le_bytes().to_vec(),
+                    ),
+                )
+                .expect("adopt");
+            if document_id == thread {
+                stored.thread_linked(old, root, thread).expect("link");
+            }
+        }
+        // The segment turns final, so an open of the channel holds it not.
+        assert_eq!(stored.lease_to_ask(NOW), Some(old));
+        stored.lease_granted(
+            old,
+            Id::<Lease>::mint(),
+            Seq::<Relay>::new(0),
+            TimeSpan::<Ms>::new(30_000),
+        );
+        stored
+            .final_snapshot(NOW, Seq::<Relay>::new(0))
+            .expect("export")
+            .expect("in");
+        stored.mark_final(old).expect("mark");
+        (channel_id, stored, old, thread)
+    }
+
+    /// Open the channel of `stored`, which holds its final segment `old`
+    /// not, then ask for a revoke on its `meta`.
+    fn revoke_without(
+        state: &mut LogicState,
+        sync: &Receiver<SyncCommand>,
+        stored: &ChannelState,
+        old: Id<Segment>,
+    ) -> Seq<Request> {
+        let channel_id = stored.channel_id();
+        let meta = stored.meta_id().document_id();
+        let active = stored.active_id().document_id();
+        state.handle_logic_command(LogicCommand::OpenChannel { channel_id });
+        let mut documents = listing(stored);
+        documents.push(ChannelDocument {
+            document_id: old.document_id(),
+            kind: ChannelDocumentKind::Segment,
+        });
+        state.handle_logic_event(LogicEvent::ChannelDocuments {
+            channel_id,
+            documents,
+        });
+        serve(state, stored, meta);
+        serve(state, stored, active);
+        assert!(state.rt().channels().contains_key(&channel_id));
+        assert!(!state.rt().channels()[&channel_id].holds(old.document_id()));
+        drain(sync);
+        revoke(state, meta, Id::<User>::mint())
+    }
+
+    /// `SYNC-321`: a revoke on an open channel reads each segment its `meta`
+    /// lists for the threads the roots name. A segment the channel does not
+    /// hold opens for that read alone and closes once read. The revoke then
+    /// names the thread with the documents of the `meta`.
+    #[test]
+    fn a_revoke_names_the_thread_a_segment_not_held_names() {
+        let (mut state, _ui, sync) = harness();
+        let (_, stored, old, thread) = threaded_channel();
+        let meta = stored.meta_id().document_id();
+        let id = revoke_without(&mut state, &sync, &stored, old);
+        assert_eq!(
+            sent(&sync),
+            [Sent::Open(old.document_id())],
+            "the revoke waits for the read"
+        );
+        serve(&mut state, &stored, old.document_id());
+        let after = drain(&sync);
+        assert!(after.iter().any(|c| matches!(
+            c,
+            SyncCommand::CloseDocument { document_id } if *document_id == old.document_id()
+        )));
+        assert!(
+            after.iter().any(|c| matches!(
+                c,
+                SyncCommand::RevokeFromChannel { id: i, document_id, named, .. }
+                    if *i == id && *document_id == meta && named.contains(&thread)
+                        && named.contains(&old.document_id())
+            )),
+            "{after:?}"
+        );
+        assert!(
+            !state.rt().channels()[&stored.channel_id()].holds(old.document_id()),
+            "the read keeps nothing"
+        );
+    }
+
+    /// `SYNC-321`, fail closed: a segment the read needs fails to open. The
+    /// view hears the revoke failed, and nothing leaves for the Sync worker.
+    #[test]
+    fn a_revoke_whose_segment_fails_to_open_sends_nothing() {
+        let (mut state, ui, sync) = harness();
+        let (_, stored, old, _) = threaded_channel();
+        let id = revoke_without(&mut state, &sync, &stored, old);
+        drain(&sync);
+        drain(&ui);
+        state.handle_logic_event(LogicEvent::DocumentOpenFailed {
+            document_id: old.document_id(),
+            cause: OpenFailure::KeyNotReceived,
+        });
+        let sent = drain(&sync);
+        assert!(
+            !sent.iter().any(|c| matches!(
+                c,
+                SyncCommand::Rest { .. } | SyncCommand::RevokeFromChannel { .. }
+            )),
+            "{sent:?}"
+        );
+        assert!(drain(&ui).iter().any(|e| matches!(
+            e,
+            UiEvent::ApiError { id: Some(i), request: ambre_bus::ApiRequest::RevokeFromDocument, .. }
+                if *i == id
+        )));
+    }
+
     /// The relay removing the user from a closed channel ends its light
     /// subscriptions and forgets its read cursors.
     #[test]

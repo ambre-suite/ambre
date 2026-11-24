@@ -12,13 +12,13 @@
 
 use ambre_chrome::commands::{Command, Home, KeyBinding, KeyChar, Locale, Property, Reading};
 use ambre_chrome::{
-    Choice, ChoiceRow, ChoiceView, CommandButton, ContextPanel, DockSide, FONT_FAMILIES, Field,
-    Fold, FontPicker, IconButton, LengthField, PanelPrefs, PanelSection, PanelWidth, Pressed,
-    PropertyToggle, Select, SelectField, native_controls, untipped_icons,
+    Choice, ChoiceRow, ChoiceView, ColorPopover, CommandButton, ContextPanel, DockSide,
+    FONT_FAMILIES, Field, Fold, FontPicker, IconButton, LengthField, PanelPrefs, PanelSection,
+    PanelWidth, Pressed, PropertyToggle, Select, SelectField, native_controls, untipped_icons,
 };
 use ambre_core::index::Pos;
 use ambre_core::{
-    Categories, Commands, FontFamily, Mm, PanelSections, PrintLength, Properties, StaticKey,
+    Categories, Commands, FontFamily, Mm, PanelSections, PrintLength, Properties, Rgb, StaticKey,
 };
 use leptos::mount::mount_to;
 use leptos::prelude::*;
@@ -174,7 +174,7 @@ fn mount_kit_panel() -> web_sys::Element {
         let prefs = PanelPrefs::new(DockSide::Right, PanelWidth::DEFAULT, Fold::Open);
         view! {
             <div class="ambre-body" style="height:600px;width:900px;display:flex">
-                <ContextPanel prefs=prefs title="Document" sections=kit_section(margin, paper) />
+                <ContextPanel prefs=prefs title="Document" sections=kit_section(margin, paper) cover=RwSignal::new(ambre_client_core::cover::Cover::default()) />
             </div>
         }
     })
@@ -456,6 +456,74 @@ async fn a_long_press_shows_the_tooltip_in_place_of_the_command() {
     pointer(&button, "pointerup", "mouse");
     button.click();
     assert_eq!(pressed.get_untracked(), 2, "a mouse press runs the command");
+    root.remove();
+}
+
+/// `CHROME-187`, `CHROME-188`: the colour trigger of a property names itself
+/// in a tooltip, under the focus and on a long press. The long press opens no
+/// popover. The probe reads the controls of a property too, so a native
+/// title under one breaks the rule (`CHROME-185`).
+#[wasm_bindgen_test]
+async fn a_colour_trigger_names_itself_under_the_focus_and_a_long_press() {
+    with_styles();
+    let marker = ambre_chrome::commands::Reach::Property(MARGIN.id).marker();
+    let shown = marker.clone();
+    let root = mount_in_container(move || {
+        view! {
+            <span data-reach=shown>
+                <ColorPopover
+                    title="Fill colour"
+                    icon=icondata::BiColorFillSolid
+                    current=RwSignal::new(None::<Rgb>)
+                    default=Signal::stored(Rgb::from_bits(0))
+                    reset_label="No fill"
+                    on_pick=Callback::new(|_: Option<Rgb>| {})
+                />
+            </span>
+        }
+    });
+    leptos::task::tick().await;
+    assert_eq!(untipped_icons(&root, &[]), Vec::<String>::new());
+    let button: web_sys::HtmlElement = q(&root, ".ambre-color > .ambre-icon-button")
+        .dyn_into()
+        .unwrap();
+    let tip = q(&button, ".ambre-tip");
+    assert_eq!(
+        q(&tip, ".ambre-tip-name").text_content().as_deref(),
+        Some("Fill colour")
+    );
+    button.focus().unwrap();
+    leptos::task::tick().await;
+    assert_eq!(tip.get_attribute("data-shown").as_deref(), Some("true"));
+    button.blur().unwrap();
+    leptos::task::tick().await;
+    assert_eq!(tip.get_attribute("data-shown").as_deref(), Some("false"));
+
+    pointer(&button, "pointerdown", "touch");
+    sleep(700).await;
+    assert_eq!(tip.get_attribute("data-shown").as_deref(), Some("true"));
+    pointer(&button, "pointerup", "touch");
+    button.click();
+    leptos::task::tick().await;
+    assert!(
+        root.query_selector(".ambre-color-popover")
+            .unwrap()
+            .is_none(),
+        "a long press opens no popover"
+    );
+    root.remove();
+
+    let root = mount_in_container(move || {
+        view! {
+            <span data-reach=marker>
+                <button aria-label="Fill colour" title="Fill colour">
+                    <leptos_icons::Icon icon=icondata::BiColorFillSolid />
+                </button>
+            </span>
+        }
+    });
+    leptos::task::tick().await;
+    assert_eq!(untipped_icons(&root, &[]), vec!["Fill colour".to_owned()]);
     root.remove();
 }
 

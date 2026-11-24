@@ -44,6 +44,8 @@ mod composed;
 mod context_menu;
 mod context_panel;
 mod controls;
+/// Each floating surface measures what it covers of the canvas (`CHROME-171`).
+pub mod cover;
 mod debounce;
 mod dialog;
 mod font;

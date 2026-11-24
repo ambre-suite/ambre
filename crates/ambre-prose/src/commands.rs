@@ -12,7 +12,7 @@ use ambre_core::{Categories, Commands, Icons, StaticKey};
 use crate::mark::MarkRoot;
 
 /// Taking the document out as a file.
-const FILE: StaticKey<Categories> = StaticKey::<Categories>::new("file");
+const FILE: StaticKey<Categories> = ambre_commands::shared::FILE;
 /// Inline formatting: the format bar and its chords.
 const FORMAT: StaticKey<Categories> = StaticKey::<Categories>::new("format");
 /// Moving text through the system clipboard.
@@ -21,6 +21,8 @@ const CLIPBOARD: StaticKey<Categories> = StaticKey::<Categories>::new("clipboard
 const GENERAL: StaticKey<Categories> = StaticKey::<Categories>::new("general");
 /// Stepping through the local history.
 const HISTORY: StaticKey<Categories> = StaticKey::<Categories>::new("history");
+/// Adding a new object to the page, such as a picture.
+const INSERT: StaticKey<Categories> = StaticKey::<Categories>::new("insert");
 /// Ruling on the suggestions of a review.
 const REVIEW: StaticKey<Categories> = StaticKey::<Categories>::new("review");
 
@@ -497,7 +499,7 @@ pub const COMMANDS: &[Command] = &[
         title: insert_picture_title,
         icon: Some(StaticKey::<Icons>::new("file-import-outline")),
         keybindings: &[],
-        category: FILE,
+        category: INSERT,
         home: Home::CreationBar,
         description: None,
     },

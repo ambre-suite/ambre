@@ -610,6 +610,29 @@ pub(super) fn named_documents(meta: &LoroDoc) -> Vec<Id<Document>> {
     named
 }
 
+/// Each segment `meta` lists, with the amendments document it names when no
+/// fold erased it. The read of the threads a removal names walks them
+/// (`SYNC-321`). An entry with no readable segment is left out: no member
+/// places a root of it, so no member opens a thread its amendments record.
+pub(super) fn swept_entries(meta: &LoroDoc) -> Vec<(Id<Segment>, Option<Id<Document>>)> {
+    let list: LoroList = crate::logic::schema::root_list(meta, Root::Segments);
+    let mut entries: Vec<(Id<Segment>, Option<Id<Document>>)> = Vec::new();
+    list.for_each(|item| {
+        let Some(entry) = crate::logic::schema::fields_of::<SegmentKey>(item) else {
+            return;
+        };
+        let Some(segment) = schema::string(&entry, SegmentKey::Document)
+            .and_then(|s| Id::<Segment>::parse_str(&s).ok())
+        else {
+            return;
+        };
+        if entries.iter().all(|(listed, _)| *listed != segment) {
+            entries.push((segment, live_amendments(&entry)));
+        }
+    });
+    entries
+}
+
 /// Every segment `meta` names an amendments document for, with that
 /// document, in list order.
 fn amendments_entries(meta: &LoroDoc) -> Vec<(Id<Segment>, Id<Document>)> {

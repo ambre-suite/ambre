@@ -475,6 +475,11 @@ impl<D> Runtime<D> {
     /// A channel still opening ends the session
     /// of each document it asked for.
     pub fn close_channel(&mut self, channel_id: Id<Channel>) {
+        // A removal that waits on the read of its threads fails: the read
+        // needs the channel open (`SYNC-321`).
+        if self.channels.contains_key(&channel_id) && self.removals.contains_key(&channel_id) {
+            self.fail_removals(channel_id);
+        }
         let Some(channel) = self.channels.remove(&channel_id) else {
             return self.end_channel(channel_id);
         };
@@ -768,6 +773,12 @@ impl<D> Runtime<D> {
         if let Some((&channel_id, channel)) =
             self.channels.iter_mut().find(|(_, c)| c.holds(document_id))
         {
+            // A document a removal reads for its threads, then closes
+            // (`SYNC-321`).
+            if channel.is_swept(document_id) {
+                self.swept_ready(channel_id, document_id);
+                return true;
+            }
             // A probe is read for the segment its header names, then
             // closed: nothing holds it.
             if channel.is_probe(document_id) {
@@ -806,6 +817,8 @@ impl<D> Runtime<D> {
                     }
                 }
                 self.advance_seek(channel_id);
+                // A removal may wait on what the view loaded.
+                self.advance_sweep(channel_id);
             }
             return true;
         }
@@ -971,6 +984,14 @@ impl<D> Runtime<D> {
         if let Some((&channel_id, channel)) =
             self.channels.iter_mut().find(|(_, c)| c.holds(document_id))
         {
+            // A document a removal reads for its threads fails the removal:
+            // its threads stay unknown (`SYNC-321`).
+            if channel.is_swept(document_id) {
+                tracing::warn!("Logic: {document_id} failed to open for a removal: {cause}");
+                channel.end_sweep();
+                self.sweep_failed(channel_id);
+                return true;
+            }
             // A missing key earns a band in the list. A transient failure
             // earns none: asking again may open it. A refusal earns none
             // either: the band names a key, and the relay's answer is told.
@@ -993,6 +1014,7 @@ impl<D> Runtime<D> {
                 self.emit(UiEvent::Channel { channel_id, event });
             }
             self.advance_seek(channel_id);
+            self.advance_sweep(channel_id);
             return true;
         }
         let Some(channel_id) = self.opening.iter().find_map(|(id, o)| {

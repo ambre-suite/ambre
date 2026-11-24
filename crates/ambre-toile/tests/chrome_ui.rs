@@ -12,7 +12,7 @@
 //! - the right-click context menu end-to-end -- the entry rows a
 //!   [`CtxScope`] renders, and that clicking a row fires its `StaticKey<Commands>`;
 //! - the tool palette -- a click switches the shared active tool;
-//! - the top menu bar and the floating selection toolbar -- a click fires
+//! - the command palette and the floating selection toolbar -- a click fires
 //!   its `StaticKey<Commands>` on the shared sink.
 //!
 //! On the host target the whole file is empty (the `cfg` gate below), so the
@@ -41,8 +41,7 @@ use ambre_draw::Rect;
 use ambre_toile::chrome::{
     CommentComposer, CommentDraft, CommentIntent, CommentsPanel, DeckIntent, DeckMove, DeckPanel,
     EditingSurfaces, FloatBar, PresenterIntent, PresenterPanel, REDO, SelStats, SelectionToolbar,
-    StatusBar, StyleEdit, StyleModel, Toggles, ToileIntent, ToileRelay, ToolPalette, TopMenuBar,
-    UNDO,
+    StatusBar, StyleEdit, StyleModel, ToileIntent, ToileRelay, ToolPalette, UNDO,
 };
 use ambre_toile::message::TextDelta;
 use ambre_toile::message::{
@@ -118,6 +117,28 @@ fn the_zoom_chip_closes_the_status_bar() {
         last.class_list().contains("statusbar-zoom"),
         "the band ends on `{}`",
         last.class_name()
+    );
+    root.remove();
+}
+
+/// `TOILE-UI-087`: the status bar offers the start of the presentation, its
+/// home, and a click on it reports the command the board resolves.
+#[wasm_bindgen_test]
+fn the_status_bar_starts_the_presentation() {
+    let owner = Owner::new();
+    owner.set();
+    let fired = RwSignal::new(None::<StaticKey<Commands>>);
+    let on_command = Callback::new(move |id: StaticKey<Commands>| fired.set(Some(id)));
+    let stats = RwSignal::new(None);
+    let zoom = RwSignal::new(Scale::<Board, View>::within(1.0, 0.1, 10.0));
+    let perf = RwSignal::new(PerfSnapshot::default());
+    let root = mount_in_container(move || {
+        view! { <StatusBar stats=stats perf=perf zoom=zoom on_command=on_command /> }
+    });
+    assert!(click_by_aria(&root, "Start presentation"));
+    assert_eq!(
+        fired.get_untracked(),
+        Some(ambre_toile::ui::menu_bar::PRESENT)
     );
     root.remove();
 }
@@ -369,7 +390,9 @@ fn tool_palette_click_switches_active_tool() {
     let owner = Owner::new();
     owner.set();
     let active = RwSignal::new(Tool::Select);
-    let root = mount_in_container(move || view! { <ToolPalette active=active /> });
+    let root = mount_in_container(
+        move || view! { <ToolPalette active=active cover=RwSignal::new(ambre_client_core::cover::Cover::default()) /> },
+    );
 
     // The Select button reflects the active tool through `aria-pressed`.
     let select_btn = root
@@ -388,38 +411,42 @@ fn tool_palette_click_switches_active_tool() {
     root.remove();
 }
 
-// -- Top menu bar, zoom from the View menu -----------------------
+// -- Zoom from the palette ---------------------------------------
 
-/// `TOILE-UI-416`: the zoom-in entry of the View menu reports the zoom-in
-/// command. The bar itself holds no zoom control: the zoom lives in the status
-/// bar alone (`CHROME-206`).
+/// `TOILE-UI-416`: the zoom-in entry of the command palette reports the
+/// zoom-in command. The board lays out no menu bar, so the palette and the
+/// chord reach the zoom actions. The zoom chip of the status bar shows the
+/// percentage.
 #[wasm_bindgen_test]
-async fn the_view_menu_reports_zoom_in_and_the_bar_holds_no_zoom_control() {
+async fn the_palette_reports_zoom_in() {
     let owner = Owner::new();
     owner.set();
     let fired = RwSignal::new(None::<StaticKey<Commands>>);
     let on_command = Callback::new(move |id: StaticKey<Commands>| fired.set(Some(id)));
-    let store = CommandStates::new(ambre_toile::chrome::COMMANDS.iter().map(|c| c.id));
-    ambre_toile::chrome::init_command_states(&store);
-    let toggles = Toggles::from_store(&store);
+    let open = RwSignal::new(ambre_chrome::Openness::Open);
     let root = mount_in_container(move || {
-        view! { <TopMenuBar on_command=on_command toggles=toggles /> }
+        view! {
+            <ambre_chrome::CommandPalette
+                open=open
+                table=ambre_toile::chrome::COMMANDS
+                on_command=on_command
+            />
+        }
     });
-    assert!(
-        root.query_selector("[aria-label=\"Zoom in\"]")
-            .unwrap()
-            .is_none(),
-        "the menu bar holds a zoom control"
-    );
-    assert!(root.query_selector(".ambre-toile-zoom").unwrap().is_none());
-
-    assert!(click_by_aria(&root, "View"));
     leptos::task::tick().await;
-    let rows = root.query_selector_all(".ambre-ctx-item").unwrap();
+    let rows = root.query_selector_all(".ambre-palette-row").unwrap();
     let zoom_in = (0..rows.length())
         .filter_map(|i| rows.item(i))
-        .find(|row| row.text_content().is_some_and(|t| t.starts_with("Zoom in")))
-        .expect("a Zoom in row in the View menu");
+        .filter_map(|row| row.dyn_into::<web_sys::Element>().ok())
+        .find(|row| {
+            row.query_selector(".ambre-palette-label")
+                .ok()
+                .flatten()
+                .and_then(|l| l.text_content())
+                .as_deref()
+                == Some("Zoom in")
+        })
+        .expect("a Zoom in row in the palette");
     zoom_in.dyn_into::<web_sys::HtmlElement>().unwrap().click();
     assert_eq!(fired.get_untracked(), Some(ZOOM_IN));
 
@@ -427,7 +454,7 @@ async fn the_view_menu_reports_zoom_in_and_the_bar_holds_no_zoom_control() {
 }
 
 /// `mirror_event` projects the authoritative Undo/Redo availability from
-/// `ToileEvent::UndoState` into the command store the menu bar reads for its
+/// `ToileEvent::UndoState` into the command store the Ambre menu reads for its
 /// `disabled` state (`UNDO-006`).
 #[wasm_bindgen_test]
 fn undo_state_mirrors_into_command_store() {
@@ -487,7 +514,7 @@ fn selection_toolbar_delete_fires_command() {
     let model = RwSignal::new(None::<StyleModel>);
     let on_style = Callback::new(move |_e: StyleEdit| {});
     let root = mount_in_container(move || {
-        view! { <SelectionToolbar bar=bar model=model on_command=on_command on_style=on_style /> }
+        view! { <SelectionToolbar bar=bar model=model on_command=on_command on_style=on_style cover=RwSignal::new(ambre_client_core::cover::Cover::default()) /> }
     });
 
     assert!(click_by_aria(&root, "Delete"));
@@ -521,7 +548,9 @@ fn the_button_bars_announce_the_registry_labels() {
     owner.set();
 
     let active = RwSignal::new(Tool::Select);
-    let palette = mount_in_container(move || view! { <ToolPalette active=active /> });
+    let palette = mount_in_container(
+        move || view! { <ToolPalette active=active cover=RwSignal::new(ambre_client_core::cover::Cover::default()) /> },
+    );
     assert_registry_labels(
         &palette,
         &[
@@ -553,7 +582,7 @@ fn the_button_bars_announce_the_registry_labels() {
     let model = RwSignal::new(None::<StyleModel>);
     let on_style = Callback::new(move |_e: StyleEdit| {});
     let toolbar = mount_in_container(move || {
-        view! { <SelectionToolbar bar=bar model=model on_command=on_command on_style=on_style /> }
+        view! { <SelectionToolbar bar=bar model=model on_command=on_command on_style=on_style cover=RwSignal::new(ambre_client_core::cover::Cover::default()) /> }
     });
     assert_registry_labels(
         &toolbar,
@@ -573,7 +602,9 @@ async fn each_icon_of_the_button_bars_names_itself_and_its_chord_in_a_tooltip() 
     let table = ambre_toile::ui::commands::COMMANDS;
 
     let active = RwSignal::new(Tool::Select);
-    let palette = mount_in_container(move || view! { <ToolPalette active=active /> });
+    let palette = mount_in_container(
+        move || view! { <ToolPalette active=active cover=RwSignal::new(ambre_client_core::cover::Cover::default()) /> },
+    );
     leptos::task::tick().await;
     assert_eq!(
         ambre_chrome::untipped_icons(&palette, table),
@@ -621,7 +652,7 @@ async fn each_icon_of_the_button_bars_names_itself_and_its_chord_in_a_tooltip() 
     let model = RwSignal::new(None::<StyleModel>);
     let on_style = Callback::new(move |_e: StyleEdit| {});
     let toolbar = mount_in_container(move || {
-        view! { <SelectionToolbar bar=bar model=model on_command=on_command on_style=on_style /> }
+        view! { <SelectionToolbar bar=bar model=model on_command=on_command on_style=on_style cover=RwSignal::new(ambre_client_core::cover::Cover::default()) /> }
     });
     leptos::task::tick().await;
     assert_eq!(
@@ -1328,7 +1359,7 @@ async fn the_editing_chrome_leaves_while_the_board_presents() {
     let root = mount_in_container(move || {
         view! {
             <EditingSurfaces present=present>
-                <ToolPalette active=active />
+                <ToolPalette active=active cover=RwSignal::new(ambre_client_core::cover::Cover::default()) />
             </EditingSurfaces>
         }
     });
@@ -1450,14 +1481,23 @@ async fn settle() {
     }
 }
 
-/// `ZOOM-011`: the palette publishes the right edge it covers, as the page
-/// lays it out. The edge tracks a change of size, and clears when the palette
-/// hides.
+/// What the surface `surface` covers in `cover` now.
+fn covered(
+    cover: RwSignal<ambre_client_core::cover::Cover>,
+    surface: ambre_client_core::cover::Surface,
+) -> Option<ambre_client_core::cover::Covered> {
+    cover.get_untracked().of(surface)
+}
+
+/// `CHROME-170`, `ZOOM-011`: the palette publishes the box it covers, as the
+/// page lays it out. The box tracks a change of size, and clears when the
+/// palette hides.
 #[wasm_bindgen_test]
 async fn the_palette_publishes_the_edge_it_covers_and_clears_it_when_it_hides() {
+    use ambre_client_core::cover::{Cover, Covered, Surface};
     let sheet = with_shell_stylesheet();
     let active = RwSignal::new(Tool::Select);
-    let cover = RwSignal::new(ambre_toile::ui::cover::Cover::default());
+    let cover = RwSignal::new(Cover::default());
     let root = mount_in_container(move || view! { <ToolPalette active=active cover=cover /> });
     settle().await;
     let palette: web_sys::HtmlElement = root
@@ -1466,11 +1506,9 @@ async fn the_palette_publishes_the_edge_it_covers_and_clears_it_when_it_hides() 
         .unwrap()
         .dyn_into()
         .unwrap();
-    let measured = |cover: RwSignal<ambre_toile::ui::cover::Cover>| {
-        cover
-            .get_untracked()
-            .palette_right
-            .map(|right| f64::from(right.get()))
+    let measured = |cover| match covered(cover, Surface::CreationBar) {
+        Some(Covered::Fixed(at)) => Some(f64::from(at.bottom_right.x.get())),
+        _ => None,
     };
     let right = palette.get_bounding_client_rect().right();
     assert!(
@@ -1493,10 +1531,11 @@ async fn the_palette_publishes_the_edge_it_covers_and_clears_it_when_it_hides() 
     sheet.remove();
 }
 
-/// `ZOOM-011`: the selection bar publishes how far it reaches above the
-/// selection, its height and its lift, and clears it once it leaves.
+/// `CHROME-170`, `ZOOM-011`: the selection bar publishes how far it reaches
+/// above the selection, its height and its lift, and clears it once it leaves.
 #[wasm_bindgen_test]
 async fn the_selection_bar_publishes_its_reach_and_clears_it_when_it_leaves() {
+    use ambre_client_core::cover::{Cover, Covered, Surface};
     let sheet = with_shell_stylesheet();
     let bar = RwSignal::new(Some(FloatBar {
         at: css_point(400.0, 300.0),
@@ -1507,7 +1546,7 @@ async fn the_selection_bar_publishes_its_reach_and_clears_it_when_it_leaves() {
         mixed: Default::default(),
     }));
     let model = RwSignal::new(None::<StyleModel>);
-    let cover = RwSignal::new(ambre_toile::ui::cover::Cover::default());
+    let cover = RwSignal::new(Cover::default());
     let on_command = Callback::new(move |_id: StaticKey<Commands>| {});
     let on_style = Callback::new(move |_e: StyleEdit| {});
     let root = mount_in_container(move || {
@@ -1518,7 +1557,12 @@ async fn the_selection_bar_publishes_its_reach_and_clears_it_when_it_leaves() {
     settle().await;
     let selbar = root.query_selector(".ambre-selbar").unwrap().unwrap();
     let rect = selbar.get_bounding_client_rect();
-    let reach = f64::from(cover.get_untracked().bar_reach.unwrap().get());
+    let reach = match covered(cover, Surface::ContextBar) {
+        Some(Covered::Above(reach)) => Some(reach),
+        _ => None,
+    }
+    .expect("the bar publishes a reach above the selection");
+    let reach = f64::from(reach.get());
     assert!((reach - (300.0 - rect.top())).abs() < 0.5);
     // The reach is the bar's own height and the lift above the selection.
     assert!(
@@ -1529,7 +1573,7 @@ async fn the_selection_bar_publishes_its_reach_and_clears_it_when_it_leaves() {
 
     bar.set(None);
     settle().await;
-    assert_eq!(cover.get_untracked().bar_reach, None);
+    assert_eq!(covered(cover, Surface::ContextBar), None);
 
     root.remove();
     sheet.remove();
@@ -1585,6 +1629,7 @@ fn mount_toile_panel_on(model: Option<StyleModel>, scope: CtxScope) -> web_sys::
                 title=content.title
                 subtitle=content.subtitle
                 sections=content.sections
+                cover=RwSignal::new(ambre_client_core::cover::Cover::default())
             />
         }
     })
@@ -1724,7 +1769,7 @@ async fn each_entry_of_the_board_bar_is_a_control_of_the_panel() {
     let model = RwSignal::new(Some(styled(Styled::Elements)));
     let toolbar = mount_in_container(move || {
         view! {
-            <SelectionToolbar bar=bar model=model on_command=Callback::new(|_| {}) on_style=Callback::new(|_| {}) />
+            <SelectionToolbar bar=bar model=model on_command=Callback::new(|_| {}) on_style=Callback::new(|_| {}) cover=RwSignal::new(ambre_client_core::cover::Cover::default()) />
         }
     });
     let shown = ambre_chrome::reach_markers(&toolbar);

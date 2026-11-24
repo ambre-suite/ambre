@@ -1,13 +1,17 @@
 //! The removals from a channel: a departure of this user, or a revoke of a
-//! member, on the log of its `meta` (`SYNC-320`).
+//! member, on the log of its `meta` (`SYNC-320`, `SYNC-321`).
 //!
 //! The Sync worker lists the documents of the channel from the relay, and a
-//! relay may hide one. Only this thread reads the sealed `meta`, so each
-//! removal leaves with the documents the `meta` names. The census refuses a
+//! relay may hide one. Only this thread reads the sealed documents. Each
+//! removal thus leaves with the documents they name: the segments and
+//! amendments the `meta` names, and the threads those name. The census refuses a
 //! listing that leaves one out. A channel not open here opens first, and the
-//! removal waits for it. A channel opened for a removal alone closes again.
+//! removal waits for it and for the read of its threads. A channel opened
+//! for a removal alone closes again.
 
+use super::channels::open_in_channel;
 use super::*;
+use crate::{ChannelState, SweepStep};
 use ambre_bus::{ApiFailure, ApiRequest};
 
 /// A removal from a channel that waits for the documents its `meta` names.
@@ -25,9 +29,11 @@ pub(crate) enum Removal {
 }
 
 impl<D> Runtime<D> {
-    /// Send `removal` with the documents the sealed `meta` of `channel_id`
+    /// Send `removal` with the documents the sealed state of `channel_id`
     /// names. A channel not open here opens first, and the removal waits for
-    /// it (`SYNC-320`).
+    /// it (`SYNC-320`). An open channel first reads the threads its segments
+    /// and amendments name, and the removal waits for that read
+    /// (`SYNC-321`).
     pub(crate) fn remove_from_channel(&mut self, channel_id: Id<Channel>, removal: Removal) {
         let Some(channel) = self.channels.get(&channel_id) else {
             if !self.opening.contains_key(&channel_id) {
@@ -37,51 +43,119 @@ impl<D> Runtime<D> {
             self.removals.entry(channel_id).or_default().push(removal);
             return;
         };
-        let named = channel.named_documents();
         let meta = channel.meta_id().document_id();
-        self.ask(match removal {
-            Removal::Leave => SyncCommand::LeaveChannel { channel_id, named },
-            Removal::Revoke {
-                id,
-                document_id,
-                user_id,
-            } if document_id == meta => SyncCommand::RevokeFromChannel {
-                id,
-                document_id,
-                user_id,
-                named,
-            },
-            // A closed channel holds its documents by identifier alone: the
-            // revoke named one of them that is no `meta`, so it goes as it
-            // came.
-            Removal::Revoke {
-                id,
-                document_id,
-                user_id,
-            } => SyncCommand::Rest {
-                id,
-                cmd: RestCommand::RevokeFromDocument {
-                    document_id,
-                    user_id,
-                },
-            },
-        });
+        if let Some(cmd) = revoke_elsewhere(removal, meta) {
+            return self.ask(cmd);
+        }
+        self.removals.entry(channel_id).or_default().push(removal);
+        self.advance_sweep(channel_id);
     }
 
-    /// `channel_id` opened: each removal that waited on it leaves now. A
-    /// channel opened for them alone closes again.
+    /// `channel_id` opened: each removal that waited on it leaves once the
+    /// read of its threads ends. A channel opened for them alone closes then.
     pub(crate) fn release_removals(&mut self, channel_id: Id<Channel>) {
+        let Some(meta) = self
+            .channels
+            .get(&channel_id)
+            .map(|channel| channel.meta_id().document_id())
+        else {
+            return;
+        };
         for removal in self.removals.remove(&channel_id).unwrap_or_default() {
-            self.remove_from_channel(channel_id, removal);
+            match revoke_elsewhere(removal, meta) {
+                Some(cmd) => self.ask(cmd),
+                None => self.removals.entry(channel_id).or_default().push(removal),
+            }
         }
-        if self.opened_for_removal.remove(&channel_id) {
+        if self.removals.contains_key(&channel_id) {
+            self.advance_sweep(channel_id);
+        } else if self.opened_for_removal.remove(&channel_id) {
             self.close_channel(channel_id);
         }
     }
 
-    /// The open of `channel_id` failed: each removal that waited on it fails
-    /// without a word from the relay, and nothing leaves for the Sync worker.
+    /// Move the read of the threads the removals of `channel_id` wait on
+    /// one step (`SYNC-321`). Once it ends, each removal leaves with every
+    /// document the sealed state names, and a channel opened for them alone
+    /// closes.
+    pub(crate) fn advance_sweep(&mut self, channel_id: Id<Channel>) {
+        if !self.removals.contains_key(&channel_id) {
+            return;
+        }
+        let Some(channel) = self.channels.get_mut(&channel_id) else {
+            return;
+        };
+        let meta = channel.meta_id();
+        match channel.sweep_step() {
+            SweepStep::Open(document_id) => self.ask(open_in_channel(meta, document_id)),
+            SweepStep::Wait => {}
+            SweepStep::Done(named) => {
+                let document_id = meta.document_id();
+                for removal in self.removals.remove(&channel_id).unwrap_or_default() {
+                    let named = named.clone();
+                    self.ask(match removal {
+                        Removal::Leave => SyncCommand::LeaveChannel { channel_id, named },
+                        Removal::Revoke { id, user_id, .. } => SyncCommand::RevokeFromChannel {
+                            id,
+                            document_id,
+                            user_id,
+                            named,
+                        },
+                    });
+                }
+                if self.opened_for_removal.remove(&channel_id) {
+                    self.close_channel(channel_id);
+                }
+            }
+        }
+    }
+
+    /// A document the read of the threads of `channel_id` opened has all
+    /// its bytes: read it, close it, and go on. A document it cannot read
+    /// fails every removal that waits on it (`SYNC-321`).
+    pub(crate) fn swept_ready(&mut self, channel_id: Id<Channel>, document_id: Id<Document>) {
+        let Some(channel) = self.channels.get_mut(&channel_id) else {
+            return;
+        };
+        let meta = channel.meta_id();
+        let read = channel.sweep_ready(document_id);
+        self.forget_murmure_session(document_id);
+        self.ask(SyncCommand::CloseDocument { document_id });
+        match read {
+            Ok(Some(next)) => self.ask(open_in_channel(meta, next)),
+            Ok(None) => self.advance_sweep(channel_id),
+            Err(error) => {
+                tracing::warn!("Logic: {document_id} names no thread a removal can read: {error}");
+                self.sweep_failed(channel_id);
+            }
+        }
+    }
+
+    /// The read of the threads of `channel_id` failed: each removal that
+    /// waited on it fails, and nothing leaves for the Sync worker. A channel
+    /// opened for them alone closes.
+    pub(crate) fn sweep_failed(&mut self, channel_id: Id<Channel>) {
+        if self.opened_for_removal.remove(&channel_id) {
+            self.fail_removals(channel_id);
+            self.close_channel(channel_id);
+        } else {
+            self.fail_removals(channel_id);
+        }
+    }
+
+    /// The open of `channel_id`, or the read of its threads, failed. Each
+    /// removal that waited on it fails without a word from the relay.
+    /// Nothing leaves for the Sync worker. The document the read held open
+    /// closes.
     pub(crate) fn fail_removals(&mut self, channel_id: Id<Channel>) {
+        if let Some(document_id) = self
+            .channels
+            .get_mut(&channel_id)
+            .and_then(ChannelState::end_sweep)
+        {
+            self.forget_murmure_session(document_id);
+            self.ask(SyncCommand::CloseDocument { document_id });
+        }
         self.opened_for_removal.remove(&channel_id);
         let failure = ApiFailure::Local(ambre_core::LocalFailure::ChannelNotOpen);
         for removal in self.removals.remove(&channel_id).unwrap_or_default() {
@@ -118,5 +192,25 @@ impl<D> Runtime<D> {
             },
         );
         true
+    }
+}
+
+/// The request a revoke on `document_id` makes when that document is no
+/// `meta` of the channel: it goes as it came. `None` for a departure, and
+/// for a revoke on `meta`, which wait for the documents it names.
+fn revoke_elsewhere(removal: Removal, meta: Id<Document>) -> Option<SyncCommand> {
+    match removal {
+        Removal::Revoke {
+            id,
+            document_id,
+            user_id,
+        } if document_id != meta => Some(SyncCommand::Rest {
+            id,
+            cmd: RestCommand::RevokeFromDocument {
+                document_id,
+                user_id,
+            },
+        }),
+        Removal::Leave | Removal::Revoke { .. } => None,
     }
 }

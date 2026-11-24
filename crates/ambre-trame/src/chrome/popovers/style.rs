@@ -92,17 +92,14 @@ pub(crate) fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) 
     };
     view! {
         <span class="ambre-borders" node_ref=root_ref>
-            <button
-                aria-label="Borders"
-                aria-haspopup="true"
-                aria-expanded=move || open.get().aria()
-                // Keep the grid's focus: a button steals it on mousedown, which
-                // would clear the active cell before on:click can apply the colour.
-                on:mousedown=move |ev| ev.prevent_default()
-                on:click=move |_| open.update(|o| *o = o.toggled())
-            >
-                <Icon icon=icondata::BsBorderAll />
-            </button>
+            // The icon button names the trigger in a tooltip, and keeps the
+            // grid's focus on mousedown, so the active cell survives the press.
+            <ambre_chrome::IconButton
+                icon=icondata::BsBorderAll
+                label="Borders"
+                expanded=Some(Signal::from(open))
+                on_press=Callback::new(move |()| open.update(|o| *o = o.toggled()))
+            />
             <Show when=move || open.get() == ambre_chrome::Openness::Open fallback=|| ()>
                 <div class="ambre-borders-popover">
                     // Preset grid: each applies the pen to its edges.

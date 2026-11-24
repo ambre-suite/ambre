@@ -21,14 +21,14 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**5160 rows: 4749 shipped, of which 14 loose. 411 unbuilt.**
+**5161 rows: 4756 shipped, of which 14 loose. 405 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1760 | 583 | 996 | 835 | 561 | 4735 |
+| `verified` | 1766 | 583 | 996 | 835 | 562 | 4742 |
 | `failing` |  |  |  |  |  | 0 |
 | `human-review` | 14 |  |  |  |  | 14 |
-| `unimplemented` | 156 | 42 | 21 | 24 | 168 | 411 |
+| `unimplemented` | 151 | 42 | 21 | 24 | 167 | 405 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -60,7 +60,7 @@
 | `ambre-spec-launcher.md` | 55 | 55 | 55 |  |  |
 | `ambre-spec-locale.md` | 23 | 23 | 23 |  |  |
 | `ambre-spec-media.md` | 20 | 20 | 20 |  |  |
-| `ambre-spec-membership.md` | 116 | 116 | 116 |  |  |
+| `ambre-spec-membership.md` | 117 | 117 | 117 |  |  |
 | `ambre-spec-message-bus.md` | 46 | 45 | 45 |  | 1 |
 | `ambre-spec-newtypes.md` | 1 | 1 | 1 |  |  |
 | `ambre-spec-object-store.md` | 25 | 24 | 24 |  | 1 |
@@ -76,7 +76,7 @@
 | `ambre-spec-sequencer.md` | 85 | 85 | 85 |  |  |
 | `ambre-spec-server.md` | 136 | 128 | 127 | 1 | 8 |
 | `ambre-spec-session.md` | 54 | 54 | 54 |  |  |
-| `ambre-spec-shell.md` | 90 | 78 | 78 |  | 12 |
+| `ambre-spec-shell.md` | 90 | 83 | 83 |  | 7 |
 | `ambre-spec-sync.md` | 91 | 90 | 90 |  | 1 |
 | `ambre-spec-text-editor.md` | 20 | 18 | 18 |  | 2 |
 | `ambre-spec-text-input.md` | 15 | 15 | 15 |  |  |
@@ -173,7 +173,7 @@
 | `ambre-spec-prose-word-count.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-murmure-schema.md` | 24 | 24 | 24 |  |  |
 | `ambre-spec-murmure-attachments.md` | 19 | 18 | 18 |  | 1 |
-| `ambre-spec-murmure-calls.md` | 100 | 90 | 90 |  | 10 |
+| `ambre-spec-murmure-calls.md` | 100 | 91 | 91 |  | 9 |
 | `ambre-spec-murmure-channels.md` | 58 | 43 | 43 |  | 15 |
 | `ambre-spec-murmure-composer.md` | 45 | 45 | 45 |  |  |
 | `ambre-spec-murmure-emoji.md` | 14 | 5 | 5 |  | 9 |
@@ -229,7 +229,7 @@
 | `ambre-spec-machine-access.md` | MACH-001..034 |
 | `ambre-spec-macros.md` | MACRO-001..054 |
 | `ambre-spec-media.md` | SYNC-049..055,074..077,139..140,145..146,174..176,228,288 |
-| `ambre-spec-membership.md` | SYNC-010,012,014..017,034..040,073,092..094,102..111,123..124,132,150..151,161,172..173,190,197,200..202,205..212,214..215,217..222,225..227,229..247,260,262..263,266..268,272..274,279,282..285,289..291,298..304,306..317,319..320 |
+| `ambre-spec-membership.md` | SYNC-010,012,014..017,034..040,073,092..094,102..111,123..124,132,150..151,161,172..173,190,197,200..202,205..212,214..215,217..222,225..227,229..247,260,262..263,266..268,272..274,279,282..285,289..291,298..304,306..317,319..321 |
 | `ambre-spec-message-bus.md` | BUS-001..046 |
 | `ambre-spec-murmure-attachments.md` | MURMURE-128..136,240..242,577..578,626..628,636..637 |
 | `ambre-spec-murmure-bots.md` | MURMURE-387..398 |
