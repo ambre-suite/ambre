@@ -557,7 +557,7 @@ mod tests {
         }
     }
 
-    /// `SYNC-330`: a channel with more documents than one entry caps opens
+    /// `SYNC-316`: a channel with more documents than one entry caps opens
     /// each of them for the census, and the removal waits on them all.
     #[test]
     fn a_channel_past_the_caps_of_one_entry_opens_every_document() {
@@ -692,7 +692,7 @@ mod tests {
         let removal = Removal::LeaveChannel {
             channel_id: CHANNEL,
         };
-        state.census_planned(removal, channel_counted(&listed, None).map_err(Into::into));
+        state.census_planned(removal, channel_counted(&listed, None));
         assert!(state.census_docs.contains(&META) && state.census_docs.contains(&THREAD));
         assert!(!state.channel_metas.contains_key(&META), "the log itself");
         assert_eq!(state.log_document(THREAD), META);

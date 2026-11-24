@@ -126,7 +126,7 @@ pub(crate) async fn checked_entry(
 }
 
 /// Checks the entry of a removal and the continuations that follow it
-/// (`SRV-104`, `SRV-344`). One entry holds at most `DOCUMENT_CAPS_MAX`
+/// (`SRV-104`, `SRV-338`). One entry holds at most `DOCUMENT_CAPS_MAX`
 /// document caps. A removal from a larger channel carries the rest in
 /// continuations.
 ///
@@ -368,7 +368,7 @@ pub struct RemovalRequest {
     #[serde(default)]
     pub entry: Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
     /// The cap continuations, in log order, appended after `entry` in the
-    /// same transaction (`SRV-344`). Empty for an older client.
+    /// same transaction (`SRV-338`). Empty for an older client.
     #[serde(default)]
     pub continued: Vec<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
 }

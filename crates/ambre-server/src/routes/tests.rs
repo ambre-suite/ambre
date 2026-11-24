@@ -1181,6 +1181,7 @@ mod handler_tests {
             author,
             cap: None,
             document_caps: Vec::new(),
+            elsewhere: ambre_protocol::Elsewhere::Uncapped,
             signature: ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array([0; 64]),
         }
     }
@@ -1504,7 +1505,7 @@ mod handler_tests {
         [create, invite]
     }
 
-    /// Holds `SRV-344`. A removal with no rotation appends its entry, then
+    /// Holds `SRV-338`. A removal with no rotation appends its entry, then
     /// each cap continuation at the next place, in the order sent.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
@@ -1557,7 +1558,7 @@ mod handler_tests {
         assert_eq!(list_members(&app, &owner, &doc_id).await.len(), 1);
     }
 
-    /// Holds `SRV-344`. A revoke that rotates the key appends its entry,
+    /// Holds `SRV-338`. A revoke that rotates the key appends its entry,
     /// then each cap continuation at the next place, with the new key.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
@@ -1615,7 +1616,7 @@ mod handler_tests {
         assert_eq!(members[0]["doc_key_enc"], new_key, "and the key rotated");
     }
 
-    /// Holds `SRV-344`. A continuation that is not a cap-only revoke of the
+    /// Holds `SRV-338`. A continuation that is not a cap-only revoke of the
     /// same member by the caller at the next place refuses the whole
     /// removal. The log keeps no entry of it and the member keeps the row,
     /// with a rotation and without.

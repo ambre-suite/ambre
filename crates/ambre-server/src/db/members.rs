@@ -78,7 +78,7 @@ pub struct LogEntry {
 }
 
 /// The entries a removal appends to the log: its own, then the cap
-/// continuations that follow it at the next places (`SRV-344`). The route
+/// continuations that follow it at the next places (`SRV-338`). The route
 /// checked each one. A removal of a document with no log carries none.
 #[derive(Debug, Default)]
 pub struct RemovalEntries {
@@ -214,7 +214,7 @@ pub(super) async fn record_change(
 }
 
 /// Records the entries of a removal: its own, as [`record_change`] does, then
-/// each continuation at the next place, under the same lock (`SRV-344`). A
+/// each continuation at the next place, under the same lock (`SRV-338`). A
 /// continuation at another place than the next refuses the whole removal.
 async fn record_removal(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,

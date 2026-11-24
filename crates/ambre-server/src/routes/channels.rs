@@ -1086,6 +1086,7 @@ mod tests {
             author: who,
             cap: None,
             document_caps: Vec::new(),
+            elsewhere: ambre_protocol::Elsewhere::Uncapped,
             signature: ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array([0; 64]),
         };
         entry.signature = ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array(
@@ -2746,6 +2747,7 @@ mod tests {
             author,
             cap: None,
             document_caps: Vec::new(),
+            elsewhere: ambre_protocol::Elsewhere::Uncapped,
             signature: ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array([0; 64]),
         };
         entry.signature = ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array(

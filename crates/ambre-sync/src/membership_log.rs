@@ -1394,7 +1394,7 @@ fn allowed(
 /// same role. It names no key and no cap of its own, and adds caps in other
 /// documents of the channel alone. One entry carries at most `DOCUMENT_CAPS_MAX` of them, so
 /// a removal from a larger channel spreads its caps over a run of entries
-/// (`SYNC-330`). The member is gone by then, so [`allowed`] refuses it.
+/// (`SYNC-316`). The member is gone by then, so [`allowed`] refuses it.
 fn continues(
     held: &HashMap<Id<User>, Held>,
     last: &MembershipEntry,
@@ -1483,7 +1483,7 @@ pub(crate) fn sign_capped(
 ///
 /// The first entry carries `cap` and the first `DOCUMENT_CAPS_MAX` caps.
 /// Each further run of caps takes a continuation after it: the same revoke,
-/// with no key and no cap of its own (`SYNC-330`). Each entry thus keeps the
+/// with no key and no cap of its own (`SYNC-316`). Each entry thus keeps the
 /// bytes an update carries within its budget row, whatever the size of the
 /// channel. The entries chain, each after the one before it.
 ///
@@ -2520,7 +2520,7 @@ pub(crate) mod tests {
         assert!(admits(&log, hidden, 1, back), "a write past the invite");
     }
 
-    /// Holds `SYNC-330` at the walk. A revoke past the caps of one entry
+    /// Holds `SYNC-316` at the walk. A revoke past the caps of one entry
     /// takes continuations, and the walk caps Bob in each document of every
     /// run. Each of these continuations stops the walk:
     /// * one another member signs, or one that names another member;
