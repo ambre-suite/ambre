@@ -46,6 +46,7 @@ mod confirming;
 mod finalizing;
 mod folding;
 mod relocating;
+mod sweeping;
 mod threading;
 
 pub use amending::{ChangeTarget, Linked};
@@ -53,6 +54,7 @@ pub use closing::{Closed, SEGMENT_MESSAGES, SEGMENT_SNAPSHOT_SIZE, SUCCESSOR_RET
 pub use finalizing::{FINALIZE_RETRY, FinalSnapshot};
 pub use folding::{FOLD_DELAY, FoldSnapshot, Settled};
 pub use relocating::{Relocated, Replay};
+pub use sweeping::SweepStep;
 pub use threading::{Replied, SeekStep, ThreadLinked, ThreadTarget};
 
 #[cfg(test)]
@@ -299,6 +301,9 @@ pub struct ChannelState {
     /// The last message a remote delta brought to a segment, until the
     /// caller takes it (`MURMURE-507`).
     arrived: Option<(Id<Segment>, Id<Message>)>,
+    /// The read of the threads a removal names, while it runs
+    /// (`SYNC-321`).
+    sweep: Option<sweeping::Sweep>,
 }
 
 impl ChannelState {
@@ -476,6 +481,7 @@ impl ChannelState {
             seek: None,
             closing_band: None,
             arrived: None,
+            sweep: None,
         }
     }
 
@@ -683,7 +689,9 @@ impl ChannelState {
     /// Whether the channel holds the document of that identifier in memory,
     /// or is loading it on the view's demand.
     pub fn holds(&self, document_id: Id<Document>) -> bool {
-        self.doc(document_id).is_some() || self.is_pending(document_id)
+        self.doc(document_id).is_some()
+            || self.is_pending(document_id)
+            || self.is_swept(document_id)
     }
 
     /// Every document the channel holds or is loading, so a close can end
@@ -1647,6 +1655,11 @@ impl ChannelState {
         order: Option<Order>,
         payload: LoroPayloadRef<'_>,
     ) -> Result<Vec<MurmureEvent>, MurmureError> {
+        // A document open to read the threads a removal names keeps its
+        // bytes until it is read (`SYNC-321`).
+        if self.sweep_arrival(document_id, || Arrival::Bytes(payload.to_payload())) {
+            return Ok(Vec::new());
+        }
         // An amendments document still arriving keeps its bytes too. It has
         // no message to number, but a fold names how far it reaches.
         if let Some(pending) = self.amendments_pending.get_mut(&document_id) {
@@ -1772,6 +1785,11 @@ impl ChannelState {
         }
         if !self.holds(document_id) {
             return Err(MurmureError::NotHeld(document_id));
+        }
+        if self.is_swept(document_id) {
+            let update = delta::read(payload)?;
+            self.sweep_arrival(document_id, || Arrival::Signed { update, signer });
+            return Ok(Vec::new());
         }
         if self.is_amendments(document_id) {
             return self.apply_amendment(document_id, seq, payload, signer);
