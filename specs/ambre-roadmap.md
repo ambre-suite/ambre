@@ -645,6 +645,9 @@ row reads `V1`.
 | `[ ]` The accept and reject of a suggestion sit in the tab order | V1 | the buttons of the suggestion popover are out of the tab order of the text input of the canvas, so a keyboard user reaches them through the panel and the palette alone. Done when the tab key moves from the text to the two buttons and back, and a row binding it reads `verified` (`PROSE-UI-258`) |
 | `[ ]` The chord of suggestion mode survives Firefox | V1 | `Ctrl+Shift+E` opens the network panel of the Firefox devtools. Done when a browser test in Firefox shows the keymap keeps the chord, or the command takes another chord (`PROSE-UI-262`) |
 | `[ ]` The suggestion mode chip names the state | V1 | the chip of the status bar reads the title of the command, Suggest changes, where it shows a state. Done when the description of the command carries a state label, Suggesting, and the chip reads it (`PROSE-UI-261`) |
+| `[ ]` A list over a selection settles what a heading becomes | V1 | the list control leaves a heading of the selection alone, and the style list leaves a code block alone. Word turns a heading into a list item. Done when a row states what each block kind becomes and reads `verified` |
+| `[ ]` A block gesture that writes nothing says so | V1 | a block property that applies to no block of the selection, such as an indent of the first item of a run, writes nothing and reports no refusal. Done when such a gesture reports its refusal and a row reads `verified` |
+| `[ ]` A selection write that fails halfway writes nothing | V1 | a store error in the middle of a write over a selection leaves the blocks before it written and uncommitted. The format path of the selection has the same flaw. Done when a failed write leaves the document as it was and a row reads `verified` |
 
 ### Murmure
 
