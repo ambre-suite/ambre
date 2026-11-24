@@ -1373,7 +1373,7 @@ body {
 }
 
 .ambre-kit-text[aria-invalid="true"] {
-    border-color: var(--danger, var(--accent));
+    border-color: var(--error);
 }
 
 /* An icon button: one glyph of the icon size, centred in a square box of a
