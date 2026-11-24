@@ -938,17 +938,20 @@ fn two_peers_setting_the_page_at_once_converge_on_one_agreeing_page() {
     }
 }
 
-/// Two peers over one seeded document of two paragraphs, "hello" and
-/// "world", and the selection over both.
-fn two_peers_two_paragraphs() -> (
+/// One end of a selection: a block and an offset in it.
+type Spot = (crate::events::BlockId, Pos<DocChar>);
+
+/// Two peers, the two blocks they share, and the selection over both.
+type TwoParagraphs = (
     ProseState,
     ProseState,
     (crate::events::BlockId, crate::events::BlockId),
-    (
-        (crate::events::BlockId, Pos<DocChar>),
-        (crate::events::BlockId, Pos<DocChar>),
-    ),
-) {
+    (Spot, Spot),
+);
+
+/// Two peers over one seeded document of two paragraphs, "hello" and
+/// "world", and the selection over both.
+fn two_peers_two_paragraphs() -> TwoParagraphs {
     let mut alice = ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document is built");
     let (first, second, anchor, focus) = crate::logic::selection::tests::two_paragraphs(&mut alice);
     let seed = alice.export_snapshot();
@@ -960,10 +963,7 @@ fn two_peers_two_paragraphs() -> (
 /// One value mark over a selection, and the delta it exported.
 fn mark_selection(
     state: &mut ProseState,
-    (anchor, focus): (
-        (crate::events::BlockId, Pos<DocChar>),
-        (crate::events::BlockId, Pos<DocChar>),
-    ),
+    (anchor, focus): (Spot, Spot),
     key: crate::mark::MarkRoot,
     raw: &str,
 ) -> ambre_core::Payload<ambre_core::DeltaBytes> {

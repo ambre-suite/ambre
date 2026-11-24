@@ -13,6 +13,7 @@
 #![cfg(target_arch = "wasm32")]
 #![expect(
     clippy::unwrap_used,
+    clippy::expect_used,
     clippy::indexing_slicing,
     reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
 )]

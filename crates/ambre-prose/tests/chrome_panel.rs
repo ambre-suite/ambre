@@ -741,13 +741,12 @@ async fn with_a_selection_the_panel_shows_each_text_and_paragraph_control() {
         .dyn_into()
         .unwrap();
     more.click();
-    let Some(TextWrite::Paragraph(style)) = signals.text_write.get_untracked() else {
-        panic!("an indent is one paragraph write");
-    };
-    let left = style
-        .indent_left
-        .expect("the left indent")
-        .in_unit::<ambre_core::Mm>();
+    let left = match signals.text_write.get_untracked() {
+        Some(TextWrite::Paragraph(style)) => style.indent_left,
+        _ => None,
+    }
+    .expect("an indent is one paragraph write")
+    .in_unit::<ambre_core::Mm>();
     assert!((left.get() - 1.0).abs() < 0.01, "one millimetre: {left:?}");
     // The link opens the field of the bar; nothing is written yet.
     signals.text_write.set(None);
@@ -805,13 +804,11 @@ async fn with_no_selection_the_panel_shows_the_default_fonts() {
     let root = mount_prose_panel(signals);
     leptos::task::tick().await;
     let markers = ambre_chrome::reach_markers(&root);
-    for id in [panel::BODY_FONT] {
-        let reach = ambre_chrome::commands::Reach::Property(id);
-        assert!(
-            markers.iter().any(|m| reach.matches_marker(m)),
-            "{id:?} shows"
-        );
-    }
+    let reach = ambre_chrome::commands::Reach::Property(panel::BODY_FONT);
+    assert!(
+        markers.iter().any(|m| reach.matches_marker(m)),
+        "the body font shows"
+    );
     let titles: Vec<String> = {
         let list = root.query_selector_all(".ambre-ctx-section-head").unwrap();
         (0..list.length())
