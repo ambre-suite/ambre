@@ -21,6 +21,15 @@ const CLIPBOARD: StaticKey<Categories> = StaticKey::<Categories>::new("clipboard
 const GENERAL: StaticKey<Categories> = StaticKey::<Categories>::new("general");
 /// Stepping through the local history.
 const HISTORY: StaticKey<Categories> = StaticKey::<Categories>::new("history");
+/// Ruling on the suggestions of a review.
+const REVIEW: StaticKey<Categories> = StaticKey::<Categories>::new("review");
+
+/// Accept the suggestion at the caret (`PROSE-UI-259`).
+pub const ACCEPT_SUGGESTION: StaticKey<Commands> =
+    StaticKey::<Commands>::new("prose.review.accept");
+/// Reject the suggestion at the caret (`PROSE-UI-259`).
+pub const REJECT_SUGGESTION: StaticKey<Commands> =
+    StaticKey::<Commands>::new("prose.review.reject");
 
 /// Undo this peer's last change (`UNDO-001`).
 pub const UNDO: StaticKey<Commands> = StaticKey::<Commands>::new("prose.history.undo");
@@ -213,6 +222,14 @@ fn paste_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle
 
 fn paste_plain_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
     ambre_core::Validated::new("Paste as plain text")
+}
+
+fn accept_suggestion_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Accept the suggestion")
+}
+
+fn reject_suggestion_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Reject the suggestion")
 }
 
 fn undo_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
@@ -495,6 +512,22 @@ pub const COMMANDS: &[Command] = &[
         keybindings: ambre_commands::shared::PASTE_PLAIN_CHORDS,
         category: CLIPBOARD,
         home: Home::ContextMenu,
+    },
+    Command {
+        id: ACCEPT_SUGGESTION,
+        title: accept_suggestion_title,
+        icon: None,
+        keybindings: &[],
+        category: REVIEW,
+        home: Home::ContextPanel,
+    },
+    Command {
+        id: REJECT_SUGGESTION,
+        title: reject_suggestion_title,
+        icon: None,
+        keybindings: &[],
+        category: REVIEW,
+        home: Home::ContextPanel,
     },
     Command {
         id: UNDO,

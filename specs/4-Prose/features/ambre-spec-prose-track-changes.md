@@ -28,6 +28,8 @@ of this feature: the suggestion converges under one, and it is painted under the
 | `PROSE-FEAT-011` | `CONC` | Track changes MUST converge under concurrent accept and reject of the same suggestion: one outcome, never a half-applied edit. | this spec section 3 | `ambre_prose::logic::suggestions::tests::a_concurrent_accept_and_reject_converge_on_one_outcome` | none | verified |
 | `PROSE-UI-051` | `OBS` | A suggested insertion and a suggested deletion MUST be distinguishable in the text itself, not by an affordance the reader has to open. | this spec section 4 | `ambre_prose::view::paint::tests::an_insertion_is_underlined_and_a_deletion_struck_through` | none | verified |
 | `PROSE-UI-148` | `OBS` | A hover over a suggestion MUST show the accept and reject affordance on that suggestion, and on no other. | this spec section 4 | `ambre_prose::view::annotate::tests::a_hover_names_the_suggestion_under_the_pointer_and_no_other` -- the one suggestion the view publishes; `::a_suggestion_that_leaves_the_list_takes_its_popover_along`; structural -- `crates/ambre-prose/src/chrome/mod.rs` draws the popover from that one signal alone; `ambre_prose::tests::chrome_ui::the_popover_sits_over_the_hovered_suggestion_alone` -- wasm tier: one popover, over the hovered rectangle, moved by a new hover and gone with none | none | verified |
+| `PROSE-UI-258` | `OBS` | With no pointer over a suggestion, a caret before a character of a suggestion MUST show the accept and reject affordance on that suggestion. | this spec section 4; `CHROME-183` | `ambre_prose::view::annotate::tests::the_caret_in_a_suggestion_raises_its_popover_with_no_hover` -- every offset inside, none before or at the end, the pointer still first; structural -- `crates/ambre-app/src/host/prose.rs` publishes the popover after each input the view takes, so a key or a tap that moves the caret raises it | none | verified |
+| `PROSE-UI-259` | `OBS` | With the caret in a suggestion, the context panel and the command palette MUST each accept and reject that suggestion. | this spec section 4; `CHROME-164`; `CHROME-183` | `ambre_prose::tests::chrome_panel::the_caret_in_a_suggestion_shows_its_accept_and_reject_in_the_panel` -- wasm tier: the section shows and leaves with the caret, each button in the tab order hands its intent; `ambre_prose::view::annotate::tests::the_review_commands_rule_on_the_suggestion_at_the_caret` -- the two commands the palette lists hand the same intents, and nothing with no suggestion | none | verified |
 | `PROSE-UI-052` | `INV` | The accept and reject affordance MUST be DOM chrome, not a canvas overlay. | this spec section 4; `ambre-spec-ui.md section 2` | structural -- `crates/ambre-prose/src/chrome/mod.rs` renders the two buttons as Leptos elements, and the Prose painter holds no button to draw; `ambre_prose::view::annotate::tests::each_intent_becomes_its_command_and_a_focus_scrolls` -- what each button sends; `ambre_prose::tests::chrome_ui::each_popover_button_hands_its_intent_to_the_view` -- wasm tier: a click on each button writes its intent, naming the hovered suggestion | none | verified |
 
 ### 1.2 Turn suggestion mode on or off
@@ -94,7 +96,7 @@ of this feature: the suggestion converges under one, and it is painted under the
   a hundred suggestions is under 5 ms.
 * **Boundary.** none of its own: a suggestion is a mark and an annotation entry in the document.
   `ZK-001` seals every payload before it leaves the client.
-* **Verification.** 38 `verified`, 2 `unimplemented`. `PROSE-FEAT-085` names a merge window resting
+* **Verification.** 40 `verified`, 2 `unimplemented`. `PROSE-FEAT-085` names a merge window resting
   on an undo interval no document defines. `PROSE-FEAT-301` is the structure a reviewer cannot
   suggest yet. Both land with the `Suggestions beyond typing` Story (`ambre-roadmap.md` E5).
 
@@ -206,6 +208,8 @@ answer it, never a keystroke.
 | typing while suggesting | a suggested insertion at the caret |
 | deleting while suggesting | a suggested deletion, or a plain delete over this peer's own pending insertion |
 | a hover over a suggestion | the accept and reject affordance, on that suggestion |
+| the caret before a character of a suggestion, with no hover | the same affordance, on that suggestion, and a suggestion section in the context panel |
+| the accept or reject command of the palette | that suggestion at the caret applied or cancelled |
 | the accept control | that suggestion applied, whatever its span count |
 | the reject control | that suggestion cancelled, leaving nothing |
 | the accept-all and reject-all controls | every pending suggestion at once |
@@ -216,6 +220,13 @@ use theme colours the palette owns
 (`features/ambre-spec-prose-page-rendering.md section 3`). Those are canvas content, painted in the
 page pass. The accept and reject affordance is a DOM Leptos popover, transform-synced to the hovered
 suggestion through a signal the view raises (`PROSE-UI-052`).
+
+**No hover is needed.** A hover is a pointer's alone, so a key or a tap reaches a suggestion through
+the caret. The popover sits on the suggestion at the caret when no pointer is over one
+(`PROSE-UI-258`). A caret at the end of a suggestion names none, so a reviewer who types sees no
+popover. The context panel shows a suggestion section with the two commands, and the command
+palette lists them (`PROSE-UI-259`). Both act on the suggestion at the caret, through the intent the
+popover sends.
 
 ---
 

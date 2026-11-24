@@ -258,6 +258,8 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
         } else if booted == ambre_bus::DocType::Prose {
             AppHandler::Prose(ambre_prose::chrome::ProseHandler {
                 format: prose_signals.format,
+                at_caret: prose_signals.at_caret,
+                intent: prose_signals.intent,
                 now: || ambre_core::Instant::<ambre_core::Authored>::new(js_sys::Date::now() as u64),
                 // The session's zone, by its IANA name, as the browser
                 // resolves it. A name the browser does not give reads as UTC.

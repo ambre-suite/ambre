@@ -9,7 +9,7 @@ use ambre_core::index::{Pos, Span};
 use std::collections::HashMap;
 
 use ambre_core::id::{Comment, Id, Suggestion};
-use ambre_core::{Doc, Point, Px, View};
+use ambre_core::{Commands, Doc, Point, Px, StaticKey, View};
 
 use crate::events::{
     BlockId, CommentThread, LinkSpan, Page, ProseCommand, SuggestionKind, tree_id,
@@ -205,6 +205,21 @@ pub fn stack(heights: &[Px<View>], room: Px<View>) -> Vec<Px<View>> {
     out
 }
 
+/// The intent that an accept or a reject hands the view for the suggestion
+/// at the caret. Another command, or no suggestion there, hands none.
+#[must_use]
+pub fn review_intent(
+    id: StaticKey<Commands>,
+    at_caret: Option<HoveredSuggestion>,
+) -> Option<AnnotationIntent> {
+    let suggestion_id = at_caret?.suggestion_id;
+    match id {
+        crate::commands::ACCEPT_SUGGESTION => Some(AnnotationIntent::Accept { suggestion_id }),
+        crate::commands::REJECT_SUGGESTION => Some(AnnotationIntent::Reject { suggestion_id }),
+        _ => None,
+    }
+}
+
 impl ProseUiState {
     /// The page and fragment of `block` that show `run_y`, a height in its
     /// run, and the top of that fragment in the page.
@@ -272,18 +287,70 @@ impl ProseUiState {
             if y1 <= piece.run_top || y0 >= bottom {
                 return None;
             }
-            let corner = |x: f64, y: Px<Doc>| Point::new(Px::<Doc>::new(x as f32), y);
-
-            let top_left = self.to_screen(block, page, piece, corner(part.x0, y0));
-            let bottom_right = self.to_screen(block, page, piece, corner(part.x1, y1));
-            let rect = ScreenRect {
-                x0: top_left.x,
-                y0: top_left.y,
-                x1: bottom_right.x,
-                y1: bottom_right.y,
-            };
+            let rect = self.part_rect(block, page, piece, part);
             rect.contains(at).then_some(rect)
         })
+    }
+
+    /// One box of a laid run, moved onto the canvas from the fragment of
+    /// `page` that shows it.
+    fn part_rect(
+        &self,
+        block: BlockId,
+        page: Pos<Page>,
+        piece: Fragment,
+        part: ambre_draw::BoundingBox,
+    ) -> ScreenRect {
+        let corner =
+            |x: f64, y: f64| Point::new(Px::<Doc>::new(x as f32), Px::<Doc>::new(y as f32));
+        let top_left = self.to_screen(block, page, piece, corner(part.x0, part.y0));
+        let bottom_right = self.to_screen(block, page, piece, corner(part.x1, part.y1));
+        ScreenRect {
+            x0: top_left.x,
+            y0: top_left.y,
+            x1: bottom_right.x,
+            y1: bottom_right.y,
+        }
+    }
+
+    /// The suggestion that holds the character after the caret, and the box
+    /// of that character on the canvas (`PROSE-UI-258`). A caret at the end of
+    /// a suggestion names none, so typing a suggestion raises no popover.
+    #[must_use]
+    pub fn suggestion_at_caret(&self) -> Option<HoveredSuggestion> {
+        let caret = self.cursor?;
+        let next = caret.offset + ambre_core::index::Len::<DocChar>::new(1);
+        self.suggestions.iter().find_map(|suggestion| {
+            suggestion
+                .spans
+                .iter()
+                .find(|span| {
+                    span.block_id == caret.block_id
+                        && span.start <= caret.offset
+                        && caret.offset < span.end
+                })
+                .and_then(|_| {
+                    let index = self.flow_index(&tree_id(caret.block_id))?;
+                    let layout = self.shaped.block(index)?;
+                    let run = self.shaped.blocks.get(&layout.block_id)?.data();
+                    let part = *run.range_boxes(answered_span(caret.offset, next)).first()?;
+                    let (page, piece) =
+                        self.fragment_at(caret.block_id, Px::<Doc>::new(part.y0 as f32))?;
+                    Some(HoveredSuggestion {
+                        suggestion_id: suggestion.suggestion_id,
+                        kind: suggestion.kind,
+                        rect: self.part_rect(caret.block_id, page, piece, part),
+                    })
+                })
+        })
+    }
+
+    /// The suggestion the accept and reject popover sits on. The one under
+    /// the pointer comes first, else the one at the caret. So a key or a tap
+    /// reaches it with no hover (`PROSE-UI-148`, `PROSE-UI-258`).
+    #[must_use]
+    pub fn popover_suggestion(&self) -> Option<HoveredSuggestion> {
+        self.hovered.or_else(|| self.suggestion_at_caret())
     }
 
     /// The page under a canvas point, if any.
@@ -502,7 +569,7 @@ impl ProseUiState {
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]
 mod tests {
-    use super::{AnnotationIntent, Offered};
+    use super::{AnnotationIntent, Offered, review_intent};
     use crate::events::ProseCommand;
     use crate::layout::run::RunChar;
     use crate::message::DocChar;
@@ -866,6 +933,87 @@ mod tests {
         assert_eq!(
             lost, expected,
             "each departure is told, an empty field is not"
+        );
+    }
+
+    /// The caret just before `offset` of `block`, with no selection.
+    fn caret(ui: &mut ProseUiState, block: BlockId, offset: u32) {
+        ui.cursor = Some(crate::message::CursorPosition {
+            block_id: block,
+            offset: Pos::<DocChar>::new(offset),
+            anchor: None,
+        });
+    }
+
+    /// `PROSE-UI-258`: with no pointer over any suggestion, the popover sits
+    /// on the suggestion that holds the character after the caret, over that
+    /// character. A caret at the end of a suggestion, where typing goes on,
+    /// names none. A hover still wins over the caret.
+    #[test]
+    fn the_caret_in_a_suggestion_raises_its_popover_with_no_hover() {
+        let mut ui = view(2);
+        let (a, b) = (text_block(&ui, 0), text_block(&ui, 1));
+        let first = suggestion(a, SuggestionKind::Insertion, 2, 6);
+        let second = suggestion(b, SuggestionKind::Deletion, 3, 8);
+        ui.apply_event(&ProseEvent::SuggestionsUpdated {
+            mode: crate::events::EditMode::Editing,
+            suggestions: vec![first.clone(), second.clone()],
+        });
+        assert_eq!(ui.hovered, None);
+        caret(&mut ui, a, 1);
+        assert_eq!(ui.popover_suggestion(), None, "before the suggestion");
+        for offset in 2..6 {
+            caret(&mut ui, a, offset);
+            let at = ui.popover_suggestion().expect("the caret's suggestion");
+            assert_eq!(at.suggestion_id, first.suggestion_id, "offset {offset}");
+            let glyph = middle(&ui, a, offset, offset + 1);
+            assert!(at.rect.contains(glyph), "over the glyph after the caret");
+        }
+        caret(&mut ui, a, 6);
+        assert_eq!(ui.popover_suggestion(), None, "at its end");
+        caret(&mut ui, b, 3);
+        assert_eq!(
+            ui.suggestion_at_caret().map(|s| s.suggestion_id),
+            Some(second.suggestion_id)
+        );
+        ui.hover(middle(&ui, a, 2, 6));
+        assert_eq!(
+            ui.popover_suggestion().map(|s| s.suggestion_id),
+            Some(first.suggestion_id),
+            "the pointer wins"
+        );
+    }
+
+    /// `PROSE-UI-259`: the accept and reject commands each hand the view the
+    /// popover's own intent for the suggestion at the caret. With no
+    /// suggestion there, or for another command, they hand nothing.
+    #[test]
+    fn the_review_commands_rule_on_the_suggestion_at_the_caret() {
+        use crate::commands::{ACCEPT_SUGGESTION, BOLD, REJECT_SUGGESTION};
+        let mut ui = view(1);
+        let a = text_block(&ui, 0);
+        let one = suggestion(a, SuggestionKind::Insertion, 2, 6);
+        ui.apply_event(&ProseEvent::SuggestionsUpdated {
+            mode: crate::events::EditMode::Editing,
+            suggestions: vec![one.clone()],
+        });
+        caret(&mut ui, a, 3);
+        let at = ui.suggestion_at_caret();
+        let id = one.suggestion_id;
+        assert_eq!(
+            review_intent(ACCEPT_SUGGESTION, at),
+            Some(AnnotationIntent::Accept { suggestion_id: id })
+        );
+        assert_eq!(
+            review_intent(REJECT_SUGGESTION, at),
+            Some(AnnotationIntent::Reject { suggestion_id: id })
+        );
+        assert_eq!(review_intent(BOLD, at), None);
+        assert_eq!(review_intent(ACCEPT_SUGGESTION, None), None);
+        let now = Instant::<Authored>::new(0);
+        assert_eq!(
+            ui.take_intent(AnnotationIntent::Accept { suggestion_id: id }, now),
+            Some(ProseCommand::AcceptSuggestion { suggestion_id: id })
         );
     }
 

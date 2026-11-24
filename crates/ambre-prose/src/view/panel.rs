@@ -21,6 +21,8 @@ use crate::doc::PageFormat;
 pub const PAGE: StaticKey<PanelSections> = StaticKey::new("prose.page");
 /// The text of the selection.
 pub const TEXT: StaticKey<PanelSections> = StaticKey::new("prose.text");
+/// The suggestion at the caret, whatever the kind (`PROSE-UI-259`).
+pub const SUGGESTION: StaticKey<PanelSections> = StaticKey::new("prose.suggestion");
 
 /// The paper of the page.
 pub const PAPER: StaticKey<Properties> = StaticKey::new("prose.page.paper");
@@ -147,6 +149,31 @@ pub const TEXT_COMMANDS: [StaticKey<Commands>; 8] = [
     commands::SUBSCRIPT,
     commands::CLEAR_FORMATTING,
 ];
+
+/// The commands the suggestion section shows, in order (`PROSE-UI-259`).
+pub const SUGGESTION_COMMANDS: [StaticKey<Commands>; 2] =
+    [commands::ACCEPT_SUGGESTION, commands::REJECT_SUGGESTION];
+
+/// The sections the panel shows: those of `kind`, then the suggestion
+/// section while a suggestion holds the caret (`PROSE-UI-259`).
+#[must_use]
+pub fn sections(kind: PanelKind, at_caret: CaretSuggestion) -> Vec<StaticKey<PanelSections>> {
+    let mut all = kind.sections().to_vec();
+    if at_caret == CaretSuggestion::Held {
+        all.push(SUGGESTION);
+    }
+    all
+}
+
+ambre_core::define_flag! {
+    /// Whether a suggestion holds the character after the caret.
+    pub enum CaretSuggestion {
+        /// The caret is outside every suggestion.
+        Outside,
+        /// A suggestion holds the caret.
+        Held,
+    }
+}
 
 /// A paper the page section offers, in its portrait dimensions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

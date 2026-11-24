@@ -63,8 +63,12 @@ pub struct ProseSignals {
     /// The reply being typed in each thread's field, by thread. It outlives
     /// the card, so a thread that moves keeps it (`PROSE-UI-231`).
     pub drafts: RwSignal<HashMap<Id<Comment>, String>>,
-    /// The suggestion under the pointer, for the popover.
+    /// The suggestion the popover sits on: the one under the pointer, else
+    /// the one at the caret (`PROSE-UI-148`, `PROSE-UI-258`).
     pub hovered: RwSignal<Option<HoveredSuggestion>>,
+    /// The suggestion at the caret, which the context panel and the palette
+    /// accept or reject (`PROSE-UI-259`).
+    pub at_caret: RwSignal<Option<HoveredSuggestion>>,
     /// The spelling popover a press on a misspelled word opened
     /// (`PROSE-UI-248`).
     pub spelling: RwSignal<Option<SpellingPopover>>,
@@ -126,6 +130,7 @@ impl ProseSignals {
             threads: RwSignal::new(Vec::new()),
             drafts: RwSignal::new(HashMap::new()),
             hovered: RwSignal::new(None),
+            at_caret: RwSignal::new(None),
             spelling: RwSignal::new(None),
             intent: RwSignal::new(None),
             over_link: RwSignal::new(LinkHover::Elsewhere),
@@ -315,8 +320,8 @@ fn thread_card(comment_id: Id<Comment>, signals: ProseSignals) -> impl IntoView 
     }
 }
 
-/// The accept and reject buttons over the suggestion under the pointer, and
-/// over no other (`PROSE-UI-148`).
+/// The accept and reject buttons over the suggestion under the pointer, or
+/// at the caret, and over no other (`PROSE-UI-148`, `PROSE-UI-258`).
 #[component]
 pub fn ProseSuggestionPopover(signals: ProseSignals) -> impl IntoView {
     move || {
