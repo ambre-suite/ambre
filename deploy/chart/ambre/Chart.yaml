@@ -1,0 +1,9 @@
+# The chart of Ambre (`deploy/chart/README.md`, `SRV-309`). A release pins the
+# version, the app version and the digest of each image (`SRV-308`).
+apiVersion: v2
+name: ambre
+description: The Ambre suite on Kubernetes -- the blind relay, the SFU and the client, with optional stores
+type: application
+version: 0.0.0
+appVersion: "0.0.0"
+kubeVersion: ">=1.27.0-0"

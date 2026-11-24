@@ -139,6 +139,11 @@ ENTRYPOINT ["/usr/local/bin/ambre-sfu"]
 
 # The client: the built files behind Caddy, with the headers of `_headers`.
 FROM caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d AS web
+# The binary carries the file capability to bind a low port. A process that
+# holds no capability cannot run such a file, so the copy drops it: the chart
+# runs Caddy as a user without privileges on high ports (`deploy/chart/`). The
+# compose file runs it as root, which binds port 80 without the file capability.
+RUN cp /usr/bin/caddy /tmp/caddy && mv /tmp/caddy /usr/bin/caddy
 COPY --from=web-build /out/dist /srv/ambre
 COPY --from=web-build /out/headers.caddy /etc/caddy/headers.caddy
 COPY deploy/compose/Caddyfile /etc/caddy/Caddyfile

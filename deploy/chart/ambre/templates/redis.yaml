@@ -1,0 +1,57 @@
+{{- if .Values.redis.enabled }}
+{{- $c := dict "root" . "component" "redis" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ambre.name" $c }}
+  labels: {{- include "ambre.labels" $c | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {{- include "ambre.selector" $c | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "ambre.labels" $c | nindent 8 }}
+    spec:
+      # The user `redis` of the Alpine image.
+      {{- include "ambre.podSecurity" (dict "uid" 999) | nindent 6 }}
+      containers:
+        - name: redis
+          image: {{ .Values.redis.image }}
+          {{- include "ambre.containerSecurity" . | nindent 10 }}
+          # The ephemeral store loses nothing the relay cannot rebuild from
+          # Postgres (`ambre-spec-server.md` section 3), so it keeps no
+          # snapshot on disk.
+          args: ["--requirepass", "$(REDIS_PASSWORD)", "--save", "", "--appendonly", "no"]
+          env:
+            {{- include "ambre.secretEnv" (dict "root" . "name" "REDIS_PASSWORD" "key" "redis-password") | nindent 12 }}
+          ports:
+            - name: redis
+              containerPort: 6379
+          readinessProbe:
+            tcpSocket:
+              port: redis
+            periodSeconds: 5
+          {{- with .Values.redis.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ambre.name" $c }}
+  labels: {{- include "ambre.labels" $c | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector: {{- include "ambre.selector" $c | nindent 4 }}
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+{{- end }}

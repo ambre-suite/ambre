@@ -811,10 +811,11 @@ mod tests {
         );
     }
 
-    /// `SRV-310`: the stack that `deploy/compose/compose.yml` starts on one host serves the
-    /// suite. The page is cross-origin isolated, and two members sign in. The second joins the
-    /// document of the first from the invite link, and both read one text. The stack runs apart,
-    /// behind its TLS front, at `SELFHOST_ORIGIN` (`just selfhost-test`).
+    /// `SRV-310`, `SRV-309`: the stack that `deploy/compose/compose.yml` starts on one host, or
+    /// that the chart of `deploy/chart/` deploys on a cluster, serves the suite. The page is
+    /// cross-origin isolated, and two members sign in. The second joins the document of the first
+    /// from the invite link, and both read one text. The stack runs apart, behind its TLS front,
+    /// at `SELFHOST_ORIGIN` (`just selfhost-test`, `just chart-test`).
     #[tokio::test(flavor = "multi_thread")]
     #[ignore = "needs the self-hosted stack of deploy/compose; run just selfhost-test"]
     async fn the_self_hosted_stack_serves_two_members_one_document() {

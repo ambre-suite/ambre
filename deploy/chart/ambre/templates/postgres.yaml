@@ -1,0 +1,77 @@
+{{- if .Values.postgres.enabled }}
+{{- $c := dict "root" . "component" "postgres" -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "ambre.name" $c }}
+  labels: {{- include "ambre.labels" $c | nindent 4 }}
+spec:
+  serviceName: {{ include "ambre.name" $c }}
+  replicas: 1
+  selector:
+    matchLabels: {{- include "ambre.selector" $c | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "ambre.labels" $c | nindent 8 }}
+    spec:
+      # The user `postgres` of the Alpine image.
+      {{- include "ambre.podSecurity" (dict "uid" 70) | nindent 6 }}
+      containers:
+        - name: postgres
+          image: {{ .Values.postgres.image }}
+          {{- include "ambre.containerSecurity" . | nindent 10 }}
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: ambre
+            - name: POSTGRES_DB
+              value: ambre
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            {{- include "ambre.secretEnv" (dict "root" . "name" "POSTGRES_PASSWORD" "key" "postgres-password") | nindent 12 }}
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "ambre", "-d", "ambre"]
+            periodSeconds: 5
+          {{- with .Values.postgres.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: run
+              mountPath: /var/run/postgresql
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- with .Values.postgres.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.postgres.size }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ambre.name" $c }}
+  labels: {{- include "ambre.labels" $c | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector: {{- include "ambre.selector" $c | nindent 4 }}
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+{{- end }}
