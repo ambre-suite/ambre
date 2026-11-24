@@ -21,11 +21,11 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**5046 rows: 4626 shipped, of which 15 loose. 420 unbuilt.**
+**5047 rows: 4627 shipped, of which 15 loose. 420 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1689 | 583 | 995 | 818 | 526 | 4611 |
+| `verified` | 1690 | 583 | 995 | 818 | 526 | 4612 |
 | `failing` | 1 |  |  |  |  | 1 |
 | `human-review` | 14 |  |  |  |  | 14 |
 | `unimplemented` | 176 | 42 | 21 | 24 | 157 | 420 |
@@ -60,7 +60,7 @@
 | `ambre-spec-launcher.md` | 55 | 55 | 55 |  |  |
 | `ambre-spec-locale.md` | 23 | 23 | 23 |  |  |
 | `ambre-spec-media.md` | 20 | 20 | 20 |  |  |
-| `ambre-spec-membership.md` | 112 | 111 | 111 |  | 1 |
+| `ambre-spec-membership.md` | 113 | 112 | 112 |  | 1 |
 | `ambre-spec-message-bus.md` | 46 | 45 | 45 |  | 1 |
 | `ambre-spec-newtypes.md` | 1 | 1 | 1 |  |  |
 | `ambre-spec-object-store.md` | 25 | 24 | 24 |  | 1 |
@@ -227,7 +227,7 @@
 | `ambre-spec-machine-access.md` | MACH-001..034 |
 | `ambre-spec-macros.md` | MACRO-001..054 |
 | `ambre-spec-media.md` | SYNC-049..055,074..077,139..140,145..146,174..176,228,288 |
-| `ambre-spec-membership.md` | SYNC-010,012,014..017,034..040,073,092..094,102..111,123..124,132,150..151,161,172..173,190,197,200..202,205..212,214..215,217..222,225..227,229..247,260,262..263,266..268,272..274,279,282..285,289..291,298..304,306..315 |
+| `ambre-spec-membership.md` | SYNC-010,012,014..017,034..040,073,092..094,102..111,123..124,132,150..151,161,172..173,190,197,200..202,205..212,214..215,217..222,225..227,229..247,260,262..263,266..268,272..274,279,282..285,289..291,298..304,306..316 |
 | `ambre-spec-message-bus.md` | BUS-001..046 |
 | `ambre-spec-murmure-attachments.md` | MURMURE-128..136,240..242,577..578,626..628,636..637 |
 | `ambre-spec-murmure-bots.md` | MURMURE-387..398 |

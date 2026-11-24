@@ -164,6 +164,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-304` | `FAIL` | Given an open, a snapshot that folds a delta past the cap of its writer MUST open nothing, and the open MUST replay from a start under every cap (`SYNC-307`). A reopen whose local copy applied such a delta MUST read the document again. | this spec section 3; `SYNC-300`, `RESID-010` | `ambre_sync::updates::tests::an_open_refuses_a_delta_past_the_cap_of_its_writer` -- the owner's snapshot that folds a clock past the cap opens nothing, the replay starts at the first delta and lands the clock at the cap alone, and a snapshot under the cap opens; `ambre_sync::light::tests::a_reopen_past_a_revoke_cap_reads_the_document_again` -- the clocks of an evicted session travel to its reopen, which reads the document again past a cap and not under one | none | verified |
 | `SYNC-307` | `FAIL` | Given an open whose start folds a delta past a cap, the open MUST start from the trusted reference when the reference folds none, and replay the deltas past its horizon alone; with no such reference, it MUST replay from the first delta. Either start MUST reach the clocks a full replay of the same log reaches. | this spec section 3; `SYNC-304`, `AUTHOR-030`, `SRV-127` | `ambre_sync::updates::tests::a_snapshot_past_a_cap_starts_from_the_reference_as_a_full_replay_does` -- the open starts from the reference and asks past its horizon, applies the deltas a full replay applies past it and reaches its clocks, and a reference past the cap replays from the first delta; `ambre_sync::snapshot_trust::tests::a_trusted_latest_keeps_the_trusted_reference_to_fall_back_on` -- only a trusted reference older than the start is a fallback | none | verified |
 | `SYNC-309` | `FAIL` | Given an open, the replay the relay serves MUST hand the document no delta past the cap of its writer, and MUST land every delta under the caps. | this spec section 3; `SYNC-300`, `SYNC-304` | `ambre_sync::updates::tests::an_open_replay_refuses_a_delta_past_the_cap_of_its_writer` -- a fresh open replays the whole log in one batch, which carries the capped writer's clock at the cap and the other writer's delta alone, warns once per refused delta and leaves no write past the cap applied | none | verified |
+| `SYNC-316` | `FAIL` | Given an open, a start that folds a clock of a writer past any cap a later grant lifted MUST open nothing, as `SYNC-304` states; every lifted cap of that writer counts, the latest one alone does not. | this spec section 3; `SYNC-301`, `SYNC-304`, `SYNC-307` | `ambre_sync::updates::tests::a_start_past_a_lifted_cap_opens_nothing` -- after a revoke at cap 1 and an invite, a start that folds Bob's clock 2 or 3 opens nothing and replays from the first delta, one that folds his clock 1 opens, and a copy that folded his clock 2 is read again; `ambre_sync::membership_log::tests::a_fold_past_any_lifted_cap_of_its_author_is_past_a_cap` -- after two exclusions each lifted, a fold past the first cap counts as past a cap, and Alice is bound by none | none | verified |
 
 * **Budget.** the key exchange costs one elliptic-curve operation per member at open, charged to
   the crypto rows of `ambre-spec-budgets.md section 1`. The directory and the role are read off an
@@ -171,7 +172,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 111 `verified`, 1 `unimplemented`. Every pure transform holds, out of the
+* **Verification.** 112 `verified`, 1 `unimplemented`. Every pure transform holds, out of the
   browser: the wrap, the weak key, the pin, the invitee, the role and the log walk. What is loose is
   the branches that only run against a live relay.
 ---
@@ -620,6 +621,12 @@ reference beside it. A reference that folds no delta past a cap starts the open,
 asks for the deltas past its horizon alone (`SYNC-307`). The relay keeps every delta past the
 reference (`SRV-127`), so the replay costs those deltas and no more. A replay from the first delta
 remains the last resort, and the relay may have trimmed the deltas under the reference.
+
+**A snapshot proves no head.** A snapshot names the highest clock of each author it folds, and no
+head. A later grant lifts the cap of a readmitted writer, but a clock past that cap may be a write
+of the exclusion. A start that folds such a clock thus opens nothing, and the deltas replay under
+their heads (`SYNC-316`). Each cap a grant lifted counts, not the latest one alone. A signed list of
+heads would prove nothing: only the signature of each delta binds its head.
 
 **A replay checks each delta.** The open checks each replayed delta against the cap of its writer,
 as it checks a live delta. A batch thus hands the document no write past a cap (`SYNC-309`).
