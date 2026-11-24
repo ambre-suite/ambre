@@ -319,6 +319,59 @@ body {
     border-color: var(--accent);
 }
 
+/* The ruler above a Prose page. The component places the bar and each marker
+   along it; this sheet draws them from the tokens (`PROSE-UI-257`): a hairline
+   track, the first-line marker pointing down from the top, the two side
+   markers pointing up from the bottom. A marker reads in the dimmed text, and
+   takes the accent under the pointer and while it is dragged. The box of a
+   marker is wider than its triangle, so the pointer finds it. */
+.ambre-prose-ruler {
+    background: linear-gradient(var(--border-strong), var(--border-strong)) center / 100% 1px no-repeat;
+}
+
+.ambre-prose-ruler-handle {
+    display: flex;
+    justify-content: center;
+    width: var(--icon);
+    height: 50%;
+    color: var(--text-dim);
+}
+
+.ambre-prose-ruler-handle[data-handle="first"] {
+    top: 0;
+    align-items: flex-start;
+}
+
+.ambre-prose-ruler-handle:not([data-handle="first"]) {
+    bottom: 0;
+    align-items: flex-end;
+}
+
+.ambre-prose-ruler-handle::before {
+    content: "";
+    width: 10px;
+    height: 7px;
+    background: currentColor;
+    clip-path: polygon(0 0, 100% 0, 50% 100%);
+}
+
+.ambre-prose-ruler-handle:not([data-handle="first"])::before {
+    clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+
+.ambre-prose-ruler-handle:hover {
+    color: var(--accent);
+}
+
+.ambre-prose-ruler-handle[data-dragging="true"] {
+    color: var(--accent);
+}
+
+.ambre-prose-ruler-handle[data-dragging="true"]::before {
+    width: 12px;
+    height: 9px;
+}
+
 /* Toile top menu bar (toile-ui SS5quinquies.E): a group inside the command
    bar row, under the header (`CHROME-200`). It reuses `.ambre-commandbar` for
    its buttons, so the nested group drops the frame of a bar. The zoom is not

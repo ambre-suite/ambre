@@ -595,6 +595,38 @@ mod stylesheet_tests {
         }
     }
 
+    /// The ruler of a Prose page draws its markers from the tokens. A marker
+    /// reads in the dimmed text, and in the accent under the pointer and in a
+    /// drag. Its triangle is painted in that colour, on a track in the strong
+    /// border. No glyph of a font draws it.
+    #[test]
+    fn the_ruler_markers_read_the_tokens_with_a_hover_and_a_drag_state() {
+        let all = rules(SHELL_CSS);
+        let body_of = |wanted: &str| {
+            all.iter()
+                .find(|(selector, _)| selector == wanted)
+                .map(|(_, body)| body.clone())
+                .unwrap_or_else(|| panic!("a `{wanted}` rule"))
+        };
+        let handle = ".ambre-prose-ruler-handle";
+        assert_eq!(value_of(&body_of(handle), "color"), Some("var(--text-dim)"));
+        for state in [":hover", "[data-dragging=\"true\"]"] {
+            assert_eq!(
+                value_of(&body_of(&format!("{handle}{state}")), "color"),
+                Some("var(--accent)"),
+                "{state}"
+            );
+        }
+        let marker = body_of(&format!("{handle}::before"));
+        assert_eq!(value_of(&marker, "background"), Some("currentColor"));
+        assert!(value_of(&marker, "clip-path").is_some(), "a drawn triangle");
+        let track = body_of(".ambre-prose-ruler");
+        assert!(
+            value_of(&track, "background").is_some_and(|v| v.contains("var(--border-strong)")),
+            "the track reads the strong border"
+        );
+    }
+
     /// `CHROME-202`: the format bar carries the frame of a floating bar. Each
     /// control carries the look of a chrome button, not the raw button of the
     /// browser.
@@ -623,5 +655,66 @@ mod stylesheet_tests {
             )
             .is_some()
         );
+    }
+}
+
+#[cfg(test)]
+mod canvas_palette_tests {
+    use super::Theme;
+    use ambre_draw::Color;
+
+    /// The relative luminance of an opaque colour (WCAG 2.2).
+    fn luminance(colour: Color) -> f64 {
+        let [r, g, b, _] = colour.to_rgba8().to_u8_array();
+        let linear = |c: u8| {
+            let c = f64::from(c) / 255.0;
+            if c <= 0.040_45 {
+                c / 12.92
+            } else {
+                ((c + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
+    }
+
+    /// The contrast ratio of two opaque colours (WCAG 2.2).
+    fn contrast(a: Color, b: Color) -> f64 {
+        let (la, lb) = (luminance(a), luminance(b));
+        (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
+    }
+
+    /// `UI-THREAD-069`: the grounds the canvas draws are the warm surfaces of
+    /// the chrome, in both themes. A grid lies on the surface. Its headers,
+    /// and the ground around a page or under a board, lie on the sunken one.
+    /// A grid line is the chrome's border. Every text drawn on one of those
+    /// grounds passes the AA ratio for body text.
+    #[test]
+    fn the_canvas_grounds_are_the_warm_chrome_surfaces_and_their_text_passes_aa() {
+        for theme in [Theme::Light, Theme::Dark] {
+            let canvas = theme.palette();
+            let chrome = theme.chrome_palette();
+            assert_eq!(canvas.content_bg, chrome.surface, "{theme:?}: grid ground");
+            assert_eq!(canvas.header_bg, chrome.surface_2, "{theme:?}: header");
+            assert_eq!(canvas.ground, chrome.surface_2, "{theme:?}: ground");
+            assert_eq!(
+                canvas.header_hover, chrome.surface_hover,
+                "{theme:?}: hover"
+            );
+            assert_eq!(
+                canvas.header_active, chrome.accent_soft,
+                "{theme:?}: active"
+            );
+            assert_eq!(canvas.grid_line, chrome.border, "{theme:?}: grid line");
+            let pairs = [
+                ("cell text", canvas.cell_text, canvas.content_bg),
+                ("header text", canvas.header_text, canvas.header_bg),
+                ("hovered header", canvas.header_text, canvas.header_hover),
+                ("active header", canvas.header_text, canvas.header_active),
+            ];
+            for (what, ink, ground) in pairs {
+                let ratio = contrast(ink, ground);
+                assert!(ratio >= 4.5, "{theme:?}: {what} at {ratio:.2}:1");
+            }
+        }
     }
 }

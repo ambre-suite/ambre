@@ -23,6 +23,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-064` | `OBS` | The handles MUST show the indents of the block the caret is in, whichever block that is. | this spec section 3 | `ambre_prose::view::ruler::tests::the_handles_show_the_caret_blocks_laid_out_indents` | none | verified |
 | `PROSE-UI-075` | `OBS` | The values the handles show MUST be the ones the page is laid out with, not the block's own stored keys. | this spec section 3; this spec section 5 | `ambre_prose::view::ruler::tests::the_handles_show_the_caret_blocks_laid_out_indents` | none | verified |
 | `PROSE-UI-065` | `OBS` | The scale MUST stay aligned with the page's content width, at any zoom and at any horizontal offset of the page column. | this spec section 3 | `ambre_prose::view::ruler::tests::the_scale_follows_the_column_at_any_zoom` -- the canvas coordinates; `ambre_prose::chrome_panel::the_ruler_element_sits_on_the_column_it_was_given` -- the element and its handles moved onto the page by the canvas origin, in a headless document | none | verified |
+| `PROSE-UI-257` | `OBS` | Each handle MUST be drawn from the theme tokens, in the dimmed text at rest and in the accent under the pointer and while it is dragged. | this spec section 4 | `ambre_canvas::theme::stylesheet_tests::the_ruler_markers_read_the_tokens_with_a_hover_and_a_drag_state` -- the rules of the shell sheet: the colour at rest, under the pointer and in a drag, the triangle painted in it, and the track; `ambre_prose::tests::chrome_ui::a_ruler_drag_hands_back_one_release` -- wasm tier: the marker carries no glyph, and shows its drag state from the press to the release | none | verified |
 
 ### 1.2 Drag a handle
 
@@ -39,7 +40,7 @@ status values are normative in `ambre-spec-template.md`.
   no document write happens during the gesture.
 * **Boundary.** none: the ruler reads view state and emits one command on release. It holds no key
   and opens no socket (`PROSE-UI-002`).
-* **Verification.** 8 `verified`. Host tests hold every row on the view's state: a drag of any
+* **Verification.** 9 `verified`. Host tests hold every row on the view's state: a drag of any
   length yields one command on release, and the motion writes nothing. The element has no command
   queue, so it cannot write during the gesture. The browser tier holds the placement in CSS pixels
   at three zooms (`ambre-spec-testing.md section 6`).
@@ -128,6 +129,10 @@ both from the layout. A zoom moves the ruler with the page (`PROSE-UI-065`,
 | the release | the paragraph's indent is set, in one operation |
 | a caret move to another block | the three handles jump to that block's values |
 | a zoom, or a horizontal scroll | the scale and the handles move with the page column |
+| the pointer over a handle | the handle takes the accent |
+
+**The look.** A hairline track; the first-line handle points down from its top, the side handles
+up from its bottom. Each is a triangle the sheet draws in a token colour (`PROSE-UI-257`).
 
 The element, its keyboard reachability and its pointer capture are the shared chrome toolkit's, and
 are not respecified here (`ambre-spec-chrome.md`).
