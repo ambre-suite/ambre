@@ -360,13 +360,43 @@ impl Writers {
     /// for the clocks it folds, so it cannot prove that a clock past that
     /// cap was signed after the grant. It thus fails closed, and the deltas
     /// replay one by one under their heads (`SYNC-301`, `SYNC-316`).
+    #[cfg(test)]
     pub(crate) fn folds_past_cap(
         &self,
         folded: &[(FixedBytes<PublicKey>, Seq<DeltaAuthor>)],
     ) -> bool {
-        folded
-            .iter()
-            .any(|(author, clock)| self.folds_past_cap_of(author, *clock))
+        self.folds_past_cap_under(folded, None)
+    }
+
+    /// Whether a snapshot that folds `folded` holds a delta past a cap. A
+    /// member other than its author confirmed it under the log head `proof`.
+    /// That member applied each folded delta under its own check at that
+    /// head. A lifted cap thus reads `proof` as the head of a signed delta
+    /// (`SYNC-317`). A standing cap still counts whatever the head.
+    pub(crate) fn folds_past_cap_under(
+        &self,
+        folded: &[(FixedBytes<PublicKey>, Seq<DeltaAuthor>)],
+        proof: Option<LogHead>,
+    ) -> bool {
+        folded.iter().any(|(author, clock)| match proof {
+            None => self.folds_past_cap_of(author, *clock),
+            Some(head) => {
+                self.cap(author).is_some_and(|cap| *clock > cap)
+                    || !self.readmits(author, *clock, head)
+            }
+        })
+    }
+
+    /// The head of the walk these writers come from, when it readmits a
+    /// writer: the head a confirmation signs (`AUTHOR-038`). A walk that
+    /// readmits nobody names none, so its confirmation proves no fold past
+    /// a lifted cap.
+    pub(crate) fn proof_head(&self) -> Option<LogHead> {
+        match self {
+            Self::Unchecked => None,
+            Self::Granted { readmitted, .. } if readmitted.by_key.is_empty() => None,
+            Self::Granted { readmitted, .. } => readmitted.heads.last().copied(),
+        }
     }
 
     /// Whether `author`'s deltas up to `clock`, folded with no head, pass
@@ -2449,6 +2479,45 @@ pub(crate) mod tests {
         assert!(folds(8), "past both lifted caps");
         assert!(!writers.folds_past_cap(&[(alice.public(), at(99))]));
         assert!(!Writers::Unchecked.folds_past_cap(&[(bob.public(), at(99))]));
+    }
+
+    /// Holds `SYNC-317` at the walk. An invite lifts the cap 4 of Bob's
+    /// exclusion. A fold of his clock 9 then stands under a confirmed head
+    /// at or past the invite alone. The head of the exclusion, a head
+    /// the walk never passed and no head leave it past the cap. A standing
+    /// cap holds under any head. A walk that readmits nobody names no head
+    /// to sign (`AUTHOR-038`).
+    #[test]
+    fn a_confirmed_head_past_the_grant_proves_a_fold_past_its_lifted_cap() {
+        let (alice, bob) = (Person::new(3), Person::new(4));
+        let at = Seq::<DeltaAuthor>::new;
+        let mut log = created(&alice, &bob);
+        assert_eq!(Writers::of(&walk(&log)).proof_head(), None);
+        revoke_capped(&mut log, &alice, &bob, 4);
+        let excluded = walk(&log).walked_head();
+        assert_eq!(Writers::of(&walk(&log)).proof_head(), None);
+        append(&mut log, &alice, &bob, MembershipAct::Invite, Role::Editor);
+        let walked = walk(&log);
+        let readmitted = walked.walked_head();
+        let writers = Writers::of(&walked);
+        assert_eq!(writers.proof_head(), Some(readmitted));
+        let folded = [(bob.public(), at(9))];
+        let forged = LogHead {
+            previous: Some(FixedBytes::from_array([9; 32])),
+            ..readmitted
+        };
+        assert!(!writers.folds_past_cap_under(&folded, Some(readmitted)));
+        assert!(writers.folds_past_cap_under(&folded, Some(excluded)));
+        assert!(writers.folds_past_cap_under(&folded, Some(forged)));
+        assert!(writers.folds_past_cap_under(&folded, None));
+        assert!(!writers.folds_past_cap_under(&[(bob.public(), at(4))], Some(excluded)));
+
+        revoke_capped(&mut log, &alice, &bob, 9);
+        let walked = walk(&log);
+        let standing = Writers::of(&walked);
+        let head = walked.walked_head();
+        assert!(standing.folds_past_cap_under(&[(bob.public(), at(10))], Some(head)));
+        assert!(!standing.folds_past_cap_under(&folded, Some(head)));
     }
 
     /// Holds `SYNC-211` at the walk: the writers are the keys a valid entry

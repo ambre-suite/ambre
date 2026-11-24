@@ -2157,6 +2157,9 @@ pub(crate) use ambre_protocol::snapshot_confirm::SignedConfirmation;
 pub(crate) struct ConfirmSnapshotRequest {
     pub signature: ambre_core::FixedBytes<ambre_core::Signature>,
     pub blob: ambre_core::FixedBytes<ambre_core::SnapshotDigest>,
+    /// The log head the transcript names, if any (`AUTHOR-038`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub head: Option<ambre_protocol::LogHead>,
 }
 
 /// Body of `POST /api/documents/{id}/snapshots/{snapshot_id}/report`: the
