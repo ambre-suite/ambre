@@ -1574,7 +1574,7 @@ pub struct DeckFrame {
     pub id: Id<Frame>,
     pub name: String,
     /// How many elements the frame holds, which the frames section of the
-    /// context panel shows (`CHROME-243`).
+    /// context panel shows (`CHROME-255`).
     pub items: ambre_core::Count<Elements>,
 }
 

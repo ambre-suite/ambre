@@ -105,7 +105,7 @@ pub fn CommandButton(
                 >
                     {icon.map(|icon| view! { <leptos_icons::Icon icon=icon /> })}
                     <span>{label}</span>
-                    // A labelled row names its chord at its end (`CHROME-242`).
+                    // A labelled row names its chord at its end (`CHROME-254`).
                     {command.chord().map(|c| view! { <crate::Kbd binding=c /> })}
                 </button>
             }
@@ -191,7 +191,7 @@ pub enum ColourLayout {
     #[default]
     Popover,
     /// The common colours as inline swatches, then the picker as the
-    /// custom-colour button (`CHROME-244`).
+    /// custom-colour button (`CHROME-256`).
     Swatches,
 }
 
@@ -305,7 +305,7 @@ fn field_signed(text: &str) -> Option<f64> {
         .filter(|v| v.is_finite())
 }
 
-/// A place or a size on the board (`CHROME-239`). A place can be negative:
+/// A place or a size on the board (`CHROME-251`). A place can be negative:
 /// the board has no edge. A size below zero flips its box, which the caller
 /// refuses.
 impl FieldLength for Px<Board> {
@@ -328,7 +328,7 @@ impl FieldLength for Px<Board> {
     }
 }
 
-/// A rotation, which the field shows and reads in degrees (`CHROME-239`).
+/// A rotation, which the field shows and reads in degrees (`CHROME-251`).
 impl FieldLength for Radians {
     const UNIT: &'static str = "deg";
 
@@ -595,7 +595,7 @@ mod tests {
         assert_eq!(Px::<StoredBoard>::new(1.5).field_text(), "1.5");
     }
 
-    /// `CHROME-239`: a place on the board reads either sign, and a rotation
+    /// `CHROME-251`: a place on the board reads either sign, and a rotation
     /// reads and shows degrees.
     #[test]
     fn a_place_reads_either_sign_and_a_rotation_reads_degrees() {

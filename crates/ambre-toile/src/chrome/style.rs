@@ -66,10 +66,10 @@ pub struct ToilePanelSignals {
     /// The whole-style edit the view turns into `RestyleElements`.
     pub restyle: RwSignal<Option<ElementStyle>>,
     /// The write of the position section the view turns into its one
-    /// command (`CHROME-240`).
+    /// command (`CHROME-252`).
     pub place: RwSignal<Option<PlaceEdit>>,
     /// The board's frames, which the frames section lists, and the intent
-    /// that selects one (`CHROME-243`).
+    /// that selects one (`CHROME-255`).
     pub deck: DeckSignals,
 }
 
@@ -140,7 +140,7 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
     };
 
     // A command the registry gives no glyph, drawn compact with the glyph
-    // the panel names (`CHROME-242`).
+    // the panel names (`CHROME-254`).
     let icon_command = move |id: StaticKey<Commands>, icon: icondata::Icon| {
         ambre_chrome::commands::find(registry::COMMANDS, id).map(|c| {
             view! {
@@ -156,7 +156,7 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
     };
 
     // The place, the size and the rotation of a lone shape. Each write is
-    // one command, so one undo step (`CHROME-239`, `CHROME-240`).
+    // one command, so one undo step (`CHROME-251`, `CHROME-252`).
     let position = move || {
         let placed = move || model.get().and_then(|m| m.placement);
         let field = move |get: fn(&panel::Placement) -> Px<Board>| {
@@ -204,7 +204,7 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
     };
 
     // The board's frames, each with the count of its items. A press selects
-    // the frame (`CHROME-243`).
+    // the frame (`CHROME-255`).
     let frames = move || {
         let list = move || {
             let view = deck.view.get();
@@ -271,7 +271,7 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
             </Field>
             {stroke_fields(base, commit)}
             // The link of an element is a property of the element, never of
-            // its arrangement. One compact row (`CHROME-242`).
+            // its arrangement. One compact row (`CHROME-254`).
             <Field label="Link">
                 {icon_command(crate::ui::menu_bar::LINK_SET, icondata::MdiLinkVariant)}
                 {icon_command(crate::ui::menu_bar::LINK_CLEAR, icondata::MdiLinkVariantOff)}
@@ -367,7 +367,7 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
             })
         };
         view! {
-            // Labelled rows that name their chords (`CHROME-242`).
+            // Labelled rows that name their chords (`CHROME-254`).
             <Row>
                 {labelled(menu::DUPLICATE)}
                 <Show when=multi>{labelled(menu::GROUP)}</Show>

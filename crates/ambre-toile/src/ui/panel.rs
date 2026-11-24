@@ -145,7 +145,7 @@ pub struct PlaceEdit {
 
 impl PlaceEdit {
     /// The one command the write sends, so one write is one undo step
-    /// (`CHROME-240`). A place moves the box and keeps its size; a size keeps
+    /// (`CHROME-252`). A place moves the box and keeps its size; a size keeps
     /// the top-left corner. `None` for a size of zero or less, which would
     /// flip the box, and for an angle that is no number.
     #[must_use]
@@ -294,7 +294,7 @@ mod tests {
         Rotate(Radians),
     }
 
-    /// `CHROME-240`: each field of the position section sends one command,
+    /// `CHROME-252`: each field of the position section sends one command,
     /// which changes that field alone, so one write is one undo step.
     #[test]
     fn each_place_field_sends_one_command_that_changes_it_alone() {
