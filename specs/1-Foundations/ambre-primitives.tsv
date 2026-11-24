@@ -4986,3 +4986,6 @@ ambre-logic | src/dispatch.rs | crate::dispatch | LogicState::murmure_space_sign
 ambre-murmure | src/logic/runtime/spaces.rs | crate::logic::runtime::spaces | Runtime<D>::keep_space_signed() | ret | bool	generic	predicate result
 ambre-protocol | src/membership.rs | crate::membership | <MembershipEntry as TryFrom<Wire>>::Error | assoc | &'static str	foreign-api	the error serde's try_from attribute formats with Display; a peer never reads it back
 ambre-protocol | src/membership.rs | crate::membership | CapSlot::into_caps() | ret | Result<(Option<Seq<DeltaAuthor>>,Vec<DocumentCap>),&'static str>	foreign-api	the error of the serde try_from conversion it feeds, formatted with Display
+ambre-logic | src/persistence.rs | crate::persistence | pinned_keys(row) | param | &[u8]	foreign-api	a trusted_keys row as the store returns it; split into typed keys at once
+ambre-prose | src/commands.rs | crate::commands | formats_selection() | ret | bool	generic	predicate result
+ambre-sync | src/census.rs | crate::census | Census::awaits() | ret | bool	generic	predicate result
