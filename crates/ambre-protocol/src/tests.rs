@@ -409,6 +409,7 @@ fn sample_update(fill: u8) -> Update {
                 author: Id::<User>::from_bytes([fill + 9; 16]),
                 cap: None,
                 document_caps: Vec::new(),
+                elsewhere: crate::membership::Elsewhere::Uncapped,
                 signature: FixedBytes::from_array([fill + 13; 64]),
             })),
         },
@@ -813,6 +814,7 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
         author: Id::<User>::from_bytes([6; 16]),
         cap: None,
         document_caps: Vec::new(),
+        elsewhere: crate::membership::Elsewhere::Uncapped,
         signature: FixedBytes::from_array([7; ENTRY_SIGNATURE_LEN]),
     };
     let transcript = report_transcript(
@@ -1033,6 +1035,7 @@ fn a_log_entry_costs_an_update_at_most_250_bytes() {
             author: Id::<User>::from_bytes([9; 16]),
             cap: cap.map(Seq::new),
             document_caps: Vec::new(),
+            elsewhere: crate::membership::Elsewhere::Uncapped,
             signature: FixedBytes::from_array([10; 64]),
         }
     };
@@ -1110,6 +1113,7 @@ fn a_log_head_and_entry_cost_an_ephemeral_at_most_293_bytes() {
         author: Id::<User>::from_bytes([9; 16]),
         cap: Some(Seq::new(cap)),
         document_caps: Vec::new(),
+        elsewhere: crate::membership::Elsewhere::Uncapped,
         signature: FixedBytes::from_array([10; 64]),
     };
     assert_eq!(size(crate::LogHead::EMPTY, None) - without, 3);

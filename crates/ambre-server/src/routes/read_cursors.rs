@@ -608,9 +608,15 @@ mod tests {
             put_cursor(&state, session(alice, 1), segment, 1).await;
         }
 
-        db::remove_document_member(&state.db, &meta, &bob, None, Instant::<UnixSec>::new(0))
-            .await
-            .expect("remove");
+        db::remove_document_member(
+            &state.db,
+            &meta,
+            &bob,
+            &db::RemovalEntries::default(),
+            Instant::<UnixSec>::new(0),
+        )
+        .await
+        .expect("remove");
         for &segment in &segments {
             assert_eq!(cursor_of(&state.db, bob, segment).await, None);
             assert_eq!(cursor_of(&state.db, alice, segment).await, Some(1));

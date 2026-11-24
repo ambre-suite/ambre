@@ -190,15 +190,6 @@ impl SyncState {
             Ok(counted) => counted,
             Err(error) => return self.fail_removal(removal, error.failure()),
         };
-        if Count::<ambre_protocol::DocumentCaps>::of(
-            counted.iter().filter(|c| c.meta.is_some()).count(),
-        ) > ambre_protocol::DOCUMENT_CAPS_MAX
-        {
-            return self.fail_removal(
-                removal,
-                ApiFailure::Local(ambre_core::LocalFailure::TooManyChannelDocuments),
-            );
-        }
         let closed: Vec<Counted> = counted
             .into_iter()
             .filter(|c| !self.documents.contains_key(&c.document_id))
@@ -347,14 +338,25 @@ fn channel_counted(
         .ok_or(http::HttpError::Local(
             ambre_core::LocalFailure::NoMetaDocument,
         ))?;
-    Ok(entries
-        .iter()
-        .filter(|e| e.kind != ambre_core::ChannelDocumentKind::Meta)
-        .map(|e| Counted {
-            document_id: e.document_id,
-            doc_type: DocType::Murmure,
-            meta: Some(Id::<Meta>::from_document(meta)),
-        })
+    // The `meta` opens too when it is closed. A removal floors every
+    // document it names no cap for at zero (`SYNC-315`). The `meta` thus
+    // needs the clock of its own cap. It is the log, so it names no `meta`.
+    let own = Counted {
+        document_id: meta,
+        doc_type: DocType::Murmure,
+        meta: None,
+    };
+    Ok(std::iter::once(own)
+        .chain(
+            entries
+                .iter()
+                .filter(|e| e.kind != ambre_core::ChannelDocumentKind::Meta)
+                .map(|e| Counted {
+                    document_id: e.document_id,
+                    doc_type: DocType::Murmure,
+                    meta: Some(Id::<Meta>::from_document(meta)),
+                }),
+        )
         .collect())
 }
 
@@ -555,10 +557,10 @@ mod tests {
         }
     }
 
-    /// `SYNC-312`: a channel with more documents than one entry caps fails
-    /// the removal, and opens none of them.
+    /// `SYNC-319`: a channel with more documents than one entry caps opens
+    /// each of them for the census, and the removal waits on them all.
     #[test]
-    fn a_channel_past_the_caps_of_one_entry_fails_the_removal() {
+    fn a_channel_past_the_caps_of_one_entry_opens_every_document() {
         let (mut state, rx, _author) = signed_in();
         let id = Seq::<Request>::new(5);
         let many: Vec<Counted> = (0..=ambre_protocol::DOCUMENT_CAPS_MAX.get())
@@ -568,6 +570,7 @@ mod tests {
                 ))
             })
             .collect();
+        let count = many.len();
         state.census_planned(
             Removal::Revoke {
                 id,
@@ -576,20 +579,13 @@ mod tests {
             },
             Ok(many),
         );
-        assert!(state.censuses.is_empty() && state.census_docs.is_empty());
-        assert_eq!(state.documents.len(), 1, "the meta alone");
-        let events: Vec<LogicEvent> = rx.try_iter().collect();
-        assert!(
-            matches!(
-                events.as_slice(),
-                [LogicEvent::ApiError {
-                    id: Some(i),
-                    request: ApiRequest::RevokeFromDocument,
-                    failure: ApiFailure::Local(ambre_core::LocalFailure::TooManyChannelDocuments),
-                }] if *i == id
-            ),
-            "{events:?}"
-        );
+        assert_eq!(state.censuses.len(), 1, "the removal waits");
+        assert_eq!(state.census_docs.len(), count, "every document opens");
+        assert_eq!(state.documents.len(), count + 1, "and the meta");
+        let failed = rx
+            .try_iter()
+            .any(|e| matches!(e, LogicEvent::ApiError { .. }));
+        assert!(!failed, "no refusal past the caps of one entry");
     }
 
     /// `SYNC-312`: the Logic thread may open a document while its census
@@ -662,12 +658,43 @@ mod tests {
             entry(THREAD, ambre_core::ChannelDocumentKind::Thread),
         ];
         let counted = channel_counted(&listed, Some(META)).expect("its own meta");
-        assert_eq!(counted, vec![under_meta(THREAD)]);
+        let own = Counted {
+            document_id: META,
+            doc_type: DocType::Murmure,
+            meta: None,
+        };
+        assert_eq!(counted, vec![own, under_meta(THREAD)], "the meta first");
         assert!(
             channel_counted(&listed, None).is_ok(),
             "a departure names no log"
         );
         assert!(channel_counted(&listed, Some(SEGMENT)).is_err());
         assert!(channel_counted(&listed[1..], None).is_err());
+    }
+
+    /// `SYNC-315`: a departure floors every document it names no cap for at
+    /// zero. A closed `meta` thus opens for the census like any document of
+    /// the channel. The `meta` names no `meta` of its own.
+    #[test]
+    fn a_channel_departure_opens_its_closed_meta_for_its_own_cap() {
+        let (mut state, _rx, _author) = signed_in();
+        state.documents.remove(&META);
+        let listed = [
+            http::ChannelDocumentEntry {
+                document_id: META,
+                kind: ambre_core::ChannelDocumentKind::Meta,
+            },
+            http::ChannelDocumentEntry {
+                document_id: THREAD,
+                kind: ambre_core::ChannelDocumentKind::Thread,
+            },
+        ];
+        let removal = Removal::LeaveChannel {
+            channel_id: CHANNEL,
+        };
+        state.census_planned(removal, channel_counted(&listed, None));
+        assert!(state.census_docs.contains(&META) && state.census_docs.contains(&THREAD));
+        assert!(!state.channel_metas.contains_key(&META), "the log itself");
+        assert_eq!(state.log_document(THREAD), META);
     }
 }

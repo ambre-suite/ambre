@@ -2281,6 +2281,10 @@ pub(crate) struct InviteRequest {
 pub(crate) struct LeaveRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub entry: Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
+    /// The continuations after `entry`, which carry the caps it cannot
+    /// (`SYNC-319`).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub continued: Vec<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
 }
 
 /// The body of a role change: the role and the entry the owner signs for it
@@ -2326,6 +2330,10 @@ pub(crate) struct RevokeRequest {
     /// The entry the owner signs for this revoke (`SYNC-132`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub entry: Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
+    /// The continuations after `entry`, which carry the caps it cannot
+    /// (`SYNC-319`).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub continued: Vec<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
 }
 
 /// The links of one document's chain, oldest first (`SYNC-117`).

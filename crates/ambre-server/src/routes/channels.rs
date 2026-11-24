@@ -1086,6 +1086,7 @@ mod tests {
             author: who,
             cap: None,
             document_caps: Vec::new(),
+            elsewhere: ambre_protocol::Elsewhere::Uncapped,
             signature: ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array([0; 64]),
         };
         entry.signature = ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array(
@@ -2189,7 +2190,7 @@ mod tests {
             &state.db,
             &channel.meta.document_id(),
             &who,
-            None,
+            &db::RemovalEntries::default(),
             crate::deletion::sweep_due(state),
         )
         .await
@@ -2746,6 +2747,7 @@ mod tests {
             author,
             cap: None,
             document_caps: Vec::new(),
+            elsewhere: ambre_protocol::Elsewhere::Uncapped,
             signature: ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array([0; 64]),
         };
         entry.signature = ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array(
@@ -3413,6 +3415,7 @@ mod tests {
                 members: vec![alice],
                 link: link.encode().expect("encode"),
                 entry: None,
+                continued: Vec::new(),
             }),
         )
         .await;
@@ -3462,6 +3465,7 @@ mod tests {
                 members: vec![alice],
                 link: link.encode().expect("encode"),
                 entry: None,
+                continued: Vec::new(),
             }),
         )
         .await;

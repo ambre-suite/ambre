@@ -175,8 +175,21 @@ pub(crate) struct Readmission {
     pub(crate) from: Seq<LogPlaces>,
 }
 
-/// The cap of one key in each document a revoke named (`SYNC-311`).
-type CapsByDocument = HashMap<Id<Document>, Seq<DeltaAuthor>>;
+/// The cap of one key in each document a revoke named (`SYNC-311`). A
+/// floored revoke also caps every other document of the channel
+/// (`SYNC-315`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct CapsByDocument {
+    named: HashMap<Id<Document>, Seq<DeltaAuthor>>,
+    elsewhere: Option<Seq<DeltaAuthor>>,
+}
+
+impl CapsByDocument {
+    /// The cap in `document`: the one a revoke named, else the floor.
+    fn get(&self, document: &Id<Document>) -> Option<&Seq<DeltaAuthor>> {
+        self.named.get(document).or(self.elsewhere.as_ref())
+    }
+}
 
 /// One set of caps a later grant lifted, which [`Writers::of_in`] reads as
 /// a [`Readmission`] in each document it names (`SYNC-301`).
@@ -894,20 +907,23 @@ impl Log {
             heads: ServedHeads::of(entries),
         };
         let mut previous = None;
+        let mut last: Option<&MembershipEntry> = None;
         for (place, entry) in entries.iter().enumerate() {
             let fits = entry.document == document
                 && place_after(place) == entry.position
                 && entry.well_formed()
                 && entry.previous == previous;
             let this = digest(entry);
+            let continued = last.is_some_and(|last| continues(&log.held, last, entry));
             let valid = fits
                 && match previous {
                     None => this.is_some() && this == anchor && log.creates(entry),
-                    Some(_) => log.allows(entry, self_join),
+                    Some(_) => continued || log.allows(entry, self_join),
                 };
             if !valid {
                 break;
             }
+            last = Some(entry);
             if let Some(key) = log.writer_names(entry) {
                 let named = NamedKey {
                     place: entry.position,
@@ -934,8 +950,10 @@ impl Log {
                     log.binders.entry(entry.member_key).or_default().insert(key);
                 }
             }
-            // A revoke its member signed is a departure (`SYNC-127`).
-            if entry.act == MembershipAct::Revoke && entry.author == entry.member {
+            // A revoke its member signed is a departure (`SYNC-127`). Its
+            // continuations add caps alone, so the departure stays at its
+            // own place.
+            if entry.act == MembershipAct::Revoke && entry.author == entry.member && !continued {
                 log.departed = Some(entry.position);
             }
             log.apply(entry);
@@ -1073,13 +1091,17 @@ impl Log {
         // A revoke on the log of a channel's `meta` also caps the key in
         // each document it names, at the clock of that document
         // (`SYNC-311`).
-        let named: CapsByDocument = entry
+        // A floored revoke caps the key at zero in each document of the
+        // channel it names no cap for. A document the census missed thus
+        // takes no write of it (`SYNC-315`).
+        let named: Vec<(Id<Document>, Seq<DeltaAuthor>)> = entry
             .cap
             .map(|cap| (entry.document, cap))
             .into_iter()
             .chain(entry.document_caps.iter().map(|c| (c.document, c.cap)))
             .collect();
-        let capped = (entry.act == MembershipAct::Revoke && !named.is_empty())
+        let floored = entry.elsewhere == ambre_protocol::Elsewhere::Zero;
+        let capped = (entry.act == MembershipAct::Revoke && (!named.is_empty() || floored))
             .then(|| self.held.get(&entry.member).map(|held| held.key))
             .flatten();
         self.apply_act(entry);
@@ -1087,9 +1109,13 @@ impl Log {
         if let Some(key) = capped {
             let held = self.caps.entry(key).or_default();
             for (document, cap) in named {
-                held.entry(document)
+                held.named
+                    .entry(document)
                     .and_modify(|held| *held = (*held).min(cap))
                     .or_insert(cap);
+            }
+            if floored {
+                held.elsewhere = Some(Seq::<DeltaAuthor>::new(0));
             }
         }
         // A later grant of a writing role lifts the cap. The writer is
@@ -1427,6 +1453,36 @@ fn allowed(
     permitted && !taken && key.is_some_and(|key| signed_by(entry, key))
 }
 
+/// Whether `entry` continues `last`, the valid entry before it. A
+/// continuation revokes the same member again, by the same author, under the
+/// same role. It names no key and no cap of its own, and adds caps in other
+/// documents of the channel alone. One entry carries at most `DOCUMENT_CAPS_MAX` of them, so
+/// a removal from a larger channel spreads its caps over a run of entries
+/// (`SYNC-319`). The member is gone by then, so [`allowed`] refuses it.
+fn continues(
+    held: &HashMap<Id<User>, Held>,
+    last: &MembershipEntry,
+    entry: &MembershipEntry,
+) -> bool {
+    last.act == MembershipAct::Revoke
+        && entry.elsewhere == ambre_protocol::Elsewhere::Uncapped
+        && !last.document_caps.is_empty()
+        && entry.act == MembershipAct::Revoke
+        && entry.member == last.member
+        && entry.author == last.author
+        && entry.role == last.role
+        && entry.member_key == last.member_key
+        && entry.key.is_none()
+        && entry.cap.is_none()
+        && !entry.document_caps.is_empty()
+        && held
+            .get(&entry.member)
+            .is_some_and(|member| !member.present)
+        && held
+            .get(&entry.author)
+            .is_some_and(|author| signed_by(entry, &author.key))
+}
+
 /// Whether `key` signed `entry`.
 fn signed_by(entry: &MembershipEntry, key: &FixedBytes<PublicKey>) -> bool {
     entry.signed_bytes().is_ok_and(|bytes| {
@@ -1435,6 +1491,7 @@ fn signed_by(entry: &MembershipEntry, key: &FixedBytes<PublicKey>) -> bool {
 }
 
 /// What an entry records, before its place in the log and its signature.
+#[derive(Clone)]
 pub(crate) struct Draft {
     pub document: Id<Document>,
     pub member: Id<User>,
@@ -1475,32 +1532,85 @@ pub(crate) fn sign_capped(
     author: Id<User>,
     signing_key: &SigningKey,
 ) -> Result<MembershipEntry, SerializationError> {
-    sign_channel_capped(draft, cap, Vec::new(), next, author, signing_key)
+    sign_one(
+        &draft,
+        (cap, Vec::new(), ambre_protocol::Elsewhere::Uncapped),
+        next,
+        author,
+        signing_key,
+    )
 }
 
 /// Signs `draft` as [`sign_capped`] does, with the cap of the member in each
 /// other document of a channel whose `meta` keeps the log (`SYNC-311`). The
 /// caps are put in ascending document order.
 ///
+/// The first entry carries `cap` and the first `DOCUMENT_CAPS_MAX` caps.
+/// Each further run of caps takes a continuation after it: the same revoke,
+/// with no key and no cap of its own (`SYNC-319`). Each entry thus keeps the
+/// bytes an update carries within its budget row, whatever the size of the
+/// channel. The entries chain, each after the one before it.
+///
 /// # Errors
 ///
 /// The encoder's error, which a well-formed entry never reaches.
 pub(crate) fn sign_channel_capped(
     draft: Draft,
-    cap: Option<Seq<DeltaAuthor>>,
+    (cap, elsewhere): (Option<Seq<DeltaAuthor>>, ambre_protocol::Elsewhere),
     mut document_caps: Vec<ambre_protocol::DocumentCap>,
     next: LogHead,
     author: Id<User>,
     signing_key: &SigningKey,
-) -> Result<MembershipEntry, SerializationError> {
-    // Past the bound the relay and every peer refuse the entry, so the
-    // revoke fails here instead (`SYNC-311`).
-    if ambre_core::Count::<ambre_protocol::DocumentCaps>::of(document_caps.len())
-        > ambre_protocol::DOCUMENT_CAPS_MAX
-    {
-        return Err(SerializationError::NotCanonical);
-    }
+) -> Result<Vec<MembershipEntry>, SerializationError> {
     document_caps.sort_by_key(|c| *c.document.as_bytes());
+    let run = usize::try_from(ambre_protocol::DOCUMENT_CAPS_MAX.get()).unwrap_or(usize::MAX);
+    let mut runs = document_caps.chunks(run);
+    let first = runs.next().map(<[_]>::to_vec).unwrap_or_default();
+    let mut entries = vec![sign_one(
+        &draft,
+        (cap, first, elsewhere),
+        next,
+        author,
+        signing_key,
+    )?];
+    for caps in runs {
+        // The next place, after the entry signed last.
+        let head = entries
+            .last()
+            .and_then(|last| {
+                digest(last).map(|d| LogHead {
+                    position: last.position.next(),
+                    previous: Some(d),
+                })
+            })
+            .ok_or(SerializationError::NotCanonical)?;
+        let continued = Draft {
+            key: None,
+            ..draft.clone()
+        };
+        entries.push(sign_one(
+            &continued,
+            (None, caps.to_vec(), ambre_protocol::Elsewhere::Uncapped),
+            head,
+            author,
+            signing_key,
+        )?);
+    }
+    Ok(entries)
+}
+
+/// Signs one entry of `draft` at `next`, with its caps.
+fn sign_one(
+    draft: &Draft,
+    (cap, document_caps, elsewhere): (
+        Option<Seq<DeltaAuthor>>,
+        Vec<ambre_protocol::DocumentCap>,
+        ambre_protocol::Elsewhere,
+    ),
+    next: LogHead,
+    author: Id<User>,
+    signing_key: &SigningKey,
+) -> Result<MembershipEntry, SerializationError> {
     let mut entry = MembershipEntry {
         document: draft.document,
         position: next.position,
@@ -1514,6 +1624,7 @@ pub(crate) fn sign_channel_capped(
         author,
         cap,
         document_caps,
+        elsewhere,
         signature: FixedBytes::<Signature>::from_array([0; ENTRY_SIGNATURE_LEN]),
     };
     let bytes = entry.signed_bytes()?;
@@ -1547,6 +1658,7 @@ pub(crate) fn decode(
 pub(crate) mod tests {
     use super::*;
     use ambre_core::Seq;
+    use ambre_protocol::Elsewhere::Uncapped;
     use ambre_protocol::LogPlaces;
 
     /// One user of a test log: an identity and a signing key.
@@ -2343,7 +2455,16 @@ pub(crate) mod tests {
         let caps = vec![named(segment, 30), named(thread, 0)];
         let head = next(&log);
         log.push(
-            sign_channel_capped(revoke, Some(at(4)), caps, head, alice.id, &alice.key).unwrap(),
+            sign_channel_capped(
+                revoke,
+                (Some(at(4)), Uncapped),
+                caps,
+                head,
+                alice.id,
+                &alice.key,
+            )
+            .unwrap()
+            .remove(0),
         );
         assert_eq!(walk(&log).walked_head().position, place_after(3), "walks");
         let excluded = walk(&log).walked_head();
@@ -2390,9 +2511,216 @@ pub(crate) mod tests {
                 ..draft(&bob, act, Role::Editor)
             };
             let caps = vec![named(document, 1)];
-            bad.push(sign_channel_capped(draft, None, caps, head, alice.id, &alice.key).unwrap());
+            bad.extend(
+                sign_channel_capped(draft, (None, Uncapped), caps, head, alice.id, &alice.key)
+                    .unwrap(),
+            );
             assert_eq!(walk(&bad).walked_head().position, place_after(2), "{act:?}");
         }
+    }
+
+    /// Holds `SYNC-315` at the walk. A floored revoke caps Bob at zero in
+    /// each document of the channel it names no cap for. A named document
+    /// keeps its own cap. A revoke with no floor leaves such a document
+    /// uncapped. A later invite readmits Bob past the floor alone.
+    #[test]
+    fn a_floored_revoke_caps_every_unnamed_document_at_zero() {
+        let (alice, bob) = (Person::new(1), Person::new(2));
+        let at = Seq::<DeltaAuthor>::new;
+        let (named, hidden) = (
+            Id::<Document>::from_bytes([0xd0; 16]),
+            Id::<Document>::from_bytes([0x10; 16]),
+        );
+        let caps = vec![ambre_protocol::DocumentCap {
+            document: named,
+            cap: at(30),
+        }];
+        let revoked = |elsewhere| {
+            let mut log = created(&alice, &bob);
+            let head = LogHead {
+                position: place_after(log.len()),
+                previous: log.last().and_then(digest),
+            };
+            let revoke = Draft {
+                key: Some(FixedBytes::from_array([9; 16])),
+                ..draft(&bob, MembershipAct::Revoke, Role::Editor)
+            };
+            log.extend(
+                sign_channel_capped(
+                    revoke,
+                    (Some(at(4)), elsewhere),
+                    caps.clone(),
+                    head,
+                    alice.id,
+                    &alice.key,
+                )
+                .unwrap(),
+            );
+            log
+        };
+        let mut log = revoked(ambre_protocol::Elsewhere::Zero);
+        let excluded = walk(&log).walked_head();
+        let admits = |log: &[MembershipEntry], document, clock, head| {
+            Writers::of_in(&walk(log), document).admits_delta(&bob.public(), at(clock), head)
+        };
+        assert!(
+            admits(&log, DOC, 4, excluded) && !admits(&log, DOC, 5, excluded),
+            "the meta"
+        );
+        assert!(admits(&log, named, 30, excluded) && !admits(&log, named, 31, excluded));
+        assert!(
+            !admits(&log, hidden, 1, excluded),
+            "a document the census missed"
+        );
+        let open = revoked(Uncapped);
+        assert!(admits(&open, hidden, 99, excluded), "no floor, no cap");
+
+        append(&mut log, &alice, &bob, MembershipAct::Invite, Role::Editor);
+        let back = walk(&log).walked_head();
+        assert!(
+            !admits(&log, hidden, 1, excluded),
+            "a write of the exclusion"
+        );
+        assert!(admits(&log, hidden, 1, back), "a write past the invite");
+    }
+
+    /// Holds `SYNC-319` at the walk. A revoke past the caps of one entry
+    /// takes continuations, and the walk caps Bob in each document of every
+    /// run. Each of these continuations stops the walk:
+    /// * one another member signs, or one that names another member;
+    /// * one with a key or a cap of its own, or with no document cap;
+    /// * one after an entry that is no capped revoke.
+    #[test]
+    fn a_run_of_continuations_caps_every_document_and_nothing_else_continues() {
+        let (alice, bob, carol) = (Person::new(1), Person::new(2), Person::new(3));
+        let at = Seq::<DeltaAuthor>::new;
+        let documents: Vec<Id<Document>> = (0..40u8)
+            .map(|n| Id::<Document>::from_bytes([n.wrapping_add(0x40); 16]))
+            .collect();
+        let caps: Vec<ambre_protocol::DocumentCap> = documents
+            .iter()
+            .zip(1u64..)
+            .map(|(document, clock)| ambre_protocol::DocumentCap {
+                document: *document,
+                cap: at(clock),
+            })
+            .collect();
+        let mut base = created(&alice, &bob);
+        append(
+            &mut base,
+            &alice,
+            &carol,
+            MembershipAct::Invite,
+            Role::Editor,
+        );
+        let head = |log: &[MembershipEntry]| LogHead {
+            position: place_after(log.len()),
+            previous: log.last().and_then(digest),
+        };
+        let revoke = Draft {
+            key: Some(FixedBytes::from_array([9; 16])),
+            ..draft(&bob, MembershipAct::Revoke, Role::Editor)
+        };
+        let run = sign_channel_capped(
+            revoke.clone(),
+            (Some(at(4)), Uncapped),
+            caps,
+            head(&base),
+            alice.id,
+            &alice.key,
+        )
+        .unwrap();
+        assert_eq!(run.len(), 3, "16, 16, then 8 caps");
+        let mut log = base.clone();
+        log.extend(run.iter().cloned());
+        assert_eq!(
+            walk(&log).walked_head().position,
+            place_after(log.len()),
+            "walks"
+        );
+        let excluded = walk(&log).walked_head();
+        let admits = |log: &[MembershipEntry], document, clock| {
+            Writers::of_in(&walk(log), document).admits_delta(&bob.public(), at(clock), excluded)
+        };
+        for (document, clock) in documents.iter().zip(1u64..) {
+            assert!(admits(&log, *document, clock) && !admits(&log, *document, clock + 1));
+        }
+
+        // Each refused continuation, signed after the revoke alone.
+        let one_cap = vec![ambre_protocol::DocumentCap {
+            document: Id::<Document>::from_bytes([0xee; 16]),
+            cap: at(1),
+        }];
+        let after = |log: &[MembershipEntry], by: &Person, draft: Draft, cap| {
+            let mut log = log.to_vec();
+            let entry = sign_one(
+                &draft,
+                (cap, one_cap.clone(), Uncapped),
+                head(&log),
+                by.id,
+                &by.key,
+            )
+            .unwrap();
+            log.push(entry);
+            walk(&log).walked_head().position == place_after(log.len())
+        };
+        let first = base
+            .iter()
+            .cloned()
+            .chain(run.first().cloned())
+            .collect::<Vec<_>>();
+        let plain = Draft {
+            key: None,
+            ..revoke.clone()
+        };
+        assert!(
+            after(&first, &alice, plain.clone(), None),
+            "a continuation walks"
+        );
+        assert!(
+            !after(&first, &carol, plain.clone(), None),
+            "another author"
+        );
+        // Dave never joined: only a continuation could stand for him.
+        let dave = Person::new(4);
+        let other = Draft {
+            member: dave.id,
+            member_key: dave.public(),
+            member_exchange_key: dave.exchange(),
+            ..plain.clone()
+        };
+        assert!(!after(&first, &alice, other, None), "another member");
+        assert!(
+            !after(&first, &alice, revoke.clone(), None),
+            "a key of its own"
+        );
+        assert!(
+            !after(&first, &alice, plain.clone(), Some(at(9))),
+            "a cap of its own"
+        );
+        let mut empty = first.clone();
+        empty.push(
+            sign_one(
+                &plain,
+                (None, Vec::new(), Uncapped),
+                head(&first),
+                alice.id,
+                &alice.key,
+            )
+            .unwrap(),
+        );
+        assert_eq!(
+            walk(&empty).walked_head().position,
+            place_after(first.len()),
+            "no cap"
+        );
+        // After a revoke with no document cap, nothing continues.
+        let mut bare = base.clone();
+        revoke_capped(&mut bare, &alice, &bob, 4);
+        assert!(
+            !after(&bare, &alice, plain, None),
+            "no capped revoke before it"
+        );
     }
 
     /// Holds `SYNC-301` at the walk. Alice revokes Bob at cap 4, then
