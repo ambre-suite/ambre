@@ -48,7 +48,7 @@ const PALETTE: &[Rgb] = &[
 ];
 
 /// The colours a field lays out inline, before its custom-colour button
-/// (`CHROME-256`). They are black, a light grey and the saturated hues of the
+/// (`CHROME-244`). They are black, a light grey and the saturated hues of the
 /// palette, in its order.
 pub(crate) const INLINE: [Rgb; 7] = [
     Rgb::from_bits(0x00_0000),

@@ -803,7 +803,7 @@ async fn the_panel_announces_the_registry_labels() {
             theme: RwSignal::new(ambre_canvas::Theme::Dark),
             on_command: Callback::new(|_| {}),
             on_style: Callback::new(|_| {}),
-            // A lone cell shows every section (`CHROME-257`).
+            // A lone cell shows every section (`CHROME-245`).
             selection: RwSignal::new(ambre_core::Validated::new("B2")),
             sheet: RwSignal::new(None),
             sheets: RwSignal::new(Vec::new()),
@@ -835,7 +835,7 @@ async fn the_panel_announces_the_registry_labels() {
             .unwrap();
         assert!(found.is_some(), "{id:?}: no control announces {expected:?}");
     }
-    // `CHROME-253`: each command of the rows and columns and of the sort and
+    // `CHROME-241`: each command of the rows and columns and of the sort and
     // filter is a labelled row, never a bare icon.
     for &id in panel::ROW_COL_COMMANDS
         .iter()
@@ -872,7 +872,7 @@ async fn the_panel_announces_the_registry_labels() {
     container.remove();
 }
 
-/// `CHROME-250`: the range bar is the shared format bar. It shows each entry
+/// `CHROME-238`: the range bar is the shared format bar. It shows each entry
 /// `ui::panel::BAR` declares, save the unmerge of a merged cell. With no
 /// anchor it draws nothing.
 #[wasm_bindgen_test]
@@ -965,7 +965,7 @@ async fn the_sheet_panel_names_the_selection_and_folds_its_print_group() {
             .unwrap_or_default()
     };
     assert_eq!(text(".ambre-ctx-title"), "B2:D5");
-    // `CHROME-257`: a range shows the cells first and no sheet section; a
+    // `CHROME-245`: a range shows the cells first and no sheet section; a
     // lone cell shows the sheet first, then the cells.
     let order = || {
         let list = container.query_selector_all(".ambre-ctx-section").unwrap();

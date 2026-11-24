@@ -330,7 +330,7 @@ impl TrameView {
 
     /// Where the range bar sits: the centre of the top edge of the selection
     /// in view pixels. `None` hides the bar: a lone cell, an open edit, a drag
-    /// in progress, or a top row out of view (`CHROME-250`).
+    /// in progress, or a top row out of view (`CHROME-238`).
     #[cfg_attr(
         all(not(target_arch = "wasm32"), not(test)),
         expect(dead_code, reason = "the browser frame alone publishes it")

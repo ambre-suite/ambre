@@ -1169,7 +1169,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         })}
 
         // The Trame range bar over a selection of two cells or more
-        // (`CHROME-250`): the shared format bar, at the anchor the view
+        // (`CHROME-238`): the shared format bar, at the anchor the view
         // publishes.
         {boot_is_trame.then(|| view! {
             <trame_chrome::RangeBar

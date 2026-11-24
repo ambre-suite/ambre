@@ -109,7 +109,7 @@ pub struct StyleModel {
     /// panel: a shape's or a connector's.
     pub kind: Styled,
     /// The box and the rotation of a lone shape the user can move, which the
-    /// position section edits (`CHROME-251`). `None` for a selection of
+    /// position section edits (`CHROME-239`). `None` for a selection of
     /// several, a group, a locked element and an arrow.
     pub placement: Option<super::panel::Placement>,
 }
@@ -284,7 +284,7 @@ mod tests {
         assert!(!model.mixed.any());
     }
 
-    /// `CHROME-251`: a lone shape the user can move carries its box and its
+    /// `CHROME-239`: a lone shape the user can move carries its box and its
     /// rotation. Two shapes and a locked shape carry none.
     #[test]
     fn a_lone_movable_shape_carries_its_placement() {

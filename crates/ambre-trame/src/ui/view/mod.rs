@@ -398,7 +398,7 @@ pub struct TrameSignals {
     /// header of the context panel shows.
     pub selection_ref: RwSignal<ambre_core::Validated<crate::ui::panel::RangeLabel>>,
     /// Where the range bar sits over a selection of two cells or more, in
-    /// view pixels. `None` hides the bar (`CHROME-250`).
+    /// view pixels. `None` hides the bar (`CHROME-238`).
     pub range_bar: RwSignal<Option<ambre_core::Point<ambre_core::Px<ambre_core::View>>>>,
     /// The page setup and the frozen pane of the active sheet, which the
     /// context panel shows. `None` before the first sheet list.

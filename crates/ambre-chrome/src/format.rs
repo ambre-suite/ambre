@@ -168,7 +168,7 @@ pub struct FormatControl {
 /// The format bar over a selection, centred on `anchor` in the viewport
 /// (`CHROME-105`). A press keeps the selection: the bar never takes the focus.
 /// `children` follow the controls: a list or a colour, which a press button
-/// cannot hold (`CHROME-250`).
+/// cannot hold (`CHROME-238`).
 #[component]
 pub fn FormatBar(
     anchor: Point<Px<Css>>,

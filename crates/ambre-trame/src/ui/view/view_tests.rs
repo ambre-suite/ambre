@@ -744,7 +744,7 @@ fn the_panel_header_names_the_selection() {
     assert_eq!(rig.view.selection_ref().as_str(), "B2:D5");
 }
 
-/// `CHROME-250`: the range bar shows over two cells or more, centred on the
+/// `CHROME-238`: the range bar shows over two cells or more, centred on the
 /// top edge. A lone cell and a drag hide it.
 #[test]
 fn the_range_bar_shows_over_a_range_alone() {
