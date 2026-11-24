@@ -12,12 +12,14 @@
 
 use ambre_chrome::commands::{Command, Home, KeyBinding, KeyChar, Locale, Property, Reading};
 use ambre_chrome::{
-    Choice, ChoiceRow, ChoiceView, CommandButton, ContextPanel, DockSide, Field, Fold, IconButton,
-    LengthField, PanelPrefs, PanelSection, PanelWidth, Pressed, PropertyToggle, Select,
-    SelectField, native_controls,
+    Choice, ChoiceRow, ChoiceView, CommandButton, ContextPanel, DockSide, FONT_FAMILIES, Field,
+    Fold, FontPicker, IconButton, LengthField, PanelPrefs, PanelSection, PanelWidth, Pressed,
+    PropertyToggle, Select, SelectField, native_controls,
 };
 use ambre_core::index::Pos;
-use ambre_core::{Categories, Commands, Mm, PanelSections, PrintLength, Properties, StaticKey};
+use ambre_core::{
+    Categories, Commands, FontFamily, Mm, PanelSections, PrintLength, Properties, StaticKey,
+};
 use leptos::mount::mount_to;
 use leptos::prelude::*;
 use leptos::wasm_bindgen::JsCast;
@@ -383,5 +385,129 @@ async fn a_select_is_operable_from_the_keyboard_alone() {
     leptos::task::tick().await;
     assert_eq!(trigger.text_content().unwrap().trim(), "Mixed");
     assert!(all(&list, "[aria-selected=true]").is_empty());
+    root.remove();
+}
+
+/// The `font-family` the inline style of `el` holds, as the browser spells it.
+fn inline_face(el: &web_sys::Element) -> String {
+    el.dyn_ref::<web_sys::HtmlElement>()
+        .unwrap()
+        .style()
+        .get_property_value("font-family")
+        .unwrap()
+}
+
+/// The browser's spelling of the CSS `font-family` stack `css`.
+fn spelled_face(css: &str) -> String {
+    let probe: web_sys::HtmlElement = document()
+        .create_element("span")
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    probe.style().set_property("font-family", css).unwrap();
+    probe.style().get_property_value("font-family").unwrap()
+}
+
+fn computed(el: &web_sys::Element, property: &str) -> String {
+    web_sys::window()
+        .unwrap()
+        .get_computed_style(el)
+        .unwrap()
+        .unwrap()
+        .get_property_value(property)
+        .unwrap()
+}
+
+#[wasm_bindgen_test]
+async fn the_font_list_is_the_shared_select_and_shows_each_family_in_its_own_face() {
+    with_styles();
+    let current = RwSignal::new(Some(FontFamily::Sans));
+    let picked = RwSignal::new(None::<Option<FontFamily>>);
+    let root = mount_in_container(move || {
+        view! {
+            <div class="ambre-ctx-section-body">
+                <span class="t-font">
+                    <FontPicker
+                        current=current.into()
+                        on_pick=Callback::new(move |f| picked.set(Some(f)))
+                    />
+                </span>
+                <span class="t-plain">
+                    <Select
+                        label="Paper"
+                        choices=vec![ChoiceView::text("A4")]
+                        selected=Signal::derive(|| Some(Pos::<ChoiceRow>::ZERO))
+                        on_pick=Callback::new(|_| {})
+                    />
+                </span>
+            </div>
+        }
+    });
+    leptos::task::tick().await;
+    let font = q(&root, ".t-font");
+    let trigger: web_sys::HtmlElement = q(&font, ".ambre-select-trigger").dyn_into().unwrap();
+    let plain = q(&root, ".t-plain .ambre-select-trigger");
+
+    // One trigger, the shared one, drawn as every other list of the panel.
+    assert_eq!(all(&font, "button").len(), 1, "the list draws one trigger");
+    assert_eq!(trigger.get_attribute("aria-label").as_deref(), Some("Font"));
+    for property in [
+        "height",
+        "border-top-width",
+        "border-top-color",
+        "border-radius",
+        "background-color",
+        "font-size",
+    ] {
+        assert_eq!(
+            computed(&trigger, property),
+            computed(&plain, property),
+            "the font trigger matches a list on {property}"
+        );
+    }
+
+    // Each entry, and the button, previews its family in its own face.
+    let list = q(&font, "[role=listbox]");
+    let options = all(&list, "[role=option]");
+    assert_eq!(options.len(), FONT_FAMILIES.len());
+    for (option, choice) in options.iter().zip(FONT_FAMILIES) {
+        assert_eq!(option.text_content().unwrap().trim(), choice.label());
+        assert_eq!(inline_face(option), spelled_face(choice.css));
+    }
+    let value = q(&font, ".ambre-select-value");
+    assert_eq!(value.text_content().unwrap().trim(), "Sans");
+    assert_eq!(inline_face(&value), spelled_face(FONT_FAMILIES[1].css));
+
+    // The keyboard opens on the current family and picks the next one.
+    trigger.focus().unwrap();
+    key(&trigger, "Enter");
+    leptos::task::tick().await;
+    assert_eq!(
+        active().as_ref(),
+        options.get(1),
+        "the current family takes the focus"
+    );
+    key(&options[1], "ArrowDown");
+    key(&options[2], "Enter");
+    leptos::task::tick().await;
+    assert_eq!(picked.get_untracked(), Some(Some(FontFamily::Serif)));
+
+    // A pointer pick of "Default" reports no family.
+    let first: web_sys::HtmlElement = options[0].clone().dyn_into().unwrap();
+    trigger.click();
+    leptos::task::tick().await;
+    first.click();
+    leptos::task::tick().await;
+    assert_eq!(picked.get_untracked(), Some(None));
+
+    // A family the list does not offer shows its own name, no entry selected.
+    current.set(Some(FontFamily::Other("Calibri".to_owned())));
+    leptos::task::tick().await;
+    assert_eq!(value.text_content().unwrap().trim(), "Calibri");
+    assert!(
+        options
+            .iter()
+            .all(|o| o.get_attribute("aria-selected").as_deref() == Some("false"))
+    );
     root.remove();
 }

@@ -1,10 +1,10 @@
 // ambre-chrome/src/font.rs
 // ============================================================================
-// Shared, app-agnostic font-family picker (ambre-spec-chrome.md). A single
-// toolbar trigger (the current family name + caret) toggles a context-menu
-// popover listing the families. Each is rendered in its OWN typeface, so the
-// user previews the font before picking. A `<select>` cannot reliably style its
-// `<option>`s per-font across browsers, hence this custom popover.
+// Shared, app-agnostic font-family picker (ambre-spec-shell.md section 2, the
+// visual system). It is the shared `Select` of `controls`, so it matches every
+// other list of the panel. Each entry shows in its OWN typeface, so the user
+// previews the font before picking. A native `<select>` cannot style its
+// `<option>`s per font across browsers, hence the styled list.
 //
 // Promoted here from Trame's cell font popover so Toile's style inspector and
 // Trame's cell formatting share the very same control (mirrors `ColorPopover`).
@@ -15,10 +15,10 @@
 // ============================================================================
 
 use ambre_core::FontFamily;
-use leptos::html;
+use ambre_core::index::Pos;
 use leptos::prelude::*;
-use leptos_icons::Icon;
-use wasm_bindgen::JsCast;
+
+use crate::{ChoiceRow, ChoiceView, Select};
 
 /// One entry of the picker: the family it picks and the CSS `font-family`
 /// that renders the entry in its own typeface, the live preview.
@@ -65,103 +65,49 @@ pub const FONT_FAMILIES: &[FamilyChoice] = &[
     },
 ];
 
-/// The label the trigger shows for `current`: the entry's label, or the
-/// family's own label for a family the picker does not offer.
-fn shown_label(current: Option<&FontFamily>) -> String {
-    match current {
-        None => DEFAULT_LABEL.to_owned(),
-        Some(family) => family.picker_label().unwrap_or(family.label()).to_owned(),
-    }
+/// The place of `current` in [`FONT_FAMILIES`], or `None` for a family the
+/// picker does not offer.
+fn place_of(current: Option<&FontFamily>) -> Option<Pos<ChoiceRow>> {
+    FONT_FAMILIES
+        .iter()
+        .position(|choice| choice.family.as_ref() == current)
+        .map(Pos::from_usize)
 }
 
-/// The composed font-family control. `current` is the active family (`None`
-/// = "Default"); `on_pick` receives the chosen family (`None` for the
-/// "Default" reset). The popover dismisses on any pointer-down outside it.
+/// The composed font-family control, drawn as the shared [`Select`]: each
+/// entry and the button show their family in its own face. `current` is the
+/// active family (`None` = "Default"); `on_pick` receives the chosen family
+/// (`None` for the "Default" reset). A family the picker does not offer
+/// shows its own name, with no entry selected.
 #[component]
 pub fn FontPicker(
     current: Signal<Option<FontFamily>>,
     on_pick: Callback<Option<FontFamily>>,
 ) -> impl IntoView {
-    let open = RwSignal::new(crate::Openness::Closed);
-    // The wrapper node, so a global pointer-down can tell clicks inside the menu
-    // apart from clicks elsewhere (another control, the canvas).
-    let root_ref = NodeRef::<html::Span>::new();
-    let handle = window_event_listener(leptos::ev::pointerdown, move |ev| {
-        if open.get_untracked() == crate::Openness::Closed {
-            return;
-        }
-        let inside = root_ref
-            .get_untracked()
-            .zip(ev.target())
-            .and_then(|(root, target)| target.dyn_into::<web_sys::Node>().ok().map(|n| (root, n)))
-            .is_some_and(|(root, node)| root.contains(Some(&node)));
-        if !inside {
-            open.set(crate::Openness::Closed);
+    let choices = FONT_FAMILIES
+        .iter()
+        .map(|choice| ChoiceView::text(choice.label()).in_face(choice.css))
+        .collect();
+    let selected = Signal::derive(move || place_of(current.get().as_ref()));
+    let unlisted = Signal::derive(move || {
+        current
+            .get()
+            .map_or_else(String::new, |family| family.label().to_owned())
+    });
+    let pick = Callback::new(move |p: Pos<ChoiceRow>| {
+        if let Some(choice) = p.to_index().and_then(|i| FONT_FAMILIES.get(i)) {
+            on_pick.run(choice.family.clone());
         }
     });
-    on_cleanup(move || handle.remove());
-
-    // The active family label ("Default" when unset).
-    let current_label = move || shown_label(current.get().as_ref());
-    // CSS font-family for the active family, so the trigger previews it too.
-    let current_css = move || {
-        let family = current.get();
-        FONT_FAMILIES
-            .iter()
-            .find(|choice| choice.family == family)
-            .map_or("inherit", |choice| choice.css)
-    };
-
     view! {
-        <span class="ambre-font" node_ref=root_ref>
-            <button
-                class="font-trigger"
-                aria-label="Font"
-                aria-haspopup="true"
-                aria-expanded=move || open.get().aria()
-                style:font-family=current_css
-                // Keep DOM focus on the canvas text pipe (the FormatBar hazard).
-                on:mousedown=move |ev| ev.prevent_default()
-                on:click=move |_| open.update(|o| *o = o.toggled())
-            >
-                <span class="label">{current_label}</span>
-                <Icon icon=icondata::BiDownArrowSolid />
-            </button>
-            <Show when=move || open.get() == crate::Openness::Open fallback=|| ()>
-                <div class="ambre-font-popover">
-                    {FONT_FAMILIES
-                        .iter()
-                        .map(|choice| {
-                            let name = choice.label();
-                            let css = choice.css;
-                            let family = choice.family.clone();
-                            let picked = choice.family.clone();
-                            view! {
-                                <button
-                                    class="font-item"
-                                    style:font-family=css
-                                    on:mousedown=move |ev| ev.prevent_default()
-                                    on:click=move |_| {
-                                        // "Default" clears the explicit family (None).
-                                        on_pick.run(picked.clone());
-                                        open.set(crate::Openness::Closed);
-                                    }
-                                >
-                                    <span class="check">
-                                        <Show
-                                            when=move || current.get() == family
-                                            fallback=|| ()
-                                        >
-                                            <Icon icon=icondata::BsCheck />
-                                        </Show>
-                                    </span>
-                                    <span class="label">{name}</span>
-                                </button>
-                            }
-                        })
-                        .collect_view()}
-                </div>
-            </Show>
+        <span class="ambre-font">
+            <Select
+                label="Font"
+                choices=choices
+                selected=selected
+                on_pick=pick
+                placeholder=unlisted
+            />
         </span>
     }
 }
