@@ -2,8 +2,8 @@
 // ============================================================================
 // The board's creation bar (`toile-tools`, `CHROME-152`), wasm-only. The board
 // lays out the shared `ambre_chrome::CreationBar` over its own table: the
-// tools of the pointer, then the two embeds. Exactly one tool reads pressed,
-// the one the shared `RwSignal<Tool>` holds; a press on a tool arms it, and a
+// tools of the pointer, then the two embeds. Exactly one tool reads pressed:
+// the shared `RwSignal<Tool>` names it. A press on a tool arms it, and a
 // press on an embed runs its command.
 //
 // The Sticky button is a split affordance. Clicking it opens a small colour popover

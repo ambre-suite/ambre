@@ -335,8 +335,8 @@ pub mod shared {
     /// The group of every command that inserts a new object: a picture, a
     /// table, a chart, a comment. Its home is the creation bar (`CHROME-152`).
     pub const INSERT: StaticKey<Categories> = StaticKey::<Categories>::new("insert");
-    /// The group of every tool of the pointer: the mode the next press on the
-    /// content takes, as the pen or the hand of a board. Its home is the
+    /// The group of every tool of the pointer. A tool is the mode the next
+    /// press on the content takes, as the pen of a board. Its home is the
     /// creation bar (`CHROME-152`).
     pub const TOOL: StaticKey<Categories> = StaticKey::<Categories>::new("tool");
 

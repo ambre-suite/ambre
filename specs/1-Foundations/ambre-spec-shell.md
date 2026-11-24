@@ -50,9 +50,9 @@ other six documents of the DOM side.
 | `CHROME-178` | `INV` | Cut, copy and paste MUST have the context menu as their home region. | this spec section 2; `ambre-spec-clipboard.md` | Toile `ambre_toile::ui::panel::tests::the_clipboard_homes_in_the_menu`; Prose `ambre_prose::view::panel::tests::the_clipboard_homes_in_the_menu_and_the_panel_holds_every_formatting_command`; Trame `ambre_trame::ui::panel::tests::the_clipboard_homes_in_the_menu_and_the_panel_holds_every_formatting_command`; type-level -- `Command::home` holds one region | none | verified |
 | `CHROME-182` | `INV` | Besides its clipboard entries, the context menu MUST hold only commands whose home is the context panel. | this spec section 2 | Toile `ambre_toile::ui::panel::menu_tests::the_board_menu_opens_on_the_clipboard_then_reaches_the_panel`; Prose `ambre_prose::view::panel::tests::the_page_menu_opens_on_the_clipboard_then_reaches_the_panel`; Trame `ambre_trame::ui::panel::tests::the_sheet_menu_opens_on_the_clipboard_then_reaches_the_panel` | none | verified |
 | `CHROME-179` | `OBS` | In Prose, Trame and Toile, the context menu MUST list first the clipboard entries that apply, cut, copy and paste in that order. | this spec section 2 | Toile `ambre_toile::ui::panel::menu_tests::the_board_menu_opens_on_the_clipboard_then_reaches_the_panel` -- every scope, a locked selection keeping copy and paste; Prose `ambre_prose::view::panel::tests::the_page_menu_opens_on_the_clipboard_then_reaches_the_panel`; Trame `ambre_trame::ui::panel::tests::the_sheet_menu_opens_on_the_clipboard_then_reaches_the_panel` -- every scope and filter state; `ambre_commands::tests::a_menu_opens_on_cut_copy_paste_then_reaches_the_panel_alone` | none | verified |
-| `CHROME-180` | `OBS` | In Prose, the creation bar MUST offer a comment. | this spec section 2 | not built | unbuilt -- Prose has no gesture that writes a new comment: the Logic thread adds one, and no view composes its text; lands with the `The creation bar` Story (`ambre-roadmap.md` MVP) | unimplemented |
+| `CHROME-180` | `OBS` | In Prose, the creation bar MUST offer a comment. | this spec section 2 | not built | unbuilt -- lands with the `The creation bar` Story (`ambre-roadmap.md` MVP). Prose has no gesture that writes a new comment: the Logic thread adds one, and no view composes its text | unimplemented |
 | `CHROME-246` | `OBS` | In Prose, the creation bar MUST offer text, a picture, a table and a separator. | this spec section 2; `CHROME-180` | `ambre_prose::input_tests::each_insert_of_the_creation_bar_lands_after_the_caret_block` -- text, a table and a separator land after the caret block, and nothing lands with no caret; `ambre_prose::commands::tests::the_save_entry_is_declared_once` -- the four are declared once each; `ambre_app::shell::narrow::the_three_pages_lay_out_one_creation_bar_at_one_place` -- wasm tier, the page's bar shows the four | none | verified |
-| `CHROME-181` | `OBS` | In Trame, the creation bar MUST offer a chart, a picture and a comment. | this spec section 2 | not built | unbuilt -- the sheet holds no chart, no picture and no comment yet, so no command inserts one; lands with the `The creation bar` Story (`ambre-roadmap.md` MVP). A filter acts on a range and creates nothing, so its home is the context panel | unimplemented |
+| `CHROME-181` | `OBS` | In Trame, the creation bar MUST offer a chart, a picture and a comment. | this spec section 2 | not built | unbuilt -- lands with the `The creation bar` Story (`ambre-roadmap.md` MVP). The sheet holds no chart, no picture and no comment yet, so no command inserts one. A filter acts on a range and creates nothing, so its home is the context panel | unimplemented |
 | `CHROME-247` | `OBS` | In Trame, the creation bar MUST offer a function, which opens the editor of the active cell on the sign a formula starts with. | this spec section 2; `CHROME-181` | `ambre_trame::ui::view::view_tests::the_function_of_the_creation_bar_opens_a_formula_on_the_active_cell` -- the grid opens the editor on the sign, and the text typed after it commits as a formula; `ambre_trame::tests::chrome_ui::the_function_of_the_creation_bar_asks_the_grid_for_a_formula` -- wasm tier, the handler hands the id to the grid view; `ambre_app::shell::narrow::the_three_pages_lay_out_one_creation_bar_at_one_place` -- wasm tier, the sheet's bar shows it | none | verified |
 | `CHROME-214` | `OBS` | In Prose, the context menu MUST reach after the clipboard bold, italic, underline, strikethrough and clearing the formatting. | this spec section 2; `CHROME-182` | Prose `ambre_prose::view::panel::tests::the_page_menu_opens_on_the_clipboard_then_reaches_the_panel` -- the declared list, each entry a control of the text section; `ambre_prose::commands::tests::every_menu_entry_past_the_clipboard_formats_the_selection` -- each entry past the clipboard reaches the view; `ambre_belt::prose::tests::the_menu_key_opens_the_page_menu_and_runs_an_entry` -- browser tier, Bold run from the menu bolds the selected word | none | verified |
 | `CHROME-215` | `OBS` | In Trame, the context menu MUST reach after the clipboard the rows and columns, the sort, the filter, the merge and the freeze. | this spec section 2; `CHROME-182` | Trame `ambre_trame::ui::panel::tests::the_sheet_menu_opens_on_the_clipboard_then_reaches_the_panel` -- every scope, each entry a command of the panel | none | verified |
@@ -146,7 +146,7 @@ The user opens a list of the panel and picks a choice, with the pointer or the k
   chrome operation. A cover a surface publishes is read by a fit, which is a zoom cost.
 * **Boundary.** none: a region holds commands, and a command reaches the Logic thread as every
   command does. Nothing here opens a socket or holds a key.
-* **Verification.** 83 `verified`, 7 `unimplemented`, and the type holds the home of each command.
+* **Verification.** 87 `verified`, 5 `unimplemented`, and the type holds the home of each command.
   Host tests run each table through the one sink of every region, on a real Logic state. Wasm tests
   hold the palette and the sheet tabs. A scan of the shell stylesheet holds the hover reveals. The
   rest waits on the regions, which no application lays out.
@@ -176,7 +176,7 @@ context bar and the command palette reach commands whose home is elsewhere.
 **The creation bar adds, and arms the pointer.** It holds every command that inserts a new
 object, and every tool of the pointer (`CHROME-152`). A tool is the mode the next press on the
 content takes: the pen, the hand and select are three of the board's. The insert group and the tool
-group of a table are the two that home there, and a table that homes another command there has a
+group of a table are the two that home there. A table that homes another command there has a
 defect. One component draws the bar in the three applications, from the table of each, so it
 compiles once (`CHROME-153`).
 
@@ -324,8 +324,9 @@ is `crates/ambre-chrome/src/cover.rs`. The pieces of the header are
 `crates/ambre-chrome/src/header.rs`, laid out by `crates/ambre-app/src/shell/app_root.rs`. The
 rows each menu takes from the table of the booted application are
 `crates/ambre-app/src/shell/header.rs`. The creation bar is `crates/ambre-chrome/src/creation.rs`,
-and `crates/ambre-app/src/shell/app_root.rs` hands it the table of each page. A command of the file group or of the account group homed
-elsewhere is a defect of its table (`ambre_commands::table_defects`). The tooltip of an icon is
+and `crates/ambre-app/src/shell/app_root.rs` hands it the table of each page. A command of the
+file group or of the account group homed elsewhere is a defect of its table
+(`ambre_commands::table_defects`). The tooltip of an icon is
 `crates/ambre-chrome/src/tip.rs`, and the icon button of `crates/ambre-chrome/src/controls.rs`
 draws it.
 

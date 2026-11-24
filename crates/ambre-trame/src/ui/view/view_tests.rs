@@ -189,7 +189,7 @@ fn a_typed_value_reaches_the_logic_thread_through_the_view() {
 }
 
 /// `CHROME-247`: the function of the creation bar opens the editor of the
-/// active cell on the sign of a formula, and what the user types follows it.
+/// active cell on the sign of a formula. What the user types follows it.
 #[test]
 fn the_function_of_the_creation_bar_opens_a_formula_on_the_active_cell() {
     let mut rig = Rig::new();

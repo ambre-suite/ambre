@@ -358,8 +358,8 @@ async fn creation_edges(kind: ambre_bus::DocType, side: ambre_chrome::DockSide) 
     edges
 }
 
-/// `CHROME-153`: Prose, Trame and Toile each lay out the one creation bar,
-/// centred at the bottom of the content, with a panel docked to either side.
+/// `CHROME-153`: Prose, Trame and Toile each lay out the one creation bar.
+/// It sits centred at the bottom of the content, beside a panel on either side.
 /// The bars share one height and one bottom edge. `CHROME-152`: each holds
 /// every command its table homes in the creation bar, in order, and no other.
 #[wasm_bindgen_test]

@@ -691,10 +691,10 @@ impl TrameView {
         true
     }
 
-    /// Perform a command the grid view owns: a zoom to the selection
-    /// (`ZOOM-007`), or the function of the creation bar, which opens the
-    /// editor of the active cell on the sign a formula starts with
-    /// (`CHROME-247`). Any other id does nothing.
+    /// Perform a command the grid view owns. A zoom to the selection frames
+    /// it (`ZOOM-007`). The function of the creation bar opens the editor of
+    /// the active cell on the sign of a formula (`CHROME-247`). Any other id
+    /// does nothing.
     pub fn run_view_command(&mut self, id: ambre_core::StaticKey<ambre_core::Commands>) {
         if id == crate::ui::commands::ZOOM_TO_SELECTION {
             self.zoom_to_selection();

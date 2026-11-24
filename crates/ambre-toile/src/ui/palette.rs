@@ -361,7 +361,7 @@ mod tests {
     }
 
     /// The creation bar presses the one tool the board holds, whatever its
-    /// sub-option (`TOILE-UI-408`).
+    /// sub-option.
     #[test]
     fn each_tool_names_the_command_that_arms_it() {
         for &id in TOOL_COMMANDS {

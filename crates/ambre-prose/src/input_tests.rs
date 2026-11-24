@@ -3595,7 +3595,7 @@ fn the_suggestion_mode_command_turns_the_mode_on_then_off() {
     }
 }
 
-/// `CHROME-180`: text, a table and a separator of the creation bar each
+/// `CHROME-246`: text, a table and a separator of the creation bar each
 /// land after the block the caret sits in, and need no selection. With no
 /// caret, the bar inserts nothing.
 #[test]

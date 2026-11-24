@@ -1,7 +1,7 @@
 // ambre-chrome/src/creation.rs
 // ============================================================================
 // The creation bar: one bar of the commands that add something to the
-// document, the same in Prose, Trame and Toile (`ambre-spec-shell.md`
+// document. It is the same in Prose, Trame and Toile (`ambre-spec-shell.md`
 // section 2, `CHROME-152`, `CHROME-153`). The bar shows every command its
 // table homes in the creation bar, in the order of the table, and no other.
 // It floats centred at the bottom of the content cell, and publishes the box
@@ -26,8 +26,8 @@ pub fn creation_entries(table: &'static [Command]) -> Vec<&'static Command> {
         .collect()
 }
 
-/// A view an application draws in place of the plain button of one command
-/// of its bar, as the board draws the colour picker of its sticky note. The
+/// A view an application draws in place of the plain button of one command.
+/// The board draws the colour picker of its sticky note this way. The
 /// view carries the reach of that command, so the bar still names it.
 #[derive(Clone)]
 pub struct CreationSlot {
