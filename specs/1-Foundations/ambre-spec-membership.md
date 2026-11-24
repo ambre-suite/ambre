@@ -175,9 +175,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 115 `verified`. Every pure transform holds, out of the browser: the wrap, the
-  weak key, the pin, the invitee, the role and the log walk. What is loose is the branches that only
-  run against a live relay.
+* **Verification.** 115 `verified`, 1 `unimplemented`. Every pure transform holds, out of the
+  browser: the wrap, the weak key, the pin, the invitee, the role and the log walk. What is loose is
+  the branches that only run against a live relay.
 ---
 
 ## 2. WHAT EACH USER SEES

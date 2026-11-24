@@ -124,7 +124,7 @@ pub struct Runtime<D> {
     /// Murmure notifications spec). Cleared on logout.
     listed_channels: unopened::ListedChannels,
     /// The role this client holds on the `meta` of each open or opening
-    /// channel, from the ready of that `meta` (`MURMURE-684`). A channel
+    /// channel, from the ready of that `meta` (`MURMURE-729`). A channel
     /// whose `meta` it cannot write keeps its listed hint. Dropped with the
     /// channel, and cleared on logout.
     meta_roles: HashMap<Id<Document>, Role>,

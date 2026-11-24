@@ -94,7 +94,7 @@ impl<D> Runtime<D> {
     /// reads the true name. A channel no listing named, or one not open, seals
     /// nothing. Nor does a channel whose `meta` this client cannot write, and
     /// its hint stays as listed, so a later writer still sees it stale
-    /// (`MURMURE-684`).
+    /// (`MURMURE-729`).
     pub(crate) fn reseal_stale_name(&mut self, channel_id: Id<Channel>) {
         let Some(channel) = self.channels.get(&channel_id) else {
             return;

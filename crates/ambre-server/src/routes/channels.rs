@@ -2937,7 +2937,7 @@ mod tests {
         );
     }
 
-    /// `SRV-340`: a viewer of a channel's `meta` cannot seal a name beside
+    /// `SRV-346`: a viewer of a channel's `meta` cannot seal a name beside
     /// it, nor can a user outside the channel. The refusal leaves the
     /// sealed name as it was, and an owner of the same `meta` still renames.
     #[sqlx::test]

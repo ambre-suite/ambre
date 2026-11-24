@@ -1020,7 +1020,7 @@ mod tests {
         );
     }
 
-    /// `MURMURE-684`: a viewer of `meta` seals no name and keeps the stale
+    /// A viewer of `meta` seals no name and keeps the stale
     /// hint as listed. Once the same client reads `meta` as an editor, the
     /// hint still reads stale, so the name seals then.
     #[test]

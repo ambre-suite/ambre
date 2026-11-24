@@ -821,7 +821,7 @@ impl<D> Runtime<D> {
 
     /// Keep `role` when `document_id` is the `meta` of a channel open or
     /// opening here. A role that changes on an open channel may let this
-    /// client seal its name now (`MURMURE-684`).
+    /// client seal its name now (`MURMURE-729`).
     fn note_meta_role(&mut self, document_id: Id<Document>, role: Role) {
         let open = self
             .channels
