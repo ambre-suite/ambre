@@ -486,10 +486,6 @@ pub(crate) fn icon_of(command: &ambre_commands::Command) -> Option<icondata::Ico
     })
 }
 
-<<<<<<< HEAD
-/// One control, announced by its command's title, chord and description
-/// (`CHROME-186`). An id the table does not describe shows an empty label.
-=======
 /// The suggestion-mode chip of the status bar, shown while this session
 /// suggests (`PROSE-UI-261`). The context panel folds, and the status bar
 /// never does, so the mode stays in view. The chip is a reach of the
@@ -520,8 +516,8 @@ pub fn ProseModeChip(signals: ProseSignals) -> impl IntoView {
     }
 }
 
-/// One control, announced by its command's title.
->>>>>>> 20d6f5b4a86566c10897844f6640bb8b7c88da95
+/// One control, announced by its command's title, chord and description
+/// (`CHROME-186`). An id the table does not describe shows an empty label.
 fn control(signals: ProseSignals, id: StaticKey<Commands>, pressed: Pressed) -> FormatControl {
     let on_press = Callback::new(move |()| signals.format.set(Some(id)));
     match ambre_commands::find(crate::commands::COMMANDS, id) {

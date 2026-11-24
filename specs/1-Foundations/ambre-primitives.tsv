@@ -5028,11 +5028,8 @@ ambre-chrome | src/command.rs | crate::command | digit_of_code(code) | param | &
 ambre-core | src/call.rs | crate::call | FORWARDED | const | u32	generic	the one written figure of the call row of the budgets, which the forwarded count and the slots past it are built on
 ambre-chrome | src/controls.rs | crate::controls | ChoiceView.hint | field | Option<String>	free-text	the muted hint at the end of a row of a select, as a chord, display text
 ambre-chrome | src/controls.rs | crate::controls | ChoiceView::hinted(hint) | param | impl Into<String>	free-text	the muted hint at the end of a row of a select, display text
-<<<<<<< HEAD
 ambre-protocol | src/snapshot_confirm.rs | crate::snapshot_confirm | CONFIRM_HEAD_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/membership_log.rs | crate::membership_log | Readmitted::under_every_cap() | ret | bool	generic	predicate result
 ambre-sync | src/membership_log.rs | crate::membership_log | Writers::folds_past_cap_under() | ret | bool	generic	predicate result
 ambre-sync | src/membership_log.rs | crate::membership_log | continues() | ret | bool	generic	predicate result
-=======
 ambre-chrome | src/tip.rs | crate::tip | untipped_icons() | ret | Vec<String>	foreign-api	the accessible names the DOM holds for icon controls whose tooltip breaks the rule, which a test prints
->>>>>>> e0d5491218bc6d74e796d9d9bce321f125502fdc

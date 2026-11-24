@@ -1165,7 +1165,7 @@ mod tests {
         let target: web_sys::HtmlElement = slot.clone().dyn_into().expect("an element");
         mount_to(
             target,
-            move || view! { <ProseFigures figures=figures zoom=zoom /> },
+            move || view! { <ProseFigures figures=figures zoom=zoom signals=ProseSignals::new() /> },
         )
         .forget();
 
@@ -1243,7 +1243,7 @@ mod tests {
         let target: web_sys::HtmlElement = slot.clone().dyn_into().expect("an element");
         mount_to(
             target,
-            move || view! { <ProseFigures figures=figures zoom=zoom /> },
+            move || view! { <ProseFigures figures=figures zoom=zoom signals=ProseSignals::new() /> },
         )
         .forget();
         let last = slot.last_element_child().expect("a band child");

@@ -572,6 +572,8 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[KeyBinding::primary_shift(KeyChar::E)],
         category: REVIEW,
         home: Home::ContextPanel,
+
+        description: None,
     },
     Command {
         id: UNDO,
