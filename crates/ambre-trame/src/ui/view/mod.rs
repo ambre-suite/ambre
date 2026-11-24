@@ -396,7 +396,7 @@ pub struct TrameSignals {
     pub formula_ref: RwSignal<String>,
     /// The reference of the whole selection, such as `B2:D5`, which the
     /// header of the context panel shows.
-    pub selection_ref: RwSignal<ambre_core::Validated<crate::ui::panel::RangeLabel>>,
+    pub selection_ref: RwSignal<crate::ui::panel::PanelSelection>,
     /// The page setup and the frozen pane of the active sheet, which the
     /// context panel shows. `None` before the first sheet list.
     pub sheet_setup: RwSignal<Option<crate::ui::panel::ActiveSheet>>,
@@ -514,7 +514,7 @@ pub struct TrameView {
     #[cfg(target_arch = "wasm32")]
     formula_ref: RwSignal<String>,
     #[cfg(target_arch = "wasm32")]
-    selection_ref: RwSignal<ambre_core::Validated<crate::ui::panel::RangeLabel>>,
+    selection_ref: RwSignal<crate::ui::panel::PanelSelection>,
     #[cfg(target_arch = "wasm32")]
     sheet_setup: RwSignal<Option<crate::ui::panel::ActiveSheet>>,
     #[cfg(target_arch = "wasm32")]

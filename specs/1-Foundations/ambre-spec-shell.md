@@ -29,7 +29,7 @@ other six documents of the DOM side.
 | `CHROME-152` | `INV` | The creation bar MUST hold every command that inserts a new object, and no other command. | this spec section 2 | not built | unbuilt -- lands with the `The creation bar` Story (`ambre-roadmap.md` MVP). The board's tool palette is the one creation bar, and it docks to the left | unimplemented |
 | `CHROME-153` | `OBS` | In Prose, Trame and Toile, the creation bar MUST take the same place and the same shape. | this spec section 2, the placement table | not built | unbuilt -- lands with the `The creation bar` Story (`ambre-roadmap.md` MVP) | unimplemented |
 | `CHROME-154` | `INV` | A command that acts on the document as a file MUST have the Ambre menu as its home region. | this spec section 2 | not built | unbuilt -- lands with the `The Ambre and avatar menus` Story (`ambre-roadmap.md` MVP). The board's File menu holds the save to a file, and no other application has a file menu | unimplemented |
-| `CHROME-155` | `OBS` | The first entry of the Ambre menu MUST be the way home. | this spec section 2; `CHROME-204` | not built | unbuilt -- lands with the `The Ambre and avatar menus` Story (`ambre-roadmap.md` MVP). The way home is a link of the header | unimplemented |
+| `CHROME-155` | `OBS` | The first entry of the Ambre menu MUST be the way home. | this spec section 2; `CHROME-204` | `ambre_app::shell::app_root::tests::the_header_links_home_and_names_the_open_document` -- wasm tier, the menu the mark opens lists the way home first, then the palette and the about dialog | none | verified |
 | `CHROME-156` | `INV` | A command that acts on the account of the user MUST have the avatar menu as its home region. | this spec section 2 | not built | unbuilt -- lands with the `The Ambre and avatar menus` Story (`ambre-roadmap.md` MVP) | unimplemented |
 | `CHROME-157` | `OBS` | The command palette MUST show the home region of each command it lists. | this spec section 2; `CHROME-008` | `ambre_chrome::chrome_ui::palette_row_shows_home_region_and_chord` -- wasm tier, each row of the palette shows the name of its command's home | none | verified |
 | `CHROME-158` | `OBS` | The command palette MUST show the chord of each command that has one. | this spec section 2; `CHROME-008` | `ambre_chrome::chrome_ui::palette_row_shows_home_region_and_chord` -- wasm tier, a row shows a chord chip exactly when its command has a chord, and the chip names the key | none | verified |
@@ -45,7 +45,7 @@ other six documents of the DOM side.
 | `CHROME-167` | `OBS` | On a phone, the context panel MUST open as a sheet on the bottom edge, whatever its side. | this spec section 2, the placement table; `CHROME-032` | `ambre_app::shell::narrow::a_phone_panel_is_a_sheet_on_the_bottom_edge_whatever_its_side` -- wasm tier, frames of 360 and 599 px under the shell stylesheet: on either side the panel spans the width and meets the bottom edge | none | verified |
 | `CHROME-212` | `OBS` | On a phone, the context panel MUST take the place of the keyboard while it is open. | this spec section 2, the placement table; `CHROME-167` | not built | unheld -- the panel opens over the content, and nothing closes the system keyboard while it shows; no wasm page raises a keyboard to measure, so the rule waits for the browser tier on a phone profile; lands with the `The context panel, bar and menu` Story (`ambre-roadmap.md` MVP) | unimplemented |
 | `CHROME-168` | `OBS` | On a phone, the context bar MUST NOT cover the menu the system raises over a selection. | this spec section 2, the placement table | not built | unheld -- a phone shows the Prose format bar and the board's bar where a desktop does, over the selection, and no page measures the menu the system raises; lands with the `The context panel, bar and menu` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `CHROME-169` | `OBS` | On a phone, the Ambre menu MUST offer the command palette. | this spec section 2, the placement table; `CHROME-008` | not built | unbuilt -- lands with the `The Ambre and avatar menus` Story (`ambre-roadmap.md` MVP) | unimplemented |
+| `CHROME-169` | `OBS` | On a phone, the Ambre menu MUST offer the command palette. | this spec section 2, the placement table; `CHROME-008` | `ambre_app::shell::app_root::tests::a_phone_folds_the_search_field_and_offers_the_palette_in_the_menu` -- wasm tier, frames of 400, 599, 600 and 1280 px under the shell stylesheet each show the entry; `ambre_app::shell::app_root::tests::the_header_links_home_and_names_the_open_document` -- the entry runs the palette command | none | verified |
 | `CHROME-170` | `INV` | In Toile, the tool palette and the selection bar MUST each publish the part of the board they cover. | this spec section 2; `ambre-spec-zoom.md section 3` (`ZOOM-011`) | `ambre_toile::tests::chrome_ui::the_palette_publishes_the_edge_it_covers_and_clears_it_when_it_hides` -- wasm tier, the palette measures itself under the shell stylesheet and clears when it hides; `ambre_toile::tests::chrome_ui::the_selection_bar_publishes_its_reach_and_clears_it_when_it_leaves` -- the bar publishes its height and its lift, and clears when it leaves | none | verified |
 | `CHROME-178` | `INV` | Cut, copy and paste MUST have the context menu as their home region. | this spec section 2; `ambre-spec-clipboard.md` | Toile `ambre_toile::ui::panel::tests::the_clipboard_homes_in_the_menu`; Prose `ambre_prose::view::panel::tests::the_clipboard_homes_in_the_menu_and_the_panel_holds_every_formatting_command`; Trame `ambre_trame::ui::panel::tests::the_clipboard_homes_in_the_menu_and_the_panel_holds_every_formatting_command`; type-level -- `Command::home` holds one region | none | verified |
 | `CHROME-182` | `INV` | Besides its clipboard entries, the context menu MUST hold only commands whose home is the context panel. | this spec section 2 | Toile `ambre_toile::ui::panel::menu_tests::the_board_menu_opens_on_the_clipboard_then_reaches_the_panel`; Prose `ambre_prose::view::panel::tests::the_page_menu_opens_on_the_clipboard_then_reaches_the_panel`; Trame `ambre_trame::ui::panel::tests::the_sheet_menu_opens_on_the_clipboard_then_reaches_the_panel` | none | verified |
@@ -83,6 +83,14 @@ other six documents of the DOM side.
 | `CHROME-232` | `OBS` | In Prose, a margin field of the context panel MUST show a decimal only when the margin has one. | this spec section 2, one visual system | `ambre_chrome::kit::tests::a_length_shows_a_decimal_only_when_it_has_one`; Prose `ambre_prose::tests::chrome_panel::with_no_selection_the_panel_shows_the_page_the_layout_holds` -- wasm tier, a margin of 31 mm reads "31" | none | verified |
 | `CHROME-233` | `OBS` | In Prose and Trame, an orientation control MUST draw portrait and landscape as two glyphs of distinct shapes. | this spec section 2, one visual system | Prose `ambre_prose::tests::chrome_panel::with_no_selection_the_panel_shows_the_page_the_layout_holds` -- wasm tier, the two glyphs differ; Trame `ambre_trame::tests::chrome_ui::the_sheet_panel_names_the_selection_and_folds_its_print_group` -- wasm tier, the same in the print section | none | verified |
 | `CHROME-234` | `OBS` | In Prose, a control of the format bar that names a glyph MUST show it as the icon button of the toolkit, its name in the tooltip. | this spec section 2, one visual system; `CHROME-220` | `ambre_chrome::context_panel_ui::a_format_bar_control_shows_its_glyph_as_an_icon_button` -- wasm tier; Prose `ambre_prose::tests::chrome_panel::the_format_bar_announces_the_registry_labels` -- each entry of the format bar keeps its name | none | verified |
+| `CHROME-238` | `OBS` | Outside a development build, the status bar MUST NOT show the frame rate. | this spec section 2, the region table | `ambre_chrome::status::tests::only_a_development_build_shows_the_diagnostics`; `ambre_chrome::chrome_ui::a_release_shows_no_perf_chip` -- wasm tier, the perf chip of a release renders no element | none | verified |
+| `CHROME-239` | `OBS` | The search field of the header MUST open the command palette, through the palette command of the application. | this spec section 2, the header; `CHROME-008` | `ambre_chrome::chrome_ui::the_search_field_runs_the_palette_command` -- wasm tier, a press runs the palette command through the one command path, and the field carries its reach and its chord | none | verified |
+| `CHROME-240` | `OBS` | On a phone, the search field of the header MUST show its icon without its label. | this spec section 2, the placement table; `ambre-spec-adaptive-layout.md` | `ambre_app::shell::app_root::tests::a_phone_folds_the_search_field_and_offers_the_palette_in_the_menu` -- wasm tier, frames of 400 and 599 px under the shell stylesheet hide the label, and frames of 600 and 1280 px show it | none | verified |
+| `CHROME-241` | `OBS` | Under its title, the context panel MUST show a short count read from the view state of the document. | this spec section 2, one frame | `ambre_chrome::context_panel_ui::the_subtitle_counts_the_selection_under_the_title` -- wasm tier, the line follows its signal and an empty one shows nothing; Prose `ambre_prose::view::panel::tests::the_subtitle_counts_the_selected_words`; `ambre_prose::input_tests::the_selected_words_are_counted_across_blocks`; Trame `ambre_trame::tests::chrome_ui::the_sheet_panel_names_the_selection_and_folds_its_print_group` -- wasm tier, the cells of the selection; `ambre_trame::ui::view::view_tests::the_panel_header_names_the_selection`; Toile `ambre_toile::tests::chrome_ui::the_board_panel_shows_the_board_then_what_applies_to_the_selection` -- wasm tier, nothing selected, then the elements; `ambre_toile::ui::panel::tests::the_subtitle_counts_the_selection` | none | verified |
+| `CHROME-242` | `OBS` | The control that moves the context panel to the other side MUST sit in the header of the panel. | this spec section 2, one frame; `CHROME-193` | `ambre_chrome::context_panel_ui::the_panel_header_moves_the_panel_to_the_other_side` -- wasm tier, the control of the header flips the side the shell keeps, and back | none | verified |
+| `CHROME-243` | `OBS` | The end of the header MUST hold nothing but the avatars of the collaborators, the share button and the avatar menu. | this spec section 2, the header | `ambre_app::shell::app_root::tests::the_header_ends_on_share_and_the_avatar_menu` -- wasm tier, the end of the header holds the share button then the avatar menu, and the header holds no icon button of its own | none | verified |
+| `CHROME-244` | `OBS` | The share button MUST be the primary button of the header, with an icon and a label, and open the share dialog. | this spec section 2, the header | `ambre_app::shell::app_root::tests::the_header_ends_on_share_and_the_avatar_menu` -- wasm tier, a press opens the share dialog, and a page with no document shows no share button | none | verified |
+| `CHROME-245` | `OBS` | The sync state MUST sit right after the name of the document in the header. | this spec section 2, the header; `CHROME-203` | `ambre_app::shell::app_root::tests::the_header_ends_on_share_and_the_avatar_menu` -- wasm tier, the header reads the Ambre menu, the name, the sync state, the search field, then its end | none | verified |
 | `CHROME-185` | `OBS` | A control of the shell that shows an icon and no text MUST show a tooltip with the name of its command, and the chord when the command has one. | this spec section 2; `ambre-spec-chrome.md section 2`, the shortcut chip | not built | unbuilt -- lands with the `Command tooltips` Story (`ambre-roadmap.md` MVP). Icon buttons carry a native title, without the chord | unimplemented |
 | `CHROME-186` | `INV` | A tooltip MUST take its name, its chord and its description from the description of the command. | this spec section 2; `UI-THREAD-019` | not built | unbuilt -- lands with the `Command tooltips` Story (`ambre-roadmap.md` MVP). The description of a command carries no sentence that describes it | unimplemented |
 | `CHROME-187` | `OBS` | A tooltip MUST show when its control takes the keyboard focus, as it does under the pointer. | this spec section 2; `CHROME-165` | not built | unbuilt -- lands with the `Command tooltips` Story (`ambre-roadmap.md` MVP) | unimplemented |
@@ -136,7 +144,7 @@ The user opens a list of the panel and picks a choice, with the pointer or the k
   chrome operation. A cover a surface publishes is read by a fit, which is a zoom cost.
 * **Boundary.** none: a region holds commands, and a command reaches the Logic thread as every
   command does. Nothing here opens a socket or holds a key.
-* **Verification.** 61 `verified`, 2 `failing`, 19 `unimplemented`, and the type holds the home of
+* **Verification.** 71 `verified`, 2 `failing`, 17 `unimplemented`, and the type holds the home of
   each command. Host tests run each table through the one sink of every region, on a real Logic
   state. Wasm tests hold the palette and the sheet tabs. A hover-only control of Prose and a paste
   over a text selection fail. The rest waits on the regions, which no application lays out.
@@ -154,18 +162,31 @@ context bar and the command palette reach commands whose home is elsewhere.
 
 | Region | Answers | Home of commands | Writes to the document | Examples |
 |---|---|---|---|---|
-| status bar | how I see the document | yes | never (`CHROME-149`) | the zoom, the counters, the sheet tabs of Trame |
+| status bar | how I see the document | yes | never (`CHROME-149`) | the zoom, the counters, the sheet tabs of Trame; the frame rate in a development build alone (`CHROME-238`) |
 | context panel | what the document or the selection is | yes | yes | the page format and the margins of Prose, the sheet and the filter of Trame, the board of Toile; the style of a selection |
 | creation bar | what I can add | yes | yes | the tools of the board; text, a picture, a table, a chart, a comment (`CHROME-180`, `CHROME-181`) |
 | context menu | what I do with the selection under the pointer | the clipboard alone (`CHROME-178`) | yes | the clipboard first (`CHROME-179`), then commands of the panel (`CHROME-182`, `CHROME-214` to `CHROME-216`) |
-| Ambre menu | what I do with the file | yes | through the file | the way home first, then new, open, rename, export, print, the history |
+| Ambre menu | what I do with the file | yes | through the file | the way home first, then new, open, rename, export, print, the history; the palette; the about dialog |
 | avatar menu | who I am | yes | never | the account, the theme, the interface language, sign out |
 | context bar | the most frequent actions of the panel, at the pointer | no (`CHROME-150`) | yes | bold, italic, colour, a link |
-| command palette | every command, by name | no | as the command does | each command with its chord and its home region (`CHROME-008`) |
+| command palette | every command, by name | no | as the command does | each command with its chord and its home region (`CHROME-008`), opened from the search field of the header (`CHROME-239`) |
 
 **A home is not the only way in.** A chord and the command palette reach a command in any
 region. The share button of the header reaches a command whose home is the Ambre menu. A reach
 never makes a second home, so a command keeps one entry in the region map.
+
+**The header holds the brand, the document and the reaches.** The three applications share one
+header, in this order:
+
+1. the Ambre mark and its chevron, which open the Ambre menu (`CHROME-155`);
+2. the name of the document, then its sync state (`CHROME-203`, `CHROME-245`);
+3. a search field in the centre, which runs the palette command (`CHROME-239`);
+4. the avatars of the collaborators, the share button and the avatar menu (`CHROME-243`).
+
+The search field is no second search engine: it opens the one palette. Share is the primary
+button of the header, on the accent (`CHROME-244`). The header holds no setting of its own. The
+theme lives in the avatar menu, the about dialog in the Ambre menu. The side of the context panel
+is view state of the panel, so its control sits in the header of the panel (`CHROME-242`).
 
 **What is contextual repeats the panel.** The context panel is the home of every command of the
 selection. Two surfaces show part of it again, at the pointer, and are the exceptions to one place.
@@ -186,6 +207,10 @@ three applications (`CHROME-190`). A header names the selection, sections fold, 
 collapses to a rail. Each section declares an icon and a label, and the rail shows those icons
 (`CHROME-191`): a click opens the panel at that section (`CHROME-192`). An application writes the
 content of its sections and nothing else, from the widgets the chrome toolkit shares.
+
+Under the title, a short line counts the selection from the view state of the document. It reads
+"nothing selected", "4 words", "12 cells" or "3 elements" (`CHROME-241`). The frame holds the slot,
+and each application fills it.
 
 **A value is a property, not a command.** A command runs with no argument: bold, delete, bring
 to front. A colour, a font, a size, a number format or a margin carries a value. The panel edits it
@@ -224,12 +249,14 @@ property shim maps a value to its place. A generic control compiles once per val
 main wasm sits near its ceiling (`ambre-spec-budgets.md section 5`).
 
 **The user chooses the side.** The panel docks to the right by default, or to the left, and the
-choice holds in the three applications (`CHROME-193`, `CHROME-194`). Whether it is collapsed is
-remembered for each application (`CHROME-195`, `CHROME-196`): a writer folds it in Prose and keeps
-it open in Trame. A drag of its inner edge sets its width, from 240 to 480 CSS pixels, 300 by
-default (`CHROME-197`). The bounds are CSS pixels, which keep their size from a 1080p screen to a
-4K one at its scale. The panel docks beside the canvas and never over it
-(`CHROME-198`), so a fit frames inside what is left, on either side.
+choice holds in the three applications (`CHROME-193`, `CHROME-194`). The control sits in the header
+of the panel, beside the collapse (`CHROME-242`).
+
+Whether it is collapsed is remembered for each application (`CHROME-195`, `CHROME-196`): a
+writer folds it in Prose and keeps it open in Trame. A drag of its inner edge sets its width, from
+240 to 480 CSS pixels, 300 by default (`CHROME-197`). The bounds are CSS pixels, which keep their
+size from a 1080p screen to a 4K one at its scale. The panel docks beside the canvas and never over
+it (`CHROME-198`), so a fit frames inside what is left, on either side.
 
 **The panel shows the document when nothing is selected.** The page format and the margins of
 Prose, the sheet of Trame and the board of Toile are document state. They live in the panel, never
@@ -249,9 +276,9 @@ edits the content of the active cell, and holds no command.
 | context panel | a column on the side the user chose, the right by default, collapsible to a rail (`CHROME-193`) | a sheet from the bottom edge, in place of the keyboard (`CHROME-167`, `CHROME-212`) |
 | context bar | floating over the selection | a bar above the keyboard, clear of the system menu (`CHROME-168`) |
 | creation bar | floating, centred at the bottom of the content | one add button that opens the modes |
-| Ambre menu | the logo, top left of the header | the logo, which also offers the command palette (`CHROME-169`) |
+| Ambre menu | the mark and its chevron, top left of the header | the mark, whose menu also offers the command palette (`CHROME-169`) |
 | avatar menu | the avatar, top right of the header | the avatar |
-| command palette | `Ctrl+K` | an entry of the Ambre menu |
+| command palette | `Ctrl+K`, or the search field in the centre of the header (`CHROME-239`) | an entry of the Ambre menu (`CHROME-169`); the search field shows its icon alone (`CHROME-240`) |
 
 **An icon names itself.** A bar of icons alone teaches nothing, so each icon shows a tooltip. It
 holds the name of its command, its chord as the shortcut chip, and one line of description where
@@ -268,7 +295,8 @@ Each surface measures the part of the canvas it covers, and a fit reads the late
 a surface is written twice.
 
 **Code:** the board's cover is `crates/ambre-toile/src/ui/cover.rs`, and the measure the chrome
-takes is `crates/ambre-toile/src/chrome/cover.rs`. No region has code beyond it.
+takes is `crates/ambre-toile/src/chrome/cover.rs`. The pieces of the header are
+`crates/ambre-chrome/src/header.rs`, laid out by `crates/ambre-app/src/shell/app_root.rs`.
 
 ---
 
@@ -276,10 +304,11 @@ takes is `crates/ambre-toile/src/chrome/cover.rs`. No region has code beyond it.
 
 | Trigger | Behaviour |
 |---|---|
-| `Ctrl+K` | the command palette opens, each row with its chord and its home region |
+| `Ctrl+K`, or a click on the search field of the header | the command palette opens, each row with its chord and its home region |
 | `Ctrl+.` on an open context panel | the panel collapses to a rail, and keeps its state |
 | `Ctrl+.`, or a click on the rail | the panel opens again as it was |
-| a click on the Ambre logo | the Ambre menu opens, the way home first |
+| a click on the Ambre mark | the Ambre menu opens, the way home first |
+| a click on Share | the share dialog opens |
 | a click on the avatar | the avatar menu opens |
 | the pointer or the focus held on an icon | its tooltip shows the name, the chord and, if useful, a description |
 | a long press on an icon, on a phone | its tooltip shows, and the command does not run |

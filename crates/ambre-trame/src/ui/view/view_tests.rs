@@ -732,7 +732,8 @@ fn the_bar_names_the_active_cell() {
 fn the_panel_header_names_the_selection() {
     let mut rig = Rig::new();
     rig.frame();
-    assert_eq!(rig.view.selection_ref().as_str(), "A1");
+    assert_eq!(rig.view.selection_ref().reference.as_str(), "A1");
+    assert_eq!(rig.view.selection_ref().subtitle(), "1 cell");
     let (b2, d5) = (
         CellPos::new(Pos::new(1), Pos::new(1)),
         CellPos::new(Pos::new(4), Pos::new(3)),
@@ -741,7 +742,8 @@ fn the_panel_header_names_the_selection() {
     range.extend_to(d5);
     rig.view.state.selection = range;
     rig.frame();
-    assert_eq!(rig.view.selection_ref().as_str(), "B2:D5");
+    assert_eq!(rig.view.selection_ref().reference.as_str(), "B2:D5");
+    assert_eq!(rig.view.selection_ref().subtitle(), "12 cells");
 }
 
 /// `TRAME-UI-155` and `TRAME-UI-092`: the focus alone opens nothing. A text

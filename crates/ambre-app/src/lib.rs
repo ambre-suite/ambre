@@ -267,7 +267,7 @@ struct Wiring {
     formula_ref: RwSignal<String>,
     /// The reference of the selection the context panel names (for example
     /// "B2:D5").
-    selection_ref: RwSignal<ambre_core::Validated<ambre_trame::ui::panel::RangeLabel>>,
+    selection_ref: RwSignal<ambre_trame::ui::panel::PanelSelection>,
     /// The page setup and the frozen pane of the active Trame sheet, which
     /// the context panel shows.
     sheet_setup: RwSignal<Option<ambre_trame::ui::panel::ActiveSheet>>,
@@ -507,10 +507,7 @@ pub fn main() {
     // thread, that was most of a keystroke's pass
     // (`ambre-spec-budgets.md` section 1). Timing marks are a debug aid, so a
     // release build does not stamp them.
-    #[cfg(debug_assertions)]
-    let build = console_trace::Build::Debug;
-    #[cfg(not(debug_assertions))]
-    let build = console_trace::Build::Release;
+    let build = console_trace::Build::CURRENT;
     let _ = tracing::subscriber::set_global_default(console_trace::ConsoleTrace::new(build));
     std::panic::set_hook(Box::new(|info| {
         console_error_panic_hook::hook(info);
@@ -638,7 +635,7 @@ pub fn main() {
     // Formula bar signals (HTML input -> TrameView sync). RwSignal is Copy, so
     // we create them once and pass clones to both TrameView and the Leptos shell.
     let formula_ref = RwSignal::new(String::new());
-    let selection_ref = RwSignal::new(ambre_core::Validated::new(""));
+    let selection_ref = RwSignal::new(ambre_trame::ui::panel::PanelSelection::default());
     let sheet_setup = RwSignal::new(None);
     let formula_text = RwSignal::new(String::new());
     let formula_action = RwSignal::new(None::<FormulaAction>);
@@ -1547,7 +1544,9 @@ pub fn main() {
                     clock: Box::new(host::PageClock),
                     signals: ambre_trame::ui::TrameSignals {
                         formula_ref: ch_formula_ref,
-                        selection_ref: RwSignal::new(ambre_core::Validated::new("")),
+                        selection_ref: RwSignal::new(
+                            ambre_trame::ui::panel::PanelSelection::default(),
+                        ),
                         sheet_setup: RwSignal::new(None),
                         formula_text: ch_formula_text,
                         formula_action: ch_formula_action,

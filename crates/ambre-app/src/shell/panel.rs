@@ -55,33 +55,6 @@ pub(crate) fn panel_prefs(kind: DocType) -> PanelPrefs {
     prefs
 }
 
-/// The control that moves the panel to the other side
-/// (`ambre-spec-shell.md` section 2). It sits beside the theme switch, the
-/// one place of the header that holds a setting of the person.
-#[component]
-pub(crate) fn DockSideSwitch(side: RwSignal<DockSide>) -> impl IntoView {
-    let label = move || match side.get() {
-        DockSide::Right => "Dock the panel to the left",
-        DockSide::Left => "Dock the panel to the right",
-    };
-    view! {
-        <button
-            class="icon ambre-dock-side"
-            title=label
-            aria-label=label
-            on:click=move |_| side.update(|s| *s = s.flipped())
-        >
-            {move || {
-                let icon = match side.get() {
-                    DockSide::Right => icondata::LuPanelRight,
-                    DockSide::Left => icondata::LuPanelLeft,
-                };
-                view! { <leptos_icons::Icon icon=icon /> }
-            }}
-        </button>
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
