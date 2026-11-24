@@ -19,7 +19,6 @@ pub(crate) mod tests {
         let (ox, oy) = page.canvas_origin().await;
         let centre = ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
         let edge = top_edge(a, b);
-        let blank = edge_colors(page, edge).await;
         page.focus_canvas().await;
         page.browser.perform(json!([key("r")])).await;
         // An armed creation tool shows the crosshair (`toile-tools`).
@@ -36,7 +35,7 @@ pub(crate) mod tests {
         let deadline = std::time::Instant::now() + STEP;
         loop {
             let seen = edge_colors(page, edge).await;
-            if !same_colors(&seen, &blank) {
+            if shows_stroke(&seen) {
                 break;
             }
             assert!(
@@ -67,12 +66,25 @@ pub(crate) mod tests {
         seen
     }
 
-    /// Whether two strips show the same colours, within a rounding of 8.
-    pub(crate) fn same_colors(a: &[[u8; 3]], b: &[[u8; 3]]) -> bool {
-        a.iter()
-            .zip(b)
-            .all(|(p, q)| p.iter().zip(q).all(|(x, y)| x.abs_diff(*y) <= 8))
+    /// Whether a strip shows the dark grey stroke of a shape (`#333333`),
+    /// even spread over two pixels. A grid line (about `#d2d5da`) is too
+    /// light, and the outline of a selection (about `#b06f0a`) is not grey.
+    /// A strip read before the draw is no reference: the grid moves once the
+    /// board holds an element.
+    pub(crate) fn shows_stroke(strip: &[[u8; 3]]) -> bool {
+        strip.iter().any(|p| {
+            let (lo, hi) = (p.iter().min(), p.iter().max());
+            lo.zip(hi)
+                .is_some_and(|(lo, hi)| *hi < STROKE_CUT && hi - lo < GREY_SPREAD)
+        })
     }
+
+    /// The channel value under which a pixel belongs to a stroke: `#333333`
+    /// on white, at half coverage, reads about 153.
+    const STROKE_CUT: u8 = 170;
+
+    /// The widest gap between the channels of a grey pixel.
+    const GREY_SPREAD: u8 = 32;
 
     /// Clicks the canvas at `at`, in canvas pixels.
     async fn click(page: &Page, at: (f64, f64)) {
@@ -458,7 +470,6 @@ pub(crate) mod tests {
         let page = Page::new_document("toile").await;
         let (a, b) = ((300.0, 200.0), (420.0, 300.0));
         let edge = top_edge(a, b);
-        let blank = edge_colors(&page, edge).await;
         draw_rect(&page, a, b).await;
 
         page.browser
@@ -502,7 +513,7 @@ pub(crate) mod tests {
         let deadline = std::time::Instant::now() + STEP;
         loop {
             let seen = edge_colors(&page, edge).await;
-            if same_colors(&seen, &blank) {
+            if !shows_stroke(&seen) {
                 break;
             }
             assert!(
