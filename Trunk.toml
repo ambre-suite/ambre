@@ -49,7 +49,8 @@ ws = true
 
 # The call socket, `/api/calls/{call}/socket`, needs a WebSocket proxy of its
 # own for the same reason. A Trunk WebSocket proxy refuses a plain request, so
-# the roster, `GET /api/calls/{call}/roster`, fails behind `trunk serve`.
+# no plain route may live under `/api/calls/`: the roster is
+# `GET /api/call-rosters/{call}`, which the `/api/` proxy below carries.
 [[proxy]]
 rewrite = "/api/calls/"
 backend = "ws://127.0.0.1:3000/api/calls/"

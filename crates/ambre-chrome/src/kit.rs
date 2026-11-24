@@ -260,8 +260,8 @@ pub enum Step {
     Up,
 }
 
-/// The unit of a [`LengthField`], as data: what it shows after the number,
-/// how far one stepper moves, its floor and the scale it shows at. One copy
+/// The unit of a [`LengthField`], as data. It names the suffix, the step of
+/// one stepper, the floor and the scale the field shows at. One copy
 /// of the field serves every unit, so each length type adds no code but its
 /// adapter.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -473,6 +473,7 @@ fn choice_views<T>(choices: &[Choice<T>]) -> Vec<crate::ChoiceView> {
             icon: c.icon,
             reach: None,
             face: None,
+            hint: None,
         })
         .collect()
 }

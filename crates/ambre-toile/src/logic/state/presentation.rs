@@ -1010,7 +1010,7 @@ mod pdf_tests {
         }
     }
 
-    /// Covers `TOILE-IO-047`: a page draws no grid line, where the same
+    /// Covers `TOILE-IO-047`: a page draws no grid dot, where the same
     /// viewport walked for editing does.
     #[test]
     fn a_page_carries_no_grid() {
@@ -1039,9 +1039,12 @@ mod pdf_tests {
             None,
             crate::message::PresentMode::Editing,
         );
-        let lines = |s: &RecordingSurface| s.count(|op| matches!(op, DrawOp::StrokeLine { .. }));
-        assert!(lines(&board).get() > 0, "the editing walk draws the grid");
-        assert_eq!(lines(&page).get(), 0, "the page drew a grid line");
+        let dot = ambre_canvas::Theme::Light.palette().grid_dot;
+        let dots = |s: &RecordingSurface| {
+            s.count(|op| matches!(op, DrawOp::FillRect { color, .. } if *color == dot))
+        };
+        assert!(dots(&board).get() > 0, "the editing walk draws the grid");
+        assert_eq!(dots(&page).get(), 0, "the page drew a grid dot");
     }
 
     // -- PNG export (`toile-import-export`) ----------------------------------

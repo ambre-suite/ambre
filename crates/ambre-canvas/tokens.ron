@@ -89,36 +89,47 @@ Tokens(
     ),
 
     // -- Canvas (wgpu content) colours -> Rust Palette -----------------------
+    // The warm palette of the chrome: a grid and its headers read the same
+    // surfaces, lines and dimmed text as the DOM beside them.
     canvas: (
         light: (
             content_bg:      "#ffffff",
-            content_pending: "#ebedf0",
-            header_bg:       "#f2f3f5",
-            header_active:   "#f5e7c8",
-            header_hover:    "#e6e8ec",
-            grid_line:       "#d2d5da",
-            header_border:   "#b8bcc4",
+            content_pending: "#f6f4f0",
+            header_bg:       "#efece6",
+            header_active:   "#f6e3d1",
+            header_hover:    "#e7e3dc",
+            grid_line:       "#e3ddd3",
+            header_border:   "#cfc7ba",
             selection:       "#b06f0a",
             cell_text:       "#202020",
-            header_text:     "#5f6368",
+            // A shade darker than the chrome's dimmed text, so a header label
+            // passes AA on the hovered and the active header too.
+            header_text:     "#6a6257",
             caret:           "#141414",
             cell_error:      "#cc4444",
             cell_border:     "#606060",
+            // The chrome's sunken surface, around a page and under a board.
+            ground:          "#efece6",
+            grid_dot:        "#cfc7ba",
+            shadow:          "#1f1b16",
         ),
         dark: (
-            content_bg:      "#1c1c1f",
-            content_pending: "#262629",
-            header_bg:       "#2c2c30",
-            header_active:   "#3d3420",
-            header_hover:    "#35353b",
-            grid_line:       "#37373c",
-            header_border:   "#44444a",
+            content_bg:      "#1d1a16",
+            content_pending: "#13110e",
+            header_bg:       "#171511",
+            header_active:   "#3a2614",
+            header_hover:    "#2a2620",
+            grid_line:       "#312c25",
+            header_border:   "#453e35",
             selection:       "#f2a93d",
             cell_text:       "#e8e8e8",
-            header_text:     "#9aa0a6",
+            header_text:     "#a59a89",
             caret:           "#f0f0f0",
             cell_error:      "#e05a5a",
             cell_border:     "#8c8c94",
+            ground:          "#171511",
+            grid_dot:        "#453e35",
+            shadow:          "#000000",
         ),
     ),
 

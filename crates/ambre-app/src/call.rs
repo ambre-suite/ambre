@@ -51,9 +51,9 @@ use ambre_bus::{CallSignal, LogicEvent, PageDescription, SyncCommand};
 use ambre_core::id::{Call, Channel, Id};
 use ambre_core::index::Pos;
 use ambre_core::{
-    AudioSlots, BitsPerSecond, Bounded, CallWorkerNote, Count, FixedBytes, MediaSlot, Opaque,
-    ParticipantVolume, Payload, SCREEN_SLOT, SlotSender, Track, TransformSide, Validated,
-    VideoSlots,
+    AudioSlots, BitsPerSecond, Bounded, CallWorkerNote, Count, FixedBytes, Instant, MediaSlot,
+    Opaque, PageLoad, ParticipantVolume, Payload, SCREEN_SLOT, SlotSender, Track, TransformSide,
+    Validated, VideoSlots,
 };
 use ambre_murmure::ui::call_controls::{
     CallPhase, Camera, CameraPress, CameraRefusal, Microphone, MicrophoneRefusal, Share,
@@ -155,6 +155,14 @@ thread_local! {
     static CAMERA: ArcRwSignal<Camera> = ArcRwSignal::new(Camera::Off);
     /// The share of a screen of the call of the page, which the share button reads.
     static SHARE: ArcRwSignal<Share> = ArcRwSignal::new(Share::Off);
+    /// The channel of the call of the page, and the instant the member entered it. The bubble
+    /// names the one and counts from the other (the Murmure calls spec, section 3).
+    static WHERE: ArcRwSignal<Option<(Id<Channel>, Instant<PageLoad>)>> = ArcRwSignal::new(None);
+}
+
+/// The channel of the call of the page, and the instant the member entered it.
+pub(crate) fn where_from() -> ArcRwSignal<Option<(Id<Channel>, Instant<PageLoad>)>> {
+    WHERE.with(ArcRwSignal::clone)
 }
 
 /// The share of a screen of the call of the page, for the header (the Murmure calls spec,
@@ -636,6 +644,7 @@ fn open(call: Id<Call>, channel: Id<Channel>, opening: Opening, camera: WithCame
         return;
     }
     crate::call_ring::clear_notice();
+    WHERE.with(|w| w.set(Some((channel, crate::host::now()))));
     let chosen = call_devices::choice(DeviceKind::Microphone).get_untracked();
     wasm_bindgen_futures::spawn_local(async move {
         match microphone(&chosen).await {
