@@ -36,7 +36,7 @@
 | `schema-version` | What a document looks like once it reaches the disk, and how a later binary knows it can still read it. | implemented | 20 |  |
 | `sealed-envelope` | Nothing a user writes leaves the browser readable. | implemented | 31 |  |
 | `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | implemented | 85 |  |
-| `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 48 |  |
+| `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 54 |  |
 | `text-input` | A text area that shows nothing, sits under the caret, and is the real keyboard focus of the canvas. | implemented | 15 |  |
 | `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 25 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | implemented | 11 |  |
@@ -66,4 +66,4 @@
 | `macros` | A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. | design-only | 54 |  |
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 
-**50 features: 25 implemented, 22 partial, 3 design-only. 1880 contract rows, 15 loose.**
+**50 features: 25 implemented, 22 partial, 3 design-only. 1886 contract rows, 15 loose.**

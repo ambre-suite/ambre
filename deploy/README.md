@@ -70,10 +70,29 @@ flowchart LR
 
 ## Sign-in
 
-The relay signs a user in through an identity provider, and Google is the one it knows today. Set
-`OIDC_GOOGLE_CLIENT_ID` and `OIDC_GOOGLE_CLIENT_SECRET` in `.env`, with
-`https://<domain>/signin/google` as the redirect address of the client. Without them, no user can
-sign in.
+The relay signs a user in through an identity provider: Google, or the OpenID Connect issuer of the
+organization. Without one, no user can sign in.
+
+| Provider | Variables in `.env` | Redirect address of the client |
+| :--- | :--- | :--- |
+| Google | `OIDC_GOOGLE_CLIENT_ID`, `OIDC_GOOGLE_CLIENT_SECRET` | `https://<domain>/signin/google` |
+| an OpenID Connect issuer | `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | `https://<domain>/signin/oidc` |
+
+`OIDC_ISSUER` is the exact `issuer` that the discovery document of the provider names, over
+`https`. A Keycloak realm reads `https://id.example.org/realms/<realm>`, and an Authentik
+application reads `https://id.example.org/application/o/<slug>/`. In the provider, register a
+confidential client with the authorization code flow and the redirect address above, and grant it
+the scopes `openid`, `email` and `profile`. The client must sign its identity tokens under an
+asymmetric algorithm, such as RS256. The provider must verify the address of each user: the relay
+refuses an address the provider has not verified.
+
+The client build names the same issuer, offers it in place of Google, and follows a sign-in to its
+host alone. So run `docker compose up -d --build` after a change of `OIDC_ISSUER`.
+
+The stack runs no identity provider of its own. A provider served under the origin of the suite
+would read what the client keeps on the device, and a second origin needs its own name and
+certificate. An organization that leaves a provider outside the European Union already runs its
+directory: name it here.
 
 ## Web embeds
 

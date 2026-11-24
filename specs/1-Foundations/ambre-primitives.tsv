@@ -81,6 +81,7 @@ ambre-app | src/route.rs | crate::route | type_slug() | ret | &'static str	gener
 ambre-app | src/shell/app_root.rs | crate::shell::app_root | follow_shell_nav(navigate) | param | &impl Fn(&str,leptos_router::NavigateOptions)	trait	leptos navigate signature
 ambre-app | src/shell/commands.rs | crate::shell::commands | CommandPath::key() | ret | bool	generic	predicate result
 ambre-app | src/shell/mod.rs | crate::shell | ShellWiring.presenter_notes | field | RwSignal<String>	free-text	presenter notes text
+ambre-app | src/signin.rs | crate::signin | BUILD_ISSUER | const | Option<&str>	foreign-api	the issuer address the client build names at compile time, which one foreign call, web_sys::Url::new, alone reads; the parsed Url is the type every other site holds
 ambre-app | src/signin.rs | crate::signin | RETURN_PREFIX | const | &str	generic	the path prefix of a provider return address, which is_return_path and parse_return match back: part of the codec of that address
 ambre-app | src/signin.rs | crate::signin | follow_address() | ret | bool	generic	predicate result
 ambre-app | src/signin.rs | crate::signin | is_followable() | ret | bool	generic	predicate result
@@ -1084,7 +1085,7 @@ ambre-core | src/object_key.rs | crate::object_key | ObjectKey::into_inner() | r
 ambre-core | src/object_key.rs | crate::object_key | ObjectKey::new(value) | param | String	newtype-inner	the constructor of the ObjectKey newtype
 ambre-core | src/payload.rs | crate::payload | LoroPayload::as_bytes() | ret | &[u8]	generic	Loro import bytes: a delta or a snapshot alike, for the engine that imports either
 ambre-core | src/payload.rs | crate::payload | LoroPayloadRef<'a>::as_bytes() | ret | &'a[u8]	generic	Loro import bytes: a delta or a snapshot alike, for the engine that imports either
-ambre-core | src/provider.rs | crate::provider | OidcProvider::authorization_host() | ret | &'static str	generic	the host of a provider's authorization endpoint, which the sign-in compares the host of a relay's address against; a host name has no type in the workspace, and web_sys hands the compared host as text
+ambre-core | src/provider.rs | crate::provider | OidcProvider::authorization_host() | ret | Option<&'static str>	generic	the host of a provider's authorization endpoint, which the sign-in compares the host of a relay's address against, or none for the provider whose host the client build names; a host name has no type in the workspace, and web_sys hands the compared host as text
 ambre-core | src/provider.rs | crate::provider | OidcProvider::as_str() | ret | &'static str	newtype-inner	closed-set enum word codec
 ambre-core | src/provider.rs | crate::provider | OidcProvider::parse(word) | param | &str	newtype-inner	closed-set enum word codec
 ambre-core | src/residency.rs | crate::residency | Residency<K>::holds() | ret | bool	generic	residency fact flag or its setter; named field, no mode switch

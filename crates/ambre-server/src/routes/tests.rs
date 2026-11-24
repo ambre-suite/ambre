@@ -370,14 +370,37 @@ mod handler_tests {
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn a_provider_return_signs_the_person_in(pool: sqlx::PgPool) {
+        a_return_signs_the_person_in(pool, ambre_core::OidcProvider::Google).await;
+    }
+
+    // `SRV-339`: the same, through the issuer the configuration names, under
+    // the `oidc` paths of the shipped router.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_return_from_the_issuer_the_configuration_names_signs_the_person_in(
+        pool: sqlx::PgPool,
+    ) {
+        a_return_signs_the_person_in(pool, ambre_core::OidcProvider::Oidc).await;
+    }
+
+    /// A return from `provider` through the shipped router, the provider a
+    /// stub. The session it opens answers `/auth/me` as the person, and the
+    /// same return is not taken twice.
+    async fn a_return_signs_the_person_in(pool: sqlx::PgPool, provider: ambre_core::OidcProvider) {
         use crate::oidc::stub::{CLIENT_ID, EMAIL, NAME, StubProvider};
         let stub = StubProvider::spawn().await;
-        let clients = crate::oidc::start_oidc_clients(Some(&crate::oidc::OidcRegistration {
-            issuer: openidconnect::IssuerUrl::new(stub.issuer.clone()).unwrap(),
-            client_id: openidconnect::ClientId::new(CLIENT_ID.to_owned()),
-            client_secret: ambre_core::Confidential::<crate::oidc::OidcSecret>::new("s".to_owned()),
-            redirect_uri: openidconnect::RedirectUrl::new("https://app/cb".to_owned()).unwrap(),
-        }))
+        let clients = crate::oidc::start_oidc_clients(
+            &[crate::oidc::OidcRegistration {
+                provider,
+                issuer: openidconnect::IssuerUrl::new(stub.issuer.clone()).unwrap(),
+                client_id: openidconnect::ClientId::new(CLIENT_ID.to_owned()),
+                client_secret: ambre_core::Confidential::<crate::oidc::OidcSecret>::new(
+                    "s".to_owned(),
+                ),
+                redirect_uri: openidconnect::RedirectUrl::new("https://app/cb".to_owned()).unwrap(),
+            }],
+            crate::oidc::ProviderTransport::LoopbackHttp,
+        )
         .await
         .unwrap();
         let app = shipped_router(test_app_state_with(pool, clients).await);
@@ -399,7 +422,7 @@ mod handler_tests {
         };
 
         let (status, login) = send(
-            Request::get("/api/auth/google/login")
+            Request::get(format!("/api/auth/{provider}/login"))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -408,7 +431,7 @@ mod handler_tests {
         let code = stub.authorize(login["url"].as_str().unwrap());
         let callback = serde_json::json!({ "code": code, "state": login["state"] }).to_string();
         let post = || {
-            Request::post("/api/auth/google/callback")
+            Request::post(format!("/api/auth/{provider}/callback"))
                 .header("content-type", "application/json")
                 .body(Body::from(callback.clone()))
                 .unwrap()
@@ -2209,6 +2232,7 @@ mod handler_tests {
         let signed_in = crate::db::sign_in_from_oidc(
             &state.db,
             ambre_core::OidcProvider::Google,
+            &crate::oidc::provider_issuer(ambre_core::OidcProvider::Google, None).unwrap(),
             &openidconnect::SubjectIdentifier::new("sub-victim".to_owned()),
             &ambre_core::Email::from(squatter_email),
             &ambre_core::Validated::<ambre_core::DisplayName>::parse("Victim").unwrap(),
@@ -2248,6 +2272,7 @@ mod handler_tests {
         let again = crate::db::sign_in_from_oidc(
             &state.db,
             ambre_core::OidcProvider::Google,
+            &crate::oidc::provider_issuer(ambre_core::OidcProvider::Google, None).unwrap(),
             &openidconnect::SubjectIdentifier::new("sub-victim".to_owned()),
             &ambre_core::Email::from(squatter_email),
             &ambre_core::Validated::<ambre_core::DisplayName>::parse("Victim").unwrap(),
@@ -2284,6 +2309,7 @@ mod handler_tests {
         crate::db::sign_in_from_oidc(
             &state.db,
             ambre_core::OidcProvider::Google,
+            &crate::oidc::provider_issuer(ambre_core::OidcProvider::Google, None).unwrap(),
             &openidconnect::SubjectIdentifier::new("sub-victim".to_owned()),
             &ambre_core::Email::from(squatter_email),
             &ambre_core::Validated::<ambre_core::DisplayName>::parse("Victim").unwrap(),

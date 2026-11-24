@@ -66,5 +66,10 @@ METRICS_TOKEN=$(hex 32)
 # The provider sign-in (\`SRV-074\`). Empty turns it off.
 OIDC_GOOGLE_CLIENT_ID=
 OIDC_GOOGLE_CLIENT_SECRET=
+# The OpenID Connect issuer of the organization, in place of Google
+# (\`SRV-339\`): its https address, and the client it issued the suite.
+OIDC_ISSUER=
+OIDC_CLIENT_ID=
+OIDC_CLIENT_SECRET=
 EOF
 echo "wrote $env_file"
