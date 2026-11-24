@@ -589,6 +589,9 @@ row reads `V1`.
 | `[ ]` A picture handle shows its cursor | V1 | a pointer over a picture handle keeps the text cursor, so nothing shows that a drag resizes. Done when the hover of each handle asks the host for its directional cursor, and a row reads `verified` |
 | `[ ]` The string arena of Loro keeps no doubled chunks | V1 | the string arena of the oplog holds 8.4 MB in 9 chunks for 3.7 MB of text on 2026-11-17: each chunk doubles the one before, and a slice keeps its chunk. Done when `PROSE-IO-119` reads the arena at most 1.2 times the text it holds |
 | `[ ]` A paste stays where it was aimed under remote edits | V1 | a paste at a caret passes through the catch-up with the position it came with, and an HTML paste lands later through the converter. A remote edit in between moves the text under it, so the paste lands at a stale position. Done when both pastes are caught up like a paste over a selection, and a row binding it reads `verified` |
+| `[ ]` An undo reaches a deletion that follows a mark in one commit | V1 | the walk that names the characters a deletion takes out does not follow mark anchors, so a commit that writes a mark before a deletion in the same text records no identity for it. Its undo then falls back to the neighbour (`UNDO-025`). Done when such a commit records the identities of its deletion, and a row binding it reads `verified` |
+| `[ ]` The identity table of undo stays bounded | V1 | each restore of a character adds a row to the identity table of undo (`UNDO-024`), and each undo clones the renames of containers. Both grow with the history. Done when a measure on a long session sets a budget row, and the tables hold it |
+| `[ ]` Undo converges between two peers | V1 | no property runs undo on two peers that edit the same text and checks that they converge (`ambre-spec-undo.md` section 6). Done when such a property runs in the belt, and a row binding it reads `verified` |
 
 ### Murmure
 

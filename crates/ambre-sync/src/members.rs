@@ -928,7 +928,7 @@ mod tests {
     /// holds a link before a history boundary too. The row keeps the
     /// nearest [`crate::chain::KEPT_LINKS_LIMIT`] links of the walk back
     /// from its key, and drops the rest. The next session accepts the row
-    /// under the checks of `SYNC-308`. It reaches the key that many
+    /// under the checks of the reload. It reaches the key that many
     /// rotations back, and no older one.
     #[test]
     fn the_row_of_a_kept_log_keeps_the_nearest_links_its_key_walks() {
