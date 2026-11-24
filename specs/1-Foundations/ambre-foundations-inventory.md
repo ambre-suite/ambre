@@ -20,7 +20,7 @@
 | `call-proofs` | The harnesses that measure a call on hardware no CI job runs. | implemented | 20 |  |
 | `commands` | Everything the user can ask for has one name. | implemented | 13 |  |
 | `delta-order` | A change made on one screen appears on another with the changes it was built on, or it waits. | implemented | 23 |  |
-| `design-tokens` | The interface is drawn twice, once by the browser and once by the graphics card. | implemented | 9 |  |
+| `design-tokens` | The interface is drawn twice, once by the browser and once by the graphics card. | implemented | 10 |  |
 | `docfile` | The file a user saves a document into, and opens back. | implemented | 22 |  |
 | `fixtures` | Ambre documents in known states, built from a seed instead of by hand. | implemented | 37 |  |
 | `high-density` | A screen with two or more physical pixels per CSS pixel. | implemented | 10 |  |
@@ -66,4 +66,4 @@
 | `machine-access` | A program reads or writes a sheet, a board, a text or a conversation only as a sealed client. | design-only | 34 |  |
 | `macros` | A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. | design-only | 54 |  |
 
-**50 features: 23 implemented, 25 partial, 2 design-only. 1892 contract rows, 16 loose.**
+**50 features: 23 implemented, 25 partial, 2 design-only. 1893 contract rows, 16 loose.**

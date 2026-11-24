@@ -223,7 +223,7 @@ pub fn api_router(
             "/calls/{call}/socket",
             axum::routing::get(crate::ws::call_upgrade),
         )
-        .route("/calls/{call}/roster", axum::routing::get(call_roster))
+        .route("/call-rosters/{call}", axum::routing::get(call_roster))
         .layer({
             let state = state.clone();
             axum::middleware::from_fn(

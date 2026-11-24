@@ -294,15 +294,17 @@ pub enum CallControls {
     None,
     /// The call button, which starts a call in this channel (`MURMURE-599`).
     Start(Id<Channel>),
-    /// Mute, in this state, and hang up (`MURMURE-603`).
+    /// Mute, in this state, and hang up, in the channel of the call (`MURMURE-603`).
     During(Microphone),
 }
 
 impl CallControls {
-    /// What the header offers in `phase`, on a pane that shows `shown`. A page in a call offers
-    /// mute and hang up whatever channel it shows, since the call goes on in any pane.
-    pub fn of(phase: CallPhase, shown: Option<Id<Channel>>) -> Self {
+    /// What the header offers in `phase`, on a pane that shows `shown`, for a call that lives in
+    /// `call`. A page in a call offers mute and hang up in the channel of the call alone. Any
+    /// other pane offers none, and the call bubble holds them there (`MURMURE-728`).
+    pub fn of(phase: CallPhase, shown: Option<Id<Channel>>, call: Option<Id<Channel>>) -> Self {
         match (phase, shown) {
+            (CallPhase::InCall(_), _) if call.is_some_and(|c| shown != Some(c)) => Self::None,
             (CallPhase::InCall(microphone), _) => Self::During(microphone),
             (CallPhase::Asking, _) | (CallPhase::Idle | CallPhase::Refused(_), None) => Self::None,
             (CallPhase::Idle | CallPhase::Refused(_), Some(channel)) => Self::Start(channel),
@@ -314,27 +316,55 @@ impl CallControls {
 mod tests {
     use super::*;
 
-    /// `MURMURE-599`, `MURMURE-603`: a shown channel offers the call button, and a call offers
-    /// mute and hang up in its place, whatever the pane shows.
+    /// `MURMURE-599`, `MURMURE-603`: a shown channel offers the call button. In the channel of
+    /// a call, mute and hang up take its place.
     #[test]
     fn a_channel_offers_the_call_button_and_a_call_offers_mute_and_hang_up_in_its_place() {
         let channel = Id::<Channel>::mint();
         assert_eq!(
-            CallControls::of(CallPhase::Idle, Some(channel)),
+            CallControls::of(CallPhase::Idle, Some(channel), None),
             CallControls::Start(channel)
         );
-        assert_eq!(CallControls::of(CallPhase::Idle, None), CallControls::None);
+        assert_eq!(
+            CallControls::of(CallPhase::Idle, None, None),
+            CallControls::None
+        );
         for shown in [Some(channel), None] {
             for microphone in [Microphone::Live, Microphone::Muted] {
                 assert_eq!(
-                    CallControls::of(CallPhase::InCall(microphone), shown),
+                    CallControls::of(CallPhase::InCall(microphone), shown, shown),
                     CallControls::During(microphone)
                 );
             }
             // A gesture that waits for the microphone offers no second one.
             assert_eq!(
-                CallControls::of(CallPhase::Asking, shown),
+                CallControls::of(CallPhase::Asking, shown, None),
                 CallControls::None
+            );
+        }
+    }
+
+    /// `MURMURE-728`: while the page is in a call, the header of another channel, and a pane that
+    /// shows no channel, offer no call control. The call bubble holds them there.
+    #[test]
+    fn the_header_away_from_the_call_offers_no_call_control() {
+        let (call, other) = (Id::<Channel>::mint(), Id::<Channel>::mint());
+        for microphone in [Microphone::Live, Microphone::Muted] {
+            let phase = CallPhase::InCall(microphone);
+            for shown in [Some(other), None] {
+                assert_eq!(
+                    CallControls::of(phase, shown, Some(call)),
+                    CallControls::None
+                );
+                assert_eq!(
+                    crate::ui::call_float::Float::of(phase, Some(call), shown),
+                    crate::ui::call_float::Float::Shown,
+                    "the bubble holds them"
+                );
+            }
+            assert_eq!(
+                CallControls::of(phase, Some(call), Some(call)),
+                CallControls::During(microphone)
             );
         }
     }
@@ -408,7 +438,7 @@ mod tests {
             assert_eq!(phase.refusal(), Some(refusal));
             assert!(phase.accepts_a_gesture());
             assert_eq!(
-                CallControls::of(phase, Some(channel)),
+                CallControls::of(phase, Some(channel), None),
                 CallControls::Start(channel)
             );
             assert!(refusal.notice().contains("did not start"), "{refusal:?}");

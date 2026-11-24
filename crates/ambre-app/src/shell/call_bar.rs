@@ -7,7 +7,8 @@
 // header offers (`ambre_murmure::ui::call_controls`), and holds its header.
 // ============================================================================
 
-use ambre_core::Bounded;
+use ambre_chrome::{Availability, ControlSize, IconButton, IconLook};
+use ambre_core::{Bounded, Validated};
 use ambre_murmure::MurmurePane;
 use ambre_murmure::chrome::MurmureRelay;
 use ambre_murmure::ui::call_controls::{CallControls, CallPhase, Camera, Microphone, Share};
@@ -22,7 +23,8 @@ use leptos_icons::Icon;
 
 use crate::{call_devices, call_volumes};
 
-/// The call controls of the header: the call button, or mute and hang up during a call. Each
+/// The call controls of the header: the call button, or mute and hang up in the channel of a
+/// call. Another channel offers none during a call, and the call bubble holds them. Each
 /// is a button with an icon and an accessible name, and mute carries its pressed state. A
 /// refused microphone shows why the call did not start, as an alert. The alert stays until the
 /// next call gesture (the Murmure calls spec, section 3, the call controls).
@@ -35,7 +37,12 @@ pub(super) fn CallBar(
     /// The members of the spaces, which name each participant of the volumes.
     relay: MurmureRelay,
 ) -> impl IntoView {
-    let controls = move || CallControls::of(phase.get(), pane.get().shown_channel());
+    let from = crate::call::where_from();
+    let controls = Signal::derive(move || {
+        let call = from.get().map(|(channel, _)| channel);
+        CallControls::of(phase.get(), pane.get().shown_channel(), call)
+    });
+    let controls = move || controls.get();
     let offers_devices = move || !matches!(controls(), CallControls::None);
     let open = RwSignal::new(ambre_chrome::Openness::Closed);
     let fallback: Signal<Option<ambre_murmure::ui::call_devices::Fallback>> =
@@ -48,20 +55,19 @@ pub(super) fn CallBar(
             {move || match controls() {
                 CallControls::None => ().into_any(),
                 CallControls::Start(channel) => view! {
-                    <button
-                        class="icon murmure-call-start"
-                        title="Call"
-                        aria-label="Start a call"
-                        on:click=move |_| {
+                    <IconButton
+                        icon=icondata::MdiPhone
+                        label="Start a call"
+                        look=IconLook::Ghost
+                        class="murmure-call-start"
+                        on_press=Callback::new(move |()| {
                             // A call of a direct message rings the other member, and the
                             // header waits for the answer (the Murmure calls spec, the ring).
                             if let Some(call) = crate::call::start(channel) {
                                 crate::call_ring::started(&relay, call, channel);
                             }
-                        }
-                    >
-                        <Icon icon=icondata::MdiPhone />
-                    </button>
+                        })
+                    />
                 }
                 .into_any(),
                 CallControls::During(microphone) => view! {
@@ -70,33 +76,19 @@ pub(super) fn CallBar(
                     <FillButton />
                     <CameraButton />
                     <ShareButton />
-                    <button
-                        class="icon murmure-call-mute"
-                        title="Mute"
-                        aria-label="Mute"
-                        aria-pressed=ambre_chrome::Pressed::from_bool(microphone == Microphone::Muted).aria()
-                        on:click=move |_| crate::call::toggle_mute()
-                    >
-                        <Icon icon=icondata::MdiMicrophoneOff />
-                    </button>
-                    <button
-                        class="icon murmure-call-hang-up"
-                        title="Hang up"
-                        aria-label="Hang up"
-                        on:click=move |_| crate::call::leave_call()
-                    >
-                        <Icon icon=icondata::MdiPhoneHangup />
-                    </button>
+                    <MuteButton microphone=Signal::stored(microphone) />
+                    <HangUpButton />
                 }
                 .into_any(),
             }}
             {move || offers_devices().then(|| view! {
-                <button
-                    class="icon murmure-call-devices"
-                    title="Call devices"
-                    aria-label="Call devices"
-                    aria-expanded=move || open.get().aria()
-                    on:click=move |_| {
+                <IconButton
+                    icon=icondata::MdiTuneVariant
+                    label="Call devices"
+                    look=IconLook::Ghost
+                    class="murmure-call-devices"
+                    expanded=Some(Signal::from(open))
+                    on_press=Callback::new(move |()| {
                         let next = open.get_untracked().toggled();
                         if next == ambre_chrome::Openness::Open {
                             leptos::task::spawn_local(async {
@@ -104,10 +96,8 @@ pub(super) fn CallBar(
                             });
                         }
                         open.set(next);
-                    }
-                >
-                    <Icon icon=icondata::MdiTuneVariant />
-                </button>
+                    })
+                />
             })}
             {move || (offers_devices() && open.get() == ambre_chrome::Openness::Open)
                 .then(|| view! { <DevicePanel phase=phase relay=relay /> })}
@@ -138,6 +128,42 @@ pub(super) fn CallBar(
     }
 }
 
+/// The mute button of a call, in the header and in the call float (the Murmure calls spec,
+/// section 3, the call controls). It carries its pressed state.
+#[component]
+fn MuteButton(
+    /// The state of the microphone in the call.
+    microphone: Signal<Microphone>,
+) -> impl IntoView {
+    view! {
+        <IconButton
+            icon=icondata::MdiMicrophoneOff
+            label="Mute"
+            look=IconLook::Ghost
+            class="murmure-call-mute"
+            pressed=Some(Signal::derive(move || {
+                ambre_chrome::Pressed::from_bool(microphone.get() == Microphone::Muted)
+            }))
+            on_press=Callback::new(move |()| crate::call::toggle_mute())
+        />
+    }
+}
+
+/// The hang up button of a call, in the header and in the call float (the Murmure calls spec,
+/// section 3, the call controls). The stylesheet gives it the colour of an error.
+#[component]
+fn HangUpButton() -> impl IntoView {
+    view! {
+        <IconButton
+            icon=icondata::MdiPhoneHangup
+            label="Hang up"
+            look=IconLook::Ghost
+            class="murmure-call-hang-up"
+            on_press=Callback::new(move |()| crate::call::leave_call())
+        />
+    }
+}
+
 /// The list of the participants of a call (the Murmure calls spec, section 3, the video region).
 /// A button with an accessible name opens it and reports whether it is open. So each participant
 /// the page of the grid shows no tile for reaches the page (`CHROME-029`). Each one carries a
@@ -151,8 +177,10 @@ fn RosterButton(
     let participants = call_volumes::participants();
     let pinned = crate::call_stage::pinned();
     let (expanded, toggled, shown) = (roster.clone(), roster.clone(), roster);
-    let names = move || {
-        participants
+    let expanded = Signal::derive(move || expanded.get());
+    let names =
+        move || {
+            participants
             .get()
             .into_iter()
             .map(|member| {
@@ -161,46 +189,45 @@ fn RosterButton(
                     .map_or_else(|| "A participant".to_owned(), |n| n.as_str().to_owned());
                 let (labelled, pressed, icon) = (pinned.clone(), pinned.clone(), pinned.clone());
                 let pin_name = name.clone();
-                let label = move || {
+                let label = Signal::derive(move || {
                     let verb = if labelled.get() == Some(member) { "Unpin" } else { "Pin" };
                     format!("{verb} {pin_name}")
-                };
+                });
+                let icon = Signal::derive(move || {
+                    if icon.get() == Some(member) { icondata::MdiPinOff } else { icondata::MdiPin }
+                });
+                let pressed = Signal::derive(move || {
+                    ambre_chrome::Pressed::from_bool(pressed.get() == Some(member))
+                });
                 view! {
                     <li>
-                        {name}
-                        <button
-                            class="icon murmure-call-pin"
-                            title=label.clone()
-                            aria-label=label
-                            aria-pressed=move || {
-                                ambre_chrome::Pressed::from_bool(pressed.get() == Some(member)).aria()
-                            }
-                            on:click=move |_| crate::call_stage::toggle_pin(member)
-                        >
-                            {move || if icon.get() == Some(member) {
-                                view! { <Icon icon=icondata::MdiPinOff /> }.into_any()
-                            } else {
-                                view! { <Icon icon=icondata::MdiPin /> }.into_any()
-                            }}
-                        </button>
+                        <span class="murmure-call-roster-name">{name}</span>
+                        <IconButton
+                            icon=icon
+                            label=label
+                            size=ControlSize::Small
+                            look=IconLook::Ghost
+                            class="murmure-call-pin"
+                            pressed=Some(pressed)
+                            on_press=Callback::new(move |()| crate::call_stage::toggle_pin(member))
+                        />
                     </li>
                 }
             })
             .collect_view()
-    };
+        };
     view! {
-        <button
-            class="icon murmure-call-roster"
-            title="Participants"
-            aria-label="Participants"
-            aria-expanded=move || expanded.get().aria()
-            on:click=move |_| toggled.set(toggled.get_untracked().toggled())
-        >
-            <Icon icon=icondata::MdiAccountMultiple />
-        </button>
+        <IconButton
+            icon=icondata::MdiAccountMultiple
+            label="Participants"
+            look=IconLook::Ghost
+            class="murmure-call-roster"
+            expanded=Some(expanded)
+            on_press=Callback::new(move |()| toggled.set(toggled.get_untracked().toggled()))
+        />
         {move || (shown.get() == ambre_chrome::Openness::Open).then(|| view! {
             <ul class="murmure-call-roster-list" aria-label="Participants of the call">
-                <li>"You"</li>
+                <li><span class="murmure-call-roster-name">"You"</span></li>
                 {names.clone()}
             </ul>
         })}
@@ -215,22 +242,27 @@ fn PageButtons() -> impl IntoView {
     let participants = call_volumes::participants();
     let paging = Memo::new(move |_| crate::call_stage::paging(&participants.get()));
     let button = move |way: Turn, class: &'static str| {
+        let icon = match way {
+            Turn::Previous => icondata::MdiChevronLeft,
+            Turn::Next => icondata::MdiChevronRight,
+        };
+        let availability = Signal::derive(move || {
+            let paging = paging.get();
+            if paging.turned(way) == paging.page {
+                Availability::Disabled
+            } else {
+                Availability::Enabled
+            }
+        });
         view! {
-            <button
-                class=format!("icon {class}")
-                title=way.label()
-                aria-label=way.label()
-                prop:disabled=move || {
-                    let paging = paging.get();
-                    paging.turned(way) == paging.page
-                }
-                on:click=move |_| crate::call_stage::turn(way)
-            >
-                {match way {
-                    Turn::Previous => view! { <Icon icon=icondata::MdiChevronLeft /> }.into_any(),
-                    Turn::Next => view! { <Icon icon=icondata::MdiChevronRight /> }.into_any(),
-                }}
-            </button>
+            <IconButton
+                icon=icon
+                label=way.label()
+                look=IconLook::Ghost
+                class=class
+                availability=availability
+                on_press=Callback::new(move |()| crate::call_stage::turn(way))
+            />
         }
     };
     move || {
@@ -256,24 +288,21 @@ fn PageButtons() -> impl IntoView {
 #[component]
 fn FillButton() -> impl IntoView {
     let fill = crate::call_stage::fill();
-    let (titled, named, pressed, icon) = (fill.clone(), fill.clone(), fill.clone(), fill);
+    let (named, pressed, icon) = (fill.clone(), fill.clone(), fill);
     let widened = move |fill: ambre_murmure::ui::call_videos::Fill| {
         fill == ambre_murmure::ui::call_videos::Fill::Region
     };
     view! {
-        <button
-            class="icon murmure-call-fill"
-            title=move || titled.get().label()
-            aria-label=move || named.get().label()
-            aria-pressed=move || ambre_chrome::Pressed::from_bool(widened(pressed.get())).aria()
-            on:click=move |_| crate::call_stage::toggle_fill()
-        >
-            {move || if widened(icon.get()) {
-                view! { <Icon icon=icondata::MdiFullscreenExit /> }.into_any()
-            } else {
-                view! { <Icon icon=icondata::MdiFullscreen /> }.into_any()
-            }}
-        </button>
+        <IconButton
+            icon=Signal::derive(move || {
+                if widened(icon.get()) { icondata::MdiFullscreenExit } else { icondata::MdiFullscreen }
+            })
+            label=Signal::derive(move || named.get().label().to_owned())
+            look=IconLook::Ghost
+            class="murmure-call-fill"
+            pressed=Some(Signal::derive(move || ambre_chrome::Pressed::from_bool(widened(pressed.get()))))
+            on_press=Callback::new(move |()| crate::call_stage::toggle_fill())
+        />
     }
 }
 
@@ -284,23 +313,22 @@ fn FillButton() -> impl IntoView {
 #[component]
 fn CameraButton() -> impl IntoView {
     let camera = crate::call::camera();
-    let (titled, named) = (camera.clone(), camera.clone());
+    let named = camera.clone();
     let (pressed, waits, icon) = (camera.clone(), camera.clone(), camera);
     view! {
-        <button
-            class="icon murmure-call-camera"
-            title=move || titled.get().label()
-            aria-label=move || named.get().label()
-            aria-pressed=move || ambre_chrome::Pressed::from_bool(pressed.get().sends()).aria()
-            prop:disabled=move || waits.get() == Camera::Asking
-            on:click=move |_| crate::call::toggle_camera()
-        >
-            {move || if icon.get().sends() {
-                view! { <Icon icon=icondata::MdiVideoOff /> }.into_any()
-            } else {
-                view! { <Icon icon=icondata::MdiVideo /> }.into_any()
-            }}
-        </button>
+        <IconButton
+            icon=Signal::derive(move || {
+                if icon.get().sends() { icondata::MdiVideoOff } else { icondata::MdiVideo }
+            })
+            label=Signal::derive(move || named.get().label().to_owned())
+            look=IconLook::Ghost
+            class="murmure-call-camera"
+            pressed=Some(Signal::derive(move || ambre_chrome::Pressed::from_bool(pressed.get().sends())))
+            availability=Signal::derive(move || {
+                if waits.get() == Camera::Asking { Availability::Disabled } else { Availability::Enabled }
+            })
+            on_press=Callback::new(move |()| crate::call::toggle_camera())
+        />
     }
 }
 
@@ -586,23 +614,22 @@ fn DeviceSelect(
 #[component]
 fn ShareButton() -> impl IntoView {
     let share = crate::call::share();
-    let (titled, named) = (share.clone(), share.clone());
+    let named = share.clone();
     let (pressed, waits, icon) = (share.clone(), share.clone(), share);
     view! {
-        <button
-            class="icon murmure-call-share"
-            title=move || titled.get().label()
-            aria-label=move || named.get().label()
-            aria-pressed=move || ambre_chrome::Pressed::from_bool(pressed.get().sends()).aria()
-            prop:disabled=move || waits.get() == Share::Asking
-            on:click=move |_| crate::call::toggle_share()
-        >
-            {move || if icon.get().sends() {
-                view! { <Icon icon=icondata::MdiMonitorOff /> }.into_any()
-            } else {
-                view! { <Icon icon=icondata::MdiMonitorShare /> }.into_any()
-            }}
-        </button>
+        <IconButton
+            icon=Signal::derive(move || {
+                if icon.get().sends() { icondata::MdiMonitorOff } else { icondata::MdiMonitorShare }
+            })
+            label=Signal::derive(move || named.get().label().to_owned())
+            look=IconLook::Ghost
+            class="murmure-call-share"
+            pressed=Some(Signal::derive(move || ambre_chrome::Pressed::from_bool(pressed.get().sends())))
+            availability=Signal::derive(move || {
+                if waits.get() == Share::Asking { Availability::Disabled } else { Availability::Enabled }
+            })
+            on_press=Callback::new(move |()| crate::call::toggle_share())
+        />
     }
 }
 
@@ -642,5 +669,170 @@ pub(super) fn RingAlert() -> impl IntoView {
             }
             Ring::Quiet | Ring::Outgoing(_) => ().into_any(),
         }}
+    }
+}
+
+/// The call away from its channel (the Murmure calls spec, section 3, away from the channel of
+/// the call). While Murmure shows another channel, a thread or the list, the page shows a bubble.
+/// Under the phone width the stylesheet turns it into a pill. Each
+/// names the channel of the call and the time in it, with the faces of the participants.
+///
+/// The bubble offers mute, the camera, the share, the way back and hang up, and the pill keeps
+/// mute and hang up. A drag of the bubble moves it, and its release rests it in the nearest
+/// corner. Nothing here writes into a channel or changes the choice of videos.
+#[component]
+pub(super) fn CallFloat(
+    /// The pane the user is in, which names the shown channel.
+    pane: RwSignal<MurmurePane>,
+    /// The phase of the call of the page.
+    phase: Signal<CallPhase>,
+    /// The sidebar names the channel, and the spaces name each participant.
+    relay: MurmureRelay,
+) -> impl IntoView {
+    use ambre_murmure::ui::call_float::{Corner, Float, clock};
+    let from = crate::call::where_from();
+    let from_shown = from.clone();
+    let shown = Signal::derive(move || {
+        let call = from_shown.get().map(|(channel, _)| channel);
+        Float::of(phase.get(), call, pane.get().shown_channel()) == Float::Shown
+    });
+    let corner = RwSignal::new(Corner::default());
+    // The pointer offset of a drag in progress, and the place of the bubble during it.
+    let dragged = RwSignal::new(None::<(f64, f64)>);
+    let tick = RwSignal::new(crate::host::now());
+    // The clock ticks while the float is mounted, and stops with it.
+    if let Ok(handle) = set_interval_with_handle(
+        move || tick.set(crate::host::now()),
+        std::time::Duration::from_secs(1),
+    ) {
+        on_cleanup(move || handle.clear());
+    }
+    let from_clock = from.clone();
+    let elapsed = Signal::derive(move || {
+        from_clock
+            .get()
+            .map_or_else(String::new, |(_, at)| clock(tick.get() - at))
+    });
+    let from_name = from.clone();
+    let channel_name = Signal::derive(move || {
+        from_name
+            .get()
+            .and_then(|(channel, _)| relay.sidebar.with(|s| s.name_of(channel)))
+            .map_or_else(|| "Call".to_owned(), Validated::into_string)
+    });
+    let participants = crate::call_volumes::participants();
+    let faces = Signal::derive(move || {
+        participants
+            .get()
+            .into_iter()
+            .take(4)
+            .map(|member| {
+                let name = relay.member_name(member);
+                ambre_murmure::ui::call_videos::initials(name.as_ref())
+            })
+            .collect::<Vec<String>>()
+    });
+    let back = Callback::new(move |()| {
+        if let Some((channel, _)) = from.get_untracked() {
+            pane.set(MurmurePane::channel(channel));
+        }
+    });
+    let release = move |ev: web_sys::PointerEvent| {
+        if dragged.get_untracked().is_none() {
+            return;
+        }
+        dragged.set(None);
+        let Some(window) = web_sys::window() else {
+            return;
+        };
+        let size = |v: Result<wasm_bindgen::JsValue, wasm_bindgen::JsValue>| {
+            v.ok().and_then(|v| v.as_f64()).unwrap_or_default()
+        };
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "a coordinate of the window fits an f32"
+        )]
+        let area = ambre_core::Size::new(
+            ambre_core::Px::<ambre_core::View>::new(size(window.inner_width()) as f32),
+            ambre_core::Px::<ambre_core::View>::new(size(window.inner_height()) as f32),
+        );
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "a coordinate of the window fits an f32"
+        )]
+        let at = (
+            ambre_core::Px::<ambre_core::View>::new(f64::from(ev.client_x()) as f32),
+            ambre_core::Px::<ambre_core::View>::new(f64::from(ev.client_y()) as f32),
+        );
+        corner.set(Corner::nearest(at, area));
+    };
+    let microphone = Signal::derive(move || match phase.get() {
+        CallPhase::InCall(microphone) => microphone,
+        _ => Microphone::Live,
+    });
+    view! {
+        <Show when=move || shown.get()>
+            <div
+                class="murmure-call-float"
+                role="region"
+                aria-label="Call in progress"
+                data-corner=move || corner.get().word()
+                data-dragging=move || dragged.get().is_some().then_some("true")
+                style:left=move || dragged.get().map(|(x, _)| format!("{x}px"))
+                style:top=move || dragged.get().map(|(_, y)| format!("{y}px"))
+                style:right=move || dragged.get().map(|_| "auto")
+                style:bottom=move || dragged.get().map(|_| "auto")
+                on:pointermove=move |ev: web_sys::PointerEvent| {
+                    if dragged.get_untracked().is_some() {
+                        let (x, y) = (f64::from(ev.client_x()), f64::from(ev.client_y()));
+                        dragged.set(Some((x - 120.0, y - 18.0)));
+                    }
+                }
+                on:pointerup=release
+            >
+                <button
+                    r#type="button"
+                    class="murmure-float-grip"
+                    aria-label=move || format!("Back to the call of {}", channel_name.get())
+                    on:click=move |_| back.run(())
+                    on:pointerdown=move |ev: web_sys::PointerEvent| {
+                        if ev.pointer_type() == "mouse" {
+                            let (x, y) = (f64::from(ev.client_x()), f64::from(ev.client_y()));
+                            dragged.set(Some((x - 120.0, y - 18.0)));
+                        }
+                    }
+                >
+                    <Icon icon=icondata::MdiPhone />
+                    <span class="murmure-float-channel">{channel_name}</span>
+                    <span class="murmure-float-clock">{elapsed}</span>
+                    <span class="murmure-float-faces">
+                        {move || {
+                            faces
+                                .get()
+                                .into_iter()
+                                .map(|initials| view! {
+                                    <span class="murmure-float-face" aria-hidden="true">{initials}</span>
+                                })
+                                .collect_view()
+                        }}
+                    </span>
+                </button>
+                <div class="murmure-float-controls">
+                    <MuteButton microphone=microphone />
+                    <span class="murmure-float-wide">
+                        <CameraButton />
+                        <ShareButton />
+                        <IconButton
+                            icon=icondata::MdiArrowULeftTop
+                            label="Back to the channel of the call"
+                            look=IconLook::Ghost
+                            class="murmure-float-back"
+                            on_press=back
+                        />
+                    </span>
+                    <HangUpButton />
+                </div>
+            </div>
+        </Show>
     }
 }

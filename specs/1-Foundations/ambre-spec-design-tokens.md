@@ -26,6 +26,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `UI-THREA
 | `UI-THREAD-031` | `INV` | A stylesheet MUST NOT read a token the source does not emit and the sheet does not declare. | this spec section 2 | `ambre_canvas::theme::stylesheet_tests::the_stylesheet_reads_only_declared_tokens` -- every name the shell sheet reads is checked against the names the token source emits and the sheet declares | none | verified |
 | `UI-THREAD-068` | `INV` | Every control of the chrome MUST take its height from the control scale, and every glyph inside a control its size from the icon scale. | this spec section 2; `ambre-spec-shell.md section 2`, the visual system | `ambre_canvas::theme::stylesheet_tests::every_control_reads_the_control_scale_and_every_glyph_the_icon_scale` -- every rule of a control primitive sets its height from a control step, every glyph rule inside one reads an icon step, and the source emits both scales | none | verified |
 | `UI-THREAD-033` | `INV` | The unmarked stylesheet MUST carry the light set, so a page that never sets the theme attribute renders light rather than unstyled. | this spec section 2; section 4, row 4 | `ambre_canvas::theme::stylesheet_tests::the_unmarked_block_carries_the_light_set` -- reads the generated stylesheet | none | verified |
+| `UI-THREAD-069` | `INV` | The grounds the canvas draws MUST be the warm surfaces of the chrome, in both themes, and every text the canvas draws on one of them MUST read at the AA ratio for body text. | this spec section 2 | `ambre_canvas::theme::canvas_palette_tests::the_canvas_grounds_are_the_warm_chrome_surfaces_and_their_text_passes_aa` -- reads both generated palettes: the grid ground, the header, the hovered and active header, the ground and the grid line against their chrome surface, and four text pairs at 4.5 to 1 or more | none | verified |
 
 ### 1.2 Switch the theme
 
@@ -51,7 +52,7 @@ A page opens. It takes the theme the system asks for, before the first frame.
 * **Boundary.** none: a token is a colour and a number, generated into the binary. Nothing here
   reaches the relay, holds a key or opens a socket. The chosen theme leaves sealed, in the user
   settings (`ZK-054`).
-* **Verification.** 9 `verified`. A drift check keeps the two committed sides on one source; host
+* **Verification.** 10 `verified`. A drift check keeps the two committed sides on one source; host
   tests read the generated sheets, and a browser test drives a switch.
 
 ---
@@ -82,7 +83,7 @@ theme is a setting of the account, kept in the user settings (`ambre-spec-user-s
 | the chrome colours | background, surface, second surface, hover, border, strong border, text, dimmed text, faint text, accent, soft accent, the four status colours, and the text drawn on the accent | the browser half, as custom properties |
 | the chrome effects | three shadows, low, mid and high, and the scrim behind a modal | the browser half, as custom properties |
 | the photo colours | the text, its shadow, the lines, the control and the veil drawn over a picture | the browser half, as custom properties |
-| the content colours | content ground, pending ground, header ground, active and hovered header, grid line, header border, selection, cell text, header text, caret, error | the drawing half, as two palettes |
+| the content colours | content ground, pending ground, header ground, active and hovered header, grid line, header border, selection, cell text, header text, caret, error, the ground around a page and under a board, a dot of the board grid, the colour a page casts its shadow in | the drawing half, as two palettes |
 | the scales | a spacing ladder in steps of two pixels, five radii, nine type sizes, three control heights, three icon sizes, and the width and the gap of the focus ring | both halves |
 
 Each colour group is declared twice, light and dark, but the photo colours. Their ground is a
@@ -102,6 +103,15 @@ reads the tokens.
 **Where the two halves diverge, and why that is correct.** The chrome names a surface and the
 content a grid line. They agree on the entries both groups share by name: the accent, the text
 colour and the scales.
+
+They agree on the grounds too. A grid lies on the chrome's surface. Its
+headers, and the ground around a page or under a board, lie on the sunken surface. A grid line is
+the chrome's border (`UI-THREAD-069`). The source spells each value twice, once per group, and the
+check holds the two equal.
+
+**A page is not a ground.** The paper of a Prose page, its ink and its rules are the document's,
+not the theme's. One set serves both themes and the print. It is declared beside the painter that
+the print also runs (`features/ambre-spec-prose-page-rendering.md`, `PROSE-UI-255`).
 
 **The theme is a run-time value, not a build one.** Both palettes are in the binary. A control the
 chrome writes and the render loop reads selects one, and an attribute on the document root selects
@@ -156,8 +166,9 @@ The user touches one thing: the theme control. Everything else is what they see.
 * **The scale is what the shell used, not a designed one.** The ladder keeps every spacing the
   sheet carried, rounding an odd one to its even neighbour. Three dialog headings of three sizes
   became one heading. Nothing yet rules on how many steps a ladder may hold.
-* **Nothing rules on contrast.** The two palettes are chosen by eye. No rule states a minimum ratio
-  between a text colour and the ground it is drawn on (`ambre-spec-accessibility.md`).
+* **Contrast is ruled for the canvas text alone.** The canvas text on its grounds reads at the AA
+  ratio (`UI-THREAD-069`). The chrome palette is chosen by eye. No rule states a minimum ratio
+  between a chrome text colour and its ground (`ambre-spec-accessibility.md`).
 * **Nothing rules on a third theme, or on the system preference.** The switch has two values and
   the page never reads what the operating system asks for.
 * **The scales have no unit in the source.** They are unitless integers, read as pixels by one half and as

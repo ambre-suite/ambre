@@ -1254,8 +1254,12 @@ mod tests {
     fn a_choice_of_videos_reaches_the_sfu_alone_and_never_the_relay() {
         let alice = Person::new(1);
         let (mut state, _handed, port, _rx) = worker_heard(&alice);
-        let chosen = VideoChoice::new(vec![ambre_core::Seq::new(5)], Some(ambre_core::Seq::new(5)))
-            .expect("a choice of one");
+        let chosen = VideoChoice::new(
+            vec![ambre_core::Seq::new(5)],
+            Some(ambre_core::Seq::new(5)),
+            ambre_protocol::signaling::VIDEOS_PER_RECEIVER,
+        )
+        .expect("a choice of one");
         state.handle_command(SyncCommand::ChooseVideos(chosen.clone()));
         assert!(state.call.is_none(), "a choice with no call opens nothing");
         state.call_ports.offer(port);
@@ -1298,7 +1302,12 @@ mod tests {
     fn a_choice_before_the_offer_leaves_after_it() {
         let alice = Person::new(1);
         let (mut state, _handed, port, _rx) = worker_heard(&alice);
-        let chosen = VideoChoice::new(vec![ambre_core::Seq::new(5)], None).expect("a choice");
+        let chosen = VideoChoice::new(
+            vec![ambre_core::Seq::new(5)],
+            None,
+            ambre_protocol::signaling::VIDEOS_PER_RECEIVER,
+        )
+        .expect("a choice");
         state.call_ports.offer(port);
         state.handle_command(SyncCommand::JoinCall {
             call: TARGET.call,
@@ -1306,7 +1315,12 @@ mod tests {
         });
         state.call_channel(TARGET.call, Some(META));
         state.call_log(META, Some(log_of(&alice)));
-        let former = VideoChoice::new(vec![ambre_core::Seq::new(4)], None).expect("a choice");
+        let former = VideoChoice::new(
+            vec![ambre_core::Seq::new(4)],
+            None,
+            ambre_protocol::signaling::VIDEOS_PER_RECEIVER,
+        )
+        .expect("a choice");
         state.handle_command(SyncCommand::ChooseVideos(former));
         state.call_relay(CallServerMsg::Admitted {
             call: TARGET.call,

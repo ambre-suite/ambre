@@ -24,22 +24,19 @@ use crate::view::cache::{RunCache, RunKey};
 use crate::view::column::PageColumn;
 use crate::view::paint::Frame;
 use crate::view::walk::{
-    Highlights, PageItem, PagePaint, PagePalette, PageView, PageWalk, Placed, to_rect,
+    Highlights, PageItem, PagePaint, PagePalette, PageView, PageWalk, Placed, ThemeInks, to_rect,
 };
 
-/// The colours of a print: black text on white paper, whatever the theme
-/// the screen is drawn in. A dark theme would print white text on a page
-/// no reader prints white.
-pub(crate) const PRINT_PALETTE: PagePalette = PagePalette {
-    sheet: Color::from_rgba8(255, 255, 255, 255),
-    sheet_border: Color::from_rgba8(160, 160, 160, 255),
+/// The colours of a print: the paper's ink and rules, whatever the theme the
+/// screen is drawn in. The screen reads the same paper, so a theme switch
+/// changes neither a print nor an export (`PROSE-UI-255`).
+pub(crate) const PRINT_PALETTE: PagePalette = PagePalette::on_paper(ThemeInks {
     shadow: Color::from_rgba8(0, 0, 0, 0),
-    text: Color::from_rgba8(0, 0, 0, 255),
     accent: Color::from_rgba8(0, 90, 200, 255),
     warning: Color::from_rgba8(230, 160, 0, 255),
     success: Color::from_rgba8(0, 140, 60, 255),
     error: Color::from_rgba8(200, 30, 30, 255),
-};
+});
 
 /// A block a printed page drew text for: its id, its run, and where the
 /// run was placed on the page.

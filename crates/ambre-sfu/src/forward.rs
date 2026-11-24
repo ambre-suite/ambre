@@ -380,9 +380,11 @@ fn assign(slots: &mut [&mut Slot], wanted: &[Feed]) {
 /// most recent speakers fill the slots they leave (`CALL-041`). A sender who left is in no
 /// track, so its slot falls to a speaker (`CALL-127`). The first track gets the top layer the
 /// estimate holds. It is the large sender of the choice, or else the most recent speaker
-/// served (`CALL-128`). The tracks past the count of videos get nothing.
+/// served (`CALL-128`). The tracks past the count of videos the choice names get nothing, and
+/// that count never passes the slots of a receiver.
 fn forwarded<'a>(videos: &[&'a Track], choice: &VideoChoice) -> Vec<&'a Track> {
-    let cap = usize::try_from(VIDEOS_PER_RECEIVER.get()).unwrap_or(usize::MAX);
+    let cap =
+        usize::try_from(VIDEOS_PER_RECEIVER.get().min(choice.count().get())).unwrap_or(usize::MAX);
     let chosen = |t: &Track| choice.senders().contains(&t.sender) && !t.offered.is_empty();
     let picked = videos.iter().copied().filter(|t| chosen(t)).take(cap);
     let filled = videos.iter().copied().filter(|t| !chosen(t));

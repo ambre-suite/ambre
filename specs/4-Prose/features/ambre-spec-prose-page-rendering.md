@@ -28,7 +28,8 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-019` | `INV` | The run cache MUST be bounded: it MUST evict rather than grow with the document. | this spec section 2 | `ambre_prose::view::cache::tests::the_run_painted_least_recently_is_the_one_dropped`; `ambre_prose::view::paint::tests::the_run_cache_stays_bounded_over_a_long_scroll` | none | verified |
 | `PROSE-UI-018` | `INV` | Block drawing MUST be written once against the drawing surface: the screen and the PDF MUST NOT be two implementations. | this spec section 2; `ambre-spec-drawing-surface.md section 2` | `ambre_prose::view::paint::tests::a_long_document_builds_only_the_pages_around_the_canvas` | none | verified |
 | `PROSE-UI-017` | `INV` | Partial repaint MUST use the shared content-repaint contract; a second repaint mechanism MUST NOT exist beside it. | this spec section 2; `ambre-spec-frame.md section 2` | not built | unbuilt -- lands with the `One repaint contract` Story (`ambre-roadmap.md` E8) | unimplemented |
-| `PROSE-UI-014` | `INV` | Every colour drawn MUST come from the generated theme tokens; a literal colour MUST NOT appear in render code. | this spec section 3; `ambre-spec-design-tokens.md` | `ambre_prose::view::paint::tests::every_colour_comes_from_the_palette_or_a_peer` | none | verified |
+| `PROSE-UI-014` | `INV` | Every colour drawn MUST come from the generated theme tokens or from the paper; a literal colour MUST NOT appear in render code. | this spec section 3; `ambre-spec-design-tokens.md` | `ambre_prose::view::paint::tests::every_colour_comes_from_the_palette_or_a_peer` | none | verified |
+| `PROSE-UI-255` | `INV` | A page MUST be drawn on the same paper, with the same ink and rules, in either theme and in a print, so a theme switch MUST NOT change what a page prints or exports; the ink MUST read on that paper at the AA ratio for body text. | this spec section 3 | `ambre_prose::view::walk::tests::the_paper_is_the_same_on_screen_in_either_theme_and_in_print` -- a page built from any theme colours and the print palette share the paper, and the ink reads at 4.5 to 1 or more; type-level -- the constructor of a page palette takes the theme colours alone, so no theme value reaches the sheet, its ink or its rules | none | verified |
 | `PROSE-UI-115` | `OBS` | A visible page MUST be drawn with its sheet, the blocks the layout places on it, and the header, the footer and the footnote band the layout carries for it. | this spec section 2 | `ambre_prose::view::paint::tests::a_page_carries_its_bands_and_its_footnotes_below_a_separator` | none | verified |
 | `PROSE-UI-116` | `OBS` | A block the layout breaks across two pages MUST be drawn on both: the continuation MUST NOT be left out. | this spec section 2 | `ambre_prose::view::paint::tests::a_block_split_across_two_pages_is_drawn_on_both` | none | verified |
 | `PROSE-UI-117` | `OBS` | A selection MUST be drawn under the glyphs it covers, and an inline highlight over them. | this spec section 2 | `ambre_prose::view::paint::tests::selections_go_under_the_glyphs_and_highlights_over_them` | none | verified |
@@ -59,7 +60,7 @@ status values are normative in `ambre-spec-template.md`.
   exceeds the shared UI-thread total, and the register says so.
 * **Boundary.** none: this thread paints view state, where `UI-THREAD-004` bans a network, crypto
   or persistence path. What it draws arrives as an event and leaves as nothing.
-* **Verification.** 22 `verified`, 2 `unimplemented`. Every verified row is a host test in
+* **Verification.** 23 `verified`, 2 `unimplemented`. Every verified row is a host test in
   `crates/ambre-prose`, painting through the recording surface of `ambre-draw`. `PROSE-UI-113` is
   also compiler-held: the run type must be `Send`, `Sync` and `'static`. `PROSE-UI-006` is held in
   `crates/ambre-logic`: the Logic thread shapes, and the view draws what the bus hands it.
@@ -120,11 +121,19 @@ the drawing surface.
 /// The drawing state of the runs painted lately, bounded.
 pub struct RunCache { /* private */ }
 
-/// The colours a page is painted with, filled by the host from the theme tokens.
+/// The colours a page is painted with: the paper, and what the theme lends it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PagePalette {
     pub sheet: Color, pub sheet_border: Color, pub shadow: Color, pub text: Color,
     pub accent: Color, pub warning: Color, pub success: Color, pub error: Color,
+}
+
+/// The paper, the ink and the rules of every page, on screen and in print.
+pub const PAPER: Paper = /* cream sheet, black ink, grey rules */;
+
+impl PagePalette {
+    /// A page on the paper. The theme lends the shadow, the accent and the statuses.
+    pub const fn on_paper(inks: ThemeInks) -> Self;
 }
 
 impl ProseUiState {
@@ -141,7 +150,7 @@ impl HitTest for ProseUiState {
 
 The steps, per page built:
 
-1. paint the page shadow, the sheet and its border, at the page origin the viewport resolves;
+1. paint the soft shadow and the sheet, at the page origin the viewport resolves;
 2. walk the blocks the layout places on that page, continuations of split blocks included;
 3. for each block, clip to its fragment and take its drawing state from the cache;
 4. paint the selection rectangles under the glyphs, then the glyphs, then the inline highlights;
@@ -171,8 +180,11 @@ is on it. What is drawn, and where each colour comes from:
 
 | Drawn | Token | Opacity |
 |---|---|---|
-| the page sheet, its border and its shadow | the `surfaces` group | full |
-| body text, headers, footers, footnotes | the surface's foreground, or the block's own colour mark | full |
+| the ground around the pages | the canvas `ground`, the chrome's sunken surface | full |
+| the page sheet | the paper | full |
+| the shadow of a sheet | the canvas `shadow`, over six one-pixel rings | three hundredths a ring |
+| body text, headers, footers, footnotes | the paper's ink, or the block's own colour mark | full |
+| a table border or a footnote separator with no colour of its own | the paper's rule | full |
 | the text caret | `accent` | full |
 | the local selection | `accent` | a fifth |
 | a comment highlight | the `warning` status | two fifths |
@@ -182,8 +194,17 @@ is on it. What is drawn, and where each colour comes from:
 | a spelling error | the `error` status, as a wavy underline | full |
 
 Each of those names a generated token, read at paint time from the constants
-`ambre-spec-design-tokens.md` declares and `ambre-spec-frame.md section 2` consumes. That is
-what `PROSE-UI-014` asks for, and what a table of literal colours cannot give. The chrome surfaces
+`ambre-spec-design-tokens.md` declares and `ambre-spec-frame.md section 2` consumes, but the paper.
+That is what `PROSE-UI-014` asks for, and what a table of literal colours cannot give.
+
+**The paper is the document's, not the theme's.** The ground around the pages is chrome, and it
+follows the theme. A page is cream in either theme, its ink black and its rules grey, and the print
+reads the same three colours (`PROSE-UI-255`). A dark theme therefore shows cream paper on a dark
+ground, never a dark page.
+
+The paper lives beside the painter rather than in the token source,
+because the print runs on the Logic thread, which reaches no drawing crate. The print lays no ink
+for the paper itself: its page is the sheet. The chrome surfaces
 that sit over the canvas are DOM and are not painted here (`UI-THREAD-001`,
 `features/ambre-spec-prose-toolbar.md`, `features/ambre-spec-prose-slash-command.md`).
 
@@ -200,6 +221,8 @@ that sit over the canvas are DOM and are not painted here (`UI-THREAD-001`,
 | The run cache is bounded and evicts | caching every block, or caching only what is visible | a cache proportional to the document is a memory leak with a slow fuse -- a hundred-page document holds every block's glyphs for the session -- while a visible-only cache re-rasters on every scroll reversal. Fifty pages of runs is more than any reader has scrolled through recently |
 | Partial repaint is the shared contract, not a Prose one | a Prose-specific dirty-page mechanism | it is two places a repaint bug can live, and the shared contract already models what Prose needs. Prose simply never uses the scroll-band mode. It is also what the design started as |
 | One drawing implementation for screen and PDF | a separate PDF painter reading the same layout | two implementations disagree on the first thing that is hard -- a wavy underline, a struck-through run, a footnote separator. A page is the same picture on both, and parameterizing the drawing on the surface makes divergence a compile error rather than a rendering bug |
+| The paper is one set for both themes, shared with the print | a page that follows the theme, dark in the dark theme | the page is the document. A dark page shows a reader a document that prints otherwise, and the text colour of a dark page is a colour no print uses. The dark theme darkens the ground, which is chrome, and keeps the paper |
+| The ink is black | the warm ink of the mockup, `#29241e` | a print lays black on one plate; a near black lays four, and fringes on a misregistered press. On the cream paper black still reads warm enough, at more than nineteen to one |
 | A stale layout is dropped, not merged | applying whatever arrives last | it moves the page a reader is looking at backwards. Layouts are whole values, so a late one is not a delta to reconcile, and dropping it costs a frame at worst |
 
 ---

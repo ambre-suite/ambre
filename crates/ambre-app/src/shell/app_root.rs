@@ -4,7 +4,7 @@
 // this tree by the per-frame route poll in `main`.
 
 use super::super::*;
-use super::call_bar::{CallBar, RingAlert};
+use super::call_bar::{CallBar, CallFloat, RingAlert};
 use super::prose_status::ProseFigures;
 use super::share::{InviteLink, MurmureInviteLink, ShareInviteLink, ShareMembers};
 use super::sync_badge::SyncBadge;
@@ -15,7 +15,8 @@ use ambre_core::{Commands, StaticKey};
 use ambre_murmure::MurmurePane;
 use ambre_murmure::chrome::{
     ChannelHeader, ChannelList, ChannelMentionConfirm, DeleteConfirm, EmojiPicker, InviteControl,
-    KeyList, MarkBarPanel, MemberList, MentionPanel, MessageSearch, MurmureRelay, SpaceList,
+    KeyList, MarkBarPanel, MemberList, MentionPanel, MessageSearch, MurmureRelay, PhoneTabs,
+    SpaceList,
 };
 
 /// The table the command palette searches: the booted application's whole
@@ -74,6 +75,7 @@ pub(crate) fn MurmureShell(
                     now=Callback::new(|()| Instant::<Authored>::new(js_sys::Date::now() as u64))
                 />
                 <ChannelList relay=relay send=send />
+                <PhoneTabs relay=relay />
             </Sidebar>
             <Panel slot label=Signal::derive(move || ambre_murmure::chrome::panel_label(pane.get()).to_owned())>
                 <Show
@@ -104,6 +106,7 @@ pub(crate) fn MurmureShell(
             now=Callback::new(|()| Instant::<Authored>::new(js_sys::Date::now() as u64))
         />
         <KeyList relay=relay />
+        <CallFloat pane=pane phase=call_phase relay=relay />
         <MentionPanel relay=relay />
         <MarkBarPanel relay=relay />
     }
