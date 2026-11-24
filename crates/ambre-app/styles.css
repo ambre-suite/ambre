@@ -2113,6 +2113,19 @@ body {
     gap: var(--space-7);
 }
 
+/* The suggestion-mode chip of Prose (PROSE-UI-261): the kit command at the
+   height of the band's small controls, 24 px, so a finger still reaches it. */
+.ambre-statusbar .statusbar-mode {
+    display: flex;
+    align-items: center;
+}
+
+.ambre-statusbar .statusbar-mode .ambre-kit-command {
+    flex: none;
+    min-height: var(--control-sm);
+    padding: 0 var(--space-3);
+}
+
 /* The app-agnostic <Tabs> slot, below the canvas and above the status bar.
    No application lays it out today: Trame's sheet tabs sit in the status bar
    (CHROME-162). */

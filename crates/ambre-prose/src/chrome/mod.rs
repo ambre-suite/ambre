@@ -106,6 +106,10 @@ pub struct ProseSignals {
     /// A page format a control of the context panel asked for, until the
     /// view drains it into one command (`PROSE-UI-252`).
     pub page_write: RwSignal<Option<crate::doc::PageFormat>>,
+    /// Whether this session suggests, as the Logic thread last reported it.
+    /// The control of the panel and the status chip read it
+    /// (`PROSE-UI-261`).
+    pub mode: RwSignal<crate::events::EditMode>,
 }
 
 /// What the local history holds, as the Logic thread last reported it. A
@@ -145,6 +149,7 @@ impl ProseSignals {
             history: RwSignal::new(History::default()),
             page: RwSignal::new(None),
             page_write: RwSignal::new(None),
+            mode: RwSignal::new(crate::events::EditMode::Editing),
         }
     }
 
@@ -476,8 +481,39 @@ pub(crate) fn icon_of(command: &ambre_commands::Command) -> Option<icondata::Ico
         "format-superscript" => icondata::MdiFormatSuperscript,
         "format-subscript" => icondata::MdiFormatSubscript,
         "format-clear" => icondata::MdiFormatClear,
+        "file-document-edit-outline" => icondata::MdiFileDocumentEditOutline,
         _ => return None,
     })
+}
+
+/// The suggestion-mode chip of the status bar, shown while this session
+/// suggests (`PROSE-UI-261`). The context panel folds, and the status bar
+/// never does, so the mode stays in view. The chip is a reach of the
+/// command, never a second home: a press turns the mode off.
+#[component]
+pub fn ProseModeChip(signals: ProseSignals) -> impl IntoView {
+    let command = ambre_commands::find(crate::commands::COMMANDS, crate::commands::SUGGEST_CHANGES);
+    let on_command = Callback::new(move |id| {
+        if let Some(intent) = crate::view::annotate::review_intent(id, None) {
+            signals.intent.set(Some(intent));
+        }
+    });
+    move || {
+        let command = command?;
+        (signals.mode.get() == crate::events::EditMode::Suggesting).then(|| {
+            view! {
+                <span class="statusbar-mode" role="status">
+                    <ambre_chrome::CommandButton
+                        command=command
+                        icon=icon_of(command)
+                        on_command=on_command
+                        pressed=Signal::derive(|| Pressed::On)
+                        labelled=ambre_chrome::Labelled::Text
+                    />
+                </span>
+            }
+        })
+    }
 }
 
 /// One control, announced by its command's title.

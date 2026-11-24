@@ -446,6 +446,12 @@ impl ProseView {
         if self.annotations.page.with_untracked(|shown| *shown != page) {
             self.annotations.page.set(page);
         }
+        // The mode the Logic thread last reported, for the control of the
+        // panel and the status chip (`PROSE-UI-261`).
+        let mode = self.state.edit_mode;
+        if self.annotations.mode.get_untracked() != mode {
+            self.annotations.mode.set(mode);
+        }
         // The slash menu sits at the caret, and moves when the bar does.
         self.publish_slash();
         self.publish_ruler();
