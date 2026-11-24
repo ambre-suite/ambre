@@ -154,6 +154,7 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
         filter_active,
         find_result,
         view_cmd: trame_view_cmd,
+        cover: _,
     } = trame;
     let ambre_toile::ui::ToileSignals {
         ctx_scope: toile_ctx_scope,

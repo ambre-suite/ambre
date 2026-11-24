@@ -2344,10 +2344,7 @@ impl ToileView {
     /// no chrome, so nothing covers its canvas.
     #[cfg(target_arch = "wasm32")]
     fn fit_clearance(&self) -> kurbo::Insets {
-        let Some(canvas) = canvas_page_box() else {
-            return kurbo::Insets::ZERO;
-        };
-        let clear = self.cover.get_untracked().clearance(canvas);
+        let clear = ambre_chrome::cover::canvas_clearance(&self.cover.get_untracked());
         kurbo::Insets {
             x0: f64::from(clear.left.get()),
             y0: f64::from(clear.top.get()),
@@ -4617,15 +4614,6 @@ impl ToileView {
 fn wall_clock() -> Instant<Authored> {
     // `Date.now()` is a whole, non-negative count of milliseconds.
     Instant::<Authored>::new(js_sys::Date::now() as u64)
-}
-
-/// The box of the board's canvas on the page, `None` before it mounts.
-#[cfg(target_arch = "wasm32")]
-fn canvas_page_box() -> Option<ambre_client_core::cover::PageBox> {
-    web_sys::window()
-        .and_then(|w| w.document())
-        .and_then(|d| d.query_selector(".ambre-canvas").ok().flatten())
-        .map(|el| ambre_chrome::cover::page_box(&el.get_bounding_client_rect()))
 }
 
 /// The canvas element's top-left client offset (CSS px), so a canvas-local anchor

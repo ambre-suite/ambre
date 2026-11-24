@@ -773,6 +773,7 @@ pub fn main() {
         filter_active,
         find_result,
         view_cmd: RwSignal::new(None),
+        cover: shell_cover,
     };
     let toile_signals = ambre_toile::ui::ToileSignals {
         ctx_scope: toile_ctx_scope,
@@ -1592,6 +1593,7 @@ pub fn main() {
                         filter_active: ch_tr_filter_active,
                         find_result: ch_tr_find_result,
                         view_cmd: RwSignal::new(None),
+                        cover: RwSignal::new(ambre_client_core::cover::Cover::default()),
                     },
                 },
             )),

@@ -418,6 +418,9 @@ pub struct TrameSignals {
     pub find_result: RwSignal<Option<crate::chrome::FindPosition>>,
     /// A command the view performs itself, set by the command handler.
     pub view_cmd: RwSignal<Option<ambre_core::StaticKey<ambre_core::Commands>>>,
+    /// What the shell's floating surfaces cover, as each one measures
+    /// itself. A zoom to the selection reads it (`ZOOM-011`).
+    pub cover: RwSignal<ambre_client_core::cover::Cover>,
 }
 
 /// The wiring of a sheet view: its channels to the Logic thread, its text
@@ -532,6 +535,9 @@ pub struct TrameView {
     zoom_sig: RwSignal<ambre_core::Scale<ambre_core::Doc, ambre_core::View>>,
     #[cfg(target_arch = "wasm32")]
     view_cmd: RwSignal<Option<ambre_core::StaticKey<ambre_core::Commands>>>,
+    /// What the floating surfaces cover, as the chrome last measured it.
+    #[cfg(target_arch = "wasm32")]
+    cover: RwSignal<ambre_client_core::cover::Cover>,
     /// The active sheet, the filter flag and the find counter, published for
     /// the chrome. The view keeps each of them, so it alone writes these
     /// signals (`UI-THREAD-003`). Browser-only, like the formula signals.
