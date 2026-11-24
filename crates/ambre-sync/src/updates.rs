@@ -808,7 +808,7 @@ impl SyncState {
             MembersAnswer::Exists(resp) => match &exchange_key {
                 Some(ek) => match Self::opened_from_members(
                     &resp,
-                    log_document,
+                    (log_document, doc_id),
                     ek,
                     my_user_id,
                     &rule,
@@ -1202,7 +1202,7 @@ impl SyncState {
     /// [`OpenFailure::KeyUnsigned`], a fault of the relay.
     pub(crate) fn opened_from_members(
         resp: &http::MembersResponse,
-        document_id: Id<Document>,
+        (document_id, checked): (Id<Document>, Id<Document>),
         exchange_key: &x25519_dalek::StaticSecret,
         my_user_id: Option<Id<User>>,
         rule: &membership_log::LogRule,
@@ -1227,7 +1227,8 @@ impl SyncState {
             signing_keys,
             role,
             rotation_owed: resp.rotation_owed,
-            writers: membership_log::Writers::of(&log),
+            // The caps of a revoke bind the document they name (`SYNC-311`).
+            writers: membership_log::Writers::of_in(&log, checked),
             confirmers: membership_log::Confirmers::of(&log),
             departed: log.departed_at(),
             link_signers: log.link_signers(),
@@ -2370,7 +2371,7 @@ async fn checked_members_key_via(
     let refused = |step: &str| crate::error::SyncError::KeyOutOfReach.at(step);
     let opened = SyncState::opened_from_members(
         resp,
-        check.log_document,
+        (check.log_document, check.document_id),
         &check.exchange_key,
         check.my_user_id,
         &check.rule,
@@ -2678,7 +2679,7 @@ mod tests {
         };
         let opened = SyncState::opened_from_members(
             &resp,
-            ROWS_DOC,
+            (ROWS_DOC, ROWS_DOC),
             &my_xk,
             Some(me),
             &membership_log::LogRule::document(),
@@ -2718,7 +2719,7 @@ mod tests {
         };
         let refused = SyncState::opened_from_members(
             &resp,
-            ROWS_DOC,
+            (ROWS_DOC, ROWS_DOC),
             &my_xk,
             Some(me),
             &membership_log::LogRule::document(),
@@ -2971,7 +2972,7 @@ mod tests {
         let opens = |resp: &http::MembersResponse| {
             let opened = SyncState::opened_from_members(
                 resp,
-                document_id,
+                (document_id, document_id),
                 &bob_xk,
                 Some(bob.id),
                 &membership_log::LogRule::document(),
@@ -3118,7 +3119,7 @@ mod tests {
             };
             let opened = SyncState::opened_from_members(
                 &resp,
-                document_id,
+                (document_id, document_id),
                 bob_xk,
                 Some(bob.id),
                 &membership_log::LogRule::document(),
@@ -3247,7 +3248,7 @@ mod tests {
         let opens = |resp: &http::MembersResponse, log_document: Id<Document>| {
             let opened = SyncState::opened_from_members(
                 resp,
-                log_document,
+                (log_document, log_document),
                 &bob_xk,
                 Some(bob.id),
                 &membership_log::LogRule::document(),
@@ -3497,7 +3498,7 @@ mod tests {
                      pin: Option<&FixedBytes<ambre_core::InviterPin>>| {
             let opened = SyncState::opened_from_members(
                 resp,
-                document_id,
+                (document_id, document_id),
                 &bob_xk,
                 Some(bob.id),
                 &membership_log::LogRule::document(),

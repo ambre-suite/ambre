@@ -48,7 +48,7 @@ prefix is `AUTHOR`, and it belongs to this document alone.
 | `AUTHOR-014` | `FRAME` | Refusing a delta MUST NOT change the document, its registry or its export cursor. | this spec section 3 | `ambre_logic::authorship_tests::a_delta_carrying_an_operation_not_its_signers_is_refused_whole` -- the document's version vector is unchanged, nothing is sent, and the next edit carries this session alone | none | verified |
 | `AUTHOR-032` | `FAIL` | Given a delta of a Trame, Toile or Prose document whose PeerID carries a registry entry that the session of that PeerID wrote under another nonce, the client MUST refuse the whole delta before import. | this spec section 3, the margin of a PeerID; section 6 | `ambre_logic::authorship_tests::a_peer_id_another_session_registered_is_refused` -- a delta under Alice's PeerID with another nonce leaves the document as it was, live and in a replay; `::a_replay_keeps_a_peer_id_for_its_first_session` -- inside one replay, the first session keeps the PeerID and a free PeerID lands; `::an_entry_planted_by_another_peer_claims_nothing` -- an entry Mallory writes under Alice's PeerID does not refuse Alice | none | verified |
 | `AUTHOR-033` | `FAIL` | Given a delta of an open Murmure channel or space document whose PeerID carries a registry entry that the session of that PeerID wrote under another nonce, the client MUST refuse the whole delta before import. | this spec section 3, the margin of a PeerID; `AUTHOR-032` | `ambre_murmure::logic::authorship_tests::a_segment_delta_under_a_peer_id_another_session_registered_is_refused` -- a segment delta under Alice's PeerID with another nonce leaves every document as it was, and her own session writes on; `::a_meta_delta_under_a_peer_id_another_session_registered_is_refused` -- the name of `meta` stays hers; `ambre_logic::spaces::tests::a_space_delta_under_a_peer_id_another_session_registered_is_refused` -- the catalogue of an open space stays as it was | none | verified |
-| `AUTHOR-037` | `FAIL` | Given a delta of a channel `meta` or a space document that arrives before that document opens, under a PeerID whose registry entry another session wrote, the client MUST refuse it before import. | this spec section 6; `AUTHOR-033` | not built | unbuilt -- lands with the `A PeerID is never shared by two accounts` Story (`ambre-roadmap.md` MVP). An opening keeps these payloads as bytes, with no signer, and imports them whole once the document opens | unimplemented |
+| `AUTHOR-037` | `FAIL` | Given a delta of a channel `meta` or a space document that arrives before that document opens, under a PeerID whose registry entry another session wrote, the client MUST refuse it before import. | this spec section 3, the margin of a PeerID; `AUTHOR-033` | `ambre_murmure::logic::authorship_tests::a_meta_delta_before_the_open_under_a_peer_id_another_session_registered_is_refused` -- a `meta` delta under Alice's PeerID with another nonce, kept while the channel opens, leaves the name hers, and the same delta under her session lands; `ambre_logic::spaces::tests::a_space_delta_before_the_open_under_a_peer_id_another_session_registered_is_refused` -- such a space delta lists nothing once the space opens, and under her session it lists the channel; `ambre_logic::spaces::tests::a_replayed_space_delta_before_the_open_under_a_claimed_peer_id_is_refused` -- a replay that reaches an opening space is checked the same way | none | verified |
 
 ### 1.4 Open from a snapshot
 
@@ -100,8 +100,7 @@ derive from no key. No delta ever carries them, so every client must write them 
   comparison.
 * **Boundary.** the session nonce rides inside the sealed payload (`AUTHOR-010`), so the relay
   learns nothing beyond the `ZK-007` set. The registry is document content, sealed like the rest.
-* **Verification.** 36 `verified`, 1 `unimplemented`. Every delta is checked, and every row on it
-  holds by a test.
+* **Verification.** 37 `verified`. Every delta is checked, and every row on it holds by a test.
 
 ---
 
@@ -283,6 +282,10 @@ counts, so an entry another writer planted claims nothing. A collision search bu
 and no operation under the PeerID of another member. The relay cannot hold this check: the nonce
 and the PeerID ride sealed (`AUTHOR-010`).
 
+An open Murmure channel and an open space hold the check (`AUTHOR-033`). A `meta` or a space
+delta that arrives while its document opens keeps its signer. The open then checks each delta in
+arrival order, against the registry the payloads before it built (`AUTHOR-037`).
+
 **Code.**
 
 * `crates/ambre-crypto/src/peer.rs` -- the nonce, the derivation, the signed entry and its resolution;
@@ -293,7 +296,9 @@ and the PeerID ride sealed (`AUTHOR-010`).
 * `crates/ambre-logic/src/data.rs` -- the gate on edits, the check before import, and the unsent
   edits of earlier sessions;
 * `crates/ambre-murmure/src/logic/delta.rs` -- the check of a channel delta, the registry
-  included;
+  included, and the check of a payload kept while its document opens;
+* `crates/ambre-murmure/src/logic/opening.rs` -- the `meta` deltas an opening channel keeps;
+* `crates/ambre-murmure/src/logic/runtime/spaces.rs` -- the deltas an opening space keeps;
 * `crates/ambre-logic/src/persistence.rs` -- the sessions the local store keeps;
 * `crates/ambre-trame/src/logic/sync.rs` -- the entry write and the export cursor, as in Toile
   and Prose.
@@ -340,10 +345,7 @@ The binding has no control of its own.
 
 * **A PeerID holds 64 bits of margin, and no more.** Section 3 states why the registry binds it
   and the derivation does not. A delta can wait on an operation, and its PeerID's first entry with
-  it. The next delta under that PeerID is then checked against the registry the peer holds. An
-  open Murmure channel and an open space hold the check (`AUTHOR-033`). A `meta` or a space
-  delta that arrives while its document opens is kept as bytes with no signer, and is not
-  checked (`AUTHOR-037`).
+  it. The next delta under that PeerID is then checked against the registry the peer holds.
 
 * **A local restore is not checked.** It imports with no check, so whoever wrote the local store
   can still place any operation in it. A snapshot from the relay is checked (section 1.4).

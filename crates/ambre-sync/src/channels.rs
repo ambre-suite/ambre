@@ -224,6 +224,21 @@ impl SyncState {
             .map_or(document_id, |meta| meta.document_id())
     }
 
+    /// The documents open here whose log is the log of `meta`, `meta` aside:
+    /// the open documents of the channel whose `meta` it is. A revoke on that
+    /// log caps its member in each of them (`SYNC-311`).
+    pub(crate) fn open_channel_documents(&self, meta: Id<Document>) -> Vec<Id<Document>> {
+        self.channel_metas
+            .iter()
+            .filter(|(document_id, of)| {
+                of.document_id() == meta
+                    && **document_id != meta
+                    && self.documents.contains_key(document_id)
+            })
+            .map(|(document_id, _)| *document_id)
+            .collect()
+    }
+
     /// The rule a walk of `document_id`'s log applies, the log of its `meta`
     /// for a document of a channel. A self-join is valid in the log of a
     /// channel a catalogue lists, and nowhere else (`SYNC-106`). That log
@@ -791,12 +806,27 @@ impl SyncState {
                 )),
             );
         };
+        // The departure caps this user in each document of the channel open
+        // here, at the last clock they wrote in it (`SYNC-311`).
+        let key = author.public();
+        let written = self
+            .documents
+            .iter()
+            .map(|(document_id, doc)| {
+                (
+                    *document_id,
+                    self.log_document(*document_id),
+                    doc.own_last_clock(&key),
+                )
+            })
+            .collect();
         let params = crate::sharing::ChannelLeaveParams {
             channel_id,
             author,
             url_scheme: self.url_scheme,
             api_base: self.api_base.clone(),
             exchange_key,
+            written,
         };
         let http = crate::sharing::GlooHttp {
             auth: self.auth_context(),

@@ -616,11 +616,25 @@ pub(crate) fn admit_space(
     space_id: Id<Space>,
 ) -> Result<LoroDoc, MurmureError> {
     let document_id = space_id.document_id();
-    let doc = import_current(|doc| {
+    admit_space_with(space_id, |doc| {
         payloads
             .iter()
             .try_for_each(|&payload| import_bytes(doc, payload, document_id))
-    })?;
+    })
+}
+
+/// [`admit_space`], with the document filled by `fill` rather than from
+/// bytes. The signed deltas of an opening space pass the PeerID check on the
+/// way in (`AUTHOR-037`).
+///
+/// # Errors
+/// Every refusal of `fill` and of [`admit_space`].
+pub(crate) fn admit_space_with(
+    space_id: Id<Space>,
+    fill: impl FnOnce(&LoroDoc) -> Result<(), MurmureError>,
+) -> Result<LoroDoc, MurmureError> {
+    let document_id = space_id.document_id();
+    let doc = import_current(fill)?;
     let header = header(&doc);
     check_kind(&header, DocumentKind::Space, document_id)?;
     let found = string(&header, HeaderKey::Space)
