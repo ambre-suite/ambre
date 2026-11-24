@@ -270,7 +270,9 @@ impl SyncState {
             pin: self.pinned_inviters.get(&document_id).copied(),
             session: match doc_type {
                 DocType::Murmure => self.murmure_roots.iter().copied().collect(),
-                DocType::Trame | DocType::Toile | DocType::Prose => Vec::new(),
+                // The settings log is rooted on the user's own key, which `signer`
+                // names (`SETTINGS-001`).
+                DocType::Trame | DocType::Toile | DocType::Prose | DocType::Settings => Vec::new(),
             },
             signer: self.author_pub_key(),
             catalogue: self.catalogue_pin(document_id),

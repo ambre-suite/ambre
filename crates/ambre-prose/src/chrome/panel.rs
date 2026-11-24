@@ -268,6 +268,7 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
     });
     PanelContent {
         title: Signal::derive(move || kind.get().title().to_owned()),
+        subtitle: Signal::derive(move || kind.get().subtitle(signals.selection_words.get())),
         sections,
     }
 }

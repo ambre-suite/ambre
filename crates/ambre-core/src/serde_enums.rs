@@ -27,7 +27,7 @@ where
     parse(&word).ok_or_else(|| serde::de::Error::unknown_variant(&word, words))
 }
 
-// DocType adapter: "prose", "trame", "toile", "murmure"
+// DocType adapter: "prose", "trame", "toile", "murmure", "settings"
 pub mod doc_type {
     use super::*;
 
@@ -52,7 +52,7 @@ pub mod doc_type {
     where
         D: Deserializer<'de>,
     {
-        const WORDS: &[&str] = &["prose", "trame", "toile", "murmure"];
+        const WORDS: &[&str] = &["prose", "trame", "toile", "murmure", "settings"];
         read_word(deserializer, WORDS, |word| word.parse().ok())
     }
 }

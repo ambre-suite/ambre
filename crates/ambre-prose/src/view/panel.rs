@@ -12,10 +12,11 @@
 // ============================================================================
 
 use ambre_commands::{Locale, Property, Reach};
-use ambre_core::{Commands, Mm, PanelSections, PrintLength, Properties, StaticKey};
+use ambre_core::{Commands, Count, Mm, PanelSections, PrintLength, Properties, StaticKey};
 
 use crate::commands;
 use crate::doc::PageFormat;
+use crate::events::Words;
 
 /// The page, with no text selected.
 pub const PAGE: StaticKey<PanelSections> = StaticKey::new("prose.page");
@@ -111,6 +112,19 @@ impl PanelKind {
         match self {
             Self::Page => "Document",
             Self::Text => "Selection",
+        }
+    }
+
+    /// The subtitle of the panel for this kind (`CHROME-241`): the words of
+    /// the selected text. A count the view could not read shows nothing.
+    #[must_use]
+    pub fn subtitle(self, words: Option<Count<Words>>) -> String {
+        match self {
+            Self::Page => ambre_commands::NOTHING_SELECTED.to_owned(),
+            Self::Text => words.map_or_else(String::new, |n| {
+                let n = n.get();
+                format!("{n} {}", if n == 1 { "word" } else { "words" })
+            }),
         }
     }
 
@@ -361,6 +375,16 @@ pub fn with_orientation(format: PageFormat, orientation: crate::doc::Orientation
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The subtitle reads nothing selected over the page, and the words of
+    /// a text selection (`CHROME-241`).
+    #[test]
+    fn the_subtitle_counts_the_selected_words() {
+        assert_eq!(PanelKind::Page.subtitle(None), "nothing selected");
+        assert_eq!(PanelKind::Text.subtitle(Some(Count::of(1))), "1 word");
+        assert_eq!(PanelKind::Text.subtitle(Some(Count::of(4))), "4 words");
+        assert_eq!(PanelKind::Text.subtitle(None), "");
+    }
     use crate::doc::Orientation;
 
     #[test]

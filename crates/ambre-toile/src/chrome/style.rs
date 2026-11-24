@@ -61,6 +61,8 @@ pub struct ToilePanelSignals {
     pub on_command: Callback<StaticKey<Commands>>,
     /// The whole-style edit the view turns into `RestyleElements`.
     pub restyle: RwSignal<Option<ElementStyle>>,
+    /// The count of the selection, which the subtitle reads.
+    pub stats: RwSignal<Option<crate::ui::status::SelStats>>,
 }
 
 /// The value of one field, mixed when the selection disagrees on it.
@@ -88,6 +90,7 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
         scope,
         on_command,
         restyle,
+        stats,
     } = signals;
     let kind = Memo::new(move |_| model.with(|m| PanelKind::of(m.as_ref())));
 
@@ -337,6 +340,7 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
     });
     PanelContent {
         title: Signal::derive(move || kind.get().title().to_owned()),
+        subtitle: Signal::derive(move || kind.get().subtitle(stats.with(|s| s.map(|s| s.count)))),
         sections,
     }
 }

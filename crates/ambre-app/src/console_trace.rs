@@ -34,20 +34,10 @@ extern "C" {
     fn performance_measure(name: &str, start: &str) -> Result<(), wasm_bindgen::JsValue>;
 }
 
-/// The build the subscriber runs in, which sets what it prints.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Build {
-    /// Our events up to INFO, and no timing mark.
-    #[cfg_attr(
-        all(debug_assertions, not(test)),
-        expect(dead_code, reason = "a debug binary builds the debug variant alone")
-    )]
-    Release,
-    /// Our events up to DEBUG, each with a timing mark. A release binary
-    /// cannot build it, so it links no timing code.
-    #[cfg(debug_assertions)]
-    Debug,
-}
+/// The build the subscriber runs in, which sets what it prints. A release
+/// prints our events up to INFO, with no timing mark. A development build
+/// prints them up to DEBUG, each with a timing mark.
+pub use ambre_chrome::Build;
 
 /// The subscriber: our crates at the level of the build, every dependency at
 /// WARN.

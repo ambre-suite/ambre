@@ -110,6 +110,9 @@ pub struct ProseSignals {
     /// The control of the panel and the status chip read it
     /// (`PROSE-UI-261`).
     pub mode: RwSignal<crate::events::EditMode>,
+    /// The words of the selected text, which the subtitle of the context
+    /// panel shows (`CHROME-241`). `None` with no selection.
+    pub selection_words: RwSignal<Option<ambre_core::Count<crate::events::Words>>>,
 }
 
 /// What the local history holds, as the Logic thread last reported it. A
@@ -150,6 +153,7 @@ impl ProseSignals {
             page: RwSignal::new(None),
             page_write: RwSignal::new(None),
             mode: RwSignal::new(crate::events::EditMode::Editing),
+            selection_words: RwSignal::new(None),
         }
     }
 

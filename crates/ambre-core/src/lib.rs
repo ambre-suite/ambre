@@ -228,8 +228,8 @@ pub use span::{
 };
 pub use static_key::{
     AssetPaths, Attributes, Canvases, Categories, CommandNames, Commands, CssClasses, DebugNames,
-    ElementIds, Icons, KeyKind, LabelValues, MetricNames, PanelSections, Properties, StaticKey,
-    StorageKeys,
+    ElementIds, Icons, KeyKind, LabelValues, MetricNames, PanelSections, Properties, SettingKeys,
+    StaticKey, StorageKeys,
 };
 pub use status::{
     ApiFailure, HttpStatus, LocalFailure, RefusalCode, RotationStatus, SnapshotStatus, StatusWord,

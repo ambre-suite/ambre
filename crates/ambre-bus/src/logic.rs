@@ -268,6 +268,11 @@ pub enum LogicCommand<A = Infallible, P: ChannelPlane = NoChannels> {
     SetReaderLocale {
         reader: ambre_client_core::ReaderLocale,
     },
+    /// One setting of the account changed in the view. The Logic thread
+    /// writes it into the settings document (`SETTINGS-012`).
+    ChangeSetting {
+        change: ambre_client_core::SettingChange,
+    },
 }
 
 // -----------------------------------------------------------------------------
@@ -373,6 +378,7 @@ impl<A, P: ChannelPlane> LogicCommand<A, P> {
             Self::SearchMessages { query } => LogicCommand::SearchMessages { query },
             Self::LoadFonts { faces } => LogicCommand::LoadFonts { faces },
             Self::SetReaderLocale { reader } => LogicCommand::SetReaderLocale { reader },
+            Self::ChangeSetting { change } => LogicCommand::ChangeSetting { change },
         })
     }
 
