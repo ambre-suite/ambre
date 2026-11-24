@@ -25,31 +25,48 @@ pub(crate) struct Expected {
     pub key: Option<Option<ambre_core::FixedBytes<ambre_core::KeyId>>>,
 }
 
-/// Decodes and checks the signed membership entry a request carries
-/// (`SRV-104`). The entry must record the change the route makes, about
-/// the member it names and under the two keys that member registered
-/// (`SRV-311`). The caller must have signed it with their own key. The
-/// relay checks the signature and nothing past it: the digests are the
-/// clients' to walk.
-pub(crate) async fn checked_entry(
-    state: &AppState,
+/// The two keys a member registered, which every entry about that member
+/// must name (`SRV-311`).
+struct Registered {
+    signing: Option<ambre_core::FixedBytes<ambre_core::PublicKey>>,
+    exchange: Option<ambre_core::FixedBytes<ambre_core::ExchangePublicKey>>,
+}
+
+impl Registered {
+    /// The keys `member` registered, or none for an unknown account.
+    async fn of(state: &AppState, member: &Id<User>) -> Result<Self, AppError> {
+        let user = db::get_user(&state.db, member).await?;
+        Ok(match user {
+            Some(user) => Self {
+                signing: user.signing_pubkey,
+                // A rotation wraps for the exchange key the log signs
+                // (`SYNC-198`). An entry under another key than the
+                // registered one would leave the member without a copy at
+                // the next rotation, and nobody would see why.
+                exchange: user.exchange_pubkey,
+            },
+            None => Self {
+                signing: None,
+                exchange: None,
+            },
+        })
+    }
+}
+
+/// Decodes `sent` and checks that it records the change `expected` names,
+/// under the keys the member registered, signed by the caller. Every
+/// membership entry of a request passes these checks (`SRV-104`,
+/// `SRV-311`).
+fn verified_entry(
     auth: &auth::AuthSession,
     doc_id: Id<Document>,
-    entry: Option<&ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
-    expected: Expected,
-) -> Result<Option<db::LogEntry>, AppError> {
+    sent: &ambre_core::Encoded<ambre_core::EncodedLogEntry>,
+    expected: &Expected,
+    registered: &Registered,
+) -> Result<ambre_protocol::MembershipEntry, AppError> {
     use ed25519_dalek::{Signature, VerifyingKey};
-    let Some(sent) = entry else {
-        return Ok(None);
-    };
     let entry = ambre_protocol::MembershipEntry::decode(sent)
         .map_err(|e| AppError::BadRequest(format!("entry: {e}")))?;
-    let member = db::get_user(&state.db, &expected.member).await?;
-    let member_key = member.as_ref().and_then(|user| user.signing_pubkey);
-    // A rotation wraps for the exchange key the log signs (`SYNC-198`). An
-    // entry under another key than the registered one would leave the member
-    // without a copy at the next rotation, and nobody would see why.
-    let member_exchange_key = member.and_then(|user| user.exchange_pubkey);
     let first = entry.act == ambre_protocol::MembershipAct::Create;
     let records = entry.well_formed()
         && entry.document == doc_id
@@ -59,9 +76,13 @@ pub(crate) async fn checked_entry(
         && expected.role.is_none_or(|role| entry.role == role)
         && expected.key.is_none_or(|key| entry.key == key)
         && first == (entry.position == ambre_core::Seq::ZERO)
-        && member_key.as_ref().map(ambre_core::FixedBytes::as_slice)
+        && registered
+            .signing
+            .as_ref()
+            .map(ambre_core::FixedBytes::as_slice)
             == Some(entry.member_key.as_slice())
-        && member_exchange_key
+        && registered
+            .exchange
             .as_ref()
             .map(ambre_core::FixedBytes::as_slice)
             == Some(entry.member_exchange_key.as_slice());
@@ -77,10 +98,94 @@ pub(crate) async fn checked_entry(
     VerifyingKey::from_bytes(auth.signing_pubkey.as_array())
         .and_then(|key| key.verify_strict(signed.as_bytes(), &signature))
         .map_err(|_| AppError::InvalidSignature)?;
+    Ok(entry)
+}
+
+/// Decodes and checks the signed membership entry a request carries
+/// (`SRV-104`). The entry must record the change the route makes, about
+/// the member it names and under the two keys that member registered
+/// (`SRV-311`). The caller must have signed it with their own key. The
+/// relay checks the signature and nothing past it: the digests are the
+/// clients' to walk.
+pub(crate) async fn checked_entry(
+    state: &AppState,
+    auth: &auth::AuthSession,
+    doc_id: Id<Document>,
+    entry: Option<&ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
+    expected: Expected,
+) -> Result<Option<db::LogEntry>, AppError> {
+    let Some(sent) = entry else {
+        return Ok(None);
+    };
+    let registered = Registered::of(state, &expected.member).await?;
+    let entry = verified_entry(auth, doc_id, sent, &expected, &registered)?;
     Ok(Some(db::LogEntry {
         position: entry.position,
         bytes: sent.clone(),
     }))
+}
+
+/// Checks the entry of a removal and the continuations that follow it
+/// (`SRV-104`, `SRV-344`). One entry holds at most `DOCUMENT_CAPS_MAX`
+/// document caps. A removal from a larger channel carries the rest in
+/// continuations.
+///
+/// Each continuation passes the checks of the entry. It is also a revoke of
+/// the same member at the same role. It installs no key, sets no own cap,
+/// and holds at least one document cap. It stands at the place after the
+/// entry before it.
+///
+/// # Errors
+///
+/// * [`AppError::BadRequest`] for continuations without an entry, or for a
+///   continuation that fails a check.
+/// * [`AppError::InvalidSignature`] for an entry the caller did not sign.
+pub(crate) async fn checked_removal(
+    state: &AppState,
+    auth: &auth::AuthSession,
+    doc_id: Id<Document>,
+    entry: Option<&ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
+    continued: &[ambre_core::Encoded<ambre_core::EncodedLogEntry>],
+    expected: Expected,
+) -> Result<db::RemovalEntries, AppError> {
+    let Some(sent) = entry else {
+        if !continued.is_empty() {
+            return Err(AppError::BadRequest(
+                "continued: a continuation follows the entry of its removal".into(),
+            ));
+        }
+        return Ok(db::RemovalEntries::default());
+    };
+    let registered = Registered::of(state, &expected.member).await?;
+    let removal = verified_entry(auth, doc_id, sent, &expected, &registered)?;
+    let follows = Expected {
+        act: ambre_protocol::MembershipAct::Revoke,
+        member: expected.member,
+        role: Some(removal.role),
+        key: Some(None),
+    };
+    let mut place = removal.position;
+    let mut entries = Vec::with_capacity(continued.len());
+    for text in continued {
+        place = place.next();
+        let next = verified_entry(auth, doc_id, text, &follows, &registered)?;
+        if next.position != place || next.cap.is_some() || next.document_caps.is_empty() {
+            return Err(AppError::BadRequest(
+                "continued: not the cap continuation of this removal".into(),
+            ));
+        }
+        entries.push(db::LogEntry {
+            position: next.position,
+            bytes: text.clone(),
+        });
+    }
+    Ok(db::RemovalEntries {
+        entry: Some(db::LogEntry {
+            position: removal.position,
+            bytes: sent.clone(),
+        }),
+        continued: entries,
+    })
 }
 
 /// Request to add a user to a document. `doc_key_enc` is the DocumentKey
@@ -256,11 +361,16 @@ pub async fn invite_to_document(
     }))
 }
 
-/// The body a removal may carry: the signed entry that records it.
+/// The body a removal may carry: the signed entry that records it. The
+/// continuations carry the document caps the entry has no room for.
 #[derive(serde::Deserialize)]
 pub struct RemovalRequest {
     #[serde(default)]
     pub entry: Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
+    /// The cap continuations, in log order, appended after `entry` in the
+    /// same transaction (`SRV-344`). Empty for an older client.
+    #[serde(default)]
+    pub continued: Vec<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
 }
 
 pub async fn revoke_from_document(
@@ -286,7 +396,10 @@ pub async fn revoke_from_document(
         key: Some(None),
     };
     let text = body.as_ref().and_then(|body| body.get().entry.as_ref());
-    let entry = checked_entry(&state, &s, doc_id, text, expected).await?;
+    let continued = body
+        .as_ref()
+        .map_or(&[][..], |body| body.get().continued.as_slice());
+    let entries = checked_removal(&state, &s, doc_id, text, continued, expected).await?;
     // The removal posts no rotation, so the document owes one (`SRV-122`). The
     // mirror is raised first: no delta slips in between the commit and it.
     // A leave of a space raises it on each private channel it leaves too.
@@ -295,7 +408,7 @@ pub async fn revoke_from_document(
     let sweep_due = crate::deletion::sweep_due(&state);
     let removed = match raise_debt_mirrors(&state, &owing).await {
         Ok(()) => {
-            db::remove_document_member(&state.db, &doc_id, &target, entry.as_ref(), sweep_due).await
+            db::remove_document_member(&state.db, &doc_id, &target, &entries, sweep_due).await
         }
         Err(e) => Err(e),
     };
@@ -364,6 +477,9 @@ pub struct RevokeRequest {
     /// The signed entry that records the removal (`SYNC-132`).
     #[serde(default)]
     pub entry: Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
+    /// The cap continuations of `entry`, as [`RemovalRequest`] carries them.
+    #[serde(default)]
+    pub continued: Vec<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
 }
 
 /// Removes a member and installs the new key for everyone who stays, in one
@@ -394,7 +510,15 @@ pub async fn revoke_and_rotate(
         // The entry names the key the rotation installs.
         key: Some(Some(link.key)),
     };
-    let entry = checked_entry(&state, &s, doc_id, req.entry.as_ref(), expected).await?;
+    let entries = checked_removal(
+        &state,
+        &s,
+        doc_id,
+        req.entry.as_ref(),
+        &req.continued,
+        expected,
+    )
+    .await?;
     // A removal from a space leaves each of its private channels owing a
     // rotation (`SRV-136`), so their mirrors are raised first.
     let owing = db::private_channels_of_member(&state.db, &doc_id, &target).await?;
@@ -411,7 +535,7 @@ pub async fn revoke_and_rotate(
                     members: &members,
                     link: &link,
                 },
-                entry.as_ref(),
+                &entries,
                 sweep_due,
             )
             .await

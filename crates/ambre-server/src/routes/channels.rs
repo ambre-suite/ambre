@@ -2189,7 +2189,7 @@ mod tests {
             &state.db,
             &channel.meta.document_id(),
             &who,
-            None,
+            &db::RemovalEntries::default(),
             crate::deletion::sweep_due(state),
         )
         .await
@@ -3413,6 +3413,7 @@ mod tests {
                 members: vec![alice],
                 link: link.encode().expect("encode"),
                 entry: None,
+                continued: Vec::new(),
             }),
         )
         .await;
@@ -3462,6 +3463,7 @@ mod tests {
                 members: vec![alice],
                 link: link.encode().expect("encode"),
                 entry: None,
+                continued: Vec::new(),
             }),
         )
         .await;
