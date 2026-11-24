@@ -53,12 +53,13 @@ pub fn Field(label: &'static str, children: Children) -> impl IntoView {
             <div class="ambre-kit-control">{children()}</div>
         </div>
     }
+    .into_any()
 }
 
 /// Controls side by side, on one line of a section.
 #[component]
 pub fn Row(children: Children) -> impl IntoView {
-    view! { <div class="ambre-kit-row">{children()}</div> }
+    view! { <div class="ambre-kit-row">{children()}</div> }.into_any()
 }
 
 /// A button that runs one command. With `pressed`, it is a toggle chip that
@@ -138,6 +139,7 @@ pub fn PropertyToggle(
             on_press=on_toggle
         />
     }
+    .into_any()
 }
 
 /// Whether a [`CommandButton`] shows its label beside its icon.
@@ -177,6 +179,7 @@ pub fn ColourField<C: PickedColour>(
             {move || mixed_hint(value.get().is_mixed())}
         </span>
     }
+    .into_any()
 }
 
 /// The font family of a property: the picker that shows each family in
@@ -198,6 +201,7 @@ pub fn FontField(
             {move || mixed_hint(value.get().is_mixed())}
         </span>
     }
+    .into_any()
 }
 
 /// The direction of a stepper of a [`LengthField`].
@@ -313,6 +317,7 @@ pub fn LengthField<L: FieldLength>(
             reach=Reach::Property(property.id)
         />
     }
+    .into_any()
 }
 
 /// One choice of a [`Segmented`] control or a [`SelectField`].
@@ -386,6 +391,7 @@ pub fn Segmented<T: Copy + PartialEq + Send + Sync + 'static>(
             {move || mixed_hint(value.get().is_mixed())}
         </span>
     }
+    .into_any()
 }
 
 /// A list of choices of a property, in the styled [`Select`](crate::Select).
@@ -409,6 +415,7 @@ pub fn SelectField<T: Copy + PartialEq + Send + Sync + 'static>(
             reach=Reach::Property(property.id)
         />
     }
+    .into_any()
 }
 
 /// The `data-reach` markers of every control under `root`, in document order:
