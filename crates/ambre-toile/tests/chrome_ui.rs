@@ -369,7 +369,9 @@ fn tool_palette_click_switches_active_tool() {
     let owner = Owner::new();
     owner.set();
     let active = RwSignal::new(Tool::Select);
-    let root = mount_in_container(move || view! { <ToolPalette active=active /> });
+    let root = mount_in_container(
+        move || view! { <ToolPalette active=active cover=RwSignal::new(ambre_client_core::cover::Cover::default()) /> },
+    );
 
     // The Select button reflects the active tool through `aria-pressed`.
     let select_btn = root
@@ -487,7 +489,7 @@ fn selection_toolbar_delete_fires_command() {
     let model = RwSignal::new(None::<StyleModel>);
     let on_style = Callback::new(move |_e: StyleEdit| {});
     let root = mount_in_container(move || {
-        view! { <SelectionToolbar bar=bar model=model on_command=on_command on_style=on_style /> }
+        view! { <SelectionToolbar bar=bar model=model on_command=on_command on_style=on_style cover=RwSignal::new(ambre_client_core::cover::Cover::default()) /> }
     });
 
     assert!(click_by_aria(&root, "Delete"));
@@ -521,7 +523,9 @@ fn the_button_bars_announce_the_registry_labels() {
     owner.set();
 
     let active = RwSignal::new(Tool::Select);
-    let palette = mount_in_container(move || view! { <ToolPalette active=active /> });
+    let palette = mount_in_container(
+        move || view! { <ToolPalette active=active cover=RwSignal::new(ambre_client_core::cover::Cover::default()) /> },
+    );
     assert_registry_labels(
         &palette,
         &[
@@ -553,7 +557,7 @@ fn the_button_bars_announce_the_registry_labels() {
     let model = RwSignal::new(None::<StyleModel>);
     let on_style = Callback::new(move |_e: StyleEdit| {});
     let toolbar = mount_in_container(move || {
-        view! { <SelectionToolbar bar=bar model=model on_command=on_command on_style=on_style /> }
+        view! { <SelectionToolbar bar=bar model=model on_command=on_command on_style=on_style cover=RwSignal::new(ambre_client_core::cover::Cover::default()) /> }
     });
     assert_registry_labels(
         &toolbar,
@@ -1251,7 +1255,7 @@ async fn the_editing_chrome_leaves_while_the_board_presents() {
     let root = mount_in_container(move || {
         view! {
             <EditingSurfaces present=present>
-                <ToolPalette active=active />
+                <ToolPalette active=active cover=RwSignal::new(ambre_client_core::cover::Cover::default()) />
             </EditingSurfaces>
         }
     });
@@ -1373,14 +1377,23 @@ async fn settle() {
     }
 }
 
-/// `ZOOM-011`: the palette publishes the right edge it covers, as the page
-/// lays it out. The edge tracks a change of size, and clears when the palette
-/// hides.
+/// What the surface `surface` covers in `cover` now.
+fn covered(
+    cover: RwSignal<ambre_client_core::cover::Cover>,
+    surface: ambre_client_core::cover::Surface,
+) -> Option<ambre_client_core::cover::Covered> {
+    cover.get_untracked().of(surface)
+}
+
+/// `CHROME-170`, `ZOOM-011`: the palette publishes the box it covers, as the
+/// page lays it out. The box tracks a change of size, and clears when the
+/// palette hides.
 #[wasm_bindgen_test]
 async fn the_palette_publishes_the_edge_it_covers_and_clears_it_when_it_hides() {
+    use ambre_client_core::cover::{Cover, Covered, Surface};
     let sheet = with_shell_stylesheet();
     let active = RwSignal::new(Tool::Select);
-    let cover = RwSignal::new(ambre_toile::ui::cover::Cover::default());
+    let cover = RwSignal::new(Cover::default());
     let root = mount_in_container(move || view! { <ToolPalette active=active cover=cover /> });
     settle().await;
     let palette: web_sys::HtmlElement = root
@@ -1389,11 +1402,9 @@ async fn the_palette_publishes_the_edge_it_covers_and_clears_it_when_it_hides() 
         .unwrap()
         .dyn_into()
         .unwrap();
-    let measured = |cover: RwSignal<ambre_toile::ui::cover::Cover>| {
-        cover
-            .get_untracked()
-            .palette_right
-            .map(|right| f64::from(right.get()))
+    let measured = |cover| match covered(cover, Surface::CreationBar) {
+        Some(Covered::Fixed(at)) => Some(f64::from(at.bottom_right.x.get())),
+        _ => None,
     };
     let right = palette.get_bounding_client_rect().right();
     assert!(
@@ -1416,10 +1427,11 @@ async fn the_palette_publishes_the_edge_it_covers_and_clears_it_when_it_hides() 
     sheet.remove();
 }
 
-/// `ZOOM-011`: the selection bar publishes how far it reaches above the
-/// selection, its height and its lift, and clears it once it leaves.
+/// `CHROME-170`, `ZOOM-011`: the selection bar publishes how far it reaches
+/// above the selection, its height and its lift, and clears it once it leaves.
 #[wasm_bindgen_test]
 async fn the_selection_bar_publishes_its_reach_and_clears_it_when_it_leaves() {
+    use ambre_client_core::cover::{Cover, Covered, Surface};
     let sheet = with_shell_stylesheet();
     let bar = RwSignal::new(Some(FloatBar {
         at: css_point(400.0, 300.0),
@@ -1430,7 +1442,7 @@ async fn the_selection_bar_publishes_its_reach_and_clears_it_when_it_leaves() {
         mixed: Default::default(),
     }));
     let model = RwSignal::new(None::<StyleModel>);
-    let cover = RwSignal::new(ambre_toile::ui::cover::Cover::default());
+    let cover = RwSignal::new(Cover::default());
     let on_command = Callback::new(move |_id: StaticKey<Commands>| {});
     let on_style = Callback::new(move |_e: StyleEdit| {});
     let root = mount_in_container(move || {
@@ -1441,7 +1453,12 @@ async fn the_selection_bar_publishes_its_reach_and_clears_it_when_it_leaves() {
     settle().await;
     let selbar = root.query_selector(".ambre-selbar").unwrap().unwrap();
     let rect = selbar.get_bounding_client_rect();
-    let reach = f64::from(cover.get_untracked().bar_reach.unwrap().get());
+    let reach = match covered(cover, Surface::ContextBar) {
+        Some(Covered::Above(reach)) => Some(reach),
+        _ => None,
+    }
+    .expect("the bar publishes a reach above the selection");
+    let reach = f64::from(reach.get());
     assert!((reach - (300.0 - rect.top())).abs() < 0.5);
     // The reach is the bar's own height and the lift above the selection.
     assert!(
@@ -1452,7 +1469,7 @@ async fn the_selection_bar_publishes_its_reach_and_clears_it_when_it_leaves() {
 
     bar.set(None);
     settle().await;
-    assert_eq!(cover.get_untracked().bar_reach, None);
+    assert_eq!(covered(cover, Surface::ContextBar), None);
 
     root.remove();
     sheet.remove();
@@ -1498,7 +1515,7 @@ fn mount_toile_panel_on(model: Option<StyleModel>, scope: CtxScope) -> web_sys::
     });
     let prefs = PanelPrefs::new(DockSide::Right, PanelWidth::DEFAULT, Fold::Open);
     mount_in_container(move || {
-        view! { <ContextPanel prefs=prefs title=content.title sections=content.sections /> }
+        view! { <ContextPanel prefs=prefs title=content.title sections=content.sections cover=RwSignal::new(ambre_client_core::cover::Cover::default()) /> }
     })
 }
 
@@ -1627,7 +1644,7 @@ async fn each_entry_of_the_board_bar_is_a_control_of_the_panel() {
     let model = RwSignal::new(Some(styled(Styled::Elements)));
     let toolbar = mount_in_container(move || {
         view! {
-            <SelectionToolbar bar=bar model=model on_command=Callback::new(|_| {}) on_style=Callback::new(|_| {}) />
+            <SelectionToolbar bar=bar model=model on_command=Callback::new(|_| {}) on_style=Callback::new(|_| {}) cover=RwSignal::new(ambre_client_core::cover::Cover::default()) />
         }
     });
     let shown = ambre_chrome::reach_markers(&toolbar);

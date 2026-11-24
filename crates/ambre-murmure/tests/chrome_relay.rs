@@ -1680,7 +1680,10 @@ async fn the_format_bar_shows_the_murmure_marks_and_a_press_toggles_one() {
     let root = document().create_element("div").unwrap();
     document().body().unwrap().append_child(&root).unwrap();
     let mount: web_sys::HtmlElement = root.clone().dyn_into().unwrap();
-    let _handle = leptos::mount::mount_to(mount, move || view! { <MarkBarPanel relay=relay /> });
+    let _handle = leptos::mount::mount_to(
+        mount,
+        move || view! { <MarkBarPanel relay=relay cover=RwSignal::new(ambre_client_core::cover::Cover::default()) /> },
+    );
     assert!(root.query_selector("[role=toolbar]").unwrap().is_none());
 
     let bar = MarkBar {

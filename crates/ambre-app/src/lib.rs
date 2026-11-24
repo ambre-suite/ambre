@@ -351,9 +351,10 @@ struct Wiring {
     /// The canvas view applies it on top of the live common style as one
     /// `RestyleElements` over the selection.
     toile_quick_style: RwSignal<Option<toile_chrome::StyleEdit>>,
-    /// What the palette and the selection bar cover of the board, as they
-    /// measure it. The canvas view reads it when a fit lands (`ZOOM-011`).
-    toile_cover: RwSignal<ambre_toile::ui::cover::Cover>,
+    /// What the floating surfaces of the shell cover of the canvas, as each
+    /// one measures itself (`CHROME-171`). The board's view reads it when a
+    /// fit lands (`ZOOM-011`).
+    shell_cover: RwSignal<ambre_client_core::cover::Cover>,
     /// The comments panel's signals (`toile-comments`): the canvas view writes
     /// the list, the open thread and the drop composer. It drains the intents
     /// the panel and the composer emit. The panel holds nothing of its own
@@ -726,9 +727,9 @@ pub fn main() {
     // `toile_quick_style`, mirroring the inspector's model / restyle pair.
     let toile_float_bar = RwSignal::new(None::<toile_chrome::FloatBar>);
     let toile_quick_style = RwSignal::new(None::<toile_chrome::StyleEdit>);
-    // The palette and the selection bar measure what they cover; a fit reads
-    // it (`ZOOM-011`).
-    let toile_cover = RwSignal::new(ambre_toile::ui::cover::Cover::default());
+    // Each floating surface of the shell measures what it covers; a fit reads
+    // it (`CHROME-171`, `ZOOM-011`). One cover per page.
+    let shell_cover = RwSignal::new(ambre_client_core::cover::Cover::default());
     // Comments (`toile-comments`): the panel and the drop composer read what
     // the view published. They write back one intent at a time, the same seam
     // as the inspector's model / restyle pair.
@@ -790,7 +791,7 @@ pub fn main() {
         followed_link: toile_followed_link,
         present_mode: present_toile,
         find_result: find_result_toile,
-        cover: toile_cover,
+        cover: shell_cover,
     };
 
     // Design tokens: inject the generated CSS custom properties (theme.css) and
@@ -1522,7 +1523,7 @@ pub fn main() {
                         find_result: ch_toile_find_result,
                         // An embedded board shows no palette or bar of its
                         // own, so nothing covers it.
-                        cover: RwSignal::new(ambre_toile::ui::cover::Cover::default()),
+                        cover: RwSignal::new(ambre_client_core::cover::Cover::default()),
                     },
                 },
             )),

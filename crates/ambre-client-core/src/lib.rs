@@ -1,6 +1,8 @@
 //! The core types that the client alone uses, apart from `ambre-core`, which
 //! the relay, the wire and the SFU link too (`ARCH-117`).
 //!
+//! - [`cover`]: what the floating surfaces of the shell cover of the canvas,
+//!   which a fit keeps clear of (`ambre-spec-shell.md` section 2)
 //! - [`docfile`]: the `.ambre` container in its two lineages -- plaintext and
 //!   passphrase-sealed -- shared by every application
 //!   (`ambre-spec-docfile.md`)
@@ -15,6 +17,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod cover;
 pub mod docfile;
 /// The name and the bytes of a file an import reads or an export writes.
 pub mod export_file;

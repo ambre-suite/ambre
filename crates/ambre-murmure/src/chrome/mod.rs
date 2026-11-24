@@ -2133,9 +2133,13 @@ pub fn MentionPanel(relay: MurmureRelay) -> impl IntoView {
 
 /// The format bar of a composer, over its selection: the shared bar Prose
 /// shows, with the Murmure marks alone (`MURMURE-432`, `CHROME-105`). A
-/// press toggles its style and leaves the focus where it was.
+/// press toggles its style and leaves the focus where it was. The bar
+/// publishes its reach into `cover` (`CHROME-171`).
 #[component]
-pub fn MarkBarPanel(relay: MurmureRelay) -> impl IntoView {
+pub fn MarkBarPanel(
+    relay: MurmureRelay,
+    cover: RwSignal<ambre_client_core::cover::Cover>,
+) -> impl IntoView {
     move || {
         relay.mark_bar.get().map(|bar| {
             let anchor = bar.at.on_page(canvas_origin(bar.region));
@@ -2162,7 +2166,7 @@ pub fn MarkBarPanel(relay: MurmureRelay) -> impl IntoView {
                     }
                 })
                 .collect();
-            view! { <FormatBar anchor=anchor controls=controls /> }
+            view! { <FormatBar anchor=anchor controls=controls cover=cover /> }
         })
     }
 }

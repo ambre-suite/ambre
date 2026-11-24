@@ -55,7 +55,7 @@ other six documents of the DOM side.
 | `CHROME-214` | `OBS` | In Prose, the context menu MUST reach after the clipboard bold, italic, underline, strikethrough and clearing the formatting. | this spec section 2; `CHROME-182` | Prose `ambre_prose::view::panel::tests::the_page_menu_opens_on_the_clipboard_then_reaches_the_panel` -- the declared list, each entry a control of the text section; `ambre_prose::commands::tests::every_menu_entry_past_the_clipboard_formats_the_selection` -- each entry past the clipboard reaches the view; `ambre_belt::prose::tests::the_menu_key_opens_the_page_menu_and_runs_an_entry` -- browser tier, Bold run from the menu bolds the selected word | none | verified |
 | `CHROME-215` | `OBS` | In Trame, the context menu MUST reach after the clipboard the rows and columns, the sort, the filter, the merge and the freeze. | this spec section 2; `CHROME-182` | Trame `ambre_trame::ui::panel::tests::the_sheet_menu_opens_on_the_clipboard_then_reaches_the_panel` -- every scope, each entry a command of the panel | none | verified |
 | `CHROME-216` | `OBS` | In Toile, the context menu MUST reach after the clipboard duplicate, delete, the reactions, the grouping, the order, the lock, the alignment and the frame entries that apply. | this spec section 2; `CHROME-182`; `TOILE-UI-047` | Toile `ambre_toile::tests::chrome_ui::each_entry_of_the_board_menu_is_a_control_of_the_panel` -- every scope, each entry a control the panel shows | none | verified |
-| `CHROME-171` | `INV` | Each floating surface of the shell MUST publish the part of the canvas it covers. | this spec section 2; `ambre-spec-zoom.md section 3` (`ZOOM-011`) | not built | unbuilt -- lands with the `The floating cover` Story (`ambre-roadmap.md` MVP). `CHROME-170` holds the two surfaces of the board; the format bar of Prose publishes nothing | unimplemented |
+| `CHROME-171` | `INV` | Each floating surface of the shell MUST publish the part of the canvas it covers. | this spec section 2; `ambre-spec-zoom.md section 3` (`ZOOM-011`) | type-level -- `ambre_client_core::cover::Surface` closes the set of floating surfaces, and `FormatBar`, `ContextPanel`, `ToolPalette`, `SelectionToolbar` and `CallFloat` each take a required cover, so a surface mounted with none does not compile; `ambre_client_core::cover::tests::a_surface_records_and_reads_back_alone`; `ambre_chrome::chrome_ui::the_format_bar_publishes_its_reach_and_clears_it_when_it_leaves` -- wasm tier, the context bar of Prose and of Murmure; `ambre_app::shell::narrow::the_panel_publishes_its_cover_and_a_fit_clears_the_sheet_alone` -- wasm tier, a desktop panel covers nothing and a phone sheet the bottom strip; `ambre_app::shell::murmure_regions::the_call_bubble_publishes_its_box_and_clears_it_when_it_leaves` -- wasm tier (`MURMURE-698`); the board's two surfaces (`CHROME-170`) | none | verified |
 | `CHROME-190` | `OBS` | In Prose, Trame and Toile, the context panel MUST take one frame: a header naming the selection, then sections that fold. | this spec section 2 | `ambre_chrome::context_panel_ui::the_panel_takes_one_frame_a_header_then_sections_that_fold` -- wasm tier, the frame; Toile `ambre_toile::tests::chrome_ui::the_board_panel_shows_the_board_then_what_applies_to_the_selection`; Prose `ambre_prose::tests::chrome_panel::with_no_selection_the_panel_shows_the_page_the_layout_holds`; Trame `ambre_trame::tests::chrome_ui::the_panel_announces_the_registry_labels` -- each application's content in that one frame | none | verified |
 | `CHROME-191` | `OBS` | The rail of a collapsed panel MUST show one icon for each section of the panel. | this spec section 2 | `ambre_chrome::context_panel_ui::the_rail_shows_one_icon_for_each_section` -- wasm tier, one labelled icon per section, in order | none | verified |
 | `CHROME-193` | `OBS` | On a desktop, the context panel MUST dock to the side the user chose, the right by default. | this spec section 2; `ambre-spec-adaptive-layout.md` | `ambre_app::shell::narrow::a_desktop_panel_docks_beside_the_canvas_on_its_side` -- wasm tier, a 1280 px frame under the shell stylesheet: the panel meets the right edge by default and the left edge when the side is left; `ambre_app::shell::panel::tests::the_side_is_one_setting_for_the_three_applications` -- the right by default | none | verified |
@@ -267,14 +267,22 @@ the keyboard focus as under the pointer (`CHROME-187`), and a screen reader hear
 chord (`CHROME-189`). A tooltip waits about half a second, then shows at once while the pointer
 moves to the next icon.
 
-**A floating surface publishes what it covers.** The context bar, the creation bar and the
-context panel float over the canvas, so a fit must frame the selection clear of them (`ZOOM-011`).
-Each surface measures the part of the canvas it covers, and a fit reads the latest measure
-(`CHROME-171`). The board's tool palette and selection bar do it today (`CHROME-170`). No size of
-a surface is written twice.
+**A floating surface publishes what it covers.** The context bar, the creation bar, the context
+panel and the call bubble float over a canvas. So a fit must frame the selection clear of them
+(`ZOOM-011`). Each surface measures the part of the canvas it covers, into the one cover of the
+page, and a fit reads the latest measure (`CHROME-171`). No size of a surface is written twice.
 
-**Code:** the board's cover is `crates/ambre-toile/src/ui/cover.rs`, and the measure the chrome
-takes is `crates/ambre-toile/src/chrome/cover.rs`. No region has code beyond it.
+A surface that keeps its place on the page publishes its box: the creation bar, the panel and the
+bubble. A fit keeps clear the strip along one edge that holds the box and costs the least room. A
+panel docked beside the canvas covers none of it, and the sheet of a phone covers its bottom. The
+context bar rides above the selection, so it publishes how far it reaches above it. The board's
+palette is its creation bar, and its selection bar is its context bar (`CHROME-170`).
+
+A tooltip, a menu, the command palette, a dialog and a toast publish no cover. Each is transient,
+and leaves before the user reads the framed selection.
+
+**Code:** the cover is `crates/ambre-client-core/src/cover.rs`, and the measure each surface takes
+is `crates/ambre-chrome/src/cover.rs`. No region has code beyond it.
 
 ---
 

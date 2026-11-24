@@ -264,6 +264,10 @@ pub fn ContextPanel(
     prefs: PanelPrefs,
     #[prop(into)] title: Signal<String>,
     #[prop(into)] sections: Signal<Vec<PanelSection>>,
+    /// Where the panel publishes the box it covers (`CHROME-171`). A desktop
+    /// panel docks beside the canvas and covers none of it; the sheet of a
+    /// phone covers its bottom.
+    cover: RwSignal<ambre_client_core::cover::Cover>,
 ) -> impl IntoView {
     let PanelPrefs { side, width, fold } = prefs;
     // The sections a person folded. A key outlives the section it names, so a
@@ -273,6 +277,11 @@ pub fn ContextPanel(
     // folds on its first showing alone, so a user's unfold holds.
     let seen = StoredValue::new(HashSet::<StaticKey<PanelSections>>::new());
     let panel_ref = NodeRef::<leptos::html::Aside>::new();
+    crate::cover::watch_fixed(
+        panel_ref,
+        ambre_client_core::cover::Surface::ContextPanel,
+        cover,
+    );
 
     // `Ctrl+.` collapses an open panel and opens a collapsed one
     // (`CHROME-175`, `CHROME-176`).

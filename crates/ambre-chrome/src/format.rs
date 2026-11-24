@@ -167,8 +167,17 @@ pub struct FormatControl {
 
 /// The format bar over a selection, centred on `anchor` in the viewport
 /// (`CHROME-105`). A press keeps the selection: the bar never takes the focus.
+///
+/// The bar is a context bar: it publishes into `cover` how far it reaches
+/// above the selection, so a fit frames clear of it (`CHROME-171`).
 #[component]
-pub fn FormatBar(anchor: Point<Px<Css>>, controls: Vec<FormatControl>) -> impl IntoView {
+pub fn FormatBar(
+    anchor: Point<Px<Css>>,
+    controls: Vec<FormatControl>,
+    cover: RwSignal<ambre_client_core::cover::Cover>,
+) -> impl IntoView {
+    let node = NodeRef::<leptos::html::Div>::new();
+    crate::cover::watch_above(node, move || Some(anchor.y), cover);
     let left = format!("{}px", anchor.x.get());
     let top = format!(
         "{}px",
@@ -211,6 +220,7 @@ pub fn FormatBar(anchor: Point<Px<Css>>, controls: Vec<FormatControl>) -> impl I
     });
     view! {
         <div
+            node_ref=node
             class="ambre-format-bar"
             style:position="fixed"
             style:left=left

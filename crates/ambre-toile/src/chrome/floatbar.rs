@@ -48,20 +48,18 @@ pub fn SelectionToolbar(
     model: RwSignal<Option<StyleModel>>,
     on_command: Callback<StaticKey<Commands>>,
     on_style: Callback<StyleEdit>,
-    /// Where the bar publishes how far it reaches above the selection
-    /// (`ZOOM-011`). A bar nothing fits around publishes nothing.
-    #[prop(optional)]
-    cover: Option<RwSignal<crate::ui::cover::Cover>>,
+    /// Where the bar, the board's context bar, publishes how far it reaches
+    /// above the selection (`CHROME-170`, `ZOOM-011`).
+    cover: RwSignal<ambre_client_core::cover::Cover>,
 ) -> impl IntoView {
+    use ambre_client_core::cover::Surface;
     let node = NodeRef::<leptos::html::Div>::new();
-    if let Some(cover) = cover {
-        super::cover::watch_bar(node, move || bar.get_untracked().map(|b| b.at.y), cover);
-        Effect::new(move |_| {
-            if bar.with(Option::is_none) {
-                super::cover::clear_bar(cover);
-            }
-        });
-    }
+    ambre_chrome::cover::watch_above(node, move || bar.get_untracked().map(|b| b.at.y), cover);
+    Effect::new(move |_| {
+        if bar.with(Option::is_none) {
+            ambre_chrome::cover::clear(cover, Surface::ContextBar);
+        }
+    });
     let fill = RwSignal::new(None::<Rgba>);
     let text_color = RwSignal::new(None::<Rgba>);
     Effect::new(move |_| {

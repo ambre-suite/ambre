@@ -44,6 +44,9 @@ pub(crate) fn MurmureShell(
     /// The last invite into a space, whose link the toolbar shows
     /// (`SYNC-245`).
     invite_link: RwSignal<Option<InviteLink>>,
+    /// Where the call bubble and the mark bar publish what they cover
+    /// (`CHROME-171`).
+    cover: RwSignal<ambre_client_core::cover::Cover>,
     /// The shared header.
     children: ChildrenFn,
 ) -> impl IntoView {
@@ -104,9 +107,9 @@ pub(crate) fn MurmureShell(
             now=Callback::new(|()| Instant::<Authored>::new(js_sys::Date::now() as u64))
         />
         <KeyList relay=relay />
-        <CallFloat pane=pane phase=call_phase relay=relay />
+        <CallFloat pane=pane phase=call_phase relay=relay cover=cover />
         <MentionPanel relay=relay />
-        <MarkBarPanel relay=relay />
+        <MarkBarPanel relay=relay cover=cover />
     }
 }
 
@@ -369,7 +372,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         toile_restyle,
         toile_float_bar,
         toile_quick_style,
-        toile_cover,
+        shell_cover,
         toile_comments,
         toile_deck,
         toile_dropped_file,
@@ -816,7 +819,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
     let shell = if boot_is_murmure {
         let send = super::commands::murmure_send(to_logic.clone());
         view! {
-            <MurmureShell relay=murmure_relay send=send invite_link=invite_link>
+            <MurmureShell relay=murmure_relay send=send invite_link=invite_link cover=shell_cover>
                 {header.clone()}
             </MurmureShell>
         }
@@ -833,6 +836,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                             prefs=prefs
                             title=panel_content.title
                             sections=panel_content.sections
+                            cover=shell_cover
                         />
                     </Show>
                 })}
@@ -842,7 +846,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
             <CanvasOverlay slot>
                 {boot_is_toile.then(|| view! {
                     <toile_chrome::EditingSurfaces present=present_toile>
-                        <toile_chrome::ToolPalette active=toile_active_tool cover=toile_cover />
+                        <toile_chrome::ToolPalette active=toile_active_tool cover=shell_cover />
                     </toile_chrome::EditingSurfaces>
                 })}
             </CanvasOverlay>
@@ -1130,7 +1134,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
             <toile_chrome::EditingSurfaces present=present_toile>
                 <toile_chrome::SelectionToolbar
                     bar=toile_float_bar
-                    cover=toile_cover
+                    cover=shell_cover
                     model=toile_style_model
                     on_command=on_command
                     on_style=Callback::new(move |s: toile_chrome::StyleEdit| {
@@ -1170,7 +1174,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
             <ambre_prose::chrome::ProseCommentsPanel signals=prose_signals />
             <ambre_prose::chrome::ProseSuggestionPopover signals=prose_signals />
             <ambre_prose::chrome::ProseSpellingPopover signals=prose_signals />
-            <ambre_prose::chrome::ProseFormatBar signals=prose_signals />
+            <ambre_prose::chrome::ProseFormatBar signals=prose_signals cover=shell_cover />
             <ambre_prose::chrome::ProseSlashMenu signals=prose_signals />
             <ambre_prose::chrome::ProseRuler signals=prose_signals />
         })}
