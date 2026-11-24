@@ -368,6 +368,8 @@ The test of section 1: a team that lacks one of these stories keeps its old suit
 | `[x]` A space departure holds its budget with one key for every public channel | MVP | a space leave rotates the space key and every public channel key: the p95 read 2.19 s on a desktop for a budget of 2 s, the `Murmure space leave` row. Done when a space leave derives each member's pair key once for all its public channels, and the row holds its budget on a desktop |
 | `[x]` Murmure phone seed | MVP | the phone measures need a channel of 5 000 messages on the relay the phone reaches, and the phone stack seeds none. Done when one recipe fills a channel to 5 000 messages through the relay of the phone stack, and a test holds the count. On 2026-11-18, `just phone-seed phone 5000` filled one at `https://localhost:8443` in 630 s, and `seed_the_phone_stack` held the count of 5 000 through a second member |
 | `[x]` A stale channel name | MVP | the name sealed beside `meta` is a hint: a seal that failed to reach the relay, or two renames racing, leave the older one until the channel opens. A relay can also serve an older seal, never forge or read one. Re-seal on open when the hint differs from what meta reads |
+| `[ ]` A reader of a channel keeps the hint it cannot seal | MVP | Logic still writes the name meta reads into the local hint for a member who cannot write meta, before Sync refuses the seal (`SYNC-318`). No write leaves, but the hint then hides that the sealed name is stale. Done when Logic learns the role of meta from the document it opens, leaves the hint alone for a reader, and a row binding it reads `verified` |
+| `[ ]` The relay refuses a channel rename from a reader | MVP | the relay checks that the sender of a rename can write the document, and no row binds that check. Done when an `SRV` row names it and a test sends a rename from a viewer and reads the refusal |
 
 ### Import and export
 
@@ -647,6 +649,7 @@ row reads `V1`.
 | `[ ]` Murmure cold open measure | V1 | the cold open of a channel, the relay read included, is read by hand from a trace of the remote inspector. Done when a page of `phone-measures` times a cold open of the seeded channel and prints its row of the budget register |
 | `[ ]` Murmure answers a delta with the messages it touched | V1 | a remote delta derives the view of the channel again, whatever it changed. Done when a delta answers the messages it touched alone, and a row reads `verified` under a count of instructions |
 | `[ ]` Murmure counts without a walk per mark | V1 | each read mark walks the messages of its channel to count what stays unread. Done when a mark updates the count with no walk, and a row reads `verified` under a count of instructions |
+| `[ ]` A channel name renamed twice at once settles on the last | V1 | when a member opens a channel before the rename delta of another lands, its re-seal can reach the relay after that rename and leave the older name as the hint until the next open. A name delta on an open channel does not compare against the hint. Done when such a delta re-seals the hint, and a row binding it reads `verified` |
 
 ### Import and export
 
