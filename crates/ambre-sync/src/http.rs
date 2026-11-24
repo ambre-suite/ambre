@@ -1212,14 +1212,30 @@ fn expect_ok(request: &Outgoing, resp: &Incoming) -> Result<(), HttpError> {
     ))
 }
 
-/// The JSON body of a successful answer.
+/// The JSON body of a successful answer, as `serde_json::from_slice` reads
+/// it: one value, then nothing but white space.
+///
+/// Only `R::deserialize` is generic. The status check, the end of the body
+/// and the error mapping link once (`ambre-spec-budgets.md` section 5).
 fn read_json<R: serde::de::DeserializeOwned>(
     request: &Outgoing,
     resp: &Incoming,
 ) -> Result<R, HttpError> {
     expect_ok(request, resp)?;
-    // Only the decode is generic: the error mapping is `unreadable`, once.
-    serde_json::from_slice(resp.body.as_bytes()).map_err(|e| unreadable(request, &e))
+    let mut json = serde_json::Deserializer::from_slice(resp.body.as_bytes());
+    match R::deserialize(&mut json) {
+        Ok(value) => end_json(request, &mut json).map(|()| value),
+        Err(e) => Err(unreadable(request, &e)),
+    }
+}
+
+/// The end of a JSON body: anything but white space after the value refuses
+/// the answer, as `serde_json::from_slice` does.
+fn end_json(
+    request: &Outgoing,
+    json: &mut serde_json::Deserializer<serde_json::de::SliceRead<'_>>,
+) -> Result<(), HttpError> {
+    json.end().map_err(|e| unreadable(request, &e))
 }
 
 /// The error of a successful answer whose JSON body did not decode.
@@ -1578,15 +1594,46 @@ pub(crate) struct ProviderCallbackRequest {
 }
 
 /// The relay's answer to a provider return: who signed in, and their tokens.
+///
+/// It decodes through [`ProviderCallbackWire`], whose fields lie flat as the
+/// relay sends them. A `#[serde(flatten)]` on `tokens` buffered the whole
+/// object first, and linked a second decoder of every JSON value
+/// (`ambre-spec-budgets.md` section 5).
 #[derive(Deserialize)]
+#[serde(from = "ProviderCallbackWire")]
 pub(crate) struct ProviderCallbackResponse {
-    #[serde(with = "ambre_core::serde_id::text")]
     pub user_id: Id<User>,
     pub email: ambre_core::Email,
     pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
     /// The pair, with the lifetime of its access token.
-    #[serde(flatten)]
     pub tokens: TokenPair,
+}
+
+/// The fields of [`ProviderCallbackResponse`], as the relay sends them.
+#[derive(Deserialize)]
+struct ProviderCallbackWire {
+    #[serde(with = "ambre_core::serde_id::text")]
+    user_id: Id<User>,
+    email: ambre_core::Email,
+    display_name: ambre_core::Validated<ambre_core::DisplayName>,
+    access_token: Credential<AccessToken>,
+    refresh_token: Credential<RefreshToken>,
+    access_expires_in: TimeSpan<Sec>,
+}
+
+impl From<ProviderCallbackWire> for ProviderCallbackResponse {
+    fn from(wire: ProviderCallbackWire) -> Self {
+        Self {
+            user_id: wire.user_id,
+            email: wire.email,
+            display_name: wire.display_name,
+            tokens: TokenPair {
+                access_token: wire.access_token,
+                refresh_token: wire.refresh_token,
+                access_expires_in: wire.access_expires_in,
+            },
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -1616,10 +1663,14 @@ pub(crate) struct StoreMasterKeysRequest {
 
 /// The relay's answer to a first key store: a fresh pair, bound to the new
 /// signing key. The pair the store presented is stale from then on.
+///
+/// The answer is the pair's object itself, so the decode is transparent: a
+/// `#[serde(flatten)]` buffered the object first, for the same fields
+/// (`ambre-spec-budgets.md` section 5).
 #[derive(Deserialize)]
+#[serde(transparent)]
 pub(crate) struct KeysStoredResponse {
     /// The pair, with the lifetime of its access token.
-    #[serde(flatten)]
     pub tokens: TokenPair,
 }
 
@@ -2174,6 +2225,22 @@ pub(crate) struct SnapshotUploadIdResponse {
     #[serde(with = "ambre_core::serde_id::text")]
     pub snapshot_id: Id<Snapshot>,
 }
+
+/// Body of `POST /api/documents/{id}/snapshot/upload-id`: the size of the
+/// sealed blob the relay mints an identifier for.
+///
+/// A typed body in place of a `serde_json::Value`: no body of the worker then
+/// builds a JSON tree, so the tree's code leaves the wasm
+/// (`ambre-spec-budgets.md` section 5).
+#[derive(Serialize)]
+pub(crate) struct SnapshotUploadIdRequest {
+    #[serde(rename = "size_bytes")]
+    pub size: ambre_core::Count<ambre_core::Octets>,
+}
+
+/// The body of a request that carries no field: it encodes as `{}`.
+#[derive(Serialize)]
+pub(crate) struct EmptyBody {}
 
 /// Body of `POST /api/documents/{id}/snapshot/upload-url`: the size of the
 /// sealed blob, the id it seals, and its SHA-256 digest, which the link signs

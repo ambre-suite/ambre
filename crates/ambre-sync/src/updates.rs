@@ -2267,7 +2267,7 @@ pub(crate) async fn upload_snapshot(
     let minted: http::SnapshotUploadIdResponse = http::post_json_auth_via(
         transport,
         &base.route(format!("/documents/{document_id}/snapshot/upload-id")),
-        &serde_json::json!({ "size_bytes": draft.size() }),
+        &http::SnapshotUploadIdRequest { size: draft.size() },
         auth,
     )
     .await?;
