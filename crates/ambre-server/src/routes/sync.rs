@@ -101,6 +101,10 @@ pub struct ConfirmedSnapshotJson {
 pub struct ConfirmSnapshotRequest {
     pub signature: FixedBytes<ambre_core::Signature>,
     pub blob: FixedBytes<ambre_core::SnapshotDigest>,
+    /// The log head the confirmer signed, which the relay keeps and serves
+    /// with the signature (`AUTHOR-038`).
+    #[serde(default)]
+    pub head: Option<ambre_protocol::LogHead>,
 }
 
 /// Records that the caller checked a snapshot and vouches for it (`SRV-126`).
@@ -140,6 +144,7 @@ pub async fn confirm_snapshot(
             covered_seq: snap.covered_seq,
             author: &snap.author_pubkey,
             blob: &req.blob,
+            head: req.head,
         },
     );
     let signature = Signature::from_bytes(req.signature.as_array());
@@ -149,6 +154,7 @@ pub async fn confirm_snapshot(
     let confirmation = db::SignedConfirmation {
         confirmer: auth.signing_pubkey,
         signature: req.signature,
+        head: req.head,
     };
     let status = db::confirm_snapshot(&state.db, &doc_id, &snap_id, &confirmation)
         .await?

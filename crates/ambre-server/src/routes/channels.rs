@@ -4594,6 +4594,7 @@ mod tests {
                 covered_seq: snapshot.covered_seq,
                 author: &snapshot.author_pubkey,
                 blob: &blob,
+                head: None,
             },
         );
         let signature = ed25519_dalek::Signer::sign(&signing_key_of(who), transcript.as_bytes());
@@ -4604,6 +4605,7 @@ mod tests {
             Json::new(crate::routes::ConfirmSnapshotRequest {
                 signature: ambre_core::FixedBytes::from_array(signature.to_bytes()),
                 blob,
+                head: None,
             }),
         )
         .await

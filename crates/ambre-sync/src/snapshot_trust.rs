@@ -62,6 +62,7 @@ impl Trusted {
                     covered_seq: self.named.covered_seq,
                     author: &self.named.author,
                     blob: &digest,
+                    head: confirmation.head,
                 });
                 ambre_crypto::signature::verify_message(
                     &confirmation.confirmer,
@@ -70,6 +71,18 @@ impl Trusted {
                 )
                 .is_ok()
             }
+        }
+    }
+}
+
+impl Trusted {
+    /// The log head a member other than the author signed with its
+    /// confirmation, under which a fold past a lifted cap stands
+    /// (`SYNC-317`). The user's own snapshot names none.
+    pub(crate) fn proof(&self) -> Option<ambre_protocol::LogHead> {
+        match &self.trust {
+            Trust::Own => None,
+            Trust::Confirmed(confirmation) => confirmation.head,
         }
     }
 }
@@ -206,10 +219,12 @@ mod tests {
             covered_seq: named.covered_seq,
             author: &named.author,
             blob: &digest,
+            head: None,
         });
         SignedConfirmation {
             confirmer: public(confirmer),
             signature: ambre_crypto::signature::sign_message(confirmer, &transcript),
+            head: None,
         }
     }
 
@@ -328,6 +343,59 @@ mod tests {
             adopts(doc, &mine, author, &confirmers, &swapped),
             Some(snapshot)
         );
+    }
+
+    /// `SYNC-317`: Bob confirms the blob under the head of his walk, and
+    /// the start carries that head as its proof. A relay that rewrites the
+    /// head, or strips it, serves a confirmation whose signature fails, so
+    /// the blob is no start.
+    #[test]
+    fn a_confirmation_holds_under_the_head_it_signs_alone() {
+        let doc = Id::<Document>::mint();
+        let (alice, bob) = (key(1), key(2));
+        let confirmers = members(&[&alice, &bob]);
+        let snapshot = named(&alice, 9);
+        let checked = blob(b"the blob Bob checked");
+        let head = ambre_protocol::LogHead {
+            position: Seq::new(3),
+            previous: Some(FixedBytes::from_array([8; 32])),
+        };
+        let digest = blob_digest(&checked);
+        let transcript = confirm_transcript(Confirmed {
+            document_id: doc,
+            snapshot_id: snapshot.snapshot_id,
+            covered_seq: snapshot.covered_seq,
+            author: &snapshot.author,
+            blob: &digest,
+            head: Some(head),
+        });
+        let genuine = SignedConfirmation {
+            confirmer: public(&bob),
+            signature: ambre_crypto::signature::sign_message(&bob, &transcript),
+            head: Some(head),
+        };
+        let start = |confirmation: SignedConfirmation| {
+            open_start(
+                &meta(&snapshot, Some(confirmation), None),
+                None,
+                &confirmers,
+            )
+            .start
+            .filter(|start| start.holds(doc, &checked))
+        };
+        let trusted = start(genuine).expect("the signed head holds");
+        assert_eq!(trusted.proof(), Some(head));
+        let rewritten = ambre_protocol::LogHead {
+            position: Seq::new(4),
+            ..head
+        };
+        for served in [Some(rewritten), None] {
+            let tampered = SignedConfirmation {
+                head: served,
+                ..genuine
+            };
+            assert_eq!(start(tampered), None, "{served:?}");
+        }
     }
 
     /// `AUTHOR-034`, audit `W203`: Mallory's second account, whose binding

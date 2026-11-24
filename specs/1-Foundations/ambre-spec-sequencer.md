@@ -359,7 +359,10 @@ growing while one author writes alone (`SRV-132`).
 A confirmation carries the confirmer's signature and the digest of the blob checked. The
 signature covers the document, the snapshot, its horizon, its author and that digest. The relay
 refuses one that does not verify (`SRV-284`). It keeps another member's signature and serves it
-with the snapshot, since a cold open trusts nothing else (`AUTHOR-030`). The relay keeps no
+with the snapshot, since a cold open trusts nothing else (`AUTHOR-030`). It keeps and serves the
+log head a confirmer signed too (`AUTHOR-038`).
+
+The relay keeps no
 digest. A cold open computes it again from the blob it downloads, so a digest of another blob
 fails there (audit `W101`).
 
