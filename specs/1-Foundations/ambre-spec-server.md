@@ -281,7 +281,9 @@ document row removes its delta rows in the same statement. It holds on every pat
 cascade and plain SQL (`SRV-275`). The trigger fires on a delete alone, so an insert pays nothing.
 
 A write past its checks when the tombstone was set may still insert a row after the delete. No
-trigger sees that row, so the second sweep removes it (`SRV-273`).
+trigger sees that row, so the second sweep removes it (`SRV-273`). The write path makes that case
+rarer. It reads the tombstone again before it stores a delta, and stores nothing once it finds it
+(`ambre-spec-sequencer.md`, `SRV-335`).
 
 A presigned upload link cannot be revoked, so the mark schedules a second sweep of the objects for
 when the last link has expired (`SRV-057`). The tombstone lives as long as that window.

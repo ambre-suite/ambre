@@ -2197,6 +2197,60 @@ mod handler_tests {
         assert_eq!(rows, 1, "the refused name wrote no row");
     }
 
+    /// `SRV-337`: a development sign-in keeps the keys an account holds.
+    /// Another signing key or another exchange key is refused and writes
+    /// nothing. The same keys, and no key, sign in and keep them.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_dev_sign_in_keeps_the_keys_it_finds_and_refuses_others(pool: sqlx::PgPool) {
+        let state = test_app_state_dev(pool.clone()).await;
+        let app = build_test_router(state);
+        let login = |body: serde_json::Value| {
+            Request::post("/api/auth/dev/login")
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap()
+        };
+        let stored = || async {
+            sqlx::query_as::<_, (Vec<u8>, Vec<u8>)>(
+                "SELECT signing_pubkey, exchange_pubkey FROM users WHERE oidc_subject = 'alice'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+        };
+        let held = (vec![7u8; 32], vec![8u8; 32]);
+        let first = app
+            .clone()
+            .oneshot(login(dev_login_body("alice")))
+            .await
+            .unwrap();
+        assert_eq!(first.status(), StatusCode::OK);
+        assert_eq!(stored().await, held);
+
+        let mut other_signing = dev_login_body("alice");
+        other_signing["signing_pub_key"] = hex::encode([9u8; 32]).into();
+        let mut other_exchange = dev_login_body("alice");
+        other_exchange["exchange_pub_key"] = hex::encode([9u8; 32]).into();
+        for (body, case) in [
+            (other_signing, "another signing key"),
+            (other_exchange, "another exchange key"),
+        ] {
+            let resp = app.clone().oneshot(login(body)).await.unwrap();
+            assert_eq!(resp.status(), StatusCode::CONFLICT, "{case}");
+            assert_eq!(stored().await, held, "{case} wrote nothing");
+        }
+
+        for (body, case) in [
+            (dev_login_body("alice"), "the same keys"),
+            (serde_json::json!({ "username": "alice" }), "no key"),
+        ] {
+            let resp = app.clone().oneshot(login(body)).await.unwrap();
+            assert_eq!(resp.status(), StatusCode::OK, "{case}");
+            assert_eq!(stored().await, held, "{case} keeps the keys");
+        }
+    }
+
     /// The signing key of the first key stores of these tests.
     fn store_key() -> ed25519_dalek::SigningKey {
         ed25519_dalek::SigningKey::from_bytes(&[3u8; 32])
