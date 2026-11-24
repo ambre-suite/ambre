@@ -926,7 +926,7 @@ pub fn main() {
     // the bootstrap and was lost whenever the worker came up slowly.
     let sync_start = Rc::new(RefCell::new(ambre_bus::start::StartGate::new()));
     let sync_worker = spawn_sync_worker(Rc::clone(&sync_inbox), Rc::clone(&sync_start));
-    call::install(&sync_worker);
+    call::install(&sync_worker, &shell_outbox);
 
     // The canvas document-swap handle is created by `run_with` below (after the
     // chrome mounts the `<canvas>`); the route effect reads it through this slot.

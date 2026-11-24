@@ -587,6 +587,29 @@ pub(crate) fn folded_amendments(meta: &LoroDoc, segment: Id<Segment>) -> Option<
     Id::<Document>::parse_str(&schema::string(&entry, SegmentKey::Folded)?).ok()
 }
 
+/// Every document `meta` names: each segment of its list, whatever its
+/// state, and the amendments document of each segment that a fold did not
+/// erase. A removal from the channel refuses a relay listing that leaves one
+/// out (`SYNC-320`). An entry with no readable segment still names its
+/// amendments, so a malformed entry hides nothing.
+pub(super) fn named_documents(meta: &LoroDoc) -> Vec<Id<Document>> {
+    let list: LoroList = crate::logic::schema::root_list(meta, Root::Segments);
+    let mut named: Vec<Id<Document>> = Vec::new();
+    list.for_each(|item| {
+        let Some(entry) = crate::logic::schema::fields_of::<SegmentKey>(item) else {
+            return;
+        };
+        let segment = schema::string(&entry, SegmentKey::Document)
+            .and_then(|s| Id::<Document>::parse_str(&s).ok());
+        for document_id in segment.into_iter().chain(live_amendments(&entry)) {
+            if !named.contains(&document_id) {
+                named.push(document_id);
+            }
+        }
+    });
+    named
+}
+
 /// Every segment `meta` names an amendments document for, with that
 /// document, in list order.
 fn amendments_entries(meta: &LoroDoc) -> Vec<(Id<Segment>, Id<Document>)> {
