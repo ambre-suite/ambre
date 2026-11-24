@@ -175,9 +175,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 115 `verified`, 1 `unimplemented`. Every pure transform holds, out of the
-  browser: the wrap, the weak key, the pin, the invitee, the role and the log walk. What is loose is
-  the branches that only run against a live relay.
+* **Verification.** 116 `verified`. Every pure transform holds, out of the browser: the wrap, the
+  weak key, the pin, the invitee, the role and the log walk. What is loose is the branches that only
+  run against a live relay.
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -680,7 +680,9 @@ write there with the relay, so it posts nothing.
 departure or a revoke on the log of a channel's `meta`, it opens the channel when it is closed. It
 then sends the documents the `meta` names with the removal: each segment, and each amendments
 document no fold erased. The census refuses a listing that leaves one out, and a removal that names
-none (`SYNC-320`). A channel the Logic thread opened for the removal alone closes again. An open that
+none (`SYNC-320`).
+
+A channel the Logic thread opened for the removal alone closes again. An open that
 fails fails the removal, and nothing reaches the Sync worker.
 
 **A removal floors the channel at zero.** The census reads the documents of the channel from the

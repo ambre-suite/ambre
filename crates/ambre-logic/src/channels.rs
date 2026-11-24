@@ -766,8 +766,8 @@ mod tests {
     }
 
     /// `SYNC-320`: a revoke on the `meta` of a closed channel opens it to read
-    /// the documents the sealed `meta` names, sends them with the revoke,
-    /// then closes the channel again.
+    /// the documents the sealed `meta` names. The revoke leaves with them,
+    /// then the channel closes again.
     #[test]
     fn a_revoke_on_a_closed_channel_opens_it_then_closes_it_again() {
         let (mut state, _ui, sync, store) = harness_with_store();

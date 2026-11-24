@@ -185,8 +185,8 @@ pub(crate) fn phase() -> ArcRwSignal<CallPhase> {
     PHASE.with(ArcRwSignal::clone)
 }
 
-/// Gives the call client the Sync worker the page spawned and the launcher's writer to the
-/// Logic thread, and listens for a change of the device list of the browser.
+/// Gives the call client the Sync worker the page spawned, and the launcher's writer to the
+/// Logic thread. Then listens for a change of the device list of the browser.
 pub(crate) fn install(sync: &web_sys::Worker, logic: &crate::outbox::ShellOutbox) {
     SYNC.with(|slot| *slot.borrow_mut() = Some(sync.clone()));
     LOGIC.with(|slot| *slot.borrow_mut() = Some(logic.clone()));

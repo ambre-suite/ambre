@@ -21,14 +21,14 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**5113 rows: 4682 shipped, of which 14 loose. 431 unbuilt.**
+**5113 rows: 4683 shipped, of which 14 loose. 430 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1705 | 583 | 996 | 823 | 561 | 4668 |
+| `verified` | 1706 | 583 | 996 | 823 | 561 | 4669 |
 | `failing` |  |  |  |  |  | 0 |
 | `human-review` | 14 |  |  |  |  | 14 |
-| `unimplemented` | 176 | 42 | 21 | 24 | 168 | 431 |
+| `unimplemented` | 175 | 42 | 21 | 24 | 168 | 430 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -60,7 +60,7 @@
 | `ambre-spec-launcher.md` | 55 | 55 | 55 |  |  |
 | `ambre-spec-locale.md` | 23 | 23 | 23 |  |  |
 | `ambre-spec-media.md` | 20 | 20 | 20 |  |  |
-| `ambre-spec-membership.md` | 116 | 115 | 115 |  | 1 |
+| `ambre-spec-membership.md` | 116 | 116 | 116 |  |  |
 | `ambre-spec-message-bus.md` | 46 | 45 | 45 |  | 1 |
 | `ambre-spec-newtypes.md` | 1 | 1 | 1 |  |  |
 | `ambre-spec-object-store.md` | 25 | 24 | 24 |  | 1 |
