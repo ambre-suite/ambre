@@ -164,6 +164,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-304` | `FAIL` | Given an open, a snapshot that folds a delta past the cap of its writer MUST open nothing, and the open MUST replay from a start under every cap (`SYNC-307`). A reopen whose local copy applied such a delta MUST read the document again. | this spec section 3; `SYNC-300`, `RESID-010` | `ambre_sync::updates::tests::an_open_refuses_a_delta_past_the_cap_of_its_writer` -- the owner's snapshot that folds a clock past the cap opens nothing, the replay starts at the first delta and lands the clock at the cap alone, and a snapshot under the cap opens; `ambre_sync::light::tests::a_reopen_past_a_revoke_cap_reads_the_document_again` -- the clocks of an evicted session travel to its reopen, which reads the document again past a cap and not under one | none | verified |
 | `SYNC-307` | `FAIL` | Given an open whose start folds a delta past a cap, the open MUST start from the trusted reference when the reference folds none, and replay the deltas past its horizon alone; with no such reference, it MUST replay from the first delta. Either start MUST reach the clocks a full replay of the same log reaches. | this spec section 3; `SYNC-304`, `AUTHOR-030`, `SRV-127` | `ambre_sync::updates::tests::a_snapshot_past_a_cap_starts_from_the_reference_as_a_full_replay_does` -- the open starts from the reference and asks past its horizon, applies the deltas a full replay applies past it and reaches its clocks, and a reference past the cap replays from the first delta; `ambre_sync::snapshot_trust::tests::a_trusted_latest_keeps_the_trusted_reference_to_fall_back_on` -- only a trusted reference older than the start is a fallback | none | verified |
 | `SYNC-309` | `FAIL` | Given an open, the replay the relay serves MUST hand the document no delta past the cap of its writer, and MUST land every delta under the caps. | this spec section 3; `SYNC-300`, `SYNC-304` | `ambre_sync::updates::tests::an_open_replay_refuses_a_delta_past_the_cap_of_its_writer` -- a fresh open replays the whole log in one batch, which carries the capped writer's clock at the cap and the other writer's delta alone, warns once per refused delta and leaves no write past the cap applied | none | verified |
+| `SYNC-316` | `FAIL` | Given an open, a start that folds a clock of a writer past any cap a later grant lifted MUST open nothing, as `SYNC-304` states, unless `SYNC-317` admits it; every lifted cap of that writer counts, the latest one alone does not. | this spec section 3; `SYNC-301`, `SYNC-304`, `SYNC-307` | `ambre_sync::updates::tests::a_start_past_a_lifted_cap_opens_nothing` -- after a revoke at cap 1 and an invite, a start that folds Bob's clock 2 or 3 opens nothing and replays from the first delta, one that folds his clock 1 opens, and a copy that folded his clock 2 is read again; `ambre_sync::membership_log::tests::a_fold_past_any_lifted_cap_of_its_author_is_past_a_cap` -- after two exclusions each lifted, a fold past the first cap counts as past a cap, and Alice is bound by none | none | verified |
+| `SYNC-317` | `FAIL` | Given an open, a start that folds a clock of a writer past a cap a later grant lifted MUST open when a member other than its author confirmed it under a log head the valid walk passes through at or past that grant. A standing cap MUST still refuse it. | this spec section 3; `SYNC-301`, `SYNC-316`; `ambre-spec-op-authorship.md`, `AUTHOR-030`, `AUTHOR-038` | `ambre_sync::updates::tests::a_start_past_a_lifted_cap_opens_under_a_head_past_the_grant` -- after a revoke at cap 1 and an invite, a start folding Bob's clock 3 at horizon 9 opens under the head after the invite and replays past its horizon alone, as after a trim, and is never read again, while the head of the exclusion or no head opens nothing; `ambre_sync::membership_log::tests::a_confirmed_head_past_the_grant_proves_a_fold_past_its_lifted_cap` -- the head after the invite proves the fold, the head of the exclusion, a forged head and no head do not, and a standing cap refuses it under any head; `ambre_sync::snapshot_trust::tests::a_confirmation_holds_under_the_head_it_signs_alone` -- the start carries the signed head as its proof, and a head the relay rewrote or stripped trusts nothing | none | verified |
 
 * **Budget.** the key exchange costs one elliptic-curve operation per member at open, charged to
   the crypto rows of `ambre-spec-budgets.md section 1`. The directory and the role are read off an
@@ -171,7 +173,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 111 `verified`, 1 `unimplemented`. Every pure transform holds, out of the
+* **Verification.** 113 `verified`, 1 `unimplemented`. Every pure transform holds, out of the
   browser: the wrap, the weak key, the pin, the invitee, the role and the log walk. What is loose is
   the branches that only run against a live relay.
 ---
@@ -621,6 +623,27 @@ asks for the deltas past its horizon alone (`SYNC-307`). The relay keeps every d
 reference (`SRV-127`), so the replay costs those deltas and no more. A replay from the first delta
 remains the last resort, and the relay may have trimmed the deltas under the reference.
 
+**A snapshot proves no head.** A snapshot names the highest clock of each author it folds, and no
+head. A later grant lifts the cap of a readmitted writer, but a clock past that cap may be a write
+of the exclusion. A start that folds such a clock thus opens nothing, and the deltas replay under
+their heads (`SYNC-316`). Each cap a grant lifted counts, not the latest one alone. A signed list of
+heads would prove nothing: only the signature of each delta binds its head.
+
+**A confirmation proves the head.** Once a readmitted writer writes past the lifted cap, every later
+snapshot folds past it, the reference included. The relay trims the deltas under the reference, so a
+replay from the first delta can lose them.
+
+A member other than the author who confirms a snapshot
+checked it against its own state (`AUTHOR-016`). That state took each delta of the writer under its
+head. The confirmer thus signs the head of its walk (`AUTHOR-038`). A start whose confirmation names
+a head at or past the grant opens, as a delta signed under that head would (`SYNC-317`).
+
+A confirmation with no head, or a head short of the grant, leaves `SYNC-316` in force.
+
+The open notes each folded clock under that head. A later walk reads them as signed deltas, so the
+document is not read again. A standing cap still refuses the start, whatever the head. The price is
+the one `AUTHOR-030` states: an owner and a guest of that owner can make such a fold read as checked.
+
 **A replay checks each delta.** The open checks each replayed delta against the cap of its writer,
 as it checks a live delta. A batch thus hands the document no write past a cap (`SYNC-309`).
 
@@ -726,6 +749,9 @@ authority: the role here hides what the relay would refuse anyway.
 | A census opens each document a removal caps | the clock of each author the relay's index of deltas holds | the relay's word on a clock: with the removed member, it raises the cap and the member keeps writing. An open reads only clocks under a signature the walk admits |
 | A census opens each document a removal caps | asking the Logic thread to open them | the Logic thread would load each document for nothing, and the census needs no content. The Sync worker already runs the open whole, the snapshot check aside |
 | A channel past 16 documents fails the removal | capping the 16 first and leaving the rest | the member keeps writing with the relay in each document left, and nobody sees it |
+| A start past a lifted cap stands on a confirmation that signs its confirmer's head | the relay keeps every delta of a readmitted writer past the lifted cap, and the open checks each one | the deltas kept grow with the history of that writer, and each open downloads all of them, against the memory budget of `README.md`. The open would also have to match each fold against the ops of those deltas in the Logic thread. The relay could still trim them, and the open would fail |
+| A start past a lifted cap stands on a confirmation that signs its confirmer's head | the snapshot carries the signed deltas it folds past the lifted cap | each snapshot grows with the history of the writer, and no fold is bound to those deltas without the same check in the Logic thread |
+| A start past a lifted cap stands on a confirmation that signs its confirmer's head | the confirmation as it stood, with no head | a member who confirmed before it learned the revoke vouches for writes of the exclusion. The relay can delay the revoke to choose that member |
 | An invite names the key it wraps | trusting the wrap the relay serves | the relay could hand the invitee another document's key, or an old one, and nothing would tell the two apart |
 
 ---

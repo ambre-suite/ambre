@@ -128,6 +128,7 @@ that component's prefix instead.
 | `ambre-server` | `document_id`, `pub_key` (Ed25519), `clock`, `seq`, `snapshot_id`, `key_id`, `nonce` | CRDT content, Document Key, Master Seed, User Key, passphrase |
 | `ambre-server`, per update and per ephemeral | the head of the membership log the author of the frame read (`SYNC-207`, `SYNC-263`), and the entry that head names (`SYNC-218`, `SYNC-262`) | anything else about that author's view of the log |
 | `ambre-server`, per key link | the head of the membership log the rotator read (`SYNC-204`) | the key the link seals |
+| `ambre-server`, per confirmation | the head of the membership log the confirmer read, when its walk readmits a writer (`AUTHOR-038`) | the snapshot it checked against |
 | `ambre-sfu` | the set of `ZK-021`, each participant under the pseudonyms of `ZK-023`, who shares a screen and when (`ZK-033`), and whose video each receiver chose (`ZK-044`) | the audio and video of a call, every sender key, the channel, the user and the key of a participant |
 | a host a web embed names, never the relay | the address of the client, the page and the instant it loads, once this user chose to load pages of that host (`ZK-048`) | the board, the document, every key, the user, the choice itself |
 

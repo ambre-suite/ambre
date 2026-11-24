@@ -350,6 +350,7 @@ mod tests {
             &Vouch::Confirm(crate::pipeline::BlobConfirmation {
                 signature: FixedBytes::from_array([0; 64]),
                 blob: FixedBytes::from_array([0; 32]),
+                head: None,
             }),
         )
         .await;

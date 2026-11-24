@@ -101,6 +101,11 @@ wasm-bindgen-test = "0.3"
 # log to the console itself (`src/log.rs`, `SYNC-305`).
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 console_error_panic_hook = { workspace = true }
+# The one-shot channel whose sender the guard of the renewal lock holds. A
+# renewal dropped mid-way drops the sender, and the task that waits on the
+# receiver releases the Web Lock (`kept.rs`, `SRV-338`). `futures-util`
+# already builds it, so the worker links no new crate.
+futures-channel = { workspace = true }
 
 # The log reaches `tracing` on the host alone, where the native tests capture
 # it (`src/log.rs`). The worker links no `tracing`.

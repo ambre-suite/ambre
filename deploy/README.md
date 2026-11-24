@@ -81,7 +81,8 @@ A Toile web embed loads a page of another site only when the deployment names th
 `AMBRE_EMBED_SITES` in `.env` to the hosts or `https` origins it admits, split by spaces or commas,
 for example `AMBRE_EMBED_SITES=www.youtube.com player.vimeo.com`. Then run
 `docker compose up -d --build`: the build writes the sites into the policy of the page. Without the
-variable, no embed loads (`SRV-312`).
+variable, no embed loads (`SRV-312`). Each entry names one host: a wildcard such as `*.github.io`
+fails the build, since it admits the page of any user of that host.
 
 ## The stack under test
 

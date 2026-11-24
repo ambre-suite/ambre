@@ -4471,6 +4471,18 @@ mod handler_tests {
         covered: u64,
         author: [u8; 32],
     ) -> serde_json::Value {
+        confirm_body_under(key, (doc_id, snap), covered, author, None)
+    }
+
+    /// The body of a confirmation `key` signs as [`confirm_body`] does, under
+    /// the log head `head` when one is named (`AUTHOR-038`).
+    fn confirm_body_under(
+        key: &ed25519_dalek::SigningKey,
+        (doc_id, snap): (&str, &str),
+        covered: u64,
+        author: [u8; 32],
+        head: Option<ambre_protocol::LogHead>,
+    ) -> serde_json::Value {
         let blob = ambre_core::FixedBytes::<ambre_core::SnapshotDigest>::from_array([6; 32]);
         let transcript = ambre_protocol::snapshot_confirm::confirm_transcript(
             ambre_protocol::snapshot_confirm::Confirmed {
@@ -4479,13 +4491,18 @@ mod handler_tests {
                 covered_seq: ambre_core::Seq::<ambre_core::Relay>::new(covered),
                 author: &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(author),
                 blob: &blob,
+                head,
             },
         );
         let signature = ed25519_dalek::Signer::sign(key, transcript.as_bytes());
-        serde_json::json!({
+        let mut body = serde_json::json!({
             "signature": hex::encode(signature.to_bytes()),
             "blob": hex::encode(blob.as_array()),
-        })
+        });
+        if let Some(head) = head {
+            body["head"] = serde_json::to_value(head).unwrap();
+        }
+        body
     }
 
     /// The member behind `auth`, whose signing key is `author`, uploads a
@@ -4713,6 +4730,47 @@ mod handler_tests {
         assert_eq!(served["reference"]["snapshot_id"], snap.as_str());
         assert_eq!(served["reference"]["author_pubkey"], hex::encode(author));
         assert_eq!(served["reference"]["confirmation"], *confirmation);
+    }
+
+    /// `AUTHOR-038`: a confirmation that names its confirmer's log head
+    /// stands only when the signature covers that head. The relay keeps the
+    /// head and serves it with the signature, so an open can check both.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_confirmation_keeps_the_log_head_its_confirmer_signed(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let owner_key = ed25519_dalek::SigningKey::from_bytes(&[5u8; 32]);
+        let author = owner_key.verifying_key().to_bytes();
+        let owner = setup_signing(&app, "user@ambre.app", &owner_key).await;
+        let doc_id = create_test_doc(&app, &owner).await;
+        let checker_key = ed25519_dalek::SigningKey::from_bytes(&[6u8; 32]);
+        let checker = setup_signing(&app, "checker@ambre.app", &checker_key).await;
+        invite(&app, &owner, &doc_id, "checker@ambre.app", "viewer").await;
+        let snap = upload_snapshot_by(&app, &owner, &doc_id, 0, author).await;
+        let confirm = format!("/api/documents/{doc_id}/snapshots/{snap}/confirm");
+        let head = ambre_protocol::LogHead {
+            position: ambre_core::Seq::new(3),
+            previous: Some(ambre_core::FixedBytes::from_array([8; 32])),
+        };
+
+        // A head the signature does not cover is refused.
+        let mut forged = confirm_body_under(&checker_key, (&doc_id, &snap), 0, author, Some(head));
+        forged["head"]["position"] = serde_json::json!(4);
+        let status = post_json(&app, &checker, confirm.clone(), forged).await;
+        assert!(status.is_client_error(), "{status}");
+        assert!(served_snapshot(&app, &checker, &doc_id).await.is_none());
+
+        let signed = confirm_body_under(&checker_key, (&doc_id, &snap), 0, author, Some(head));
+        assert_eq!(
+            post_json(&app, &checker, confirm, signed.clone()).await,
+            StatusCode::OK
+        );
+        let served = served_snapshot(&app, &checker, &doc_id).await.unwrap();
+        let confirmation: ambre_protocol::snapshot_confirm::SignedConfirmation =
+            serde_json::from_value(served["confirmation"].clone()).unwrap();
+        assert_eq!(confirmation.head, Some(head));
+        assert_eq!(served["confirmation"]["signature"], signed["signature"]);
     }
 
     /// `SRV-133`, `SRV-134`, `SRV-135`, `AUTHOR-023`: a report signed by its
