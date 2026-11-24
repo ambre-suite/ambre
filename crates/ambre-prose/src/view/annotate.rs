@@ -448,7 +448,7 @@ impl ProseUiState {
             }
             AnnotationIntent::Resolve { comment_id } => ProseCommand::ResolveComment { comment_id },
             // A thread anchors in one block: over a selection of several,
-            // it takes the part in the first (`PROSE-UI-259`).
+            // it takes the part in the first (`PROSE-UI-262`).
             AnnotationIntent::Comment { text } => {
                 if text.trim().is_empty() {
                     return None;

@@ -15,6 +15,7 @@ use ambre_core::{Commands, StaticKey};
 use std::collections::{HashMap, HashSet};
 use std::convert::Infallible;
 
+use crate::SpaceRanks;
 use crate::message::LogicCommand;
 use crate::message::{
     ChannelMatches, DirectMessageEvent, MemberView, MessageAt, MurmureCommand, MurmureEvent,
@@ -22,8 +23,8 @@ use crate::message::{
 };
 use crate::ui::commands::{
     AskedAll, COMMANDS, KEYS, KeyPlace, MARK_ALL_READ, MessageAction, MessageTarget, NEXT_ACTIVITY,
-    PALETTE, PREVIOUS_ACTIVITY, PendingDelete, PendingEdit, Picking, SEARCH, asked_all_title,
-    key_list, message_action, message_actions,
+    PALETTE, PREVIOUS_ACTIVITY, PendingDelete, PendingEdit, Picking, SEARCH, SHOW_SPACE,
+    asked_all_title, key_list, message_action, message_actions,
 };
 use crate::ui::drafts::DraftShelf;
 use crate::ui::emoji;
@@ -31,8 +32,8 @@ use crate::ui::markers::{Cover, MarkBar};
 use crate::ui::mention_list::{MentionEntry, MentionList};
 use crate::ui::uploads::PickedFile;
 use crate::{
-    Activity, MessageRef, MurmurePane, Region, Sidebar, SidebarEntry, SidebarGroup, SidebarSection,
-    SpaceHead,
+    Activity, DrawnSection, Folding, Folds, HiddenMark, Kept, LiveCalls, MessageRef, MurmurePane,
+    PhoneTab, Region, Sidebar, SidebarEntry, SidebarGroup, SidebarSection, SpaceHead,
 };
 use ambre_bus::MentionState;
 use ambre_bus::{Authored, ChannelPlace, Instant, RestCommand, RestEvent};
@@ -419,6 +420,14 @@ pub struct MurmureRelay {
     /// The files dropped on the channel's canvas, until its region takes
     /// them to upload (`MURMURE-132`).
     dropped_files: RwSignal<Vec<PickedFile>>,
+    /// The groups of the sidebar the user folded (`MURMURE-720`).
+    pub folds: RwSignal<Folds>,
+    /// The live calls the page knows, by channel, which the sidebar marks (`MURMURE-689`).
+    pub calls: RwSignal<LiveCalls>,
+    /// The space the user chose in the switcher, `None` for the first (`MURMURE-712`).
+    pub space: RwSignal<Option<Id<Space>>>,
+    /// The tab of the bar of the phone (`MURMURE-717`).
+    pub tab: RwSignal<PhoneTab>,
 }
 
 /// The search box: whether it is open, the query typed, and the last answer
@@ -560,6 +569,43 @@ impl MurmureRelay {
             picking: RwSignal::new(None),
             picked_emoji: RwSignal::new(None),
             dropped_files: RwSignal::new(Vec::new()),
+            folds: RwSignal::new(Folds::default()),
+            calls: RwSignal::new(LiveCalls::default()),
+            space: RwSignal::new(None),
+            tab: RwSignal::new(PhoneTab::Channels),
+        }
+    }
+
+    /// The space the sidebar shows: the one the user chose, else the first (`MURMURE-711`).
+    pub fn shown_space(&self) -> Signal<Option<Id<Space>>> {
+        let (sidebar, space) = (self.sidebar, self.space);
+        Signal::derive(move || sidebar.with(|s| s.shown_space(space.get())))
+    }
+
+    /// Shows the space of `rank`, counted from zero in the order of the switcher. Nothing opens,
+    /// nothing is joined and no cursor moves (`MURMURE-712`, `MURMURE-713`).
+    pub fn show_space(&self, rank: Pos<SpaceRanks>) {
+        if let Some(space) = self
+            .sidebar
+            .with_untracked(|s| s.spaces().get(rank.to_usize()).copied())
+        {
+            self.space.set(Some(space));
+        }
+    }
+
+    /// Folds the group `group`, or unfolds it. Nothing leaves the page (`MURMURE-720`,
+    /// `MURMURE-724`).
+    pub fn toggle_fold(&self, group: SidebarGroup) {
+        self.folds.update(|f| f.toggle(group));
+    }
+
+    /// Shows the view of `tab` in place of the channel list of a phone. The search tab opens the
+    /// search box (`MURMURE-717`).
+    pub fn choose_tab(&self, tab: PhoneTab) {
+        self.tab.set(tab);
+        if tab == PhoneTab::Search {
+            self.search
+                .update(|s| s.open = ambre_chrome::Openness::Open);
         }
     }
 
@@ -1055,6 +1101,14 @@ impl MurmureRelay {
                 self.forget_drafts(&[*channel_id]);
                 Vec::new()
             }
+            // Who is in the live call of a channel: the sidebar counts it (`MURMURE-689`).
+            UiEvent::Channel {
+                channel_id,
+                event: MurmureEvent::CallMembers { members, .. },
+            } => {
+                self.calls.update(|c| c.answer(*channel_id, members));
+                Vec::new()
+            }
             UiEvent::Space { space_id, event } => self.absorb_space(*space_id, event),
             // An answer to the query the box holds. One to an older query, or
             // to a box closed since, is dropped: typing outruns the answers.
@@ -1532,6 +1586,17 @@ impl MurmureHandler {
                 self.relay.keys.set(ambre_chrome::Openness::Open);
                 None
             }
+            // The chord of a space of the switcher shows it, and opens nothing (`MURMURE-712`).
+            id if SHOW_SPACE.contains(&id) => {
+                if let Some(rank) = SHOW_SPACE
+                    .iter()
+                    .position(|s| *s == id)
+                    .and_then(Pos::<SpaceRanks>::from_index)
+                {
+                    self.relay.show_space(rank);
+                }
+                None
+            }
             _ => return false,
         };
         if let Some(command) = command {
@@ -1604,7 +1669,23 @@ impl CommandHandler for MurmureHandler {
 /// `send` carries what the relay answers.
 #[component]
 pub fn ChannelList(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl IntoView {
-    let sections = Memo::new(move |_| relay.sidebar.with(Sidebar::sections));
+    let shown_space = relay.shown_space();
+    let sections = Memo::new(move |_| {
+        let space = shown_space.get();
+        let tab = relay.tab.get();
+        let sections: Vec<SidebarSection> = relay
+            .sidebar
+            .with(|s| s.sections_in(space))
+            .into_iter()
+            .filter(|section| tab.keeps(section.group))
+            .collect();
+        let shown = relay.pane.get().shown_channel();
+        relay.folds.with(|folds| {
+            relay
+                .calls
+                .with(|calls| crate::fold(sections, folds, Kept { shown, calls }))
+        })
+    });
     view! {
         <nav class="murmure-channel-list" aria-label="Channels">
             {move || {
@@ -1618,12 +1699,13 @@ pub fn ChannelList(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl In
     }
 }
 
-/// The spaces of the sidebar, above its channels (the Murmure spaces spec).
-/// A signed-in user creates a space here, and each space lists once created
-/// (`MURMURE-583`). An owner or an editor of a space creates a public channel
-/// in it (`MURMURE-584`), and its owner invites another user (`MURMURE-585`).
-/// A space whose role is not known yet offers neither. `now` stamps a
-/// creation, and `send` carries what the relay answers.
+/// The space switcher at the top of the sidebar, then the controls of the space shown (the
+/// Murmure spaces spec, the Murmure layout spec). The switcher names the space shown and lists
+/// every space of the user (`MURMURE-711`). A choice shows that space and opens nothing
+/// (`MURMURE-712`). A signed-in user creates a space here (`MURMURE-583`). An owner or an
+/// editor creates a public channel in the space shown (`MURMURE-584`), and its owner invites
+/// another user (`MURMURE-585`). `now` stamps a creation, and `send` carries what the relay
+/// answers.
 #[component]
 pub fn SpaceList(
     relay: MurmureRelay,
@@ -1631,24 +1713,66 @@ pub fn SpaceList(
     now: Callback<(), Instant<Authored>>,
 ) -> impl IntoView {
     let heads = relay.space_heads();
+    let shown = relay.shown_space();
     let new_space = Callback::new(move |name: String| relay.create_space(name, now.run(())));
+    let head_shown = move || {
+        let shown = shown.get();
+        heads.get().into_iter().find(|h| Some(h.space) == shown)
+    };
+    // The list rebuilds when the spaces change, never on a choice. So a pick keeps the focus
+    // on the switcher, which shows the space it picked.
+    let switcher = move || {
+        // Each of the first nine carries its chord, as the command table states it, so a
+        // rebinding moves no view (`ambre-spec-murmure-keyboard.md`).
+        let choices: Vec<ambre_chrome::ChoiceView> = heads
+            .get()
+            .into_iter()
+            .enumerate()
+            .map(|(rank, h)| {
+                let name = h
+                    .name
+                    .map_or_else(|| UNNAMED_SPACE.to_owned(), Validated::into_string);
+                let choice = ambre_chrome::ChoiceView::text(name);
+                match SHOW_SPACE
+                    .get(rank)
+                    .and_then(|id| crate::ui::commands::chord_of(*id))
+                {
+                    Some(chord) => choice.hinted(chord.to_string()),
+                    None => choice,
+                }
+            })
+            .collect();
+        let selected = Signal::derive(move || {
+            let shown = shown.get();
+            heads
+                .with(|heads| heads.iter().position(|h| Some(h.space) == shown))
+                .map(Pos::<ambre_chrome::ChoiceRow>::from_usize)
+        });
+        let on_pick = Callback::new(move |p: Pos<ambre_chrome::ChoiceRow>| {
+            if let Some(rank) = p.to_index().and_then(Pos::<SpaceRanks>::from_index) {
+                relay.show_space(rank);
+            }
+        });
+        view! {
+            <ambre_chrome::Select
+                label="Switch space"
+                choices=choices
+                selected=selected
+                on_pick=on_pick
+                placeholder="No space yet"
+            />
+        }
+    };
     view! {
         <section class="murmure-spaces" aria-label="Spaces">
+            <div class="murmure-space-switch">{switcher}</div>
+            {move || head_shown().map(|head| space_view(relay, send, now, head))}
             <PromptControl words=NEW_SPACE send=send on_submit=new_space />
-            <ul>
-                {move || {
-                    heads
-                        .get()
-                        .into_iter()
-                        .map(|head| space_view(relay, send, now, head))
-                        .collect_view()
-                }}
-            </ul>
         </section>
     }
 }
 
-/// One space of the sidebar: its name, then the controls its role allows.
+/// The controls of the space shown, as its role allows.
 fn space_view(
     relay: MurmureRelay,
     send: Callback<LogicCommand>,
@@ -1665,15 +1789,39 @@ fn space_view(
         let on_submit = Callback::new(move |email: String| relay.invite_to_space(space, email));
         view! { <PromptControl words=INVITE_TO_SPACE send=send on_submit=on_submit /> }
     });
-    let name = head
-        .name
-        .map_or_else(|| UNNAMED_SPACE.to_owned(), Validated::into_string);
     view! {
-        <li class="murmure-space">
-            <h3 class="murmure-space-name">{name}</h3>
+        <div class="murmure-space">
             {new_channel}
             {invite}
-        </li>
+        </div>
+    }
+}
+
+/// The bar of tabs on the bottom edge of the channel list of a phone (`MURMURE-715`). The
+/// stylesheet shows it under the phone width, on the channel list alone (`MURMURE-716`). A tab
+/// shows its view, and nothing leaves the page (`MURMURE-717`, `MURMURE-718`).
+#[component]
+pub fn PhoneTabs(relay: MurmureRelay) -> impl IntoView {
+    let choices = PhoneTab::ALL
+        .into_iter()
+        .map(|tab| ambre_chrome::ChoiceView::text(tab.label()))
+        .collect();
+    let selected = Signal::derive(move || {
+        let tab = relay.tab.get();
+        PhoneTab::ALL
+            .iter()
+            .position(|t| *t == tab)
+            .map(Pos::<ambre_chrome::ChoiceRow>::from_usize)
+    });
+    let on_pick = Callback::new(move |p: Pos<ambre_chrome::ChoiceRow>| {
+        if let Some(tab) = p.to_index().and_then(|i| PhoneTab::ALL.get(i)) {
+            relay.choose_tab(*tab);
+        }
+    });
+    view! {
+        <nav class="murmure-tabs" aria-label="Murmure">
+            <ambre_chrome::SegmentBar label="Murmure views" choices=choices selected=selected on_pick=on_pick />
+        </nav>
     }
 }
 
@@ -2230,8 +2378,14 @@ impl GroupWords {
 fn section_view(
     relay: MurmureRelay,
     send: Callback<LogicCommand>,
-    section: SidebarSection,
+    drawn: DrawnSection,
 ) -> impl IntoView {
+    let DrawnSection {
+        section,
+        folding,
+        hidden,
+        mark,
+    } = drawn;
     let GroupWords {
         word,
         title: fallback,
@@ -2241,9 +2395,31 @@ fn section_view(
     let title = section
         .title
         .map_or_else(|| fallback.to_owned(), Validated::into_string);
+    let group = section.group;
+    // A folded group says how many channels it hides, and marks one with activity
+    // (`MURMURE-722`).
+    let summary = (folding == Folding::Folded && !hidden.is_zero()).then(|| {
+        view! {
+            <span class="murmure-section-hidden" aria-label=format!("{} hidden", hidden.get())>
+                {(mark == HiddenMark::Active).then(|| view! { <span class="murmure-mark"></span> })}
+                {hidden.get()}
+            </span>
+        }
+    });
     view! {
-        <section class="murmure-section" data-group=word>
-            <h3 class="murmure-section-title">{title}</h3>
+        <section class="murmure-section" data-group=word data-folded=folding.expanded()>
+            <h3 class="murmure-section-head">
+                <button
+                    r#type="button"
+                    class="murmure-section-title"
+                    aria-expanded=folding.expanded()
+                    on:click=move |_| relay.toggle_fold(group)
+                >
+                    <span class="murmure-section-chevron" aria-hidden="true"></span>
+                    <span class="murmure-section-name">{title}</span>
+                    {summary}
+                </button>
+            </h3>
             <ul>
                 {section
                     .entries
@@ -2280,6 +2456,31 @@ fn entry_view(
             .into_any(),
         ),
     };
+    // A live call shows a mark and the count of its participants, and no name. The entry of the
+    // channel shown adds their initials (`MURMURE-689`, `MURMURE-690`).
+    let call = move || {
+        let seated = relay.calls.with(|c| c.of(channel).cloned())?;
+        let count = seated.count().get();
+        let shown = relay.pane.get().shown_channel() == Some(channel);
+        let faces = shown.then(|| {
+            seated
+                .members
+                .iter()
+                .map(|member| {
+                    let name = relay.member_name(*member);
+                    let initials = crate::ui::call_videos::initials(name.as_ref());
+                    view! { <span class="murmure-call-face" aria-hidden="true">{initials}</span> }
+                })
+                .collect_view()
+        });
+        Some(view! {
+            <span class="murmure-call-live" aria-label=format!("Call in progress, {count} in it")>
+                <span class="murmure-call-live-icon" aria-hidden="true"></span>
+                {faces}
+                <span class="murmure-call-live-count">{count}</span>
+            </span>
+        })
+    };
     view! {
         <li>
             <button
@@ -2294,6 +2495,7 @@ fn entry_view(
                 <span class="murmure-entry-name">
                     {entry.name.map_or_else(|| unnamed.to_owned(), Validated::into_string)}
                 </span>
+                {call}
                 {badge}
             </button>
         </li>

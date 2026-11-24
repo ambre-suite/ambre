@@ -104,7 +104,7 @@ impl ProseState {
     }
 
     /// Write the paragraph properties `style` names on every block a
-    /// selection covers, in one commit (`PROSE-UI-256`).
+    /// selection covers, in one commit (`PROSE-UI-259`).
     ///
     /// Only a property whose value differs is written, so a write that
     /// changes nothing exports no delta (`PROSE-FEAT-025`).
@@ -142,7 +142,7 @@ impl ProseState {
     }
 
     /// Make every paragraph, heading and list item a selection covers the
-    /// kind `kind` names, in one commit (`PROSE-UI-189`, `PROSE-UI-257`).
+    /// kind `kind` names, in one commit (`PROSE-UI-189`, `PROSE-UI-260`).
     ///
     /// A code block or a table among them is left as it is. Each block is
     /// checked before the first write: a heading the tree may not hold where
@@ -238,7 +238,7 @@ impl ProseState {
         Ok(())
     }
 
-    /// Set the body font of the document (`PROSE-UI-258`). One write, so
+    /// Set the body font of the document (`PROSE-UI-261`). One write, so
     /// one undo takes it back.
     pub(super) fn set_default_font(&mut self, family: &ambre_core::FontFamily) -> ProseOutcome {
         if doc::read_defaults(&self.doc, &self.roots).font_family == *family {
@@ -467,7 +467,7 @@ pub(crate) mod tests {
     }
 
     /// An alignment and a line spacing over two blocks are one command
-    /// each, and one undo takes the last back on both (`PROSE-UI-256`).
+    /// each, and one undo takes the last back on both (`PROSE-UI-259`).
     #[test]
     fn a_paragraph_property_over_two_blocks_is_one_undo_item() {
         let (mut state, first, second, anchor, focus) = fresh();
@@ -509,7 +509,7 @@ pub(crate) mod tests {
     }
 
     /// Two paragraphs become two list items in one command, and back to
-    /// body in another; each is one undo item (`PROSE-UI-257`).
+    /// body in another; each is one undo item (`PROSE-UI-260`).
     #[test]
     fn a_selection_becomes_a_list_and_back() {
         let (mut state, first, second, anchor, focus) = fresh();
@@ -594,7 +594,7 @@ pub(crate) mod tests {
     }
 
     /// A heading the tree may not hold where a block sits refuses the whole
-    /// command, and nothing is written (`PROSE-UI-261`).
+    /// command, and nothing is written (`PROSE-UI-264`).
     #[test]
     fn a_heading_inside_a_list_item_refuses_the_whole_command() {
         let (mut state, first, second, anchor, focus) = fresh();
@@ -616,7 +616,7 @@ pub(crate) mod tests {
     }
 
     /// The reading reports a value the whole selection holds, and mixed
-    /// where two parts disagree (`PROSE-UI-255`).
+    /// where two parts disagree (`PROSE-UI-258`).
     #[test]
     fn the_reading_reports_each_value_and_mixed_where_parts_disagree() {
         let (mut state, first, _, anchor, focus) = fresh();
@@ -648,7 +648,7 @@ pub(crate) mod tests {
     }
 
     /// The body font is written, read, resolved for each run, and one undo
-    /// takes it back (`PROSE-UI-258`).
+    /// takes it back (`PROSE-UI-261`).
     #[test]
     fn the_body_font_is_written_and_reaches_every_run() {
         let (mut state, first, second, _, _) = fresh();
@@ -687,7 +687,7 @@ pub(crate) mod tests {
     }
 
     /// A quote is laid out italic and set in from the left, unless the
-    /// paragraph names its own indent (`PROSE-UI-260`).
+    /// paragraph names its own indent (`PROSE-UI-263`).
     #[test]
     fn a_quote_is_laid_out_italic_and_set_in() {
         let (mut state, first, second, anchor, focus) = fresh();

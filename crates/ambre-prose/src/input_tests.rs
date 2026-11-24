@@ -3377,7 +3377,7 @@ fn an_import_keeps_the_zoom() {
     assert_eq!(rig.ui.viewport.zoom, zoom, "the import moved the zoom");
 }
 
-/// `PROSE-UI-262`: each write of the context panel leaves as one command
+/// `PROSE-UI-265`: each write of the context panel leaves as one command
 /// over the selection the view holds. One undo takes it back, whatever the
 /// number of blocks. A default font needs no selection.
 #[test]
@@ -3459,7 +3459,7 @@ fn each_panel_write_is_one_command_over_the_selection_and_one_undo_item() {
     ));
 }
 
-/// `PROSE-UI-259`: a comment from the bar opens a thread over the part of
+/// `PROSE-UI-262`: a comment from the bar opens a thread over the part of
 /// the selection in its first block; an empty one sends nothing.
 #[test]
 fn a_comment_from_the_bar_anchors_in_the_first_block_of_the_selection() {

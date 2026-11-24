@@ -105,6 +105,10 @@ pub struct ChoiceView {
     /// The CSS `font-family` stack the choice shows in, so a list of fonts
     /// previews each one. `None` keeps the face of the control.
     pub face: Option<&'static str>,
+    /// A muted hint at the end of the row of a [`Select`], as the chord that
+    /// picks the choice. The list of keys announces it, so a screen reader
+    /// skips it here.
+    pub hint: Option<String>,
 }
 
 impl ChoiceView {
@@ -115,6 +119,7 @@ impl ChoiceView {
             icon: None,
             reach: None,
             face: None,
+            hint: None,
         }
     }
 
@@ -131,6 +136,15 @@ impl ChoiceView {
     pub fn in_face(self, css: &'static str) -> Self {
         Self {
             face: Some(css),
+            ..self
+        }
+    }
+
+    /// The same choice, with `hint` at the end of its row.
+    #[must_use]
+    pub fn hinted(self, hint: impl Into<String>) -> Self {
+        Self {
+            hint: Some(hint.into()),
             ..self
         }
     }
@@ -159,12 +173,15 @@ fn below(el: &web_sys::Element) -> Point<Px<Css>> {
 /// name and its chord under the pointer and the keyboard focus.
 ///
 /// The name is the accessible name too, so a screen reader hears what the
-/// tooltip shows. `pressed` makes it a toggle; `reach` is the id of the
-/// command or the property it reaches (`CHROME-207`).
+/// tooltip shows. `pressed` makes it a toggle. `expanded` makes it the
+/// opener of a list or a panel. `reach` is the id of the command or the
+/// property it reaches (`CHROME-207`). The icon and the name may follow a state, as a
+/// toggle whose press does the opposite does. `class` names the button for
+/// the stylesheet of its application and for its tests.
 #[component]
 pub fn IconButton(
-    icon: icondata::Icon,
-    #[prop(into)] label: String,
+    #[prop(into)] icon: Signal<icondata::Icon>,
+    #[prop(into)] label: Signal<String>,
     on_press: Callback<()>,
     #[prop(optional_no_strip)] chord: Option<KeyBinding>,
     #[prop(optional_no_strip)] pressed: Option<Signal<Pressed>>,
@@ -172,6 +189,8 @@ pub fn IconButton(
     #[prop(optional)] size: ControlSize,
     #[prop(optional)] look: IconLook,
     #[prop(optional)] reach: Option<Reach>,
+    #[prop(optional_no_strip)] expanded: Option<Signal<Openness>>,
+    #[prop(optional)] class: Option<&'static str>,
 ) -> impl IntoView {
     let tip_at = RwSignal::new(None::<Point<Px<Css>>>);
     let show = move |ev: web_sys::Event| {
@@ -183,16 +202,20 @@ pub fn IconButton(
         }
     };
     let hide = move || tip_at.set(None);
-    let tip = label.clone();
+    let class = class.map_or_else(
+        || "ambre-icon-button".to_owned(),
+        |c| format!("ambre-icon-button {c}"),
+    );
     view! {
         <button
-            class="ambre-icon-button"
+            class=class
             data-size=size.as_str()
             data-look=look.as_str()
             data-reach=reach.map(|r| r.marker())
-            aria-label=label
+            aria-label=move || label.get()
             aria-keyshortcuts=chord.map(|c| c.to_string())
             aria-pressed=move || pressed.map(|p| p.get().aria())
+            aria-expanded=move || expanded.map(|e| e.get().aria())
             disabled=move || availability.is_some_and(|a| a.get() == Availability::Disabled)
             on:mousedown=move |ev| ev.prevent_default()
             on:pointerenter=move |ev| show(ev.into())
@@ -213,7 +236,7 @@ pub fn IconButton(
                 style:left=move || tip_at.get().map(|p| format!("{}px", p.x.get()))
                 style:top=move || tip_at.get().map(|p| format!("{}px", p.y.get()))
             >
-                <span>{tip}</span>
+                <span>{move || label.get()}</span>
                 {chord.map(|c| view! { <crate::Kbd binding=c /> })}
             </span>
         </button>
@@ -394,6 +417,9 @@ pub fn Select(
                 >
                     {choice.icon.map(|icon| view! { <Icon icon=icon /> })}
                     <span>{choice.label}</span>
+                    {choice.hint.map(|hint| view! {
+                        <span class="ambre-select-hint" aria-hidden="true">{hint}</span>
+                    })}
                 </div>
             }
         })

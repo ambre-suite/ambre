@@ -40,7 +40,55 @@ pub struct PagePalette {
     pub error: Color,
 }
 
+/// The colours of the page itself: the paper, the ink and the rules.
+///
+/// They belong to the document, not to the theme. A page is the same paper
+/// in either theme, and the print lays down the same ink. A theme switch
+/// then reaches neither a page nor an export (`PROSE-UI-255`). The ink is black, a
+/// print's one plate; on this paper it reads at more than 19 to 1.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Paper {
+    pub sheet: Color,
+    pub ink: Color,
+    pub rule: Color,
+}
+
+/// The paper every page is drawn on, on screen and in print.
+pub const PAPER: Paper = Paper {
+    sheet: Color::from_rgba8(0xff, 0xfd, 0xf9, 0xff),
+    ink: Color::from_rgba8(0x00, 0x00, 0x00, 0xff),
+    rule: Color::from_rgba8(0xa0, 0xa0, 0xa0, 0xff),
+};
+
+/// The colours a page takes from the theme: the shadow it casts on the
+/// ground, and the accent and statuses it shares with the chrome.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ThemeInks {
+    pub shadow: Color,
+    pub accent: Color,
+    pub warning: Color,
+    pub success: Color,
+    pub error: Color,
+}
+
 impl PagePalette {
+    /// A page on [`PAPER`], with what the theme lends it. The paper takes no
+    /// argument, so no theme can reach the sheet, its ink or its rules
+    /// (`PROSE-UI-255`).
+    #[must_use]
+    pub const fn on_paper(inks: ThemeInks) -> Self {
+        Self {
+            sheet: PAPER.sheet,
+            sheet_border: PAPER.rule,
+            text: PAPER.ink,
+            shadow: inks.shadow,
+            accent: inks.accent,
+            warning: inks.warning,
+            success: inks.success,
+            error: inks.error,
+        }
+    }
+
     pub(crate) fn highlight(&self, kind: HighlightKind) -> Color {
         match kind {
             HighlightKind::Comment => self.warning.multiply_alpha(0.4),
@@ -606,4 +654,63 @@ fn paint_cell_box<S: DrawSurface>(
 fn packed(rgba: Rgba) -> Color {
     let [r, g, b, a] = rgba.channels();
     Color::from_rgba8(r, g, b, a)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{PAPER, PagePalette, ThemeInks};
+    use crate::view::print::PRINT_PALETTE;
+    use ambre_draw::Color;
+
+    /// The relative luminance of an opaque colour (WCAG 2.2).
+    fn luminance(colour: Color) -> f64 {
+        let [r, g, b, _] = colour.to_rgba8().to_u8_array();
+        let linear = |c: u8| {
+            let c = f64::from(c) / 255.0;
+            if c <= 0.040_45 {
+                c / 12.92
+            } else {
+                ((c + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
+    }
+
+    /// The contrast ratio of two opaque colours (WCAG 2.2).
+    fn contrast(a: Color, b: Color) -> f64 {
+        let (hi, lo) = {
+            let (la, lb) = (luminance(a), luminance(b));
+            (la.max(lb), la.min(lb))
+        };
+        (hi + 0.05) / (lo + 0.05)
+    }
+
+    /// `PROSE-UI-255`: the sheet, its ink and its rules are the paper, on a
+    /// screen in either theme and in a print. Whatever a theme lends a page,
+    /// the paper stays, and the print reads the same one. The ink on that
+    /// paper passes the AA ratio for body text.
+    #[test]
+    fn the_paper_is_the_same_on_screen_in_either_theme_and_in_print() {
+        let lent = |shade: u8| ThemeInks {
+            shadow: Color::from_rgba8(shade, shade, shade, 255),
+            accent: Color::from_rgba8(shade, 0, 0, 255),
+            warning: Color::from_rgba8(0, shade, 0, 255),
+            success: Color::from_rgba8(0, 0, shade, 255),
+            error: Color::from_rgba8(shade, shade, 0, 255),
+        };
+        for page in [
+            PagePalette::on_paper(lent(0)),
+            PagePalette::on_paper(lent(255)),
+            PRINT_PALETTE,
+        ] {
+            assert_eq!(page.sheet, PAPER.sheet);
+            assert_eq!(page.text, PAPER.ink);
+            assert_eq!(page.sheet_border, PAPER.rule);
+        }
+        assert_ne!(PAPER.sheet, Color::WHITE, "the paper is cream");
+        let ratio = contrast(PAPER.ink, PAPER.sheet);
+        assert!(ratio >= 4.5, "ink on paper reads at {ratio:.2}:1");
+        let rule = contrast(PAPER.rule, PAPER.sheet);
+        assert!(rule >= 2.0, "a rule reads on the paper at {rule:.2}:1");
+    }
 }

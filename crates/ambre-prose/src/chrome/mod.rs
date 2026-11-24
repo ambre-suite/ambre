@@ -107,7 +107,7 @@ pub struct ProseSignals {
     /// (`PROSE-UI-098`).
     pub text_write: RwSignal<Option<crate::view::panel::TextWrite>>,
     /// The two default fonts the layout was measured with, which the
-    /// default styles section shows (`PROSE-UI-258`).
+    /// default styles section shows (`PROSE-UI-261`).
     pub fonts: RwSignal<Option<crate::doc::DocFonts>>,
     /// The field of the format bar a link or a comment press opened.
     pub prompt: RwSignal<Option<crate::view::toolbar::BarPrompt>>,
@@ -517,7 +517,7 @@ pub fn ProseFormatBar(signals: ProseSignals) -> impl IntoView {
 }
 
 /// The paragraph style list of the bar: body, three headings, quote
-/// (`PROSE-UI-259`). A pick reaches the view as one write.
+/// (`PROSE-UI-262`). A pick reaches the view as one write.
 fn bar_kind_list(
     signals: ProseSignals,
     kind: ambre_commands::Reading<Option<crate::message::ParagraphKind>>,
@@ -764,25 +764,33 @@ pub fn ProseRuler(signals: ProseSignals) -> impl IntoView {
         let height = format!("{}px", RULER_HEIGHT.get());
         let handles = ruler.visible.as_bool().then(|| {
             [
-                (RulerHandle::IndentFirst, "First-line indent"),
-                (RulerHandle::IndentLeft, "Left indent"),
-                (RulerHandle::IndentRight, "Right indent"),
+                (RulerHandle::IndentFirst, "First-line indent", "first"),
+                (RulerHandle::IndentLeft, "Left indent", "left"),
+                (RulerHandle::IndentRight, "Right indent", "right"),
             ]
-            .map(|(handle, label)| {
+            .map(|(handle, label, side)| {
                 let x = move || {
                     drag.get()
                         .filter(|d| d.handle == handle)
                         .map_or_else(|| ruler.handle_x(handle), |d| d.at)
                         - ruler.page_left
                 };
+                // The sheet draws the marker from the tokens, and its hover and
+                // drag states (`PROSE-UI-257`).
+                let dragging = move || {
+                    drag.get()
+                        .is_some_and(|d| d.handle == handle)
+                        .then_some("true")
+                };
                 view! {
                     <div
                         class="ambre-prose-ruler-handle"
                         role="slider"
                         aria-label=label
+                        data-handle=side
+                        data-dragging=dragging
                         style:position="absolute"
                         style:left=move || format!("{}px", x().get())
-                        style:top="0"
                         style:transform="translateX(-50%)"
                         style:touch-action="none"
                         style:cursor="ew-resize"
@@ -802,9 +810,7 @@ pub fn ProseRuler(signals: ProseSignals) -> impl IntoView {
                         }
                         on:pointerup=release
                         on:pointercancel=move |_| drag.set(None)
-                    >
-                        "\u{25BC}"
-                    </div>
+                    ></div>
                 }
             })
             .into_iter()

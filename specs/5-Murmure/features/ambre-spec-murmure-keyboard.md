@@ -103,6 +103,7 @@ Page Up. It acts on the list or the composer that holds the focus, which the she
 | close the thread | Escape, in the message list of a thread | the thread's list |
 | send the next reply to the channel too | Alt+Enter, in the composer of a thread (`MURMURE-534`) | the thread's composer |
 | mark everything read | Alt+Shift+A | anywhere in Murmure |
+| show the space of rank 1 to 9 in the switcher | Alt+Shift+1 to Alt+Shift+9, read from the key and not from the character (`MURMURE-712`) | anywhere in Murmure |
 | list the keys | none: the palette offers it | anywhere in Murmure |
 
 ```rust
@@ -161,6 +162,7 @@ chord opens. `ambre_murmure::ui::commands::REGION_KEYS` holds the keys of a regi
 
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
+| Alt+Shift and a digit switch the space | Ctrl and a digit, as a desktop client binds it | Chrome and Firefox switch the tab on Ctrl+1 to Ctrl+9, and on Alt+1 to Alt+9 on Linux, before the page reads the key (`MURMURE-171`). On a French keyboard the digit needs Shift, so the chord reads the key, never the character |
 | Channels first in the suite palette | a switcher of its own on Ctrl+K | Ctrl+K opens the palette in every other application, and a second meaning in one of them breaks the habit of the suite |
 | Channels first in the suite palette | channels and commands mixed in one list | a channel name among every command makes the frequent jump slower |
 | Chords of the command table | key handlers in each view | two views would bind one chord to two actions, which `UI-THREAD-026` refuses |

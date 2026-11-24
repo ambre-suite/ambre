@@ -1597,7 +1597,7 @@ pub enum ProseCommand {
         value: Option<MarkValue>,
     },
     /// Write the paragraph properties `style` names on every block a
-    /// selection covers, in one commit (`PROSE-UI-256`).
+    /// selection covers, in one commit (`PROSE-UI-259`).
     SetSelectionParagraph {
         anchor: (BlockId, Pos<DocChar>),
         focus: (BlockId, Pos<DocChar>),
@@ -1611,7 +1611,7 @@ pub enum ProseCommand {
         kind: ParagraphKind,
     },
     /// Set the body font of the document, `meta/defaults`
-    /// (`PROSE-UI-258`).
+    /// (`PROSE-UI-261`).
     SetDefaultFont {
         family: ambre_core::FontFamily,
     },

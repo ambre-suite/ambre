@@ -1246,7 +1246,7 @@ pub struct DocDefaults {
 }
 
 /// The default fonts of a document, as the context panel shows them
-/// (`PROSE-UI-258`).
+/// (`PROSE-UI-261`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct DocFonts {
     /// The font of every block no mark and no block type sets.
@@ -1405,7 +1405,7 @@ pub(crate) fn write_page_format(
             .is_ok()
 }
 
-/// Write the body font of the document (`PROSE-UI-258`). The register
+/// Write the body font of the document (`PROSE-UI-261`). The register
 /// `seed` opened takes the key, so the other defaults stay.
 ///
 /// # Errors

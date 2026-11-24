@@ -49,7 +49,7 @@ pub struct PageLayout {
     pub margin_top: Px<Doc>,
     /// The page format the layout was measured on, in millimetres.
     pub format: doc::PageFormat,
-    /// The two default fonts the layout was measured with (`PROSE-UI-258`).
+    /// The two default fonts the layout was measured with (`PROSE-UI-261`).
     pub fonts: doc::DocFonts,
     pub page_count: Len<Page>,
     pub blocks: Vec<BlockLayout>,

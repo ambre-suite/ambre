@@ -652,7 +652,7 @@ fn radio(root: &web_sys::Element, label: &str) -> web_sys::HtmlElement {
 /// With a selection the panel shows four sections: text, paragraph,
 /// paragraph style and actions. Each control reads the value the Logic
 /// thread read, and hands each write to the view as one value
-/// (`PROSE-UI-255`, `PROSE-UI-256`, `PROSE-UI-189`, `PROSE-UI-257`).
+/// (`PROSE-UI-258`, `PROSE-UI-259`, `PROSE-UI-189`, `PROSE-UI-260`).
 #[wasm_bindgen_test]
 async fn with_a_selection_the_panel_shows_each_text_and_paragraph_control() {
     use ambre_chrome::commands::Reading;
@@ -767,7 +767,7 @@ async fn with_a_selection_the_panel_shows_each_text_and_paragraph_control() {
 }
 
 /// A mixed reading shows no value as chosen, and says mixed
-/// (`PROSE-UI-255`).
+/// (`PROSE-UI-258`).
 #[wasm_bindgen_test]
 async fn a_mixed_paragraph_reads_mixed_in_the_panel() {
     use ambre_chrome::commands::Reading;
@@ -793,7 +793,7 @@ async fn a_mixed_paragraph_reads_mixed_in_the_panel() {
 }
 
 /// With no text selected the panel shows the body font of the document
-/// (`PROSE-UI-258`).
+/// (`PROSE-UI-261`).
 #[wasm_bindgen_test]
 async fn with_no_selection_the_panel_shows_the_default_fonts() {
     use ambre_prose::view::panel;

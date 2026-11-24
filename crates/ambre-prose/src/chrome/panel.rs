@@ -138,7 +138,7 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
     };
 
     // What the Logic thread read for this selection; the defaults before
-    // its answer arrives (`PROSE-UI-255`).
+    // its answer arrives (`PROSE-UI-258`).
     let values = Memo::new(move |_| {
         signals.toolbar.with(|bar| {
             bar.active

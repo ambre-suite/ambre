@@ -5543,6 +5543,26 @@ mod tests {
         assert_eq!(asked(&sync), [second], "a gone call is asked no more");
     }
 
+    /// The tick of the shown channel asks who is in the live call of each other
+    /// held channel too, so the sidebar counts it. Each channel keeps its own interval.
+    #[test]
+    fn a_tick_asks_who_is_in_the_live_call_of_each_held_channel() {
+        let (mut state, _ui, sync) = harness();
+        signed_in(&mut state, Id::<User>::mint());
+        let (shown, _) = open_channel(&mut state);
+        let (other, _) = open_channel(&mut state);
+        let call = Id::<ambre_core::id::Call>::mint();
+        state.handle_logic_event(LogicEvent::CallStarted {
+            call,
+            channel: other,
+            at: NOW,
+        });
+        command(&mut state, shown, MurmureCommand::Tick { now: at(1) });
+        assert_eq!(asked(&sync), [call], "the call of the other channel");
+        command(&mut state, shown, MurmureCommand::Tick { now: at(1_000) });
+        assert!(asked(&sync).is_empty(), "within the interval");
+    }
+
     /// The last ask of who is in a call is the session's.
     /// After a logout, the next session that shows the same channel asks at
     /// its first tick, within the interval of the previous ask.

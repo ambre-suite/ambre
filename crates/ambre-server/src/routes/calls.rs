@@ -20,7 +20,7 @@ pub struct RosterQuery {
     pub channel: Id<Channel>,
 }
 
-/// `GET /api/calls/{call}/roster?channel={channel}`: the signed join of each seat of the call,
+/// `GET /api/call-rosters/{call}?channel={channel}`: the signed join of each seat of the call,
 /// to a member of the channel, in the call or not (`CALL-070`).
 ///
 /// An asker who is no member of the channel reads [`CallRoster::Gone`]. So does an ask of a

@@ -327,6 +327,59 @@ body {
     border-color: var(--accent);
 }
 
+/* The ruler above a Prose page. The component places the bar and each marker
+   along it; this sheet draws them from the tokens (`PROSE-UI-257`): a hairline
+   track, the first-line marker pointing down from the top, the two side
+   markers pointing up from the bottom. A marker reads in the dimmed text, and
+   takes the accent under the pointer and while it is dragged. The box of a
+   marker is wider than its triangle, so the pointer finds it. */
+.ambre-prose-ruler {
+    background: linear-gradient(var(--border-strong), var(--border-strong)) center / 100% 1px no-repeat;
+}
+
+.ambre-prose-ruler-handle {
+    display: flex;
+    justify-content: center;
+    width: var(--icon);
+    height: 50%;
+    color: var(--text-dim);
+}
+
+.ambre-prose-ruler-handle[data-handle="first"] {
+    top: 0;
+    align-items: flex-start;
+}
+
+.ambre-prose-ruler-handle:not([data-handle="first"]) {
+    bottom: 0;
+    align-items: flex-end;
+}
+
+.ambre-prose-ruler-handle::before {
+    content: "";
+    width: 10px;
+    height: 7px;
+    background: currentColor;
+    clip-path: polygon(0 0, 100% 0, 50% 100%);
+}
+
+.ambre-prose-ruler-handle:not([data-handle="first"])::before {
+    clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+
+.ambre-prose-ruler-handle:hover {
+    color: var(--accent);
+}
+
+.ambre-prose-ruler-handle[data-dragging="true"] {
+    color: var(--accent);
+}
+
+.ambre-prose-ruler-handle[data-dragging="true"]::before {
+    width: 12px;
+    height: 9px;
+}
+
 /* Toile top menu bar (toile-ui SS5quinquies.E): a group inside the command
    bar row, under the header (`CHROME-200`). It reuses `.ambre-commandbar` for
    its buttons, so the nested group drops the frame of a bar. The zoom is not
@@ -671,11 +724,99 @@ body {
     padding: var(--space-2) 0;
 }
 
+/* The head of a group folds it (`MURMURE-720`): a button across the sidebar,
+   its chevron turned while folded, the count of what it hides at its end. */
+.murmure-section-head {
+    margin: var(--space-3) 0 var(--space-1);
+    font: inherit;
+}
+
 .murmure-section-title {
-    margin: var(--space-3) var(--space-4) var(--space-1);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    padding: 0 var(--space-4);
+    border: 0;
+    background: none;
+    color: var(--text-dim);
+    font: inherit;
     font-size: var(--font-xs);
     font-weight: 600;
-    color: var(--text-dim);
+    text-align: left;
+    cursor: pointer;
+}
+
+.murmure-section-title:hover {
+    color: var(--text);
+}
+
+.murmure-section-chevron {
+    flex: none;
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid currentColor;
+    transition: transform 120ms ease;
+}
+
+[aria-expanded="false"] > .murmure-section-chevron {
+    transform: rotate(-90deg);
+}
+
+.murmure-section-name {
+    flex: 1 1 auto;
+}
+
+.murmure-section-hidden {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-weight: 400;
+}
+
+/* A live call in the sidebar (`MURMURE-689`): a green phone and the count,
+   the initials of the participants on the channel shown alone. */
+.murmure-call-live {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    color: var(--success);
+    font-size: var(--font-xs);
+    font-weight: 600;
+}
+
+.murmure-call-live-icon {
+    width: 14px;
+    height: 14px;
+    background: currentColor;
+    -webkit-mask: var(--icon) center / contain no-repeat;
+    mask: var(--icon) center / contain no-repeat;
+}
+
+.murmure-call-live-icon {
+    --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1z'/%3E%3C/svg%3E");
+}
+
+.murmure-call-face {
+    display: inline-grid;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+    margin-left: calc(-1 * var(--space-2));
+    border: 1px solid var(--surface);
+    border-radius: 50%;
+    background: var(--surface-2);
+    color: var(--text);
+    font-size: var(--font-xs);
+    font-weight: 700;
+}
+
+/* The space switcher at the top of the sidebar (`MURMURE-711`): the select
+   of the visual system, the width of the sidebar. */
+.murmure-space-switch {
+    display: flex;
 }
 
 .murmure-section ul {
@@ -752,7 +893,8 @@ body {
     margin-left: var(--space-2);
 }
 
-.murmure-call-hang-up {
+.ambre-icon-button.murmure-call-hang-up,
+.ambre-icon-button.murmure-call-hang-up:hover {
     color: var(--error);
 }
 
@@ -1548,6 +1690,13 @@ body {
 .ambre-select-option[aria-selected="true"] {
     color: var(--accent);
     font-weight: 600;
+}
+
+.ambre-select-hint {
+    margin-left: auto;
+    padding-left: var(--space-4);
+    color: var(--text-dim);
+    font-size: var(--font-xs);
 }
 
 .ambre-select-option > svg {
@@ -4308,6 +4457,165 @@ body {
 .ambre-deck-empty {
     margin: 0;
     color: var(--text-dim);
+}
+
+/* The call away from its channel (the Murmure calls spec, section 3): a
+   pill under the header on a phone, the base, and a bubble in a corner of
+   the content from the phone width up. */
+.murmure-call-float {
+    position: fixed;
+    z-index: 30;
+    top: calc(var(--header-h) + var(--space-2));
+    right: var(--space-3);
+    left: var(--space-3);
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-full);
+    background: color-mix(in srgb, var(--success) 14%, var(--surface));
+    box-shadow: var(--shadow-high);
+    touch-action: none;
+}
+
+.murmure-call-float[data-dragging] {
+    cursor: grabbing;
+    opacity: 0.92;
+}
+
+.murmure-float-grip {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--success);
+    font: inherit;
+    font-weight: 600;
+    cursor: grab;
+}
+
+.murmure-float-channel {
+    color: var(--text);
+}
+
+.murmure-float-clock {
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+    font-weight: 400;
+}
+
+.murmure-float-faces {
+    display: inline-flex;
+    margin-left: auto;
+    padding-left: var(--space-2);
+}
+
+.murmure-float-face {
+    display: inline-grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    margin-left: calc(-1 * var(--space-3));
+    border: 2px solid var(--surface);
+    border-radius: 50%;
+    background: var(--surface-2);
+    color: var(--text);
+    font-size: var(--font-xs);
+    font-weight: 700;
+}
+
+.murmure-float-controls,
+.murmure-float-wide {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+/* The pill keeps mute and hang up alone (`MURMURE-697`). */
+.murmure-float-wide {
+    display: none;
+}
+
+.murmure-float-controls .ambre-icon-button.murmure-call-hang-up {
+    margin-left: auto;
+    background: var(--error);
+    color: var(--on-accent);
+}
+
+/* The bar of tabs of the phone list (`MURMURE-715`), on the list alone:
+   a channel and a thread keep their height. */
+.murmure-tabs {
+    display: none;
+}
+
+@media (max-width: 599px) {
+    .ambre-body[data-focus="sidebar"] .murmure-tabs {
+        display: flex;
+    }
+}
+
+.murmure-tabs {
+    position: sticky;
+    bottom: 0;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+}
+
+/* The tabs are the segments of the visual system, one per view, across the
+   width of the phone. */
+.murmure-tabs .ambre-segments {
+    flex: 1 1 auto;
+    margin: var(--space-2) var(--space-3);
+}
+
+.murmure-tabs .ambre-segments > button {
+    flex: 1 1 0;
+}
+
+@media (min-width: 600px) {
+    .murmure-call-float {
+        top: auto;
+        right: var(--space-6);
+        bottom: var(--space-6);
+        left: auto;
+        flex-direction: column;
+        align-items: stretch;
+        width: 260px;
+        padding: var(--space-3);
+        border-radius: var(--radius-lg);
+        background: var(--surface);
+    }
+
+    .murmure-call-float[data-corner="top-left"] {
+        top: calc(var(--header-h) + var(--commandbar-h) + var(--space-6));
+        right: auto;
+        bottom: auto;
+        left: var(--space-6);
+    }
+
+    .murmure-call-float[data-corner="top-right"] {
+        top: calc(var(--header-h) + var(--commandbar-h) + var(--space-6));
+        bottom: auto;
+    }
+
+    .murmure-call-float[data-corner="bottom-left"] {
+        right: auto;
+        left: var(--space-6);
+    }
+
+    .murmure-float-grip {
+        flex: none;
+    }
+
+    .murmure-float-wide {
+        display: flex;
+    }
 }
 
 /* The gallery of the visual system, a test page behind `chrome-gallery`
