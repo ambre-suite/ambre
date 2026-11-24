@@ -1654,6 +1654,7 @@ ambre-prose | src/band.rs | crate::band | format_date() | ret | String	free-text
 ambre-prose | src/band.rs | crate::band | months() | ret | Option<[&'static str;12]>	free-text	the twelve month names a band date draws, for a language that has them here
 ambre-prose | src/band.rs | crate::band | resolve() | ret | String	free-text	the text of a band as drawn on one page, its fields filled in
 ambre-prose | src/chrome/mod.rs | crate::chrome | ProseSignals.drafts | field | RwSignal<HashMap<Id<Comment>,String>>	free-text	the reply the user is typing in each thread's field, keyed by its thread
+ambre-prose | src/chrome/mod.rs | crate::chrome | bar_prompt(draft) | param | RwSignal<Option<String>>	free-text	the address or the comment the user is typing in the field of the format bar
 ambre-prose | src/chrome/notify.rs | crate::chrome::notify | is_refused_reply() | ret | bool	generic	whether a refusal turned down a reply because its thread is gone
 ambre-prose | src/comment.rs | crate::comment | thread_of_key(key) | param | &str	foreign-api	a mark key as the Loro attribute map yields it, parsed with no copy
 ambre-prose | src/count.rs | crate::count | add_block(text) | param | &str	free-text	one block's text, added to the running word and character counts
@@ -2878,6 +2879,7 @@ ambre-prose | src/message/mod.rs | crate::message | LineSpacingMultiple.0 | fiel
 ambre-prose | src/message/mod.rs | crate::message | LineSpacingMultiple::get() | ret | f32	newtype-inner	newtype inner, accessor or constructor
 ambre-prose | src/message/mod.rs | crate::message | LineSpacingMultiple::new(ratio) | param | f32	newtype-inner	newtype inner, accessor or constructor
 ambre-prose | src/view/annotate.rs | crate::view::annotate | LostReply::notice() | ret | &'static str	free-text	the sentence a toast shows the user for a lost reply
+ambre-prose | src/view/annotate.rs | crate::view::annotate | AnnotationIntent::Comment.text | field | String	free-text	the first reply of a comment the user typed in the field of the format bar; Debug prints its length alone
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | FixtureError::Missing.0 | field | &'static str	free-text	a diagnostic sentence naming the part a fixture build could not find
 ambre-prose | src/doc.rs | crate::doc | BuiltInStyle::name() | ret | &'static str	generic	the codec of an enum that carries data: the style name the tree stores and the lookup matches back
 ambre-prose | src/doc.rs | crate::doc | RefusalCause::sentence() | ret | &'static str	free-text	log and refusal sentence of the cause
@@ -4981,5 +4983,9 @@ ambre-prose | src/doc.rs | crate::doc | write_whole_page_format() | ret | bool	g
 ambre-prose | src/view/panel.rs | crate::view::panel | PanelKind::title() | ret | &'static str	free-text	the header a person reads
 ambre-prose | src/view/panel.rs | crate::view::panel | Paper::label() | ret | &'static str	free-text	the name of a paper a person reads
 ambre-prose | src/view/panel.rs | crate::view::panel | Margins::label() | ret | &'static str	free-text	the name of a margin preset a person reads
+ambre-prose | src/view/panel.rs | crate::view::panel | BAR_KINDS | const | [(crate::message::ParagraphKind,&str);5]	free-text	each paragraph kind of the bar's list, beside the label a person reads
+ambre-prose | src/view/panel.rs | crate::view::panel | KINDS | const | [(crate::message::ParagraphKind,&str);5]	free-text	each paragraph kind of the paragraph style section, beside the label a person reads
+ambre-prose | src/view/panel.rs | crate::view::panel | LINE_SPACINGS | const | [(Option<crate::events::LineHeight>,&str);5]	free-text	each line spacing the paragraph section offers, beside the label a person reads
+ambre-prose | src/view/panel.rs | crate::view::panel | LISTS | const | [(crate::events::ListStyle,&str);3]	free-text	each list marker the paragraph section offers, beside the label a person reads
 ambre-trame | src/chrome/panel.rs | crate::chrome::panel | reach() | ret | String	generic	the codec of a property reach on the data-reach attribute, as Reach::marker writes it
 ambre-chrome | src/kit.rs | crate::kit | unreached_controls() | ret | Vec<String>	foreign-api	the accessible names the DOM holds for controls with no data-reach, which a test prints

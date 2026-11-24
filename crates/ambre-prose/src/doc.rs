@@ -1409,16 +1409,17 @@ pub(crate) fn write_page_format(
 /// `seed` opened takes the key, so the other defaults stay.
 ///
 /// # Errors
-/// `false` when the document holds no defaults register, or when the CRDT
-/// engine refuses the write.
-pub(crate) fn write_default_font(doc: &LoroDoc, family: &ambre_core::FontFamily) -> bool {
-    let Some(defaults) = map_at(&meta(doc), MetaKey::Defaults).map(Fields::<DefaultsKey>::new)
-    else {
-        return false;
-    };
-    defaults
-        .insert(DefaultsKey::FontFamily, family.label())
-        .is_ok()
+/// [`RefusalCause::DefaultsRefused`] when the document holds no defaults
+/// register, or the engine's own error when it refuses the write.
+pub(crate) fn write_default_font(
+    doc: &LoroDoc,
+    family: &ambre_core::FontFamily,
+) -> Result<(), WriteError> {
+    let defaults = map_at(&meta(doc), MetaKey::Defaults)
+        .map(Fields::<DefaultsKey>::new)
+        .ok_or(WriteError::Refused(RefusalCause::DefaultsRefused))?;
+    defaults.insert(DefaultsKey::FontFamily, family.label())?;
+    Ok(())
 }
 
 /// Write the whole page format: the orientation the two dimensions name, the

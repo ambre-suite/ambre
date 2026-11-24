@@ -30,14 +30,6 @@ const VALUE_KEYS: [MarkRoot; 5] = [
     MarkRoot::Link,
 ];
 
-/// The block types the paragraph style control turns into one another.
-fn takes_a_kind(block_type: BlockType) -> bool {
-    matches!(
-        block_type,
-        BlockType::Paragraph | BlockType::Heading | BlockType::ListItem
-    )
-}
-
 /// The block type a kind writes.
 fn type_of(kind: ParagraphKind) -> BlockType {
     match kind {
@@ -166,7 +158,13 @@ impl ProseState {
             .selected_spans(anchor, focus)
             .into_iter()
             .map(|(block, _)| tree_id(block))
-            .filter(|id| doc::block_type_of(&tree, id).is_some_and(takes_a_kind))
+            // The paragraph style control turns these three into one another.
+            .filter(|id| {
+                matches!(
+                    doc::block_type_of(&tree, id),
+                    Some(BlockType::Paragraph | BlockType::Heading | BlockType::ListItem)
+                )
+            })
             .collect();
         if targets.is_empty() {
             return Self::err_bad_range();
@@ -246,8 +244,8 @@ impl ProseState {
         if doc::read_defaults(&self.doc, &self.roots).font_family == *family {
             return ProseOutcome::nothing();
         }
-        if !doc::write_default_font(&self.doc, family) {
-            return Self::err_write(doc::WriteError::Refused(doc::RefusalCause::DefaultsRefused));
+        if let Err(e) = doc::write_default_font(&self.doc, family) {
+            return Self::err_write(e);
         }
         self.commit_with(Vec::new())
     }
