@@ -348,6 +348,7 @@ The test of section 1: a team that lacks one of these stories keeps its old suit
 | `[x]` The grid context menu from the keyboard | MVP | no key opens the Trame context menu, so a keyboard user reaches none of its commands, where Toile and Murmure open theirs from the context-menu key and Shift+F10. Done when both keys open the grid menu at the active cell, its entries run from the keyboard, and a row reads `verified` |
 | `[x]` The page context menu from the keyboard | MVP | no key opens the Prose context menu, so a keyboard user reaches none of its commands, where Toile and Murmure open theirs from the context-menu key and Shift+F10. Done when both keys open the page menu at the caret, its entries run from the keyboard, and a row reads `verified` |
 | `[x]` A web page loads only when asked | MVP | an embed fetches its page the moment a pan brings it on screen, so the site, and anyone on the way to it, learns that this user has this board open -- a flow that leaves the client, which the zero-knowledge boundary rules on the relay alone and has no row for. The user decides instead: ask, always, or never, remembered per site and never shared |
+| `[ ]` The colour triggers of the board bar take their name from the registry | MVP | the Fill and Text colour triggers of the Toile selection bar carry literal titles, not the labels of the property registry, as the context panel now does. Done when both read the registry and a row reads `verified` (`CHROME-186`) |
 
 ### Prose
 
@@ -589,6 +590,7 @@ row reads `V1`.
 | `[ ]` Frozen pane past the grid reported | V1 | an import cuts a frozen count past Trame's grid without a word. Done when the cut reaches the import report as approximated |
 | `[ ]` A frozen band bounded to the screen | V1 | a band frozen through thousands of lines ships every cell of it in each viewport answer. Done when freezing refuses a band taller or wider than the screen, under a row that reads verified |
 | `[ ]` Frozen panes checked in the browser | V1 | the four panes are proved on a recording surface only. Done when a belt test scrolls a frozen sheet in headless Chrome and reads the header row on screen |
+| `[ ]` The icons of an open popover carry a tooltip | V1 | the preset grid of the Borders popover and its line-style trigger are buttons with an icon and no tooltip. The probe of untipped icons passes only because the tests keep the popover closed. Done when the probe reads an open popover and finds no untipped icon (`CHROME-185`) |
 
 ### Toile
 
