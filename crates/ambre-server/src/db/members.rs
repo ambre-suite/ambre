@@ -77,6 +77,16 @@ pub struct LogEntry {
     pub bytes: ambre_core::Encoded<ambre_core::EncodedLogEntry>,
 }
 
+/// The entries a removal appends to the log: its own, then the cap
+/// continuations that follow it at the next places (`SRV-344`). The route
+/// checked each one. A removal of a document with no log carries none.
+#[derive(Debug, Default)]
+pub struct RemovalEntries {
+    pub entry: Option<LogEntry>,
+    /// The continuations, in log order. Empty without an entry.
+    pub continued: Vec<LogEntry>,
+}
+
 /// The document whose member rows decide access to `$1` (`SRV-103`).
 ///
 /// A document of a channel resolves to the channel's `meta` document, so
@@ -199,6 +209,26 @@ pub(super) async fn record_change(
         return Err(AppError::BadRequest(
             "the document keeps a membership log: the change needs its entry".into(),
         ));
+    }
+    Ok(())
+}
+
+/// Records the entries of a removal: its own, as [`record_change`] does, then
+/// each continuation at the next place, under the same lock (`SRV-344`). A
+/// continuation at another place than the next refuses the whole removal.
+async fn record_removal(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    document_id: Id<Document>,
+    entries: &RemovalEntries,
+) -> Result<(), AppError> {
+    if entries.entry.is_none() && !entries.continued.is_empty() {
+        return Err(AppError::BadRequest(
+            "continued: a continuation follows the entry of its removal".into(),
+        ));
+    }
+    record_change(tx, document_id, entries.entry.as_ref()).await?;
+    for entry in &entries.continued {
+        append_entry(tx, document_id, entry).await?;
     }
     Ok(())
 }
@@ -427,12 +457,12 @@ pub async fn remove_document_member(
     pool: &PgPool,
     document_id: &Id<Document>,
     user_id: &Id<User>,
-    entry: Option<&LogEntry>,
+    entries: &RemovalEntries,
     sweep_due: Instant<UnixSec>,
 ) -> Result<Removed, AppError> {
     let mut tx = pool.begin().await?;
     lock_document(&mut tx, *document_id).await?;
-    record_change(&mut tx, *document_id, entry).await?;
+    record_removal(&mut tx, *document_id, entries).await?;
     let channel = super::channels::channel_of_meta(&mut tx, *document_id).await?;
     if let Some(emptied) = delete_member(&mut tx, *document_id, *user_id, channel).await? {
         let deleted = super::channels::delete_channel_in(&mut tx, emptied, sweep_due).await?;
@@ -479,14 +509,14 @@ pub async fn revoke_and_rotate(
     document_id: &Id<Document>,
     user_id: &Id<User>,
     rotation: &Rotation<'_>,
-    entry: Option<&LogEntry>,
+    entries: &RemovalEntries,
     sweep_due: Instant<UnixSec>,
 ) -> Result<Option<SpaceLeave>, AppError> {
     let mut tx = pool.begin().await?;
     // The document row first, as every rotation takes it: two rotations of one
     // document queue on it instead of deadlocking on the member rows.
     lock_document(&mut tx, *document_id).await?;
-    record_change(&mut tx, *document_id, entry).await?;
+    record_removal(&mut tx, *document_id, entries).await?;
     delete_member(&mut tx, *document_id, *user_id, None).await?;
     rewrap_members(&mut tx, *document_id, rotation).await?;
     let left = super::channels::leave_space_channels_in(

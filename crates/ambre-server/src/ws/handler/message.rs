@@ -1947,7 +1947,7 @@ mod access_tests {
             &pool,
             &doc_id,
             &editor,
-            None,
+            &db::RemovalEntries::default(),
             ambre_core::Instant::<ambre_core::UnixSec>::new(0),
         )
         .await
@@ -2021,7 +2021,7 @@ mod access_tests {
             &pool,
             &doc_id,
             &editor,
-            None,
+            &db::RemovalEntries::default(),
             ambre_core::Instant::<ambre_core::UnixSec>::new(0),
         )
         .await
@@ -2063,7 +2063,7 @@ mod access_tests {
             &pool,
             &doc_id,
             &editor,
-            None,
+            &db::RemovalEntries::default(),
             ambre_core::Instant::<ambre_core::UnixSec>::new(0),
         )
         .await
@@ -2121,7 +2121,7 @@ mod access_tests {
             &pool,
             &doc_id,
             &editor,
-            None,
+            &db::RemovalEntries::default(),
             ambre_core::Instant::<ambre_core::UnixSec>::new(0),
         )
         .await
