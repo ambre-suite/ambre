@@ -5066,3 +5066,5 @@ ambre-prose | src/view/panel.rs | crate::view::panel | ListChoice::label() | ret
 ambre-prose | src/view/panel.rs | crate::view::panel | style_label() | ret | &'static str	free-text	the name of a paragraph style a person reads
 ambre-murmure | src/logic/channel/sweeping.rs | crate::logic::channel::sweeping | ChannelState::is_swept() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/logic/channel/sweeping.rs | crate::logic::channel::sweeping | ChannelState::sweep_arrival() | ret | bool	generic	state flag/predicate
+ambre-protocol | src/thread_erasure.rs | crate::thread_erasure | ERASURE_DOMAIN | const | &[u8]	generic	domain-separation tag or length constant
+ambre-sync | src/erasure.rs | crate::erasure | verifies() | ret | bool	generic	predicate result

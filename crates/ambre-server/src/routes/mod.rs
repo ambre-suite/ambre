@@ -171,6 +171,10 @@ pub fn api_router(
             axum::routing::post(register_amendments),
         )
         .route(
+            "/channels/{id}/erasures",
+            axum::routing::post(erase_thread).get(list_thread_erasures),
+        )
+        .route(
             "/channels/{id}/threads",
             axum::routing::post(register_thread),
         )

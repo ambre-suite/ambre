@@ -6375,4 +6375,76 @@ mod tests {
             Some(SyncEvent::FootingAdvanced { footing, .. }) if *footing == held
         ));
     }
+
+    /// `SYNC-323`: an owner of the log signs an erasure of a hidden thread
+    /// that none covers, and posts it. The census passes once it is recorded.
+    /// A held erasure of an owner posts nothing. A user the log holds as no
+    /// owner posts nothing and fails, and so does an erasure the relay refuses.
+    #[tokio::test]
+    async fn an_owner_erases_a_hidden_thread_and_no_one_else_does() {
+        use crate::erasure::{ErasureEntry, ErasureParams, erase_hidden, sign_erasure, unerased};
+        let (owner_xk, _) = keypair(1);
+        let meta = Id::<Document>::mint();
+        let channel_id = Id::<Channel>::mint();
+        let phantom = Id::<Document>::mint();
+        let (log, own) = log_inviting(meta, &author(), &owner_xk, &[]);
+        let members = serde_json::json!({ "members": [own], "log": log });
+        let params = |author| ErasureParams {
+            url_scheme: crate::http::UrlScheme::Https,
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
+            channel_id,
+            meta,
+            hidden: vec![phantom],
+            footing: footing_of(meta, &log),
+            rule: LogRule::document(),
+            author,
+        };
+        let none = serde_json::json!({ "erasures": [] });
+        let erased = serde_json::json!({ "thread": phantom.to_string() });
+
+        let http = FakeHttp::new(vec![Ok(members.clone()), Ok(none.clone()), Ok(erased)]);
+        assert!(erase_hidden(&http, params(author())).await.is_ok());
+        let posted = match http.calls().last() {
+            Some(Call::Post(url, body))
+                if url.ends_with(&format!("/channels/{channel_id}/erasures")) =>
+            {
+                body.clone()
+            }
+            other => panic!("the owner posts the erasure: {other:?}"),
+        };
+        let entry = ErasureEntry {
+            thread: phantom,
+            signer: author().public(),
+            signature: serde_json::from_value(posted["signature"].clone()).expect("a signature"),
+        };
+        let owners = std::collections::HashSet::from([author().public()]);
+        assert!(
+            unerased(channel_id, &[phantom], &[entry], &owners).is_empty(),
+            "the posted erasure clears the thread for every census"
+        );
+
+        let held = serde_json::json!({ "erasures": [ErasureEntry {
+            thread: phantom,
+            signer: author().public(),
+            signature: sign_erasure(&author(), channel_id, phantom),
+        }] });
+        let http = FakeHttp::new(vec![Ok(members.clone()), Ok(held)]);
+        assert!(erase_hidden(&http, params(author())).await.is_ok());
+        assert_eq!(http.calls().len(), 2, "a held erasure posts nothing");
+
+        let stranger = Author {
+            user_id: Id::<User>::mint(),
+            signing_key: MasterSeed::from_array([7; 32]).derive_signing_key(),
+        };
+        let http = FakeHttp::new(vec![Ok(members.clone()), Ok(none.clone())]);
+        assert!(matches!(
+            erase_hidden(&http, params(stranger)).await,
+            Err(http::HttpError::Local(LocalFailure::ChannelDocumentHidden))
+        ));
+        assert_eq!(http.calls().len(), 2, "no owner, no erasure");
+
+        let refused = http::HttpError::Local(LocalFailure::UnexpectedAnswer);
+        let http = FakeHttp::new(vec![Ok(members), Ok(none), Err(refused)]);
+        assert!(erase_hidden(&http, params(author())).await.is_err());
+    }
 }

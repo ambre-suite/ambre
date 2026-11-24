@@ -485,12 +485,14 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         SyncCommand::LeaveChannel {
             channel_id: chan,
             named: vec![doc, doc],
+            threads: vec![doc],
         },
         SyncCommand::RevokeFromChannel {
             id: Seq::<ambre_bus::Request>::new(9),
             document_id: doc,
             user_id: user,
             named: vec![doc],
+            threads: vec![doc],
         },
         SyncCommand::ListSpaceChannels { space_id: space },
         SyncCommand::ListMemberChannels,

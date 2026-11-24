@@ -1195,6 +1195,16 @@ impl Log {
         }
     }
 
+    /// The signing keys of the members the log holds present as owners: the
+    /// keys whose erasure of a thread name a census takes (`SYNC-322`).
+    pub(crate) fn owner_keys(&self) -> HashSet<FixedBytes<PublicKey>> {
+        self.held
+            .values()
+            .filter(|held| held.present && held.role == Role::Owner)
+            .map(|held| held.key)
+            .collect()
+    }
+
     /// The keys a key link may be signed by (`SYNC-121`): every key the log
     /// granted a writing role. `None` for a document whose wrap carried no
     /// anchor, which predates the log.
