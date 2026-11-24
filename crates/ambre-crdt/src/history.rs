@@ -18,6 +18,7 @@
 //! * a tree node keeps its parent and its sibling; a node a commit created is
 //!   hidden on an undo, never deleted.
 
+mod ident;
 mod list;
 mod rich;
 mod shot;
@@ -32,12 +33,13 @@ use ambre_core::index::{Axis, Len};
 use ambre_core::{Availability, HistoryStep};
 use loro::event::{ContainerDiff, Diff, DiffEvent};
 use loro::{
-    Container, ContainerID, ContainerTrait, ContainerType, EventTriggerKind, InternalString,
-    LoroDoc, LoroMap, LoroValue, Subscription, TreeID,
+    Container, ContainerID, ContainerTrait, ContainerType, EventTriggerKind, IdSpan,
+    InternalString, LoroDoc, LoroMap, LoroValue, Subscription, TreeID,
 };
 
 use ambre_core::Flag as _;
 use ambre_core::crdt::CrdtName as _;
+use ident::{Commit, Idents};
 use list::{ListWrite, plain, seq_list, take_list};
 use rich::Rich;
 use shot::{Held, Parent, Shot, attach};
@@ -92,10 +94,12 @@ impl std::fmt::Debug for Hide {
     }
 }
 
-/// The new identity of each container a replay created again by value.
+/// The new identity of each container a replay created again by value, and
+/// of each character a replay put back (`UNDO-024`).
 #[derive(Debug, Default, Clone)]
 struct Renames {
     to: HashMap<ContainerID, ContainerID>,
+    chars: Idents,
 }
 
 impl Renames {
@@ -430,6 +434,10 @@ struct Recorder {
     /// A handle on the document, to read the cursors of a text edit. The
     /// history lets go of it before it unsubscribes (`Drop for UndoHistory`).
     reader: Option<LoroDoc>,
+    /// The span of operations of the last local commit, which the hook
+    /// before each commit writes. A deletion reads in it the identities of
+    /// the characters it took out (`UNDO-024`).
+    commit: Arc<Mutex<Option<IdSpan>>>,
 }
 
 /// Which containers a history records.
@@ -466,6 +474,8 @@ pub struct UndoHistory {
     recorder: Arc<Mutex<Recorder>>,
     /// Keeps the recorder subscribed for the life of the history.
     _watch: Subscription,
+    /// Keeps the span of each local commit noted for the life of the history.
+    _commits: Subscription,
 }
 
 impl Drop for UndoHistory {
@@ -507,12 +517,25 @@ impl UndoHistory {
     }
 
     fn start(doc: &LoroDoc, skipped: &[CommitOrigin], reach: Reach) -> Self {
+        let commit: Arc<Mutex<Option<IdSpan>>> = Arc::default();
+        // A lock of its own: a replay commits while the recorder is locked.
+        let noted = Arc::clone(&commit);
+        let commits = doc.subscribe_pre_commit(Box::new(move |payload| {
+            let meta = &payload.change_meta;
+            let span = i32::try_from(meta.len)
+                .ok()
+                .and_then(|len| meta.id.counter.checked_add(len))
+                .map(|end| IdSpan::new(meta.id.peer, meta.id.counter, end));
+            *noted.lock().unwrap_or_else(PoisonError::into_inner) = span;
+            true
+        }));
         let recorder = Arc::new(Mutex::new(Recorder {
             mirror: Mirror::read(doc),
             history: History::default(),
             renames: Renames::default(),
             reach,
             reader: Some(doc.clone()),
+            commit,
         }));
         let into = Arc::clone(&recorder);
         let skipped: Vec<CommitOrigin> = UNRECORDED.iter().chain(skipped).copied().collect();
@@ -523,6 +546,7 @@ impl UndoHistory {
         Self {
             recorder,
             _watch: watch,
+            _commits: commits,
         }
     }
 
@@ -716,6 +740,15 @@ impl Recorder {
             && !skipped
                 .iter()
                 .any(|origin| event.origin.starts_with(origin.as_str()));
+        // A span outlives no commit: an event that finds none reads no
+        // identity, rather than the identities of an earlier commit.
+        let span = self
+            .commit
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()
+            .filter(|_| record);
+        let commit = Commit::new(doc, span);
         let mut chunk = Chunk::default();
         let mut replayable = Replayable::Whole;
         let mut touched = HashSet::default();
@@ -729,7 +762,11 @@ impl Recorder {
                 replayable = Replayable::Lost;
             }
             let journal = if record { Some(&mut chunk) } else { None };
-            if self.mirror.take(change, journal, doc, self.reach.hide()) == Replayable::Lost {
+            if self
+                .mirror
+                .take(change, journal, &commit, self.reach.hide())
+                == Replayable::Lost
+            {
                 replayable = Replayable::Lost;
             }
         }
@@ -868,7 +905,7 @@ impl Mirror {
         &mut self,
         change: &ContainerDiff<'_>,
         journal: Option<&mut Chunk>,
-        doc: &LoroDoc,
+        commit: &Commit<'_>,
         hide: Option<&Hide>,
     ) -> Replayable {
         let target = change.target;
@@ -998,7 +1035,13 @@ impl Mirror {
                 // A text the commit created rides its creation: its cursors
                 // are not worth reading.
                 if let Some(chunk) = journal.filter(|chunk| !chunk.born.contains(target)) {
-                    chunk.texts.push(TextWrite::record(doc, target, edits));
+                    let took = edits
+                        .iter()
+                        .any(|edit| matches!(edit, rich::Edit::Took { .. }));
+                    let deleted = if took { commit.deleted(target) } else { None };
+                    chunk
+                        .texts
+                        .push(TextWrite::record(commit.doc(), target, edits, deleted));
                 }
                 Replayable::Whole
             }
@@ -1213,6 +1256,10 @@ impl Step {
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]
 mod format_tests;
+
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
+mod ident_tests;
 
 #[cfg(test)]
 mod tests {

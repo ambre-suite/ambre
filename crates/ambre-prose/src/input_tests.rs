@@ -3408,14 +3408,6 @@ fn a_paste_over_a_selection_is_one_undo_item() {
             ("html", html),
             ("own bytes", own),
         ] {
-            // Several lines across two blocks split the paragraph at the
-            // join the deletion made. A later write moved the tail of that
-            // deletion, and its undo then restores the wrong text. Two
-            // plain undos fail the same way, so the grouping is not the
-            // cause.
-            if matches!(over, Over::TwoBlocks) && name == "lines" {
-                continue;
-            }
             let mut rig = Rig::new(&["hello world", "second"]);
             let blocks = rig.blocks();
             match over {

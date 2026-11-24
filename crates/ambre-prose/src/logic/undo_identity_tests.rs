@@ -318,3 +318,77 @@ proptest! {
         check(&mut state, &ops)?;
     }
 }
+
+/// A page this peer loaded from another peer. The history holds no step of
+/// the seed, and no character of it is this peer's own.
+fn loaded(texts: &[&str]) -> (ProseState, Vec<BlockId>) {
+    let mut seed = ProseState::new().expect("a document is built");
+    let mut last = seed.root_blocks()[0];
+    for (index, text) in texts.iter().enumerate() {
+        if index > 0 {
+            last = insert_after(&mut seed, Some(last)).0;
+        }
+        type_into(&mut seed, last, text);
+    }
+    let mut state =
+        ProseState::with_peer(ambre_core::PeerId::new(41)).expect("a document is built");
+    state
+        .import_snapshot(&seed.export_snapshot())
+        .expect("the seed imports");
+    let blocks = state.root_blocks();
+    (state, blocks)
+}
+
+/// A delete across two blocks joins them, and a split at the
+/// join moves the tail into a new block. Two undos give back both blocks as
+/// they stood. The second undo read `helloworld ond` before.
+#[test]
+fn an_undo_across_a_split_at_a_join_restores_both_blocks() {
+    let (mut state, blocks) = loaded(&["hello world", "second"]);
+    let (first, second) = (blocks[0], blocks[1]);
+    let before = page_of(&state);
+    state.handle_command(ProseCommand::DeleteRange {
+        anchor: (first, Pos::<DocChar>::new(6)),
+        focus: (second, Pos::<DocChar>::new(3)),
+    });
+    assert_eq!(page_of(&state), vec![(first, "hello ond".to_owned())]);
+    state.handle_command(ProseCommand::SplitBlock {
+        block_id: first,
+        pos: Pos::<DocChar>::new(6),
+    });
+    assert_eq!(state.root_blocks().len(), 2, "the split adds a block");
+    state.handle_command(ProseCommand::Undo);
+    assert_eq!(page_of(&state), vec![(first, "hello ond".to_owned())]);
+    state.handle_command(ProseCommand::Undo);
+    assert_eq!(page_of(&state), before);
+}
+
+/// Delete a word, type a letter over it, delete the letter, then
+/// undo three times. The second undo takes out the letter the first one put
+/// back. The text read `hello xworld` before.
+#[test]
+fn an_undo_of_typing_over_restored_text_takes_it_back() {
+    use ambre_core::index::Span;
+    let (mut state, blocks) = loaded(&["hello world"]);
+    let block = blocks[0];
+    let at = |n| Pos::<DocChar>::new(n);
+    state.handle_command(ProseCommand::DeleteText {
+        block_id: block,
+        range: Span::new(at(6), at(11)),
+    });
+    state.handle_command(ProseCommand::InsertText {
+        block_id: block,
+        pos: at(6),
+        text: "x".to_owned(),
+    });
+    state.handle_command(ProseCommand::DeleteText {
+        block_id: block,
+        range: Span::new(at(6), at(7)),
+    });
+    let mut seen = Vec::new();
+    for _ in 0..3 {
+        state.handle_command(ProseCommand::Undo);
+        seen.push(state.text_of(&block).unwrap_or_default());
+    }
+    assert_eq!(seen, ["hello x", "hello ", "hello world"]);
+}
