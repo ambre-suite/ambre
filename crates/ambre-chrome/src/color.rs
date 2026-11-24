@@ -48,7 +48,7 @@ const PALETTE: &[Rgb] = &[
 ];
 
 /// The colours a field lays out inline, before its custom-colour button
-/// (`CHROME-244`). They are black, a light grey and the saturated hues of the
+/// (`CHROME-252`). They are black, a light grey and the saturated hues of the
 /// palette, in its order.
 /// Each one carries its name and its CSS text as constants, so a swatch
 /// formats nothing at run time.

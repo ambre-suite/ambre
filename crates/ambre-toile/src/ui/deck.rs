@@ -92,7 +92,7 @@ pub enum DeckIntent {
     /// rank addresses.
     Rename(Id<Frame>, String),
     /// Select a frame, from the frames section of the context panel
-    /// (`CHROME-243`).
+    /// (`CHROME-251`).
     Select(Id<Frame>),
 }
 

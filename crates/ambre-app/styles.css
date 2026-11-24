@@ -4670,7 +4670,7 @@ body {
     height: 220px;
 }
 
-/* The count of items of a frame row, at its end (`CHROME-243`). */
+/* The count of items of a frame row, at its end (`CHROME-251`). */
 .ambre-kit-count {
     margin-left: auto;
     color: var(--text-dim);

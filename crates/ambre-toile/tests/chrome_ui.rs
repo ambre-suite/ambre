@@ -1526,7 +1526,7 @@ fn mount_toile_panel_with(
     })
 }
 
-/// `CHROME-243`: with nothing selected, the frames section lists each frame
+/// `CHROME-251`: with nothing selected, the frames section lists each frame
 /// with its count of items, and a press selects the frame.
 #[wasm_bindgen_test]
 async fn the_frames_section_lists_the_frames_and_selects_one() {
@@ -1570,7 +1570,7 @@ async fn the_frames_section_lists_the_frames_and_selects_one() {
     root.remove();
 }
 
-/// `CHROME-239`: a lone movable shape shows its position as five length
+/// `CHROME-247`: a lone movable shape shows its position as five length
 /// fields, and a typed value writes an edit of that field alone.
 #[wasm_bindgen_test]
 async fn the_position_section_shows_a_lone_shape_and_writes_one_field() {
@@ -1613,7 +1613,7 @@ async fn the_position_section_shows_a_lone_shape_and_writes_one_field() {
         PlaceField::Width(ambre_core::Px::<ambre_core::Board>::new(40.0))
     );
 
-    // `CHROME-244`: the fill and the stroke lay out inline swatches, then the
+    // `CHROME-252`: the fill and the stroke lay out inline swatches, then the
     // custom-colour button.
     for id in [panel::FILL, panel::STROKE] {
         let marker = ambre_chrome::commands::Reach::Property(id).marker();
@@ -1632,7 +1632,7 @@ async fn the_position_section_shows_a_lone_shape_and_writes_one_field() {
                 .is_some()
         );
     }
-    // `CHROME-242`: an arrange row names its command and its chord, and the
+    // `CHROME-250`: an arrange row names its command and its chord, and the
     // link is one compact row of icon buttons.
     let duplicate = ambre_chrome::commands::Reach::Command(menu::DUPLICATE).marker();
     assert!(

@@ -102,7 +102,7 @@ fn run_place(
 }
 
 /// The number format list of the cells, which the panel and the range bar
-/// share: one copy of the view serves both (`CHROME-238`).
+/// share: one copy of the view serves both (`CHROME-246`).
 pub(super) fn number_format(style: StyleState, on_style: Callback<StylePatch>) -> AnyView {
     let selected = Signal::derive(move || {
         let format = style.format.get();
@@ -431,7 +431,7 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
         .into_any()
     };
 
-    // A labelled row per command (`CHROME-241`): the name reads at a glance,
+    // A labelled row per command (`CHROME-249`): the name reads at a glance,
     // where a row of bare icons asks the user to hover each one.
     let labelled = move |id: StaticKey<Commands>, icon_of: StaticKey<Commands>| {
         ambre_chrome::commands::find(registry::COMMANDS, id).map(|c| {
@@ -472,7 +472,7 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
     };
 
     // The shape of the selection picks the sections, never its content
-    // (`CHROME-245`).
+    // (`CHROME-253`).
     let shape = Memo::new(move |_| selection.with(panel::SelectionShape::of));
     let sections = Signal::derive(move || {
         shape

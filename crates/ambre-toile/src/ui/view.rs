@@ -306,7 +306,7 @@ pub struct ToileSignals {
     pub style_model: RwSignal<Option<super::style::StyleModel>>,
     /// A whole-style edit from the inspector.
     pub restyle: RwSignal<Option<crate::message::ElementStyle>>,
-    /// A write of the position section (`CHROME-240`).
+    /// A write of the position section (`CHROME-248`).
     pub place: RwSignal<Option<super::panel::PlaceEdit>>,
     /// The placement of the floating selection toolbar.
     pub float_bar: RwSignal<Option<super::floatbar::FloatBar>>,
@@ -585,7 +585,7 @@ pub struct ToileView {
     #[cfg(target_arch = "wasm32")]
     restyle: RwSignal<Option<crate::message::ElementStyle>>,
     /// A write of the position section, which `update` turns into its one
-    /// command (`CHROME-240`). Wasm-only.
+    /// command (`CHROME-248`). Wasm-only.
     #[cfg(target_arch = "wasm32")]
     place: RwSignal<Option<super::panel::PlaceEdit>>,
     /// The content-anchored floating selection toolbar's placement + flags
@@ -1270,7 +1270,7 @@ impl ToileView {
             ToileEvent::BoardChanged => {
                 self.selection_stale = !self.selection.is_empty();
                 // The frames section lists the frames and their items while
-                // nothing is selected (`CHROME-243`).
+                // nothing is selected (`CHROME-251`).
                 self.reread_frames();
                 // The frame under a title editor may have moved or gone: ask
                 // again, so a peer's delete closes the editor (`TOILE-UI-390`).
@@ -2284,7 +2284,7 @@ impl ToileView {
     fn drain_restyle(&mut self) {}
 
     /// Drain a write of the position section and send its one command, so
-    /// one write is one undo step (`CHROME-240`). Wasm-only.
+    /// one write is one undo step (`CHROME-248`). Wasm-only.
     #[cfg(target_arch = "wasm32")]
     fn drain_place(&mut self) {
         let Some(edit) = self.place.get_untracked() else {
@@ -2671,7 +2671,7 @@ impl ToileView {
     }
 
     /// Read the board's frames while nothing is selected: the frames section
-    /// of the context panel lists them (`CHROME-243`).
+    /// of the context panel lists them (`CHROME-251`).
     #[cfg(target_arch = "wasm32")]
     fn reread_frames(&mut self) {
         if self.selection.is_empty() && self.arrow.is_none() {
@@ -2726,7 +2726,7 @@ impl ToileView {
                 return;
             }
             // The frames section selects the frame, as a click on its title
-            // does (`CHROME-243`).
+            // does (`CHROME-251`).
             DeckIntent::Select(frame) => {
                 self.arrow = None;
                 self.selection = vec![frame.into()];

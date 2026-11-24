@@ -65,7 +65,7 @@ pub fn RangeBar(
             command(id, None)
         };
         // One list of erased views: the bar adds no nested view type of its
-        // own (`CHROME-238`).
+        // own (`CHROME-246`).
         let bold = Signal::derive(move || Pressed::from_bool(style.bold.get().as_bool()));
         let controls: Vec<AnyView> = vec![
             command(registry::BOLD, Some(bold)).into_any(),

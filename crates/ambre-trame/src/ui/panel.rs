@@ -4,7 +4,7 @@
 // Pure, so the host tier reads it.
 //
 // The shape of the selection picks the sections, never its content
-// (`CHROME-245`). A lone cell shows the sheet first, then the cells, the rows
+// (`CHROME-253`). A lone cell shows the sheet first, then the cells, the rows
 // and columns, the sort and filter, and the print setup, folded first. A range
 // of two cells or more shows the cells first and no sheet. The docked format toolbar
 // left once the panel held its controls (`CHROME-159`). Find and replace has
@@ -109,7 +109,7 @@ pub const SECTIONS: [StaticKey<PanelSections>; 5] = [SHEET, CELLS, ROWS_COLS, SO
 /// The sections the panel shows over a range of two cells or more, in order.
 pub const RANGE_SECTIONS: [StaticKey<PanelSections>; 4] = [CELLS, ROWS_COLS, SORT_FILTER, PRINT];
 
-/// The shape of the selection, which picks the sections (`CHROME-245`).
+/// The shape of the selection, which picks the sections (`CHROME-253`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SelectionShape {
     /// The active cell alone.
@@ -142,7 +142,7 @@ impl SelectionShape {
 }
 
 /// Where the range bar sits: the centre of the top edge of the selection,
-/// in view pixels (`CHROME-238`). A type of its own, so the shell signal
+/// in view pixels (`CHROME-246`). A type of its own, so the shell signal
 /// that carries it holds no value a view also keeps (`UI-THREAD-059`).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RangeBarAnchor {
@@ -274,7 +274,7 @@ pub const SORT_FILTER_COMMANDS: [StaticKey<Commands>; 7] = [
 ];
 
 /// The entries of the range bar over a selection of two cells or more, in
-/// order (`CHROME-238`). Each one is a control of the context panel
+/// order (`CHROME-246`). Each one is a control of the context panel
 /// (`CHROME-208`). The bar shows unmerge in place of merge on a merged cell.
 pub const BAR: [Reach; 7] = [
     Reach::Command(cmd::BOLD),
@@ -317,7 +317,7 @@ mod tests {
         );
     }
 
-    /// `CHROME-245`: a lone cell shows the sheet first and keeps the cells; a
+    /// `CHROME-253`: a lone cell shows the sheet first and keeps the cells; a
     /// range shows the cells first and no sheet. The content never decides.
     #[test]
     fn the_shape_of_the_selection_picks_the_sections() {
