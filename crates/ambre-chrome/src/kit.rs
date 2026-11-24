@@ -259,164 +259,194 @@ pub enum Step {
     Up,
 }
 
-/// A length a [`LengthField`] edits: its unit, its step and its text.
-pub trait FieldLength: Copy + PartialEq + Send + Sync + 'static {
+/// The unit of a [`LengthField`], as data: what it shows after the number,
+/// how far one stepper moves, its floor and the scale it shows at. One copy
+/// of the field serves every unit, so each length type adds no code but its
+/// adapter.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LengthUnit {
     /// The unit the field shows after the number.
-    const UNIT: &'static str;
-
-    /// The length one stepper moves, from `self`, never below zero.
-    #[must_use]
-    fn stepped(self, step: Step) -> Self;
-
-    /// The number the field shows.
-    fn field_text(self) -> String;
-
-    /// The length a typed number names, or `None` for a text that is no
-    /// length: a negative number, or no number.
-    fn from_field(text: &str) -> Option<Self>;
+    pub suffix: &'static str,
+    /// How far one stepper moves, in the shown scale.
+    pub step: f64,
+    /// The least value the field accepts, or `None` for a value of either
+    /// sign: a place on the board or an angle.
+    pub floor: Option<f64>,
+    /// The shown number per stored unit: 1 for a length, degrees per radian
+    /// for an angle.
+    pub scale: f64,
 }
 
-/// The text of `value` to one decimal, with no decimal when it is whole:
-/// "20", never "20.0", and "12.7".
-fn tenths(value: f32) -> String {
-    let text = format!("{value:.1}");
-    match text.strip_suffix(".0") {
-        Some(whole) => whole.to_owned(),
-        None => text,
+impl LengthUnit {
+    /// The text the field shows for `value`, to one decimal and with no
+    /// decimal when whole: "20", never "20.0", and "12.7".
+    #[must_use]
+    pub fn text(&self, value: f64) -> String {
+        let text = format!("{:.1}", value * self.scale);
+        match text.strip_suffix(".0") {
+            Some("-0") => "0".to_owned(),
+            Some(whole) => whole.to_owned(),
+            None => text,
+        }
+    }
+
+    /// The value a typed text names, or `None` for a text that is no number
+    /// or falls below the floor.
+    #[must_use]
+    pub fn parse(&self, text: &str) -> Option<f64> {
+        let shown = text.trim().replace(',', ".").parse::<f64>().ok()?;
+        let fits = shown.is_finite() && self.floor.is_none_or(|f| shown >= f);
+        fits.then_some(shown / self.scale)
+    }
+
+    /// The value one stepper moves `value` to, held at the floor.
+    #[must_use]
+    pub fn stepped(&self, value: f64, step: Step) -> f64 {
+        let by = match step {
+            Step::Down => -self.step,
+            Step::Up => self.step,
+        };
+        let shown = value * self.scale + by;
+        self.floor.map_or(shown, |f| shown.max(f)) / self.scale
     }
 }
 
-/// The number a field reads, when it is a finite length of zero or more.
-fn field_number(text: &str) -> Option<f32> {
-    text.trim()
-        .replace(',', ".")
-        .parse::<f32>()
-        .ok()
-        .filter(|v| v.is_finite() && *v >= 0.0)
+/// A length a [`LengthField`] edits: its unit, and the one conversion to and
+/// from the number the field computes in.
+pub trait FieldLength: Copy + PartialEq + Send + Sync + 'static {
+    /// The unit of the field.
+    const UNIT: &'static LengthUnit;
+
+    /// The number the field computes in.
+    fn to_field(self) -> f64;
+
+    /// The length a number of the field names.
+    fn of_field(value: f64) -> Self;
 }
 
-/// The number a field reads, when it is finite, of either sign: a place on
-/// the board or an angle.
-fn field_signed(text: &str) -> Option<f64> {
-    text.trim()
-        .replace(',', ".")
-        .parse::<f64>()
-        .ok()
-        .filter(|v| v.is_finite())
+/// A margin of a printed page.
+impl FieldLength for PrintLength<Mm> {
+    const UNIT: &'static LengthUnit = &LengthUnit {
+        suffix: "mm",
+        step: 1.0,
+        floor: Some(0.0),
+        scale: 1.0,
+    };
+
+    fn to_field(self) -> f64 {
+        f64::from(self.get())
+    }
+
+    fn of_field(value: f64) -> Self {
+        // A margin is stored in `f32`; the field computes in `f64`.
+        Self::new(value as f32)
+    }
+}
+
+/// A stroke width on the board.
+impl FieldLength for Px<StoredBoard> {
+    const UNIT: &'static LengthUnit = &LengthUnit {
+        suffix: "px",
+        step: 0.5,
+        floor: Some(0.0),
+        scale: 1.0,
+    };
+
+    fn to_field(self) -> f64 {
+        f64::from(self.get())
+    }
+
+    fn of_field(value: f64) -> Self {
+        // A stroke width is stored in `f32`; the field computes in `f64`.
+        Self::new(value as f32)
+    }
 }
 
 /// A place or a size on the board (`CHROME-239`). A place can be negative:
 /// the board has no edge. A size below zero flips its box, which the caller
 /// refuses.
 impl FieldLength for Px<Board> {
-    const UNIT: &'static str = "px";
+    const UNIT: &'static LengthUnit = &LengthUnit {
+        suffix: "px",
+        step: 1.0,
+        floor: None,
+        scale: 1.0,
+    };
 
-    fn stepped(self, step: Step) -> Self {
-        match step {
-            Step::Down => Self::new(self.get() - 1.0),
-            Step::Up => Self::new(self.get() + 1.0),
-        }
+    fn to_field(self) -> f64 {
+        self.get()
     }
 
-    fn field_text(self) -> String {
-        // The board computes in `f64`; the field shows a tenth.
-        tenths(self.get() as f32)
-    }
-
-    fn from_field(text: &str) -> Option<Self> {
-        field_signed(text).map(Self::new)
+    fn of_field(value: f64) -> Self {
+        Self::new(value)
     }
 }
 
 /// A rotation, which the field shows and reads in degrees (`CHROME-239`).
 impl FieldLength for Radians {
-    const UNIT: &'static str = "deg";
+    const UNIT: &'static LengthUnit = &LengthUnit {
+        suffix: "deg",
+        step: 1.0,
+        floor: None,
+        scale: 180.0 / std::f64::consts::PI,
+    };
 
-    fn stepped(self, step: Step) -> Self {
-        let by = match step {
-            Step::Down => -1.0_f64,
-            Step::Up => 1.0,
-        };
-        Self::new((self.to_degrees() + by).to_radians())
+    fn to_field(self) -> f64 {
+        self.get()
     }
 
-    fn field_text(self) -> String {
-        tenths(self.to_degrees() as f32)
-    }
-
-    fn from_field(text: &str) -> Option<Self> {
-        field_signed(text).map(|degrees| Self::new(degrees.to_radians()))
-    }
-}
-
-impl FieldLength for PrintLength<Mm> {
-    const UNIT: &'static str = "mm";
-
-    fn stepped(self, step: Step) -> Self {
-        let by = match step {
-            Step::Down => -1.0,
-            Step::Up => 1.0,
-        };
-        Self::new((self.get() + by).max(0.0))
-    }
-
-    fn field_text(self) -> String {
-        tenths(self.get())
-    }
-
-    fn from_field(text: &str) -> Option<Self> {
-        field_number(text).map(Self::new)
-    }
-}
-
-impl FieldLength for Px<StoredBoard> {
-    const UNIT: &'static str = "px";
-
-    fn stepped(self, step: Step) -> Self {
-        let by = match step {
-            Step::Down => -0.5,
-            Step::Up => 0.5,
-        };
-        Self::new((self.get() + by).max(0.0))
-    }
-
-    fn field_text(self) -> String {
-        tenths(self.get())
-    }
-
-    fn from_field(text: &str) -> Option<Self> {
-        field_number(text).map(Self::new)
+    fn of_field(value: f64) -> Self {
+        Self::new(value)
     }
 }
 
 /// A length of a property: a number, its unit, and two steppers, drawn by
-/// the one [`Stepper`](crate::Stepper).
+/// the one [`Stepper`](crate::Stepper). The body is a thin adapter to the
+/// one copy of the field (`length_core`), so a length type costs its two
+/// conversions alone.
 #[component]
 pub fn LengthField<L: FieldLength>(
     property: &'static Property,
     #[prop(into)] value: Signal<Reading<L>>,
     on_write: Callback<L>,
 ) -> impl IntoView {
+    length_core(
+        property,
+        L::UNIT,
+        Signal::derive(move || value.get().uniform().map(L::to_field)),
+        Callback::new(move |v: f64| on_write.run(L::of_field(v))),
+    )
+}
+
+/// The one copy of a length field, over the number it computes in. `value`
+/// is `None` while the selection disagrees.
+fn length_core(
+    property: &'static Property,
+    unit: &'static LengthUnit,
+    value: Signal<Option<f64>>,
+    on_write: Callback<f64>,
+) -> AnyView {
     let step = Callback::new(move |s: Step| {
-        if let Some(v) = value.get_untracked().uniform() {
-            on_write.run(v.stepped(s));
+        if let Some(v) = value.get_untracked() {
+            on_write.run(unit.stepped(v, s));
         }
     });
     let typed = Callback::new(move |text: String| {
-        if let Some(v) = L::from_field(&text) {
+        if let Some(v) = unit.parse(&text) {
             on_write.run(v);
         }
     });
     view! {
         <crate::Stepper
             label=property_label(property)
-            text=Signal::derive(move || value.get().uniform().map(L::field_text))
-            unit=L::UNIT
+            text=Signal::derive(move || value.get().map(|v| unit.text(v)))
+            unit=unit.suffix
             on_step=step
             on_text=typed
             reach=Reach::Property(property.id)
         />
     }
+    .into_any()
 }
 
 /// One choice of a [`Segmented`] control or a [`SelectField`].
@@ -589,33 +619,35 @@ mod tests {
 
     #[test]
     fn a_length_shows_a_decimal_only_when_it_has_one() {
-        assert_eq!(PrintLength::<Mm>::new(20.0).field_text(), "20");
-        assert_eq!(PrintLength::<Mm>::new(12.7).field_text(), "12.7");
-        assert_eq!(PrintLength::<Mm>::new(0.04).field_text(), "0");
-        assert_eq!(Px::<StoredBoard>::new(1.5).field_text(), "1.5");
+        let mm = PrintLength::<Mm>::UNIT;
+        assert_eq!(mm.text(20.0), "20");
+        assert_eq!(mm.text(PrintLength::<Mm>::new(12.7).to_field()), "12.7");
+        assert_eq!(mm.text(0.04), "0");
+        assert_eq!(Px::<StoredBoard>::UNIT.text(1.5), "1.5");
     }
 
-    /// `CHROME-239`: a place on the board reads either sign, and a rotation
-    /// reads and shows degrees.
+    /// `CHROME-239`: a place on the board reads either sign, a stroke width
+    /// stays positive, and a rotation reads and shows degrees.
     #[test]
     fn a_place_reads_either_sign_and_a_rotation_reads_degrees() {
+        let board = Px::<Board>::UNIT;
+        assert_eq!(board.parse("-12.5"), Some(-12.5));
+        assert_eq!(board.text(-3.0), "-3");
+        assert_eq!(Px::<StoredBoard>::UNIT.parse("-1"), None);
         assert_eq!(
-            Px::<Board>::from_field("-12.5"),
-            Some(Px::<Board>::new(-12.5))
+            Px::<StoredBoard>::UNIT.stepped(0.2, Step::Down),
+            0.0,
+            "held at the floor"
         );
-        assert_eq!(Px::<Board>::new(-3.0).field_text(), "-3");
+        let deg = Radians::UNIT;
+        let quarter = deg.parse("90").expect("a number");
+        assert!((quarter - std::f64::consts::FRAC_PI_2).abs() < 1e-9);
+        assert_eq!(deg.text(quarter), "90");
         assert_eq!(
-            Px::<StoredBoard>::from_field("-1"),
-            None,
-            "a stroke width stays positive"
-        );
-        let quarter = Radians::from_field("90").expect("a number");
-        assert!((quarter.get() - std::f64::consts::FRAC_PI_2).abs() < 1e-9);
-        assert_eq!(quarter.field_text(), "90");
-        assert_eq!(
-            Radians::from_field("-45").map(FieldLength::field_text),
+            deg.parse("-45").map(|v| deg.text(v)),
             Some("-45".to_owned())
         );
-        assert_eq!(Radians::from_field("a"), None);
+        assert_eq!(deg.text(deg.stepped(quarter, Step::Up)), "91");
+        assert_eq!(deg.parse("a"), None);
     }
 }

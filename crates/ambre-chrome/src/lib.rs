@@ -86,8 +86,8 @@ pub use gallery::Gallery;
 pub use handler::{CommandHandler, FileAccept, FilePick, KeyRoute, KeyTarget, ShellAction};
 pub use kit::{
     Choice, ColourField, ColourLayout, CommandButton, Field, FieldLength, FontField, Labelled,
-    LengthField, PropertyToggle, Row, Segmented, SelectField, Step, native_controls, reach_markers,
-    repeated_title, unreached_controls,
+    LengthField, LengthUnit, PropertyToggle, Row, Segmented, SelectField, Step, native_controls,
+    reach_markers, repeated_title, unreached_controls,
 };
 pub use menu::{
     Checked, MenuKey, MenuRow, Openness, Selected, focus_first_item, initial, menu_key,
