@@ -1198,9 +1198,11 @@ fn expect_ok(request: &Outgoing, resp: &Incoming) -> Result<(), HttpError> {
         return Ok(());
     }
     let code = if matches!(resp.status.get(), 403 | 409) {
-        crate::json::from_slice::<RefusalBody>(resp.body.as_bytes())
-            .ok()
-            .map(|body| body.error)
+        crate::json::read_whole::<RefusalBody>(serde_json::Deserializer::from_slice(
+            resp.body.as_bytes(),
+        ))
+        .ok()
+        .map(|body| body.error)
     } else {
         None
     };
@@ -1595,12 +1597,10 @@ pub(crate) struct ProviderCallbackRequest {
 
 /// The relay's answer to a provider return: who signed in, and their tokens.
 ///
-/// It decodes through [`ProviderCallbackWire`], whose fields lie flat as the
+/// The worker reads [`ProviderCallbackWire`], whose fields lie flat as the
 /// relay sends them. A `#[serde(flatten)]` on `tokens` buffered the whole
 /// object first, and linked a second decoder of every JSON value
 /// (`ambre-spec-budgets.md` section 5).
-#[derive(Deserialize)]
-#[serde(from = "ProviderCallbackWire")]
 pub(crate) struct ProviderCallbackResponse {
     pub user_id: Id<User>,
     pub email: ambre_core::Email,
@@ -1611,7 +1611,7 @@ pub(crate) struct ProviderCallbackResponse {
 
 /// The fields of [`ProviderCallbackResponse`], as the relay sends them.
 #[derive(Deserialize)]
-struct ProviderCallbackWire {
+pub(crate) struct ProviderCallbackWire {
     #[serde(with = "ambre_core::serde_id::text")]
     user_id: Id<User>,
     email: ambre_core::Email,

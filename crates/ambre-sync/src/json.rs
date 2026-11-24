@@ -1,5 +1,5 @@
 //! The JSON read of the worker: every JSON value the relay or the SFU sends
-//! decodes through [`from_slice`].
+//! decodes through [`read`].
 //!
 //! The relay sends each struct as a JSON object. `serde_json` also reads a
 //! struct from a JSON array, so each struct of an answer linked a second
@@ -14,15 +14,16 @@
 
 use serde::de::{self, DeserializeSeed, Deserializer, Visitor};
 
-/// Decodes `bytes` as one JSON value of `T`, then refuses anything but white
+/// Reads one JSON value of `T` from `json`, then refuses anything but white
 /// space after it, as `serde_json::from_slice` does.
 ///
 /// # Errors
 ///
 /// The error of `serde_json` for a body that does not decode as `T`,
 /// a struct sent as a JSON array included.
-pub(crate) fn from_slice<T: de::DeserializeOwned>(bytes: &[u8]) -> Result<T, serde_json::Error> {
-    let mut json = serde_json::Deserializer::from_slice(bytes);
+pub(crate) fn read_whole<T: de::DeserializeOwned>(
+    mut json: serde_json::Deserializer<serde_json::de::SliceRead<'_>>,
+) -> Result<T, serde_json::Error> {
     let value = read(&mut json)?;
     json.end()?;
     Ok(value)
@@ -264,7 +265,12 @@ impl<'de, V: Visitor<'de>> DeserializeSeed<'de> for StructBody<V> {
 
 #[cfg(test)]
 mod tests {
-    use super::from_slice;
+    use super::read_whole;
+
+    /// The read under test, over the bytes of one body.
+    fn from_slice<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T, serde_json::Error> {
+        read_whole(serde_json::Deserializer::from_slice(bytes))
+    }
     use proptest::prelude::*;
     use serde::{Deserialize, Serialize};
     use std::collections::BTreeMap;
