@@ -964,7 +964,7 @@ async fn the_sheet_panel_names_the_selection_and_folds_its_print_group() {
     assert_eq!(value("Margins"), "Wide");
     let landscape = container
         .query_selector(
-            "[role=\"radiogroup\"][aria-label=\"Orientation\"] [aria-label=\"Landscape\"]",
+            "[role=\"radiogroup\"][aria-label=\"Orientation\"] [aria-label=\"Page setup: landscape\"]",
         )
         .unwrap()
         .expect("a landscape segment")
@@ -980,7 +980,10 @@ async fn the_sheet_panel_names_the_selection_and_folds_its_print_group() {
             .unwrap_or_else(|| panic!("{name}"))
             .inner_html()
     };
-    assert_ne!(glyph("Portrait"), glyph("Landscape"));
+    assert_ne!(
+        glyph("Page setup: portrait"),
+        glyph("Page setup: landscape")
+    );
 
     let find = ambre_chrome::commands::Reach::Command(chrome::FIND);
     assert!(

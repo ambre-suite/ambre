@@ -225,8 +225,9 @@ fn fixed_origin(el: &web_sys::Element) -> Point<Px<Css>> {
 /// (`CHROME-189`). A command's icon takes its words from a
 /// [`CommandTip`](crate::CommandTip) (`CHROME-186`).
 ///
-/// `pressed` makes it a toggle. `expanded` makes it the opener of a list or a
-/// panel. `reach` is the id of the command or the property it reaches
+/// `pressed` makes it a toggle. `checked` makes it one radio of a group, as a
+/// segment of a [`SegmentBar`] is. `expanded` makes it the opener of a list or
+/// a panel. `reach` is the id of the command or the property it reaches
 /// (`CHROME-207`). The icon and the name may follow a state, as a toggle whose
 /// press does the opposite does. `class` names the button for the stylesheet
 /// of its application and for its tests.
@@ -240,6 +241,7 @@ pub fn IconButton(
         ambre_core::Validated<ambre_commands::CommandDescription>,
     >,
     #[prop(optional_no_strip)] pressed: Option<Signal<Pressed>>,
+    #[prop(optional_no_strip)] checked: Option<Signal<crate::Checked>>,
     #[prop(optional_no_strip)] expanded: Option<Signal<Openness>>,
     #[prop(optional, into)] availability: Option<Signal<Availability>>,
     #[prop(optional)] size: ControlSize,
@@ -332,6 +334,8 @@ pub fn IconButton(
             aria-describedby=described_by
             aria-keyshortcuts=chord.map(|c| c.to_string())
             aria-pressed=move || pressed.map(|p| p.get().aria())
+            role=checked.map(|_| "radio")
+            aria-checked=move || checked.map(|c| c.get().aria())
             aria-expanded=move || expanded.map(|e| e.get().aria())
             disabled=move || availability.is_some_and(|a| a.get() == Availability::Disabled)
             on:mousedown=move |ev| ev.prevent_default()
@@ -625,22 +629,37 @@ pub fn SegmentBar(
         .map(|(i, choice)| {
             let p = Pos::<ChoiceRow>::from_usize(i);
             let checked = move || selected.get() == Some(p);
-            let name = choice.label.clone();
-            view! {
-                <button
-                    role="radio"
-                    data-reach=choice.reach.map(|r| r.marker())
-                    aria-checked=move || crate::Checked::from_bool(checked()).aria()
-                    aria-label=name.clone()
-                    title=name
-                    on:mousedown=move |ev| ev.prevent_default()
-                    on:click=move |_| on_pick.run(p)
-                >
-                    {match choice.icon {
-                        Some(icon) => view! { <Icon icon=icon /> }.into_any(),
-                        None => view! { <span>{choice.label}</span> }.into_any(),
-                    }}
-                </button>
+            let checked = Signal::derive(move || crate::Checked::from_bool(checked()));
+            // An icon names itself in a tooltip, as every icon of the chrome
+            // does (`CHROME-185`). A word needs none.
+            match choice.icon {
+                Some(icon) => view! {
+                    <IconButton
+                        icon=icon
+                        label=choice.label
+                        checked=Some(checked)
+                        reach=choice.reach
+                        on_press=Callback::new(move |()| on_pick.run(p))
+                    />
+                }
+                .into_any(),
+                None => {
+                    let (name, tip) = (choice.label.clone(), choice.label.clone());
+                    view! {
+                    <button
+                        role="radio"
+                        data-reach=choice.reach.map(|r| r.marker())
+                        aria-checked=move || checked.get().aria()
+                        aria-label=name
+                        title=tip
+                        on:mousedown=move |ev| ev.prevent_default()
+                        on:click=move |_| on_pick.run(p)
+                    >
+                        <span>{choice.label}</span>
+                    </button>
+                    }
+                    .into_any()
+                }
             }
         })
         .collect_view();

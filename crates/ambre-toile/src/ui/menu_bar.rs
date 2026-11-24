@@ -1,32 +1,30 @@
 // ambre-toile/src/ui/menu_bar.rs
 // ============================================================================
-// Command surface for the Toile top menu bar and zoom control
-// (`toile-menus`). The host-visible half: the `StaticKey<Commands>`s that only the menu
-// bar contributes, that is Undo / Redo / Present and the five zoom actions.
-// Also the `MenuId` grouping and the pure per-menu layout the DOM builder
-// renders.
+// The board commands that no context-menu entry carries (`toile-menus`).
+// They are undo, redo, the zoom actions, the pointer mode, the panels, the
+// presentation entry point, the file and the links. A menu bar once laid them out, and it
+// left the board (`CHROME-160`). Each command now lives in its home region
+// (`ambre-spec-shell.md` section 2), and the command palette reaches every
+// one of them.
+//
+// The Ambre menu holds the file and the history, and the status bar holds the
+// zoom. The avatar menu holds the pointer mode, and the context panel the
+// rest.
 //
 // Kept in the always-compiled `ui` module (not the wasm-only `chrome`) so it is
 // host-unit-tested, exactly like `ui::menu`, `ui::palette` and `ui::find`.
-// The wasm-only Leptos component that renders these (`chrome::TopMenuBar`)
-// consumes them. It routes every selection through the same `on_command` path
-// as the context menu, the shared command path of the chrome surfaces.
 //
-// The Edit / Object rows REUSE the ids already declared for the context menu
-// (`ui::menu`). A menu id is minted once and shared by every trigger, so a
-// menu-bar "Group" and a right-click "Group" are the very same command. Only
-// the entries with no other home (Undo/Redo, the zoom actions, Present) are new
-// here.
+// The context ids live in `ui::menu`. An id is minted once and shared by every
+// trigger, so the palette's "Group" and a right-click "Group" are the very
+// same command.
 // ============================================================================
 
 use crate::message::{PngScope, PresentFocus, ToileCommand, ToileExport};
 use ambre_core::{Commands, StaticKey};
 
-use super::menu;
-
-// -- Command identities (new to the menu bar) ---------------------------------
-// The clipboard / grouping / z-order / lock / select-all ids live in `ui::menu`
-// and are re-used below; these are the ids the menu bar introduces.
+// -- Command identities (beyond the context menu) -----------------------------
+// The clipboard / grouping / z-order / lock / select-all ids live in `ui::menu`;
+// these are the ids no context-menu entry carries.
 
 /// Undo the last board mutation (-> `ToileCommand::Undo`).
 pub const UNDO: StaticKey<Commands> = StaticKey::<Commands>::new("toile.edit.undo");
@@ -117,7 +115,7 @@ pub const SAVE_FILE: StaticKey<Commands> = StaticKey::<Commands>::new("toile.fil
 pub const SAVE_SEALED_FILE: StaticKey<Commands> =
     StaticKey::<Commands>::new("toile.file.save_sealed_file");
 
-/// Every id the menu bar introduces (not shared with `ui::menu`). Used by the
+/// Every id this module introduces (not shared with `ui::menu`). Used by the
 /// view to recognise the ids it must resolve locally, and by tests.
 pub const MENU_BAR_COMMANDS: &[StaticKey<Commands>] = &[
     UNDO,
@@ -147,127 +145,7 @@ pub const MENU_BAR_COMMANDS: &[StaticKey<Commands>] = &[
     SAVE_SEALED_FILE,
 ];
 
-// -- Menu grouping -------------------------------------------------------------
-
-/// The five top-level menus (`toile-menus`), in bar order.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum MenuId {
-    File,
-    Edit,
-    View,
-    Object,
-    Present,
-}
-
-/// The menus in bar order, each with its title.
-pub const TOP_MENUS: &[(MenuId, &str)] = &[
-    (MenuId::File, "File"),
-    (MenuId::Edit, "Edit"),
-    (MenuId::View, "View"),
-    (MenuId::Object, "Object"),
-    (MenuId::Present, "Present"),
-];
-
-/// One row of a dropdown: a selectable command, or a group separator. Pure
-/// data; the wasm builder turns it into an `ambre_chrome::MenuEntry`, reading
-/// the label and the accelerator from `ui::commands` (`UI-THREAD-019`). A
-/// layout declares an order and a grouping and never a word the user reads.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum MenuRow {
-    /// A selectable command, shown with the label and chord it declares.
-    Command(StaticKey<Commands>),
-    /// A divider between two groups.
-    Separator,
-}
-
-/// The rows of one menu (`toile-menus`), grouped with separators.
-/// Inapplicable-row hiding by selection state is NOT done here, unlike the
-/// context menu. A menu bar shows a stable layout and relies on the command's
-/// registry state to disable an entry. The layout is a pure function of the
-/// `MenuId`.
-pub fn menu_layout(id: MenuId) -> Vec<MenuRow> {
-    let row = MenuRow::Command;
-    match id {
-        // The share dialog is app-agnostic chrome (E2), so File carries the
-        // local file, the two lossy exports and the presentation entry point.
-        // The save sits above the separator with the exports below it. One of
-        // the three keeps everything, and the grouping is the only place that
-        // difference shows before the user clicks.
-        MenuId::File => vec![
-            row(IMPORT_FILE),
-            row(EMBED_WEB),
-            row(EMBED_DOC),
-            MenuRow::Separator,
-            row(SAVE_FILE),
-            row(SAVE_SEALED_FILE),
-            MenuRow::Separator,
-            row(EXPORT_SVG),
-            row(EXPORT_PNG),
-            row(EXPORT_PDF),
-            row(EXPORT_PPTX),
-            // The one entry that hands the board to readers outside Ambre in
-            // the clear sits in a group of its own (`TOILE-IO-096`).
-            MenuRow::Separator,
-            row(EXPORT_SHOWCASE),
-            MenuRow::Separator,
-            row(PRESENT),
-        ],
-        MenuId::Edit => vec![
-            row(UNDO),
-            row(REDO),
-            MenuRow::Separator,
-            row(menu::CUT),
-            row(menu::COPY),
-            row(menu::PASTE),
-            row(menu::DUPLICATE),
-            row(menu::DELETE),
-            MenuRow::Separator,
-            row(menu::SELECT_ALL),
-        ],
-        MenuId::View => vec![
-            row(ZOOM_IN),
-            row(ZOOM_OUT),
-            row(ZOOM_RESET),
-            MenuRow::Separator,
-            row(ZOOM_FIT),
-            row(ZOOM_TO_SELECTION),
-            MenuRow::Separator,
-            row(POINTER_AUTO),
-            row(POINTER_MOUSE),
-            row(POINTER_TRACKPAD),
-            MenuRow::Separator,
-            row(COMMENTS),
-        ],
-        MenuId::Object => vec![
-            row(menu::GROUP),
-            row(menu::UNGROUP),
-            MenuRow::Separator,
-            row(menu::BRING_FRONT),
-            row(menu::FORWARD),
-            row(menu::BACKWARD),
-            row(menu::SEND_BACK),
-            MenuRow::Separator,
-            row(menu::LOCK),
-            row(menu::UNLOCK),
-            MenuRow::Separator,
-            row(menu::ALIGN_LEFT),
-            row(menu::ALIGN_HCENTER),
-            row(menu::ALIGN_RIGHT),
-            row(menu::ALIGN_TOP),
-            row(menu::ALIGN_VCENTER),
-            row(menu::ALIGN_BOTTOM),
-            MenuRow::Separator,
-            row(menu::DISTRIBUTE_H),
-            row(menu::DISTRIBUTE_V),
-            MenuRow::Separator,
-            row(LINK_SET),
-            row(LINK_CLEAR),
-        ],
-        MenuId::Present => vec![row(PRESENT), row(DECK)],
-    }
-}
-
-/// The direct board command a menu-bar id emits, if any. Undo / Redo and the
+/// The direct board command an id of this module emits, if any. Undo / Redo and the
 /// presentation entry point resolve to a `ToileCommand` independent of the
 /// selection or local transform. The zoom ids are local-transform intents and
 /// return `None` (serviced by the view). Pure, so the wiring is host-tested.
@@ -297,37 +175,37 @@ pub fn menu_bar_edit(id: StaticKey<Commands>) -> Option<ToileCommand> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ui::menu;
     use ambre_bus::interop::InteropRequest;
+    use ambre_commands::Home;
 
-    fn item_commands(rows: &[MenuRow]) -> Vec<StaticKey<Commands>> {
-        rows.iter()
-            .filter_map(|r| match r {
-                MenuRow::Command(command) => Some(*command),
-                MenuRow::Separator => None,
-            })
-            .collect()
+    /// The home region the board's table gives `id`, or `None` for an id it
+    /// does not describe.
+    fn home_of(id: StaticKey<Commands>) -> Option<Home> {
+        ambre_commands::find(crate::ui::commands::COMMANDS, id).map(|c| c.home)
     }
 
+    /// `TOILE-UI-122`: the board homes commands in the Ambre menu and in the
+    /// avatar menu, so neither header menu of a board opens empty.
     #[test]
-    fn every_menu_has_items() {
-        for (id, _) in TOP_MENUS {
+    fn the_board_homes_commands_in_the_ambre_and_avatar_menus() {
+        for region in [Home::AmbreMenu, Home::AvatarMenu] {
             assert!(
-                !item_commands(&menu_layout(*id)).is_empty(),
-                "menu {id:?} is empty"
+                crate::ui::commands::COMMANDS
+                    .iter()
+                    .any(|c| c.home == region),
+                "the board homes nothing in {region:?}"
             );
         }
     }
 
     /// `TOILE-UI-418` (`ambre-spec-docfile.md section 4`): the save gesture
-    /// exists, it is in the File menu, and it resolves to the board command
+    /// exists, it lives in the Ambre menu, and it resolves to the board command
     /// the Logic thread serves.
     #[test]
-    fn the_file_menu_offers_the_native_file_and_resolves_it() {
-        let cmds = item_commands(&menu_layout(MenuId::File));
-        assert!(
-            cmds.contains(&SAVE_FILE),
-            "File must offer the native file: {cmds:?}"
-        );
+    fn the_ambre_menu_offers_the_native_file_and_resolves_it() {
+        assert_eq!(home_of(SAVE_FILE), Some(Home::AmbreMenu));
+        assert_eq!(home_of(SAVE_SEALED_FILE), Some(Home::AmbreMenu));
         assert!(matches!(
             menu_bar_edit(SAVE_FILE),
             Some(ToileCommand::Interop(InteropRequest::Export(
@@ -336,18 +214,19 @@ mod tests {
         ));
     }
 
+    /// `TOILE-UI-018`: no two ids this module introduces are equal.
     #[test]
     fn menu_bar_ids_are_distinct() {
         let mut ids: Vec<&str> = MENU_BAR_COMMANDS.iter().map(|c| c.as_str()).collect();
         ids.sort_unstable();
         let len = ids.len();
         ids.dedup();
-        assert_eq!(ids.len(), len, "duplicate menu-bar command id");
+        assert_eq!(ids.len(), len, "duplicate command id");
     }
 
-    /// `TOILE-UI-121`: no id the bar introduces is also a context-menu id. An
-    /// entry both surfaces show reuses the context constant. It is one
-    /// command reached two ways, never a second id with the same name.
+    /// `TOILE-UI-121`: no id this module introduces is also a context-menu
+    /// id. A command both surfaces reach reuses the context constant. It is
+    /// one command reached two ways, never a second id with the same name.
     #[test]
     fn no_bar_id_is_also_a_context_id() {
         for id in MENU_BAR_COMMANDS {
@@ -358,38 +237,30 @@ mod tests {
         }
     }
 
+    /// `TOILE-UI-123`: the five zoom actions live in the status bar, beside
+    /// the zoom chip that shows the percentage.
     #[test]
-    fn view_menu_exposes_all_zoom_actions() {
-        let cmds = item_commands(&menu_layout(MenuId::View));
-        for expected in [ZOOM_IN, ZOOM_OUT, ZOOM_RESET, ZOOM_FIT, ZOOM_TO_SELECTION] {
-            assert!(cmds.contains(&expected), "View missing {expected:?}");
+    fn the_zoom_actions_home_in_the_status_bar() {
+        for id in [ZOOM_IN, ZOOM_OUT, ZOOM_RESET, ZOOM_FIT, ZOOM_TO_SELECTION] {
+            assert_eq!(home_of(id), Some(Home::StatusBar), "{id:?}");
         }
     }
 
+    /// `TOILE-UI-124`, `TOILE-UI-364`: undo and redo live in the Ambre menu,
+    /// and cut, copy and paste in the context menu under the context menu's
+    /// own ids. Select all is a command of the context panel.
     #[test]
-    fn edit_menu_carries_undo_redo_and_reuses_clipboard_ids() {
-        let cmds = item_commands(&menu_layout(MenuId::Edit));
-        assert!(cmds.contains(&UNDO));
-        assert!(cmds.contains(&REDO));
-        // Reused, not redeclared: the same ids the context menu emits.
-        assert!(cmds.contains(&menu::COPY));
-        assert!(cmds.contains(&menu::SELECT_ALL));
-    }
-
-    /// Every dropdown row resolves in the registry, so a menu never shows an
-    /// entry the registry cannot label (`UI-THREAD-019`).
-    #[test]
-    fn every_dropdown_row_is_described() {
-        for (id, _) in TOP_MENUS {
-            for command in item_commands(&menu_layout(*id)) {
-                assert!(
-                    crate::ui::commands::title(command, &ambre_commands::Locale::En).is_some(),
-                    "{id:?} lists {command:?}, which the registry does not describe"
-                );
-            }
+    fn undo_and_redo_home_in_the_ambre_menu_and_the_clipboard_in_the_context_menu() {
+        assert_eq!(home_of(UNDO), Some(Home::AmbreMenu));
+        assert_eq!(home_of(REDO), Some(Home::AmbreMenu));
+        for id in [menu::CUT, menu::COPY, menu::PASTE] {
+            assert_eq!(home_of(id), Some(Home::ContextMenu), "{id:?}");
         }
+        assert_eq!(home_of(menu::SELECT_ALL), Some(Home::ContextPanel));
     }
 
+    /// `TOILE-UI-155`: the presentation entry asks for presentation mode with
+    /// focus.
     #[test]
     fn present_entry_emits_enter_present() {
         // `ToileCommand` is not `PartialEq`, so match on the shape instead.
@@ -414,15 +285,15 @@ mod tests {
         }
     }
 
-    /// The three exports are board commands, not view-local intents: the
-    /// document lives on the Logic thread, and so does everything that
-    /// serializes it. The PowerPoint entry is the gesture of `TOILE-IO-126`.
+    /// The exports are board commands, not view-local intents: the document
+    /// lives on the Logic thread, and so does everything that serializes it.
+    /// Each lives in the Ambre menu. The PowerPoint entry is the gesture of
+    /// `TOILE-IO-126`.
     #[test]
-    fn file_menu_exports_resolve_to_board_commands() {
-        let cmds = item_commands(&menu_layout(MenuId::File));
-        assert!(cmds.contains(&EXPORT_SVG));
-        assert!(cmds.contains(&EXPORT_PDF));
-        assert!(cmds.contains(&EXPORT_PPTX));
+    fn the_exports_home_in_the_ambre_menu_and_resolve_to_board_commands() {
+        for id in [EXPORT_SVG, EXPORT_PNG, EXPORT_PDF, EXPORT_PPTX] {
+            assert_eq!(home_of(id), Some(Home::AmbreMenu), "{id:?}");
+        }
         assert!(matches!(
             menu_bar_edit(EXPORT_PPTX),
             Some(ToileCommand::Interop(InteropRequest::Export(
@@ -454,12 +325,11 @@ mod tests {
         assert!(!ToileCommand::export(ToileExport::Png(PngScope::Board)).is_mutating());
     }
 
-    /// `TOILE-IO-096`: the File menu offers the showcase page, and the entry
+    /// `TOILE-IO-096`: the Ambre menu offers the showcase page, and the entry
     /// resolves to its own board command, never to another export's.
     #[test]
-    fn the_file_menu_offers_the_showcase_page_as_its_own_gesture() {
-        let cmds = item_commands(&menu_layout(MenuId::File));
-        assert!(cmds.contains(&EXPORT_SHOWCASE));
+    fn the_ambre_menu_offers_the_showcase_page_as_its_own_gesture() {
+        assert_eq!(home_of(EXPORT_SHOWCASE), Some(Home::AmbreMenu));
         assert!(matches!(
             menu_bar_edit(EXPORT_SHOWCASE),
             Some(ToileCommand::Interop(InteropRequest::Export(
@@ -468,15 +338,11 @@ mod tests {
         ));
     }
 
-    /// `TOILE-IO-192`: the File menu offers the board's image, and the entry
+    /// `TOILE-IO-192`: the Ambre menu offers the board's image, and the entry
     /// resolves to the board command the Logic thread serves.
     #[test]
-    fn the_file_menu_offers_the_board_as_png() {
-        let cmds = item_commands(&menu_layout(MenuId::File));
-        assert!(
-            cmds.contains(&EXPORT_PNG),
-            "File must offer the PNG: {cmds:?}"
-        );
+    fn the_ambre_menu_offers_the_board_as_png() {
+        assert_eq!(home_of(EXPORT_PNG), Some(Home::AmbreMenu));
         assert!(matches!(
             menu_bar_edit(EXPORT_PNG),
             Some(ToileCommand::Interop(InteropRequest::Export(
@@ -487,12 +353,12 @@ mod tests {
 
     /// The two placement entries are UI-only intents (`TOILE-086`,
     /// `TOILE-087`). The shell owns the dialog, and the board is handed the
-    /// answer, an address or a document, never the gesture.
+    /// answer, an address or a document, never the gesture. Each inserts an
+    /// object, so it lives in the creation bar.
     #[test]
     fn the_placement_entries_are_shell_intents() {
-        let cmds = item_commands(&menu_layout(MenuId::File));
         for id in [EMBED_WEB, EMBED_DOC] {
-            assert!(cmds.contains(&id), "File missing {id:?}");
+            assert_eq!(home_of(id), Some(Home::CreationBar), "{id:?}");
             assert!(
                 menu_bar_edit(id).is_none(),
                 "{id:?} must resolve in the shell, not to a board command"
@@ -502,43 +368,45 @@ mod tests {
 
     /// `TOILE-UI-417`: the link chooser is a shell intent for the same reason
     /// the embed entries are: the shell owns the dialog. Clearing is not -- it
-    /// names no target, so the view sends it straight to the board.
+    /// names no target, so the view sends it straight to the board. Both act
+    /// on the selection, so both live in the context panel.
     #[test]
-    fn the_link_entries_sit_under_object() {
-        let cmds = item_commands(&menu_layout(MenuId::Object));
-        assert!(cmds.contains(&LINK_SET));
-        assert!(cmds.contains(&LINK_CLEAR));
+    fn the_link_entries_home_in_the_context_panel() {
+        assert_eq!(home_of(LINK_SET), Some(Home::ContextPanel));
+        assert_eq!(home_of(LINK_CLEAR), Some(Home::ContextPanel));
         assert!(
             menu_bar_edit(LINK_SET).is_none(),
             "the chooser resolves in the shell"
         );
         assert!(
             menu_bar_edit(LINK_CLEAR).is_none(),
-            "clearing needs the selection, which a menu id does not carry"
+            "clearing needs the selection, which an id does not carry"
         );
     }
 
+    /// `TOILE-UI-125`: the group, z-order and lock commands live in the
+    /// context panel, under the ids the context menu emits.
     #[test]
-    fn object_menu_reuses_z_order_and_lock_ids() {
-        let cmds = item_commands(&menu_layout(MenuId::Object));
+    fn the_group_order_and_lock_commands_home_in_the_context_panel() {
         for id in [
             menu::GROUP,
             menu::UNGROUP,
             menu::BRING_FRONT,
+            menu::FORWARD,
+            menu::BACKWARD,
             menu::SEND_BACK,
             menu::LOCK,
             menu::UNLOCK,
         ] {
-            assert!(cmds.contains(&id), "Object missing {id:?}");
+            assert_eq!(home_of(id), Some(Home::ContextPanel), "{id:?}");
         }
     }
 
-    /// The Object menu carries the six alignments and the two distributions,
-    /// and each resolves against the selection rather than to a direct board
-    /// command.
+    /// `TOILE-UI-355`, `TOILE-UI-375`: the six alignments and the two
+    /// distributions live in the context panel. Each resolves against the
+    /// selection rather than to a direct board command.
     #[test]
-    fn the_align_entries_sit_under_object() {
-        let cmds = item_commands(&menu_layout(MenuId::Object));
+    fn the_align_entries_home_in_the_context_panel() {
         for id in [
             menu::ALIGN_LEFT,
             menu::ALIGN_HCENTER,
@@ -549,10 +417,10 @@ mod tests {
             menu::DISTRIBUTE_H,
             menu::DISTRIBUTE_V,
         ] {
-            assert!(cmds.contains(&id), "{id:?} missing from the Object menu");
+            assert_eq!(home_of(id), Some(Home::ContextPanel), "{id:?}");
             assert!(
                 menu_bar_edit(id).is_none(),
-                "{id:?} needs the selection a menu id does not carry"
+                "{id:?} needs the selection an id does not carry"
             );
         }
     }
