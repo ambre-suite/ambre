@@ -209,9 +209,9 @@ pub enum TextWrite {
     /// A size, or `None` for the block's own.
     Size(Option<ambre_core::FontSize>),
     /// A text colour, or `None` for the theme's.
-    Colour(Option<ambre_core::Rgb>),
+    Colour(Option<ambre_core::Rgba>),
     /// A highlight, or `None` for none.
-    Highlight(Option<ambre_core::Rgb>),
+    Highlight(Option<ambre_core::Rgba>),
     /// A link address, or `None` to take the link off.
     Link(Option<ambre_core::LinkUrl>),
     /// The paragraph properties the style names, and no other.

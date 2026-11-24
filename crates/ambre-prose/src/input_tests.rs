@@ -3403,8 +3403,8 @@ fn each_panel_write_is_one_command_over_the_selection_and_one_undo_item() {
     let writes = [
         TextWrite::Font(Some(ambre_core::FontFamily::from_label("Lora"))),
         TextWrite::Size(ambre_core::FontSize::new(18.0)),
-        TextWrite::Colour(Some(ambre_core::Rgb::from_bits(0x2f_6fd6))),
-        TextWrite::Highlight(Some(ambre_core::Rgb::from_bits(0xff_ff00))),
+        TextWrite::Colour(Some(ambre_core::Rgba::from_bits(0x2f6f_d6ff))),
+        TextWrite::Highlight(Some(ambre_core::Rgba::from_bits(0xffff_00ff))),
         TextWrite::Link(Some(ambre_core::LinkUrl::new(
             " https://example.org ".to_owned(),
         ))),

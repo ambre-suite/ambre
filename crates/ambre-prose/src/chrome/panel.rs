@@ -14,7 +14,7 @@ use ambre_chrome::{
     Choice, ColourField, CommandButton, Field, FontField, FontSizeSelect, Labelled, LengthField,
     PanelContent, PanelSection, Pressed, Row, Segmented, SelectField,
 };
-use ambre_core::{Mm, PrintLength, Pt, Rgb, Rgba};
+use ambre_core::{Mm, PrintLength, Pt, Rgba};
 use leptos::prelude::*;
 
 use super::ProseSignals;
@@ -23,6 +23,27 @@ use crate::events::{Align, ParagraphStyle, TriState};
 use crate::message::{ParagraphKind, SelectionValues};
 use crate::view::panel::{self, Margins, PanelKind, Paper, TextWrite};
 use crate::view::toolbar::state_of;
+
+/// The value of every list and segmented control of the panel. One value
+/// type gives one instance of each generic control, which keeps Main
+/// small (`ambre-spec-budgets.md` section 5).
+#[derive(Clone, Copy, PartialEq)]
+enum Pick {
+    Paper(Paper),
+    Orientation(Orientation),
+    Margins(Margins),
+    Align(Align),
+    Spacing(Option<crate::events::LineHeight>),
+    Kind(Option<ParagraphKind>),
+}
+
+/// A reading of one property, as the value the panel's controls take.
+fn picked<T>(reading: Reading<T>, wrap: fn(T) -> Pick) -> Reading<Pick> {
+    match reading {
+        Reading::Uniform(value) => Reading::Uniform(wrap(value)),
+        Reading::Mixed => Reading::Mixed,
+    }
+}
 
 /// The property of `id`. Every id this module names is in the table.
 fn prop(
@@ -44,27 +65,30 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
     let write = move |format: PageFormat| signals.page_write.set(Some(format));
 
     let page_section = move || {
-        let paper = Signal::derive(move || Reading::Uniform(Paper::of(&page())));
-        let orientation = Signal::derive(move || Reading::Uniform(panel::orientation_of(&page())));
+        let paper = Signal::derive(move || Reading::Uniform(Pick::Paper(Paper::of(&page()))));
+        let orientation = Signal::derive(move || {
+            Reading::Uniform(Pick::Orientation(panel::orientation_of(&page())))
+        });
         // A pick of custom shows the four steppers before any margin moves;
         // margins no preset names show them too.
         let custom = RwSignal::new(false);
         let margins = Signal::derive(move || {
             if custom.get() {
-                Reading::Uniform(Margins::Custom)
+                Reading::Uniform(Pick::Margins(Margins::Custom))
             } else {
-                Reading::Uniform(Margins::of(&page()))
+                Reading::Uniform(Pick::Margins(Margins::of(&page())))
             }
         });
         let margin_choices = Margins::ALL
             .into_iter()
             .map(|m| Choice {
-                value: m,
+                value: Pick::Margins(m),
                 label: m.label(),
                 icon: None,
             })
             .collect::<Vec<_>>();
-        let show_steppers = move || margins.get() == Reading::Uniform(Margins::Custom);
+        let show_steppers =
+            move || margins.get() == Reading::Uniform(Pick::Margins(Margins::Custom));
         let margin = move |id,
                            get: fn(&PageFormat) -> PrintLength<Mm>,
                            set: fn(&mut PageFormat, PrintLength<Mm>)| {
@@ -84,7 +108,7 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
             .into_iter()
             .chain([Paper::Other])
             .map(|p| Choice {
-                value: p,
+                value: Pick::Paper(p),
                 label: p.label(),
                 icon: None,
             })
@@ -96,7 +120,9 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
                     choices=papers
                     value=paper
                     on_write=Callback::new(move |p| {
-                        if let Some(format) = panel::with_paper(page(), p) {
+                        if let Pick::Paper(p) = p
+                            && let Some(format) = panel::with_paper(page(), p)
+                        {
                             write(format);
                         }
                     })
@@ -106,11 +132,15 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
                 <Segmented
                     property=prop(panel::ORIENTATION)
                     choices=vec![
-                        Choice { value: Orientation::Portrait, label: "Portrait", icon: Some(icondata::LuRectangleVertical) },
-                        Choice { value: Orientation::Landscape, label: "Landscape", icon: Some(icondata::LuRectangleHorizontal) },
+                        Choice { value: Pick::Orientation(Orientation::Portrait), label: "Portrait", icon: Some(icondata::LuRectangleVertical) },
+                        Choice { value: Pick::Orientation(Orientation::Landscape), label: "Landscape", icon: Some(icondata::LuRectangleHorizontal) },
                     ]
                     value=orientation
-                    on_write=Callback::new(move |o| write(panel::with_orientation(page(), o)))
+                    on_write=Callback::new(move |o| {
+                        if let Pick::Orientation(o) = o {
+                            write(panel::with_orientation(page(), o));
+                        }
+                    })
                 />
             </Field>
             <Field label="Margins">
@@ -118,12 +148,15 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
                     property=prop(panel::MARGINS)
                     choices=margin_choices
                     value=margins
-                    on_write=Callback::new(move |m| match panel::with_margins(page(), m) {
-                        Some(format) => {
-                            custom.set(false);
-                            write(format);
+                    on_write=Callback::new(move |m| {
+                        let Pick::Margins(m) = m else { return };
+                        match panel::with_margins(page(), m) {
+                            Some(format) => {
+                                custom.set(false);
+                                write(format);
+                            }
+                            None => custom.set(true),
                         }
-                        None => custom.set(true),
                     })
                 />
             </Field>
@@ -149,6 +182,11 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
     });
     let text_write = move |write: TextWrite| signals.text_write.set(Some(write));
     let paragraph = move |style: ParagraphStyle| text_write(TextWrite::Paragraph(style));
+    let write_kind = move |pick: Pick| {
+        if let Pick::Kind(Some(kind)) = pick {
+            text_write(TextWrite::Kind(kind));
+        }
+    };
     let command_buttons = move |ids: &'static [ambre_core::StaticKey<ambre_core::Commands>],
                                 labelled: Labelled| {
         ids.iter()
@@ -194,10 +232,6 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
         let (marks, rest) = all.split_at(5);
         let (script, clear) = rest.split_at(2);
         let size = Signal::derive(move || values.with(|v| v.font_size.uniform().flatten()));
-        let colour = |reading: Reading<Option<Rgba>>| match reading {
-            Reading::Uniform(c) => Reading::Uniform(c.map(Rgba::rgb)),
-            Reading::Mixed => Reading::Mixed,
-        };
         view! {
             <Field label="Font">
                 <FontField
@@ -220,8 +254,8 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
                 <ColourField
                     property=prop(panel::COLOUR)
                     icon=icondata::MdiFormatColorText
-                    value=Signal::derive(move || colour(values.with(|v| v.color)))
-                    default=Signal::stored(Rgb::from_bits(0x29_241e))
+                    value=Signal::derive(move || values.with(|v| v.color))
+                    default=Signal::stored(Rgba::from_bits(0x2924_1eff))
                     reset_label="Automatic"
                     on_write=Callback::new(move |c| text_write(TextWrite::Colour(c)))
                 />
@@ -230,8 +264,8 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
                 <ColourField
                     property=prop(panel::HIGHLIGHT)
                     icon=icondata::MdiFormatColorHighlight
-                    value=Signal::derive(move || colour(values.with(|v| v.highlight)))
-                    default=Signal::stored(Rgb::from_bits(0xff_ff00))
+                    value=Signal::derive(move || values.with(|v| v.highlight))
+                    default=Signal::stored(Rgba::from_bits(0xffff_00ff))
                     reset_label="No highlight"
                     on_write=Callback::new(move |c| text_write(TextWrite::Highlight(c)))
                 />
@@ -260,7 +294,7 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
         let spacings = panel::LINE_SPACINGS
             .into_iter()
             .map(|(value, label)| Choice {
-                value,
+                value: Pick::Spacing(value),
                 label,
                 icon: None,
             })
@@ -273,16 +307,16 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
                 icondata::MdiFormatListChecks,
             ])
             .map(|((style, label), icon)| Choice {
-                value: Some(ParagraphKind::List(style)),
+                value: Pick::Kind(Some(ParagraphKind::List(style))),
                 label,
                 icon: Some(icon),
             })
             .collect::<Vec<_>>();
         let list = Signal::derive(move || match values.with(|v| v.kind) {
             Reading::Uniform(Some(ParagraphKind::List(style))) => {
-                Reading::Uniform(Some(ParagraphKind::List(style)))
+                Reading::Uniform(Pick::Kind(Some(ParagraphKind::List(style))))
             }
-            Reading::Uniform(_) => Reading::Uniform(None),
+            Reading::Uniform(_) => Reading::Uniform(Pick::Kind(None)),
             Reading::Mixed => Reading::Mixed,
         });
         view! {
@@ -290,21 +324,26 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
                 <Segmented
                     property=prop(panel::ALIGN)
                     choices=vec![
-                        Choice { value: Align::Left, label: "Left", icon: Some(icondata::MdiFormatAlignLeft) },
-                        Choice { value: Align::Center, label: "Centre", icon: Some(icondata::MdiFormatAlignCenter) },
-                        Choice { value: Align::Right, label: "Right", icon: Some(icondata::MdiFormatAlignRight) },
-                        Choice { value: Align::Justify, label: "Justified", icon: Some(icondata::MdiFormatAlignJustify) },
+                        Choice { value: Pick::Align(Align::Left), label: "Left", icon: Some(icondata::MdiFormatAlignLeft) },
+                        Choice { value: Pick::Align(Align::Center), label: "Centre", icon: Some(icondata::MdiFormatAlignCenter) },
+                        Choice { value: Pick::Align(Align::Right), label: "Right", icon: Some(icondata::MdiFormatAlignRight) },
+                        Choice { value: Pick::Align(Align::Justify), label: "Justified", icon: Some(icondata::MdiFormatAlignJustify) },
                     ]
-                    value=Signal::derive(move || values.with(|v| v.align))
-                    on_write=Callback::new(move |a| paragraph(ParagraphStyle { align: Some(a), ..ParagraphStyle::default() }))
+                    value=Signal::derive(move || picked(values.with(|v| v.align), Pick::Align))
+                    on_write=Callback::new(move |a| {
+                        if let Pick::Align(a) = a {
+                            paragraph(ParagraphStyle { align: Some(a), ..ParagraphStyle::default() });
+                        }
+                    })
                 />
             </Field>
             <Field label="Line spacing">
                 <SelectField
                     property=prop(panel::LINE_SPACING)
                     choices=spacings
-                    value=Signal::derive(move || values.with(|v| v.line_height))
-                    on_write=Callback::new(move |h: Option<crate::events::LineHeight>| {
+                    value=Signal::derive(move || picked(values.with(|v| v.line_height), Pick::Spacing))
+                    on_write=Callback::new(move |h: Pick| {
+                        let Pick::Spacing(h) = h else { return };
                         // The default is the document's: the paragraph's own
                         // spacing goes back to single, the seeded default.
                         let height = h.unwrap_or(crate::events::LineHeight::Multiple(
@@ -325,11 +364,7 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
                     property=prop(panel::KIND)
                     choices=lists
                     value=list
-                    on_write=Callback::new(move |kind: Option<ParagraphKind>| {
-                        if let Some(kind) = kind {
-                            text_write(TextWrite::Kind(kind));
-                        }
-                    })
+                    on_write=Callback::new(write_kind)
                 />
             </Field>
         }
@@ -340,7 +375,7 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
         let kinds = panel::KINDS
             .into_iter()
             .map(|(kind, label)| Choice {
-                value: Some(kind),
+                value: Pick::Kind(Some(kind)),
                 label,
                 icon: None,
             })
@@ -350,14 +385,10 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
                 property=prop(panel::KIND)
                 choices=kinds
                 value=Signal::derive(move || match values.with(|v| v.kind) {
-                    Reading::Uniform(kind) => Reading::Uniform(panel::kind_chip(kind)),
+                    Reading::Uniform(kind) => Reading::Uniform(Pick::Kind(panel::kind_chip(kind))),
                     Reading::Mixed => Reading::Mixed,
                 })
-                on_write=Callback::new(move |kind: Option<ParagraphKind>| {
-                    if let Some(kind) = kind {
-                        text_write(TextWrite::Kind(kind));
-                    }
-                })
+                on_write=Callback::new(write_kind)
             />
         }
         .into_any()

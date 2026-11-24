@@ -182,9 +182,7 @@ impl ProseUiState {
                 value,
             })
         };
-        let colour = |rgb: ambre_core::Rgb| {
-            crate::mark::canonical_color(rgb.to_rgba(ambre_core::Alpha::OPAQUE))
-        };
+        let colour = crate::mark::canonical_color;
         match write {
             TextWrite::Font(family) => {
                 mark(MarkRoot::FontFamily, family.map(|f| f.label().to_owned()))
