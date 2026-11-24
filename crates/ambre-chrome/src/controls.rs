@@ -17,6 +17,10 @@
 // to its place and back. A generic control would compile once per type, and
 // the main wasm is near its ceiling (`ambre-spec-budgets.md` section 5).
 //
+// Each control erases its view type with `into_any`. A typed view nests into
+// the view type of every caller. Each caller then compiles its own build,
+// rebuild and drop of the control: 82 KB of Main on 2026-11-24.
+//
 // Every control prevents the default of `mousedown`. A control that takes the
 // focus would steal it from the canvas text pipe (the format bar hazard). The
 // keyboard still reaches each one through Tab.
@@ -381,6 +385,7 @@ pub fn IconButton(
             {described.map(|id| view! { <span id=id hidden>{spoken}</span> })}
         </button>
     }
+    .into_any()
 }
 
 /// The place of the choice an open list moves to on `ev`, from `at`, or what
@@ -600,6 +605,7 @@ pub fn Select(
             </div>
         </span>
     }
+    .into_any()
 }
 
 /// A row of exclusive choices on one track: an alignment, an orientation.
@@ -643,6 +649,7 @@ pub fn SegmentBar(
             {segments}
         </span>
     }
+    .into_any()
 }
 
 /// A number and its unit in one field, between a step down and a step up.
@@ -688,6 +695,7 @@ pub fn Stepper(
             </button>
         </span>
     }
+    .into_any()
 }
 
 /// A square of one colour that reports a press. `colour` is `None` for no
@@ -715,6 +723,7 @@ pub fn ColorSwatch(
             on:click=move |_| on_press.run(())
         ></button>
     }
+    .into_any()
 }
 
 /// What a [`Slider`] shows beside its track.
@@ -785,6 +794,7 @@ pub fn Slider(
             </span>
         </span>
     }
+    .into_any()
 }
 
 #[cfg(test)]
