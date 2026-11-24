@@ -2014,7 +2014,7 @@ ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | Ra
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | RateLimitCategory::prefix() | ret | &'static str	newtype-inner	the enum's own word, the prefix of the Redis key its counter is stored and read under
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | SLIDING_WINDOW_LUA | const | &str	free-text	Lua script text
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | client_peer(x_forwarded_for) | param | Option<&str>	generic	the X-Forwarded-For header text before its parse: client_peer reads the entry of the first trusted proxy into an IpAddr at once
-ambre-server | src/oidc.rs | crate::oidc | <ProviderHttp as AsyncHttpClient<'c>>::Future | assoc | Pin<Box<dyn Future<Output=Result<HttpResponse,Self::Error>>+Send+'c>>	trait	the future the AsyncHttpClient trait of oauth2 fixes, whose answer is the http::Response<Vec<u8>> the provider crate parses
+ambre-server | src/oidc.rs | crate::oidc | <ProviderHttp as AsyncHttpClient<'c>>::Future | assoc | Pin<Box<dyn Future<Output=Result<HttpResponse,Self::Error>>+Send+'c>>	foreign-api	the future the AsyncHttpClient trait of oauth2 fixes, whose answer is the http::Response<Vec<u8>> the provider crate parses
 ambre-server | src/oidc.rs | crate::oidc | <ProviderHttp as AsyncHttpClient<'c>>::call(request) | param | HttpRequest	trait	the request the AsyncHttpClient trait of oauth2 fixes, an http::Request<Vec<u8>> the provider crate builds
 ambre-server | src/payload.rs | crate::payload | StoredPayload.0 | field | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/payload.rs | crate::payload | StoredPayload::expose_bytes() | ret | &[u8]	newtype-inner	newtype inner, accessor or constructor
@@ -4915,7 +4915,7 @@ ambre-sync | src/membership_log.rs | crate::membership_log | Writers::admits_del
 ambre-sync | src/membership_log.rs | crate::membership_log | Writers::admits_snapshot() | ret | bool	generic	predicate result
 ambre-sync | src/membership_log.rs | crate::membership_log | Readmitted::admits() | ret | bool	generic	predicate result
 ambre-sync | src/membership_log.rs | crate::membership_log | Writers::readmits() | ret | bool	generic	predicate result
-ambre-sync | src/membership_log.rs | crate::membership_log | Writers::folds_past_cap() | ret | bool	generic	predicate result: whether a snapshot fold passes a cap, selects no mode
+ambre-sync | src/membership_log.rs | crate::membership_log | Writers::folds_past_cap_of() | ret | bool	generic	predicate result: whether a snapshot fold passes a cap, selects no mode
 ambre-sync | src/snapshot_trust.rs | crate::snapshot_trust | Trusted::holds() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/snapshot_trust.rs | crate::snapshot_trust | confirmation_admitted() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/updates.rs | crate::updates | absent_opens_local() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -5010,7 +5010,7 @@ ambre-chrome | src/kit.rs | crate::kit | unreached_controls() | ret | Vec<String
 ambre-logic | src/dispatch.rs | crate::dispatch | LogicState::murmure_space_signed() | ret | bool	generic	predicate result
 ambre-murmure | src/logic/runtime/spaces.rs | crate::logic::runtime::spaces | Runtime<D>::keep_space_signed() | ret | bool	generic	predicate result
 ambre-protocol | src/membership.rs | crate::membership | <MembershipEntry as TryFrom<Wire>>::Error | assoc | &'static str	foreign-api	the error serde's try_from attribute formats with Display; a peer never reads it back
-ambre-protocol | src/membership.rs | crate::membership | CapSlot::into_caps() | ret | Result<(Option<Seq<DeltaAuthor>>,Vec<DocumentCap>),&'static str>	foreign-api	the error of the serde try_from conversion it feeds, formatted with Display
+ambre-protocol | src/membership.rs | crate::membership | CapSlot::into_caps() | ret | Result<Caps,&'static str>	foreign-api	the error of the serde try_from conversion it feeds, formatted with Display
 ambre-logic | src/persistence.rs | crate::persistence | pinned_keys(row) | param | &[u8]	foreign-api	a trusted_keys row as the store returns it; split into typed keys at once
 ambre-prose | src/commands.rs | crate::commands | formats_selection() | ret | bool	generic	predicate result
 ambre-sync | src/census.rs | crate::census | Census::awaits() | ret | bool	generic	predicate result
@@ -5028,3 +5028,7 @@ ambre-chrome | src/command.rs | crate::command | digit_of_code(code) | param | &
 ambre-core | src/call.rs | crate::call | FORWARDED | const | u32	generic	the one written figure of the call row of the budgets, which the forwarded count and the slots past it are built on
 ambre-chrome | src/controls.rs | crate::controls | ChoiceView.hint | field | Option<String>	free-text	the muted hint at the end of a row of a select, as a chord, display text
 ambre-chrome | src/controls.rs | crate::controls | ChoiceView::hinted(hint) | param | impl Into<String>	free-text	the muted hint at the end of a row of a select, display text
+ambre-protocol | src/snapshot_confirm.rs | crate::snapshot_confirm | CONFIRM_HEAD_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
+ambre-sync | src/membership_log.rs | crate::membership_log | Readmitted::under_every_cap() | ret | bool	generic	predicate result
+ambre-sync | src/membership_log.rs | crate::membership_log | Writers::folds_past_cap_under() | ret | bool	generic	predicate result
+ambre-sync | src/membership_log.rs | crate::membership_log | continues() | ret | bool	generic	predicate result
