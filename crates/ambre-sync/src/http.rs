@@ -1643,6 +1643,15 @@ pub(crate) struct AuthMeResponse {
     pub address_reclaimed: ambre_core::AddressStanding,
 }
 
+/// `GET /api/documents/{id}`, read for the type alone: a census opens a
+/// document under the type the relay holds for it, as any open does
+/// (`SYNC-313`).
+#[derive(Deserialize)]
+pub(crate) struct DocumentTypeResponse {
+    #[serde(with = "ambre_core::serde_enums::doc_type")]
+    pub doc_type: ambre_core::DocType,
+}
+
 /// `GET /api/channels/{id}/documents`: the documents a channel groups.
 #[derive(Deserialize)]
 pub(crate) struct ChannelDocumentsResponse {

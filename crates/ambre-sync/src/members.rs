@@ -246,7 +246,26 @@ impl SyncState {
     /// 5. Emits [`SyncEvent::RevocationComplete`], which causes
     ///    [`handle_sync_event`] to swap the local key and push the old key
     ///    into the [`SyncDocumentState::old_keys`] LRU cache.
+    ///
+    /// On the log of a channel's `meta`, the census first opens each document
+    /// of the channel. The revoke then caps the member in each one
+    /// (`SYNC-312`).
     pub(crate) fn handle_revoke_from_document(
+        &mut self,
+        id: Seq<Request>,
+        document_id: Id<Document>,
+        user_id: Id<User>,
+    ) {
+        self.begin_removal(crate::census::Removal::Revoke {
+            id,
+            document_id,
+            user_id,
+        });
+    }
+
+    /// The revoke of [`handle_revoke_from_document`](Self::handle_revoke_from_document),
+    /// on the documents open here.
+    pub(crate) fn revoke_now(
         &self,
         id: Seq<Request>,
         document_id: Id<Document>,
@@ -315,20 +334,29 @@ impl SyncState {
                 .get(&document_id)
                 .map(SyncDocumentState::applied_clocks)
                 .unwrap_or_default(),
-            channel_applied: self
-                .open_channel_documents(document_id)
-                .into_iter()
-                .filter_map(|other| {
-                    self.documents
-                        .get(&other)
-                        .map(|doc| (other, doc.applied_clocks()))
-                })
-                .collect(),
+            channel_applied: self.channel_applied(document_id),
         };
         let http = sharing::GlooHttp { auth };
         crate::spawn(async move {
             sharing::revoke_task(&http, params, &tx, &logic_tx).await;
         });
+    }
+
+    /// What each other open document of the channel whose `meta` is
+    /// `meta` applied, those a census opened included. A revoke on that log
+    /// caps its member in each one (`SYNC-311`, `SYNC-312`).
+    pub(crate) fn channel_applied(
+        &self,
+        meta: Id<Document>,
+    ) -> Vec<(Id<Document>, sharing::Applied)> {
+        self.open_channel_documents(meta)
+            .into_iter()
+            .filter_map(|other| {
+                self.documents
+                    .get(&other)
+                    .map(|doc| (other, doc.applied_clocks()))
+            })
+            .collect()
     }
 
     /// Where the log of `document_id` stands for this client, once an open or
@@ -470,7 +498,16 @@ impl SyncState {
 
     /// Leaves a document: DELETEs this user's own share and nothing else
     /// (`SYNC-127`, `SYNC-130`). [`SyncEvent::DocumentLeft`] closes it locally.
-    pub(crate) fn handle_leave_document(&self, id: Seq<Request>, document_id: Id<Document>) {
+    ///
+    /// A document not open here opens for a census first, so the departure
+    /// names the last clock this user wrote in it (`SYNC-313`).
+    pub(crate) fn handle_leave_document(&mut self, id: Seq<Request>, document_id: Id<Document>) {
+        self.begin_removal(crate::census::Removal::Leave { id, document_id });
+    }
+
+    /// The departure of [`handle_leave_document`](Self::handle_leave_document),
+    /// from a document open here.
+    pub(crate) fn leave_now(&self, id: Seq<Request>, document_id: Id<Document>) {
         let (Some(tx), Some(author), Some(exchange_key)) = (
             self.event_tx.clone(),
             self.author(),

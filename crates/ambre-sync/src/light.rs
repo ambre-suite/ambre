@@ -122,7 +122,7 @@ impl LightSubscription {
     /// The light subscription a full session leaves behind. The horizon never
     /// passes what the session itself received.
     /// It keeps the writers the session walked (`RESID-032`).
-    fn of(doc: SyncDocumentState, applied: Seq<Relay>) -> Self {
+    pub(crate) fn of(doc: SyncDocumentState, applied: Seq<Relay>) -> Self {
         Self {
             on_relay: doc.existence,
             applied: doc.take_applied(),
