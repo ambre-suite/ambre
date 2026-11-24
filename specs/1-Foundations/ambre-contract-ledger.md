@@ -21,11 +21,11 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**5049 rows: 4629 shipped, of which 15 loose. 420 unbuilt.**
+**5050 rows: 4630 shipped, of which 15 loose. 420 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1692 | 583 | 995 | 818 | 526 | 4614 |
+| `verified` | 1693 | 583 | 995 | 818 | 526 | 4615 |
 | `failing` | 1 |  |  |  |  | 1 |
 | `human-review` | 14 |  |  |  |  | 14 |
 | `unimplemented` | 176 | 42 | 21 | 24 | 157 | 420 |
@@ -77,7 +77,7 @@
 | `ambre-spec-server.md` | 134 | 126 | 125 | 1 | 8 |
 | `ambre-spec-session.md` | 48 | 48 | 48 |  |  |
 | `ambre-spec-shell.md` | 82 | 63 | 62 | 1 | 19 |
-| `ambre-spec-sync.md` | 90 | 89 | 89 |  | 1 |
+| `ambre-spec-sync.md` | 91 | 90 | 90 |  | 1 |
 | `ambre-spec-text-editor.md` | 20 | 18 | 18 |  | 2 |
 | `ambre-spec-text-input.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-ui.md` | 24 | 18 | 18 |  | 6 |
@@ -303,7 +303,7 @@
 | `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165,167..168,170..171,173..182,187..193,216..228,230,238..257,260..261,266,268,270,272..273,275,280..283,285..287,297..299,302,304,306,308..312,316..318 |
 | `ambre-spec-session.md` | SRV-003,009,022..031,074,090..092,163,172,232,234..236,267,278..279,291,293..296,303,319..333,337..338 |
 | `ambre-spec-shell.md` | CHROME-148..198,207..237 |
-| `ambre-spec-sync.md` | SYNC-002,011,013,056..071,095..100,133..134,136..137,149,152..160,162..167,169..171,177..189,191..196,248..256,261,269..271,275,277..278,281,292..296,305 |
+| `ambre-spec-sync.md` | SYNC-002,011,013,056..071,095..100,133..134,136..137,149,152..160,162..167,169..171,177..189,191..196,248..256,261,269..271,275,277..278,281,292..296,305,318 |
 | `ambre-spec-text-editor.md` | CANVAS-036..042,047..050,077..080,082..083,085; UI-THREAD-014,018 |
 | `ambre-spec-text-input.md` | CHROME-007,016..021,059..064,102..103 |
 | `ambre-spec-toile-auto-layout.md` | TOILE-FEAT-005,009,029..032,038..054,099,102..104 |
