@@ -182,7 +182,8 @@ pub fn FormatBar(
         (anchor.y - FORMAT_BAR_LIFT).max(Px::<Css>::ZERO).get()
     );
     // An icon control is the one icon button of the toolkit. The bar then
-    // shows the glyphs of the context panel, at the size of a bar.
+    // shows the glyphs of the context panel, at the size of a bar, with no
+    // frame until the pointer comes: the look of a floating bar.
     let controls = controls.into_iter().map(|control| {
         let on_press = control.on_press;
         match control.icon {
@@ -193,6 +194,7 @@ pub fn FormatBar(
                     chord=control.chord
                     pressed=Some(Signal::stored(control.pressed))
                     size=crate::ControlSize::Large
+                    look=crate::IconLook::Ghost
                     on_press=Callback::new(move |()| on_press.run(()))
                     {..}
                     class:ambre-format-control=true

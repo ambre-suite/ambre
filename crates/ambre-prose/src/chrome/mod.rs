@@ -563,6 +563,7 @@ fn bar_comment(signals: ProseSignals) -> impl IntoView {
                 icon=icon
                 label=label
                 size=ambre_chrome::ControlSize::Large
+                look=ambre_chrome::IconLook::Ghost
                 reach=ambre_commands::Reach::Command(crate::commands::COMMENT)
                 on_press=Callback::new(move |()| {
                     signals.open_prompt(crate::commands::COMMENT);
