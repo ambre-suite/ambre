@@ -140,7 +140,7 @@ impl PanelKind {
         }
     }
 
-    /// The subtitle of the panel for this kind (`CHROME-239`): the elements
+    /// The subtitle of the panel for this kind (`CHROME-241`): the elements
     /// the selection holds, as the Logic thread last counted them. A count
     /// not read yet shows nothing.
     #[must_use]
@@ -188,7 +188,7 @@ mod tests {
     use super::*;
 
     /// The subtitle counts what the selection holds, and reads nothing
-    /// selected over the board alone (`CHROME-239`).
+    /// selected over the board alone (`CHROME-241`).
     #[test]
     fn the_subtitle_counts_the_selection() {
         assert_eq!(PanelKind::Board.subtitle(None), "nothing selected");

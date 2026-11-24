@@ -17,7 +17,7 @@ use leptos::prelude::*;
 pub const SEARCH_LABEL: &str = "Search for a command";
 
 /// The field in the centre of the header that opens the command palette
-/// (`CHROME-237`). It is no search engine of its own. A press runs
+/// (`CHROME-239`). It is no search engine of its own. A press runs
 /// `command`, the palette command of the booted application. It runs it
 /// through `on_command`, the path every trigger shares. Below the tablet
 /// width the stylesheet keeps its icon alone.
@@ -105,7 +105,7 @@ pub fn HeaderMenu(
 }
 
 /// The primary button of the header: an accent fill, an icon and a label.
-/// Share is the one (`CHROME-238`).
+/// Share is the one (`CHROME-240`).
 #[component]
 pub fn PrimaryButton(
     /// The icon before the label.

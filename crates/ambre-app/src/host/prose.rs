@@ -441,7 +441,7 @@ impl ProseView {
         {
             self.annotations.toolbar.set(bar);
             // The words the subtitle of the panel counts move with the
-            // selection, which moves the bar (`CHROME-239`).
+            // selection, which moves the bar (`CHROME-241`).
             let words = self.state.selected_words();
             if self
                 .annotations

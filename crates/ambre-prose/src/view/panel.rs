@@ -110,7 +110,7 @@ impl PanelKind {
         }
     }
 
-    /// The subtitle of the panel for this kind (`CHROME-239`): the words of
+    /// The subtitle of the panel for this kind (`CHROME-241`): the words of
     /// the selected text. A count the view could not read shows nothing.
     #[must_use]
     pub fn subtitle(self, words: Option<Count<Words>>) -> String {
@@ -342,7 +342,7 @@ mod tests {
     use super::*;
 
     /// The subtitle reads nothing selected over the page, and the words of
-    /// a text selection (`CHROME-239`).
+    /// a text selection (`CHROME-241`).
     #[test]
     fn the_subtitle_counts_the_selected_words() {
         assert_eq!(PanelKind::Page.subtitle(None), "nothing selected");

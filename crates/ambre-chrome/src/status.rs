@@ -160,7 +160,7 @@ impl Build {
     pub const CURRENT: Self = Self::Release;
 
     /// Whether the status bar shows the frame rate and its timings
-    /// (`CHROME-236`). A person who uses the shipped suite has no use for
+    /// (`CHROME-238`). A person who uses the shipped suite has no use for
     /// them.
     #[must_use]
     pub const fn shows_diagnostics(self) -> bool {
@@ -176,7 +176,7 @@ impl Build {
 /// detail panel (`PerfDetail`). Shared by Trame and Toile so the fps readout and
 /// its toggle behave identically; the panel body differs per renderer. With no
 /// `detail` slot the button is a passive readout (no toggle). A release
-/// renders nothing in its place (`CHROME-236`).
+/// renders nothing in its place (`CHROME-238`).
 #[component]
 pub fn PerfChip(
     /// The live frame rate. Derive it from the app's perf snapshot signal.
@@ -228,7 +228,7 @@ mod tests {
     use ambre_core::Doc;
 
     /// A release shows no frame rate, and a development build shows it
-    /// (`CHROME-236`).
+    /// (`CHROME-238`).
     #[test]
     fn only_a_development_build_shows_the_diagnostics() {
         assert!(!Build::Release.shows_diagnostics());

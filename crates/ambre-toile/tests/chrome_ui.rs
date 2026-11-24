@@ -1530,7 +1530,7 @@ async fn the_board_panel_shows_the_board_then_what_applies_to_the_selection() {
             .unwrap(),
         "Document"
     );
-    // The subtitle reads the view state: nothing selected (`CHROME-239`).
+    // The subtitle reads the view state: nothing selected (`CHROME-241`).
     let subtitle = |root: &web_sys::Element| {
         root.query_selector(".ambre-ctx-subtitle")
             .unwrap()

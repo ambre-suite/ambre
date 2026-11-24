@@ -350,7 +350,7 @@ fn perf_chip_renders_fps_from_signal_and_starts_collapsed() {
     root.remove();
 }
 
-/// A release shows no frame rate in the status bar (`CHROME-236`).
+/// A release shows no frame rate in the status bar (`CHROME-238`).
 #[wasm_bindgen_test]
 fn a_release_shows_no_perf_chip() {
     let owner = Owner::new();
@@ -369,7 +369,7 @@ fn a_release_shows_no_perf_chip() {
 
 /// The search field of the header runs the palette command it is handed,
 /// through the one command path, and names it and its chord
-/// (`CHROME-237`).
+/// (`CHROME-239`).
 #[wasm_bindgen_test]
 async fn the_search_field_runs_the_palette_command() {
     use ambre_chrome::commands::{Command, Home, KeyBinding, KeyChar, Locale, Reach};

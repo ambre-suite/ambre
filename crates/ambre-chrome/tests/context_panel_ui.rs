@@ -420,7 +420,7 @@ async fn a_format_bar_control_shows_its_glyph_as_an_icon_button() {
 }
 
 /// The subtitle shows the count the application hands, under the title, and
-/// an empty one shows nothing (`CHROME-239`).
+/// an empty one shows nothing (`CHROME-241`).
 #[wasm_bindgen_test]
 async fn the_subtitle_counts_the_selection_under_the_title() {
     let prefs = PanelPrefs::new(DockSide::Right, PanelWidth::DEFAULT, Fold::Open);
@@ -448,7 +448,7 @@ async fn the_subtitle_counts_the_selection_under_the_title() {
 }
 
 /// The header of the panel moves it to the other side, and the side is the
-/// one the shell keeps (`CHROME-240`).
+/// one the shell keeps (`CHROME-242`).
 #[wasm_bindgen_test]
 async fn the_panel_header_moves_the_panel_to_the_other_side() {
     let prefs = PanelPrefs::new(DockSide::Right, PanelWidth::DEFAULT, Fold::Open);

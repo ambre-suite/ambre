@@ -71,7 +71,7 @@ impl ProseUiState {
     }
 
     /// The words of the selected text, counted as the word count counts
-    /// them, which the subtitle of the context panel shows (`CHROME-239`).
+    /// them, which the subtitle of the context panel shows (`CHROME-241`).
     /// `None` with no selection, or for one whose ends the flow of the
     /// layout in force does not hold, such as a table cell.
     #[must_use]

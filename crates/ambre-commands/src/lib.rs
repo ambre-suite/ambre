@@ -302,7 +302,7 @@ fn panel_defect(
 }
 
 /// The subtitle of a context panel over an empty selection, the same words
-/// in Prose, Trame and Toile (`CHROME-239`).
+/// in Prose, Trame and Toile (`CHROME-241`).
 pub const NOTHING_SELECTED: &str = "nothing selected";
 
 /// What every application shares, decided once: the clipboard identities and

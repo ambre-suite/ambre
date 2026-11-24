@@ -103,7 +103,7 @@ pub struct ProseSignals {
     /// view drains it into one command (`PROSE-UI-252`).
     pub page_write: RwSignal<Option<crate::doc::PageFormat>>,
     /// The words of the selected text, which the subtitle of the context
-    /// panel shows (`CHROME-239`). `None` with no selection.
+    /// panel shows (`CHROME-241`). `None` with no selection.
     pub selection_words: RwSignal<Option<ambre_core::Count<crate::events::Words>>>,
 }
 

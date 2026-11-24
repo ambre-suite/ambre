@@ -907,7 +907,7 @@ async fn the_sheet_panel_names_the_selection_and_folds_its_print_group() {
             .unwrap_or_default()
     };
     assert_eq!(text(".ambre-ctx-title"), "B2:D5");
-    // The subtitle counts the cells the selection spans (`CHROME-239`).
+    // The subtitle counts the cells the selection spans (`CHROME-241`).
     assert_eq!(text(".ambre-ctx-subtitle"), "12 cells");
     selection.set(panel::PanelSelection {
         reference: ambre_core::Validated::new("C3"),

@@ -108,7 +108,7 @@ pub(crate) fn MurmureShell(
 }
 
 /// The palette command of `kind`, which the search field of the header runs
-/// (`CHROME-237`). Each application declares its own, under the same chord.
+/// (`CHROME-239`). Each application declares its own, under the same chord.
 pub(crate) fn palette_command(kind: DocType) -> Option<&'static ambre_chrome::commands::Command> {
     let id = match kind {
         DocType::Toile => ambre_toile::ui::commands::PALETTE,
@@ -1469,9 +1469,9 @@ mod tests {
     }
 
     /// The header lays out the Ambre menu, the name, the sync state and the
-    /// search field, then Share and the avatar menu alone (`CHROME-241`).
+    /// search field, then Share and the avatar menu alone (`CHROME-243`).
     /// Share is the primary button and opens the share dialog
-    /// (`CHROME-242`). The theme sits in the avatar menu, the about dialog
+    /// (`CHROME-244`). The theme sits in the avatar menu, the about dialog
     /// in the Ambre menu, and no icon button of the header holds either.
     #[wasm_bindgen_test]
     async fn the_header_ends_on_share_and_the_avatar_menu() {
@@ -1673,7 +1673,7 @@ mod tests {
         out
     }
 
-    /// On a phone the search field keeps its icon alone (`CHROME-238`), and
+    /// On a phone the search field keeps its icon alone (`CHROME-240`), and
     /// the Ambre menu offers the palette (`CHROME-169`). A tablet and a
     /// desktop show the field whole, and the menu leaves the entry out.
     #[wasm_bindgen_test]

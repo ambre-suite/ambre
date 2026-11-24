@@ -1523,7 +1523,7 @@ fn the_bar_shows_over_a_selection_and_goes_with_it() {
     assert!(!rig.ui.toolbar().visible());
 }
 
-/// `CHROME-239`: the subtitle of the panel counts the words of the selected
+/// `CHROME-241`: the subtitle of the panel counts the words of the selected
 /// text, across blocks, and none with no selection.
 #[test]
 fn the_selected_words_are_counted_across_blocks() {

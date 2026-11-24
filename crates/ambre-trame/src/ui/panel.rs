@@ -131,7 +131,7 @@ impl Default for PanelSelection {
 
 impl PanelSelection {
     /// The subtitle of the panel: the cells the selection spans, such as
-    /// "12 cells" (`CHROME-239`). A sheet always has an active cell, so a
+    /// "12 cells" (`CHROME-241`). A sheet always has an active cell, so a
     /// sheet never reads as nothing selected.
     #[must_use]
     pub fn subtitle(&self) -> String {
