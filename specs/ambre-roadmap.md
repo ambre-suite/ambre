@@ -602,6 +602,8 @@ row reads `V1`.
 | `[ ]` An undo reaches a deletion that follows a mark in one commit | V1 | the walk that names the characters a deletion takes out does not follow mark anchors, so a commit that writes a mark before a deletion in the same text records no identity for it. Its undo then falls back to the neighbour (`UNDO-025`). Done when such a commit records the identities of its deletion, and a row binding it reads `verified` |
 | `[ ]` The identity table of undo stays bounded | V1 | each restore of a character adds a row to the identity table of undo (`UNDO-024`), and each undo clones the renames of containers. Both grow with the history. Done when a measure on a long session sets a budget row, and the tables hold it |
 | `[ ]` Undo converges between two peers | V1 | no property runs undo on two peers that edit the same text and checks that they converge (`ambre-spec-undo.md` section 6). Done when such a property runs in the belt, and a row binding it reads `verified` |
+| `[ ]` A menu entry of Prose reaches the view in the wasm tier | V1 | the formatting entries of the page menu (`CHROME-214`) did nothing for a release: `ProseHandler::on_command` mapped none of their ids, and only a browser test caught it. Done when a wasm-tier test runs each menu and palette id of Prose through `on_command` and reads the signal it sets |
+| `[ ]` Every menu and palette id of Toile and Trame reaches its handler | V1 | the Prose handler dropped the ids of its formatting entries with no error (`CHROME-214`). The handlers of Toile and Trame may drop an id their panel reaches through a signal (`CHROME-209`, `CHROME-215`, `CHROME-216`). Done when a test lists each id of their menus and palettes and finds a mapping for each |
 
 ### Murmure
 
