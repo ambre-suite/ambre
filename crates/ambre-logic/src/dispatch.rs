@@ -317,6 +317,14 @@ impl LogicState {
                     {
                         return;
                     }
+                    // A revoke on the `meta` of a channel names the documents
+                    // its sealed state holds (`SYNC-320`).
+                    RestCommand::RevokeFromDocument {
+                        document_id,
+                        user_id,
+                    } if self.route(|m| m.revoke_in_channel(id, *document_id, *user_id)) => {
+                        return;
+                    }
                     RestCommand::InviteToDocument { .. }
                         if self.route(|m| m.announce_before_invite(id, &cmd)) =>
                     {

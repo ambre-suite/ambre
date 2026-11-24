@@ -998,9 +998,11 @@ mod tests {
             space_id,
             command: SpaceCommand::LeaveChannel { channel_id },
         });
+        // The leave names what the sealed `meta` names (`SYNC-320`).
         assert!(matches!(
             drain(&sync).as_slice(),
-            [SyncCommand::LeaveChannel { channel_id: id }] if *id == channel_id
+            [SyncCommand::LeaveChannel { channel_id: id, named }]
+                if *id == channel_id && *named == [segment]
         ));
         assert!(drain(&ui).is_empty(), "nothing shows before the answer");
         assert!(state.rt().channels().contains_key(&channel_id));

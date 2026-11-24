@@ -410,6 +410,10 @@ pub enum LocalFailure {
     /// one entry carries, so it leaves no document uncapped and fails
     /// (`SYNC-312`).
     TooManyChannelDocuments,
+    /// The relay listed the documents of a channel without one that its
+    /// sealed `meta` names, so a removal would leave that document uncapped
+    /// (`SYNC-320`).
+    ChannelDocumentHidden,
 }
 
 impl fmt::Display for LocalFailure {
@@ -453,6 +457,7 @@ impl fmt::Display for LocalFailure {
             Self::TooManyChannelDocuments => {
                 f.write_str("the channel holds more documents than one removal can cap")
             }
+            Self::ChannelDocumentHidden => f.write_str("the relay hid a document of the channel"),
         }
     }
 }

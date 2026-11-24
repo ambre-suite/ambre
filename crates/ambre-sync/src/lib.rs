@@ -2426,7 +2426,22 @@ impl SyncState {
                 documents,
             } => self.handle_watch_channel(channel_id, (meta, meta_last), &documents),
             SyncCommand::DeleteChannel { channel_id } => self.handle_delete_channel(channel_id),
-            SyncCommand::LeaveChannel { channel_id } => self.handle_leave_channel(channel_id),
+            SyncCommand::LeaveChannel { channel_id, named } => {
+                self.handle_leave_channel(channel_id, named);
+            }
+            SyncCommand::RevokeFromChannel {
+                id,
+                document_id,
+                user_id,
+                named,
+            } => self.begin_removal(
+                crate::census::Removal::Revoke {
+                    id,
+                    document_id,
+                    user_id,
+                },
+                Some(named),
+            ),
             SyncCommand::CreateDirectMessage {
                 channel_id,
                 meta,
