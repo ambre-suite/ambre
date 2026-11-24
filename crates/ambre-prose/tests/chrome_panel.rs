@@ -327,7 +327,9 @@ async fn the_format_bar_announces_the_registry_labels() {
             )),
             active: None,
         });
-    let root = mount_in_container(move || view! { <chrome::ProseFormatBar signals=signals /> });
+    let root = mount_in_container(
+        move || view! { <chrome::ProseFormatBar signals=signals cover=RwSignal::new(ambre_client_core::cover::Cover::default()) /> },
+    );
     leptos::task::tick().await;
 
     for (id, _) in ambre_prose::commands::FORMAT_BAR {
@@ -408,7 +410,7 @@ fn mount_prose_panel(signals: ProseSignals) -> web_sys::Element {
     let content = chrome::prose_panel(signals);
     let prefs = PanelPrefs::new(DockSide::Right, PanelWidth::DEFAULT, Fold::Open);
     mount_in_container(move || {
-        view! { <ContextPanel prefs=prefs title=content.title sections=content.sections /> }
+        view! { <ContextPanel prefs=prefs title=content.title sections=content.sections cover=RwSignal::new(ambre_client_core::cover::Cover::default()) /> }
     })
 }
 

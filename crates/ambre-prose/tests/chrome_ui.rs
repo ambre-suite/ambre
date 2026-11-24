@@ -191,7 +191,9 @@ fn pressed(root: &web_sys::Element) -> Vec<String> {
 async fn the_format_bar_follows_its_anchor_and_reports_each_mark() {
     let signals = ProseSignals::new();
     signals.canvas_origin.set(origin());
-    let root = mount_in_container(move || view! { <chrome::ProseFormatBar signals=signals /> });
+    let root = mount_in_container(
+        move || view! { <chrome::ProseFormatBar signals=signals cover=RwSignal::new(ambre_client_core::cover::Cover::default()) /> },
+    );
     leptos::task::tick().await;
     assert!(one(&root, ".ambre-format-bar").is_none(), "no selection");
 
@@ -230,7 +232,9 @@ async fn a_control_press_hands_its_command_back_and_keeps_the_focus() {
         anchor: Some(at(200.0, 100.0)),
         active: None,
     });
-    let root = mount_in_container(move || view! { <chrome::ProseFormatBar signals=signals /> });
+    let root = mount_in_container(
+        move || view! { <chrome::ProseFormatBar signals=signals cover=RwSignal::new(ambre_client_core::cover::Cover::default()) /> },
+    );
     leptos::task::tick().await;
 
     let controls = all(&root, ".ambre-format-control");

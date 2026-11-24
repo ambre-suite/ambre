@@ -810,7 +810,7 @@ async fn the_panel_announces_the_registry_labels() {
             sheet: RwSignal::new(None),
         });
         let prefs = PanelPrefs::new(DockSide::Right, PanelWidth::DEFAULT, Fold::Open);
-        view! { <ContextPanel prefs=prefs title=content.title sections=content.sections /> }
+        view! { <ContextPanel prefs=prefs title=content.title sections=content.sections cover=RwSignal::new(ambre_client_core::cover::Cover::default()) /> }
     });
     leptos::task::tick().await;
 
@@ -913,6 +913,7 @@ async fn the_sheet_panel_names_the_selection_and_folds_its_print_group() {
                 title=content.title
                 subtitle=content.subtitle
                 sections=content.sections
+                cover=RwSignal::new(ambre_client_core::cover::Cover::default())
             />
         }
     });

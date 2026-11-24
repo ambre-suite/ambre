@@ -326,9 +326,9 @@ pub struct ToileSignals {
     pub present_mode: RwSignal<crate::message::PresentMode>,
     /// The find counters.
     pub find_result: RwSignal<Option<crate::message::FindResults>>,
-    /// What the shell's floating surfaces cover, as the chrome measures it.
-    /// The view reads it when a fit lands (`ZOOM-011`).
-    pub cover: RwSignal<super::cover::Cover>,
+    /// What the shell's floating surfaces cover, as each one measures
+    /// itself. The view reads it when a fit lands (`ZOOM-011`).
+    pub cover: RwSignal<ambre_client_core::cover::Cover>,
 }
 
 /// The wiring of a board view: its channels to the Logic thread, its text
@@ -639,7 +639,7 @@ pub struct ToileView {
     /// What the floating surfaces cover, as the chrome last measured it. Read
     /// when a fit lands, never written here (`ZOOM-011`). Wasm-only.
     #[cfg(target_arch = "wasm32")]
-    cover: RwSignal<super::cover::Cover>,
+    cover: RwSignal<ambre_client_core::cover::Cover>,
 
     /// The element that anchors a thread the panel opened, awaiting the
     /// `SelectionStats` reply that carries its bounds. The camera then comes to
@@ -2339,12 +2339,21 @@ impl ToileView {
     #[cfg(not(target_arch = "wasm32"))]
     fn publish_float_bar(&self) {}
 
-    /// The strips a fit keeps clear of, from what the chrome last measured of
-    /// the floating surfaces (`ZOOM-011`). The host build mounts no chrome, so
-    /// nothing covers its canvas.
+    /// The strips a fit keeps clear of, from what each floating surface of
+    /// the shell last measured of itself (`ZOOM-011`). The host build mounts
+    /// no chrome, so nothing covers its canvas.
     #[cfg(target_arch = "wasm32")]
     fn fit_clearance(&self) -> kurbo::Insets {
-        self.cover.get_untracked().clearance(canvas_client_offset())
+        let Some(canvas) = canvas_page_box() else {
+            return kurbo::Insets::ZERO;
+        };
+        let clear = self.cover.get_untracked().clearance(canvas);
+        kurbo::Insets {
+            x0: f64::from(clear.left.get()),
+            y0: f64::from(clear.top.get()),
+            x1: f64::from(clear.right.get()),
+            y1: f64::from(clear.bottom.get()),
+        }
     }
     #[cfg(not(target_arch = "wasm32"))]
     fn fit_clearance(&self) -> kurbo::Insets {
@@ -4608,6 +4617,15 @@ impl ToileView {
 fn wall_clock() -> Instant<Authored> {
     // `Date.now()` is a whole, non-negative count of milliseconds.
     Instant::<Authored>::new(js_sys::Date::now() as u64)
+}
+
+/// The box of the board's canvas on the page, `None` before it mounts.
+#[cfg(target_arch = "wasm32")]
+fn canvas_page_box() -> Option<ambre_client_core::cover::PageBox> {
+    web_sys::window()
+        .and_then(|w| w.document())
+        .and_then(|d| d.query_selector(".ambre-canvas").ok().flatten())
+        .map(|el| ambre_chrome::cover::page_box(&el.get_bounding_client_rect()))
 }
 
 /// The canvas element's top-left client offset (CSS px), so a canvas-local anchor

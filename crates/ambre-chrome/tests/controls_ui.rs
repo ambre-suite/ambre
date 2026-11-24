@@ -174,7 +174,7 @@ fn mount_kit_panel() -> web_sys::Element {
         let prefs = PanelPrefs::new(DockSide::Right, PanelWidth::DEFAULT, Fold::Open);
         view! {
             <div class="ambre-body" style="height:600px;width:900px;display:flex">
-                <ContextPanel prefs=prefs title="Document" sections=kit_section(margin, paper) />
+                <ContextPanel prefs=prefs title="Document" sections=kit_section(margin, paper) cover=RwSignal::new(ambre_client_core::cover::Cover::default()) />
             </div>
         }
     })

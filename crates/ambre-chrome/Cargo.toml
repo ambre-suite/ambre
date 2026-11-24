@@ -25,6 +25,9 @@ icondata       = { workspace = true }
 # DOM keyboard event -> KeyBinding translation, native <dialog> control.
 web-sys        = { workspace = true }
 wasm-bindgen   = { workspace = true }
+# The entries a `ResizeObserver` hands each floating surface it watches
+# (`cover`, `CHROME-171`). The application already links it.
+js-sys         = { workspace = true }
 
 # Reactive/DOM tests for the chrome components (Epic `ET`,
 # ambre-spec-testing.md "wasm" tier): leptos CSR + real `document`, so

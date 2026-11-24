@@ -5000,7 +5000,6 @@ ambre-core | src/zoom.rs | crate::zoom | WheelRate.0 | field | f64	newtype-inner
 ambre-core | src/zoom.rs | crate::zoom | WheelRate::ratio() | ret | f64	math	a scalar multiplier: the ratio a wheel step applies to the zoom factor
 ambre-toile | src/chrome/style.rs | crate::chrome::style | pressed(on) | param | bool	generic	the state a style field reads, computed by the caller, never a literal
 ambre-toile | src/ui/panel.rs | crate::ui::panel | PanelKind::title() | ret | &'static str	free-text	the header a person reads
-ambre-toile | src/chrome/cover.rs | crate::chrome::cover | shown() | ret | bool	generic	predicate result
 ambre-prose | src/doc.rs | crate::doc | write_whole_page_format() | ret | bool	generic	whether the whole page register was written; false on a refused format or a refused write
 ambre-prose | src/view/panel.rs | crate::view::panel | PanelKind::title() | ret | &'static str	free-text	the header a person reads
 ambre-prose | src/view/panel.rs | crate::view::panel | Paper::label() | ret | &'static str	free-text	the name of a paper a person reads
@@ -5058,3 +5057,8 @@ ambre-logic | src/settings.rs | crate::settings | KIND | const | &str	generic	th
 ambre-logic | src/settings.rs | crate::settings | META | const | &str	generic	the name of the map that holds the kind marker, which the open reads back: part of the codec of the settings document
 ambre-logic | src/settings.rs | crate::settings | SETTINGS_KIND | const | &str	generic	the word the kind marker holds, which the open matches back: part of the codec of the settings document
 ambre-logic | src/settings_flow.rs | crate::settings_flow | LogicState::is_settings() | ret | bool	generic	predicate result
+ambre-chrome | src/cover.rs | crate::cover | css(v) | param | f64	foreign-api	a length getBoundingClientRect returns, narrowed once into a Px<Css> at the DOM call
+ambre-chrome | src/cover.rs | crate::cover | shown() | ret | bool	generic	predicate result: whether a measured box has an area, selects no mode
+ambre-client-core | src/cover.rs | crate::cover | PageBox::overlaps() | ret | bool	generic	predicate result: whether two boxes share an area, selects no mode
+ambre-app | src/call.rs | crate::call | leave_channel(space) | param | &str	foreign-api	the space id a page script passes to the wasm export as a JavaScript string; the export parses it into Id<Space> at once
+ambre-murmure | src/logic/runtime/removals.rs | crate::logic::runtime::removals | Runtime<D>::revoke_in_channel() | ret | bool	generic	yes/no fact or predicate answer, selects no mode

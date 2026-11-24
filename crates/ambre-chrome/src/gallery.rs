@@ -192,6 +192,7 @@ pub fn Gallery() -> impl IntoView {
                         prefs=prefs
                         title="Document"
                         sections=Signal::stored(vec![section])
+                        cover=RwSignal::new(ambre_client_core::cover::Cover::default())
                     />
                 </div>
             </Specimen>

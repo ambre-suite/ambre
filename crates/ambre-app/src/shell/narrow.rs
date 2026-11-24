@@ -94,6 +94,9 @@ async fn a_phone_menu_is_a_sheet_on_the_bottom_edge() {
 struct PanelEdges {
     canvas: web_sys::DomRect,
     panel: web_sys::DomRect,
+    /// The strips of the canvas a fit keeps clear of, from the cover the
+    /// panel published of itself (`CHROME-171`).
+    clear: ambre_client_core::cover::Clearance,
 }
 
 /// Lay out a document page with a context panel docked to `side`, in a frame
@@ -124,6 +127,7 @@ async fn panel_edges_at(width: u32, side: ambre_chrome::DockSide) -> PanelEdges 
         .unwrap();
 
     let prefs = PanelPrefs::new(side, PanelWidth::DEFAULT, Fold::Open);
+    let cover = RwSignal::new(ambre_client_core::cover::Cover::default());
     let sections = vec![PanelSection::new(
         ambre_core::StaticKey::new("t.board"),
         "Board",
@@ -140,13 +144,23 @@ async fn panel_edges_at(width: u32, side: ambre_chrome::DockSide) -> PanelEdges 
                 <Header slot>"Ambre"</Header>
                 <Toolbar slot>""</Toolbar>
                 <ContextRegion slot>
-                    <ContextPanel prefs=prefs title="Board" sections=sections.clone() />
+                    <ContextPanel prefs=prefs title="Board" sections=sections.clone() cover=cover />
                 </ContextRegion>
             </AppShell>
         }
     });
     leptos::task::tick().await;
     let _ = frame.offset_width();
+    // The panel measures itself once the page lays it out.
+    for _ in 0..2 {
+        let next = js_sys::Promise::new(&mut |resolve, _| {
+            web_sys::window()
+                .unwrap()
+                .request_animation_frame(&resolve)
+                .unwrap();
+        });
+        wasm_bindgen_futures::JsFuture::from(next).await.unwrap();
+    }
     let rect = |sel: &str| {
         inner
             .query_selector(sel)
@@ -154,8 +168,12 @@ async fn panel_edges_at(width: u32, side: ambre_chrome::DockSide) -> PanelEdges 
             .expect("on screen")
             .get_bounding_client_rect()
     };
+    let canvas = rect(".ambre-content");
     let edges = PanelEdges {
-        canvas: rect(".ambre-content"),
+        clear: cover
+            .get_untracked()
+            .clearance(ambre_chrome::cover::page_box(&canvas)),
+        canvas,
         panel: rect(".ambre-ctx-panel"),
     };
     drop(handle);
@@ -185,6 +203,28 @@ async fn a_desktop_panel_docks_beside_the_canvas_on_its_side() {
         "the canvas starts after the panel"
     );
     assert_eq!(left.canvas.right(), 1280.0);
+}
+
+/// The panel publishes the box it covers (`CHROME-171`). A desktop panel
+/// docks beside the canvas, so a fit keeps no strip for it. The sheet of a
+/// phone covers the bottom of the canvas, so a fit keeps that strip clear.
+#[wasm_bindgen_test]
+async fn the_panel_publishes_its_cover_and_a_fit_clears_the_sheet_alone() {
+    use ambre_chrome::DockSide;
+    use ambre_client_core::cover::{COVER_GAP, Clearance};
+    for side in [DockSide::Right, DockSide::Left] {
+        let desk = panel_edges_at(1280, side).await;
+        assert_eq!(desk.clear, Clearance::default(), "{side:?} on a desktop");
+        let phone = panel_edges_at(360, side).await;
+        let sheet = phone.panel.height() + f64::from(COVER_GAP.get());
+        assert!(phone.panel.height() > 0.0);
+        assert!(
+            (f64::from(phone.clear.bottom.get()) - sheet).abs() < 0.5,
+            "{side:?} on a phone: {:?}, sheet {sheet}",
+            phone.clear
+        );
+        assert_eq!(phone.clear.top, ambre_core::Px::<ambre_core::Css>::ZERO);
+    }
 }
 
 /// On a phone the panel is a sheet on the bottom edge, whatever its side
