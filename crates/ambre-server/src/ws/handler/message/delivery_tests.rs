@@ -396,3 +396,219 @@ async fn a_second_replay_inside_the_window_is_answered_with_nothing(pool: sqlx::
     assert!(rx.try_recv().is_err(), "the second one sends nothing");
     forget(&state, doc_id).await;
 }
+
+/// The rows of `doc_id`, whatever the store each one names.
+async fn rows_of(state: &AppState, doc_id: Id<Document>) -> Vec<db::UpdateRow> {
+    db::get_updates_after(
+        &state.db,
+        &doc_id,
+        ambre_core::Seq::<ambre_core::Relay>::new(0),
+        ambre_core::Bounded::<crate::db::QueryLimit>::of::<10>(),
+    )
+    .await
+    .unwrap()
+}
+
+/// A subscription to the broadcast topic of `doc_id`, on a connection of its
+/// own. A subscriber sharing the relay's client would desynchronise its
+/// replies (see `PubSubHub`).
+async fn listen(doc_id: Id<Document>) -> rustis::client::PubSubStream {
+    use rustis::commands::PubSubCommands;
+    crate::test_helpers::connect_test_redis()
+        .await
+        .unwrap()
+        .ssubscribe(format!("doc:{{{doc_id}}}"))
+        .await
+        .unwrap()
+}
+
+/// Asserts that the topic of `stream` carries no broadcast for a while.
+async fn silent(stream: &mut rustis::client::PubSubStream) {
+    use futures_util::StreamExt;
+    let heard = tokio::time::timeout(Duration::from_millis(300), stream.next()).await;
+    assert!(heard.is_err(), "a fenced delta is broadcast");
+}
+
+/// The frames sent back to the author, decoded.
+fn answers(rx: &mut mpsc::Receiver<StoredPayload>) -> Vec<WsServerMsg> {
+    std::iter::from_fn(|| rx.try_recv().ok())
+        .map(|f| decode_server_msg(&ambre_core::Payload::new(f.expose_bytes().to_vec())).unwrap())
+        .collect()
+}
+
+/// Whether `answer` is the refusal of a document being deleted.
+fn not_found(answer: &WsServerMsg, doc_id: Id<Document>) -> bool {
+    matches!(
+        answer,
+        WsServerMsg::Error { document_id: Some(d), code: RefusalCode::NotFound }
+            if *d == doc_id
+    )
+}
+
+/// Drops the tombstone a test set for `doc_id`, then its other keys.
+async fn unfence(state: &AppState, doc_id: Id<Document>) {
+    let _: usize = state
+        .redis
+        .del(crate::redis_keys::DocKey::<crate::redis_keys::Gone>::of(&doc_id).as_str())
+        .await
+        .unwrap();
+    forget(state, doc_id).await;
+}
+
+/// `SRV-335`: a delete that fences the document after the clock script and
+/// before the store leaves nothing of a delta, inline or not. No object is
+/// put, no row is written, no broadcast leaves, and the author hears that the
+/// document is not found.
+#[sqlx::test]
+#[cfg_attr(
+    not(feature = "db"),
+    ignore = "needs postgres+redis; run with --features db"
+)]
+async fn a_fenced_document_stores_and_sends_no_delta(pool: sqlx::PgPool) {
+    let stub = S3Stub::spawn([]).await;
+    let key = ed25519_dalek::SigningKey::from_bytes(&[57u8; 32]);
+    let (state, conn, doc_id) = writer(pool, &stub, &key).await;
+    let mut stream = listen(doc_id).await;
+    let (tx, mut rx) = mpsc::channel::<StoredPayload>(8);
+    let large = crate::hot_tail::INLINE_DELTA_MAX_SIZE
+        .saturating_len()
+        .to_usize()
+        + 1024;
+    crate::redis_ops::mark_document_gone(&state.redis, &doc_id, ambre_core::TimeSpan::new(60))
+        .await
+        .unwrap();
+
+    for (seq, len) in [(1, 16), (2, large)] {
+        let update = signed_update(&key, doc_id, seq, len);
+        let seq = Seq::<Relay>::new(seq);
+        let timer = crate::metrics::Sequencing::start();
+        store_numbered(&state, &conn, update, seq, timer, &tx).await;
+    }
+
+    assert!(
+        rows_of(&state, doc_id).await.is_empty(),
+        "a fenced delta takes no row"
+    );
+    let object =
+        crate::s3::format_s3_delta_key(&state.config.s3_env_prefix, &doc_id, Seq::<Relay>::new(2));
+    assert_eq!(
+        stub.puts(object.as_str()),
+        0,
+        "a fenced delta puts no object"
+    );
+    silent(&mut stream).await;
+    let sent = answers(&mut rx);
+    assert!(matches!(sent.as_slice(), [a, b] if not_found(a, doc_id) && not_found(b, doc_id)));
+    unfence(&state, doc_id).await;
+}
+
+/// `SRV-335`: a delete that begins while the object of a large delta is put
+/// takes its row and its broadcast. The object landed, and the second sweep
+/// removes it (`SRV-057`).
+#[sqlx::test]
+#[cfg_attr(
+    not(feature = "db"),
+    ignore = "needs postgres+redis; run with --features db"
+)]
+async fn a_delete_begun_during_the_object_put_takes_the_row_and_the_broadcast(pool: sqlx::PgPool) {
+    let stub = S3Stub::spawn([]).await;
+    let key = ed25519_dalek::SigningKey::from_bytes(&[58u8; 32]);
+    let (state, mut conn, doc_id) = writer(pool, &stub, &key).await;
+    let mut stream = listen(doc_id).await;
+    let (tx, mut rx) = mpsc::channel::<StoredPayload>(8);
+    let large = crate::hot_tail::INLINE_DELTA_MAX_SIZE
+        .saturating_len()
+        .to_usize()
+        + 1024;
+    let object =
+        crate::s3::format_s3_delta_key(&state.config.s3_env_prefix, &doc_id, Seq::<Relay>::new(1));
+    stub.delay(object.as_str().to_owned(), Duration::from_millis(500));
+    let deleter = Arc::clone(&state);
+    let delete = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        crate::redis_ops::mark_document_gone(
+            &deleter.redis,
+            &doc_id,
+            ambre_core::TimeSpan::new(60),
+        )
+        .await
+        .unwrap();
+    });
+
+    handle_update(
+        &state,
+        &mut conn,
+        signed_update(&key, doc_id, 1, large),
+        &tx,
+    )
+    .await;
+    delete.await.unwrap();
+
+    assert_eq!(
+        stub.puts(object.as_str()),
+        1,
+        "the object was put before the fence"
+    );
+    assert!(rows_of(&state, doc_id).await.is_empty(), "no row names it");
+    silent(&mut stream).await;
+    assert!(matches!(answers(&mut rx).as_slice(), [a] if not_found(a, doc_id)));
+    unfence(&state, doc_id).await;
+}
+
+/// `SRV-336`: the object of a delta with no inline home costs one write to
+/// the store. The relay gives up a write held past the wait of the budget
+/// register, and the index row takes the frame.
+#[sqlx::test]
+#[cfg_attr(
+    not(feature = "db"),
+    ignore = "needs postgres+redis; run with --features db"
+)]
+async fn an_object_put_past_its_wait_leaves_the_frame_in_its_row(pool: sqlx::PgPool) {
+    use crate::metrics::{Failure, RELAY};
+    use crate::s3::DELTA_PUT_TIMEOUT;
+    let stub = S3Stub::spawn([]).await;
+    let key = ed25519_dalek::SigningKey::from_bytes(&[59u8; 32]);
+    let (state, mut conn, doc_id) = writer(pool, &stub, &key).await;
+    let (tx, _rx) = mpsc::channel::<StoredPayload>(8);
+    let large = crate::hot_tail::INLINE_DELTA_MAX_SIZE
+        .saturating_len()
+        .to_usize()
+        + 1024;
+    let object = |seq| {
+        crate::s3::format_s3_delta_key(&state.config.s3_env_prefix, &doc_id, Seq::<Relay>::new(seq))
+    };
+
+    handle_update(
+        &state,
+        &mut conn,
+        signed_update(&key, doc_id, 1, large),
+        &tx,
+    )
+    .await;
+    assert_eq!(stub.puts(object(1).as_str()), 1, "one write per object");
+
+    stub.delay(object(2).into_inner(), DELTA_PUT_TIMEOUT * 2);
+    let before = RELAY.failures.read(Failure::ObjectPut);
+    let started = std::time::Instant::now();
+    handle_update(
+        &state,
+        &mut conn,
+        signed_update(&key, doc_id, 2, large),
+        &tx,
+    )
+    .await;
+    let waited = started.elapsed();
+
+    assert!(waited >= DELTA_PUT_TIMEOUT, "given up after {waited:?}");
+    assert!(
+        waited < DELTA_PUT_TIMEOUT + Duration::from_secs(1),
+        "held {waited:?}"
+    );
+    assert!(RELAY.failures.read(Failure::ObjectPut) > before);
+    let rows = rows_of(&state, doc_id).await;
+    assert!(matches!(
+        rows.as_slice(),
+        [a, b] if a.s3_key.is_some() && a.wire.is_none() && b.s3_key.is_none() && b.wire.is_some()
+    ));
+    forget(&state, doc_id).await;
+}

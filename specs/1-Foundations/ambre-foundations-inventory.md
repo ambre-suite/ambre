@@ -35,7 +35,7 @@
 | `residency` | Which documents a client holds, in memory and on disk, and what a document it does not hold still costs. | implemented | 32 |  |
 | `schema-version` | What a document looks like once it reaches the disk, and how a later binary knows it can still read it. | implemented | 20 |  |
 | `sealed-envelope` | Nothing a user writes leaves the browser readable. | implemented | 31 |  |
-| `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | implemented | 83 |  |
+| `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | implemented | 85 |  |
 | `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 47 |  |
 | `text-input` | A text area that shows nothing, sits under the caret, and is the real keyboard focus of the canvas. | implemented | 15 |  |
 | `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 25 |  |
@@ -49,7 +49,7 @@
 | `find` | A user types a word and the application takes them to it, wherever it is -- including far past the edge of the screen. | partial | 15 |  |
 | `frame` | One frame, from the browser's tick to the pixels on the screen. | partial | 25 | 2 |
 | `interop` | A user brings a file in, or takes a document out, and reads the conversion report: what the file kept and what it lost. | partial | 26 | 2 |
-| `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | partial | 110 |  |
+| `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | partial | 112 |  |
 | `message-bus` | The contract the three threads talk over. | partial | 46 |  |
 | `object-store` | Everything too large for a wire message lives in object storage, sealed. | partial | 25 |  |
 | `organizations` | A company that loses an employee must not lose that employee's documents. | partial | 15 |  |
@@ -66,4 +66,4 @@
 | `macros` | A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. | design-only | 54 |  |
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 
-**50 features: 25 implemented, 22 partial, 3 design-only. 1874 contract rows, 15 loose.**
+**50 features: 25 implemented, 22 partial, 3 design-only. 1878 contract rows, 15 loose.**
