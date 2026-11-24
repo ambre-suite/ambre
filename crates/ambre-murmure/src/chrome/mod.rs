@@ -2163,6 +2163,8 @@ pub fn MarkBarPanel(
                         on_press: Callback::new(move |()| relay.press_mark(style.clone())),
                         icon: None,
                         chord: None,
+                        description: None,
+                        reach: None,
                     }
                 })
                 .collect();

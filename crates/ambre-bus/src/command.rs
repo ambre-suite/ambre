@@ -22,7 +22,7 @@
 use ambre_core::{FixedBytes, SessionNonce};
 use serde::{Deserialize, Serialize};
 
-use ambre_core::id::{Channel, Document, Id, Lease, Message, Meta, Segment, Snapshot, Space};
+use ambre_core::id::{Channel, Document, Id, Lease, Message, Meta, Segment, Snapshot, Space, User};
 
 use crate::{
     ActivitySummary, DirectMember, DocType, Relay, Request, RestCommand, SealedChannelKey, Seq,
@@ -334,8 +334,23 @@ pub enum SyncCommand {
     /// its `meta`, posted with no rotation (`SYNC-127`). Answered by
     /// [`crate::LogicEvent::ChannelLeft`] or by
     /// [`crate::LogicEvent::ChannelRequestFailed`].
+    ///
+    /// `named` lists the documents the sealed `meta` names, which the Logic
+    /// thread read. The census refuses a relay listing that leaves one out,
+    /// and an empty `named` (`SYNC-320`).
     LeaveChannel {
         channel_id: Id<Channel>,
+        named: Vec<Id<Document>>,
+    },
+    /// Revoke `user_id` from the channel whose `meta` is `document_id`, as
+    /// [`RestCommand::RevokeFromDocument`] does, with the documents the
+    /// sealed `meta` names, as [`SyncCommand::LeaveChannel`] carries them
+    /// (`SYNC-320`). Answered under `id` as that request is.
+    RevokeFromChannel {
+        id: Seq<Request>,
+        document_id: Id<Document>,
+        user_id: Id<User>,
+        named: Vec<Id<Document>>,
     },
     /// Open or create the direct message of this user and `members`, in one
     /// request. It carries one channel key wrapped for each member alone, and

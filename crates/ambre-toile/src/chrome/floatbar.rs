@@ -23,7 +23,7 @@
 // pipe, the palette / inspector hazard. A click then never clears the selection the bar
 // acts on. ============================================================================
 
-use ambre_chrome::commands::{Locale, Reach};
+use ambre_chrome::commands::Reach;
 use ambre_core::{Commands, Rgba, StaticKey};
 
 use super::icons;
@@ -82,24 +82,21 @@ pub fn SelectionToolbar(
     });
 
     // A command button routing through the shared sink, as the context menu
-    // does. The tooltip and the glyph are the ones the command declares
-    // (`UI-THREAD-019`).
+    // does. The tooltip, its chord and its description and the glyph are the
+    // ones the command declares (`UI-THREAD-019`, `CHROME-186`).
     let cmd_button = move |command: StaticKey<Commands>| {
-        let label = registry::title(command, &Locale::En)
-            .map(ambre_core::Validated::into_string)
-            .unwrap_or_default();
         let icon = registry::icon(command).and_then(icons::resolve);
-        view! {
-            <button
-                data-reach=Reach::Command(command).marker()
-                aria-label=label.clone()
-                title=label
-                on:mousedown=move |ev| ev.prevent_default()
-                on:click=move |_| on_command.run(command)
-            >
-                {icon.map(|ic| view! { <leptos_icons::Icon icon=ic /> })}
-            </button>
-        }
+        ambre_commands::find(registry::COMMANDS, command).map(|described| {
+            view! {
+                <ambre_chrome::CommandButton
+                    command=described
+                    icon=icon
+                    size=ambre_chrome::ControlSize::Large
+                    look=ambre_chrome::IconLook::Ghost
+                    on_command=on_command
+                />
+            }
+        })
     };
 
     // A "Mixed" hint beside a colour that differs across the selection

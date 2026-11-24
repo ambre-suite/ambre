@@ -245,6 +245,15 @@ pub async fn invite_to_document(
     if !m.role.can_write_document() {
         return Err(AppError::Forbidden);
     }
+    // The settings document has its user as its only member (`SETTINGS-001`).
+    if db::get_document(&state.db, &doc_id)
+        .await?
+        .is_some_and(|doc| doc.doc_type == ambre_core::DocType::Settings)
+    {
+        return Err(AppError::Conflict {
+            detail: "the settings document takes no member".into(),
+        });
+    }
     // The rows of a channel's `meta` grant every document of it, so an
     // invite into a channel goes there and nowhere else (`SRV-190`).
     let mut channel_space = None;

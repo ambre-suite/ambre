@@ -34,6 +34,7 @@ static BOLD: Command = Command {
     keybindings: &[],
     category: StaticKey::<Categories>::new("format"),
     home: Home::ContextPanel,
+    description: None,
 };
 
 static INK: Property = Property {
@@ -404,6 +405,8 @@ async fn a_format_bar_control_shows_its_glyph_as_an_icon_button() {
             on_press: Callback::new(|()| {}),
             icon: Some(icondata::BsTypeBold),
             chord: None,
+            description: None,
+            reach: None,
         }];
         view! { <FormatBar anchor=ambre_core::Point::default() controls=controls cover=RwSignal::new(ambre_client_core::cover::Cover::default()) /> }
     });
@@ -417,4 +420,58 @@ async fn a_format_bar_control_shows_its_glyph_as_an_icon_button() {
         "Bold",
         "the label is the tooltip"
     );
+}
+
+/// The subtitle shows the count the application hands, under the title, and
+/// an empty one shows nothing (`CHROME-241`).
+#[wasm_bindgen_test]
+async fn the_subtitle_counts_the_selection_under_the_title() {
+    let prefs = PanelPrefs::new(DockSide::Right, PanelWidth::DEFAULT, Fold::Open);
+    let subtitle = RwSignal::new(String::from("4 words"));
+    with_styles();
+    let root = mount_in_container(move || {
+        view! {
+            <ContextPanel prefs=prefs title="Selection" subtitle=subtitle sections=two_sections() cover=RwSignal::new(ambre_client_core::cover::Cover::default()) />
+        }
+    });
+    leptos::task::tick().await;
+    assert_eq!(
+        q(&root, ".ambre-ctx-head .ambre-ctx-subtitle")
+            .text_content()
+            .unwrap(),
+        "4 words"
+    );
+    subtitle.set(String::new());
+    leptos::task::tick().await;
+    assert!(
+        root.query_selector(".ambre-ctx-subtitle")
+            .unwrap()
+            .is_none()
+    );
+}
+
+/// The header of the panel moves it to the other side, and the side is the
+/// one the shell keeps (`CHROME-242`).
+#[wasm_bindgen_test]
+async fn the_panel_header_moves_the_panel_to_the_other_side() {
+    let prefs = PanelPrefs::new(DockSide::Right, PanelWidth::DEFAULT, Fold::Open);
+    let root = mount_panel(prefs);
+    leptos::task::tick().await;
+    let dock = q(&root, ".ambre-ctx-head .ambre-ctx-dock");
+    assert_eq!(
+        dock.get_attribute("aria-label").unwrap(),
+        "Dock the panel to the left"
+    );
+    click(&dock);
+    leptos::task::tick().await;
+    assert_eq!(prefs.side.get_untracked(), DockSide::Left);
+    assert_eq!(
+        q(&root, ".ambre-ctx-panel")
+            .get_attribute("data-side")
+            .unwrap(),
+        "left"
+    );
+    click(&q(&root, ".ambre-ctx-head .ambre-ctx-dock"));
+    leptos::task::tick().await;
+    assert_eq!(prefs.side.get_untracked(), DockSide::Right);
 }

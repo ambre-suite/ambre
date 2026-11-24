@@ -803,7 +803,10 @@ async fn the_panel_announces_the_registry_labels() {
             theme: RwSignal::new(ambre_canvas::Theme::Dark),
             on_command: Callback::new(|_| {}),
             on_style: Callback::new(|_| {}),
-            selection: RwSignal::new(ambre_core::Validated::new("B2:D5")),
+            selection: RwSignal::new(panel::PanelSelection {
+                reference: ambre_core::Validated::new("B2:D5"),
+                cells: ambre_core::Count::new(12),
+            }),
             sheet: RwSignal::new(None),
         });
         let prefs = PanelPrefs::new(DockSide::Right, PanelWidth::DEFAULT, Fold::Open);
@@ -836,6 +839,25 @@ async fn the_panel_announces_the_registry_labels() {
         ambre_chrome::native_controls(&container),
         Vec::<String>::new()
     );
+    // `CHROME-185`, `CHROME-186`: each icon names itself in a tooltip, with
+    // the chord and the description its command declares.
+    assert_eq!(
+        ambre_chrome::untipped_icons(&container, chrome::COMMANDS),
+        Vec::<String>::new()
+    );
+    // `CHROME-187`: the keyboard focus shows the tooltip of an icon.
+    let bold = ambre_chrome::commands::Reach::Command(BOLD).marker();
+    let icon: web_sys::HtmlElement = container
+        .query_selector(&format!(".ambre-icon-button[data-reach=\"{bold}\"]"))
+        .unwrap()
+        .expect("the icon of bold")
+        .dyn_into()
+        .unwrap();
+    let tip = icon.query_selector(".ambre-tip").unwrap().unwrap();
+    assert_eq!(tip.get_attribute("data-shown").as_deref(), Some("false"));
+    icon.focus().unwrap();
+    leptos::task::tick().await;
+    assert_eq!(tip.get_attribute("data-shown").as_deref(), Some("true"));
     assert_eq!(
         ambre_chrome::unreached_controls(&container),
         Vec::<String>::new(),
@@ -860,7 +882,10 @@ async fn the_sheet_panel_names_the_selection_and_folds_its_print_group() {
     use ambre_chrome::{ContextPanel, DockSide, Fold, PanelPrefs, PanelWidth};
     use ambre_trame::message::{FrozenPane, PageMargins, PageOrientation, PageSetup, PaperSize};
     use ambre_trame::ui::panel;
-    let selection = RwSignal::new(ambre_core::Validated::new("B2:D5"));
+    let selection = RwSignal::new(panel::PanelSelection {
+        reference: ambre_core::Validated::new("B2:D5"),
+        cells: ambre_core::Count::new(12),
+    });
     let sheet = RwSignal::new(Some(panel::ActiveSheet {
         page: PageSetup {
             paper: PaperSize::Letter,
@@ -882,7 +907,15 @@ async fn the_sheet_panel_names_the_selection_and_folds_its_print_group() {
             sheet,
         });
         let prefs = PanelPrefs::new(DockSide::Right, PanelWidth::DEFAULT, Fold::Open);
-        view! { <ContextPanel prefs=prefs title=content.title sections=content.sections cover=RwSignal::new(ambre_client_core::cover::Cover::default()) /> }
+        view! {
+            <ContextPanel
+                prefs=prefs
+                title=content.title
+                subtitle=content.subtitle
+                sections=content.sections
+                cover=RwSignal::new(ambre_client_core::cover::Cover::default())
+            />
+        }
     });
     leptos::task::tick().await;
     let text = |selector: &str| {
@@ -894,9 +927,15 @@ async fn the_sheet_panel_names_the_selection_and_folds_its_print_group() {
             .unwrap_or_default()
     };
     assert_eq!(text(".ambre-ctx-title"), "B2:D5");
-    selection.set(ambre_core::Validated::new("C3"));
+    // The subtitle counts the cells the selection spans (`CHROME-241`).
+    assert_eq!(text(".ambre-ctx-subtitle"), "12 cells");
+    selection.set(panel::PanelSelection {
+        reference: ambre_core::Validated::new("C3"),
+        cells: ambre_core::Count::new(1),
+    });
     leptos::task::tick().await;
     assert_eq!(text(".ambre-ctx-title"), "C3");
+    assert_eq!(text(".ambre-ctx-subtitle"), "1 cell");
 
     let print = format!(
         ".ambre-ctx-section[data-section=\"{}\"]",

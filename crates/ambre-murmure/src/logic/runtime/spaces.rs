@@ -520,8 +520,10 @@ impl<D> Runtime<D> {
             }
             SpaceCommand::LeaveChannel { channel_id } => {
                 // As with a delete, nothing changes before the relay answers.
+                // The leave names the documents of the sealed `meta`, so a
+                // closed channel opens first (`SYNC-320`).
                 self.leaving.insert(channel_id, space_id);
-                self.ask(SyncCommand::LeaveChannel { channel_id });
+                self.remove_from_channel(channel_id, super::removals::Removal::Leave);
             }
             SpaceCommand::RefreshPresence { now } => {
                 let expired = space.roster.tick(now);

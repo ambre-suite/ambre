@@ -49,6 +49,7 @@ async fn menu_edges_at(width: u32) -> (f64, f64, f64) {
         keybindings: &[],
         category: StaticKey::<Categories>::new("edit"),
         home: Home::ContextMenu,
+        description: None,
     };
     let entries = Signal::stored(vec![MenuEntry::command(&copy, &Locale::En)]);
     let handle = mount_to(inner.body().unwrap(), move || {

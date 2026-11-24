@@ -270,7 +270,9 @@ impl SyncState {
             pin: self.pinned_inviters.get(&document_id).copied(),
             session: match doc_type {
                 DocType::Murmure => self.murmure_roots.iter().copied().collect(),
-                DocType::Trame | DocType::Toile | DocType::Prose => Vec::new(),
+                // The settings log is rooted on the user's own key, which `signer`
+                // names (`SETTINGS-001`).
+                DocType::Trame | DocType::Toile | DocType::Prose | DocType::Settings => Vec::new(),
             },
             signer: self.author_pub_key(),
             catalogue: self.catalogue_pin(document_id),
@@ -801,9 +803,17 @@ impl SyncState {
     /// refusal leaves the channel whole, as with a delete.
     ///
     /// The census opens each document of the channel not open here first,
-    /// so the departure caps this user in each one (`SYNC-312`).
-    pub(crate) fn handle_leave_channel(&mut self, channel_id: Id<Channel>) {
-        self.begin_removal(crate::census::Removal::LeaveChannel { channel_id });
+    /// so the departure caps this user in each one (`SYNC-312`). `named`
+    /// lists the documents the sealed `meta` names (`SYNC-320`).
+    pub(crate) fn handle_leave_channel(
+        &mut self,
+        channel_id: Id<Channel>,
+        named: Vec<Id<Document>>,
+    ) {
+        self.begin_removal(
+            crate::census::Removal::LeaveChannel { channel_id },
+            Some(named),
+        );
     }
 
     /// The departure of [`handle_leave_channel`](Self::handle_leave_channel),
@@ -2168,7 +2178,7 @@ pub(crate) mod tests {
             ),
         );
 
-        state.handle_leave_channel(channel_id);
+        state.handle_leave_channel(channel_id, vec![meta]);
         state.handle_sync_event(SyncEvent::ChannelLeft {
             channel_id,
             result: Err(crate::http::HttpError::Local(

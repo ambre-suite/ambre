@@ -1523,6 +1523,27 @@ fn the_bar_shows_over_a_selection_and_goes_with_it() {
     assert!(!rig.ui.toolbar().visible());
 }
 
+/// `CHROME-241`: the subtitle of the panel counts the words of the selected
+/// text, across blocks, and none with no selection.
+#[test]
+fn the_selected_words_are_counted_across_blocks() {
+    let mut rig = Rig::new(&["hello big world", "and more"]);
+    let blocks = rig.blocks();
+    assert_eq!(rig.ui.selected_words(), None);
+    rig.select(blocks[0], 6, 15);
+    assert_eq!(rig.ui.selected_words().map(|n| n.get()), Some(2));
+    rig.ui.cursor = Some(CursorPosition {
+        block_id: blocks[1],
+        offset: Pos::<DocChar>::new(3),
+        anchor: Some((blocks[0], Pos::<DocChar>::new(10))),
+    });
+    assert_eq!(
+        rig.ui.selected_words().map(|n| n.get()),
+        Some(2),
+        "\"world\" and \"and\""
+    );
+}
+
 /// `PROSE-UI-099`: raising the bar writes nothing, and the selection it was
 /// raised on stays whole.
 #[test]
@@ -3478,4 +3499,38 @@ fn an_import_keeps_the_zoom() {
     rig.lay();
     assert_ne!(snapshot(&rig), before, "the import wrote nothing");
     assert_eq!(rig.ui.viewport.zoom, zoom, "the import moved the zoom");
+}
+
+/// `PROSE-UI-260`: the suggestion-mode command turns the mode on, then off.
+/// A control, the chord and the palette each hand the intent of
+/// `review_intent`. The view asks for the mode the Logic thread did not
+/// last report.
+#[test]
+fn the_suggestion_mode_command_turns_the_mode_on_then_off() {
+    use crate::events::EditMode;
+    use crate::view::annotate::{AnnotationIntent, review_intent};
+    let mut rig = Rig::new(&["one"]);
+    rig.logic
+        .set_user_id(ambre_core::id::Id::<ambre_core::id::User>::mint());
+    assert_eq!(rig.ui.edit_mode, EditMode::Editing);
+    for expected in [EditMode::Suggesting, EditMode::Editing] {
+        let intent = review_intent(crate::commands::SUGGEST_CHANGES, None);
+        assert_eq!(intent, Some(AnnotationIntent::ToggleSuggesting));
+        let command = rig
+            .ui
+            .take_intent(AnnotationIntent::ToggleSuggesting, Instant::new(0))
+            .expect("the toggle asks for a mode");
+        assert_eq!(
+            command,
+            ProseCommand::EnableTrackChanges { mode: expected },
+            "the other mode than the one reported"
+        );
+        rig.take_sent(vec![command]);
+        rig.deliver();
+        assert_eq!(
+            rig.ui.edit_mode, expected,
+            "the view reads the reported mode"
+        );
+        assert_eq!(rig.logic.is_suggesting(), expected == EditMode::Suggesting);
+    }
 }

@@ -566,6 +566,85 @@ fn the_button_bars_announce_the_registry_labels() {
     toolbar.remove();
 }
 
+/// `CHROME-185`, `CHROME-186`: each icon of the tool palette and of the
+/// selection bar names itself in a tooltip. The tooltip shows the chord and
+/// the description its command declares. `CHROME-187`: the keyboard focus shows
+/// the tooltip, as the pointer does.
+#[wasm_bindgen_test]
+async fn each_icon_of_the_button_bars_names_itself_and_its_chord_in_a_tooltip() {
+    let owner = Owner::new();
+    owner.set();
+    let table = ambre_toile::ui::commands::COMMANDS;
+
+    let active = RwSignal::new(Tool::Select);
+    let palette = mount_in_container(
+        move || view! { <ToolPalette active=active cover=RwSignal::new(ambre_client_core::cover::Cover::default()) /> },
+    );
+    leptos::task::tick().await;
+    assert_eq!(
+        ambre_chrome::untipped_icons(&palette, table),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        palette
+            .query_selector_all("[role=\"tooltip\"]")
+            .unwrap()
+            .length(),
+        10,
+        "one tooltip for each tool"
+    );
+    let hand: web_sys::HtmlElement = palette
+        .query_selector("[aria-label=\"Hand\"]")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    let tip = hand.query_selector(".ambre-tip").unwrap().unwrap();
+    assert_eq!(tip.get_attribute("data-shown").as_deref(), Some("false"));
+    hand.focus().unwrap();
+    leptos::task::tick().await;
+    assert_eq!(tip.get_attribute("data-shown").as_deref(), Some("true"));
+    let text = tip.text_content().unwrap();
+    assert!(
+        text.contains("Hand") && text.contains("H"),
+        "the name and the chord: {text}"
+    );
+    assert!(
+        text.contains("Drag to move the view"),
+        "the description: {text}"
+    );
+    palette.remove();
+
+    let on_command = Callback::new(|_: StaticKey<Commands>| {});
+    let bar = RwSignal::new(Some(FloatBar {
+        at: css_point(40.0, 20.0),
+        count: Count::<Elements>::new(2),
+        groups: GroupHeld::Group,
+        locks: LockMix::Both,
+        fill: None,
+        mixed: Default::default(),
+    }));
+    let model = RwSignal::new(None::<StyleModel>);
+    let on_style = Callback::new(move |_e: StyleEdit| {});
+    let toolbar = mount_in_container(move || {
+        view! { <SelectionToolbar bar=bar model=model on_command=on_command on_style=on_style cover=RwSignal::new(ambre_client_core::cover::Cover::default()) /> }
+    });
+    leptos::task::tick().await;
+    assert_eq!(
+        ambre_chrome::untipped_icons(&toolbar, table),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        toolbar
+            .query_selector_all("[data-reach^=\"command:\"] > [role=\"tooltip\"]")
+            .unwrap()
+            .length(),
+        4,
+        "duplicate, delete, lock and unlock each name themselves"
+    );
+    toolbar.remove();
+}
+
 // -- Presenter overlay panel (toile-presentation), input ---------------------
 
 /// Mount a `PresenterPanel` with the given initial state, returning the container
@@ -1512,10 +1591,22 @@ fn mount_toile_panel_on(model: Option<StyleModel>, scope: CtxScope) -> web_sys::
         scope,
         on_command: Callback::new(|_| {}),
         restyle: RwSignal::new(None),
+        stats: RwSignal::new(Some(ambre_toile::ui::status::SelStats::from_reply(
+            ambre_core::Count::new(3),
+            None,
+        ))),
     });
     let prefs = PanelPrefs::new(DockSide::Right, PanelWidth::DEFAULT, Fold::Open);
     mount_in_container(move || {
-        view! { <ContextPanel prefs=prefs title=content.title sections=content.sections cover=RwSignal::new(ambre_client_core::cover::Cover::default()) /> }
+        view! {
+            <ContextPanel
+                prefs=prefs
+                title=content.title
+                subtitle=content.subtitle
+                sections=content.sections
+                cover=RwSignal::new(ambre_client_core::cover::Cover::default())
+            />
+        }
     })
 }
 
@@ -1536,6 +1627,14 @@ async fn the_board_panel_shows_the_board_then_what_applies_to_the_selection() {
             .unwrap(),
         "Document"
     );
+    // The subtitle reads the view state: nothing selected (`CHROME-241`).
+    let subtitle = |root: &web_sys::Element| {
+        root.query_selector(".ambre-ctx-subtitle")
+            .unwrap()
+            .and_then(|el| el.text_content())
+            .unwrap_or_default()
+    };
+    assert_eq!(subtitle(&board), "nothing selected");
     assert_eq!(ambre_chrome::repeated_title(&board), None);
     assert_eq!(ambre_chrome::native_controls(&board), Vec::<String>::new());
     let markers = ambre_chrome::reach_markers(&board);
@@ -1557,6 +1656,7 @@ async fn the_board_panel_shows_the_board_then_what_applies_to_the_selection() {
     // The link of an element sits in its shape section, out of the arrangement.
     let shape = mount_toile_panel(Some(styled(Styled::Elements)));
     leptos::task::tick().await;
+    assert_eq!(subtitle(&shape), "3 elements");
     for (id, section) in [
         (ambre_toile::ui::menu_bar::LINK_SET, panel::SHAPE),
         (ambre_toile::ui::menu_bar::LINK_CLEAR, panel::SHAPE),

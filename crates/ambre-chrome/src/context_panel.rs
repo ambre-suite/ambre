@@ -215,13 +215,17 @@ impl PanelSection {
     }
 }
 
-/// What the panel shows now: a title that names the selection, and the
-/// sections the booted application writes for it. Each application fills
-/// both from the selection its view publishes.
+/// What the panel shows now: a title that names the selection, a subtitle
+/// that counts it, and the sections the booted application writes for it.
+/// Each application fills the three from the view state its view publishes.
 #[derive(Clone, Copy)]
 pub struct PanelContent {
     /// The header of the panel.
     pub title: Signal<String>,
+    /// The short line under the title: a count read from the view state of
+    /// the document, such as "nothing selected" or "4 words". An empty line
+    /// shows nothing.
+    pub subtitle: Signal<String>,
     /// The sections, in the order the panel shows them.
     pub sections: Signal<Vec<PanelSection>>,
 }
@@ -231,8 +235,25 @@ impl PanelContent {
     pub fn empty() -> Self {
         Self {
             title: Signal::stored(String::new()),
+            subtitle: Signal::stored(String::new()),
             sections: Signal::stored(Vec::new()),
         }
+    }
+}
+
+/// The words of the button that moves the panel to the other side.
+fn dock_label(side: DockSide) -> &'static str {
+    match side {
+        DockSide::Right => "Dock the panel to the left",
+        DockSide::Left => "Dock the panel to the right",
+    }
+}
+
+/// The icon of the button that moves the panel: the side it goes to.
+fn dock_icon(side: DockSide) -> icondata::Icon {
+    match side {
+        DockSide::Right => icondata::LuPanelLeft,
+        DockSide::Left => icondata::LuPanelRight,
     }
 }
 
@@ -256,13 +277,16 @@ fn is_toggle(chord: KeyBinding) -> bool {
     shared::PANEL_TOGGLE_CHORDS.contains(&chord)
 }
 
-/// The context panel. `title` names the selection, and `sections` lists the
-/// sections it shows now; both follow the selection. `prefs` holds the side,
-/// the width and the fold the shell keeps.
+/// The context panel. `title` names the selection, `subtitle` counts it,
+/// and `sections` lists the sections it shows now; the three follow the
+/// selection. `prefs` holds the side, the width and the fold the shell
+/// keeps. The header holds the two controls of the frame: the side and the
+/// fold, view state of the panel alone (`ambre-spec-shell.md` section 2).
 #[component]
 pub fn ContextPanel(
     prefs: PanelPrefs,
     #[prop(into)] title: Signal<String>,
+    #[prop(into, optional)] subtitle: Signal<String>,
     #[prop(into)] sections: Signal<Vec<PanelSection>>,
     /// Where the panel publishes the box it covers (`CHROME-171`). A desktop
     /// panel docks beside the canvas and covers none of it; the sheet of a
@@ -420,7 +444,24 @@ pub fn ContextPanel(
             </nav>
             <div class="ambre-ctx-body">
                 <header class="ambre-ctx-head">
-                    <h2 class="ambre-ctx-title">{move || title.get()}</h2>
+                    <div class="ambre-ctx-heading">
+                        <h2 class="ambre-ctx-title">{move || title.get()}</h2>
+                        <Show when=move || subtitle.with(|s| !s.is_empty())>
+                            <p class="ambre-ctx-subtitle">{move || subtitle.get()}</p>
+                        </Show>
+                    </div>
+                    {move || {
+                        view! {
+                            <crate::IconButton
+                                look=crate::IconLook::Ghost
+                                icon=dock_icon(side.get())
+                                label=dock_label(side.get())
+                                on_press=Callback::new(move |()| side.update(|s| *s = s.flipped()))
+                                {..}
+                                class:ambre-ctx-dock=true
+                            />
+                        }
+                    }}
                     {move || {
                         view! {
                             <crate::IconButton

@@ -41,6 +41,7 @@ static ACTION: ambre_commands::Command = ambre_commands::Command {
     keybindings: &[],
     category: ambre_core::StaticKey::<ambre_core::Categories>::new("gallery"),
     home: ambre_commands::Home::ContextPanel,
+    description: None,
 };
 
 /// One specimen: a name the snapshot reads, and the control under it.

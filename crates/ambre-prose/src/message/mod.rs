@@ -819,6 +819,18 @@ pub enum EditMode {
     Suggesting,
 }
 
+impl EditMode {
+    /// The other mode: what the suggestion-mode command asks for
+    /// (`PROSE-UI-260`).
+    #[must_use]
+    pub fn toggled(self) -> Self {
+        match self {
+            Self::Editing => Self::Suggesting,
+            Self::Suggesting => Self::Editing,
+        }
+    }
+}
+
 /// Whether one side, the header or the footer, is drawn (`PROSE-FEAT-167`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum BandState {

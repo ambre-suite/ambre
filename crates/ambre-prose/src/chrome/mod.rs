@@ -106,6 +106,13 @@ pub struct ProseSignals {
     /// A page format a control of the context panel asked for, until the
     /// view drains it into one command (`PROSE-UI-252`).
     pub page_write: RwSignal<Option<crate::doc::PageFormat>>,
+    /// Whether this session suggests, as the Logic thread last reported it.
+    /// The control of the panel and the status chip read it
+    /// (`PROSE-UI-261`).
+    pub mode: RwSignal<crate::events::EditMode>,
+    /// The words of the selected text, which the subtitle of the context
+    /// panel shows (`CHROME-241`). `None` with no selection.
+    pub selection_words: RwSignal<Option<ambre_core::Count<crate::events::Words>>>,
 }
 
 /// What the local history holds, as the Logic thread last reported it. A
@@ -145,6 +152,8 @@ impl ProseSignals {
             history: RwSignal::new(History::default()),
             page: RwSignal::new(None),
             page_write: RwSignal::new(None),
+            mode: RwSignal::new(crate::events::EditMode::Editing),
+            selection_words: RwSignal::new(None),
         }
     }
 
@@ -479,22 +488,56 @@ pub(crate) fn icon_of(command: &ambre_commands::Command) -> Option<icondata::Ico
         "format-superscript" => icondata::MdiFormatSuperscript,
         "format-subscript" => icondata::MdiFormatSubscript,
         "format-clear" => icondata::MdiFormatClear,
+        "file-document-edit-outline" => icondata::MdiFileDocumentEditOutline,
         _ => return None,
     })
 }
 
-/// One control, announced by its command's title.
+/// The suggestion-mode chip of the status bar, shown while this session
+/// suggests (`PROSE-UI-261`). The context panel folds, and the status bar
+/// never does, so the mode stays in view. The chip is a reach of the
+/// command, never a second home: a press turns the mode off.
+#[component]
+pub fn ProseModeChip(signals: ProseSignals) -> impl IntoView {
+    let command = ambre_commands::find(crate::commands::COMMANDS, crate::commands::SUGGEST_CHANGES);
+    let on_command = Callback::new(move |id| {
+        if let Some(intent) = crate::view::annotate::review_intent(id, None) {
+            signals.intent.set(Some(intent));
+        }
+    });
+    move || {
+        let command = command?;
+        (signals.mode.get() == crate::events::EditMode::Suggesting).then(|| {
+            view! {
+                <span class="statusbar-mode" role="status">
+                    <ambre_chrome::CommandButton
+                        command=command
+                        icon=icon_of(command)
+                        on_command=on_command
+                        pressed=Signal::derive(|| Pressed::On)
+                        labelled=ambre_chrome::Labelled::Text
+                    />
+                </span>
+            }
+        })
+    }
+}
+
+/// One control, announced by its command's title, chord and description
+/// (`CHROME-186`). An id the table does not describe shows an empty label.
 fn control(signals: ProseSignals, id: StaticKey<Commands>, pressed: Pressed) -> FormatControl {
-    let command = ambre_commands::find(crate::commands::COMMANDS, id);
-    let label = command
-        .map(|command| (command.title)(&ambre_commands::Locale::En).into_string())
-        .unwrap_or_default();
-    FormatControl {
-        label,
-        pressed,
-        on_press: Callback::new(move |()| signals.format.set(Some(id))),
-        icon: command.and_then(icon_of),
-        chord: command.and_then(ambre_commands::Command::chord),
+    let on_press = Callback::new(move |()| signals.format.set(Some(id)));
+    match ambre_commands::find(crate::commands::COMMANDS, id) {
+        Some(command) => FormatControl::of(command, icon_of(command), pressed, on_press),
+        None => FormatControl {
+            label: String::new(),
+            pressed,
+            on_press,
+            icon: None,
+            chord: None,
+            description: None,
+            reach: None,
+        },
     }
 }
 

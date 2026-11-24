@@ -214,6 +214,7 @@ pub mod mock_relay;
 mod pipeline;
 mod rekey;
 mod renewal;
+mod settings;
 mod sharing;
 mod snapshot_trust;
 mod space_rotation;
@@ -382,6 +383,10 @@ enum SyncEvent {
     /// A renewal replaced the pair in the store, on any path: arm the
     /// renewal of the new pair (`SYNC-183`).
     TokensRenewed,
+    /// The relay named the settings document of the account (`SETTINGS-007`).
+    SettingsDocumentFound {
+        document_id: Id<Document>,
+    },
     /// The membership log of the channel of the call was read (`CALL-060`). `None` for a
     /// log that stands on no root (`CALL-134`).
     CallLog {
@@ -2426,7 +2431,22 @@ impl SyncState {
                 documents,
             } => self.handle_watch_channel(channel_id, (meta, meta_last), &documents),
             SyncCommand::DeleteChannel { channel_id } => self.handle_delete_channel(channel_id),
-            SyncCommand::LeaveChannel { channel_id } => self.handle_leave_channel(channel_id),
+            SyncCommand::LeaveChannel { channel_id, named } => {
+                self.handle_leave_channel(channel_id, named);
+            }
+            SyncCommand::RevokeFromChannel {
+                id,
+                document_id,
+                user_id,
+                named,
+            } => self.begin_removal(
+                crate::census::Removal::Revoke {
+                    id,
+                    document_id,
+                    user_id,
+                },
+                Some(named),
+            ),
             SyncCommand::CreateDirectMessage {
                 channel_id,
                 meta,

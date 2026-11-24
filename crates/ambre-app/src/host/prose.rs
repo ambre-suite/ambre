@@ -439,12 +439,28 @@ impl ProseView {
             .with_untracked(|shown| *shown != bar)
         {
             self.annotations.toolbar.set(bar);
+            // The words the subtitle of the panel counts move with the
+            // selection, which moves the bar (`CHROME-241`).
+            let words = self.state.selected_words();
+            if self
+                .annotations
+                .selection_words
+                .with_untracked(|shown| *shown != words)
+            {
+                self.annotations.selection_words.set(words);
+            }
         }
         // The page the layout was measured on, for the context panel
         // (`PROSE-UI-253`).
         let page = Some(self.state.shaped.layout.format);
         if self.annotations.page.with_untracked(|shown| *shown != page) {
             self.annotations.page.set(page);
+        }
+        // The mode the Logic thread last reported, for the control of the
+        // panel and the status chip (`PROSE-UI-261`).
+        let mode = self.state.edit_mode;
+        if self.annotations.mode.get_untracked() != mode {
+            self.annotations.mode.set(mode);
         }
         // The slash menu sits at the caret, and moves when the bar does.
         self.publish_slash();
@@ -1159,7 +1175,7 @@ mod tests {
         let target: web_sys::HtmlElement = slot.clone().dyn_into().expect("an element");
         mount_to(
             target,
-            move || view! { <ProseFigures figures=figures zoom=zoom /> },
+            move || view! { <ProseFigures figures=figures zoom=zoom signals=ProseSignals::new() /> },
         )
         .forget();
 
@@ -1237,7 +1253,7 @@ mod tests {
         let target: web_sys::HtmlElement = slot.clone().dyn_into().expect("an element");
         mount_to(
             target,
-            move || view! { <ProseFigures figures=figures zoom=zoom /> },
+            move || view! { <ProseFigures figures=figures zoom=zoom signals=ProseSignals::new() /> },
         )
         .forget();
         let last = slot.last_element_child().expect("a band child");

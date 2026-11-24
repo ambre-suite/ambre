@@ -598,7 +598,7 @@ pub fn import_fixture(
             Some(prose) => DocState::Prose(Box::new(prose)),
             None => return Err(FixtureError::NoEngine { doc_type }),
         },
-        DocType::Murmure => return Err(FixtureError::NoEngine { doc_type }),
+        DocType::Murmure | DocType::Settings => return Err(FixtureError::NoEngine { doc_type }),
     };
     // The same bytes, header included: each app re-reads the header through
     // `read_ambre_plaintext_as`, which is also where the dispatch rule fires.

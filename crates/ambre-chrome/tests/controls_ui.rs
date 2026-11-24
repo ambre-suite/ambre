@@ -14,7 +14,7 @@ use ambre_chrome::commands::{Command, Home, KeyBinding, KeyChar, Locale, Propert
 use ambre_chrome::{
     Choice, ChoiceRow, ChoiceView, CommandButton, ContextPanel, DockSide, FONT_FAMILIES, Field,
     Fold, FontPicker, IconButton, LengthField, PanelPrefs, PanelSection, PanelWidth, Pressed,
-    PropertyToggle, Select, SelectField, native_controls,
+    PropertyToggle, Select, SelectField, native_controls, untipped_icons,
 };
 use ambre_core::index::Pos;
 use ambre_core::{
@@ -36,6 +36,17 @@ static BOLD: Command = Command {
     keybindings: &[KeyBinding::primary(KeyChar::B)],
     category: StaticKey::<Categories>::new("format"),
     home: Home::ContextPanel,
+    description: None,
+};
+
+static HAND: Command = Command {
+    id: StaticKey::<Commands>::new("t.tool.hand"),
+    title: |_: &Locale| ambre_core::Validated::new("Hand"),
+    icon: None,
+    keybindings: &[KeyBinding::primary(KeyChar::H)],
+    category: StaticKey::<Categories>::new("tool"),
+    home: Home::CreationBar,
+    description: Some(|_: &Locale| ambre_core::Validated::new("Drag to move the view")),
 };
 
 static ITALIC: Property = Property {
@@ -285,6 +296,225 @@ async fn an_icon_button_names_itself_and_its_chord_in_a_tooltip_under_the_focus(
     assert_eq!(pressed.get_untracked(), 1);
     leptos::task::tick().await;
     assert_eq!(tip.get_attribute("data-shown").as_deref(), Some("false"));
+    root.remove();
+}
+
+/// Resolve after `ms` milliseconds, on a later task.
+async fn sleep(ms: i32) {
+    let promise = js_sys::Promise::new(&mut |resolve, _| {
+        web_sys::window()
+            .unwrap()
+            .set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, ms)
+            .unwrap();
+    });
+    wasm_bindgen_futures::JsFuture::from(promise).await.unwrap();
+}
+
+/// A pointer event of `kind` on `el`, as a finger or a mouse fires it.
+fn pointer(el: &web_sys::Element, name: &str, kind: &str) {
+    let init = web_sys::PointerEventInit::new();
+    init.set_bubbles(true);
+    init.set_pointer_type(kind);
+    let ev = web_sys::PointerEvent::new_with_event_init_dict(name, &init).unwrap();
+    el.dispatch_event(&ev).unwrap();
+}
+
+/// `CHROME-186`: the tooltip of a command's icon shows the name, the chord
+/// and the description the command declares. It has no word of its own.
+#[wasm_bindgen_test]
+async fn a_command_icon_shows_what_its_command_declares_in_its_tooltip() {
+    with_styles();
+    let root = mount_in_container(move || {
+        view! {
+            <CommandButton
+                command=&HAND
+                icon=icondata::BsHandIndex
+                on_command=Callback::new(|_| {})
+            />
+        }
+    });
+    leptos::task::tick().await;
+    assert_eq!(
+        untipped_icons(&root, std::slice::from_ref(&HAND)),
+        Vec::<String>::new()
+    );
+    let tip = q(&root, ".ambre-tip");
+    assert_eq!(q(&tip, ".ambre-tip-name").text_content().unwrap(), "Hand");
+    assert_eq!(
+        q(&tip, ".ambre-kbd").text_content().unwrap(),
+        KeyBinding::primary(KeyChar::H).to_string()
+    );
+    assert_eq!(
+        q(&tip, ".ambre-tip-description").text_content().unwrap(),
+        "Drag to move the view"
+    );
+    root.remove();
+
+    // A tooltip that names its control otherwise than its command does
+    // breaks the rule, and the probe says so.
+    let root = mount_in_container(move || {
+        view! {
+            <IconButton
+                icon=icondata::BsHandIndex
+                label="Pan"
+                reach=Some(ambre_chrome::commands::Reach::Command(HAND.id))
+                on_press=Callback::new(|()| {})
+            />
+        }
+    });
+    leptos::task::tick().await;
+    assert_eq!(
+        untipped_icons(&root, std::slice::from_ref(&HAND)),
+        vec!["Pan".to_owned()]
+    );
+    root.remove();
+}
+
+/// A transform centres a floating bar, and the bar holds the fixed box of the
+/// tooltip. The tooltip measures from the bar and hangs under its icon.
+#[wasm_bindgen_test]
+async fn a_tooltip_hangs_under_its_icon_inside_a_bar_a_transform_moves() {
+    with_styles();
+    let root = mount_in_container(move || {
+        view! {
+            <div style="position: fixed; left: 200px; top: 120px; transform: translate(-50%, -20px)">
+                <IconButton icon=icondata::BsTypeBold label="Bold" on_press=Callback::new(|()| {}) />
+            </div>
+        }
+    });
+    leptos::task::tick().await;
+    let button: web_sys::HtmlElement = q(&root, ".ambre-icon-button").dyn_into().unwrap();
+    button.focus().unwrap();
+    leptos::task::tick().await;
+    let tip = q(&root, ".ambre-tip");
+    let (b, t) = (
+        button.get_bounding_client_rect(),
+        tip.get_bounding_client_rect(),
+    );
+    let centre = |r: &web_sys::DomRect| r.left() + r.width() / 2.0;
+    assert!(
+        (centre(&b) - centre(&t)).abs() < 1.0,
+        "centred: {} {}",
+        centre(&b),
+        centre(&t)
+    );
+    assert!(
+        t.top() >= b.bottom() && t.top() - b.bottom() < 16.0,
+        "under: {} {}",
+        b.bottom(),
+        t.top()
+    );
+    root.remove();
+}
+
+/// `CHROME-188`: a long press of a finger on an icon shows its tooltip and
+/// runs nothing. A short tap runs the command.
+#[wasm_bindgen_test]
+async fn a_long_press_shows_the_tooltip_in_place_of_the_command() {
+    with_styles();
+    let pressed = RwSignal::new(0_u32);
+    let root = mount_in_container(move || {
+        view! {
+            <IconButton
+                icon=icondata::BsTypeBold
+                label="Bold"
+                chord=Some(KeyBinding::primary(KeyChar::B))
+                on_press=Callback::new(move |()| pressed.update(|n| *n += 1))
+            />
+        }
+    });
+    leptos::task::tick().await;
+    let button: web_sys::HtmlElement = q(&root, ".ambre-icon-button").dyn_into().unwrap();
+    let tip = q(&root, ".ambre-tip");
+
+    pointer(&button, "pointerdown", "touch");
+    sleep(700).await;
+    assert_eq!(tip.get_attribute("data-shown").as_deref(), Some("true"));
+    pointer(&button, "pointerup", "touch");
+    pointer(&button, "pointerleave", "touch");
+    button.click();
+    leptos::task::tick().await;
+    assert_eq!(pressed.get_untracked(), 0, "a long press runs nothing");
+    assert_eq!(
+        tip.get_attribute("data-shown").as_deref(),
+        Some("true"),
+        "the tooltip stays while the person reads it"
+    );
+    sleep(1700).await;
+    assert_eq!(tip.get_attribute("data-shown").as_deref(), Some("false"));
+
+    pointer(&button, "pointerdown", "touch");
+    sleep(50).await;
+    pointer(&button, "pointerup", "touch");
+    button.click();
+    sleep(700).await;
+    assert_eq!(pressed.get_untracked(), 1, "a tap runs the command");
+    assert_eq!(tip.get_attribute("data-shown").as_deref(), Some("false"));
+
+    pointer(&button, "pointerdown", "mouse");
+    sleep(700).await;
+    pointer(&button, "pointerup", "mouse");
+    button.click();
+    assert_eq!(pressed.get_untracked(), 2, "a mouse press runs the command");
+    root.remove();
+}
+
+/// `CHROME-189`: a screen reader hears the name of an icon as its accessible
+/// name, and its chord and its description as its accessible description.
+#[wasm_bindgen_test]
+async fn a_screen_reader_hears_the_name_the_chord_and_the_description_of_an_icon() {
+    with_styles();
+    let root = mount_in_container(move || {
+        view! {
+            <CommandButton
+                command=&HAND
+                icon=icondata::BsHandIndex
+                on_command=Callback::new(|_| {})
+            />
+        }
+    });
+    leptos::task::tick().await;
+    let button = q(&root, ".ambre-icon-button");
+    assert_eq!(button.get_attribute("aria-label").as_deref(), Some("Hand"));
+    let chord = KeyBinding::primary(KeyChar::H).to_string();
+    assert_eq!(
+        button.get_attribute("aria-keyshortcuts"),
+        Some(chord.clone())
+    );
+    let described = button.get_attribute("aria-describedby").unwrap();
+    let words = document()
+        .get_element_by_id(&described)
+        .unwrap()
+        .text_content()
+        .unwrap();
+    assert!(words.contains(&chord), "the chord: {words}");
+    assert!(
+        words.contains("Drag to move the view"),
+        "the description: {words}"
+    );
+    // The tooltip itself stays out of the tree, so nothing is heard twice.
+    assert_eq!(
+        q(&button, ".ambre-tip")
+            .get_attribute("aria-hidden")
+            .as_deref(),
+        Some("true")
+    );
+    root.remove();
+
+    // Two icons never share the id of their description.
+    let root = mount_in_container(move || {
+        view! {
+            <IconButton icon=icondata::BsTypeBold label="Bold" chord=Some(KeyBinding::primary(KeyChar::B)) on_press=Callback::new(|()| {}) />
+            <IconButton icon=icondata::BsTypeItalic label="Italic" chord=Some(KeyBinding::primary(KeyChar::I)) on_press=Callback::new(|()| {}) />
+        }
+    });
+    leptos::task::tick().await;
+    let ids: Vec<String> = all(&root, ".ambre-icon-button")
+        .iter()
+        .filter_map(|b| b.get_attribute("aria-describedby"))
+        .collect();
+    assert_eq!(ids.len(), 2);
+    assert_ne!(ids[0], ids[1]);
     root.remove();
 }
 

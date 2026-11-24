@@ -29,7 +29,7 @@ use super::popovers::{
 use super::style::{Flip, StyleState};
 use crate::ui::commands as registry;
 use crate::ui::panel;
-use crate::ui::panel::{ActiveSheet, RangeLabel};
+use crate::ui::panel::{ActiveSheet, PanelSelection};
 
 /// What the sheet's panel reads and where its controls write.
 #[derive(Clone, Copy)]
@@ -42,8 +42,9 @@ pub struct TramePanelSignals {
     pub on_command: Callback<StaticKey<Commands>>,
     /// The style patch sink.
     pub on_style: Callback<StylePatch>,
-    /// The reference of the selection, which the header names.
-    pub selection: RwSignal<ambre_core::Validated<RangeLabel>>,
+    /// The reference of the selection and the cells it spans, which the
+    /// header names and counts.
+    pub selection: RwSignal<PanelSelection>,
     /// The page setup and the frozen pane of the active sheet.
     pub sheet: RwSignal<Option<ActiveSheet>>,
 }
@@ -432,7 +433,8 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
         ]
     });
     PanelContent {
-        title: Signal::derive(move || selection.get().into_string()),
+        title: Signal::derive(move || selection.with(|s| s.reference.as_str().to_owned())),
+        subtitle: Signal::derive(move || selection.with(PanelSelection::subtitle)),
         sections,
     }
 }

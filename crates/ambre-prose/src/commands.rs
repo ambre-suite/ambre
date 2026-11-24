@@ -30,6 +30,9 @@ pub const ACCEPT_SUGGESTION: StaticKey<Commands> =
 /// Reject the suggestion at the caret (`PROSE-UI-259`).
 pub const REJECT_SUGGESTION: StaticKey<Commands> =
     StaticKey::<Commands>::new("prose.review.reject");
+/// Turn suggestion mode on when it is off, and off when it is on
+/// (`PROSE-UI-260`).
+pub const SUGGEST_CHANGES: StaticKey<Commands> = StaticKey::<Commands>::new("prose.review.suggest");
 
 /// Undo this peer's last change (`UNDO-001`).
 pub const UNDO: StaticKey<Commands> = StaticKey::<Commands>::new("prose.history.undo");
@@ -232,6 +235,10 @@ fn reject_suggestion_title(_: &Locale) -> ambre_core::Validated<ambre_commands::
     ambre_core::Validated::new("Reject the suggestion")
 }
 
+fn suggest_changes_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Suggest changes")
+}
+
 fn undo_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
     ambre_core::Validated::new("Undo")
 }
@@ -312,6 +319,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[KeyBinding::primary(KeyChar::B)],
         category: FORMAT,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: ITALIC,
@@ -320,6 +328,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[KeyBinding::primary(KeyChar::I)],
         category: FORMAT,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: UNDERLINE,
@@ -328,6 +337,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[KeyBinding::primary(KeyChar::U)],
         category: FORMAT,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: STRIKETHROUGH,
@@ -336,6 +346,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[KeyBinding::primary_shift(KeyChar::X)],
         category: FORMAT,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: CODE,
@@ -344,6 +355,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[KeyBinding::primary(KeyChar::E)],
         category: FORMAT,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: SUPERSCRIPT,
@@ -352,6 +364,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FORMAT,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: SUBSCRIPT,
@@ -360,6 +373,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FORMAT,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: CLEAR_FORMATTING,
@@ -368,6 +382,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[KeyBinding::primary(KeyChar::new('\\'))],
         category: FORMAT,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: SAVE_FILE,
@@ -376,6 +391,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FILE,
         home: Home::AmbreMenu,
+        description: None,
     },
     Command {
         id: IMPORT_MARKDOWN,
@@ -384,6 +400,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FILE,
         home: Home::AmbreMenu,
+        description: None,
     },
     Command {
         id: EXPORT_MARKDOWN,
@@ -392,6 +409,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FILE,
         home: Home::AmbreMenu,
+        description: None,
     },
     Command {
         id: IMPORT_WORD,
@@ -400,6 +418,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FILE,
         home: Home::AmbreMenu,
+        description: None,
     },
     Command {
         id: EXPORT_WORD,
@@ -408,6 +427,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FILE,
         home: Home::AmbreMenu,
+        description: None,
     },
     Command {
         id: EXPORT_WORD_REVIEWED,
@@ -416,6 +436,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FILE,
         home: Home::AmbreMenu,
+        description: None,
     },
     Command {
         id: IMPORT_ODT,
@@ -424,6 +445,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FILE,
         home: Home::AmbreMenu,
+        description: None,
     },
     Command {
         id: EXPORT_ODT,
@@ -432,6 +454,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FILE,
         home: Home::AmbreMenu,
+        description: None,
     },
     Command {
         id: EXPORT_ODT_REVIEWED,
@@ -440,6 +463,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FILE,
         home: Home::AmbreMenu,
+        description: None,
     },
     Command {
         id: IMPORT_HTML,
@@ -448,6 +472,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FILE,
         home: Home::AmbreMenu,
+        description: None,
     },
     Command {
         id: EXPORT_HTML,
@@ -456,6 +481,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FILE,
         home: Home::AmbreMenu,
+        description: None,
     },
     Command {
         id: EXPORT_HTML_REVIEWED,
@@ -464,6 +490,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FILE,
         home: Home::AmbreMenu,
+        description: None,
     },
     Command {
         id: INSERT_PICTURE,
@@ -472,6 +499,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FILE,
         home: Home::CreationBar,
+        description: None,
     },
     Command {
         id: EXPORT_PDF,
@@ -480,6 +508,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FILE,
         home: Home::AmbreMenu,
+        description: None,
     },
     Command {
         id: CUT,
@@ -488,6 +517,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: ambre_commands::shared::CUT_CHORDS,
         category: CLIPBOARD,
         home: Home::ContextMenu,
+        description: None,
     },
     Command {
         id: COPY,
@@ -496,6 +526,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: ambre_commands::shared::COPY_CHORDS,
         category: CLIPBOARD,
         home: Home::ContextMenu,
+        description: None,
     },
     Command {
         id: PASTE,
@@ -504,6 +535,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: ambre_commands::shared::PASTE_CHORDS,
         category: CLIPBOARD,
         home: Home::ContextMenu,
+        description: None,
     },
     Command {
         id: PASTE_PLAIN,
@@ -512,6 +544,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: ambre_commands::shared::PASTE_PLAIN_CHORDS,
         category: CLIPBOARD,
         home: Home::ContextMenu,
+        description: None,
     },
     Command {
         id: ACCEPT_SUGGESTION,
@@ -520,6 +553,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: REVIEW,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: REJECT_SUGGESTION,
@@ -528,6 +562,18 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: REVIEW,
         home: Home::ContextPanel,
+        description: None,
+    },
+    Command {
+        id: SUGGEST_CHANGES,
+        title: suggest_changes_title,
+        icon: Some(StaticKey::<Icons>::new("file-document-edit-outline")),
+        // The chord Word gives the same mode, so a reviewer's hand knows it.
+        keybindings: &[KeyBinding::primary_shift(KeyChar::E)],
+        category: REVIEW,
+        home: Home::ContextPanel,
+
+        description: None,
     },
     Command {
         id: UNDO,
@@ -536,6 +582,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: ambre_commands::shared::UNDO_CHORDS,
         category: HISTORY,
         home: Home::AmbreMenu,
+        description: None,
     },
     Command {
         id: REDO,
@@ -544,6 +591,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: ambre_commands::shared::REDO_CHORDS,
         category: HISTORY,
         home: Home::AmbreMenu,
+        description: None,
     },
     Command {
         id: PALETTE,
@@ -552,12 +600,17 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[KeyBinding::primary(KeyChar::K)],
         category: GENERAL,
         home: Home::AmbreMenu,
+        description: None,
     },
 ];
 
 /// Bind the chords the shell routes for Prose.
 pub fn bind_keys(keymap: &mut Keymap) {
-    for id in FORMAT_BAR.map(|(id, _)| id).into_iter().chain([PALETTE]) {
+    for id in FORMAT_BAR
+        .map(|(id, _)| id)
+        .into_iter()
+        .chain([PALETTE, SUGGEST_CHANGES])
+    {
         if let Some(chord) = ambre_commands::find(COMMANDS, id).and_then(Command::chord) {
             keymap.bind(chord, id);
         }
@@ -654,5 +707,21 @@ mod tests {
         }
         assert!(!formats_selection(PALETTE));
         assert!(!formats_selection(CUT));
+    }
+
+    /// `PROSE-UI-262`: the suggestion-mode command is declared once, and its
+    /// chord resolves to it, so a control, the chord and the palette run one
+    /// id.
+    #[test]
+    fn the_suggestion_mode_command_is_declared_once_and_its_chord_resolves_to_it() {
+        let declared = COMMANDS.iter().filter(|c| c.id == SUGGEST_CHANGES).count();
+        assert_eq!(declared, 1);
+        let mut keymap = Keymap::new();
+        bind_keys(&mut keymap);
+        assert_eq!(
+            keymap.resolve(KeyBinding::primary_shift(KeyChar::E)),
+            Some(SUGGEST_CHANGES)
+        );
+        assert!(!formats_selection(SUGGEST_CHANGES));
     }
 }

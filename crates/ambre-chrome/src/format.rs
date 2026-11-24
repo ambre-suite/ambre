@@ -163,6 +163,34 @@ pub struct FormatControl {
     pub icon: Option<icondata::Icon>,
     /// The chord the tooltip names beside the label.
     pub chord: Option<ambre_commands::KeyBinding>,
+    /// The line the tooltip shows under the label, where the label is not
+    /// enough (`CHROME-185`).
+    pub description: Option<ambre_core::Validated<ambre_commands::CommandDescription>>,
+    /// The command the control runs, which a test reads back (`CHROME-207`).
+    /// `None` for a control that backs no command.
+    pub reach: Option<ambre_commands::Reach>,
+}
+
+impl FormatControl {
+    /// The control of `command`: its words are the ones the command describes
+    /// (`CHROME-186`), and `icon` its glyph.
+    pub fn of(
+        command: &ambre_commands::Command,
+        icon: Option<icondata::Icon>,
+        pressed: Pressed,
+        on_press: Callback<()>,
+    ) -> Self {
+        let tip = crate::CommandTip::of(command);
+        Self {
+            label: tip.title().as_str().to_owned(),
+            pressed,
+            on_press,
+            icon,
+            chord: tip.chord(),
+            description: tip.description().cloned(),
+            reach: Some(tip.reach()),
+        }
+    }
 }
 
 /// The format bar over a selection, centred on `anchor` in the viewport
@@ -193,6 +221,8 @@ pub fn FormatBar(
                     icon=icon
                     label=control.label
                     chord=control.chord
+                    description=control.description
+                    reach=control.reach
                     pressed=Some(Signal::stored(control.pressed))
                     size=crate::ControlSize::Large
                     on_press=Callback::new(move |()| on_press.run(()))

@@ -162,6 +162,12 @@ impl CommandHandler for ProseHandler {
         if id == PALETTE {
             return KeyRoute::Run(vec![ShellAction::OpenPalette]);
         }
+        // The suggestion-mode chord takes the path of its control and of
+        // the palette (`PROSE-UI-262`).
+        if let Some(intent) = review_intent(id, self.at_caret.get_untracked()) {
+            self.intent.set(Some(intent));
+            return KeyRoute::Run(Vec::new());
+        }
         // A chrome text field keeps its own formatting chords.
         if mark_key(id).is_some() {
             if target == ambre_chrome::KeyTarget::TextField {
