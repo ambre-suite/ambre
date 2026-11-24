@@ -697,6 +697,29 @@ impl AnchoredLog {
             })
     }
 
+    /// The footing once a removal and its continuations land, each after
+    /// the one before it (`SYNC-330`). The run lands whole or not at all.
+    pub(crate) fn after_run(
+        &self,
+        entry: Option<&ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
+        continued: &[ambre_core::Encoded<ambre_core::EncodedLogEntry>],
+    ) -> Footing {
+        let first = self.after(entry);
+        if first == self.footing {
+            return first;
+        }
+        membership_log::decode(continued)
+            .iter()
+            .map(membership_log::digest)
+            .try_fold(first, |footing, digest| {
+                digest.map(|digest| Footing {
+                    head: footing.head.after(digest),
+                    ..footing
+                })
+            })
+            .unwrap_or(first)
+    }
+
     /// A log no footing roots, for the tests of a pure transform.
     #[cfg(test)]
     pub(crate) fn assumed(log: Log) -> Self {

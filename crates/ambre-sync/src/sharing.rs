@@ -221,29 +221,56 @@ fn entry_at_capped(
     cap: Option<Seq<DeltaAuthor>>,
     author: &Author,
 ) -> Result<Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>, SyncError> {
-    entry_at_channel_capped(next, draft, (cap, Vec::new()), author)
+    Ok(entry_at_channel_capped(
+        next,
+        draft,
+        (cap, Vec::new(), ambre_protocol::Elsewhere::Uncapped),
+        author,
+    )?
+    .entry)
+}
+
+/// The entries a removal posts, in request form: the removal itself, then
+/// the continuations that carry the caps one entry cannot (`SYNC-330`).
+#[derive(Default)]
+pub(crate) struct RemovalEntries {
+    pub entry: Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
+    pub continued: Vec<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
 }
 
 /// [`entry_at_capped`], with the cap of the member in each other document of
-/// the channel whose `meta` keeps the log (`SYNC-311`).
+/// the channel whose `meta` keeps the log (`SYNC-311`). Caps past one entry
+/// take continuations after it (`SYNC-330`).
 fn entry_at_channel_capped(
     next: LogHead,
     draft: Draft,
-    (cap, others): (Option<Seq<DeltaAuthor>>, Vec<ambre_protocol::DocumentCap>),
+    (cap, others, elsewhere): (
+        Option<Seq<DeltaAuthor>>,
+        Vec<ambre_protocol::DocumentCap>,
+        ambre_protocol::Elsewhere,
+    ),
     author: &Author,
-) -> Result<Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>, SyncError> {
+) -> Result<RemovalEntries, SyncError> {
     if next.is_empty() {
-        return Ok(None);
+        return Ok(RemovalEntries::default());
     }
-    let entry = membership_log::sign_channel_capped(
+    let entries = membership_log::sign_channel_capped(
         draft,
-        cap,
+        (cap, elsewhere),
         others,
         next,
         author.user_id,
         &author.signing_key,
     )?;
-    Ok(Some(membership_log::encode(&entry)?))
+    let mut encoded = entries
+        .iter()
+        .map(membership_log::encode)
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter();
+    Ok(RemovalEntries {
+        entry: encoded.next(),
+        continued: encoded.collect(),
+    })
 }
 
 /// The creator's copy of a new document's key, and the first entry of its
@@ -1013,7 +1040,7 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
             .members
             .into_iter()
             .partition(|m| m.user_id == p.user_id);
-        let entry = match removed.first().map(|m| {
+        let removal = match removed.first().map(|m| {
             let member_key = m
                 .signing_pub_key
                 .key()
@@ -1042,11 +1069,19 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
                 .and_then(|key| p.applied.get(&key).copied())
                 .unwrap_or(Seq::<DeltaAuthor>::new(0));
             let others = document_caps(key, &p.channel_applied);
-            entry_at_channel_capped(log.log().next(), draft, (Some(cap), others), &p.author)
+            // Every other document of the log takes zero, so a document the
+            // census missed takes no write of the member (`SYNC-315`). A
+            // log no other document walks loses nothing by it.
+            entry_at_channel_capped(
+                log.log().next(),
+                draft,
+                (Some(cap), others, ambre_protocol::Elsewhere::Zero),
+                &p.author,
+            )
         }) {
-            Some(Ok(entry)) => entry,
+            Some(Ok(removal)) => removal,
             // No row for the member: the relay refuses the removal itself.
-            None => None,
+            None => RemovalEntries::default(),
             Some(Err(e)) => return failed(logic_tx, ApiRequest::RevokeFromDocument, e),
         };
         let (keys, unwrapped) = rotate_entries_for(
@@ -1056,13 +1091,14 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
             &log,
             &staying,
         );
-        let footing = log.after(entry.as_ref());
+        let footing = log.after_run(removal.entry.as_ref(), &removal.continued);
         let body = http::RevokeRequest {
             user_id: p.user_id,
             keys,
             members: staying.into_iter().map(|m| m.user_id).collect(),
             link: link.1.clone(),
-            entry,
+            entry: removal.entry,
+            continued: removal.continued,
         };
         match http
             .post_json::<_, http::WriteAnswer>(&revoke_url, &body)
@@ -1190,8 +1226,17 @@ async fn leave_document<H: ShareHttp>(
         // after the served log, which a relay that cut it refuses anyway.
         // Its cap binds the deltas this user's key signs after it, whoever
         // holds that key then (`SYNC-306`).
-        let entry = entry_at_channel_capped(log.next(), draft, (cap, others.clone()), author)?;
-        let body = http::LeaveRequest { entry };
+        // Every other document of the log takes zero (`SYNC-315`).
+        let removal = entry_at_channel_capped(
+            log.next(),
+            draft,
+            (cap, others.clone(), ambre_protocol::Elsewhere::Zero),
+            author,
+        )?;
+        let body = http::LeaveRequest {
+            entry: removal.entry,
+            continued: removal.continued,
+        };
         match http.delete(&url, &body).await {
             Ok(()) => return Ok(()),
             Err(e) if e.is(RefusalCode::LogMoved) && tries < ROTATION_TRIES => {}
@@ -3591,6 +3636,11 @@ mod tests {
             (me, me, MembershipAct::Revoke)
         );
         assert_eq!(entry.cap, Some(Seq::<DeltaAuthor>::new(2)), "the meta");
+        assert_eq!(
+            entry.elsewhere,
+            ambre_protocol::Elsewhere::Zero,
+            "every other document of the channel takes zero (`SYNC-315`)"
+        );
         let cap = |document, clock| ambre_protocol::DocumentCap {
             document,
             cap: Seq::<DeltaAuthor>::new(clock),
@@ -5294,7 +5344,8 @@ mod tests {
     /// Holds `SYNC-311` at a revoke on the log of a channel's `meta`. The
     /// entry caps the member in the `meta` and in each open document of the
     /// channel. Each cap is the member's highest clock applied there, or
-    /// zero. The walk then binds each cap to its own document alone.
+    /// zero. The walk then binds each cap to its own document alone, and a
+    /// document the entry names no cap for takes zero (`SYNC-315`).
     #[tokio::test]
     async fn a_channel_revoke_caps_the_member_in_each_open_document() {
         let owner = Peer::new(1);
@@ -5367,9 +5418,108 @@ mod tests {
             "a thread she never wrote in takes nothing"
         );
         assert!(
-            admits(unopened, 99),
-            "a document the revoke names no cap for is left uncapped"
+            !admits(unopened, 1),
+            "a document the revoke names no cap for takes zero (`SYNC-315`)"
         );
+    }
+
+    /// Holds `SYNC-330` at a revoke on the log of a channel's `meta`. A
+    /// channel of 40 documents past the `meta` takes the revoke and two
+    /// continuations, each within the caps of one entry, in one request.
+    /// The walk then caps Carol in every document, at her clock there.
+    #[tokio::test]
+    async fn a_revoke_from_a_large_channel_caps_every_document_over_a_run_of_entries() {
+        let owner = Peer::new(1);
+        let carol = Peer::new(3);
+        let mut logged = Logged::new(&owner);
+        logged.invite(&owner, &carol, Role::Editor);
+        let meta = logged.document_id;
+        let clock = Seq::<DeltaAuthor>::new;
+        let documents: Vec<Id<Document>> = (0..40u8)
+            .map(|n| Id::<Document>::from_bytes([n.wrapping_add(0x40); 16]))
+            .collect();
+        let mut params = revoke_params(&owner.xk);
+        params.document_id = meta;
+        params.footing = logged.footing();
+        params.user_id = carol.author.user_id;
+        params.previous = logged.doc_key.clone();
+        params.author = same(&owner.author);
+        params.applied = HashMap::from([(carol.author.public(), clock(2))]);
+        params.channel_applied = documents
+            .iter()
+            .zip(1u64..)
+            .map(|(document, at)| {
+                (
+                    *document,
+                    HashMap::from([(carol.author.public(), clock(at))]),
+                )
+            })
+            .collect();
+        let http = FakeHttp::new(vec![
+            Ok(logged.answer()),
+            Ok(serde_json::json!({ "status": "revoked" })),
+        ]);
+        let (etx, erx, sink, _lrx) = channels();
+        revoke_task(&http, params, &etx, &sink).await;
+        assert!(matches!(
+            erx.try_recv(),
+            Ok(SyncEvent::RevocationComplete { .. })
+        ));
+        let calls = http.calls();
+        let Call::Post(_, body) = &calls[1] else {
+            panic!("expected the revoke POST: {calls:?}");
+        };
+        let continued: Vec<&str> = body["continued"]
+            .as_array()
+            .map(|all| all.iter().filter_map(serde_json::Value::as_str).collect())
+            .unwrap_or_default();
+        assert_eq!(
+            continued.len(),
+            2,
+            "40 caps take the revoke and two continuations"
+        );
+        let mut sent = vec![body["entry"].as_str().unwrap()];
+        sent.extend(continued);
+        let entries = membership_log::decode(
+            &sent
+                .iter()
+                .map(|text| serde_json::from_value(serde_json::json!(text)).unwrap())
+                .collect::<Vec<_>>(),
+        );
+        assert!(
+            entries
+                .iter()
+                .all(|e| ambre_core::Count::<ambre_protocol::DocumentCaps>::of(
+                    e.document_caps.len()
+                ) <= ambre_protocol::DOCUMENT_CAPS_MAX),
+            "no entry carries more caps than its budget row"
+        );
+        assert!(
+            entries
+                .iter()
+                .skip(1)
+                .all(|e| e.key.is_none() && e.cap.is_none()),
+            "a continuation names no key and no cap of its own"
+        );
+        assert_eq!(
+            entries.first().map(|e| e.elsewhere),
+            Some(ambre_protocol::Elsewhere::Zero),
+            "the revoke floors every other document (`SYNC-315`)"
+        );
+
+        let log = logged.walk(&sent);
+        let carol_key = carol.author.public();
+        let head = ambre_protocol::LogHead::EMPTY;
+        let admits = |document, at| {
+            membership_log::Writers::of_in(&log, document).admits_delta(&carol_key, clock(at), head)
+        };
+        assert!(admits(meta, 2) && !admits(meta, 3), "the meta cap");
+        for (document, at) in documents.iter().zip(1u64..) {
+            assert!(
+                admits(*document, at) && !admits(*document, at + 1),
+                "each document at Carol's clock there"
+            );
+        }
     }
 
     /// Holds `SYNC-132` at a leave: the member signs their own removal.
