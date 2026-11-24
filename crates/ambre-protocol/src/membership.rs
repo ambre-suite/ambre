@@ -9,7 +9,7 @@
 
 use ambre_core::id::{Document, Id, User};
 use ambre_core::{
-    Encoded, EncodedLogEntry, ExchangePublicKey, FixedBytes, KeyId, PublicKey, Role, Seq,
+    Count, Encoded, EncodedLogEntry, ExchangePublicKey, FixedBytes, KeyId, PublicKey, Role, Seq,
 };
 use serde::{Deserialize, Serialize};
 
@@ -132,8 +132,34 @@ impl LogHead {
     }
 }
 
+/// The most documents of a channel one revoke caps beside its own
+/// (`SYNC-311`). The bound holds the decode of one entry, and the bytes an
+/// update or a presence sample carries (`ambre-spec-budgets.md` section 1).
+pub const DOCUMENT_CAPS_MAX: Count<DocumentCaps> = Count::new(16);
+
+/// How many documents of a channel one revoke caps beside its own.
+pub enum DocumentCaps {}
+
+impl ambre_core::NarrowCount for DocumentCaps {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("DocumentCaps");
+}
+
+/// The cap a revoke on the log of a channel's `meta` sets in one other
+/// document of that channel (`SYNC-311`). Each document numbers the clocks of
+/// an author on its own, so each one takes its own cap.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DocumentCap {
+    /// The document of the channel the cap binds.
+    pub document: Id<Document>,
+    /// The highest clock of the member's deltas in that document that still
+    /// counts.
+    pub cap: Seq<DeltaAuthor>,
+}
+
 /// One signed change of membership.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "Wire", into = "Wire")]
 pub struct MembershipEntry {
     /// The document whose membership changes.
     pub document: Id<Document>,
@@ -163,9 +189,120 @@ pub struct MembershipEntry {
     /// author applied (`SYNC-300`). A delta of that member past the cap
     /// counts nowhere. `None` on every other act.
     pub cap: Option<Seq<DeltaAuthor>>,
+    /// The cap of the member in each other document of the channel, by
+    /// ascending document, on a revoke on the log of its `meta`
+    /// (`SYNC-311`). Empty on every other entry.
+    pub document_caps: Vec<DocumentCap>,
     /// The author's signature over [`MembershipEntry::signed_bytes`]. It
     /// encodes as its 64 bytes, with no length prefix.
     pub signature: FixedBytes<Signature>,
+}
+
+/// The slot of the caps on the wire. Its first two forms write the bytes of
+/// an `Option<Seq<DeltaAuthor>>`. An entry with no document cap thus keeps
+/// its encoding, its digest and its signed bytes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+enum CapSlot {
+    /// No cap.
+    None,
+    /// The cap in the document of the log alone.
+    Own(Seq<DeltaAuthor>),
+    /// The cap in the document of the log, if any, and one cap in each other
+    /// document of the channel. The list is never empty.
+    Documents(Option<Seq<DeltaAuthor>>, Vec<DocumentCap>),
+}
+
+impl CapSlot {
+    fn of(cap: Option<Seq<DeltaAuthor>>, documents: &[DocumentCap]) -> Self {
+        match (cap, documents.is_empty()) {
+            (None, true) => Self::None,
+            (Some(cap), true) => Self::Own(cap),
+            (cap, false) => Self::Documents(cap, documents.to_vec()),
+        }
+    }
+
+    /// The caps the slot holds. A list of documents that is empty, longer
+    /// than [`DOCUMENT_CAPS_MAX`], or not strictly ascending has another
+    /// encoding or none, so it is refused.
+    fn into_caps(self) -> Result<(Option<Seq<DeltaAuthor>>, Vec<DocumentCap>), &'static str> {
+        match self {
+            Self::None => Ok((None, Vec::new())),
+            Self::Own(cap) => Ok((Some(cap), Vec::new())),
+            Self::Documents(cap, documents) => {
+                let ascending = documents
+                    .iter()
+                    .zip(documents.iter().skip(1))
+                    .all(|(a, b)| a.document.as_bytes() < b.document.as_bytes());
+                if documents.is_empty()
+                    || Count::<DocumentCaps>::of(documents.len()) > DOCUMENT_CAPS_MAX
+                    || !ascending
+                {
+                    return Err("document caps out of their canonical form");
+                }
+                Ok((cap, documents))
+            }
+        }
+    }
+}
+
+/// The wire form of [`MembershipEntry`]: the same fields, with the caps in
+/// one slot.
+#[derive(Serialize, Deserialize)]
+struct Wire {
+    document: Id<Document>,
+    position: Seq<LogPlaces>,
+    member: Id<User>,
+    member_key: FixedBytes<PublicKey>,
+    member_exchange_key: FixedBytes<ExchangePublicKey>,
+    act: MembershipAct,
+    role: Role,
+    key: Option<FixedBytes<KeyId>>,
+    previous: Option<FixedBytes<EntryDigest>>,
+    author: Id<User>,
+    cap: CapSlot,
+    signature: FixedBytes<Signature>,
+}
+
+impl From<MembershipEntry> for Wire {
+    fn from(entry: MembershipEntry) -> Self {
+        Self {
+            document: entry.document,
+            position: entry.position,
+            member: entry.member,
+            member_key: entry.member_key,
+            member_exchange_key: entry.member_exchange_key,
+            act: entry.act,
+            role: entry.role,
+            key: entry.key,
+            previous: entry.previous,
+            author: entry.author,
+            cap: CapSlot::of(entry.cap, &entry.document_caps),
+            signature: entry.signature,
+        }
+    }
+}
+
+impl TryFrom<Wire> for MembershipEntry {
+    type Error = &'static str;
+
+    fn try_from(wire: Wire) -> Result<Self, Self::Error> {
+        let (cap, document_caps) = wire.cap.into_caps()?;
+        Ok(Self {
+            document: wire.document,
+            position: wire.position,
+            member: wire.member,
+            member_key: wire.member_key,
+            member_exchange_key: wire.member_exchange_key,
+            act: wire.act,
+            role: wire.role,
+            key: wire.key,
+            previous: wire.previous,
+            author: wire.author,
+            cap,
+            document_caps,
+            signature: wire.signature,
+        })
+    }
 }
 
 /// The fields a signature covers: every field but the signature.
@@ -181,7 +318,7 @@ struct Signed<'a> {
     key: &'a Option<FixedBytes<KeyId>>,
     previous: &'a Option<FixedBytes<EntryDigest>>,
     author: &'a Id<User>,
-    cap: &'a Option<Seq<DeltaAuthor>>,
+    cap: CapSlot,
 }
 
 impl MembershipEntry {
@@ -203,7 +340,7 @@ impl MembershipEntry {
             key: &self.key,
             previous: &self.previous,
             author: &self.author,
-            cap: &self.cap,
+            cap: CapSlot::of(self.cap, &self.document_caps),
         };
         let mut bytes = ENTRY_DOMAIN.to_vec();
         bytes.extend(postcard::to_allocvec(&signed)?);
@@ -214,8 +351,16 @@ impl MembershipEntry {
     /// lacks a previous digest. A signature of another length does not
     /// decode.
     #[must_use]
+    ///
+    /// Document caps stand on a revoke alone, and none names the document of
+    /// the log, whose cap is [`MembershipEntry::cap`] (`SYNC-311`).
     pub fn well_formed(&self) -> bool {
         (self.position == Seq::ZERO) == self.previous.is_none()
+            && (self.document_caps.is_empty() || self.act == MembershipAct::Revoke)
+            && self
+                .document_caps
+                .iter()
+                .all(|c| c.document != self.document)
     }
 
     /// The bytes a request carries and the relay stores.
@@ -263,6 +408,7 @@ mod tests {
             previous: Some(FixedBytes::from_array([5; 32])),
             author: Id::<User>::from_bytes([6; 16]),
             cap: None,
+            document_caps: Vec::new(),
             signature: FixedBytes::from_array([7; ENTRY_SIGNATURE_LEN]),
         }
     }
@@ -398,6 +544,51 @@ mod tests {
         longer.extend([0x81, 0x00]);
         longer.extend(&sent[17..]);
         assert!(MembershipEntry::decode(&Encoded::new(longer)).is_err());
+    }
+
+    /// Holds `SYNC-311` at the encoding. The caps of the documents of a
+    /// channel travel whole and under the signature. An entry with none keeps
+    /// the bytes of the slot it had before them. An empty, unsorted or
+    /// oversized list has no encoding a reader accepts.
+    #[test]
+    fn the_caps_of_a_channel_travel_in_the_slot_of_the_cap() {
+        let cap = |byte: u8, clock: u64| DocumentCap {
+            document: Id::<Document>::from_bytes([byte; 16]),
+            cap: Seq::<DeltaAuthor>::new(clock),
+        };
+        let mut capped = entry();
+        capped.act = MembershipAct::Revoke;
+        capped.cap = Some(Seq::<DeltaAuthor>::new(3));
+        let own = capped.encode().unwrap();
+        let legacy = postcard::to_allocvec(&Some(Seq::<DeltaAuthor>::new(3))).unwrap();
+        assert!(own.as_bytes().windows(legacy.len()).any(|w| w == legacy));
+        capped.document_caps = vec![cap(2, 0), cap(8, 300)];
+        assert!(capped.well_formed());
+        let sent = capped.encode().unwrap();
+        assert_eq!(MembershipEntry::decode(&sent).unwrap(), capped);
+        assert_ne!(sent, own);
+        let signed = capped.signed_bytes().unwrap();
+        let mut raised = capped.clone();
+        raised.document_caps[1].cap = Seq::<DeltaAuthor>::new(301);
+        assert_ne!(raised.signed_bytes().unwrap(), signed);
+
+        let refused = |caps: Vec<DocumentCap>| {
+            let mut bad = capped.clone();
+            bad.document_caps = caps;
+            MembershipEntry::decode(&bad.encode().unwrap()).is_err()
+        };
+        assert!(refused(vec![cap(8, 1), cap(2, 1)]), "out of order");
+        assert!(refused(vec![cap(2, 1), cap(2, 1)]), "a document twice");
+        let many = (0..=DOCUMENT_CAPS_MAX.get())
+            .map(|i| cap(i as u8 + 2, 1))
+            .collect();
+        assert!(refused(many), "past the bound");
+        // The third form with an empty list is a second spelling of no cap.
+        let mut empty = postcard::to_allocvec(&Wire::from(entry())).unwrap();
+        let slot = empty.len() - ENTRY_SIGNATURE_LEN - 1;
+        assert_eq!(empty[slot], 0, "no cap");
+        empty.splice(slot..=slot, [2, 0, 0]);
+        assert!(MembershipEntry::decode(&Encoded::new(empty)).is_err());
     }
 
     /// An ownerless log opens with its creation, and leaves the creator and
