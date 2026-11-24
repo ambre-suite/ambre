@@ -40,7 +40,7 @@ other six documents of the DOM side.
 | `CHROME-163` | `OBS` | With nothing selected, the context panel MUST show the properties of the document: the page in Prose, the sheet in Trame, the board in Toile. | this spec section 2 | Toile `ambre_toile::tests::chrome_ui::the_board_panel_shows_the_board_then_what_applies_to_the_selection` -- wasm tier, the board section with nothing selected; Prose `ambre_prose::tests::chrome_panel::with_no_selection_the_panel_shows_the_page_the_layout_holds`; Trame `ambre_trame::tests::chrome_ui::the_panel_announces_the_registry_labels` -- the sheet section, page setup and frozen panes | none | verified |
 | `CHROME-164` | `OBS` | With a selection, the context panel MUST show the commands that apply to it. | this spec section 2 | Toile `ambre_toile::tests::chrome_ui::the_board_panel_shows_the_board_then_what_applies_to_the_selection` -- wasm tier, a shape's and a connector's sections; Prose `ambre_prose::tests::chrome_panel::superscript_subscript_and_clearing_reach_a_control_of_the_panel` -- the text section over a selection; Trame `ambre_trame::tests::chrome_ui::the_panel_announces_the_registry_labels` -- the cells, the rows and columns, the sort and filter | none | verified |
 | `CHROME-165` | `INV` | A command an application declares MUST NOT be reachable by hover alone. | this spec section 2; `ambre-spec-accessibility.md` | `ambre_app::shell::app_root::tests::the_palette_is_fed_the_whole_declared_table` -- wasm tier, the palette lists every command of each table; `ambre_chrome::chrome_ui::the_palette_is_operable_by_keyboard_alone` -- wasm tier, the palette moves and runs a command from the keyboard alone | none | verified |
-| `CHROME-183` | `INV` | A control that writes to the document MUST NOT be reachable by hover alone. | this spec section 2; `CHROME-165`; `ambre-spec-accessibility.md` | none | unheld -- in Prose, the accept and the reject of one suggestion show only while the pointer is over it (`PROSE-UI-148`), and no scan reads the controls a hover reveals; lands with the `No control by hover alone` Story (`ambre-roadmap.md` MVP) | failing |
+| `CHROME-183` | `INV` | A control that writes to the document MUST NOT be reachable by hover alone. | this spec section 2; `CHROME-165`; `ambre-spec-accessibility.md` | `ambre_chrome::hover_scan::tests::no_rule_of_the_shell_reveals_a_control_by_hover_alone` -- each rule of the shell stylesheet that reveals a control on hover shows it under the keyboard focus and under `@media (hover: none)`, and `::the_scan_names_a_reveal_that_lacks_a_twin` holds the scan red on each missing twin; `ambre_prose::view::annotate::tests::the_caret_in_a_suggestion_raises_its_popover_with_no_hover` -- the popover of a suggestion, raised by the caret (`PROSE-UI-258`); `ambre_prose::tests::chrome_panel::the_caret_in_a_suggestion_shows_its_accept_and_reject_in_the_panel` -- wasm tier, the accept and the reject of a suggestion in the panel (`PROSE-UI-259`) | none | verified |
 | `CHROME-166` | `OBS` | On a phone, one context panel MUST carry every formatting command. | this spec section 2, the placement table; `ambre-spec-adaptive-layout.md` | Prose `ambre_prose::view::panel::tests::the_clipboard_homes_in_the_menu_and_the_panel_holds_every_formatting_command` -- every command of the format group is a control of the text section; Trame `ambre_trame::ui::panel::tests::the_clipboard_homes_in_the_menu_and_the_panel_holds_every_formatting_command` -- bold and italic, the rest are properties of the cells section; Toile `ambre_toile::ui::panel::tests::the_board_formats_through_the_text_section` -- the board's text style is properties of the text section; `ambre_app::shell::narrow::a_phone_panel_is_a_sheet_on_the_bottom_edge_whatever_its_side` -- the same panel is the phone's sheet | none | verified |
 | `CHROME-167` | `OBS` | On a phone, the context panel MUST open as a sheet on the bottom edge, whatever its side. | this spec section 2, the placement table; `CHROME-032` | `ambre_app::shell::narrow::a_phone_panel_is_a_sheet_on_the_bottom_edge_whatever_its_side` -- wasm tier, frames of 360 and 599 px under the shell stylesheet: on either side the panel spans the width and meets the bottom edge | none | verified |
 | `CHROME-212` | `OBS` | On a phone, the context panel MUST take the place of the keyboard while it is open. | this spec section 2, the placement table; `CHROME-167` | not built | unheld -- the panel opens over the content, and nothing closes the system keyboard while it shows; no wasm page raises a keyboard to measure, so the rule waits for the browser tier on a phone profile; lands with the `The context panel, bar and menu` Story (`ambre-roadmap.md` MVP) | unimplemented |
@@ -136,10 +136,10 @@ The user opens a list of the panel and picks a choice, with the pointer or the k
   chrome operation. A cover a surface publishes is read by a fit, which is a zoom cost.
 * **Boundary.** none: a region holds commands, and a command reaches the Logic thread as every
   command does. Nothing here opens a socket or holds a key.
-* **Verification.** 62 `verified`, 1 `failing`, 19 `unimplemented`, and the type holds the home of
-  each command. Host tests run each table through the one sink of every region, on a real Logic
-  state. Wasm tests hold the palette and the sheet tabs. A hover-only control of Prose fails. The
-  rest waits on the regions, which no application lays out.
+* **Verification.** 63 `verified`, 19 `unimplemented`, and the type holds the home of each
+  command. Host tests run each table through the one sink of every region, on a real Logic state.
+  Wasm tests hold the palette and the sheet tabs. A scan of the shell stylesheet holds the hover
+  reveals. The rest waits on the regions, which no application lays out.
 
 ---
 
@@ -166,6 +166,12 @@ context bar and the command palette reach commands whose home is elsewhere.
 **A home is not the only way in.** A chord and the command palette reach a command in any
 region. The share button of the header reaches a command whose home is the Ambre menu. A reach
 never makes a second home, so a command keeps one entry in the region map.
+
+**A hover is never the only way in.** A keyboard and a touch screen have no hover. A control that
+a hover reveals shows under the keyboard focus too, and always on a screen with no hover
+(`CHROME-183`). A scan of the shell stylesheet reads each such reveal. A control that a signal of the
+pointer draws takes a second signal. In Prose, the caret raises the accept and the reject of a
+suggestion (`PROSE-UI-258`, `PROSE-UI-259`).
 
 **What is contextual repeats the panel.** The context panel is the home of every command of the
 selection. Two surfaces show part of it again, at the pointer, and are the exceptions to one place.

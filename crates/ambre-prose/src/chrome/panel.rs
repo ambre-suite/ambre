@@ -20,7 +20,8 @@ use leptos::prelude::*;
 use super::ProseSignals;
 use crate::doc::{Orientation, PageFormat};
 use crate::events::TriState;
-use crate::view::panel::{self, Margins, PanelKind, Paper};
+use crate::view::annotate::review_intent;
+use crate::view::panel::{self, CaretSuggestion, Margins, PanelKind, Paper};
 use crate::view::toolbar::state_of;
 
 /// The property of `id`. Every id this module names is in the table.
@@ -178,11 +179,35 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
         .into_any()
     };
 
-    let sections = Signal::derive(move || {
-        kind.get()
-            .sections()
+    // Accept and reject of the suggestion at the caret, so a key or a tap
+    // reaches them with no hover (`PROSE-UI-259`, `CHROME-183`).
+    let suggestion_section = move || {
+        let on_command = Callback::new(move |id| {
+            if let Some(intent) = review_intent(id, signals.at_caret.get_untracked()) {
+                signals.intent.set(Some(intent));
+            }
+        });
+        let buttons = panel::SUGGESTION_COMMANDS
             .iter()
-            .filter_map(|&key| {
+            .filter_map(|&id| {
+                let command = ambre_commands::find(crate::commands::COMMANDS, id)?;
+                Some(view! { <CommandButton command=command icon=Option::<icondata::Icon>::None on_command=on_command /> })
+            })
+            .collect_view();
+        view! { <Field label="Review">{buttons}</Field> }.into_any()
+    };
+
+    let at_caret = Memo::new(move |_| {
+        if signals.at_caret.with(Option::is_some) {
+            CaretSuggestion::Held
+        } else {
+            CaretSuggestion::Outside
+        }
+    });
+    let sections = Signal::derive(move || {
+        panel::sections(kind.get(), at_caret.get())
+            .into_iter()
+            .filter_map(|key| {
                 Some(match key {
                     k if k == panel::PAGE => {
                         PanelSection::new(k, "Page", icondata::MdiFileDocumentOutline, page_section)
@@ -190,6 +215,12 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
                     k if k == panel::TEXT => {
                         PanelSection::new(k, "Text", icondata::MdiFormatText, text_section)
                     }
+                    k if k == panel::SUGGESTION => PanelSection::new(
+                        k,
+                        "Suggestion",
+                        icondata::MdiFileDocumentEditOutline,
+                        suggestion_section,
+                    ),
                     _ => return None,
                 })
             })

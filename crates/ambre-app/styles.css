@@ -3012,6 +3012,13 @@ body {
     opacity: 1;
 }
 
+/* A touch screen has no hover: its actions always show (`CHROME-183`). */
+@media (hover: none) {
+    .ambre-doc-item .ambre-doc-actions {
+        opacity: 1;
+    }
+}
+
 .ambre-doc-action {
     padding: var(--space-2) var(--space-4);
     border: 1px solid var(--border);

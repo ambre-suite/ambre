@@ -25,12 +25,18 @@ use crate::commands::{
     IMPORT_WORD, INSERT_PICTURE, PALETTE, PASTE, PASTE_PLAIN, REDO, SAVE_FILE, UNDO,
     formats_selection, mark_key,
 };
+use crate::view::annotate::{AnnotationIntent, HoveredSuggestion, review_intent};
 
 /// The signal Prose's chords act through. `Copy`, so the handler is too.
 #[derive(Clone, Copy)]
 pub struct ProseHandler {
     /// The formatting id the view drains, shared with the format bar.
     pub format: RwSignal<Option<StaticKey<Commands>>>,
+    /// The suggestion at the caret, as the view last published it.
+    pub at_caret: RwSignal<Option<HoveredSuggestion>>,
+    /// Where the palette leaves an accept or a reject, which the view
+    /// drains as the popover's own (`PROSE-UI-259`).
+    pub intent: RwSignal<Option<AnnotationIntent>>,
     /// The page's clock: an import dates a reply the file leaves undated at
     /// the moment the user chose the file.
     pub now: fn() -> ambre_core::Instant<ambre_core::Authored>,
@@ -77,6 +83,12 @@ impl CommandHandler for ProseHandler {
         // leaves its id; the view drains it (`CHROME-214`).
         if formats_selection(id) {
             self.format.set(Some(id));
+            return Vec::new();
+        }
+        // The palette rules on the suggestion at the caret, through the path
+        // the popover and the panel take. With none, it does nothing.
+        if let Some(intent) = review_intent(id, self.at_caret.get_untracked()) {
+            self.intent.set(Some(intent));
             return Vec::new();
         }
         let action = match id {

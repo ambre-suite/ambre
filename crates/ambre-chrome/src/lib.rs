@@ -51,6 +51,8 @@ mod format;
 #[cfg(feature = "gallery")]
 mod gallery;
 mod handler;
+#[cfg(test)]
+mod hover_scan;
 mod kit;
 mod menu;
 mod palette;
