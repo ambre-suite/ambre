@@ -248,6 +248,7 @@ impl ProseView {
         self.drop_lost_drafts();
         self.take_intent();
         self.take_format();
+        self.take_text_write();
         self.take_page();
         self.take_ruler();
         self.take_slash_pick();
@@ -325,6 +326,25 @@ impl ProseView {
         };
         self.annotations.format.set(None);
         if let Some(command) = self.state.format(id) {
+            send_edit(&mut self.outbox, self.document_id, command);
+        }
+        self.busy_pub
+            .publish(BusyLevel::from_busy(self.outbox.is_busy()));
+    }
+
+    /// Act on the write a value or block control of the text section asked
+    /// for: one command over the whole selection, one undo item
+    /// (`PROSE-UI-270`). One that waits behind a busy outbox stays in its
+    /// signal for a later frame.
+    fn take_text_write(&mut self) {
+        if self.fatal || self.outbox.is_busy() {
+            return;
+        }
+        let Some(write) = self.annotations.text_write.get_untracked() else {
+            return;
+        };
+        self.annotations.text_write.set(None);
+        if let Some(command) = self.state.text_write(&write) {
             send_edit(&mut self.outbox, self.document_id, command);
         }
         self.busy_pub

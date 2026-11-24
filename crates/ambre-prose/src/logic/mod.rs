@@ -40,6 +40,7 @@ pub use roots::Roots;
 mod derived;
 mod docfile;
 mod find;
+mod formatting;
 #[cfg(any(test, feature = "fuzz"))]
 pub mod fuzz;
 mod history;
@@ -986,6 +987,17 @@ impl ProseState {
                 key,
                 action,
             } => self.format_selection(anchor, focus, &key, action),
+            ProseCommand::MarkSelection {
+                anchor,
+                focus,
+                key,
+                value,
+            } => self.mark_selection(anchor, focus, &key, value.as_ref()),
+            ProseCommand::FormatBlocks {
+                anchor,
+                focus,
+                format,
+            } => self.format_blocks(anchor, focus, format),
             ProseCommand::SetHeaderEnabled { shown } => {
                 self.set_side_enabled(bands::Side::Header, shown)
             }

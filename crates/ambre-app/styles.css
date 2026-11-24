@@ -1957,6 +1957,27 @@ body {
     outline: none;
 }
 
+/* The link field of the Prose text section: one line of text, in the box of
+   a stepper. */
+.ambre-prose-link-field {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    height: var(--control);
+    padding: 0 var(--space-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface-2);
+    color: var(--text);
+    font: inherit;
+    font-size: var(--font-small);
+}
+
+.ambre-prose-link-field:focus-visible {
+    outline: var(--focus-width) solid var(--accent);
+    outline-offset: 0;
+}
+
 .ambre-stepper-unit {
     padding: 0 var(--space-2) 0 var(--space-1);
     color: var(--text-faint);
