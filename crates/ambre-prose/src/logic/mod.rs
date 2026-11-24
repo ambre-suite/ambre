@@ -52,6 +52,7 @@ mod pictures;
 mod presence;
 mod print;
 mod roots;
+mod selection;
 mod sliced;
 mod spelling;
 mod suggestions;
@@ -1007,6 +1008,23 @@ impl ProseState {
             ProseCommand::ClearSelectionMarks { anchor, focus } => {
                 self.clear_selection_marks(anchor, focus)
             }
+            ProseCommand::MarkSelection {
+                anchor,
+                focus,
+                key,
+                value,
+            } => self.mark_selection(anchor, focus, &key, value.as_ref()),
+            ProseCommand::SetSelectionParagraph {
+                anchor,
+                focus,
+                style,
+            } => self.set_selection_paragraph(anchor, focus, &style),
+            ProseCommand::SetSelectionKind {
+                anchor,
+                focus,
+                kind,
+            } => self.set_selection_kind(anchor, focus, kind),
+            ProseCommand::SetDefaultFont { family } => self.set_default_font(&family),
             ProseCommand::FindStart { query } => self.find_start(query),
             ProseCommand::FindNext => self.find_step(StepDirection::Forward),
             ProseCommand::FindPrev => self.find_step(StepDirection::Backward),

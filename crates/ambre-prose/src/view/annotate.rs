@@ -116,6 +116,10 @@ pub enum AnnotationIntent {
         block_id: BlockId,
         range: Span<DocChar>,
     },
+    /// Open a thread over the selection, its first reply `text`.
+    Comment {
+        text: String,
+    },
 }
 
 impl std::fmt::Debug for AnnotationIntent {
@@ -156,6 +160,10 @@ impl std::fmt::Debug for AnnotationIntent {
                 .debug_struct("Ignore")
                 .field("block_id", block_id)
                 .field("range", range)
+                .finish(),
+            Self::Comment { text } => f
+                .debug_struct("Comment")
+                .field("text", &ambre_core::RedactedChars::of(text))
                 .finish(),
         }
     }
@@ -439,6 +447,25 @@ impl ProseUiState {
                 }
             }
             AnnotationIntent::Resolve { comment_id } => ProseCommand::ResolveComment { comment_id },
+            // A thread anchors in one block: over a selection of several,
+            // it takes the part in the first (`PROSE-UI-259`).
+            AnnotationIntent::Comment { text } => {
+                if text.trim().is_empty() {
+                    return None;
+                }
+                let ((block_id, start), (last, end)) = self.selection()?;
+                let end = if last == block_id {
+                    end
+                } else {
+                    self.block_len(block_id).as_end()
+                };
+                ProseCommand::AddComment {
+                    block_id,
+                    range: Span::<DocChar>::new(start, end),
+                    text,
+                    now,
+                }
+            }
             AnnotationIntent::Accept { suggestion_id } => {
                 self.hovered = None;
                 ProseCommand::AcceptSuggestion { suggestion_id }

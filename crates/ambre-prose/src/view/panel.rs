@@ -21,6 +21,35 @@ use crate::doc::PageFormat;
 pub const PAGE: StaticKey<PanelSections> = StaticKey::new("prose.page");
 /// The text of the selection.
 pub const TEXT: StaticKey<PanelSections> = StaticKey::new("prose.text");
+/// The paragraphs of the selection: alignment, line spacing, indents.
+pub const PARAGRAPH: StaticKey<PanelSections> = StaticKey::new("prose.paragraph");
+/// The kind of each paragraph of the selection.
+pub const PARAGRAPH_STYLE: StaticKey<PanelSections> = StaticKey::new("prose.paragraph_style");
+/// The actions over the selection: link, comment, clear the formatting.
+pub const ACTIONS: StaticKey<PanelSections> = StaticKey::new("prose.actions");
+/// The default fonts of the document, with no text selected.
+pub const DEFAULT_STYLES: StaticKey<PanelSections> = StaticKey::new("prose.default_styles");
+
+/// The font of the selection.
+pub const FONT: StaticKey<Properties> = StaticKey::new("prose.text.font");
+/// The size of the selection.
+pub const SIZE: StaticKey<Properties> = StaticKey::new("prose.text.size");
+/// The colour of the text of the selection.
+pub const COLOUR: StaticKey<Properties> = StaticKey::new("prose.text.colour");
+/// The highlight behind the text of the selection.
+pub const HIGHLIGHT: StaticKey<Properties> = StaticKey::new("prose.text.highlight");
+/// The alignment of the paragraphs of the selection.
+pub const ALIGN: StaticKey<Properties> = StaticKey::new("prose.paragraph.align");
+/// The line spacing of the paragraphs of the selection.
+pub const LINE_SPACING: StaticKey<Properties> = StaticKey::new("prose.paragraph.line_spacing");
+/// The left indent of the paragraphs of the selection.
+pub const INDENT_LEFT: StaticKey<Properties> = StaticKey::new("prose.paragraph.indent_left");
+/// The first-line indent of the paragraphs of the selection.
+pub const INDENT_FIRST: StaticKey<Properties> = StaticKey::new("prose.paragraph.indent_first");
+/// What each paragraph of the selection is: body, heading, quote, list.
+pub const KIND: StaticKey<Properties> = StaticKey::new("prose.paragraph.kind");
+/// The body font of the document.
+pub const BODY_FONT: StaticKey<Properties> = StaticKey::new("prose.defaults.body_font");
 
 /// The paper of the page.
 pub const PAPER: StaticKey<Properties> = StaticKey::new("prose.page.paper");
@@ -66,6 +95,16 @@ properties! {
     MARGIN_LEFT: MARGIN_LEFT, "Left margin";
     MARGIN_RIGHT: MARGIN_RIGHT, "Right margin";
     MARGINS: MARGINS, "Margins";
+    FONT: FONT, "Font";
+    SIZE: SIZE, "Font size";
+    COLOUR: COLOUR, "Text colour";
+    HIGHLIGHT: HIGHLIGHT, "Highlight";
+    ALIGN: ALIGN, "Alignment";
+    LINE_SPACING: LINE_SPACING, "Line spacing";
+    INDENT_LEFT: INDENT_LEFT, "Left indent";
+    INDENT_FIRST: INDENT_FIRST, "First-line indent";
+    KIND: KIND, "Paragraph style";
+    BODY_FONT: BODY_FONT, "Body font";
 }
 
 /// The title of a property no table describes.
@@ -113,13 +152,14 @@ impl PanelKind {
     #[must_use]
     pub fn sections(self) -> &'static [StaticKey<PanelSections>] {
         match self {
-            Self::Page => &[PAGE],
-            Self::Text => &[TEXT],
+            Self::Page => &[PAGE, DEFAULT_STYLES],
+            Self::Text => &[TEXT, PARAGRAPH, PARAGRAPH_STYLE, ACTIONS],
         }
     }
 
-    /// The entries of the context bar for this kind (`CHROME-208`): the
-    /// marks of the format bar over a selection, nothing over the page.
+    /// The entries of the context bar for this kind (`CHROME-208`), in the
+    /// mockup's order. Over a selection, they are three marks, the link,
+    /// the paragraph style list and the comment. Over the page, none.
     #[must_use]
     pub fn bar(self) -> &'static [Reach] {
         match self {
@@ -127,13 +167,22 @@ impl PanelKind {
                 Reach::Command(commands::BOLD),
                 Reach::Command(commands::ITALIC),
                 Reach::Command(commands::UNDERLINE),
-                Reach::Command(commands::STRIKETHROUGH),
-                Reach::Command(commands::CODE),
+                Reach::Command(commands::LINK),
+                Reach::Property(KIND),
+                Reach::Command(commands::COMMENT),
             ],
             Self::Page => &[],
         }
     }
 }
+
+/// The commands the actions section shows: the link, the comment, then
+/// clearing the formatting.
+pub const ACTION_COMMANDS: [StaticKey<Commands>; 3] = [
+    commands::LINK,
+    commands::COMMENT,
+    commands::CLEAR_FORMATTING,
+];
 
 /// The commands the text section shows, in order: the five marks of the
 /// bar, superscript, subscript, then clearing the formatting.
@@ -146,6 +195,114 @@ pub const TEXT_COMMANDS: [StaticKey<Commands>; 8] = [
     commands::SUPERSCRIPT,
     commands::SUBSCRIPT,
     commands::CLEAR_FORMATTING,
+];
+
+/// What a control of the text, paragraph or default styles sections asks
+/// for, until the view turns it into one command (`PROSE-UI-098`).
+///
+/// The panel holds no selection: the view adds the one it holds, so a
+/// write always reaches the selection the panel shows.
+#[derive(Clone, Debug, PartialEq)]
+pub enum TextWrite {
+    /// A font, or `None` for the block's own.
+    Font(Option<ambre_core::FontFamily>),
+    /// A size, or `None` for the block's own.
+    Size(Option<ambre_core::FontSize>),
+    /// A text colour, or `None` for the theme's.
+    Colour(Option<ambre_core::Rgb>),
+    /// A highlight, or `None` for none.
+    Highlight(Option<ambre_core::Rgb>),
+    /// A link address, or `None` to take the link off.
+    Link(Option<ambre_core::LinkUrl>),
+    /// The paragraph properties the style names, and no other.
+    Paragraph(crate::events::ParagraphStyle),
+    /// What every paragraph of the selection becomes.
+    Kind(crate::message::ParagraphKind),
+    /// The body font of the document. It needs no selection.
+    DefaultFont(ambre_core::FontFamily),
+}
+
+/// The line spacings the paragraph section offers. `None` is the
+/// document's own.
+pub const LINE_SPACINGS: [(Option<crate::events::LineHeight>, &str); 5] = {
+    use crate::events::{LineHeight, LineSpacingMultiple};
+    [
+        (None, "Default"),
+        (Some(LineHeight::Multiple(LineSpacingMultiple::SINGLE)), "1"),
+        (
+            Some(LineHeight::Multiple(LineSpacingMultiple::ONE_AND_FIFTEEN)),
+            "1.15",
+        ),
+        (
+            Some(LineHeight::Multiple(LineSpacingMultiple::ONE_AND_HALF)),
+            "1.5",
+        ),
+        (Some(LineHeight::Multiple(LineSpacingMultiple::DOUBLE)), "2"),
+    ]
+};
+
+/// The paragraph kinds the paragraph style section offers, in the mockup's
+/// order, with their labels.
+pub const KINDS: [(crate::message::ParagraphKind, &str); 5] = [
+    (crate::message::ParagraphKind::Body, "Body"),
+    (
+        crate::message::ParagraphKind::Heading(crate::message::HeadingLevel::H1),
+        "Heading 1",
+    ),
+    (
+        crate::message::ParagraphKind::Heading(crate::message::HeadingLevel::H2),
+        "Heading 2",
+    ),
+    (crate::message::ParagraphKind::Quote, "Quote"),
+    (
+        crate::message::ParagraphKind::List(crate::events::ListStyle::Bullet),
+        "List",
+    ),
+];
+
+/// The paragraph kinds the floating bar's list offers, with their labels.
+pub const BAR_KINDS: [(crate::message::ParagraphKind, &str); 5] = [
+    (crate::message::ParagraphKind::Body, "Body"),
+    (
+        crate::message::ParagraphKind::Heading(crate::message::HeadingLevel::H1),
+        "Heading 1",
+    ),
+    (
+        crate::message::ParagraphKind::Heading(crate::message::HeadingLevel::H2),
+        "Heading 2",
+    ),
+    (
+        crate::message::ParagraphKind::Heading(crate::message::HeadingLevel::H3),
+        "Heading 3",
+    ),
+    (crate::message::ParagraphKind::Quote, "Quote"),
+];
+
+/// The kind a chip of [`KINDS`] shows for a reading: every list reads as
+/// the one list chip.
+#[must_use]
+pub fn kind_chip(
+    kind: Option<crate::message::ParagraphKind>,
+) -> Option<crate::message::ParagraphKind> {
+    match kind {
+        Some(crate::message::ParagraphKind::List(_)) => Some(crate::message::ParagraphKind::List(
+            crate::events::ListStyle::Bullet,
+        )),
+        other => other,
+    }
+}
+
+/// The list markers the paragraph section offers.
+pub const LISTS: [(crate::events::ListStyle, &str); 3] = [
+    (crate::events::ListStyle::Bullet, "Bulleted list"),
+    (
+        crate::events::ListStyle::Ordered(crate::message::OrderedStyle::Decimal),
+        "Numbered list",
+    ),
+    (
+        crate::events::ListStyle::Todo(crate::message::TodoMark::Open),
+        "Checklist",
+    ),
 ];
 
 /// A paper the page section offers, in its portrait dimensions.
@@ -338,7 +495,10 @@ mod tests {
             );
             for entry in kind.bar() {
                 if let Reach::Command(id) = entry {
-                    assert!(TEXT_COMMANDS.contains(id), "{id:?} is in the text section");
+                    assert!(
+                        TEXT_COMMANDS.contains(id) || ACTION_COMMANDS.contains(id),
+                        "{id:?} is in a section of the panel"
+                    );
                 }
             }
         }
@@ -407,14 +567,19 @@ mod tests {
             .filter(|c| c.category.as_str() == "format")
         {
             assert!(
-                TEXT_COMMANDS.contains(&command.id),
+                TEXT_COMMANDS.contains(&command.id) || ACTION_COMMANDS.contains(&command.id),
                 "{:?} is in the panel",
                 command.id
             );
         }
-        let bar: Vec<Reach> = commands::FORMAT_BAR
+        let bar: Vec<Reach> = commands::BAR_MARKS
             .iter()
             .map(|(id, _)| Reach::Command(*id))
+            .chain([
+                Reach::Command(commands::LINK),
+                Reach::Property(KIND),
+                Reach::Command(commands::COMMENT),
+            ])
             .collect();
         assert_eq!(bar, PanelKind::Text.bar());
     }
