@@ -539,6 +539,8 @@ row reads `V1`.
 | `[ ]` No control drawn on a canvas shows by hover alone | V1 | the scan that holds `CHROME-183` reads the stylesheet alone. A control that a canvas draws, or that a Rust signal shows on hover, in Toile or Trame, is read by no scan. Done when each application lists the controls it reveals on hover, each is reachable by keyboard and touch, and a test reads that list |
 | `[ ]` A tooltip shows at once on the next icon | V1 | the design asks that a tooltip show at once while the pointer moves to the next icon, and the stylesheet always waits half a second. Done when a tooltip shown in the last moment makes the next one show at once, and a row binding it reads `verified` |
 | `[ ]` A select opens at its place in a transformed bar | V1 | a select in a bar that a transform moves opens off its trigger: the fix of the origin applies to the tooltip alone. Done when the select measures from the same origin, and a test in a transformed bar reads its place |
+| `[ ]` The Ambre menu disables an undo with nothing to undo | V1 | the Ambre menu reads the undo state of a board alone (`UNDO-006`). The undo and redo rows of Prose and Trame stay enabled with nothing to undo. Done when each reads the undo state of its application, and a row reads `verified` |
+| `[ ]` The comments of a board reach from a menu | V1 | the comments entry of Toile is reachable only from the panel and the palette, since the board lays out no menu bar. Done when a menu of the shell homes it, and a row reads `verified` |
 
 ### Build, CI and verification
 
