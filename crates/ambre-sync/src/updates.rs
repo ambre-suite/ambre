@@ -7972,6 +7972,92 @@ mod tests {
         }
     }
 
+    /// Holds `SYNC-317` under the floor of `SYNC-315`. A revoke on the log
+    /// of a channel's `meta` names no cap for a thread, so the floor caps Bob
+    /// there at zero. An invite lifts the floor. A start that folds Bob's
+    /// clock 1 in the thread opens under the head after the invite. Under the
+    /// head of the exclusion, or with no head, it opens nothing.
+    #[test]
+    fn a_start_past_a_lifted_floor_opens_under_a_head_past_the_grant() {
+        use crate::membership_log::tests::{DOC, Person, append, created, walk as walk_log};
+        use crate::membership_log::{Draft, LogHead, Writers, digest, sign_channel_capped};
+        use ambre_protocol::MembershipAct;
+        let (alice, bob) = (Person::new(0x5c), Person::new(0x5d));
+        let mut log = created(&alice, &bob);
+        let head = LogHead {
+            position: ambre_protocol::membership::place_after(log.len()),
+            previous: log.last().and_then(digest),
+        };
+        let revoke = Draft {
+            document: DOC,
+            member: bob.id,
+            member_key: bob.public(),
+            member_exchange_key: bob.exchange(),
+            act: MembershipAct::Revoke,
+            role: Role::Editor,
+            key: Some(FixedBytes::from_array([9; 16])),
+        };
+        log.extend(
+            sign_channel_capped(
+                revoke,
+                (
+                    Some(Seq::<DeltaAuthor>::new(1)),
+                    ambre_protocol::Elsewhere::Zero,
+                ),
+                Vec::new(),
+                head,
+                alice.id,
+                &alice.key,
+            )
+            .unwrap(),
+        );
+        let excluded = walk_log(&log).walked_head();
+        append(&mut log, &alice, &bob, MembershipAct::Invite, Role::Editor);
+        let walked = walk_log(&log);
+        let thread = Id::<Document>::from_bytes([0x5e; 16]);
+        let readmitted = Writers::of_in(&walked, thread);
+        let granted = walked.walked_head();
+        for (proof, opens) in [
+            (Some(granted), true),
+            (Some(excluded), false),
+            (None, false),
+        ] {
+            let (mut state, rx, _doc, _key, _sk, _snap) = setup();
+            let key = DocumentKey::generate();
+            let snapshot_id = Id::<Snapshot>::mint();
+            let blob = snapshot_blob_folding(
+                thread,
+                served(snapshot_id, 9),
+                b"snap",
+                (&key, &alice.key),
+                vec![(bob.public(), Seq::<DeltaAuthor>::new(1))],
+            );
+            let mut start = started(blob, &alice.key);
+            start.proof = proof;
+            state.handle_sync_event(SyncEvent::OpenDocumentReady {
+                document_id: thread,
+                doc_key: key.clone(),
+                snapshot_payload: Some(start),
+                snapshot_id,
+                covered_seq: Seq::<Relay>::new(9),
+                held_snapshot: None,
+                fallback: None,
+                doc_type: DocType::Murmure,
+                existence: crate::Existence::OnRelay,
+                signing_keys: Vec::new(),
+                role: Role::Owner,
+                rotation_owed: ambre_core::RotationDebt::Settled,
+                links: Vec::new(),
+                writers: readmitted.clone(),
+                departed: None,
+            });
+            let opened = drain(&rx)
+                .iter()
+                .any(|e| matches!(e, LogicEvent::RemoteSnapshot { .. }));
+            assert_eq!(opened, opens, "proof {proof:?}");
+        }
+    }
+
     /// Holds `AUTHOR-038`. A member whose walk readmits Bob confirms Alice's
     /// snapshot under the head of that walk, and the signature covers it. A
     /// state that holds a write of Bob past his lifted cap under the head of
