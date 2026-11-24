@@ -1889,7 +1889,7 @@ impl Spaces {
     fn names(&self) -> Vec<String> {
         let list = self
             .root
-            .query_selector_all(".murmure-space-switch .ambre-select-option span")
+            .query_selector_all(".murmure-space-switch .ambre-select-option > span:first-of-type")
             .unwrap();
         (0..list.length())
             .filter_map(|i| list.item(i)?.text_content())

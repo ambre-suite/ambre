@@ -1631,6 +1631,13 @@ body {
     font-weight: 600;
 }
 
+.ambre-select-hint {
+    margin-left: auto;
+    padding-left: var(--space-4);
+    color: var(--text-dim);
+    font-size: var(--font-xs);
+}
+
 .ambre-select-option > svg {
     width: var(--icon);
     height: var(--icon);

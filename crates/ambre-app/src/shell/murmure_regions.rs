@@ -2057,8 +2057,22 @@ async fn the_space_switcher_names_the_space_and_lists_each_one() {
         Some("true")
     );
     assert_eq!(
-        frame.texts(".murmure-space-switch .ambre-select-option"),
+        frame.texts(".murmure-space-switch .ambre-select-option > span:first-of-type"),
         ["Acme"]
+    );
+    // The chord shows as the command table states it, hidden from a screen reader.
+    assert_eq!(
+        frame.texts(".murmure-space-switch .ambre-select-hint"),
+        ["Alt+Shift+1"]
+    );
+    assert_eq!(
+        attribute(
+            &frame,
+            ".murmure-space-switch .ambre-select-hint",
+            "aria-hidden"
+        )
+        .as_deref(),
+        Some("true")
     );
     let before = frame.sent.get_untracked().len();
     frame

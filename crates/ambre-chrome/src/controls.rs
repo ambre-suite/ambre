@@ -105,6 +105,10 @@ pub struct ChoiceView {
     /// The CSS `font-family` stack the choice shows in, so a list of fonts
     /// previews each one. `None` keeps the face of the control.
     pub face: Option<&'static str>,
+    /// A muted hint at the end of the row of a [`Select`], as the chord that
+    /// picks the choice. The list of keys announces it, so a screen reader
+    /// skips it here.
+    pub hint: Option<String>,
 }
 
 impl ChoiceView {
@@ -115,6 +119,7 @@ impl ChoiceView {
             icon: None,
             reach: None,
             face: None,
+            hint: None,
         }
     }
 
@@ -131,6 +136,15 @@ impl ChoiceView {
     pub fn in_face(self, css: &'static str) -> Self {
         Self {
             face: Some(css),
+            ..self
+        }
+    }
+
+    /// The same choice, with `hint` at the end of its row.
+    #[must_use]
+    pub fn hinted(self, hint: impl Into<String>) -> Self {
+        Self {
+            hint: Some(hint.into()),
             ..self
         }
     }
@@ -403,6 +417,9 @@ pub fn Select(
                 >
                     {choice.icon.map(|icon| view! { <Icon icon=icon /> })}
                     <span>{choice.label}</span>
+                    {choice.hint.map(|hint| view! {
+                        <span class="ambre-select-hint" aria-hidden="true">{hint}</span>
+                    })}
                 </div>
             }
         })

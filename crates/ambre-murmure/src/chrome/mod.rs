@@ -1722,12 +1722,24 @@ pub fn SpaceList(
     // The list rebuilds when the spaces change, never on a choice. So a pick keeps the focus
     // on the switcher, which shows the space it picked.
     let switcher = move || {
-        let names: Vec<String> = heads
+        // Each of the first nine carries its chord, as the command table states it, so a
+        // rebinding moves no view (`ambre-spec-murmure-keyboard.md`).
+        let choices: Vec<ambre_chrome::ChoiceView> = heads
             .get()
             .into_iter()
-            .map(|h| {
-                h.name
-                    .map_or_else(|| UNNAMED_SPACE.to_owned(), Validated::into_string)
+            .enumerate()
+            .map(|(rank, h)| {
+                let name = h
+                    .name
+                    .map_or_else(|| UNNAMED_SPACE.to_owned(), Validated::into_string);
+                let choice = ambre_chrome::ChoiceView::text(name);
+                match SHOW_SPACE
+                    .get(rank)
+                    .and_then(|id| crate::ui::commands::chord_of(*id))
+                {
+                    Some(chord) => choice.hinted(chord.to_string()),
+                    None => choice,
+                }
             })
             .collect();
         let selected = Signal::derive(move || {
@@ -1744,7 +1756,7 @@ pub fn SpaceList(
         view! {
             <ambre_chrome::Select
                 label="Switch space"
-                choices=names.into_iter().map(ambre_chrome::ChoiceView::text).collect()
+                choices=choices
                 selected=selected
                 on_pick=on_pick
                 placeholder="No space yet"
