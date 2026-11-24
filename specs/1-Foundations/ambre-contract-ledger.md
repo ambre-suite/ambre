@@ -21,14 +21,14 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**5033 rows: 4612 shipped, of which 15 loose. 421 unbuilt.**
+**5033 rows: 4613 shipped, of which 15 loose. 420 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1675 | 583 | 995 | 818 | 526 | 4597 |
+| `verified` | 1676 | 583 | 995 | 818 | 526 | 4598 |
 | `failing` | 1 |  |  |  |  | 1 |
 | `human-review` | 14 |  |  |  |  | 14 |
-| `unimplemented` | 177 | 42 | 21 | 24 | 157 | 421 |
+| `unimplemented` | 176 | 42 | 21 | 24 | 157 | 420 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -73,7 +73,7 @@
 | `ambre-spec-residency.md` | 32 | 32 | 32 |  |  |
 | `ambre-spec-schema-version.md` | 20 | 20 | 20 |  |  |
 | `ambre-spec-sealed-envelope.md` | 31 | 31 | 31 |  |  |
-| `ambre-spec-sequencer.md` | 83 | 82 | 82 |  | 1 |
+| `ambre-spec-sequencer.md` | 83 | 83 | 83 |  |  |
 | `ambre-spec-server.md` | 134 | 126 | 125 | 1 | 8 |
 | `ambre-spec-session.md` | 46 | 46 | 46 |  |  |
 | `ambre-spec-shell.md` | 80 | 61 | 60 | 1 | 19 |
