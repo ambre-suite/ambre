@@ -21,11 +21,11 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**5038 rows: 4617 shipped, of which 15 loose. 421 unbuilt.**
+**5040 rows: 4619 shipped, of which 15 loose. 421 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1680 | 583 | 995 | 818 | 526 | 4602 |
+| `verified` | 1682 | 583 | 995 | 818 | 526 | 4604 |
 | `failing` | 1 |  |  |  |  | 1 |
 | `human-review` | 14 |  |  |  |  | 14 |
 | `unimplemented` | 177 | 42 | 21 | 24 | 157 | 421 |
@@ -73,7 +73,7 @@
 | `ambre-spec-residency.md` | 32 | 32 | 32 |  |  |
 | `ambre-spec-schema-version.md` | 20 | 20 | 20 |  |  |
 | `ambre-spec-sealed-envelope.md` | 31 | 31 | 31 |  |  |
-| `ambre-spec-sequencer.md` | 83 | 83 | 83 |  |  |
+| `ambre-spec-sequencer.md` | 85 | 85 | 85 |  |  |
 | `ambre-spec-server.md` | 134 | 126 | 125 | 1 | 8 |
 | `ambre-spec-session.md` | 46 | 46 | 46 |  |  |
 | `ambre-spec-shell.md` | 82 | 63 | 62 | 1 | 19 |
@@ -299,7 +299,7 @@
 | `ambre-spec-residency.md` | RESID-001..032 |
 | `ambre-spec-schema-version.md` | SCHEMA-001..020 |
 | `ambre-spec-sealed-envelope.md` | SYNC-001,003..005,008..009,018..023,072,088..091,112..114,125,135,138,144,203,216,257..259,287,297 |
-| `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155,169,184,194..215,259,262..264,274,276..277,284,288..290,300,307 |
+| `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155,169,184,194..215,259,262..264,274,276..277,284,288..290,300,307,335..336 |
 | `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165,167..168,170..171,173..182,187..193,216..228,230,238..257,260..261,266,268,270,272..273,275,280..283,285..287,297..299,302,304,306,308..312,316..318 |
 | `ambre-spec-session.md` | SRV-003,009,022..031,074,090..092,163,172,232,234..236,267,278..279,291,293..296,303,319..333 |
 | `ambre-spec-shell.md` | CHROME-148..198,207..237 |
