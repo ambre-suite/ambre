@@ -447,6 +447,28 @@ pub(crate) async fn handle_update(
             }
         };
 
+    store_numbered(state, conn, update, seq, sequencing, outbound_tx).await;
+}
+
+/// Stores delta `seq`, then sends it to the subscribers of its document.
+///
+/// A delete may begin after the clock script that numbered the delta. So the
+/// relay reads the tombstone before the object, the row and the broadcast of
+/// every delta. A delta without an inline home reads it again once its object
+/// is put, before its row (`SRV-335`). A fenced delta takes no row and no
+/// broadcast, and its author hears that the document is not found. A delete
+/// that begins after the last read is left to the sweeps (`SRV-057`,
+/// `SRV-273`).
+pub(super) async fn store_numbered(
+    state: &Arc<AppState>,
+    conn: &WsConnectionState,
+    update: ambre_protocol::Update,
+    seq: ambre_core::Seq<ambre_core::Relay>,
+    sequencing: crate::metrics::Sequencing,
+    outbound_tx: &mpsc::Sender<StoredPayload>,
+) {
+    let doc_id = update.public_data.document_id;
+    let clock = update.public_data.clock;
     let s3_key = crate::s3::format_s3_delta_key(&state.config.s3_env_prefix, &doc_id, seq);
 
     // Serialize the full sealed Update up front: it is both what we dead-letter on
@@ -463,6 +485,11 @@ pub(crate) async fn handle_update(
         }
     };
 
+    if read_fence(state, &doc_id).await == redis_ops::DocumentFence::Gone {
+        refuse_fenced(&update, outbound_tx).await;
+        return;
+    }
+
     // The index write is retried. A refused statement is most often the pool or
     // the register briefly unavailable. The number is already spent, so a write
     // given up on is a delta the index never names (`SRV-033`).
@@ -477,24 +504,31 @@ pub(crate) async fn handle_update(
         tracing::warn!("insert_update refused seq={seq}, retrying: {e}");
         tokio::time::sleep(*pause).await;
     };
-    if let Err(e) = stored {
-        // The delta index (Postgres) is the ONLY thing `handle_request_missing`
-        // reads to replay this seq. The clock was already consumed atomically in
-        // Redis, so we cannot cleanly reject and let the client retry. A retry at
-        // the same clock would fail CLOCK_MISMATCH. If we merely logged, a large
-        // delta's object would exist but no index row would ever reference it.
-        // That is an orphaned, unreplayable object: live subscribers get it
-        // while a reconnecting client misses it forever. Dead-letter the full
-        // wire so an operator can rebuild the index row (H1) instead of losing
-        // it.
-        tracing::error!("insert_update failed seq={seq}: {e}");
-        tracing::debug!("insert_update failed doc={doc_id} seq={seq}");
-        crate::metrics::failed(crate::metrics::Failure::IndexWrite);
-        if let Err(dl) =
-            redis_ops::push_dead_letter(&state.redis, &doc_id, seq, &s3_key, &update_wire).await
-        {
-            tracing::error!("dead-letter push failed seq={seq}: {dl}");
-            crate::metrics::failed(crate::metrics::Failure::DeadLetter);
+    match stored {
+        Ok(Stored::Written) => {}
+        Ok(Stored::Fenced) => {
+            refuse_fenced(&update, outbound_tx).await;
+            return;
+        }
+        Err(e) => {
+            // The delta index (Postgres) is the ONLY thing `handle_request_missing`
+            // reads to replay this seq. The clock was already consumed atomically in
+            // Redis, so we cannot cleanly reject and let the client retry. A retry at
+            // the same clock would fail CLOCK_MISMATCH. If we merely logged, a large
+            // delta's object would exist but no index row would ever reference it.
+            // That is an orphaned, unreplayable object: live subscribers get it
+            // while a reconnecting client misses it forever. Dead-letter the full
+            // wire so an operator can rebuild the index row (H1) instead of losing
+            // it.
+            tracing::error!("insert_update failed seq={seq}: {e}");
+            tracing::debug!("insert_update failed doc={doc_id} seq={seq}");
+            crate::metrics::failed(crate::metrics::Failure::IndexWrite);
+            if let Err(dl) =
+                redis_ops::push_dead_letter(&state.redis, &doc_id, seq, &s3_key, &update_wire).await
+            {
+                tracing::error!("dead-letter push failed seq={seq}: {dl}");
+                crate::metrics::failed(crate::metrics::Failure::DeadLetter);
+            }
         }
     }
 
@@ -522,6 +556,41 @@ pub(crate) async fn handle_update(
     crate::compaction::ask_when_due(state, doc_id, seq, outbound_tx);
 }
 
+/// Reads the tombstone of `doc_id` on the write path. A store that does not
+/// answer reads as open. The delta was numbered under a live document, so it
+/// is stored. If a delete has begun, the sweeps remove it (`SRV-335`).
+async fn read_fence(state: &AppState, doc_id: &Id<Document>) -> redis_ops::DocumentFence {
+    match redis_ops::document_fence(&state.redis, doc_id).await {
+        Ok(fence) => fence,
+        Err(e) => {
+            tracing::error!("tombstone read failed: {e}");
+            redis_ops::DocumentFence::Open
+        }
+    }
+}
+
+/// Answers the author of a delta whose document a delete fenced after its
+/// number was given: the refusal of a document being deleted (`SRV-017`).
+async fn refuse_fenced(update: &ambre_protocol::Update, outbound_tx: &mpsc::Sender<StoredPayload>) {
+    crate::metrics::RELAY
+        .deltas
+        .inc(crate::metrics::Delta::Refused);
+    let gone = AppError::NotFound {
+        resource: crate::error::Resource::Document,
+    };
+    let answer = update_refusal(update, &gone);
+    let _ = outbound_tx.send(StoredPayload::server_msg(&answer)).await;
+}
+
+/// What became of the index write of one delta.
+enum Stored {
+    /// The row names the delta: it holds the frame, or it names its object.
+    Written,
+    /// A delete fenced the document while the object was put: no row names
+    /// the delta, and the second sweep removes its object (`SRV-335`).
+    Fenced,
+}
+
 /// The pauses between the attempts of an index write: three retries, a third
 /// of a second in all. That bounds how long one delta holds its connection.
 const INDEX_WRITE_BACKOFF: [Duration; 3] = [
@@ -537,6 +606,9 @@ const INDEX_WRITE_BACKOFF: [Duration; 3] = [
 /// acknowledges no delta that only the ephemeral store holds (`SRV-307`). A
 /// store that refuses the object leaves the frame in the row (`SRV-034`).
 /// Both inserts ignore a row already written, so a retry never doubles one.
+///
+/// The put may last the wait of the budget register, so the tombstone is read
+/// again after it, before the row (`SRV-335`).
 async fn store_index_row(
     state: &Arc<AppState>,
     doc_id: Id<Document>,
@@ -544,7 +616,7 @@ async fn store_index_row(
     seq: ambre_core::Seq<ambre_core::Relay>,
     s3_key: &ambre_core::ObjectKey,
     wire: &StoredPayload,
-) -> Result<(), AppError> {
+) -> Result<Stored, AppError> {
     let author = &update.public_data.pub_key;
     let snapshot_id = &update.public_data.snapshot_id;
     let clock = update.public_data.clock;
@@ -565,12 +637,15 @@ async fn store_index_row(
                 if crate::hot_tail::past_watermark(deltas, bytes) {
                     crate::hot_tail::spawn_move(state, doc_id);
                 }
-                return Ok(());
+                return Ok(Stored::Written);
             }
             db::InlineInsert::Full => crate::hot_tail::spawn_move(state, doc_id),
         }
     }
     let put = crate::s3::put_delta_object(state, s3_key, wire).await;
+    if read_fence(state, &doc_id).await == redis_ops::DocumentFence::Gone {
+        return Ok(Stored::Fenced);
+    }
     db::insert_update(&state.db, &doc_id, author, snapshot_id, clock, seq, s3_key).await?;
     if let Err(e) = put {
         // The object does not exist, so the row must not name it. Postgres is
@@ -582,7 +657,7 @@ async fn store_index_row(
         // this same write attached it.
         let _: bool = db::attach_wire(&state.db, &doc_id, seq, wire).await?;
     }
-    Ok(())
+    Ok(Stored::Written)
 }
 
 pub(crate) async fn handle_ephemeral(

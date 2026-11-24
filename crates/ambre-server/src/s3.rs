@@ -672,10 +672,11 @@ pub async fn fetch_object(
     }
 }
 
-/// How long the write path waits for the object of one delta. A store that
-/// hangs would hold the connection of the writer, so past this wait the index
-/// row takes the frame instead (`SRV-034`).
-const DELTA_PUT_TIMEOUT: Duration = Duration::from_secs(2);
+/// How long the write path waits for the object of one delta: the wait of the
+/// delta object row of `ambre-spec-budgets.md section 3`. A store that hangs
+/// would hold the connection of the writer, so past this wait the index row
+/// takes the frame instead (`SRV-034`, `SRV-336`).
+pub(crate) const DELTA_PUT_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Writes the object of delta `key` before the relay acknowledges it, so a
 /// loss of the ephemeral store loses no acknowledged delta (`SRV-307`).
