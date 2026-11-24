@@ -1294,6 +1294,38 @@ mod handler_tests {
         assert_eq!(read, Some(first.to_string()));
     }
 
+    /// Holds `SETTINGS-015`. A sign-out leaves the settings document and the
+    /// pointer of the account on the relay.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_sign_out_keeps_the_settings_document_on_the_relay(pool: sqlx::PgPool) {
+        let state = test_app_state(pool.clone()).await;
+        let app = build_test_router(state.clone());
+        let (auth, key, user) = setup_signed(&app, &state, "erin@settings.test", 55).await;
+        let doc = Id::<Document>::mint();
+        let body = settings_claim(doc, user, &key);
+        let (status, _) =
+            settings_answer(&app, json_request("POST", "/api/settings", &auth, &body)).await;
+        assert_eq!(status, StatusCode::OK);
+        let (status, _) = status_and_code(
+            &app,
+            json_request("POST", "/api/auth/logout", &auth, &serde_json::json!({})),
+        )
+        .await;
+        assert!(status.is_success(), "the sign-out answers {status}");
+        assert_eq!(
+            crate::db::settings_document(&pool, &user).await.unwrap(),
+            Some(doc),
+            "the pointer stays"
+        );
+        assert!(
+            crate::db::get_document(&pool, &doc)
+                .await
+                .unwrap()
+                .is_some()
+        );
+    }
+
     /// Holds `SETTINGS-009`. Two first unlocks at once receive one document.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]

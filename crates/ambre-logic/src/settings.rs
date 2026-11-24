@@ -604,6 +604,44 @@ mod tests {
         assert_eq!(hint.interface_language, french);
     }
 
+    /// `SETTINGS-006`: every setting of the catalogue at its longest word
+    /// holds the document far under its row of `ambre-spec-budgets.md`
+    /// section 6, 256 KB.
+    #[test]
+    fn the_whole_catalogue_stays_within_its_byte_budget() {
+        const BUDGET: usize = 256 * 1024;
+        let mut settings = SettingsDoc::create();
+        let longest =
+            ambre_client_core::DocumentLocale::parse("zh-Hant-TW-x-private1").expect("a tag");
+        for change in [
+            SettingChange::Theme(ThemeChoice::System),
+            SettingChange::PanelSide(PanelSide::Right),
+            SettingChange::PanelFold(
+                ambre_client_core::PanelApplication::Prose,
+                PanelFold::Folded,
+            ),
+            SettingChange::PanelFold(
+                ambre_client_core::PanelApplication::Trame,
+                PanelFold::Folded,
+            ),
+            SettingChange::PanelFold(
+                ambre_client_core::PanelApplication::Toile,
+                PanelFold::Folded,
+            ),
+            SettingChange::InterfaceLanguage(longest.clone()),
+            SettingChange::ReaderLocale(longest),
+            SettingChange::NumberConvention(ambre_client_core::NumberConvention::TypeMine),
+        ] {
+            settings.apply(&change).expect("a write");
+        }
+        let delta = settings.flush().expect("a delta");
+        assert!(
+            delta.as_bytes().len() < BUDGET / 100,
+            "{} bytes",
+            delta.as_bytes().len()
+        );
+    }
+
     /// An import is never sent back.
     #[test]
     fn an_imported_delta_is_never_sent_back() {

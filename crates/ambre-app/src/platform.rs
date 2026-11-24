@@ -1100,6 +1100,48 @@ mod tests {
         ambre_client_core::docfile::read_ambre_plaintext(&file).expect("the file reads")
     }
 
+    /// `SETTINGS-029`, `SETTINGS-037`, `SETTINGS-039`: the boot hint the page
+    /// keeps reads back whole from the storage, and a sign-out deletes it.
+    #[wasm_bindgen_test]
+    fn the_boot_hint_reads_back_from_the_storage_and_a_sign_out_deletes_it() {
+        let hint = ambre_client_core::BootHint {
+            theme: ambre_client_core::ThemeChoice::Light,
+            interface_language: ambre_client_core::DocumentLocale::parse("fr").expect("a tag"),
+        };
+        keep_boot_hint(&hint);
+        assert_eq!(boot_hint(), Some(hint.clone()));
+        let dark = ambre_client_core::BootHint {
+            theme: ambre_client_core::ThemeChoice::Dark,
+            ..hint
+        };
+        keep_boot_hint(&dark);
+        assert_eq!(boot_hint(), Some(dark), "a later change rewrites it");
+        forget_boot_hint();
+        assert_eq!(boot_hint(), None);
+    }
+
+    /// `SETTINGS-032`: a page boots in the theme of the hint the storage
+    /// holds, whatever the system asks for.
+    #[wasm_bindgen_test]
+    fn a_page_boots_in_the_theme_of_the_stored_boot_hint() {
+        keep_boot_hint(&ambre_client_core::BootHint {
+            theme: ambre_client_core::ThemeChoice::Light,
+            interface_language: ambre_client_core::DocumentLocale::NONE,
+        });
+        for system in [ambre_canvas::Theme::Light, ambre_canvas::Theme::Dark] {
+            assert_eq!(
+                crate::settings_view::boot_theme(boot_hint().as_ref(), system),
+                ambre_canvas::Theme::Light
+            );
+        }
+        forget_boot_hint();
+        assert_eq!(
+            crate::settings_view::boot_theme(boot_hint().as_ref(), ambre_canvas::Theme::Dark),
+            ambre_canvas::Theme::Dark,
+            "with no hint the system decides"
+        );
+    }
+
     /// An opened file never lands on the document its header names, so it
     /// replaces no local copy and drops no local delta (`DOCFILE-021`,
     /// audit `P50`). The type and the payload stay the file's.

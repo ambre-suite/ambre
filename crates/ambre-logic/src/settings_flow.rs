@@ -310,6 +310,23 @@ mod tests {
         );
     }
 
+    /// `SETTINGS-011`: a document opened while the settings wait on their
+    /// identity and their content opens at once.
+    #[test]
+    fn the_settings_open_holds_back_no_other_open() {
+        let mut rig = rig(0.0);
+        rig.sync.try_iter().for_each(drop);
+        let prose = Id::<Document>::mint();
+        rig.state.handle_logic_command(LogicCommand::OpenDocument {
+            document_id: prose,
+            doc_type: DocType::Prose,
+        });
+        assert!(rig.sync.try_iter().any(|command| matches!(
+            command,
+            SyncCommand::OpenDocument { document_id, .. } if document_id == prose
+        )));
+    }
+
     /// `SETTINGS-040`: a second name in one session is refused, and the
     /// document opened first stays.
     #[test]
