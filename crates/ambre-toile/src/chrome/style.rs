@@ -175,32 +175,40 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
         let rotation = Signal::derive(move || {
             placed().map_or(Reading::Mixed, |p| Reading::Uniform(p.rotation))
         });
-        view! {
-            <Field label="X">
-                <LengthField property=prop(panel::X) value=field(|p| Px::<Board>::new(p.frame.x0)) on_write=write(PlaceField::X) />
-            </Field>
-            <Field label="Y">
-                <LengthField property=prop(panel::Y) value=field(|p| Px::<Board>::new(p.frame.y0)) on_write=write(PlaceField::Y) />
-            </Field>
-            <Field label="W">
-                <LengthField property=prop(panel::WIDTH) value=field(|p| Px::<Board>::new(p.frame.width())) on_write=write(PlaceField::Width) />
-            </Field>
-            <Field label="H">
-                <LengthField property=prop(panel::HEIGHT) value=field(|p| Px::<Board>::new(p.frame.height())) on_write=write(PlaceField::Height) />
-            </Field>
-            <Field label="Rotation">
-                <LengthField
-                    property=prop(panel::ROTATION)
-                    value=rotation
-                    on_write=Callback::new(move |r: Radians| {
-                        if let Some(placement) = placed() {
-                            place.set(Some(PlaceEdit { placement, field: PlaceField::Rotation(r) }));
-                        }
-                    })
-                />
-            </Field>
-        }
-        .into_any()
+        // One row builder serves the four places and sizes, so the section
+        // adds one view type, not four (`CHROME-239`).
+        let row = move |name: &'static str,
+                        id,
+                        get: fn(&panel::Placement) -> Px<Board>,
+                        make: fn(Px<Board>) -> PlaceField| {
+            view! {
+                <Field label=name>
+                    <LengthField property=prop(id) value=field(get) on_write=write(make) />
+                </Field>
+            }
+            .into_any()
+        };
+        let rows: Vec<AnyView> = vec![
+            row("X", panel::X, |p| Px::<Board>::new(p.frame.x0), PlaceField::X),
+            row("Y", panel::Y, |p| Px::<Board>::new(p.frame.y0), PlaceField::Y),
+            row("W", panel::WIDTH, |p| Px::<Board>::new(p.frame.width()), PlaceField::Width),
+            row("H", panel::HEIGHT, |p| Px::<Board>::new(p.frame.height()), PlaceField::Height),
+            view! {
+                <Field label="Rotation">
+                    <LengthField
+                        property=prop(panel::ROTATION)
+                        value=rotation
+                        on_write=Callback::new(move |r: Radians| {
+                            if let Some(placement) = placed() {
+                                place.set(Some(PlaceEdit { placement, field: PlaceField::Rotation(r) }));
+                            }
+                        })
+                    />
+                </Field>
+            }
+            .into_any(),
+        ];
+        rows.into_any()
     };
 
     // The board's frames, each with the count of its items. A press selects
@@ -355,10 +363,12 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
     };
 
     let arrange = move || {
-        let any_locked = move || scope.with(|s| s.locks.any_locked());
-        let any_unlocked = move || scope.with(|s| s.locks.any_unlocked());
         let multi = move || scope.with(CtxScope::multi);
-        let grouped = move || scope.with(|s| s.groups == menu::GroupHeld::Group);
+        // A row that shows while the scope meets `when`. The predicate is a
+        // function pointer, so every such row shares one view type.
+        let shown = move |when: fn(&CtxScope) -> bool, id: StaticKey<Commands>| {
+            (move || scope.with(when).then(|| labelled(id))).into_any()
+        };
         let framing = move || {
             scope.with(|s| {
                 s.containing_frame.is_some()
@@ -370,10 +380,10 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
             // Labelled rows that name their chords (`CHROME-242`).
             <Row>
                 {labelled(menu::DUPLICATE)}
-                <Show when=multi>{labelled(menu::GROUP)}</Show>
-                <Show when=grouped>{labelled(menu::UNGROUP)}</Show>
-                <Show when=any_unlocked>{labelled(menu::LOCK)}</Show>
-                <Show when=any_locked>{labelled(menu::UNLOCK)}</Show>
+                {shown(CtxScope::multi, menu::GROUP)}
+                {shown(|s| s.groups == menu::GroupHeld::Group, menu::UNGROUP)}
+                {shown(|s| s.locks.any_unlocked(), menu::LOCK)}
+                {shown(|s| s.locks.any_locked(), menu::UNLOCK)}
                 {labelled(menu::BRING_FRONT)}
                 {labelled(menu::FORWARD)}
                 {labelled(menu::BACKWARD)}

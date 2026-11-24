@@ -11,18 +11,14 @@
 // ============================================================================
 
 use ambre_chrome::commands::Reach;
-use ambre_chrome::{ChoiceRow, ChoiceView, FormatBar, IconButton, Pressed, Select};
+use ambre_chrome::{FormatBar, IconButton, Pressed};
 use ambre_core::Flag as _;
-use ambre_core::index::Pos;
-use ambre_core::{Commands, Rgb, StaticKey};
+use ambre_core::{Commands, StaticKey};
 use leptos::prelude::*;
 
-use super::color::theme_bg_default;
-use super::popovers::{ColorPopover, NUMBER_FORMATS};
 use super::style::StyleState;
 use crate::message::StylePatch;
 use crate::ui::commands as registry;
-use crate::ui::panel;
 
 /// The range bar over the published anchor. `None` draws nothing.
 #[component]
@@ -61,13 +57,6 @@ pub fn RangeBar(
     };
     move || {
         let at = super::handler::client_anchor(Some(anchor.get()?.at));
-        let format_place = Signal::derive(move || {
-            let format = style.format.get();
-            NUMBER_FORMATS
-                .iter()
-                .position(|(f, _)| *f == format)
-                .map(Pos::<ChoiceRow>::from_usize)
-        });
         let merge = move || {
             let id = match style.merged.get() {
                 crate::message::Merge::Single => registry::MERGE,
@@ -75,40 +64,17 @@ pub fn RangeBar(
             };
             command(id, None)
         };
-        Some(view! {
-            <FormatBar anchor=at>
-                {command(
-                    registry::BOLD,
-                    Some(Signal::derive(move || Pressed::from_bool(style.bold.get().as_bool()))),
-                )}
-                <span class="ambre-kit-control" data-reach=Reach::Property(panel::FILL).marker()>
-                    <ColorPopover
-                        title="Fill colour"
-                        icon=icondata::BiColorFillSolid
-                        current=style.bg
-                        default=Signal::derive(move || theme_bg_default(theme.get()))
-                        reset_label="No fill (transparent)"
-                        on_pick=Callback::new(move |bg: Option<Rgb>| {
-                            on_style.run(StylePatch { bg: Some(bg), ..Default::default() })
-                        })
-                    />
-                </span>
-                <Select
-                    label="Number format"
-                    choices=NUMBER_FORMATS.iter().map(|(_, l)| ChoiceView::text(*l)).collect()
-                    selected=format_place
-                    on_pick=Callback::new(move |p: Pos<ChoiceRow>| {
-                        if let Some((f, _)) = p.to_index().and_then(|i| NUMBER_FORMATS.get(i)) {
-                            on_style.run(StylePatch { format: Some(f.clone()), ..Default::default() });
-                        }
-                    })
-                    placeholder="Custom"
-                    reach=Reach::Property(panel::NUMBER_FORMAT)
-                />
-                {merge}
-                {command(registry::SORT_RANGE_ASC, None)}
-                {command(registry::SORT_RANGE_DESC, None)}
-            </FormatBar>
-        })
+        // One list of erased views: the bar adds no nested view type of its
+        // own (`CHROME-238`).
+        let bold = Signal::derive(move || Pressed::from_bool(style.bold.get().as_bool()));
+        let controls: Vec<AnyView> = vec![
+            command(registry::BOLD, Some(bold)).into_any(),
+            super::panel::fill(style, theme, on_style),
+            super::panel::number_format(style, on_style),
+            merge.into_any(),
+            command(registry::SORT_RANGE_ASC, None).into_any(),
+            command(registry::SORT_RANGE_DESC, None).into_any(),
+        ];
+        Some(view! { <FormatBar anchor=at>{controls}</FormatBar> })
     }
 }

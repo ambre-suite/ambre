@@ -101,6 +101,60 @@ fn run_place(
     })
 }
 
+/// The number format list of the cells, which the panel and the range bar
+/// share: one copy of the view serves both (`CHROME-238`).
+pub(super) fn number_format(style: StyleState, on_style: Callback<StylePatch>) -> AnyView {
+    let selected = Signal::derive(move || {
+        let format = style.format.get();
+        NUMBER_FORMATS
+            .iter()
+            .position(|(f, _)| *f == format)
+            .map(Pos::<ChoiceRow>::from_usize)
+    });
+    let pick = Callback::new(move |p: Pos<ChoiceRow>| {
+        if let Some((f, _)) = p.to_index().and_then(|i| NUMBER_FORMATS.get(i)) {
+            on_style.run(StylePatch {
+                format: Some(f.clone()),
+                ..Default::default()
+            });
+        }
+    });
+    view! {
+        <Select
+            label=label(panel::NUMBER_FORMAT)
+            choices=NUMBER_FORMATS.iter().map(|(_, l)| ChoiceView::text(*l)).collect()
+            selected=selected
+            on_pick=pick
+            placeholder="Custom"
+            reach=Reach::Property(panel::NUMBER_FORMAT)
+        />
+    }
+    .into_any()
+}
+
+/// The fill of the cells, which the panel and the range bar share.
+pub(super) fn fill(
+    style: StyleState,
+    theme: RwSignal<ambre_canvas::Theme>,
+    on_style: Callback<StylePatch>,
+) -> AnyView {
+    view! {
+        <span class="ambre-kit-control" data-reach=reach(panel::FILL)>
+            <ColorPopover
+                title="Fill colour"
+                icon=icondata::BiColorFillSolid
+                current=style.bg
+                default=Signal::derive(move || theme_bg_default(theme.get()))
+                reset_label="No fill (transparent)"
+                on_pick=Callback::new(move |bg: Option<Rgb>| {
+                    on_style.run(StylePatch { bg: Some(bg), ..Default::default() })
+                })
+            />
+        </span>
+    }
+    .into_any()
+}
+
 /// The title and the sections of the sheet's context panel.
 pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
     let TramePanelSignals {
@@ -231,21 +285,6 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
                 Availability::Disabled
             }
         });
-        let format_place = Signal::derive(move || {
-            let format = style.format.get();
-            NUMBER_FORMATS
-                .iter()
-                .position(|(f, _)| *f == format)
-                .map(Pos::<ChoiceRow>::from_usize)
-        });
-        let pick_format = Callback::new(move |p: Pos<ChoiceRow>| {
-            if let Some((f, _)) = p.to_index().and_then(|i| NUMBER_FORMATS.get(i)) {
-                on_style.run(StylePatch {
-                    format: Some(f.clone()),
-                    ..Default::default()
-                });
-            }
-        });
         let h_place = Signal::derive(move || {
             let at = style.h_align.get();
             H_ALIGNS
@@ -261,16 +300,7 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
                 .map(Pos::<ChoiceRow>::from_usize)
         });
         view! {
-            <Field label="Number">
-                <Select
-                    label=label(panel::NUMBER_FORMAT)
-                    choices=NUMBER_FORMATS.iter().map(|(_, l)| ChoiceView::text(*l)).collect()
-                    selected=format_place
-                    on_pick=pick_format
-                    placeholder="Custom"
-                    reach=Reach::Property(panel::NUMBER_FORMAT)
-                />
-            </Field>
+            <Field label="Number">{number_format(style, on_style)}</Field>
             <Field label="Decimals">
                 <span class="ambre-kit-control" data-reach=reach(panel::DECIMALS)>
                     <IconButton
@@ -342,18 +372,7 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
                         })
                     />
                 </span>
-                <span class="ambre-kit-control" data-reach=reach(panel::FILL)>
-                    <ColorPopover
-                        title="Fill colour"
-                        icon=icondata::BiColorFillSolid
-                        current=style.bg
-                        default=Signal::derive(move || theme_bg_default(theme.get()))
-                        reset_label="No fill (transparent)"
-                        on_pick=Callback::new(move |bg: Option<Rgb>| {
-                            on_style.run(StylePatch { bg: Some(bg), ..Default::default() })
-                        })
-                    />
-                </span>
+                {fill(style, theme, on_style)}
             </Field>
             <Field label="Horizontal">
                 <SegmentBar

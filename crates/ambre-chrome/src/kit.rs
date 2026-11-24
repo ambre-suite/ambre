@@ -203,26 +203,27 @@ fn swatch_row(
     current: Signal<Option<ambre_core::Rgba>>,
     on_pick: Callback<Option<ambre_core::Rgba>>,
 ) -> AnyView {
-    let choices = std::iter::once(None).chain(
+    let choices = std::iter::once((none_label, None, None)).chain(
         crate::color::INLINE
             .iter()
-            .map(|c| Some(c.to_rgba(ambre_core::Alpha::OPAQUE))),
+            .map(|&(name, css, c)| (name, Some(css), Some(c))),
     );
     choices
-        .map(|choice| {
-            let label = choice.map_or_else(|| none_label.to_owned(), |c| c.to_string());
-            let pressed = Signal::derive(move || {
-                Pressed::from_bool(
-                    current.get().map(ambre_core::Rgba::rgb) == choice.map(ambre_core::Rgba::rgb),
-                )
-            });
+        .map(|(name, css, rgb)| {
+            let pressed =
+                move || Pressed::from_bool(current.get().map(ambre_core::Rgba::rgb) == rgb).aria();
+            let picked = rgb.map(|c| c.to_rgba(ambre_core::Alpha::OPAQUE));
             view! {
-                <crate::ColorSwatch
-                    label=label
-                    colour=Signal::stored(choice)
-                    pressed=pressed
-                    on_press=Callback::new(move |()| on_pick.run(choice))
-                />
+                <button
+                    class="ambre-swatch"
+                    data-empty=if css.is_none() { "true" } else { "false" }
+                    aria-label=name
+                    title=name
+                    aria-pressed=pressed
+                    style:background-color=css
+                    on:mousedown=|ev| ev.prevent_default()
+                    on:click=move |_| on_pick.run(picked)
+                ></button>
             }
         })
         .collect_view()
@@ -282,7 +283,9 @@ impl LengthUnit {
     /// decimal when whole: "20", never "20.0", and "12.7".
     #[must_use]
     pub fn text(&self, value: f64) -> String {
-        let text = format!("{:.1}", value * self.scale);
+        // The field shows a tenth, so `f32` holds it; Main already formats
+        // `f32`, and a second float formatter would cost its code.
+        let text = format!("{:.1}", (value * self.scale) as f32);
         match text.strip_suffix(".0") {
             Some("-0") => "0".to_owned(),
             Some(whole) => whole.to_owned(),
@@ -294,7 +297,7 @@ impl LengthUnit {
     /// or falls below the floor.
     #[must_use]
     pub fn parse(&self, text: &str) -> Option<f64> {
-        let shown = text.trim().replace(',', ".").parse::<f64>().ok()?;
+        let shown = f64::from(text.trim().replace(',', ".").parse::<f32>().ok()?);
         let fits = shown.is_finite() && self.floor.is_none_or(|f| shown >= f);
         fits.then_some(shown / self.scale)
     }
