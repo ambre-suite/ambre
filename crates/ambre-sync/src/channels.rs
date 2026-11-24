@@ -794,7 +794,16 @@ impl SyncState {
     /// Ask the relay to remove this user from a channel. The documents stay
     /// open here until the Logic thread hears the answer and closes them. A
     /// refusal leaves the channel whole, as with a delete.
-    pub(crate) fn handle_leave_channel(&self, channel_id: Id<Channel>) {
+    ///
+    /// The census opens each document of the channel not open here first,
+    /// so the departure caps this user in each one (`SYNC-312`).
+    pub(crate) fn handle_leave_channel(&mut self, channel_id: Id<Channel>) {
+        self.begin_removal(crate::census::Removal::LeaveChannel { channel_id });
+    }
+
+    /// The departure of [`handle_leave_channel`](Self::handle_leave_channel),
+    /// from the documents open here.
+    pub(crate) fn leave_channel_now(&self, channel_id: Id<Channel>) {
         let Some(tx) = self.event_tx.clone() else {
             return self.channel_answered(channel_id, Err(SyncError::NoRelay.into()));
         };

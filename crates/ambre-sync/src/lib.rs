@@ -185,6 +185,7 @@ mod call;
 mod call_client;
 mod call_link;
 mod call_roster;
+mod census;
 mod chain;
 mod channels;
 mod converter;
@@ -584,6 +585,12 @@ enum SyncEvent {
     ChannelDeleted {
         channel_id: Id<Channel>,
         result: Result<(), http::HttpError>,
+    },
+    /// The documents a removal caps, as the relay listed them, before their
+    /// census (`SYNC-312`, `SYNC-314`).
+    CensusPlanned {
+        removal: census::Removal,
+        result: Result<Vec<census::Counted>, http::HttpError>,
     },
     /// The answer to a channel leave (`SyncCommand::LeaveChannel`).
     ChannelLeft {
@@ -1815,6 +1822,17 @@ pub struct SyncState {
     /// hydrates instead of opening local-only with a throwaway key.
     pending_opens: Vec<(Id<Document>, DocType)>,
 
+    /// The removals that wait on the census of their documents
+    /// (`SYNC-312`, `SYNC-314`).
+    censuses: Vec<census::Census>,
+    /// The documents a census opened that the Logic thread does not hold.
+    /// What their opens would tell the Logic thread reaches the census
+    /// alone.
+    census_docs: HashSet<Id<Document>>,
+    /// What each document a census awaits said, held until the event that
+    /// raised it is handled whole.
+    census_signals: RefCell<Vec<(Id<Document>, census::Signal)>>,
+
     /// The inviter each document's invite link pinned, for the session
     /// (`SYNC-205`). A pin outlives a close, so a later open of the document
     /// in the session checks the same log against it.
@@ -1929,6 +1947,9 @@ impl SyncState {
             documents: HashMap::new(),
             doc_metadata: HashMap::new(),
             pending_opens: Vec::new(),
+            censuses: Vec::new(),
+            census_docs: HashSet::new(),
+            census_signals: RefCell::new(Vec::new()),
             pinned_inviters: HashMap::new(),
             murmure_roots: HashSet::new(),
             typed_opens: HashSet::new(),
@@ -1962,6 +1983,17 @@ impl SyncState {
     // -- Outbound: Sync -> Logic ------------------------------------------------
 
     fn send_to_logic(&self, event: LogicEvent) {
+        // An open a census runs tells the census alone (`SYNC-312`).
+        if let Some((document_id, signal)) = census::subject(&event) {
+            if let Some(signal) = signal
+                && self.censuses.iter().any(|c| c.awaits(document_id))
+            {
+                self.census_signals.borrow_mut().push((document_id, signal));
+            }
+            if self.census_docs.contains(&document_id) {
+                return;
+            }
+        }
         if let Err(SendError(ev)) = self.logic_tx.send(event) {
             crate::log::warning!(
                 "Sync: Logic receiver dropped, discarding {:?}",
@@ -2126,6 +2158,12 @@ impl SyncState {
     }
 
     pub fn handle_command(&mut self, cmd: SyncCommand) {
+        self.dispatch_command(cmd);
+        self.settle_census();
+    }
+
+    /// Acts on one command of the Logic thread.
+    fn dispatch_command(&mut self, cmd: SyncCommand) {
         match cmd {
             // -- Service plane: the relayed request/response family ------------
             SyncCommand::Rest { id, cmd } => self.handle_rest(id, cmd),
@@ -2140,6 +2178,9 @@ impl SyncState {
                     Some(meta) => self.channel_metas.insert(document_id, meta),
                     None => self.channel_metas.remove(&document_id),
                 };
+                // The Logic thread claims a document a census opened: its
+                // open now reaches the Logic thread (`SYNC-312`).
+                self.census_docs.remove(&document_id);
                 self.handle_open_document(document_id, doc_type);
             }
             SyncCommand::PinInviter {

@@ -654,6 +654,12 @@ impl SyncState {
     }
 
     pub(crate) fn handle_sync_event(&mut self, event: SyncEvent) {
+        self.react(event);
+        self.settle_census();
+    }
+
+    /// Acts on one event of the Sync loop.
+    fn react(&mut self, event: SyncEvent) {
         match event {
             SyncEvent::WsMessage(msg) => self.handle_ws_message(msg),
             SyncEvent::WsOpened => {
@@ -1180,6 +1186,7 @@ impl SyncState {
                     result.map(|()| LogicEvent::ChannelDeleted { channel_id }),
                 );
             }
+            SyncEvent::CensusPlanned { removal, result } => self.census_planned(removal, result),
             SyncEvent::ChannelLeft { channel_id, result } => {
                 self.channel_answered(
                     channel_id,
