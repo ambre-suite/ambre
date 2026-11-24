@@ -1,6 +1,6 @@
 //! The path of a numbered delta, driven through its failures. The register
-//! refuses an index write, the queue refuses a frame, and the index breaks
-//! under a replay. Reads finish out of order, and one replay is asked twice.
+//! refuses an index write, the object store refuses a frame, the ephemeral
+//! store loses its keys, and the index breaks under a replay. Reads finish out of order, and one replay is asked twice.
 //! Each test reads the stores back, so it needs Postgres and Redis.
 
 use super::hot_tail_tests::{replay, signed_update, writer};
@@ -8,7 +8,7 @@ use super::*;
 use crate::test_helpers::S3Stub;
 use ambre_protocol::messages::{Relay, Seq};
 use ambre_protocol::ws::decode_server_msg;
-use rustis::commands::{GenericCommands, ListCommands, StringCommands};
+use rustis::commands::{GenericCommands, ListCommands};
 
 /// Makes the register refuse the next `count` inserts into the delta index. A
 /// sequence counts them, since it is not rolled back with the refused insert.
@@ -149,29 +149,31 @@ async fn an_index_write_that_never_lands_leaves_the_whole_frame(pool: sqlx::PgPo
     forget(&state, doc_id).await;
 }
 
-/// `SRV-034`: a large delta whose queue refuses it keeps its frame in its
-/// index row, so a replay still delivers it. The failure is dead-lettered too.
+/// `SRV-034`: a large delta whose object the store refuses keeps its frame in
+/// its index row, so a replay still delivers it. The row names no object, and
+/// the relay counts the refusal.
 #[sqlx::test]
 #[cfg_attr(
     not(feature = "db"),
     ignore = "needs postgres+redis; run with --features db"
 )]
-async fn a_refused_queue_leaves_the_frame_in_its_row(pool: sqlx::PgPool) {
+async fn a_refused_object_leaves_the_frame_in_its_row(pool: sqlx::PgPool) {
+    use crate::metrics::{Failure, RELAY};
     let stub = S3Stub::spawn([]).await;
     let key = ed25519_dalek::SigningKey::from_bytes(&[53u8; 32]);
-    let (state, mut conn, doc_id) = writer(pool, &stub, &key).await;
-    // A pending key that is not a list refuses every push.
-    let () = state
-        .redis
-        .set(format!("doc:{{{doc_id}}}:pending"), "not a list")
-        .await
-        .unwrap();
+    let (base, mut conn, doc_id) = writer(pool, &stub, &key).await;
+    // No store listens on the first port, so every write is refused.
+    let state = crate::test_helpers::with_s3(
+        &base,
+        crate::test_helpers::offline_s3(Some("http://127.0.0.1:1")),
+    );
     let (tx, _rx) = mpsc::channel::<StoredPayload>(8);
     let large = crate::hot_tail::INLINE_DELTA_MAX_SIZE
         .saturating_len()
         .to_usize()
         + 1024;
     let update = signed_update(&key, doc_id, 1, large);
+    let before = RELAY.failures.read(Failure::ObjectPut);
 
     handle_update(&state, &mut conn, update.clone(), &tx).await;
 
@@ -184,56 +186,56 @@ async fn a_refused_queue_leaves_the_frame_in_its_row(pool: sqlx::PgPool) {
     .await
     .unwrap();
     assert!(matches!(rows.as_slice(), [r] if r.wire.is_some() && r.s3_key.is_none()));
+    assert!(RELAY.failures.read(Failure::ObjectPut) > before);
     let sent = replayed(&replay(&state, &mut conn, doc_id).await);
     assert!(matches!(sent.as_slice(), [d] if d.seq.get() == 1 && d.update == update));
-    assert_eq!(dead_letters(&state, doc_id).await.len(), 1);
+    assert!(dead_letters(&state, doc_id).await.is_empty());
     forget(&state, doc_id).await;
 }
 
-/// `SRV-262`: a large delta whose dirty mark the store refuses stays queued,
-/// nothing is dead-lettered, and the relay counts the miss.
+/// `SRV-307`: the object of a large delta exists once the relay has handled
+/// it, and no pending entry holds it. So a loss of every ephemeral key of the
+/// document leaves the delta readable: a replay after the loss delivers it.
 #[sqlx::test]
 #[cfg_attr(
     not(feature = "db"),
     ignore = "needs postgres+redis; run with --features db"
 )]
-async fn a_missed_dirty_mark_is_counted(pool: sqlx::PgPool) {
-    use crate::metrics::{Failure, RELAY};
+async fn a_large_delta_survives_a_loss_of_the_ephemeral_store(pool: sqlx::PgPool) {
     let stub = S3Stub::spawn([]).await;
     let key = ed25519_dalek::SigningKey::from_bytes(&[56u8; 32]);
-    let (base, mut conn, doc_id) = writer(pool, &stub, &key).await;
-    let redis = crate::test_helpers::connect_document_keys_redis()
-        .await
-        .unwrap();
-    let state = crate::test_helpers::with_redis(&base, redis);
+    let (state, mut conn, doc_id) = writer(pool, &stub, &key).await;
     let (tx, _rx) = mpsc::channel::<StoredPayload>(8);
     let large = crate::hot_tail::INLINE_DELTA_MAX_SIZE
         .saturating_len()
         .to_usize()
         + 1024;
-    let before = RELAY.failures.read(Failure::DirtyMark);
+    let update = signed_update(&key, doc_id, 1, large);
 
-    handle_update(
-        &state,
-        &mut conn,
-        signed_update(&key, doc_id, 1, large),
-        &tx,
-    )
-    .await;
+    handle_update(&state, &mut conn, update.clone(), &tx).await;
 
-    assert_eq!(
-        RELAY.failures.read(Failure::DirtyMark),
-        before.incremented(),
-        "the miss is counted once"
+    let object = crate::s3::format_s3_delta_key(
+        &state.config.s3_env_prefix,
+        &doc_id,
+        ambre_core::Seq::<ambre_core::Relay>::new(1),
     );
-    let queued: Vec<String> = base
+    assert_eq!(
+        stub.object(object.as_str()),
+        Some(postcard::to_allocvec(&update).unwrap()),
+        "the object exists before the delta is acknowledged"
+    );
+    let queued: usize = state
         .redis
-        .lrange(format!("doc:{{{doc_id}}}:pending"), 0, -1)
+        .llen(format!("doc:{{{doc_id}}}:pending"))
         .await
         .unwrap();
-    assert_eq!(queued.len(), 1, "the list keeps the delta");
-    assert!(dead_letters(&base, doc_id).await.is_empty());
-    forget(&base, doc_id).await;
+    assert_eq!(queued, 0, "the ephemeral store holds no copy");
+
+    forget(&state, doc_id).await;
+
+    let sent = replayed(&replay(&state, &mut conn, doc_id).await);
+    assert!(matches!(sent.as_slice(), [d] if d.seq.get() == 1 && d.update == update));
+    forget(&state, doc_id).await;
 }
 
 /// `SRV-040`, `SRV-184`: an index that cannot be read under a replay still

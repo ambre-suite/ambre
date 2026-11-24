@@ -84,13 +84,13 @@ impl Label for Delta {
 pub enum Failure {
     /// The index row of a sequenced delta was not written (`SRV-033`).
     IndexWrite,
-    /// A sequenced delta did not reach its pending list (`SRV-034`).
-    PendingAppend,
-    /// A pending list took a delta, but the dirty set missed its mark: the
-    /// flush waits for the reconciling sweep (`SRV-262`).
+    /// The object store refused the object of a sequenced delta: its index
+    /// row holds the frame instead (`SRV-034`).
+    ObjectPut,
+    /// The sweep found a pending list, but the dirty set refused its mark:
+    /// the flush waits for the next sweep (`SRV-262`).
     DirtyMark,
-    /// A delta the index or the pending list missed did not reach the
-    /// dead-letter list either.
+    /// A delta the index missed did not reach the dead-letter list either.
     DeadLetter,
     /// The broadcast of a sequenced delta failed: its subscribers replay it.
     Broadcast,
@@ -100,7 +100,7 @@ impl Label for Failure {
     const KEY: Option<StaticKey<MetricNames>> = Some(StaticKey::new("failure"));
     const ALL: &'static [Self] = &[
         Self::IndexWrite,
-        Self::PendingAppend,
+        Self::ObjectPut,
         Self::DirtyMark,
         Self::DeadLetter,
         Self::Broadcast,
@@ -108,7 +108,7 @@ impl Label for Failure {
     fn value(self) -> StaticKey<LabelValues> {
         StaticKey::new(match self {
             Self::IndexWrite => "index_write",
-            Self::PendingAppend => "pending_append",
+            Self::ObjectPut => "object_put",
             Self::DirtyMark => "dirty_mark",
             Self::DeadLetter => "dead_letter",
             Self::Broadcast => "broadcast",

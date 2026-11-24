@@ -672,11 +672,44 @@ pub async fn fetch_object(
     }
 }
 
+/// How long the write path waits for the object of one delta. A store that
+/// hangs would hold the connection of the writer, so past this wait the index
+/// row takes the frame instead (`SRV-034`).
+const DELTA_PUT_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// Writes the object of delta `key` before the relay acknowledges it, so a
+/// loss of the ephemeral store loses no acknowledged delta (`SRV-307`).
+///
+/// # Errors
+///
+/// The store refused the write, or did not answer within the wait. The error
+/// text names no key: a store failure is logged (`ZK-030`).
+pub async fn put_delta_object(
+    state: &crate::state::AppState,
+    key: &ambre_core::ObjectKey,
+    wire: &StoredPayload,
+) -> Result<(), AppError> {
+    let put = state
+        .s3
+        .put_object()
+        .bucket(state.s3_bucket.as_str())
+        .key(key.as_str())
+        .body(wire.clone().into_body())
+        .send();
+    match tokio::time::timeout(DELTA_PUT_TIMEOUT, put).await {
+        Ok(Ok(_)) => Ok(()),
+        Ok(Err(e)) => Err(AppError::S3(crate::error::FaultText::of("delta put", e))),
+        Err(_) => Err(AppError::S3(crate::error::FaultText::bare(
+            "delta put timed out",
+        ))),
+    }
+}
+
 /// Background task that periodically flushes pending deltas from Redis to S3.
 ///
 /// Runs once per Axum instance, every 15 seconds. The work list is the
 /// `flush:dirty` SET, the documents that actually have unflushed deltas,
-/// maintained by `append_pending_delta`. The common path is therefore O(dirty
+/// which a relay marked as it queued a delta. The common path is therefore O(dirty
 /// docs), instead of an O(keyspace) `SCAN doc:{*}:pending` every cycle. A full
 /// SCAN reconciliation runs only occasionally, and on the first cycle, seeding
 /// the set on upgrade. It re-marks any pending key missing from the set, so no
@@ -812,8 +845,11 @@ async fn reconcile_node(state: &crate::state::AppState, node: &rustis::client::C
             }
         };
         for key in keys.iter().filter_map(|text| PendingKey::parse(text)) {
+            // The list keeps its entries: the next sweep tries the mark
+            // again, and an operator sees the delay (`SRV-262`).
             if let Err(e) = crate::redis_ops::mark_pending_dirty(&state.redis, &key).await {
-                tracing::warn!(error = %e, "flusher reconcile: mark dirty failed");
+                tracing::error!(error = %e, "flusher reconcile: mark dirty failed");
+                crate::metrics::failed(crate::metrics::Failure::DirtyMark);
             }
         }
         cursor = next_cursor;
@@ -1053,6 +1089,35 @@ mod tests {
             "the sweep missed {} of 20 lists",
             missed.len()
         );
+    }
+
+    /// `SRV-262`: a sweep whose dirty mark the store refuses keeps the pending
+    /// list whole, and counts the miss. The connection reaches the keys of a
+    /// document alone, so the dirty set refuses every mark.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_refused_mark_in_a_sweep_keeps_the_list_and_is_counted(pool: sqlx::PgPool) {
+        use crate::metrics::{Failure, RELAY};
+        let base = crate::test_helpers::test_app_state(pool).await;
+        let redis = crate::test_helpers::connect_document_keys_redis()
+            .await
+            .expect("db-tier tests require a reachable Redis");
+        let state = crate::test_helpers::with_redis(&base, redis);
+        let key = PendingKey::of(&Id::<Document>::mint());
+        let _: usize = base
+            .redis
+            .rpush(key.as_str(), "entry")
+            .await
+            .expect("rpush");
+        let before = RELAY.failures.read(Failure::DirtyMark);
+
+        reconcile_dirty_set(&state).await;
+
+        let after = RELAY.failures.read(Failure::DirtyMark);
+        let held: usize = base.redis.llen(key.as_str()).await.expect("llen");
+        let _: usize = base.redis.del([key.as_str()]).await.expect("del");
+        assert!(after > before, "the refused mark is counted");
+        assert_eq!(held, 1, "the list keeps its entry");
     }
 
     /// The deployment prefix `text`.
