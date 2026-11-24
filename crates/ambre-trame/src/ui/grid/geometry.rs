@@ -623,6 +623,16 @@ impl TrameUiState {
         Some(rect)
     }
 
+    /// The block whose first row carries the filter buttons. It is the data
+    /// block around the active cell, while the sheet filters one of its
+    /// columns. `None` with no filter, so a sheet nobody filtered draws no
+    /// button (`TRAME-FEAT-027`).
+    pub fn filter_band(&self) -> Option<CellRect> {
+        let col = self.filtered_col?;
+        self.current_region()
+            .filter(|region| region.cols().into_iter().any(|c| c == col))
+    }
+
     /// Screen pixel rect of the autofilter button of cell `at`, a
     /// cell of the current region's header row (`trame-shared-filter`). It is a
     /// small square hugging the right edge of the cell. `None` when that cell is
@@ -645,7 +655,7 @@ impl TrameUiState {
     /// when no button is hit (or no current region exists).
     pub fn filter_button_at(&self, at: Point<Px<View>>) -> Option<CellPos> {
         let (x, y) = (f64::from(at.x.get()), f64::from(at.y.get()));
-        let region = self.current_region()?;
+        let region = self.filter_band()?;
         let band_row = region.top_left.row;
         region.cols().into_iter().find_map(|col| {
             let at = CellPos::new(band_row, col);

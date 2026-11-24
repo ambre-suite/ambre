@@ -746,6 +746,46 @@ fn the_panel_header_names_the_selection() {
     assert_eq!(rig.view.selection_ref().subtitle(), "12 cells");
 }
 
+/// `CHROME-246`: the range bar shows over two cells or more, centred on the
+/// top edge. A lone cell and a drag hide it.
+#[test]
+fn the_range_bar_shows_over_a_range_alone() {
+    let mut rig = Rig::new();
+    rig.frame();
+    assert_eq!(
+        rig.view.range_bar_anchor(),
+        None,
+        "a lone cell shows no bar"
+    );
+    let (b2, d5) = (
+        CellPos::new(Pos::new(1), Pos::new(1)),
+        CellPos::new(Pos::new(4), Pos::new(3)),
+    );
+    let mut range = crate::ui::grid::Selection::single(b2);
+    range.extend_to(d5);
+    rig.view.state.selection = range;
+    rig.frame();
+    let at = rig
+        .view
+        .range_bar_anchor()
+        .expect("a range shows the bar")
+        .at;
+    let (left, right) = (
+        rig.view.state.cell_pixel_rect(b2).expect("B2 in view"),
+        rig.view
+            .state
+            .cell_pixel_rect(CellPos::new(Pos::new(1), Pos::new(3)))
+            .expect("D2 in view"),
+    );
+    assert!((f64::from(at.x.get()) - f64::midpoint(left.x0, right.x1)).abs() < 0.5);
+    assert!(
+        (f64::from(at.y.get()) - left.y0).abs() < 0.5,
+        "on the top edge"
+    );
+    rig.view.selecting_drag = true;
+    assert_eq!(rig.view.range_bar_anchor(), None, "a drag hides the bar");
+}
+
 /// `TRAME-UI-155` and `TRAME-UI-092`: the focus alone opens nothing. A text
 /// typed in the bar opens a session, and the focus stays in the bar.
 #[test]

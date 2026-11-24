@@ -108,6 +108,10 @@ pub struct StyleModel {
     /// What the selection holds, which picks the sections of the context
     /// panel: a shape's or a connector's.
     pub kind: Styled,
+    /// The box and the rotation of a lone shape the user can move, which the
+    /// position section edits (`CHROME-247`). `None` for a selection of
+    /// several, a group, a locked element and an arrow.
+    pub placement: Option<super::panel::Placement>,
 }
 
 /// What a styled selection holds. An arrow is a selection of its own, never
@@ -136,6 +140,7 @@ pub fn arrow_style_scope(id: &Id<Connector>, display: &DisplayViewport) -> Optio
         base,
         mixed: MixedFlags::default(),
         kind: Styled::Arrow,
+        placement: None,
     })
 }
 
@@ -174,6 +179,30 @@ pub fn style_scope_for(
         base,
         mixed,
         kind: Styled::Elements,
+        placement: placement_of(selection, selected),
+    })
+}
+
+/// The box and the rotation of the lone selected shape, when the user can
+/// move it. A group takes its box from its members, and a locked element
+/// refuses the write (`TOILE-150`, `TOILE-234`), so neither has one.
+fn placement_of(
+    selection: &[Id<Element>],
+    selected: &[DisplayElement],
+) -> Option<super::panel::Placement> {
+    let [only] = selection else {
+        return None;
+    };
+    let e = selected.iter().find(|e| &e.id == only)?;
+    let movable = e.locked == crate::message::LockState::Unlocked
+        && !matches!(e.geom, crate::message::DisplayGeom::Group);
+    movable.then(|| {
+        let c = e.transform.as_coeffs();
+        super::panel::Placement {
+            id: e.id.clone(),
+            frame: e.bounds,
+            rotation: ambre_core::Radians::new(c[1].atan2(c[0])),
+        }
     })
 }
 
@@ -253,6 +282,28 @@ mod tests {
         assert_eq!(model.base, s);
         assert_eq!(model.mixed, MixedFlags::default());
         assert!(!model.mixed.any());
+    }
+
+    /// `CHROME-247`: a lone shape the user can move carries its box and its
+    /// rotation. Two shapes and a locked shape carry none.
+    #[test]
+    fn a_lone_movable_shape_carries_its_placement() {
+        let dv = viewport(vec![
+            elem("a", ElementStyle::default()),
+            elem("b", ElementStyle::default()),
+        ]);
+        let mut selected = els(&dv);
+        let lone = style_scope_for(&[eid("a")], &selected).expect("model");
+        let placed = lone.placement.expect("a lone shape is placed");
+        assert_eq!(placed.frame, Rect::new(0.0, 0.0, 10.0, 10.0));
+        assert_eq!(placed.rotation, ambre_core::Radians::ZERO);
+        let two = style_scope_for(&[eid("a"), eid("b")], &selected).expect("model");
+        assert_eq!(two.placement, None);
+        if let Some(a) = selected.first_mut() {
+            a.locked = crate::message::LockState::Locked;
+        }
+        let locked = style_scope_for(&[eid("a")], &selected).expect("model");
+        assert_eq!(locked.placement, None);
     }
 
     /// The culled viewport holds only `a`; `b` is off-screen but in the

@@ -32,6 +32,7 @@ impl TrameView {
         let TrameSignals {
             formula_ref,
             selection_ref,
+            range_bar,
             sheet_setup,
             formula_text,
             formula_action,
@@ -77,6 +78,8 @@ impl TrameView {
             formula_ref,
             #[cfg(target_arch = "wasm32")]
             selection_ref,
+            #[cfg(target_arch = "wasm32")]
+            range_bar,
             #[cfg(target_arch = "wasm32")]
             sheet_setup,
             #[cfg(target_arch = "wasm32")]
@@ -327,6 +330,36 @@ impl TrameView {
             )
         });
         crate::ui::panel::PanelSelection { reference, cells }
+    }
+
+    /// Where the range bar sits: the centre of the top edge of the selection
+    /// in view pixels. `None` hides the bar: a lone cell, an open edit, a drag
+    /// in progress, or a top row out of view (`CHROME-246`).
+    #[cfg_attr(
+        all(not(target_arch = "wasm32"), not(test)),
+        expect(dead_code, reason = "the browser frame alone publishes it")
+    )]
+    pub(crate) fn range_bar_anchor(&self) -> Option<crate::ui::panel::RangeBarAnchor> {
+        let bounds = self.state.selection.bounds();
+        let dragging = self.selecting_drag
+            || self.fill_drag.is_some()
+            || self.axis_drag.is_some()
+            || self.reorder_drag.is_some()
+            || self.resize_drag.is_some();
+        if bounds.is_single_cell() || self.editor.is_some() || dragging {
+            return None;
+        }
+        let left = self.state.cell_pixel_rect(bounds.top_left)?;
+        let right = self
+            .state
+            .cell_pixel_rect(CellPos::new(bounds.top_left.row, bounds.bottom_right.col))
+            .unwrap_or(left);
+        Some(crate::ui::panel::RangeBarAnchor {
+            at: view_point(ambre_draw::Point::new(
+                f64::midpoint(left.x0, right.x1),
+                left.y0,
+            )),
+        })
     }
 
     /// Recompute the active cell's on-screen anchor and publish it for the
