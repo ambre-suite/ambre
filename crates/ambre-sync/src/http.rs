@@ -2232,8 +2232,8 @@ pub(crate) struct SnapshotUploadIdResponse {
 /// Body of `POST /api/documents/{id}/snapshot/upload-id`: the size of the
 /// sealed blob the relay mints an identifier for.
 ///
-/// A typed body in place of a `serde_json::Value`: no body of the worker then
-/// builds a JSON tree, so the tree's code leaves the wasm
+/// A typed body replaces a `serde_json::Value`. No body of the worker builds
+/// a JSON tree, so the code of the tree leaves the wasm
 /// (`ambre-spec-budgets.md` section 5).
 #[derive(Serialize)]
 pub(crate) struct SnapshotUploadIdRequest {

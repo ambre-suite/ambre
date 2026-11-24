@@ -1013,8 +1013,8 @@
   3. The JSON read of an answer keeps `R::deserialize` alone generic.
   4. `serde_json` reads a struct from a JSON object or from a JSON array. The relay sends objects
      alone, so the array decoder of each struct was dead code. The wrapper of
-     `crates/ambre-sync/src/json.rs` reads every struct as a map, at any depth, and refuses an
-     array, as any value of the wrong JSON type is refused.
+     `crates/ambre-sync/src/json.rs` reads every struct as a map, at any depth. It refuses an
+     array, as it refuses any value of the wrong JSON type.
 * **No budget of section 1 moves.** The cuts touch the REST answers and the socket of the SFU,
   which no hot path reads. No security check moves, and the level of `curve25519-dalek` stays 3.
 * **The method.** The first and last rows are `trunk build --release`, then

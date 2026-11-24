@@ -2,7 +2,7 @@
 //! decodes through [`read`].
 //!
 //! The relay sends each struct as a JSON object. `serde_json` also reads a
-//! struct from a JSON array, so each struct of an answer linked a second
+//! struct from a JSON array. So each struct of an answer linked a second
 //! decoder that no answer reaches: about 41 KB of the worker
 //! (`ambre-spec-budgets.md` section 5). [`Objects`] wraps the deserializer of
 //! `serde_json` and reads every struct, at any depth, as a JSON map. A struct
@@ -240,9 +240,8 @@ impl<'de, A: de::VariantAccess<'de>> de::VariantAccess<'de> for Objects<A> {
         self.0.tuple_variant(len, Objects(visitor))
     }
 
-    /// A struct variant reads as a map too: `serde_json` reads its body as a
-    /// struct, and the newtype read hands that body to the deserializer
-    /// above.
+    /// A struct variant reads as a map too. `serde_json` reads its body as a
+    /// struct, and here the newtype read hands that body to a map read.
     fn struct_variant<V: Visitor<'de>>(
         self,
         _fields: &'static [&'static str],
@@ -411,7 +410,7 @@ mod tests {
     }
 
     /// The worker reads a word it does not know as an update to install from
-    /// the start of this message (`SYNC-152`).
+    /// the start of this message.
     #[test]
     fn an_unknown_variant_keeps_the_message_of_serde_json() {
         let ours = from_slice::<Kind>(br#""Later""#).expect_err("no such variant");
