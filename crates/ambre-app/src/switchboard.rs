@@ -17,14 +17,16 @@ use std::collections::{HashMap, VecDeque};
 
 use ambre_bus::conduit::{Sender, TrySendError};
 use ambre_bus::sync_warning::SyncWarningCode;
-use ambre_bus::{AuthFailure, DocumentSummary, MemberInfo, RestCommand, RestEvent, Role};
+use ambre_bus::{
+    AuthFailure, DocumentSummary, MemberInfo, RecipientKeys, RestCommand, RestEvent, Role,
+};
 use ambre_canvas::{PerfPublisher, PerfSnapshot};
 use ambre_chrome::{ToastKind, ToastVoice};
 use ambre_core::id::{Channel, Document, Id, User};
 use ambre_core::{
-    Authored, Confidential, Credential, DisplayName, Email, ExchangePublicKey, FixedBytes, FracMs,
-    Instant, InviterPin, OidcState, Opaque, PageLoad, PassphraseWeakness, Payload,
-    PlaintextContainer, ProviderUrls, RecoveryWords, TimeSpan, Validated,
+    Authored, Confidential, Credential, DisplayName, Email, FixedBytes, FracMs, Instant,
+    InviterPin, OidcState, Opaque, PageLoad, PassphraseWeakness, Payload, PlaintextContainer,
+    ProviderUrls, RecoveryWords, TimeSpan, Validated,
 };
 use ambre_logic::app::{LogicCommand, UiEvent};
 
@@ -761,7 +763,7 @@ impl Switchboard {
                 display_name,
                 email,
                 email_proof,
-                exchange_pub_key,
+                keys,
                 fingerprint,
             } => effects.push(Effect::Classify(TofuPrompt {
                 purpose: tofu::Purpose::Invite {
@@ -771,7 +773,7 @@ impl Switchboard {
                 },
                 user_id: *user_id,
                 display_name: Some(display_name.clone()),
-                exchange_pub_key: *exchange_pub_key,
+                keys: *keys,
                 fingerprint: fingerprint.clone(),
                 contact: tofu::KeyContact::New,
             })),
@@ -780,7 +782,7 @@ impl Switchboard {
             // direct message or the invite wraps a key for them.
             RestEvent::MemberKey {
                 user_id,
-                exchange_pub_key,
+                keys,
                 fingerprint,
             } => {
                 let display_name = roster.member_name(*user_id);
@@ -794,7 +796,7 @@ impl Switchboard {
                     purpose,
                     user_id: *user_id,
                     display_name,
-                    exchange_pub_key: *exchange_pub_key,
+                    keys: *keys,
                     fingerprint: fingerprint.clone(),
                     contact: tofu::KeyContact::New,
                 }));
@@ -941,7 +943,7 @@ impl BusyNotice {
 /// invitation grants.
 pub(crate) fn pin_read(
     prompt: TofuPrompt,
-    pinned: Option<FixedBytes<ExchangePublicKey>>,
+    pinned: Option<RecipientKeys>,
     role: Role,
     now: Instant<Authored>,
 ) -> tofu::Next {
@@ -1006,7 +1008,7 @@ mod tests {
     use ambre_bus::AuthFailure;
     use ambre_bus::conduit;
     use ambre_bus::sync_warning::SyncWarningCode;
-    use ambre_bus::{Authored, DirectMember, Instant};
+    use ambre_bus::{Authored, DirectMember, Instant, RecipientKeys};
     use ambre_bus::{Confidential, DocType, Plaintext, RestCommand, RestEvent, Role};
     use ambre_canvas::{PerfPublisher, PerfSnapshot};
     use ambre_chrome::{ToastKind, ToastVoice};
@@ -1481,6 +1483,15 @@ mod tests {
         FixedBytes::from_array([byte; 32])
     }
 
+    /// The pair of keys of `byte`: the exchange key [`key`], and a signing key
+    /// that differs from it.
+    fn keys(byte: u8) -> RecipientKeys {
+        RecipientKeys {
+            exchange: key(byte),
+            signing: FixedBytes::from_array([byte ^ 0x80; 32]),
+        }
+    }
+
     fn rest(evt: RestEvent) -> UiEvent {
         UiEvent::Rest { id: None, evt }
     }
@@ -1501,7 +1512,7 @@ mod tests {
     fn member_key(user_id: Id<User>, byte: u8) -> UiEvent {
         rest(RestEvent::MemberKey {
             user_id,
-            exchange_pub_key: key(byte),
+            keys: keys(byte),
             fingerprint: Opaque::<KeyFingerprints>::new("ABCD EFGH"),
         })
     }
@@ -1586,7 +1597,7 @@ mod tests {
         );
         assert_eq!(prompt.user_id, user);
         assert_eq!(prompt.display_name, Some(name("Bob")));
-        assert_eq!(prompt.exchange_pub_key, key(3));
+        assert_eq!(prompt.keys, keys(3));
         assert_eq!(prompt.fingerprint.as_str(), "ABCD EFGH");
         assert_eq!(prompt.contact, KeyContact::New);
 
@@ -1631,7 +1642,7 @@ mod tests {
             display_name: name("Ada"),
             email: Email::from("ada@test.local"),
             email_proof: ambre_core::EmailProof::Asserted,
-            exchange_pub_key: key(7),
+            keys: keys(7),
             fingerprint: Opaque::<KeyFingerprints>::new("WXYZ"),
         });
         let prompt = classified(Switchboard::new(Page::Document).service(&ev, on(None), &nobody()));
@@ -1652,7 +1663,7 @@ mod tests {
             Next::Ask(asked) => assert_eq!(asked.contact, KeyContact::New),
             Next::Proceed(sent) => panic!("a key with no pin left with no prompt: {sent:?}"),
         }
-        match pin_read(prompt, Some(key(8)), Role::Editor, AT) {
+        match pin_read(prompt, Some(keys(8)), Role::Editor, AT) {
             Next::Ask(asked) => assert_eq!(asked.contact, KeyContact::Changed),
             Next::Proceed(sent) => panic!("a changed key left with no prompt: {sent:?}"),
         }
@@ -1674,7 +1685,7 @@ mod tests {
             display_name: name("Ada"),
             email: Email::from("ada@test.local"),
             email_proof: ambre_core::EmailProof::Asserted,
-            exchange_pub_key: key(7),
+            keys: keys(7),
             fingerprint: Opaque::<KeyFingerprints>::new("WXYZ"),
         });
         let prompt = classified(Switchboard::new(Page::Document).service(&ev, on(None), &nobody()));
@@ -1689,7 +1700,7 @@ mod tests {
                     ..
                 },
             ..
-        }) = pin_read(prompt, Some(key(7)), Role::Viewer, AT)
+        }) = pin_read(prompt, Some(keys(7)), Role::Viewer, AT)
         else {
             panic!("a pinned key did not invite");
         };
@@ -1698,6 +1709,60 @@ mod tests {
         assert_eq!(role, Role::Viewer);
         assert_eq!(expect_exchange_pub_key, key(7));
         assert_eq!(now, AT, "the invitation is dated by another clock");
+    }
+
+    /// `CHROME-141`, audit `P44`: the relay serves the pinned exchange key of
+    /// a recipient beside a signing key of its own. The invitation, the
+    /// invite into a channel and the direct message each ask as for a changed
+    /// key, and send nothing. The pinned pair alone goes out unasked.
+    #[test]
+    fn a_pinned_exchange_key_beside_another_signing_key_asks_as_a_change() {
+        let user_id = Id::<User>::mint();
+        let channel = Id::<Channel>::mint();
+        let swapped = RecipientKeys {
+            signing: FixedBytes::from_array([0xEE; 32]),
+            ..keys(7)
+        };
+        let invitee = rest(RestEvent::InviteeKey {
+            document_id: Id::<Document>::mint(),
+            user_id,
+            display_name: name("Ada"),
+            email: Email::from("ada@test.local"),
+            email_proof: ambre_core::EmailProof::Verified,
+            keys: swapped,
+            fingerprint: Opaque::<KeyFingerprints>::new("WXYZ"),
+        });
+        let member = rest(RestEvent::MemberKey {
+            user_id,
+            keys: swapped,
+            fingerprint: Opaque::<KeyFingerprints>::new("WXYZ"),
+        });
+        let roster = Members {
+            name: Some(name("Ada")),
+            invite: Cell::new(Some((user_id, channel))),
+        };
+        let mut murmure = Switchboard::new(Page::Murmure);
+        let prompts = [
+            classified(Switchboard::new(Page::Document).service(&invitee, on(None), &nobody())),
+            classified(murmure.service(&member, on(None), &roster)),
+            classified(murmure.service(&member, on(None), &roster)),
+        ];
+        assert!(matches!(prompts[1].purpose, Purpose::Channel { .. }));
+        assert!(matches!(prompts[2].purpose, Purpose::Direct { .. }));
+        for prompt in prompts {
+            let purpose = prompt.purpose.clone();
+            match pin_read(prompt.clone(), Some(keys(7)), Role::Editor, AT) {
+                Next::Ask(asked) => assert_eq!(asked.contact, KeyContact::Changed, "{purpose:?}"),
+                Next::Proceed(sent) => panic!("a swapped signing key left: {sent:?}"),
+            }
+            assert!(
+                matches!(
+                    pin_read(prompt, Some(swapped), Role::Editor, AT),
+                    Next::Proceed(_)
+                ),
+                "the pinned pair asked again for {purpose:?}"
+            );
+        }
     }
 
     /// The pinned key of a Murmure member opens the direct message of the two
@@ -1714,7 +1779,7 @@ mod tests {
         let later = AT.plus(TimeSpan::<Ms>::new(60_000));
         for at in [AT, later] {
             let Next::Proceed(LogicCommand::OpenDirectMessage { draft, now }) =
-                pin_read(prompt.clone(), Some(key(5)), Role::Editor, at)
+                pin_read(prompt.clone(), Some(keys(5)), Role::Editor, at)
             else {
                 panic!("a pinned member key did not open the direct message");
             };

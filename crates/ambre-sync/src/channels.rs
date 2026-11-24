@@ -867,6 +867,12 @@ impl SyncState {
             Ok(prepared) => prepared,
             Err(message) => return self.channel_answered(channel_id, Err(message.into())),
         };
+        // The keys this session showed for each member, whose fingerprint
+        // the user compared before the request (audit `P44`).
+        let shown: Vec<_> = members
+            .iter()
+            .map(|member| self.shown_identities.get(&member.user_id).copied())
+            .collect();
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
@@ -874,11 +880,11 @@ impl SyncState {
             let base = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base);
             let result = async {
                 let mut signing_keys = Vec::with_capacity(members.len());
-                for member in &members {
+                for (member, shown) in members.iter().zip(&shown) {
                     let url = base.route(format!("/users/{}/pubkeys", member.user_id));
                     let served =
                         http::get_json_auth::<http::PubkeysResponse>(&url, auth.clone()).await?;
-                    check_pinned(member, &served.exchange_pubkey)?;
+                    check_pinned(member, &served, shown.as_ref())?;
                     signing_keys.push(served.signing_pubkey);
                 }
                 let invited: Vec<_> = members.iter().zip(signing_keys).collect();
@@ -1499,13 +1505,23 @@ pub(crate) fn direct_message_request(
     })
 }
 
-/// Refuse a member whose exchange key, as the relay serves it now, is not
-/// the one the view pinned for them.
+/// Refuse a member whose keys, as the relay serves them now, differ from
+/// the keys this session showed. Those are the exchange key the view pinned
+/// and the signing key the fingerprint covered beside it (`CHROME-140`).
+///
+/// A member this session showed no keys for is refused too. The signing key
+/// the entry binds would then be one no person compared.
 pub(crate) fn check_pinned(
     member: &DirectMember,
-    served: &FixedBytes<ambre_core::ExchangePublicKey>,
+    served: &http::PubkeysResponse,
+    shown: Option<&ambre_crypto::IdentityKeys>,
 ) -> Result<(), SyncError> {
-    if *served == member.exchange_pub_key {
+    let served_keys = ambre_crypto::IdentityKeys {
+        exchange: served.exchange_pubkey,
+        signing: served.signing_pubkey,
+    };
+    let pinned = served.exchange_pubkey == member.exchange_pub_key;
+    if pinned && shown == Some(&served_keys) {
         Ok(())
     } else {
         Err(SyncError::PinMismatch(member.user_id))
@@ -3098,13 +3114,39 @@ pub(crate) mod tests {
     }
 
     /// A member whose key the relay now serves differently is refused: no
-    /// wrap leaves under a key the view did not pin.
+    /// wrap leaves under a key the view did not pin. `CHROME-140`, audit
+    /// `P44`: a signing key other than the one this session showed, or a
+    /// member this session showed nothing for, is refused too.
     #[test]
     fn a_key_other_than_the_pinned_one_is_refused() {
         let bob = member_of(&exchange_key(2));
-        assert!(check_pinned(&bob, &bob.exchange_pub_key).is_ok());
-        let other = crate::sharing::own_exchange_key(&exchange_key(3));
-        assert!(check_pinned(&bob, &other).is_err());
+        let signing = FixedBytes::<ambre_core::PublicKey>::from_array([0x5B; 32]);
+        let served = http::PubkeysResponse {
+            signing_pubkey: signing,
+            exchange_pubkey: bob.exchange_pub_key,
+        };
+        let shown = ambre_crypto::IdentityKeys {
+            exchange: bob.exchange_pub_key,
+            signing,
+        };
+        assert!(check_pinned(&bob, &served, Some(&shown)).is_ok());
+        let other = http::PubkeysResponse {
+            exchange_pubkey: crate::sharing::own_exchange_key(&exchange_key(3)),
+            ..served
+        };
+        assert!(
+            check_pinned(&bob, &other, Some(&shown)).is_err(),
+            "another exchange key"
+        );
+        let swapped = http::PubkeysResponse {
+            signing_pubkey: FixedBytes::from_array([0xEE; 32]),
+            ..served
+        };
+        assert!(
+            check_pinned(&bob, &swapped, Some(&shown)).is_err(),
+            "another signing key"
+        );
+        assert!(check_pinned(&bob, &served, None).is_err(), "no keys shown");
         // A key that is not hex never reaches the pin: the answer that
         // carries it is refused when it is read.
         let served = serde_json::json!({

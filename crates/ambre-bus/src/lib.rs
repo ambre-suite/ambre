@@ -72,7 +72,8 @@ pub use plane::{ChannelPlane, NoChannels, PlaneOf};
 pub use port::{Feed, Port};
 pub use rest::{
     Confidential, DocumentSummary, DraftKey, KeySetup, MemberInfo, MemberStanding, Plaintext,
-    RecoveryWords, Request, RestCommand, RestEvent, RowPlace, SealedRow, UserInfo, next_request,
+    RecipientKeys, RecoveryWords, Request, RestCommand, RestEvent, RowPlace, SealedRow, UserInfo,
+    next_request,
 };
 pub use sink::CommandSink;
 pub use token::{Token, TokenKind};
