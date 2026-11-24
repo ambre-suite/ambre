@@ -1198,7 +1198,7 @@ fn expect_ok(request: &Outgoing, resp: &Incoming) -> Result<(), HttpError> {
         return Ok(());
     }
     let code = if matches!(resp.status.get(), 403 | 409) {
-        serde_json::from_slice::<RefusalBody>(resp.body.as_bytes())
+        crate::json::from_slice::<RefusalBody>(resp.body.as_bytes())
             .ok()
             .map(|body| body.error)
     } else {
@@ -1223,7 +1223,7 @@ fn read_json<R: serde::de::DeserializeOwned>(
 ) -> Result<R, HttpError> {
     expect_ok(request, resp)?;
     let mut json = serde_json::Deserializer::from_slice(resp.body.as_bytes());
-    match R::deserialize(&mut json) {
+    match crate::json::read::<R>(&mut json) {
         Ok(value) => end_json(request, &mut json).map(|()| value),
         Err(e) => Err(unreadable(request, &e)),
     }

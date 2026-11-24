@@ -687,7 +687,7 @@ impl SyncState {
                 let text = data.as_string()?;
                 // The slice reader the REST answers use: a second reader
                 // would link a second copy of the JSON parser.
-                serde_json::from_slice::<SfuMsg>(text.as_bytes())
+                crate::json::from_slice::<SfuMsg>(text.as_bytes())
                     .ok()
                     .map(SyncEvent::CallSfu)
             },
