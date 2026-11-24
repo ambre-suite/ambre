@@ -71,6 +71,8 @@ pub struct ToilePanelSignals {
     /// The board's frames, which the frames section lists, and the intent
     /// that selects one (`CHROME-251`).
     pub deck: DeckSignals,
+    /// The count of the selection, which the subtitle reads.
+    pub stats: RwSignal<Option<crate::ui::status::SelStats>>,
 }
 
 /// The value of one field, mixed when the selection disagrees on it.
@@ -100,6 +102,7 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
         restyle,
         place,
         deck,
+        stats,
     } = signals;
     let kind = Memo::new(move |_| model.with(|m| PanelKind::of(m.as_ref())));
 
@@ -470,6 +473,7 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
     });
     PanelContent {
         title: Signal::derive(move || kind.get().title().to_owned()),
+        subtitle: Signal::derive(move || kind.get().subtitle(stats.with(|s| s.map(|s| s.count)))),
         sections,
     }
 }

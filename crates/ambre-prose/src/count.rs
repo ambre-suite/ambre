@@ -42,6 +42,13 @@ pub fn compute_word_count(document: &LoroDoc, roots: &Roots) -> WordCount {
     count
 }
 
+/// The words of `text`: the UAX #29 word segments that hold a letter or a
+/// digit.
+#[must_use]
+pub fn words_in(text: &str) -> Count<Words> {
+    Count::<Words>::of(text.unicode_words().count())
+}
+
 /// Add one block's text to the running counts.
 ///
 /// The break between two paragraphs is whitespace the tree does not store. It
@@ -58,9 +65,7 @@ fn add_block(text: &str, count: &mut WordCount) {
     }
     // A document past four billion clusters reads as the largest figure
     // rather than wrapping: every count holds at its top.
-    count.words = count
-        .words
-        .plus(Count::<Words>::of(text.unicode_words().count()));
+    count.words = count.words.plus(words_in(text));
     count.characters = count.characters.plus(Count::<Graphemes>::of(visible));
     count.characters_with_spaces = count
         .characters_with_spaces

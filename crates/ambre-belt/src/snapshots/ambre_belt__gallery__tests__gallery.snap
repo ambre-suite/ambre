@@ -44,14 +44,16 @@ frame ambre-ctx-head#4 rest | min-h 44px | pad 8px 8px 8px 14px | border none | 
 frame ambre-ctx-title#5 rest | pad 0px 0px 0px 0px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 13px/600 | fg rgb(31, 27, 22)
 frame ambre-icon-button#6 rest | w 28px | h 28px | pad 0px 0px 0px 0px | border 1px solid rgba(0, 0, 0, 0) | radius 8px | bg rgba(0, 0, 0, 0) | font 13px/400 | fg rgb(111, 103, 92)
 frame svg#7 rest | w 16px | h 16px | fg rgb(111, 103, 92)
-frame ambre-ctx-section-head#8 rest | pad 12px 14px 8px 14px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 11px/600 | fg rgb(154, 145, 132)
-frame ambre-ctx-section-body#9 rest | pad 0px 14px 12px 14px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 12px/400 | fg rgb(31, 27, 22)
-frame ambre-kit-label#10 rest | pad 0px 0px 0px 0px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 12px/400 | fg rgb(111, 103, 92)
-frame ambre-stepper#11 rest | h 28px | pad 0px 0px 0px 0px | border 1px solid rgb(189, 179, 164) | radius 8px | bg rgb(239, 236, 230) | font 12px/400 | fg rgb(31, 27, 22)
-frame ambre-stepper-step#12 rest | w 24px | h 26px | pad 0px 0px 0px 0px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 13.3333px/400 | fg rgb(111, 103, 92)
-frame input#13 rest | pad 0px 2px 0px 2px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 12px/400 | fg rgb(31, 27, 22)
-frame ambre-stepper-unit#14 rest | pad 0px 4px 0px 2px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 11px/400 | fg rgb(154, 145, 132)
-frame ambre-stepper-step#15 rest | w 24px | h 26px | pad 0px 0px 0px 0px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 13.3333px/400 | fg rgb(111, 103, 92)
+frame ambre-icon-button#8 rest | w 28px | h 28px | pad 0px 0px 0px 0px | border 1px solid rgba(0, 0, 0, 0) | radius 8px | bg rgba(0, 0, 0, 0) | font 13px/400 | fg rgb(111, 103, 92)
+frame svg#9 rest | w 16px | h 16px | fg rgb(111, 103, 92)
+frame ambre-ctx-section-head#10 rest | pad 12px 14px 8px 14px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 11px/600 | fg rgb(154, 145, 132)
+frame ambre-ctx-section-body#11 rest | pad 0px 14px 12px 14px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 12px/400 | fg rgb(31, 27, 22)
+frame ambre-kit-label#12 rest | pad 0px 0px 0px 0px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 12px/400 | fg rgb(111, 103, 92)
+frame ambre-stepper#13 rest | h 28px | pad 0px 0px 0px 0px | border 1px solid rgb(189, 179, 164) | radius 8px | bg rgb(239, 236, 230) | font 12px/400 | fg rgb(31, 27, 22)
+frame ambre-stepper-step#14 rest | w 24px | h 26px | pad 0px 0px 0px 0px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 13.3333px/400 | fg rgb(111, 103, 92)
+frame input#15 rest | pad 0px 2px 0px 2px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 12px/400 | fg rgb(31, 27, 22)
+frame ambre-stepper-unit#16 rest | pad 0px 4px 0px 2px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 11px/400 | fg rgb(154, 145, 132)
+frame ambre-stepper-step#17 rest | w 24px | h 26px | pad 0px 0px 0px 0px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 13.3333px/400 | fg rgb(111, 103, 92)
 icon-button ambre-icon-button#0 hover | w 28px | h 28px | pad 0px 0px 0px 0px | border 1px solid rgb(189, 179, 164) | radius 8px | bg rgb(231, 227, 220) | font 13px/400 | fg rgb(31, 27, 22)
 icon-button ambre-icon-button#0 focus-visible | w 28px | h 28px | pad 0px 0px 0px 0px | border 1px solid rgb(189, 179, 164) | radius 8px | bg rgb(239, 236, 230) | font 13px/400 | fg rgb(31, 27, 22) | outline 2px solid rgb(180, 83, 9) +2px
 icon-button ambre-icon-button#0 active | w 28px | h 28px | pad 0px 0px 0px 0px | border 1px solid rgb(189, 179, 164) | radius 8px | bg rgb(239, 236, 230) | font 13px/400 | fg rgb(31, 27, 22)
@@ -118,15 +120,18 @@ frame ambre-icon-button#1 active | w 32px | h 32px | pad 0px 0px 0px 0px | borde
 frame ambre-icon-button#2 hover | w 28px | h 28px | pad 0px 0px 0px 0px | border 1px solid rgba(0, 0, 0, 0) | radius 8px | bg rgb(231, 227, 220) | font 13px/400 | fg rgb(31, 27, 22)
 frame ambre-icon-button#2 focus-visible | w 28px | h 28px | pad 0px 0px 0px 0px | border 1px solid rgba(0, 0, 0, 0) | radius 8px | bg rgba(0, 0, 0, 0) | font 13px/400 | fg rgb(111, 103, 92) | outline 2px solid rgb(180, 83, 9) +2px
 frame ambre-icon-button#2 active | w 28px | h 28px | pad 0px 0px 0px 0px | border 1px solid rgba(0, 0, 0, 0) | radius 8px | bg rgba(0, 0, 0, 0) | font 13px/400 | fg rgb(111, 103, 92)
-frame ambre-ctx-section-head#3 hover | pad 12px 14px 8px 14px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 11px/600 | fg rgb(31, 27, 22)
-frame ambre-ctx-section-head#3 focus-visible | pad 12px 14px 8px 14px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 11px/600 | fg rgb(154, 145, 132) | outline 2px solid rgb(180, 83, 9) +2px
-frame ambre-ctx-section-head#3 active | pad 12px 14px 8px 14px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 11px/600 | fg rgb(154, 145, 132)
-frame ambre-stepper-step#4 hover | w 24px | h 26px | pad 0px 0px 0px 0px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 13.3333px/400 | fg rgb(31, 27, 22)
-frame ambre-stepper-step#4 focus-visible | w 24px | h 26px | pad 0px 0px 0px 0px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 13.3333px/400 | fg rgb(111, 103, 92) | outline 2px solid rgb(180, 83, 9) +2px
-frame ambre-stepper-step#4 active | w 24px | h 26px | pad 0px 0px 0px 0px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 13.3333px/400 | fg rgb(111, 103, 92)
+frame ambre-icon-button#3 hover | w 28px | h 28px | pad 0px 0px 0px 0px | border 1px solid rgba(0, 0, 0, 0) | radius 8px | bg rgb(231, 227, 220) | font 13px/400 | fg rgb(31, 27, 22)
+frame ambre-icon-button#3 focus-visible | w 28px | h 28px | pad 0px 0px 0px 0px | border 1px solid rgba(0, 0, 0, 0) | radius 8px | bg rgba(0, 0, 0, 0) | font 13px/400 | fg rgb(111, 103, 92) | outline 2px solid rgb(180, 83, 9) +2px
+frame ambre-icon-button#3 active | w 28px | h 28px | pad 0px 0px 0px 0px | border 1px solid rgba(0, 0, 0, 0) | radius 8px | bg rgba(0, 0, 0, 0) | font 13px/400 | fg rgb(111, 103, 92)
+frame ambre-ctx-section-head#4 hover | pad 12px 14px 8px 14px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 11px/600 | fg rgb(31, 27, 22)
+frame ambre-ctx-section-head#4 focus-visible | pad 12px 14px 8px 14px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 11px/600 | fg rgb(154, 145, 132) | outline 2px solid rgb(180, 83, 9) +2px
+frame ambre-ctx-section-head#4 active | pad 12px 14px 8px 14px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 11px/600 | fg rgb(154, 145, 132)
 frame ambre-stepper-step#5 hover | w 24px | h 26px | pad 0px 0px 0px 0px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 13.3333px/400 | fg rgb(31, 27, 22)
 frame ambre-stepper-step#5 focus-visible | w 24px | h 26px | pad 0px 0px 0px 0px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 13.3333px/400 | fg rgb(111, 103, 92) | outline 2px solid rgb(180, 83, 9) +2px
 frame ambre-stepper-step#5 active | w 24px | h 26px | pad 0px 0px 0px 0px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 13.3333px/400 | fg rgb(111, 103, 92)
+frame ambre-stepper-step#6 hover | w 24px | h 26px | pad 0px 0px 0px 0px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 13.3333px/400 | fg rgb(31, 27, 22)
+frame ambre-stepper-step#6 focus-visible | w 24px | h 26px | pad 0px 0px 0px 0px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 13.3333px/400 | fg rgb(111, 103, 92) | outline 2px solid rgb(180, 83, 9) +2px
+frame ambre-stepper-step#6 active | w 24px | h 26px | pad 0px 0px 0px 0px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 13.3333px/400 | fg rgb(111, 103, 92)
 == theme dark
 icon-button ambre-icon-button#0 rest | w 28px | h 28px | pad 0px 0px 0px 0px | border 1px solid rgb(90, 81, 69) | radius 8px | bg rgb(23, 21, 17) | font 13px/400 | fg rgb(238, 232, 223)
 icon-button svg#1 rest | w 16px | h 16px | fg rgb(238, 232, 223)
@@ -169,14 +174,16 @@ frame ambre-ctx-head#4 rest | min-h 44px | pad 8px 8px 8px 14px | border none | 
 frame ambre-ctx-title#5 rest | pad 0px 0px 0px 0px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 13px/600 | fg rgb(238, 232, 223)
 frame ambre-icon-button#6 rest | w 28px | h 28px | pad 0px 0px 0px 0px | border 1px solid rgba(0, 0, 0, 0) | radius 8px | bg rgba(0, 0, 0, 0) | font 13px/400 | fg rgb(165, 154, 137)
 frame svg#7 rest | w 16px | h 16px | fg rgb(165, 154, 137)
-frame ambre-ctx-section-head#8 rest | pad 12px 14px 8px 14px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 11px/600 | fg rgb(123, 114, 102)
-frame ambre-ctx-section-body#9 rest | pad 0px 14px 12px 14px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 12px/400 | fg rgb(238, 232, 223)
-frame ambre-kit-label#10 rest | pad 0px 0px 0px 0px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 12px/400 | fg rgb(165, 154, 137)
-frame ambre-stepper#11 rest | h 28px | pad 0px 0px 0px 0px | border 1px solid rgb(90, 81, 69) | radius 8px | bg rgb(23, 21, 17) | font 12px/400 | fg rgb(238, 232, 223)
-frame ambre-stepper-step#12 rest | w 24px | h 26px | pad 0px 0px 0px 0px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 13.3333px/400 | fg rgb(165, 154, 137)
-frame input#13 rest | pad 0px 2px 0px 2px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 12px/400 | fg rgb(238, 232, 223)
-frame ambre-stepper-unit#14 rest | pad 0px 4px 0px 2px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 11px/400 | fg rgb(123, 114, 102)
-frame ambre-stepper-step#15 rest | w 24px | h 26px | pad 0px 0px 0px 0px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 13.3333px/400 | fg rgb(165, 154, 137)
+frame ambre-icon-button#8 rest | w 28px | h 28px | pad 0px 0px 0px 0px | border 1px solid rgba(0, 0, 0, 0) | radius 8px | bg rgba(0, 0, 0, 0) | font 13px/400 | fg rgb(165, 154, 137)
+frame svg#9 rest | w 16px | h 16px | fg rgb(165, 154, 137)
+frame ambre-ctx-section-head#10 rest | pad 12px 14px 8px 14px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 11px/600 | fg rgb(123, 114, 102)
+frame ambre-ctx-section-body#11 rest | pad 0px 14px 12px 14px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 12px/400 | fg rgb(238, 232, 223)
+frame ambre-kit-label#12 rest | pad 0px 0px 0px 0px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 12px/400 | fg rgb(165, 154, 137)
+frame ambre-stepper#13 rest | h 28px | pad 0px 0px 0px 0px | border 1px solid rgb(90, 81, 69) | radius 8px | bg rgb(23, 21, 17) | font 12px/400 | fg rgb(238, 232, 223)
+frame ambre-stepper-step#14 rest | w 24px | h 26px | pad 0px 0px 0px 0px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 13.3333px/400 | fg rgb(165, 154, 137)
+frame input#15 rest | pad 0px 2px 0px 2px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 12px/400 | fg rgb(238, 232, 223)
+frame ambre-stepper-unit#16 rest | pad 0px 4px 0px 2px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 11px/400 | fg rgb(123, 114, 102)
+frame ambre-stepper-step#17 rest | w 24px | h 26px | pad 0px 0px 0px 0px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 13.3333px/400 | fg rgb(165, 154, 137)
 icon-button ambre-icon-button#0 hover | w 28px | h 28px | pad 0px 0px 0px 0px | border 1px solid rgb(90, 81, 69) | radius 8px | bg rgb(42, 38, 32) | font 13px/400 | fg rgb(238, 232, 223)
 icon-button ambre-icon-button#0 focus-visible | w 28px | h 28px | pad 0px 0px 0px 0px | border 1px solid rgb(90, 81, 69) | radius 8px | bg rgb(23, 21, 17) | font 13px/400 | fg rgb(238, 232, 223) | outline 2px solid rgb(242, 169, 61) +2px
 icon-button ambre-icon-button#0 active | w 28px | h 28px | pad 0px 0px 0px 0px | border 1px solid rgb(90, 81, 69) | radius 8px | bg rgb(23, 21, 17) | font 13px/400 | fg rgb(238, 232, 223)
@@ -243,12 +250,15 @@ frame ambre-icon-button#1 active | w 32px | h 32px | pad 0px 0px 0px 0px | borde
 frame ambre-icon-button#2 hover | w 28px | h 28px | pad 0px 0px 0px 0px | border 1px solid rgba(0, 0, 0, 0) | radius 8px | bg rgb(42, 38, 32) | font 13px/400 | fg rgb(238, 232, 223)
 frame ambre-icon-button#2 focus-visible | w 28px | h 28px | pad 0px 0px 0px 0px | border 1px solid rgba(0, 0, 0, 0) | radius 8px | bg rgba(0, 0, 0, 0) | font 13px/400 | fg rgb(165, 154, 137) | outline 2px solid rgb(242, 169, 61) +2px
 frame ambre-icon-button#2 active | w 28px | h 28px | pad 0px 0px 0px 0px | border 1px solid rgba(0, 0, 0, 0) | radius 8px | bg rgba(0, 0, 0, 0) | font 13px/400 | fg rgb(165, 154, 137)
-frame ambre-ctx-section-head#3 hover | pad 12px 14px 8px 14px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 11px/600 | fg rgb(238, 232, 223)
-frame ambre-ctx-section-head#3 focus-visible | pad 12px 14px 8px 14px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 11px/600 | fg rgb(123, 114, 102) | outline 2px solid rgb(242, 169, 61) +2px
-frame ambre-ctx-section-head#3 active | pad 12px 14px 8px 14px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 11px/600 | fg rgb(123, 114, 102)
-frame ambre-stepper-step#4 hover | w 24px | h 26px | pad 0px 0px 0px 0px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 13.3333px/400 | fg rgb(238, 232, 223)
-frame ambre-stepper-step#4 focus-visible | w 24px | h 26px | pad 0px 0px 0px 0px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 13.3333px/400 | fg rgb(165, 154, 137) | outline 2px solid rgb(242, 169, 61) +2px
-frame ambre-stepper-step#4 active | w 24px | h 26px | pad 0px 0px 0px 0px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 13.3333px/400 | fg rgb(165, 154, 137)
+frame ambre-icon-button#3 hover | w 28px | h 28px | pad 0px 0px 0px 0px | border 1px solid rgba(0, 0, 0, 0) | radius 8px | bg rgb(42, 38, 32) | font 13px/400 | fg rgb(238, 232, 223)
+frame ambre-icon-button#3 focus-visible | w 28px | h 28px | pad 0px 0px 0px 0px | border 1px solid rgba(0, 0, 0, 0) | radius 8px | bg rgba(0, 0, 0, 0) | font 13px/400 | fg rgb(165, 154, 137) | outline 2px solid rgb(242, 169, 61) +2px
+frame ambre-icon-button#3 active | w 28px | h 28px | pad 0px 0px 0px 0px | border 1px solid rgba(0, 0, 0, 0) | radius 8px | bg rgba(0, 0, 0, 0) | font 13px/400 | fg rgb(165, 154, 137)
+frame ambre-ctx-section-head#4 hover | pad 12px 14px 8px 14px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 11px/600 | fg rgb(238, 232, 223)
+frame ambre-ctx-section-head#4 focus-visible | pad 12px 14px 8px 14px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 11px/600 | fg rgb(123, 114, 102) | outline 2px solid rgb(242, 169, 61) +2px
+frame ambre-ctx-section-head#4 active | pad 12px 14px 8px 14px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 11px/600 | fg rgb(123, 114, 102)
 frame ambre-stepper-step#5 hover | w 24px | h 26px | pad 0px 0px 0px 0px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 13.3333px/400 | fg rgb(238, 232, 223)
 frame ambre-stepper-step#5 focus-visible | w 24px | h 26px | pad 0px 0px 0px 0px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 13.3333px/400 | fg rgb(165, 154, 137) | outline 2px solid rgb(242, 169, 61) +2px
 frame ambre-stepper-step#5 active | w 24px | h 26px | pad 0px 0px 0px 0px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 13.3333px/400 | fg rgb(165, 154, 137)
+frame ambre-stepper-step#6 hover | w 24px | h 26px | pad 0px 0px 0px 0px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 13.3333px/400 | fg rgb(238, 232, 223)
+frame ambre-stepper-step#6 focus-visible | w 24px | h 26px | pad 0px 0px 0px 0px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 13.3333px/400 | fg rgb(165, 154, 137) | outline 2px solid rgb(242, 169, 61) +2px
+frame ambre-stepper-step#6 active | w 24px | h 26px | pad 0px 0px 0px 0px | border none | radius 0px | bg rgba(0, 0, 0, 0) | font 13.3333px/400 | fg rgb(165, 154, 137)

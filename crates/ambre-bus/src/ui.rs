@@ -262,6 +262,13 @@ pub enum UiEvent<E = Infallible, P: ChannelPlane = NoChannels> {
     /// The relay speaks a newer wire version than this build. It calls for a
     /// reload onto the new client, not for an error (`ambre-spec-sync.md`, `SYNC-137`).
     UpdateRequired,
+
+    /// The settings of the account, read whole whenever one changes, here or
+    /// on another device (`SETTINGS-012`). The view applies them, and writes
+    /// the boot hint of the device from them (`SETTINGS-029`).
+    SettingsChanged {
+        settings: ambre_client_core::UserSettings,
+    },
 }
 
 impl<E, P: ChannelPlane> UiEvent<E, P> {
@@ -449,6 +456,7 @@ impl<E, P: ChannelPlane> UiEvent<E, P> {
             },
             Self::SetupRequired => UiEvent::SetupRequired,
             Self::UpdateRequired => UiEvent::UpdateRequired,
+            Self::SettingsChanged { settings } => UiEvent::SettingsChanged { settings },
         })
     }
 

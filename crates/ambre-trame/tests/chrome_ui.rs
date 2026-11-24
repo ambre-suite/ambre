@@ -804,7 +804,10 @@ async fn the_panel_announces_the_registry_labels() {
             on_command: Callback::new(|_| {}),
             on_style: Callback::new(|_| {}),
             // A lone cell shows every section (`CHROME-253`).
-            selection: RwSignal::new(ambre_core::Validated::new("B2")),
+            selection: RwSignal::new(panel::PanelSelection {
+                reference: ambre_core::Validated::new("B2"),
+                cells: ambre_core::Count::new(1),
+            }),
             sheet: RwSignal::new(None),
             sheets: RwSignal::new(Vec::new()),
             active_sheet: RwSignal::new(Id::<Sheet>::from_text("s0".to_owned())),
@@ -927,7 +930,10 @@ async fn the_sheet_panel_names_the_selection_and_folds_its_print_group() {
     use ambre_chrome::{ContextPanel, DockSide, Fold, PanelPrefs, PanelWidth};
     use ambre_trame::message::{FrozenPane, PageMargins, PageOrientation, PageSetup, PaperSize};
     use ambre_trame::ui::panel;
-    let selection = RwSignal::new(ambre_core::Validated::new("B2:D5"));
+    let selection = RwSignal::new(panel::PanelSelection {
+        reference: ambre_core::Validated::new("B2:D5"),
+        cells: ambre_core::Count::new(12),
+    });
     let sheet = RwSignal::new(Some(panel::ActiveSheet {
         page: PageSetup {
             paper: PaperSize::Letter,
@@ -955,7 +961,14 @@ async fn the_sheet_panel_names_the_selection_and_folds_its_print_group() {
             on_rename: Callback::new(|_| {}),
         });
         let prefs = PanelPrefs::new(DockSide::Right, PanelWidth::DEFAULT, Fold::Open);
-        view! { <ContextPanel prefs=prefs title=content.title sections=content.sections /> }
+        view! {
+            <ContextPanel
+                prefs=prefs
+                title=content.title
+                subtitle=content.subtitle
+                sections=content.sections
+            />
+        }
     });
     leptos::task::tick().await;
     let text = |selector: &str| {
@@ -967,6 +980,8 @@ async fn the_sheet_panel_names_the_selection_and_folds_its_print_group() {
             .unwrap_or_default()
     };
     assert_eq!(text(".ambre-ctx-title"), "B2:D5");
+    // The subtitle counts the cells the selection spans (`CHROME-241`).
+    assert_eq!(text(".ambre-ctx-subtitle"), "12 cells");
     // `CHROME-253`: a range shows the cells first and no sheet section; a
     // lone cell shows the sheet first, then the cells.
     let order = || {
@@ -982,9 +997,13 @@ async fn the_sheet_panel_names_the_selection_and_folds_its_print_group() {
         Some(panel::CELLS.as_str())
     );
     assert!(!order().iter().any(|s| s == panel::SHEET.as_str()));
-    selection.set(ambre_core::Validated::new("C3"));
+    selection.set(panel::PanelSelection {
+        reference: ambre_core::Validated::new("C3"),
+        cells: ambre_core::Count::new(1),
+    });
     leptos::task::tick().await;
     assert_eq!(text(".ambre-ctx-title"), "C3");
+    assert_eq!(text(".ambre-ctx-subtitle"), "1 cell");
     assert_eq!(
         order().first().map(String::as_str),
         Some(panel::SHEET.as_str())

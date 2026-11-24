@@ -439,6 +439,16 @@ impl ProseView {
             .with_untracked(|shown| *shown != bar)
         {
             self.annotations.toolbar.set(bar);
+            // The words the subtitle of the panel counts move with the
+            // selection, which moves the bar (`CHROME-241`).
+            let words = self.state.selected_words();
+            if self
+                .annotations
+                .selection_words
+                .with_untracked(|shown| *shown != words)
+            {
+                self.annotations.selection_words.set(words);
+            }
         }
         // The page the layout was measured on, for the context panel
         // (`PROSE-UI-253`).

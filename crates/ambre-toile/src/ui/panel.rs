@@ -11,9 +11,9 @@
 
 use ambre_commands::{Locale, Property, Reach};
 use ambre_core::id::{Element, Id};
-use ambre_core::{Board, PanelSections, Properties, Px, Radians, StaticKey};
+use ambre_core::{Board, Count, PanelSections, Properties, Px, Radians, StaticKey};
 
-use crate::message::ToileCommand;
+use crate::message::{Elements, ToileCommand};
 
 use super::menu;
 use super::style::{StyleModel, Styled};
@@ -224,6 +224,21 @@ impl PanelKind {
         }
     }
 
+    /// The subtitle of the panel for this kind (`CHROME-241`): the elements
+    /// the selection holds, as the Logic thread last counted them. A count
+    /// not read yet shows nothing.
+    #[must_use]
+    pub fn subtitle(self, count: Option<Count<Elements>>) -> String {
+        match self {
+            Self::Board => ambre_commands::NOTHING_SELECTED.to_owned(),
+            Self::Connector => "1 connector".to_owned(),
+            Self::Shape | Self::Placed => count.map_or_else(String::new, |n| {
+                let n = n.get();
+                format!("{n} {}", if n == 1 { "element" } else { "elements" })
+            }),
+        }
+    }
+
     /// The sections the panel shows for this kind, in order.
     #[must_use]
     pub fn sections(self) -> &'static [StaticKey<PanelSections>] {
@@ -256,6 +271,17 @@ impl PanelKind {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The subtitle counts what the selection holds, and reads nothing
+    /// selected over the board alone (`CHROME-241`).
+    #[test]
+    fn the_subtitle_counts_the_selection() {
+        assert_eq!(PanelKind::Board.subtitle(None), "nothing selected");
+        assert_eq!(PanelKind::Shape.subtitle(Some(Count::new(1))), "1 element");
+        assert_eq!(PanelKind::Shape.subtitle(Some(Count::new(4))), "4 elements");
+        assert_eq!(PanelKind::Shape.subtitle(None), "");
+        assert_eq!(PanelKind::Connector.subtitle(None), "1 connector");
+    }
 
     #[test]
     fn each_bar_reaches_the_panel_and_holds_no_clipboard() {

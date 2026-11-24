@@ -16,6 +16,7 @@ mod limit;
 mod members;
 mod orgs;
 mod read_cursors;
+mod settings;
 mod users;
 
 pub use calls::*;
@@ -26,6 +27,7 @@ pub use limit::{QueryLimit, clamped_limit};
 pub use members::*;
 pub use orgs::*;
 pub use read_cursors::*;
+pub use settings::*;
 pub use users::*;
 
 /// A stored role word, as a [`Role`](ambre_core::Role).

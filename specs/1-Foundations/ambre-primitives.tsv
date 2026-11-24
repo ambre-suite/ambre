@@ -4996,6 +4996,18 @@ ambre-chrome | src/kit.rs | crate::kit | LengthUnit::text() | ret | String	forei
 ambre-chrome | src/kit.rs | crate::kit | LengthUnit::text(value) | param | f64	generic	the number the one length field computes in; each length type converts to it at this boundary alone
 ambre-chrome | src/kit.rs | crate::kit | length_core(value) | param | Signal<Option<f64>>	local	the number the field shows, from the typed adapter of LengthField alone; private
 ambre-chrome | src/kit.rs | crate::kit | length_core(on_write) | param | Callback<f64>	local	the number the field writes, to the typed adapter of LengthField alone; private
+ambre-chrome | src/context_panel.rs | crate::context_panel | ContextPanel(subtitle) | param | Signal<String>	free-text	the count a person reads under the title of the panel
+ambre-chrome | src/context_panel.rs | crate::context_panel | PanelContent.subtitle | field | Signal<String>	free-text	the count a person reads under the title of the panel
+ambre-chrome | src/context_panel.rs | crate::context_panel | dock_label() | ret | &'static str	free-text	the accessible name and tooltip of the control that moves the panel
+ambre-chrome | src/header.rs | crate::header | HeaderMenu(label) | param | String	free-text	the accessible name of the button of a header menu
+ambre-chrome | src/header.rs | crate::header | PrimaryButton(label) | param | &'static str	free-text	the words a person reads on the primary button of the header
+ambre-chrome | src/header.rs | crate::header | SEARCH_LABEL | const | &str	free-text	the words and the accessible name of the search field of the header
+ambre-chrome | src/status.rs | crate::status | Build::shows_diagnostics() | ret | bool	generic	predicate result
+ambre-commands | src/lib.rs | crate | NOTHING_SELECTED | const | &str	free-text	the subtitle a person reads over an empty selection
+ambre-prose | src/count.rs | crate::count | words_in(text) | param | &str	free-text	the text a person wrote, counted in words
+ambre-prose | src/view/panel.rs | crate::view::panel | PanelKind::subtitle() | ret | String	free-text	the count a person reads under the title of the panel
+ambre-toile | src/ui/panel.rs | crate::ui::panel | PanelKind::subtitle() | ret | String	free-text	the count a person reads under the title of the panel
+ambre-trame | src/ui/panel.rs | crate::ui::panel | PanelSelection::subtitle() | ret | String	free-text	the count a person reads under the title of the panel
 ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | STRIP_SHARE | const | f32	math	the share of the width of a wide scene its strip of faces takes, a scalar multiplier of that width
 ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | STRIP_ROW_SHARE | const | f32	math	the share of the height of a narrow scene its strip of faces takes, a scalar multiplier of that height
 ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | initials_of() | ret | String	free-text	the initials a tile or the mark of a space draws for a person to read
@@ -5010,3 +5022,16 @@ ambre-chrome | src/command.rs | crate::command | digit_of_code(code) | param | &
 ambre-core | src/call.rs | crate::call | FORWARDED | const | u32	generic	the one written figure of the call row of the budgets, which the forwarded count and the slots past it are built on
 ambre-chrome | src/controls.rs | crate::controls | ChoiceView.hint | field | Option<String>	free-text	the muted hint at the end of a row of a select, as a chord, display text
 ambre-chrome | src/controls.rs | crate::controls | ChoiceView::hinted(hint) | param | impl Into<String>	free-text	the muted hint at the end of a row of a select, display text
+ambre-client-core | src/settings.rs | crate::settings | BOOT_HINT_VERSION | const | &str	generic	the version word that opens a boot hint text, which BootHint::decode matches back: part of the codec of the hint
+ambre-client-core | src/settings.rs | crate::settings | BootHintText.0 | field | String	newtype-inner	the stored text of the boot hint the newtype wraps
+ambre-client-core | src/settings.rs | crate::settings | BootHintText::as_str() | ret | &str	newtype-inner	the stored text the newtype wraps, handed to the one storage call that keeps it
+ambre-client-core | src/settings.rs | crate::settings | BootHintText::new(text) | param | impl Into<String>	newtype-inner	the text read back from the storage, which BootHint::decode parses
+ambre-client-core | src/settings.rs | crate::settings | SettingWord.0 | field | String	newtype-inner	the word a setting value takes in the settings document, which the newtype wraps
+ambre-client-core | src/settings.rs | crate::settings | SettingWord::as_str() | ret | &str	newtype-inner	the stored word the newtype wraps, which each value type matches back and Loro stores
+ambre-client-core | src/settings.rs | crate::settings | SettingWord::new(text) | param | impl Into<String>	newtype-inner	the word a value type spells or the document holds; reading it is the value type's job
+ambre-client-core | src/settings.rs | crate::settings | SettingsSection::word() | ret | &'static str	newtype-inner	closed-set enum word codec: the frozen name of the section's map
+ambre-core | src/static_key.rs | crate::static_key | <SettingKeys as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
+ambre-logic | src/settings.rs | crate::settings | KIND | const | &str	generic	the key of the kind marker in the settings document, which the open reads back: part of its codec
+ambre-logic | src/settings.rs | crate::settings | META | const | &str	generic	the name of the map that holds the kind marker, which the open reads back: part of the codec of the settings document
+ambre-logic | src/settings.rs | crate::settings | SETTINGS_KIND | const | &str	generic	the word the kind marker holds, which the open matches back: part of the codec of the settings document
+ambre-logic | src/settings_flow.rs | crate::settings_flow | LogicState::is_settings() | ret | bool	generic	predicate result

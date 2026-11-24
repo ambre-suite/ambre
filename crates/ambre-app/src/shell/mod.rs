@@ -60,6 +60,7 @@ pub(crate) struct ShellWiring {
     pub(crate) clipboard_paste: ambre_bus::conduit::Sender<ClipboardPaste>,
     pub(crate) raf: ambre_canvas::RafControl,
     pub(crate) theme_ctl: ambre_canvas::ThemeControl,
+    pub(crate) account_theme: RwSignal<ambre_client_core::ThemeChoice>,
     pub(crate) boot_doc: Option<Id<Document>>,
     pub(crate) booted: ambre_bus::DocType,
     pub(crate) slots: ShellSlots,
@@ -98,6 +99,7 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
         clipboard_paste,
         raf,
         theme_ctl,
+        account_theme,
         boot_doc,
         booted,
         slots,
@@ -318,6 +320,7 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
         provide_context(Wiring {
             to_logic,
             theme_ctl,
+            account_theme,
             toile_toggles,
             style_state,
             toasts,

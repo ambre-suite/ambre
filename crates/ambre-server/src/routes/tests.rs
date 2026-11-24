@@ -27,6 +27,11 @@ mod handler_tests {
             .route("/auth/me", axum::routing::get(routes::me))
             .route("/auth/logout", axum::routing::post(routes::logout))
             .route(
+                "/settings",
+                axum::routing::get(routes::get_settings_document)
+                    .post(routes::claim_settings_document),
+            )
+            .route(
                 "/keys/master",
                 axum::routing::put(routes::store_master_keys).get(routes::get_master_keys),
             )
@@ -1212,6 +1217,200 @@ mod handler_tests {
             .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         json["log"].as_array().unwrap().clone()
+    }
+
+    /// The body of a settings claim for `doc`, its first entry signed by
+    /// `key`.
+    fn settings_claim(
+        doc: Id<Document>,
+        user: Id<User>,
+        key: &ed25519_dalek::SigningKey,
+    ) -> serde_json::Value {
+        use ambre_core::Role;
+        use ambre_protocol::MembershipAct;
+        let create = sealed(
+            entry_at(
+                doc,
+                0,
+                user,
+                (user, key),
+                MembershipAct::Create,
+                Role::Owner,
+            ),
+            key,
+        );
+        serde_json::json!({
+            "document_id": doc.to_string(),
+            "doc_key_enc": base64_encode(&[5u8; 73]), "entry": create,
+        })
+    }
+
+    /// The `document_id` of a settings answer.
+    async fn settings_answer(app: &Router, req: Request<Body>) -> (StatusCode, Option<String>) {
+        let resp = app.clone().oneshot(req).await.unwrap();
+        let status = resp.status();
+        let bytes = axum::body::to_bytes(resp.into_body(), 64 * 1024)
+            .await
+            .unwrap();
+        let document = serde_json::from_slice::<serde_json::Value>(&bytes)
+            .ok()
+            .and_then(|json| json["document_id"].as_str().map(str::to_owned));
+        (status, document)
+    }
+
+    /// Holds `SETTINGS-002` and `SETTINGS-008`. An account
+    /// with no settings document reads not-found, a first claim creates one,
+    /// and a later claim stores nothing and answers the first.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn an_account_holds_one_settings_document(pool: sqlx::PgPool) {
+        let state = test_app_state(pool.clone()).await;
+        let app = build_test_router(state.clone());
+        let (auth, key, user) = setup_signed(&app, &state, "alice@settings.test", 51).await;
+        let (status, _) = settings_answer(&app, get_with("/api/settings", &auth)).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+
+        let first = Id::<Document>::mint();
+        let body = settings_claim(first, user, &key);
+        let (status, answered) =
+            settings_answer(&app, json_request("POST", "/api/settings", &auth, &body)).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(answered, Some(first.to_string()));
+
+        let second = Id::<Document>::mint();
+        let body = settings_claim(second, user, &key);
+        let (status, answered) =
+            settings_answer(&app, json_request("POST", "/api/settings", &auth, &body)).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(answered, Some(first.to_string()), "the first claim stands");
+        assert!(
+            crate::db::get_document(&pool, &second)
+                .await
+                .unwrap()
+                .is_none(),
+            "the losing claim stores no document"
+        );
+        let (_, read) = settings_answer(&app, get_with("/api/settings", &auth)).await;
+        assert_eq!(read, Some(first.to_string()));
+    }
+
+    /// Holds `SETTINGS-015`. A sign-out leaves the settings document and the
+    /// pointer of the account on the relay.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_sign_out_keeps_the_settings_document_on_the_relay(pool: sqlx::PgPool) {
+        let state = test_app_state(pool.clone()).await;
+        let app = build_test_router(state.clone());
+        let (auth, key, user) = setup_signed(&app, &state, "erin@settings.test", 55).await;
+        let doc = Id::<Document>::mint();
+        let body = settings_claim(doc, user, &key);
+        let (status, _) =
+            settings_answer(&app, json_request("POST", "/api/settings", &auth, &body)).await;
+        assert_eq!(status, StatusCode::OK);
+        let (status, _) = status_and_code(
+            &app,
+            json_request("POST", "/api/auth/logout", &auth, &serde_json::json!({})),
+        )
+        .await;
+        assert!(status.is_success(), "the sign-out answers {status}");
+        assert_eq!(
+            crate::db::settings_document(&pool, &user).await.unwrap(),
+            Some(doc),
+            "the pointer stays"
+        );
+        assert!(
+            crate::db::get_document(&pool, &doc)
+                .await
+                .unwrap()
+                .is_some()
+        );
+    }
+
+    /// Holds `SETTINGS-009`. Two first unlocks at once receive one document.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn two_first_claims_at_once_converge_on_one_document(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let (auth, key, user) = setup_signed(&app, &state, "bob@settings.test", 52).await;
+        let laptop = settings_claim(Id::<Document>::mint(), user, &key);
+        let phone = settings_claim(Id::<Document>::mint(), user, &key);
+        let (a, b) = tokio::join!(
+            settings_answer(&app, json_request("POST", "/api/settings", &auth, &laptop)),
+            settings_answer(&app, json_request("POST", "/api/settings", &auth, &phone)),
+        );
+        assert_eq!(a.0, StatusCode::OK);
+        assert_eq!(b.0, StatusCode::OK);
+        assert_eq!(a.1, b.1, "both devices open one document");
+    }
+
+    /// Holds `SETTINGS-001` on the relay. The settings
+    /// document takes no invite, no launcher lists it, and the route that
+    /// creates any document refuses the settings kind.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn the_settings_document_takes_no_member_and_is_never_listed(pool: sqlx::PgPool) {
+        use ambre_core::Role;
+        use ambre_protocol::MembershipAct;
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let (auth, key, user) = setup_signed(&app, &state, "carol@settings.test", 53).await;
+        let (_bob, bob_key, bob_id) = setup_signed(&app, &state, "dave@settings.test", 54).await;
+        let doc = Id::<Document>::mint();
+        let body = settings_claim(doc, user, &key);
+        let (status, _) =
+            settings_answer(&app, json_request("POST", "/api/settings", &auth, &body)).await;
+        assert_eq!(status, StatusCode::OK);
+
+        let invite = sealed(
+            entry_at(
+                doc,
+                1,
+                user,
+                (bob_id, &bob_key),
+                MembershipAct::Invite,
+                Role::Editor,
+            ),
+            &key,
+        );
+        let body = serde_json::json!({
+            "invitee_email": "dave@settings.test", "role": "editor",
+            "doc_key_enc": base64_encode(&[9u8; 73]), "key_id": key_id_hex(1), "entry": invite,
+        });
+        let share = format!("/api/documents/{doc}/share");
+        let (status, _) = status_and_code(&app, json_request("POST", &share, &auth, &body)).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+
+        let resp = app
+            .clone()
+            .oneshot(get_with("/api/documents", &auth))
+            .await
+            .unwrap();
+        let bytes = axum::body::to_bytes(resp.into_body(), 64 * 1024)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json["documents"].as_array().map(Vec::len), Some(0));
+
+        let other = Id::<Document>::mint();
+        let create = sealed(
+            entry_at(
+                other,
+                0,
+                user,
+                (user, &key),
+                MembershipAct::Create,
+                Role::Owner,
+            ),
+            &key,
+        );
+        let body = serde_json::json!({
+            "doc_type": "settings", "document_id": other.to_string(),
+            "doc_key_enc": base64_encode(&[5u8; 73]), "entry": create,
+        });
+        let (status, _) =
+            status_and_code(&app, json_request("POST", "/api/documents", &auth, &body)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
     }
 
     /// Holds `SRV-104` and `SYNC-107`. The register keeps each signed entry
