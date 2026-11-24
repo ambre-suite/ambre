@@ -34,6 +34,7 @@ static BOLD: Command = Command {
     keybindings: &[],
     category: StaticKey::<Categories>::new("format"),
     home: Home::ContextPanel,
+    description: None,
 };
 
 static INK: Property = Property {
@@ -404,6 +405,8 @@ async fn a_format_bar_control_shows_its_glyph_as_an_icon_button() {
             on_press: Callback::new(|()| {}),
             icon: Some(icondata::BsTypeBold),
             chord: None,
+            description: None,
+            reach: None,
         }];
         view! { <FormatBar anchor=ambre_core::Point::default() controls=controls /> }
     });

@@ -58,6 +58,7 @@ macro_rules! commands {
                 keybindings: $chords,
                 category: $category,
                 home: Home::$home,
+                description: None,
             },)*
         ];
     };

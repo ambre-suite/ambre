@@ -165,7 +165,7 @@ body {
     min-height: var(--commandbar-h);
 }
 
-.ambre-commandbar button {
+.ambre-commandbar button:where(:not(.ambre-icon-button)) {
     appearance: none;
     border: 1px solid transparent;
     background: transparent;
@@ -178,24 +178,24 @@ body {
     cursor: pointer;
 }
 
-.ambre-commandbar button svg {
+.ambre-commandbar button:where(:not(.ambre-icon-button)) svg {
     width: var(--icon-lg);
     height: var(--icon-lg);
     display: block;
 }
 
-.ambre-commandbar button:hover:not(:disabled) {
+.ambre-commandbar button:where(:not(.ambre-icon-button)):hover:not(:disabled) {
     background: var(--surface-hover);
 }
 
 /* Inactionable controls (e.g. Undo/Redo with an empty history stack, or the
    decimals steppers on a non-decimal format) are greyed out and inert. */
-.ambre-commandbar button:disabled {
+.ambre-commandbar button:where(:not(.ambre-icon-button)):disabled {
     opacity: 0.4;
     cursor: default;
 }
 
-.ambre-commandbar button[aria-pressed="true"] {
+.ambre-commandbar button:where(:not(.ambre-icon-button))[aria-pressed="true"] {
     background: var(--accent);
     border-color: var(--accent);
     color: var(--on-accent);
@@ -213,12 +213,13 @@ body {
    `aria-label` so the accessible name and the visual hint share one source. The
    bubble fades in after a short delay so it stays out of the way. A control
    alone carries the bubble: a floating menu the bar opens keeps its own fixed
-   position (`CHROME-200`). */
-.ambre-commandbar :is(button, select)[aria-label]:not(.ambre-ctx-menu *) {
+   position (`CHROME-200`). An icon button draws its own tooltip, with the
+   chord, so this bubble leaves it alone (`CHROME-185`). */
+.ambre-commandbar :is(button, select)[aria-label]:not(.ambre-ctx-menu *, .ambre-icon-button) {
     position: relative;
 }
 
-.ambre-commandbar :is(button, select)[aria-label]:not(.ambre-ctx-menu *)::after {
+.ambre-commandbar :is(button, select)[aria-label]:not(.ambre-ctx-menu *, .ambre-icon-button)::after {
     content: attr(aria-label);
     position: absolute;
     top: calc(100% + 6px);
@@ -240,7 +241,7 @@ body {
     transition: opacity 0.1s ease 0.45s;
 }
 
-.ambre-commandbar :is(button, select)[aria-label]:not(.ambre-ctx-menu *):hover::after {
+.ambre-commandbar :is(button, select)[aria-label]:not(.ambre-ctx-menu *, .ambre-icon-button):hover::after {
     opacity: 1;
 }
 
@@ -273,7 +274,7 @@ body {
 
 /* The shared tooltip sits below the button in the docked bar; on a left-docked
    vertical palette it reads better to its right. */
-.ambre-tool-palette :is(button, select)[aria-label]:not(.ambre-ctx-menu *)::after {
+.ambre-tool-palette :is(button, select)[aria-label]:not(.ambre-ctx-menu *, .ambre-icon-button)::after {
     top: 50%;
     left: calc(100% + 6px);
     transform: translateY(-50%);
@@ -1508,6 +1509,11 @@ body {
     color: var(--text);
     font: inherit;
     cursor: pointer;
+    /* A long press shows the tooltip (`CHROME-188`): no platform callout,
+       no text selection, and no double-tap zoom on the icon. */
+    -webkit-touch-callout: none;
+    user-select: none;
+    touch-action: manipulation;
 }
 
 .ambre-icon-button[data-look="ghost"] {
@@ -1563,8 +1569,9 @@ body {
     position: fixed;
     z-index: 1000;
     display: flex;
-    align-items: center;
-    gap: var(--space-6);
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
     max-width: 280px;
     margin-top: var(--space-3);
     padding: var(--space-3) var(--space-5);
@@ -1585,6 +1592,19 @@ body {
     opacity: 1;
     visibility: visible;
     transition: opacity 0.09s ease-out 0.5s, visibility 0s linear 0.5s;
+}
+
+/* The name and the chord on the first line, the description under them. */
+.ambre-tip-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+}
+
+.ambre-tip-description {
+    font-weight: 400;
+    white-space: normal;
+    opacity: 0.85;
 }
 
 .ambre-tip .ambre-kbd {

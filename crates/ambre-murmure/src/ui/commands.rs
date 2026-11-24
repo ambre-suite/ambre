@@ -183,6 +183,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[KeyBinding::primary(KeyChar::K)],
         category: GENERAL,
         home: Home::AmbreMenu,
+        description: None,
     },
     Command {
         id: NEXT_ACTIVITY,
@@ -191,6 +192,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[KeyBinding::new(ModifierKeys::ALT_SHIFT, Key::ArrowDown)],
         category: NAVIGATE,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: PREVIOUS_ACTIVITY,
@@ -199,6 +201,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[KeyBinding::new(ModifierKeys::ALT_SHIFT, Key::ArrowUp)],
         category: NAVIGATE,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: MARK_ALL_READ,
@@ -212,6 +215,7 @@ pub const COMMANDS: &[Command] = &[
         )],
         category: UNREAD,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: SEARCH,
@@ -220,6 +224,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[KeyBinding::primary(KeyChar::F)],
         category: SEARCH_CATEGORY,
         home: Home::ContextPanel,
+        description: None,
     },
     // No chord: the keymap matches the character a key types, and Ctrl+/
     // needs Shift on a French keyboard. The palette reaches it.
@@ -230,6 +235,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: GENERAL,
         home: Home::AvatarMenu,
+        description: None,
     },
     // The actions of a message take no chord: a chord needs a message to
     // act on, and the keyboard reaches them through the focused one.
@@ -240,6 +246,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: MESSAGE,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: REPLY,
@@ -248,6 +255,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: MESSAGE,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: REACT,
@@ -256,6 +264,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: MESSAGE,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: MARK_UNREAD,
@@ -264,6 +273,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: MESSAGE,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: COPY_TEXT,
@@ -272,6 +282,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: MESSAGE,
         home: Home::ContextMenu,
+        description: None,
     },
     Command {
         id: EDIT,
@@ -280,6 +291,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: MESSAGE,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: DELETE,
@@ -288,6 +300,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: MESSAGE,
         home: Home::ContextPanel,
+        description: None,
     },
     // The space of each rank of the switcher, on Alt+Shift and its digit: the browser takes
     // Ctrl and a digit (the Murmure keyboard spec, `MURMURE-171`). The shell reads the digit
@@ -302,6 +315,7 @@ pub const COMMANDS: &[Command] = &[
         )],
         category: NAVIGATE,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: SHOW_SPACE[1],
@@ -313,6 +327,7 @@ pub const COMMANDS: &[Command] = &[
         )],
         category: NAVIGATE,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: SHOW_SPACE[2],
@@ -324,6 +339,7 @@ pub const COMMANDS: &[Command] = &[
         )],
         category: NAVIGATE,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: SHOW_SPACE[3],
@@ -335,6 +351,7 @@ pub const COMMANDS: &[Command] = &[
         )],
         category: NAVIGATE,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: SHOW_SPACE[4],
@@ -346,6 +363,7 @@ pub const COMMANDS: &[Command] = &[
         )],
         category: NAVIGATE,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: SHOW_SPACE[5],
@@ -357,6 +375,7 @@ pub const COMMANDS: &[Command] = &[
         )],
         category: NAVIGATE,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: SHOW_SPACE[6],
@@ -368,6 +387,7 @@ pub const COMMANDS: &[Command] = &[
         )],
         category: NAVIGATE,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: SHOW_SPACE[7],
@@ -379,6 +399,7 @@ pub const COMMANDS: &[Command] = &[
         )],
         category: NAVIGATE,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: SHOW_SPACE[8],
@@ -390,6 +411,7 @@ pub const COMMANDS: &[Command] = &[
         )],
         category: NAVIGATE,
         home: Home::ContextPanel,
+        description: None,
     },
 ];
 

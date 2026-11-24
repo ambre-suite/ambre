@@ -480,18 +480,21 @@ pub(crate) fn icon_of(command: &ambre_commands::Command) -> Option<icondata::Ico
     })
 }
 
-/// One control, announced by its command's title.
+/// One control, announced by its command's title, chord and description
+/// (`CHROME-186`). An id the table does not describe shows an empty label.
 fn control(signals: ProseSignals, id: StaticKey<Commands>, pressed: Pressed) -> FormatControl {
-    let command = ambre_commands::find(crate::commands::COMMANDS, id);
-    let label = command
-        .map(|command| (command.title)(&ambre_commands::Locale::En).into_string())
-        .unwrap_or_default();
-    FormatControl {
-        label,
-        pressed,
-        on_press: Callback::new(move |()| signals.format.set(Some(id))),
-        icon: command.and_then(icon_of),
-        chord: command.and_then(ambre_commands::Command::chord),
+    let on_press = Callback::new(move |()| signals.format.set(Some(id)));
+    match ambre_commands::find(crate::commands::COMMANDS, id) {
+        Some(command) => FormatControl::of(command, icon_of(command), pressed, on_press),
+        None => FormatControl {
+            label: String::new(),
+            pressed,
+            on_press,
+            icon: None,
+            chord: None,
+            description: None,
+            reach: None,
+        },
     }
 }
 

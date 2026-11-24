@@ -24,11 +24,9 @@
 // Tool map, the swatch set) lives in the always-compiled, host-tested `ui::palette`.
 // ============================================================================
 
-use ambre_chrome::commands::Locale;
 use ambre_core::{Commands, StaticKey};
 use leptos::html;
 use leptos::prelude::*;
-use leptos_icons::Icon;
 use wasm_bindgen::JsCast;
 
 use crate::ui::Tool;
@@ -43,31 +41,36 @@ use super::icons;
 /// One palette button. `aria-pressed` compares the active tool by variant
 /// (`mem::discriminant`). So any `Shape(kind)` reads pressed while the Shape tool
 /// is active, regardless of the current kind sub-option (`toile-tools`). The
-/// `mousedown` `prevent_default` keeps DOM focus on the canvas text pipe. A
-/// button stealing focus broke the next canvas click and the clipboard, the same
-/// hazard documented on the Trame `FormatBar`.
+/// icon button prevents the default of `mousedown`, which keeps DOM focus on the
+/// canvas text pipe. A button stealing focus broke the next canvas click and the
+/// clipboard, the same hazard documented on the Trame `FormatBar`.
 ///
 /// `command` names the tool. Its tooltip and its glyph come from the registry
-/// (`UI-THREAD-019`), and `tool_for_command` says which tool the click arms.
-/// The button, the keyboard chord and the command palette then all agree.
+/// (`UI-THREAD-019`, `CHROME-186`), and `tool_for_command` says which tool the
+/// click arms. The button, the keyboard chord and the command palette then all
+/// agree. An id the table does not describe shows no button.
 fn tool_button(active: RwSignal<Tool>, command: StaticKey<Commands>) -> impl IntoView {
-    let label = registry::title(command, &Locale::En)
-        .map(ambre_core::Validated::into_string)
-        .unwrap_or_default();
+    let described = ambre_commands::find(registry::COMMANDS, command);
     let icon = registry::icon(command).and_then(icons::resolve);
     // An id absent from the tool map arms nothing rather than failing the bar.
     let tool = tool_for_command(command).unwrap_or(Tool::Select);
-    let is_active = move || std::mem::discriminant(&active.get()) == std::mem::discriminant(&tool);
-    view! {
-        <button
-            aria-label=label
-            aria-pressed=move || ambre_chrome::Pressed::from_bool(is_active()).aria()
-            on:mousedown=move |ev| ev.prevent_default()
-            on:click=move |_| active.set(tool)
-        >
-            {icon.map(|ic| view! { <Icon icon=ic /> })}
-        </button>
-    }
+    let pressed = Signal::derive(move || {
+        ambre_chrome::Pressed::from_bool(
+            std::mem::discriminant(&active.get()) == std::mem::discriminant(&tool),
+        )
+    });
+    described.map(|described| {
+        view! {
+            <ambre_chrome::CommandButton
+                command=described
+                icon=icon
+                pressed=pressed
+                size=ambre_chrome::ControlSize::Large
+                look=ambre_chrome::IconLook::Ghost
+                on_command=Callback::new(move |_| active.set(tool))
+            />
+        }
+    })
 }
 
 /// The Sticky button + its colour popover (`toile-tools`). Clicking the button
@@ -86,6 +89,9 @@ fn sticky_button(active: RwSignal<Tool>) -> impl IntoView {
         _ => STICKY_SWATCHES.first().copied().unwrap_or_default(),
     };
     let is_active = move || matches!(active.get(), Tool::Sticky(_));
+    // The words of the button are the ones the command describes (`CHROME-186`).
+    let tip =
+        ambre_commands::find(registry::COMMANDS, TOOL_STICKY).map(ambre_chrome::CommandTip::of);
 
     // Close on any pointer-down outside the control (mirrors `ambre_chrome::
     // ColorPopover`): the wrapper node lets us tell inside from outside.
@@ -107,20 +113,25 @@ fn sticky_button(active: RwSignal<Tool>) -> impl IntoView {
 
     view! {
         <span class="ambre-color" node_ref=root_ref>
-            <button
-                aria-label=registry::title(TOOL_STICKY, &Locale::En).map(ambre_core::Validated::into_string).unwrap_or_default()
-                aria-haspopup="true"
-                aria-expanded=move || open.get().aria()
-                aria-pressed=move || ambre_chrome::Pressed::from_bool(is_active()).aria()
-                on:mousedown=move |ev| ev.prevent_default()
-                on:click=move |_| open.update(|o| *o = o.toggled())
-            >
-                <Icon icon=icondata::MdiNoteOutline />
-                <span
-                    class="swatch-strip"
-                    style:background-color=move || format!("#{:06x}", strip_color().rgb().bits())
-                ></span>
-            </button>
+            {tip.map(|tip| view! {
+                <ambre_chrome::IconButton
+                    icon=icondata::MdiNoteOutline
+                    label=tip.title().as_str().to_owned()
+                    chord=tip.chord()
+                    description=tip.description().cloned()
+                    reach=Some(tip.reach())
+                    pressed=Some(Signal::derive(move || ambre_chrome::Pressed::from_bool(is_active())))
+                    expanded=Some(open.into())
+                    size=ambre_chrome::ControlSize::Large
+                    look=ambre_chrome::IconLook::Ghost
+                    on_press=Callback::new(move |()| open.update(|o| *o = o.toggled()))
+                >
+                    <span
+                        class="swatch-strip"
+                        style:background-color=move || format!("#{:06x}", strip_color().rgb().bits())
+                    ></span>
+                </ambre_chrome::IconButton>
+            })}
             <Show when=move || open.get() == ambre_chrome::Openness::Open fallback=|| ()>
                 <div class="ambre-color-popover">
                     <div class="swatches">
