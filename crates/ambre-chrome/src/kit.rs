@@ -439,6 +439,7 @@ fn choice_views<T>(choices: &[Choice<T>]) -> Vec<crate::ChoiceView> {
             label: c.label.to_owned(),
             icon: c.icon,
             reach: None,
+            face: None,
         })
         .collect()
 }
