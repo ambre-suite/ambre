@@ -377,6 +377,7 @@ async fn the_search_field_runs_the_palette_command() {
         id: StaticKey::<Commands>::new("t.palette.open"),
         title: |_: &Locale| ambre_core::Validated::new("Command palette"),
         icon: None,
+        description: None,
         keybindings: &[KeyBinding::primary(KeyChar::K)],
         category: StaticKey::<Categories>::new("general"),
         home: Home::AmbreMenu,
