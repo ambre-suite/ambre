@@ -2027,7 +2027,6 @@ ambre-server | src/redis_ops.rs | crate::redis_ops | ROTATION_OWED | const | &st
 ambre-server | src/redis_ops.rs | crate::redis_ops | SEGMENT_LOCKED | const | &str	generic	refusal word shared with the Lua script text
 ambre-server | src/redis_ops.rs | crate::redis_ops | StoreVersion.major | field | u16	generic	version component, compared as a pair
 ambre-server | src/redis_ops.rs | crate::redis_ops | StoreVersion.minor | field | u16	generic	version component, compared as a pair
-ambre-server | src/redis_ops.rs | crate::redis_ops | append_pending_delta::LUA | const | &str	foreign-api	Lua script text sent to Redis
 ambre-server | src/redis_ops.rs | crate::redis_ops | check_store_version(info) | param | &str	generic	parses a store reply text
 ambre-server | src/redis_ops.rs | crate::redis_ops | primary_servers(nodes) | param | &str	generic	parses a store reply text, the CLUSTER NODES reply
 ambre-server | src/redis_ops.rs | crate::redis_ops | claim_snapshot_ask() | ret | Result<bool,AppError>	generic	predicate result
@@ -2067,7 +2066,6 @@ ambre-server | src/ws/handler/message.rs | crate::ws::handler::message | ClockFe
 ambre-server | src/ws/handler/message.rs | crate::ws::handler::message | membership_still_valid() | ret | bool	generic	predicate result
 ambre-server | src/ws/handler/message.rs | crate::ws::handler::message | refuse(detail) | param | &str	free-text	refusal detail
 ambre-server | src/ws/handler/message.rs | crate::ws::handler::message | refuse_delta(detail) | param | &str	free-text	refusal detail
-ambre-server | src/ws/handler/message.rs | crate::ws::handler::message | store_index_row() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/ws/handler/mod.rs | crate::ws::handler | WsConnectionState::watches_channel() | ret | bool	generic	predicate result
 ambre-server | src/ws/handler/signature.rs | crate::ws::handler::signature | push_framed(field) | param | &[u8]	generic	generic codec/parser/bytes API
 ambre-server | src/ws/handler/signature.rs | crate::ws::handler::signature | push_framed(msg) | param | &mut Vec<u8>	generic	generic codec/parser/bytes API
@@ -4984,3 +4982,7 @@ ambre-prose | src/view/panel.rs | crate::view::panel | Paper::label() | ret | &'
 ambre-prose | src/view/panel.rs | crate::view::panel | Margins::label() | ret | &'static str	free-text	the name of a margin preset a person reads
 ambre-trame | src/chrome/panel.rs | crate::chrome::panel | reach() | ret | String	generic	the codec of a property reach on the data-reach attribute, as Reach::marker writes it
 ambre-chrome | src/kit.rs | crate::kit | unreached_controls() | ret | Vec<String>	foreign-api	the accessible names the DOM holds for controls with no data-reach, which a test prints
+ambre-logic | src/dispatch.rs | crate::dispatch | LogicState::murmure_space_signed() | ret | bool	generic	predicate result
+ambre-murmure | src/logic/runtime/spaces.rs | crate::logic::runtime::spaces | Runtime<D>::keep_space_signed() | ret | bool	generic	predicate result
+ambre-protocol | src/membership.rs | crate::membership | <MembershipEntry as TryFrom<Wire>>::Error | assoc | &'static str	foreign-api	the error serde's try_from attribute formats with Display; a peer never reads it back
+ambre-protocol | src/membership.rs | crate::membership | CapSlot::into_caps() | ret | Result<(Option<Seq<DeltaAuthor>>,Vec<DocumentCap>),&'static str>	foreign-api	the error of the serde try_from conversion it feeds, formatted with Display

@@ -1422,6 +1422,39 @@ return 0
     Ok(last == 1)
 }
 
+/// Whether a delete has fenced a document, read from its tombstone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DocumentFence {
+    /// No tombstone: the document is not being deleted.
+    Open,
+    /// The tombstone exists: a delete has begun (`SRV-017`).
+    Gone,
+}
+
+/// Reads the tombstone of a document. The write path asks it after the clock
+/// script, since a delete may begin between that script and the store
+/// (`SRV-335`). A store reset loses the tombstone until the next pass sets it
+/// again, so an `Open` answer is no proof: the sweeps stay the backstop.
+///
+/// # Errors
+///
+/// The ephemeral store did not answer.
+pub async fn document_fence(
+    redis: &Client,
+    document_id: &Id<Document>,
+) -> Result<DocumentFence, AppError> {
+    let gone_key = DocKey::<Gone>::of(document_id);
+    let found: usize = redis
+        .exists(gone_key.as_str())
+        .await
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("tombstone read", e)))?;
+    Ok(if found == 0 {
+        DocumentFence::Open
+    } else {
+        DocumentFence::Gone
+    })
+}
+
 /// Sets the tombstone of a document for `ttl`: the first step of a
 /// delete, before any object or key is removed.
 pub async fn mark_document_gone(

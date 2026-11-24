@@ -84,6 +84,7 @@
 | amendment | a late edit or delete of a final segment | | `5-Murmure/ambre-spec-murmure-schema.md` |
 | history boundary | a key rotation with no link, which later members cannot read past | | `5-Murmure/features/ambre-spec-murmure-channels.md` |
 | membership log | the signed record of every invite, revoke and role change | | `1-Foundations/ambre-spec-membership.md` |
+| census | the opens a removal runs to read the clocks it caps | probe open | `1-Foundations/ambre-spec-membership.md` |
 | residency | where a document lives: in memory, on disk, or neither | | `1-Foundations/ambre-spec-residency.md` |
 | user settings | one user's own choices, kept in one sealed document that follows them | | `1-Foundations/ambre-spec-user-settings.md` |
 | activity summary | the sealed header that tells what an update holds | | `1-Foundations/ambre-spec-residency.md` |

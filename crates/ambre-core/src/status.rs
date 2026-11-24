@@ -406,6 +406,10 @@ pub enum LocalFailure {
     /// The log the relay serves does not extend the log this device checked,
     /// so nothing is written on it (audits `P26`, `P27`).
     LogDiverged,
+    /// A removal from a channel would cap the member in more documents than
+    /// one entry carries, so it leaves no document uncapped and fails
+    /// (`SYNC-312`).
+    TooManyChannelDocuments,
 }
 
 impl fmt::Display for LocalFailure {
@@ -445,6 +449,9 @@ impl fmt::Display for LocalFailure {
             Self::UnexpectedAnswer => f.write_str("the relay answered something unexpected"),
             Self::LogDiverged => {
                 f.write_str("the relay served members that do not extend the ones you checked")
+            }
+            Self::TooManyChannelDocuments => {
+                f.write_str("the channel holds more documents than one removal can cap")
             }
         }
     }

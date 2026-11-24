@@ -246,7 +246,26 @@ impl SyncState {
     /// 5. Emits [`SyncEvent::RevocationComplete`], which causes
     ///    [`handle_sync_event`] to swap the local key and push the old key
     ///    into the [`SyncDocumentState::old_keys`] LRU cache.
+    ///
+    /// On the log of a channel's `meta`, the census first opens each document
+    /// of the channel. The revoke then caps the member in each one
+    /// (`SYNC-312`).
     pub(crate) fn handle_revoke_from_document(
+        &mut self,
+        id: Seq<Request>,
+        document_id: Id<Document>,
+        user_id: Id<User>,
+    ) {
+        self.begin_removal(crate::census::Removal::Revoke {
+            id,
+            document_id,
+            user_id,
+        });
+    }
+
+    /// The revoke of [`handle_revoke_from_document`](Self::handle_revoke_from_document),
+    /// on the documents open here.
+    pub(crate) fn revoke_now(
         &self,
         id: Seq<Request>,
         document_id: Id<Document>,
@@ -315,20 +334,29 @@ impl SyncState {
                 .get(&document_id)
                 .map(SyncDocumentState::applied_clocks)
                 .unwrap_or_default(),
-            channel_applied: self
-                .open_channel_documents(document_id)
-                .into_iter()
-                .filter_map(|other| {
-                    self.documents
-                        .get(&other)
-                        .map(|doc| (other, doc.applied_clocks()))
-                })
-                .collect(),
+            channel_applied: self.channel_applied(document_id),
         };
         let http = sharing::GlooHttp { auth };
         crate::spawn(async move {
             sharing::revoke_task(&http, params, &tx, &logic_tx).await;
         });
+    }
+
+    /// What each other open document of the channel whose `meta` is
+    /// `meta` applied, those a census opened included. A revoke on that log
+    /// caps its member in each one (`SYNC-311`, `SYNC-312`).
+    pub(crate) fn channel_applied(
+        &self,
+        meta: Id<Document>,
+    ) -> Vec<(Id<Document>, sharing::Applied)> {
+        self.open_channel_documents(meta)
+            .into_iter()
+            .filter_map(|other| {
+                self.documents
+                    .get(&other)
+                    .map(|doc| (other, doc.applied_clocks()))
+            })
+            .collect()
     }
 
     /// Where the log of `document_id` stands for this client, once an open or
@@ -397,15 +425,16 @@ impl SyncState {
     }
 
     /// Records where the log of `document_id` stands now, with the key and
-    /// the chain the document holds. It hands that to the local store when
-    /// it moved (`SYNC-290`, `SYNC-308`). It is a no-op before a footing or a
+    /// the links of the chain that key walks, within their bound. It hands
+    /// that to the local store when it moved (`SYNC-290`, `SYNC-308`,
+    /// `SYNC-313`). It is a no-op before a footing or a
     /// key exists.
     pub(crate) fn keep_log(&mut self, document_id: Id<Document>) {
         let (Some(footing), Some((key, links))) = (
             self.footing(document_id),
             self.documents
                 .get(&document_id)
-                .map(|doc| (doc.doc_key.id(), doc.chain.links())),
+                .map(|doc| (doc.doc_key.id(), doc.chain.kept_links(doc.doc_key.id()))),
         ) else {
             return;
         };
@@ -470,7 +499,16 @@ impl SyncState {
 
     /// Leaves a document: DELETEs this user's own share and nothing else
     /// (`SYNC-127`, `SYNC-130`). [`SyncEvent::DocumentLeft`] closes it locally.
-    pub(crate) fn handle_leave_document(&self, id: Seq<Request>, document_id: Id<Document>) {
+    ///
+    /// A document not open here opens for a census first, so the departure
+    /// names the last clock this user wrote in it (`SYNC-314`).
+    pub(crate) fn handle_leave_document(&mut self, id: Seq<Request>, document_id: Id<Document>) {
+        self.begin_removal(crate::census::Removal::Leave { id, document_id });
+    }
+
+    /// The departure of [`handle_leave_document`](Self::handle_leave_document),
+    /// from a document open here.
+    pub(crate) fn leave_now(&self, id: Seq<Request>, document_id: Id<Document>) {
         let (Some(tx), Some(author), Some(exchange_key)) = (
             self.event_tx.clone(),
             self.author(),
@@ -921,6 +959,108 @@ mod tests {
             "a log walked from another anchor"
         );
         assert!(!refused(row, false), "the honest chain holds");
+    }
+
+    /// Holds `SYNC-313`. A document was rotated forty times, and its chain
+    /// holds a link before a history boundary too. The row keeps the
+    /// nearest [`crate::chain::KEPT_LINKS_LIMIT`] links of the walk back
+    /// from its key, and drops the rest. The next session accepts the row
+    /// under the checks of the reload. It reaches the key that many
+    /// rotations back, and no older one.
+    #[test]
+    fn the_row_of_a_kept_log_keeps_the_nearest_links_its_key_walks() {
+        use crate::chain::KEPT_LINKS_LIMIT;
+        use crate::key_vouch::Footing;
+        use crate::membership_log::tests::{DOC, Person, created};
+        use crate::membership_log::{LogRule, digest, encode};
+        let (mut state, rx) = bare_state();
+        let alice = Person::new(1);
+        let entries = created(&alice, &Person::new(2));
+        let texts: Vec<_> = entries.iter().map(|e| encode(e).unwrap()).collect();
+        let anchor = digest(&entries[0]).expect("an anchor");
+        let bound = usize::try_from(KEPT_LINKS_LIMIT.get()).expect("a small bound");
+        let rotations = bound + 8;
+        let keys: Vec<DocumentKey> = (0..=rotations).map(|_| DocumentKey::generate()).collect();
+        let seal = |previous: &DocumentKey, next: &DocumentKey| {
+            crate::pipeline::seal_link(
+                DOC,
+                previous,
+                next,
+                ambre_protocol::LogHead::EMPTY,
+                &alice.key,
+            )
+            .unwrap()
+        };
+        let mut links: Vec<_> = keys
+            .windows(2)
+            .map(|pair| seal(&pair[0], &pair[1]))
+            .collect();
+        // A rotation with no link cut the chain: this link is out of reach.
+        links.push(seal(&DocumentKey::generate(), &DocumentKey::generate()));
+        let current = keys.last().expect("a current key");
+        let mut doc = SyncDocumentState::new(
+            DOC,
+            current.clone(),
+            DocType::Prose,
+            crate::Existence::LocalOnly,
+        );
+        doc.chain = crate::chain::Chain::new(DOC, links);
+        state.documents.insert(DOC, doc);
+        let walked = Footing::sealed_in_catalogue(DOC, anchor)
+            .walk(&texts, &LogRule::document())
+            .expect("the whole log walks")
+            .footing();
+        state.handle_sync_event(SyncEvent::FootingAdvanced {
+            document_id: DOC,
+            footing: walked,
+        });
+        let kept = rx
+            .try_iter()
+            .find_map(|event| match event {
+                LogicEvent::LogKept { kept, .. } => Some(kept),
+                _ => None,
+            })
+            .expect("the log is kept");
+        assert_eq!(kept.links.len(), bound, "the row holds the bound");
+        let nearest: Vec<_> = keys
+            .iter()
+            .rev()
+            .take(bound + 1)
+            .map(DocumentKey::id)
+            .collect();
+        assert!(
+            kept.links
+                .iter()
+                .zip(nearest.windows(2))
+                .all(|(link, pair)| link.key == pair[0] && link.previous == pair[1]),
+            "nearest first, along the walk"
+        );
+        // The ceiling of `ambre-spec-budgets.md section 6`: each link of
+        // this row names an empty head, and a head costs at most 41 B more.
+        let bytes = kept.to_row().unwrap().as_bytes().len();
+        assert!(bytes + bound * 41 <= 12 * 1024, "{bytes} B");
+
+        let row = ambre_bus::KeptLog::from_row(&kept.to_row().unwrap()).expect("a row");
+        let (mut next, _rx) = bare_state();
+        next.handle_command(SyncCommand::KeepLog {
+            document_id: DOC,
+            kept: row,
+        });
+        let rebuilt = next
+            .kept_chains()
+            .get(&DOC)
+            .expect("the pruned chain holds");
+        let oldest_kept = &keys[rotations - bound];
+        assert_eq!(
+            rebuilt.recover(current, oldest_kept.id()).map(|k| k.id()),
+            Some(oldest_kept.id()),
+            "the key the bound reaches"
+        );
+        let past = &keys[rotations - bound - 1];
+        assert!(
+            rebuilt.recover(current, past.id()).is_none(),
+            "no key past the bound"
+        );
     }
 
     /// `SYNC-292`: a user search with no relay logs that it ran, and never

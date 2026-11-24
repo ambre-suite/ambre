@@ -610,6 +610,9 @@ impl SyncState {
         #[cfg(not(target_arch = "wasm32"))]
         self.roster_asks.clear();
         self.pending_opens.clear();
+        self.censuses.clear();
+        self.census_docs.clear();
+        self.census_signals.borrow_mut().clear();
         self.pinned_inviters.clear();
         self.murmure_roots.clear();
         self.typed_opens.clear();
