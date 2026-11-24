@@ -51,6 +51,7 @@ mod format;
 #[cfg(feature = "gallery")]
 mod gallery;
 mod handler;
+mod header;
 mod kit;
 mod menu;
 mod palette;
@@ -84,6 +85,7 @@ pub use format::{
 #[cfg(feature = "gallery")]
 pub use gallery::Gallery;
 pub use handler::{CommandHandler, FileAccept, FilePick, KeyRoute, KeyTarget, ShellAction};
+pub use header::{CommandSearch, HeaderMenu, PrimaryButton, SEARCH_LABEL};
 pub use kit::{
     Choice, ColourField, CommandButton, Field, FieldLength, FontField, Labelled, LengthField,
     PropertyToggle, Row, Segmented, SelectField, Step, native_controls, reach_markers,
@@ -101,5 +103,5 @@ pub use passphrase::{
     PassphraseDialog, PassphraseIntent, PassphraseRefusal, vet as vet_passphrase,
 };
 pub use shortcut::Kbd;
-pub use status::{PerfChip, PerfDetail, StatusLabel, ZoomChip};
+pub use status::{Build, PerfChip, PerfDetail, StatusLabel, ZoomChip};
 pub use toast::{ToastHost, ToastKind, ToastVoice, Toasts};

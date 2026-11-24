@@ -138,17 +138,58 @@ pub struct PerfDetail {
     children: ChildrenFn,
 }
 
+/// The build a binary was compiled as. A development build shows the render
+/// diagnostics and prints its debug events; a release shows and prints
+/// neither.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Build {
+    /// The shipped binary.
+    Release,
+    /// A development binary. A release cannot build it, so it links no code
+    /// that only a development build runs.
+    #[cfg(debug_assertions)]
+    Debug,
+}
+
+impl Build {
+    /// The build of this binary.
+    #[cfg(debug_assertions)]
+    pub const CURRENT: Self = Self::Debug;
+    /// The build of this binary.
+    #[cfg(not(debug_assertions))]
+    pub const CURRENT: Self = Self::Release;
+
+    /// Whether the status bar shows the frame rate and its timings
+    /// (`CHROME-236`). A person who uses the shipped suite has no use for
+    /// them.
+    #[must_use]
+    pub const fn shows_diagnostics(self) -> bool {
+        match self {
+            Self::Release => false,
+            #[cfg(debug_assertions)]
+            Self::Debug => true,
+        }
+    }
+}
+
 /// Interactive perf chip: a `<fps> fps` button that toggles an app-supplied
 /// detail panel (`PerfDetail`). Shared by Trame and Toile so the fps readout and
 /// its toggle behave identically; the panel body differs per renderer. With no
-/// `detail` slot the button is a passive readout (no toggle).
+/// `detail` slot the button is a passive readout (no toggle). A release
+/// renders nothing in its place (`CHROME-236`).
 #[component]
 pub fn PerfChip(
     /// The live frame rate. Derive it from the app's perf snapshot signal.
     #[prop(into)]
     fps: Signal<ambre_core::FrameRate>,
     #[prop(optional)] perf_detail: Option<PerfDetail>,
+    /// The build the chip renders for: this binary's unless a test names one.
+    #[prop(optional)]
+    compiled_as: Option<Build>,
 ) -> impl IntoView {
+    if !compiled_as.unwrap_or(Build::CURRENT).shows_diagnostics() {
+        return ().into_any();
+    }
     // The detail panel is collapsed by default: only the fps chip shows.
     let show = RwSignal::new(crate::Openness::Closed);
     let has_detail = perf_detail.is_some();
@@ -178,12 +219,22 @@ pub fn PerfChip(
                 })}
         </div>
     }
+    .into_any()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use ambre_core::Doc;
+
+    /// A release shows no frame rate, and a development build shows it
+    /// (`CHROME-236`).
+    #[test]
+    fn only_a_development_build_shows_the_diagnostics() {
+        assert!(!Build::Release.shows_diagnostics());
+        #[cfg(debug_assertions)]
+        assert!(Build::Debug.shows_diagnostics());
+    }
 
     /// A zoom factor is built inside its range, so a reader can divide by it
     /// (`UI-THREAD-060`).

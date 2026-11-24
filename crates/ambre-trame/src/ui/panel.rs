@@ -110,6 +110,36 @@ impl ambre_core::Free for RangeLabel {}
 
 impl ambre_core::Displayed for RangeLabel {}
 
+/// What the header of the panel names of the selection: its reference, and
+/// the number of cells it spans, which the subtitle counts.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PanelSelection {
+    /// The reference, such as `B2:D5`, which the title shows (`CHROME-227`).
+    pub reference: ambre_core::Validated<RangeLabel>,
+    /// The cells the selection spans, its hidden rows included.
+    pub cells: ambre_core::Count<ambre_core::Cells>,
+}
+
+impl Default for PanelSelection {
+    fn default() -> Self {
+        Self {
+            reference: ambre_core::Validated::new(""),
+            cells: ambre_core::Count::new(1),
+        }
+    }
+}
+
+impl PanelSelection {
+    /// The subtitle of the panel: the cells the selection spans, such as
+    /// "12 cells" (`CHROME-239`). A sheet always has an active cell, so a
+    /// sheet never reads as nothing selected.
+    #[must_use]
+    pub fn subtitle(&self) -> String {
+        let n = self.cells.get();
+        format!("{n} {}", if n == 1 { "cell" } else { "cells" })
+    }
+}
+
 /// What the context panel shows of the active sheet: its page setup and its
 /// frozen pane. The view publishes it from the sheet list (`UI-THREAD-003`).
 #[derive(Clone, Copy, Debug, PartialEq)]

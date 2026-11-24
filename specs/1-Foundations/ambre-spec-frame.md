@@ -71,7 +71,8 @@ one numbering over the four documents the rendering layer produces.
 
 * **Budget.** the frame phases of `ambre-spec-budgets.md section 2`, cited by `CANVAS-005`, and the
   vertex-buffer and texture rows of `ambre-spec-budgets.md section 6`. Not one is measured by a
-  bench: a developer reads the frame time by hand off the perf chip.
+  bench: a developer reads the frame time by hand off the perf chip of a development build
+  (`ambre-spec-shell.md`, `CHROME-236`).
 * **Boundary.** none: this loop opens no socket, holds no key and writes nothing. The one network
   path the layer opens is the same-origin font fetch of `ambre-spec-render-assets.md`, which
   `UI-THREAD-004` names as the single exception.
