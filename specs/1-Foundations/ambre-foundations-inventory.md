@@ -34,9 +34,10 @@
 | `residency` | Which documents a client holds, in memory and on disk, and what a document it does not hold still costs. | implemented | 32 |  |
 | `schema-version` | What a document looks like once it reaches the disk, and how a later binary knows it can still read it. | implemented | 20 |  |
 | `sealed-envelope` | Nothing a user writes leaves the browser readable. | implemented | 31 |  |
+| `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | implemented | 83 |  |
 | `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 46 |  |
 | `text-input` | A text area that shows nothing, sits under the caret, and is the real keyboard focus of the canvas. | implemented | 15 |  |
-| `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 23 |  |
+| `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 25 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | implemented | 11 |  |
 | `accessibility` | What a screen reader and a keyboard reach. | partial | 15 |  |
 | `adaptive-layout` | How the interface changes with the width of the window. | partial | 9 |  |
@@ -48,16 +49,15 @@
 | `frame` | One frame, from the browser's tick to the pixels on the screen. | partial | 25 | 2 |
 | `interop` | A user brings a file in, or takes a document out, and reads the conversion report: what the file kept and what it lost. | partial | 26 | 2 |
 | `key-verification` | Before a document is shared with someone, their key is shown as a short readable fingerprint and the user confirms it. | partial | 21 |  |
-| `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | partial | 111 |  |
+| `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | partial | 112 |  |
 | `message-bus` | The contract the three threads talk over. | partial | 46 |  |
 | `object-store` | Everything too large for a wire message lives in object storage, sealed. | partial | 25 |  |
 | `organizations` | A company that loses an employee must not lose that employee's documents. | partial | 15 |  |
 | `presence` | Where the other collaborators are, right now: a position in each peer's colour, their name beside it, and what they hold selected. | partial | 17 |  |
 | `profile` | The avatar that stands for a user in every application: a picture the user chooses, or their initials on their identity colour. | partial | 9 |  |
 | `render-assets` | What the renderer loads before it can draw anything: the fonts a script needs, the glyphs rasterized from them, the icons, the embedded images. | partial | 26 |  |
-| `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | partial | 83 |  |
 | `server` | The one process every client talks to. | partial | 134 | 1 |
-| `shell` | Where each command of a document page lives. | partial | 80 | 1 |
+| `shell` | Where each command of a document page lives. | partial | 82 | 1 |
 | `sync` | The one part of the client that talks to the network. | partial | 90 |  |
 | `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 20 |  |
 | `ui` | The page's own thread. | partial | 24 |  |
@@ -66,4 +66,4 @@
 | `macros` | A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. | design-only | 54 |  |
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 
-**50 features: 23 implemented, 24 partial, 3 design-only. 1870 contract rows, 15 loose.**
+**50 features: 24 implemented, 23 partial, 3 design-only. 1875 contract rows, 15 loose.**

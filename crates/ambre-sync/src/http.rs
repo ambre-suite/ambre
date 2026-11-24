@@ -1645,7 +1645,7 @@ pub(crate) struct AuthMeResponse {
 
 /// `GET /api/documents/{id}`, read for the type alone: a census opens a
 /// document under the type the relay holds for it, as any open does
-/// (`SYNC-313`).
+/// (`SYNC-314`).
 #[derive(Deserialize)]
 pub(crate) struct DocumentTypeResponse {
     #[serde(with = "ambre_core::serde_enums::doc_type")]

@@ -1,5 +1,5 @@
 //! The census of a removal: the open of each document a removal caps and
-//! the Logic thread does not hold (`SYNC-312`, `SYNC-313`).
+//! the Logic thread does not hold (`SYNC-312`, `SYNC-314`).
 //!
 //! A removal caps a member at the clock they reached in each document, and
 //! only an open document knows that clock. A census opens each such document
@@ -109,7 +109,7 @@ pub(crate) fn subject(event: &LogicEvent) -> Option<(Id<Document>, Option<Signal
 impl SyncState {
     /// Starts `removal`. A removal that caps a document the Logic thread
     /// does not hold lists the documents it caps first, then opens them
-    /// (`SYNC-312`, `SYNC-313`). Any other runs at once.
+    /// (`SYNC-312`, `SYNC-314`). Any other runs at once.
     pub(crate) fn begin_removal(&mut self, removal: Removal) {
         let Some(tx) = self.event_tx.clone() else {
             return self.run_removal(removal);
@@ -475,7 +475,7 @@ mod tests {
         )));
     }
 
-    /// `SYNC-313`: a departure of a document not open here opens it first.
+    /// `SYNC-314`: a departure of a document not open here opens it first.
     /// It names the last clock this user wrote in it, and the census closes
     /// the document once the departure ran.
     #[test]

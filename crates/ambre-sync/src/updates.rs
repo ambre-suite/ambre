@@ -701,7 +701,7 @@ impl SyncState {
     }
 
     /// The open of `document_id` once its type claimed it, or with no claim
-    /// at all for a census (`SYNC-312`, `SYNC-313`).
+    /// at all for a census (`SYNC-312`, `SYNC-314`).
     pub(crate) fn open_session(&mut self, document_id: Id<Document>, doc_type: DocType) {
         // Without session keys we cannot authenticate the members fetch or unwrap
         // the document key. Opening now would insert a local-only doc with a
@@ -8053,7 +8053,7 @@ mod tests {
         state.exchange_key = Some(x25519_dalek::StaticSecret::from([7; 32]));
         state.set_event_tx(ambre_bus::conduit::unbounded().0);
         let id = Seq::<Request>::new(1);
-        // The census opens a document not open first (`SYNC-313`). The
+        // The census opens a document not open first (`SYNC-314`). The
         // departure itself still refuses to read a cap from nothing.
         state.leave_now(id, other);
         assert!(drain(&rx).iter().any(|e| matches!(

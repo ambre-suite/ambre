@@ -587,7 +587,7 @@ enum SyncEvent {
         result: Result<(), http::HttpError>,
     },
     /// The documents a removal caps, as the relay listed them, before their
-    /// census (`SYNC-312`, `SYNC-313`).
+    /// census (`SYNC-312`, `SYNC-314`).
     CensusPlanned {
         removal: census::Removal,
         result: Result<Vec<census::Counted>, http::HttpError>,
@@ -1823,7 +1823,7 @@ pub struct SyncState {
     pending_opens: Vec<(Id<Document>, DocType)>,
 
     /// The removals that wait on the census of their documents
-    /// (`SYNC-312`, `SYNC-313`).
+    /// (`SYNC-312`, `SYNC-314`).
     censuses: Vec<census::Census>,
     /// The documents a census opened that the Logic thread does not hold.
     /// What their opens would tell the Logic thread reaches the census

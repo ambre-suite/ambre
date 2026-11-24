@@ -348,9 +348,9 @@ pub(crate) async fn handle_update(
     // Cap the inline delta ciphertext before any signature check or durable
     // write. A CRDT delta is small; a large blob belongs on the media path. This
     // stops an authorized writer from pushing oversized deltas. Such deltas are
-    // persisted durably (S3 + Redis pending) and fanned out to every subscriber.
-    // That is the same storage/cost abuse the media and snapshot caps close, on
-    // the hot path.
+    // persisted durably (the index and the object store) and fanned out to
+    // every subscriber. That is the same storage/cost abuse the media and
+    // snapshot caps close, on the hot path.
     let cipher_len = update.ciphertext.len();
     if cipher_len > state.config.delta_max_size {
         let detail = format!(
@@ -477,16 +477,15 @@ pub(crate) async fn handle_update(
         tracing::warn!("insert_update refused seq={seq}, retrying: {e}");
         tokio::time::sleep(*pause).await;
     };
-    let inlined = matches!(stored, Ok(true));
     if let Err(e) = stored {
         // The delta index (Postgres) is the ONLY thing `handle_request_missing`
         // reads to replay this seq. The clock was already consumed atomically in
         // Redis, so we cannot cleanly reject and let the client retry. A retry at
-        // the same clock would fail CLOCK_MISMATCH. If we merely logged, the delta
-        // would still reach S3 via the pending list but no index row would ever
-        // reference it. That is an orphaned, unreplayable object: live subscribers
-        // get it while a reconnecting client misses it forever. Dead-letter the
-        // full wire so an operator can rebuild the index row (H1) instead of losing
+        // the same clock would fail CLOCK_MISMATCH. If we merely logged, a large
+        // delta's object would exist but no index row would ever reference it.
+        // That is an orphaned, unreplayable object: live subscribers get it
+        // while a reconnecting client misses it forever. Dead-letter the full
+        // wire so an operator can rebuild the index row (H1) instead of losing
         // it.
         tracing::error!("insert_update failed seq={seq}: {e}");
         tracing::debug!("insert_update failed doc={doc_id} seq={seq}");
@@ -496,50 +495,6 @@ pub(crate) async fn handle_update(
         {
             tracing::error!("dead-letter push failed seq={seq}: {dl}");
             crate::metrics::failed(crate::metrics::Failure::DeadLetter);
-        }
-    }
-
-    tracing::debug!("[Server->Redis] append_pending_delta doc={doc_id} seq={seq} s3_key={s3_key}");
-    let queued = if inlined {
-        Ok(redis_ops::Queued::Marked)
-    } else {
-        redis_ops::append_pending_delta(&state.redis, &doc_id, seq, &s3_key, &update_wire).await
-    };
-    match queued {
-        Ok(redis_ops::Queued::Marked) => {}
-        // The list holds the delta, but no flusher cycle visits it until the
-        // reconciling sweep finds it. An operator sees the delay (`SRV-262`).
-        Ok(redis_ops::Queued::MarkMissed(e)) => {
-            tracing::error!("dirty mark failed seq={seq}: {e}");
-            tracing::debug!("dirty mark failed doc={doc_id} seq={seq}");
-            crate::metrics::failed(crate::metrics::Failure::DirtyMark);
-        }
-        // The document is being deleted: the delta has nowhere to go and must
-        // not be kept anywhere, nor broadcast (`SRV-017`).
-        Err(AppError::NotFound { .. }) => {
-            tracing::debug!("update dropped: document being deleted doc={doc_id} seq={seq}");
-            return;
-        }
-        Err(e) => {
-            // The pending list is the only path this sequenced delta takes to S3. A
-            // failed push would lose it after the seq was already assigned and
-            // broadcast. Its index row takes the frame instead, so a replay still
-            // finds it (`SRV-034`). Log loudly and dead-letter the full wire as well,
-            // so an operator sees the failure and can replay it (H1).
-            tracing::error!("append_pending_delta failed seq={seq}: {e}");
-            tracing::debug!("append_pending_delta failed doc={doc_id} seq={seq}");
-            crate::metrics::failed(crate::metrics::Failure::PendingAppend);
-            match db::attach_wire(&state.db, &doc_id, seq, &update_wire).await {
-                Ok(true) => {}
-                Ok(false) => tracing::error!("no index row took the frame seq={seq}"),
-                Err(e) => tracing::error!("attach_wire failed seq={seq}: {e}"),
-            }
-            if let Err(dl) =
-                redis_ops::push_dead_letter(&state.redis, &doc_id, seq, &s3_key, &update_wire).await
-            {
-                tracing::error!("dead-letter push failed seq={seq}: {dl}");
-                crate::metrics::failed(crate::metrics::Failure::DeadLetter);
-            }
         }
     }
 
@@ -578,8 +533,10 @@ const INDEX_WRITE_BACKOFF: [Duration; 3] = [
 /// Writes the index row of delta `seq`. A small delta lives in its row, in the
 /// same write as the row, and takes no other path (`SRV-148`). A large one, or
 /// one that meets a full inline tail, keeps an object of its own (`SRV-149`,
-/// `SRV-150`). Returns whether the row holds the delta. Both inserts ignore a
-/// row already written, so a retry never doubles one.
+/// `SRV-150`). The object is written before the row names it, so the relay
+/// acknowledges no delta that only the ephemeral store holds (`SRV-307`). A
+/// store that refuses the object leaves the frame in the row (`SRV-034`).
+/// Both inserts ignore a row already written, so a retry never doubles one.
 async fn store_index_row(
     state: &Arc<AppState>,
     doc_id: Id<Document>,
@@ -587,7 +544,7 @@ async fn store_index_row(
     seq: ambre_core::Seq<ambre_core::Relay>,
     s3_key: &ambre_core::ObjectKey,
     wire: &StoredPayload,
-) -> Result<bool, AppError> {
+) -> Result<(), AppError> {
     let author = &update.public_data.pub_key;
     let snapshot_id = &update.public_data.snapshot_id;
     let clock = update.public_data.clock;
@@ -608,13 +565,24 @@ async fn store_index_row(
                 if crate::hot_tail::past_watermark(deltas, bytes) {
                     crate::hot_tail::spawn_move(state, doc_id);
                 }
-                return Ok(true);
+                return Ok(());
             }
             db::InlineInsert::Full => crate::hot_tail::spawn_move(state, doc_id),
         }
     }
+    let put = crate::s3::put_delta_object(state, s3_key, wire).await;
     db::insert_update(&state.db, &doc_id, author, snapshot_id, clock, seq, s3_key).await?;
-    Ok(false)
+    if let Err(e) = put {
+        // The object does not exist, so the row must not name it. Postgres is
+        // durable where Redis is not, so the frame goes there.
+        tracing::error!("delta object put failed seq={seq}: {e}");
+        tracing::debug!("delta object put failed doc={doc_id} seq={seq}");
+        crate::metrics::failed(crate::metrics::Failure::ObjectPut);
+        // `false` means the row already holds the frame: an earlier attempt of
+        // this same write attached it.
+        let _: bool = db::attach_wire(&state.db, &doc_id, seq, wire).await?;
+    }
+    Ok(())
 }
 
 pub(crate) async fn handle_ephemeral(
@@ -785,8 +753,8 @@ pub(crate) async fn handle_request_missing(
         // Rehydrate each indexed delta into the full sealed Update the client
         // needs to decrypt and verify. A small delta's bytes are in its row,
         // and a moved one's in a batch object, fetched once (`SRV-155`). A large
-        // one's are in its own object once flushed, or in the pending map until
-        // then. A delta we cannot locate or decode ends the replay at that seq,
+        // one's are in its own object. A delta that an older relay queued is in
+        // the pending map until the flush writes its object. A delta we cannot locate or decode ends the replay at that seq,
         // and the caller is told (`SRV-041`). A page with a hole in it is never
         // sent.
         //
@@ -2801,7 +2769,7 @@ mod hot_tail_tests {
 
     /// `SRV-148`, `SRV-149`: a small delta is stored in its index row and takes
     /// no other path. A delta past the inline size keeps an object of its own,
-    /// reached through the pending list.
+    /// which its row names, and takes no pending entry.
     #[sqlx::test]
     #[cfg_attr(
         not(feature = "db"),
@@ -2846,10 +2814,17 @@ mod hot_tail_tests {
         )
         .await
         .unwrap();
-        assert!(matches!(rows.as_slice(), [r] if r.wire.is_none() && r.s3_key.is_some()));
+        let named = match rows.as_slice() {
+            [r] if r.wire.is_none() => r.s3_key.clone(),
+            other => panic!(
+                "expected one row naming an object, got {} rows",
+                other.len()
+            ),
+        };
+        let named = named.expect("the row names its object");
+        assert!(stub.object(named.as_str()).is_some(), "the object exists");
         let pending: usize = state.redis.llen(pending_key.as_str()).await.unwrap();
-        assert_eq!(pending, 1, "a large delta waits for the flush");
-        let _: usize = state.redis.del(pending_key).await.unwrap();
+        assert_eq!(pending, 0, "a large delta takes no pending entry");
     }
 
     /// `SRV-037`, `SRV-169`: two sessions of one key race for clock 1. The

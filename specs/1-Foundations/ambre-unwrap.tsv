@@ -2,6 +2,7 @@
 # One line per key that hands a newtype's primitive to workspace code: the number of sites it allows, then the true reason they may. Add a line by hand only; a reviewer reads it.
 key	count	reason
 ambre-core | src/unit.rs | crate::unit::Px<Doc>::zoomed_on_surface | Scale::get -> .scaled	1	A crossing of two families in core: Scalar::scaled widens a document length to the f64 of the surface under the zoom factor, the one conversion between the two spaces.
+ambre-crdt | src/history/ident.rs | crate::history::ident::Commit<'a>::deleted | Len::to_usize -> Len::of	1	A crossing of two axes of one text: Loro deletes no mark anchor, so each entity a text deletion takes out is one character, and its length in entities is its length in characters.
 ambre-crypto | src/aead.rs | crate::aead::open | Payload::as_bytes -> open_under	1	A private kernel: open_under is the AEAD opener over bytes that open, open_file, open_anchored_key and open_row share, each typed by its caller.
 ambre-crypto | src/aead.rs | crate::aead::open_anchored_key | Payload::as_bytes -> open_under	1	A private kernel: open_under is the AEAD opener over bytes that open, open_file, open_anchored_key and open_row share, each typed by its caller.
 ambre-crypto | src/aead.rs | crate::aead::open_file | Payload::as_bytes -> open_under	1	A private kernel: open_under is the AEAD opener over bytes that open, open_file, open_anchored_key and open_row share, each typed by its caller.
