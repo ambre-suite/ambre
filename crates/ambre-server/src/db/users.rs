@@ -475,7 +475,7 @@ pub async fn replace_master_key(
 mod tests {
     use super::*;
 
-    /// `ZK-018`: the account row holds what the relay may learn of a user in
+    /// `ZK-018`, `ZK-055`: the account row holds what the relay may learn of a user in
     /// the clear. Beside it sit the identifier it mints and the sealed keys.
     /// A column added here widens what the relay learns, so it fails this test
     /// before it ships.
@@ -505,6 +505,9 @@ mod tests {
                 "id",
                 "master_key_enc",
                 "master_key_salt",
+                // Which document holds the settings of the account, the one
+                // thing the relay learns of them (`ZK-055`).
+                "settings_document",
             ]
             .into_iter()
             .collect()

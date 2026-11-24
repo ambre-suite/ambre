@@ -147,10 +147,10 @@ pub enum NumberConvention { Document, TypeMine, AllMine }
 
 | Element | Where | Why |
 | :--- | :--- | :--- |
-| The reader's own locale | the device's local storage, key `ambre.reader_locale`, empty for none; never a document | two small values read once at boot need no asynchronous store |
+| The reader's own locale | the device's local storage, key `ambre.reader_locale`, empty for none; never a document | two small values read once at boot need no asynchronous store. Its home is the user settings (`SETTINGS-027`) |
 | Its first value | the browser's language, read once at the first run and stored; a malformed one is stored as none | a stored setting, so no later read of the machine happens (`LOCALE-012`) |
 | The convention | `TypeMine` until a picker exists | `LOCALE-016` |
-| Its later home | the settings document of the `User settings` Story (`ambre-roadmap.md` E6) | -- |
+| Its later home | the `locale` section of the user settings, beside the interface language (`ambre-spec-user-settings.md`, `SETTINGS-024`, `SETTINGS-027`) | -- |
 | The forms | `ambre_client_core::locale::table`, written by `scripts/locale_table.py` from CLDR 48.0.0, held by `just locale-table-check` | no mark is typed by hand |
 | The locales | `en`, `en-GB`, `fr`, `fr-CA`, `fr-CH`, `de`, `de-AT`, `de-CH`, `es`, `it`, `it-CH`, `pt`, `nl` | -- |
 | Any other tag | its language's record, else the neutral forms: a decimal point, no group, the ISO date | `LOCALE-013`; the neutral forms are what Trame drew before the register |
@@ -158,9 +158,10 @@ pub enum NumberConvention { Document, TypeMine, AllMine }
 
 **Two languages, and they never meet.** The document's locale is a property of the content: the
 numbers, the currencies, the dates and the collation a reader sees inside the document. The
-interface language is a property of the reader, held by the client and never written anywhere
-(`LOCALE-003`). A command title is the second one -- `title: fn(&Locale) -> String` in
-`ambre-spec-commands.md` takes the reader's, and this document supplies neither.
+interface language is a property of the reader, written in no document but the reader's sealed
+settings (`LOCALE-003`, `SETTINGS-024`). A command title is the second one --
+`title: fn(&Locale) -> String` in `ambre-spec-commands.md` takes the reader's, and this document
+supplies neither.
 
 **Resolving, in order.** Three steps, and the third is a value:
 
@@ -223,7 +224,8 @@ Collation is its own Story. Each other gap below waits on the
   locale-aware one disagree; which collation a tag selects, and for which operation, is open.
 * **Nothing supplies the reader's interface language.** `ambre-spec-commands.md` carries
   `title: fn(&Locale) -> String` and no document says who holds that argument. This one rules it out
-  of the document (`LOCALE-003`); where the client reads it from is unwritten.
+  of the document (`LOCALE-003`). The user settings store it (`SETTINGS-024`), and no title reads
+  it yet.
 * **An array constant keeps its separators.** The edit bar translates the decimal mark and the
   argument separator of a formula, and leaves the separators of a `{...}` array as stored.
 

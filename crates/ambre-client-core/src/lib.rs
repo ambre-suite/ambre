@@ -19,6 +19,8 @@ pub mod docfile;
 /// The name and the bytes of a file an import reads or an export writes.
 pub mod export_file;
 pub mod locale;
+/// The typed catalogue of the user settings, and the boot hint.
+pub mod settings;
 
 pub use docfile::{
     AMBRE_MAGIC, AMBRE_SEALED_VERSION, AMBRE_VERSION, AmbreHeader, ContainerFile, ContainerKind,
@@ -30,4 +32,8 @@ pub use export_file::{ExportExtension, ExportFilename, ExportFilenameError, File
 pub use locale::{
     CalendarNames, DateAmbiguity, DateOrder, DocumentLocale, Grouping, LocaleError, MonthDay,
     NumberConvention, NumberForms, ReaderLocale, TypedDate, resolve,
+};
+pub use settings::{
+    BootHint, BootHintText, PanelApplication, PanelFold, PanelSide, Setting, SettingChange,
+    SettingEntry, SettingValue, SettingWord, SettingsSection, ThemeChoice, UserSettings,
 };
