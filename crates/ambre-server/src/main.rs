@@ -453,7 +453,7 @@ where
 /// `_REDIRECT_URI` and `_ISSUER`. `None` when
 /// the client id is unset or empty. Unset or empty, the issuer of the `google`
 /// provider is Google's own, and the `oidc` provider stops the start
-/// (`SRV-322`, `SRV-339`).
+/// (`SRV-322`, `SRV-340`).
 fn oidc_registration(
     provider: ambre_core::OidcProvider,
 ) -> Result<Option<oidc::OidcRegistration>, Box<dyn std::error::Error>> {

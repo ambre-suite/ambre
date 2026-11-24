@@ -67,7 +67,7 @@ METRICS_TOKEN=$(hex 32)
 OIDC_GOOGLE_CLIENT_ID=
 OIDC_GOOGLE_CLIENT_SECRET=
 # The OpenID Connect issuer of the organization, in place of Google
-# (\`SRV-339\`): its https address, and the client it issued the suite.
+# (\`SRV-340\`): its https address, and the client it issued the suite.
 OIDC_ISSUER=
 OIDC_CLIENT_ID=
 OIDC_CLIENT_SECRET=

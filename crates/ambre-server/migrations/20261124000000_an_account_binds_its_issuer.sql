@@ -1,5 +1,5 @@
 -- A provider account is keyed by the issuer and the subject it asserts
--- (`SRV-343`), the one pair OpenID Connect makes unique.
+-- (`SRV-344`), the one pair OpenID Connect makes unique.
 --
 -- A subject is unique within one issuer alone. Keyed by the provider word and
 -- the subject, two issuers that assert one subject would sign two people in

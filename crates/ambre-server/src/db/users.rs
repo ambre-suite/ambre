@@ -183,7 +183,7 @@ pub async fn create_user(
 /// Uses `ON CONFLICT (oidc_issuer, oidc_subject)` to handle returning users.
 /// The account is keyed by the issuer and the subject, never by the address
 /// or the provider word. So two issuers that assert one subject reach two
-/// accounts (`SRV-343`).
+/// accounts (`SRV-344`).
 /// New users are inserted with placeholder (zero-filled) key columns because
 /// the master key, signing key, and exchange key are only set later via `PUT
 /// /keys/master`. The `ON CONFLICT DO UPDATE` refreshes `email` and
@@ -691,7 +691,7 @@ mod tests {
         assert_eq!(second.email_verified, EmailProof::Verified);
     }
 
-    /// `SRV-343`: an account is keyed by the issuer and the subject. Two
+    /// `SRV-344`: an account is keyed by the issuer and the subject. Two
     /// issuers that assert one subject sign two people in to two accounts,
     /// and Google's issuer a third. A second sign-in through one issuer finds
     /// its own account. A second issuer never takes the verified address of

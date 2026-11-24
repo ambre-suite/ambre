@@ -112,7 +112,7 @@ services:
       OIDC_GOOGLE_CLIENT_SECRET: ${OIDC_GOOGLE_CLIENT_SECRET:-}
       OIDC_GOOGLE_REDIRECT_URI: https://${AMBRE_DOMAIN}/signin/google
       # The OpenID Connect issuer of the organization: a Keycloak, an
-      # Authentik or its directory (`SRV-339`). The relay discovers it at its
+      # Authentik or its directory (`SRV-340`). The relay discovers it at its
       # https address, and the client build of `web` names the same one.
       OIDC_ISSUER: ${OIDC_ISSUER:-}
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}

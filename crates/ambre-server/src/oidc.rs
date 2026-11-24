@@ -40,13 +40,13 @@ pub struct OidcProviderState {
     pub client: OidcClient,
     pub redirect_uri: RedirectUrl,
     /// The issuer the deployment configured. The discovery document named it
-    /// exactly, and every identity token must name it exactly (`SRV-344`, `SRV-340`).
+    /// exactly, and every identity token must name it exactly (`SRV-345`, `SRV-341`).
     pub issuer: IssuerUrl,
     /// The client the provider issued the relay: the one audience an identity
     /// token may carry, and its authorized party when it names one.
     pub client_id: ClientId,
     /// The keys the issuer publishes, fetched again on an unknown key id at
-    /// most once per `KEYS_REFRESH_INTERVAL` (`SRV-341`).
+    /// most once per `KEYS_REFRESH_INTERVAL` (`SRV-342`).
     pub keys: ProviderKeys,
     /// Shared HTTP client for the token exchange and the key fetch. One
     /// instance is built at discovery time and reused for every callback,
@@ -199,7 +199,7 @@ impl std::fmt::Display for ProviderAddress {
     }
 }
 
-/// The issuer `provider` is discovered at (`SRV-322`, `SRV-339`).
+/// The issuer `provider` is discovered at (`SRV-322`, `SRV-340`).
 ///
 /// The `google` provider defaults to Google's own issuer. The `oidc` provider
 /// has none: the deployment names it, or the start stops. The transport of
@@ -241,25 +241,25 @@ pub async fn start_oidc_clients(
 const PROVIDER_DEADLINE: std::time::Duration = std::time::Duration::from_secs(10);
 
 /// The most bytes the relay reads of one answer of the identity provider
-/// (`ambre-spec-budgets.md` section 6, `SRV-342`). The answer is a discovery
+/// (`ambre-spec-budgets.md` section 6, `SRV-343`). The answer is a discovery
 /// document, a key set or a token answer.
 pub const PROVIDER_ANSWER_MAX_SIZE: ambre_core::Count<ambre_core::Octets> =
     ambre_core::Count::<ambre_core::Octets>::new(256 * 1024);
 
 /// The shortest interval between two fetches of the key set of one provider
-/// (`ambre-spec-budgets.md` section 8, `SRV-341`).
+/// (`ambre-spec-budgets.md` section 8, `SRV-342`).
 const KEYS_REFRESH_INTERVAL: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// How far the clock of the provider may stand from the clock of the relay
-/// (`ambre-spec-budgets.md` section 8, `SRV-340`). It applies to the expiry,
+/// (`ambre-spec-budgets.md` section 8, `SRV-341`). It applies to the expiry,
 /// the issue time and the start of an identity token.
 const PROVIDER_CLOCK_SKEW: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// The oldest issue time an identity token may carry: the lifetime of the
-/// sign-in state, since no exchange outlives it (`SRV-340`).
+/// sign-in state, since no exchange outlives it (`SRV-341`).
 const ID_TOKEN_MAX_AGE: std::time::Duration = std::time::Duration::from_secs(10 * 60);
 
-/// The algorithms an identity token may be signed under (`SRV-340`). Each one
+/// The algorithms an identity token may be signed under (`SRV-341`). Each one
 /// is asymmetric, so a key the issuer publishes never serves as a secret.
 /// `none` is no algorithm here.
 const ALLOWED_ALGORITHMS: [CoreJwsSigningAlgorithm; 8] = [
@@ -274,7 +274,7 @@ const ALLOWED_ALGORITHMS: [CoreJwsSigningAlgorithm; 8] = [
 ];
 
 /// The client every request to the identity provider goes through
-/// (`SRV-296`, `SRV-342`).
+/// (`SRV-296`, `SRV-343`).
 ///
 /// A request past its deadline fails, so a stalled provider holds no sign-in
 /// open. A redirect is never followed, as the provider crate asks. So an
@@ -340,7 +340,7 @@ impl<'c> AsyncHttpClient<'c> for ProviderHttp {
 /// A token under a key id the set does not hold fetches the set again. So a
 /// provider that rotates its key keeps signing people in. The fetch runs at
 /// most once per `KEYS_REFRESH_INTERVAL`. So a stream of forged key ids cannot
-/// turn the relay into a client that floods the provider (`SRV-341`).
+/// turn the relay into a client that floods the provider (`SRV-342`).
 pub struct ProviderKeys {
     jwks_uri: openidconnect::JsonWebKeySetUrl,
     set: std::sync::RwLock<CoreJsonWebKeySet>,
@@ -387,7 +387,7 @@ impl ProviderKeys {
     }
 }
 
-/// Discovers `registration`'s provider and builds its state (`SRV-344`).
+/// Discovers `registration`'s provider and builds its state (`SRV-345`).
 ///
 /// The relay refuses the provider, and so stops the start, when:
 ///
@@ -548,11 +548,11 @@ pub async fn exchange_code(
     verify_id_token(provider, id_token, &stored_state.nonce).await
 }
 
-/// The claims of `id_token`, once every check of `SRV-340` holds.
+/// The claims of `id_token`, once every check of `SRV-341` holds.
 ///
 /// A token under a key id the relay does not hold fetches the key set again,
 /// within the interval of [`ProviderKeys`]. The token is then checked once
-/// more (`SRV-341`).
+/// more (`SRV-342`).
 async fn verify_id_token(
     provider: &OidcProviderState,
     id_token: &CoreIdToken,
@@ -576,7 +576,7 @@ async fn verify_id_token(
     Ok(claims)
 }
 
-/// The checks the provider crate runs, under the settings of `SRV-340`:
+/// The checks the provider crate runs, under the settings of `SRV-341`:
 ///
 /// * the issuer and the audience;
 /// * the signature under `keys`, and an allowed algorithm;
@@ -625,7 +625,7 @@ fn check_id_token(
 
 /// Refuses a token whose authorized party is another client. The provider
 /// crate leaves the check out. A token with several audiences carries one,
-/// and the crate already refuses any audience but the relay's (`SRV-340`).
+/// and the crate already refuses any audience but the relay's (`SRV-341`).
 fn check_authorized_party(
     provider: &OidcProviderState,
     claims: &CoreIdTokenClaims,
@@ -645,7 +645,7 @@ struct NotBefore {
     nbf: Option<serde_json::Number>,
 }
 
-/// Refuses a token that is not valid yet, past the skew (`SRV-340`). The
+/// Refuses a token that is not valid yet, past the skew (`SRV-341`). The
 /// signature is already verified, so the payload is the issuer's own.
 fn check_not_before(id_token: &CoreIdToken) -> Result<(), AppError> {
     use base64::Engine as _;
@@ -1054,7 +1054,7 @@ mod tests {
         );
     }
 
-    /// `SRV-342`: an answer of the provider past the cap is refused, whether
+    /// `SRV-343`: an answer of the provider past the cap is refused, whether
     /// it announces its length or streams it. An answer at the cap is read.
     #[tokio::test]
     async fn a_provider_answer_past_its_cap_is_refused() {
@@ -1213,7 +1213,7 @@ mod tests {
         );
     }
 
-    /// `SRV-339`: a relay that names an OpenID Connect issuer discovers it as
+    /// `SRV-340`: a relay that names an OpenID Connect issuer discovers it as
     /// the `oidc` provider. A sign-in goes to its authorization endpoint
     /// under the configured client, and its code is exchanged for the
     /// verified identity of the person. That provider names no issuer of its
@@ -1261,7 +1261,7 @@ mod tests {
         ));
     }
 
-    /// `SRV-340`: an identity token is refused in each of these cases:
+    /// `SRV-341`: an identity token is refused in each of these cases:
     ///
     /// * it names another issuer, another audience or another authorized party;
     /// * it is signed under the client secret;
@@ -1320,7 +1320,7 @@ mod tests {
         }
     }
 
-    /// `SRV-344`, `SRV-342`: the relay refuses to start on a provider in each
+    /// `SRV-345`, `SRV-343`: the relay refuses to start on a provider in each
     /// of these cases:
     ///
     /// * its discovery document names another issuer than the one configured;
@@ -1352,7 +1352,7 @@ mod tests {
         assert!(start(StubProvider::spawn().await).await.is_ok());
     }
 
-    /// `SRV-341`: a token under a key id the relay does not hold fetches the
+    /// `SRV-342`: a token under a key id the relay does not hold fetches the
     /// key set again. So a provider that rotates its key keeps signing people
     /// in. A second unknown key id within the interval fetches
     /// nothing, and is refused.

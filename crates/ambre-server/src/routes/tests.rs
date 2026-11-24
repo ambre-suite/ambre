@@ -373,7 +373,7 @@ mod handler_tests {
         a_return_signs_the_person_in(pool, ambre_core::OidcProvider::Google).await;
     }
 
-    // `SRV-339`: the same, through the issuer the configuration names, under
+    // `SRV-340`: the same, through the issuer the configuration names, under
     // the `oidc` paths of the shipped router.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]

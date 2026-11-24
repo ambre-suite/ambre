@@ -2014,6 +2014,8 @@ ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | Ra
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | RateLimitCategory::prefix() | ret | &'static str	newtype-inner	the enum's own word, the prefix of the Redis key its counter is stored and read under
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | SLIDING_WINDOW_LUA | const | &str	free-text	Lua script text
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | client_peer(x_forwarded_for) | param | Option<&str>	generic	the X-Forwarded-For header text before its parse: client_peer reads the entry of the first trusted proxy into an IpAddr at once
+ambre-server | src/oidc.rs | crate::oidc | <ProviderHttp as AsyncHttpClient<'c>>::Future | assoc | Pin<Box<dyn Future<Output=Result<HttpResponse,Self::Error>>+Send+'c>>	trait	the future the AsyncHttpClient trait of oauth2 fixes, whose answer is the http::Response<Vec<u8>> the provider crate parses
+ambre-server | src/oidc.rs | crate::oidc | <ProviderHttp as AsyncHttpClient<'c>>::call(request) | param | HttpRequest	trait	the request the AsyncHttpClient trait of oauth2 fixes, an http::Request<Vec<u8>> the provider crate builds
 ambre-server | src/payload.rs | crate::payload | StoredPayload.0 | field | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/payload.rs | crate::payload | StoredPayload::expose_bytes() | ret | &[u8]	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/payload.rs | crate::payload | StoredPayload::len() | ret | usize	newtype-inner	newtype inner, accessor or constructor
