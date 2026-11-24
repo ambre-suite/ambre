@@ -29,13 +29,11 @@ pub use crate::view::walk::{PAPER, PagePalette, Paper, ThemeInks};
 
 /// How far the shadow falls below the sheet.
 const SHADOW_DROP: Px<Surface> = Px::<Surface>::new(2.0);
-/// How many rings the shadow spreads over, one pixel each.
-const SHADOW_RINGS: u8 = 6;
-/// The strength of one ring. The rings overlap, so the shadow is darkest at
-/// the sheet's edge and fades over [`SHADOW_RINGS`] pixels.
-const SHADOW_RING_ALPHA: f32 = 0.03;
+/// How far the shadow spreads past the sheet, in rings of one pixel. The
+/// rings overlap, so the shadow is darkest at the sheet's edge and fades out.
+const SHADOW_SPREAD: Px<Surface> = Px::<Surface>::new(6.0);
 /// How far the shadow reaches past the sheet, on any side.
-const SHADOW_REACH: Px<Surface> = Px::<Surface>::new(SHADOW_RINGS as f64 + SHADOW_DROP.get());
+const SHADOW_REACH: Px<Surface> = Px::<Surface>::new(SHADOW_SPREAD.get() + SHADOW_DROP.get());
 /// The width of the local caret and of a remote one.
 const CARET_WIDTH: Px<Surface> = Px::<Surface>::new(1.5);
 /// The tab a remote caret carries above its bar, standing for its label.
@@ -794,7 +792,8 @@ impl ProseUiState {
 
 /// The colour of one ring of a sheet's shadow.
 pub(crate) fn shadow_ring(palette: &PagePalette) -> ambre_draw::Color {
-    palette.shadow.multiply_alpha(SHADOW_RING_ALPHA)
+    // One ring at three hundredths: six of them reach about a sixth.
+    palette.shadow.multiply_alpha(0.03)
 }
 
 /// A sheet and its soft shadow, at `top` down the column. The page itself is
@@ -810,9 +809,9 @@ fn paint_sheet<S: DrawSurface>(
     let sheet = Rect::new(0.0, 0.0, width.get(), height.get());
     surface.push_transform(Affine::translate((0.0, top.get())));
     let ring = shadow_ring(palette);
-    for spread in 1..=SHADOW_RINGS {
-        let spread = f64::from(spread);
-        let drop = SHADOW_DROP.get();
+    let drop = SHADOW_DROP.get();
+    let mut spread = 1.0;
+    while spread <= SHADOW_SPREAD.get() {
         surface.fill_rect(
             Rect::new(
                 -spread,
@@ -822,6 +821,7 @@ fn paint_sheet<S: DrawSurface>(
             ),
             ring,
         );
+        spread += 1.0;
     }
     surface.fill_rect(sheet, palette.sheet);
     surface.pop_transform();

@@ -88,7 +88,7 @@ pub fn snap_world(p: Point, step: Px<Board>) -> Point {
 }
 
 /// The side of a grid dot, in screen pixels, at every zoom (`TOILE-UI-280`).
-const DOT: f64 = 1.5;
+const DOT: ambre_core::Px<ambre_core::Surface> = ambre_core::Px::<ambre_core::Surface>::new(1.5);
 
 /// Fill the board background only, without the grid. Used by presentation
 /// focus mode (`toile-presentation`), which hides the grid so the audience sees
@@ -139,7 +139,7 @@ pub fn paint_grid<S: DrawSurface>(
     };
     let xs = crossings(min_x, max_x, |p| p.x, |x| Point::new(x, 0.0));
     let ys = crossings(min_y, max_y, |p| p.y, |y| Point::new(0.0, y));
-    let half = DOT / 2.0;
+    let half = DOT.get() / 2.0;
     for &sy in &ys {
         for &sx in &xs {
             surface.fill_rect(
@@ -290,7 +290,11 @@ mod tests {
             let all = dots(&ops);
             assert!(!all.is_empty(), "zoom {zoom} paints dots");
             for dot in all {
-                assert_eq!((dot.width(), dot.height()), (DOT, DOT), "zoom {zoom}");
+                assert_eq!(
+                    (dot.width(), dot.height()),
+                    (DOT.get(), DOT.get()),
+                    "zoom {zoom}"
+                );
             }
         }
     }
