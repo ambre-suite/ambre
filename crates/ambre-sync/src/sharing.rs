@@ -2072,7 +2072,7 @@ pub(crate) struct RosterRead {
 /// Asks the relay who is in `call` of `channel` (`CALL-070`). It reads the membership log of
 /// the channel too when `log` names it (the Murmure calls spec).
 #[cfg_attr(
-    not(target_arch = "wasm32"),
+    all(not(test), not(target_arch = "wasm32")),
     expect(dead_code, reason = "only the wasm transport asks the relay")
 )]
 pub(crate) async fn call_roster_task<H: ShareHttp>(
@@ -2084,7 +2084,7 @@ pub(crate) async fn call_roster_task<H: ShareHttp>(
     log: Option<CallLogParams>,
 ) -> RosterRead {
     let url = crate::http::Url::<crate::http::ApiRoot>::of(scheme, base)
-        .route(format!("/calls/{call}/roster?channel={channel}"));
+        .route(format!("/call-rosters/{call}?channel={channel}"));
     let roster = match http
         .get_json::<ambre_protocol::signaling::CallRoster>(&url)
         .await
@@ -2659,6 +2659,60 @@ mod tests {
             footing: footing_of(document_id, &[]),
             rule: LogRule::document(),
         }
+    }
+
+    /// The prefixes `Trunk.toml` proxies as WebSockets. Such a proxy refuses a plain request.
+    fn websocket_proxies() -> Vec<String> {
+        let trunk = include_str!("../../../Trunk.toml");
+        trunk
+            .split("[[proxy]]")
+            .skip(1)
+            .filter(|block| block.lines().any(|l| l.trim() == "ws = true"))
+            .filter_map(|block| {
+                block.lines().find_map(|l| {
+                    l.trim()
+                        .strip_prefix("rewrite = \"")
+                        .and_then(|r| r.strip_suffix('"'))
+                        .map(str::to_owned)
+                })
+            })
+            .collect()
+    }
+
+    /// The ask of who is in a call is a plain GET. Behind `trunk serve`, the plain proxy of the
+    /// API carries it to the relay, and no WebSocket proxy may catch it.
+    #[tokio::test]
+    async fn the_roster_ask_leaves_the_page_on_a_route_no_websocket_proxy_catches() {
+        let http = FakeHttp::new(vec![Err(http::HttpError::Local(
+            ambre_core::LocalFailure::UnexpectedAnswer,
+        ))]);
+        let base = crate::http::Url::<crate::http::RelayHost>::new("127.0.0.1:8080".to_owned());
+        let read = call_roster_task(
+            &http,
+            Id::<ambre_core::id::Call>::mint(),
+            Id::<Channel>::mint(),
+            crate::http::UrlScheme::Http,
+            &base,
+            None,
+        )
+        .await;
+        assert!(read.roster.is_none(), "the scripted answer fails");
+        let calls = http.calls();
+        let [Call::Get(url)] = calls.as_slice() else {
+            panic!("one GET leaves the page, got {calls:?}");
+        };
+        let path = url
+            .strip_prefix("http://127.0.0.1:8080")
+            .expect("the ask goes to the relay of the page");
+        let proxies = websocket_proxies();
+        assert!(!proxies.is_empty(), "Trunk.toml proxies the sockets");
+        for proxy in &proxies {
+            assert!(!path.starts_with(proxy.as_str()), "{proxy} catches {path}");
+        }
+        assert!(
+            path.starts_with("/api/"),
+            "the plain proxy of the API carries {path}"
+        );
     }
 
     #[tokio::test]

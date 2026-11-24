@@ -7,6 +7,7 @@
 
 pub mod call_controls;
 pub mod call_devices;
+pub mod call_float;
 pub mod call_ring;
 pub mod call_videos;
 pub mod call_volumes;

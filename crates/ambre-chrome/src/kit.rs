@@ -327,6 +327,7 @@ fn choice_views<T>(choices: &[Choice<T>]) -> Vec<crate::ChoiceView> {
             icon: c.icon,
             reach: None,
             face: None,
+            hint: None,
         })
         .collect()
 }

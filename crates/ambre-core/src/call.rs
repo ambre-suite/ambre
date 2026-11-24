@@ -272,14 +272,33 @@ impl Axis for VideoSlots {
     const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("VideoSlot");
 }
 
-/// The video slot the page gives the screen slot of the SFU. The SFU offers it after the nine
-/// video slots, so the page numbers it tenth (`ambre-spec-call-media.md section 3`, the screen).
-pub const SCREEN_SLOT: Pos<VideoSlots> = Pos::new(9);
+/// How many videos one receiver of a call gets.
+pub enum ReceivedVideos {}
+
+impl NarrowCount for ReceivedVideos {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ReceivedVideos");
+}
+
+/// The desktop count of the call row of `ambre-spec-budgets.md section 1`. The one place the
+/// figure is written: the count below and the slots of the page are built on it.
+const FORWARDED: u32 = 9;
+
+/// The count of videos the SFU forwards one receiver at most. The SFU, the wire, the slots of the
+/// page and the fill grid of Murmure read it.
+pub const VIDEOS_PER_RECEIVER: Count<ReceivedVideos> = Count::new(FORWARDED);
+
+/// The count of videos a page under the phone width asks for: the phone count of the call row of
+/// `ambre-spec-budgets.md section 1`.
+pub const PHONE_VIDEOS: Count<ReceivedVideos> = Count::new(9);
+
+/// The video slot the page gives the screen slot of the SFU. The SFU offers it after its video
+/// slots, so the page numbers it next (`ambre-spec-call-media.md section 3`, the screen).
+pub const SCREEN_SLOT: Pos<VideoSlots> = Pos::new(FORWARDED);
 
 /// The video slot the page gives its own camera, which its own tile draws mirrored. No receiver
-/// carries it: the SFU offers nine video slots and one screen slot (the Murmure calls spec,
-/// section 3, the video region).
-pub const OWN_SLOT: Pos<VideoSlots> = Pos::new(10);
+/// carries it: it follows the video slots and the screen slot (the Murmure calls spec, section 3,
+/// the video region).
+pub const OWN_SLOT: Pos<VideoSlots> = Pos::new(FORWARDED + 1);
 
 /// The slot of one receive transform: an audio slot or a video slot. The page numbers each kind
 /// apart (`ambre-spec-call-media.md section 3`, the volumes and video on the canvas).

@@ -21,7 +21,12 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-160` | `OBS` | Under the phone width, Murmure MUST show one view at a time: the channel list, a channel, or a thread. | this spec section 3; `ambre-spec-adaptive-layout.md section 2` | `ambre_app::shell::murmure_regions::a_phone_shows_one_view_at_a_time` -- each pane in a frame of 360 and 599 pixels shows one region, as wide as the frame | none | verified |
 | `MURMURE-161` | `INV` | A region MUST collapse at a narrow width, never disappear. | this spec section 3; `CHROME-033` | `ambre_app::shell::murmure_regions::a_region_collapses_and_never_disappears` -- the folded sidebar of a tablet is a strip that unfolds, and a phone reaches the channel list through the back control | none | verified |
 | `MURMURE-162` | `INV` | The layout MUST read the three widths of the adaptive layout, never a device class. | this spec section 3; `CHROME-034` | `ambre_app::shell::murmure_regions::the_layout_reads_the_three_widths` -- a channel and a thread in frames of 599, 600, 1024 and 1025 pixels, each region flipping at the two thresholds alone | none | verified |
-| `MURMURE-163` | `OBS` | The sidebar MUST group the public channels of each space by category, then list the private channels and the direct messages. | this spec section 3 | `ambre_murmure::ui::sidebar::tests::the_sidebar_groups_public_channels_by_category_then_private_then_direct` -- the sections in order, each channel by catalogue rank; `ambre_app::shell::murmure_regions::the_sidebar_draws_its_sections_in_order` -- the shell draws the section titles and entries in that order | none | verified |
+| `MURMURE-163` | `OBS` | The sidebar MUST group the public channels of the space it shows by category, then list the private channels of that space and the direct messages of every space. | this spec section 3, the sidebar | `ambre_murmure::ui::sidebar::tests::the_sidebar_shows_one_space_and_every_direct_message`; `ambre_murmure::ui::sidebar::tests::the_sidebar_groups_public_channels_by_category_then_private_then_direct`; `ambre_app::shell::murmure_regions::the_sidebar_draws_its_sections_in_order` -- wasm tier | none | verified |
+| `MURMURE-711` | `OBS` | The top of the sidebar MUST hold the space switcher, which names the space shown and lists every space of the user. | this spec section 3, the sidebar | `ambre_murmure::ui::sidebar::tests::the_sidebar_shows_one_space_and_every_direct_message`; `ambre_app::shell::murmure_regions::the_space_switcher_names_the_space_and_lists_each_one` -- wasm tier | none | verified |
+| `MURMURE-714` | `INV` | The space switcher MUST carry an accessible name, take the keyboard focus and carry its expanded state. | this spec section 3, the sidebar; `1-Foundations/ambre-spec-accessibility.md section 2` (`CHROME-022`) | `ambre_app::shell::murmure_regions::the_space_switcher_names_the_space_and_lists_each_one` -- wasm tier | none | verified |
+| `MURMURE-715` | `OBS` | Under the phone width, the channel list MUST show a bar of tabs on its bottom edge: the channels, the direct messages and the search. | this spec section 3, the phone | `ambre_app::shell::murmure_regions::the_bar_of_tabs_shows_on_the_phone_list_alone` -- wasm tier, at a phone width | none | verified |
+| `MURMURE-716` | `OBS` | The bar of tabs MUST NOT show over a channel or a thread. | this spec section 3, the phone | `ambre_app::shell::murmure_regions::the_bar_of_tabs_shows_on_the_phone_list_alone` -- wasm tier: a channel and a desktop show no bar | none | verified |
+| `MURMURE-719` | `INV` | Each tab MUST carry an accessible name, take the keyboard focus and carry its selected state. | this spec section 3, the phone; `1-Foundations/ambre-spec-accessibility.md section 2` (`CHROME-022`) | `ambre_app::shell::murmure_regions::the_bar_of_tabs_shows_on_the_phone_list_alone` -- wasm tier | none | verified |
 | `MURMURE-164` | `OBS` | A channel to join MUST be shown apart from the joined channels. | this spec section 3; `features/ambre-spec-murmure-spaces.md` | `ambre_murmure::ui::sidebar::tests::a_channel_to_join_sits_apart_from_the_joined_ones` -- a section of its own, left once joined; `ambre_app::shell::murmure_regions::the_sidebar_draws_its_sections_in_order` -- the last section drawn is the one to join | none | verified |
 | `MURMURE-165` | `OBS` | A channel with activity MUST show a mark, and its count once the count is known. | this spec section 3; `features/ambre-spec-murmure-unread.md` | `ambre_murmure::ui::sidebar::tests::a_mark_shows_before_the_count_and_the_count_replaces_it` -- the mark, then the counts, kept when absent from an answer; `ambre_app::shell::murmure_regions::a_channel_shows_its_mark_then_its_counts` -- the entry draws the mark, then the message and mention counts | none | verified |
 | `MURMURE-382` | `INV` | A split view MUST exist at the desktop width alone. | this spec section 3; `ambre-spec-adaptive-layout.md section 2` | not built | unbuilt -- lands with the `Two channels side by side` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -59,10 +64,24 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-385` | `POST` | Closing a pane MUST give its width back to the other. | this spec section 3 | not built | unbuilt -- lands with the `Two channels side by side` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-386` | `FRAME` | A split view MUST NOT hold in view more than the documents of the two channels it shows. | this spec section 3; `RESID-003` | not built | unbuilt -- lands with the `Two channels side by side` Story (`ambre-roadmap.md` E5) | unimplemented |
 
+### 1.5 Switch the space shown
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-712` | `POST` | Choosing a space in the space switcher, or its chord of `ambre-spec-murmure-keyboard.md section 3`, MUST show that space in the sidebar. | this spec section 3, the sidebar; `ambre-spec-murmure-keyboard.md section 3` | `ambre_app::shell::murmure_regions::the_space_switcher_names_the_space_and_lists_each_one` -- wasm tier: a choice shows the space; `ambre_chrome::command::digit_tests::a_shifted_digit_chord_reads_the_key_and_not_the_character`; structural -- each command of `SHOW_SPACE` runs `show_space` of its rank | none | verified |
+| `MURMURE-713` | `FRAME` | Switching the space shown MUST NOT change the channel the view shows, nor move a read cursor, nor open or join a channel. | this spec section 3, the sidebar | `ambre_app::shell::murmure_regions::the_space_switcher_names_the_space_and_lists_each_one` -- wasm tier: a choice sends nothing; structural -- `show_space` sets two signals of the relay | none | verified |
+
+### 1.6 Change the tab on a phone
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-717` | `POST` | A press on a tab MUST show its view in place of the channel list. | this spec section 3, the phone | `ambre_murmure::ui::sidebar::tests::a_tab_shows_its_view_in_place_of_the_list`; `ambre_app::shell::murmure_regions::the_bar_of_tabs_shows_on_the_phone_list_alone` -- wasm tier | none | verified |
+| `MURMURE-718` | `FRAME` | A press on a tab MUST NOT move a read cursor, nor write into a channel. | this spec section 3, the phone | `ambre_app::shell::murmure_regions::the_bar_of_tabs_shows_on_the_phone_list_alone` -- wasm tier: a tab sends nothing | none | verified |
+
 * **Budget.** none of its own: the chrome regions are DOM, and the message list holds the frame
   budget of `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: the width of a window never leaves the client.
-* **Verification.** 23 `verified`, 5 `unimplemented`. The regions, the back control, the rows of the
+* **Verification.** 32 `verified`, 5 `unimplemented`. The regions, the back control, the rows of the
   shell, the sidebar entries and the list of the shown channel are built. The split view is not.
 
 ---
@@ -97,6 +116,25 @@ with its own list and composer (`MURMURE-383`). The window narrows, and the seco
 
 On a phone, the application switcher of the suite stays the drawer the adaptive layout declares.
 The channel list is a Murmure view inside it, not a second drawer.
+
+**The phone, a stack and a bar of tabs.** Under the phone width the views stack: the channel list
+is the home, a channel stacks on it and a thread on the channel (`MURMURE-160`). Back pops one
+view, as the gesture of the browser does (`MURMURE-168`). The channel list carries a bar of tabs
+on its bottom edge: the channels, the direct messages and the search (`MURMURE-715`). A tab shows
+its view in place of the list (`MURMURE-717`). The bar leaves with the list, so a channel and a
+thread keep their height for the messages and the composer (`MURMURE-716`).
+
+The bar is Murmure's, and no other application lays one out. `ambre-spec-shell.md` binds Prose,
+Trame and Toile alone, and its bans name a toolbar, a bar of menus and a button of commands
+(`CHROME-159` to `CHROME-161`). A bar of tabs holds no command: it moves between three views, as
+the back control does. The adaptive layout already declares a bottom bar for the navigation of a
+phone (`ambre-spec-adaptive-layout.md section 2`).
+
+**The sidebar shows one space.** The space switcher at its top names the space shown and lists
+every space of the user (`MURMURE-711`). The sidebar groups the categories, the private channels
+and the channels to join of that space alone (`MURMURE-163`). The direct messages belong to no
+space, so every space shows them all. A choice in the switcher, or its chord, shows another space
+(`MURMURE-712`). The channel the view shows stays, and nothing opens or joins (`MURMURE-713`).
 
 **The rows of the shell.** Murmure fills the grid of `ambre-spec-chrome.md section 2` as below.
 
@@ -181,7 +219,9 @@ in a cell of its own (`MURMURE-421`).
 | Three columns on a desktop | the thread over the message list | the user loses the channel while reading the thread |
 | No zoom of its own | the zoom model of the editors, with its chip | Murmure is no editor, and a chat has no page or board to fit. The browser zoom scales the chrome and the lists together (`ambre-spec-high-density.md`) |
 | The channel header in the command bar | a status bar under the conversation | a chat has no count or mode to report, and the row costs a line of messages on a phone |
-| One view at a time on a phone | a drawer that slides the sidebar in | the edge gesture fights the back gesture of the browser |
+| One view at a time on a phone | a drawer that slides the sidebar in | the edge gesture fights the back gesture of the browser, and its swipe fights the horizontal scroll of the call band |
+| A bar of tabs on the phone list alone | the bar on every view of the phone | it would take a row of height from the messages and the composer of a channel, which a thread and a call already share |
+| One space at a time in the sidebar | every space in one long sidebar | a member of three spaces scrolls past two of them to reach a channel, and the categories of two spaces mix |
 
 ---
 

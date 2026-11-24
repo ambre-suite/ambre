@@ -331,7 +331,19 @@ async fn a_ruler_drag_hands_back_one_release() {
         (r.left() + r.width() / 2.0) as f32
     };
     let start = centre(&handle);
+    assert_eq!(
+        handle.text_content().as_deref(),
+        Some(""),
+        "no glyph draws the marker"
+    );
+    assert_eq!(handle.get_attribute("data-dragging"), None);
     pointer(&handle, "pointerdown", start);
+    leptos::task::tick().await;
+    // `PROSE-UI-257`: the marker in hand shows its drag state.
+    assert_eq!(
+        handle.get_attribute("data-dragging").as_deref(),
+        Some("true")
+    );
     for step in 1..=3 {
         pointer(&handle, "pointermove", start + 20.0 * step as f32);
         leptos::task::tick().await;
@@ -347,6 +359,11 @@ async fn a_ruler_drag_hands_back_one_release() {
     let dropped = Px::<Css>::new(start + 60.0).in_canvas(origin().x);
     let expected = RulerDrag::press(RulerHandle::IndentLeft, dropped).release(&ruler);
     assert_eq!(signals.ruler_release.get_untracked(), Some(expected));
+    assert_eq!(
+        handle.get_attribute("data-dragging"),
+        None,
+        "the drag state ends"
+    );
     signals.ruler_release.set(None);
     pointer(&handle, "pointerup", start + 80.0);
     assert_eq!(signals.ruler_release.get_untracked(), None, "one release");

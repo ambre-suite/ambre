@@ -2359,8 +2359,10 @@ mod tests {
             Rect::new(0.0, 0.0, 50.0, 50.0),
         )]);
         let canvas = Rect::new(0.0, 0.0, 1000.0, 800.0);
-        let lines = |s: &RecordingSurface| {
-            s.count(|o| matches!(o, DrawOp::StrokeLine { color, .. } if *color == LIGHT_PALETTE.grid_line))
+        let dots = |s: &RecordingSurface| {
+            s.count(
+                |o| matches!(o, DrawOp::FillRect { color, .. } if *color == LIGHT_PALETTE.grid_dot),
+            )
         };
         for present in [PresentMode::Editing, PresentMode::Presenting] {
             let surface = paint_pass(
@@ -2375,14 +2377,14 @@ mod tests {
                 surface.ops().first(),
                 Some(&DrawOp::FillRect {
                     rect: canvas,
-                    color: LIGHT_PALETTE.content_bg
+                    color: LIGHT_PALETTE.ground
                 }),
                 "present {present:?}"
             );
             if present.is_presenting() {
-                assert_eq!(lines(&surface).get(), 0, "focus paints no grid line");
+                assert_eq!(dots(&surface).get(), 0, "focus paints no grid dot");
             } else {
-                assert!(lines(&surface).get() > 0, "the board paints its grid");
+                assert!(dots(&surface).get() > 0, "the board paints its grid");
             }
         }
     }
@@ -2562,21 +2564,6 @@ mod tests {
         );
     }
 
-    // A minimal palette for host tests (the generated LIGHT lives behind the
-    // canvas build script; construct the fields the renderer reads).
-    const LIGHT_PALETTE: Palette = Palette {
-        content_bg: Color::from_rgba8(255, 255, 255, 255),
-        content_pending: Color::from_rgba8(235, 237, 240, 255),
-        header_bg: Color::from_rgba8(242, 243, 245, 255),
-        header_active: Color::from_rgba8(245, 231, 200, 255),
-        header_hover: Color::from_rgba8(230, 232, 236, 255),
-        grid_line: Color::from_rgba8(210, 213, 218, 255),
-        header_border: Color::from_rgba8(184, 188, 196, 255),
-        selection: Color::from_rgba8(176, 111, 10, 255),
-        cell_text: Color::from_rgba8(32, 32, 32, 255),
-        header_text: Color::from_rgba8(95, 99, 104, 255),
-        caret: Color::from_rgba8(20, 20, 20, 255),
-        cell_error: Color::from_rgba8(204, 68, 68, 255),
-        cell_border: Color::from_rgba8(96, 96, 96, 255),
-    };
+    // The generated light palette, which every host test reads.
+    const LIGHT_PALETTE: Palette = ambre_canvas::theme::LIGHT;
 }

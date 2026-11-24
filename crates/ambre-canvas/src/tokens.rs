@@ -343,11 +343,19 @@ struct CanvasColors {
     cell_error: OpaqueColour,
     /// A cell border the user did not colour.
     cell_border: OpaqueColour,
+    /// The ground around a page and under a board: the chrome's sunken
+    /// surface, drawn by the canvas.
+    ground: OpaqueColour,
+    /// A dot of the board grid.
+    grid_dot: OpaqueColour,
+    /// The colour a page casts its shadow in. The painter lays it at a
+    /// fraction of its strength, so the token itself stays opaque.
+    shadow: OpaqueColour,
 }
 
 impl CanvasColors {
     /// The `Palette` field name of each colour, in field order.
-    fn fields(&self) -> [(&'static str, OpaqueColour); 13] {
+    fn fields(&self) -> [(&'static str, OpaqueColour); 16] {
         [
             ("content_bg", self.content_bg),
             ("content_pending", self.content_pending),
@@ -362,6 +370,9 @@ impl CanvasColors {
             ("caret", self.caret),
             ("cell_error", self.cell_error),
             ("cell_border", self.cell_border),
+            ("ground", self.ground),
+            ("grid_dot", self.grid_dot),
+            ("shadow", self.shadow),
         ]
     }
 }
