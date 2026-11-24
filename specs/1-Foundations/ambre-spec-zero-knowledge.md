@@ -72,16 +72,16 @@ that component's prefix instead.
 | `ZK-044` | `INV` | What the SFU learns of a choice of videos MUST be limited to `{the senders each receiver chose, by their sender index, the one it marks large, the instant of each choice}`. | this spec section 2, the choice of videos of a call; `ambre-spec-call-media.md section 3`, the choice of videos; `ZK-021` | type-level -- `ambre_protocol::signaling::VideoChoice` holds the sender indexes and the large one alone, and the SFU reads it on its own socket; `ambre_sync::call_link::tests::a_choice_of_videos_reaches_the_sfu_alone_and_never_the_relay` -- the relay reads none of it | none | verified |
 | `ZK-048` | `INV` | What a host that a document names learns of a client MUST be limited to `{the address of the client, the page asked, the instant of each request}`, and only after the user of that client chose to load pages of that host. | this spec section 2, a web page on a board; `3-Toile/features/ambre-spec-toile-embeds.md`, `TOILE-299`, `TOILE-301` | `ambre_app::host::web_embed::tests::no_page_loads_before_its_site_is_chosen` -- no frame with an address before the answer, and the choice in the storage of the browser alone; `ambre_toile::ui::embed::consent_tests::only_an_answer_loads_a_page`; structural -- the frame carries no referrer, no permission and an opaque origin (`TOILE-088`), so the request names neither the board nor the user | none | verified |
 | `ZK-054` | `INV` | No setting of a user MUST leave the client outside the sealed settings document. | this spec section 2, the settings of a user; `ambre-spec-user-settings.md section 3` (`SETTINGS-001`) | `ambre_sync::settings::tests::an_account_with_none_claims_one_and_opens_the_relay_answer` -- the claim carries the id, the wrap and the entry, and no setting; structural -- a setting leaves the Logic thread only as a delta of the settings document, which the seal of `ZK-001` covers | none | verified |
-| `ZK-055` | `INV` | What the relay learns of the settings of a user MUST be limited to `{which document holds them}`, beyond what `ZK-007` admits for any document. | this spec section 2, the settings of a user; `ambre-spec-user-settings.md section 3`; `ZK-007` | none | unheld -- the relay keeps one pointer per account and the sealed document, and no test reads every column it holds for a settings document; lands with the `The settings of a user follow the account` Story (`ambre-roadmap.md` MVP) | failing |
+| `ZK-055` | `INV` | What the relay learns of the settings of a user MUST be limited to `{which document holds them}`, beyond what `ZK-007` admits for any document. | this spec section 2, the settings of a user; `ambre-spec-user-settings.md section 3`; `ZK-007` | `ambre_server::db::users::tests::the_account_table_holds_only_what_the_relay_may_learn` -- the account row adds the pointer to the settings document and nothing else of them; structural -- the settings document itself rides the pipeline of any document, whose relay view `ZK-007` bounds | none | verified |
 
 * **Budget.** the four crypto rows of `ambre-spec-budgets.md section 1`: the outbound seal, the
   inbound open, the full round trip and the snapshot compression. `criterion` measures all four in
   `ambre-crypto/benches`, which no CI job runs.
 * **Boundary.** this document **is** the boundary. Every other document either refines one of these
   rows on its own side, or answers `none` and says why.
-* **Verification.** 52 `verified`, 1 `failing`, 1 `human-review`, 1 `unimplemented`. Every row is an
-  `INV`. This document owns no gesture, so it declares no operation table, and each rule binds the
-  boundary at every instant.
+* **Verification.** 53 `verified`, 1 `human-review`, 1 `unimplemented`. Every row is an `INV`. This
+  document owns no gesture, so it declares no operation table, and each rule binds the boundary at
+  every instant.
 
   The structural rows hold because the crate graph, `deny.toml` and the type system refuse what
   they forbid. No key type is nameable on the wire, no `argon2` sits outside `ambre-crypto`, no decrypting
