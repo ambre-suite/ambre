@@ -108,15 +108,14 @@ pub(crate) fn MurmureShell(
 }
 
 /// The palette command of `kind`, which the search field of the header runs
-/// (`CHROME-239`). Each application declares its own, under the same chord.
+/// (`CHROME-239`). Each application declares its own under the one palette
+/// chord, so the shell finds it by that chord and names no id of it
+/// (`ARCH-018`).
 pub(crate) fn palette_command(kind: DocType) -> Option<&'static ambre_chrome::commands::Command> {
-    let id = match kind {
-        DocType::Toile => ambre_toile::ui::commands::PALETTE,
-        DocType::Prose => ambre_prose::commands::PALETTE,
-        DocType::Trame => trame_chrome::PALETTE,
-        DocType::Murmure => ambre_murmure::ui::commands::PALETTE,
-    };
-    ambre_chrome::commands::find(palette_table(kind), id)
+    palette_table(kind).iter().find(|c| {
+        c.keybindings
+            .contains(&ambre_chrome::commands::shared::PALETTE_CHORD)
+    })
 }
 
 /// The header every application shares (`ambre-spec-shell.md` section 2).
@@ -1350,6 +1349,21 @@ mod tests {
             ids(ambre_murmure::ui::commands::COMMANDS)
         );
         assert!(fed(DocType::Toile).len() > ambre_toile::ui::menu::COMMANDS.len());
+        // The header finds the palette command of each table by its chord.
+        let palette = |kind| palette_command(kind).map(|c| c.id);
+        assert_eq!(
+            palette(DocType::Toile),
+            Some(ambre_toile::ui::commands::PALETTE)
+        );
+        assert_eq!(
+            palette(DocType::Prose),
+            Some(ambre_prose::commands::PALETTE)
+        );
+        assert_eq!(palette(DocType::Trame), Some(trame_chrome::PALETTE));
+        assert_eq!(
+            palette(DocType::Murmure),
+            Some(ambre_murmure::ui::commands::PALETTE)
+        );
     }
 
     /// The header names the open document (`CHROME-203`). The Ambre menu

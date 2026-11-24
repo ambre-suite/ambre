@@ -91,14 +91,15 @@ body {
     min-width: 0;
 }
 
-/* The mark of the brand: a warm square with a ring, as the mockup draws it. */
+/* The mark of the brand: an accent square with a ring. The mockup draws a
+   gradient, which no token declares. */
 .ambre-mark {
     position: relative;
     width: 20px;
     height: 20px;
     flex: 0 0 20px;
     border-radius: var(--radius-sm);
-    background: linear-gradient(140deg, #f2a24a, var(--accent));
+    background: var(--accent);
 }
 
 .ambre-mark::after {
@@ -106,7 +107,7 @@ body {
     position: absolute;
     inset: 5px;
     border-radius: 50%;
-    border: 2px solid rgba(255, 255, 255, 0.6);
+    border: 2px solid var(--on-accent);
     border-right-color: transparent;
 }
 

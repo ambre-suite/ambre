@@ -331,6 +331,11 @@ pub mod shared {
     /// on the keydown, then strips the richer halves from the event.
     pub const BROWSER_SERVICED: [StaticKey<Commands>; 4] = [CUT, COPY, PASTE, PASTE_PLAIN];
 
+    /// The command palette answers one chord in every application. The
+    /// header finds the palette command of a table by it, so the shell names
+    /// no command id of an application (`ARCH-018`).
+    pub const PALETTE_CHORD: KeyBinding = KeyBinding::primary(KeyChar::K);
+
     /// Undo answers one chord.
     pub const UNDO_CHORDS: &[KeyBinding] = &[KeyBinding::primary(KeyChar::Z)];
 
