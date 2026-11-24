@@ -180,9 +180,11 @@ names, as the relay lists them (`MURMURE-492`). That name is composed for displa
 an older name. A relay can also serve an older seal, and never forge or read one. So an open
 channel whose `meta` reads another name than the latest listing seals that name again
 (`ambre-spec-murmure-channels.md`, `MURMURE-682`). The new seal reaches every member, so a stale
-hint lasts until one member opens the channel. A member that only reads `meta` shows what `meta`
-reads and seals nothing, so its stale hint waits for a writer
-(`ambre-spec-sync.md`, `SYNC-318`).
+hint lasts until one member opens the channel.
+
+A member that only reads `meta` shows what `meta` reads and seals nothing, so its stale hint waits
+for a writer (`ambre-spec-sync.md`, `SYNC-318`). Its hint keeps the listed name, so the same client
+still reads it as stale once it can write `meta` (`ambre-spec-murmure-channels.md`, `MURMURE-729`).
 
 A channel keeps the message it shows, so back from a thread lands on its root (`MURMURE-168`).
 The pane names the region in focus, and the stylesheet alone decides which regions sit beside it.

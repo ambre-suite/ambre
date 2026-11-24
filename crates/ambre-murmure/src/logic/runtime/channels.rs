@@ -475,6 +475,7 @@ impl<D> Runtime<D> {
         let Some(channel) = self.channels.remove(&channel_id) else {
             return self.end_channel(channel_id);
         };
+        self.meta_roles.remove(&channel.meta_id().document_id());
         // Its documents leave the relay's watch, so the other members see
         // this user go (`SRV-097`). A reopen lists the members again.
         self.channel_watchers.remove(&channel_id);
@@ -645,6 +646,7 @@ impl<D> Runtime<D> {
         };
         for document_id in documents {
             self.channel_ledgers.remove(&document_id);
+            self.meta_roles.remove(&document_id);
             self.forget_murmure_session(document_id);
             self.ask(SyncCommand::CloseDocument { document_id });
         }
@@ -755,9 +757,11 @@ impl<D> Runtime<D> {
         });
     }
 
-    /// A document of a channel has all its bytes. Returns `false` when no
-    /// channel, open or opening, asked for it.
-    pub fn channel_document_ready(&mut self, document_id: Id<Document>) -> bool {
+    /// A document of a channel has all its bytes, and `role` is this
+    /// client's role on it. Returns `false` when no channel, open or
+    /// opening, asked for it.
+    pub fn channel_document_ready(&mut self, document_id: Id<Document>, role: Role) -> bool {
+        self.note_meta_role(document_id, role);
         if let Some((&channel_id, channel)) =
             self.channels.iter_mut().find(|(_, c)| c.holds(document_id))
         {
@@ -813,6 +817,29 @@ impl<D> Runtime<D> {
         let result = opening.ready(document_id);
         self.advance_opening(channel_id, asked, result);
         true
+    }
+
+    /// Keep `role` when `document_id` is the `meta` of a channel open or
+    /// opening here. A role that changes on an open channel may let this
+    /// client seal its name now (`MURMURE-729`).
+    fn note_meta_role(&mut self, document_id: Id<Document>, role: Role) {
+        let open = self
+            .channels
+            .iter()
+            .find(|(_, c)| c.meta_id().document_id() == document_id)
+            .map(|(id, _)| *id);
+        let opening = self
+            .opening
+            .values()
+            .flatten()
+            .any(|o| o.meta_id().document_id() == document_id);
+        if open.is_none() && !opening {
+            return;
+        }
+        self.meta_roles.insert(document_id, role);
+        if let Some(channel_id) = open {
+            self.reseal_stale_name(channel_id);
+        }
     }
 
     /// Act on where an opening stands. `asked` lists every document it asked
