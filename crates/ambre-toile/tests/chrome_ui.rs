@@ -12,7 +12,7 @@
 //! - the right-click context menu end-to-end -- the entry rows a
 //!   [`CtxScope`] renders, and that clicking a row fires its `StaticKey<Commands>`;
 //! - the tool palette -- a click switches the shared active tool;
-//! - the top menu bar and the floating selection toolbar -- a click fires
+//! - the command palette and the floating selection toolbar -- a click fires
 //!   its `StaticKey<Commands>` on the shared sink.
 //!
 //! On the host target the whole file is empty (the `cfg` gate below), so the
@@ -41,8 +41,7 @@ use ambre_draw::Rect;
 use ambre_toile::chrome::{
     CommentComposer, CommentDraft, CommentIntent, CommentsPanel, DeckIntent, DeckMove, DeckPanel,
     EditingSurfaces, FloatBar, PresenterIntent, PresenterPanel, REDO, SelStats, SelectionToolbar,
-    StatusBar, StyleEdit, StyleModel, Toggles, ToileIntent, ToileRelay, ToolPalette, TopMenuBar,
-    UNDO,
+    StatusBar, StyleEdit, StyleModel, ToileIntent, ToileRelay, ToolPalette, UNDO,
 };
 use ambre_toile::message::TextDelta;
 use ambre_toile::message::{
@@ -118,6 +117,28 @@ fn the_zoom_chip_closes_the_status_bar() {
         last.class_list().contains("statusbar-zoom"),
         "the band ends on `{}`",
         last.class_name()
+    );
+    root.remove();
+}
+
+/// `TOILE-UI-087`: the status bar offers the start of the presentation, its
+/// home, and a click on it reports the command the board resolves.
+#[wasm_bindgen_test]
+fn the_status_bar_starts_the_presentation() {
+    let owner = Owner::new();
+    owner.set();
+    let fired = RwSignal::new(None::<StaticKey<Commands>>);
+    let on_command = Callback::new(move |id: StaticKey<Commands>| fired.set(Some(id)));
+    let stats = RwSignal::new(None);
+    let zoom = RwSignal::new(Scale::<Board, View>::within(1.0, 0.1, 10.0));
+    let perf = RwSignal::new(PerfSnapshot::default());
+    let root = mount_in_container(move || {
+        view! { <StatusBar stats=stats perf=perf zoom=zoom on_command=on_command /> }
+    });
+    assert!(click_by_aria(&root, "Start presentation"));
+    assert_eq!(
+        fired.get_untracked(),
+        Some(ambre_toile::ui::menu_bar::PRESENT)
     );
     root.remove();
 }
@@ -388,38 +409,42 @@ fn tool_palette_click_switches_active_tool() {
     root.remove();
 }
 
-// -- Top menu bar, zoom from the View menu -----------------------
+// -- Zoom from the palette ---------------------------------------
 
-/// `TOILE-UI-416`: the zoom-in entry of the View menu reports the zoom-in
-/// command. The bar itself holds no zoom control: the zoom lives in the status
-/// bar alone (`CHROME-206`).
+/// `TOILE-UI-416`: the zoom-in entry of the command palette reports the
+/// zoom-in command. The board lays out no menu bar, so the palette and the
+/// chord reach the zoom actions. The zoom chip of the status bar shows the
+/// percentage.
 #[wasm_bindgen_test]
-async fn the_view_menu_reports_zoom_in_and_the_bar_holds_no_zoom_control() {
+async fn the_palette_reports_zoom_in() {
     let owner = Owner::new();
     owner.set();
     let fired = RwSignal::new(None::<StaticKey<Commands>>);
     let on_command = Callback::new(move |id: StaticKey<Commands>| fired.set(Some(id)));
-    let store = CommandStates::new(ambre_toile::chrome::COMMANDS.iter().map(|c| c.id));
-    ambre_toile::chrome::init_command_states(&store);
-    let toggles = Toggles::from_store(&store);
+    let open = RwSignal::new(ambre_chrome::Openness::Open);
     let root = mount_in_container(move || {
-        view! { <TopMenuBar on_command=on_command toggles=toggles /> }
+        view! {
+            <ambre_chrome::CommandPalette
+                open=open
+                table=ambre_toile::chrome::COMMANDS
+                on_command=on_command
+            />
+        }
     });
-    assert!(
-        root.query_selector("[aria-label=\"Zoom in\"]")
-            .unwrap()
-            .is_none(),
-        "the menu bar holds a zoom control"
-    );
-    assert!(root.query_selector(".ambre-toile-zoom").unwrap().is_none());
-
-    assert!(click_by_aria(&root, "View"));
     leptos::task::tick().await;
-    let rows = root.query_selector_all(".ambre-ctx-item").unwrap();
+    let rows = root.query_selector_all(".ambre-palette-row").unwrap();
     let zoom_in = (0..rows.length())
         .filter_map(|i| rows.item(i))
-        .find(|row| row.text_content().is_some_and(|t| t.starts_with("Zoom in")))
-        .expect("a Zoom in row in the View menu");
+        .filter_map(|row| row.dyn_into::<web_sys::Element>().ok())
+        .find(|row| {
+            row.query_selector(".ambre-palette-label")
+                .ok()
+                .flatten()
+                .and_then(|l| l.text_content())
+                .as_deref()
+                == Some("Zoom in")
+        })
+        .expect("a Zoom in row in the palette");
     zoom_in.dyn_into::<web_sys::HtmlElement>().unwrap().click();
     assert_eq!(fired.get_untracked(), Some(ZOOM_IN));
 
@@ -427,7 +452,7 @@ async fn the_view_menu_reports_zoom_in_and_the_bar_holds_no_zoom_control() {
 }
 
 /// `mirror_event` projects the authoritative Undo/Redo availability from
-/// `ToileEvent::UndoState` into the command store the menu bar reads for its
+/// `ToileEvent::UndoState` into the command store the Ambre menu reads for its
 /// `disabled` state (`UNDO-006`).
 #[wasm_bindgen_test]
 fn undo_state_mirrors_into_command_store() {

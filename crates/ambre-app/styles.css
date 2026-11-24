@@ -83,15 +83,21 @@ body {
     letter-spacing: 0.2px;
 }
 
-/* The way home reads as the title, not as a link of the page (`CHROME-203`). */
+/* The logo opens the Ambre menu, and reads as the title, not as a button of
+   the page (`CHROME-155`, `CHROME-203`). */
 .ambre-header .ambre-home {
     color: var(--text);
-    text-decoration: none;
+    background: none;
+    border: 0;
+    font: inherit;
+    cursor: pointer;
     border-radius: var(--radius-sm);
     padding: var(--space-1) var(--space-2);
 }
 
-.ambre-header .ambre-home:hover {
+.ambre-header .ambre-home:hover,
+.ambre-header .ambre-home:focus-visible,
+.ambre-header .ambre-home[aria-expanded="true"] {
     background: var(--surface-hover);
 }
 
@@ -152,6 +158,20 @@ body {
     font-size: var(--font-xs);
     font-weight: 600;
     user-select: none;
+}
+
+/* The avatar of the header opens the avatar menu (`CHROME-156`). */
+.ambre-header button.ambre-avatar {
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.ambre-header button.ambre-avatar:focus-visible,
+.ambre-header button.ambre-avatar[aria-expanded="true"] {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
 }
 
 /* Command bar: contextual toolbar. */
@@ -371,24 +391,6 @@ body {
 .ambre-prose-ruler-handle[data-dragging="true"]::before {
     width: 12px;
     height: 9px;
-}
-
-/* Toile top menu bar (toile-ui SS5quinquies.E): a group inside the command
-   bar row, under the header (`CHROME-200`). It reuses `.ambre-commandbar` for
-   its buttons, so the nested group drops the frame of a bar. The zoom is not
-   here: it closes the status bar (`CHROME-206`). */
-.ambre-commandbar > .ambre-toile-menubar {
-    padding: 0;
-    min-height: 0;
-    background: none;
-    border: 0;
-}
-
-/* Menu titles are text, not icons: give them horizontal padding and normal
-   text sizing (the shared bar is sized for square icon buttons). */
-.ambre-menu-title {
-    padding: 0 var(--space-4);
-    font-size: var(--font-body);
 }
 
 /* Toile style / property inspector (toile-ui SS5quinquies.B): a floating side

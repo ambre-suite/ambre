@@ -2,12 +2,12 @@
 
 **Type:** Vertical (feature)
 
-> A user right-clicks and gets what applies to what is under the cursor. A user opens a menu at the
-> top and finds everything else, each entry showing the shortcut that reaches it faster.
+> A user right-clicks and gets what applies to what is under the cursor. Every other command of the
+> board lives in its home region, and the command palette finds each one by name.
 
 A menu owns no behaviour: every entry names a command another feature specifies. What this document
-holds is the scope, the layout and the dispatch. The zoom shows in the status bar alone (`CHROME-206`).
-The menu bar leaves the board, and each of its commands moves to a home region (`CHROME-160`).
+holds is the scope of the context menu, the home of each other command and the dispatch. The zoom
+shows in the status bar alone (`CHROME-206`). The board lays out no menu bar (`CHROME-160`).
 
 ---
 
@@ -20,22 +20,22 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-UI-018` | `INV` | No two menu-bar entries MUST carry the same command id. | this spec section 2 | `ambre_toile::ui::menu_bar::tests::menu_bar_ids_are_distinct` -- it sorts the bar-only id list and reads the deduplicated length back unchanged | none | verified |
-| `TOILE-UI-121` | `INV` | No context-menu entry MUST carry an id the menu bar already carries, except where both name the same command. | this spec section 2 | `ambre_toile::ui::menu_bar::tests::no_bar_id_is_also_a_context_id` -- it reads every bar-only id against the context list by value, so a shared entry has to reuse the context constant | none | verified |
+| `TOILE-UI-018` | `INV` | No two commands the board declares beyond the context menu MUST carry the same id. | this spec section 2 | `ambre_toile::ui::menu_bar::tests::menu_bar_ids_are_distinct` -- it sorts the list of those ids and reads the deduplicated length back unchanged | none | verified |
+| `TOILE-UI-121` | `INV` | No command the board declares beyond the context menu MUST carry an id the context menu already carries, except where both name the same command. | this spec section 2 | `ambre_toile::ui::menu_bar::tests::no_bar_id_is_also_a_context_id` -- it reads every such id against the context list by value, so a shared entry has to reuse the context constant | none | verified |
 | `TOILE-UI-049` | `INV` | A menu entry MUST carry no geometry: it MUST be resolved against the selection the view already holds. | this spec section 2 | structural -- a row holds a command id, a label and an optional key binding, so there is no field a coordinate could travel in | none | verified |
-| `TOILE-UI-050` | `OBS` | The menu-bar layout MUST be a pure function of the menu, never of the selection. | this spec section 4 | type-level -- the layout builder takes a menu id and nothing else, so no selection can reach it | none | verified |
-| `TOILE-UI-122` | `OBS` | Every menu in the bar MUST carry at least one entry. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::every_menu_has_items` -- it walks the five menus and reads a non-empty item list from each | none | verified |
-| `TOILE-UI-123` | `OBS` | The View menu MUST show all five zoom actions. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::view_menu_exposes_all_zoom_actions` -- it reads the five zoom ids back | none | verified |
-| `TOILE-UI-124` | `OBS` | The Edit menu MUST show undo and redo. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::edit_menu_carries_undo_redo_and_reuses_clipboard_ids` -- it reads undo and redo | none | verified |
-| `TOILE-UI-364` | `OBS` | The Edit menu MUST reuse the clipboard ids rather than mint its own. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::edit_menu_carries_undo_redo_and_reuses_clipboard_ids` -- it reads the copy and select-all ids as the context menu's own | none | verified |
-| `TOILE-UI-125` | `OBS` | The Object menu MUST reuse the group, z-order and lock ids. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::object_menu_reuses_z_order_and_lock_ids` -- it reads the six ids as the ones the context menu emits | none | verified |
-| `TOILE-UI-355` | `OBS` | The Object menu MUST carry the six alignments and the two distributions. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::the_align_entries_sit_under_object` -- it reads the eight ids in the layout | none | verified |
-| `TOILE-UI-375` | `OBS` | Each alignment and distribution entry MUST resolve against the selection rather than to a board command of its own. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::the_align_entries_sit_under_object` -- none of the eight resolves through `menu_bar_edit`; `ambre_toile::ui::menu::tests::an_align_id_resolves_to_one_batch_over_the_selection` -- what each one becomes | none | verified |
+| `TOILE-UI-050` | `OBS` | The rows of the Ambre menu MUST be a function of the board's command table and of the open document, never of the selection. | this spec section 4; `CHROME-155` | type-level -- the shell builds the rows from the table, the open document and the undo state alone, so no selection can reach them | none | verified |
+| `TOILE-UI-122` | `OBS` | The board MUST home at least one command in the Ambre menu and one in the avatar menu. | this spec section 3; `CHROME-154`; `CHROME-156` | `ambre_toile::ui::menu_bar::tests::the_board_homes_commands_in_the_ambre_and_avatar_menus` -- it reads a command of each region in the board's table | none | verified |
+| `TOILE-UI-123` | `OBS` | The five zoom actions MUST have the status bar as their home region. | this spec section 3; `CHROME-206` | `ambre_toile::ui::menu_bar::tests::the_zoom_actions_home_in_the_status_bar` -- it reads the home of the five zoom ids | none | verified |
+| `TOILE-UI-124` | `OBS` | Undo and redo MUST have the Ambre menu as their home region. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::undo_and_redo_home_in_the_ambre_menu_and_the_clipboard_in_the_context_menu` -- it reads the home of undo and redo | none | verified |
+| `TOILE-UI-364` | `OBS` | Cut, copy and paste MUST have the context menu as their home region, under the ids the context menu carries. | this spec section 3; `CHROME-178` | `ambre_toile::ui::menu_bar::tests::undo_and_redo_home_in_the_ambre_menu_and_the_clipboard_in_the_context_menu` -- it reads the home of the context menu's own clipboard ids | none | verified |
+| `TOILE-UI-125` | `OBS` | The group, z-order and lock commands MUST have the context panel as their home region, under the ids the context menu carries. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::the_group_order_and_lock_commands_home_in_the_context_panel` -- it reads the home of the eight ids the context menu emits | none | verified |
+| `TOILE-UI-355` | `OBS` | The six alignments and the two distributions MUST have the context panel as their home region. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::the_align_entries_home_in_the_context_panel` -- it reads the home of the eight ids | none | verified |
+| `TOILE-UI-375` | `OBS` | Each alignment and distribution command MUST resolve against the selection rather than to a board command of its own. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::the_align_entries_home_in_the_context_panel` -- none of the eight resolves through `menu_bar_edit`; `ambre_toile::ui::menu::tests::an_align_id_resolves_to_one_batch_over_the_selection` -- what each one becomes | none | verified |
 | `TOILE-UI-047` | `OBS` | A context-menu entry MUST be left out when it does not apply to the selection under the cursor. | this spec section 3 | `ambre_toile::ui::menu::tests::an_entry_that_does_not_apply_is_left_out` -- it reads the id list the DOM menu maps for one element and for the empty board; `ambre_toile::ui::menu::tests::an_unframed_element_inside_a_box_is_offered_add_only` -- an element no frame lists is offered add and never removal; `ambre_toile::tests::chrome_ui::context_menu_empty_canvas_shows_only_paste_and_select_all`; `ambre_toile::tests::chrome_ui::context_menu_copy_row_fires_copy_command`; `ambre_toile::tests::chrome_ui::context_menu_locked_selection_offers_only_unlock` -- wasm tier: the mounted menu leaves out each row that does not apply | none | verified |
 | `TOILE-UI-126` | `OBS` | An entry that would move or remove a locked element MUST be left out when the selection is locked. | this spec section 3 | `ambre_toile::ui::menu::tests::a_locked_selection_omits_move_and_remove_entries` -- cut, delete, duplicate and the four z-order ids are absent from a locked scope; `::an_unlocked_selection_keeps_the_full_set` -- the same ids stay when nothing is locked | none | verified |
 | `TOILE-UI-052` | `OBS` | A shortcut shown beside an entry MUST be the one the keymap binds. | this spec section 3 | `ambre_toile::ui::view::view_tests::a_shown_shortcut_does_what_its_entry_does` -- it presses the chord the registry announces for each board entry and picks the entry on a twin board, and reads the same commands and selection back | none | verified |
-| `TOILE-UI-417` | `OBS` | The Object menu MUST carry the set-link and clear-link entries. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::the_link_entries_sit_under_object` -- both ids in the Object layout, neither resolving to a board command of its own | none | verified |
-| `TOILE-UI-418` | `OBS` | The File menu MUST offer the save to an `.ambre` file, resolved to the board's export of it. | this spec section 3; `ambre-spec-docfile.md section 4` | `ambre_toile::ui::menu_bar::tests::the_file_menu_offers_the_native_file_and_resolves_it` -- the save id in the File layout, resolving to the native export | none | verified |
+| `TOILE-UI-417` | `OBS` | Set link and remove link MUST have the context panel as their home region. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::the_link_entries_home_in_the_context_panel` -- the home of both ids, neither resolving to a board command of its own | none | verified |
+| `TOILE-UI-418` | `OBS` | The save to an `.ambre` file MUST have the Ambre menu as its home region, and resolve to the board's export of it. | this spec section 3; `ambre-spec-docfile.md section 4`; `CHROME-154` | `ambre_toile::ui::menu_bar::tests::the_ambre_menu_offers_the_native_file_and_resolves_it` -- the home of the two saves, and the plain one resolving to the native export | none | verified |
 
 ### 1.2 Right-click over the board
 
@@ -81,16 +81,16 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-153` | `FAIL` | With no enclosing frame, the two frame entries MUST tell the user why nothing happened. | this spec section 5 | `ambre_toile::ui::view::view_tests::add_to_frame_with_no_frame_around_says_so_and_sends_nothing` -- one notice and no command, and a frame around the sticky gets the add with no notice; `ambre_toile::ui::view::view_tests::remove_from_frame_outside_any_frame_says_so_and_sends_nothing` -- the same for an unframed selection | none | verified |
 | `TOILE-UI-415` | `POST` | Choosing Group in the context menu MUST report the group command id. | this spec section 2 | `ambre_toile::tests::chrome_ui::context_menu_multi_selection_offers_group` -- wasm tier: the mounted menu over two elements shows Group, and a click on it reports `menu::GROUP` | none | verified |
 
-### 1.4 Choose a menu-bar entry
+### 1.4 Choose a command of the Ambre menu or of the status bar
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-154` | `POST` | Undo and redo MUST reach the board. | this spec section 2 | `ambre_toile::ui::menu_bar::tests::undo_redo_map_to_edits` -- each id mapping to its board command | none | verified |
 | `TOILE-UI-155` | `POST` | The presentation entry MUST ask to enter presentation mode with focus. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::present_entry_emits_enter_present` -- the command and the focus flag | none | verified |
-| `TOILE-UI-156` | `FRAME` | A bar entry that reaches the board MUST NOT read the selection. | this spec section 4 | type-level -- the bar resolver takes a command id alone, so undo, redo and present cannot depend on what is selected | none | verified |
+| `TOILE-UI-156` | `FRAME` | A command of the Ambre menu or of the status bar that reaches the board directly MUST NOT read the selection. | this spec section 4 | type-level -- the direct resolver takes a command id alone, so undo, redo and present cannot depend on what is selected | none | verified |
 | `TOILE-UI-395` | `POST` | A command chosen from the palette MUST apply before the next input the board takes. | this spec section 2 | `ambre_belt::toile::tests::a_palette_command_runs_before_the_click_that_follows_it` -- a click sent as the palette closes lands on the rectangle only once the zoom applies | none | verified |
 
-### 1.5 Zoom from the View menu
+### 1.5 Zoom from the palette or a chord
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
@@ -99,18 +99,18 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-158` | `POST` | A fit MUST ask the Logic thread for the extent before it moves the camera. | this spec section 3 | `ambre_toile::ui::view::view_tests::a_fit_asks_for_the_extent_before_it_moves` -- both fits send the request with the camera still, and move it on the answer | none | verified |
 | `TOILE-UI-159` | `POST` | A pointer-mode entry MUST stay in the view: it MUST change no camera and reach no thread. | this spec section 3 | `ambre_toile::ui::view::view_tests::a_pointer_mode_entry_stays_in_the_view` | none | verified |
 | `TOILE-UI-160` | `FAIL` | A fit to the selection with nothing selected MUST tell the user why nothing happened. | this spec section 5 | `ambre_toile::ui::view::view_tests::zoom_to_selection_with_nothing_selected_says_so` -- one notice and no request, then a selected sticky asks for its extent with no notice | none | verified |
-| `TOILE-UI-416` | `POST` | The zoom-in entry of the View menu MUST report the zoom-in command. | this spec section 3 | `ambre_toile::tests::chrome_ui::the_view_menu_reports_zoom_in_and_the_bar_holds_no_zoom_control` -- wasm tier: the View title opens its menu on the mounted bar, and its Zoom in row reports `ZOOM_IN` | none | verified |
+| `TOILE-UI-416` | `POST` | The zoom-in entry of the command palette MUST report the zoom-in command. | this spec section 3 | `ambre_toile::tests::chrome_ui::the_palette_reports_zoom_in` -- wasm tier: the palette mounted on the board's table, and its Zoom in row reports `ZOOM_IN` | none | verified |
 
 * **Budget.** none: a menu is built from a static entry set on the UI thread, and
   `ambre-spec-budgets.md` budgets no menu operation. What an entry commits is budgeted
   by the feature that owns the command.
 * **Boundary.** none: a menu is view state on the UI thread, where `UI-THREAD-004` bans a network,
   crypto or persistence path. What an entry commits leaves as a command.
-* **Verification.** 60 `verified`. What holds is the entry set, the omission of what does not apply,
-  and a scope read from the whole selection (`TOILE-UI-134`). The right-click and each zoom entry
-  are driven on the host view, and a shown chord is pressed against its entry on a twin board. An
-  unknown id is refused, and an entry that changes nothing says why. The browser tier holds a
-  palette command against the click that follows it, and a menu key against the entry it reaches.
+* **Verification.** 60 `verified`. What holds is the entry set, the omission of what does not
+  apply and the home of each other command. A scope reads the whole selection (`TOILE-UI-134`). The
+  host view drives the right-click and each zoom entry, and presses a shown chord on a twin board.
+  An unknown id is refused, and an entry that changes nothing says why, while the browser tier
+  holds a palette command against the next click.
 
 ---
 
@@ -121,14 +121,6 @@ status values are normative in `ambre-spec-template.md`.
 **Shapes** (`ambre-toile`):
 
 ```rust
-pub enum MenuId { File, Edit, View, Object, Present }
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum MenuRow {
-    Command(StaticKey<Commands>),   // the label and the chord come from the command it names
-    Separator,
-}
-
 pub struct CtxScope {
     // what the pointer resolved to: the selection size, whether it is locked,
     // whether it is a group, the frame that contains it, if any, and whether
@@ -163,9 +155,12 @@ which is why that map is a pure function.
 **Code:**
 
 * `crates/ambre-toile/src/ui/menu.rs` -- the context ids, the scope classifier and the resolver;
-* `ui/menu_bar.rs` -- the five menus, their rows, the accelerators and the direct map;
+* `ui/menu_bar.rs` -- the ids no context-menu entry carries, and the direct map;
+* `ui/commands.rs` -- the home region of every command;
 * `ui/view.rs` -- the right-click handler, the scope publication and the id application;
-* `chrome/menu.rs`, `chrome/menu_bar.rs` -- the two components, built on `ambre-spec-chrome.md`.
+* `chrome/menu.rs` -- the context menu, built on `ambre-spec-chrome.md`;
+* `crates/ambre-app/src/shell/header.rs` -- the Ambre menu and the avatar menu, which read the
+  board's table.
 
 ---
 
@@ -197,20 +192,25 @@ keeps the whole set, so the menu acts on it (`TOILE-UI-048`). A click on an elem
 that element (`TOILE-UI-127`). A click that hits nothing clears the selection, including one that lands in the
 gap between two selected elements (`TOILE-UI-128`).
 
-**The menu bar.** Five menus in bar order -- File, Edit, View, Object, Present -- each a fixed layout with
-separators, each entry showing its accelerator. Unlike the context menu, the bar hides nothing. An entry that
-does not apply is disabled by its command state, so the layout never moves under the user (`TOILE-UI-050`).
+**The home of each other command.** The board lays out no menu bar (`CHROME-160`). Each command the
+context menu does not carry lives in its home region (`ambre-spec-shell.md section 2`), and the
+command palette lists every one of them (`CHROME-008`).
 
-| Menu | Holds |
+| Command | Home region |
 |---|---|
-| Edit | undo, redo, the clipboard entries the context menu also carries, and select all |
-| View | zoom in, zoom out, 100 %, fit the board, fit the selection, the pointer mode, the panels |
-| Object | group and ungroup, the four z-order moves, lock and unlock, the six alignments and the two distributions, and the two link entries |
-| File | bringing a file onto the board, saving the board as a native `.ambre` file, and taking it out as a lossy one -- the save above the separator, the exports below it (`features/ambre-spec-toile-import-export.md section 4`) -- then the presentation entry point |
-| Present | the presentation entry point, listed in both, and the deck panel (`features/ambre-spec-toile-presentation.md section 4`) |
+| undo, redo, find, the command palette | the Ambre menu (`TOILE-UI-124`) |
+| importing a file, the two saves to an `.ambre` file, the five exports | the Ambre menu, the saves before the exports (`TOILE-UI-418`, `features/ambre-spec-toile-import-export.md section 4`) |
+| the five zoom actions, the start of the presentation | the status bar (`TOILE-UI-123`, `TOILE-UI-087`) |
+| the pointer mode | the avatar menu: a preference of the person, kept on the device |
+| group and ungroup, the z-order, the lock, the alignments, the distributions, the links, the comments, the deck | the context panel (`TOILE-UI-125`, `TOILE-UI-355`, `TOILE-UI-417`) |
+| embedding a web page or a document | the creation bar |
+| cut, copy and paste | the context menu (`TOILE-UI-364`) |
 
-**The zoom entries.** Zoom out, zoom in, 100 %, fit, and fit the selection sit in the View menu
-and the palette. The menu bar carries no zoom control: the zoom chip of the status bar shows the
+The Ambre menu disables an undo or a redo with nothing to take back, from the state the Logic thread
+reports (`UNDO-006`). Its rows never move with the selection (`TOILE-UI-050`).
+
+**The zoom entries.** Zoom out, zoom in, 100 %, fit, and fit the selection sit in the palette, and
+the chords of `ambre-spec-zoom.md` reach them. The zoom chip of the status bar shows the
 percentage (`features/ambre-spec-toile-status-bar.md`, `CHROME-206`). Each entry moves the camera
 and forwards one cull request (`TOILE-UI-157`). Neither fit moves the camera on its own. Both ask
 the Logic thread for the extent first, because the UI holds the culled set alone (`TOILE-UI-158`,
@@ -228,12 +228,13 @@ This one restates none of them.
 | :--- | :--- | :--- |
 | Entries are parameterless | passing the click position with the command | it gives two sources for one selection. The shared component dispatches an identifier, so a command needing coordinates could not travel through it, and the view already holds the selection well enough to resolve the geometry itself |
 | The scope is resolved on the press, not when the menu builds | reading the pointer position when the menu builds | the browser opens the menu from its own event, after ours, so deciding later means re-deriving the target from a stale position |
-| The context menu omits, the menu bar disables | one behaviour for both surfaces | a context menu is short and appears under the cursor, so a wrong entry there is noise. A menu bar is a map of the application, and a layout that changes with the selection cannot be learned |
+| The context menu omits, the Ambre menu disables | one behaviour for both surfaces | a context menu is short and appears under the cursor, so a wrong entry there is noise. The Ambre menu is a map of the file, and a layout that changes with the selection cannot be learned |
+| Each command in its home region | a menu bar of five menus | it files commands under words a user must guess, and hides each one behind two clicks (`ambre-spec-shell.md section 4`) |
 | A menu key opens the menu at the selection | opening it at the last pointer position | a keyboard user leaves the pointer anywhere, often off the board. The menu then opens far from what it acts on |
 | A right-click keeps a selection it lands in | collapsing on every right-click, like a plain click | the menu exists to act on sets, and collapsing first makes every multi-element entry unreachable by mouse |
 | The zoom ids resolve to no board command | a zoom register on the board | zoom is a way of looking, and a percentage in the document makes two users fight over one camera |
-| Undo and redo sit in the bar, not on the canvas | a UI-side stack mirrored for the menu's enabled state | the undo stack is the Logic thread's and the UI holds none, so the mirror is a second stack to keep true. An entry that emits a command is the whole surface |
-| The bar and the context menu share their ids | a separate id per surface | the same action reached two ways must be one command, or the two surfaces drift and only one of them gets fixed |
+| Undo and redo sit in the Ambre menu, not on the canvas | a UI-side stack mirrored for the menu's enabled state | the undo stack is the Logic thread's and the UI holds none, so the mirror is a second stack to keep true. An entry that emits a command is the whole surface |
+| The palette and the context menu share their ids | a separate id per surface | the same action reached two ways must be one command, or the two surfaces drift and only one of them gets fixed |
 
 ---
 
@@ -250,6 +251,7 @@ This one restates none of them.
   locked is still offered every alignment. The operation then moves one box and refuses the other
   (`TOILE-234`, `features/ambre-spec-toile-elements.md`). It is the same hole `TOILE-UI-126` closed for cut,
   delete, duplicate and the z-order rows, left open in the align rows.
-* **The comment entry opens the panel and comments on nothing.** The View menu opens the board-wide list, and
-  no context-menu entry drops a thread on the element under the cursor. The tool and the pin are the only ways
+* **The comment entry opens the panel and comments on nothing.** The comments command of the panel
+  opens the board-wide list, and no context-menu entry drops a thread on the element under the
+  cursor. The tool and the pin are the only ways
   in (`features/ambre-spec-toile-comments.md section 4`).

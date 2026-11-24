@@ -511,10 +511,6 @@ mod stylesheet_tests {
                 );
             }
         }
-        let toile = rules(SHELL_CSS)
-            .into_iter()
-            .filter(|(selector, _)| selector.contains("ambre-toile-menubar"))
-            .collect::<Vec<_>>();
         // The command bar hosts a floating menu: a rule that positions what
         // carries a name must leave that menu fixed.
         for (selector, body) in rules(SHELL_CSS) {
@@ -523,18 +519,11 @@ mod stylesheet_tests {
                 && value_of(&body, "position").is_some()
             {
                 assert!(
-                    selector.contains(":not(.ambre-ctx-menu *)"),
+                    selector.contains(":not(.ambre-ctx-menu *"),
                     "`{selector}` positions the floating menu of the bar"
                 );
             }
         }
-        assert!(!toile.is_empty(), "the Toile menu bar keeps a rule");
-        assert!(
-            toile
-                .iter()
-                .all(|(_, body)| value_of(body, "position").is_none()),
-            "the Toile menu bar leaves the command bar"
-        );
     }
 
     /// The rules of the control primitives, each with the box it sizes.

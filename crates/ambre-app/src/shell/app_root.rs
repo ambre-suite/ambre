@@ -5,9 +5,9 @@
 
 use super::super::*;
 use super::call_bar::{CallBar, CallFloat, RingAlert};
+use super::header::ShellHeader;
 use super::prose_status::ProseFigures;
 use super::share::{InviteLink, MurmureInviteLink, ShareInviteLink, ShareMembers};
-use super::sync_badge::SyncBadge;
 use ambre_bus::DocType;
 use ambre_bus::{Authored, Instant};
 use ambre_chrome::commands::{ClipboardWrite, PasteForm};
@@ -110,95 +110,13 @@ pub(crate) fn MurmureShell(
     }
 }
 
-/// The header every application shares: the title, the sync badge, the theme
-/// switch, the share and about buttons and the avatar.
-#[component]
-fn ShellHeader(
-    theme_ctl: ambre_canvas::ThemeControl,
-    theme_sig: RwSignal<ambre_canvas::Theme>,
-    toasts: Toasts,
-    chrome_status: RwSignal<ChromeStatus>,
-    current_doc: RwSignal<Option<Id<Document>>>,
-    share_open: RwSignal<ambre_chrome::Openness>,
-    about_open: RwSignal<ambre_chrome::Openness>,
-    username: RwSignal<Option<ambre_core::Validated<ambre_core::DisplayName>>>,
-    me: RwSignal<Option<Id<User>>>,
-    docs: RwSignal<Vec<crate::landing::DocItem>>,
-    /// The side of the context panel, on a page that lays one out.
-    dock_side: Option<RwSignal<ambre_chrome::DockSide>>,
-) -> impl IntoView {
-    view! {
-        <HeaderTitle docs=docs current_doc=current_doc />
-        <span class="spacer"></span>
-        // The side of the context panel is a setting of the person. It sits
-        // beside the theme switch, the one setting the header holds: no
-        // avatar menu exists yet (`ambre-spec-shell.md` section 2).
-        {dock_side.map(|side| view! { <super::panel::DockSideSwitch side=side /> })}
-        <SyncBadge status=chrome_status.into() />
-        <button
-            class="icon"
-            title="Toggle theme"
-            aria-label="Toggle colour theme"
-            on:click=move |_| {
-                let next = switch_theme(&theme_ctl);
-                theme_sig.set(next);
-                let label = if next == ambre_canvas::Theme::Dark {
-                    "Dark theme"
-                } else {
-                    "Light theme"
-                };
-                toasts.info(label);
-            }
-        >
-            {move || {
-                let icon = if theme_sig.get() == ambre_canvas::Theme::Dark {
-                    icondata::AiMoonFilled
-                } else {
-                    icondata::AiSunFilled
-                };
-                view! { <Icon icon=icon /> }
-            }}
-        </button>
-        <Show when=move || current_doc.get().is_some()>
-            <button
-                class="icon"
-                title="Share"
-                aria-label="Share document"
-                aria-haspopup="dialog"
-                aria-expanded=move || share_open.get().aria()
-                on:click=move |_| share_open.set(ambre_chrome::Openness::Open)
-            >
-                <Icon icon=icondata::AiShareAltOutlined />
-            </button>
-        </Show>
-        <button
-            class="icon"
-            title="About"
-            aria-label="About Ambre"
-            aria-haspopup="dialog"
-            aria-expanded=move || about_open.get().aria()
-            on:click=move |_| about_open.set(ambre_chrome::Openness::Open)
-        >
-            "?"
-        </button>
-        // The user's initials on their identity colour, the accent until the
-        // session names them (`PROFILE-002`).
-        <span
-            class="ambre-avatar"
-            title=move || username.get().map(ambre_core::Validated::into_string).unwrap_or_else(|| "Signed out".to_owned())
-            style:background=move || me.get().map(|user| ambre_draw::peer_rgb(&user).to_string())
-        >
-            {move || ambre_chrome::avatar_initials(username.get().as_ref().map_or("", ambre_core::Validated::as_str))}
-        </span>
-    }
-}
-
 /// The optional rows of the shell each application lays out (`CHROME-199`).
-/// The formula bar is Trame's alone. No application lays out the tab strip:
-/// Trame's sheet tabs sit in the status bar (`CHROME-162`). A Toile board docks
-/// its menus in the command bar. A Prose page and a Trame sheet format from
-/// the context panel, so neither lays out a command bar (`CHROME-159`).
-/// Murmure builds its own shell.
+/// The formula bar is Trame's alone, and Trame's sheet tabs sit in the status
+/// bar, not in the tab strip (`CHROME-162`). No document page
+/// lays out a command bar. A Prose page and a Trame sheet format from the
+/// context panel (`CHROME-159`). A board docks no bar of menus, since each
+/// command of the board lives in its home region (`CHROME-160`). Murmure
+/// builds its own shell, its channel header in the command bar.
 pub(crate) fn shell_rows(kind: DocType) -> ambre_chrome::ShellRows {
     use ambre_chrome::RowShown::{Absent, Shown};
     match kind {
@@ -208,7 +126,7 @@ pub(crate) fn shell_rows(kind: DocType) -> ambre_chrome::ShellRows {
             tabs: Absent,
         },
         DocType::Toile => ambre_chrome::ShellRows {
-            toolbar: Shown,
+            toolbar: Absent,
             formula_bar: Absent,
             tabs: Absent,
         },
@@ -222,55 +140,6 @@ pub(crate) fn shell_rows(kind: DocType) -> ambre_chrome::ShellRows {
             formula_bar: Absent,
             tabs: Absent,
         },
-    }
-}
-
-/// The way home and the name of the open document, at the start of the
-/// header (`CHROME-203`, `CHROME-204`). A plain click goes home in place. It
-/// takes the navigation the launcher opens a document with, so the address bar
-/// and the frame loop follow. The router's own anchor handling moves its state and
-/// leaves the address unchanged, as no `Routes` completes the navigation. A
-/// modified click keeps the browser's own behaviour, a new tab for example.
-/// The name is the one the document list holds, composed at the point of use
-/// (`CHROME-080`).
-#[component]
-pub(crate) fn HeaderTitle(
-    docs: RwSignal<Vec<crate::landing::DocItem>>,
-    current_doc: RwSignal<Option<Id<Document>>>,
-) -> impl IntoView {
-    let navigate = leptos_router::hooks::use_navigate();
-    let go_home = move |ev: web_sys::MouseEvent| {
-        let modified =
-            ev.button() != 0 || ev.ctrl_key() || ev.meta_key() || ev.shift_key() || ev.alt_key();
-        if !modified {
-            ev.prevent_default();
-            navigate("/", Default::default());
-        }
-    };
-    view! {
-        <a
-            class="title ambre-home"
-            href="/"
-            title="All documents"
-            aria-label="Ambre, all documents"
-            on:click=go_home
-        >
-            "Ambre"
-        </a>
-        {move || {
-            current_doc.get().map(|document_id| {
-                let name = docs.with(|list| {
-                    list.iter()
-                        .find(|d| d.document_id == document_id)
-                        .and_then(|d| d.name.clone())
-                });
-                view! {
-                    <span class="ambre-doc-name">
-                        {ambre_chrome::ComposedName::or_placeholder(name.as_ref()).into_view()}
-                    </span>
-                }
-            })
-        }}
     }
 }
 
@@ -791,6 +660,24 @@ pub(crate) fn AppRoot() -> impl IntoView {
         ambre_chrome::PanelContent::empty()
     };
 
+    // The rows of the Ambre menu the page holds unavailable: the undo and the
+    // redo of a board report what the Logic thread holds (`UNDO-006`).
+    let ambre_menu_disabled = Signal::derive(move || {
+        if !boot_is_toile {
+            return Vec::new();
+        }
+        let off = |a: RwSignal<ambre_chrome::Availability>| {
+            a.get() == ambre_chrome::Availability::Disabled
+        };
+        [
+            (toile_chrome::UNDO, toile_toggles.undo_enabled),
+            (toile_chrome::REDO, toile_toggles.redo_enabled),
+        ]
+        .into_iter()
+        .filter(|(_, a)| off(*a))
+        .map(|(id, _)| id)
+        .collect()
+    });
     let header = {
         let theme_ctl = theme_ctl.clone();
         move || {
@@ -807,6 +694,9 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     me=me
                     docs=docs
                     dock_side=panel_prefs.map(|p| p.side)
+                    table=palette_table(booted)
+                    on_command=on_command
+                    disabled=ambre_menu_disabled
                 />
             }
         }
@@ -847,17 +737,10 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 })}
             </CanvasOverlay>
             // Each application lays out its own rows (`CHROME-199`). The formula
-            // bar is Trame's alone, and its sheet tabs sit in the status bar. A Prose page has no
-            // command bar. Gated on the booted app kind, fixed per page load.
-            <Toolbar slot>
-                // Toile docks its menus and its zoom in the command bar, under
-                // the header, so neither covers the header (`CHROME-200`).
-                {boot_is_toile.then(|| view! {
-                    <toile_chrome::EditingSurfaces present=present_toile>
-                        <toile_chrome::TopMenuBar on_command=on_command toggles=toile_toggles />
-                    </toile_chrome::EditingSurfaces>
-                })}
-            </Toolbar>
+            // bar is Trame's alone, and its sheet tabs sit in the status bar. No
+            // document page lays out a command bar (`CHROME-159`, `CHROME-160`):
+            // the slot stays empty, and the row is absent.
+            <Toolbar slot>""</Toolbar>
             <FormulaBar slot>
                 {boot_is_trame.then(|| view! {
                     <trame_chrome::FormulaBar
@@ -881,6 +764,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                             stats=sel_stats_toile
                             perf=perf_snap
                             zoom=board_zoom
+                            on_command=on_command
                         />
                     }
                     .into_any()
@@ -1302,87 +1186,21 @@ mod tests {
         assert!(fed(DocType::Toile).len() > ambre_toile::ui::menu::COMMANDS.len());
     }
 
-    /// The header names the open document (`CHROME-203`), and its way home
-    /// moves the address bar home (`CHROME-204`) with no reload
-    /// (`CHROME-205`). A page with no document
-    /// shows the way home alone.
-    #[wasm_bindgen_test]
-    async fn the_header_links_home_and_names_the_open_document() {
-        use wasm_bindgen::JsCast as _;
-        let document_id = Id::<Document>::mint();
-        let docs = RwSignal::new(vec![crate::landing::DocItem {
-            document_id,
-            doc_type: DocType::Prose,
-            name: Some(ambre_core::Validated::<ambre_core::Name>::parse("Plan").expect("a name")),
-            updated_at: None,
-            member_count: ambre_core::Count::<ambre_core::Members>::ONE,
-        }]);
-        let current_doc = RwSignal::new(None);
-        let page = web_sys::window()
-            .and_then(|w| w.document())
-            .expect("a document");
-        let container = page.create_element("div").expect("a container");
-        page.body()
-            .expect("a body")
-            .append_child(&container)
-            .expect("appended");
-        let target: web_sys::HtmlElement = container.clone().dyn_into().expect("an element");
-        leptos::mount::mount_to(target, move || {
-            view! {
-                <leptos_router::components::Router>
-                    <HeaderTitle docs=docs current_doc=current_doc />
-                </leptos_router::components::Router>
-            }
-        })
-        .forget();
-        let query = |selector: &str| container.query_selector(selector).expect("a selector");
-        let home = query("a.ambre-home").expect("the way home");
-        assert_eq!(home.get_attribute("href").as_deref(), Some("/"));
-        assert!(query(".ambre-doc-name").is_none(), "no document, no name");
-
-        current_doc.set(Some(document_id));
-        leptos::task::tick().await;
-        let name = query(".ambre-doc-name").expect("the name of the open document");
-        assert_eq!(name.text_content().as_deref(), Some("Plan"));
-
-        // A plain click moves the address bar home, which the frame loop reads.
-        let window = web_sys::window().expect("a window");
-        let history = window.history().expect("a history");
-        let runner = window.location().href().expect("the runner address");
-        let doc = crate::route::doc_path(DocType::Prose, document_id);
-        history
-            .push_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&doc))
-            .expect("a document address");
-        home.dyn_ref::<web_sys::HtmlElement>()
-            .expect("an element")
-            .click();
-        leptos::task::tick().await;
-        let path = window.location().pathname().expect("a path");
-        history
-            .replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&runner))
-            .expect("the runner address back");
-        assert_eq!(path, "/", "the address bar goes home");
-        assert!(
-            home.is_connected(),
-            "the page did not reload (`CHROME-205`)"
-        );
-        container.remove();
-    }
-
     /// Each application lays out its own rows (`CHROME-199`). The formula bar
     /// is Trame's alone. No application lays out the tab strip, since Trame's
-    /// sheet tabs sit in the status bar (`CHROME-162`). A Prose page lays out
-    /// no command bar, and a Trame sheet none since its format toolbar left
-    /// for the context panel (`CHROME-159`).
+    /// sheet tabs sit in the status bar (`CHROME-162`). No document page lays
+    /// out a command bar. A Prose page and a Trame sheet format from the
+    /// context panel (`CHROME-159`), and a board docks no bar of menus
+    /// (`CHROME-160`).
     #[wasm_bindgen_test]
-    fn the_formula_bar_is_trames_alone_and_prose_has_no_command_bar() {
+    fn the_formula_bar_is_trames_alone_and_no_page_has_a_command_bar() {
         use ambre_chrome::RowShown::{Absent, Shown};
         let rows = |kind| {
             let r = shell_rows(kind);
             (r.toolbar, r.formula_bar, r.tabs)
         };
         assert_eq!(rows(DocType::Trame), (Absent, Shown, Absent));
-        assert_eq!(rows(DocType::Toile), (Shown, Absent, Absent));
+        assert_eq!(rows(DocType::Toile), (Absent, Absent, Absent));
         assert_eq!(rows(DocType::Prose), (Absent, Absent, Absent));
     }
 

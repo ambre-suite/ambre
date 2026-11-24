@@ -15,6 +15,7 @@
 
 mod keybinding;
 mod mode;
+pub mod shell;
 
 pub use keybinding::{FunctionKey, Key, KeyBinding, KeyChar, KeyState, ModifierFold, ModifierKeys};
 pub use mode::{ClipboardWrite, PasteForm, SelectionMode};
@@ -320,7 +321,14 @@ fn panel_defect(
 /// `UI-THREAD-011`).
 pub mod shared {
     use super::{Key, KeyBinding, KeyChar, ModifierKeys};
-    use ambre_core::{Commands, StaticKey};
+    use ambre_core::{Categories, Commands, StaticKey};
+
+    /// The group of every command that acts on the document as a file: save,
+    /// import, export, share. Its home is the Ambre menu (`CHROME-154`).
+    pub const FILE: StaticKey<Categories> = StaticKey::<Categories>::new("file");
+    /// The group of every command that acts on the account or a preference
+    /// of the person. Its home is the avatar menu (`CHROME-156`).
+    pub const ACCOUNT: StaticKey<Categories> = StaticKey::<Categories>::new("account");
 
     /// The clipboard identities. One intent, one identity, in every
     /// application: a menu entry, a toolbar button and the browser's own event
@@ -481,6 +489,24 @@ pub enum TableDefect {
     /// Two entries declare one default chord. Seeding keeps the last one, so
     /// the first silently leaves the keyboard.
     SharedChord(KeyBinding, StaticKey<Commands>, StaticKey<Commands>),
+    /// The command acts on the file or on the account, and lives in another
+    /// region than the one its subject names (`CHROME-154`, `CHROME-156`).
+    HomedAway(StaticKey<Commands>, Home),
+}
+
+/// The one region the subject of `category` names, if it names one. A
+/// command on the document as a file lives in the Ambre menu. A command on
+/// the account of the person lives in the avatar menu
+/// (`ambre-spec-shell.md` section 2).
+#[must_use]
+pub fn subject_home(category: StaticKey<Categories>) -> Option<Home> {
+    if category == shared::FILE {
+        Some(Home::AmbreMenu)
+    } else if category == shared::ACCOUNT {
+        Some(Home::AvatarMenu)
+    } else {
+        None
+    }
 }
 
 /// Every defect of `table`, in declaration order. An empty answer is a table
@@ -517,6 +543,9 @@ pub fn table_defects(table: &[Command]) -> Vec<TableDefect> {
             if let Some(first) = chords.insert(kb, cmd.id) {
                 defects.push(TableDefect::SharedChord(kb, first, cmd.id));
             }
+        }
+        if subject_home(cmd.category).is_some_and(|home| home != cmd.home) {
+            defects.push(TableDefect::HomedAway(cmd.id, cmd.home));
         }
     }
     defects
@@ -783,6 +812,43 @@ mod tests {
             Locale::Fr => ambre_core::Validated::new(" "),
             Locale::En => ambre_core::Validated::new("Bold"),
         }
+    }
+
+    /// A command on the file outside the Ambre menu is a defect of the table.
+    /// So is a command on the account outside the avatar menu. A
+    /// command of another group may live in any region (`CHROME-154`,
+    /// `CHROME-156`).
+    #[test]
+    fn a_command_on_the_file_or_the_account_homed_away_is_a_defect() {
+        let save = StaticKey::<Commands>::new("t.file.save");
+        let theme = StaticKey::<Commands>::new("t.account.theme");
+        let bold = StaticKey::<Commands>::new("t.format.bold");
+        let entry = |id, category, home| Command {
+            id,
+            title: bold_title,
+            icon: None,
+            keybindings: &[],
+            category,
+            home,
+            description: None,
+        };
+        let homed = [
+            entry(save, shared::FILE, Home::AmbreMenu),
+            entry(theme, shared::ACCOUNT, Home::AvatarMenu),
+            entry(bold, FORMAT, Home::AvatarMenu),
+        ];
+        assert_eq!(table_defects(&homed), []);
+        let away = [
+            entry(save, shared::FILE, Home::ContextPanel),
+            entry(theme, shared::ACCOUNT, Home::AmbreMenu),
+        ];
+        assert_eq!(
+            table_defects(&away),
+            [
+                TableDefect::HomedAway(save, Home::ContextPanel),
+                TableDefect::HomedAway(theme, Home::AmbreMenu),
+            ]
+        );
     }
 
     /// A whole table has no defect, and each part of a description that goes

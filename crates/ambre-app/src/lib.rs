@@ -76,8 +76,6 @@ use ambre_trame::ui::TrameView;
 #[cfg(target_arch = "wasm32")]
 use leptos::prelude::*;
 #[cfg(target_arch = "wasm32")]
-use leptos_icons::Icon;
-#[cfg(target_arch = "wasm32")]
 use leptos_router::components::Router;
 #[cfg(target_arch = "wasm32")]
 use leptos_router::hooks::use_location;
