@@ -110,7 +110,7 @@ impl Page {
                 &format!(
                     "const i = document.querySelector('.ambre-share-input'); \
                      if (!i || !i.checkVisibility()) {{ \
-                       document.querySelector('[aria-label=\"Share document\"]').click(); \
+                       document.querySelector('.ambre-header-end .ambre-primary-button').click(); \
                        return false; }} \
                      i.value = {name}; \
                      i.dispatchEvent(new Event('input', {{ bubbles: true }})); \
@@ -174,7 +174,7 @@ impl Page {
                 "the copy button of the invite link",
                 "const b = document.querySelector('.ambre-share-link-copy'); \
                  if (!b || !b.checkVisibility()) { \
-                   document.querySelector('[aria-label=\"Share document\"]').click(); \
+                   document.querySelector('.ambre-header-end .ambre-primary-button').click(); \
                    return null; } \
                  b.scrollIntoView(); \
                  const r = b.getBoundingClientRect(); \
