@@ -23,7 +23,7 @@ pub(crate) async fn take_fold_lease(
         "/channels/{channel_id}/segments/{segment}/fold-lease"
     ));
     let answer: http::FoldLeaseResponse =
-        http::post_json_auth_via(transport, &url, &serde_json::json!({}), auth).await?;
+        http::post_json_auth_via(transport, &url, &http::EmptyBody {}, auth).await?;
     Ok(match answer.lease {
         Some(granted) => FoldAnswer::Granted {
             lease: granted.lease_id,

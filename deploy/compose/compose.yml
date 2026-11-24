@@ -111,6 +111,13 @@ services:
       OIDC_GOOGLE_CLIENT_ID: ${OIDC_GOOGLE_CLIENT_ID:-}
       OIDC_GOOGLE_CLIENT_SECRET: ${OIDC_GOOGLE_CLIENT_SECRET:-}
       OIDC_GOOGLE_REDIRECT_URI: https://${AMBRE_DOMAIN}/signin/google
+      # The OpenID Connect issuer of the organization: a Keycloak, an
+      # Authentik or its directory (`SRV-340`). The relay discovers it at its
+      # https address, and the client build of `web` names the same one.
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_REDIRECT_URI: https://${AMBRE_DOMAIN}/signin/oidc
     # The relay on the loopback of the host alone, for Caddy's `/api`. Its
     # metrics port stays inside the network of the stack (`SRV-257`).
     ports:
@@ -169,6 +176,9 @@ services:
       args:
         DEV_LOGIN: ${AMBRE_DEV_LOGIN:-}
         AMBRE_EMBED_SITES: ${AMBRE_EMBED_SITES:-}
+        # The client follows the sign-in to the host of this issuer alone
+        # (`CHROME-139`), and offers it in place of Google.
+        AMBRE_OIDC_ISSUER: ${OIDC_ISSUER:-}
     image: ambre-web:local
     restart: unless-stopped
     network_mode: host

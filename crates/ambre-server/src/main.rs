@@ -141,34 +141,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let s3 = aws_sdk_s3::Client::from_conf(s3_config.build());
 
-    // An empty client id means provider sign-in is off (`SRV-074`). A
-    // redirect that is no URL stops the start, as a provider that does not
-    // answer does.
-    let oidc_google = match std::env::var("OIDC_GOOGLE_CLIENT_ID") {
-        Ok(client_id) if !client_id.is_empty() => {
-            let redirect_uri = openidconnect::RedirectUrl::new(
-                std::env::var("OIDC_GOOGLE_REDIRECT_URI").unwrap_or_default(),
-            )
-            .map_err(|e| format!("OIDC initialization failed: invalid redirect URI: {e}"))?;
-            let secret = std::env::var("OIDC_GOOGLE_CLIENT_SECRET").unwrap_or_default();
-            // Unset or empty, the issuer is Google's own (`SRV-322`).
-            let configured = std::env::var("OIDC_GOOGLE_ISSUER")
-                .ok()
-                .filter(|text| !text.is_empty())
-                .map(openidconnect::IssuerUrl::new)
-                .transpose()
-                .map_err(|e| format!("OIDC initialization failed: invalid issuer: {e}"))?;
-            let issuer = oidc::google_issuer(configured)
-                .map_err(|e| format!("OIDC initialization failed: {e}"))?;
-            Some(oidc::OidcRegistration::google(
-                issuer,
-                openidconnect::ClientId::new(client_id),
-                ambre_core::Confidential::<oidc::OidcSecret>::new(secret),
-                redirect_uri,
-            ))
+    // An empty client id means the provider is off (`SRV-074`). A redirect
+    // or an issuer that is no URL stops the start, as a provider that does
+    // not answer does.
+    let mut oidc_registrations = Vec::new();
+    for provider in ambre_core::OidcProvider::ALL {
+        if let Some(registration) = oidc_registration(provider)? {
+            oidc_registrations.push(registration);
         }
-        _ => None,
-    };
+    }
     // Access-token signing key. In a multi-instance deployment the seed MUST be
     // shared, so any instance can verify a token minted by another. Absent
     // (dev), generate an ephemeral one so a restart simply forces clients to
@@ -234,7 +215,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = Config {
         s3_env_prefix,
         snapshot_custody,
-        oidc_google,
+        oidc_registrations,
         dev_mode: dev,
         trust_proxy_headers,
         access_ttl: TimeSpan::<Sec>::new(env_ttl("ACCESS_TTL_SECS", 900)),
@@ -293,7 +274,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // login). But when credentials ARE configured, a discovery failure is a
     // misconfiguration we must not silently swallow into "login disabled". Log
     // at ERROR and fail-fast, so the operator notices at startup (M7).
-    let oidc_clients = match oidc::start_oidc_clients(config.oidc_google.as_ref()).await {
+    let oidc_clients = match oidc::start_oidc_clients(
+        &config.oidc_registrations,
+        oidc::ProviderTransport::of(config.dev_mode),
+    )
+    .await
+    {
         Ok(clients) => clients,
         Err(e) => {
             tracing::error!("OIDC discovery failed with configured credentials: {e}");
@@ -462,6 +448,43 @@ where
 /// step. That is the membership graph `ZK-030` keeps out of the logs. So a
 /// relay outside `DEV_MODE` logs at info, and debug takes an explicit
 /// `RUST_LOG`.
+/// The registration of `provider`, read from the variables under its prefix,
+/// `OIDC_GOOGLE` or `OIDC`: `_CLIENT_ID`, `_CLIENT_SECRET`,
+/// `_REDIRECT_URI` and `_ISSUER`. `None` when
+/// the client id is unset or empty. Unset or empty, the issuer of the `google`
+/// provider is Google's own, and the `oidc` provider stops the start
+/// (`SRV-322`, `SRV-340`).
+fn oidc_registration(
+    provider: ambre_core::OidcProvider,
+) -> Result<Option<oidc::OidcRegistration>, Box<dyn std::error::Error>> {
+    let prefix = match provider {
+        ambre_core::OidcProvider::Google => "OIDC_GOOGLE",
+        ambre_core::OidcProvider::Oidc => "OIDC",
+    };
+    let read = |name: &str| std::env::var(format!("{prefix}_{name}")).unwrap_or_default();
+    let client_id = read("CLIENT_ID");
+    if client_id.is_empty() {
+        return Ok(None);
+    }
+    let redirect_uri = openidconnect::RedirectUrl::new(read("REDIRECT_URI")).map_err(|e| {
+        format!("OIDC initialization failed: {provider}: invalid redirect URI: {e}")
+    })?;
+    let issuer = Some(read("ISSUER"))
+        .filter(|text| !text.is_empty())
+        .map(openidconnect::IssuerUrl::new)
+        .transpose()
+        .map_err(|e| format!("OIDC initialization failed: {provider}: invalid issuer: {e}"))?;
+    let issuer = oidc::provider_issuer(provider, issuer)
+        .map_err(|e| format!("OIDC initialization failed: {e}"))?;
+    Ok(Some(oidc::OidcRegistration {
+        provider,
+        issuer,
+        client_id: openidconnect::ClientId::new(client_id),
+        client_secret: ambre_core::Confidential::<oidc::OidcSecret>::new(read("CLIENT_SECRET")),
+        redirect_uri,
+    }))
+}
+
 fn default_log_filter(dev_mode: state::DevMode) -> tracing_subscriber::EnvFilter {
     match dev_mode {
         state::DevMode::Off => {

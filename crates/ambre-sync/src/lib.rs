@@ -199,6 +199,7 @@ mod fold;
 pub mod fuzz;
 mod generation;
 mod http;
+mod json;
 mod kept;
 mod key_vouch;
 mod lifecycle;

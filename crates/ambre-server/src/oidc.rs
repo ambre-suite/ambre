@@ -1,11 +1,15 @@
 use openidconnect::core::{
-    CoreAuthenticationFlow, CoreClient, CoreIdTokenClaims, CoreProviderMetadata,
+    CoreAuthenticationFlow, CoreClient, CoreIdToken, CoreIdTokenClaims, CoreIdTokenVerifier,
+    CoreJsonWebKeySet, CoreJwsSigningAlgorithm, CoreProviderMetadata,
 };
 use openidconnect::{
-    ClientId, CsrfToken, EndpointMaybeSet, EndpointNotSet, EndpointSet, IssuerUrl, Nonce,
-    PkceCodeChallenge, RedirectUrl, Scope, TokenResponse,
+    AsyncHttpClient, ClaimsVerificationError, ClientId, CsrfToken, EndpointMaybeSet,
+    EndpointNotSet, EndpointSet, HttpClientError, HttpRequest, HttpResponse, IssuerUrl, Nonce,
+    PkceCodeChallenge, RedirectUrl, Scope, SignatureVerificationError, TokenResponse,
 };
 use std::collections::HashMap;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 
 use ambre_core::id::{Id, User};
@@ -26,7 +30,8 @@ pub type OidcClient = CoreClient<
     EndpointMaybeSet,
 >;
 
-/// Per-provider OIDC state: the configured client and its redirect URI.
+/// Per-provider OIDC state: the configured client, its redirect URI, the
+/// issuer it was discovered at and the keys that issuer signs under.
 ///
 /// The redirect URI is stored separately from the client. The same
 /// `OidcClient` can then be used by `login_url` and `exchange_code`,
@@ -34,11 +39,19 @@ pub type OidcClient = CoreClient<
 pub struct OidcProviderState {
     pub client: OidcClient,
     pub redirect_uri: RedirectUrl,
-    /// Shared HTTP client for token exchange. `reqwest::Client` owns a
-    /// connection pool internally and is cheap to clone. One instance is
-    /// built at discovery time and reused for every callback, rather than
-    /// spinning up a fresh pool (and TLS handshake) per request.
-    pub http_client: reqwest::Client,
+    /// The issuer the deployment configured. The discovery document named it
+    /// exactly, and every identity token must name it exactly (`SRV-345`, `SRV-341`).
+    pub issuer: IssuerUrl,
+    /// The client the provider issued the relay: the one audience an identity
+    /// token may carry, and its authorized party when it names one.
+    pub client_id: ClientId,
+    /// The keys the issuer publishes, fetched again on an unknown key id at
+    /// most once per `KEYS_REFRESH_INTERVAL` (`SRV-342`).
+    pub keys: ProviderKeys,
+    /// Shared HTTP client for the token exchange and the key fetch. One
+    /// instance is built at discovery time and reused for every callback,
+    /// rather than spinning up a fresh pool (and TLS handshake) per request.
+    pub http_client: ProviderHttp,
 }
 
 /// Map of each configured OIDC provider to its state. A provider absent from
@@ -111,126 +124,349 @@ pub struct OidcAuthState {
     pub nonce: Nonce,
 }
 
-/// The registration of the relay with one provider. It names where the
-/// provider is discovered, the client it issued the relay, and where it sends
-/// a sign-in back. Each part is the provider crate's own type, so a client id never
-/// takes the place of a redirect.
+/// The registration of the relay with one provider. It names the provider,
+/// where it is discovered, the client it issued the relay, and where it sends
+/// a sign-in back. Each part is the provider crate's own type, so a client id
+/// never takes the place of a redirect.
 #[derive(Debug, Clone)]
 pub struct OidcRegistration {
+    pub provider: ambre_core::OidcProvider,
     pub issuer: IssuerUrl,
     pub client_id: ClientId,
     pub client_secret: ambre_core::Confidential<OidcSecret>,
     pub redirect_uri: RedirectUrl,
 }
 
-impl OidcRegistration {
-    /// The registration with the `google` provider, discovered at `issuer`.
-    pub fn google(
-        issuer: IssuerUrl,
-        client_id: ClientId,
-        client_secret: ambre_core::Confidential<OidcSecret>,
-        redirect_uri: RedirectUrl,
-    ) -> Self {
-        Self {
-            issuer,
-            client_id,
-            client_secret,
-            redirect_uri,
+/// Whether the relay may reach a provider over plain `http` on the loopback.
+///
+/// Off the loopback, plain `http` is refused under both: a network attacker
+/// could answer the discovery and the keys. On the loopback, only a
+/// development relay accepts it, where a test runs its provider (`SRV-322`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProviderTransport {
+    /// Every address of the provider is `https`.
+    HttpsOnly,
+    /// An address may also be plain `http` on a loopback host.
+    LoopbackHttp,
+}
+
+impl ProviderTransport {
+    /// The transport a relay in `dev_mode` accepts.
+    pub fn of(dev_mode: crate::state::DevMode) -> Self {
+        match dev_mode {
+            crate::state::DevMode::Off => Self::HttpsOnly,
+            crate::state::DevMode::On => Self::LoopbackHttp,
+        }
+    }
+
+    /// Refuses `url` unless it is `https`, or plain `http` on a loopback host
+    /// under [`ProviderTransport::LoopbackHttp`]. `role` names the address in
+    /// the refusal.
+    fn admit(self, url: &url::Url, role: ProviderAddress) -> Result<(), AppError> {
+        let loopback = match url.host() {
+            Some(url::Host::Ipv4(ip)) => ip.is_loopback(),
+            Some(url::Host::Ipv6(ip)) => ip.is_loopback(),
+            Some(url::Host::Domain(name)) => name == "localhost",
+            None => false,
+        };
+        match (url.scheme(), self) {
+            ("https", _) => Ok(()),
+            ("http", Self::LoopbackHttp) if loopback => Ok(()),
+            _ => Err(AppError::Oidc(format!(
+                "the provider {role} must be https, or http on a loopback host of a development relay"
+            ))),
         }
     }
 }
 
-/// The issuer the `google` provider is discovered at (`SRV-322`).
+/// An address of a provider the relay reaches, as a refusal names it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProviderAddress {
+    Issuer,
+    AuthorizationEndpoint,
+    TokenEndpoint,
+    KeySet,
+}
+
+impl std::fmt::Display for ProviderAddress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Issuer => "issuer",
+            Self::AuthorizationEndpoint => "authorization endpoint",
+            Self::TokenEndpoint => "token endpoint",
+            Self::KeySet => "key set",
+        })
+    }
+}
+
+/// The issuer `provider` is discovered at (`SRV-322`, `SRV-340`).
 ///
-/// No issuer names Google's own. Any other is the issuer the deployment
-/// configured. It must be `https`, or plain `http` on a loopback host, which
-/// no other machine reaches. A test runs its provider there. A plain `http`
-/// issuer on another host is refused, so the start stops: a network attacker
-/// could answer its discovery and its keys.
-pub fn google_issuer(configured: Option<IssuerUrl>) -> Result<IssuerUrl, AppError> {
-    let issuer = match configured {
-        Some(issuer) => issuer,
-        None => IssuerUrl::new("https://accounts.google.com".to_owned())
-            .map_err(|e| AppError::Oidc(format!("invalid google issuer URL: {e}")))?,
-    };
-    let url = issuer.url();
-    let loopback = match url.host() {
-        Some(url::Host::Ipv4(ip)) => ip.is_loopback(),
-        Some(url::Host::Ipv6(ip)) => ip.is_loopback(),
-        Some(url::Host::Domain(name)) => name == "localhost",
-        None => false,
-    };
-    match url.scheme() {
-        "https" => Ok(issuer),
-        "http" if loopback => Ok(issuer),
-        _ => Err(AppError::Oidc(
-            "the google issuer must be https, or http on a loopback host".to_owned(),
+/// The `google` provider defaults to Google's own issuer. The `oidc` provider
+/// has none: the deployment names it, or the start stops. The transport of
+/// the issuer is checked when the relay starts, by [`start_oidc_clients`].
+pub fn provider_issuer(
+    provider: ambre_core::OidcProvider,
+    configured: Option<IssuerUrl>,
+) -> Result<IssuerUrl, AppError> {
+    match (provider, configured) {
+        (_, Some(issuer)) => Ok(issuer),
+        (ambre_core::OidcProvider::Google, None) => {
+            IssuerUrl::new("https://accounts.google.com".to_owned())
+                .map_err(|e| AppError::Oidc(format!("invalid google issuer URL: {e}")))
+        }
+        (ambre_core::OidcProvider::Oidc, None) => Err(AppError::Oidc(
+            "the oidc provider needs the issuer the deployment names".to_owned(),
         )),
     }
 }
 
 /// The provider clients the relay starts with. No registration means
 /// provider sign-in is off, and nothing is discovered. A configured provider
-/// that does not answer is an error, so the start stops (`SRV-074`).
+/// that does not answer, or that fails a check of [`discover`], is an error,
+/// so the start stops (`SRV-074`).
 pub async fn start_oidc_clients(
-    google: Option<&OidcRegistration>,
+    registrations: &[OidcRegistration],
+    transport: ProviderTransport,
 ) -> Result<OidcClients, AppError> {
-    match google {
-        None => Ok(Arc::new(HashMap::new())),
-        Some(google) => init_oidc_clients(google).await,
+    let mut map = HashMap::new();
+    for registration in registrations {
+        let state = discover(registration, transport).await?;
+        map.insert(registration.provider, state);
     }
+    Ok(Arc::new(map))
 }
 
 /// How long one request to the identity provider may take: the discovery,
 /// the code exchange or the key fetch (`ambre-spec-budgets.md` section 8).
 const PROVIDER_DEADLINE: std::time::Duration = std::time::Duration::from_secs(10);
 
+/// The most bytes the relay reads of one answer of the identity provider
+/// (`ambre-spec-budgets.md` section 6, `SRV-343`). The answer is a discovery
+/// document, a key set or a token answer.
+pub const PROVIDER_ANSWER_MAX_SIZE: ambre_core::Count<ambre_core::Octets> =
+    ambre_core::Count::<ambre_core::Octets>::new(256 * 1024);
+
+/// The shortest interval between two fetches of the key set of one provider
+/// (`ambre-spec-budgets.md` section 8, `SRV-342`).
+const KEYS_REFRESH_INTERVAL: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// How far the clock of the provider may stand from the clock of the relay
+/// (`ambre-spec-budgets.md` section 8, `SRV-341`). It applies to the expiry,
+/// the issue time and the start of an identity token.
+const PROVIDER_CLOCK_SKEW: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// The oldest issue time an identity token may carry: the lifetime of the
+/// sign-in state, since no exchange outlives it (`SRV-341`).
+const ID_TOKEN_MAX_AGE: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+
+/// The algorithms an identity token may be signed under (`SRV-341`). Each one
+/// is asymmetric, so a key the issuer publishes never serves as a secret.
+/// `none` is no algorithm here.
+const ALLOWED_ALGORITHMS: [CoreJwsSigningAlgorithm; 8] = [
+    CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha256,
+    CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha384,
+    CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha512,
+    CoreJwsSigningAlgorithm::RsaSsaPssSha256,
+    CoreJwsSigningAlgorithm::RsaSsaPssSha384,
+    CoreJwsSigningAlgorithm::RsaSsaPssSha512,
+    CoreJwsSigningAlgorithm::EcdsaP256Sha256,
+    CoreJwsSigningAlgorithm::EcdsaP384Sha384,
+];
+
 /// The client every request to the identity provider goes through
-/// (`SRV-296`).
+/// (`SRV-296`, `SRV-343`).
 ///
-/// A request past `deadline` fails, so a stalled provider holds no sign-in
+/// A request past its deadline fails, so a stalled provider holds no sign-in
 /// open. A redirect is never followed, as the provider crate asks. So an
-/// answer cannot send the relay's code or secret to another host.
-fn provider_client(deadline: std::time::Duration) -> Result<reqwest::Client, AppError> {
-    reqwest::Client::builder()
-        .timeout(deadline)
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .map_err(|e| AppError::Oidc(format!("provider client: {e}")))
+/// answer cannot send the relay's code or secret to another host. An answer
+/// past `cap` is refused before the relay reads more of it.
+#[derive(Clone)]
+pub struct ProviderHttp {
+    client: reqwest::Client,
+    cap: ambre_core::Count<ambre_core::Octets>,
 }
 
-/// Discovers the `google` provider's metadata at its issuer and initializes
-/// an `OidcClient`.
+impl ProviderHttp {
+    fn new(
+        deadline: std::time::Duration,
+        cap: ambre_core::Count<ambre_core::Octets>,
+    ) -> Result<Self, AppError> {
+        let client = reqwest::Client::builder()
+            .timeout(deadline)
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .map_err(|e| AppError::Oidc(format!("provider client: {e}")))?;
+        Ok(Self { client, cap })
+    }
+}
+
+impl<'c> AsyncHttpClient<'c> for ProviderHttp {
+    type Error = HttpClientError<reqwest::Error>;
+    type Future = Pin<Box<dyn Future<Output = Result<HttpResponse, Self::Error>> + Send + 'c>>;
+
+    /// The answer to `request`, its body read up to the cap alone.
+    fn call(&'c self, request: HttpRequest) -> Self::Future {
+        Box::pin(async move {
+            let request = reqwest::Request::try_from(request).map_err(Box::new)?;
+            let mut response = self.client.execute(request).await.map_err(Box::new)?;
+            let cap = self.cap.get();
+            let past_cap =
+                || HttpClientError::Other("the provider answer passed its cap".to_owned());
+            if response.content_length().is_some_and(|length| length > cap) {
+                return Err(past_cap());
+            }
+            let mut builder = openidconnect::http::Response::builder()
+                .status(response.status())
+                .version(response.version());
+            for (name, value) in response.headers() {
+                builder = builder.header(name, value);
+            }
+            let mut body = Vec::new();
+            while let Some(chunk) = response.chunk().await.map_err(Box::new)? {
+                let read =
+                    u64::try_from(body.len().saturating_add(chunk.len())).unwrap_or(u64::MAX);
+                if read > cap {
+                    return Err(past_cap());
+                }
+                body.extend_from_slice(&chunk);
+            }
+            builder.body(body).map_err(HttpClientError::Http)
+        })
+    }
+}
+
+/// The key set one provider publishes, and when the relay last fetched it.
 ///
-/// The resulting `OidcClients` map is stored in `AppState` and used by
-/// the `/auth/{provider}/login` and `/auth/{provider}/callback` routes.
-async fn init_oidc_clients(google: &OidcRegistration) -> Result<OidcClients, AppError> {
-    let http_client = provider_client(PROVIDER_DEADLINE)?;
+/// A token under a key id the set does not hold fetches the set again. So a
+/// provider that rotates its key keeps signing people in. The fetch runs at
+/// most once per `KEYS_REFRESH_INTERVAL`. So a stream of forged key ids cannot
+/// turn the relay into a client that floods the provider (`SRV-342`).
+pub struct ProviderKeys {
+    jwks_uri: openidconnect::JsonWebKeySetUrl,
+    set: std::sync::RwLock<CoreJsonWebKeySet>,
+    /// When the set was last fetched. The lock is held across a fetch, so two
+    /// sign-ins that miss one key at once fetch the set once.
+    fetched: tokio::sync::Mutex<tokio::time::Instant>,
+    interval: std::time::Duration,
+}
 
-    let provider_metadata =
-        CoreProviderMetadata::discover_async(google.issuer.clone(), &http_client)
+/// What one fetch of the key set did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum KeysFetch {
+    /// The set was fetched again.
+    Fetched,
+    /// The last fetch is too recent: the set stays as it is.
+    TooSoon,
+}
+
+impl ProviderKeys {
+    /// The keys as they stand.
+    fn current(&self) -> CoreJsonWebKeySet {
+        match self.set.read() {
+            Ok(set) => set.clone(),
+            Err(poisoned) => poisoned.into_inner().clone(),
+        }
+    }
+
+    /// Fetches the set again, unless the last fetch is younger than the
+    /// interval.
+    async fn refresh(&self, http: &ProviderHttp) -> Result<KeysFetch, AppError> {
+        let mut fetched = self.fetched.lock().await;
+        if fetched.elapsed() < self.interval {
+            return Ok(KeysFetch::TooSoon);
+        }
+        *fetched = tokio::time::Instant::now();
+        let set = CoreJsonWebKeySet::fetch_async(&self.jwks_uri, http)
             .await
-            .map_err(|e| AppError::Oidc(format!("google discovery failed: {e}")))?;
+            .map_err(|e| AppError::Oidc(format!("key set fetch failed: {e}")))?;
+        match self.set.write() {
+            Ok(mut current) => *current = set,
+            Err(poisoned) => *poisoned.into_inner() = set,
+        }
+        Ok(KeysFetch::Fetched)
+    }
+}
 
-    let redirect_uri = google.redirect_uri.clone();
+/// Discovers `registration`'s provider and builds its state (`SRV-345`).
+///
+/// The relay refuses the provider, and so stops the start, when:
+///
+/// * the issuer, the authorization endpoint, the token endpoint or the key
+///   set is not on a transport `transport` admits;
+/// * the discovery document names another issuer than the one configured;
+/// * the discovery document, or the key set, does not answer or passes the
+///   answer cap.
+async fn discover(
+    registration: &OidcRegistration,
+    transport: ProviderTransport,
+) -> Result<OidcProviderState, AppError> {
+    let provider = registration.provider;
+    transport.admit(registration.issuer.url(), ProviderAddress::Issuer)?;
+    let http_client = ProviderHttp::new(PROVIDER_DEADLINE, PROVIDER_ANSWER_MAX_SIZE)?;
+
+    // The crate's own discovery fetches the key set before any check of its
+    // address, so the relay reads the document itself and checks first.
+    let discovery_url = registration
+        .issuer
+        .join(".well-known/openid-configuration")
+        .map_err(|e| AppError::Oidc(format!("{provider} discovery address: {e}")))?;
+    let request = openidconnect::http::Request::builder()
+        .method(openidconnect::http::Method::GET)
+        .uri(discovery_url.as_str())
+        .header(openidconnect::http::header::ACCEPT, "application/json")
+        .body(Vec::new())
+        .map_err(|e| AppError::Oidc(format!("{provider} discovery request: {e}")))?;
+    let answer = http_client
+        .call(request)
+        .await
+        .map_err(|e| AppError::Oidc(format!("{provider} discovery failed: {e}")))?;
+    if !answer.status().is_success() {
+        return Err(AppError::Oidc(format!(
+            "{provider} discovery failed: status {}",
+            answer.status()
+        )));
+    }
+    let metadata: CoreProviderMetadata = serde_json::from_slice(answer.body())
+        .map_err(|e| AppError::Oidc(format!("{provider} discovery failed: {e}")))?;
+    if metadata.issuer() != &registration.issuer {
+        return Err(AppError::Oidc(format!(
+            "{provider} discovery failed: the document names another issuer"
+        )));
+    }
+    transport.admit(
+        metadata.authorization_endpoint().url(),
+        ProviderAddress::AuthorizationEndpoint,
+    )?;
+    if let Some(token) = metadata.token_endpoint() {
+        transport.admit(token.url(), ProviderAddress::TokenEndpoint)?;
+    }
+    transport.admit(metadata.jwks_uri().url(), ProviderAddress::KeySet)?;
+
+    let jwks_uri = metadata.jwks_uri().clone();
+    let set = CoreJsonWebKeySet::fetch_async(&jwks_uri, &http_client)
+        .await
+        .map_err(|e| AppError::Oidc(format!("{provider} key set fetch failed: {e}")))?;
+    let keys = ProviderKeys {
+        jwks_uri,
+        set: std::sync::RwLock::new(set.clone()),
+        fetched: tokio::sync::Mutex::new(tokio::time::Instant::now()),
+        interval: KEYS_REFRESH_INTERVAL,
+    };
 
     let client = OidcClient::from_provider_metadata(
-        provider_metadata,
-        google.client_id.clone(),
-        Some(google.client_secret.to_client_secret()),
+        metadata.set_jwks(set),
+        registration.client_id.clone(),
+        Some(registration.client_secret.to_client_secret()),
     );
 
-    let mut map = HashMap::new();
-    map.insert(
-        ambre_core::OidcProvider::Google,
-        OidcProviderState {
-            client,
-            redirect_uri,
-            http_client,
-        },
-    );
-
-    Ok(Arc::new(map))
+    Ok(OidcProviderState {
+        client,
+        redirect_uri: registration.redirect_uri.clone(),
+        issuer: registration.issuer.clone(),
+        client_id: registration.client_id.clone(),
+        keys,
+        http_client,
+    })
 }
 
 /// Generates an OIDC authorization URL with PKCE challenge, CSRF token, and nonce.
@@ -280,7 +516,7 @@ pub async fn login_url(
 /// Exchanges an authorization code for tokens, validates the ID token, and returns the claims.
 ///
 /// Uses the PKCE verifier and nonce from the `OidcAuthState` (retrieved from Redis)
-/// to prevent code interception. The ID token is verified against the provider's JWKS keys.
+/// to prevent code interception. The ID token is verified by [`verify_id_token`].
 pub async fn exchange_code(
     provider: &OidcProviderState,
     code: &ambre_core::Credential<ambre_core::OidcCode>,
@@ -295,8 +531,7 @@ pub async fn exchange_code(
         .clone()
         .set_redirect_uri(provider.redirect_uri.clone());
 
-    let exchange_client = client_with_redirect.clone();
-    let exchange_req = exchange_client
+    let exchange_req = client_with_redirect
         .exchange_code(auth_code)
         .map_err(|e| AppError::Oidc(format!("exchange_code setup failed: {e}")))?;
 
@@ -310,15 +545,136 @@ pub async fn exchange_code(
         .id_token()
         .ok_or_else(|| AppError::Oidc("no id_token in response".into()))?;
 
-    let claims = id_token
-        .clone()
-        .into_claims(
-            &client_with_redirect.id_token_verifier(),
-            &stored_state.nonce,
-        )
-        .map_err(|e| AppError::Oidc(format!("id token verification failed: {e}")))?;
+    verify_id_token(provider, id_token, &stored_state.nonce).await
+}
 
+/// The claims of `id_token`, once every check of `SRV-341` holds.
+///
+/// A token under a key id the relay does not hold fetches the key set again,
+/// within the interval of [`ProviderKeys`]. The token is then checked once
+/// more (`SRV-342`).
+async fn verify_id_token(
+    provider: &OidcProviderState,
+    id_token: &CoreIdToken,
+    nonce: &Nonce,
+) -> Result<CoreIdTokenClaims, AppError> {
+    let first = check_id_token(provider, id_token, nonce, provider.keys.current());
+    let claims = match first {
+        Err(ClaimsVerificationError::SignatureVerification(
+            SignatureVerificationError::NoMatchingKey,
+        )) => match provider.keys.refresh(&provider.http_client).await? {
+            KeysFetch::Fetched => {
+                check_id_token(provider, id_token, nonce, provider.keys.current())
+            }
+            KeysFetch::TooSoon => first,
+        },
+        checked => checked,
+    }
+    .map_err(|e| AppError::Oidc(format!("id token verification failed: {e}")))?;
+    check_authorized_party(provider, &claims)?;
+    check_not_before(id_token)?;
     Ok(claims)
+}
+
+/// The checks the provider crate runs, under the settings of `SRV-341`:
+///
+/// * the issuer and the audience;
+/// * the signature under `keys`, and an allowed algorithm;
+/// * the expiry and the issue time, within the skew;
+/// * the one-time value.
+fn check_id_token(
+    provider: &OidcProviderState,
+    id_token: &CoreIdToken,
+    nonce: &Nonce,
+    keys: CoreJsonWebKeySet,
+) -> Result<CoreIdTokenClaims, ClaimsVerificationError> {
+    let skew = chrono::Duration::from_std(PROVIDER_CLOCK_SKEW).unwrap_or_default();
+    let max_age = chrono::Duration::from_std(ID_TOKEN_MAX_AGE).unwrap_or_default();
+    // A public client verifier holds no secret, so a token signed under a
+    // shared secret is refused whatever its algorithm says.
+    let verifier = CoreIdTokenVerifier::new_public_client(
+        provider.client_id.clone(),
+        provider.issuer.clone(),
+        keys,
+    )
+    .set_allowed_algs(ALLOWED_ALGORITHMS)
+    // The crate refuses a token once the time it reads passes the expiry, so
+    // a time read `skew` early admits an expiry `skew` past.
+    .set_time_fn(move || {
+        let now = chrono::Utc::now();
+        now.checked_sub_signed(skew).unwrap_or(now)
+    })
+    .set_issue_time_verifier_fn(move |issued| {
+        let now = chrono::Utc::now();
+        let no_time = || "the clock of the relay is out of range".to_owned();
+        let latest = now.checked_add_signed(skew).ok_or_else(no_time)?;
+        let earliest = now
+            .checked_sub_signed(max_age)
+            .and_then(|time| time.checked_sub_signed(skew))
+            .ok_or_else(no_time)?;
+        if issued > latest {
+            Err("the token is issued in the future".to_owned())
+        } else if issued < earliest {
+            Err("the token is issued too long ago".to_owned())
+        } else {
+            Ok(())
+        }
+    });
+    id_token.clone().into_claims(&verifier, nonce)
+}
+
+/// Refuses a token whose authorized party is another client. The provider
+/// crate leaves the check out. A token with several audiences carries one,
+/// and the crate already refuses any audience but the relay's (`SRV-341`).
+fn check_authorized_party(
+    provider: &OidcProviderState,
+    claims: &CoreIdTokenClaims,
+) -> Result<(), AppError> {
+    match claims.authorized_party() {
+        Some(party) if party != &provider.client_id => Err(AppError::Oidc(
+            "id token verification failed: another authorized party".to_owned(),
+        )),
+        _ => Ok(()),
+    }
+}
+
+/// The `nbf` claim of an identity token, which the claims of the provider
+/// crate do not model.
+#[derive(serde::Deserialize)]
+struct NotBefore {
+    nbf: Option<serde_json::Number>,
+}
+
+/// Refuses a token that is not valid yet, past the skew (`SRV-341`). The
+/// signature is already verified, so the payload is the issuer's own.
+fn check_not_before(id_token: &CoreIdToken) -> Result<(), AppError> {
+    use base64::Engine as _;
+    let refused = |reason: &str| AppError::Oidc(format!("id token verification failed: {reason}"));
+    let text = id_token.to_string();
+    let payload = text
+        .split('.')
+        .nth(1)
+        .ok_or_else(|| refused("no payload"))?;
+    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(payload)
+        .map_err(|_| refused("a payload that is not base64url"))?;
+    let claims: NotBefore =
+        serde_json::from_slice(&bytes).map_err(|_| refused("a payload that is not JSON"))?;
+    let Some(nbf) = claims.nbf else {
+        return Ok(());
+    };
+    let start = nbf
+        .as_i64()
+        .and_then(|seconds| chrono::DateTime::from_timestamp(seconds, 0))
+        .ok_or_else(|| refused("a start that is no time"))?;
+    let skew = chrono::Duration::from_std(PROVIDER_CLOCK_SKEW).unwrap_or_default();
+    let latest = chrono::Utc::now()
+        .checked_add_signed(skew)
+        .ok_or_else(|| refused("a clock out of range"))?;
+    if start > latest {
+        return Err(refused("the token is not valid yet"));
+    }
+    Ok(())
 }
 
 /// An identity provider that a test runs in process. It publishes its
@@ -326,23 +682,51 @@ pub async fn exchange_code(
 /// URL, and answers the code with an identity token it signs.
 #[cfg(test)]
 pub(crate) mod stub {
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
 
     use openidconnect::core::{
-        CoreIdToken, CoreIdTokenClaims, CoreJwsSigningAlgorithm, CoreRsaPrivateSigningKey,
+        CoreHmacKey, CoreIdToken, CoreIdTokenClaims, CoreJwsSigningAlgorithm,
+        CoreRsaPrivateSigningKey,
     };
     use openidconnect::{
-        Audience, EmptyAdditionalClaims, EndUserEmail, EndUserName, IssuerUrl, JsonWebKeyId, Nonce,
-        PkceCodeChallenge, PkceCodeVerifier, PrivateSigningKey, StandardClaims, SubjectIdentifier,
+        Audience, ClientId, EmptyAdditionalClaims, EndUserEmail, EndUserName, IssuerUrl,
+        JsonWebKeyId, Nonce, PkceCodeChallenge, PkceCodeVerifier, PrivateSigningKey,
+        StandardClaims, SubjectIdentifier,
     };
     use rsa::pkcs1::EncodeRsaPrivateKey;
 
-    /// The client the provider knows.
+    /// The client the provider knows, and the secret it issued that client.
     pub(crate) const CLIENT_ID: &str = "client";
+    pub(crate) const CLIENT_SECRET: &str = "secret";
     /// The subject, the email and the name of the person who signs in.
     pub(crate) const SUBJECT: &str = "stub-subject";
     pub(crate) const EMAIL: &str = "ada@example.org";
     pub(crate) const NAME: &str = "Ada";
+
+    /// What the next identity token gets wrong, if anything.
+    #[derive(Clone, Debug)]
+    pub(crate) enum Tamper {
+        /// Nothing: the token passes every check.
+        None,
+        /// Signed by a key the provider does not publish, under the key id of
+        /// the published one.
+        Forge,
+        /// Names this issuer in place of the provider's own.
+        Issuer(String),
+        /// Carries these audiences in place of the client alone.
+        Audiences(Vec<String>),
+        /// Names this authorized party.
+        AuthorizedParty(String),
+        /// Issued this many seconds from now, a negative count in the past.
+        IssuedAt(i64),
+        /// Expires this many seconds from now.
+        Expires(i64),
+        /// Valid from this many seconds from now.
+        NotBefore(i64),
+        /// Signed under HS256 with the client secret as the key.
+        SharedSecret,
+    }
 
     /// What one authorization left for the token endpoint to check.
     struct Grant {
@@ -355,9 +739,9 @@ pub(crate) mod stub {
         issuer: String,
         key: CoreRsaPrivateSigningKey,
         /// A key the provider does not publish, signing in place of `key`
-        /// while `forge` is set.
+        /// under `Tamper::Forge`.
         foreign: CoreRsaPrivateSigningKey,
-        forge: bool,
+        tamper: Tamper,
         grant: Option<Grant>,
     }
 
@@ -366,6 +750,8 @@ pub(crate) mod stub {
     pub(crate) struct StubProvider {
         pub(crate) issuer: String,
         shared: Arc<Mutex<Shared>>,
+        /// How many times the key set was fetched.
+        key_fetches: Arc<AtomicUsize>,
     }
 
     fn signing_key(kid: &str) -> CoreRsaPrivateSigningKey {
@@ -376,6 +762,11 @@ pub(crate) mod stub {
 
     impl StubProvider {
         pub(crate) async fn spawn() -> Self {
+            Self::spawn_with(|_| {}).await
+        }
+
+        /// A provider whose discovery document `edit` changes first.
+        pub(crate) async fn spawn_with(edit: impl FnOnce(&mut serde_json::Value)) -> Self {
             let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
             let issuer = format!("http://{}", listener.local_addr().unwrap());
             let stub = Self {
@@ -385,11 +776,12 @@ pub(crate) mod stub {
                     // The same key id on both, so only the signature tells them apart.
                     key: signing_key("k"),
                     foreign: signing_key("k"),
-                    forge: false,
+                    tamper: Tamper::None,
                     grant: None,
                 })),
+                key_fetches: Arc::new(AtomicUsize::new(0)),
             };
-            let metadata = serde_json::json!({
+            let mut metadata = serde_json::json!({
                 "issuer": issuer,
                 "authorization_endpoint": format!("{issuer}/authorize"),
                 "token_endpoint": format!("{issuer}/token"),
@@ -398,10 +790,9 @@ pub(crate) mod stub {
                 "subject_types_supported": ["public"],
                 "id_token_signing_alg_values_supported": ["RS256"],
             });
-            let jwks = {
-                let shared = stub.shared.lock().unwrap();
-                serde_json::json!({ "keys": [shared.key.as_verification_key()] })
-            };
+            edit(&mut metadata);
+            let keys = Arc::clone(&stub.shared);
+            let fetches = Arc::clone(&stub.key_fetches);
             let shared = Arc::clone(&stub.shared);
             let app = axum::Router::new()
                 .route(
@@ -410,7 +801,13 @@ pub(crate) mod stub {
                 )
                 .route(
                     "/jwks",
-                    axum::routing::get(move || async move { axum::Json(jwks) }),
+                    axum::routing::get(move || async move {
+                        fetches.fetch_add(1, Ordering::SeqCst);
+                        let shared = keys.lock().unwrap();
+                        axum::Json(
+                            serde_json::json!({ "keys": [shared.key.as_verification_key()] }),
+                        )
+                    }),
                 )
                 .route(
                     "/token",
@@ -424,10 +821,26 @@ pub(crate) mod stub {
             stub
         }
 
+        /// Makes every later identity token wrong in the way `tamper` says.
+        pub(crate) fn tamper(&self, tamper: Tamper) {
+            self.shared.lock().unwrap().tamper = tamper;
+        }
+
         /// Signs every later identity token with a key the provider does not
         /// publish.
         pub(crate) fn forge(&self) {
-            self.shared.lock().unwrap().forge = true;
+            self.tamper(Tamper::Forge);
+        }
+
+        /// Replaces the signing key by a new one under the key id `kid`, and
+        /// publishes it in place of the old one.
+        pub(crate) fn rotate(&self, kid: &str) {
+            self.shared.lock().unwrap().key = signing_key(kid);
+        }
+
+        /// How many times the key set was fetched so far.
+        pub(crate) fn key_fetches(&self) -> usize {
+            self.key_fetches.load(Ordering::SeqCst)
         }
 
         /// What the provider does once the person signs in at `url`. It keeps
@@ -470,11 +883,29 @@ pub(crate) mod stub {
             return refused();
         }
         let now = chrono::Utc::now();
-        let claims = CoreIdTokenClaims::new(
-            IssuerUrl::new(shared.issuer.clone()).unwrap(),
-            vec![Audience::new(CLIENT_ID.into())],
-            now + chrono::Duration::minutes(5),
-            now,
+        let seconds = chrono::Duration::seconds;
+        let tamper = shared.tamper.clone();
+        let issuer = match &tamper {
+            Tamper::Issuer(other) => other.clone(),
+            _ => shared.issuer.clone(),
+        };
+        let audiences = match &tamper {
+            Tamper::Audiences(list) => list.iter().cloned().map(Audience::new).collect(),
+            _ => vec![Audience::new(CLIENT_ID.into())],
+        };
+        let issued = match tamper {
+            Tamper::IssuedAt(offset) => now + seconds(offset),
+            _ => now,
+        };
+        let expires = match tamper {
+            Tamper::Expires(offset) => now + seconds(offset),
+            _ => now + chrono::Duration::minutes(5),
+        };
+        let mut claims = CoreIdTokenClaims::new(
+            IssuerUrl::new(issuer).unwrap(),
+            audiences,
+            expires,
+            issued,
             StandardClaims::new(SubjectIdentifier::new(SUBJECT.into()))
                 .set_email(Some(EndUserEmail::new(EMAIL.into())))
                 .set_email_verified(Some(true))
@@ -482,25 +913,73 @@ pub(crate) mod stub {
             EmptyAdditionalClaims {},
         )
         .set_nonce(Some(Nonce::new(grant.nonce)));
-        let key = if shared.forge {
-            &shared.foreign
-        } else {
-            &shared.key
-        };
-        let id_token = CoreIdToken::new(
-            claims,
-            key,
-            CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha256,
-            None,
-            None,
-        )
+        if let Tamper::AuthorizedParty(party) = &tamper {
+            claims = claims.set_authorized_party(Some(ClientId::new(party.clone())));
+        }
+        let id_token = match &tamper {
+            Tamper::SharedSecret => CoreIdToken::new(
+                claims,
+                &CoreHmacKey::new(CLIENT_SECRET.as_bytes()),
+                CoreJwsSigningAlgorithm::HmacSha256,
+                None,
+                None,
+            ),
+            Tamper::Forge => CoreIdToken::new(
+                claims,
+                &shared.foreign,
+                CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha256,
+                None,
+                None,
+            ),
+            _ => CoreIdToken::new(
+                claims,
+                &shared.key,
+                CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha256,
+                None,
+                None,
+            ),
+        }
         .unwrap();
+        let id_token = match tamper {
+            Tamper::NotBefore(offset) => {
+                with_not_before(&id_token, &shared.key, now + seconds(offset))
+            }
+            _ => id_token.to_string(),
+        };
         axum::Json(serde_json::json!({
             "access_token": "stub-access",
             "token_type": "bearer",
-            "id_token": id_token.to_string(),
+            "id_token": id_token,
         }))
         .into_response()
+    }
+
+    /// `token` signed again by `key` with an `nbf` claim of `start`, which the
+    /// claims of the provider crate cannot carry.
+    fn with_not_before(
+        token: &CoreIdToken,
+        key: &CoreRsaPrivateSigningKey,
+        start: chrono::DateTime<chrono::Utc>,
+    ) -> String {
+        use base64::Engine as _;
+        let engine = base64::engine::general_purpose::URL_SAFE_NO_PAD;
+        let text = token.to_string();
+        let mut parts = text.split('.');
+        let header = parts.next().unwrap();
+        let mut payload: serde_json::Value =
+            serde_json::from_slice(&engine.decode(parts.next().unwrap()).unwrap()).unwrap();
+        payload["nbf"] = serde_json::json!(start.timestamp());
+        let signed = format!(
+            "{header}.{}",
+            engine.encode(serde_json::to_vec(&payload).unwrap())
+        );
+        let signature = key
+            .sign(
+                &CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha256,
+                signed.as_bytes(),
+            )
+            .unwrap();
+        format!("{signed}.{}", engine.encode(signature))
     }
 
     fn refused() -> axum::response::Response {
@@ -515,7 +994,7 @@ pub(crate) mod stub {
 
 #[cfg(test)]
 mod tests {
-    use super::stub::{CLIENT_ID, EMAIL, SUBJECT, StubProvider};
+    use super::stub::{CLIENT_ID, EMAIL, SUBJECT, StubProvider, Tamper};
     use super::*;
 
     /// An issuer nothing listens on.
@@ -550,33 +1029,132 @@ mod tests {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let base = format!("http://{}", listener.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(listener, app).await });
-        let client = provider_client(std::time::Duration::from_millis(300)).unwrap();
+        let client = ProviderHttp::new(
+            std::time::Duration::from_millis(300),
+            PROVIDER_ANSWER_MAX_SIZE,
+        )
+        .unwrap();
+        let get = |path: &str| {
+            openidconnect::http::Request::builder()
+                .uri(format!("{base}{path}"))
+                .body(Vec::new())
+                .unwrap()
+        };
 
-        let moved = client.get(format!("{base}/moved")).send().await.unwrap();
-        assert_eq!(moved.status(), reqwest::StatusCode::FOUND, "not followed");
-        let stalled = client.get(format!("{base}/stalled")).send().await;
-        assert!(stalled.is_err_and(|e| e.is_timeout()), "the deadline holds");
+        let moved = client.call(get("/moved")).await.unwrap();
+        assert_eq!(
+            moved.status(),
+            openidconnect::http::StatusCode::FOUND,
+            "not followed"
+        );
+        let stalled = client.call(get("/stalled")).await;
+        assert!(
+            matches!(stalled, Err(HttpClientError::Reqwest(e)) if e.is_timeout()),
+            "the deadline holds"
+        );
+    }
+
+    /// `SRV-343`: an answer of the provider past the cap is refused, whether
+    /// it announces its length or streams it. An answer at the cap is read.
+    #[tokio::test]
+    async fn a_provider_answer_past_its_cap_is_refused() {
+        let cap = 1024_usize;
+        let app = axum::Router::new()
+            .route(
+                "/at",
+                axum::routing::get(move || async move { "a".repeat(cap) }),
+            )
+            .route(
+                "/past",
+                axum::routing::get(move || async move { "a".repeat(cap + 1) }),
+            )
+            .route(
+                "/streamed",
+                axum::routing::get(move || async move {
+                    let chunks = (0..4).map(move |_| {
+                        Ok::<_, std::convert::Infallible>(axum::body::Bytes::from(
+                            "a".repeat(cap / 2),
+                        ))
+                    });
+                    axum::body::Body::from_stream(futures_util::stream::iter(chunks))
+                }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(listener, app).await });
+        let client = ProviderHttp::new(
+            PROVIDER_DEADLINE,
+            ambre_core::Count::<ambre_core::Octets>::new(cap as u64),
+        )
+        .unwrap();
+        let get = |path: &str| {
+            openidconnect::http::Request::builder()
+                .uri(format!("{base}{path}"))
+                .body(Vec::new())
+                .unwrap()
+        };
+
+        assert_eq!(client.call(get("/at")).await.unwrap().body().len(), cap);
+        for past in ["/past", "/streamed"] {
+            assert!(
+                matches!(client.call(get(past)).await, Err(HttpClientError::Other(_))),
+                "{past}"
+            );
+        }
     }
 
     /// The client secret every test configures.
     fn secret() -> ambre_core::Confidential<OidcSecret> {
-        ambre_core::Confidential::<OidcSecret>::new("secret".to_owned())
+        ambre_core::Confidential::<OidcSecret>::new(super::stub::CLIENT_SECRET.to_owned())
     }
 
     /// The `google` client discovered at `stub`.
     async fn client_of(stub: &StubProvider) -> OidcClients {
-        start_oidc_clients(Some(&registration(&stub.issuer, CLIENT_ID)))
-            .await
-            .unwrap()
+        start_oidc_clients(
+            &[registration(&stub.issuer, CLIENT_ID)],
+            ProviderTransport::LoopbackHttp,
+        )
+        .await
+        .unwrap()
     }
 
-    /// A registration of `client_id` with the provider at `issuer`.
+    /// A registration of `client_id` with the provider at `issuer`, as the
+    /// `google` provider.
     fn registration(issuer: &str, client_id: &str) -> OidcRegistration {
+        registration_of(ambre_core::OidcProvider::Google, issuer, client_id)
+    }
+
+    /// A registration of `client_id` with `provider`, discovered at `issuer`.
+    fn registration_of(
+        provider: ambre_core::OidcProvider,
+        issuer: &str,
+        client_id: &str,
+    ) -> OidcRegistration {
         OidcRegistration {
+            provider,
             issuer: IssuerUrl::new(issuer.to_owned()).unwrap(),
             client_id: ClientId::new(client_id.to_owned()),
             client_secret: secret(),
             redirect_uri: RedirectUrl::new("https://app/cb".to_owned()).unwrap(),
+        }
+    }
+
+    /// One sign-in at `provider` through `stub`, to the end of the exchange.
+    async fn sign_in(
+        stub: &StubProvider,
+        provider: &OidcProviderState,
+    ) -> Result<CoreIdTokenClaims, AppError> {
+        let (login, kept) = login_url(provider).await.unwrap();
+        let code = ambre_core::Credential::new(stub.authorize(login.url.as_str()));
+        exchange_code(provider, &code, &kept).await
+    }
+
+    /// Asserts that `result` is a refusal whose reason starts with `stage`.
+    fn refused_at(result: Result<CoreIdTokenClaims, AppError>, stage: &str) {
+        match result {
+            Err(AppError::Oidc(reason)) => assert!(reason.starts_with(stage), "{reason}"),
+            Err(other) => panic!("{other}"),
+            Ok(_) => panic!("the exchange was accepted"),
         }
     }
 
@@ -587,11 +1165,7 @@ mod tests {
     async fn a_provider_code_is_exchanged_for_a_verified_identity() {
         let stub = StubProvider::spawn().await;
         let clients = client_of(&stub).await;
-        let (login, kept) = login_url(&clients[&ambre_core::OidcProvider::Google])
-            .await
-            .unwrap();
-        let code = ambre_core::Credential::new(stub.authorize(login.url.as_str()));
-        let claims = exchange_code(&clients[&ambre_core::OidcProvider::Google], &code, &kept)
+        let claims = sign_in(&stub, &clients[&ambre_core::OidcProvider::Google])
             .await
             .unwrap();
         assert_eq!(claims.subject().as_str(), SUBJECT);
@@ -607,11 +1181,6 @@ mod tests {
         let stub = StubProvider::spawn().await;
         let clients = client_of(&stub).await;
         let provider = &clients[&ambre_core::OidcProvider::Google];
-        let refused_at = |result: Result<CoreIdTokenClaims, AppError>, stage: &str| match result {
-            Err(AppError::Oidc(reason)) => assert!(reason.starts_with(stage), "{reason}"),
-            Err(other) => panic!("{other}"),
-            Ok(_) => panic!("the exchange was accepted"),
-        };
 
         let (login, kept) = login_url(provider).await.unwrap();
         let other_nonce = OidcAuthState {
@@ -638,33 +1207,207 @@ mod tests {
         );
 
         stub.forge();
-        let (login, kept) = login_url(provider).await.unwrap();
-        let code = ambre_core::Credential::new(stub.authorize(login.url.as_str()));
         refused_at(
-            exchange_code(provider, &code, &kept).await,
+            sign_in(&stub, provider).await,
             "id token verification failed",
         );
     }
 
+    /// `SRV-340`: a relay that names an OpenID Connect issuer discovers it as
+    /// the `oidc` provider. A sign-in goes to its authorization endpoint
+    /// under the configured client, and its code is exchanged for the
+    /// verified identity of the person. That provider names no issuer of its
+    /// own, so a relay that names none does not start.
+    #[tokio::test]
+    async fn a_relay_signs_in_through_the_issuer_its_configuration_names() {
+        let stub = StubProvider::spawn().await;
+        let issuer = provider_issuer(
+            ambre_core::OidcProvider::Oidc,
+            Some(IssuerUrl::new(stub.issuer.clone()).unwrap()),
+        )
+        .unwrap();
+        let clients = start_oidc_clients(
+            &[registration_of(
+                ambre_core::OidcProvider::Oidc,
+                issuer.as_str(),
+                CLIENT_ID,
+            )],
+            ProviderTransport::LoopbackHttp,
+        )
+        .await
+        .unwrap();
+        assert!(!clients.contains_key(&ambre_core::OidcProvider::Google));
+        let provider = &clients[&ambre_core::OidcProvider::Oidc];
+        assert_eq!(provider.issuer, issuer);
+
+        let (login, kept) = login_url(provider).await.unwrap();
+        assert!(
+            login
+                .url
+                .as_str()
+                .starts_with(&format!("{}/authorize?", stub.issuer)),
+            "{}",
+            login.url.as_str()
+        );
+        assert!(login.url.as_str().contains("client_id=client"));
+        let code = ambre_core::Credential::new(stub.authorize(login.url.as_str()));
+        let claims = exchange_code(provider, &code, &kept).await.unwrap();
+        assert_eq!(claims.issuer(), &issuer);
+        assert_eq!(claims.subject().as_str(), SUBJECT);
+
+        assert!(matches!(
+            provider_issuer(ambre_core::OidcProvider::Oidc, None),
+            Err(AppError::Oidc(_))
+        ));
+    }
+
+    /// `SRV-341`: an identity token is refused in each of these cases:
+    ///
+    /// * it names another issuer, another audience or another authorized party;
+    /// * it is signed under the client secret;
+    /// * it expired, or is issued in the future, past the skew;
+    /// * it is too old, or not valid yet past the skew.
+    ///
+    /// A token within the skew is accepted.
+    #[tokio::test]
+    async fn an_identity_token_that_fails_a_claim_check_is_refused() {
+        let stub = StubProvider::spawn().await;
+        let clients = start_oidc_clients(
+            &[registration_of(
+                ambre_core::OidcProvider::Oidc,
+                &stub.issuer,
+                CLIENT_ID,
+            )],
+            ProviderTransport::LoopbackHttp,
+        )
+        .await
+        .unwrap();
+        let provider = &clients[&ambre_core::OidcProvider::Oidc];
+        let skew = i64::try_from(PROVIDER_CLOCK_SKEW.as_secs()).unwrap();
+        let max_age = i64::try_from(ID_TOKEN_MAX_AGE.as_secs()).unwrap();
+
+        for tamper in [
+            Tamper::Issuer(format!("{}/other", stub.issuer)),
+            Tamper::Audiences(vec!["another-client".into()]),
+            Tamper::Audiences(vec![CLIENT_ID.into(), "another-client".into()]),
+            Tamper::AuthorizedParty("another-client".into()),
+            Tamper::SharedSecret,
+            Tamper::Expires(-skew - 5),
+            Tamper::IssuedAt(skew + 30),
+            Tamper::IssuedAt(-max_age - skew - 30),
+            Tamper::NotBefore(skew + 30),
+        ] {
+            stub.tamper(tamper.clone());
+            match sign_in(&stub, provider).await {
+                Err(AppError::Oidc(reason)) => {
+                    assert!(
+                        reason.starts_with("id token verification failed"),
+                        "{tamper:?}: {reason}"
+                    );
+                }
+                other => panic!("{tamper:?} was not refused: {:?}", other.err()),
+            }
+        }
+        for within in [
+            Tamper::None,
+            Tamper::AuthorizedParty(CLIENT_ID.into()),
+            Tamper::Expires(-skew + 20),
+            Tamper::IssuedAt(skew - 20),
+            Tamper::NotBefore(skew - 20),
+        ] {
+            stub.tamper(within.clone());
+            assert!(sign_in(&stub, provider).await.is_ok(), "{within:?}");
+        }
+    }
+
+    /// `SRV-345`, `SRV-343`: the relay refuses to start on a provider in each
+    /// of these cases:
+    ///
+    /// * its discovery document names another issuer than the one configured;
+    /// * its key set or token endpoint is plain `http` off the loopback;
+    /// * its discovery document passes the answer cap.
+    #[tokio::test]
+    async fn a_discovery_the_relay_cannot_trust_stops_the_start() {
+        let start = |stub: StubProvider| async move {
+            start_oidc_clients(
+                &[registration_of(
+                    ambre_core::OidcProvider::Oidc,
+                    &stub.issuer,
+                    CLIENT_ID,
+                )],
+                ProviderTransport::LoopbackHttp,
+            )
+            .await
+        };
+        let edits: [fn(&mut serde_json::Value); 4] = [
+            |m| m["issuer"] = serde_json::json!("https://issuer.example.org"),
+            |m| m["jwks_uri"] = serde_json::json!("http://keys.example.org/jwks"),
+            |m| m["token_endpoint"] = serde_json::json!("http://token.example.org/token"),
+            |m| m["padding"] = serde_json::json!("a".repeat(300 * 1024)),
+        ];
+        for edit in edits {
+            let stub = StubProvider::spawn_with(edit).await;
+            assert!(matches!(start(stub).await, Err(AppError::Oidc(_))));
+        }
+        assert!(start(StubProvider::spawn().await).await.is_ok());
+    }
+
+    /// `SRV-342`: a token under a key id the relay does not hold fetches the
+    /// key set again. So a provider that rotates its key keeps signing people
+    /// in. A second unknown key id within the interval fetches
+    /// nothing, and is refused.
+    #[tokio::test]
+    async fn an_unknown_key_id_fetches_the_key_set_again_at_most_once_per_interval() {
+        let stub = StubProvider::spawn().await;
+        let clients = client_of(&stub).await;
+        let provider = &clients[&ambre_core::OidcProvider::Google];
+        // Back-date the last fetch past the interval, as if it were old.
+        *provider.keys.fetched.lock().await -= KEYS_REFRESH_INTERVAL;
+        assert_eq!(stub.key_fetches(), 1, "the discovery fetched the set once");
+
+        stub.rotate("k2");
+        sign_in(&stub, provider).await.unwrap();
+        assert_eq!(stub.key_fetches(), 2, "the unknown key id fetched the set");
+
+        stub.rotate("k3");
+        refused_at(
+            sign_in(&stub, provider).await,
+            "id token verification failed",
+        );
+        assert_eq!(stub.key_fetches(), 2, "the interval holds the next fetch");
+    }
+
     /// `SRV-322`: no configured issuer names Google's. A loopback provider is
-    /// accepted over plain `http`, and a sign-in is sent there. A plain `http`
-    /// issuer on another host, and another scheme, are refused.
+    /// accepted over plain `http` by a development relay alone, and a sign-in
+    /// is sent there. A plain `http` issuer on another host, and another
+    /// scheme, are refused.
     #[tokio::test]
     async fn the_configured_issuer_is_https_or_a_loopback_provider() {
         assert_eq!(
-            google_issuer(None).unwrap().as_str(),
+            provider_issuer(ambre_core::OidcProvider::Google, None)
+                .unwrap()
+                .as_str(),
             "https://accounts.google.com"
         );
-        let configured = |text: &str| google_issuer(Some(IssuerUrl::new(text.to_owned()).unwrap()));
         let stub = StubProvider::spawn().await;
-        let issuer = configured(&stub.issuer).unwrap();
-        let registration = OidcRegistration::google(
-            issuer,
-            ClientId::new(CLIENT_ID.to_owned()),
-            secret(),
-            RedirectUrl::new("https://app/cb".to_owned()).unwrap(),
+        let configured = provider_issuer(
+            ambre_core::OidcProvider::Google,
+            Some(IssuerUrl::new(stub.issuer.clone()).unwrap()),
+        )
+        .unwrap();
+        let registration = registration(configured.as_str(), CLIENT_ID);
+        let refused = start_oidc_clients(
+            std::slice::from_ref(&registration),
+            ProviderTransport::HttpsOnly,
+        )
+        .await;
+        assert!(
+            matches!(refused, Err(AppError::Oidc(_))),
+            "outside development"
         );
-        let clients = start_oidc_clients(Some(&registration)).await.unwrap();
+        let clients = start_oidc_clients(&[registration], ProviderTransport::LoopbackHttp)
+            .await
+            .unwrap();
         let (login, _) = login_url(&clients[&ambre_core::OidcProvider::Google])
             .await
             .unwrap();
@@ -676,8 +1419,22 @@ mod tests {
             "{}",
             login.url.as_str()
         );
-        for local in ["http://localhost:8080", "http://[::1]:8080"] {
-            assert!(configured(local).is_ok(), "{local}");
+        let admit = |text: &str, transport: ProviderTransport| {
+            transport.admit(&url::Url::parse(text).unwrap(), ProviderAddress::Issuer)
+        };
+        for local in [
+            "http://localhost:8080",
+            "http://[::1]:8080",
+            "http://127.0.0.1",
+        ] {
+            assert!(
+                admit(local, ProviderTransport::LoopbackHttp).is_ok(),
+                "{local}"
+            );
+            assert!(
+                admit(local, ProviderTransport::HttpsOnly).is_err(),
+                "{local}"
+            );
         }
         for refused in [
             "http://accounts.example.org",
@@ -685,19 +1442,29 @@ mod tests {
             "ftp://127.0.0.1",
         ] {
             assert!(
-                matches!(configured(refused), Err(AppError::Oidc(_))),
+                matches!(
+                    admit(refused, ProviderTransport::LoopbackHttp),
+                    Err(AppError::Oidc(_))
+                ),
                 "{refused}"
             );
         }
+        assert!(admit("https://id.example.org", ProviderTransport::HttpsOnly).is_ok());
     }
 
     /// `SRV-074`: a configured provider that does not answer stops the start.
     /// With no client id configured nothing is discovered, and sign-in is off.
     #[tokio::test]
     async fn a_configured_provider_that_does_not_answer_stops_the_start() {
-        let started = start_oidc_clients(Some(&registration(SILENT_ISSUER, "client"))).await;
+        let started = start_oidc_clients(
+            &[registration(SILENT_ISSUER, "client")],
+            ProviderTransport::LoopbackHttp,
+        )
+        .await;
         assert!(matches!(started, Err(AppError::Oidc(_))));
-        let off = start_oidc_clients(None).await.unwrap();
+        let off = start_oidc_clients(&[], ProviderTransport::HttpsOnly)
+            .await
+            .unwrap();
         assert!(off.is_empty());
     }
 
@@ -706,9 +1473,12 @@ mod tests {
     #[tokio::test]
     async fn a_sign_in_is_sent_to_the_configured_provider() {
         let issuer = spawn_provider().await;
-        let clients = start_oidc_clients(Some(&registration(&issuer, "client")))
-            .await
-            .unwrap();
+        let clients = start_oidc_clients(
+            &[registration(&issuer, "client")],
+            ProviderTransport::LoopbackHttp,
+        )
+        .await
+        .unwrap();
         let (login, _) = login_url(&clients[&ambre_core::OidcProvider::Google])
             .await
             .unwrap();

@@ -81,6 +81,7 @@ ambre-app | src/route.rs | crate::route | type_slug() | ret | &'static str	gener
 ambre-app | src/shell/app_root.rs | crate::shell::app_root | follow_shell_nav(navigate) | param | &impl Fn(&str,leptos_router::NavigateOptions)	trait	leptos navigate signature
 ambre-app | src/shell/commands.rs | crate::shell::commands | CommandPath::key() | ret | bool	generic	predicate result
 ambre-app | src/shell/mod.rs | crate::shell | ShellWiring.presenter_notes | field | RwSignal<String>	free-text	presenter notes text
+ambre-app | src/signin.rs | crate::signin | BUILD_ISSUER | const | Option<&str>	foreign-api	the issuer address the client build names at compile time, which one foreign call, web_sys::Url::new, alone reads; the parsed Url is the type every other site holds
 ambre-app | src/signin.rs | crate::signin | RETURN_PREFIX | const | &str	generic	the path prefix of a provider return address, which is_return_path and parse_return match back: part of the codec of that address
 ambre-app | src/signin.rs | crate::signin | follow_address() | ret | bool	generic	predicate result
 ambre-app | src/signin.rs | crate::signin | is_followable() | ret | bool	generic	predicate result
@@ -1084,7 +1085,7 @@ ambre-core | src/object_key.rs | crate::object_key | ObjectKey::into_inner() | r
 ambre-core | src/object_key.rs | crate::object_key | ObjectKey::new(value) | param | String	newtype-inner	the constructor of the ObjectKey newtype
 ambre-core | src/payload.rs | crate::payload | LoroPayload::as_bytes() | ret | &[u8]	generic	Loro import bytes: a delta or a snapshot alike, for the engine that imports either
 ambre-core | src/payload.rs | crate::payload | LoroPayloadRef<'a>::as_bytes() | ret | &'a[u8]	generic	Loro import bytes: a delta or a snapshot alike, for the engine that imports either
-ambre-core | src/provider.rs | crate::provider | OidcProvider::authorization_host() | ret | &'static str	generic	the host of a provider's authorization endpoint, which the sign-in compares the host of a relay's address against; a host name has no type in the workspace, and web_sys hands the compared host as text
+ambre-core | src/provider.rs | crate::provider | OidcProvider::authorization_host() | ret | Option<&'static str>	generic	the host of a provider's authorization endpoint, which the sign-in compares the host of a relay's address against, or none for the provider whose host the client build names; a host name has no type in the workspace, and web_sys hands the compared host as text
 ambre-core | src/provider.rs | crate::provider | OidcProvider::as_str() | ret | &'static str	newtype-inner	closed-set enum word codec
 ambre-core | src/provider.rs | crate::provider | OidcProvider::parse(word) | param | &str	newtype-inner	closed-set enum word codec
 ambre-core | src/residency.rs | crate::residency | Residency<K>::holds() | ret | bool	generic	residency fact flag or its setter; named field, no mode switch
@@ -2013,6 +2014,8 @@ ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | Ra
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | RateLimitCategory::prefix() | ret | &'static str	newtype-inner	the enum's own word, the prefix of the Redis key its counter is stored and read under
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | SLIDING_WINDOW_LUA | const | &str	free-text	Lua script text
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | client_peer(x_forwarded_for) | param | Option<&str>	generic	the X-Forwarded-For header text before its parse: client_peer reads the entry of the first trusted proxy into an IpAddr at once
+ambre-server | src/oidc.rs | crate::oidc | <ProviderHttp as AsyncHttpClient<'c>>::Future | assoc | Pin<Box<dyn Future<Output=Result<HttpResponse,Self::Error>>+Send+'c>>	trait	the future the AsyncHttpClient trait of oauth2 fixes, whose answer is the http::Response<Vec<u8>> the provider crate parses
+ambre-server | src/oidc.rs | crate::oidc | <ProviderHttp as AsyncHttpClient<'c>>::call(request) | param | HttpRequest	trait	the request the AsyncHttpClient trait of oauth2 fixes, an http::Request<Vec<u8>> the provider crate builds
 ambre-server | src/payload.rs | crate::payload | StoredPayload.0 | field | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/payload.rs | crate::payload | StoredPayload::expose_bytes() | ret | &[u8]	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/payload.rs | crate::payload | StoredPayload::len() | ret | usize	newtype-inner	newtype inner, accessor or constructor
@@ -4861,6 +4864,27 @@ ambre-murmure | src/logic/schema.rs | crate::logic::schema | blank() | ret | boo
 ambre-server | src/s3.rs | crate::s3 | holds_object() | ret | Result<bool,AppError>	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | read_metered() | ret | Result<Vec<u8>,TransportError>	generic	opaque bytes of a response body, read under its byte cap and handed to a parser
 ambre-sync | src/http.rs | crate::http | read_body() | ret | Result<Vec<u8>,TransportError>	generic	opaque bytes of a response body, read under its byte cap and handed to a parser
+ambre-sync | src/json.rs | crate::json | <Objects<A> as de::VariantAccess<'de>>::struct_variant(_fields) | param | &'static[&'static str]	trait	serde VariantAccess signature: the field names a map read does not take, so the wrapper drops them
+ambre-sync | src/json.rs | crate::json | <Objects<A> as de::VariantAccess<'de>>::tuple_variant(len) | param | usize	trait	serde VariantAccess signature: the length serde_json takes, which the wrapper forwards untouched
+ambre-sync | src/json.rs | crate::json | <Objects<D> as Deserializer<'de>>::deserialize_enum(name) | param | &'static str	trait	serde Deserializer signature: the name serde_json takes, which the wrapper forwards untouched
+ambre-sync | src/json.rs | crate::json | <Objects<D> as Deserializer<'de>>::deserialize_enum(variants) | param | &'static[&'static str]	trait	serde Deserializer signature: the variant names serde_json takes, which the wrapper forwards untouched
+ambre-sync | src/json.rs | crate::json | <Objects<D> as Deserializer<'de>>::deserialize_newtype_struct(name) | param | &'static str	trait	serde Deserializer signature: the name serde_json takes, which the wrapper forwards untouched
+ambre-sync | src/json.rs | crate::json | <Objects<D> as Deserializer<'de>>::deserialize_struct(_fields) | param | &'static[&'static str]	trait	serde Deserializer signature: the field names a map read does not take, so the wrapper drops them
+ambre-sync | src/json.rs | crate::json | <Objects<D> as Deserializer<'de>>::deserialize_struct(_name) | param | &'static str	trait	serde Deserializer signature: the struct name a map read does not take, so the wrapper drops it
+ambre-sync | src/json.rs | crate::json | <Objects<D> as Deserializer<'de>>::deserialize_tuple(len) | param | usize	trait	serde Deserializer signature: the length serde_json takes, which the wrapper forwards untouched
+ambre-sync | src/json.rs | crate::json | <Objects<D> as Deserializer<'de>>::deserialize_tuple_struct(len) | param | usize	trait	serde Deserializer signature: the length serde_json takes, which the wrapper forwards untouched
+ambre-sync | src/json.rs | crate::json | <Objects<D> as Deserializer<'de>>::deserialize_tuple_struct(name) | param | &'static str	trait	serde Deserializer signature: the name serde_json takes, which the wrapper forwards untouched
+ambre-sync | src/json.rs | crate::json | <Objects<D> as Deserializer<'de>>::deserialize_unit_struct(name) | param | &'static str	trait	serde Deserializer signature: the name serde_json takes, which the wrapper forwards untouched
+ambre-sync | src/json.rs | crate::json | <Objects<V> as Visitor<'de>>::visit_bool(value) | param | bool	trait	serde Visitor signature: the value serde_json read, which the wrapper hands to the wrapped visitor untouched
+ambre-sync | src/json.rs | crate::json | <Objects<V> as Visitor<'de>>::visit_borrowed_bytes(value) | param | &'de[u8]	trait	serde Visitor signature: the value serde_json read, which the wrapper hands to the wrapped visitor untouched
+ambre-sync | src/json.rs | crate::json | <Objects<V> as Visitor<'de>>::visit_borrowed_str(value) | param | &'de str	trait	serde Visitor signature: the value serde_json read, which the wrapper hands to the wrapped visitor untouched
+ambre-sync | src/json.rs | crate::json | <Objects<V> as Visitor<'de>>::visit_bytes(value) | param | &[u8]	trait	serde Visitor signature: the value serde_json read, which the wrapper hands to the wrapped visitor untouched
+ambre-sync | src/json.rs | crate::json | <Objects<V> as Visitor<'de>>::visit_f64(value) | param | f64	trait	serde Visitor signature: the value serde_json read, which the wrapper hands to the wrapped visitor untouched
+ambre-sync | src/json.rs | crate::json | <Objects<V> as Visitor<'de>>::visit_i128(value) | param | i128	trait	serde Visitor signature: the value serde_json read, which the wrapper hands to the wrapped visitor untouched
+ambre-sync | src/json.rs | crate::json | <Objects<V> as Visitor<'de>>::visit_i64(value) | param | i64	trait	serde Visitor signature: the value serde_json read, which the wrapper hands to the wrapped visitor untouched
+ambre-sync | src/json.rs | crate::json | <Objects<V> as Visitor<'de>>::visit_str(value) | param | &str	trait	serde Visitor signature: the value serde_json read, which the wrapper hands to the wrapped visitor untouched
+ambre-sync | src/json.rs | crate::json | <Objects<V> as Visitor<'de>>::visit_u128(value) | param | u128	trait	serde Visitor signature: the value serde_json read, which the wrapper hands to the wrapped visitor untouched
+ambre-sync | src/json.rs | crate::json | <Objects<V> as Visitor<'de>>::visit_u64(value) | param | u64	trait	serde Visitor signature: the value serde_json read, which the wrapper hands to the wrapped visitor untouched
 ambre-sync | src/lib.rs | crate | SyncDocumentState::quarantine_overflows() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncDocumentState::applied_past_cap() | ret | bool	generic	predicate result
 ambre-sync | src/lib.rs | crate | Applied::is_empty() | ret | bool	generic	predicate result

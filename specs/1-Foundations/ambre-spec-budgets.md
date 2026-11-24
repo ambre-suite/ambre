@@ -1001,6 +1001,46 @@
   Sync at 1 328 640 raw bytes in CI. The ceiling went back to 1 350 000, the figure of the W10
   raise.
 
+* **Four cuts took Sync to 1 321 521 raw bytes on 2026-11-24, under its ceiling of 1 350 000.**
+  The W13 stories put Sync at 1 362 315 raw bytes in CI at `63f1cfc`, 12 315 over its ceiling.
+  `twiggy` found the growth spread over some 400 items, and no crate came in whole. It also found
+  that the JSON decode of the relay answers weighed about 150 KB. Each cut removes code that no
+  answer reaches, and every body keeps its bytes on the wire:
+  1. Three request bodies built a `serde_json::Value`. Typed bodies replace them, so the JSON
+     tree, its map and its encoder leave the worker.
+  2. Two token answers decoded through `#[serde(flatten)]`, which buffers the object and links a
+     second decoder of every JSON value. A flat wire struct and a transparent decode replace it.
+  3. The JSON read of an answer keeps `R::deserialize` alone generic.
+  4. `serde_json` reads a struct from a JSON object or from a JSON array. The relay sends objects
+     alone, so the array decoder of each struct was dead code. The wrapper of
+     `crates/ambre-sync/src/json.rs` reads every struct as a map, at any depth. It refuses an
+     array, as it refuses any value of the wrong JSON type.
+* **No budget of section 1 moves.** The cuts touch the REST answers and the socket of the SFU,
+  which no hot path reads. No security check moves, and the level of `curve25519-dalek` stays 3.
+* **The method.** The first and last rows are `trunk build --release`, then
+  `scripts/wasm_size.py`, on the session container. The tries are
+  `cargo build --profile wasm-release -p ambre-sync`, then `wasm-bindgen` 0.2.122 with
+  `--target no-modules`: 1 371 596 bytes at `1e07504` by that build.
+
+| Build | Sync raw | Change | Verdict |
+|---|---|---|---|
+| CI at `63f1cfc`, by `just size` | 1 362 315 | -- | before the story; 408 954 brotli |
+| typed bodies in place of `json!` | 1 364 500 | -7 096 | kept; read against 1 371 596 |
+| no `#[serde(flatten)]` | 1 357 641 | -6 859 | kept |
+| `R::deserialize` alone generic | 1 355 958 | -1 683 | kept |
+| the merge of `ccr-cd7c4606-wmq4hy` | 1 356 752 | +794 | the signing key binding |
+| every struct read as a map | 1 320 878 | -35 874 | kept |
+| the kept cuts, by `just size` | 1 321 521 | -40 794 | 398 960 brotli; the ceiling stays 1 350 000 |
+| the decode through `erased-serde` | 2 052 540 | +680 985 | dropped: a full visitor vtable per type |
+| the JSON read through a trait object slot | 1 358 799 | +2 841 | dropped, it grew |
+| `wasm-opt -Oz` of binaryen 124 | 1 201 519 | -119 359 | refused: 24 454 more brotli bytes, and the download is the budget |
+| the merge of `ccr-cd7c4606-wmq4hy` at `9c86491`, by `just size` | 1 328 477 | +6 956 | the confirmed head and the lifted cap; 399 027 brotli |
+
+  After that merge, 2 % above the measure rounds up to 1 360 000. The ceiling holds at 1 350 000,
+  the figure of the W10 raise, with 21 523 bytes of room, 1.6 % of the measure. The first download
+  reads 3 249 391 bytes of brotli. A cut under the former ceiling of 1 310 000 needs a cut that is
+  refused: `wasm-opt`, or the size level of `curve25519-dalek`.
+
 * **The PNG raster raised the PDF module ceiling on 2026-11-15.** The PNG export rasterizes a
   recorded page in the PDF module, on the converter thread
   (`3-Toile/features/ambre-spec-toile-import-export.md section 3`). Three cuts came before the
@@ -1057,6 +1097,7 @@
 | View state (content) | < 5 MB | Proportional to the visible content: cells, text runs |
 | Fonts in memory | < 10 MB | Base fonts plus lazily loaded ones |
 | Icon atlas | < 1 MB | Compiled vector blob |
+| One answer of the identity provider, bytes the relay reads | 256 KiB | `PROVIDER_ANSWER_MAX_SIZE` in `ambre_server::oidc`: a discovery document, a key set or a token answer. A discovery document or a key set counts a few KiB, so the cap leaves a wide margin. An answer past it is refused before the relay reads more (`SRV-343`) |
 | Murmure decoded pictures, per page | < 16 MiB | `PICTURES_MAX_SIZE` in `ambre-murmure`, shared by the channel's region and the thread's. Evicted least recently painted, never a picture on screen, which may hold it past the cap. One picture holds at most 8 MiB of frames (`PICTURE_MAX_SIZE` in `ambre-logic`), decoded at most 480x320: an animation past it plays the frames that fit (`features/ambre-spec-murmure-attachments.md`) |
 | **Total UI thread** | **< 57 MB** | Within the global < 100 MB |
 | `SyncState` base, per session | < 1 MB | `MasterSeed`, `SigningKey`, `ExchangeKey`, plus `HashMap` overhead |
@@ -1158,6 +1199,8 @@ A duration a rule waits on before it acts. Each figure is a first estimate, to m
 |---|---|---|---|
 | Grace period before a closing Murmure segment is finalized | 24 h | a typo fix lands within minutes, so a day keeps every recent edit out of a sealed segment | `FINALIZE_GRACE` in `ambre_server::routes::channels`, counted from the close and from the latest delta (`SRV-199`) |
 | Deadline of one request of the relay to the identity provider | 10 s | a provider answers a discovery, a code exchange or a key fetch in well under a second, so ten seconds admits a slow network and holds no sign-in open for long (`SRV-296`) | `PROVIDER_DEADLINE` in `ambre_server::oidc` |
+| Shortest interval between two fetches of the key set of one identity provider | 60 s | a provider rotates its key in days, so one fetch a minute follows a rotation within a minute. A stream of tokens under forged key ids then draws one fetch a minute at most (`SRV-342`) | `KEYS_REFRESH_INTERVAL` in `ambre_server::oidc` |
+| Clock skew between the relay and an identity provider | 60 s | the clocks of two servers synchronised by their operating systems differ by seconds. A minute admits that, and an identity token lives minutes (`SRV-341`) | `PROVIDER_CLOCK_SKEW` in `ambre_server::oidc` |
 | Murmure message grouping span | 5 min | consecutive messages of one author inside the span share one header, as every chat product groups them | `GROUP_SPAN` in `ambre_murmure::list` (`MURMURE-183`) |
 | Refresh period of the presence in a space or a channel | 60 s | a member list needs a state per minute, and the relay then writes one entry per member per minute (`MURMURE-445`, `MURMURE-126`) | `REFRESH_PERIOD` in `ambre_murmure::members` |
 | Presence expiry in a space or a channel | 180 s | three refresh periods: one for the tick that dates a sample, one for a lost sample, one for two timers drifting apart (`MURMURE-445`, `MURMURE-126`) | `PRESENCE_EXPIRY` in `ambre_murmure::members` |

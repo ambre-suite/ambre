@@ -277,8 +277,15 @@ pub async fn oidc_callback(
     )
     .ok_or_else(|| AppError::BadRequest("OIDC provider returned a blank subject".into()))?;
 
-    let db::OidcSignIn { user, reclaims } =
-        db::sign_in_from_oidc(&state.db, provider, &oidc_subject, &email, &display_name).await?;
+    let db::OidcSignIn { user, reclaims } = db::sign_in_from_oidc(
+        &state.db,
+        provider,
+        &provider_state.issuer,
+        &oidc_subject,
+        &email,
+        &display_name,
+    )
+    .await?;
     tell_reclaims(&state, &reclaims).await;
 
     let user_id = user.id;
