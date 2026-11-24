@@ -231,7 +231,7 @@ fn entry_at_capped(
 }
 
 /// The entries a removal posts, in request form: the removal itself, then
-/// the continuations that carry the caps one entry cannot (`SYNC-316`).
+/// the continuations that carry the caps one entry cannot (`SYNC-317`).
 #[derive(Default)]
 pub(crate) struct RemovalEntries {
     pub entry: Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
@@ -240,7 +240,7 @@ pub(crate) struct RemovalEntries {
 
 /// [`entry_at_capped`], with the cap of the member in each other document of
 /// the channel whose `meta` keeps the log (`SYNC-311`). Caps past one entry
-/// take continuations after it (`SYNC-316`).
+/// take continuations after it (`SYNC-317`).
 fn entry_at_channel_capped(
     next: LogHead,
     draft: Draft,
@@ -5423,7 +5423,7 @@ mod tests {
         );
     }
 
-    /// Holds `SYNC-316` at a revoke on the log of a channel's `meta`. A
+    /// Holds `SYNC-317` at a revoke on the log of a channel's `meta`. A
     /// channel of 40 documents past the `meta` takes the revoke and two
     /// continuations, each within the caps of one entry, in one request.
     /// The walk then caps Carol in every document, at her clock there.

@@ -698,7 +698,7 @@ impl AnchoredLog {
     }
 
     /// The footing once a removal and its continuations land, each after
-    /// the one before it (`SYNC-316`). The run lands whole or not at all.
+    /// the one before it (`SYNC-317`). The run lands whole or not at all.
     pub(crate) fn after_run(
         &self,
         entry: Option<&ambre_core::Encoded<ambre_core::EncodedLogEntry>>,

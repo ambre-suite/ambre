@@ -2279,7 +2279,7 @@ pub(crate) struct LeaveRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub entry: Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
     /// The continuations after `entry`, which carry the caps it cannot
-    /// (`SYNC-316`).
+    /// (`SYNC-317`).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub continued: Vec<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
 }
@@ -2328,7 +2328,7 @@ pub(crate) struct RevokeRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub entry: Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
     /// The continuations after `entry`, which carry the caps it cannot
-    /// (`SYNC-316`).
+    /// (`SYNC-317`).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub continued: Vec<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
 }

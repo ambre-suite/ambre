@@ -30,7 +30,7 @@
 | `launcher` | The home screen at the root of the site: sign in, then every document you can open, whatever kind it is. | implemented | 55 |  |
 | `locale` | A document carries one language tag, so two collaborators on differently configured machines read the same number, the same currency and the same date. | implemented | 23 |  |
 | `media` | A picture in a document travels apart from it. | implemented | 20 |  |
-| `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | implemented | 113 |  |
+| `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | implemented | 114 |  |
 | `op-authorship` | Who wrote each operation of a document. | implemented | 37 |  |
 | `pdf-export` | A user hands a document to someone who has no Ambre, and the file looks like the screen. | implemented | 20 |  |
 | `residency` | Which documents a client holds, in memory and on disk, and what a document it does not hold still costs. | implemented | 32 |  |
@@ -66,4 +66,4 @@
 | `macros` | A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. | design-only | 54 |  |
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 
-**50 features: 26 implemented, 21 partial, 3 design-only. 1881 contract rows, 15 loose.**
+**50 features: 26 implemented, 21 partial, 3 design-only. 1882 contract rows, 15 loose.**

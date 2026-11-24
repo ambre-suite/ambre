@@ -7794,6 +7794,92 @@ mod tests {
         }
     }
 
+    /// Holds `SYNC-316` at the open. Alice revokes Bob at cap 1, and invites
+    /// him back. Alice's snapshot folds Bob's clocks with no head, so a clock
+    /// past the lifted cap may be a write of his exclusion. A start that
+    /// folds his clock 2 or 3 opens nothing and replays from the first
+    /// delta. A start that folds his clock 1 alone opens.
+    #[test]
+    fn a_start_past_a_lifted_cap_opens_nothing() {
+        use crate::membership_log::Writers;
+        use crate::membership_log::tests::{
+            Person, append, created, revoke_capped, walk as walk_log,
+        };
+        use ambre_protocol::MembershipAct;
+        let (alice, bob) = (Person::new(0x55), Person::new(0x56));
+        let mut log = created(&alice, &bob);
+        revoke_capped(&mut log, &alice, &bob, 1);
+        append(&mut log, &alice, &bob, MembershipAct::Invite, Role::Editor);
+        let readmitted = Writers::of(&walk_log(&log));
+        assert_eq!(
+            readmitted.cap(&bob.public()),
+            None,
+            "the invite lifts the cap"
+        );
+        for (folded, opens) in [(2, false), (3, false), (1, true)] {
+            let (mut state, rx, _doc, _key, _sk, _snap) = setup();
+            let doc = Id::<Document>::mint();
+            let key = DocumentKey::generate();
+            let snapshot_id = Id::<Snapshot>::mint();
+            let blob = snapshot_blob_folding(
+                doc,
+                served(snapshot_id, 3),
+                b"snap",
+                (&key, &alice.key),
+                vec![(bob.public(), Seq::<DeltaAuthor>::new(folded))],
+            );
+            state.handle_sync_event(SyncEvent::OpenDocumentReady {
+                document_id: doc,
+                doc_key: key.clone(),
+                snapshot_payload: Some(started(blob, &alice.key)),
+                snapshot_id,
+                covered_seq: Seq::<Relay>::new(3),
+                held_snapshot: None,
+                fallback: None,
+                doc_type: DocType::Trame,
+                existence: crate::Existence::OnRelay,
+                signing_keys: Vec::new(),
+                role: Role::Owner,
+                rotation_owed: ambre_core::RotationDebt::Settled,
+                links: Vec::new(),
+                writers: readmitted.clone(),
+                departed: None,
+            });
+            let events = drain(&rx);
+            let opened = events
+                .iter()
+                .any(|e| matches!(e, LogicEvent::RemoteSnapshot { .. }));
+            assert_eq!(opened, opens, "folded clock {folded}");
+            let doc_state = &state.documents[&doc];
+            if opens {
+                assert_eq!(doc_state.last_seq, Seq::<Relay>::new(3));
+                assert!(!doc_state.applied_past_cap(&readmitted));
+                continue;
+            }
+            assert_eq!(
+                doc_state.last_seq,
+                Seq::<Relay>::ZERO,
+                "the open replays from the first delta"
+            );
+            assert!(events.iter().any(|e| matches!(
+                e,
+                LogicEvent::SyncWarning {
+                    code: SyncWarningCode::WriterRefused,
+                    ..
+                }
+            )));
+            assert!(!doc_state.applied_past_cap(&readmitted));
+        }
+
+        // A copy that folded a clock past the lifted cap is read again.
+        let (mut state, _rx, doc, _key, _sk, _snap) = setup();
+        state.documents.get_mut(&doc).unwrap().writers = readmitted.clone();
+        state.documents[&doc].note_applied(&bob.public(), Seq::<DeltaAuthor>::new(1));
+        assert!(!state.documents[&doc].applied_past_cap(&readmitted));
+        state.documents[&doc].note_applied(&bob.public(), Seq::<DeltaAuthor>::new(2));
+        assert!(state.documents[&doc].applied_past_cap(&readmitted));
+    }
+
     /// Holds `SYNC-309`. A fresh open with no snapshot replays the whole log
     /// in one batch. A revoke caps Bob at clock 1, and the relay replays his
     /// clocks 1 to 3 beside Alice's clock 1. The batch hands Logic his clock

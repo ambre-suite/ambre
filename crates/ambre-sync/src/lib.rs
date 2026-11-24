@@ -1150,12 +1150,25 @@ pub(crate) struct Applied {
     /// signed, for the deltas that reached the document alone. A snapshot
     /// names no head, so it adds nothing here.
     heads: HashMap<FixedBytes<PublicKey>, Vec<(ambre_protocol::LogHead, Seq<DeltaAuthor>)>>,
+    /// The highest clock of each author's deltas folded in a snapshot. No
+    /// head proves when they were signed, so a cap a later grant lifted
+    /// still reads them (`SYNC-316`).
+    folded: HashMap<FixedBytes<PublicKey>, Seq<DeltaAuthor>>,
 }
 
 impl Applied {
     /// Notes a delta `author` signed at `clock`, alone or folded.
     fn note(&mut self, author: &FixedBytes<PublicKey>, clock: Seq<DeltaAuthor>) {
         self.clocks
+            .entry(*author)
+            .and_modify(|held| *held = (*held).max(clock))
+            .or_insert(clock);
+    }
+
+    /// Notes a delta `author` signed at `clock`, folded in a snapshot.
+    fn note_folded(&mut self, author: &FixedBytes<PublicKey>, clock: Seq<DeltaAuthor>) {
+        self.note(author, clock);
+        self.folded
             .entry(*author)
             .and_modify(|held| *held = (*held).max(clock))
             .or_insert(clock);
@@ -1198,6 +1211,9 @@ impl Applied {
         for (author, clock) in other.clocks {
             self.note(&author, clock);
         }
+        for (author, clock) in other.folded {
+            self.note_folded(&author, clock);
+        }
         for (author, heads) in other.heads {
             for (head, clock) in heads {
                 self.note_signed(&author, head, clock);
@@ -1210,8 +1226,9 @@ impl Applied {
         self.clocks.is_empty()
     }
 
-    /// Whether a delta applied lies past a cap `writers` sets, or past a cap
-    /// a later grant lifted under a head before that grant.
+    /// Whether a delta applied lies past a cap `writers` sets. A cap a
+    /// later grant lifted counts for a delta signed under a head before that
+    /// grant, and for a clock a snapshot folded.
     fn past_cap(&self, writers: &membership_log::Writers) -> bool {
         let capped = self
             .clocks
@@ -1222,7 +1239,11 @@ impl Applied {
                 .iter()
                 .any(|(head, clock)| !writers.readmits(author, *clock, *head))
         });
-        capped || excluded
+        let folded = self
+            .folded
+            .iter()
+            .any(|(author, clock)| writers.folds_past_cap_of(author, *clock));
+        capped || excluded || folded
     }
 }
 
@@ -1503,7 +1524,8 @@ impl SyncDocumentState {
         }
         // A snapshot that folds a delta past the cap of its writer holds a
         // write the log refuses, whoever signed it. It is refused whole, and
-        // the deltas replay one by one under the cap (`SYNC-300`).
+        // the deltas replay one by one under the cap (`SYNC-300`). A cap a
+        // later grant lifted counts too: no head proves the fold (`SYNC-316`).
         let folded = &snapshot.public_data.parent_snapshot_update_clocks;
         if self.writers.folds_past_cap(folded) {
             return Err(pipeline::PipelineError::PastCap);
@@ -1520,10 +1542,10 @@ impl SyncDocumentState {
         Ok((payload, snapshot.public_data.pub_key))
     }
 
-    /// Notes that a delta `author` signed at `clock` reached the document,
-    /// alone or folded in a snapshot (`SYNC-300`).
+    /// Notes that a delta `author` signed at `clock` reached the document
+    /// folded in a snapshot (`SYNC-300`, `SYNC-316`).
     fn note_applied(&self, author: &FixedBytes<PublicKey>, clock: Seq<DeltaAuthor>) {
-        self.applied.borrow_mut().note(author, clock);
+        self.applied.borrow_mut().note_folded(author, clock);
     }
 
     /// The highest clock of `author`'s deltas this document applied, the
