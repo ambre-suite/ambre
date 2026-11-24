@@ -221,25 +221,34 @@ impl Piece {
     }
 }
 
+/// The index space of the pieces one walk keeps.
+#[derive(Debug, PartialEq, Eq)]
+enum Pieces {}
+
+impl Axis for Pieces {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("Pieces");
+}
+
 /// The index in `pieces` where the place `at` starts, the piece across it cut
 /// in two. `None` past the end.
-fn cut(pieces: &mut Vec<Piece>, at: Pos<Entities>) -> Option<usize> {
+fn cut(pieces: &mut Vec<Piece>, at: Pos<Entities>) -> Option<Pos<Pieces>> {
     let mut start = Pos::<Entities>::ZERO;
     for index in 0..pieces.len() {
         let piece = *pieces.get(index)?;
         if start == at {
-            return Some(index);
+            return Some(Pos::from_usize(index));
         }
         let end = start + piece.len;
         if at < end {
             let offset = at.len_from(start);
             *pieces.get_mut(index)? = piece.head(offset);
             pieces.insert(index + 1, piece.tail(offset));
-            return Some(index + 1);
+            return Some(Pos::from_usize(index + 1));
         }
         start = end;
     }
-    (start == at).then_some(pieces.len())
+    (start == at).then(|| Pos::from_usize(pieces.len()))
 }
 
 /// A text far longer than any document, so the piece of the old text never
@@ -288,7 +297,7 @@ impl<'a> Commit<'a> {
                 JsonTextOp::Insert { pos, text } => {
                     let at = cut(&mut pieces, Pos::from_usize(usize::try_from(*pos).ok()?))?;
                     pieces.insert(
-                        at,
+                        at.to_usize(),
                         Piece {
                             old: None,
                             len: Len::of(text.chars().count()),
@@ -313,7 +322,7 @@ impl<'a> Commit<'a> {
                     // The identities rise from left to right: the first one
                     // names the leftmost character.
                     let mut offset = Len::<Chars>::ZERO;
-                    for piece in pieces.drain(from..to) {
+                    for piece in pieces.drain(from.to_usize()..to.to_usize()) {
                         let len = Len::<Chars>::of(piece.len.to_usize());
                         if let Some(old) = piece.old {
                             let start = start_id.inc(i32::try_from(offset.to_usize()).ok()?);
