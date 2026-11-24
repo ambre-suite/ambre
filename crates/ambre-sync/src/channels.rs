@@ -527,7 +527,9 @@ impl SyncState {
     }
 
     /// `name` sealed for the relay beside `meta`, under the key meta holds
-    /// now, once the walk of its log settled that key (`SYNC-234`).
+    /// now, once the walk of its log settled that key (`SYNC-234`). A client
+    /// that may not write meta seals nothing: the relay refuses its write,
+    /// and a stale hint waits for a writer's open (`SYNC-318`).
     fn sealed_channel_name(
         &self,
         meta: Id<Meta>,
@@ -537,6 +539,9 @@ impl SyncState {
             .documents
             .get(&meta.document_id())
             .ok_or(SyncError::NotOpen)?;
+        if !held.role.can_write_document() {
+            return Err(SyncError::NameRefused);
+        }
         self.seal_channel_name(meta, held.sealing_key()?, name)
     }
 
@@ -2611,6 +2616,23 @@ pub(crate) mod tests {
             Some("Design")
         );
         assert_eq!(open(Id::<Document>::mint()), None);
+    }
+
+    /// `SYNC-318`: a member that only reads meta seals no name beside it,
+    /// whatever the name, and a writer of the same meta seals it.
+    #[test]
+    fn a_reader_of_meta_seals_no_channel_name() {
+        let (mut state, _rx, _events, meta) = gated_meta(false);
+        let held = state.documents.get_mut(&meta.document_id()).unwrap();
+        held.gate = LogGate::Open;
+        held.role = Role::Viewer;
+        let design = ambre_core::Validated::<ambre_core::Name>::parse("Design").unwrap();
+        assert!(matches!(
+            state.sealed_channel_name(meta, &design),
+            Err(SyncError::NameRefused)
+        ));
+        state.documents.get_mut(&meta.document_id()).unwrap().role = Role::Editor;
+        assert!(state.sealed_channel_name(meta, &design).is_ok());
     }
 
     /// `SYNC-170`: a space this client creates is marked until the relay

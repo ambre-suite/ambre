@@ -249,7 +249,9 @@ impl SyncState {
             let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route(format!("/auth/{provider}/callback"));
             let body = http::ProviderCallbackRequest { code, state };
-            let resp = match http::post_json::<_, http::ProviderCallbackResponse>(&url, &body).await
+            let resp = match http::post_json::<_, http::ProviderCallbackWire>(&url, &body)
+                .await
+                .map(http::ProviderCallbackResponse::from)
             {
                 Ok(resp) => resp,
                 Err(message) => {

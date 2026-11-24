@@ -25,7 +25,7 @@
 | Inbound decryption 1 KB (verify+HMAC+AEAD+decompress) | < 350 us | < 1 ms | Sync | criterion |
 | Full crypto round-trip (excluding network) | < 600 us | < 1.5 ms | Sync | criterion |
 | Log head in the public data of one update, wire bytes (`SYNC-206`) | 34 B, for a log under 128 entries | 43 B | Sync -> relay | `ambre_protocol::tests::a_log_head_costs_an_update_at_most_43_bytes` -- 2 B on an empty log, 34 B below 128 entries, 43 B at a place of `u64::MAX`, by postcard, read on 2026-11-14. The relay stores each update whole, so each delta stored costs the same bytes more. A peer checks a head against its log from the end, so a current head costs one comparison of 32 bytes. Only a head the log does not hold costs one more signature check |
-| Log entry in the public data of one update, wire bytes (`SYNC-218`) | 232 B, for a log under 128 entries | 250 B | Sync -> relay | `ambre_protocol::tests::a_log_entry_costs_an_update_at_most_250_bytes` -- 1 B on an empty log, 232 B below 128 entries and clocks, 250 B at a place and a revoke cap of `u64::MAX`, by postcard, read on 2026-11-20. A channel revoke adds at most 418 B: 16 document caps at clocks of `u64::MAX` (`SYNC-311`), read on 2026-11-23. With the head, an update carries 266 B of log metadata below 128 entries. The relay stores each update whole, so each delta stored costs the same bytes more. A peer checks the entry only for a head its log does not hold: one encode, one hash and one signature check |
+| Log entry in the public data of one update, wire bytes (`SYNC-218`) | 232 B, for a log under 128 entries | 250 B | Sync -> relay | `ambre_protocol::tests::a_log_entry_costs_an_update_at_most_250_bytes` -- 1 B on an empty log, 232 B below 128 entries and clocks, 250 B at a place and a revoke cap of `u64::MAX`, by postcard, read on 2026-11-20. A channel revoke adds at most 418 B: 16 document caps at clocks of `u64::MAX` (`SYNC-311`), read on 2026-11-23. A removal past 16 documents posts its other caps in continuations, each within the same 418 B (`SYNC-319`). With the head, an update carries 266 B of log metadata below 128 entries. The relay stores each update whole, so each delta stored costs the same bytes more. A peer checks the entry only for a head its log does not hold: one encode, one hash and one signature check |
 | Log head and log entry in the public data of one presence sample, wire bytes (`SYNC-262`) | 266 B, for a log under 128 entries | 293 B | Sync -> relay | `ambre_protocol::tests::a_log_head_and_entry_cost_an_ephemeral_at_most_293_bytes` -- 3 B on an empty log, 266 B below 128 entries and clocks, 293 B at a place and a revoke cap of `u64::MAX`, by postcard, read on 2026-11-20. A channel revoke adds at most 418 B, as for an update, read on 2026-11-23. The relay keeps no sample past its expiry, so the cost is per send, at the pace of presence. A current head costs a receiver one comparison of 32 bytes; only a head the log does not hold costs the check of its entry and of the sample signature |
 | Body of one relay answer, bytes the Sync worker reads (`SYNC-277`) | -- | 16 MiB | relay -> Sync | `ambre_sync::http::tests::an_answer_past_its_ceiling_is_no_answer`. A members answer with its log is the largest relay answer, and stays far under it. The ceiling bounds the worker's memory against a relay that answers without end (audit `W206`) |
 | Body of one object from the store, a snapshot or a media blob, bytes the Sync worker reads (`SYNC-277`) | -- | 128 MiB | store -> Sync | `ambre_sync::http::tests::an_answer_past_its_ceiling_is_no_answer`. It sits above the 50 MiB of a snapshot and the 100 MiB of a media blob, the defaults the relay binds into an upload link (`ambre-spec-object-store.md`) |
@@ -1000,6 +1000,46 @@
   The merges of the kept session, the address reclaim and the membership cap came next. They put
   Sync at 1 328 640 raw bytes in CI. The ceiling went back to 1 350 000, the figure of the W10
   raise.
+
+* **Four cuts took Sync to 1 321 521 raw bytes on 2026-11-24, under its ceiling of 1 350 000.**
+  The W13 stories put Sync at 1 362 315 raw bytes in CI at `63f1cfc`, 12 315 over its ceiling.
+  `twiggy` found the growth spread over some 400 items, and no crate came in whole. It also found
+  that the JSON decode of the relay answers weighed about 150 KB. Each cut removes code that no
+  answer reaches, and every body keeps its bytes on the wire:
+  1. Three request bodies built a `serde_json::Value`. Typed bodies replace them, so the JSON
+     tree, its map and its encoder leave the worker.
+  2. Two token answers decoded through `#[serde(flatten)]`, which buffers the object and links a
+     second decoder of every JSON value. A flat wire struct and a transparent decode replace it.
+  3. The JSON read of an answer keeps `R::deserialize` alone generic.
+  4. `serde_json` reads a struct from a JSON object or from a JSON array. The relay sends objects
+     alone, so the array decoder of each struct was dead code. The wrapper of
+     `crates/ambre-sync/src/json.rs` reads every struct as a map, at any depth. It refuses an
+     array, as it refuses any value of the wrong JSON type.
+* **No budget of section 1 moves.** The cuts touch the REST answers and the socket of the SFU,
+  which no hot path reads. No security check moves, and the level of `curve25519-dalek` stays 3.
+* **The method.** The first and last rows are `trunk build --release`, then
+  `scripts/wasm_size.py`, on the session container. The tries are
+  `cargo build --profile wasm-release -p ambre-sync`, then `wasm-bindgen` 0.2.122 with
+  `--target no-modules`: 1 371 596 bytes at `1e07504` by that build.
+
+| Build | Sync raw | Change | Verdict |
+|---|---|---|---|
+| CI at `63f1cfc`, by `just size` | 1 362 315 | -- | before the story; 408 954 brotli |
+| typed bodies in place of `json!` | 1 364 500 | -7 096 | kept; read against 1 371 596 |
+| no `#[serde(flatten)]` | 1 357 641 | -6 859 | kept |
+| `R::deserialize` alone generic | 1 355 958 | -1 683 | kept |
+| the merge of `ccr-cd7c4606-wmq4hy` | 1 356 752 | +794 | the signing key binding |
+| every struct read as a map | 1 320 878 | -35 874 | kept |
+| the kept cuts, by `just size` | 1 321 521 | -40 794 | 398 960 brotli; the ceiling stays 1 350 000 |
+| the decode through `erased-serde` | 2 052 540 | +680 985 | dropped: a full visitor vtable per type |
+| the JSON read through a trait object slot | 1 358 799 | +2 841 | dropped, it grew |
+| `wasm-opt -Oz` of binaryen 124 | 1 201 519 | -119 359 | refused: 24 454 more brotli bytes, and the download is the budget |
+| the merge of `ccr-cd7c4606-wmq4hy` at `9c86491`, by `just size` | 1 328 477 | +6 956 | the confirmed head and the lifted cap; 399 027 brotli |
+
+  After that merge, 2 % above the measure rounds up to 1 360 000. The ceiling holds at 1 350 000,
+  the figure of the W10 raise, with 21 523 bytes of room, 1.6 % of the measure. The first download
+  reads 3 249 391 bytes of brotli. A cut under the former ceiling of 1 310 000 needs a cut that is
+  refused: `wasm-opt`, or the size level of `curve25519-dalek`.
 
 * **The PNG raster raised the PDF module ceiling on 2026-11-15.** The PNG export rasterizes a
   recorded page in the PDF module, on the converter thread

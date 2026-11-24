@@ -199,6 +199,7 @@ mod fold;
 pub mod fuzz;
 mod generation;
 mod http;
+mod json;
 mod kept;
 mod key_vouch;
 mod lifecycle;
@@ -1253,6 +1254,9 @@ impl Applied {
 pub(crate) struct StartBlob {
     pub blob: Payload<pipeline::FetchedBlob>,
     pub author: FixedBytes<PublicKey>,
+    /// The log head its confirmation signed, which proves a fold past a
+    /// lifted cap (`SYNC-317`).
+    pub proof: Option<ambre_protocol::LogHead>,
 }
 
 /// An older trusted snapshot an open starts from when its start folds a
@@ -1485,7 +1489,8 @@ impl SyncDocumentState {
         start: &StartBlob,
         served: pipeline::ServedSnapshot,
     ) -> Result<ambre_core::Payload<ambre_core::SnapshotBytes>, pipeline::PipelineError> {
-        let (payload, signer) = self.open_signed_snapshot(&start.blob, served)?;
+        let (payload, signer) =
+            self.open_signed_snapshot_under(&start.blob, served, start.proof)?;
         if signer != start.author {
             return Err(pipeline::PipelineError::WrongAuthor);
         }
@@ -1509,6 +1514,24 @@ impl SyncDocumentState {
         ),
         pipeline::PipelineError,
     > {
+        self.open_signed_snapshot_under(blob, served, None)
+    }
+
+    /// Opens a snapshot blob as [`Self::open_signed_snapshot`] does. A fold
+    /// past a lifted cap stands under `proof`, the log head a member other
+    /// than its author confirmed it at (`SYNC-317`).
+    fn open_signed_snapshot_under(
+        &self,
+        blob: &Payload<pipeline::FetchedBlob>,
+        served: pipeline::ServedSnapshot,
+        proof: Option<ambre_protocol::LogHead>,
+    ) -> Result<
+        (
+            ambre_core::Payload<ambre_core::SnapshotBytes>,
+            FixedBytes<PublicKey>,
+        ),
+        pipeline::PipelineError,
+    > {
         // No snapshot is adopted while the log walks again: its author may be
         // a writer the relay forged (`SYNC-234`).
         if !matches!(self.gate, channels::LogGate::Open) {
@@ -1525,9 +1548,10 @@ impl SyncDocumentState {
         // A snapshot that folds a delta past the cap of its writer holds a
         // write the log refuses, whoever signed it. It is refused whole, and
         // the deltas replay one by one under the cap (`SYNC-300`). A cap a
-        // later grant lifted counts too: no head proves the fold (`SYNC-316`).
+        // later grant lifted counts too, unless a confirmation by another
+        // member signs a head past that grant (`SYNC-316`, `SYNC-317`).
         let folded = &snapshot.public_data.parent_snapshot_update_clocks;
-        if self.writers.folds_past_cap(folded) {
+        if self.writers.folds_past_cap_under(folded, proof) {
             return Err(pipeline::PipelineError::PastCap);
         }
         let key = self
@@ -1537,7 +1561,10 @@ impl SyncDocumentState {
         // What the snapshot folds counts as applied, so a revoke caps a
         // writer at the deltas the snapshot holds too (`SYNC-300`).
         for (author, clock) in folded {
-            self.note_applied(author, *clock);
+            match proof {
+                Some(head) => self.applied.borrow_mut().note_signed(author, head, *clock),
+                None => self.note_applied(author, *clock),
+            }
         }
         Ok((payload, snapshot.public_data.pub_key))
     }

@@ -1204,6 +1204,7 @@ mod handler_tests {
             author,
             cap: None,
             document_caps: Vec::new(),
+            elsewhere: ambre_protocol::Elsewhere::Uncapped,
             signature: ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array([0; 64]),
         }
     }
@@ -1457,6 +1458,321 @@ mod handler_tests {
         let (status, _) =
             status_and_code(&app, json_request("PATCH", &member, &owner, &changed)).await;
         assert_eq!(status, StatusCode::OK);
+    }
+
+    /// A cap continuation of a revoke of `member` at `position`: a revoke
+    /// at `role` with no key, no own cap and one document cap.
+    fn continuation_at(
+        doc: Id<Document>,
+        position: u64,
+        author: Id<User>,
+        member: (Id<User>, &ed25519_dalek::SigningKey),
+        role: ambre_core::Role,
+    ) -> ambre_protocol::MembershipEntry {
+        let mut entry = entry_at(
+            doc,
+            position,
+            author,
+            member,
+            ambre_protocol::MembershipAct::Revoke,
+            role,
+        );
+        entry.document_caps = vec![ambre_protocol::DocumentCap {
+            document: Id::<Document>::mint(),
+            cap: ambre_core::Seq::<ambre_protocol::messages::DeltaAuthor>::new(position),
+        }];
+        entry
+    }
+
+    /// A document `owner` created and shared with `bob` as an editor, so its
+    /// log holds the creation and the invite. Answers the two entries.
+    async fn logged_share(
+        app: &Router,
+        owner: (&str, Id<User>, &ed25519_dalek::SigningKey),
+        bob: (Id<User>, &ed25519_dalek::SigningKey),
+        bob_email: &str,
+        doc: Id<Document>,
+    ) -> [String; 2] {
+        use ambre_core::Role;
+        use ambre_protocol::MembershipAct;
+        let (auth, owner_id, owner_key) = owner;
+        let create = sealed(
+            entry_at(
+                doc,
+                0,
+                owner_id,
+                (owner_id, owner_key),
+                MembershipAct::Create,
+                Role::Owner,
+            ),
+            owner_key,
+        );
+        let body = serde_json::json!({
+            "doc_type": "prose", "document_id": doc.to_string(),
+            "doc_key_enc": base64_encode(&[5u8; 73]), "entry": create,
+        });
+        let (status, _) =
+            status_and_code(app, json_request("POST", "/api/documents", auth, &body)).await;
+        assert_eq!(status, StatusCode::OK);
+        let invite = sealed(
+            entry_at(doc, 1, owner_id, bob, MembershipAct::Invite, Role::Editor),
+            owner_key,
+        );
+        let body = serde_json::json!({
+            "invitee_email": bob_email, "role": "editor",
+            "doc_key_enc": base64_encode(&[9u8; 73]), "key_id": key_id_hex(1), "entry": invite,
+        });
+        let share = format!("/api/documents/{doc}/share");
+        let (status, _) = status_and_code(app, json_request("POST", &share, auth, &body)).await;
+        assert_eq!(status, StatusCode::OK);
+        [create, invite]
+    }
+
+    /// Holds `SRV-339`. A removal with no rotation appends its entry, then
+    /// each cap continuation at the next place, in the order sent.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_removal_appends_its_cap_continuations_after_its_entry(pool: sqlx::PgPool) {
+        use ambre_core::Role;
+        use ambre_protocol::MembershipAct;
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let (owner, owner_key, owner_id) = setup_signed(&app, &state, "owner@cont.test", 61).await;
+        let (_bob, bob_key, bob_id) = setup_signed(&app, &state, "bob@cont.test", 62).await;
+        let doc = Id::<Document>::mint();
+        let doc_id = doc.to_string();
+        let bob = (bob_id, &bob_key);
+        let [create, invite] = logged_share(
+            &app,
+            (&owner, owner_id, &owner_key),
+            bob,
+            "bob@cont.test",
+            doc,
+        )
+        .await;
+
+        let revoke = sealed(
+            entry_at(doc, 2, owner_id, bob, MembershipAct::Revoke, Role::Editor),
+            &owner_key,
+        );
+        let first = sealed(
+            continuation_at(doc, 3, owner_id, bob, Role::Editor),
+            &owner_key,
+        );
+        let second = sealed(
+            continuation_at(doc, 4, owner_id, bob, Role::Editor),
+            &owner_key,
+        );
+        let body = serde_json::json!({ "entry": revoke, "continued": [first, second] });
+        let removal = format!("/api/documents/{doc_id}/share/{bob_id}");
+        let (status, _) =
+            status_and_code(&app, json_request("DELETE", &removal, &owner, &body)).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            served_log(&app, &owner, &doc_id).await,
+            [
+                create.as_str(),
+                invite.as_str(),
+                revoke.as_str(),
+                first.as_str(),
+                second.as_str()
+            ]
+        );
+        assert_eq!(list_members(&app, &owner, &doc_id).await.len(), 1);
+    }
+
+    /// Holds `SRV-339`. A revoke that rotates the key appends its entry,
+    /// then each cap continuation at the next place, with the new key.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_revoke_appends_its_cap_continuations_after_its_entry(pool: sqlx::PgPool) {
+        use ambre_core::Role;
+        use ambre_protocol::MembershipAct;
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let (owner, owner_key, owner_id) = setup_signed(&app, &state, "owner@rot.test", 63).await;
+        let (_bob, bob_key, bob_id) = setup_signed(&app, &state, "bob@rot.test", 64).await;
+        let doc = Id::<Document>::mint();
+        let doc_id = doc.to_string();
+        let bob = (bob_id, &bob_key);
+        let [create, invite] = logged_share(
+            &app,
+            (&owner, owner_id, &owner_key),
+            bob,
+            "bob@rot.test",
+            doc,
+        )
+        .await;
+
+        let mut revoke = entry_at(doc, 2, owner_id, bob, MembershipAct::Revoke, Role::Editor);
+        revoke.key = Some(ambre_core::FixedBytes::<ambre_core::KeyId>::from_array(
+            [2; 16],
+        ));
+        let revoke = sealed(revoke, &owner_key);
+        let first = sealed(
+            continuation_at(doc, 3, owner_id, bob, Role::Editor),
+            &owner_key,
+        );
+        let new_key = base64_encode(&[0xEFu8; 73]);
+        let body = serde_json::json!({
+            "user_id": bob_id.to_string(),
+            "keys": [ { "user_id": owner_id.to_string(), "doc_key_enc": new_key } ],
+            "members": [ owner_id.to_string() ],
+            "link": link_text(&doc_id, 2, 1),
+            "entry": revoke,
+            "continued": [first],
+        });
+        let path = format!("/api/documents/{doc_id}/revoke");
+        let (status, _) = status_and_code(&app, json_request("POST", &path, &owner, &body)).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            served_log(&app, &owner, &doc_id).await,
+            [
+                create.as_str(),
+                invite.as_str(),
+                revoke.as_str(),
+                first.as_str()
+            ]
+        );
+        let members = list_members(&app, &owner, &doc_id).await;
+        assert_eq!(members.len(), 1, "the member is removed");
+        assert_eq!(members[0]["doc_key_enc"], new_key, "and the key rotated");
+    }
+
+    /// Holds `SRV-339`. A continuation that is not a cap-only revoke of the
+    /// same member by the caller at the next place refuses the whole
+    /// removal. The log keeps no entry of it and the member keeps the row,
+    /// with a rotation and without.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_removal_with_a_stray_continuation_stores_nothing(pool: sqlx::PgPool) {
+        use ambre_core::Role;
+        use ambre_protocol::MembershipAct;
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let (owner, owner_key, owner_id) = setup_signed(&app, &state, "owner@stray.test", 65).await;
+        let (_bob, bob_key, bob_id) = setup_signed(&app, &state, "bob@stray.test", 66).await;
+        let (_carol, carol_key, carol_id) =
+            setup_signed(&app, &state, "carol@stray.test", 67).await;
+        let doc = Id::<Document>::mint();
+        let doc_id = doc.to_string();
+        let bob = (bob_id, &bob_key);
+        let logged = logged_share(
+            &app,
+            (&owner, owner_id, &owner_key),
+            bob,
+            "bob@stray.test",
+            doc,
+        )
+        .await;
+        let revoke = sealed(
+            entry_at(doc, 2, owner_id, bob, MembershipAct::Revoke, Role::Editor),
+            &owner_key,
+        );
+        let next = || continuation_at(doc, 3, owner_id, bob, Role::Editor);
+        let keyed = {
+            let mut entry = next();
+            entry.key = Some(ambre_core::FixedBytes::<ambre_core::KeyId>::from_array(
+                [1; 16],
+            ));
+            entry
+        };
+        let uncapped = {
+            let mut entry = next();
+            entry.document_caps.clear();
+            entry
+        };
+        let own_cap = {
+            let mut entry = next();
+            entry.cap = Some(ambre_core::Seq::<ambre_protocol::messages::DeltaAuthor>::new(7));
+            entry
+        };
+        let refused = [
+            (
+                "a wrong place",
+                sealed(
+                    continuation_at(doc, 4, owner_id, bob, Role::Editor),
+                    &owner_key,
+                ),
+                StatusCode::BAD_REQUEST,
+            ),
+            ("a key", sealed(keyed, &owner_key), StatusCode::BAD_REQUEST),
+            (
+                "no document cap",
+                sealed(uncapped, &owner_key),
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                "an own cap",
+                sealed(own_cap, &owner_key),
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                "another role",
+                sealed(
+                    continuation_at(doc, 3, owner_id, bob, Role::Viewer),
+                    &owner_key,
+                ),
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                "another member",
+                sealed(
+                    continuation_at(doc, 3, owner_id, (carol_id, &carol_key), Role::Editor),
+                    &owner_key,
+                ),
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                "another signer",
+                sealed(next(), &bob_key),
+                StatusCode::UNPROCESSABLE_ENTITY,
+            ),
+        ];
+        let removal = format!("/api/documents/{doc_id}/share/{bob_id}");
+        for (case, stray, expected) in &refused {
+            let body = serde_json::json!({ "entry": revoke, "continued": [stray] });
+            let (status, _) =
+                status_and_code(&app, json_request("DELETE", &removal, &owner, &body)).await;
+            assert_eq!(status, *expected, "{case}");
+            assert_eq!(served_log(&app, &owner, &doc_id).await, logged, "{case}");
+            assert_eq!(list_members(&app, &owner, &doc_id).await.len(), 2, "{case}");
+        }
+        let body = serde_json::json!({ "continued": [sealed(next(), &owner_key)] });
+        let (status, _) =
+            status_and_code(&app, json_request("DELETE", &removal, &owner, &body)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "no entry");
+        assert_eq!(served_log(&app, &owner, &doc_id).await, logged, "no entry");
+
+        let mut rotated = entry_at(doc, 2, owner_id, bob, MembershipAct::Revoke, Role::Editor);
+        rotated.key = Some(ambre_core::FixedBytes::<ambre_core::KeyId>::from_array(
+            [2; 16],
+        ));
+        let body = serde_json::json!({
+            "user_id": bob_id.to_string(),
+            "keys": [ { "user_id": owner_id.to_string(), "doc_key_enc": base64_encode(&[7u8; 73]) } ],
+            "members": [ owner_id.to_string() ],
+            "link": link_text(&doc_id, 2, 1),
+            "entry": sealed(rotated, &owner_key),
+            "continued": [refused[0].1],
+        });
+        let path = format!("/api/documents/{doc_id}/revoke");
+        let (status, _) = status_and_code(&app, json_request("POST", &path, &owner, &body)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "the revoke");
+        assert_eq!(
+            served_log(&app, &owner, &doc_id).await,
+            logged,
+            "the revoke"
+        );
+        assert_eq!(
+            list_members(&app, &owner, &doc_id).await.len(),
+            2,
+            "the revoke"
+        );
+        assert!(
+            key_links(&app, &owner, &doc_id).await.is_empty(),
+            "the revoke"
+        );
     }
 
     /// An owner can change a member's role; an unknown role string is rejected.
@@ -4497,6 +4813,18 @@ mod handler_tests {
         covered: u64,
         author: [u8; 32],
     ) -> serde_json::Value {
+        confirm_body_under(key, (doc_id, snap), covered, author, None)
+    }
+
+    /// The body of a confirmation `key` signs as [`confirm_body`] does, under
+    /// the log head `head` when one is named (`AUTHOR-038`).
+    fn confirm_body_under(
+        key: &ed25519_dalek::SigningKey,
+        (doc_id, snap): (&str, &str),
+        covered: u64,
+        author: [u8; 32],
+        head: Option<ambre_protocol::LogHead>,
+    ) -> serde_json::Value {
         let blob = ambre_core::FixedBytes::<ambre_core::SnapshotDigest>::from_array([6; 32]);
         let transcript = ambre_protocol::snapshot_confirm::confirm_transcript(
             ambre_protocol::snapshot_confirm::Confirmed {
@@ -4505,13 +4833,18 @@ mod handler_tests {
                 covered_seq: ambre_core::Seq::<ambre_core::Relay>::new(covered),
                 author: &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(author),
                 blob: &blob,
+                head,
             },
         );
         let signature = ed25519_dalek::Signer::sign(key, transcript.as_bytes());
-        serde_json::json!({
+        let mut body = serde_json::json!({
             "signature": hex::encode(signature.to_bytes()),
             "blob": hex::encode(blob.as_array()),
-        })
+        });
+        if let Some(head) = head {
+            body["head"] = serde_json::to_value(head).unwrap();
+        }
+        body
     }
 
     /// The member behind `auth`, whose signing key is `author`, uploads a
@@ -4739,6 +5072,47 @@ mod handler_tests {
         assert_eq!(served["reference"]["snapshot_id"], snap.as_str());
         assert_eq!(served["reference"]["author_pubkey"], hex::encode(author));
         assert_eq!(served["reference"]["confirmation"], *confirmation);
+    }
+
+    /// `AUTHOR-038`: a confirmation that names its confirmer's log head
+    /// stands only when the signature covers that head. The relay keeps the
+    /// head and serves it with the signature, so an open can check both.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_confirmation_keeps_the_log_head_its_confirmer_signed(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let owner_key = ed25519_dalek::SigningKey::from_bytes(&[5u8; 32]);
+        let author = owner_key.verifying_key().to_bytes();
+        let owner = setup_signing(&app, "user@ambre.app", &owner_key).await;
+        let doc_id = create_test_doc(&app, &owner).await;
+        let checker_key = ed25519_dalek::SigningKey::from_bytes(&[6u8; 32]);
+        let checker = setup_signing(&app, "checker@ambre.app", &checker_key).await;
+        invite(&app, &owner, &doc_id, "checker@ambre.app", "viewer").await;
+        let snap = upload_snapshot_by(&app, &owner, &doc_id, 0, author).await;
+        let confirm = format!("/api/documents/{doc_id}/snapshots/{snap}/confirm");
+        let head = ambre_protocol::LogHead {
+            position: ambre_core::Seq::new(3),
+            previous: Some(ambre_core::FixedBytes::from_array([8; 32])),
+        };
+
+        // A head the signature does not cover is refused.
+        let mut forged = confirm_body_under(&checker_key, (&doc_id, &snap), 0, author, Some(head));
+        forged["head"]["position"] = serde_json::json!(4);
+        let status = post_json(&app, &checker, confirm.clone(), forged).await;
+        assert!(status.is_client_error(), "{status}");
+        assert!(served_snapshot(&app, &checker, &doc_id).await.is_none());
+
+        let signed = confirm_body_under(&checker_key, (&doc_id, &snap), 0, author, Some(head));
+        assert_eq!(
+            post_json(&app, &checker, confirm, signed.clone()).await,
+            StatusCode::OK
+        );
+        let served = served_snapshot(&app, &checker, &doc_id).await.unwrap();
+        let confirmation: ambre_protocol::snapshot_confirm::SignedConfirmation =
+            serde_json::from_value(served["confirmation"].clone()).unwrap();
+        assert_eq!(confirmation.head, Some(head));
+        assert_eq!(served["confirmation"]["signature"], signed["signature"]);
     }
 
     /// `SRV-133`, `SRV-134`, `SRV-135`, `AUTHOR-023`: a report signed by its
