@@ -22,6 +22,9 @@ fn css_point(x: f32, y: f32) -> ambre_core::Point<ambre_core::Px<ambre_core::Css
 /// The shell stylesheet, as the page loads it.
 const STYLES: &str = include_str!("../../styles.css");
 
+/// The design tokens, as the page loads them.
+const TOKENS: &str = include_str!("../../../ambre-canvas/src/theme.css");
+
 /// The frame's height, which a pinned sheet's bottom edge meets.
 const HEIGHT: f64 = 300.0;
 
@@ -274,8 +277,10 @@ async fn creation_edges(kind: ambre_bus::DocType, side: ambre_chrome::DockSide) 
         .unwrap();
     document().body().unwrap().append_child(&frame).unwrap();
     let inner = frame.content_document().unwrap();
+    // The bar sits on the scales of the design tokens, as the page loads
+    // them before the shell stylesheet.
     let sheet = inner.create_element("style").unwrap();
-    sheet.set_text_content(Some(STYLES));
+    sheet.set_text_content(Some(&format!("{TOKENS}\n{STYLES}")));
     inner.head().unwrap().append_child(&sheet).unwrap();
     inner
         .document_element()
