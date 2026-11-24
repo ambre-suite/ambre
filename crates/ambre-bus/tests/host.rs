@@ -523,6 +523,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             ambre_protocol::signaling::VideoChoice::new(
                 vec![Seq::<ambre_core::SenderIndex>::new(4)],
                 None,
+                ambre_protocol::signaling::VIDEOS_PER_RECEIVER,
             )
             .unwrap(),
         ),

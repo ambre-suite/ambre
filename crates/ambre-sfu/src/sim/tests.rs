@@ -6,7 +6,7 @@
 use std::time::{Duration, Instant};
 
 use ambre_core::Seq;
-use ambre_protocol::signaling::VideoChoice;
+use ambre_protocol::signaling::{VIDEOS_PER_RECEIVER, VideoChoice};
 use str0m::media::MediaKind;
 
 use super::client::{Arrival, SCREEN_LAYER, VideoRx};
@@ -297,12 +297,36 @@ fn video_senders(net: &Net, receiver: usize, from: Instant) -> Vec<u16> {
     senders
 }
 
+/// `CALL-041`, a smaller count: a receiver whose choice names five videos gets five of the
+/// eleven senders, the speaker among them. A receiver beside it gets the cap.
+#[test]
+fn a_receiver_that_names_fewer_videos_gets_that_many() {
+    let mut net = call(12, Profile::CLEAN);
+    let id = net.member(1).id;
+    let five = VideoChoice::new(Vec::new(), None, ambre_core::Count::new(5)).expect("a choice");
+    net.sfu.choose_videos(id, five);
+    net.run(Duration::from_secs(4));
+    let senders = video_senders(&net, 1, net.now - Duration::from_secs(1));
+    assert_eq!(
+        senders.len(),
+        5,
+        "the receiver got the video of {senders:?}"
+    );
+    assert!(senders.contains(&0), "the speaker is missing: {senders:?}");
+    assert_eq!(
+        video_senders(&net, 2, net.now - Duration::from_secs(1)).len(),
+        9,
+        "a receiver of no choice beside it"
+    );
+}
+
 /// The choice of the senders `senders`, by their sender index, which the simulation draws from
 /// the index of each participant.
 fn choice(senders: &[u64], large: Option<u64>) -> VideoChoice {
     VideoChoice::new(
         senders.iter().copied().map(Seq::new).collect(),
         large.map(Seq::new),
+        VIDEOS_PER_RECEIVER,
     )
     .expect("a choice under the cap")
 }

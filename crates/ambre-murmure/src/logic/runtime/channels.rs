@@ -1806,7 +1806,19 @@ impl<D> Runtime<D> {
                     self.show_watchers(channel_id);
                 }
                 self.replay_owed(channel_id, now);
+                // The sidebar counts the live call of each held channel. So the tick of the
+                // shown one asks for them all, each at its own interval (the Murmure calls
+                // spec).
                 self.ask_call_rosters(channel_id, now);
+                let held: Vec<Id<Channel>> = self
+                    .channels
+                    .keys()
+                    .copied()
+                    .filter(|held| *held != channel_id)
+                    .collect();
+                for held in held {
+                    self.ask_call_rosters(held, now);
+                }
             }
             MurmureCommand::Typing { now, thread } => {
                 let meta = channel.meta_id().document_id();

@@ -54,7 +54,7 @@ this document alone.
 | `CALL-037` | `OBS` | Two browsers in one room MUST each decode the audio and the video of the other through the SFU. | this spec section 3, the stack | `ambre_belt::call::tests::two_browsers_decode_each_other_through_the_sfu` -- browser tier, under Chrome and under Firefox | none | verified |
 | `CALL-039` | `INV` | The SFU MUST switch a receiver to another layer of a track only on a keyframe of that layer. | this spec section 3, the SFU | `ambre_sfu::sim::tests::a_receiver_switches_layer_only_on_a_keyframe_of_the_new_layer` | none | verified |
 | `CALL-040` | `INV` | The sequence numbers of a video track forwarded to one receiver MUST stay continuous across a layer switch. | this spec section 3, the SFU; `CALL-032` | `ambre_sfu::sim::tests::the_sequence_numbers_stay_continuous_across_a_layer_switch` | none | verified |
-| `CALL-041` | `INV` | The SFU MUST fill the video slots that the choice of a receiver leaves with the most recent speakers, up to the count of `ambre-spec-budgets.md section 1`. | this spec section 3, the SFU; `CALL-126` | `ambre_sfu::sim::tests::a_receiver_gets_the_video_of_the_most_recent_speakers_alone` -- a receiver of no choice; `ambre_sfu::sim::tests::the_most_recent_speakers_fill_the_slots_a_choice_leaves` -- a choice of two leaves seven slots to the speakers | none | verified |
+| `CALL-041` | `INV` | The SFU MUST fill the video slots that the choice of a receiver leaves with the most recent speakers, up to the count of videos that choice names. | this spec section 3, the SFU; `CALL-126`; `ambre-spec-budgets.md section 1` | `ambre_sfu::sim::tests::a_receiver_gets_the_video_of_the_most_recent_speakers_alone` -- a receiver of no choice; `ambre_sfu::sim::tests::the_most_recent_speakers_fill_the_slots_a_choice_leaves` -- a choice of two leaves nine slots to the speakers; `ambre_sfu::sim::tests::a_receiver_that_names_fewer_videos_gets_that_many` -- a count of five beside a receiver of no choice | none | verified |
 | `CALL-042` | `OBS` | A browser whose network opens TCP on port 443 alone MUST decode the audio and the video of the call through the TURN relay within the delay of `ambre-spec-budgets.md section 1`. | this spec section 3, the stack | `ambre_belt::call::tests::a_browser_on_tcp_443_alone_decodes_the_call_through_turn` -- browser tier, coturn over TCP behind port 443 at 150 ms of round trip; `ambre_belt::murmure::tests::a_call_on_the_self_hosted_stack_reaches_the_sfu_through_turn_on_443` -- browser tier, against the stack of `deploy/compose/` that `just selfhost-test` starts: a page that gathers relay candidates alone joins through port 443, where the TLS front sends what is no TLS hello to coturn, and both pages decode the other | none | verified |
 | `CALL-154` | `INV` | A TURN credential MUST expire within the TURN lifetime of `ambre-spec-budgets.md section 1`. A renewal that keeps its seat while the last credential of the seat expires within the margin of that row MUST bring a fresh credential under the same pseudonym. Any other renewal MUST bring none. | `security-audit-blind-2026-11-17.md`, finding `P60`; this spec section 3, the TURN credential; `CALL-120` | `ambre_sfu::turn::tests::a_credential_expires_one_turn_lifetime_after_it_is_minted`; `ambre_sfu::turn::tests::a_renewal_mints_a_fresh_credential_within_the_margin_alone` -- at the production lifetime and at a short one; `ambre_sfu::serve::tests::a_renewal_near_the_expiry_of_the_credential_answers_a_fresh_one` -- over the socket: a renewal before the margin, a renewal of another seat in the margin and a renewal right after a fresh credential read nothing | none | verified |
 | `CALL-155` | `OBS` | A browser relayed through TURN MUST keep decoding the audio and the video of the call past the expiry of its first credential. | `security-audit-blind-2026-11-17.md`, finding `P60`; this spec section 3, the TURN credential; `CALL-042` | `ambre_belt::call::tests::a_relayed_call_flows_past_the_expiry_of_its_first_credential` -- browser tier, coturn over TCP alone, a credential of 30 s renewed 10 s before its expiry: the page restarts ICE onto a new relay allocation, and both pages decode more past the expiry; `ambre_sfu::forward::tests::an_ice_restart_moves_the_connection_to_its_fresh_fragment` -- the audio flows across the restart, and a check of the new allocation reaches its connection | none | verified |
@@ -291,7 +291,7 @@ A receiver names the senders whose video it wants, and one of them it shows larg
 | `CALL-128` | `POST` | The SFU MUST forward the sender a receiver marks large at the top layer the estimate holds, in place of the most recent speaker. | this spec section 3, the choice of videos; `CALL-099` | `ambre_sfu::sim::tests::a_large_sender_gets_the_top_layer_in_place_of_the_speaker` -- the speaker drops to the lowest layer at the chooser alone | none | verified |
 | `CALL-129` | `POST` | The SFU MUST ask a keyframe of each sender that a choice brings to a receiver, within the chosen sender switch row of `ambre-spec-budgets.md section 3`. | this spec section 3, the choice of videos; `CALL-049` | `ambre_sfu::sim::tests::a_chosen_sender_is_asked_a_keyframe_and_shows_within_the_budget` -- the synthetic senders send a keyframe on request alone | none | verified |
 | `CALL-130` | `FRAME` | The SFU MUST NOT ask one layer of a sender for a keyframe again before a keyframe of that layer passes or the keyframe retry interval of this spec section 3 ends. | this spec section 3, the choice of videos; `CALL-129` | `ambre_sfu::sim::tests::ten_receivers_who_choose_one_sender_ask_it_one_keyframe` -- ten receivers choose one sender 10 ms apart, before the keyframe of the first ask comes back, and each one decodes it | none | verified |
-| `CALL-131` | `FAIL` | Given a choice that names more senders than the count of `ambre-spec-budgets.md section 1`, a sender twice, or a large sender outside it, the SFU MUST read none of it. | this spec section 3, the choice of videos; `CALL-126` | type-level -- `ambre_protocol::signaling::VideoChoice` has one door, its constructor, and its deserialisation goes through it; `ambre_protocol::tests::a_choice_of_too_many_videos_or_a_stray_large_sender_reads_as_nothing` | none | verified |
+| `CALL-131` | `FAIL` | Given a choice that names more senders than the desktop count of `ambre-spec-budgets.md section 1`, a count of videos past that count or under its senders, a sender twice, or a large sender outside it, the SFU MUST read none of it. | this spec section 3, the choice of videos; `CALL-126` | type-level -- `ambre_protocol::signaling::VideoChoice` has one door, its constructor, and its deserialisation goes through it; `ambre_protocol::tests::a_choice_of_too_many_videos_or_a_stray_large_sender_reads_as_nothing` | none | verified |
 | `CALL-132` | `POST` | A command of the bus that chooses videos MUST reach the socket of the SFU alone, never the relay. | this spec section 3, the choice of videos; `ZK-044` | `ambre_sync::call_link::tests::a_choice_of_videos_reaches_the_sfu_alone_and_never_the_relay`; `ambre_sync::call_link::tests::a_choice_before_the_offer_leaves_after_it` -- a choice the page posts before its first offer waits for it | none | verified |
 
 ## 2. WHAT EACH USER SEES
@@ -932,10 +932,11 @@ that holds no whole header, since the next packet could complete it under anothe
 * A change of speaker moves a slot to another sender, and renegotiates nothing (`CALL-046`). The
   pacer of str0m reads every send stream at each packet, so the slots also bound its cost.
 * Each receiver gets the video of the senders it chose (`CALL-126`), then of the most recent
-  speakers up to nine (`CALL-041`). It gets the audio of the three most recent speakers
-  (`CALL-047`). The audio level of each packet, which the seal leaves in clear, names who speaks.
+  speakers up to the count its choice names (`CALL-041`). That is nine at most. It
+  gets the audio of the three most recent speakers (`CALL-047`). The audio level of each packet,
+  which the seal leaves in clear, names who speaks.
 * The layer choice runs per receiver, every 100 ms, and at once when a target falls or overuse
-  starts or ends. Each of the nine gets its lowest layer while
+  starts or ends. Each video it gets takes its lowest layer while
   the estimate holds it. Then the most recent speaker moves up to the highest layer the rest
   holds. A move up needs a margin, so a receiver near a boundary stays on its layer.
 * A switch to another layer waits for a keyframe of that layer (`CALL-039`). The SFU shifts the
@@ -963,13 +964,15 @@ that holds no whole header, since the next packet could complete it under anothe
 
 **The choice of videos.** A receiver names the senders whose video it wants, by the sender index
 of each, on the socket of the SFU (`CALL-132`). The page posts the choice to the Sync worker, which
-writes `{"videos": {"senders": [..], "large": ..}}` there, and on no socket of the relay. A choice
-replaces the one before it.
+writes `{"videos": {"senders": [..], "large": .., "count": ..}}` there, and on no socket of the
+relay. A choice replaces the one before it.
 
-1. The choice names nine senders at most, each once. Its large sender is one of them. The SFU
-   reads nothing of another choice (`CALL-131`).
-2. The SFU serves the chosen senders that send a camera first, then fills the slots left with the
-   most recent speakers (`CALL-126`, `CALL-041`). Under a tight estimate, a filler loses its video
+1. The choice names the count of videos its receiver lays out, nine at most, and as many
+   senders at most, each once. Its large sender is one of them. The SFU reads nothing of another
+   choice (`CALL-131`). A choice with no count asks for nine.
+2. The SFU serves the chosen senders that send a camera first. It then fills the slots left with
+   the most recent speakers, up to the count (`CALL-126`, `CALL-041`). So the fill sends no
+   video its receiver has no tile for. Under a tight estimate, a filler loses its video
    before a chosen sender does.
 3. The large sender takes the top layer the estimate holds, in place of the most recent speaker
    (`CALL-128`). With no large sender, the most recent speaker served takes it. The estimate
@@ -1129,6 +1132,7 @@ Versions and bug numbers read on 2026-10-18, from the sources in the session res
 | A probe pads up to the next layer step | the probe clusters of str0m | str0m starts none while the SFU sets the estimate, and its result feeds the estimate of str0m, which `CALL-044` rejects |
 | A drop to a lower layer stops the current layer | the current layer flows until the lower keyframe | its packets queue in the pacer of the congested downlink. Over 40 seeds on 2026-11-08, the worst drop took 2.52 s, against 0.85 s |
 | The video of the nine most recent speakers | every video of the room to every receiver | 49 videos at the lowest layer exceed the downlink of a phone, and the SFU cost grows with the count |
+| A count of videos in the choice | a fixed fill of nine for every receiver | the desktop count and the phone count are two figures of the budgets, and a desktop count that grows must leave a phone where it is with no change of protocol |
 | str0m drives the SFU | the `rtc` crate of webrtc-rs | ring or aws-lc-rs seal its DTLS records, not only its certificate |
 | str0m drives the SFU | LiveKit | a Go server with a frame format of its own |
 | Every call goes through the SFU | a direct connection between two clients | two topologies to test, and each peer would see the address of the other |
