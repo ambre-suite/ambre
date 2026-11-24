@@ -14,7 +14,7 @@ use ambre_chrome::commands::Reach;
 use ambre_chrome::{ChoiceRow, ChoiceView, FormatBar, IconButton, Pressed, Select};
 use ambre_core::Flag as _;
 use ambre_core::index::Pos;
-use ambre_core::{Commands, Point, Px, Rgb, StaticKey, View};
+use ambre_core::{Commands, Rgb, StaticKey};
 use leptos::prelude::*;
 
 use super::color::theme_bg_default;
@@ -28,7 +28,7 @@ use crate::ui::panel;
 #[component]
 pub fn RangeBar(
     /// Where the bar sits, in view pixels, as the sheet view publishes it.
-    anchor: RwSignal<Option<Point<Px<View>>>>,
+    anchor: RwSignal<Option<crate::ui::panel::RangeBarAnchor>>,
     /// The style of the active cell, which the controls read.
     style: StyleState,
     /// The light or dark theme, for the default of the fill.
@@ -60,7 +60,7 @@ pub fn RangeBar(
         })
     };
     move || {
-        let at = super::handler::client_anchor(Some(anchor.get()?));
+        let at = super::handler::client_anchor(Some(anchor.get()?.at));
         let format_place = Signal::derive(move || {
             let format = style.format.get();
             NUMBER_FORMATS

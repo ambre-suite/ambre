@@ -141,6 +141,15 @@ impl SelectionShape {
     }
 }
 
+/// Where the range bar sits: the centre of the top edge of the selection,
+/// in view pixels (`CHROME-238`). A type of its own, so the shell signal
+/// that carries it holds no value a view also keeps (`UI-THREAD-059`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RangeBarAnchor {
+    /// The centre of the top edge of the selection.
+    pub at: ambre_core::Point<ambre_core::Px<ambre_core::View>>,
+}
+
 /// The reference of a selection the header of the panel names, such as
 /// `B2:D5`. `Validated<RangeLabel>`: the view writes it, no rule bounds it.
 pub enum RangeLabel {}

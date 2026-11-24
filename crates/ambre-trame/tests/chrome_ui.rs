@@ -897,10 +897,12 @@ async fn the_range_bar_shows_the_declared_entries_over_a_range() {
             .unwrap()
             .is_none()
     );
-    anchor.set(Some(ambre_core::Point::new(
-        ambre_core::Px::<ambre_core::View>::new(100.0),
-        ambre_core::Px::<ambre_core::View>::new(80.0),
-    )));
+    anchor.set(Some(panel::RangeBarAnchor {
+        at: ambre_core::Point::new(
+            ambre_core::Px::<ambre_core::View>::new(100.0),
+            ambre_core::Px::<ambre_core::View>::new(80.0),
+        ),
+    }));
     leptos::task::tick().await;
     assert!(
         container

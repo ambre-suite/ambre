@@ -269,7 +269,7 @@ struct Wiring {
     /// "B2:D5").
     selection_ref: RwSignal<ambre_core::Validated<ambre_trame::ui::panel::RangeLabel>>,
     /// Where the Trame range bar sits, in view pixels; `None` hides it.
-    range_bar: RwSignal<Option<ambre_core::Point<ambre_core::Px<ambre_core::View>>>>,
+    range_bar: RwSignal<Option<ambre_trame::ui::panel::RangeBarAnchor>>,
     /// The page setup and the frozen pane of the active Trame sheet, which
     /// the context panel shows.
     sheet_setup: RwSignal<Option<ambre_trame::ui::panel::ActiveSheet>>,

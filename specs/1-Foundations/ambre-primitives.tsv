@@ -4983,3 +4983,12 @@ ambre-prose | src/view/panel.rs | crate::view::panel | Paper::label() | ret | &'
 ambre-prose | src/view/panel.rs | crate::view::panel | Margins::label() | ret | &'static str	free-text	the name of a margin preset a person reads
 ambre-trame | src/chrome/panel.rs | crate::chrome::panel | reach() | ret | String	generic	the codec of a property reach on the data-reach attribute, as Reach::marker writes it
 ambre-chrome | src/kit.rs | crate::kit | unreached_controls() | ret | Vec<String>	foreign-api	the accessible names the DOM holds for controls with no data-reach, which a test prints
+ambre-chrome | src/kit.rs | crate::kit | <Px<Board> as FieldLength>::UNIT | const | &'static str	free-text	the unit a person reads after the number
+ambre-chrome | src/kit.rs | crate::kit | <Px<Board> as FieldLength>::field_text() | ret | String	foreign-api	the text an `<input>` shows
+ambre-chrome | src/kit.rs | crate::kit | <Px<Board> as FieldLength>::from_field(text) | param | &str	foreign-api	the value an `<input>` reports
+ambre-chrome | src/kit.rs | crate::kit | <Radians as FieldLength>::UNIT | const | &'static str	free-text	the unit a person reads after the number
+ambre-chrome | src/kit.rs | crate::kit | <Radians as FieldLength>::field_text() | ret | String	foreign-api	the text an `<input>` shows
+ambre-chrome | src/kit.rs | crate::kit | <Radians as FieldLength>::from_field(text) | param | &str	foreign-api	the value an `<input>` reports
+ambre-chrome | src/kit.rs | crate::kit | field_signed() | ret | Option<f64>	local	the signed number a field reads, wrapped by the caller into its place or its angle at once; private
+ambre-chrome | src/kit.rs | crate::kit | field_signed(text) | param | &str	foreign-api	the value an `<input>` reports
+ambre-chrome | src/kit.rs | crate::kit | swatch_row(none_label) | param | &'static str	free-text	text, label or user content

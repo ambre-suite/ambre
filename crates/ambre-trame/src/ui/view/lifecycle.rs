@@ -335,9 +335,7 @@ impl TrameView {
         all(not(target_arch = "wasm32"), not(test)),
         expect(dead_code, reason = "the browser frame alone publishes it")
     )]
-    pub(crate) fn range_bar_anchor(
-        &self,
-    ) -> Option<ambre_core::Point<ambre_core::Px<ambre_core::View>>> {
+    pub(crate) fn range_bar_anchor(&self) -> Option<crate::ui::panel::RangeBarAnchor> {
         let bounds = self.state.selection.bounds();
         let dragging = self.selecting_drag
             || self.fill_drag.is_some()
@@ -352,10 +350,12 @@ impl TrameView {
             .state
             .cell_pixel_rect(CellPos::new(bounds.top_left.row, bounds.bottom_right.col))
             .unwrap_or(left);
-        Some(view_point(ambre_draw::Point::new(
-            f64::midpoint(left.x0, right.x1),
-            left.y0,
-        )))
+        Some(crate::ui::panel::RangeBarAnchor {
+            at: view_point(ambre_draw::Point::new(
+                f64::midpoint(left.x0, right.x1),
+                left.y0,
+            )),
+        })
     }
 
     /// Recompute the active cell's on-screen anchor and publish it for the

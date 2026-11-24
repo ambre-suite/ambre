@@ -763,7 +763,11 @@ fn the_range_bar_shows_over_a_range_alone() {
     range.extend_to(d5);
     rig.view.state.selection = range;
     rig.frame();
-    let at = rig.view.range_bar_anchor().expect("a range shows the bar");
+    let at = rig
+        .view
+        .range_bar_anchor()
+        .expect("a range shows the bar")
+        .at;
     let (left, right) = (
         rig.view.state.cell_pixel_rect(b2).expect("B2 in view"),
         rig.view
