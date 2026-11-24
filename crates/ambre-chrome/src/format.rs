@@ -90,6 +90,7 @@ pub fn FontSizeSelect(
             />
         </span>
     }
+    .into_any()
 }
 
 /// A single pressed-state format toggle button (bold / italic / underline /
@@ -120,6 +121,7 @@ pub fn FormatToggle(
             {icon.map(|ic| view! { <Icon icon=ic /> })}
         </button>
     }
+    .into_any()
 }
 
 /// How far above its anchor the format bar sits, in CSS pixels.
@@ -263,4 +265,5 @@ pub fn FormatBar(
             {controls.collect_view()}
         </div>
     }
+    .into_any()
 }

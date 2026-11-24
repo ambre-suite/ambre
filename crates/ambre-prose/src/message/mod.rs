@@ -29,6 +29,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
+pub use ambre_commands::Reading;
 use ambre_core::id::{self, Comment, Footnote, Id, Reply, User};
 use ambre_core::{CommandNames, Count, Pt, Rgb, StaticKey};
 
@@ -741,9 +742,40 @@ pub enum TriState {
     Mixed,
 }
 
+/// What one block control of the text section writes over every block a
+/// selection covers, in one commit (`PROSE-UI-265` to `PROSE-UI-267`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum BlockFormat {
+    /// The paragraph settings it names. A `None` field leaves that property
+    /// alone on each block (`PROSE-FEAT-025`).
+    Paragraph(ParagraphStyle),
+    /// The paragraph style: a heading of this level, or `None` for a body
+    /// paragraph. A block that is neither keeps its type.
+    Heading(Option<HeadingLevel>),
+    /// Each paragraph becomes a list item of this style, and each item takes
+    /// it. `None` takes each item out of its list, as a paragraph.
+    List(Option<ListStyle>),
+    /// Nest or raise each list item, and move the left indent of each other
+    /// block one step.
+    Indent(IndentStep),
+}
+
+/// Which way an indent control moves the blocks of a selection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IndentStep {
+    /// One level out, or one step to the left.
+    Out,
+    /// One level in, or one step to the right.
+    In,
+}
+
 /// The marks a selection carries, one state per control of the format bar
-/// (`PROSE-UI-054`).
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// (`PROSE-UI-054`), and one reading per value control of the text section
+/// (`PROSE-UI-269`).
+///
+/// A value reading is `Uniform(None)` when the selection carries no value of
+/// its own: no colour, a body paragraph, no list.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ActiveMarks {
     pub bold: TriState,
     pub italic: TriState,
@@ -755,6 +787,44 @@ pub struct ActiveMarks {
     /// The address, when the whole selection carries one link and the same
     /// one.
     pub link: Option<ambre_core::LinkUrl>,
+    /// The family every selected run resolves to, the document's face
+    /// included.
+    pub font_family: Reading<Option<ambre_core::FontFamily>>,
+    /// The size every selected run resolves to.
+    pub font_size: Reading<Option<ambre_core::FontSize>>,
+    /// The text colour every selected run carries.
+    pub color: Reading<Option<ambre_core::Rgba>>,
+    /// The highlight every selected run carries.
+    pub background: Reading<Option<ambre_core::Rgba>>,
+    /// The paragraph style of every selected block: a heading level, or
+    /// `None` for a body paragraph.
+    pub heading: Reading<Option<HeadingLevel>>,
+    /// The alignment every selected block resolves to.
+    pub align: Reading<Option<Align>>,
+    /// The list marker every selected block carries. `None` is no list.
+    pub list: Reading<Option<ListStyle>>,
+}
+
+impl Default for ActiveMarks {
+    fn default() -> Self {
+        Self {
+            bold: TriState::Off,
+            italic: TriState::Off,
+            underline: TriState::Off,
+            strikethrough: TriState::Off,
+            code: TriState::Off,
+            superscript: TriState::Off,
+            subscript: TriState::Off,
+            link: None,
+            font_family: Reading::Uniform(None),
+            font_size: Reading::Uniform(None),
+            color: Reading::Uniform(None),
+            background: Reading::Uniform(None),
+            heading: Reading::Uniform(None),
+            align: Reading::Uniform(None),
+            list: Reading::Uniform(None),
+        }
+    }
 }
 
 /// A value a band resolves when its page is drawn, and never stores
@@ -1485,6 +1555,23 @@ pub enum ProseCommand {
         key: MarkKey,
         action: MarkAction,
     },
+    /// Write one value mark over a whole selection, or take it off: a font,
+    /// a size, a colour, a highlight or a link. `None` takes the key off.
+    /// Every block the selection covers changes in one commit, so one undo
+    /// takes the whole gesture back (`PROSE-UI-263`, `PROSE-UI-268`).
+    MarkSelection {
+        anchor: (BlockId, Pos<DocChar>),
+        focus: (BlockId, Pos<DocChar>),
+        key: MarkKey,
+        value: Option<MarkValue>,
+    },
+    /// Write one block property over every block a selection covers, in one
+    /// commit (`PROSE-UI-265`).
+    FormatBlocks {
+        anchor: (BlockId, Pos<DocChar>),
+        focus: (BlockId, Pos<DocChar>),
+        format: BlockFormat,
+    },
 
     // -- Headers and footers (`features/ambre-spec-prose-headers-footers.md`) --
     /// Show or hide the top band (`PROSE-FEAT-167`).
@@ -1887,6 +1974,17 @@ impl fmt::Debug for ProseCommand {
                 key,
                 action,
             } => fields!("FormatSelection", anchor, focus, key, action),
+            Self::MarkSelection {
+                anchor,
+                focus,
+                key,
+                value,
+            } => fields!("MarkSelection", anchor, focus, key, value),
+            Self::FormatBlocks {
+                anchor,
+                focus,
+                format,
+            } => fields!("FormatBlocks", anchor, focus, format),
             Self::SetHeaderEnabled { shown } => fields!("SetHeaderEnabled", shown),
             Self::SetFooterEnabled { shown } => fields!("SetFooterEnabled", shown),
             Self::SetDifferentFirstPage { first_page } => {
@@ -2235,6 +2333,8 @@ impl ambre_bus::Mutation for ProseCommand {
             | Self::CopyRange { .. }
             | Self::Paste { .. }
             | Self::FormatSelection { .. }
+            | Self::MarkSelection { .. }
+            | Self::FormatBlocks { .. }
             | Self::SetHeaderEnabled { .. }
             | Self::SetFooterEnabled { .. }
             | Self::SetDifferentFirstPage { .. }
@@ -2373,6 +2473,8 @@ impl ProseCommand {
             Self::ShowBlock { .. } => "showing the block",
             Self::ReadMarks { .. } => "reading the styles",
             Self::FormatSelection { .. } => "formatting the selection",
+            Self::MarkSelection { .. } => "formatting the selection",
+            Self::FormatBlocks { .. } => "formatting the paragraphs",
             Self::SetHeaderEnabled { .. } => "showing or hiding the header",
             Self::SetFooterEnabled { .. } => "showing or hiding the footer",
             Self::SetDifferentFirstPage { .. } => "changing the first page's bands",

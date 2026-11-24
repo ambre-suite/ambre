@@ -88,6 +88,9 @@ pub struct ProseSignals {
     /// A formatting command a control or a chord invoked, until the view
     /// drains it. Both write the same id here (`PROSE-UI-056`).
     pub format: RwSignal<Option<StaticKey<Commands>>>,
+    /// A write a value or block control of the text section asked for,
+    /// until the view drains it into one command (`PROSE-UI-270`).
+    pub text_write: RwSignal<Option<crate::view::toolbar::TextWrite>>,
     /// The slash menu, its anchor in CSS pixels (`PROSE-UI-090`).
     pub slash: RwSignal<SlashMenuState>,
     /// The menu item picked with the pointer, until the view drains it.
@@ -145,6 +148,7 @@ impl ProseSignals {
             menu: RwSignal::new(None),
             toolbar: RwSignal::new(ToolbarState::default()),
             format: RwSignal::new(None),
+            text_write: RwSignal::new(None),
             slash: RwSignal::new(SlashMenuState::default()),
             slash_pick: RwSignal::new(None),
             ruler: RwSignal::new(RulerState::default()),

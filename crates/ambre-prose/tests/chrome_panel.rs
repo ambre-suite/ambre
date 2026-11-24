@@ -585,6 +585,114 @@ async fn a_page_control_hands_the_whole_format_to_the_view() {
     root.remove();
 }
 
+/// With a selection the text section shows each value and block control,
+/// with the reading of the selection. Each control hands one write to the
+/// view (`PROSE-UI-270`).
+#[wasm_bindgen_test]
+async fn the_text_section_shows_each_control_and_hands_its_write() {
+    use ambre_prose::events::{
+        ActiveMarks, Align, BlockFormat, HeadingLevel, IndentStep, ListStyle, OrderedStyle, Reading,
+    };
+    use ambre_prose::view::panel::{
+        INDENT_IN, INDENT_OUT, PARAGRAPH_ALIGN, PARAGRAPH_LIST, PARAGRAPH_STYLE, TEXT_COLOR,
+        TEXT_FONT, TEXT_HIGHLIGHT, TEXT_LINK, TEXT_SIZE,
+    };
+    use ambre_prose::view::toolbar::{TextWrite, ToolbarState};
+    let signals = ProseSignals::new();
+    signals.toolbar.set(ToolbarState {
+        anchor: Some(ambre_core::Point::default()),
+        active: Some(ActiveMarks {
+            heading: Reading::Uniform(Some(HeadingLevel::H2)),
+            align: Reading::Uniform(Some(Align::Center)),
+            list: Reading::Mixed,
+            ..ActiveMarks::default()
+        }),
+    });
+    let root = mount_prose_panel(signals);
+    leptos::task::tick().await;
+    assert_eq!(ambre_chrome::native_controls(&root), Vec::<String>::new());
+    assert_eq!(
+        ambre_chrome::unreached_controls(&root),
+        Vec::<String>::new()
+    );
+    let markers = ambre_chrome::reach_markers(&root);
+    for id in [
+        TEXT_FONT,
+        TEXT_SIZE,
+        TEXT_COLOR,
+        TEXT_HIGHLIGHT,
+        TEXT_LINK,
+        PARAGRAPH_STYLE,
+        PARAGRAPH_ALIGN,
+        PARAGRAPH_LIST,
+        INDENT_OUT,
+        INDENT_IN,
+    ] {
+        let reach = ambre_chrome::commands::Reach::Property(id);
+        assert!(
+            markers.iter().any(|m| reach.matches_marker(m)),
+            "{id:?} shows"
+        );
+    }
+    let text = root.text_content().unwrap_or_default();
+    assert!(text.contains("Heading 2"), "the style read is shown");
+    let centred: web_sys::Element = root
+        .query_selector("[aria-label=\"Centre\"]")
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        centred.get_attribute("aria-checked").as_deref(),
+        Some("true"),
+        "the alignment read is checked"
+    );
+
+    let click = |selector: &str| {
+        let button: web_sys::HtmlElement = root
+            .query_selector(selector)
+            .unwrap()
+            .unwrap()
+            .dyn_into()
+            .unwrap();
+        button.click();
+    };
+    click("[aria-label=\"Numbers\"]");
+    assert_eq!(
+        signals.text_write.get_untracked(),
+        Some(TextWrite::Block(BlockFormat::List(Some(
+            ListStyle::Ordered(OrderedStyle::Decimal)
+        ))))
+    );
+    click("[aria-label=\"Justify\"]");
+    assert!(matches!(
+        signals.text_write.get_untracked(),
+        Some(TextWrite::Block(BlockFormat::Paragraph(style))) if style.align == Some(Align::Justify)
+    ));
+    let marker = ambre_chrome::commands::Reach::Property(INDENT_IN).marker();
+    click(&format!("[data-reach=\"{marker}\"]"));
+    assert_eq!(
+        signals.text_write.get_untracked(),
+        Some(TextWrite::Block(BlockFormat::Indent(IndentStep::In)))
+    );
+    let marker = ambre_chrome::commands::Reach::Property(TEXT_LINK).marker();
+    let field: web_sys::HtmlInputElement = root
+        .query_selector(&format!("[data-reach=\"{marker}\"]"))
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    field.set_value("https://example.org");
+    field
+        .dispatch_event(&web_sys::Event::new("change").unwrap())
+        .unwrap();
+    assert_eq!(
+        signals.text_write.get_untracked(),
+        Some(TextWrite::Link(Some(ambre_core::LinkUrl::new(
+            "https://example.org".to_owned()
+        ))))
+    );
+    root.remove();
+}
+
 /// With a selection the panel shows the text: the marks, superscript,
 /// subscript and clearing the formatting, each handing its id to the view
 /// (`PROSE-UI-191`).

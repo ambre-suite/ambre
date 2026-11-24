@@ -10,15 +10,15 @@
 //! which the engine does not hold (`PROSE-024`).
 
 pub use crate::message::{
-    ActiveMarks, Align, AnchorState, BandSet, BandState, BlockId, BlockInit, BlockType, CellBorder,
-    ChangeOrigin, CommentReply, CommentThread, CrossRefKind, CursorPosition, DateFieldFormat,
-    EditMode, FindMatch, FindOptions, FirstPage, FootnoteCall, FootnoteEntry, Graphemes,
-    HeaderField, HeadingLevel, HeadingNumber, HfTarget, KeepTogether, KeepWithNext, LineHeight,
-    LineHeightMode, LineSpacingMultiple, LinkSpan, ListStyle, MarkAction, OrderedStyle, Page,
-    ParagraphStyle, Paragraphs, PatternKind, PresencePayload, ProseCommand, ProseError, ProseEvent,
-    ProseRefusal, RefusedAction, RemoteCursor, ResolvedCrossRef, StyleId, Suggestion,
-    SuggestionKind, SuggestionSpan, TableOfContents, TableValue, TextEdit, TocEntry, TocNumbering,
-    TodoMark, TriState, VAlign, WordCount, Words,
+    ActiveMarks, Align, AnchorState, BandSet, BandState, BlockFormat, BlockId, BlockInit,
+    BlockType, CellBorder, ChangeOrigin, CommentReply, CommentThread, CrossRefKind, CursorPosition,
+    DateFieldFormat, EditMode, FindMatch, FindOptions, FirstPage, FootnoteCall, FootnoteEntry,
+    Graphemes, HeaderField, HeadingLevel, HeadingNumber, HfTarget, IndentStep, KeepTogether,
+    KeepWithNext, LineHeight, LineHeightMode, LineSpacingMultiple, LinkSpan, ListStyle, MarkAction,
+    OrderedStyle, Page, ParagraphStyle, Paragraphs, PatternKind, PresencePayload, ProseCommand,
+    ProseError, ProseEvent, ProseRefusal, Reading, RefusedAction, RemoteCursor, ResolvedCrossRef,
+    StyleId, Suggestion, SuggestionKind, SuggestionSpan, TableOfContents, TableValue, TextEdit,
+    TocEntry, TocNumbering, TodoMark, TriState, VAlign, WordCount, Words,
 };
 pub use ambre_bus::app::grid;
 

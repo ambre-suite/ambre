@@ -11,17 +11,18 @@
 
 use ambre_chrome::commands::Reading;
 use ambre_chrome::{
-    Choice, CommandButton, Field, LengthField, PanelContent, PanelSection, Pressed, Segmented,
-    SelectField,
+    Choice, ColourField, CommandButton, Field, FontField, FontSizeSelect, LengthField,
+    PanelContent, PanelSection, Pressed, Segmented, SelectField,
 };
 use ambre_core::{Mm, PrintLength};
 use leptos::prelude::*;
 
 use super::ProseSignals;
 use crate::doc::{Orientation, PageFormat};
-use crate::events::TriState;
+use crate::events::{ActiveMarks, Align, BlockFormat, IndentStep, ParagraphStyle, TriState};
 use crate::view::annotate::review_intent;
 use crate::view::panel::{self, CaretSuggestion, Margins, PanelKind, Paper};
+use crate::view::toolbar::TextWrite;
 use crate::view::toolbar::state_of;
 
 /// The property of `id`. Every id this module names is in the table.
@@ -29,6 +30,19 @@ fn prop(
     id: ambre_core::StaticKey<ambre_core::Properties>,
 ) -> &'static ambre_chrome::commands::Property {
     panel::property(id)
+}
+
+/// The label of the property of `id`, as a control names it.
+fn label_of(id: ambre_core::StaticKey<ambre_core::Properties>) -> String {
+    (prop(id).title)(&ambre_chrome::commands::Locale::En).into_string()
+}
+
+/// What the Logic thread read of one value for this very selection. Before
+/// its answer, the value reads as mixed rather than as a guess.
+fn read<T>(signals: ProseSignals, pick: impl Fn(&ActiveMarks) -> Reading<T>) -> Reading<T> {
+    signals
+        .toolbar
+        .with(|bar| bar.active.as_ref().map_or(Reading::Mixed, pick))
 }
 
 /// The title and the sections of the page's context panel.
@@ -171,9 +185,134 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
         let all: &'static [ambre_core::StaticKey<ambre_core::Commands>] = &panel::TEXT_COMMANDS;
         let (marks, rest) = all.split_at(5);
         let (script, clear) = rest.split_at(2);
+        // What the Logic thread read for this very selection. Before its
+        // answer, each value reads as mixed rather than as a guess.
+        let write = move |w: TextWrite| signals.text_write.set(Some(w));
+        let size_shown = Signal::derive(move || read(signals, |m| m.font_size).uniform().flatten());
+        let styles = panel::PARAGRAPH_STYLES
+            .into_iter()
+            .map(|style| Choice {
+                value: style,
+                label: panel::style_label(style),
+                icon: None,
+            })
+            .collect::<Vec<_>>();
+        let lists = panel::ListChoice::ALL
+            .into_iter()
+            .map(|choice| Choice {
+                value: choice,
+                label: choice.label(),
+                icon: None,
+            })
+            .collect::<Vec<_>>();
+        let indent = move |id, icon: icondata::Icon, step: IndentStep| {
+            view! {
+                <ambre_chrome::IconButton
+                    icon=icon
+                    label=label_of(id)
+                    reach=Some(ambre_chrome::commands::Reach::Property(id))
+                    on_press=Callback::new(move |()| write(TextWrite::Block(BlockFormat::Indent(step))))
+                />
+            }
+        };
+        let link = Signal::derive(move || {
+            signals.toolbar.with(|bar| {
+                bar.active
+                    .as_ref()
+                    .and_then(|m| m.link.as_ref())
+                    .map(|l| l.as_str().to_owned())
+                    .unwrap_or_default()
+            })
+        });
         view! {
             <Field label="Style">{buttons(marks)}</Field>
             <Field label="Script">{buttons(script)}</Field>
+            <Field label="Font">
+                <FontField
+                    property=prop(panel::TEXT_FONT)
+                    value=Signal::derive(move || read(signals, |m| m.font_family.clone()))
+                    on_write=Callback::new(move |f| write(TextWrite::Family(f)))
+                />
+            </Field>
+            <Field label="Size">
+                <span class="ambre-kit-control" data-reach=ambre_chrome::commands::Reach::Property(panel::TEXT_SIZE).marker()>
+                    <FontSizeSelect
+                        current=size_shown
+                        on_pick=Callback::new(move |s| write(TextWrite::Size(s)))
+                        auto_label="Default"
+                    />
+                </span>
+            </Field>
+            <Field label="Colour">
+                <ColourField
+                    property=prop(panel::TEXT_COLOR)
+                    icon=icondata::MdiFormatColorText
+                    value=Signal::derive(move || read(signals, |m| m.color))
+                    default=Signal::derive(|| ambre_core::Rgba::from_channels(0, 0, 0, 0xFF))
+                    reset_label="Automatic"
+                    on_write=Callback::new(move |c| write(TextWrite::Color(c)))
+                />
+                <ColourField
+                    property=prop(panel::TEXT_HIGHLIGHT)
+                    icon=icondata::MdiFormatColorHighlight
+                    value=Signal::derive(move || read(signals, |m| m.background))
+                    default=Signal::derive(|| ambre_core::Rgba::from_channels(0xFF, 0xEE, 0x00, 0xFF))
+                    reset_label="No highlight"
+                    on_write=Callback::new(move |c| write(TextWrite::Highlight(c)))
+                />
+            </Field>
+            <Field label="Paragraph">
+                <SelectField
+                    property=prop(panel::PARAGRAPH_STYLE)
+                    choices=styles
+                    value=Signal::derive(move || read(signals, |m| m.heading))
+                    on_write=Callback::new(move |h| write(TextWrite::Block(BlockFormat::Heading(h))))
+                />
+            </Field>
+            <Field label="Align">
+                <Segmented
+                    property=prop(panel::PARAGRAPH_ALIGN)
+                    choices=vec![
+                        Choice { value: Align::Left, label: "Left", icon: Some(icondata::MdiFormatAlignLeft) },
+                        Choice { value: Align::Center, label: "Centre", icon: Some(icondata::MdiFormatAlignCenter) },
+                        Choice { value: Align::Right, label: "Right", icon: Some(icondata::MdiFormatAlignRight) },
+                        Choice { value: Align::Justify, label: "Justify", icon: Some(icondata::MdiFormatAlignJustify) },
+                    ]
+                    value=Signal::derive(move || panel::align_shown(read(signals, |m| m.align)))
+                    on_write=Callback::new(move |align| {
+                        write(TextWrite::Block(BlockFormat::Paragraph(ParagraphStyle {
+                            align: Some(align),
+                            ..ParagraphStyle::default()
+                        })));
+                    })
+                />
+            </Field>
+            <Field label="List">
+                <Segmented
+                    property=prop(panel::PARAGRAPH_LIST)
+                    choices=lists
+                    value=Signal::derive(move || panel::ListChoice::of(read(signals, |m| m.list)))
+                    on_write=Callback::new(move |c: panel::ListChoice| write(TextWrite::Block(c.format())))
+                />
+            </Field>
+            <Field label="Indent">
+                {indent(panel::INDENT_OUT, icondata::MdiFormatIndentDecrease, IndentStep::Out)}
+                {indent(panel::INDENT_IN, icondata::MdiFormatIndentIncrease, IndentStep::In)}
+            </Field>
+            <Field label="Link">
+                <input
+                    type="url"
+                    class="ambre-prose-link-field"
+                    placeholder="https://"
+                    aria-label=label_of(panel::TEXT_LINK)
+                    data-reach=ambre_chrome::commands::Reach::Property(panel::TEXT_LINK).marker()
+                    prop:value=move || link.get()
+                    on:change=move |ev| {
+                        let typed = event_target_value(&ev);
+                        write(TextWrite::Link(Some(ambre_core::LinkUrl::new(typed))));
+                    }
+                />
+            </Field>
             <Field label="Clear">{buttons(clear)}</Field>
         }
         .into_any()

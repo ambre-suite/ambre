@@ -386,6 +386,17 @@
 | Main | `ambre-commands`, `ambre-core` | +24 KB | A signal of a reading per value type a control edits, and the section keys |
 | Main | `.rodata` | +14 KB | The labels and the icons of the sections |
 
+* **Main sat over its ceiling again on 2026-11-24, and one cut brought it back under.** After the
+  stories of tooltips, the header, suggestion mode, settings and the floating cover, Main read
+  10 743 271 raw bytes at `349e867`. That is 33 271 over 10 710 000, under `just size`. The tool
+  `twiggy top` ran on builds that keep the name section. Most growth sat in the views that
+  hold an `IconButton` or a `Select`: 53 KB and 43 KB of build, rebuild and drop code.
+* **The cut erases the view type of each control primitive.** `IconButton`, `Select`,
+  `SegmentBar`, `Stepper`, `ColorSwatch` and `Slider` of `ambre-chrome` now end with `into_any`.
+  Each caller then holds one opaque view in place of a copy of the control's type. Main read
+  10 661 673 raw and 2 875 468 brotli, 81 598 and 15 718 bytes less. Sync did not move, at
+  1 342 117. The ceiling stays at 10 710 000.
+
 * **A budget or the Main ceiling rises only through a story of its own (`ARCH-095`).** The ceiling
   of Main rose twice in a row, to 2.73 MB and then 2.74 MB, each time inside the merge of a feature
   story. A raise needs a story row of the roadmap or of the journal that names the new figure and
