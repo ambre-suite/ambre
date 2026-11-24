@@ -5058,3 +5058,6 @@ ambre-logic | src/settings.rs | crate::settings | KIND | const | &str	generic	th
 ambre-logic | src/settings.rs | crate::settings | META | const | &str	generic	the name of the map that holds the kind marker, which the open reads back: part of the codec of the settings document
 ambre-logic | src/settings.rs | crate::settings | SETTINGS_KIND | const | &str	generic	the word the kind marker holds, which the open matches back: part of the codec of the settings document
 ambre-logic | src/settings_flow.rs | crate::settings_flow | LogicState::is_settings() | ret | bool	generic	predicate result
+ambre-prose | src/chrome/panel.rs | crate::chrome::panel | label_of() | ret | String	free-text	the name of a control of the text section a person reads
+ambre-prose | src/view/panel.rs | crate::view::panel | ListChoice::label() | ret | &'static str	free-text	the name of a list choice a person reads
+ambre-prose | src/view/panel.rs | crate::view::panel | style_label() | ret | &'static str	free-text	the name of a paragraph style a person reads
