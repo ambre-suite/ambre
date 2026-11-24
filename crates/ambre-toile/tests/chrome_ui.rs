@@ -411,6 +411,44 @@ fn tool_palette_click_switches_active_tool() {
     root.remove();
 }
 
+/// `CHROME-152`: the board's creation bar holds every command its table
+/// homes there, tools and embeds, and no other. A press on an embed runs its
+/// command and arms no tool.
+#[wasm_bindgen_test]
+fn the_board_creation_bar_holds_its_tools_and_its_embeds_alone() {
+    use ambre_toile::ui::menu_bar::{EMBED_DOC, EMBED_WEB};
+    let owner = Owner::new();
+    owner.set();
+    let active = RwSignal::new(Tool::Pen);
+    let fired = RwSignal::new(None::<StaticKey<Commands>>);
+    let on_command = Callback::new(move |id| fired.set(Some(id)));
+    let root = mount_in_container(move || {
+        view! { <ToolPalette active=active cover=RwSignal::new(ambre_client_core::cover::Cover::default()) on_command=on_command /> }
+    });
+    let marks: Vec<String> = (0..root.query_selector_all("[data-reach]").unwrap().length())
+        .filter_map(|i| root.query_selector_all("[data-reach]").unwrap().item(i))
+        .filter_map(|node| node.dyn_into::<web_sys::Element>().ok())
+        .filter_map(|el| el.get_attribute("data-reach"))
+        .collect();
+    let homed = ambre_chrome::creation_entries(ambre_toile::ui::commands::COMMANDS);
+    assert_eq!(marks.len(), homed.len(), "{marks:?}");
+    for (mark, command) in marks.iter().zip(&homed) {
+        assert!(
+            ambre_commands::Reach::Command(command.id).matches_marker(mark),
+            "{mark} for {:?}",
+            command.id
+        );
+    }
+    assert!(homed.iter().any(|c| c.id == EMBED_WEB) && homed.iter().any(|c| c.id == EMBED_DOC));
+    assert!(click_by_aria(&root, "Embed a web page..."));
+    assert_eq!(fired.get_untracked(), Some(EMBED_WEB));
+    assert!(
+        matches!(active.get_untracked(), Tool::Pen),
+        "an embed arms no tool"
+    );
+    root.remove();
+}
+
 // -- Zoom from the palette ---------------------------------------
 
 /// `TOILE-UI-416`: the zoom-in entry of the command palette reports the
@@ -615,8 +653,8 @@ async fn each_icon_of_the_button_bars_names_itself_and_its_chord_in_a_tooltip() 
             .query_selector_all("[role=\"tooltip\"]")
             .unwrap()
             .length(),
-        10,
-        "one tooltip for each tool"
+        12,
+        "one tooltip for each tool and each embed"
     );
     let hand: web_sys::HtmlElement = palette
         .query_selector("[aria-label=\"Hand\"]")
@@ -1501,7 +1539,7 @@ async fn the_palette_publishes_the_edge_it_covers_and_clears_it_when_it_hides() 
     let root = mount_in_container(move || view! { <ToolPalette active=active cover=cover /> });
     settle().await;
     let palette: web_sys::HtmlElement = root
-        .query_selector(".ambre-tool-palette")
+        .query_selector(".ambre-creation-bar")
         .unwrap()
         .unwrap()
         .dyn_into()
@@ -1517,7 +1555,7 @@ async fn the_palette_publishes_the_edge_it_covers_and_clears_it_when_it_hides() 
     );
     assert!((measured(cover).unwrap() - right).abs() < 0.5);
 
-    palette.style().set_property("width", "120px").unwrap();
+    palette.style().set_property("width", "900px").unwrap();
     settle().await;
     let wider = palette.get_bounding_client_rect().right();
     assert!(wider > right);
@@ -1776,6 +1814,48 @@ async fn each_entry_of_the_board_bar_is_a_control_of_the_panel() {
     assert_eq!(shown.len(), PanelKind::Shape.bar().len());
     for (marker, entry) in shown.iter().zip(PanelKind::Shape.bar()) {
         assert!(entry.matches_marker(marker), "{marker} is {entry:?}");
+    }
+    toolbar.remove();
+}
+
+/// `CHROME-186`: the Fill and Text colour triggers of the board bar take
+/// their names from the property registry, as the context panel does.
+#[wasm_bindgen_test]
+async fn the_colour_triggers_of_the_board_bar_take_their_names_from_the_registry() {
+    use ambre_toile::ui::panel::{FILL, TEXT_COLOUR, property};
+    use ambre_toile::ui::style::Styled;
+    let bar = RwSignal::new(Some(FloatBar {
+        at: css_point(40.0, 20.0),
+        count: Count::<Elements>::new(1),
+        groups: GroupHeld::NoGroup,
+        locks: LockMix::Unlocked,
+        fill: None,
+        mixed: Default::default(),
+    }));
+    let model = RwSignal::new(Some(styled(Styled::Elements)));
+    let toolbar = mount_in_container(move || {
+        view! {
+            <SelectionToolbar bar=bar model=model on_command=Callback::new(|_| {}) on_style=Callback::new(|_| {}) cover=RwSignal::new(ambre_client_core::cover::Cover::default()) />
+        }
+    });
+    leptos::task::tick().await;
+    for id in [FILL, TEXT_COLOUR] {
+        let marker = ambre_commands::Reach::Property(id).marker();
+        let trigger = toolbar
+            .query_selector(&format!("[data-reach=\"{marker}\"] button"))
+            .unwrap()
+            .expect("the bar shows the trigger");
+        let want = (property(id).title)(&ambre_commands::Locale::En).into_string();
+        assert_eq!(
+            trigger.get_attribute("aria-label"),
+            Some(want.clone()),
+            "{id:?}"
+        );
+        let tip = trigger
+            .query_selector(".ambre-tip-name")
+            .unwrap()
+            .and_then(|t| t.text_content());
+        assert_eq!(tip.as_deref().map(str::trim), Some(want.as_str()), "{id:?}");
     }
     toolbar.remove();
 }

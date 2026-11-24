@@ -1,24 +1,19 @@
 // ambre-toile/src/chrome/palette.rs
-// ============================================================================ The
-// tool palette / primary toolbar (`toile-tools`), wasm-only. A floating vertical
-// toolbar with one button per Toile tool (Select, Pen, Shape, Connector, Draw,
-// Sticky, Text, Hand). Exactly one button reads active, reflecting the current
-// `Tool`; clicking switches the tool.
+// ============================================================================
+// The board's creation bar (`toile-tools`, `CHROME-152`), wasm-only. The board
+// lays out the shared `ambre_chrome::CreationBar` over its own table: the
+// tools of the pointer, then the two embeds. Exactly one tool reads pressed,
+// the one the shared `RwSignal<Tool>` holds; a press on a tool arms it, and a
+// press on an embed runs its command.
 //
 // The Sticky button is a split affordance. Clicking it opens a small colour popover
 // of pastel swatches, and picking a swatch arms `Tool::Sticky(colour)`. The next
 // click then places notes in that colour (folded into `CreateElement.fill`,
-// `toile-elements`). This mirrors the Miro / Figma-whiteboard sticky flow.
-//
-// Styling is SHARED with the Trame command bar. The container carries the
-// `.ambre-commandbar` class. So buttons, hover, the `[aria-pressed="true"]` active
-// fill, `.sep` separators and the `aria-label` tooltip all come from the launcher
-// CSS, pixel-identical to Trame. An `.ambre-tool-palette` modifier only re-docks it
-// as a floating vertical bar. Icons come from `icondata` rendered by `leptos-icons`,
-// exactly like the Trame `FormatBar` and the Toile context menu (`chrome::menu`).
+// `toile-elements`). The bar draws it in place of the plain button of its
+// command.
 //
 // The active tool is UI-only, canvas-local state (`toile-tools`): it is NOT a
-// `ToileCommand`. The palette writes a shared `RwSignal<Tool>` that the canvas
+// `ToileCommand`. The bar writes a shared `RwSignal<Tool>` that the canvas
 // `ToileView` applies each frame; the keyboard chords (`ui::palette::bind_tool_keys`)
 // write the very same signal. The pure command surface (ids, key chords, the id ->
 // Tool map, the swatch set) lives in the always-compiled, host-tested `ui::palette`.
@@ -31,47 +26,9 @@ use wasm_bindgen::JsCast;
 
 use crate::ui::Tool;
 use crate::ui::commands as registry;
-use crate::ui::palette::{
-    STICKY_SWATCHES, TOOL_COMMENT, TOOL_CONNECTOR, TOOL_DRAW, TOOL_HAND, TOOL_LASER, TOOL_PEN,
-    TOOL_SELECT, TOOL_SHAPE, TOOL_STICKY, TOOL_TEXT, tool_for_command,
-};
+use crate::ui::palette::{STICKY_SWATCHES, TOOL_STICKY, command_for_tool, tool_for_command};
 
 use super::icons;
-
-/// One palette button. `aria-pressed` compares the active tool by variant
-/// (`mem::discriminant`). So any `Shape(kind)` reads pressed while the Shape tool
-/// is active, regardless of the current kind sub-option (`toile-tools`). The
-/// icon button prevents the default of `mousedown`, which keeps DOM focus on the
-/// canvas text pipe. A button stealing focus broke the next canvas click and the
-/// clipboard, the same hazard documented on the Trame `FormatBar`.
-///
-/// `command` names the tool. Its tooltip and its glyph come from the registry
-/// (`UI-THREAD-019`, `CHROME-186`), and `tool_for_command` says which tool the
-/// click arms. The button, the keyboard chord and the command palette then all
-/// agree. An id the table does not describe shows no button.
-fn tool_button(active: RwSignal<Tool>, command: StaticKey<Commands>) -> impl IntoView {
-    let described = ambre_commands::find(registry::COMMANDS, command);
-    let icon = registry::icon(command).and_then(icons::resolve);
-    // An id absent from the tool map arms nothing rather than failing the bar.
-    let tool = tool_for_command(command).unwrap_or(Tool::Select);
-    let pressed = Signal::derive(move || {
-        ambre_chrome::Pressed::from_bool(
-            std::mem::discriminant(&active.get()) == std::mem::discriminant(&tool),
-        )
-    });
-    described.map(|described| {
-        view! {
-            <ambre_chrome::CommandButton
-                command=described
-                icon=icon
-                pressed=pressed
-                size=ambre_chrome::ControlSize::Large
-                look=ambre_chrome::IconLook::Ghost
-                on_command=Callback::new(move |_| active.set(tool))
-            />
-        }
-    })
-}
 
 /// The Sticky button + its colour popover (`toile-tools`). Clicking the button
 /// opens the popover; picking a pastel swatch arms `Tool::Sticky(colour)` (which
@@ -158,34 +115,38 @@ fn sticky_button(active: RwSignal<Tool>) -> impl IntoView {
     }
 }
 
-/// The Toile tool palette. `active` is the shared active-tool signal, the same
-/// signal the keyboard chords write and the canvas view reads. The buttons write
-/// it on click, and read it for their pressed state. The palette is the
-/// board's creation bar: it publishes the box it covers into `cover`, which a
-/// fit reads (`CHROME-170`, `ZOOM-011`).
+/// The board's creation bar. `active` is the shared active-tool signal, the
+/// same signal the keyboard chords write and the canvas view reads. A tool
+/// writes it on a press, and reads it for its pressed state. An embed runs
+/// `on_command`. The bar publishes the box it covers into `cover`, which a fit
+/// reads (`CHROME-170`, `ZOOM-011`).
 #[component]
 pub fn ToolPalette(
     active: RwSignal<Tool>,
     cover: RwSignal<ambre_client_core::cover::Cover>,
+    #[prop(optional)] on_command: Option<Callback<StaticKey<Commands>>>,
 ) -> impl IntoView {
-    let node = NodeRef::<html::Div>::new();
-    ambre_chrome::cover::watch_fixed(node, ambre_client_core::cover::Surface::CreationBar, cover);
+    let run = Callback::new(move |id: StaticKey<Commands>| match tool_for_command(id) {
+        Some(tool) => active.set(tool),
+        None => {
+            if let Some(on_command) = on_command {
+                on_command.run(id);
+            }
+        }
+    });
+    let armed = Signal::derive(move || command_for_tool(active.get()));
+    let sticky = ambre_chrome::CreationSlot {
+        command: TOOL_STICKY,
+        view: ViewFn::from(move || sticky_button(active)),
+    };
     view! {
-        <div class="ambre-commandbar ambre-tool-palette" role="toolbar" aria-label="Tools" node_ref=node>
-            {tool_button(active, TOOL_SELECT)}
-            <span class="sep"></span>
-            {tool_button(active, TOOL_PEN)}
-            // The Shape tool defaults to a rectangle; the kind sub-picker is a
-            // later palette signal folded into `CreateElement` (`toile-tools`).
-            {tool_button(active, TOOL_SHAPE)}
-            {tool_button(active, TOOL_CONNECTOR)}
-            {tool_button(active, TOOL_DRAW)}
-            {sticky_button(active)}
-            {tool_button(active, TOOL_TEXT)}
-            {tool_button(active, TOOL_COMMENT)}
-            {tool_button(active, TOOL_LASER)}
-            <span class="sep"></span>
-            {tool_button(active, TOOL_HAND)}
-        </div>
+        <ambre_chrome::CreationBar
+            table=registry::COMMANDS
+            resolve=|command| command.icon.and_then(icons::resolve)
+            on_command=run
+            cover=cover
+            armed=armed
+            slots=vec![sticky]
+        />
     }
 }

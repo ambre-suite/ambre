@@ -36,6 +36,12 @@ use crate::ui::menu;
 use crate::ui::panel;
 use crate::ui::style::StyleModel;
 
+/// The name a colour trigger shows in its tooltip: the label the property
+/// registry declares, as the context panel shows it (`CHROME-186`).
+fn property_title(id: StaticKey<ambre_core::Properties>) -> String {
+    (panel::property(id).title)(&ambre_chrome::commands::Locale::En).into_string()
+}
+
 /// The floating selection toolbar. `bar` is the per-frame published placement +
 /// flags (`None` hides it). `model` is the selection's common style: it seeds
 /// the text colour, and is the same model the context panel reads.
@@ -123,7 +129,7 @@ pub fn SelectionToolbar(
                         >
                             <span data-reach=Reach::Property(panel::FILL).marker()>
                                 <ColorPopover
-                                    title="Fill"
+                                    title=property_title(panel::FILL)
                                     icon=icondata::MdiFormatColorFill
                                     current=fill
                                     default=Signal::derive(|| Rgba::from_bits(0xffff_ffff))
@@ -134,7 +140,7 @@ pub fn SelectionToolbar(
                             {mixed_hint(b.mixed.fill.is_mixed())}
                             <span data-reach=Reach::Property(panel::TEXT_COLOUR).marker()>
                                 <ColorPopover
-                                    title="Text colour"
+                                    title=property_title(panel::TEXT_COLOUR)
                                     icon=icondata::MdiFormatColorText
                                     current=text_color
                                     default=Signal::derive(|| Rgba::from_bits(0x1a1a_1aff))

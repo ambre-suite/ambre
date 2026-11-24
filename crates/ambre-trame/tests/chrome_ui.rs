@@ -1416,3 +1416,34 @@ async fn closing_the_sort_dialog_sorts_nothing() {
         root.remove();
     }
 }
+
+/// `CHROME-247`: the function of the creation bar asks the grid view to open
+/// the editor of the active cell on the sign of a formula. Nothing reaches the
+/// shell, and the sheet's bar offers it.
+#[wasm_bindgen_test]
+fn the_function_of_the_creation_bar_asks_the_grid_for_a_formula() {
+    use ambre_chrome::CommandHandler;
+    let handler = ambre_trame::chrome::TrameHandler {
+        find: RwSignal::new(None),
+        filter_popover: RwSignal::new(None),
+        filter_values: RwSignal::new(Vec::new()),
+        style: ambre_trame::chrome::StyleState::new(),
+        anchor: RwSignal::new(None),
+        view_cmd: RwSignal::new(None),
+    };
+    assert!(
+        handler
+            .on_command(ambre_trame::chrome::INSERT_FUNCTION)
+            .is_empty()
+    );
+    assert_eq!(
+        handler.view_cmd.get_untracked(),
+        Some(ambre_trame::chrome::INSERT_FUNCTION)
+    );
+    let homed = ambre_chrome::creation_entries(ambre_trame::chrome::COMMANDS);
+    assert!(
+        homed
+            .iter()
+            .any(|c| c.id == ambre_trame::chrome::INSERT_FUNCTION)
+    );
+}

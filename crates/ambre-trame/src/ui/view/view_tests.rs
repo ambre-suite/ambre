@@ -188,6 +188,27 @@ fn a_typed_value_reaches_the_logic_thread_through_the_view() {
     assert!(rig.view.editor.is_none());
 }
 
+/// `CHROME-247`: the function of the creation bar opens the editor of the
+/// active cell on the sign of a formula, and what the user types follows it.
+#[test]
+fn the_function_of_the_creation_bar_opens_a_formula_on_the_active_cell() {
+    let mut rig = Rig::new();
+    rig.frame();
+    rig.sent();
+    rig.view
+        .run_view_command(crate::ui::commands::INSERT_FUNCTION);
+    assert!(rig.view.is_editing());
+    assert!(rig.type_text("1+1"));
+    assert!(rig.key(Key::Enter));
+    rig.frame();
+    let sent = rig.sent();
+    assert!(
+        sent.iter()
+            .any(|c| matches!(c, TrameCommand::CommitCellEdit { text, .. } if text == "=1+1")),
+        "sent {sent:?}"
+    );
+}
+
 /// `TRAME-UI-183`: a text typed after `Tab`, before the frame that commits,
 /// opens the next cell's session. It never joins the buffer the `Tab` commits.
 /// A fast typist, or a driven browser, types `21`, `Tab`, `=A1*2` in one frame.
@@ -2402,9 +2423,9 @@ impl Wired {
 /// host test can run. `None` for an id whose run waits on one of those.
 fn route(wired: &mut Wired, id: ambre_core::StaticKey<ambre_core::Commands>) -> Option<bool> {
     use crate::message::StylePatch;
-    use crate::ui::commands::{BOLD, ITALIC, ZOOM_TO_SELECTION};
-    if id == ZOOM_TO_SELECTION {
-        wired.rig.view.zoom_to_selection();
+    use crate::ui::commands::{BOLD, INSERT_FUNCTION, ITALIC, ZOOM_TO_SELECTION};
+    if id == ZOOM_TO_SELECTION || id == INSERT_FUNCTION {
+        wired.rig.view.run_view_command(id);
         return Some(wired.pump());
     }
     let style = |patch: StylePatch| TrameCommand::SetCellStyle { patch };

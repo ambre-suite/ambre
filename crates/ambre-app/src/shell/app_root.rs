@@ -34,6 +34,35 @@ pub(crate) fn palette_table(kind: DocType) -> &'static [ambre_chrome::commands::
     }
 }
 
+/// The creation bar of a page of `kind`: the one shared bar, over the table of
+/// that application (`CHROME-152`, `CHROME-153`). The board arms its tools
+/// through it. A page with no creation command lays out none.
+pub(crate) fn creation_bar(
+    kind: DocType,
+    tool: RwSignal<ambre_toile::ui::Tool>,
+    on_command: Callback<StaticKey<Commands>>,
+    cover: RwSignal<ambre_client_core::cover::Cover>,
+) -> AnyView {
+    let resolve = match kind {
+        DocType::Toile => {
+            return view! { <toile_chrome::ToolPalette active=tool cover=cover on_command=on_command /> }
+                .into_any();
+        }
+        DocType::Prose => ambre_prose::chrome::icon_of,
+        DocType::Trame => trame_chrome::icon_of,
+        DocType::Murmure | DocType::Settings => return ().into_any(),
+    };
+    view! {
+        <ambre_chrome::CreationBar
+            table=palette_table(kind)
+            resolve=resolve
+            on_command=on_command
+            cover=cover
+        />
+    }
+    .into_any()
+}
+
 /// The shell of a Murmure page: its channel list, its channel and its thread
 /// (the Murmure layout spec). The pane names the region in focus, and the
 /// command bar holds the channel header. No formula bar, tabs or status bar:
@@ -967,14 +996,20 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     </Show>
                 })}
             </ContextRegion>
-            // The board's tool palette floats inside the content cell, so a
-            // panel docked to the left covers none of it.
+            // The creation bar floats inside the content cell, so a panel
+            // docked to either side covers none of it (`CHROME-153`). A board
+            // that presents shows none.
             <CanvasOverlay slot>
-                {boot_is_toile.then(|| view! {
-                    <toile_chrome::EditingSurfaces present=present_toile>
-                        <toile_chrome::ToolPalette active=toile_active_tool cover=shell_cover />
-                    </toile_chrome::EditingSurfaces>
-                })}
+                {if boot_is_toile {
+                    view! {
+                        <toile_chrome::EditingSurfaces present=present_toile>
+                            {creation_bar(booted, toile_active_tool, on_command, shell_cover)}
+                        </toile_chrome::EditingSurfaces>
+                    }
+                    .into_any()
+                } else {
+                    creation_bar(booted, toile_active_tool, on_command, shell_cover)
+                }}
             </CanvasOverlay>
             // Each application lays out its own rows (`CHROME-199`). The formula
             // bar is Trame's alone, and its sheet tabs sit in the status bar. No

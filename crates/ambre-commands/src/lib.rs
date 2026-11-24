@@ -332,6 +332,13 @@ pub mod shared {
     /// The group of every command that acts on the account or a preference
     /// of the person. Its home is the avatar menu (`CHROME-156`).
     pub const ACCOUNT: StaticKey<Categories> = StaticKey::<Categories>::new("account");
+    /// The group of every command that inserts a new object: a picture, a
+    /// table, a chart, a comment. Its home is the creation bar (`CHROME-152`).
+    pub const INSERT: StaticKey<Categories> = StaticKey::<Categories>::new("insert");
+    /// The group of every tool of the pointer: the mode the next press on the
+    /// content takes, as the pen or the hand of a board. Its home is the
+    /// creation bar (`CHROME-152`).
+    pub const TOOL: StaticKey<Categories> = StaticKey::<Categories>::new("tool");
 
     /// The clipboard identities. One intent, one identity, in every
     /// application: a menu entry, a toolbar button and the browser's own event
@@ -500,11 +507,15 @@ pub enum TableDefect {
     /// The command acts on the file or on the account, and lives in another
     /// region than the one its subject names (`CHROME-154`, `CHROME-156`).
     HomedAway(StaticKey<Commands>, Home),
+    /// The command lives in the creation bar, yet neither inserts an object
+    /// nor arms a tool of the pointer (`CHROME-152`).
+    CreatesNothing(StaticKey<Commands>),
 }
 
 /// The one region the subject of `category` names, if it names one. A
 /// command on the document as a file lives in the Ambre menu. A command on
-/// the account of the person lives in the avatar menu
+/// the account of the person lives in the avatar menu. A command that inserts
+/// an object, or arms a tool of the pointer, lives in the creation bar
 /// (`ambre-spec-shell.md` section 2).
 #[must_use]
 pub fn subject_home(category: StaticKey<Categories>) -> Option<Home> {
@@ -512,6 +523,8 @@ pub fn subject_home(category: StaticKey<Categories>) -> Option<Home> {
         Some(Home::AmbreMenu)
     } else if category == shared::ACCOUNT {
         Some(Home::AvatarMenu)
+    } else if category == shared::INSERT || category == shared::TOOL {
+        Some(Home::CreationBar)
     } else {
         None
     }
@@ -552,8 +565,12 @@ pub fn table_defects(table: &[Command]) -> Vec<TableDefect> {
                 defects.push(TableDefect::SharedChord(kb, first, cmd.id));
             }
         }
-        if subject_home(cmd.category).is_some_and(|home| home != cmd.home) {
+        let subject = subject_home(cmd.category);
+        if subject.is_some_and(|home| home != cmd.home) {
             defects.push(TableDefect::HomedAway(cmd.id, cmd.home));
+        }
+        if cmd.home == Home::CreationBar && subject != Some(Home::CreationBar) {
+            defects.push(TableDefect::CreatesNothing(cmd.id));
         }
     }
     defects
@@ -855,6 +872,43 @@ mod tests {
             [
                 TableDefect::HomedAway(save, Home::ContextPanel),
                 TableDefect::HomedAway(theme, Home::AmbreMenu),
+            ]
+        );
+    }
+
+    /// `CHROME-152`: a command that inserts an object or arms a tool lives in
+    /// the creation bar, and the bar homes no other command.
+    #[test]
+    fn the_creation_bar_homes_every_insert_and_tool_and_nothing_else() {
+        let picture = StaticKey::<Commands>::new("t.insert.picture");
+        let pen = StaticKey::<Commands>::new("t.tool.pen");
+        let bold = StaticKey::<Commands>::new("t.format.bold");
+        let entry = |id, category, home| Command {
+            id,
+            title: bold_title,
+            icon: None,
+            keybindings: &[],
+            category,
+            home,
+            description: None,
+        };
+        let homed = [
+            entry(picture, shared::INSERT, Home::CreationBar),
+            entry(pen, shared::TOOL, Home::CreationBar),
+            entry(bold, FORMAT, Home::ContextPanel),
+        ];
+        assert_eq!(table_defects(&homed), []);
+        let away = [
+            entry(picture, shared::INSERT, Home::ContextPanel),
+            entry(pen, shared::TOOL, Home::StatusBar),
+            entry(bold, FORMAT, Home::CreationBar),
+        ];
+        assert_eq!(
+            table_defects(&away),
+            [
+                TableDefect::HomedAway(picture, Home::ContextPanel),
+                TableDefect::HomedAway(pen, Home::StatusBar),
+                TableDefect::CreatesNothing(bold),
             ]
         );
     }

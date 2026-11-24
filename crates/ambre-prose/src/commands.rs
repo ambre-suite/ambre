@@ -22,7 +22,7 @@ const GENERAL: StaticKey<Categories> = StaticKey::<Categories>::new("general");
 /// Stepping through the local history.
 const HISTORY: StaticKey<Categories> = StaticKey::<Categories>::new("history");
 /// Adding a new object to the page, such as a picture.
-const INSERT: StaticKey<Categories> = StaticKey::<Categories>::new("insert");
+const INSERT: StaticKey<Categories> = ambre_commands::shared::INSERT;
 /// Ruling on the suggestions of a review.
 const REVIEW: StaticKey<Categories> = StaticKey::<Categories>::new("review");
 
@@ -98,6 +98,28 @@ pub const EXPORT_HTML_REVIEWED: StaticKey<Commands> =
 /// Put a picture from a file after the block the caret sits in
 /// (`PROSE-FEAT-316`).
 pub const INSERT_PICTURE: StaticKey<Commands> = StaticKey::<Commands>::new("prose.insert.picture");
+
+/// Put a paragraph of text after the block the caret sits in (`CHROME-180`).
+pub const INSERT_TEXT: StaticKey<Commands> = StaticKey::<Commands>::new("prose.insert.text");
+/// Put a table after the block the caret sits in (`CHROME-180`).
+pub const INSERT_TABLE: StaticKey<Commands> = StaticKey::<Commands>::new("prose.insert.table");
+/// Put a separator after the block the caret sits in (`CHROME-180`).
+pub const INSERT_SEPARATOR: StaticKey<Commands> =
+    StaticKey::<Commands>::new("prose.insert.separator");
+
+/// The item of the slash menu a command of the creation bar inserts, or
+/// `None` for a command that inserts no block. The bar and the menu then
+/// insert one object the same way (`PROSE-UI-062`).
+#[must_use]
+pub fn inserted(id: StaticKey<Commands>) -> Option<crate::view::slash::SlashCommand> {
+    use crate::view::slash::SlashCommand;
+    match id {
+        INSERT_TEXT => Some(SlashCommand::Paragraph),
+        INSERT_TABLE => Some(SlashCommand::Table),
+        INSERT_SEPARATOR => Some(SlashCommand::Rule),
+        _ => None,
+    }
+}
 
 /// Take the document out as a PDF of the pages the screen shows
 /// (`PROSE-IO-033`).
@@ -287,6 +309,18 @@ fn export_odt_reviewed_title(_: &Locale) -> ambre_core::Validated<ambre_commands
 
 fn insert_picture_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
     ambre_core::Validated::new("Insert a picture")
+}
+
+fn insert_text_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Insert text")
+}
+
+fn insert_table_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Insert a table")
+}
+
+fn insert_separator_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Insert a separator")
 }
 
 fn import_html_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
@@ -495,9 +529,36 @@ pub const COMMANDS: &[Command] = &[
         description: None,
     },
     Command {
+        id: INSERT_TEXT,
+        title: insert_text_title,
+        icon: Some(StaticKey::<Icons>::new("format-text")),
+        keybindings: &[],
+        category: INSERT,
+        home: Home::CreationBar,
+        description: None,
+    },
+    Command {
         id: INSERT_PICTURE,
         title: insert_picture_title,
-        icon: Some(StaticKey::<Icons>::new("file-import-outline")),
+        icon: Some(StaticKey::<Icons>::new("image-outline")),
+        keybindings: &[],
+        category: INSERT,
+        home: Home::CreationBar,
+        description: None,
+    },
+    Command {
+        id: INSERT_TABLE,
+        title: insert_table_title,
+        icon: Some(StaticKey::<Icons>::new("table-plus")),
+        keybindings: &[],
+        category: INSERT,
+        home: Home::CreationBar,
+        description: None,
+    },
+    Command {
+        id: INSERT_SEPARATOR,
+        title: insert_separator_title,
+        icon: Some(StaticKey::<Icons>::new("border-horizontal")),
         keybindings: &[],
         category: INSERT,
         home: Home::CreationBar,
@@ -650,6 +711,9 @@ mod tests {
             EXPORT_HTML_REVIEWED,
             EXPORT_PDF,
             INSERT_PICTURE,
+            INSERT_TEXT,
+            INSERT_TABLE,
+            INSERT_SEPARATOR,
         ] {
             let declared = COMMANDS.iter().filter(|c| c.id == id).count();
             assert_eq!(declared, 1, "{id:?}");

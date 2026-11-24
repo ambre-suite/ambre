@@ -17,8 +17,9 @@ use ambre_core::{Css, Point, Px, View};
 use leptos::prelude::*;
 
 use super::commands::{
-    BOLD, COPY, CUT, FILTER_COLUMN, FIND, IMPORT_CSV, IMPORT_ODS, IMPORT_XLSX, ITALIC, PALETTE,
-    PASTE, REPLACE, SAVE_SEALED_FILE, SORT_RANGE_MULTI, ZOOM_TO_SELECTION, command_to_app,
+    BOLD, COPY, CUT, FILTER_COLUMN, FIND, IMPORT_CSV, IMPORT_ODS, IMPORT_XLSX, INSERT_FUNCTION,
+    ITALIC, PALETTE, PASTE, REPLACE, SAVE_SEALED_FILE, SORT_RANGE_MULTI, ZOOM_TO_SELECTION,
+    command_to_app,
 };
 use super::find_replace::{FindMode, FindReplaceState};
 use super::popovers::FilterPopoverState;
@@ -101,7 +102,9 @@ impl CommandHandler for TrameHandler {
                 self.open_find(FindMode::Replace);
                 return Vec::new();
             }
-            ZOOM_TO_SELECTION => {
+            // The grid opens the editor on the active cell, seeded with the
+            // sign a formula starts with (`CHROME-181`).
+            ZOOM_TO_SELECTION | INSERT_FUNCTION => {
                 self.view_cmd.set(Some(id));
                 return Vec::new();
             }

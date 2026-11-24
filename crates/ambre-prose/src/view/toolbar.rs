@@ -138,9 +138,15 @@ impl ProseUiState {
     /// A control reporting on removes the mark. Off and mixed apply it
     /// (`PROSE-UI-103`), and so does a state not read yet. Only a command the
     /// plane declares leaves (`PROSE-UI-098`): one, whatever the number of
-    /// blocks, so one undo takes the gesture back (`PROSE-UI-192`).
+    /// blocks, so one undo takes the gesture back (`PROSE-UI-192`). An insert
+    /// of the creation bar resolves at the caret, with no selection.
     #[must_use]
     pub fn format(&self, id: StaticKey<Commands>) -> Option<ProseCommand> {
+        if let Some(item) = crate::commands::inserted(id) {
+            // A command of the creation bar lands after the block the caret
+            // sits in, as the slash menu's item does (`CHROME-180`).
+            return Some(item.resolve(self.cursor.as_ref()?.block_id));
+        }
         let (anchor, focus) = self.selection()?;
         if id == crate::commands::CLEAR_FORMATTING {
             return Some(ProseCommand::ClearSelectionMarks { anchor, focus });
