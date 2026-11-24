@@ -1408,7 +1408,10 @@ impl SyncState {
                         display_name,
                         email,
                         email_proof,
-                        exchange_pub_key,
+                        keys: ambre_bus::RecipientKeys {
+                            exchange: exchange_pub_key,
+                            signing: signing_pub_key,
+                        },
                         fingerprint,
                     },
                 );
@@ -1431,7 +1434,10 @@ impl SyncState {
                     id,
                     RestEvent::MemberKey {
                         user_id,
-                        exchange_pub_key,
+                        keys: ambre_bus::RecipientKeys {
+                            exchange: exchange_pub_key,
+                            signing: signing_pub_key,
+                        },
                         fingerprint,
                     },
                 );

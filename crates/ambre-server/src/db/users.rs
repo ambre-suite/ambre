@@ -357,9 +357,13 @@ pub struct DevKeys<'a> {
 /// Stored under `oidc_provider = 'dev'`, `oidc_subject = username` so it shares
 /// the OIDC unique index and is idempotent across refreshes. The supplied
 /// pubkeys (derived deterministically client-side from the username) are written
-/// on insert and refreshed on conflict, so the server can verify the user's
-/// signatures. `master_key_*` stay NULL: dev keys never round-trip through the
-/// server. Gated by `Config::dev_mode` at the call site.
+/// once, on insert or on the first sign-in of an account that holds none.
+/// `master_key_*` stay NULL: dev keys never round-trip through the server.
+/// Gated by `Config::dev_mode` at the call site.
+///
+/// A row that holds keys keeps them. A sign-in that names other keys writes
+/// nothing and fails with a conflict, so a caller cannot swap the signing key
+/// of a member (`SRV-337`).
 ///
 /// With `keys` `None`, the row keeps the keys it holds, or holds none. The
 /// account then owes its key setup, as a provider account does (`SRV-319`).
@@ -374,15 +378,19 @@ pub async fn dev_upsert_user(
     // `(xmax = 0)` is true only for a freshly INSERTed row (vs an ON CONFLICT
     // UPDATE), so we can log creation without a prior existence check.
     let row = sqlx::query(
-        "INSERT INTO users (oidc_provider, oidc_subject, email, email_verified, display_name, signing_pubkey, exchange_pubkey) VALUES ('dev', $1, $2, true, $1, $3, $4) ON CONFLICT (oidc_provider, oidc_subject) DO UPDATE SET email = $2, email_verified = true, display_name = $1, signing_pubkey = COALESCE($3, users.signing_pubkey), exchange_pubkey = COALESCE($4, users.exchange_pubkey) RETURNING id, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, (xmax = 0) AS inserted"
+        "INSERT INTO users (oidc_provider, oidc_subject, email, email_verified, display_name, signing_pubkey, exchange_pubkey) VALUES ('dev', $1, $2, true, $1, $3, $4) ON CONFLICT (oidc_provider, oidc_subject) DO UPDATE SET email = $2, email_verified = true, display_name = $1, signing_pubkey = COALESCE(users.signing_pubkey, $3), exchange_pubkey = COALESCE(users.exchange_pubkey, $4) WHERE users.signing_pubkey IS NULL OR $3::bytea IS NULL OR (users.signing_pubkey = $3 AND users.exchange_pubkey = $4) RETURNING id, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, (xmax = 0) AS inserted"
     )
     .bind(username.as_str())
     .bind(&email)
     .bind(signing)
     .bind(exchange)
-    .fetch_one(pool)
+    .fetch_optional(pool)
     .await
-    .map_err(map_email_conflict)?;
+    .map_err(map_email_conflict)?
+    // The guard of the update refused the row: it holds other keys.
+    .ok_or_else(|| AppError::Conflict {
+        detail: "the account holds other keys".into(),
+    })?;
 
     let inserted: bool = row.try_get("inserted")?;
     if inserted {

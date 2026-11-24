@@ -1149,7 +1149,7 @@ pub fn main() {
             opened_file.set(None);
             platform::open_plaintext_container(file.into_payload(), toasts, vault_frame.clone());
         }
-        // TOFU: a confirmed prompt -> pin the fetched key in `trusted_keys` and
+        // TOFU: a confirmed prompt -> pin the fetched keys in `trusted_keys` and
         // fire phase 2 of the invite (`ambre-spec-key-verification.md`). Handled here
         // rather than in `AppRoot` because the trusted-key store is Main-thread
         // owned (this relay). Writing the pin before dispatch is normative.
@@ -1159,9 +1159,9 @@ pub fn main() {
                 &p,
                 invite_role.get_untracked(),
                 Instant::<Authored>::new(js_sys::Date::now() as u64),
-                |user, key| {
+                |user, keys| {
                     if let Some(local) = persist_store_frame.borrow().as_ref() {
-                        local.store().save_trusted_key(user, key);
+                        local.store().save_trusted_key(user, keys);
                     }
                 },
                 |cmd| {

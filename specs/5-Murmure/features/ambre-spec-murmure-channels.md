@@ -167,7 +167,8 @@ finds what the first made (`MURMURE-047`, `SRV-176`).
 1. The view names the members, each with the exchange key it showed for them.
 2. The Sync worker fetches each member's keys from the relay again. An exchange key that changed
    since the view showed it fails the request, and no wrap leaves (`MURMURE-464`). The signing
-   key is the one each member's invite names.
+   key is the one each member's invite names. A signing key that this session never showed fails
+   the request too (`ambre-spec-key-verification.md`, `CHROME-140`).
 3. It draws one key and signs the log of `meta`. The log holds its creation, one editor invite per
    member, then its own role lowered to editor (`MURMURE-251`). No owner is left (`MURMURE-252`).
 4. It wraps the key for each member, the log's root inside (`MURMURE-052`).
