@@ -1102,3 +1102,65 @@ fn an_identity_issued_before_a_thread_arrives_is_adopted_on_admission() {
     assert!(bob.identified(thread));
     assert_eq!(bob.peer(thread), Some(peer));
 }
+
+// --- SYNC-321 ---
+
+/// `SYNC-321`: a removal reads each segment the `meta` lists for the
+/// threads its roots name, in list order. A segment the view loads makes
+/// the read wait, and is read where it is held. A segment the channel does
+/// not hold opens for the read alone, then drops.
+#[test]
+fn a_removal_reads_the_thread_each_segment_names() {
+    let alice_user = Id::<User>::mint();
+    let mut alice = channel_with(&["root"], alice_user);
+    let root = message_at(&alice, 0).id;
+    let (thread, _, _) = threaded(&mut alice, root);
+    let old = alice.active_id();
+    let bytes = alice.snapshot(old.document_id()).expect("bytes");
+
+    let (mut bob, middle) = far_copy(&alice, Some(old));
+    assert_eq!(bob.retry(old), Some(old), "the view loads it");
+    assert_eq!(bob.sweep_step(), crate::SweepStep::Wait);
+    load(&mut bob, old, &bytes);
+    assert_eq!(
+        bob.sweep_step(),
+        crate::SweepStep::Open(middle.document_id()),
+        "the held segment is read where it is"
+    );
+    assert!(bob.is_swept(middle.document_id()));
+    assert!(!bob.is_pending(middle.document_id()));
+    let _ = bob
+        .apply_remote(
+            middle.document_id(),
+            (&empty_segment(alice.channel_id())).into(),
+        )
+        .expect("kept");
+    assert_eq!(bob.sweep_ready(middle.document_id()), Ok(None));
+    assert!(!bob.holds(middle.document_id()), "read, then dropped");
+    let crate::SweepStep::Done(named) = bob.sweep_step() else {
+        panic!("every segment is read");
+    };
+    for document_id in [old.document_id(), middle.document_id(), thread] {
+        assert!(named.contains(&document_id), "{named:?}");
+    }
+    assert_eq!(named.iter().filter(|id| **id == thread).count(), 1);
+
+    let (mut carol, _) = far_copy(&alice, Some(old));
+    assert_eq!(
+        carol.sweep_step(),
+        crate::SweepStep::Open(old.document_id())
+    );
+    let foreign = empty_segment(Id::<Channel>::mint());
+    let _ = carol
+        .apply_remote(old.document_id(), (&foreign).into())
+        .expect("kept");
+    assert!(
+        carol.sweep_ready(old.document_id()).is_err(),
+        "a segment of another channel ends the read"
+    );
+    assert!(!carol.is_swept(old.document_id()));
+    assert_eq!(
+        carol.sweep_ready(old.document_id()),
+        Err(MurmureError::NotHeld(old.document_id()))
+    );
+}
