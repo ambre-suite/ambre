@@ -484,7 +484,7 @@ async fn a_screen_reader_hears_the_name_the_chord_and_the_description_of_an_icon
     let described = button.get_attribute("aria-describedby").unwrap();
     let words = document()
         .get_element_by_id(&described)
-        .expect("the description the button names is in the page")
+        .unwrap()
         .text_content()
         .unwrap();
     assert!(words.contains(&chord), "the chord: {words}");

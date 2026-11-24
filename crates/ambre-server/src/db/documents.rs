@@ -88,7 +88,7 @@ pub async fn list_documents_for_user(
          FROM documents d \
          INNER JOIN document_members dm ON dm.document_id = d.id \
          LEFT JOIN users inv ON inv.id = dm.invited_by \
-         WHERE dm.user_id = $1 ORDER BY d.updated_at DESC",
+         WHERE dm.user_id = $1 AND d.doc_type <> 'settings' ORDER BY d.updated_at DESC",
     )
     .bind(uid)
     .fetch_all(pool)

@@ -99,7 +99,11 @@ fn type_slug(doc_type: DocType) -> &'static str {
 
 /// Parse a path slug back into a [`DocType`].
 fn slug_to_type(slug: &str) -> Option<DocType> {
-    slug.parse().ok()
+    // The settings document has no page: no view shows it
+    // (`ambre-spec-user-settings.md`).
+    slug.parse()
+        .ok()
+        .filter(|doc_type| *doc_type != DocType::Settings)
 }
 
 /// Resolve the current route from `window.location.pathname`.
@@ -164,7 +168,9 @@ pub fn murmure_inviter(
 ) -> Option<FixedBytes<InviterPin>> {
     match route.doc() {
         Some((DocType::Murmure, _)) => linked,
-        Some((DocType::Prose | DocType::Trame | DocType::Toile, _)) | None => None,
+        Some((DocType::Prose | DocType::Trame | DocType::Toile | DocType::Settings, _)) | None => {
+            None
+        }
     }
 }
 

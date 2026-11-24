@@ -716,6 +716,12 @@ impl SyncState {
             }
             SyncEvent::RenewalDue { ticket } => self.renewal_due(ticket),
             SyncEvent::TokensRenewed => self.tokens_renewed(),
+            SyncEvent::SettingsDocumentFound { document_id } => {
+                self.send_to_logic(LogicEvent::Rest {
+                    id: None,
+                    evt: RestEvent::SettingsDocumentFound { document_id },
+                });
+            }
             SyncEvent::CallLog { meta, log } => self.call_log(meta, log),
             SyncEvent::CallRelayOpened => self.call_relay_opened(),
             SyncEvent::CallRelay(msg) => self.call_relay(msg),
@@ -773,6 +779,7 @@ impl SyncState {
                 );
                 self.open_websocket();
                 self.flush_pending_opens();
+                self.find_settings_document();
                 self.announce_session(
                     id,
                     RestEvent::SessionReady {

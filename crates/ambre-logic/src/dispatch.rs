@@ -436,6 +436,7 @@ impl LogicState {
                 command,
             } => self.route(|m| m.handle_channel_command(channel_id, command)),
             LogicCommand::SetReaderLocale { reader } => self.set_reader_locale(reader),
+            LogicCommand::ChangeSetting { change } => self.change_setting(change),
             LogicCommand::LoadFonts { faces } => {
                 // The Logic thread cannot fetch, so this is the only way a face
                 // reaches it (`CANVAS-067`). Local-only: nothing is sent to
@@ -517,6 +518,12 @@ impl LogicState {
                         return;
                     }
                 }
+                // The settings document opens here, and no view awaits its
+                // name (`SETTINGS-007`).
+                if let RestEvent::SettingsDocumentFound { document_id } = &evt {
+                    self.settings_found(*document_id);
+                    return;
+                }
                 // A document this reader created waits for its locale seed.
                 if let RestEvent::DocumentCreated { document_id, .. } = &evt
                     && !self.reader_locale.own.is_none()
@@ -554,6 +561,10 @@ impl LogicState {
                 payload,
                 covered_seq,
             } => {
+                if self.is_settings(document_id) {
+                    self.settings_snapshot(&payload);
+                    return;
+                }
                 self.adopt_snapshot(document_id, &payload, covered_seq);
             }
 
@@ -590,6 +601,10 @@ impl LogicState {
             // Sync derived the PeerID from the signer; Logic compares it with
             // every operation the delta carries (`AUTHOR-012`).
             LogicEvent::RemoteUpdate { document_id, delta } => {
+                if self.is_settings(document_id) {
+                    self.settings_deltas(vec![delta]);
+                    return;
+                }
                 self.apply_signed(document_id, &delta);
             }
 
@@ -597,6 +612,10 @@ impl LogicState {
                 document_id,
                 deltas,
             } => {
+                if self.is_settings(document_id) {
+                    self.settings_deltas(deltas);
+                    return;
+                }
                 self.apply_signed_batch(document_id, deltas);
             }
 
@@ -606,6 +625,10 @@ impl LogicState {
                 entry,
                 nonce,
             } => {
+                if self.is_settings(document_id) {
+                    self.settings_identified(peer, &entry);
+                    return;
+                }
                 self.adopt_session(document_id, peer, entry, nonce);
             }
 
