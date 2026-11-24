@@ -21,11 +21,11 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**5152 rows: 4747 shipped, of which 14 loose. 405 unbuilt.**
+**5161 rows: 4756 shipped, of which 14 loose. 405 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1766 | 583 | 996 | 826 | 562 | 4733 |
+| `verified` | 1766 | 583 | 996 | 835 | 562 | 4742 |
 | `failing` |  |  |  |  |  | 0 |
 | `human-review` | 14 |  |  |  |  | 14 |
 | `unimplemented` | 151 | 42 | 21 | 24 | 167 | 405 |
@@ -166,7 +166,7 @@
 | `ambre-spec-prose-table-of-contents.md` | 14 | 14 | 14 |  |  |
 | `ambre-spec-prose-tables.md` | 47 | 47 | 47 |  |  |
 | `ambre-spec-prose-text-editing.md` | 45 | 45 | 45 |  |  |
-| `ambre-spec-prose-toolbar.md` | 22 | 19 | 19 |  | 3 |
+| `ambre-spec-prose-toolbar.md` | 31 | 28 | 28 |  | 3 |
 | `ambre-spec-prose-track-changes.md` | 45 | 43 | 43 |  | 2 |
 | `ambre-spec-prose-undo.md` | 6 | 6 | 6 |  |  |
 | `ambre-spec-prose-viewport.md` | 24 | 24 | 24 |  |  |
@@ -292,7 +292,7 @@
 | `ambre-spec-prose-table-of-contents.md` | PROSE-FEAT-003,060..062,113..118,291..292; PROSE-UI-082..083 |
 | `ambre-spec-prose-tables.md` | PROSE-009,040; PROSE-FEAT-017,044..051,227..256,293..294; PROSE-UI-147,179..181 |
 | `ambre-spec-prose-text-editing.md` | PROSE-037..039,041..042,101,116,124; PROSE-UI-004..005,027..030,134..143,176..178,182..185,197..204,206,208,213..216 |
-| `ambre-spec-prose-toolbar.md` | PROSE-UI-053..057,096..104,188..192,252..254 |
+| `ambre-spec-prose-toolbar.md` | PROSE-UI-053..057,096..104,188..192,252..254,263..271 |
 | `ambre-spec-prose-track-changes.md` | PROSE-FEAT-004,010..011,082..089,257..277,300..304; PROSE-UI-051..052,148,258..262 |
 | `ambre-spec-prose-undo.md` | PROSE-133..135; PROSE-UI-045,073..074 |
 | `ambre-spec-prose-viewport.md` | PROSE-UI-007,021..026,123..132,211..212,217..218,250..251,256 |

@@ -17,7 +17,7 @@ use super::ProseState;
 ///
 /// A block the tree does not hold answers `None` as well, which every caller
 /// here has already refused.
-fn parent_of(tree: &loro::LoroTree, id: &TreeID) -> Option<TreeID> {
+pub(super) fn parent_of(tree: &loro::LoroTree, id: &TreeID) -> Option<TreeID> {
     match tree.parent(*id) {
         Some(TreeParentId::Node(parent)) => Some(parent),
         _ => None,
@@ -25,7 +25,7 @@ fn parent_of(tree: &loro::LoroTree, id: &TreeID) -> Option<TreeID> {
 }
 
 /// The block just before `id` among its siblings, or `None` when it is first.
-fn previous_sibling(tree: &loro::LoroTree, id: &TreeID) -> Option<TreeID> {
+pub(super) fn previous_sibling(tree: &loro::LoroTree, id: &TreeID) -> Option<TreeID> {
     let siblings = doc::children_of(tree, parent_of(tree, id));
     let here = siblings.iter().position(|sibling| sibling == id)?;
     siblings.get(here.checked_sub(1)?).copied()

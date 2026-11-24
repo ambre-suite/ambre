@@ -7,7 +7,7 @@
 // With no text selected the panel shows the page: its paper, its orientation
 // and its four margins (`PROSE-UI-253`). With a selection it shows the text:
 // the marks, superscript and subscript, and clearing the formatting
-// (`PROSE-UI-191`). A page control writes the whole format in one command, so
+// (`PROSE-UI-191`), then the value and block controls (`PROSE-UI-270`). A page control writes the whole format in one command, so
 // one undo takes it back (`PROSE-UI-252`).
 // ============================================================================
 
@@ -16,7 +16,7 @@ use ambre_core::{Commands, Count, Mm, PanelSections, PrintLength, Properties, St
 
 use crate::commands;
 use crate::doc::PageFormat;
-use crate::events::Words;
+use crate::events::{Align, BlockFormat, HeadingLevel, ListStyle, OrderedStyle, Reading, Words};
 
 /// The page, with no text selected.
 pub const PAGE: StaticKey<PanelSections> = StaticKey::new("prose.page");
@@ -42,6 +42,27 @@ pub const MARGIN_LEFT: StaticKey<Properties> = StaticKey::new("prose.page.margin
 pub const MARGIN_RIGHT: StaticKey<Properties> = StaticKey::new("prose.page.margin_right");
 /// The four margins, as a preset.
 pub const MARGINS: StaticKey<Properties> = StaticKey::new("prose.page.margins");
+
+/// The font of the selected text.
+pub const TEXT_FONT: StaticKey<Properties> = StaticKey::new("prose.text.font");
+/// The size of the selected text.
+pub const TEXT_SIZE: StaticKey<Properties> = StaticKey::new("prose.text.size");
+/// The colour of the selected text.
+pub const TEXT_COLOR: StaticKey<Properties> = StaticKey::new("prose.text.color");
+/// The highlight behind the selected text.
+pub const TEXT_HIGHLIGHT: StaticKey<Properties> = StaticKey::new("prose.text.highlight");
+/// The link of the selected text.
+pub const TEXT_LINK: StaticKey<Properties> = StaticKey::new("prose.text.link");
+/// The paragraph style of the selected blocks: body text or a heading.
+pub const PARAGRAPH_STYLE: StaticKey<Properties> = StaticKey::new("prose.paragraph.style");
+/// The alignment of the selected blocks.
+pub const PARAGRAPH_ALIGN: StaticKey<Properties> = StaticKey::new("prose.paragraph.align");
+/// The list the selected blocks are items of.
+pub const PARAGRAPH_LIST: StaticKey<Properties> = StaticKey::new("prose.paragraph.list");
+/// One step out for the selected blocks.
+pub const INDENT_OUT: StaticKey<Properties> = StaticKey::new("prose.paragraph.indent_out");
+/// One step in for the selected blocks.
+pub const INDENT_IN: StaticKey<Properties> = StaticKey::new("prose.paragraph.indent_in");
 
 /// Describe one property per line: its id, its title function and its label.
 macro_rules! properties {
@@ -72,6 +93,98 @@ properties! {
     MARGIN_LEFT: MARGIN_LEFT, "Left margin";
     MARGIN_RIGHT: MARGIN_RIGHT, "Right margin";
     MARGINS: MARGINS, "Margins";
+    TEXT_FONT: TEXT_FONT, "Font";
+    TEXT_SIZE: TEXT_SIZE, "Font size";
+    TEXT_COLOR: TEXT_COLOR, "Text colour";
+    TEXT_HIGHLIGHT: TEXT_HIGHLIGHT, "Highlight";
+    TEXT_LINK: TEXT_LINK, "Link";
+    PARAGRAPH_STYLE: PARAGRAPH_STYLE, "Paragraph style";
+    PARAGRAPH_ALIGN: PARAGRAPH_ALIGN, "Alignment";
+    PARAGRAPH_LIST: PARAGRAPH_LIST, "List";
+    INDENT_OUT: INDENT_OUT, "Decrease indent";
+    INDENT_IN: INDENT_IN, "Increase indent";
+}
+
+/// The paragraph styles the style list offers, body text first.
+pub const PARAGRAPH_STYLES: [Option<HeadingLevel>; 7] = [
+    None,
+    Some(HeadingLevel::H1),
+    Some(HeadingLevel::H2),
+    Some(HeadingLevel::H3),
+    Some(HeadingLevel::H4),
+    Some(HeadingLevel::H5),
+    Some(HeadingLevel::H6),
+];
+
+/// The label of a paragraph style in the style list.
+#[must_use]
+pub fn style_label(style: Option<HeadingLevel>) -> &'static str {
+    match style {
+        None => "Body text",
+        Some(HeadingLevel::H1) => "Heading 1",
+        Some(HeadingLevel::H2) => "Heading 2",
+        Some(HeadingLevel::H3) => "Heading 3",
+        Some(HeadingLevel::H4) => "Heading 4",
+        Some(HeadingLevel::H5) => "Heading 5",
+        Some(HeadingLevel::H6) => "Heading 6",
+    }
+}
+
+/// The alignment the segmented control shows: a block with no stored
+/// alignment reads as left, as the layout draws it.
+#[must_use]
+pub fn align_shown(read: Reading<Option<Align>>) -> Reading<Align> {
+    match read {
+        Reading::Uniform(align) => Reading::Uniform(align.unwrap_or(Align::Left)),
+        Reading::Mixed => Reading::Mixed,
+    }
+}
+
+/// What the list control offers: no list, bullets, or numbers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ListChoice {
+    NoList,
+    Bullets,
+    Numbers,
+}
+
+impl ListChoice {
+    /// The choices, in the order the control shows them.
+    pub const ALL: [Self; 3] = [Self::NoList, Self::Bullets, Self::Numbers];
+
+    /// The label of the choice.
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::NoList => "No list",
+            Self::Bullets => "Bullets",
+            Self::Numbers => "Numbers",
+        }
+    }
+
+    /// The choice a reading of the list shows. A checklist and every
+    /// numbering style read as their kind.
+    #[must_use]
+    pub fn of(read: Reading<Option<ListStyle>>) -> Reading<Self> {
+        match read {
+            Reading::Uniform(None) => Reading::Uniform(Self::NoList),
+            Reading::Uniform(Some(ListStyle::Bullet | ListStyle::Todo(_))) => {
+                Reading::Uniform(Self::Bullets)
+            }
+            Reading::Uniform(Some(ListStyle::Ordered(_))) => Reading::Uniform(Self::Numbers),
+            Reading::Mixed => Reading::Mixed,
+        }
+    }
+
+    /// The block write a pick of the choice sends (`PROSE-UI-266`).
+    #[must_use]
+    pub fn format(self) -> BlockFormat {
+        BlockFormat::List(match self {
+            Self::NoList => None,
+            Self::Bullets => Some(ListStyle::Bullet),
+            Self::Numbers => Some(ListStyle::Ordered(OrderedStyle::Decimal)),
+        })
+    }
 }
 
 /// The title of a property no table describes.

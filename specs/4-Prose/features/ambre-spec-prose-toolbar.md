@@ -30,6 +30,8 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-098` | `INV` | The bar MUST NOT have a path into the document of its own: every control MUST reach it through a command the plane already declares. | this spec section 5 | `ambre_prose::input_tests::a_mixed_control_applies_its_mark_to_the_whole_selection`; `ambre_prose::tests::chrome_ui::a_control_press_hands_its_command_back_and_keeps_the_focus` -- wasm tier: a click on each control writes its declared command id, and its press keeps the focus | none | verified |
 | `PROSE-UI-192` | `INV` | One gesture on a control MUST be taken back by one undo, whatever the number of blocks it covers. | derived | `ambre_prose::input_tests::a_mixed_control_applies_its_mark_to_the_whole_selection` | none | verified |
 | `PROSE-UI-253` | `OBS` | With no text selected, the context panel MUST show the page format, the orientation and the four margins the document holds. | `ambre-spec-prose-schema.md section 3`; `CHROME-163` | `ambre_prose::tests::chrome_panel::with_no_selection_the_panel_shows_the_page_the_layout_holds` -- wasm tier, the paper, the orientation and the four margins of a landscape page; `ambre_prose::logic::bands::tests::a_page_write_sets_the_whole_format_and_one_undo_takes_it_back` -- the layout carries the format the panel reads | none | verified |
+| `PROSE-UI-269` | `OBS` | The selection MUST report one reading per value control to the panel: the value every selected run or block holds, or mixed where two disagree. | this spec section 3; `CHROME-210`; `PROSE-UI-057` | `ambre_prose::logic::formatting::tests::the_selection_reads_each_value_uniform_or_mixed` -- the colour and the alignment, over one block and over two; `ambre_prose::input_tests::a_text_section_write_is_one_command_over_the_selection` -- the view shows the size and the alignment it wrote | none | verified |
+| `PROSE-UI-270` | `OBS` | Over a selection, the text section MUST show a control for the font, the size, the text colour, the highlight, the paragraph style, the alignment, the list, the indent and the link, and each MUST hand its write to the view. | this spec section 3; `CHROME-164`; `CHROME-219` | `ambre_prose::tests::chrome_panel::the_text_section_shows_each_control_and_hands_its_write` -- wasm tier: every control carries its marker, no native control shows, the readings show, and the list, alignment, indent and link each hand one write | none | verified |
 
 ### 1.2 Raise the bar
 
@@ -59,12 +61,24 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-252` | `POST` | A page control of the context panel MUST write the format, the orientation or a margin of the document, and one undo MUST take that write back. | `ambre-spec-prose-schema.md section 3`; `CHROME-163`; `CHROME-203` | `ambre_prose::tests::chrome_panel::a_page_control_hands_the_whole_format_to_the_view` -- wasm tier, a margin stepper and the orientation each hand the whole format, one field changed; `ambre_prose::logic::bands::tests::a_page_write_sets_the_whole_format_and_one_undo_takes_it_back` -- the command writes the format, the layout is measured on it, one undo restores the page | none | verified |
 | `PROSE-UI-254` | `POST` | Clearing the formatting MUST remove every formatting mark over the whole selection, and one undo MUST take it back, whatever the number of blocks. | `ambre-spec-prose-schema.md section 3`; `PROSE-UI-191` | `ambre_prose::logic::marks::tests::clearing_a_selection_over_two_blocks_is_one_undo_item` -- bold and italic over two blocks clear in one command, and one undo puts both back | none | verified |
 
+### 1.5 Format from the text section of the panel
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-UI-263` | `POST` | A font, size, text colour or highlight control MUST write its value over every block the selection covers in one command, and one undo MUST take it back. | this spec section 3; `CHROME-173` | `ambre_prose::logic::formatting::tests::a_value_over_two_blocks_is_one_undo_item` -- each of the four keys over two blocks, then one undo; `ambre_prose::input_tests::a_text_section_write_is_one_command_over_the_selection` -- the view sends one command for a write over two blocks | none | verified |
+| `PROSE-UI-264` | `FAIL` | A value the registry refuses, or a key the value controls do not write, MUST be refused before any block of the selection is written. | this spec section 3; `PROSE-FEAT-022` | `ambre_prose::logic::formatting::tests::a_refused_value_writes_no_block_of_the_selection` -- a size sent under the colour key, a presence key and an anchor key | none | verified |
+| `PROSE-UI-265` | `POST` | A paragraph style or an alignment control MUST set its property on every block the selection covers in one command, and one undo MUST take it back. | this spec section 3; `CHROME-173`; `PROSE-FEAT-025` | `ambre_prose::logic::formatting::tests::a_block_property_over_two_blocks_is_one_undo_item` -- an alignment and a heading level over two blocks; `ambre_prose::input_tests::a_text_section_write_is_one_command_over_the_selection` | none | verified |
+| `PROSE-UI-266` | `POST` | The list control MUST turn every paragraph of the selection into a list item, and every item back into a paragraph, keeping the text and the order of the blocks. | this spec section 3; `features/ambre-spec-prose-lists.md` | `ambre_prose::logic::formatting::tests::a_paragraph_becomes_a_list_item_and_back` -- three paragraphs to bullets, two nested, then all out of the list in their order, and one undo | none | verified |
+| `PROSE-UI-267` | `POST` | An indent control MUST move every list item of the selection one level, and every other block one step of left indent, never left of the margin. | this spec section 3; `PROSE-FEAT-142`; `PROSE-FEAT-145` | `ambre_prose::logic::formatting::tests::an_indent_moves_each_block_one_step` | none | verified |
+| `PROSE-UI-268` | `POST` | The link field MUST put one link over the whole selection, or take it off when the field is emptied, and one undo MUST take the write back. | this spec section 3; `PROSE-UI-188` | `ambre_prose::logic::formatting::tests::a_selection_takes_a_link_and_gives_it_back`; `ambre_prose::input_tests::a_blank_link_takes_the_link_off_and_no_selection_sends_nothing` | none | verified |
+| `PROSE-UI-271` | `FRAME` | A write of the text section MUST NOT change the text of the selection, or a property its control does not name. | derived; `PROSE-FEAT-179`; `PROSE-FEAT-183` | `ambre_prose::logic::formatting::tests::a_text_section_write_leaves_the_text_and_every_other_property` -- a size and an alignment over two blocks leave the text, the bold and the heading level | none | verified |
+
 * **Budget.** none of its own. The bar is repositioned inside the frame that paints the page, the
   row of `ambre-spec-budgets.md section 2`. A static element over the canvas costs a compositor
   recomposition and no layout pass (`ambre-spec-ui.md section 4`).
 * **Boundary.** none: the bar reads view state and emits commands. It holds no key, opens no
   socket, and every mutation it starts is a `ProseCommand` (`PROSE-UI-002`).
-* **Verification.** 19 `verified`, 3 `unimplemented`. Every built row runs on the host against the
+* **Verification.** 28 `verified`, 3 `unimplemented`. Every built row runs on the host against the
   view state and the Logic thread, with no browser. The four open rows are the controls past the
   five marks. The DOM element itself renders `ToolbarState` and holds no rule of its own.
 ---
@@ -150,13 +164,32 @@ keyboard chord invokes. That id resolves to one command of the plane
 | the quote control | `SetBlockStyle`, with the built-in `quote` style |
 | the overflow control | opens the colour and size controls, which write through `ApplyMark` |
 
+**What the text section sends.** A value or block control of the panel hands the view one typed
+write. The view turns it into one command over the selection, so one undo takes the gesture back
+(`CHROME-173`).
+
+| Control | Command |
+|---|---|
+| the font, the size, the text colour, the highlight | `MarkSelection` with the key and its value, or none to take the key off |
+| the link field | `MarkSelection` with the `a` key; an emptied field takes the link off |
+| the paragraph style | `FormatBlocks` with a heading level, or none for body text |
+| the alignment | `FormatBlocks` with the paragraph settings, the alignment alone named |
+| the list | `FormatBlocks` with a marker, or none to leave the list |
+| the indent | `FormatBlocks`: a list item changes level, another block moves 36 pt of left indent |
+
+`ActiveMarks` carries one `Reading` per value control beside the `TriState` of each mark. The
+Logic thread folds the style the cascade resolves for each selected run, and the block properties
+of each selected block (`PROSE-UI-269`). A selection that ends at the start of a block selects no
+character of it. That block is left out of both.
+
 **The bar holds nothing.** `ToolbarState` is view state, rebuilt from the selection and from what
 the Logic thread reports about it. The bar never remembers a mark across a selection change
 (`PROSE-UI-097`).
 
-**Code:** `crates/ambre-prose/src/view/toolbar.rs` for the state and the commands a control sends,
-`crates/ambre-prose/src/logic/marks.rs` for the fold, and `ProseFormatBar` in
-`crates/ambre-prose/src/chrome/mod.rs` for the element. The five controls built are the marks;
+**Code:** `crates/ambre-prose/src/view/toolbar.rs` holds the state and the commands a control
+sends. `crates/ambre-prose/src/logic/marks.rs` holds the fold, and
+`crates/ambre-prose/src/logic/formatting.rs` the writes of the text section. `ProseFormatBar` in
+`crates/ambre-prose/src/chrome/mod.rs` is the element. The five controls built are the marks;
 the link, heading, quote and overflow controls are not.
 
 ---

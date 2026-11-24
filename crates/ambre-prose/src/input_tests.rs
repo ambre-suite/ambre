@@ -1662,6 +1662,66 @@ fn a_mixed_control_applies_its_mark_to_the_whole_selection() {
     assert!(rig.all_marked(first, "b") && rig.all_marked(second, "b"));
 }
 
+/// `PROSE-UI-263`, `PROSE-UI-265`, `PROSE-UI-269`: each write of the text
+/// section leaves as one command over the whole selection. The panel then
+/// reads the value it wrote.
+#[test]
+fn a_text_section_write_is_one_command_over_the_selection() {
+    use crate::events::{Align, BlockFormat, ParagraphStyle, Reading};
+    use crate::view::toolbar::TextWrite;
+    let mut rig = Rig::new(&["hello world", "second"]);
+    let (first, second) = (rig.blocks()[0], rig.blocks()[1]);
+    rig.ui.cursor = Some(CursorPosition {
+        block_id: second,
+        offset: Pos::<DocChar>::new(6),
+        anchor: Some((first, Pos::<DocChar>::ZERO)),
+    });
+    let size = ambre_core::FontSize::new(18.0).expect("a size");
+    let centred = TextWrite::Block(BlockFormat::Paragraph(ParagraphStyle {
+        align: Some(Align::Center),
+        ..ParagraphStyle::default()
+    }));
+    for write in [TextWrite::Size(Some(size)), centred] {
+        let command = rig.ui.text_write(&write).expect("one command");
+        assert!(
+            matches!(
+                command,
+                ProseCommand::MarkSelection { .. } | ProseCommand::FormatBlocks { .. }
+            ),
+            "{command:?}"
+        );
+        rig.take_sent(vec![command]);
+        rig.deliver();
+        rig.lay();
+    }
+    rig.read_marks();
+    let read = rig.ui.toolbar().active.expect("the marks are read");
+    assert_eq!(read.font_size, Reading::Uniform(Some(size)));
+    assert_eq!(read.align, Reading::Uniform(Some(Align::Center)));
+}
+
+/// `PROSE-UI-268`: a blank address takes the link off, and with no
+/// selection a write of the text section sends nothing.
+#[test]
+fn a_blank_link_takes_the_link_off_and_no_selection_sends_nothing() {
+    use crate::view::toolbar::TextWrite;
+    let mut rig = Rig::new(&["hello world"]);
+    let block = rig.blocks()[0];
+    let huge = ambre_core::FontSize::new(1638.0).expect("the cap is a size");
+    rig.select(block, 0, 5);
+    assert!(rig.ui.text_write(&TextWrite::Size(Some(huge))).is_some());
+    let past = TextWrite::Link(Some(ambre_core::LinkUrl::new("  ".to_owned())));
+    assert!(
+        matches!(
+            rig.ui.text_write(&past),
+            Some(ProseCommand::MarkSelection { value: None, .. })
+        ),
+        "a blank address takes the link off"
+    );
+    rig.ui.cursor = None;
+    assert_eq!(rig.ui.text_write(&TextWrite::Size(Some(huge))), None);
+}
+
 /// `PROSE-UI-104`: a control changes neither the text, nor the selection,
 /// nor a mark it does not name.
 #[test]

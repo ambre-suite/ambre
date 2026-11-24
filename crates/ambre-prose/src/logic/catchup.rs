@@ -118,6 +118,28 @@ impl CatchUp {
         Span::<DocChar>::new(self.position(start, block), self.end(end, block))
     }
 
+    /// A selection the view sent, its head first, both ends moved through
+    /// what it had not seen. Its tail is an end: text typed there stays
+    /// outside.
+    fn selection(
+        &self,
+        anchor: (crate::events::BlockId, Pos<DocChar>),
+        focus: (crate::events::BlockId, Pos<DocChar>),
+    ) -> (
+        (crate::events::BlockId, Pos<DocChar>),
+        (crate::events::BlockId, Pos<DocChar>),
+    ) {
+        if anchor.0 == focus.0 {
+            let span = self.range(anchor.0, Span::<DocChar>::new(anchor.1, focus.1));
+            ((anchor.0, span.start), (focus.0, span.end))
+        } else {
+            (
+                (anchor.0, self.position(anchor.1, anchor.0)),
+                (focus.0, self.end(focus.1, focus.0)),
+            )
+        }
+    }
+
     /// Stamp a change of the text: whether the view drew it, its number, and
     /// the runs the view applies. A change the view did not draw is queued.
     pub(super) fn stamp(
@@ -299,22 +321,38 @@ impl ProseState {
                 key,
                 action,
             } => {
-                // The view sends the selection head first, so its tail is an
-                // end: text typed there stays outside.
-                let (anchor, focus) = if anchor.0 == focus.0 {
-                    let span = sync.range(anchor.0, Span::<DocChar>::new(anchor.1, focus.1));
-                    ((anchor.0, span.start), (focus.0, span.end))
-                } else {
-                    (
-                        (anchor.0, sync.position(anchor.1, anchor.0)),
-                        (focus.0, sync.end(focus.1, focus.0)),
-                    )
-                };
+                let (anchor, focus) = sync.selection(anchor, focus);
                 ProseCommand::FormatSelection {
                     anchor,
                     focus,
                     key,
                     action,
+                }
+            }
+            ProseCommand::MarkSelection {
+                anchor,
+                focus,
+                key,
+                value,
+            } => {
+                let (anchor, focus) = sync.selection(anchor, focus);
+                ProseCommand::MarkSelection {
+                    anchor,
+                    focus,
+                    key,
+                    value,
+                }
+            }
+            ProseCommand::FormatBlocks {
+                anchor,
+                focus,
+                format,
+            } => {
+                let (anchor, focus) = sync.selection(anchor, focus);
+                ProseCommand::FormatBlocks {
+                    anchor,
+                    focus,
+                    format,
                 }
             }
             ProseCommand::ReadMarks { anchor, focus } => {

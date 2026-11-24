@@ -2407,7 +2407,6 @@ ambre-toile | src/ui/menu.rs | crate::ui::menu | CtxScope::multi() | ret | bool	
 ambre-toile | src/ui/menu.rs | crate::ui::menu | LockMix::any_locked() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/menu.rs | crate::ui::menu | LockMix::any_unlocked() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/menu.rs | crate::ui::menu | rect_contains_rect() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/menu_bar.rs | crate::ui::menu_bar | TOP_MENUS | const | &[(MenuId,&str)]	free-text	label, message or user text
 ambre-toile | src/ui/mod.rs | crate::ui | PanelState::is_open() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/palette.rs | crate::ui::palette | CanvasCursor.0 | field | Cow<'static,str>	newtype-inner	CanvasCursor inner
 ambre-toile | src/ui/palette.rs | crate::ui::palette | Host::content_editable_if(editable) | param | bool	newtype-inner	the bool the one constructor of Host reads into its variant
@@ -5062,3 +5061,8 @@ ambre-chrome | src/cover.rs | crate::cover | shown() | ret | bool	generic	predic
 ambre-client-core | src/cover.rs | crate::cover | PageBox::overlaps() | ret | bool	generic	predicate result: whether two boxes share an area, selects no mode
 ambre-app | src/call.rs | crate::call | leave_channel(space) | param | &str	foreign-api	the space id a page script passes to the wasm export as a JavaScript string; the export parses it into Id<Space> at once
 ambre-murmure | src/logic/runtime/removals.rs | crate::logic::runtime::removals | Runtime<D>::revoke_in_channel() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-prose | src/chrome/panel.rs | crate::chrome::panel | label_of() | ret | String	free-text	the name of a control of the text section a person reads
+ambre-prose | src/view/panel.rs | crate::view::panel | ListChoice::label() | ret | &'static str	free-text	the name of a list choice a person reads
+ambre-prose | src/view/panel.rs | crate::view::panel | style_label() | ret | &'static str	free-text	the name of a paragraph style a person reads
+ambre-murmure | src/logic/channel/sweeping.rs | crate::logic::channel::sweeping | ChannelState::is_swept() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/channel/sweeping.rs | crate::logic::channel::sweeping | ChannelState::sweep_arrival() | ret | bool	generic	state flag/predicate
