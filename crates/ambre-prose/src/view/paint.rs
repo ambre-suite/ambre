@@ -21,14 +21,19 @@ use crate::ui::ProseUiState;
 use crate::view::cache::RunKey;
 use crate::view::caret::Spot;
 use crate::view::hit::{Fragment, cell_frame};
-pub use crate::view::walk::PagePalette;
 use crate::view::walk::{
     BlockPaint, CellPaint, Highlights, Insertion, PageItem, PagePaint, PageView, PageWalk,
     PicturePaint, Placed, draw_shape, to_rect,
 };
+pub use crate::view::walk::{PAPER, PagePalette, Paper, ThemeInks};
 
-/// How far the shadow falls from the sheet.
-const SHADOW_OFFSET: Px<Surface> = Px::<Surface>::new(3.0);
+/// How far the shadow falls below the sheet.
+const SHADOW_DROP: Px<Surface> = Px::<Surface>::new(2.0);
+/// How far the shadow spreads past the sheet, in rings of one pixel. The
+/// rings overlap, so the shadow is darkest at the sheet's edge and fades out.
+const SHADOW_SPREAD: Px<Surface> = Px::<Surface>::new(6.0);
+/// How far the shadow reaches past the sheet, on any side.
+const SHADOW_REACH: Px<Surface> = Px::<Surface>::new(SHADOW_SPREAD.get() + SHADOW_DROP.get());
 /// The width of the local caret and of a remote one.
 const CARET_WIDTH: Px<Surface> = Px::<Surface>::new(1.5);
 /// The tab a remote caret carries above its bar, standing for its label.
@@ -381,10 +386,10 @@ impl ProseUiState {
             camera.inverse().transform_rect_bbox(canvas),
             |region, page| {
                 region.union(Rect::new(
-                    0.0,
-                    page.top.get(),
-                    width + SHADOW_OFFSET.get(),
-                    page.top.get() + height + SHADOW_OFFSET.get(),
+                    -SHADOW_REACH.get(),
+                    page.top.get() - SHADOW_REACH.get(),
+                    width + SHADOW_REACH.get(),
+                    page.top.get() + height + SHADOW_REACH.get(),
                 ))
             },
         )
@@ -785,8 +790,15 @@ impl ProseUiState {
     }
 }
 
-/// A sheet, its shadow and its border, at `top` down the column. The page
-/// itself is the sheet, so the walk never draws one.
+/// The colour of one ring of a sheet's shadow.
+pub(crate) fn shadow_ring(palette: &PagePalette) -> ambre_draw::Color {
+    // One ring at three hundredths: six of them reach about a sixth.
+    palette.shadow.multiply_alpha(0.03)
+}
+
+/// A sheet and its soft shadow, at `top` down the column. The page itself is
+/// the sheet, so the walk never draws one. The sheet is paper on the ground:
+/// the shadow alone sets it off, with no outline.
 fn paint_sheet<S: DrawSurface>(
     surface: &mut S,
     palette: &PagePalette,
@@ -794,22 +806,24 @@ fn paint_sheet<S: DrawSurface>(
     width: Px<Surface>,
     height: Px<Surface>,
 ) {
-    let (width, height) = (width.get(), height.get());
-    let sheet = Rect::new(0.0, 0.0, width, height);
-    let shadow = Rect::new(
-        SHADOW_OFFSET.get(),
-        SHADOW_OFFSET.get(),
-        width + SHADOW_OFFSET.get(),
-        height + SHADOW_OFFSET.get(),
-    );
+    let sheet = Rect::new(0.0, 0.0, width.get(), height.get());
     surface.push_transform(Affine::translate((0.0, top.get())));
-    surface.fill_rect(shadow, palette.shadow);
+    let ring = shadow_ring(palette);
+    let drop = SHADOW_DROP.get();
+    let mut spread = 1.0;
+    while spread <= SHADOW_SPREAD.get() {
+        surface.fill_rect(
+            Rect::new(
+                -spread,
+                drop - spread,
+                width.get() + spread,
+                height.get() + drop + spread,
+            ),
+            ring,
+        );
+        spread += 1.0;
+    }
     surface.fill_rect(sheet, palette.sheet);
-    surface.stroke_rect(
-        sheet,
-        palette.sheet_border,
-        ambre_core::Px::<ambre_core::Surface>::new(1.0),
-    );
     surface.pop_transform();
 }
 
@@ -1186,7 +1200,7 @@ mod tests {
         let mut allowed = vec![
             pal.sheet,
             pal.sheet_border,
-            pal.shadow,
+            super::shadow_ring(&pal),
             pal.text,
             pal.accent,
             pal.error,

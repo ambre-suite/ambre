@@ -51,4 +51,7 @@ pub use logic::sequence::{Order, Position};
 pub use logic::space::{Listing, SpaceState};
 pub use logic::watchers::{Sample, TICK_PERIOD, TYPING_EXPIRY, TYPING_REFRESH, Watchers};
 pub use ui::layout::{MessageRef, MurmurePane, Region};
-pub use ui::sidebar::{Activity, Sidebar, SidebarEntry, SidebarGroup, SidebarSection, SpaceHead};
+pub use ui::sidebar::{
+    Activity, DrawnSection, Folding, Folds, HiddenMark, Kept, LiveCall, LiveCalls, PhoneTab,
+    Sidebar, SidebarEntry, SidebarGroup, SidebarSection, SpaceHead, SpaceRanks, fold,
+};

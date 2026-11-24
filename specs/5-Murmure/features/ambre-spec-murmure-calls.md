@@ -20,6 +20,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-594` | `CONC` | Two members who start a call in one channel at once MUST sit in one call, named by one call message. | this spec section 3, racing starts; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-160`) | `ambre_server::ws::handler::call::tests::two_starts_at_once_make_one_call_that_holds_both_starters` -- database tier: one room, a roster of both starters, and a new call once the last left; `ambre_sync::call_link::tests::a_start_seated_in_the_live_call_of_its_channel_joins_it` -- the start the relay seats in another call posts no call message | none | verified |
 | `MURMURE-592` | `OBS` | Given a call message with no end written, whose call the relay holds no state of, the reader MUST show the call ended. | this spec section 3, the end of a call; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-070`) | `ambre_murmure::logic::call_tests::a_call_message_shows_who_is_in_it_then_ended_once_the_relay_holds_no_state`; `ambre_server::ws::handler::call::tests::a_call_whose_last_seat_stops_its_heartbeat_reads_as_gone` -- database tier; `ambre_belt::murmure::tests::a_call_whose_last_participant_crashed_reads_ended` -- browser tier, under Chrome and under Firefox | none | verified |
 | `MURMURE-602` | `OBS` | Given a microphone that the browser refuses or does not have, the header MUST show that the call did not start, and why. | this spec section 3, the call controls | `ambre_murmure::ui::call_controls::tests::a_refusal_says_why_and_leaves_the_call_button`; `ambre_app::shell::murmure_regions::the_call_controls_name_themselves_and_take_the_focus` -- wasm tier: the refusal is an alert beside the call button; `ambre_belt::murmure::tests::a_refused_microphone_starts_no_call_and_says_why` -- browser tier, under Chrome and under Firefox: a refusal and a missing device each read their reason | none | verified |
+| `MURMURE-728` | `OBS` | While the page is in a call, the header of another channel, and of a pane that shows no channel, MUST offer no call control. | this spec section 3, the call controls; `MURMURE-696`; `MURMURE-697` | `ambre_murmure::ui::call_controls::tests::the_header_away_from_the_call_offers_no_call_control` -- the call floats on each such pane, so its bubble or its pill holds the controls; `ambre_app::shell::murmure_regions::the_call_floats_away_from_its_channel_and_brings_it_back` -- wasm tier: the header holds none until the way back shows the channel of the call | none | verified |
 | `MURMURE-605` | `INV` | Each call control MUST carry an accessible name and take the keyboard focus, and mute MUST carry its pressed state. | this spec section 3, the call controls; `1-Foundations/ambre-spec-accessibility.md section 2` (`CHROME-022`) | `ambre_app::shell::murmure_regions::the_call_controls_name_themselves_and_take_the_focus` -- wasm tier: each control is a button with its name that takes the focus, and mute reads its pressed state; `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` -- browser tier, under Chrome and under Firefox: the call button names itself and takes the focus | none | verified |
 | `MURMURE-607` | `OBS` | The device panel MUST list each microphone the browser names, after the default one. | this spec section 3, the devices | `ambre_murmure::ui::call_devices::tests::the_panel_lists_each_named_device_after_the_default_one`; `ambre_belt::murmure::tests::a_member_changes_its_microphone_during_a_call_with_no_gap` -- browser tier, under Chrome and under Firefox: the default microphone comes first | none | verified |
 | `MURMURE-608` | `OBS` | Before the browser grants the microphone, the device panel MUST show the default microphone alone, and say that the names show once the microphone is allowed. | this spec section 3, the devices | `ambre_murmure::ui::call_devices::tests::before_the_grant_the_panel_shows_the_default_microphone_alone_and_says_why`; `ambre_belt::murmure::tests::a_member_changes_its_microphone_during_a_call_with_no_gap` -- browser tier, under Chrome and under Firefox: a list with no name shows the default microphone alone, and the hint | none | verified |
@@ -34,6 +35,14 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-659` | `INV` | The fill button MUST carry an accessible name, take the keyboard focus and carry its pressed state. | this spec section 3, the video region; `1-Foundations/ambre-spec-accessibility.md section 2` (`CHROME-022`) | `ambre_app::shell::murmure_regions::the_fill_button_names_itself_and_widens_the_call` -- wasm tier: a native button, which the keyboard reaches and presses | none | verified |
 | `MURMURE-669` | `INV` | The page buttons and each pin button MUST carry an accessible name and take the keyboard focus, and a pin button MUST carry its pressed state. | this spec section 3, the video region; `1-Foundations/ambre-spec-accessibility.md section 2` (`CHROME-022`) | `ambre_app::shell::murmure_regions::the_page_buttons_name_themselves_and_turn_the_page`; `ambre_app::shell::murmure_regions::the_participants_button_names_itself_and_lists_each_participant` | none | verified |
 | `MURMURE-633` | `INV` | The share button MUST carry an accessible name, take the keyboard focus and carry its pressed state. | this spec section 3, the screen; `1-Foundations/ambre-spec-accessibility.md section 2` (`CHROME-022`) | `ambre_app::shell::murmure_regions::the_share_button_names_itself_and_carries_its_pressed_state` -- wasm tier: the share control is a button with its name, which takes the focus and reads its pressed state; `ambre_murmure::ui::call_controls::tests::a_press_shares_the_screen_and_a_second_stops_it` -- the name says what a press does | none | verified |
+| `MURMURE-693` | `INV` | Each control of the call bubble and of the call pill MUST carry an accessible name and take the keyboard focus, and mute MUST carry its pressed state. | this spec section 3, away from the channel of the call; `1-Foundations/ambre-spec-accessibility.md section 2` (`CHROME-022`) | `ambre_app::shell::murmure_regions::the_call_floats_away_from_its_channel_and_brings_it_back` -- wasm tier: mute and hang up name themselves at both widths; structural -- the camera and the share of the bubble are the buttons of the header, which `MURMURE-624` and `MURMURE-633` hold | none | verified |
+| `MURMURE-689` | `OBS` | A sidebar entry whose channel holds a live call the page knows MUST show a call mark and the count of its participants, and no name. | this spec section 3, who is in the call; `ZK-024` | `ambre_murmure::ui::sidebar::tests::a_live_call_shows_its_count_and_leaves_once_gone`; `ambre_app::shell::murmure_regions::a_live_call_shows_its_mark_its_count_and_its_faces_on_the_channel_shown` -- wasm tier: a mark and a count, no face off the channel shown; `ambre_logic::channels::tests::a_tick_asks_who_is_in_the_live_call_of_each_held_channel` | none | verified |
+| `MURMURE-690` | `OBS` | The sidebar entry of the channel the view shows MUST show the initials of each participant of its live call. | this spec section 3, who is in the call; `ZK-024` | `ambre_app::shell::murmure_regions::a_live_call_shows_its_mark_its_count_and_its_faces_on_the_channel_shown` -- wasm tier | none | verified |
+| `MURMURE-691` | `OBS` | A sidebar entry whose channel the page never opened MUST show the live call of that channel. | this spec section 3, who is in the call; `ZK-024` | not built | unbuilt -- lands with the `Live calls of unopened channels in the sidebar` Story (`ambre-roadmap.md` V1) | unimplemented |
+| `MURMURE-696` | `OBS` | While the page is in a call and shows no channel region of it, over the phone width it MUST show the call bubble: the channel, the time since the member entered the call, the faces, mute, the camera, the share, the way back and hang up. | this spec section 3, away from the channel of the call | `ambre_murmure::ui::call_float::tests::the_call_floats_away_from_its_channel_alone`; `ambre_app::shell::murmure_regions::the_call_floats_away_from_its_channel_and_brings_it_back` -- wasm tier, at a desktop width | none | verified |
+| `MURMURE-697` | `OBS` | While the page is in a call and shows no channel region of it, under the phone width it MUST show the call pill under the header: the channel, the time since the member entered the call, the faces, mute and hang up. | this spec section 3, away from the channel of the call | `ambre_murmure::ui::call_float::tests::the_call_floats_away_from_its_channel_alone`; `ambre_app::shell::murmure_regions::the_call_floats_away_from_its_channel_and_brings_it_back` -- wasm tier, at a phone width: the camera, the share and the way back hide | none | verified |
+| `MURMURE-698` | `INV` | The call bubble MUST publish the part of the canvas it covers. | this spec section 3, away from the channel of the call; `1-Foundations/ambre-spec-shell.md section 2` (`CHROME-171`) | not built | unbuilt -- lands with the `The floating cover` Story (`ambre-roadmap.md` MVP) | unimplemented |
+| `MURMURE-699` | `OBS` | A press on the faces of the call bubble MUST show the video of the member who speaks, or the received screen, drawn by the render runtime of the page. | this spec section 3, away from the channel of the call; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-015`) | not built | unbuilt -- lands with the `Video in the call bubble` Story (`ambre-roadmap.md` V1) | unimplemented |
 | `MURMURE-629` | `OBS` | While the page receives a screen, the video region MUST draw it in a tile taller than each tile of a camera. | this spec section 3, the video region; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-015`) | `ambre_murmure::ui::call_videos::tests::a_screen_takes_a_tile_taller_than_each_camera_above_their_row`; `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: the moved pixels of Bob's canvas span more than the tallest tile of a camera | none | verified |
 | `MURMURE-630` | `OBS` | Given a share that the screen of another member took over, the header MUST say that another member shares. | this spec section 3, the screen; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-107`) | `ambre_murmure::ui::call_controls::tests::another_screen_takes_over_a_share_and_the_header_says_so`; `ambre_app::shell::murmure_regions::the_share_button_names_itself_and_carries_its_pressed_state` -- wasm tier: the take-over is a status; `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Ada's header reads that another member shares | none | verified |
 | `MURMURE-645` | `OBS` | Given a ring of the caller that ended with no answer, the header MUST say whether the member declined or did not answer, until the next call gesture. | this spec section 3, the ring | `ambre_murmure::ui::call_ring::tests::the_header_says_why_a_ring_ended_with_no_answer`; `ambre_app::shell::murmure_regions::the_header_says_why_a_call_rang_with_no_answer` -- wasm tier: the notice is a status beside the call button | none | verified |
@@ -77,7 +86,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `MURMURE-601` | `FAIL` | Given a microphone that the browser refuses or does not have, a call gesture MUST post no call message and take no seat. | this spec section 3, the call controls; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-076`) | `ambre_belt::murmure::tests::a_refused_microphone_starts_no_call_and_says_why` -- browser tier, under Chrome and under Firefox: the page spawns no call worker, makes no peer connection and opens no call socket | none | verified |
-| `MURMURE-603` | `POST` | While the page is in a call, the header MUST offer mute and hang up in place of the call button. | this spec section 3, the call controls | `ambre_murmure::ui::call_controls::tests::a_channel_offers_the_call_button_and_a_call_offers_mute_and_hang_up_in_its_place`; `ambre_app::shell::murmure_regions::the_call_controls_name_themselves_and_take_the_focus` -- wasm tier; `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` -- browser tier, under Chrome and under Firefox: a page in a call shows no call button | none | verified |
+| `MURMURE-603` | `POST` | While the page is in a call and shows the channel of the call, the header MUST offer mute and hang up in place of the call button. | this spec section 3, the call controls | `ambre_murmure::ui::call_controls::tests::a_channel_offers_the_call_button_and_a_call_offers_mute_and_hang_up_in_its_place`; `ambre_app::shell::murmure_regions::the_call_controls_name_themselves_and_take_the_focus` -- wasm tier; `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` -- browser tier, under Chrome and under Firefox: a page in a call shows no call button | none | verified |
 | `MURMURE-604` | `POST` | Hang up MUST leave the call, so that each other member reads the member who hung up out of it. | this spec section 3, the call controls; `MURMURE-409`; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-069`) | `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` -- browser tier, under Chrome and under Firefox: Ada hangs up, her call worker erases its keys, and Bob reads himself alone in the call | none | verified |
 | `MURMURE-606` | `FRAME` | A mute MUST NOT write into the channel. | this spec section 3, the call controls; `ZK-025` | structural -- the mute control runs `toggle_mute` of the page, which disables the track and posts nothing to a worker; `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` -- browser tier, under Chrome and under Firefox: the channel reads the same call message through the mute | none | verified |
 
@@ -102,8 +111,14 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 |---|---|---|---|---|---|---|
 | `MURMURE-620` | `OBS` | While the page receives a video of its call, the channel region MUST draw each such video in its video region, above the composer. | this spec section 3, the video region; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-015`) | `ambre_murmure::ui::view::tests::a_received_video_draws_in_a_band_above_the_composer`; `ambre_murmure::ui::call_videos::tests::the_band_places_each_slot_in_its_tile`; `ambre_belt::murmure::tests::a_member_draws_the_video_of_another_on_its_canvas` -- browser tier, under Chrome and under Firefox: the moved pixels of Bob's canvas lie in one band | none | verified |
 | `MURMURE-621` | `OBS` | While the page is in no call, the channel region MUST show no video region. | this spec section 3, the video region | `ambre_murmure::ui::view::tests::no_video_shows_no_video_region` -- the region comes with the call and goes with its end; `ambre_murmure::ui::call_videos::tests::no_call_takes_no_band_and_a_short_region_keeps_its_list` | none | verified |
-| `MURMURE-651` | `OBS` | During a call, the video region MUST show a tile for each other participant, in a grid of three by three at most: its picture while a video of it arrives, else its initials, and its name below. | this spec section 3, the video region; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-084`) | `ambre_murmure::ui::call_videos::tests::each_participant_takes_a_tile_of_a_grid_of_three_by_three_at_most`; `ambre_murmure::ui::call_videos::tests::a_tile_without_video_shows_the_initials_and_each_tile_its_name`; `ambre_murmure::ui::call_volumes::tests::a_video_slot_follows_the_member_of_its_sender`; `ambre_call::tests::a_video_slot_tells_the_page_of_each_new_sender_once`; `ambre_murmure::ui::view::tests::no_video_shows_no_video_region` -- a call with every camera off shows its region | none | verified |
-| `MURMURE-652` | `OBS` | During a call, the video region MUST show the member's own tile apart from the grid, smaller than a tile of the grid, and the tile MUST mark a mute of the member. | this spec section 3, the video region | `ambre_murmure::ui::call_videos::tests::the_own_tile_is_small_and_marks_a_mute` | none | verified |
+| `MURMURE-727` | `OBS` | While the page is in a call, the channel region of another channel MUST show no video region. | this spec section 3, away from the channel of the call; `MURMURE-696` | `ambre_app::call_stage::tests::another_channel_shows_no_video_region` -- wasm tier | none | verified |
+| `MURMURE-651` | `OBS` | During a call, the video region MUST show a tile for each participant of the page it shows: its picture while a video of it arrives, else its initials, and its name below. | this spec section 3, the video region; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-084`) | `ambre_murmure::ui::call_videos::tests::each_participant_of_the_page_takes_a_tile`; `ambre_murmure::ui::call_videos::tests::a_tile_without_video_shows_the_initials_and_each_tile_its_name`; `ambre_murmure::ui::call_volumes::tests::a_video_slot_follows_the_member_of_its_sender`; `ambre_call::tests::a_video_slot_tells_the_page_of_each_new_sender_once`; `ambre_murmure::ui::view::tests::no_video_shows_no_video_region` -- a call with every camera off shows its region | none | verified |
+| `MURMURE-652` | `OBS` | In the fill grid and in the strip of the scene, the member's own tile MUST take the last place, at the size of each other tile. | this spec section 3, the video region | `ambre_murmure::ui::call_videos::tests::the_fill_grid_ends_on_the_own_tile_at_the_size_of_every_cell`; `ambre_murmure::ui::call_videos::tests::a_screen_or_a_pin_widened_lays_out_the_scene` -- the own tile last in the strip, at either width | none | verified |
+| `MURMURE-684` | `OBS` | In the band, the member's own tile MUST sit apart from the other tiles, at the end of the band, smaller than each of them. | this spec section 3, the video region | `ambre_murmure::ui::call_videos::tests::the_own_tile_is_small_and_marks_a_mute` | none | verified |
+| `MURMURE-685` | `OBS` | The member's own tile MUST mark a mute of the member. | this spec section 3, the video region; `ZK-025` | `ambre_murmure::ui::call_videos::tests::the_own_tile_is_small_and_marks_a_mute` | none | verified |
+| `MURMURE-686` | `OBS` | In the fill grid, the video region MUST lay out the tiles of the page and the member's own tile in the count of columns that gives the largest tiles. | this spec section 3, the video region | `ambre_murmure::ui::call_videos::tests::the_fill_grid_ends_on_the_own_tile_at_the_size_of_every_cell` -- four by three on a desktop, three by three on a phone | none | verified |
+| `MURMURE-687` | `OBS` | While the call is widened and receives a screen or holds a pin, the video region MUST lay out the scene: the screen, else the pinned tile, across the region, with the other tiles in a strip beside it. | this spec section 3, the video region; `MURMURE-629` | `ambre_murmure::ui::call_videos::tests::a_screen_or_a_pin_widened_lays_out_the_scene` | none | verified |
+| `MURMURE-688` | `OBS` | While a participant on another page speaks, the arrow toward that page MUST be marked. | this spec section 3, the video region; `MURMURE-653` | `ambre_murmure::ui::call_videos::tests::a_speaker_on_another_page_marks_the_arrow_toward_it` | none | verified |
 | `MURMURE-656` | `OBS` | While the camera of the member goes into the call, its own tile MUST draw its picture, mirrored. | this spec section 3, the video region; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-015`, `CALL-100`) | `ambre_murmure::ui::call_videos::tests::the_own_tile_draws_the_camera_mirrored_while_it_is_on`; `ambre_canvas::video::tests::a_mirrored_picture_swaps_its_left_and_right`; `ambre_app::call_stage::tests::the_own_camera_reaches_the_render_runtime_while_it_is_on` -- wasm tier: the track of the camera reaches the render runtime and leaves it once the camera stops | none | verified |
 | `MURMURE-653` | `OBS` | The tile of a participant whose received audio carries speech MUST be outlined, until the hold of `ambre-spec-budgets.md section 1` after its last speech. | this spec section 3, the video region; `ZK-025` | `ambre_murmure::ui::call_videos::tests::a_member_who_speaks_is_outlined_for_the_hold` -- the level of speech, the hold and the outline of that tile alone; `ambre_app::call_stage::tests::the_level_of_a_slot_is_that_of_its_latest_source` -- wasm tier: the page reads the level of a receiver from the source it heard last | none | verified |
 
@@ -140,9 +155,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-654` | `POST` | Past nine other participants, the grid MUST show them in pages of nine, in the order the call admitted them, and a press on an arrow of the grid MUST show the next or the previous page. | this spec section 3, the video region; `CHROME-029` | `ambre_murmure::ui::call_videos::tests::past_nine_participants_the_grid_shows_pages_of_nine`; `ambre_murmure::ui::view::tests::a_press_on_an_arrow_turns_the_page_and_a_press_on_a_tile_pins_it` -- the press asks the page, and sends no command to the Logic thread; `ambre_app::shell::murmure_regions::the_page_buttons_name_themselves_and_turn_the_page` -- wasm tier: the header turns the page too; `ambre_belt::murmure::tests::a_page_switch_and_a_pin_choose_the_videos_the_grid_shows` -- browser tier: twelve participants, two pages | none | verified |
+| `MURMURE-654` | `POST` | Past the page size that section 3 gives the layout and the width, the video region MUST show the other participants in pages of that size, in the order the call admitted them, and a press on an arrow MUST show the next or the previous page. | this spec section 3, the video region; `CHROME-029` | `ambre_murmure::ui::call_videos::tests::the_pages_take_the_size_of_their_layout_and_width` -- the six sizes, the turns and their stops; `ambre_murmure::ui::view::tests::a_press_on_an_arrow_turns_the_page_and_a_press_on_a_tile_pins_it` -- the press asks the page, and sends no command to the Logic thread; `ambre_app::shell::murmure_regions::the_page_buttons_name_themselves_and_turn_the_page` -- wasm tier: the header turns the page too; `ambre_belt::murmure::tests::a_page_switch_and_a_pin_choose_the_videos_the_grid_shows` -- browser tier: twelve participants, three pages of the band | none | verified |
 | `MURMURE-667` | `POST` | During a call, the page MUST ask the SFU for the video of exactly the participants whose tile the grid shows, the pinned one included, at each change of the page, the pin or the participants. | this spec section 3, the video region; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-126`) | `ambre_murmure::ui::call_videos::tests::the_choice_names_exactly_the_tiles_the_grid_shows`; `ambre_murmure::ui::call_volumes::tests::a_member_is_chosen_by_the_sender_it_was_admitted_with_last`; `ambre_belt::murmure::tests::a_page_switch_and_a_pin_choose_the_videos_the_grid_shows` -- browser tier: a turn of the page posts the senders of the next page, and each post names the senders of the tiles shown | none | verified |
 | `MURMURE-668` | `POST` | A press on the tile of another participant, or on its pin button in the list of the participants, MUST pin it, and a second press MUST unpin it. The pinned tile MUST stay in view on every page, larger than each tile of the grid, and the page MUST ask its video large. | this spec section 3, the video region; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-128`) | `ambre_murmure::ui::call_videos::tests::a_pinned_participant_stays_large_on_every_page`; `ambre_murmure::ui::view::tests::a_press_on_an_arrow_turns_the_page_and_a_press_on_a_tile_pins_it`; `ambre_app::shell::murmure_regions::the_participants_button_names_itself_and_lists_each_participant` -- wasm tier: the pin button of the list pins and unpins; `ambre_belt::murmure::tests::a_page_switch_and_a_pin_choose_the_videos_the_grid_shows` -- browser tier: Ada pins Bob, and decodes his video at the top size while Carol alone speaks | none | verified |
+| `MURMURE-704` | `POST` | Under the phone width, the choice of videos MUST name the phone count of `ambre-spec-budgets.md section 1`, and over it the desktop count. | this spec section 3, the video region; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-041`) | `ambre_app::call_stage::tests::the_choice_names_the_count_of_videos_of_its_width` -- wasm tier; structural -- `ambre_app::call_stage::choose` names the count of `videos_of` the width of the stage in each choice | none | verified |
 | `MURMURE-655` | `FRAME` | Opening the list of the participants MUST NOT write into the channel. | this spec section 3, the video region; `ZK-025` | structural -- the list reads the participants the page holds, and the participants button posts nothing to a worker | none | verified |
 | `MURMURE-670` | `FRAME` | A turn of the page or a pin MUST NOT write into the channel, and the choice of videos it changes MUST reach the socket of the SFU alone. | this spec section 3, the video region; `1-Foundations/ambre-spec-zero-knowledge.md section 2` (`ZK-044`) | `ambre_belt::murmure::tests::a_page_switch_and_a_pin_choose_the_videos_the_grid_shows` -- browser tier: Ada's turns and pins post a choice of videos and nothing else but the roster ask; `ambre_sync::call_link::tests::a_choice_of_videos_reaches_the_sfu_alone_and_never_the_relay` | none | verified |
 
@@ -153,15 +169,45 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-657` | `POST` | During a call, the fill button MUST widen the video region to the whole height above the composer, and a second press MUST bring back the band. | this spec section 3, the video region | `ambre_murmure::ui::call_videos::tests::a_filled_call_takes_the_whole_height_above_the_composer`; `ambre_murmure::ui::view::tests::a_filled_call_leaves_the_list_no_height_and_keeps_the_composer`; `ambre_app::shell::murmure_regions::the_fill_button_names_itself_and_widens_the_call` -- wasm tier: a press widens the call and a second shrinks it | none | verified |
 | `MURMURE-658` | `FRAME` | Widening the call or bringing back the band MUST NOT write into the channel, and MUST leave the composer in place. | this spec section 3, the video region; `ZK-025` | `ambre_murmure::ui::view::tests::a_filled_call_leaves_the_list_no_height_and_keeps_the_composer` -- the composer still takes a press; structural -- the fill button runs `toggle_fill` of the page, which sets a signal of the page and posts nothing to a worker | none | verified |
 
+### 1.15 Widen the call on a screen
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-692` | `POST` | The first picture of a received screen MUST widen the call into the scene. | this spec section 3, the video region; `MURMURE-687` | `ambre_murmure::ui::call_videos::tests::the_first_picture_of_a_screen_widens_the_call_once`; structural -- `ambre_app::call_stage::stage` runs `Fill::after_screen` on each stage it builds | none | verified |
+| `MURMURE-694` | `POST` | Given a call the member brought back to the band while it received a screen, the call MUST stay a band until another share starts. | this spec section 3, the video region | `ambre_murmure::ui::call_videos::tests::the_first_picture_of_a_screen_widens_the_call_once` | none | verified |
+| `MURMURE-695` | `FRAME` | Widening the call on a screen MUST NOT write into the channel, nor move the keyboard focus. | this spec section 3, the video region; `ZK-025` | structural -- `Fill::after_screen` is a pure function, and the page sets a signal of its own with the fill it answers: it posts nothing to a worker and calls no focus | none | verified |
+
+### 1.16 Leave the channel of a call
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-700` | `POST` | The way back of the bubble, or a press on the pill, MUST show the channel of the call in Murmure. | this spec section 3, away from the channel of the call | `ambre_app::shell::murmure_regions::the_call_floats_away_from_its_channel_and_brings_it_back` -- wasm tier: a press on the grip shows the channel of the call, and the float leaves | none | verified |
+| `MURMURE-701` | `POST` | Showing another channel of Murmure, a thread or the channel list MUST keep the page in its call. | this spec section 3, away from the channel of the call | structural -- the call lives in the thread-local session of the page, which a change of the pane of Murmure leaves alone; `ambre_app::shell::murmure_regions::the_call_floats_away_from_its_channel_and_brings_it_back` -- wasm tier: the phase stays in a call across the change of channel | none | verified |
+| `MURMURE-726` | `POST` | Showing another application of the suite MUST keep the page in its call. | this spec section 3, away from the channel of the call; `1-Foundations/ambre-spec-launcher.md section 2` | not built | unbuilt -- lands with the `A call follows the member into another application` Story (`ambre-roadmap.md` V1) | unimplemented |
+| `MURMURE-703` | `POST` | A drag of the call bubble MUST move it, and its release MUST rest it in the nearest corner of the content. | this spec section 3, away from the channel of the call | `ambre_murmure::ui::call_float::tests::a_released_bubble_rests_in_the_nearest_corner`; structural -- the bubble follows the pointer while a drag holds it, and its release sets the corner `Corner::nearest` answers | none | verified |
+| `MURMURE-702` | `FRAME` | Leaving the channel of a call, or coming back to it, MUST NOT write into a channel, nor move a read cursor, nor change the choice of videos. | this spec section 3, away from the channel of the call; `ZK-025` | `ambre_app::shell::murmure_regions::the_call_floats_away_from_its_channel_and_brings_it_back` -- wasm tier: the way back sends nothing; structural -- the float reads the participants and sets the pane, and no handler of it posts a choice of videos or a command | none | verified |
+
+### 1.17 Present a document
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-705` | `POST` | Present MUST open the document of the presenter for each participant who is a member of it, following the view of the presenter. | this spec section 3, present a document | not built | unbuilt -- lands with the `Present a document in a call` Story (`ambre-roadmap.md` V1) | unimplemented |
+| `MURMURE-706` | `FAIL` | Given a participant who is no member of the document, Present MUST show that participant nothing of it, and MUST offer the presenter to invite them as a viewer or to share the screen. | this spec section 3, present a document; `1-Foundations/ambre-spec-key-rotation.md section 3` (`SYNC-116`, `SYNC-119`) | not built | unbuilt -- lands with the `Present a document in a call` Story (`ambre-roadmap.md` V1) | unimplemented |
+| `MURMURE-707` | `POST` | An edit or a scroll of a follower MUST stop it following the presenter. | this spec section 3, present a document | not built | unbuilt -- lands with the `Present a document in a call` Story (`ambre-roadmap.md` V1) | unimplemented |
+| `MURMURE-708` | `POST` | A press on the follow bar MUST bring the follower back to the view of the presenter. | this spec section 3, present a document | not built | unbuilt -- lands with the `Present a document in a call` Story (`ambre-roadmap.md` V1) | unimplemented |
+| `MURMURE-709` | `FRAME` | Presenting MUST NOT derive a key of the call from a key of the document, nor carry any part of the document over the media of the call. | this spec section 3, present a document; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-002`, `CALL-010`) | not built | unbuilt -- lands with the `Present a document in a call` Story (`ambre-roadmap.md` V1) | unimplemented |
+| `MURMURE-710` | `FRAME` | Presenting MUST NOT change the membership of the document. | this spec section 3, present a document; `ZK-001` | not built | unbuilt -- lands with the `Present a document in a call` Story (`ambre-roadmap.md` V1) | unimplemented |
+
 * **Budget.** the interval between two asks of who is in a call is the call roster row of
-  `ambre-spec-budgets.md section 1`. The time a call rings is the call ring row. The participant
-  cap and the time to live of a call are the
-  call rows of that section. The time of a paint that draws the videos is the call video paint row.
+  `ambre-spec-budgets.md section 1`. The time a call rings is the call ring row. The call rows of
+  that section hold the participant cap, the videos per receiver and the time to live. The paint of
+  the videos is the call video paint row.
 * **Boundary.** the call message and its end are sealed like any message (`ZK-001`). A ring
   rides their sealed summaries, so the relay learns no ring and no decline (`MURMURE-647`). What the relay
   learns from an ask of who is in a call is `ZK-024`. `ZK-021` and `ZK-022` bound the rest.
-* **Verification.** 70 `verified`. The relay half holds in the database tier. The engine and the two
-  workers hold on the host, and the whole path in the browser tier, under Chrome and Firefox.
+* **Verification.** 90 `verified`, 10 `unimplemented`. The relay half holds in the database tier.
+  The engine and the two workers hold on the host, and the whole path in the browser tier, under
+  Chrome and Firefox.
 
 ---
 
@@ -221,6 +267,19 @@ message shows the members that pass. Nothing of the list is written into the mes
 The view ticks while it shows the channel. Each tick asks for each live call of the
 held segments, once per interval at most (`MURMURE-595`).
 
+**A live call in the sidebar.** The sidebar marks each channel whose held segments name a live
+call, with the count of its participants and no name (`MURMURE-689`). The entry of the channel the
+view shows adds their initials (`MURMURE-690`). The count comes from the same ask, so the sidebar
+asks for each live call of each held channel at the same interval. A channel never opened holds
+no call message on the page, and shows no mark yet (`MURMURE-691`).
+
+`ZK-024` holds for each such ask: the relay learns the session, the call, the channel and the
+instant, and stores none of it. An ask for a channel the view does not show tells it no more.
+The relay already holds the subscription of that session to the channel, and the seats of the
+call. The instant of the ask says that the page is open, which its socket already says. The count
+and the initials read the same answer, so a name in the sidebar would cost the relay nothing
+either. The sidebar keeps names out for its own width, never for the relay.
+
 **What the relay learns by the ask** is `ZK-024`: the session, the call and the instant. The
 watching sample of the same tick already tells the relay that this session shows the channel
 (`MURMURE-121`). The relay knows the calls of the channel from their
@@ -247,7 +306,8 @@ control is a button with an icon of its own and an accessible name (`MURMURE-605
 |---|---|
 | in no call, a channel shown | the call button (`MURMURE-599`) |
 | asking for the microphone | no control |
-| in a call | mute and hang up, whatever channel it shows (`MURMURE-603`) |
+| in a call, its channel shown | mute and hang up (`MURMURE-603`) |
+| in a call, another pane shown | no control: the call bubble or the call pill holds them (`MURMURE-728`) |
 
 A start in a channel whose call runs sits in that call: the relay holds one call per channel
 (`CALL-160`). So the call button joins a call that runs, and the page reads no list to decide it.
@@ -411,7 +471,20 @@ header then says that another member shares now, until the next press or the end
 its message list and its composer (`MURMURE-620`). The list gives up the height of the region. A
 call with every camera off shows the region too: it says who is in the call and who speaks.
 
-Each other participant takes a tile of a grid of three by three at most (`MURMURE-651`):
+Each participant of the page shown takes a tile (`MURMURE-651`). The region takes one of three
+layouts, and none is a menu: the region picks it from the call.
+
+| Layout | When | Its page of other participants | The member's own tile |
+|---|---|---|---|
+| band | by default, a row above the composer | 5 over the phone width, 3 under it | apart, at the end, smaller (`MURMURE-684`) |
+| fill grid | after the fill button, with no screen and no pin | 9 over the phone width, 8 under it | the last cell, the size of every cell (`MURMURE-652`) |
+| scene | widened, with a received screen or a pin | 4 in the strip | the last place of the strip (`MURMURE-652`) |
+
+The page sizes follow the room each layout has. Nine tiles in a band of about 200 pixels draw
+faces of 50 pixels, which nobody reads. The fill grid takes the columns that give the largest
+tiles, its own tile counted (`MURMURE-686`). That is four by three on a wide desktop, its last row
+short of two cells, and three by three on a phone. It never sets a column aside for the member.
+The rules of the tiles:
 
 1. The participants keep the order the call admitted them, with a video or without one.
 2. A choice of videos moves no tile: a page shows the same members before and after its videos
@@ -424,10 +497,18 @@ The page learns the member of each video slot as it learns the member of an audi
 worker names the sender of the slot at its first chunk (`CALL-084`). The Sync worker names the
 member of that sender. The render runtime draws the picture inside its tile (`CALL-015`).
 
-The SFU forwards nine videos at most (`CALL-041`), so a page of nine holds each picture a
-receiver gets. Past nine other participants, the grid shows them in pages of nine (`MURMURE-654`).
-An arrow at each side of the grid turns the page, and the header offers the same two turns as
-buttons.
+The SFU forwards nine videos at most to a desktop and to a phone (`CALL-041`). So the largest
+page of each width holds each picture a receiver gets. No tile of a page waits on a picture the
+SFU never sends.
+
+Past the page size of its layout, the region shows the other participants in pages
+(`MURMURE-654`). An arrow at each end of the band, the grid or the strip turns the page. The header
+offers the same two turns as buttons. A participant who speaks on another page marks the arrow
+toward it (`MURMURE-688`).
+
+The page names the count of videos of its width in each choice (`MURMURE-704`). The two counts
+are equal today. A desktop count of eleven would fill the grid of four by three. It waits on the
+`Forward eleven videos to a desktop` Story (`ambre-roadmap.md`).
 
 The grid opens on the first page, and the turns stop at the first and at the last. A page past the
 last, after a leave, shows the last. The list of every participant opens from the participants
@@ -444,22 +525,23 @@ The SFU fills a slot that a short last page leaves with the most recent speakers
 grid draws no tile for them.
 
 A press on the tile of another participant pins it, and a second press unpins it (`MURMURE-668`).
-The pin button of the list does the same. The pinned tile sits at the left of the grid, larger
-than each of its tiles, on every page. The page then holds eight tiles, so the choice still names
-nine senders at most.
+The pin button of the list does the same. In the band, the pinned tile sits at the start, larger
+than each other tile, on every page. Widened, a pin lays out the scene with the pinned tile as its
+subject (`MURMURE-687`). The pinned member takes a place of the page, so the choice still names
+the count of the width at most.
 
 The choice marks the pinned member large. The SFU then sends the top layer of that member that
 the estimate holds, even while another member speaks (`CALL-128`). A pinned member who leaves the
 call frees the pin. A turn of the page, a pin and the list write nothing into the channel. The
 choice reaches the socket of the SFU alone (`MURMURE-670`, `ZK-044`).
 
-The member's own tile sits apart, at the right end of the region, smaller than a tile of the grid.
-It reads "You", and it marks a mute of the member (`MURMURE-652`). While the camera goes into the
-call, the tile draws it mirrored, as a mirror shows a face (`MURMURE-656`). The page hands the
-render runtime the track the video sender already carries, so the preview opens no second capture
-and touches no session (`CALL-100`). With the camera off, the tile shows the initials of the
-member. No other tile marks a mute: a
-mute sends silence, and nothing tells a receiver of it (`ZK-025`).
+In the band, the member's own tile sits apart, at the right end, smaller than each other tile
+(`MURMURE-684`). It reads "You", and it marks a mute of the member (`MURMURE-685`). While the camera
+goes into the call, the tile draws it mirrored, as a mirror shows a face (`MURMURE-656`). The page
+hands the render runtime the track the video sender already carries, so the preview opens no second
+capture and touches no session (`CALL-100`). With the camera off, the tile shows the initials of the
+member. No other tile marks a mute: a mute sends silence, and nothing tells a receiver of it
+(`ZK-025`).
 
 The tile of a participant who speaks is outlined (`MURMURE-653`). The page reads the audio level of
 each received audio slot, once per interval of the call speaker row of `ambre-spec-budgets.md
@@ -469,9 +551,15 @@ the clear header extension of each packet, which the SFU already reads to rank s
 (`CALL-047`). So the outline adds nothing to what the SFU learns, and the page writes nothing of it
 (`ZK-025`).
 
-A received screen takes a taller region and a tile of its own, above the grid. Its tile is taller
-than each tile of the grid (`MURMURE-629`). Text on a screen needs the height, and the faces of the
-participants stay in view below it. The page shows no screen it shares itself.
+A received screen takes a tile taller than each tile of a camera (`MURMURE-629`). The first
+picture of a screen widens the call into the scene (`MURMURE-692`). The screen spans the region and
+the faces move to a strip beside it, or under it on a phone (`MURMURE-687`). Text on a screen
+needs the room, and the faces stay in view.
+
+A member who brings the band back keeps it until
+another share starts (`MURMURE-694`). The widening writes nothing and leaves the focus where it
+was, so a member who types keeps typing (`MURMURE-695`). The page shows no screen it shares
+itself.
 
 The fill button of the header widens the call to the whole height above the composer, and a
 second press brings back the band (`MURMURE-657`). The list then keeps no height, and the composer
@@ -486,6 +574,45 @@ state, and the keyboard reaches it (`MURMURE-659`). The band comes back at the e
 
 Out of a call, the region takes no height (`MURMURE-621`). The thread panel shows no video
 region.
+
+**Away from the channel of the call.** The call lives in the page, so it goes on while Murmure
+shows another channel, a thread or the list (`MURMURE-701`). Another application does not keep
+it yet. A page boots one kind of document, and a switch of kind loads the page again
+(`ambre-spec-launcher.md`). The call then ends with the page (`MURMURE-726`). The page shows the
+call where the member is:
+
+| Width | Shows | Holds |
+|---|---|---|
+| over the phone width | the call bubble, floating over the content | the channel, the time in the call, the faces, mute, the camera, the share, the way back and hang up (`MURMURE-696`) |
+| under the phone width | the call pill, under the header | the channel, the time in the call, the faces, mute and hang up (`MURMURE-697`) |
+
+Another channel shows no video region: the call floats over it instead (`MURMURE-727`). The way
+back of the bubble, and a press on the pill, show the channel of the call in Murmure
+(`MURMURE-700`). Neither writes into a channel, moves a read cursor or changes the choice of
+videos (`MURMURE-702`). Each control names itself and takes the focus (`MURMURE-693`).
+
+The bubble rests in a corner of the content. A drag moves it, and its release rests it in the
+nearest corner (`MURMURE-703`).
+ It floats over the canvas, so it publishes the part it covers, as
+each floating surface of the shell does (`MURMURE-698`, `CHROME-171`). A press on its faces would
+show the video of the member who speaks, or the screen. The render runtime of the page draws a
+video, never an element over the canvas (`CALL-015`). So the bubble shows no video until the
+runtime of Prose, Trame and Toile draws a slot of the call (`MURMURE-699`).
+
+**Present a document.** A screen share of an Ambre document sends pixels of what every member
+could open. Present opens the document itself for each participant who is a member of it, and
+each follows the view of the presenter (`MURMURE-705`). Each keeps their own panel, selection and
+tools. An edit or a scroll stops following, and a press on the follow bar resumes it
+(`MURMURE-707`, `MURMURE-708`).
+
+A participant who is no member sees nothing of the document (`MURMURE-706`). The presenter is
+offered to invite them as a viewer, and to share the screen meanwhile. An invite hands the key
+chain of the document, so the viewer reads its whole history (`SYNC-116`, `SYNC-119`). Taking it
+back owes a rotation. Present writes no membership on its own (`MURMURE-710`).
+
+The call carries none of the document. A sender key derives from no document key (`CALL-002`), and
+the call opens no data channel (`CALL-010`). The document reaches each follower through its own
+sync, under its own key (`MURMURE-709`).
 
 **Code.**
 
@@ -544,6 +671,11 @@ region.
 | the participants button, during a call | the list of every participant opens, with a pin button for each |
 | a press on an arrow of the grid, or a page button of the header | the grid shows the next or the previous page, and the page asks the SFU for its videos |
 | a press on the tile of another participant, or its pin button | the participant is pinned large on every page, or unpinned |
+| the first picture of a received screen | the call widens into the scene, the screen across it and the faces in a strip |
+| another channel or another application, during a call | the call bubble on a desktop, the call pill on a phone |
+| the way back of the bubble, or a press on the pill | the channel of the call opens in Murmure |
+| a drag of the bubble | the bubble follows, and rests in the nearest corner |
+| Present, during a call | each participant who is a member follows the document of the presenter |
 
 ---
 
@@ -567,13 +699,23 @@ region.
 | The fill button widens the call inside the channel region | the full screen of the browser | the composer and the header would leave the screen, and the browser asks a gesture and shows its own notice each time |
 | Only the member's own tile marks a mute | each tile marks the mute of its member | a mute would travel on the wire, and the SFU would read a mute apart from a silence (`ZK-025`) |
 | The page reads who speaks from the audio level of each received slot | who speaks from the slots of the SFU | a slot changes its sender only when a fourth member speaks, so the slots tell who spoke last, never who speaks now |
-| Pages of nine past nine participants | a tile for each participant, past nine | the SFU forwards nine videos, and fifty tiles in one region leave no face readable |
-| Pages of nine past nine participants | a ninth tile that counts the others and opens their list | a member past the eighth would reach no tile and no video, only a name in a list |
+| A page size per layout | pages of nine in every layout | nine tiles in a band of about 200 pixels draw faces of 50 pixels, and a filled desktop leaves a column empty |
+| A page size per layout | a tile for each participant, past the page | the SFU forwards nine videos, and fifty tiles in one region leave no face readable |
+| A page size per layout | a last tile that counts the others and opens their list | a member past the page would reach no tile and no video, only a name in a list |
+| The own tile is the last cell of the fill grid | the own tile apart from the fill grid, smaller | it keeps a column for one small tile, so a grid of nine loses a column |
+| Three layouts the call picks | a gallery and speaker menu | the member chooses a layout the content already tells: a screen wants the room, and a pin names its subject |
+| A screen widens the call | the screen waits in the band for the fill button | text in a band cannot be read, and each member would press the button at each share |
+| A bubble away from the channel | the call ends when the member leaves its channel | a member who opens the document under discussion would drop out of the discussion |
+| A bubble away from the channel | a bar of call controls across the bottom of every page | it costs a row of height on every page of the suite, and the controls already sit in the channel header |
+| Present opens the document | a screen share of the document | the others read pixels, at the bitrate of a screen, of a document each member could open sharp, with tools of their own |
+| Present for members alone | a projection of the document to a participant who is no member | the projection must draw a view with no key of the document, which no spec designs yet: a story of its own |
+| The sidebar shows a count | the names of the participants in the sidebar | the sidebar is narrow, and a list of names under each channel pushes the channels out of view |
 | The grid keeps the order of admission | the participants with a video first | each choice brings videos, so the tiles would move under each turn, and a page would not know its senders |
 | The page asks for the tiles it shows | the page lets the SFU pick the speakers | a member on the page who does not speak would show its initials, and a speaker off the page would cost a video that no tile draws |
-| The pinned tile takes eight places of the grid | a pinned tile beside a page of nine | the choice would name ten senders, past the nine the SFU forwards |
+| The pinned tile takes a place of the page | a pinned tile beside a full page | the choice would name one sender past the count the SFU forwards |
+| A phone asks for the phone count of videos | a phone receives the desktop count | the desktop count may grow past what a phone lays out, and the fill would then send videos no tile of the phone draws, over the downlink of a phone |
 | The call button starts a call with the camera off | a second button that starts a video call | the header would offer two buttons for one call, and a press of the camera button reaches the same call |
-| A received screen takes a tile above the cameras | the screen in a tile of the row of the cameras | the tile of a camera is about 160 pixels tall, where the text of a screen cannot be read |
+| A received screen takes the scene | the screen in a tile of the row of the cameras | the tile of a camera is about 160 pixels tall, where the text of a screen cannot be read |
 | A share stops when another member shares | a share that goes on unseen | the member would show a screen that no other member sees |
 | A reader asks while the view shows the channel | the relay pushes the roster to every member of the channel | the relay would send who is in a call to sessions that show nothing of it |
 | The ring rides the sealed summary of the call message | a ring frame the relay forwards to the members of the direct message | the relay would learn whom a call rings and who declines it, beyond the call it already holds |
@@ -593,6 +735,8 @@ region.
 * **A page of Prose, Trame or Toile rings nothing.** The alert sits in the shell of Murmure.
 * **A long-hidden tab may ring late or stop late.** A browser may slow the timers of a hidden
   tab, which delays the timeout.
+* **No key turns the page of the call.** Page Up and Page Down scroll the message list, a key of
+  the region (`MURMURE-541`). The arrows and the header buttons turn it.
 * **The label on the screen is not chosen.** The term is `call` in the corpus; the word the
   interface shows belongs to `ambre-spec-locale.md`.
 

@@ -24,8 +24,9 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-003` | `INV` | The zoom MUST stay inside 0.1x..10x, whatever the input asks for. | this spec section 2 | `ambre_toile::ui::viewport::tests::zoom_clamps_to_range` -- it drives a hundred doublings and two hundred halvings into both stops; `ambre_toile::ui::viewport::tests::fit_bounds_clamps_tiny_rect_to_max_zoom` -- it holds the stop a fit would blow past | none | verified |
 | `TOILE-UI-278` | `INV` | The camera MUST reach no collaborator: what a user looks at MUST NOT enter the document. | this spec section 1; `ambre-spec-zero-knowledge.md section 2` | structural -- the Logic handler for a camera assigns one field and returns a display-only outcome, so a camera produces no delta to broadcast and no write to persist | none | verified |
 | `TOILE-UI-010` | `OBS` | The grid spacing MUST stay legible across the whole zoom range. | this spec section 3 | `ambre_toile::ui::grid::tests::spacing_never_illegible_across_zoom_sweep` -- it sweeps the zoom over three decades and reads the floor at each | none | verified |
-| `TOILE-UI-279` | `OBS` | The grid step MUST stay a multiple of the board unit, never finer than it. | this spec section 3; section 5 | `ambre_toile::ui::grid::tests::step_is_power_of_two_multiple_of_base` -- it reads both at seven zooms; `ambre_toile::ui::grid::tests::a_board_paints_its_grid_on_its_own_unit` -- the painted lines on units of 20, 32 and 50, and an unusable unit falling back; `ambre_toile::ui::grid::tests::a_grid_unit_is_finite_and_positive` -- a zero, negative or non-finite unit is refused, and the step search ends on the smallest positive one; `ambre_toile::logic::state::derive::tests::a_frame_carries_the_boards_grid_unit` -- the register reaches the frame | none | verified |
-| `TOILE-UI-280` | `OBS` | A grid line MUST stay one pixel wide at every zoom. | this spec section 3; `features/ambre-spec-toile-board-rendering.md section 3` | `ambre_toile::ui::grid::tests::a_grid_line_is_one_pixel_at_every_zoom` -- five zooms, and no transform pushed | none | verified |
+| `TOILE-UI-279` | `OBS` | The grid step MUST stay a multiple of the board unit, never finer than it. | this spec section 3; section 5 | `ambre_toile::ui::grid::tests::step_is_power_of_two_multiple_of_base` -- it reads both at seven zooms; `ambre_toile::ui::grid::tests::a_board_paints_its_grid_on_its_own_unit` -- the painted dots on units of 20, 32 and 50, and an unusable unit falling back; `ambre_toile::ui::grid::tests::a_grid_unit_is_finite_and_positive` -- a zero, negative or non-finite unit is refused, and the step search ends on the smallest positive one; `ambre_toile::logic::state::derive::tests::a_frame_carries_the_boards_grid_unit` -- the register reaches the frame | none | verified |
+| `TOILE-UI-280` | `OBS` | A grid dot MUST keep its screen size at every zoom. | this spec section 3; `features/ambre-spec-toile-board-rendering.md section 3` | `ambre_toile::ui::grid::tests::a_grid_dot_keeps_its_size_at_every_zoom` -- five zooms, and no transform pushed | none | verified |
+| `TOILE-UI-424` | `OBS` | The default grid MUST be one discreet dot at each crossing of the grid step, drawn on the warm ground of the board. | this spec section 3; `features/ambre-spec-toile-board-rendering.md section 3` | `ambre_toile::ui::grid::tests::the_default_grid_is_dots_at_the_crossings_on_the_ground` -- one dot per crossing a step apart, no line, a dot colour apart from the ground, and the ground the chrome's sunken surface in both themes | none | verified |
 | `TOILE-UI-281` | `INV` | The rectangle the UI hands over for culling MUST carry a zoom the Logic thread can divide by. | this spec section 2 | `ambre_toile::message::tests::any_zoom_culls_a_finite_rect` | none | verified |
 | `TOILE-UI-025` | `INV` | While the board asks for snapping, every committed geometry MUST sit on a multiple of the grid step. | this spec section 3; section 5 | not built | unbuilt -- lands with the `Snap to the board grid` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `TOILE-UI-030` | `INV` | The minimap MUST NOT write to the document: dragging its rectangle moves the camera alone. | this spec section 5 | not built | unbuilt -- lands with the `The facilitation layer` Story (`ambre-roadmap.md` post-V1) | unimplemented |
@@ -93,7 +94,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the camera is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. What crosses to the Logic thread is a rectangle to cull
   against, never document data (`TOILE-UI-001`).
-* **Verification.** 34 `verified`, 2 `unimplemented`. The pure functions of the camera hold the
+* **Verification.** 35 `verified`, 2 `unimplemented`. The pure functions of the camera hold the
   geometry. View tests drive the wheel in each mode, the finger, the edge pan and the resize, then
   read the cull request each handler queues. The grid is painted into a recording surface on the
   board's own unit. The two `unimplemented` rows are snapping and the minimap.
@@ -186,8 +187,14 @@ where a trackpad user's two-finger scroll would zoom abruptly.
 comfortable. It doubles while the board is zoomed out and halves back while it is zoomed in, never below the
 board unit (`TOILE-UI-010`). The unit is the `board` register's, carried on each frame; a unit that
 is not finite and positive falls back to 20 (`TOILE-UI-279`). The grid paints under the content walk,
-in screen space, so a line stays one pixel wide at every zoom
+in screen space, so a dot keeps its size at every zoom
 (`features/ambre-spec-toile-board-rendering.md`).
+
+**The default look.** The board lies on the sunken surface of the chrome. The grid is one dot of a
+pixel and a half at each crossing, a shade off the ground (`TOILE-UI-424`). Between two crossings
+the ground shows, so the grid reads as a texture, not a ruling. The background a board stores and
+the setting that picks lines or no grid land with the
+`Snap to the board grid` Story (`ambre-roadmap.md` E6). Until then every board shows this look.
 
 ---
 

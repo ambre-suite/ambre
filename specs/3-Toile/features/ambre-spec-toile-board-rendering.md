@@ -38,7 +38,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-358` | `OBS` | An element carrying no override MUST paint where it committed. | this spec section 3; `features/ambre-spec-toile-presentation.md section 4` | `ambre_toile::ui::render::tests::an_override_moves_its_own_element_and_no_other` -- the other image lands at its committed bounds, under no rotation | none | verified |
 | `TOILE-UI-266` | `OBS` | The element under the inline editor MUST NOT be painted twice: the static body gives way to the live buffer. | this spec section 2; `features/ambre-spec-toile-text-editing.md section 3` | `ambre_toile::ui::render::tests::the_note_under_the_editor_paints_no_body` -- the edited note paints its card and no run, and the other note its body | none | verified |
 | `TOILE-UI-045` | `OBS` | The board background MUST paint under the content, filling the canvas. | this spec section 3 | `ambre_toile::ui::render::tests::the_background_comes_first_and_focus_drops_the_grid` -- the first op of the pass fills the canvas; `ambre_toile::ui::grid::tests::the_background_fills_the_canvas_first` -- with the grid and without it | none | verified |
-| `TOILE-UI-267` | `OBS` | Presentation focus MUST drop the grid, so the audience sees the slide and not the board. | this spec section 3; `TOILE-UI-083` | `ambre_toile::ui::render::tests::the_background_comes_first_and_focus_drops_the_grid` -- grid lines without focus, none under it | none | verified |
+| `TOILE-UI-267` | `OBS` | Presentation focus MUST drop the grid, so the audience sees the slide and not the board. | this spec section 3; `TOILE-UI-083` | `ambre_toile::ui::render::tests::the_background_comes_first_and_focus_drops_the_grid` -- grid dots without focus, none under it | none | verified |
 | `TOILE-UI-046` | `OBS` | The selection box and its handles MUST paint above the content. | this spec section 3; `features/ambre-spec-toile-selection.md section 3` | `ambre_toile::ui::render::tests::overlay_draws_box_and_handles_for_single_selection` -- the box and the five handles; `ambre_toile::ui::render::tests::overlay_rotates_box_and_handles_for_a_rotated_element` -- the rotated edges and the rotated handle centres | none | verified |
 | `TOILE-UI-362` | `OBS` | The selection box and its handles MUST follow an in-flight gesture rather than the committed geometry. | this spec section 3; `features/ambre-spec-toile-selection.md section 3` | `ambre_toile::ui::render::tests::overlay_box_follows_gesture_override_bounds` -- the live bounds | none | verified |
 | `TOILE-UI-268` | `OBS` | Only a single selection MUST carry the resize handles; several elements MUST show their union box alone. | this spec section 3; `features/ambre-spec-toile-selection.md section 3` | `ambre_toile::ui::render::tests::overlay_draws_box_and_handles_for_single_selection` -- the single case, counted as five squares; `ambre_toile::ui::render::tests::several_selected_elements_show_their_union_box_alone` -- one box, the union, and the rotate knob as the only square | none | verified |
@@ -115,7 +115,7 @@ calls, with no GPU.
 **Code:**
 
 * `crates/ambre-toile/src/ui/render.rs` -- the content walk, the body pass and the overlay;
-* `ui/grid.rs` -- the background and the grid lines;
+* `ui/grid.rs` -- the background and the grid dots;
 * `ui/view.rs` -- the event drain, the dirty flags, the repaint plan and the two paint entries.
 
 ---

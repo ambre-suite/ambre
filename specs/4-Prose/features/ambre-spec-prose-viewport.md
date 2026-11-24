@@ -29,6 +29,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-024` | `INV` | Zoom MUST stay inside a quarter to four times, whatever the input. | this spec section 2 | `ambre_prose::view::zoom::tests::a_zoom_stays_in_range_and_keeps_the_offset_in_the_column` -- any factor asked, a NaN, an infinity and zero included | none | verified |
 | `PROSE-UI-025` | `INV` | The scroll offset MUST stay between the top of the column and its last scrollable position, after a scroll, a zoom, a relayout or an autoscroll tick. | this spec section 2 | `ambre_prose::input_tests::the_offset_stays_in_the_column_after_every_path` -- a scroll, a zoom, a zoom about a point, a relayout and four hundred autoscroll ticks held past the end; `ambre_prose::view::zoom::tests::a_zoom_stays_in_range_and_keeps_the_offset_in_the_column`; `ambre_prose::view::tests::a_shorter_layout_brings_the_offset_back_inside_the_column` | none | verified |
 | `PROSE-UI-026` | `INV` | The page column MUST stay centred at every zoom and every viewport width. | this spec section 2 | `ambre_prose::view::zoom::tests::the_column_stays_centred_or_pinned_at_every_zoom` | none | verified |
+| `PROSE-UI-256` | `INV` | The first page MUST start below a band of ground, at every zoom, and the column MUST end one such band below the last page; a position on that band MUST resolve to the nearer page edge. | this spec section 2 | `ambre_prose::view::column::tests::the_first_page_sits_below_an_inset_of_ground` -- the first page's top, the column's end, the screen top at three zooms, and a point on the band; `ambre_prose::view::column::tests::a_page_point_and_its_screen_point_map_to_each_other` -- the round trip holds with the band | none | verified |
 | `PROSE-UI-125` | `INV` | A page wider than the viewport MUST leave no gap on either side: its left edge MUST lie between zero and the viewport's width less the page's. | this spec section 2 | `ambre_prose::view::zoom::tests::a_wide_page_is_reachable_edge_to_edge`; `ambre_prose::view::zoom::tests::the_column_stays_centred_or_pinned_at_every_zoom` | none | verified |
 | `PROSE-UI-251` | `INV` | The horizontal offset MUST range over the whole width of a page wider than the viewport, from its left edge to the offset showing its right edge, never past either. | this spec section 2 | `ambre_prose::view::zoom::tests::a_wide_page_is_reachable_edge_to_edge` -- a scroll past either edge stops at it, at every zoom and width | none | verified |
 
@@ -69,7 +70,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the scroll offset and the zoom are view state on the UI thread, where
   `UI-THREAD-004` bans a network, crypto or persistence path. `PROSE-UI-010`
   (`features/ambre-spec-prose-engine.md section 1`) keeps both out of the document.
-* **Verification.** 23 `verified`. The state rows are property tests over the column in
+* **Verification.** 24 `verified`. The state rows are property tests over the column in
   `crates/ambre-prose`, being arithmetic over a few numbers; the others are host tests of the view.
   The zoom about the pointer is also held at the wasm tier. The flick rows drive the ticks by hand,
   as the host does once a frame.
@@ -81,7 +82,9 @@ status values are normative in `ambre-spec-template.md`.
 **Containers.** None. Nothing here is persisted and nothing is shared.
 
 **The column.** Pages of one size, stacked with a fixed gutter between them, centred horizontally.
-The column is rebuilt from the layout on every layout that is applied.
+A band of ground, the inset, lies above the first page and below the last. The first page then
+never touches the header, and the ruler sits on ground rather than on paper (`PROSE-UI-256`). The column
+is rebuilt from the layout on every layout that is applied.
 
 ```rust
 /// The geometry of the page column, derived from the page layout. Owns which pages are
@@ -91,6 +94,8 @@ pub struct PageColumn {
     pub page_width:      Px<Doc>,
     pub page_height:     Px<Doc>,
     pub gutter:          Px<Doc>,
+    /// The ground above the first page and below the last.
+    pub inset:           Px<Doc>,
     /// Zero for a layout that has not arrived yet.
     pub page_count:      Len<Page>,
     pub total_height:    Px<Doc>,

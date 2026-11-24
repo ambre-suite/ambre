@@ -14,6 +14,10 @@ use crate::layout::pass::PageLayout;
 
 /// The gap between two pages, in document pixels.
 pub const GUTTER: Px<Doc> = Px::<Doc>::new(24.0);
+/// The ground above the first page and below the last, in document pixels.
+/// The first page never touches the top of the canvas, under the header and
+/// the ruler (`PROSE-UI-256`).
+pub const INSET: Px<Doc> = Px::<Doc>::new(32.0);
 
 /// Where the reader is looking. Local, and never sent (`PROSE-UI-010`).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -90,6 +94,8 @@ pub struct PageColumn {
     pub page_width: Px<Doc>,
     pub page_height: Px<Doc>,
     pub gutter: Px<Doc>,
+    /// The ground above the first page and below the last.
+    pub inset: Px<Doc>,
     /// Zero until a layout has arrived.
     pub page_count: Len<Page>,
     pub total_height: Px<Doc>,
@@ -104,12 +110,13 @@ impl PageColumn {
         let total_height = if layout.page_count.is_zero() {
             Px::<Doc>::ZERO
         } else {
-            page_height * count + GUTTER * (count - 1.0)
+            INSET * 2.0 + page_height * count + GUTTER * (count - 1.0)
         };
         Self {
             page_width: layout.page_width.max(Px::<Doc>::ZERO),
             page_height,
             gutter: GUTTER,
+            inset: INSET,
             page_count: layout.page_count,
             total_height,
         }
@@ -122,7 +129,7 @@ impl PageColumn {
     /// Where a page starts, from the top of the column.
     #[must_use]
     pub fn page_top_y(&self, page: Pos<Page>) -> Px<Doc> {
-        self.stride() * page.get() as f32
+        self.inset + self.stride() * page.get() as f32
     }
 
     /// The last offset the column scrolls to: its bottom at the canvas's.
@@ -161,17 +168,18 @@ impl PageColumn {
     /// The page a column offset belongs to, and the offset within it.
     ///
     /// An offset in a gutter goes to the nearer of the two page edges
-    /// (`PROSE-UI-124`). One above or below the column goes to the edge of the
-    /// first or the last page. `None` only for a layout with no page
+    /// (`PROSE-UI-124`). One above or below the column, the inset included,
+    /// goes to the edge of the first or the last page. `None` only for a layout with no page
     /// (`PROSE-UI-022`).
     #[must_use]
     pub fn doc_y_to_page(&self, doc_y: Px<Doc>) -> Option<(Pos<Page>, Px<Doc>)> {
         let last = self.page_count.last()?;
         let stride = self.stride();
-        if doc_y.get().is_nan() || doc_y <= Px::<Doc>::ZERO || stride <= Px::<Doc>::ZERO {
+        let below_inset = doc_y - self.inset;
+        if doc_y.get().is_nan() || below_inset <= Px::<Doc>::ZERO || stride <= Px::<Doc>::ZERO {
             return Some((Pos::<Page>::ZERO, Px::<Doc>::ZERO));
         }
-        let index = (doc_y / stride).floor();
+        let index = (below_inset / stride).floor();
         if index >= last.get() as f32 {
             let within = (doc_y - self.page_top_y(last)).min(self.page_height);
             return Some((last, within));
@@ -399,15 +407,39 @@ mod tests {
     #[test]
     fn a_position_in_a_gutter_goes_to_the_nearer_page_edge() {
         let column = column(3);
-        let bottom = column.page_height;
+        let bottom = column.page_top_y(Pos::<Page>::ZERO) + column.page_height;
         assert_eq!(
             column.doc_y_to_page(bottom + Px::<Doc>::new(5.0)),
-            Some((Pos::<Page>::ZERO, bottom))
+            Some((Pos::<Page>::ZERO, column.page_height))
         );
         let next = column.page_top_y(Pos::<Page>::new(1)).get();
         assert_eq!(
             column.doc_y_to_page(Px::<Doc>::new(next - 5.0)),
             Some((Pos::<Page>::new(1), Px::<Doc>::ZERO))
+        );
+    }
+
+    /// `PROSE-UI-256`: the first page starts below the ground of the inset,
+    /// at every zoom, and the column ends one inset below the last page. A
+    /// point on that ground goes to the nearer page edge.
+    #[test]
+    fn the_first_page_sits_below_an_inset_of_ground() {
+        let column = column(3);
+        assert_eq!(column.page_top_y(Pos::<Page>::ZERO), INSET);
+        let last = column.page_top_y(Pos::<Page>::new(2)) + column.page_height;
+        assert_eq!(column.total_height, last + INSET);
+        for zoom in [0.5, 1.0, 2.0] {
+            let view = viewport(0.0, 800.0, zoom);
+            let top =
+                column.doc_to_screen(&view, Pos::<Page>::ZERO, Px::<Doc>::ZERO, Px::<Doc>::ZERO);
+            assert!(
+                (top.y.get() - INSET.get() * zoom).abs() < 1e-3,
+                "zoom {zoom}"
+            );
+        }
+        assert_eq!(
+            column.doc_y_to_page(INSET / 2.0),
+            Some((Pos::<Page>::ZERO, Px::<Doc>::ZERO))
         );
     }
 

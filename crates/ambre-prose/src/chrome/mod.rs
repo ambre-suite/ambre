@@ -581,25 +581,33 @@ pub fn ProseRuler(signals: ProseSignals) -> impl IntoView {
         let height = format!("{}px", RULER_HEIGHT.get());
         let handles = ruler.visible.as_bool().then(|| {
             [
-                (RulerHandle::IndentFirst, "First-line indent"),
-                (RulerHandle::IndentLeft, "Left indent"),
-                (RulerHandle::IndentRight, "Right indent"),
+                (RulerHandle::IndentFirst, "First-line indent", "first"),
+                (RulerHandle::IndentLeft, "Left indent", "left"),
+                (RulerHandle::IndentRight, "Right indent", "right"),
             ]
-            .map(|(handle, label)| {
+            .map(|(handle, label, side)| {
                 let x = move || {
                     drag.get()
                         .filter(|d| d.handle == handle)
                         .map_or_else(|| ruler.handle_x(handle), |d| d.at)
                         - ruler.page_left
                 };
+                // The sheet draws the marker from the tokens, and its hover and
+                // drag states (`PROSE-UI-257`).
+                let dragging = move || {
+                    drag.get()
+                        .is_some_and(|d| d.handle == handle)
+                        .then_some("true")
+                };
                 view! {
                     <div
                         class="ambre-prose-ruler-handle"
                         role="slider"
                         aria-label=label
+                        data-handle=side
+                        data-dragging=dragging
                         style:position="absolute"
                         style:left=move || format!("{}px", x().get())
-                        style:top="0"
                         style:transform="translateX(-50%)"
                         style:touch-action="none"
                         style:cursor="ew-resize"
@@ -619,9 +627,7 @@ pub fn ProseRuler(signals: ProseSignals) -> impl IntoView {
                         }
                         on:pointerup=release
                         on:pointercancel=move |_| drag.set(None)
-                    >
-                        "\u{25BC}"
-                    </div>
+                    ></div>
                 }
             })
             .into_iter()

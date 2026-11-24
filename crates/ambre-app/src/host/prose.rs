@@ -41,25 +41,24 @@ use ambre_prose::input::{ProseInput, ProseKey};
 use ambre_prose::message::{ProseCommand, ProseEvent, WordCount};
 use ambre_prose::probe::{Answer, Dispatch, KeyProbe, Measure, ProbeName};
 use ambre_prose::ui::{ProseUiState, send_edit, send_request, status_figures};
-use ambre_prose::view::paint::PagePalette;
+use ambre_prose::view::paint::{PagePalette, ThemeInks};
 
 /// The page palette, read from the theme tokens (`PROSE-UI-014`).
 ///
-/// The sheet is the content surface. The accent and the three statuses are
-/// the chrome's own, so a page and the control beside it agree.
+/// The sheet, its ink and its rules are the paper, the one set the print
+/// reads too, so no theme reaches them (`PROSE-UI-255`). The shadow falls on
+/// the ground of the theme. The accent and the three statuses are the
+/// chrome's own, so a page and the control beside it agree.
 pub(crate) fn page_palette(theme: Theme) -> PagePalette {
     let canvas = theme.palette();
     let chrome = theme.chrome_palette();
-    PagePalette {
-        sheet: canvas.content_bg,
-        sheet_border: canvas.grid_line,
-        shadow: canvas.header_border,
-        text: canvas.cell_text,
+    PagePalette::on_paper(ThemeInks {
+        shadow: canvas.shadow,
         accent: chrome.accent,
         warning: chrome.warning,
         success: chrome.success,
         error: chrome.error,
-    }
+    })
 }
 
 /// Where the canvas's top-left corner sits on the page. The chrome moves the
@@ -569,7 +568,7 @@ impl ProseView {
             } else {
                 LayerRepaint::Reuse
             },
-            backdrop: self.theme.palette().content_bg,
+            backdrop: self.theme.palette().ground,
         }
     }
 
@@ -595,7 +594,8 @@ impl ProseView {
             f64::from(self.size.0.get()),
             f64::from(self.size.1.get()),
         );
-        surface.fill_rect(backdrop, self.theme.palette().content_pending);
+        // The workspace is chrome: the pages lie on the ground of the theme.
+        surface.fill_rect(backdrop, self.theme.palette().ground);
         self.state.paint(surface, &page_palette(self.theme));
         // The input pipe follows the caret the paint just drew, so the IME
         // popup opens beside it (`CHROME-007`).
