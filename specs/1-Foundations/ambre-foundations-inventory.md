@@ -48,7 +48,7 @@
 | `frame` | One frame, from the browser's tick to the pixels on the screen. | partial | 25 | 2 |
 | `interop` | A user brings a file in, or takes a document out, and reads the conversion report: what the file kept and what it lost. | partial | 26 | 2 |
 | `key-verification` | Before a document is shared with someone, their key is shown as a short readable fingerprint and the user confirms it. | partial | 21 |  |
-| `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | partial | 109 |  |
+| `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | partial | 110 |  |
 | `message-bus` | The contract the three threads talk over. | partial | 46 |  |
 | `object-store` | Everything too large for a wire message lives in object storage, sealed. | partial | 25 |  |
 | `organizations` | A company that loses an employee must not lose that employee's documents. | partial | 15 |  |
@@ -66,4 +66,4 @@
 | `macros` | A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. | design-only | 54 |  |
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 
-**50 features: 23 implemented, 24 partial, 3 design-only. 1868 contract rows, 15 loose.**
+**50 features: 23 implemented, 24 partial, 3 design-only. 1869 contract rows, 15 loose.**
