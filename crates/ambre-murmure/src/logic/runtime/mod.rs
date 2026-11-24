@@ -123,6 +123,11 @@ pub struct Runtime<D> {
     /// The channels of the user this session may watch unopened (the
     /// Murmure notifications spec). Cleared on logout.
     listed_channels: unopened::ListedChannels,
+    /// The role this client holds on the `meta` of each open or opening
+    /// channel, from the ready of that `meta` (`MURMURE-684`). A channel
+    /// whose `meta` it cannot write keeps its listed hint. Dropped with the
+    /// channel, and cleared on logout.
+    meta_roles: HashMap<Id<Document>, Role>,
     /// The close each open channel asked of the Sync worker, with the time
     /// of the send that filled its segment (the Murmure segments spec).
     /// Removed on the answer, and with the channel.
@@ -218,6 +223,7 @@ impl<D> Runtime<D> {
             watched_threads: HashMap::new(),
             unplaced_threads: HashSet::new(),
             listed_channels: unopened::ListedChannels::default(),
+            meta_roles: HashMap::new(),
             closing_segments: HashMap::new(),
             close_successors: HashMap::new(),
             owed_replays: HashMap::new(),
@@ -264,6 +270,7 @@ impl<D> Runtime<D> {
         self.channels.clear();
         self.channel_ledgers.clear();
         self.opening.clear();
+        self.meta_roles.clear();
         self.read_cursors.clear();
         self.closed_channels.clear();
         self.document_channels.clear();

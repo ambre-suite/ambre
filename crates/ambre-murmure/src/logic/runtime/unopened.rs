@@ -92,12 +92,21 @@ impl<D> Runtime<D> {
     /// listing differs (`MURMURE-682`). A failed seal, two renames racing, or
     /// an older seal the relay served leave a stale hint. An open channel
     /// reads the true name. A channel no listing named, or one not open, seals
-    /// nothing.
+    /// nothing. Nor does a channel whose `meta` this client cannot write, and
+    /// its hint stays as listed, so a later writer still sees it stale
+    /// (`MURMURE-684`).
     pub(crate) fn reseal_stale_name(&mut self, channel_id: Id<Channel>) {
         let Some(channel) = self.channels.get(&channel_id) else {
             return;
         };
         let (meta, name) = (channel.meta_id(), channel.name());
+        let writes_meta = self
+            .meta_roles
+            .get(&meta.document_id())
+            .is_some_and(|role| role.can_write_document());
+        if !writes_meta {
+            return;
+        }
         let Some(hint) = self.listed_channels.hints.get_mut(&channel_id) else {
             return;
         };

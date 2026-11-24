@@ -1020,6 +1020,69 @@ mod tests {
         );
     }
 
+    /// `MURMURE-684`: a viewer of `meta` seals no name and keeps the stale
+    /// hint as listed. Once the same client reads `meta` as an editor, the
+    /// hint still reads stale, so the name seals then.
+    #[test]
+    fn a_reader_of_meta_keeps_the_stale_hint_until_it_writes() {
+        let (mut state, _ui, sync) = harness();
+        let channel_id = Id::<Channel>::mint();
+        let name = ambre_core::Validated::<ambre_core::Name>::parse("board").expect("a name");
+        let stored = crate::identified(
+            ChannelState::create(channel_id, ChannelType::Private, Some(&name), NOW)
+                .expect("create"),
+        );
+        let meta = stored.meta_id();
+        let listed = LogicEvent::MemberChannels {
+            channels: vec![ambre_bus::MemberChannel {
+                channel_id,
+                place: ambre_bus::ChannelPlace::Private(Id::<Space>::mint()),
+            }],
+            spaces: Vec::new(),
+            names: vec![ambre_bus::ChannelName {
+                channel_id,
+                name: ambre_core::Validated::<ambre_core::Name>::parse("old board")
+                    .expect("a name"),
+            }],
+            peers: Vec::new(),
+            metas: vec![ambre_bus::ChannelMeta {
+                channel_id,
+                meta,
+                last: None,
+            }],
+        };
+        let ready = |state: &mut LogicState, role: ambre_bus::Role| {
+            state.handle_logic_event(LogicEvent::DocumentReady {
+                document_id: meta.document_id(),
+                role,
+            });
+        };
+        state.handle_logic_event(listed.clone());
+        state.handle_logic_command(LogicCommand::OpenChannel { channel_id });
+        state.handle_logic_event(LogicEvent::ChannelDocuments {
+            channel_id,
+            documents: listing(&stored),
+        });
+        state.handle_logic_event(LogicEvent::RemoteSnapshot {
+            document_id: meta.document_id(),
+            covered_seq: ambre_core::Seq::<ambre_core::Relay>::new(1),
+            payload: stored.snapshot(meta.document_id()).expect("snapshot"),
+        });
+        ready(&mut state, ambre_bus::Role::Viewer);
+        serve(&mut state, &stored, stored.active_id().document_id());
+        assert!(state.rt().channels().contains_key(&channel_id));
+        assert!(sealed_names(&sync).is_empty(), "a reader seals nothing");
+        state.handle_logic_event(listed);
+        assert!(sealed_names(&sync).is_empty(), "nor on a later listing");
+
+        ready(&mut state, ambre_bus::Role::Editor);
+        assert_eq!(
+            sealed_names(&sync),
+            [(meta, Some("board".to_owned()))],
+            "the hint stayed stale, so a writer seals"
+        );
+    }
+
     /// Holds `SYNC-229` on the Logic side. The meta opens naming itself, and
     /// each live segment it names opens naming that meta, read from the
     /// sealed state of the channel.

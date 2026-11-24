@@ -719,7 +719,7 @@ impl LogicState {
                 } else {
                     // A document this client created goes up whole first.
                     self.route(|m| m.flush_unsent(document_id));
-                    if self.route(|m| m.channel_document_ready(document_id))
+                    if self.route(|m| m.channel_document_ready(document_id, role))
                         || self.route(|m| m.space_document_ready(document_id, role))
                     {
                         // A channel or a space document is no document of
