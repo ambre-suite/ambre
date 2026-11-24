@@ -1913,6 +1913,15 @@ body {
     box-shadow: var(--shadow-low);
 }
 
+/* An icon segment is an icon button: the track draws its box, not the button. */
+.ambre-segments > .ambre-icon-button {
+    width: auto;
+}
+
+.ambre-segments > .ambre-icon-button:hover:not([aria-checked="true"]) {
+    background: transparent;
+}
+
 /* A stepper: one field, the number and its unit between two steps. */
 .ambre-stepper {
     box-sizing: border-box;
