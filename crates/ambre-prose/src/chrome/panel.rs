@@ -191,7 +191,7 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
             .iter()
             .filter_map(|&id| {
                 let command = ambre_commands::find(crate::commands::COMMANDS, id)?;
-                Some(view! { <CommandButton command=command icon=Option::<icondata::Icon>::None on_command=on_command /> })
+                Some(view! { <CommandButton command=command icon={ Option::<icondata::Icon>::None } on_command=on_command /> })
             })
             .collect_view();
         view! { <Field label="Review">{buttons}</Field> }.into_any()
