@@ -377,7 +377,15 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
             .map(|(kind, label)| Choice {
                 value: Pick::Kind(Some(kind)),
                 label,
-                icon: None,
+                // A heading shows its short glyph, so the five chips fit the
+                // panel; its full name is the tooltip and the accessible name.
+                icon: match kind {
+                    ParagraphKind::Heading(crate::message::HeadingLevel::H1) => {
+                        Some(icondata::MdiFormatHeader1)
+                    }
+                    ParagraphKind::Heading(_) => Some(icondata::MdiFormatHeader2),
+                    _ => None,
+                },
             })
             .collect::<Vec<_>>();
         view! {
