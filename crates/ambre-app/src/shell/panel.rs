@@ -25,6 +25,8 @@ fn fold_key(kind: DocType) -> StaticKey<StorageKeys> {
         DocType::Trame => StaticKey::new("ambre.panel.fold.trame"),
         DocType::Toile => StaticKey::new("ambre.panel.fold.toile"),
         DocType::Murmure => StaticKey::new("ambre.panel.fold.murmure"),
+        // No route boots the settings document, so no panel reads this key.
+        DocType::Settings => StaticKey::new("ambre.panel.fold.settings"),
     }
 }
 

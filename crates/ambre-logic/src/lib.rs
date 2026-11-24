@@ -62,6 +62,10 @@ pub mod seal_queue;
 /// The window that sends a burst of a document's deltas as one
 /// (`SYNC-192`).
 mod send_window;
+// The settings document of the signed-in user.
+pub mod settings;
+// How the settings document rides the Logic thread.
+mod settings_flow;
 /// The snapshot check against the signed deltas (`AUTHOR-016`).
 mod snapshot_check;
 /// The host tests of Murmure's spaces, driven through the dispatch.
@@ -152,6 +156,9 @@ impl DocState {
             // `None` when the CRDT engine refused the scaffolding: the document
             // is not opened rather than opened empty (`PROSE-027`).
             DocType::Prose => ProseState::new().map(|state| DocState::Prose(Box::new(state))),
+            // The settings document is held by `settings::SettingsDoc`, and no
+            // view shows it (`ambre-spec-user-settings.md`).
+            DocType::Settings => None,
             DocType::Murmure => {
                 tracing::warn!(
                     "Logic: no state implemented for {:?}, document will not render",
@@ -984,6 +991,9 @@ struct LogicState {
     /// The reader's own locale and convention (`LogicCommand::SetReaderLocale`),
     /// so a document opened later reads under the same convention.
     reader_locale: ambre_client_core::ReaderLocale,
+    /// The settings document of the signed-in user, once the relay named it
+    /// (`ambre-spec-user-settings.md`).
+    settings: Option<settings::SettingsSession>,
     /// The locale each document this reader created waits to be seeded with,
     /// until it opens (`LOCALE-019`).
     locale_seeds: HashMap<Id<Document>, ambre_client_core::DocumentLocale>,
@@ -1099,6 +1109,7 @@ impl LogicState {
             pending_seals: HashMap::new(),
             faces: ambre_draw::FaceRegistry::new(),
             reader_locale: ambre_client_core::ReaderLocale::default(),
+            settings: None,
             locale_seeds: HashMap::new(),
             export_cx: None,
             converters: converting::Converters::default(),
@@ -1171,6 +1182,7 @@ impl LogicState {
         for document_id in due {
             self.send_window(document_id, Vec::new(), WindowEnd::Due(now));
         }
+        self.release_settings(now);
     }
 
     /// The earliest instant a window ends holding a delta, which the thread
@@ -1179,6 +1191,11 @@ impl LogicState {
         self.docs
             .values()
             .filter_map(|doc| doc.window.due())
+            .chain(
+                self.settings
+                    .as_ref()
+                    .and_then(settings::SettingsSession::due),
+            )
             .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
     }
 

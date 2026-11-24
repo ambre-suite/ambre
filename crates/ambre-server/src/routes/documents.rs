@@ -181,6 +181,13 @@ pub async fn create_document(
     let s = auth;
 
     let name_enc = req.name_enc;
+    // The settings document is created by its own route alone, which keeps one
+    // per account (`SETTINGS-002`).
+    if req.doc_type == ambre_core::DocType::Settings {
+        return Err(AppError::BadRequest(
+            "a settings document is claimed on /settings".into(),
+        ));
+    }
     // Only a Murmure document is a space (`SRV-217`).
     if req.space == ambre_core::DocumentScope::Space && req.doc_type != ambre_core::DocType::Murmure
     {

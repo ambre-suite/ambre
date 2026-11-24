@@ -30,6 +30,7 @@
 | `launcher` | The home screen at the root of the site: sign in, then every document you can open, whatever kind it is. | implemented | 55 |  |
 | `locale` | A document carries one language tag, so two collaborators on differently configured machines read the same number, the same currency and the same date. | implemented | 23 |  |
 | `media` | A picture in a document travels apart from it. | implemented | 20 |  |
+| `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | implemented | 116 |  |
 | `op-authorship` | Who wrote each operation of a document. | implemented | 38 |  |
 | `pdf-export` | A user hands a document to someone who has no Ambre, and the file looks like the screen. | implemented | 20 |  |
 | `residency` | Which documents a client holds, in memory and on disk, and what a document it does not hold still costs. | implemented | 32 |  |
@@ -49,7 +50,6 @@
 | `find` | A user types a word and the application takes them to it, wherever it is -- including far past the edge of the screen. | partial | 15 |  |
 | `frame` | One frame, from the browser's tick to the pixels on the screen. | partial | 25 | 2 |
 | `interop` | A user brings a file in, or takes a document out, and reads the conversion report: what the file kept and what it lost. | partial | 26 | 2 |
-| `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | partial | 116 |  |
 | `message-bus` | The contract the three threads talk over. | partial | 46 |  |
 | `object-store` | Everything too large for a wire message lives in object storage, sealed. | partial | 25 |  |
 | `organizations` | A company that loses an employee must not lose that employee's documents. | partial | 15 |  |
@@ -57,13 +57,13 @@
 | `profile` | The avatar that stands for a user in every application: a picture the user chooses, or their initials on their identity colour. | partial | 9 |  |
 | `render-assets` | What the renderer loads before it can draw anything: the fonts a script needs, the glyphs rasterized from them, the icons, the embedded images. | partial | 26 |  |
 | `server` | The one process every client talks to. | partial | 136 | 1 |
-| `shell` | Where each command of a document page lives. | partial | 82 |  |
+| `shell` | Where each command of a document page lives. | partial | 90 |  |
 | `sync` | The one part of the client that talks to the network. | partial | 91 |  |
 | `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 20 |  |
 | `ui` | The page's own thread. | partial | 24 |  |
-| `zero-knowledge` | What the relay is allowed to learn, and what it must never be able to learn. | partial | 53 | 1 |
+| `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | partial | 40 |  |
+| `zero-knowledge` | What the relay is allowed to learn, and what it must never be able to learn. | partial | 55 | 1 |
 | `machine-access` | A program reads or writes a sheet, a board, a text or a conversation only as a sealed client. | design-only | 34 |  |
 | `macros` | A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. | design-only | 54 |  |
-| `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 
-**50 features: 25 implemented, 22 partial, 3 design-only. 1894 contract rows, 14 loose.**
+**50 features: 26 implemented, 22 partial, 2 design-only. 1929 contract rows, 14 loose.**

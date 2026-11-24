@@ -655,6 +655,13 @@ impl ChannelState {
         Id::<Meta>::from_document(self.meta.id)
     }
 
+    /// The documents the sealed `meta` names: every segment it lists and
+    /// each amendments document it keeps. A removal from the channel checks
+    /// the relay's listing against them (`SYNC-320`).
+    pub fn named_documents(&self) -> Vec<Id<Document>> {
+        amending::named_documents(&self.meta.doc)
+    }
+
     /// The identifier of the segment new messages go to.
     pub fn active_id(&self) -> Id<Segment> {
         Id::<Segment>::from_document(self.active.id)

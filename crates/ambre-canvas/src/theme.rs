@@ -518,8 +518,10 @@ mod stylesheet_tests {
                 && selector.contains("[aria-label]")
                 && value_of(&body, "position").is_some()
             {
+                // `:not()` may list other exclusions after the menu.
                 assert!(
-                    selector.contains(":not(.ambre-ctx-menu *"),
+                    selector.contains(":not(.ambre-ctx-menu *)")
+                        || selector.contains(":not(.ambre-ctx-menu *,"),
                     "`{selector}` positions the floating menu of the bar"
                 );
             }

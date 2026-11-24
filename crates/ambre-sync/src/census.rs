@@ -110,7 +110,11 @@ impl SyncState {
     /// Starts `removal`. A removal that caps a document the Logic thread
     /// does not hold lists the documents it caps first, then opens them
     /// (`SYNC-312`, `SYNC-314`). Any other runs at once.
-    pub(crate) fn begin_removal(&mut self, removal: Removal) {
+    ///
+    /// `named` lists the documents the sealed `meta` of a channel names, as
+    /// the Logic thread read them. A removal from a channel with no such
+    /// list, or an empty one, fails before it lists anything (`SYNC-320`).
+    pub(crate) fn begin_removal(&mut self, removal: Removal, named: Option<Vec<Id<Document>>>) {
         let Some(tx) = self.event_tx.clone() else {
             return self.run_removal(removal);
         };
@@ -137,6 +141,14 @@ impl SyncState {
                             ApiFailure::Local(ambre_core::LocalFailure::ChannelNotOpen),
                         );
                     }
+                    // The Logic thread names the documents of a channel
+                    // whose `meta` no listing here holds (`SYNC-320`).
+                    None if named.is_some() => {
+                        return self.fail_removal(
+                            removal,
+                            ApiFailure::Local(ambre_core::LocalFailure::ChannelNotOpen),
+                        );
+                    }
                     None => return self.run_removal(removal),
                 }
             }
@@ -145,6 +157,18 @@ impl SyncState {
             }
             Removal::Leave { .. } => None,
             Removal::LeaveChannel { channel_id } => Some(channel_id),
+        };
+        // Only the sealed `meta` says which documents a channel holds. A
+        // census with no word from it fails closed (`SYNC-320`).
+        let named = match (channel, named) {
+            (Some(_), Some(named)) if !named.is_empty() => named,
+            (Some(_), _) => {
+                return self.fail_removal(
+                    removal,
+                    ApiFailure::Local(ambre_core::LocalFailure::ChannelNotOpen),
+                );
+            }
+            (None, _) => Vec::new(),
         };
         crate::spawn(async move {
             let root = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base);
@@ -157,7 +181,7 @@ impl SyncState {
                     };
                     http::get_json_auth::<http::ChannelDocumentsResponse>(&url, auth)
                         .await
-                        .and_then(|listed| channel_counted(&listed.documents, revoked_on))
+                        .and_then(|listed| channel_counted(&listed.documents, revoked_on, &named))
                 }
                 (None, Removal::Leave { document_id, .. }) => {
                     let url = root.route(format!("/documents/{document_id}"));
@@ -325,11 +349,22 @@ impl SyncState {
 /// The documents of a channel a removal caps beside its `meta`, each under
 /// that `meta`. A listing may name no `meta`, or another one than the log a
 /// revoke writes on. It then fails the removal, which would leave the
-/// documents of the channel uncapped (`SYNC-312`).
+/// documents of the channel uncapped (`SYNC-312`). So does a listing that
+/// leaves out a document of `named`, the documents the sealed `meta` names
+/// (`SYNC-320`).
 fn channel_counted(
     entries: &[http::ChannelDocumentEntry],
     revoked_on: Option<Id<Document>>,
+    named: &[Id<Document>],
 ) -> Result<Vec<Counted>, http::HttpError> {
+    if !named
+        .iter()
+        .all(|n| entries.iter().any(|e| e.document_id == *n))
+    {
+        return Err(http::HttpError::Local(
+            ambre_core::LocalFailure::ChannelDocumentHidden,
+        ));
+    }
     let meta = entries
         .iter()
         .find(|e| e.kind == ambre_core::ChannelDocumentKind::Meta)
@@ -657,7 +692,7 @@ mod tests {
             entry(META, ambre_core::ChannelDocumentKind::Meta),
             entry(THREAD, ambre_core::ChannelDocumentKind::Thread),
         ];
-        let counted = channel_counted(&listed, Some(META)).expect("its own meta");
+        let counted = channel_counted(&listed, Some(META), &[THREAD]).expect("its own meta");
         let own = Counted {
             document_id: META,
             doc_type: DocType::Murmure,
@@ -665,11 +700,11 @@ mod tests {
         };
         assert_eq!(counted, vec![own, under_meta(THREAD)], "the meta first");
         assert!(
-            channel_counted(&listed, None).is_ok(),
+            channel_counted(&listed, None, &[THREAD]).is_ok(),
             "a departure names no log"
         );
-        assert!(channel_counted(&listed, Some(SEGMENT)).is_err());
-        assert!(channel_counted(&listed[1..], None).is_err());
+        assert!(channel_counted(&listed, Some(SEGMENT), &[THREAD]).is_err());
+        assert!(channel_counted(&listed[1..], None, &[THREAD]).is_err());
     }
 
     /// `SYNC-315`: a departure floors every document it names no cap for at
@@ -692,9 +727,74 @@ mod tests {
         let removal = Removal::LeaveChannel {
             channel_id: CHANNEL,
         };
-        state.census_planned(removal, channel_counted(&listed, None));
+        state.census_planned(removal, channel_counted(&listed, None, &[THREAD]));
         assert!(state.census_docs.contains(&META) && state.census_docs.contains(&THREAD));
         assert!(!state.channel_metas.contains_key(&META), "the log itself");
         assert_eq!(state.log_document(THREAD), META);
+    }
+    /// `SYNC-320`: a listing that leaves out a document the sealed `meta`
+    /// names fails the removal, whatever else it lists. A listing that holds
+    /// every named document, and more, passes.
+    #[test]
+    fn a_listing_that_hides_a_named_document_fails_the_removal() {
+        let entry = |document_id, kind| http::ChannelDocumentEntry { document_id, kind };
+        let listed = [
+            entry(META, ambre_core::ChannelDocumentKind::Meta),
+            entry(THREAD, ambre_core::ChannelDocumentKind::Thread),
+            entry(SEGMENT, ambre_core::ChannelDocumentKind::Segment),
+        ];
+        let hidden = Id::<Document>::from_bytes([11; 16]);
+        for revoked_on in [Some(META), None] {
+            assert!(matches!(
+                channel_counted(&listed, revoked_on, &[SEGMENT, hidden]),
+                Err(http::HttpError::Local(
+                    ambre_core::LocalFailure::ChannelDocumentHidden
+                ))
+            ));
+            assert!(channel_counted(&listed, revoked_on, &[SEGMENT]).is_ok());
+        }
+        assert!(
+            channel_counted(&listed[..2], Some(META), &[SEGMENT]).is_err(),
+            "the segment the meta names is gone from the listing"
+        );
+    }
+
+    /// `SYNC-320`: a removal from a channel with no named documents, or an
+    /// empty list of them, fails before it asks the relay for anything. A
+    /// revoke on a `meta` through the plain request names none, so it fails
+    /// too. Nothing posts, and no census starts.
+    #[test]
+    fn a_channel_removal_with_no_named_documents_fails_before_it_lists() {
+        let leave = Removal::LeaveChannel {
+            channel_id: CHANNEL,
+        };
+        let revoke = Removal::Revoke {
+            id: Seq::<Request>::new(6),
+            document_id: META,
+            user_id: Id::<User>::from_bytes([8; 16]),
+        };
+        for (removal, named) in [
+            (leave, None),
+            (leave, Some(Vec::new())),
+            (revoke, None),
+            (revoke, Some(Vec::new())),
+        ] {
+            let (mut state, rx, _author) = signed_in();
+            let (tx, events) = ambre_bus::conduit::unbounded::<SyncEvent>();
+            state.set_event_tx(tx);
+            state.begin_removal(removal, named);
+            let told: Vec<LogicEvent> = rx.try_iter().collect();
+            let refused = ApiFailure::Local(ambre_core::LocalFailure::ChannelNotOpen);
+            assert!(
+                told.iter().any(|e| matches!(
+                    e,
+                    LogicEvent::ChannelRequestFailed { failure, .. }
+                        | LogicEvent::ApiError { failure, .. } if *failure == refused
+                )),
+                "{told:?}"
+            );
+            assert!(events.try_iter().next().is_none(), "nothing was asked");
+            assert!(state.censuses.is_empty() && state.census_docs.is_empty());
+        }
     }
 }

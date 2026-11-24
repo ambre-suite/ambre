@@ -76,6 +76,8 @@ use ambre_trame::ui::TrameView;
 #[cfg(target_arch = "wasm32")]
 use leptos::prelude::*;
 #[cfg(target_arch = "wasm32")]
+use leptos_icons::Icon;
+#[cfg(target_arch = "wasm32")]
 use leptos_router::components::Router;
 #[cfg(target_arch = "wasm32")]
 use leptos_router::hooks::use_location;
@@ -152,6 +154,9 @@ mod route;
 /// The route binding, polled each frame.
 #[cfg(target_arch = "wasm32")]
 mod route_binding;
+/// What the page makes of the user settings, testable on the host.
+#[cfg(any(target_arch = "wasm32", test))]
+mod settings_view;
 #[cfg(target_arch = "wasm32")]
 mod signin;
 /// What the switchboard decides, testable on the host.
@@ -216,6 +221,8 @@ type Slot<T> = Rc<RefCell<Option<T>>>;
 struct Wiring {
     to_logic: outbox::ShellOutbox,
     theme_ctl: ambre_canvas::ThemeControl,
+    /// The theme of the account, which the header glyph follows.
+    account_theme: RwSignal<ambre_client_core::ThemeChoice>,
     /// Toile's Undo/Redo availability signals, resolved from its own store so the
     /// menu bar disables the two rows from the Logic thread's `UndoState` alone
     /// (`UNDO-006`).
@@ -265,7 +272,7 @@ struct Wiring {
     formula_ref: RwSignal<String>,
     /// The reference of the selection the context panel names (for example
     /// "B2:D5").
-    selection_ref: RwSignal<ambre_core::Validated<ambre_trame::ui::panel::RangeLabel>>,
+    selection_ref: RwSignal<ambre_trame::ui::panel::PanelSelection>,
     /// The page setup and the frozen pane of the active Trame sheet, which
     /// the context panel shows.
     sheet_setup: RwSignal<Option<ambre_trame::ui::panel::ActiveSheet>>,
@@ -505,10 +512,7 @@ pub fn main() {
     // thread, that was most of a keystroke's pass
     // (`ambre-spec-budgets.md` section 1). Timing marks are a debug aid, so a
     // release build does not stamp them.
-    #[cfg(debug_assertions)]
-    let build = console_trace::Build::Debug;
-    #[cfg(not(debug_assertions))]
-    let build = console_trace::Build::Release;
+    let build = console_trace::Build::CURRENT;
     let _ = tracing::subscriber::set_global_default(console_trace::ConsoleTrace::new(build));
     std::panic::set_hook(Box::new(|info| {
         console_error_panic_hook::hook(info);
@@ -636,7 +640,7 @@ pub fn main() {
     // Formula bar signals (HTML input -> TrameView sync). RwSignal is Copy, so
     // we create them once and pass clones to both TrameView and the Leptos shell.
     let formula_ref = RwSignal::new(String::new());
-    let selection_ref = RwSignal::new(ambre_core::Validated::new(""));
+    let selection_ref = RwSignal::new(ambre_trame::ui::panel::PanelSelection::default());
     let sheet_setup = RwSignal::new(None);
     let formula_text = RwSignal::new(String::new());
     let formula_action = RwSignal::new(None::<FormulaAction>);
@@ -791,13 +795,25 @@ pub fn main() {
         cover: toile_cover,
     };
 
-    // Design tokens: inject the generated CSS custom properties (theme.css) and
-    // boot the theme the system asks for (`UI-THREAD-065`). `theme_ctl` is the
-    // single source of truth for the active scheme, shared with the chrome
-    // toggle and the canvas view.
-    let theme_ctl =
-        ambre_canvas::ThemeControl::new(platform::boot_theme(platform::system_scheme()));
+    // Design tokens: inject the generated CSS custom properties (theme.css).
+    // Boot the theme of the boot hint, read with no wait, or the theme the
+    // system asks for without one (`SETTINGS-032`, `SETTINGS-034`,
+    // `UI-THREAD-065`). `theme_ctl` is the single source of truth for the
+    // active scheme, shared with the chrome toggle and the canvas view.
+    let theme_ctl = ambre_canvas::ThemeControl::new(settings_view::boot_theme(
+        platform::boot_hint().as_ref(),
+        platform::boot_theme(platform::system_scheme()),
+    ));
     inject_theme(theme_ctl.get());
+    // The theme of the account, which the header follows to redraw the glyph
+    // of the theme switch when another device moves it.
+    let account_theme = RwSignal::new(
+        platform::boot_hint()
+            .map(|hint| hint.theme)
+            .unwrap_or_default(),
+    );
+    // The handle the settings of the account move the theme through.
+    let settings_theme = theme_ctl.clone();
 
     // Resolve the boot route once. `/` is the landing (document list); a
     // `/trame/<id>` deep-link boots straight onto that document. After boot the
@@ -825,6 +841,8 @@ pub fn main() {
         ambre_bus::DocType::Prose => ambre_prose::commands::bind_keys(&mut keymap),
         ambre_bus::DocType::Murmure => ambre_murmure::ui::commands::bind_keys(&mut keymap),
         ambre_bus::DocType::Trame => trame_chrome::bind_keys(&mut keymap),
+        // No route boots the settings document (`route::parse`).
+        ambre_bus::DocType::Settings => {}
     }
     // The canvas needs a document from frame 0. Boot onto the routed one, or a
     // throwaway id on the landing route. The canvas is hidden there, and the
@@ -924,7 +942,7 @@ pub fn main() {
     // the bootstrap and was lost whenever the worker came up slowly.
     let sync_start = Rc::new(RefCell::new(ambre_bus::start::StartGate::new()));
     let sync_worker = spawn_sync_worker(Rc::clone(&sync_inbox), Rc::clone(&sync_start));
-    call::install(&sync_worker);
+    call::install(&sync_worker, &shell_outbox);
 
     // The canvas document-swap handle is created by `run_with` below (after the
     // chrome mounts the `<canvas>`); the route effect reads it through this slot.
@@ -959,6 +977,7 @@ pub fn main() {
         clipboard_paste: paste_tx,
         raf: raf.clone(),
         theme_ctl: theme_ctl.clone(),
+        account_theme,
         boot_doc,
         booted,
         slots: shell::ShellSlots {
@@ -1264,6 +1283,17 @@ pub fn main() {
                     switchboard::Effect::Notice(notice) => {
                         toasts.raise(notice.kind, notice.voice, notice.text)
                     }
+                    switchboard::Effect::ApplySettings(settings) => {
+                        let theme = settings_view::rendered(
+                            settings.theme,
+                            platform::boot_theme(platform::system_scheme()),
+                        );
+                        if theme != settings_theme.get() {
+                            platform::set_theme(&settings_theme, theme);
+                        }
+                        account_theme.set(settings.theme);
+                        platform::keep_boot_hint(&settings.boot_hint());
+                    }
                     switchboard::Effect::Send(command) => {
                         relay_tx.send(command);
                     }
@@ -1285,6 +1315,9 @@ pub fn main() {
                         persist.signed_in(user_id);
                     }
                     switchboard::Effect::LeaveSession => {
+                        // Nothing of the account stays in the clear on the
+                        // device (`SETTINGS-039`).
+                        platform::forget_boot_hint();
                         let keeper = draft_keeper.clone();
                         wasm_bindgen_futures::spawn_local(async move {
                             keeper.written().await;
@@ -1545,7 +1578,9 @@ pub fn main() {
                     clock: Box::new(host::PageClock),
                     signals: ambre_trame::ui::TrameSignals {
                         formula_ref: ch_formula_ref,
-                        selection_ref: RwSignal::new(ambre_core::Validated::new("")),
+                        selection_ref: RwSignal::new(
+                            ambre_trame::ui::panel::PanelSelection::default(),
+                        ),
                         sheet_setup: RwSignal::new(None),
                         formula_text: ch_formula_text,
                         formula_action: ch_formula_action,

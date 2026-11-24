@@ -129,9 +129,6 @@ former menu bar and once for the right-click menu. Trame's former toolbar repeat
 
 The two menus of the header read each table.
 
-The shell declares four commands of its own in `ambre_commands::shell`: the way home, the share,
-the theme and the side of the panel.
-
 **A control that backs no command keeps its own words**, having no description to read. Underline,
 strikethrough, wrap and the decimal steppers emit a `StylePatch` and name no identity.
 `CommandSource` is constructed nowhere: the palette is its first reader.

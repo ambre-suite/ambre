@@ -404,6 +404,9 @@ impl Notice {
 pub(crate) enum Effect<'e> {
     /// Raise a toast.
     Notice(Notice),
+    /// Apply the settings of the account: move the theme, and write the boot
+    /// hint of the device (`SETTINGS-012`, `SETTINGS-029`).
+    ApplySettings(&'e ambre_client_core::UserSettings),
     /// Send a command to the Logic thread through the launcher's outbox.
     Send(LogicCommand),
     /// Send the commands a Murmure page boots with.
@@ -514,6 +517,7 @@ impl Switchboard {
                 "A new version of Ambre is available. Reload the page to keep syncing.",
             ))),
             UiEvent::Rest { evt, .. } => self.rest(evt, shown, roster, &mut effects),
+            UiEvent::SettingsChanged { settings } => effects.push(Effect::ApplySettings(settings)),
             // An unlock, a request or the socket met a key setup still owed:
             // the setup, never an error (`CHROME-098`, `SYNC-134`).
             UiEvent::SetupRequired => effects.push(Effect::AskKeys(KeysFace::SetUp)),
@@ -654,6 +658,9 @@ impl Switchboard {
             // The device keeps no session that opens: the page stays on the
             // sign-in screen it shows already (`SRV-326`).
             RestEvent::NoKeptSession => {}
+            // The Logic thread opens the settings document; no view awaits
+            // its name (`SETTINGS-007`).
+            RestEvent::SettingsDocumentFound { .. } => {}
             // The provider's address: send the browser there (`CHROME-095`).
             RestEvent::ProviderAddress { url, state } => {
                 effects.push(Effect::FollowProvider { url, state });
@@ -2237,6 +2244,29 @@ mod tests {
                 .first()
                 .is_some_and(|effect| notice(effect).is_some())
         );
+    }
+
+    /// The settings of the account reach the page as one effect. The name of
+    /// the settings document calls for nothing.
+    #[test]
+    fn the_settings_of_the_account_reach_the_page_as_one_effect() {
+        let mut switchboard = Switchboard::new(Page::Document);
+        let settings = ambre_client_core::UserSettings {
+            theme: ambre_client_core::ThemeChoice::Light,
+            ..Default::default()
+        };
+        let changed = UiEvent::SettingsChanged {
+            settings: settings.clone(),
+        };
+        let effects = switchboard.service(&changed, on(None), &nobody());
+        assert!(matches!(
+            effects.as_slice(),
+            [Effect::ApplySettings(applied)] if **applied == settings
+        ));
+        let named = rest(RestEvent::SettingsDocumentFound {
+            document_id: Id::<Document>::mint(),
+        });
+        assert!(switchboard.service(&named, on(None), &nobody()).is_empty());
     }
 
     /// A sealed file that came back open goes to the open path,

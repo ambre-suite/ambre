@@ -1523,6 +1523,27 @@ fn the_bar_shows_over_a_selection_and_goes_with_it() {
     assert!(!rig.ui.toolbar().visible());
 }
 
+/// `CHROME-241`: the subtitle of the panel counts the words of the selected
+/// text, across blocks, and none with no selection.
+#[test]
+fn the_selected_words_are_counted_across_blocks() {
+    let mut rig = Rig::new(&["hello big world", "and more"]);
+    let blocks = rig.blocks();
+    assert_eq!(rig.ui.selected_words(), None);
+    rig.select(blocks[0], 6, 15);
+    assert_eq!(rig.ui.selected_words().map(|n| n.get()), Some(2));
+    rig.ui.cursor = Some(CursorPosition {
+        block_id: blocks[1],
+        offset: Pos::<DocChar>::new(3),
+        anchor: Some((blocks[0], Pos::<DocChar>::new(10))),
+    });
+    assert_eq!(
+        rig.ui.selected_words().map(|n| n.get()),
+        Some(2),
+        "\"world\" and \"and\""
+    );
+}
+
 /// `PROSE-UI-099`: raising the bar writes nothing, and the selection it was
 /// raised on stays whole.
 #[test]

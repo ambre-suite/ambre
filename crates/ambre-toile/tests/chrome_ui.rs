@@ -1597,10 +1597,21 @@ fn mount_toile_panel_on(model: Option<StyleModel>, scope: CtxScope) -> web_sys::
         scope,
         on_command: Callback::new(|_| {}),
         restyle: RwSignal::new(None),
+        stats: RwSignal::new(Some(ambre_toile::ui::status::SelStats::from_reply(
+            ambre_core::Count::new(3),
+            None,
+        ))),
     });
     let prefs = PanelPrefs::new(DockSide::Right, PanelWidth::DEFAULT, Fold::Open);
     mount_in_container(move || {
-        view! { <ContextPanel prefs=prefs title=content.title sections=content.sections /> }
+        view! {
+            <ContextPanel
+                prefs=prefs
+                title=content.title
+                subtitle=content.subtitle
+                sections=content.sections
+            />
+        }
     })
 }
 
@@ -1621,6 +1632,14 @@ async fn the_board_panel_shows_the_board_then_what_applies_to_the_selection() {
             .unwrap(),
         "Document"
     );
+    // The subtitle reads the view state: nothing selected (`CHROME-241`).
+    let subtitle = |root: &web_sys::Element| {
+        root.query_selector(".ambre-ctx-subtitle")
+            .unwrap()
+            .and_then(|el| el.text_content())
+            .unwrap_or_default()
+    };
+    assert_eq!(subtitle(&board), "nothing selected");
     assert_eq!(ambre_chrome::repeated_title(&board), None);
     assert_eq!(ambre_chrome::native_controls(&board), Vec::<String>::new());
     let markers = ambre_chrome::reach_markers(&board);
@@ -1642,6 +1661,7 @@ async fn the_board_panel_shows_the_board_then_what_applies_to_the_selection() {
     // The link of an element sits in its shape section, out of the arrangement.
     let shape = mount_toile_panel(Some(styled(Styled::Elements)));
     leptos::task::tick().await;
+    assert_eq!(subtitle(&shape), "3 elements");
     for (id, section) in [
         (ambre_toile::ui::menu_bar::LINK_SET, panel::SHAPE),
         (ambre_toile::ui::menu_bar::LINK_CLEAR, panel::SHAPE),

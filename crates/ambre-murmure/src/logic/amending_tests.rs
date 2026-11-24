@@ -978,3 +978,39 @@ fn a_write_to_the_header_of_amendments_is_refused() {
     }
     assert_eq!(alice.doc(amendments).expect("held").get_deep_value(), was);
 }
+
+// --- SYNC-320 ---
+
+/// The sealed `meta` names each segment it lists, the locked one and the
+/// active one, and the amendments of the locked one. Once a fold marks those
+/// amendments erased, the `meta` names them no more, and still names the
+/// segment.
+#[test]
+fn the_meta_names_each_segment_and_the_amendments_no_fold_erased() {
+    let (mut alice, segment) = locked_with(&["one"], Id::<User>::mint());
+    let before = alice.named_documents();
+    assert!(before.contains(&segment.document_id()));
+    assert!(before.contains(&alice.active_id().document_id()));
+    let (amendments, _, _) = amended(&mut alice, segment);
+    let named = alice.named_documents();
+    assert!(named.contains(&amendments), "{named:?}");
+    assert_eq!(named.len(), before.len() + 1, "each document once");
+
+    let list = alice
+        .doc(alice.meta_id().document_id())
+        .expect("meta")
+        .get_list(Root::Segments.as_str());
+    for index in 0..list.len() {
+        let Some(entry) = list.get(index).and_then(crate::logic::schema::fields_of) else {
+            continue;
+        };
+        if crate::logic::schema::string(&entry, SegmentKey::Document) == Some(segment.to_string()) {
+            entry
+                .insert(SegmentKey::Folded, amendments.to_string())
+                .expect("fold");
+        }
+    }
+    let folded = alice.named_documents();
+    assert!(!folded.contains(&amendments));
+    assert!(folded.contains(&segment.document_id()));
+}

@@ -305,8 +305,11 @@ impl TrameView {
         all(not(target_arch = "wasm32"), not(test)),
         expect(dead_code, reason = "the browser frame alone publishes it")
     )]
-    pub(crate) fn selection_ref(&self) -> ambre_core::Validated<crate::ui::panel::RangeLabel> {
+    pub(crate) fn selection_ref(&self) -> crate::ui::panel::PanelSelection {
         let bounds = self.state.selection.bounds();
+        let cells = ambre_core::Count::<ambre_core::Cells>::new(
+            u64::from(bounds.row_count().get()) * u64::from(bounds.col_count().get()),
+        );
         let corner = |at: CellPos| {
             format!(
                 "{}{}",
@@ -314,7 +317,7 @@ impl TrameView {
                 crate::columns::row_label(at.row)
             )
         };
-        ambre_core::Validated::new(if bounds.is_single_cell() {
+        let reference = ambre_core::Validated::new(if bounds.is_single_cell() {
             corner(bounds.top_left)
         } else {
             format!(
@@ -322,7 +325,8 @@ impl TrameView {
                 corner(bounds.top_left),
                 corner(bounds.bottom_right)
             )
-        })
+        });
+        crate::ui::panel::PanelSelection { reference, cells }
     }
 
     /// Recompute the active cell's on-screen anchor and publish it for the
