@@ -319,6 +319,9 @@ impl<D> Runtime<D> {
     /// Ask the relay for the documents of a channel (the Murmure engine spec).
     /// A channel already open or opening is left as it is.
     pub fn open_channel(&mut self, channel_id: Id<Channel>) {
+        // An open asked while a removal opened the channel keeps it open
+        // (`SYNC-320`).
+        self.opened_for_removal.remove(&channel_id);
         if self.channels.contains_key(&channel_id) || self.opening.contains_key(&channel_id) {
             return;
         }
@@ -911,6 +914,7 @@ impl<D> Runtime<D> {
                 for decline in self.declines.remove(&channel_id).unwrap_or_default() {
                     self.handle_channel_command(channel_id, decline);
                 }
+                self.release_removals(channel_id);
             }
             Err(error) => self.end_opening(channel_id, &error),
         }
@@ -1108,6 +1112,33 @@ impl<D> Runtime<D> {
             .collect()
     }
 
+    /// The channel whose `meta` is `document_id`, whether it is open,
+    /// opening or closed.
+    pub(crate) fn channel_of_meta_anywhere(
+        &self,
+        document_id: Id<Document>,
+    ) -> Option<Id<Channel>> {
+        let meta = Id::<Meta>::from_document(document_id);
+        let open = self
+            .channels
+            .iter()
+            .find(|(_, c)| c.meta_id() == meta)
+            .map(|(id, _)| *id);
+        let opening = || {
+            self.opening
+                .iter()
+                .find(|(_, o)| o.as_ref().is_some_and(|o| o.meta_id() == meta))
+                .map(|(id, _)| *id)
+        };
+        let closed = || {
+            self.closed_channels
+                .iter()
+                .find(|(_, c)| c.meta == meta)
+                .map(|(id, _)| *id)
+        };
+        open.or_else(opening).or_else(closed)
+    }
+
     /// Drop an opening that failed, end the session of each document it asked
     /// for, and tell the view.
     fn end_opening(&mut self, channel_id: Id<Channel>, cause: &dyn std::fmt::Display) {
@@ -1120,6 +1151,7 @@ impl<D> Runtime<D> {
         self.end_light_channel(channel_id);
         // A decline that waited on the open writes nothing: the ring ends at its timeout.
         self.declines.remove(&channel_id);
+        self.fail_removals(channel_id);
         self.channel_open_failed(channel_id, cause);
     }
 

@@ -762,11 +762,22 @@ pub(crate) mod tests {
 
         // Carol leaves the channel: the log no longer holds her, and the others switch their
         // keys within the delay (`CALL-027`, `CALL-060`).
+        // The leave goes through the Logic thread, which names the documents of the sealed
+        // `meta` (`SYNC-320`). The space is the one listed last, as the channel is.
+        let space = crate::serve::asked()
+            .iter()
+            .rev()
+            .find_map(|path| {
+                path.strip_prefix("/api/spaces/")?
+                    .strip_suffix("/channels")
+                    .map(str::to_owned)
+            })
+            .expect("a page listed the channels of its space");
         let left = carol_page
             .browser
             .script(
-                "window.wasmBindings.leave_channel(arguments[0]); return true;",
-                json!([channel]),
+                "window.wasmBindings.leave_channel(arguments[0], arguments[1]); return true;",
+                json!([space, channel]),
             )
             .await;
         assert_eq!(left, json!(true));

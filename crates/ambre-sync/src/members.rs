@@ -249,18 +249,23 @@ impl SyncState {
     ///
     /// On the log of a channel's `meta`, the census first opens each document
     /// of the channel. The revoke then caps the member in each one
-    /// (`SYNC-312`).
+    /// (`SYNC-312`). This request names no document of the sealed `meta`, so
+    /// a revoke on such a log fails here: the Logic thread sends
+    /// `SyncCommand::RevokeFromChannel` instead (`SYNC-320`).
     pub(crate) fn handle_revoke_from_document(
         &mut self,
         id: Seq<Request>,
         document_id: Id<Document>,
         user_id: Id<User>,
     ) {
-        self.begin_removal(crate::census::Removal::Revoke {
-            id,
-            document_id,
-            user_id,
-        });
+        self.begin_removal(
+            crate::census::Removal::Revoke {
+                id,
+                document_id,
+                user_id,
+            },
+            None,
+        );
     }
 
     /// The revoke of [`handle_revoke_from_document`](Self::handle_revoke_from_document),
@@ -503,7 +508,7 @@ impl SyncState {
     /// A document not open here opens for a census first, so the departure
     /// names the last clock this user wrote in it (`SYNC-314`).
     pub(crate) fn handle_leave_document(&mut self, id: Seq<Request>, document_id: Id<Document>) {
-        self.begin_removal(crate::census::Removal::Leave { id, document_id });
+        self.begin_removal(crate::census::Removal::Leave { id, document_id }, None);
     }
 
     /// The departure of [`handle_leave_document`](Self::handle_leave_document),

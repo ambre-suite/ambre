@@ -693,6 +693,171 @@ mod tests {
         assert!(!state.rt().closed_channels().any(|c| c == channel_id));
     }
 
+    /// A revoke the view asks for on `meta`.
+    fn revoke(state: &mut LogicState, meta: Id<Document>, user_id: Id<User>) -> Seq<Request> {
+        let id = ambre_bus::next_request();
+        state.handle_logic_command(LogicCommand::Rest {
+            id,
+            cmd: ambre_bus::RestCommand::RevokeFromDocument {
+                document_id: meta,
+                user_id,
+            },
+        });
+        id
+    }
+
+    /// Whether `sent` holds the revoke `id` on `meta`, naming `named` alone.
+    fn revokes(
+        sent: &[SyncCommand],
+        id: Seq<Request>,
+        meta: Id<Document>,
+        named: &[Id<Document>],
+    ) -> bool {
+        sent.iter().any(|c| {
+            matches!(c, SyncCommand::RevokeFromChannel { id: i, document_id, named: n, .. }
+                if *i == id && *document_id == meta && n.as_slice() == named)
+        })
+    }
+
+    /// `SYNC-320`: a revoke on the `meta` of a channel still opening waits
+    /// for the sealed `meta`. Once the channel opens, the revoke leaves with
+    /// the documents that `meta` names, and the channel the view opened
+    /// stays open. A revoke on a document no channel holds goes as it came.
+    #[test]
+    fn a_revoke_on_a_channel_meta_names_what_the_meta_names() {
+        let (mut state, _ui, sync) = harness();
+        let (channel_id, stored) = stored_channel();
+        let meta = stored.meta_id().document_id();
+        let active = stored.active_id().document_id();
+        state.handle_logic_command(LogicCommand::OpenChannel { channel_id });
+        state.handle_logic_event(LogicEvent::ChannelDocuments {
+            channel_id,
+            documents: listing(&stored),
+        });
+        drain(&sync);
+        let user = Id::<User>::mint();
+        let id = revoke(&mut state, meta, user);
+        let waiting = drain(&sync);
+        assert!(
+            !waiting.iter().any(|c| matches!(
+                c,
+                SyncCommand::Rest { .. } | SyncCommand::RevokeFromChannel { .. }
+            )),
+            "the revoke waits for the meta: {waiting:?}"
+        );
+        serve(&mut state, &stored, meta);
+        serve(&mut state, &stored, active);
+        assert!(revokes(&drain(&sync), id, meta, &[active]));
+        assert!(state.rt().channels().contains_key(&channel_id));
+
+        let again = revoke(&mut state, meta, user);
+        assert!(
+            revokes(&drain(&sync), again, meta, &[active]),
+            "an open channel names at once"
+        );
+
+        let other = Id::<Document>::mint();
+        let plain = revoke(&mut state, other, user);
+        assert!(drain(&sync).iter().any(|c| matches!(
+            c,
+            SyncCommand::Rest { id: i, cmd: ambre_bus::RestCommand::RevokeFromDocument { document_id, .. } }
+                if *i == plain && *document_id == other
+        )));
+    }
+
+    /// `SYNC-320`: a revoke on the `meta` of a closed channel opens it to read
+    /// the documents the sealed `meta` names. The revoke leaves with them,
+    /// then the channel closes again.
+    #[test]
+    fn a_revoke_on_a_closed_channel_opens_it_then_closes_it_again() {
+        let (mut state, _ui, sync, store) = harness_with_store();
+        let (channel_id, stored) = stored_channel();
+        let meta = stored.meta_id().document_id();
+        let active = stored.active_id().document_id();
+        let listed = || LogicEvent::ChannelDocuments {
+            channel_id,
+            documents: listing(&stored),
+        };
+        state.handle_logic_command(LogicCommand::OpenChannel { channel_id });
+        state.handle_logic_event(listed());
+        serve(&mut state, &stored, meta);
+        serve(&mut state, &stored, active);
+        state.handle_logic_command(LogicCommand::CloseChannel { channel_id });
+        let copy = drain(&store)
+            .into_iter()
+            .find_map(|(id, write)| match write {
+                PersistWrite::Snapshot(copy) if id == meta => Some(copy),
+                _ => None,
+            })
+            .expect("the meta reaches the store");
+        drain(&sync);
+
+        let id = revoke(&mut state, meta, Id::<User>::mint());
+        assert_eq!(
+            sent(&sync),
+            [Sent::List(channel_id)],
+            "the channel opens first"
+        );
+        state.handle_logic_event(listed());
+        state.handle_logic_command(LogicCommand::RestoreLocalSnapshot {
+            document_id: meta,
+            doc_type: DocType::Murmure,
+            snapshot: Some(copy),
+            deltas: Vec::new(),
+            sessions: Vec::new(),
+        });
+        state.handle_logic_event(LogicEvent::DocumentReady {
+            document_id: meta,
+            role: ambre_bus::Role::Editor,
+        });
+        state.handle_logic_command(LogicCommand::RestoreLocalSnapshot {
+            document_id: active,
+            doc_type: DocType::Murmure,
+            snapshot: None,
+            deltas: Vec::new(),
+            sessions: Vec::new(),
+        });
+        drain(&sync);
+        serve(&mut state, &stored, active);
+        assert!(revokes(&drain(&sync), id, meta, &[active]));
+        assert!(!state.rt().channels().contains_key(&channel_id));
+        assert!(state.rt().closed_channels().any(|c| c == channel_id));
+    }
+
+    /// `SYNC-320`, fail closed: the open a revoke waits on fails. The view
+    /// hears the revoke failed, and nothing leaves for the Sync worker.
+    #[test]
+    fn a_revoke_whose_channel_fails_to_open_sends_nothing() {
+        let (mut state, ui, sync) = harness();
+        let (channel_id, stored) = stored_channel();
+        let meta = stored.meta_id().document_id();
+        state.handle_logic_command(LogicCommand::OpenChannel { channel_id });
+        state.handle_logic_event(LogicEvent::ChannelDocuments {
+            channel_id,
+            documents: listing(&stored),
+        });
+        let id = revoke(&mut state, meta, Id::<User>::mint());
+        drain(&sync);
+        drain(&ui);
+        state.handle_logic_event(LogicEvent::DocumentOpenFailed {
+            document_id: meta,
+            cause: OpenFailure::Transient,
+        });
+        let sent = drain(&sync);
+        assert!(
+            !sent.iter().any(|c| matches!(
+                c,
+                SyncCommand::Rest { .. } | SyncCommand::RevokeFromChannel { .. }
+            )),
+            "{sent:?}"
+        );
+        assert!(drain(&ui).iter().any(|e| matches!(
+            e,
+            UiEvent::ApiError { id: Some(i), request: ambre_bus::ApiRequest::RevokeFromDocument, .. }
+                if *i == id
+        )));
+    }
+
     /// The relay removing the user from a closed channel ends its light
     /// subscriptions and forgets its read cursors.
     #[test]
