@@ -197,6 +197,40 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
         view! { <Field label="Review">{buttons}</Field> }.into_any()
     };
 
+    // Suggestion mode, whatever is selected (`PROSE-UI-262`). The control
+    // reads the mode the Logic thread reported, so its pressed state is the
+    // mode itself (`PROSE-UI-261`).
+    let review_section = move || {
+        let on_command = Callback::new(move |id| {
+            if let Some(intent) = review_intent(id, signals.at_caret.get_untracked()) {
+                signals.intent.set(Some(intent));
+            }
+        });
+        let pressed = Signal::derive(move || {
+            if signals.mode.get() == crate::events::EditMode::Suggesting {
+                Pressed::On
+            } else {
+                Pressed::Off
+            }
+        });
+        let buttons = panel::REVIEW_COMMANDS
+            .iter()
+            .filter_map(|&id| {
+                let command = ambre_commands::find(crate::commands::COMMANDS, id)?;
+                Some(view! {
+                    <CommandButton
+                        command=command
+                        icon=super::icon_of(command)
+                        on_command=on_command
+                        pressed=pressed
+                        labelled=ambre_chrome::Labelled::Text
+                    />
+                })
+            })
+            .collect_view();
+        view! { <Field label="Mode">{buttons}</Field> }.into_any()
+    };
+
     let at_caret = Memo::new(move |_| {
         if signals.at_caret.with(Option::is_some) {
             CaretSuggestion::Held
@@ -220,6 +254,12 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
                         "Suggestion",
                         icondata::MdiFileDocumentEditOutline,
                         suggestion_section,
+                    ),
+                    k if k == panel::REVIEW => PanelSection::new(
+                        k,
+                        "Review",
+                        icondata::MdiFileDocumentEditOutline,
+                        review_section,
                     ),
                     _ => return None,
                 })

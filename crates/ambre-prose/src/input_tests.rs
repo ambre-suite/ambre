@@ -3479,3 +3479,37 @@ fn an_import_keeps_the_zoom() {
     assert_ne!(snapshot(&rig), before, "the import wrote nothing");
     assert_eq!(rig.ui.viewport.zoom, zoom, "the import moved the zoom");
 }
+
+/// `PROSE-UI-260`: the suggestion-mode command turns the mode on, then off.
+/// A control, the chord and the palette each hand the intent of
+/// `review_intent`. The view asks for the mode the Logic thread did not
+/// last report.
+#[test]
+fn the_suggestion_mode_command_turns_the_mode_on_then_off() {
+    use crate::events::EditMode;
+    use crate::view::annotate::{AnnotationIntent, review_intent};
+    let mut rig = Rig::new(&["one"]);
+    rig.logic
+        .set_user_id(ambre_core::id::Id::<ambre_core::id::User>::mint());
+    assert_eq!(rig.ui.edit_mode, EditMode::Editing);
+    for expected in [EditMode::Suggesting, EditMode::Editing] {
+        let intent = review_intent(crate::commands::SUGGEST_CHANGES, None);
+        assert_eq!(intent, Some(AnnotationIntent::ToggleSuggesting));
+        let command = rig
+            .ui
+            .take_intent(AnnotationIntent::ToggleSuggesting, Instant::new(0))
+            .expect("the toggle asks for a mode");
+        assert_eq!(
+            command,
+            ProseCommand::EnableTrackChanges { mode: expected },
+            "the other mode than the one reported"
+        );
+        rig.take_sent(vec![command]);
+        rig.deliver();
+        assert_eq!(
+            rig.ui.edit_mode, expected,
+            "the view reads the reported mode"
+        );
+        assert_eq!(rig.logic.is_suggesting(), expected == EditMode::Suggesting);
+    }
+}

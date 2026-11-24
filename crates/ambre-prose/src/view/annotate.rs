@@ -116,6 +116,9 @@ pub enum AnnotationIntent {
         block_id: BlockId,
         range: Span<DocChar>,
     },
+    /// Turn suggestion mode on when it is off, and off when it is on
+    /// (`PROSE-UI-260`). The view knows the mode, so the chrome names none.
+    ToggleSuggesting,
 }
 
 impl std::fmt::Debug for AnnotationIntent {
@@ -157,6 +160,7 @@ impl std::fmt::Debug for AnnotationIntent {
                 .field("block_id", block_id)
                 .field("range", range)
                 .finish(),
+            Self::ToggleSuggesting => f.write_str("ToggleSuggesting"),
         }
     }
 }
@@ -205,13 +209,18 @@ pub fn stack(heights: &[Px<View>], room: Px<View>) -> Vec<Px<View>> {
     out
 }
 
-/// The intent that an accept or a reject hands the view for the suggestion
-/// at the caret. Another command, or no suggestion there, hands none.
+/// The intent a review command hands the view. The suggestion-mode command
+/// hands its toggle wherever the caret is (`PROSE-UI-260`). An accept or a
+/// reject names the suggestion at the caret, and hands none with no
+/// suggestion there. Another command hands none.
 #[must_use]
 pub fn review_intent(
     id: StaticKey<Commands>,
     at_caret: Option<HoveredSuggestion>,
 ) -> Option<AnnotationIntent> {
+    if id == crate::commands::SUGGEST_CHANGES {
+        return Some(AnnotationIntent::ToggleSuggesting);
+    }
     let suggestion_id = at_caret?.suggestion_id;
     match id {
         crate::commands::ACCEPT_SUGGESTION => Some(AnnotationIntent::Accept { suggestion_id }),
@@ -530,6 +539,12 @@ impl ProseUiState {
                 self.spelling = None;
                 ProseCommand::IgnoreSpelling { block_id, range }
             }
+            // The mode the Logic thread last reported decides the toggle.
+            // Two presses before its answer ask for one mode twice, so the
+            // mode never flips back unseen.
+            AnnotationIntent::ToggleSuggesting => ProseCommand::EnableTrackChanges {
+                mode: self.edit_mode.toggled(),
+            },
         })
     }
 

@@ -30,6 +30,8 @@ of this feature: the suggestion converges under one, and it is painted under the
 | `PROSE-UI-148` | `OBS` | A hover over a suggestion MUST show the accept and reject affordance on that suggestion, and on no other. | this spec section 4 | `ambre_prose::view::annotate::tests::a_hover_names_the_suggestion_under_the_pointer_and_no_other` -- the one suggestion the view publishes; `::a_suggestion_that_leaves_the_list_takes_its_popover_along`; structural -- `crates/ambre-prose/src/chrome/mod.rs` draws the popover from that one signal alone; `ambre_prose::tests::chrome_ui::the_popover_sits_over_the_hovered_suggestion_alone` -- wasm tier: one popover, over the hovered rectangle, moved by a new hover and gone with none | none | verified |
 | `PROSE-UI-258` | `OBS` | With no pointer over a suggestion, a caret before a character of a suggestion MUST show the accept and reject affordance on that suggestion. | this spec section 4; `CHROME-183` | `ambre_prose::view::annotate::tests::the_caret_in_a_suggestion_raises_its_popover_with_no_hover` -- every offset inside, none before or at the end, the pointer still first; structural -- `crates/ambre-app/src/host/prose.rs` publishes the popover after each input the view takes, so a key or a tap that moves the caret raises it | none | verified |
 | `PROSE-UI-259` | `OBS` | With the caret in a suggestion, the context panel and the command palette MUST each accept and reject that suggestion. | this spec section 4; `CHROME-164`; `CHROME-183` | `ambre_prose::tests::chrome_panel::the_caret_in_a_suggestion_shows_its_accept_and_reject_in_the_panel` -- wasm tier: the section shows and leaves with the caret, each button in the tab order hands its intent; `ambre_prose::view::annotate::tests::the_review_commands_rule_on_the_suggestion_at_the_caret` -- the two commands the palette lists hand the same intents, and nothing with no suggestion | none | verified |
+| `PROSE-UI-261` | `OBS` | While suggestion mode is on, the view MUST show it outside the context panel, which the user can fold. | this spec section 4 | `ambre_prose::tests::chrome_panel::the_status_chip_shows_while_suggesting_alone` -- wasm tier, a chip of the status bar in a live region, pressed, named in words, and gone with the mode; `ambre_prose::tests::chrome_panel::the_suggestion_mode_control_shows_the_mode_and_hands_its_toggle` -- the control of the panel pressed exactly while suggesting | none | verified |
+| `PROSE-UI-262` | `INV` | Whatever is selected, the suggestion-mode command MUST be reachable from a control of the context panel, a chord and the command palette. | this spec section 4; `CHROME-165`; `CHROME-183` | `ambre_prose::view::panel::tests::the_review_section_shows_whatever_is_selected` -- the review section over the page and a selection, homed in the panel; `ambre_prose::commands::tests::the_suggestion_mode_command_is_declared_once_and_its_chord_resolves_to_it` -- the chord; `ambre_prose::tests::chrome_panel::the_suggestion_mode_control_shows_the_mode_and_hands_its_toggle` -- wasm tier, the control in the tab order, the chord and the palette each hand the toggle; `ambre_app::shell::app_root::tests::the_palette_is_fed_the_whole_declared_table` -- the palette lists the command | none | verified |
 | `PROSE-UI-052` | `INV` | The accept and reject affordance MUST be DOM chrome, not a canvas overlay. | this spec section 4; `ambre-spec-ui.md section 2` | structural -- `crates/ambre-prose/src/chrome/mod.rs` renders the two buttons as Leptos elements, and the Prose painter holds no button to draw; `ambre_prose::view::annotate::tests::each_intent_becomes_its_command_and_a_focus_scrolls` -- what each button sends; `ambre_prose::tests::chrome_ui::each_popover_button_hands_its_intent_to_the_view` -- wasm tier: a click on each button writes its intent, naming the hovered suggestion | none | verified |
 
 ### 1.2 Turn suggestion mode on or off
@@ -42,6 +44,7 @@ of this feature: the suggestion converges under one, and it is painted under the
 | `PROSE-FEAT-089` | `FRAME` | Turning suggestion mode on or off MUST leave every pending suggestion untouched: the command MUST NOT apply or cancel any of them. | this spec section 3 | `ambre_prose::logic::suggestions::tests::turning_the_mode_off_leaves_the_pending_ones_and_marks_nothing_new` | none | verified |
 | `PROSE-FEAT-300` | `POST` | With suggestion mode on, a command other than typing, deleting, a comment, a suggestion command or the history MUST be refused, never applied unrecorded. | this spec section 3 | `ambre_prose::logic::suggestions::tests::a_structure_command_is_refused_while_suggesting` | none | verified |
 | `PROSE-FEAT-301` | `POST` | A split, a join, a block command or a format change made while suggesting MUST be recorded as a suggestion the author accepts or rejects. | this spec section 6 | not built | unbuilt -- lands with the `Suggestions beyond typing` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-260` | `POST` | The suggestion-mode command MUST turn suggestion mode on when it is off, and off when it is on. | this spec section 4; `PROSE-FEAT-089` | `ambre_prose::input_tests::the_suggestion_mode_command_turns_the_mode_on_then_off` -- the intent the command hands, through the view, to the Logic thread and back, twice | none | verified |
 
 ### 1.3 Type while suggesting
 
@@ -96,7 +99,7 @@ of this feature: the suggestion converges under one, and it is painted under the
   a hundred suggestions is under 5 ms.
 * **Boundary.** none of its own: a suggestion is a mark and an annotation entry in the document.
   `ZK-001` seals every payload before it leaves the client.
-* **Verification.** 40 `verified`, 2 `unimplemented`. `PROSE-FEAT-085` names a merge window resting
+* **Verification.** 43 `verified`, 2 `unimplemented`. `PROSE-FEAT-085` names a merge window resting
   on an undo interval no document defines. `PROSE-FEAT-301` is the structure a reviewer cannot
   suggest yet. Both land with the `Suggestions beyond typing` Story (`ambre-roadmap.md` E5).
 
@@ -204,7 +207,8 @@ answer it, never a keystroke.
 
 | Trigger | Behaviour |
 |---|---|
-| the suggestion-mode control | new edits become suggestions, or stop being them |
+| the suggestion-mode control of the context panel, `Ctrl+Shift+E`, or the palette | new edits become suggestions, or stop being them |
+| a press on the status chip, shown while suggesting | suggestion mode turns off |
 | typing while suggesting | a suggested insertion at the caret |
 | deleting while suggesting | a suggested deletion, or a plain delete over this peer's own pending insertion |
 | a hover over a suggestion | the accept and reject affordance, on that suggestion |
@@ -220,6 +224,11 @@ use theme colours the palette owns
 (`features/ambre-spec-prose-page-rendering.md section 3`). Those are canvas content, painted in the
 page pass. The accept and reject affordance is a DOM Leptos popover, transform-synced to the hovered
 suggestion through a signal the view raises (`PROSE-UI-052`).
+
+**The mode is reached and shown.** One command turns the mode on or off (`PROSE-UI-260`). A
+review section of the context panel holds its control under any selection, and a chord and the
+palette reach it (`PROSE-UI-262`). The panel folds, so a status chip shows the mode too and turns it
+off (`PROSE-UI-261`).
 
 **No hover is needed.** A hover is a pointer's alone, so a key or a tap reaches a suggestion through
 the caret. The popover sits on the suggestion at the caret when no pointer is over one
@@ -250,10 +259,6 @@ popover sends.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **No gesture enters suggestion mode.** `EnableTrackChanges` is declared, and no surface sends it:
-  neither chrome surface names the mode (`features/ambre-spec-prose-toolbar.md section 4`,
-  `features/ambre-spec-prose-slash-command.md section 4`). The feature is unreachable, and every
-  rule above is about what happens once it is on.
 * **The merge window is set from an interval no document defines.** The grouping window is stated as
   two seconds, "aligned with the undo merge interval", and
   `features/ambre-spec-prose-undo.md section 5` records that the undo interval is undefined.

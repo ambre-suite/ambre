@@ -706,3 +706,102 @@ async fn the_caret_in_a_suggestion_shows_its_accept_and_reject_in_the_panel() {
     assert!(button(REJECT_SUGGESTION).is_none(), "the section leaves");
     root.remove();
 }
+
+/// `PROSE-UI-261`, `PROSE-UI-262`: the review section shows the
+/// suggestion-mode control over the page, in the tab order. It is pressed
+/// exactly while the reported mode is suggesting. A press, the chord and the
+/// palette each hand the view the toggle.
+#[wasm_bindgen_test]
+async fn the_suggestion_mode_control_shows_the_mode_and_hands_its_toggle() {
+    use ambre_chrome::{CommandHandler, KeyRoute, KeyTarget};
+    use ambre_prose::commands::SUGGEST_CHANGES;
+    use ambre_prose::events::EditMode;
+    use ambre_prose::view::annotate::AnnotationIntent;
+    let signals = ProseSignals::new();
+    let root = mount_prose_panel(signals);
+    leptos::task::tick().await;
+    assert_eq!(ambre_chrome::repeated_title(&root), None);
+    assert_eq!(
+        ambre_chrome::unreached_controls(&root),
+        Vec::<String>::new()
+    );
+    let marker = ambre_chrome::commands::Reach::Command(SUGGEST_CHANGES).marker();
+    let control: web_sys::HtmlElement = root
+        .query_selector(&format!("[data-reach=\"{marker}\"]"))
+        .unwrap()
+        .expect("the control shows over the page")
+        .dyn_into()
+        .unwrap();
+    assert!(control.tab_index() >= 0, "the control takes the focus");
+    assert_eq!(control.get_attribute("aria-pressed").unwrap(), "false");
+    control.click();
+    assert_eq!(
+        signals.intent.get_untracked(),
+        Some(AnnotationIntent::ToggleSuggesting)
+    );
+    signals.intent.set(None);
+    signals.mode.set(EditMode::Suggesting);
+    leptos::task::tick().await;
+    assert_eq!(control.get_attribute("aria-pressed").unwrap(), "true");
+
+    // The chord and the palette take the control's path.
+    let handler = chrome::ProseHandler {
+        format: signals.format,
+        at_caret: signals.at_caret,
+        intent: signals.intent,
+        now: || Instant::<Authored>::new(0),
+        zone: ambre_prose::message::TimeZone::default,
+    };
+    assert!(matches!(
+        handler.on_key(SUGGEST_CHANGES, KeyTarget::Canvas),
+        KeyRoute::Run(actions) if actions.is_empty()
+    ));
+    assert_eq!(
+        signals.intent.get_untracked(),
+        Some(AnnotationIntent::ToggleSuggesting)
+    );
+    signals.intent.set(None);
+    assert!(handler.on_command(SUGGEST_CHANGES).is_empty());
+    assert_eq!(
+        signals.intent.get_untracked(),
+        Some(AnnotationIntent::ToggleSuggesting)
+    );
+    root.remove();
+}
+
+/// `PROSE-UI-261`: the status chip shows while the session suggests and
+/// leaves when it stops, so a folded panel never hides the mode. The chip
+/// is a pressed reach of the command, and a press hands the toggle.
+#[wasm_bindgen_test]
+async fn the_status_chip_shows_while_suggesting_alone() {
+    use ambre_prose::commands::SUGGEST_CHANGES;
+    use ambre_prose::events::EditMode;
+    use ambre_prose::view::annotate::AnnotationIntent;
+    let signals = ProseSignals::new();
+    let root = mount_in_container(move || view! { <chrome::ProseModeChip signals=signals /> });
+    leptos::task::tick().await;
+    let marker = ambre_chrome::commands::Reach::Command(SUGGEST_CHANGES).marker();
+    let chip = || {
+        root.query_selector(&format!("[role=\"status\"] [data-reach=\"{marker}\"]"))
+            .unwrap()
+    };
+    assert!(chip().is_none(), "no chip while editing");
+    signals.mode.set(EditMode::Suggesting);
+    leptos::task::tick().await;
+    let shown: web_sys::HtmlElement = chip().expect("the chip shows").dyn_into().unwrap();
+    assert_eq!(shown.get_attribute("aria-pressed").unwrap(), "true");
+    assert!(shown.tab_index() >= 0, "the chip takes the focus");
+    assert!(
+        shown.text_content().unwrap().contains("Suggest changes"),
+        "the chip names the mode in words"
+    );
+    shown.click();
+    assert_eq!(
+        signals.intent.get_untracked(),
+        Some(AnnotationIntent::ToggleSuggesting)
+    );
+    signals.mode.set(EditMode::Editing);
+    leptos::task::tick().await;
+    assert!(chip().is_none(), "the chip leaves with the mode");
+    root.remove();
+}

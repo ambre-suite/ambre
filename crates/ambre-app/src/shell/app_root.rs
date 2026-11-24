@@ -872,7 +872,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 {if boot_is_prose {
                     // The five figures of the Prose document
                     // (`PROSE-FEAT-040`), in the shared status band.
-                    view! { <ProseFigures figures=prose_figures zoom=prose_zoom /> }.into_any()
+                    view! { <ProseFigures figures=prose_figures zoom=prose_zoom signals=prose_signals /> }.into_any()
                 } else if boot_is_toile {
                     // Toile selection status bar: count/bounds + shared
                     // zoom & fps chips, styled identically to Trame's band.

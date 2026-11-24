@@ -23,6 +23,9 @@ pub const PAGE: StaticKey<PanelSections> = StaticKey::new("prose.page");
 pub const TEXT: StaticKey<PanelSections> = StaticKey::new("prose.text");
 /// The suggestion at the caret, whatever the kind (`PROSE-UI-259`).
 pub const SUGGESTION: StaticKey<PanelSections> = StaticKey::new("prose.suggestion");
+/// The review section: suggestion mode, shown whatever is selected
+/// (`PROSE-UI-262`).
+pub const REVIEW: StaticKey<PanelSections> = StaticKey::new("prose.review");
 
 /// The paper of the page.
 pub const PAPER: StaticKey<Properties> = StaticKey::new("prose.page.paper");
@@ -154,14 +157,19 @@ pub const TEXT_COMMANDS: [StaticKey<Commands>; 8] = [
 pub const SUGGESTION_COMMANDS: [StaticKey<Commands>; 2] =
     [commands::ACCEPT_SUGGESTION, commands::REJECT_SUGGESTION];
 
-/// The sections the panel shows: those of `kind`, then the suggestion
-/// section while a suggestion holds the caret (`PROSE-UI-259`).
+/// The commands the review section shows (`PROSE-UI-262`).
+pub const REVIEW_COMMANDS: [StaticKey<Commands>; 1] = [commands::SUGGEST_CHANGES];
+
+/// The sections the panel shows. First come those of `kind`, then the
+/// suggestion section while a suggestion holds the caret (`PROSE-UI-259`).
+/// The review section comes last, whatever is selected (`PROSE-UI-262`).
 #[must_use]
 pub fn sections(kind: PanelKind, at_caret: CaretSuggestion) -> Vec<StaticKey<PanelSections>> {
     let mut all = kind.sections().to_vec();
     if at_caret == CaretSuggestion::Held {
         all.push(SUGGESTION);
     }
+    all.push(REVIEW);
     all
 }
 
@@ -369,6 +377,23 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// `PROSE-UI-262`: the review section shows over the page and over a
+    /// selection, with the caret in a suggestion or not. A selection never
+    /// hides the suggestion-mode control.
+    #[test]
+    fn the_review_section_shows_whatever_is_selected() {
+        for kind in PanelKind::ALL {
+            for at_caret in [CaretSuggestion::Outside, CaretSuggestion::Held] {
+                let shown = sections(kind, at_caret);
+                assert_eq!(shown.last(), Some(&REVIEW), "{kind:?} {at_caret:?}");
+            }
+        }
+        let command =
+            ambre_commands::find(commands::COMMANDS, commands::SUGGEST_CHANGES).expect("declared");
+        assert_eq!(command.home, ambre_commands::Home::ContextPanel);
+        assert_eq!(REVIEW_COMMANDS, [commands::SUGGEST_CHANGES]);
     }
 
     #[test]
