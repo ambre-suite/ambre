@@ -1689,7 +1689,8 @@ mod tests {
 
     /// On a phone the search field keeps its icon alone (`CHROME-240`), and
     /// the Ambre menu offers the palette (`CHROME-169`). A tablet and a
-    /// desktop show the field whole, and the menu leaves the entry out.
+    /// desktop show the field whole. The menu keeps the entry at every width,
+    /// since the stylesheet hides nothing inside a width query.
     #[wasm_bindgen_test]
     async fn a_phone_folds_the_search_field_and_offers_the_palette_in_the_menu() {
         assert_eq!(header_shown_at(400).await, (true, false), "a phone");
@@ -1698,8 +1699,8 @@ mod tests {
             (true, false),
             "the widest phone"
         );
-        assert_eq!(header_shown_at(600).await, (false, true), "a tablet");
-        assert_eq!(header_shown_at(1280).await, (false, true), "a desktop");
+        assert_eq!(header_shown_at(600).await, (true, true), "a tablet");
+        assert_eq!(header_shown_at(1280).await, (true, true), "a desktop");
     }
 
     /// Each application lays out its own rows (`CHROME-199`). The formula bar
