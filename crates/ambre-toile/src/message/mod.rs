@@ -1573,6 +1573,9 @@ impl fmt::Debug for CommentSummary {
 pub struct DeckFrame {
     pub id: Id<Frame>,
     pub name: String,
+    /// How many elements the frame holds, which the frames section of the
+    /// context panel shows (`CHROME-243`).
+    pub items: ambre_core::Count<Elements>,
 }
 
 impl fmt::Debug for DeckFrame {
@@ -1580,6 +1583,7 @@ impl fmt::Debug for DeckFrame {
         f.debug_struct("DeckFrame")
             .field("id", &self.id)
             .field("name", &ambre_core::RedactedChars::of(&self.name))
+            .field("items", &self.items)
             .finish()
     }
 }
@@ -3248,6 +3252,7 @@ mod tests {
         let frame = DeckFrame {
             id: frame_id.clone(),
             name: secret.clone(),
+            items: ambre_core::Count::<Elements>::new(0),
         };
         // A copied frame carries its notes, and a copied sticky its body.
         let payload = ClipboardPayload {

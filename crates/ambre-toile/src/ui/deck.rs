@@ -91,6 +91,9 @@ pub enum DeckIntent {
     /// rather than a rank, because the panel's second list holds frames no
     /// rank addresses.
     Rename(Id<Frame>, String),
+    /// Select a frame, from the frames section of the context panel
+    /// (`CHROME-243`).
+    Select(Id<Frame>),
 }
 
 /// A frame name prints as its length alone (`ZK-006`).
@@ -106,6 +109,7 @@ impl std::fmt::Debug for DeckIntent {
                 .field(frame)
                 .field(&ambre_core::Redacted::new(name))
                 .finish(),
+            Self::Select(frame) => f.debug_tuple("Select").field(frame).finish(),
         }
     }
 }
@@ -147,6 +151,7 @@ mod tests {
         DeckFrame {
             id: Id::<Frame>::from_text(id.to_owned()),
             name: name.to_owned(),
+            items: ambre_core::Count::<crate::message::Elements>::new(0),
         }
     }
 

@@ -47,6 +47,19 @@ const PALETTE: &[Rgb] = &[
     Rgb::from_bits(0x70_30a0),
 ];
 
+/// The colours a field lays out inline, before its custom-colour button
+/// (`CHROME-244`). They are black, a light grey and the saturated hues of the
+/// palette, in its order.
+pub(crate) const INLINE: [Rgb; 7] = [
+    Rgb::from_bits(0x00_0000),
+    Rgb::from_bits(0xd9_d9d9),
+    Rgb::from_bits(0xff_0000),
+    Rgb::from_bits(0xff_c000),
+    Rgb::from_bits(0x00_b050),
+    Rgb::from_bits(0x00_70c0),
+    Rgb::from_bits(0x70_30a0),
+];
+
 /// What an unset colour reads as when a pick keeps its alpha: opaque black.
 const UNSET: Rgba = Rgba::from_bits(0x0000_00ff);
 

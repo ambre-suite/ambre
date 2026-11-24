@@ -3,9 +3,10 @@
 // What the sheet's context panel shows (`ambre-spec-shell.md` section 2).
 // Pure, so the host tier reads it.
 //
-// A sheet always holds an active cell, so the panel always shows the same
-// five sections. They are the sheet, the cells, the rows and columns, the sort
-// and filter, and the print setup, folded first. The docked format toolbar
+// The shape of the selection picks the sections, never its content
+// (`CHROME-245`). A lone cell shows the sheet first, then the cells, the rows
+// and columns, the sort and filter, and the print setup, folded first. A range
+// of two cells or more shows the cells first and no sheet. The docked format toolbar
 // left once the panel held its controls (`CHROME-159`). Find and replace has
 // no control here: the Edit menu, its chord and the palette reach it.
 // ============================================================================
@@ -52,6 +53,8 @@ pub const BORDERS: StaticKey<Properties> = StaticKey::new("trame.cell.borders");
 pub const WRAP: StaticKey<Properties> = StaticKey::new("trame.cell.wrap");
 /// The rows and the columns that stay in view.
 pub const FREEZE: StaticKey<Properties> = StaticKey::new("trame.sheet.freeze");
+/// The name of the active sheet.
+pub const SHEET_NAME: StaticKey<Properties> = StaticKey::new("trame.sheet.name");
 /// The paper a sheet prints on.
 pub const PAPER: StaticKey<Properties> = StaticKey::new("trame.page.paper");
 /// The orientation a sheet prints in.
@@ -94,13 +97,49 @@ properties! {
     BORDERS: BORDERS, "Borders";
     WRAP: WRAP, "Wrap text";
     FREEZE: FREEZE, "Freeze";
+    SHEET_NAME: SHEET_NAME, "Sheet name";
     PAPER: PAPER, "Paper";
     ORIENTATION: ORIENTATION, "Orientation";
     MARGINS: MARGINS, "Margins";
 }
 
-/// The sections the panel shows, in order.
+/// The sections the panel shows over a lone cell, in order.
 pub const SECTIONS: [StaticKey<PanelSections>; 5] = [SHEET, CELLS, ROWS_COLS, SORT_FILTER, PRINT];
+
+/// The sections the panel shows over a range of two cells or more, in order.
+pub const RANGE_SECTIONS: [StaticKey<PanelSections>; 4] = [CELLS, ROWS_COLS, SORT_FILTER, PRINT];
+
+/// The shape of the selection, which picks the sections (`CHROME-245`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SelectionShape {
+    /// The active cell alone.
+    Cell,
+    /// Two cells or more.
+    Range,
+}
+
+impl SelectionShape {
+    /// The shape a reference names: `B2:D5` is a range, `B2` a lone cell.
+    /// The view writes the reference with a colon for a range alone
+    /// (`CHROME-227`).
+    #[must_use]
+    pub fn of(reference: &ambre_core::Validated<RangeLabel>) -> Self {
+        if reference.as_str().contains(':') {
+            Self::Range
+        } else {
+            Self::Cell
+        }
+    }
+
+    /// The sections the panel shows for this shape, in order.
+    #[must_use]
+    pub fn sections(self) -> &'static [StaticKey<PanelSections>] {
+        match self {
+            Self::Cell => &SECTIONS,
+            Self::Range => &RANGE_SECTIONS,
+        }
+    }
+}
 
 /// The reference of a selection the header of the panel names, such as
 /// `B2:D5`. `Validated<RangeLabel>`: the view writes it, no rule bounds it.
@@ -225,9 +264,18 @@ pub const SORT_FILTER_COMMANDS: [StaticKey<Commands>; 7] = [
     cmd::CLEAR_FILTER,
 ];
 
-/// The entries of the context bar. The sheet lays out no floating bar yet,
-/// so the list is empty, and the panel holds every entry it would carry.
-pub const BAR: [Reach; 0] = [];
+/// The entries of the range bar over a selection of two cells or more, in
+/// order (`CHROME-238`). Each one is a control of the context panel
+/// (`CHROME-208`). The bar shows unmerge in place of merge on a merged cell.
+pub const BAR: [Reach; 7] = [
+    Reach::Command(cmd::BOLD),
+    Reach::Property(FILL),
+    Reach::Property(NUMBER_FORMAT),
+    Reach::Command(cmd::MERGE),
+    Reach::Command(cmd::UNMERGE),
+    Reach::Command(cmd::SORT_RANGE_ASC),
+    Reach::Command(cmd::SORT_RANGE_DESC),
+];
 
 #[cfg(test)]
 mod tests {
@@ -258,6 +306,23 @@ mod tests {
             margin_choice(PageMargins::even(ambre_core::PrintLength::new(3.0))),
             None
         );
+    }
+
+    /// `CHROME-245`: a lone cell shows the sheet first and keeps the cells; a
+    /// range shows the cells first and no sheet. The content never decides.
+    #[test]
+    fn the_shape_of_the_selection_picks_the_sections() {
+        let cell = SelectionShape::of(&ambre_core::Validated::new("B2"));
+        assert_eq!(cell, SelectionShape::Cell);
+        assert_eq!(cell.sections().first(), Some(&SHEET));
+        assert!(
+            cell.sections().contains(&CELLS),
+            "a lone cell stays formattable"
+        );
+        let range = SelectionShape::of(&ambre_core::Validated::new("B2:D5"));
+        assert_eq!(range, SelectionShape::Range);
+        assert_eq!(range.sections().first(), Some(&CELLS));
+        assert!(!range.sections().contains(&SHEET));
     }
 
     /// Find and replace has no control in the panel: the Edit menu, its chord
@@ -330,7 +395,7 @@ mod tests {
     /// Cut, copy and paste live in the context menu (`CHROME-178`). Every
     /// formatting command of the sheet reaches the cells section
     /// (`CHROME-166`): bold and italic are commands, the rest properties. The
-    /// sheet's empty bar holds no clipboard entry (`CHROME-151`).
+    /// range bar holds no clipboard entry (`CHROME-151`).
     #[test]
     fn the_clipboard_homes_in_the_menu_and_the_panel_holds_every_formatting_command() {
         use ambre_commands::{Home, shared};

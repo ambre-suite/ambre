@@ -46,6 +46,15 @@ pub struct TramePanelSignals {
     pub selection: RwSignal<ambre_core::Validated<RangeLabel>>,
     /// The page setup and the frozen pane of the active sheet.
     pub sheet: RwSignal<Option<ActiveSheet>>,
+    /// The sheets of the workbook, for the name of the active one.
+    pub sheets: RwSignal<Vec<crate::message::SheetTab>>,
+    /// The active sheet.
+    pub active_sheet: RwSignal<ambre_core::Id<ambre_core::id::Sheet>>,
+    /// The rename sink, the one the sheet tabs use.
+    pub on_rename: Callback<(
+        ambre_core::Id<ambre_core::id::Sheet>,
+        crate::message::SheetName,
+    )>,
 }
 
 /// The command the merge toggle sends: a merged cell splits, any other cell
@@ -101,18 +110,10 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
         on_style,
         selection,
         sheet,
+        sheets,
+        active_sheet,
+        on_rename,
     } = signals;
-    let icon_command = move |id: StaticKey<Commands>, icon_of: StaticKey<Commands>| {
-        ambre_chrome::commands::find(registry::COMMANDS, id).map(|c| {
-            let icon = registry::icon(icon_of).and_then(super::icons::resolve);
-            view! { <CommandButton command=c icon=icon on_command=on_command /> }
-        })
-    };
-    let icons = move |ids: &[StaticKey<Commands>]| {
-        ids.iter()
-            .filter_map(|&id| icon_command(id, id))
-            .collect_view()
-    };
     // The place in `ids` of the choice the active sheet reads.
     let place = move |ids: &'static [StaticKey<Commands>],
                       f: fn(ActiveSheet) -> Option<StaticKey<Commands>>| {
@@ -125,7 +126,41 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
     };
 
     let sheet_section = move || {
+        // The name of the active sheet. A name the rule refuses keeps its
+        // reason on the field and renames nothing (`TRAME-234`).
+        let name = move || {
+            let id = active_sheet.get();
+            sheets.with(|all| {
+                all.iter()
+                    .find(|s| s.id == id)
+                    .map(|s| s.name.as_str().to_owned())
+                    .unwrap_or_default()
+            })
+        };
         view! {
+            <Field label="Name">
+                <input
+                    class="ambre-kit-text"
+                    type="text"
+                    aria-label=label(panel::SHEET_NAME)
+                    data-reach=reach(panel::SHEET_NAME)
+                    prop:value=name
+                    on:change=move |ev| {
+                        let input = event_target::<web_sys::HtmlInputElement>(&ev);
+                        match crate::message::SheetName::new(&input.value()) {
+                            Ok(next) => {
+                                let _ = input.remove_attribute("aria-invalid");
+                                input.set_title("");
+                                on_rename.run((active_sheet.get_untracked(), next));
+                            }
+                            Err(refusal) => {
+                                input.set_title(&refusal.to_string());
+                                let _ = input.set_attribute("aria-invalid", "true");
+                            }
+                        }
+                    }
+                />
+            </Field>
             <Field label="Freeze">
                 <Select
                     label=label(panel::FREEZE)
@@ -377,59 +412,82 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
         .into_any()
     };
 
+    // A labelled row per command (`CHROME-241`): the name reads at a glance,
+    // where a row of bare icons asks the user to hover each one.
+    let labelled = move |id: StaticKey<Commands>, icon_of: StaticKey<Commands>| {
+        ambre_chrome::commands::find(registry::COMMANDS, id).map(|c| {
+            let icon = registry::icon(icon_of).and_then(super::icons::resolve);
+            view! { <CommandButton command=c icon=icon on_command=on_command labelled=Labelled::Text /> }
+        })
+    };
+    let rows = move |ids: &[StaticKey<Commands>]| {
+        ids.iter().filter_map(|&id| labelled(id, id)).collect_view()
+    };
     let rows_cols = move || {
         view! {
-            <Field label="Rows">
-                {icons(&[registry::INSERT_ROW_ABOVE, registry::INSERT_ROW_BELOW, registry::DELETE_ROWS])}
-            </Field>
-            <Field label="Columns">
-                {icons(&[registry::INSERT_COL_LEFT, registry::INSERT_COL_RIGHT, registry::DELETE_COLS])}
-            </Field>
+            <Row>
+                {rows(&[
+                    registry::INSERT_ROW_ABOVE,
+                    registry::INSERT_ROW_BELOW,
+                    registry::INSERT_COL_LEFT,
+                    registry::INSERT_COL_RIGHT,
+                    registry::DELETE_ROWS,
+                    registry::DELETE_COLS,
+                ])}
+            </Row>
         }
         .into_any()
     };
     let sort_filter = move || {
         view! {
-            <Field label="Sort range">
-                {icons(&[registry::SORT_RANGE_ASC, registry::SORT_RANGE_DESC, registry::SORT_RANGE_MULTI])}
-            </Field>
-            <Field label="Sort sheet">
+            <Row>
+                {rows(&[registry::SORT_RANGE_ASC, registry::SORT_RANGE_DESC, registry::SORT_RANGE_MULTI])}
                 // The two sheet sorts declare one icon; the direction reads
                 // from the range sorts' arrows.
-                {icon_command(registry::SORT_SHEET_ASC, registry::SORT_RANGE_ASC)}
-                {icon_command(registry::SORT_SHEET_DESC, registry::SORT_RANGE_DESC)}
-            </Field>
-            <Field label="Filter">
-                {icons(&[registry::FILTER_COLUMN, registry::CLEAR_FILTER])}
-            </Field>
+                {labelled(registry::SORT_SHEET_ASC, registry::SORT_RANGE_ASC)}
+                {labelled(registry::SORT_SHEET_DESC, registry::SORT_RANGE_DESC)}
+                {rows(&[registry::FILTER_COLUMN, registry::CLEAR_FILTER])}
+            </Row>
         }
         .into_any()
     };
 
+    // The shape of the selection picks the sections, never its content
+    // (`CHROME-245`).
+    let shape = Memo::new(move |_| selection.with(panel::SelectionShape::of));
     let sections = Signal::derive(move || {
-        vec![
-            PanelSection::new(
-                panel::SHEET,
-                "Sheet",
-                icondata::MdiTableLarge,
-                sheet_section,
-            ),
-            PanelSection::new(panel::CELLS, "Cells", icondata::MdiFormatPaint, cells),
-            PanelSection::new(
-                panel::ROWS_COLS,
-                "Rows and columns",
-                icondata::MdiTableRowPlusAfter,
-                rows_cols,
-            ),
-            PanelSection::new(
-                panel::SORT_FILTER,
-                "Sort and filter",
-                icondata::MdiFilterOutline,
-                sort_filter,
-            ),
-            PanelSection::new(panel::PRINT, "Print", icondata::LuPrinter, print_section)
-                .folded_first(),
-        ]
+        shape
+            .get()
+            .sections()
+            .iter()
+            .filter_map(|&key| {
+                Some(match key {
+                    k if k == panel::SHEET => {
+                        PanelSection::new(k, "Sheet", icondata::MdiTableLarge, sheet_section)
+                    }
+                    k if k == panel::CELLS => {
+                        PanelSection::new(k, "Cells", icondata::MdiFormatPaint, cells)
+                    }
+                    k if k == panel::ROWS_COLS => PanelSection::new(
+                        k,
+                        "Rows and columns",
+                        icondata::MdiTableRowPlusAfter,
+                        rows_cols,
+                    ),
+                    k if k == panel::SORT_FILTER => PanelSection::new(
+                        k,
+                        "Sort and filter",
+                        icondata::MdiFilterOutline,
+                        sort_filter,
+                    ),
+                    k if k == panel::PRINT => {
+                        PanelSection::new(k, "Print", icondata::LuPrinter, print_section)
+                            .folded_first()
+                    }
+                    _ => return None,
+                })
+            })
+            .collect::<Vec<_>>()
     });
     PanelContent {
         title: Signal::derive(move || selection.get().into_string()),

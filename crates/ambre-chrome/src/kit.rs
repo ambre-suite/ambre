@@ -20,7 +20,7 @@
 
 use ambre_commands::{Command, Locale, Property, Reach, Reading};
 use ambre_core::FontFamily;
-use ambre_core::{Commands, Mm, PrintLength, Px, StaticKey, StoredBoard};
+use ambre_core::{Board, Commands, Mm, PrintLength, Px, Radians, StaticKey, StoredBoard};
 use leptos::prelude::*;
 
 use crate::color::PickedColour;
@@ -97,6 +97,7 @@ pub fn CommandButton(
                     class="ambre-kit-command"
                     data-reach=reach.marker()
                     aria-label=aria
+                    aria-keyshortcuts=command.chord().map(|c| c.to_string())
                     title=tip
                     aria-pressed=move || pressed.map(|p| p.get().aria())
                     on:mousedown=move |ev| ev.prevent_default()
@@ -104,6 +105,8 @@ pub fn CommandButton(
                 >
                     {icon.map(|icon| view! { <leptos_icons::Icon icon=icon /> })}
                     <span>{label}</span>
+                    // A labelled row names its chord at its end (`CHROME-242`).
+                    {command.chord().map(|c| view! { <crate::Kbd binding=c /> })}
                 </button>
             }
             .into_any()
@@ -151,12 +154,23 @@ pub fn ColourField<C: PickedColour>(
     #[prop(into)] default: Signal<C>,
     reset_label: &'static str,
     on_write: Callback<Option<C>>,
+    /// Lay out the common colours inline, before the picker.
+    #[prop(optional)]
+    layout: ColourLayout,
 ) -> impl IntoView {
     // The picker edits a signal of its own; a reading seeds it.
     let current = RwSignal::new(value.get_untracked().uniform().flatten());
     Effect::new(move |_| current.set(value.get().uniform().flatten()));
+    let inline = (layout == ColourLayout::Swatches).then(|| {
+        swatch_row(
+            reset_label,
+            Signal::derive(move || current.get().map(C::as_rgba)),
+            Callback::new(move |c: Option<ambre_core::Rgba>| on_write.run(c.map(C::from_rgba))),
+        )
+    });
     view! {
         <span class="ambre-kit-colour" data-reach=Reach::Property(property.id).marker()>
+            {inline}
             <crate::ColorPopover
                 title=property_label(property)
                 icon=icon
@@ -168,6 +182,51 @@ pub fn ColourField<C: PickedColour>(
             {move || mixed_hint(value.get().is_mixed())}
         </span>
     }
+}
+
+/// How a [`ColourField`] lays out its choices.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ColourLayout {
+    /// The picker alone, behind its icon button.
+    #[default]
+    Popover,
+    /// The common colours as inline swatches, then the picker as the
+    /// custom-colour button (`CHROME-244`).
+    Swatches,
+}
+
+/// The inline swatches of a colour field: no colour first, then each colour
+/// of [`INLINE`](crate::color::INLINE). One copy of the view serves every
+/// packing, which the caller converts.
+fn swatch_row(
+    none_label: &'static str,
+    current: Signal<Option<ambre_core::Rgba>>,
+    on_pick: Callback<Option<ambre_core::Rgba>>,
+) -> AnyView {
+    let choices = std::iter::once(None).chain(
+        crate::color::INLINE
+            .iter()
+            .map(|c| Some(c.to_rgba(ambre_core::Alpha::OPAQUE))),
+    );
+    choices
+        .map(|choice| {
+            let label = choice.map_or_else(|| none_label.to_owned(), |c| c.to_string());
+            let pressed = Signal::derive(move || {
+                Pressed::from_bool(
+                    current.get().map(ambre_core::Rgba::rgb) == choice.map(ambre_core::Rgba::rgb),
+                )
+            });
+            view! {
+                <crate::ColorSwatch
+                    label=label
+                    colour=Signal::stored(choice)
+                    pressed=pressed
+                    on_press=Callback::new(move |()| on_pick.run(choice))
+                />
+            }
+        })
+        .collect_view()
+        .into_any()
 }
 
 /// The font family of a property: the picker that shows each family in
@@ -234,6 +293,60 @@ fn field_number(text: &str) -> Option<f32> {
         .parse::<f32>()
         .ok()
         .filter(|v| v.is_finite() && *v >= 0.0)
+}
+
+/// The number a field reads, when it is finite, of either sign: a place on
+/// the board or an angle.
+fn field_signed(text: &str) -> Option<f64> {
+    text.trim()
+        .replace(',', ".")
+        .parse::<f64>()
+        .ok()
+        .filter(|v| v.is_finite())
+}
+
+/// A place or a size on the board (`CHROME-239`). A place can be negative:
+/// the board has no edge. A size below zero flips its box, which the caller
+/// refuses.
+impl FieldLength for Px<Board> {
+    const UNIT: &'static str = "px";
+
+    fn stepped(self, step: Step) -> Self {
+        match step {
+            Step::Down => Self::new(self.get() - 1.0),
+            Step::Up => Self::new(self.get() + 1.0),
+        }
+    }
+
+    fn field_text(self) -> String {
+        // The board computes in `f64`; the field shows a tenth.
+        tenths(self.get() as f32)
+    }
+
+    fn from_field(text: &str) -> Option<Self> {
+        field_signed(text).map(Self::new)
+    }
+}
+
+/// A rotation, which the field shows and reads in degrees (`CHROME-239`).
+impl FieldLength for Radians {
+    const UNIT: &'static str = "deg";
+
+    fn stepped(self, step: Step) -> Self {
+        let by = match step {
+            Step::Down => -1.0_f64,
+            Step::Up => 1.0,
+        };
+        Self::new((self.to_degrees() + by).to_radians())
+    }
+
+    fn field_text(self) -> String {
+        tenths(self.to_degrees() as f32)
+    }
+
+    fn from_field(text: &str) -> Option<Self> {
+        field_signed(text).map(|degrees| Self::new(degrees.to_radians()))
+    }
 }
 
 impl FieldLength for PrintLength<Mm> {
@@ -479,5 +592,29 @@ mod tests {
         assert_eq!(PrintLength::<Mm>::new(12.7).field_text(), "12.7");
         assert_eq!(PrintLength::<Mm>::new(0.04).field_text(), "0");
         assert_eq!(Px::<StoredBoard>::new(1.5).field_text(), "1.5");
+    }
+
+    /// `CHROME-239`: a place on the board reads either sign, and a rotation
+    /// reads and shows degrees.
+    #[test]
+    fn a_place_reads_either_sign_and_a_rotation_reads_degrees() {
+        assert_eq!(
+            Px::<Board>::from_field("-12.5"),
+            Some(Px::<Board>::new(-12.5))
+        );
+        assert_eq!(Px::<Board>::new(-3.0).field_text(), "-3");
+        assert_eq!(
+            Px::<StoredBoard>::from_field("-1"),
+            None,
+            "a stroke width stays positive"
+        );
+        let quarter = Radians::from_field("90").expect("a number");
+        assert!((quarter.get() - std::f64::consts::FRAC_PI_2).abs() < 1e-9);
+        assert_eq!(quarter.field_text(), "90");
+        assert_eq!(
+            Radians::from_field("-45").map(FieldLength::field_text),
+            Some("-45".to_owned())
+        );
+        assert_eq!(Radians::from_field("a"), None);
     }
 }
