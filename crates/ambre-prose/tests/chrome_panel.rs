@@ -339,6 +339,24 @@ async fn the_format_bar_announces_the_registry_labels() {
             .unwrap();
         assert!(found.is_some(), "{id:?}: no control announces {expected:?}");
     }
+    // `CHROME-185`, `CHROME-186`: each icon names itself in a tooltip, with
+    // the chord and the description its command declares.
+    assert_eq!(
+        ambre_chrome::untipped_icons(&root, ambre_prose::commands::COMMANDS),
+        Vec::<String>::new()
+    );
+    // `CHROME-187`: the keyboard focus shows the tooltip of an icon.
+    let icon: web_sys::HtmlElement = root
+        .query_selector(".ambre-icon-button[data-reach^=\"command:\"]")
+        .unwrap()
+        .expect("an icon that reaches a command")
+        .dyn_into()
+        .unwrap();
+    let tip = icon.query_selector(".ambre-tip").unwrap().unwrap();
+    assert_eq!(tip.get_attribute("data-shown").as_deref(), Some("false"));
+    icon.focus().unwrap();
+    leptos::task::tick().await;
+    assert_eq!(tip.get_attribute("data-shown").as_deref(), Some("true"));
     root.remove();
 }
 

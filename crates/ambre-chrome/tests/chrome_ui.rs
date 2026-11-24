@@ -485,6 +485,8 @@ async fn the_format_bar_hangs_its_controls_and_reports_a_press() {
         on_press: Callback::new(move |()| pressed.update(|p| p.push(label))),
         icon: None,
         chord: None,
+        description: None,
+        reach: None,
     };
     let controls = vec![
         control("Bold", Pressed::On),
@@ -696,6 +698,7 @@ async fn closing_the_floating_menu_returns_the_focus_to_its_opener() {
         keybindings: &[],
         category: StaticKey::<Categories>::new(""),
         home: ambre_commands::Home::ContextPanel,
+        description: None,
     };
     let entries = vec![MenuEntry::command(&item, &ambre_commands::Locale::En)];
     let root = mount_in_container(move || {
@@ -837,6 +840,7 @@ const PALETTE_TABLE: &[ambre_commands::Command] = &[
         )],
         category: StaticKey::<Categories>::new("general"),
         home: ambre_commands::Home::AmbreMenu,
+        description: None,
     },
     ambre_commands::Command {
         id: StaticKey::<Commands>::new("t.engine.recalc"),
@@ -845,6 +849,7 @@ const PALETTE_TABLE: &[ambre_commands::Command] = &[
         keybindings: &[],
         category: StaticKey::<Categories>::new("engine"),
         home: ambre_commands::Home::ContextPanel,
+        description: None,
     },
     ambre_commands::Command {
         id: StaticKey::<Commands>::new("t.merge"),
@@ -853,6 +858,7 @@ const PALETTE_TABLE: &[ambre_commands::Command] = &[
         keybindings: &[],
         category: StaticKey::<Categories>::new("structure"),
         home: ambre_commands::Home::ContextPanel,
+        description: None,
     },
 ];
 
@@ -1399,6 +1405,7 @@ fn ctx_command(
         keybindings: &[],
         category: StaticKey::<Categories>::new(""),
         home: ambre_commands::Home::ContextPanel,
+        description: None,
     }
 }
 

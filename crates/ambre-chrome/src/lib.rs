@@ -59,6 +59,7 @@ mod palette;
 mod passphrase;
 mod shortcut;
 mod status;
+mod tip;
 mod toast;
 
 pub use app_shell::{
@@ -104,4 +105,5 @@ pub use passphrase::{
 };
 pub use shortcut::Kbd;
 pub use status::{PerfChip, PerfDetail, StatusLabel, ZoomChip};
+pub use tip::{CommandTip, untipped_icons};
 pub use toast::{ToastHost, ToastKind, ToastVoice, Toasts};

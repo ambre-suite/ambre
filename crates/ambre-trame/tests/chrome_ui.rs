@@ -836,6 +836,25 @@ async fn the_panel_announces_the_registry_labels() {
         ambre_chrome::native_controls(&container),
         Vec::<String>::new()
     );
+    // `CHROME-185`, `CHROME-186`: each icon names itself in a tooltip, with
+    // the chord and the description its command declares.
+    assert_eq!(
+        ambre_chrome::untipped_icons(&container, chrome::COMMANDS),
+        Vec::<String>::new()
+    );
+    // `CHROME-187`: the keyboard focus shows the tooltip of an icon.
+    let bold = ambre_chrome::commands::Reach::Command(BOLD).marker();
+    let icon: web_sys::HtmlElement = container
+        .query_selector(&format!(".ambre-icon-button[data-reach=\"{bold}\"]"))
+        .unwrap()
+        .expect("the icon of bold")
+        .dyn_into()
+        .unwrap();
+    let tip = icon.query_selector(".ambre-tip").unwrap().unwrap();
+    assert_eq!(tip.get_attribute("data-shown").as_deref(), Some("false"));
+    icon.focus().unwrap();
+    leptos::task::tick().await;
+    assert_eq!(tip.get_attribute("data-shown").as_deref(), Some("true"));
     assert_eq!(
         ambre_chrome::unreached_controls(&container),
         Vec::<String>::new(),

@@ -95,6 +95,9 @@ pub struct Command {
     pub category: StaticKey<Categories>,
     /// The one region the command lives in (`ambre-spec-shell.md`, `CHROME-148`).
     pub home: Home,
+    /// One line the tooltip of the icon shows where the name is not enough
+    /// (`ambre-spec-shell.md`, `CHROME-185`).
+    pub description: Option<fn(&Locale) -> String>,
 }
 
 /// The six home regions (`ambre-spec-shell.md` section 2). The context bar and the palette

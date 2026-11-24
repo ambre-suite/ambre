@@ -41,6 +41,15 @@ impl ambre_core::Free for CommandTitle {}
 
 impl ambre_core::Displayed for CommandTitle {}
 
+/// One line that says what a command does where its name is not enough,
+/// which a person reads in the tooltip of its icon (`CHROME-185`).
+/// `Validated<CommandDescription>`: no rule bounds it.
+pub enum CommandDescription {}
+
+impl ambre_core::Free for CommandDescription {}
+
+impl ambre_core::Displayed for CommandDescription {}
+
 /// The name of a home region, which a person reads beside a command in the
 /// palette (`CHROME-157`). `Validated<RegionName>`: no rule bounds it.
 pub enum RegionName {}
@@ -68,6 +77,7 @@ impl ambre_core::Displayed for RegionName {}
 ///     icon: None,
 ///     keybindings: &[],
 ///     category: StaticKey::<Categories>::new("format"),
+///     description: None,
 /// };
 /// ```
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -123,6 +133,10 @@ pub struct Command {
     /// The one region the command lives in (`CHROME-148`). A required field,
     /// so a command without a home does not compile.
     pub home: Home,
+    /// One line the tooltip of the icon shows under the name, where the name
+    /// is not enough (`CHROME-185`). A function of the locale, as the title.
+    /// `None` for a command its name describes.
+    pub description: Option<fn(&Locale) -> ambre_core::Validated<CommandDescription>>,
 }
 
 impl Command {
@@ -461,6 +475,9 @@ pub enum TableDefect {
     Ungrouped(StaticKey<Commands>),
     /// The command names an icon with no name, which no icon set resolves.
     BlankIcon(StaticKey<Commands>),
+    /// The command declares a description with no words in a locale, so its
+    /// tooltip shows an empty line (`CHROME-185`).
+    BlankDescription(StaticKey<Commands>, Locale),
     /// Two entries declare one default chord. Seeding keeps the last one, so
     /// the first silently leaves the keyboard.
     SharedChord(KeyBinding, StaticKey<Commands>, StaticKey<Commands>),
@@ -488,6 +505,13 @@ pub fn table_defects(table: &[Command]) -> Vec<TableDefect> {
         }
         if cmd.icon.is_some_and(|icon| icon.as_str().trim().is_empty()) {
             defects.push(TableDefect::BlankIcon(cmd.id));
+        }
+        if let Some(description) = cmd.description {
+            for locale in [Locale::Fr, Locale::En] {
+                if description(&locale).as_str().trim().is_empty() {
+                    defects.push(TableDefect::BlankDescription(cmd.id, locale));
+                }
+            }
         }
         for &kb in cmd.keybindings {
             if let Some(first) = chords.insert(kb, cmd.id) {
@@ -625,6 +649,7 @@ mod tests {
             keybindings: &[KeyBinding::primary(KeyChar::B)],
             category: FORMAT,
             home: Home::ContextPanel,
+            description: None,
         },
         Command {
             id: StaticKey::<Commands>::new("prose.format.italic"),
@@ -633,6 +658,7 @@ mod tests {
             keybindings: &[KeyBinding::primary(KeyChar::I)],
             category: FORMAT,
             home: Home::ContextPanel,
+            description: None,
         },
     ];
 
@@ -647,6 +673,7 @@ mod tests {
             keybindings: shared::REDO_CHORDS,
             category: FORMAT,
             home: Home::ContextPanel,
+            description: None,
         },
         Command {
             id: shared::COPY,
@@ -655,6 +682,7 @@ mod tests {
             keybindings: shared::COPY_CHORDS,
             category: FORMAT,
             home: Home::ContextPanel,
+            description: None,
         },
         Command {
             id: shared::PASTE,
@@ -663,6 +691,7 @@ mod tests {
             keybindings: shared::PASTE_CHORDS,
             category: FORMAT,
             home: Home::ContextPanel,
+            description: None,
         },
     ];
 
@@ -745,6 +774,10 @@ mod tests {
         ambre_core::Validated::default()
     }
 
+    fn blank_description(_: &Locale) -> ambre_core::Validated<CommandDescription> {
+        ambre_core::Validated::new(" ")
+    }
+
     fn english_only(l: &Locale) -> ambre_core::Validated<CommandTitle> {
         match l {
             Locale::Fr => ambre_core::Validated::new(" "),
@@ -770,6 +803,7 @@ mod tests {
                 keybindings: CHORD,
                 category: StaticKey::<Categories>::new(""),
                 home: Home::ContextPanel,
+                description: Some(blank_description),
             },
             Command {
                 id: other,
@@ -778,6 +812,7 @@ mod tests {
                 keybindings: CHORD,
                 category: FORMAT,
                 home: Home::ContextPanel,
+                description: None,
             },
             Command {
                 id: bold,
@@ -786,6 +821,7 @@ mod tests {
                 keybindings: &[],
                 category: FORMAT,
                 home: Home::ContextPanel,
+                description: None,
             },
         ];
         assert_eq!(
@@ -795,6 +831,8 @@ mod tests {
                 TableDefect::Unlabelled(bold, Locale::En),
                 TableDefect::Ungrouped(bold),
                 TableDefect::BlankIcon(bold),
+                TableDefect::BlankDescription(bold, Locale::Fr),
+                TableDefect::BlankDescription(bold, Locale::En),
                 TableDefect::Unlabelled(other, Locale::Fr),
                 TableDefect::SharedChord(KeyBinding::primary(KeyChar::B), bold, other),
                 TableDefect::DescribedTwice(bold),
@@ -858,6 +896,7 @@ mod tests {
             keybindings: &[],
             category: StaticKey::<Categories>::new("format"),
             home: Home::ContextPanel,
+            description: None,
         },
         Command {
             id: SAVE,
@@ -866,6 +905,7 @@ mod tests {
             keybindings: &[],
             category: StaticKey::<Categories>::new("file"),
             home: Home::AmbreMenu,
+            description: None,
         },
     ];
 

@@ -83,11 +83,11 @@ other six documents of the DOM side.
 | `CHROME-232` | `OBS` | In Prose, a margin field of the context panel MUST show a decimal only when the margin has one. | this spec section 2, one visual system | `ambre_chrome::kit::tests::a_length_shows_a_decimal_only_when_it_has_one`; Prose `ambre_prose::tests::chrome_panel::with_no_selection_the_panel_shows_the_page_the_layout_holds` -- wasm tier, a margin of 31 mm reads "31" | none | verified |
 | `CHROME-233` | `OBS` | In Prose and Trame, an orientation control MUST draw portrait and landscape as two glyphs of distinct shapes. | this spec section 2, one visual system | Prose `ambre_prose::tests::chrome_panel::with_no_selection_the_panel_shows_the_page_the_layout_holds` -- wasm tier, the two glyphs differ; Trame `ambre_trame::tests::chrome_ui::the_sheet_panel_names_the_selection_and_folds_its_print_group` -- wasm tier, the same in the print section | none | verified |
 | `CHROME-234` | `OBS` | In Prose, a control of the format bar that names a glyph MUST show it as the icon button of the toolkit, its name in the tooltip. | this spec section 2, one visual system; `CHROME-220` | `ambre_chrome::context_panel_ui::a_format_bar_control_shows_its_glyph_as_an_icon_button` -- wasm tier; Prose `ambre_prose::tests::chrome_panel::the_format_bar_announces_the_registry_labels` -- each entry of the format bar keeps its name | none | verified |
-| `CHROME-185` | `OBS` | A control of the shell that shows an icon and no text MUST show a tooltip with the name of its command, and the chord when the command has one. | this spec section 2; `ambre-spec-chrome.md section 2`, the shortcut chip | not built | unbuilt -- lands with the `Command tooltips` Story (`ambre-roadmap.md` MVP). Icon buttons carry a native title, without the chord | unimplemented |
-| `CHROME-186` | `INV` | A tooltip MUST take its name, its chord and its description from the description of the command. | this spec section 2; `UI-THREAD-019` | not built | unbuilt -- lands with the `Command tooltips` Story (`ambre-roadmap.md` MVP). The description of a command carries no sentence that describes it | unimplemented |
-| `CHROME-187` | `OBS` | A tooltip MUST show when its control takes the keyboard focus, as it does under the pointer. | this spec section 2; `CHROME-165` | not built | unbuilt -- lands with the `Command tooltips` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `CHROME-188` | `OBS` | On a phone, a long press on an icon MUST show its tooltip in place of running its command. | this spec section 2, the placement table | not built | unbuilt -- lands with the `Command tooltips` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `CHROME-189` | `OBS` | A screen reader MUST announce the name and the chord of a control that shows an icon and no text. | this spec section 2; `ambre-spec-accessibility.md` | not built | unbuilt -- lands with the `Command tooltips` Story (`ambre-roadmap.md` MVP) | unimplemented |
+| `CHROME-185` | `OBS` | A control of the shell that shows an icon and no text MUST show a tooltip with the name of its command, and the chord when the command has one. | this spec section 2; `ambre-spec-chrome.md section 2`, the shortcut chip | Toile `ambre_toile::tests::chrome_ui::each_icon_of_the_button_bars_names_itself_and_its_chord_in_a_tooltip` -- wasm tier, the tool palette and the selection bar; Prose `ambre_prose::tests::chrome_panel::the_format_bar_announces_the_registry_labels` -- the format bar; Trame `ambre_trame::tests::chrome_ui::the_panel_announces_the_registry_labels` -- the context panel, each through `ambre_chrome::untipped_icons` | none | verified |
+| `CHROME-186` | `INV` | A tooltip MUST take its name, its chord and its description from the description of the command. | this spec section 2; `UI-THREAD-019` | type-level -- the fields of `ambre_chrome::CommandTip` are private, and its one constructor reads a `Command`; `ambre_chrome::tip::tests::a_tip_reads_the_name_the_chord_and_the_description_of_its_command`; `ambre_chrome::controls_ui::a_command_icon_shows_what_its_command_declares_in_its_tooltip` -- wasm tier, the tooltip shows the three, and the probe names a tooltip that differs from its command; Toile `ambre_toile::tests::chrome_ui::each_icon_of_the_button_bars_names_itself_and_its_chord_in_a_tooltip`; Prose `ambre_prose::tests::chrome_panel::the_format_bar_announces_the_registry_labels`; Trame `ambre_trame::tests::chrome_ui::the_panel_announces_the_registry_labels` -- each holds the probe against its own table | none | verified |
+| `CHROME-187` | `OBS` | A tooltip MUST show when its control takes the keyboard focus, as it does under the pointer. | this spec section 2; `CHROME-165` | `ambre_chrome::controls_ui::an_icon_button_names_itself_and_its_chord_in_a_tooltip_under_the_focus` -- wasm tier, the icon button every tooltip of `CHROME-185` belongs to; Toile `ambre_toile::tests::chrome_ui::each_icon_of_the_button_bars_names_itself_and_its_chord_in_a_tooltip` -- the focus on a tool shows its name, its chord and its description; Prose `ambre_prose::tests::chrome_panel::the_format_bar_announces_the_registry_labels` -- the focus on an icon of the format bar; Trame `ambre_trame::tests::chrome_ui::the_panel_announces_the_registry_labels` -- the focus on bold in the context panel | none | verified |
+| `CHROME-188` | `OBS` | On a phone, a long press on an icon MUST show its tooltip in place of running its command. | this spec section 2, the placement table | `ambre_chrome::tip::tests::a_touch_held_past_the_wait_shows_the_tip_and_runs_nothing`; `ambre_chrome::tip::tests::a_short_tap_runs_the_command`; `ambre_chrome::tip::tests::a_mouse_press_never_holds` -- the state machine of a press; `ambre_chrome::controls_ui::a_long_press_shows_the_tooltip_in_place_of_the_command` -- wasm tier, a touch held past the wait shows the tooltip and runs nothing, a tap and a mouse press run the command | none | verified |
+| `CHROME-189` | `OBS` | A screen reader MUST announce the name and the chord of a control that shows an icon and no text. | this spec section 2; `ambre-spec-accessibility.md` | `ambre_chrome::controls_ui::a_screen_reader_hears_the_name_the_chord_and_the_description_of_an_icon` -- wasm tier, the name is the accessible name, the chord and the description are the text the accessible description names, and two icons never share its id | none | verified |
 
 ### 1.2 Run a command of the status bar
 
@@ -136,10 +136,10 @@ The user opens a list of the panel and picks a choice, with the pointer or the k
   chrome operation. A cover a surface publishes is read by a fit, which is a zoom cost.
 * **Boundary.** none: a region holds commands, and a command reaches the Logic thread as every
   command does. Nothing here opens a socket or holds a key.
-* **Verification.** 63 `verified`, 19 `unimplemented`, and the type holds the home of each
-  command. Host tests run each table through the one sink of every region, on a real Logic state.
-  Wasm tests hold the palette and the sheet tabs. A scan of the shell stylesheet holds the hover
-  reveals. The rest waits on the regions, which no application lays out.
+* **Verification.** 68 `verified`, 14 `unimplemented`, and the type holds the home of each command.
+  Host tests run each table through the one sink of every region, on a real Logic state. Wasm tests
+  hold the palette and the sheet tabs. A scan of the shell stylesheet holds the hover reveals. The
+  rest waits on the regions, which no application lays out.
 
 ---
 
@@ -264,8 +264,10 @@ holds the name of its command, its chord as the shortcut chip, and one line of d
 the name is not enough (`CHROME-185`). The tooltip reads the description of the command, as the
 palette and the context menu do, so no tooltip is written by hand (`CHROME-186`). It shows under
 the keyboard focus as under the pointer (`CHROME-187`), and a screen reader hears the same name and
-chord (`CHROME-189`). A tooltip waits about half a second, then shows at once while the pointer
-moves to the next icon.
+chord (`CHROME-189`).
+
+On a phone no pointer hovers, so a long press shows the tooltip and runs nothing (`CHROME-188`). A
+tooltip waits about half a second, then shows at once while the pointer moves to the next icon.
 
 **A floating surface publishes what it covers.** The context bar, the creation bar and the
 context panel float over the canvas, so a fit must frame the selection clear of them (`ZOOM-011`).
@@ -274,7 +276,9 @@ Each surface measures the part of the canvas it covers, and a fit reads the late
 a surface is written twice.
 
 **Code:** the board's cover is `crates/ambre-toile/src/ui/cover.rs`, and the measure the chrome
-takes is `crates/ambre-toile/src/chrome/cover.rs`. No region has code beyond it.
+takes is `crates/ambre-toile/src/chrome/cover.rs`. No region has code beyond it. The tooltip of an
+icon is `crates/ambre-chrome/src/tip.rs`, and the icon button of `crates/ambre-chrome/src/controls.rs`
+draws it.
 
 ---
 

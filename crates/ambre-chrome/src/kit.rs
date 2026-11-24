@@ -63,8 +63,9 @@ pub fn Row(children: Children) -> impl IntoView {
 
 /// A button that runs one command. With `pressed`, it is a toggle chip that
 /// shows the state of the command on the selection. An icon alone is an
-/// [`IconButton`](crate::IconButton): one box, and a tooltip with the name and
-/// the chord of the command.
+/// [`IconButton`](crate::IconButton): one box, and a tooltip with the name,
+/// the chord and the description of the command (`CHROME-186`). `size` and
+/// `look` set that box; a floating bar takes a large ghost.
 #[component]
 pub fn CommandButton(
     command: &'static Command,
@@ -74,22 +75,30 @@ pub fn CommandButton(
     /// Show the label beside the icon. A button with no icon always shows it.
     #[prop(optional)]
     labelled: Labelled,
+    #[prop(optional)] size: crate::ControlSize,
+    #[prop(optional)] look: crate::IconLook,
 ) -> impl IntoView {
     let label = command_label(command);
     let id = command.id;
     let reach = Reach::Command(id);
     match (icon, labelled) {
-        (Some(icon), Labelled::Icon) => view! {
-            <crate::IconButton
-                icon=icon
-                label=label
-                chord=command.chord()
-                pressed=pressed
-                reach=reach
-                on_press=Callback::new(move |()| on_command.run(id))
-            />
+        (Some(icon), Labelled::Icon) => {
+            let tip = crate::CommandTip::of(command);
+            view! {
+                <crate::IconButton
+                    icon=icon
+                    label=tip.title().as_str().to_owned()
+                    chord=tip.chord()
+                    description=tip.description().cloned()
+                    pressed=pressed
+                    reach=Some(tip.reach())
+                    size=size
+                    look=look
+                    on_press=Callback::new(move |()| on_command.run(id))
+                />
+            }
+            .into_any()
         }
-        .into_any(),
         (icon, _) => {
             let (aria, tip) = (label.clone(), label.clone());
             view! {
@@ -125,7 +134,7 @@ pub fn PropertyToggle(
             icon=icon
             label=property_label(property)
             pressed=Some(pressed)
-            reach=Reach::Property(property.id)
+            reach=Some(Reach::Property(property.id))
             on_press=on_toggle
         />
     }
