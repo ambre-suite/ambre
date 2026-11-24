@@ -15,6 +15,7 @@ use ambre_core::id::Id;
 mod app_root;
 mod call_bar;
 mod commands;
+mod header;
 #[cfg(test)]
 mod murmure_regions;
 #[cfg(test)]

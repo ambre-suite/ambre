@@ -278,7 +278,7 @@ the peers, because presence carries element ids -- section 6.
 * **No context menu addresses an arrow.** The menu takes its scope from the element selection. A
   right-click with an arrow selected would therefore offer group, lock, react and frame entries
   that do nothing to it. Rather than offer them, the right-click drops the arrow. Delete, the
-  z-order and the style inspector reach it from the keyboard and the menu bar instead.
+  z-order and the style inspector reach it from the keyboard and the palette instead.
 * **The notice names no arrow** (`TOILE-044`). The shell says an arrow lost an end, and the board
   paints nothing the user can point at (`TOILE-166`). The repair is the re-aim, and reaching it
   means finding an arrow that is not drawn. No rule says how a surface offers that.

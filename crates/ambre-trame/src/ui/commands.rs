@@ -71,7 +71,7 @@ const SORT: StaticKey<Categories> = StaticKey::<Categories>::new("sort");
 const FILTER: StaticKey<Categories> = StaticKey::<Categories>::new("filter");
 const FIND_REPLACE: StaticKey<Categories> = StaticKey::<Categories>::new("find");
 const CLIPBOARD: StaticKey<Categories> = StaticKey::<Categories>::new("clipboard");
-const INTEROP: StaticKey<Categories> = StaticKey::<Categories>::new("interop");
+const INTEROP: StaticKey<Categories> = shared::FILE;
 /// The page setup the sheet stores for its PDF export (`TRAME-IO-022`).
 const PAGE: StaticKey<Categories> = StaticKey::<Categories>::new("page");
 /// The rows and columns that stay on screen while the rest scrolls

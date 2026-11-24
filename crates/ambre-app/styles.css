@@ -530,24 +530,6 @@ body {
     height: 9px;
 }
 
-/* Toile top menu bar (toile-ui SS5quinquies.E): a group inside the command
-   bar row, under the header (`CHROME-200`). It reuses `.ambre-commandbar` for
-   its buttons, so the nested group drops the frame of a bar. The zoom is not
-   here: it closes the status bar (`CHROME-206`). */
-.ambre-commandbar > .ambre-toile-menubar {
-    padding: 0;
-    min-height: 0;
-    background: none;
-    border: 0;
-}
-
-/* Menu titles are text, not icons: give them horizontal padding and normal
-   text sizing (the shared bar is sized for square icon buttons). */
-.ambre-menu-title {
-    padding: 0 var(--space-4);
-    font-size: var(--font-body);
-}
-
 /* Toile style / property inspector (toile-ui SS5quinquies.B): a floating side
    panel docked right, shown only for a non-empty selection. Sections stack
    vertically; the z-order / lock rows reuse `.ambre-commandbar` for their icon
