@@ -12,12 +12,26 @@
 use std::collections::HashMap;
 
 use ambre_core::id::{Document, Id};
-use ambre_core::{FixedBytes, KeyId};
+use ambre_core::{Count, FixedBytes, KeyId};
 use ambre_crypto::DocumentKey;
 use ambre_protocol::KeyLink;
 
 use crate::membership_log::{LinkSigners, LinkStanding};
 use crate::pipeline;
+
+/// The most links the row of one kept log holds (`SYNC-313`,
+/// `ambre-spec-budgets.md section 6`). Each rotation adds one link. The
+/// local store reads every row at each session, so the row must not grow
+/// with the age of the document.
+pub(crate) const KEPT_LINKS_LIMIT: Count<KeptLinks> = Count::new(32);
+
+/// The count of links a kept log holds. `Count<KeptLinks>`.
+pub(crate) enum KeptLinks {}
+
+impl ambre_core::NarrowCount for KeptLinks {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("KeptLinks");
+}
 
 /// The links of one document, indexed by the key each starts from.
 #[derive(Clone)]
@@ -49,11 +63,27 @@ impl Chain {
         }
     }
 
-    /// The links the chain holds, in the order of the key each starts from,
-    /// for the local store (`SYNC-308`). One chain always writes one list.
-    pub(crate) fn links(&self) -> Vec<KeyLink> {
-        let mut links: Vec<KeyLink> = self.links.values().cloned().collect();
-        links.sort_by(|a, b| a.key.as_slice().cmp(b.key.as_slice()));
+    /// The links the local store keeps beside the kept log of this chain
+    /// (`SYNC-308`, `SYNC-313`). They are the links the walk back from `key`
+    /// reaches, nearest first, and at most [`KEPT_LINKS_LIMIT`]. A link the
+    /// walk never reaches opens no key from `key`, so the row drops it. A
+    /// key past the bound stays out of reach of a listing until an open
+    /// fetches the links again. The list is a prefix of that walk, so
+    /// [`Chain::kept`] accepts it under the same checks as a whole chain.
+    pub(crate) fn kept_links(&self, key: FixedBytes<KeyId>) -> Vec<KeyLink> {
+        let mut links: Vec<KeyLink> = Vec::new();
+        let mut from = key;
+        while Count::of(links.len()) < KEPT_LINKS_LIMIT {
+            // A key met twice is a loop, which no honest chain holds.
+            if links.iter().any(|kept| kept.key == from) {
+                break;
+            }
+            let Some(link) = self.links.get(&from) else {
+                break;
+            };
+            from = link.previous;
+            links.push(link.clone());
+        }
         links
     }
 

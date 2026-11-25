@@ -67,9 +67,13 @@ pub struct Config {
     /// `S3_PUBLIC_ENDPOINT`. `None` hands out each link at the address the
     /// relay signs for (`SRV-265`).
     pub s3_public_endpoint: Option<crate::s3::PublicEndpoint>,
-    /// The registration with the `google` provider, `None` when provider
-    /// sign-in is off.
-    pub oidc_google: Option<crate::oidc::OidcRegistration>,
+    /// Whether the store keeps a recorded snapshot fixed, or the record copies
+    /// it (`SRV-315`). The start reads it from the store; the default serves a
+    /// test whose store holds no object to copy.
+    pub snapshot_custody: crate::s3::SnapshotCustody,
+    /// The registrations with the identity providers, at most one per
+    /// provider. Empty when provider sign-in is off.
+    pub oidc_registrations: Vec<crate::oidc::OidcRegistration>,
     /// Dev-only switch: when on, the `POST /api/auth/dev/login` endpoint is
     /// enabled, letting `?user=<name>` authenticate as an on-the-fly user
     /// (deterministic keys, no OIDC). MUST stay off in production.
@@ -254,7 +258,8 @@ impl Default for Config {
                 "dev-ambre".to_owned(),
             ),
             s3_public_endpoint: None,
-            oidc_google: None,
+            snapshot_custody: crate::s3::SnapshotCustody::StoreVerifies,
+            oidc_registrations: Vec::new(),
             dev_mode: DevMode::Off,
             trust_proxy_headers: ProxyTrust::Direct,
             ws_msg_rate_per_sec: Bounded::default(),

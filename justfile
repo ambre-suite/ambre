@@ -936,6 +936,32 @@ selfhost-test: selfhost-up
 selfhost-down:
     {{selfhost}} down -v
 
+# The chart of `deploy/chart/`, rendered under three sets of values and held to
+# its rules: no root, no capability, no secret in a value, the SFU on the
+# network of its node, the store images of the compose file, and the release
+# workflow that pins each image by digest (`scripts/chart.py`). Needs Helm.
+chart-check:
+    python3 scripts/chart.py check
+
+# `SRV-309`, `CALL-141`: the chart on a local kind cluster, from the images that
+# `just selfhost-up` built, then the browser tier through its web server on
+# port 443 of the host. The media of a call must reach the address of the node.
+# The cluster is deleted on exit, and its state printed first on a failure.
+chart-test:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    kube="--context kind-ambre-chart"
+    kind delete cluster --name ambre-chart
+    kind create cluster --name ambre-chart --config deploy/chart/test/kind.yaml --wait 180s
+    trap 'status=$?; [ $status -eq 0 ] || { kubectl $kube get pods -o wide; kubectl $kube describe pods | tail -n 80; for p in $(kubectl $kube get pods -o name); do kubectl $kube logs --all-containers "$p" | tail -n 40; done; }; kind delete cluster --name ambre-chart; exit $status' EXIT
+    kind load docker-image --name ambre-chart ambre-relay:local ambre-sfu:local ambre-web:local ambre-init:local
+    sh deploy/chart/secret.sh ambre-test | kubectl $kube apply -f -
+    helm --kube-context kind-ambre-chart install ambre deploy/chart/ambre -f deploy/chart/test/values.yaml --wait --timeout 15m
+    for _ in $(seq 60); do curl -skf -o /dev/null https://localhost/api/auth/config && break; sleep 5; done
+    curl -skf -o /dev/null https://localhost/api/auth/config
+    node=$(kubectl $kube get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+    for t in prose::tests::the_self_hosted_stack_serves_two_members_one_document murmure::tests::a_call_on_the_self_hosted_stack_reaches_the_sfu_over_udp; do sleep 61; BELT_CHROME_ARGS=--ignore-certificate-errors SELFHOST_ORIGIN=https://localhost SELFHOST_MEDIA_HOST="$node" cargo test -p ambre-belt -- --ignored --exact "$t"; done
+
 # The dev container (`.devcontainer/README.md`): the toolchain, the relay and
 # the client in one container, PostgreSQL, Redis and Garage beside it from the
 # images of `docker-compose.yml`. The container runs as the user of the clone.

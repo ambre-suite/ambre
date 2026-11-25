@@ -21,7 +21,7 @@ pub(crate) async fn take_lease(
 ) -> Result<LeaseAnswer, http::HttpError> {
     let url = base.route(format!("/channels/{channel_id}/segments/{segment}/lease"));
     let answer: http::FinalizeLeaseResponse =
-        http::post_json_auth_via(transport, &url, &serde_json::json!({}), auth).await?;
+        http::post_json_auth_via(transport, &url, &http::EmptyBody {}, auth).await?;
     Ok(match answer.lease {
         Some(granted) => LeaseAnswer::Granted {
             lease: granted.lease_id,

@@ -221,8 +221,9 @@ type Slot<T> = Rc<RefCell<Option<T>>>;
 struct Wiring {
     to_logic: outbox::ShellOutbox,
     theme_ctl: ambre_canvas::ThemeControl,
-    /// The theme of the account, which the header glyph follows.
-    account_theme: RwSignal<ambre_client_core::ThemeChoice>,
+    /// The settings of the account once the settings document answers. The
+    /// header glyph and the context panel follow them.
+    account_settings: RwSignal<Option<ambre_client_core::UserSettings>>,
     /// Toile's Undo/Redo availability signals, resolved from its own store so the
     /// menu bar disables the two rows from the Logic thread's `UndoState` alone
     /// (`UNDO-006`).
@@ -360,9 +361,10 @@ struct Wiring {
     /// The canvas view applies it on top of the live common style as one
     /// `RestyleElements` over the selection.
     toile_quick_style: RwSignal<Option<toile_chrome::StyleEdit>>,
-    /// What the palette and the selection bar cover of the board, as they
-    /// measure it. The canvas view reads it when a fit lands (`ZOOM-011`).
-    toile_cover: RwSignal<ambre_toile::ui::cover::Cover>,
+    /// What the floating surfaces of the shell cover of the canvas, as each
+    /// one measures itself (`CHROME-171`). The board's view reads it when a
+    /// fit lands (`ZOOM-011`).
+    shell_cover: RwSignal<ambre_client_core::cover::Cover>,
     /// The comments panel's signals (`toile-comments`): the canvas view writes
     /// the list, the open thread and the drop composer. It drains the intents
     /// the panel and the composer emit. The panel holds nothing of its own
@@ -734,9 +736,9 @@ pub fn main() {
     // `toile_quick_style`, mirroring the inspector's model / restyle pair.
     let toile_float_bar = RwSignal::new(None::<toile_chrome::FloatBar>);
     let toile_quick_style = RwSignal::new(None::<toile_chrome::StyleEdit>);
-    // The palette and the selection bar measure what they cover; a fit reads
-    // it (`ZOOM-011`).
-    let toile_cover = RwSignal::new(ambre_toile::ui::cover::Cover::default());
+    // Each floating surface of the shell measures what it covers; a fit reads
+    // it (`CHROME-171`, `ZOOM-011`). One cover per page.
+    let shell_cover = RwSignal::new(ambre_client_core::cover::Cover::default());
     // Comments (`toile-comments`): the panel and the drop composer read what
     // the view published. They write back one intent at a time, the same seam
     // as the inspector's model / restyle pair.
@@ -779,6 +781,7 @@ pub fn main() {
         filter_active,
         find_result,
         view_cmd: RwSignal::new(None),
+        cover: shell_cover,
     };
     let toile_signals = ambre_toile::ui::ToileSignals {
         ctx_scope: toile_ctx_scope,
@@ -800,7 +803,7 @@ pub fn main() {
         followed_link: toile_followed_link,
         present_mode: present_toile,
         find_result: find_result_toile,
-        cover: toile_cover,
+        cover: shell_cover,
     };
 
     // Design tokens: inject the generated CSS custom properties (theme.css).
@@ -813,13 +816,9 @@ pub fn main() {
         platform::boot_theme(platform::system_scheme()),
     ));
     inject_theme(theme_ctl.get());
-    // The theme of the account, which the header follows to redraw the glyph
-    // of the theme switch when another device moves it.
-    let account_theme = RwSignal::new(
-        platform::boot_hint()
-            .map(|hint| hint.theme)
-            .unwrap_or_default(),
-    );
+    // The settings of the account, which the header and the panel follow
+    // when another device moves them. None before the settings answer.
+    let account_settings = RwSignal::new(None);
     // The handle the settings of the account move the theme through.
     let settings_theme = theme_ctl.clone();
 
@@ -950,7 +949,7 @@ pub fn main() {
     // the bootstrap and was lost whenever the worker came up slowly.
     let sync_start = Rc::new(RefCell::new(ambre_bus::start::StartGate::new()));
     let sync_worker = spawn_sync_worker(Rc::clone(&sync_inbox), Rc::clone(&sync_start));
-    call::install(&sync_worker);
+    call::install(&sync_worker, &shell_outbox);
 
     // The canvas document-swap handle is created by `run_with` below (after the
     // chrome mounts the `<canvas>`); the route effect reads it through this slot.
@@ -985,7 +984,7 @@ pub fn main() {
         clipboard_paste: paste_tx,
         raf: raf.clone(),
         theme_ctl: theme_ctl.clone(),
-        account_theme,
+        account_settings,
         boot_doc,
         booted,
         slots: shell::ShellSlots {
@@ -1174,7 +1173,7 @@ pub fn main() {
             opened_file.set(None);
             platform::open_plaintext_container(file.into_payload(), toasts, vault_frame.clone());
         }
-        // TOFU: a confirmed prompt -> pin the fetched key in `trusted_keys` and
+        // TOFU: a confirmed prompt -> pin the fetched keys in `trusted_keys` and
         // fire phase 2 of the invite (`ambre-spec-key-verification.md`). Handled here
         // rather than in `AppRoot` because the trusted-key store is Main-thread
         // owned (this relay). Writing the pin before dispatch is normative.
@@ -1184,9 +1183,9 @@ pub fn main() {
                 &p,
                 invite_role.get_untracked(),
                 Instant::<Authored>::new(js_sys::Date::now() as u64),
-                |user, key| {
+                |user, keys| {
                     if let Some(local) = persist_store_frame.borrow().as_ref() {
-                        local.store().save_trusted_key(user, key);
+                        local.store().save_trusted_key(user, keys);
                     }
                 },
                 |cmd| {
@@ -1299,7 +1298,7 @@ pub fn main() {
                         if theme != settings_theme.get() {
                             platform::set_theme(&settings_theme, theme);
                         }
-                        account_theme.set(settings.theme);
+                        account_settings.set(Some(settings.clone()));
                         platform::keep_boot_hint(&settings.boot_hint());
                     }
                     switchboard::Effect::Send(command) => {
@@ -1562,7 +1561,7 @@ pub fn main() {
                         find_result: ch_toile_find_result,
                         // An embedded board shows no palette or bar of its
                         // own, so nothing covers it.
-                        cover: RwSignal::new(ambre_toile::ui::cover::Cover::default()),
+                        cover: RwSignal::new(ambre_client_core::cover::Cover::default()),
                     },
                 },
             )),
@@ -1601,6 +1600,7 @@ pub fn main() {
                         filter_active: ch_tr_filter_active,
                         find_result: ch_tr_find_result,
                         view_cmd: RwSignal::new(None),
+                        cover: RwSignal::new(ambre_client_core::cover::Cover::default()),
                     },
                 },
             )),

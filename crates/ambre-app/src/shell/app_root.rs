@@ -5,6 +5,7 @@
 
 use super::super::*;
 use super::call_bar::{CallBar, CallFloat, RingAlert};
+use super::header::HomedRows;
 use super::prose_status::ProseFigures;
 use super::share::{InviteLink, MurmureInviteLink, ShareInviteLink, ShareMembers};
 use super::sync_badge::SyncBadge;
@@ -33,6 +34,35 @@ pub(crate) fn palette_table(kind: DocType) -> &'static [ambre_chrome::commands::
     }
 }
 
+/// The creation bar of a page of `kind`: the one shared bar, over the table of
+/// that application (`CHROME-152`, `CHROME-153`). The board arms its tools
+/// through it. A page with no creation command lays out none.
+pub(crate) fn creation_bar(
+    kind: DocType,
+    tool: RwSignal<ambre_toile::ui::Tool>,
+    on_command: Callback<StaticKey<Commands>>,
+    cover: RwSignal<ambre_client_core::cover::Cover>,
+) -> AnyView {
+    let resolve = match kind {
+        DocType::Toile => {
+            return view! { <toile_chrome::ToolPalette active=tool cover=cover on_command=on_command /> }
+                .into_any();
+        }
+        DocType::Prose => ambre_prose::chrome::icon_of,
+        DocType::Trame => trame_chrome::icon_of,
+        DocType::Murmure | DocType::Settings => return ().into_any(),
+    };
+    view! {
+        <ambre_chrome::CreationBar
+            table=palette_table(kind)
+            resolve=resolve
+            on_command=on_command
+            cover=cover
+        />
+    }
+    .into_any()
+}
+
 /// The shell of a Murmure page: its channel list, its channel and its thread
 /// (the Murmure layout spec). The pane names the region in focus, and the
 /// command bar holds the channel header. No formula bar, tabs or status bar:
@@ -46,6 +76,9 @@ pub(crate) fn MurmureShell(
     /// The last invite into a space, whose link the toolbar shows
     /// (`SYNC-245`).
     invite_link: RwSignal<Option<InviteLink>>,
+    /// Where the call bubble and the mark bar publish what they cover
+    /// (`CHROME-171`).
+    cover: RwSignal<ambre_client_core::cover::Cover>,
     /// The shared header.
     children: ChildrenFn,
 ) -> impl IntoView {
@@ -62,7 +95,7 @@ pub(crate) fn MurmureShell(
                 <ChannelHeader pane=pane name=relay.channel_name() has_members=relay.has_members()>
                     <CallBar pane=pane phase=call_phase relay=relay />
                 </ChannelHeader>
-                <RingAlert />
+                <RingAlert relay=relay />
                 <InviteControl relay=relay send=send />
                 <MurmureInviteLink link=invite_link />
                 <MessageSearch relay=relay send=send />
@@ -106,9 +139,9 @@ pub(crate) fn MurmureShell(
             now=Callback::new(|()| Instant::<Authored>::new(js_sys::Date::now() as u64))
         />
         <KeyList relay=relay />
-        <CallFloat pane=pane phase=call_phase relay=relay />
+        <CallFloat pane=pane phase=call_phase relay=relay cover=cover />
         <MentionPanel relay=relay />
-        <MarkBarPanel relay=relay />
+        <MarkBarPanel relay=relay cover=cover />
     }
 }
 
@@ -143,8 +176,14 @@ fn ShellHeader(
     docs: RwSignal<Vec<crate::landing::DocItem>>,
     /// The palette command of the booted application.
     palette: Option<&'static ambre_chrome::commands::Command>,
+    /// The table of the booted application, whose commands the two menus
+    /// show by their home region.
+    table: &'static [ambre_chrome::commands::Command],
     /// The one command path of the shell.
     on_command: Callback<StaticKey<Commands>>,
+    /// The rows of the Ambre menu the page holds unavailable.
+    #[prop(optional, into)]
+    disabled: Option<Signal<Vec<StaticKey<Commands>>>>,
 ) -> impl IntoView {
     // The menu redraws its items, so the toggle is `Copy`: the control of the
     // canvas theme stays on this thread, in a local store.
@@ -167,7 +206,7 @@ fn ShellHeader(
         toasts.info(label);
     };
     view! {
-        <HeaderTitle docs=docs current_doc=current_doc palette=palette on_command=on_command about_open=about_open />
+        <HeaderTitle docs=docs current_doc=current_doc palette=palette table=table on_command=on_command about_open=about_open disabled=disabled />
         <SyncBadge status=chrome_status.into() />
         {palette.map(|command| view! { <ambre_chrome::CommandSearch command=command on_command=on_command /> })}
         <div class="ambre-header-end">
@@ -210,17 +249,21 @@ fn ShellHeader(
                         view! { <Icon icon=icon /><span>{label}</span> }
                     }}
                 </button>
+                // The settings of the person each page declares, such as
+                // the pointer of the board (`CHROME-156`).
+                <HomedRows table=table region=ambre_chrome::commands::Home::AvatarMenu on_command=on_command />
             </ambre_chrome::HeaderMenu>
         </div>
     }
 }
 
 /// The optional rows of the shell each application lays out (`CHROME-199`).
-/// The formula bar is Trame's alone. No application lays out the tab strip:
-/// Trame's sheet tabs sit in the status bar (`CHROME-162`). A Toile board docks
-/// its menus in the command bar. A Prose page and a Trame sheet format from
-/// the context panel, so neither lays out a command bar (`CHROME-159`).
-/// Murmure builds its own shell.
+/// The formula bar is Trame's alone, and Trame's sheet tabs sit in the status
+/// bar, not in the tab strip (`CHROME-162`). No document page
+/// lays out a command bar. A Prose page and a Trame sheet format from the
+/// context panel (`CHROME-159`). A board docks no bar of menus, since each
+/// command of the board lives in its home region (`CHROME-160`). Murmure
+/// builds its own shell.
 pub(crate) fn shell_rows(kind: DocType) -> ambre_chrome::ShellRows {
     use ambre_chrome::RowShown::{Absent, Shown};
     match kind {
@@ -230,7 +273,7 @@ pub(crate) fn shell_rows(kind: DocType) -> ambre_chrome::ShellRows {
             tabs: Absent,
         },
         DocType::Toile => ambre_chrome::ShellRows {
-            toolbar: Shown,
+            toolbar: Absent,
             formula_bar: Absent,
             tabs: Absent,
         },
@@ -271,10 +314,18 @@ pub(crate) fn HeaderTitle(
     current_doc: RwSignal<Option<Id<Document>>>,
     /// The palette command of the booted application.
     palette: Option<&'static ambre_chrome::commands::Command>,
+    /// The table of the booted application. Each command it homes in the
+    /// Ambre menu is a row, after the palette (`CHROME-154`).
+    table: &'static [ambre_chrome::commands::Command],
     /// The one command path of the shell.
     on_command: Callback<StaticKey<Commands>>,
     about_open: RwSignal<ambre_chrome::Openness>,
+    /// The rows the page holds unavailable.
+    #[prop(optional_no_strip)]
+    disabled: Option<Signal<Vec<StaticKey<Commands>>>>,
 ) -> impl IntoView {
+    let skip = palette.map(|c| c.id);
+    let disabled = disabled.unwrap_or_else(|| Signal::stored(Vec::new()));
     let navigate = leptos_router::hooks::use_navigate();
     let go_home = move |ev: web_sys::MouseEvent| {
         let modified =
@@ -312,6 +363,13 @@ pub(crate) fn HeaderTitle(
                     </button>
                 }
             })}
+            <HomedRows
+                table=table
+                region=ambre_chrome::commands::Home::AmbreMenu
+                skip=skip
+                on_command=on_command
+                disabled=disabled
+            />
             <button
                 role="menuitem"
                 class="ambre-menu-item ambre-menu-about"
@@ -382,7 +440,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
     let Wiring {
         to_logic,
         theme_ctl,
-        account_theme,
+        account_settings,
         toile_toggles,
         style_state,
         toasts,
@@ -437,7 +495,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         toile_place,
         toile_float_bar,
         toile_quick_style,
-        toile_cover,
+        shell_cover,
         toile_comments,
         toile_deck,
         toile_dropped_file,
@@ -472,7 +530,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
     {
         let theme_ctl = theme_ctl.clone();
         Effect::new(move |_| {
-            account_theme.track();
+            account_settings.track();
             theme_sig.set(theme_ctl.get());
         });
     }
@@ -845,7 +903,8 @@ pub(crate) fn AppRoot() -> impl IntoView {
     // The context panel of a document page: one frame for Prose, Trame and
     // Toile, its view state kept on this device (`ambre-spec-shell.md`
     // section 2). Murmure lays out no context panel.
-    let panel_prefs = (!boot_is_murmure).then(|| super::panel::panel_prefs(booted));
+    let panel_prefs = (!boot_is_murmure)
+        .then(|| super::panel::panel_prefs(booted, account_settings, to_logic.clone()));
     let panel_content = if boot_is_toile {
         toile_chrome::toile_panel(toile_chrome::ToilePanelSignals {
             model: toile_style_model,
@@ -874,6 +933,24 @@ pub(crate) fn AppRoot() -> impl IntoView {
         ambre_chrome::PanelContent::empty()
     };
 
+    // The rows of the Ambre menu the page holds unavailable: the undo and the
+    // redo of a board report what the Logic thread holds (`UNDO-006`).
+    let ambre_menu_disabled = Signal::derive(move || {
+        if !boot_is_toile {
+            return Vec::new();
+        }
+        let off = |a: RwSignal<ambre_chrome::Availability>| {
+            a.get() == ambre_chrome::Availability::Disabled
+        };
+        [
+            (toile_chrome::UNDO, toile_toggles.undo_enabled),
+            (toile_chrome::REDO, toile_toggles.redo_enabled),
+        ]
+        .into_iter()
+        .filter(|(_, a)| off(*a))
+        .map(|(id, _)| id)
+        .collect()
+    });
     let header = {
         let theme_ctl = theme_ctl.clone();
         let header_tx = to_logic.clone();
@@ -892,7 +969,9 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     me=me
                     docs=docs
                     palette=palette_command(booted)
+                    table=palette_table(booted)
                     on_command=on_command
+                    disabled=ambre_menu_disabled
                 />
             }
         }
@@ -902,7 +981,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
     let shell = if boot_is_murmure {
         let send = super::commands::murmure_send(to_logic.clone());
         view! {
-            <MurmureShell relay=murmure_relay send=send invite_link=invite_link>
+            <MurmureShell relay=murmure_relay send=send invite_link=invite_link cover=shell_cover>
                 {header.clone()}
             </MurmureShell>
         }
@@ -920,31 +999,31 @@ pub(crate) fn AppRoot() -> impl IntoView {
                             title=panel_content.title
                             subtitle=panel_content.subtitle
                             sections=panel_content.sections
+                            cover=shell_cover
                         />
                     </Show>
                 })}
             </ContextRegion>
-            // The board's tool palette floats inside the content cell, so a
-            // panel docked to the left covers none of it.
+            // The creation bar floats inside the content cell, so a panel
+            // docked to either side covers none of it (`CHROME-153`). A board
+            // that presents shows none.
             <CanvasOverlay slot>
-                {boot_is_toile.then(|| view! {
-                    <toile_chrome::EditingSurfaces present=present_toile>
-                        <toile_chrome::ToolPalette active=toile_active_tool cover=toile_cover />
-                    </toile_chrome::EditingSurfaces>
-                })}
+                {if boot_is_toile {
+                    view! {
+                        <toile_chrome::EditingSurfaces present=present_toile>
+                            {creation_bar(booted, toile_active_tool, on_command, shell_cover)}
+                        </toile_chrome::EditingSurfaces>
+                    }
+                    .into_any()
+                } else {
+                    creation_bar(booted, toile_active_tool, on_command, shell_cover)
+                }}
             </CanvasOverlay>
             // Each application lays out its own rows (`CHROME-199`). The formula
-            // bar is Trame's alone, and its sheet tabs sit in the status bar. A Prose page has no
-            // command bar. Gated on the booted app kind, fixed per page load.
-            <Toolbar slot>
-                // Toile docks its menus and its zoom in the command bar, under
-                // the header, so neither covers the header (`CHROME-200`).
-                {boot_is_toile.then(|| view! {
-                    <toile_chrome::EditingSurfaces present=present_toile>
-                        <toile_chrome::TopMenuBar on_command=on_command toggles=toile_toggles />
-                    </toile_chrome::EditingSurfaces>
-                })}
-            </Toolbar>
+            // bar is Trame's alone, and its sheet tabs sit in the status bar. No
+            // document page lays out a command bar (`CHROME-159`, `CHROME-160`):
+            // the slot stays empty, and the row is absent.
+            <Toolbar slot>""</Toolbar>
             <FormulaBar slot>
                 {boot_is_trame.then(|| view! {
                     <trame_chrome::FormulaBar
@@ -959,7 +1038,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 {if boot_is_prose {
                     // The five figures of the Prose document
                     // (`PROSE-FEAT-040`), in the shared status band.
-                    view! { <ProseFigures figures=prose_figures zoom=prose_zoom /> }.into_any()
+                    view! { <ProseFigures figures=prose_figures zoom=prose_zoom signals=prose_signals /> }.into_any()
                 } else if boot_is_toile {
                     // Toile selection status bar: count/bounds + shared
                     // zoom & fps chips, styled identically to Trame's band.
@@ -968,6 +1047,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                             stats=sel_stats_toile
                             perf=perf_snap
                             zoom=board_zoom
+                            on_command=on_command
                         />
                     }
                     .into_any()
@@ -1217,7 +1297,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
             <toile_chrome::EditingSurfaces present=present_toile>
                 <toile_chrome::SelectionToolbar
                     bar=toile_float_bar
-                    cover=toile_cover
+                    cover=shell_cover
                     model=toile_style_model
                     on_command=on_command
                     on_style=Callback::new(move |s: toile_chrome::StyleEdit| {
@@ -1270,7 +1350,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
             <ambre_prose::chrome::ProseCommentsPanel signals=prose_signals />
             <ambre_prose::chrome::ProseSuggestionPopover signals=prose_signals />
             <ambre_prose::chrome::ProseSpellingPopover signals=prose_signals />
-            <ambre_prose::chrome::ProseFormatBar signals=prose_signals />
+            <ambre_prose::chrome::ProseFormatBar signals=prose_signals cover=shell_cover />
             <ambre_prose::chrome::ProseSlashMenu signals=prose_signals />
             <ambre_prose::chrome::ProseRuler signals=prose_signals />
         })}
@@ -1452,6 +1532,7 @@ mod tests {
                         docs=docs
                         current_doc=current_doc
                         palette=palette_command(DocType::Prose)
+                        table=ambre_prose::commands::COMMANDS
                         on_command=Callback::new(move |id| ran.set(Some(id)))
                         about_open=about_open
                     />
@@ -1483,10 +1564,28 @@ mod tests {
                 .map(|e| e.class_name())
                 .unwrap_or_default()
         };
-        assert_eq!(items.length(), 3);
+        // Each command the page homes in the Ambre menu sits between the
+        // palette and about, the saves and the exports among them
+        // (`CHROME-154`).
+        let last = items.length() - 1;
+        let homed = super::super::header::homed_rows(
+            ambre_prose::commands::COMMANDS,
+            ambre_chrome::commands::Home::AmbreMenu,
+            Some(ambre_prose::commands::PALETTE),
+        );
+        assert_eq!(items.length() as usize, 3 + homed.len());
         assert!(class(0).contains("ambre-home"), "{}", class(0));
         assert!(class(1).contains("ambre-menu-palette"), "{}", class(1));
-        assert!(class(2).contains("ambre-menu-about"), "{}", class(2));
+        assert!((2..last).all(|i| class(i).contains("ambre-menu-command")));
+        assert!(class(last).contains("ambre-menu-about"), "{}", class(last));
+        click(&format!(
+            "[data-reach=\"{}\"]",
+            ambre_chrome::commands::Reach::Command(ambre_prose::commands::SAVE_FILE).marker()
+        ));
+        leptos::task::tick().await;
+        assert_eq!(ran.get_untracked(), Some(ambre_prose::commands::SAVE_FILE));
+        click(brand);
+        leptos::task::tick().await;
         click(".ambre-menu-palette");
         leptos::task::tick().await;
         assert_eq!(ran.get_untracked(), Some(ambre_prose::commands::PALETTE));
@@ -1537,6 +1636,8 @@ mod tests {
     /// Share is the primary button and opens the share dialog
     /// (`CHROME-244`). The theme sits in the avatar menu, the about dialog
     /// in the Ambre menu, and no icon button of the header holds either.
+    /// The mark and the avatar alone open a menu (`CHROME-161`), and the
+    /// avatar menu runs the pointer of the board (`CHROME-156`).
     #[wasm_bindgen_test]
     async fn the_header_ends_on_share_and_the_avatar_menu() {
         use wasm_bindgen::JsCast as _;
@@ -1557,6 +1658,7 @@ mod tests {
                 ambre_bus::conduit::ChannelSlots,
             >::of::<8>());
         let to_logic = crate::outbox::ShellOutbox::new(to_logic);
+        let ran = RwSignal::new(None::<StaticKey<Commands>>);
         StoredValue::new_local(leptos::mount::mount_to(target, move || {
             view! {
                 <leptos_router::components::Router>
@@ -1574,7 +1676,8 @@ mod tests {
                             me=RwSignal::new(None)
                             docs=RwSignal::new(Vec::new())
                             palette=palette_command(DocType::Toile)
-                            on_command=Callback::new(|_| {})
+                            table=ambre_toile::ui::commands::COMMANDS
+                            on_command=Callback::new(move |id| ran.set(Some(id)))
                         />
                     </header>
                 </leptos_router::components::Router>
@@ -1626,6 +1729,31 @@ mod tests {
                 .is_none(),
             "no icon button of its own"
         );
+        // Only the mark and the avatar open a menu, each with a subject. No
+        // bar of menus shows, and no button opens a list of commands alone
+        // (`CHROME-160`, `CHROME-161`). No icon of the header goes untipped
+        // (`CHROME-185`).
+        let openers = container
+            .query_selector_all("[aria-haspopup=\"menu\"]")
+            .expect("a selector");
+        let menus: Vec<String> = (0..openers.length())
+            .filter_map(|i| openers.item(i)?.dyn_into::<web_sys::Element>().ok())
+            .filter_map(|e| e.closest(".ambre-header-menu").ok().flatten())
+            .map(|e| e.class_name())
+            .collect();
+        assert_eq!(openers.length(), 2, "{menus:?}");
+        assert!(menus[0].contains("ambre-brand"), "{menus:?}");
+        assert!(menus[1].contains("ambre-account-menu"), "{menus:?}");
+        assert!(
+            container
+                .query_selector("[role=\"menubar\"]")
+                .expect("a selector")
+                .is_none()
+        );
+        assert_eq!(
+            ambre_chrome::untipped_icons(&header, ambre_toile::ui::commands::COMMANDS),
+            Vec::<String>::new()
+        );
 
         let press = |selector: &str| {
             container
@@ -1640,6 +1768,20 @@ mod tests {
         leptos::task::tick().await;
         assert_eq!(share_open.get_untracked(), ambre_chrome::Openness::Open);
 
+        // The avatar menu holds the settings of the board, run through the
+        // one command path (`CHROME-156`).
+        press(".ambre-account-menu .ambre-header-menu-button");
+        leptos::task::tick().await;
+        press(&format!(
+            ".ambre-account-menu [data-reach=\"{}\"]",
+            ambre_chrome::commands::Reach::Command(ambre_toile::ui::menu_bar::POINTER_MOUSE)
+                .marker()
+        ));
+        leptos::task::tick().await;
+        assert_eq!(
+            ran.get_untracked(),
+            Some(ambre_toile::ui::menu_bar::POINTER_MOUSE)
+        );
         press(".ambre-account-menu .ambre-header-menu-button");
         leptos::task::tick().await;
         press(".ambre-menu-theme");
@@ -1705,6 +1847,7 @@ mod tests {
                                 docs=docs
                                 current_doc=current_doc
                                 palette=palette
+                                table=trame_chrome::COMMANDS
                                 on_command=on_command
                                 about_open=RwSignal::new(ambre_chrome::Openness::Closed)
                             />
@@ -1762,18 +1905,19 @@ mod tests {
 
     /// Each application lays out its own rows (`CHROME-199`). The formula bar
     /// is Trame's alone. No application lays out the tab strip, since Trame's
-    /// sheet tabs sit in the status bar (`CHROME-162`). A Prose page lays out
-    /// no command bar, and a Trame sheet none since its format toolbar left
-    /// for the context panel (`CHROME-159`).
+    /// sheet tabs sit in the status bar (`CHROME-162`). No document page lays
+    /// out a command bar. A Prose page and a Trame sheet format from the
+    /// context panel (`CHROME-159`), and a board docks no bar of menus
+    /// (`CHROME-160`).
     #[wasm_bindgen_test]
-    fn the_formula_bar_is_trames_alone_and_prose_has_no_command_bar() {
+    fn the_formula_bar_is_trames_alone_and_no_page_has_a_command_bar() {
         use ambre_chrome::RowShown::{Absent, Shown};
         let rows = |kind| {
             let r = shell_rows(kind);
             (r.toolbar, r.formula_bar, r.tabs)
         };
         assert_eq!(rows(DocType::Trame), (Absent, Shown, Absent));
-        assert_eq!(rows(DocType::Toile), (Shown, Absent, Absent));
+        assert_eq!(rows(DocType::Toile), (Absent, Absent, Absent));
         assert_eq!(rows(DocType::Prose), (Absent, Absent, Absent));
     }
 

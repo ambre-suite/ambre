@@ -160,6 +160,11 @@ pub enum LogicCommand<A = Infallible, P: ChannelPlane = NoChannels> {
         inviter: ambre_core::FixedBytes<ambre_core::InviterPin>,
     },
 
+    /// The settings document this device kept for the signed-in user, or
+    /// `None` when it kept none (`SETTINGS-031`). The Main thread sends it
+    /// once the store answers. A relay answer waits on it.
+    KeptSettings { document_id: Option<Id<Document>> },
+
     /// Hold where the log of `document_id` stood in an earlier session
     /// (`SYNC-290`). The Logic thread forwards it and reads nothing of it.
     KeepLog {
@@ -341,6 +346,7 @@ impl<A, P: ChannelPlane> LogicCommand<A, P> {
                 inviter,
             },
             Self::KeepLog { document_id, kept } => LogicCommand::KeepLog { document_id, kept },
+            Self::KeptSettings { document_id } => LogicCommand::KeptSettings { document_id },
             Self::PinMurmureInviter { inviter } => LogicCommand::PinMurmureInviter { inviter },
             Self::CloseDocument { document_id } => LogicCommand::CloseDocument { document_id },
             Self::ResendState { document_id } => LogicCommand::ResendState { document_id },

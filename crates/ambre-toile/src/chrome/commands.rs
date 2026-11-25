@@ -4,7 +4,7 @@
 // keeps the Undo/Redo affordances honest (`UNDO-006`). The registry itself is
 // `crate::ui::commands`, host-compiled so a test reaches a label without a
 // browser. This module projects the Logic thread's `UndoState` into the shared
-// `CommandStates` store the menu bar reads.
+// `CommandStates` store the Ambre menu reads.
 // ============================================================================
 
 use crate::message::ToileEvent;

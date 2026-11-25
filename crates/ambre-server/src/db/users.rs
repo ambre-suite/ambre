@@ -180,7 +180,10 @@ pub async fn create_user(
 
 /// Upserts a user from an OIDC provider login.
 ///
-/// Uses `ON CONFLICT (oidc_provider, oidc_subject)` to handle returning users.
+/// Uses `ON CONFLICT (oidc_issuer, oidc_subject)` to handle returning users.
+/// The account is keyed by the issuer and the subject, never by the address
+/// or the provider word. So two issuers that assert one subject reach two
+/// accounts (`SRV-344`).
 /// New users are inserted with placeholder (zero-filled) key columns because
 /// the master key, signing key, and exchange key are only set later via `PUT
 /// /keys/master`. The `ON CONFLICT DO UPDATE` refreshes `email` and
@@ -203,6 +206,7 @@ pub async fn create_user(
 pub async fn sign_in_from_oidc(
     pool: &PgPool,
     oidc_provider: ambre_core::OidcProvider,
+    oidc_issuer: &openidconnect::IssuerUrl,
     oidc_subject: &openidconnect::SubjectIdentifier,
     email: &ambre_core::Email,
     display_name: &ambre_core::Validated<ambre_core::DisplayName>,
@@ -219,11 +223,11 @@ pub async fn sign_in_from_oidc(
          SET email = 'reclaimed-' || id::text || '@invalid.local', email_verified = false \
          WHERE lower(email) = lower($1) \
            AND email_verified = false \
-           AND (oidc_provider IS DISTINCT FROM $2 OR oidc_subject IS DISTINCT FROM $3) \
+           AND (oidc_issuer IS DISTINCT FROM $2 OR oidc_subject IS DISTINCT FROM $3) \
          RETURNING id",
     )
     .bind(email.as_str())
-    .bind(oidc_provider.as_str())
+    .bind(oidc_issuer.as_str())
     .bind(oidc_subject.as_str())
     .fetch_all(&mut *tx)
     .await?
@@ -235,9 +239,10 @@ pub async fn sign_in_from_oidc(
     let reclaims = reclaim_notices(&mut tx, &reclaimed).await?;
 
     let row = sqlx::query(
-        "INSERT INTO users (oidc_provider, oidc_subject, email, email_verified, display_name) VALUES ($1, $2, $3, true, $4) ON CONFLICT (oidc_provider, oidc_subject) DO UPDATE SET email = $3, email_verified = true, display_name = $4 RETURNING id, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, (xmax = 0) AS inserted"
+        "INSERT INTO users (oidc_provider, oidc_issuer, oidc_subject, email, email_verified, display_name) VALUES ($1, $2, $3, $4, true, $5) ON CONFLICT (oidc_issuer, oidc_subject) DO UPDATE SET email = $4, email_verified = true, display_name = $5 RETURNING id, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, (xmax = 0) AS inserted"
     )
     .bind(oidc_provider.as_str())
+    .bind(oidc_issuer.as_str())
     .bind(oidc_subject.as_str())
     .bind(email.as_str())
     .bind(display_name.as_str())
@@ -341,9 +346,17 @@ pub async fn upsert_user_from_oidc(
     email: &ambre_core::Email,
     display_name: &ambre_core::Validated<ambre_core::DisplayName>,
 ) -> Result<UserRow, AppError> {
-    sign_in_from_oidc(pool, oidc_provider, oidc_subject, email, display_name)
-        .await
-        .map(|signed_in| signed_in.user)
+    let issuer = crate::oidc::provider_issuer(oidc_provider, None)?;
+    sign_in_from_oidc(
+        pool,
+        oidc_provider,
+        &issuer,
+        oidc_subject,
+        email,
+        display_name,
+    )
+    .await
+    .map(|signed_in| signed_in.user)
 }
 
 /// The two public keys a development sign-in registers.
@@ -354,12 +367,17 @@ pub struct DevKeys<'a> {
 
 /// Dev-only: upserts a user identified by the name it signs in under.
 ///
-/// Stored under `oidc_provider = 'dev'`, `oidc_subject = username` so it shares
-/// the OIDC unique index and is idempotent across refreshes. The supplied
+/// Stored under `oidc_provider = 'dev'`, `oidc_subject = username`, with no
+/// issuer, so the index of development accounts keeps it idempotent across
+/// refreshes. The supplied
 /// pubkeys (derived deterministically client-side from the username) are written
-/// on insert and refreshed on conflict, so the server can verify the user's
-/// signatures. `master_key_*` stay NULL: dev keys never round-trip through the
-/// server. Gated by `Config::dev_mode` at the call site.
+/// once, on insert or on the first sign-in of an account that holds none.
+/// `master_key_*` stay NULL: dev keys never round-trip through the server.
+/// Gated by `Config::dev_mode` at the call site.
+///
+/// A row that holds keys keeps them. A sign-in that names other keys writes
+/// nothing and fails with a conflict, so a caller cannot swap the signing key
+/// of a member (`SRV-337`).
 ///
 /// With `keys` `None`, the row keeps the keys it holds, or holds none. The
 /// account then owes its key setup, as a provider account does (`SRV-319`).
@@ -374,15 +392,19 @@ pub async fn dev_upsert_user(
     // `(xmax = 0)` is true only for a freshly INSERTed row (vs an ON CONFLICT
     // UPDATE), so we can log creation without a prior existence check.
     let row = sqlx::query(
-        "INSERT INTO users (oidc_provider, oidc_subject, email, email_verified, display_name, signing_pubkey, exchange_pubkey) VALUES ('dev', $1, $2, true, $1, $3, $4) ON CONFLICT (oidc_provider, oidc_subject) DO UPDATE SET email = $2, email_verified = true, display_name = $1, signing_pubkey = COALESCE($3, users.signing_pubkey), exchange_pubkey = COALESCE($4, users.exchange_pubkey) RETURNING id, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, (xmax = 0) AS inserted"
+        "INSERT INTO users (oidc_provider, oidc_subject, email, email_verified, display_name, signing_pubkey, exchange_pubkey) VALUES ('dev', $1, $2, true, $1, $3, $4) ON CONFLICT (oidc_subject) WHERE oidc_provider = 'dev' DO UPDATE SET email = $2, email_verified = true, display_name = $1, signing_pubkey = COALESCE(users.signing_pubkey, $3), exchange_pubkey = COALESCE(users.exchange_pubkey, $4) WHERE users.signing_pubkey IS NULL OR $3::bytea IS NULL OR (users.signing_pubkey = $3 AND users.exchange_pubkey = $4) RETURNING id, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, (xmax = 0) AS inserted"
     )
     .bind(username.as_str())
     .bind(&email)
     .bind(signing)
     .bind(exchange)
-    .fetch_one(pool)
+    .fetch_optional(pool)
     .await
-    .map_err(map_email_conflict)?;
+    .map_err(map_email_conflict)?
+    // The guard of the update refused the row: it holds other keys.
+    .ok_or_else(|| AppError::Conflict {
+        detail: "the account holds other keys".into(),
+    })?;
 
     let inserted: bool = row.try_get("inserted")?;
     if inserted {
@@ -498,6 +520,7 @@ mod tests {
                 "email",
                 "email_verified",
                 "exchange_pubkey",
+                "oidc_issuer",
                 "oidc_provider",
                 "oidc_subject",
                 "signing_pubkey",
@@ -669,6 +692,75 @@ mod tests {
         .expect("re-login must not self-conflict");
         assert_eq!(first.id, second.id);
         assert_eq!(second.email_verified, EmailProof::Verified);
+    }
+
+    /// `SRV-344`: an account is keyed by the issuer and the subject. Two
+    /// issuers that assert one subject sign two people in to two accounts,
+    /// and Google's issuer a third. A second sign-in through one issuer finds
+    /// its own account. A second issuer never takes the verified address of
+    /// the first: its sign-in is a conflict.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn an_account_is_keyed_by_its_issuer_and_subject(pool: PgPool) {
+        let subject = openidconnect::SubjectIdentifier::new("same-subject".to_owned());
+        let name = ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada").unwrap();
+        let issuer = |text: &str| openidconnect::IssuerUrl::new(text.to_owned()).unwrap();
+        let sign_in = |provider, issuer: openidconnect::IssuerUrl, email: &'static str| {
+            let pool = pool.clone();
+            let subject = subject.clone();
+            let name = name.clone();
+            async move {
+                sign_in_from_oidc(
+                    &pool,
+                    provider,
+                    &issuer,
+                    &subject,
+                    &ambre_core::Email::from(email),
+                    &name,
+                )
+                .await
+                .map(|signed_in| signed_in.user.id)
+            }
+        };
+        let oidc = ambre_core::OidcProvider::Oidc;
+        let google = ambre_core::OidcProvider::Google;
+        let google_issuer = crate::oidc::provider_issuer(google, None).unwrap();
+
+        let a = sign_in(
+            oidc,
+            issuer("https://a.example.org/realms/x"),
+            "a@example.org",
+        )
+        .await
+        .unwrap();
+        let b = sign_in(
+            oidc,
+            issuer("https://b.example.org/realms/x"),
+            "b@example.org",
+        )
+        .await
+        .unwrap();
+        let g = sign_in(google, google_issuer, "g@example.org")
+            .await
+            .unwrap();
+        assert_ne!(a, b, "two issuers, one subject");
+        assert_ne!(a, g);
+        assert_ne!(b, g);
+        let again = sign_in(
+            oidc,
+            issuer("https://a.example.org/realms/x"),
+            "a@example.org",
+        )
+        .await
+        .unwrap();
+        assert_eq!(again, a, "the same issuer and subject");
+        let taken = sign_in(
+            oidc,
+            issuer("https://c.example.org/realms/x"),
+            "a@example.org",
+        )
+        .await;
+        assert!(matches!(taken, Err(AppError::Conflict { .. })), "{taken:?}");
     }
 
     /// N5 guard: uniqueness is case-insensitive across setup accounts too.

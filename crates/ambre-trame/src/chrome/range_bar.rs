@@ -49,7 +49,7 @@ pub fn RangeBar(
                     chord=c.chord()
                     pressed=pressed
                     size=ambre_chrome::ControlSize::Large
-                    reach=Reach::Command(id)
+                    reach=Some(Reach::Command(id))
                     on_press=Callback::new(move |()| on_command.run(id))
                 />
             }

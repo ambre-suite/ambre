@@ -126,6 +126,17 @@ impl LogicState {
         self.route(|m| m.apply_channel_signed(document_id, deltas))
     }
 
+    /// Keep signed deltas, with their signers, for the space still opening
+    /// that holds `document_id` (`AUTHOR-037`). Returns `false` when no
+    /// opening space holds it.
+    pub(crate) fn murmure_space_signed(
+        &mut self,
+        document_id: Id<Document>,
+        deltas: &[SignedDelta],
+    ) -> bool {
+        self.route(|m| m.keep_space_signed(document_id, deltas))
+    }
+
     /// Apply a trusted payload the relay placed at `seq` to the channel or
     /// the space that holds `document_id`. Returns `false` when neither does.
     pub(crate) fn murmure_remote(
@@ -214,6 +225,11 @@ impl LogicState {
                 deltas,
                 sessions,
             } => {
+                // The local copy of the settings document (`SETTINGS-035`).
+                if doc_type == DocType::Settings && self.is_settings(document_id) {
+                    self.settings_restored(snapshot.as_ref(), &deltas, sessions);
+                    return;
+                }
                 // The local copy a reopening channel asked for.
                 if doc_type == DocType::Murmure && self.route(|m| m.reads_channel_copy(document_id))
                 {
@@ -282,6 +298,7 @@ impl LogicState {
                         // The deltas a window holds leave before the
                         // session ends (`SYNC-195`).
                         self.flush_windows();
+                        self.settings_signed_out();
                         self.docs.clear();
                         self.evicted.clear();
                         self.store_full.clear();
@@ -304,6 +321,14 @@ impl LogicState {
                     RestCommand::LeaveDocument { document_id }
                         if self.route(|m| m.hand_off_before_leave(id, *document_id)) =>
                     {
+                        return;
+                    }
+                    // A revoke on the `meta` of a channel names the documents
+                    // its sealed state holds (`SYNC-320`).
+                    RestCommand::RevokeFromDocument {
+                        document_id,
+                        user_id,
+                    } if self.route(|m| m.revoke_in_channel(id, *document_id, *user_id)) => {
                         return;
                     }
                     RestCommand::InviteToDocument { .. }
@@ -418,6 +443,7 @@ impl LogicState {
             } => self.route(|m| m.handle_channel_command(channel_id, command)),
             LogicCommand::SetReaderLocale { reader } => self.set_reader_locale(reader),
             LogicCommand::ChangeSetting { change } => self.change_setting(change),
+            LogicCommand::KeptSettings { document_id } => self.settings_kept(document_id),
             LogicCommand::LoadFonts { faces } => {
                 // The Logic thread cannot fetch, so this is the only way a face
                 // reaches it (`CANVAS-067`). Local-only: nothing is sent to
@@ -502,7 +528,7 @@ impl LogicState {
                 // The settings document opens here, and no view awaits its
                 // name (`SETTINGS-007`).
                 if let RestEvent::SettingsDocumentFound { document_id } = &evt {
-                    self.settings_found(*document_id);
+                    self.settings_named(*document_id);
                     return;
                 }
                 // A document this reader created waits for its locale seed.
@@ -607,7 +633,7 @@ impl LogicState {
                 nonce,
             } => {
                 if self.is_settings(document_id) {
-                    self.settings_identified(peer, &entry);
+                    self.settings_identified(peer, &entry, nonce);
                     return;
                 }
                 self.adopt_session(document_id, peer, entry, nonce);
@@ -671,6 +697,9 @@ impl LogicState {
                 document_id,
                 connected,
             } => {
+                if self.is_settings(document_id) {
+                    self.settings_link(connected);
+                }
                 if connected.is_connected() {
                     self.route(|m| m.retry_erases());
                 }
@@ -721,6 +750,11 @@ impl LogicState {
             // preceding RemoteSnapshot arm (queue order is preserved), so the
             // UI can dismiss its loading overlay.
             LogicEvent::DocumentReady { document_id, role } => {
+                // No view shows the settings document (`SETTINGS-035`).
+                if self.is_settings(document_id) {
+                    self.settings_ready();
+                    return;
+                }
                 // Sync has now resolved our real role from the members response;
                 // it supersedes the optimistic `Owner` the slot was opened with
                 // (architecture). A ready for a document already closed is
@@ -731,7 +765,7 @@ impl LogicState {
                 } else {
                     // A document this client created goes up whole first.
                     self.route(|m| m.flush_unsent(document_id));
-                    if self.route(|m| m.channel_document_ready(document_id))
+                    if self.route(|m| m.channel_document_ready(document_id, role))
                         || self.route(|m| m.space_document_ready(document_id, role))
                     {
                         // A channel or a space document is no document of
@@ -3970,6 +4004,7 @@ mod tests {
             document_id,
             command: AppCommand::Prose(ProseCommand::Paste {
                 at: (block, Pos::<DocChar>::ZERO),
+                over: None,
                 text: "plain".to_owned(),
                 html: Some("<h1>Title</h1>".to_owned()),
                 payload: None,
@@ -4021,6 +4056,7 @@ mod tests {
             document_id,
             command: AppCommand::Prose(ProseCommand::Paste {
                 at: (block, Pos::<DocChar>::ZERO),
+                over: None,
                 text: "plain".to_owned(),
                 html: Some("<h1>Title</h1>".to_owned()),
                 payload: None,
@@ -4068,6 +4104,7 @@ mod tests {
             document_id,
             command: AppCommand::Prose(ProseCommand::Paste {
                 at: (block, Pos::<DocChar>::ZERO),
+                over: None,
                 text: "plain".to_owned(),
                 html: Some("<h1>Title</h1>".to_owned()),
                 payload: None,

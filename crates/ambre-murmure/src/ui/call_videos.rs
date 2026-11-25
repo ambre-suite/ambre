@@ -223,12 +223,13 @@ pub enum Turn {
 }
 
 impl Turn {
-    /// The accessible name of the page button of the header that turns this way.
+    /// The verb of the page button of the header that turns this way, whose command names the
+    /// button.
     #[must_use]
-    pub const fn label(self) -> &'static str {
+    pub const fn verb(self) -> ambre_commands::CallVerb {
         match self {
-            Self::Previous => "Previous page of the call",
-            Self::Next => "Next page of the call",
+            Self::Previous => ambre_commands::CallVerb::PreviousPage,
+            Self::Next => ambre_commands::CallVerb::NextPage,
         }
     }
 
@@ -424,12 +425,13 @@ impl Fill {
         }
     }
 
-    /// The accessible name of the fill button, which says what a press does.
+    /// The verb a press of the fill button performs, whose command names the button
+    /// (`CHROME-256`).
     #[must_use]
-    pub const fn label(self) -> &'static str {
+    pub const fn verb(self) -> ambre_commands::CallVerb {
         match self {
-            Self::Band => "Fill the channel region with the call",
-            Self::Region => "Shrink the call to a band",
+            Self::Band => ambre_commands::CallVerb::Fill,
+            Self::Region => ambre_commands::CallVerb::Shrink,
         }
     }
 }
@@ -1300,7 +1302,7 @@ mod tests {
         assert!(large[0].frame.height() > small[0].frame.height() * 2.0);
         assert_eq!(shown.fill.toggled(), Fill::Band);
         assert_eq!(region_height(size, composer, None), Px::<View>::ZERO);
-        assert_ne!(Fill::Band.label(), Fill::Region.label());
+        assert_ne!(Fill::Band.verb(), Fill::Region.verb());
     }
 
     fn members(placed: &Placed) -> Vec<Tile> {
@@ -1755,7 +1757,7 @@ mod tests {
         let texts = painted_texts(&twenty, &HashMapNames::new());
         assert!(texts.contains(&"<".to_owned()), "{texts:?}");
         assert!(!texts.contains(&">".to_owned()), "{texts:?}");
-        assert_ne!(Turn::Previous.label(), Turn::Next.label());
+        assert_ne!(Turn::Previous.verb(), Turn::Next.verb());
     }
 
     /// `MURMURE-667`: the page asks for exactly the members whose tile the grid shows. It names

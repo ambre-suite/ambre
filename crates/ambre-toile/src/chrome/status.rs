@@ -9,8 +9,10 @@
 //         or single-element selection shows only the count (no meaningful
 //         multi-element bounds); the pure model + formatting live in
 //         `ui::status` and are host-tested there.
-// Right : the shared interactive zoom chip (board zoom) and the shared perf chip
-//         (fps + a Toile-specific frame-timing panel).
+// Right : the start of the presentation, the shared perf chip (fps + a
+//         Toile-specific frame-timing panel) and the shared interactive zoom
+//         chip (board zoom). The start of the presentation lives here: it
+//         changes how the board is seen and writes nothing (`CHROME-149`).
 // ============================================================================
 
 use ambre_canvas::PerfSnapshot;
@@ -29,7 +31,13 @@ pub fn StatusBar(
     stats: RwSignal<Option<SelStats>>,
     perf: RwSignal<PerfSnapshot>,
     zoom: RwSignal<Scale<Board, View>>,
+    /// The sink of the board's commands, which the start of the
+    /// presentation runs through. A band with no sink offers no start.
+    #[prop(optional)]
+    on_command: Option<Callback<ambre_core::StaticKey<ambre_core::Commands>>>,
 ) -> impl IntoView {
+    let present =
+        ambre_chrome::commands::find(crate::ui::commands::COMMANDS, crate::ui::menu_bar::PRESENT);
     // The aggregates line, recomputed whenever the selection stats change. An
     // absent/empty selection collapses to nothing (only the zoom chip shows).
     let aggregates = move || {
@@ -48,6 +56,9 @@ pub fn StatusBar(
         <StatusLabel label="Toile" />
         <span class="statusbar-stats">{aggregates}</span>
         <span class="spacer"></span>
+        {on_command.zip(present).map(|(on_command, command)| view! {
+            <ambre_chrome::CommandButton command=command icon=None on_command=on_command />
+        })}
         // Shared interactive zoom + fps chips (identical to Trame). Toile uses
         // the default preset ladder; the perf panel shows the board frame timings.
         <PerfChip fps=Signal::derive(move || perf.get().fps)>

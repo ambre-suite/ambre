@@ -561,6 +561,11 @@ impl ProseUiState {
 
     /// Paste over the selection, or at the caret. The content leaves as a
     /// command, and the view keeps no model of it (`PROSE-UI-013`).
+    ///
+    /// A paste over a selection leaves as one command that names the
+    /// selection. One undo then takes back the paste and the text it
+    /// replaced (`CHROME-184`). Only a paste of one plain line at a caret
+    /// takes the typing path.
     fn paste(
         &mut self,
         text: &str,
@@ -568,22 +573,30 @@ impl ProseUiState {
         rich: Option<&ambre_core::Payload<ambre_core::ClipboardBytes>>,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
     ) -> Consumed {
-        if rich.is_none() && html.is_none() && !text.contains('\n') {
+        let selection = self.selection();
+        if selection.is_none() && rich.is_none() && html.is_none() && !text.contains('\n') {
             return self.type_into_menu(text, send);
-        }
-        if !self.take_selection(send) {
-            return Consumed::Yes;
         }
         let Some(cursor) = self.cursor else {
             return Consumed::No;
         };
-        let at = (cursor.block_id, cursor.offset);
-        send(ProseCommand::Paste {
+        let (at, over) = match selection {
+            Some((start, end)) => (start, Some(end)),
+            None => ((cursor.block_id, cursor.offset), None),
+        };
+        let sent = send(ProseCommand::Paste {
             at,
+            over,
             text: text.replace("\r\n", "\n"),
             html: html.map(str::to_owned),
             payload: rich.cloned(),
         });
+        // The selection collapses to its start once the paste that replaces
+        // it reached the channel, as a deletion of it would.
+        if over.is_some() && sent.accepted() {
+            self.set_caret(at);
+            self.reveal_caret();
+        }
         Consumed::Yes
     }
 

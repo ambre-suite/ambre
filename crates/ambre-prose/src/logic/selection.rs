@@ -1,7 +1,7 @@
 //! The commands that write one value over every block a selection covers
 //! (`features/ambre-spec-prose-toolbar.md section 3`). Each writes a value
-//! mark, the paragraph properties, the kind of each paragraph, or a default
-//! font.
+//! mark, the paragraph properties, the kind of each paragraph, one step of
+//! indent, or a default font.
 //!
 //! Each command writes every block it reaches, then commits once. One
 //! gesture is therefore one undo item, whatever the number of blocks
@@ -13,11 +13,36 @@ use loro::TreeParentId;
 use crate::doc;
 use crate::events::{BlockId, BlockType, ParagraphStyle, ProseOutcome, ProseRefusal, tree_id};
 use crate::mark::{self, MarkRoot};
-use crate::message::{DocChar, MarkKey, MarkValue, ParagraphKind};
+use crate::message::{DocChar, IndentStep, MarkKey, MarkValue, ParagraphKind};
 use ambre_core::crdt::CrdtName as _;
 use ambre_core::index::Pos;
+use ambre_core::{PrintLength, Pt};
 
 use super::ProseState;
+use super::lists::{parent_of, previous_sibling};
+
+/// One step of left indent, for a block that is no list item. Half an inch
+/// is the step of the office formats (`PROSE-UI-267`).
+const INDENT_STEP: PrintLength<Pt> = PrintLength::new(36.0);
+
+/// Whether a gesture wrote a block so far. A gesture that wrote none exports
+/// no delta and leaves no undo item (`PROSE-047`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Changed {
+    Nothing,
+    Written,
+}
+
+impl Changed {
+    /// The fold of two steps: written once one of them wrote.
+    fn or(self, other: Self) -> Self {
+        if self == Self::Written || other == Self::Written {
+            Self::Written
+        } else {
+            Self::Nothing
+        }
+    }
+}
 
 /// The keys a value mark of the context panel writes: a colour, a
 /// highlight, a size, a font and a link. Each needs a value, which the
@@ -114,7 +139,7 @@ impl ProseState {
         focus: (BlockId, Pos<DocChar>),
         style: &ParagraphStyle,
     ) -> ProseOutcome {
-        let blocks = self.selected_spans(anchor, focus);
+        let blocks = self.block_spans(anchor, focus);
         if blocks.is_empty() {
             return Self::err_bad_range();
         }
@@ -155,7 +180,7 @@ impl ProseState {
     ) -> ProseOutcome {
         let tree = doc::blocks(&self.doc);
         let targets: Vec<TreeID> = self
-            .selected_spans(anchor, focus)
+            .block_spans(anchor, focus)
             .into_iter()
             .map(|(block, _)| tree_id(block))
             // The paragraph style control turns these three into one another.
@@ -181,11 +206,144 @@ impl ProseState {
             }
         }
         for id in &targets {
-            if let Err(e) = Self::write_kind(&tree, id, kind) {
+            let written = Self::release_children(&tree, id, kind)
+                .and_then(|()| Self::write_kind(&tree, id, kind));
+            if let Err(e) = written {
                 return Self::err_write(e);
             }
         }
         self.commit_with(Vec::new())
+    }
+
+    /// Move the blocks a list item holds just after it, in their order,
+    /// unless `kind` is a list. A heading and a paragraph hold no block
+    /// (`PROSE-UI-279`). The parent of the item held a list item, so it
+    /// holds each child too.
+    fn release_children(
+        tree: &loro::LoroTree,
+        id: &TreeID,
+        kind: ParagraphKind,
+    ) -> Result<(), doc::WriteError> {
+        if matches!(kind, ParagraphKind::List(_)) {
+            return Ok(());
+        }
+        let children = tree.children(TreeParentId::Node(*id)).unwrap_or_default();
+        for child in children.iter().rev() {
+            tree.mov_after(*child, *id)?;
+        }
+        Ok(())
+    }
+
+    /// Move every block a selection covers one step in or out, in one commit
+    /// (`PROSE-UI-267`).
+    ///
+    /// A list item changes level, as a press of Tab does. Any other block
+    /// moves its left indent one step, never left of the margin. A gesture
+    /// that moves no block writes nothing.
+    pub(super) fn indent_selection(
+        &mut self,
+        anchor: (BlockId, Pos<DocChar>),
+        focus: (BlockId, Pos<DocChar>),
+        step: IndentStep,
+    ) -> ProseOutcome {
+        let blocks: Vec<TreeID> = self
+            .block_spans(anchor, focus)
+            .into_iter()
+            .map(|(block, _)| tree_id(block))
+            .collect();
+        if blocks.is_empty() {
+            return Self::err_bad_range();
+        }
+        let written = match step {
+            IndentStep::In => self.indent_in(&blocks),
+            IndentStep::Out => self.indent_out(&blocks),
+        };
+        match written {
+            Ok(Changed::Nothing) => ProseOutcome::nothing(),
+            Ok(Changed::Written) => self.commit_with(Vec::new()),
+            Err(e) => Self::err_write(e),
+        }
+    }
+
+    /// Move the left indent of one block that is no list item one
+    /// [`INDENT_STEP`], never left of the margin.
+    fn step_indent(&self, id: &TreeID, step: IndentStep) -> Result<Changed, doc::WriteError> {
+        let tree = doc::blocks(&self.doc);
+        let node = doc::node_of(&tree, id)
+            .ok_or(doc::WriteError::Refused(doc::RefusalCause::BlockVanished))?;
+        let held = doc::read_paragraph_style(&tree, id);
+        let left = held.indent_left.unwrap_or(PrintLength::ZERO);
+        let moved = match step {
+            IndentStep::In => left + INDENT_STEP,
+            IndentStep::Out => (left - INDENT_STEP).max(PrintLength::ZERO),
+        };
+        let wanted = ParagraphStyle {
+            indent_left: Some(moved),
+            ..ParagraphStyle::default()
+        };
+        let changed = doc::changed_paragraph_style(&held, &wanted);
+        if changed.is_empty() {
+            return Ok(Changed::Nothing);
+        }
+        doc::write_paragraph_style(&node, &changed)?;
+        Ok(Changed::Written)
+    }
+
+    /// One step in, first block first. An item whose block moved with an
+    /// item before it in this gesture stays where its parent took it.
+    fn indent_in(&self, blocks: &[TreeID]) -> Result<Changed, doc::WriteError> {
+        let tree = doc::blocks(&self.doc);
+        let mut moved: Vec<TreeID> = Vec::new();
+        let mut changed = Changed::Nothing;
+        for id in blocks {
+            if doc::block_type_of(&tree, id) != Some(BlockType::ListItem) {
+                changed = changed.or(self.step_indent(id, IndentStep::In)?);
+                continue;
+            }
+            let mut above = parent_of(&tree, id);
+            while let Some(parent) = above {
+                if moved.contains(&parent) {
+                    break;
+                }
+                above = parent_of(&tree, &parent);
+            }
+            if above.is_some() {
+                continue;
+            }
+            let Some(previous) = previous_sibling(&tree, id).filter(|previous| {
+                doc::block_type_of(&tree, previous) == Some(BlockType::ListItem)
+            }) else {
+                continue;
+            };
+            tree.mov(*id, TreeParentId::Node(previous))?;
+            moved.push(*id);
+            changed = Changed::Written;
+        }
+        Ok(changed)
+    }
+
+    /// One step out, last block first, so items raised past one parent keep
+    /// their order. A top-level item leaves its list, as a body paragraph.
+    fn indent_out(&self, blocks: &[TreeID]) -> Result<Changed, doc::WriteError> {
+        let tree = doc::blocks(&self.doc);
+        blocks
+            .iter()
+            .rev()
+            .try_fold(Changed::Nothing, |changed, id| {
+                if doc::block_type_of(&tree, id) != Some(BlockType::ListItem) {
+                    return Ok(changed.or(self.step_indent(id, IndentStep::Out)?));
+                }
+                match parent_of(&tree, id)
+                    .filter(|parent| doc::block_type_of(&tree, parent) == Some(BlockType::ListItem))
+                {
+                    Some(parent) => tree.mov_after(*id, parent)?,
+                    None => {
+                        Self::release_children(&tree, id, ParagraphKind::Body)?;
+                        Self::write_kind(&tree, id, ParagraphKind::Body)?;
+                    }
+                }
+                Ok(Changed::Written)
+            })
     }
 
     /// Write one block's type, its style name and the attributes of `kind`.
@@ -266,7 +424,9 @@ pub(crate) mod tests {
     };
     use crate::logic::ProseState;
     use crate::mark::MarkRoot;
-    use crate::message::{DocChar, HeadingLevel, OrderedStyle, ParagraphKind, SelectionValues};
+    use crate::message::{
+        DocChar, HeadingLevel, IndentStep, OrderedStyle, ParagraphKind, SelectionValues,
+    };
     use ambre_commands::Reading;
     use ambre_core::crdt::CrdtName as _;
     use ambre_core::index::Pos;
@@ -683,6 +843,224 @@ pub(crate) mod tests {
         assert_eq!(
             state.defaults().font_family,
             crate::doc::DocDefaults::default().font_family
+        );
+    }
+
+    /// A document of one paragraph per entry, and the selection from the
+    /// start of the first to the end of the last.
+    fn document(texts: &[&str]) -> (ProseState, Vec<BlockId>, Spot, Spot) {
+        let mut state = ProseState::new().expect("a document is built");
+        let first = state.root_blocks()[0];
+        let mut last = first;
+        for (at, text) in texts.iter().enumerate() {
+            if at > 0 {
+                let len = state.text_of(&last).unwrap_or_default().chars().count();
+                state.handle_command(ProseCommand::SplitBlock {
+                    block_id: last,
+                    pos: Pos::<DocChar>::new(u32::try_from(len).expect("short")),
+                });
+                last = state.root_blocks()[at];
+            }
+            state.handle_command(ProseCommand::InsertText {
+                block_id: last,
+                pos: Pos::<DocChar>::ZERO,
+                text: (*text).to_owned(),
+            });
+        }
+        let blocks = state.root_blocks();
+        let end = u32::try_from(texts.last().map_or(0, |t| t.chars().count())).expect("short");
+        (
+            state,
+            blocks,
+            (first, Pos::<DocChar>::ZERO),
+            (last, Pos::<DocChar>::new(end)),
+        )
+    }
+
+    fn kind(state: &mut ProseState, anchor: Spot, focus: Spot, kind: ParagraphKind) {
+        let out = state.handle_command(ProseCommand::SetSelectionKind {
+            anchor,
+            focus,
+            kind,
+        });
+        assert!(out.update.is_some(), "{kind:?} writes");
+    }
+
+    fn indent(state: &mut ProseState, anchor: Spot, focus: Spot, step: IndentStep) -> ProseOutcome {
+        state.handle_command(ProseCommand::IndentSelection {
+            anchor,
+            focus,
+            step,
+        })
+    }
+
+    /// `PROSE-UI-267`: an indent nests each item under the one before it and
+    /// moves each paragraph one step, and the way out never passes the
+    /// margin. A selection that ends at the start of a block leaves that
+    /// block where it is.
+    #[test]
+    fn an_indent_moves_each_block_one_step() {
+        let (mut state, blocks, anchor, focus) = document(&["one", "two"]);
+        let step = PrintLength::<Pt>::new(36.0);
+        let left =
+            |state: &ProseState, block: &BlockId| state.paragraph_style_of(block).indent_left;
+        assert!(
+            indent(
+                &mut state,
+                anchor,
+                (blocks[1], Pos::<DocChar>::ZERO),
+                IndentStep::In
+            )
+            .update
+            .is_some()
+        );
+        assert_eq!(left(&state, &blocks[0]), Some(step));
+        assert_eq!(
+            left(&state, &blocks[1]),
+            None,
+            "no character of it is selected"
+        );
+        state.handle_command(ProseCommand::Undo);
+
+        indent(&mut state, anchor, focus, IndentStep::In);
+        assert!(blocks.iter().all(|b| left(&state, b) == Some(step)));
+        indent(&mut state, anchor, focus, IndentStep::Out);
+        assert!(
+            blocks
+                .iter()
+                .all(|b| left(&state, b) == Some(PrintLength::ZERO))
+        );
+        let out = indent(&mut state, anchor, focus, IndentStep::Out);
+        assert!(out.update.is_none(), "at the margin, nothing moves");
+
+        kind(
+            &mut state,
+            anchor,
+            focus,
+            ParagraphKind::List(ListStyle::Bullet),
+        );
+        indent(&mut state, anchor, focus, IndentStep::In);
+        assert_eq!(
+            state.parent_of(&blocks[1]),
+            Some(blocks[0]),
+            "the first has no item before it"
+        );
+        indent(&mut state, anchor, focus, IndentStep::Out);
+        assert_eq!(state.parent_of(&blocks[1]), None);
+        assert_eq!(
+            state.block_type_of(&blocks[0]),
+            Some(BlockType::Paragraph),
+            "the top item leaves"
+        );
+    }
+
+    /// `PROSE-UI-278`: a nested list leaves for the body with every block in
+    /// its order and its text, and no paragraph holds a block. One undo
+    /// puts the nesting back.
+    #[test]
+    fn leaving_a_nested_list_keeps_every_block_in_its_order() {
+        let (mut state, blocks, anchor, focus) = document(&["one", "two", "three"]);
+        kind(
+            &mut state,
+            anchor,
+            focus,
+            ParagraphKind::List(ListStyle::Bullet),
+        );
+        indent(
+            &mut state,
+            (blocks[1], Pos::<DocChar>::ZERO),
+            focus,
+            IndentStep::In,
+        );
+        assert_eq!(state.parent_of(&blocks[1]), Some(blocks[0]));
+        assert_eq!(state.parent_of(&blocks[2]), Some(blocks[0]));
+        kind(&mut state, anchor, focus, ParagraphKind::Body);
+        assert_eq!(state.root_blocks(), blocks, "the order survives");
+        assert!(
+            blocks
+                .iter()
+                .all(|b| state.block_type_of(b) == Some(BlockType::Paragraph))
+        );
+        let texts: Vec<_> = blocks.iter().filter_map(|b| state.text_of(b)).collect();
+        assert_eq!(texts, ["one", "two", "three"]);
+        state.handle_command(ProseCommand::Undo);
+        assert_eq!(state.parent_of(&blocks[2]), Some(blocks[0]), "one undo");
+    }
+
+    /// `PROSE-UI-279`: an item that becomes a heading takes the item it
+    /// holds out with it, as a list item just after it.
+    #[test]
+    fn a_heading_from_an_item_takes_its_items_out() {
+        let (mut state, blocks, anchor, focus) = document(&["one", "two"]);
+        kind(
+            &mut state,
+            anchor,
+            focus,
+            ParagraphKind::List(ListStyle::Bullet),
+        );
+        indent(
+            &mut state,
+            (blocks[1], Pos::<DocChar>::ZERO),
+            focus,
+            IndentStep::In,
+        );
+        assert_eq!(state.parent_of(&blocks[1]), Some(blocks[0]));
+        let first = (blocks[0], Pos::<DocChar>::new(3));
+        kind(
+            &mut state,
+            anchor,
+            first,
+            ParagraphKind::Heading(HeadingLevel::H1),
+        );
+        assert_eq!(state.root_blocks(), blocks, "the item follows its heading");
+        assert_eq!(state.block_type_of(&blocks[0]), Some(BlockType::Heading));
+        assert_eq!(state.block_type_of(&blocks[1]), Some(BlockType::ListItem));
+    }
+
+    /// `PROSE-UI-271`: a size and an alignment over two blocks change no
+    /// text, no bold and no heading level.
+    #[test]
+    fn a_text_section_write_leaves_the_text_and_every_other_property() {
+        let (mut state, blocks, anchor, focus) = document(&["hello", "world"]);
+        state.handle_command(ProseCommand::ApplyMark {
+            block_id: blocks[0],
+            range: ambre_core::index::Span::<DocChar>::from_usize_range(0..2),
+            key: MarkRoot::Bold.key(),
+            value: None,
+        });
+        state.handle_command(ProseCommand::SetHeadingLevel {
+            block_id: blocks[1],
+            level: Some(HeadingLevel::H3),
+        });
+        let texts = |state: &ProseState| -> Vec<String> {
+            blocks.iter().filter_map(|b| state.text_of(b)).collect()
+        };
+        let carries = |state: &ProseState, block: &BlockId, key: &str| {
+            format!("{:?}", state.marks_of(block)).contains(&format!("\"{key}\""))
+        };
+        let before = texts(&state);
+        mark(&mut state, anchor, focus, MarkRoot::FontSize, Some("18"));
+        state.handle_command(ProseCommand::SetSelectionParagraph {
+            anchor,
+            focus,
+            style: ParagraphStyle {
+                align: Some(Align::Right),
+                ..ParagraphStyle::default()
+            },
+        });
+        assert_eq!(texts(&state), before);
+        assert!(carries(&state, &blocks[0], "b"), "the bold stays");
+        assert!(!carries(&state, &blocks[1], "b"));
+        assert_eq!(
+            state.heading_level_of(&blocks[1]).map(|l| l.get()),
+            Some(3),
+            "the heading keeps its level"
+        );
+        assert!(
+            blocks
+                .iter()
+                .all(|b| state.paragraph_style_of(b).indent_left.is_none()),
+            "no other paragraph setting is written"
         );
     }
 

@@ -25,12 +25,12 @@
 | Inbound decryption 1 KB (verify+HMAC+AEAD+decompress) | < 350 us | < 1 ms | Sync | criterion |
 | Full crypto round-trip (excluding network) | < 600 us | < 1.5 ms | Sync | criterion |
 | Log head in the public data of one update, wire bytes (`SYNC-206`) | 34 B, for a log under 128 entries | 43 B | Sync -> relay | `ambre_protocol::tests::a_log_head_costs_an_update_at_most_43_bytes` -- 2 B on an empty log, 34 B below 128 entries, 43 B at a place of `u64::MAX`, by postcard, read on 2026-11-14. The relay stores each update whole, so each delta stored costs the same bytes more. A peer checks a head against its log from the end, so a current head costs one comparison of 32 bytes. Only a head the log does not hold costs one more signature check |
-| Log entry in the public data of one update, wire bytes (`SYNC-218`) | 232 B, for a log under 128 entries | 250 B | Sync -> relay | `ambre_protocol::tests::a_log_entry_costs_an_update_at_most_250_bytes` -- 1 B on an empty log, 232 B below 128 entries and clocks, 250 B at a place and a revoke cap of `u64::MAX`, by postcard, read on 2026-11-20. With the head, an update carries 266 B of log metadata below 128 entries. The relay stores each update whole, so each delta stored costs the same bytes more. A peer checks the entry only for a head its log does not hold: one encode, one hash and one signature check |
-| Log head and log entry in the public data of one presence sample, wire bytes (`SYNC-262`) | 266 B, for a log under 128 entries | 293 B | Sync -> relay | `ambre_protocol::tests::a_log_head_and_entry_cost_an_ephemeral_at_most_293_bytes` -- 3 B on an empty log, 266 B below 128 entries and clocks, 293 B at a place and a revoke cap of `u64::MAX`, by postcard, read on 2026-11-20. The relay keeps no sample past its expiry, so the cost is per send, at the pace of presence. A current head costs a receiver one comparison of 32 bytes; only a head the log does not hold costs the check of its entry and of the sample signature |
+| Log entry in the public data of one update, wire bytes (`SYNC-218`) | 232 B, for a log under 128 entries | 250 B | Sync -> relay | `ambre_protocol::tests::a_log_entry_costs_an_update_at_most_250_bytes` -- 1 B on an empty log, 232 B below 128 entries and clocks, 250 B at a place and a revoke cap of `u64::MAX`, by postcard, read on 2026-11-20. A channel revoke adds at most 418 B: 16 document caps at clocks of `u64::MAX` (`SYNC-311`), read on 2026-11-23. A removal past 16 documents posts its other caps in continuations, each within the same 418 B (`SYNC-319`). With the head, an update carries 266 B of log metadata below 128 entries. The relay stores each update whole, so each delta stored costs the same bytes more. A peer checks the entry only for a head its log does not hold: one encode, one hash and one signature check |
+| Log head and log entry in the public data of one presence sample, wire bytes (`SYNC-262`) | 266 B, for a log under 128 entries | 293 B | Sync -> relay | `ambre_protocol::tests::a_log_head_and_entry_cost_an_ephemeral_at_most_293_bytes` -- 3 B on an empty log, 266 B below 128 entries and clocks, 293 B at a place and a revoke cap of `u64::MAX`, by postcard, read on 2026-11-20. A channel revoke adds at most 418 B, as for an update, read on 2026-11-23. The relay keeps no sample past its expiry, so the cost is per send, at the pace of presence. A current head costs a receiver one comparison of 32 bytes; only a head the log does not hold costs the check of its entry and of the sample signature |
 | Body of one relay answer, bytes the Sync worker reads (`SYNC-277`) | -- | 16 MiB | relay -> Sync | `ambre_sync::http::tests::an_answer_past_its_ceiling_is_no_answer`. A members answer with its log is the largest relay answer, and stays far under it. The ceiling bounds the worker's memory against a relay that answers without end (audit `W206`) |
 | Body of one object from the store, a snapshot or a media blob, bytes the Sync worker reads (`SYNC-277`) | -- | 128 MiB | store -> Sync | `ambre_sync::http::tests::an_answer_past_its_ceiling_is_no_answer`. It sits above the 50 MiB of a snapshot and the 100 MiB of a media blob, the defaults the relay binds into an upload link (`ambre-spec-object-store.md`) |
 | One socket frame from the relay, bytes before the copy into the Sync worker (`SYNC-277`) | -- | 128 MiB | relay -> Sync | `ambre_sync::websocket::tests::a_socket_frame_past_its_ceiling_is_not_read`. A replay page is one frame of up to 1 000 deltas, so the ceiling sits far above one delta. A wasm memory never shrinks, so the check comes before the copy (audit `W206`) |
-| Ciphertext one document holds in quarantine (`SYNC-276`) | -- | 32 MiB | Sync | `ambre_sync::updates::tests::a_quarantine_past_its_bytes_drops_the_oldest`. The count cap of 1 000 updates alone admits a thousand of the relay's largest deltas, gigabytes in all (audit `W206`) |
+| Ciphertext one document holds in quarantine (`SYNC-276`), and again in each hold of deltas a listing decides (`SYNC-310`) | -- | 32 MiB | Sync | `ambre_sync::updates::tests::a_quarantine_past_its_bytes_drops_the_oldest`; `ambre_sync::updates::tests::a_hold_past_its_bytes_drops_the_oldest`. The count cap of 1 000 updates alone admits a thousand of the relay's largest deltas, gigabytes in all (audit `W206`) |
 | Snapshot compression 100 KB (ruzstd) | < 5 ms | -- | Sync | criterion |
 | Passphrase-sealed file, one seal or one open (Argon2id, then one AEAD pass over the whole container) | < 1 s | < 2 s | Sync | the login work factor, deliberately: 64 MiB, 3 passes, 1 lane, paid per file rather than per session, because it is also what an offline guessing attack pays (`ambre-spec-docfile.md`, `DOCFILE-014`). The 64 MiB is the largest transient the Sync worker allocates, and it is released with the call -- **none exists** |
 | Quarantine release, 100 updates | < 1 ms | -- | Sync | criterion -- **none exists** |
@@ -238,6 +238,7 @@
 | WS `Update` receive and broadcast | < 5 ms p99 | Redis Lua plus PubSub | the load run of the next row reads it as the p99 of `handle_update`. On 2026-11-15, on a cloud container of 4 vCPU: 5.6 ms at 25 typists, 8.8 ms at 100. **It fails the target at every load measured** |
 | Write path load of N typists, each at five keys a second. Per key: the signature check, the ordering script, the index row, its share of the hot-tail moves, and the broadcast | 200 active typists per host of 4 vCPU, at a p99 of `handle_update` under 50 ms. The owner set it on 2026-11-15 | the inline insert, which reads the count and the bytes of the inline tail of its document before it writes. At 200 typists it took 87 % of the statement time of Postgres, at 0.58 ms a key. The hot-tail moves took 9 % | measured on 2026-11-15, on `main` at 6cb1ba6, by `LOAD_TYPISTS=<N> cargo test -p ambre-server --release --features db,test-helpers -- --ignored --nocapture typist_load`. The command runs `ambre_server::ws::handler::typist_load::typist_load`, and no CI job runs it. Each typist is one session that calls `handle_update` every 200 ms, at a random phase. Four typists share a document, and one reader per document listens on the PubSub hub. A key is 160 B to 320 B of ciphertext. The run warms up for 10 s, then counts 60 s. The relay runs on a runtime of four workers, with its pool of 20 connections. The machine is a cloud container of 4 vCPU, Intel Xeon 2.10 GHz, 15 GB of memory. It holds the relay, Postgres 16.15 and Redis together, with the defaults of the database tier. By N, the p99 of `handle_update`, then the processor time of Postgres and of the relay: 25 typists, 125 keys/s: 5.6 ms, 0.13 vCPU, 0.07 vCPU. 100 typists, 500 keys/s: 8.8 ms, 0.59 vCPU, 0.25 vCPU. 200 typists, 1 000 keys/s: 41 ms, 1.18 vCPU, 0.41 vCPU. 300 typists: 240 ms, and 1 443 keys left late. From 400 typists, the tier passes 1 880 to 1 940 keys/s, and the queue of each session grows. Every key costs 8.0 Redis commands, 1.09 commits and about 2 090 B of WAL, with no trim in the run. Up to 100 typists, the p50 of a key stays near 2.6 ms, most of it the commit. A pool of 40 or 80 connections at 400 typists passed 1 834 and 1 943 keys/s, against 1 770 for 20, on a runtime of one thread. A `commit_delay` of 1 ms passed 1 689 keys/s. Alone after the run, the read of a tail of 120 rows took 0.15 ms to 0.20 ms. Past the ceiling, the readers heard 97 % of the keys at 400 typists and 53 % at 800, for a cause not known yet. **It holds the target: 41 ms at 200 typists. The tier stops near 380.** The `The inline insert reads no tail` Story (`ambre-roadmap.md`) names the cut |
 | Redis Lua clock validation | < 1 ms | Redis round trip | **none exists** |
+| Object write of a delta with no inline home, on the write path, before the index row and the echo (`SRV-336`) | one request to the object store, one round trip. The relay waits 2 s at most, then puts the frame in the index row (`SRV-034`) | the latency of the object store, which a Garage or a managed store sets | `DELTA_PUT_TIMEOUT` in `ambre_server::s3` holds the wait. `ambre_server::ws::handler::message::delivery_tests::an_object_put_past_its_wait_leaves_the_frame_in_its_row` counts one write per object, and gives up a write the store holds for 4 s between 2 s and 3 s, on the database tier. The latency of the round trip itself: **none exists** |
 | `GET` deltas, 100 entries | < 20 ms | Postgres read | **none exists** |
 | S3 presigned URL generation | < 50 ms | S3 SDK network I/O | **none exists** |
 | Document cold start (snapshot plus N deltas) | < 500 ms | S3 plus Postgres read | **none exists** |
@@ -385,6 +386,16 @@
 | Main | `ambre-commands`, `ambre-core` | +24 KB | A signal of a reading per value type a control edits, and the section keys |
 | Main | `.rodata` | +14 KB | The labels and the icons of the sections |
 
+* **Main sat over its ceiling again on 2026-11-24, and one cut brought it back under.** After the
+  stories of tooltips, the header, suggestion mode, settings and the floating cover, Main read
+  10 743 271 raw bytes at `349e867`. That is 33 271 over 10 710 000, under `just size`. The tool
+  `twiggy top` ran on builds that keep the name section. Most growth sat in the views that
+  hold an `IconButton` or a `Select`: 53 KB and 43 KB of build, rebuild and drop code.
+* **The cut erases the view type of each control primitive.** `IconButton`, `Select`,
+  `SegmentBar`, `Stepper`, `ColorSwatch` and `Slider` of `ambre-chrome` now end with `into_any`.
+  Each caller then holds one opaque view in place of a copy of the control's type. Main read
+  10 661 673 raw and 2 875 468 brotli, 81 598 and 15 718 bytes less. Sync did not move, at
+  1 342 117. The ceiling stays at 10 710 000.
 * **The view types of leptos stay typed (2026-11-25).** The `erase_components` cfg of leptos
   makes each component return an erased view, and gives each reactive closure of `view!` one shared
   type. It took 468 826 raw bytes and 125 603 brotli off Main. It also slows every change of the
@@ -1044,6 +1055,46 @@
   Sync at 1 328 640 raw bytes in CI. The ceiling went back to 1 350 000, the figure of the W10
   raise.
 
+* **Four cuts took Sync to 1 321 521 raw bytes on 2026-11-24, under its ceiling of 1 350 000.**
+  The W13 stories put Sync at 1 362 315 raw bytes in CI at `63f1cfc`, 12 315 over its ceiling.
+  `twiggy` found the growth spread over some 400 items, and no crate came in whole. It also found
+  that the JSON decode of the relay answers weighed about 150 KB. Each cut removes code that no
+  answer reaches, and every body keeps its bytes on the wire:
+  1. Three request bodies built a `serde_json::Value`. Typed bodies replace them, so the JSON
+     tree, its map and its encoder leave the worker.
+  2. Two token answers decoded through `#[serde(flatten)]`, which buffers the object and links a
+     second decoder of every JSON value. A flat wire struct and a transparent decode replace it.
+  3. The JSON read of an answer keeps `R::deserialize` alone generic.
+  4. `serde_json` reads a struct from a JSON object or from a JSON array. The relay sends objects
+     alone, so the array decoder of each struct was dead code. The wrapper of
+     `crates/ambre-sync/src/json.rs` reads every struct as a map, at any depth. It refuses an
+     array, as it refuses any value of the wrong JSON type.
+* **No budget of section 1 moves.** The cuts touch the REST answers and the socket of the SFU,
+  which no hot path reads. No security check moves, and the level of `curve25519-dalek` stays 3.
+* **The method.** The first and last rows are `trunk build --release`, then
+  `scripts/wasm_size.py`, on the session container. The tries are
+  `cargo build --profile wasm-release -p ambre-sync`, then `wasm-bindgen` 0.2.122 with
+  `--target no-modules`: 1 371 596 bytes at `1e07504` by that build.
+
+| Build | Sync raw | Change | Verdict |
+|---|---|---|---|
+| CI at `63f1cfc`, by `just size` | 1 362 315 | -- | before the story; 408 954 brotli |
+| typed bodies in place of `json!` | 1 364 500 | -7 096 | kept; read against 1 371 596 |
+| no `#[serde(flatten)]` | 1 357 641 | -6 859 | kept |
+| `R::deserialize` alone generic | 1 355 958 | -1 683 | kept |
+| the merge of `ccr-cd7c4606-wmq4hy` | 1 356 752 | +794 | the signing key binding |
+| every struct read as a map | 1 320 878 | -35 874 | kept |
+| the kept cuts, by `just size` | 1 321 521 | -40 794 | 398 960 brotli; the ceiling stays 1 350 000 |
+| the decode through `erased-serde` | 2 052 540 | +680 985 | dropped: a full visitor vtable per type |
+| the JSON read through a trait object slot | 1 358 799 | +2 841 | dropped, it grew |
+| `wasm-opt -Oz` of binaryen 124 | 1 201 519 | -119 359 | refused: 24 454 more brotli bytes, and the download is the budget |
+| the merge of `ccr-cd7c4606-wmq4hy` at `9c86491`, by `just size` | 1 328 477 | +6 956 | the confirmed head and the lifted cap; 399 027 brotli |
+
+  After that merge, 2 % above the measure rounds up to 1 360 000. The ceiling holds at 1 350 000,
+  the figure of the W10 raise, with 21 523 bytes of room, 1.6 % of the measure. The first download
+  reads 3 249 391 bytes of brotli. A cut under the former ceiling of 1 310 000 needs a cut that is
+  refused: `wasm-opt`, or the size level of `curve25519-dalek`.
+
 * **The PNG raster raised the PDF module ceiling on 2026-11-15.** The PNG export rasterizes a
   recorded page in the PDF module, on the converter thread
   (`3-Toile/features/ambre-spec-toile-import-export.md section 3`). Three cuts came before the
@@ -1100,6 +1151,7 @@
 | View state (content) | < 5 MB | Proportional to the visible content: cells, text runs |
 | Fonts in memory | < 10 MB | Base fonts plus lazily loaded ones |
 | Icon atlas | < 1 MB | Compiled vector blob |
+| One answer of the identity provider, bytes the relay reads | 256 KiB | `PROVIDER_ANSWER_MAX_SIZE` in `ambre_server::oidc`: a discovery document, a key set or a token answer. A discovery document or a key set counts a few KiB, so the cap leaves a wide margin. An answer past it is refused before the relay reads more (`SRV-343`) |
 | Murmure decoded pictures, per page | < 16 MiB | `PICTURES_MAX_SIZE` in `ambre-murmure`, shared by the channel's region and the thread's. Evicted least recently painted, never a picture on screen, which may hold it past the cap. One picture holds at most 8 MiB of frames (`PICTURE_MAX_SIZE` in `ambre-logic`), decoded at most 480x320: an animation past it plays the frames that fit (`features/ambre-spec-murmure-attachments.md`) |
 | **Total UI thread** | **< 57 MB** | Within the global < 100 MB |
 | `SyncState` base, per session | < 1 MB | `MasterSeed`, `SigningKey`, `ExchangeKey`, plus `HashMap` overhead |
@@ -1108,6 +1160,7 @@
 | deltas held for a writer, per document | ~2 MB max | Capped at 1000 updates, as the quarantine (`SYNC-211`) |
 | edits held while a channel log walks again, per document | ~2 MB max | Capped at 1000 edits, as the quarantine. Past it the walk drops them all (`SYNC-234`) |
 | snapshots deferred while a channel log walks again, per document | ~64 KB max | Capped at 1000 identifiers, as the quarantine. The blob is fetched again after the walk (`SYNC-234`) |
+| Links in the row of a kept log, per document | 32 links, 12 KiB | `KEPT_LINKS_LIMIT` in `ambre-sync`: the links nearest the kept key along its walk, so the row stops growing with each rotation (`SYNC-313`). The store reads every row at each session, and each read clones it. `ambre_sync::members::tests::the_row_of_a_kept_log_keeps_the_nearest_links_its_key_walks` holds the count and the bytes. On 2026-11-24, by that test, 32 links under empty log heads read 8 691 B; a head adds at most 41 B a link |
 | `old_keys`, per document | negligible | Capped at 10 `DocumentKey` (32 bytes plus overhead) |
 | Unconfirmed updates, per document | 1024 updates | `UNCONFIRMED_LIMIT`: the sent deltas the relay has not echoed yet, kept to resend one it refuses for its key (`SYNC-129`) or its clock (`SYNC-147`). Past the cap the oldest is forgotten, and a refusal for it resends nothing |
 | Sync events held on Main past a full channel | 4096 events, released at 1024 | `SYNC_INBOX_MARKS`, high and low at four times and once the channel capacity. At the high mark the Sync worker closes its socket, and the relay holds the rest (`SYNC-059`). The bound is a count, not bytes: a replay batch is one event |
@@ -1200,6 +1253,8 @@ A duration a rule waits on before it acts. Each figure is a first estimate, to m
 |---|---|---|---|
 | Grace period before a closing Murmure segment is finalized | 24 h | a typo fix lands within minutes, so a day keeps every recent edit out of a sealed segment | `FINALIZE_GRACE` in `ambre_server::routes::channels`, counted from the close and from the latest delta (`SRV-199`) |
 | Deadline of one request of the relay to the identity provider | 10 s | a provider answers a discovery, a code exchange or a key fetch in well under a second, so ten seconds admits a slow network and holds no sign-in open for long (`SRV-296`) | `PROVIDER_DEADLINE` in `ambre_server::oidc` |
+| Shortest interval between two fetches of the key set of one identity provider | 60 s | a provider rotates its key in days, so one fetch a minute follows a rotation within a minute. A stream of tokens under forged key ids then draws one fetch a minute at most (`SRV-342`) | `KEYS_REFRESH_INTERVAL` in `ambre_server::oidc` |
+| Clock skew between the relay and an identity provider | 60 s | the clocks of two servers synchronised by their operating systems differ by seconds. A minute admits that, and an identity token lives minutes (`SRV-341`) | `PROVIDER_CLOCK_SKEW` in `ambre_server::oidc` |
 | Murmure message grouping span | 5 min | consecutive messages of one author inside the span share one header, as every chat product groups them | `GROUP_SPAN` in `ambre_murmure::list` (`MURMURE-183`) |
 | Refresh period of the presence in a space or a channel | 60 s | a member list needs a state per minute, and the relay then writes one entry per member per minute (`MURMURE-445`, `MURMURE-126`) | `REFRESH_PERIOD` in `ambre_murmure::members` |
 | Presence expiry in a space or a channel | 180 s | three refresh periods: one for the tick that dates a sample, one for a lost sample, one for two timers drifting apart (`MURMURE-445`, `MURMURE-126`) | `PRESENCE_EXPIRY` in `ambre_murmure::members` |

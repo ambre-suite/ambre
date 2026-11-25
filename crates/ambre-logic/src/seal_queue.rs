@@ -116,6 +116,7 @@ impl SealQueue {
             PersistWrite::Erase => (Slot::Ready(SealedWrite::Erase), None),
             PersistWrite::KeepInviter(pin) => (Slot::Ready(SealedWrite::KeepInviter(pin)), None),
             PersistWrite::KeepLog(kept) => (Slot::Ready(SealedWrite::KeepLog(kept)), None),
+            PersistWrite::KeepSettings => (Slot::Ready(SealedWrite::KeepSettings), None),
         };
         self.entries.push_back(Entry { document_id, slot });
         plaintext.map(|(ticket, bytes)| (ticket, Confidential::<Plaintext>::new(bytes)))

@@ -755,6 +755,7 @@ fn sign_in_panel(
             // Ask the Sync worker for the provider's address; the reply sends
             // the browser there (`CHROME-095`). The page itself requests nothing.
             let to_logic = to_logic.clone();
+            let provider = crate::signin::offered_provider();
             view! {
                 <div class="ambre-signin">
                     <span class="ambre-signin-wordmark">"Ambre"</span>
@@ -766,13 +767,14 @@ fn sign_in_panel(
                         on:click=move |_| {
                             to_logic.send(LogicCommand::Rest {
                                 id: ambre_bus::next_request(),
-                                cmd: RestCommand::ProviderSignIn {
-                                    provider: ambre_core::OidcProvider::Google,
-                                },
+                                cmd: RestCommand::ProviderSignIn { provider },
                             });
                         }
                     >
-                        "Sign in with Google"
+                        {match provider {
+                            ambre_core::OidcProvider::Google => "Sign in with Google",
+                            ambre_core::OidcProvider::Oidc => "Sign in with your organization",
+                        }}
                     </button>
                 </div>
             }
@@ -800,7 +802,7 @@ mod tests {
 
     /// Mount a view into its own container appended to the body, mirroring the
     /// Trame chrome tests. A per-test container keeps the runner's own harness
-    /// DOM nodes untouched, and `.forget()` keeps the view alive for assertions.
+    /// DOM nodes untouched, and the test's owner keeps the view for assertions.
     fn mount_in_container<F, N>(f: F) -> web_sys::Element
     where
         F: FnOnce() -> N + 'static,
@@ -809,7 +811,10 @@ mod tests {
         let container = document().create_element("div").unwrap();
         document().body().unwrap().append_child(&container).unwrap();
         let target: web_sys::HtmlElement = container.clone().dyn_into().unwrap();
-        mount_to(target, f).forget();
+        // The mount lives as long as the owner of the test, and leaves with the
+        // signals it reads. A forgotten mount kept effects that could run in the
+        // next test and read disposed signals.
+        StoredValue::new_local(mount_to(target, f));
         container
     }
 

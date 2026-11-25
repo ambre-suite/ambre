@@ -182,6 +182,7 @@ impl ProseState {
             (
                 ProseCommand::Paste {
                     at,
+                    over,
                     text,
                     html: Some(html),
                     payload,
@@ -193,6 +194,7 @@ impl ProseState {
                     Conversion::ReadHtml { html },
                     FileJob::Paste(ProseCommand::Paste {
                         at,
+                        over,
                         text,
                         html: None,
                         payload,
@@ -628,6 +630,7 @@ mod tests {
         };
         let paste = |payload| ProseCommand::Paste {
             at: (block, Pos::<DocChar>::ZERO),
+            over: None,
             text: "own".to_owned(),
             html: Some(html.clone()),
             payload,
@@ -652,6 +655,7 @@ mod tests {
         let asked = state.handle_conversion(
             ProseCommand::Paste {
                 at: (block, Pos::<DocChar>::ZERO),
+                over: None,
                 text: "plain".to_owned(),
                 html: Some(html),
                 payload: None,
@@ -685,6 +689,7 @@ mod tests {
         let _ = state.handle_conversion(
             ProseCommand::Paste {
                 at: (block, Pos::<DocChar>::ZERO),
+                over: None,
                 text: "plain".to_owned(),
                 html: Some("<h1>Title</h1>".to_owned()),
                 payload: None,
