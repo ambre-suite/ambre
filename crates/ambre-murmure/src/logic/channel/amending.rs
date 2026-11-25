@@ -555,6 +555,21 @@ pub(super) fn recorded_threads(amendments: &LoroDoc) -> Vec<(Id<Message>, Id<Doc
     recorded
 }
 
+/// The link receipt `amendments` records beside each thread it records
+/// (`MURMURE-739`).
+pub(crate) fn recorded_receipts(amendments: &LoroDoc) -> Vec<ambre_bus::LinkReceipt> {
+    let receipts = crate::logic::schema::root_map(amendments, Root::Receipts);
+    recorded_threads(amendments)
+        .into_iter()
+        .filter_map(|(root, thread)| {
+            let signature = schema::string_value(receipts.get(&root.to_string()))?;
+            let signature =
+                ambre_core::FixedBytes::<ambre_core::Signature>::from_hex(&signature).ok()?;
+            Some(ambre_bus::LinkReceipt { thread, signature })
+        })
+        .collect()
+}
+
 /// The first entry of `meta.segments` that lists `segment`.
 pub(super) fn segment_entry(meta: &LoroDoc, segment: Id<Segment>) -> Option<Fields<SegmentKey>> {
     let wanted = segment.to_string();

@@ -1253,11 +1253,12 @@ impl SyncState {
                 result,
             } => {
                 self.send_to_logic(match result {
-                    Ok(held) => LogicEvent::ThreadLinked {
+                    Ok((held, receipt)) => LogicEvent::ThreadLinked {
                         channel_id,
                         segment,
                         root,
                         thread: held,
+                        receipt,
                     },
                     Err(error) => LogicEvent::ThreadLinkFailed {
                         channel_id,

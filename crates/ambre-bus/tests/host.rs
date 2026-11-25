@@ -486,6 +486,10 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             channel_id: chan,
             named: vec![doc, doc],
             threads: vec![doc],
+            receipts: vec![ambre_bus::LinkReceipt {
+                thread: doc,
+                signature: ambre_core::FixedBytes::from_array([4; 64]),
+            }],
         },
         SyncCommand::RevokeFromChannel {
             id: Seq::<ambre_bus::Request>::new(9),
@@ -493,6 +497,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             user_id: user,
             named: vec![doc],
             threads: vec![doc],
+            receipts: Vec::new(),
         },
         SyncCommand::ListSpaceChannels { space_id: space },
         SyncCommand::ListMemberChannels,
@@ -735,6 +740,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             segment,
             root: Id::<Message>::mint(),
             thread: Id::<Document>::mint(),
+            receipt: Some(ambre_core::FixedBytes::from_array([3; 64])),
         },
         LogicEvent::ThreadLinkFailed {
             channel_id: chan,

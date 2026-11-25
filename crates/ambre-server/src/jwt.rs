@@ -147,6 +147,28 @@ impl JwtSeed {
         }
     }
 
+    /// Reads the seed of the link key from `THREAD_LINK_SEED`, as
+    /// [`JwtSeed::from_env`] reads the access-token seed. `None` when the
+    /// variable is not set.
+    ///
+    /// # Errors
+    ///
+    /// As [`JwtSeed::from_env`].
+    pub fn link_from_env() -> Result<Option<Self>, JwtSeedRefusal> {
+        match std::env::var("THREAD_LINK_SEED") {
+            Ok(text) => Self::from_text(&SeedText::new(text)).map(Some),
+            Err(std::env::VarError::NotPresent) => Ok(None),
+            Err(std::env::VarError::NotUnicode(_)) => Err(JwtSeedRefusal::NotHex),
+        }
+    }
+
+    /// The link key of a development relay. Its seed is public, so only a
+    /// development client pins its key,
+    /// [`ambre_protocol::thread_erasure::DEV_LINK_KEY`].
+    pub fn dev_link() -> Self {
+        Self(Box::new(SigningKey::from_bytes(&[0x4c; 32])))
+    }
+
     /// Reads the seed from its hex text. The bytes decode in place into a
     /// wrapper, so no copy of them is left behind, whether the seed is
     /// accepted or refused.
@@ -183,6 +205,11 @@ pub struct JwtKeys {
     /// rotates alone, and the SFU holds no key that verifies a session. `None` until
     /// [`JwtKeys::with_admission`] sets it: a call is then refused. It wipes itself on drop.
     admission: Option<Box<SigningKey>>,
+    /// The key of one purpose that signs the link receipt of a thread, from
+    /// `THREAD_LINK_SEED` (`SRV-390`). A client build pins its public half,
+    /// so the relay cannot take back a receipt it signed. `None` until
+    /// [`JwtKeys::with_link`] sets it: a registration then answers none.
+    link: Option<Box<SigningKey>>,
 }
 
 impl JwtKeys {
@@ -219,6 +246,7 @@ impl JwtKeys {
             decoding,
             validation,
             admission: None,
+            link: None,
         }
     }
 
@@ -227,6 +255,26 @@ impl JwtKeys {
     pub fn with_admission(mut self, seed: &JwtSeed) -> Self {
         self.admission = Some(Box::new(seed.0.as_ref().clone()));
         self
+    }
+
+    /// The keys, with `seed` signing the link receipts of a thread. The
+    /// caller passes the seed of `THREAD_LINK_SEED`, never another key's.
+    pub fn with_link(mut self, seed: &JwtSeed) -> Self {
+        self.link = Some(Box::new(seed.0.as_ref().clone()));
+        self
+    }
+
+    /// The link receipt of `thread` in `channel_id` (`SRV-390`). `None` when
+    /// no link key is set.
+    pub fn sign_link(
+        &self,
+        channel_id: Id<ambre_core::id::Channel>,
+        thread: Id<ambre_core::id::Document>,
+    ) -> Option<ambre_core::FixedBytes<ambre_core::Signature>> {
+        let transcript = ambre_protocol::thread_erasure::link_transcript(channel_id, thread);
+        self.link.as_ref().map(|key| {
+            ambre_core::FixedBytes::from_array(key.sign(transcript.as_bytes()).to_bytes())
+        })
     }
 
     /// The token that admits one participant to the SFU: `admission`, signed. The relay mints

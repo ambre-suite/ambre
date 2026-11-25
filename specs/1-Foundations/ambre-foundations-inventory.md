@@ -31,13 +31,13 @@
 | `launcher` | The home screen at the root of the site: sign in, then every document you can open, whatever kind it is. | implemented | 55 |  |
 | `locale` | A document carries one language tag, so two collaborators on differently configured machines read the same number, the same currency and the same date. | implemented | 23 |  |
 | `media` | A picture in a document travels apart from it. | implemented | 20 |  |
-| `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | implemented | 124 |  |
+| `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | implemented | 126 |  |
 | `op-authorship` | Who wrote each operation of a document. | implemented | 38 |  |
 | `pdf-export` | A user hands a document to someone who has no Ambre, and the file looks like the screen. | implemented | 20 |  |
 | `residency` | Which documents a client holds, in memory and on disk, and what a document it does not hold still costs. | implemented | 32 |  |
 | `schema-version` | What a document looks like once it reaches the disk, and how a later binary knows it can still read it. | implemented | 20 |  |
 | `sealed-envelope` | Nothing a user writes leaves the browser readable. | implemented | 31 |  |
-| `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | implemented | 89 |  |
+| `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | implemented | 90 |  |
 | `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 54 |  |
 | `text-input` | A text area that shows nothing, sits under the caret, and is the real keyboard focus of the canvas. | implemented | 15 |  |
 | `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 25 |  |
@@ -66,4 +66,4 @@
 | `machine-access` | A program reads or writes a sheet, a board, a text or a conversation only as a sealed client. | design-only | 34 |  |
 | `macros` | A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. | design-only | 54 |  |
 
-**50 features: 28 implemented, 20 partial, 2 design-only. 1970 contract rows, 14 loose.**
+**50 features: 28 implemented, 20 partial, 2 design-only. 1973 contract rows, 14 loose.**

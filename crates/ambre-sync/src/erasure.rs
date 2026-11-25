@@ -13,9 +13,13 @@
 //! relay alone thus never clears a thread. A document the `meta` names takes
 //! no erasure: only a thread does. Nor does a thread a valid revoke of that
 //! log caps, which stood in the channel at that post (`SYNC-329`).
+//!
+//! Nor does a thread whose link receipt the relay signed, which it cannot
+//! take back (`SYNC-370`).
 
 use std::collections::HashSet;
 
+use ambre_bus::LinkReceipt;
 use ambre_core::id::{Channel, Document, Id};
 use ambre_core::{FixedBytes, PublicKey, Signature};
 use serde::{Deserialize, Serialize};
@@ -64,6 +68,8 @@ pub(crate) struct ErasureParams {
     pub meta: Id<Document>,
     /// The threads the removal names and the listing leaves out.
     pub hidden: Vec<Id<Document>>,
+    /// The link receipts the sealed state of the channel holds (`SYNC-370`).
+    pub receipts: Vec<LinkReceipt>,
     /// The footing of the open of the `meta` (audit `P26`).
     pub footing: Footing,
     pub rule: LogRule,
@@ -83,14 +89,53 @@ pub(crate) fn sign_erasure(
     )
 }
 
+/// Whether `signature` by `key` holds over `transcript`.
+fn holds(
+    key: &FixedBytes<PublicKey>,
+    transcript: &ambre_protocol::SignedTranscript,
+    signature: &FixedBytes<Signature>,
+) -> bool {
+    let signature = ed25519_dalek::Signature::from_bytes(signature.as_array());
+    ed25519_dalek::VerifyingKey::from_bytes(key.as_array())
+        .and_then(|key| key.verify_strict(transcript.as_bytes(), &signature))
+        .is_ok()
+}
+
 /// Whether `erasure` carries a valid signature of its signer over the
 /// erasure of its thread in `channel_id`.
 fn verifies(channel_id: Id<Channel>, erasure: &ErasureEntry) -> bool {
     let transcript = ambre_protocol::thread_erasure::erasure_transcript(channel_id, erasure.thread);
-    let signature = ed25519_dalek::Signature::from_bytes(erasure.signature.as_array());
-    ed25519_dalek::VerifyingKey::from_bytes(erasure.signer.as_array())
-        .and_then(|key| key.verify_strict(transcript.as_bytes(), &signature))
-        .is_ok()
+    holds(&erasure.signer, &transcript, &erasure.signature)
+}
+
+/// The link key this build pins (`SYNC-371`). A release build names it at
+/// build time. A development build or a test pins the key of the public dev
+/// seed. Any other build pins none, so no receipt proves a link.
+fn link_key() -> Option<FixedBytes<PublicKey>> {
+    match option_env!("AMBRE_THREAD_LINK_KEY") {
+        Some(hex) => FixedBytes::from_hex(hex).ok(),
+        None if cfg!(any(test, feature = "dev-login")) => {
+            Some(ambre_protocol::thread_erasure::DEV_LINK_KEY)
+        }
+        None => None,
+    }
+}
+
+/// Whether a receipt of `receipts` proves that the relay linked `thread` in
+/// `channel_id` (`SYNC-370`). The pinned link key signed such a receipt over
+/// that channel and that thread (`SYNC-371`).
+pub(crate) fn linked(
+    channel_id: Id<Channel>,
+    thread: Id<Document>,
+    receipts: &[LinkReceipt],
+) -> bool {
+    let Some(key) = link_key() else {
+        return false;
+    };
+    let transcript = ambre_protocol::thread_erasure::link_transcript(channel_id, thread);
+    receipts
+        .iter()
+        .any(|r| r.thread == thread && holds(&key, &transcript, &r.signature))
 }
 
 /// The threads of `hidden` that no erasure covers. An erasure covers a
@@ -127,21 +172,33 @@ fn hidden_error() -> http::HttpError {
 /// erasure to each present writer instead (`SYNC-327`). A thread such a
 /// key's erasure covers passes. When one is left and this user holds such a
 /// key, this user signs an erasure of each one left, and the relay records
-/// it. A thread that a valid revoke of the log caps stood in the channel.
-/// So the listing hides it, and no erasure covers it (`SYNC-329`).
+/// it.
+///
+/// A thread that a valid revoke of the log caps stood in the channel. So
+/// the listing hides it, and no erasure covers it (`SYNC-329`). Neither
+/// does a thread under a valid link receipt (`SYNC-370`).
 ///
 /// # Errors
-/// [`ambre_core::LocalFailure::ChannelDocumentHidden`] in three cases:
+/// [`ambre_core::LocalFailure::ChannelDocumentHidden`] in four cases:
 /// * a thread is left and this user holds no such key;
 /// * the log does not stand on the footing;
 /// * a hidden thread is one that a valid revoke of that log caps
-///   (`SYNC-329`).
+///   (`SYNC-329`);
+/// * a hidden thread is under a valid link receipt (`SYNC-370`).
 ///
 /// The error of each request otherwise.
 pub(crate) async fn erase_hidden<H: ShareHttp>(
     http: &H,
     p: ErasureParams,
 ) -> Result<(), http::HttpError> {
+    // The relay signed the link of such a thread, so its listing hides it,
+    // and no erasure covers it (`SYNC-370`).
+    if p.hidden
+        .iter()
+        .any(|t| linked(p.channel_id, *t, &p.receipts))
+    {
+        return Err(hidden_error());
+    }
     let root = http::Url::<http::ApiRoot>::of(p.url_scheme, &p.api_base);
     let members: http::DocumentMembersResponse = http
         .get_json(&root.route(format!("/documents/{}/members", p.meta)))

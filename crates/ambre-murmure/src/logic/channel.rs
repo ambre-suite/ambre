@@ -58,7 +58,11 @@ pub use sweeping::{SweepStep, Swept};
 pub use threading::{Replied, SeekStep, ThreadLinked, ThreadTarget};
 
 #[cfg(test)]
-pub(crate) use {amending::folded_amendments, folding::header_fold};
+pub(crate) use {
+    amending::{folded_amendments, recorded_receipts},
+    folding::header_fold,
+    threading::named_receipts,
+};
 
 ambre_core::define_flag! {
     /// Whether a linked document is to open: this client's own, for its

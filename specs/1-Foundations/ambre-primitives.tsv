@@ -5119,3 +5119,7 @@ ambre-sync | src/membership_log.rs | crate::membership_log | Held::names() | ret
 ambre-sync | src/membership_log.rs | crate::membership_log | Log::holds_other_keys() | ret | bool	generic	predicate: does the log keep the member present under another key pair than the one the relay served; the invite refuses on it, and it selects no mode
 ambre-server | src/db/members.rs | crate::db::members | holds_owner() | ret | Result<bool,AppError>	generic	predicate answer: whether any member row of the document is an owner, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | Log::caps_document() | ret | bool	generic	predicate answer: whether a valid revoke of the log caps the document, selects no mode
+ambre-murmure | src/logic/delta.rs | crate::logic::delta | receipt_set() | ret | bool	generic	predicate answer: whether a write sets the link receipt of a root that names no thread yet, selects no mode
+ambre-protocol | src/thread_erasure.rs | crate::thread_erasure | LINK_DOMAIN | const | &[u8]	generic	domain-separation tag of the link receipt transcript
+ambre-sync | src/erasure.rs | crate::erasure | holds() | ret | bool	generic	predicate answer: whether a signature verifies, selects no mode
+ambre-sync | src/erasure.rs | crate::erasure | linked() | ret | bool	generic	predicate answer: whether a link receipt proves the thread, selects no mode

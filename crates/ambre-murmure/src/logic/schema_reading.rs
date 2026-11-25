@@ -39,7 +39,9 @@ use ambre_core::id::{Category, Channel, Id};
 use ambre_core::schema::verdict;
 use loro::{Container, LoroDoc, LoroValue, TextDelta, ValueOrContainer};
 
-use crate::logic::channel::{folded_amendments, header_fold, read_messages};
+use crate::logic::channel::{
+    folded_amendments, header_fold, named_receipts, read_messages, recorded_receipts,
+};
 use crate::logic::schema::{
     AmendmentKey, AttachmentKey, CategoryKey, ChannelKey, DocumentKind, EntryKey, HeaderKey, Mark,
     MessageKey, Root, SCHEMA_VERSION, SegmentKey, SegmentState, SpaceKey,
@@ -342,6 +344,10 @@ fn root_reading(
         }
         (Root::Amendments, DocumentKind::Amendments) => amendment_reading(reader, stored),
         (Root::Threads, DocumentKind::Amendments) => recorded_thread_reading(reader, stored),
+        (Root::Receipts, DocumentKind::Amendments) => {
+            let receipts = recorded_receipts(reader.doc(stored.kind));
+            receipt_reading(&receipts, stored).map(|r| format!("{r}, by amendment"))
+        }
         (Root::Space, DocumentKind::Space)
             if key.and_then(SpaceKey::parse) == Some(SpaceKey::Name) =>
         {
@@ -444,6 +450,10 @@ fn message_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
             }) =>
         {
             Some(format!("message {n} names the thread a fold carried"))
+        }
+        MessageKey::Receipt if message.thread.is_some() => {
+            let receipts = named_receipts(reader.doc(stored.kind));
+            receipt_reading(&receipts, stored).map(|r| format!("message {n}: {r}"))
         }
         MessageKey::AlsoInThread if message.also_in_thread == Some(thread) => {
             Some(format!("message {n} is a copy of a reply in its thread"))
@@ -604,6 +614,15 @@ fn recorded_thread_reading(reader: &Reader<'_>, stored: &Stored) -> Option<Strin
     let head = messages[at].thread.as_ref()?;
     (head.document.to_string() == stored.string()?)
         .then(|| format!("message {} names its thread by amendment", at + 1))
+}
+
+/// The reading of a stored link receipt, through the receipts a removal
+/// names (`MURMURE-739`): the thread it holds beside it.
+fn receipt_reading(receipts: &[ambre_bus::LinkReceipt], stored: &Stored) -> Option<String> {
+    receipts
+        .iter()
+        .any(|r| Some(r.signature.to_hex().as_str()) == stored.string())
+        .then(|| "the link receipt a removal names with its thread".to_owned())
 }
 
 /// The reading of one category field, through the list the view is given.

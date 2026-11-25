@@ -134,7 +134,7 @@ names the unit two concurrent writers race for. Every document also carries the 
 | segment | `header` | Map | `folded`, `folded_seq` | `Id<Document>`, `u64`, on a fold snapshot | the key | segments | built |
 | thread | `header` | Map | `root_id`, `segment_id` | `Id<Message>`, `Id<Segment>` | the key | threads | built |
 | segment, thread | `messages` | List | position | one message map | list order, no LWW | messages | built |
-| segment, thread | `messages/{n}` | Map | `id`, `author`, `ts`, `thread`, `also_in_thread`, `edited`, `deleted`, `title`, `origin`, `machine`, `call`, `notice`, `member` | `Id<Message>`, `Id<User>`, `Instant<Authored>`, `Id<Document>`, `Id<Document>`, `bool`, `bool`, String, `ImportOrigin`, `PublicKey`, `Id<Call>`, `NoticeKind`, `Id<User>` | the key | messages | built |
+| segment, thread | `messages/{n}` | Map | `id`, `author`, `ts`, `thread`, `thread_receipt`, `also_in_thread`, `edited`, `deleted`, `title`, `origin`, `machine`, `call`, `notice`, `member` | `Id<Message>`, `Id<User>`, `Instant<Authored>`, `Id<Document>`, the link receipt in hex, `Id<Document>`, `bool`, `bool`, String, `ImportOrigin`, `PublicKey`, `Id<Call>`, `NoticeKind`, `Id<User>` | the key | messages | built |
 | segment, thread | `messages/{n}/content` | Text | -- | the message body, with the `mention` mark and the style marks | none: char-CRDT | messages, mentions | built |
 | segment, thread | `messages/{n}/attachments` | List | position | `{media_ref, name: String, media_type: MediaType, size: Count<Octets>}`, the reference typed by `ambre-spec-media.md` | list order, no LWW | attachments | design |
 | segment, thread | `messages/{n}/reactions` | Map | a `ReactionKey`: a `ReactionEmoji` and an `Id<User>` | an `Instant<Authored>` | the entry | reactions | built |
@@ -146,6 +146,7 @@ names the unit two concurrent writers race for. Every document also carries the 
 | amendments | `amendments` | Map | an `Id<Message>` | `{content}` or `{deleted: bool, by: DeletedBy}` | the entry | messages | built |
 | amendments | `amendments/{id}/content` | Text | -- | the edited body, with the `mention` mark and the style marks | none: char-CRDT | messages | built |
 | amendments | `threads` | Map | an `Id<Message>` | `Id<Document>`, the thread of a locked root | the entry | threads | built |
+| amendments | `receipts` | Map | an `Id<Message>` | the link receipt in hex of the thread `threads` records | the entry | threads | built |
 | settings | `murmure/layout` | Map | an `Id<Channel>` | `{group: SidebarGroup, position: u32, hidden: bool, collapsed: bool}` | the entry | sidebar | design |
 | settings | `murmure/groups` | Map | a `PersonalGroupId` | `{name: String, position: u32}` | the entry | sidebar | design |
 | settings | `murmure/notify` | Map | an `Id<Channel>` | `NotifyLevel` | the entry | notifications | design |
@@ -184,6 +185,7 @@ nothing in.
 * an amendments document, one per amended locked segment
   * `header`, and `amendments`, per message: `content`, or the delete
   * `threads`, per locked root: the thread document its first reply created
+  * `receipts`, per locked root: the link receipt of that thread
 * a thread document, one per message with a reply
   * `header`, and `messages`, the same message shape
 * the `murmure` section of the user settings (`ambre-spec-user-settings.md`), one per user
