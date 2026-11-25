@@ -540,7 +540,8 @@ pub async fn register_amendments(
 ///
 /// The channel row is locked first, so two registrations take turns. The
 /// second finds the first one's document, and is answered it (`SRV-214`).
-/// A `thread` already registered is refused with a 409.
+/// A `thread` already registered is refused with a 409, and so is a
+/// `thread` the channel keeps an erasure of (`SRV-370`).
 pub async fn register_thread(
     pool: &PgPool,
     channel_id: &Id<Channel>,
@@ -566,6 +567,21 @@ pub async fn register_thread(
     .await?;
     if let Some(held) = held {
         return Ok(uuid_row_to_id(held));
+    }
+    // Every census passes an erased id that the relay hides. A link after the
+    // erasure would let the relay hide a thread with content. The channel row
+    // lock orders the two steps (`SRV-370`).
+    let erased: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM channel_erasures WHERE channel_id = $1 AND thread_id = $2)",
+    )
+    .bind(channel)
+    .bind(id_to_uuid(thread))
+    .fetch_one(&mut *tx)
+    .await?;
+    if erased {
+        return Err(AppError::Conflict {
+            detail: "the channel erased the thread name".into(),
+        });
     }
     let inserted = sqlx::query(
         "INSERT INTO channel_documents (document_id, channel_id, kind, thread_root) \
@@ -2125,6 +2141,123 @@ mod tests {
             .filter(|d| d.kind == ChannelDocumentKind::Thread)
             .count();
         assert_eq!(threads, 1);
+    }
+
+    /// An erasure of `thread`. The relay checks the signature at the route,
+    /// so the store keeps any bytes.
+    fn erasure_of(thread: Id<Document>) -> ThreadErasureRow {
+        ThreadErasureRow {
+            thread,
+            signer: FixedBytes::from_array([1; 32]),
+            signature: FixedBytes::from_array([2; 64]),
+        }
+    }
+
+    /// Whether `channel` links `thread`, and whether it keeps an erasure of it.
+    async fn linked_and_erased(
+        pool: &PgPool,
+        channel: &Id<Channel>,
+        thread: Id<Document>,
+    ) -> (bool, bool) {
+        let linked = list_channel_documents(pool, channel)
+            .await
+            .expect("listing")
+            .iter()
+            .any(|d| d.document_id == thread);
+        let erased = list_thread_erasures(pool, channel)
+            .await
+            .expect("erasures")
+            .iter()
+            .any(|e| e.thread == thread);
+        (linked, erased)
+    }
+
+    /// Waits until `waiting` statements of this test's database wait on a
+    /// lock, so the order of the queue is the order of the spawns.
+    async fn until_waiting(pool: &PgPool, waiting: i64) {
+        for _ in 0..500 {
+            let count: i64 = sqlx::query_scalar(
+                "SELECT count(*) FROM pg_stat_activity \
+                 WHERE datname = current_database() AND wait_event_type = 'Lock'",
+            )
+            .fetch_one(pool)
+            .await
+            .expect("activity");
+            if count >= waiting {
+                return;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        panic!("{waiting} statements never waited on the channel row lock");
+    }
+
+    /// The two steps that race on one thread id.
+    #[derive(Clone, Copy, Debug)]
+    enum Step {
+        Erase,
+        Register,
+    }
+
+    /// Runs `step` on `thread` of `channel` in a task of its own, so it
+    /// waits on the channel row lock while the test holds it.
+    fn spawn_step(
+        pool: &PgPool,
+        channel: Id<Channel>,
+        thread: Id<Document>,
+        step: Step,
+    ) -> tokio::task::JoinHandle<Result<(), AppError>> {
+        let pool = pool.clone();
+        tokio::spawn(async move {
+            match step {
+                Step::Erase => record_thread_erasure(&pool, &channel, &erasure_of(thread)).await,
+                Step::Register => register_thread(&pool, &channel, Id::<Message>::mint(), thread)
+                    .await
+                    .map(|_| ()),
+            }
+        })
+    }
+
+    /// `SRV-370`: an erasure and a registration of one thread id race in
+    /// both orders. The test holds the channel row lock, queues the two
+    /// steps behind it in a set order, then lets them run. The first step
+    /// wins, the second is refused, and the channel never links an erased
+    /// thread nor erases a linked one.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn an_erasure_and_a_thread_registration_take_turns(pool: PgPool) {
+        let owner = user(&pool, "owner@test.dev").await;
+        let (id, _, _) = channel_of(&pool, owner).await;
+        for (first, second) in [(Step::Erase, Step::Register), (Step::Register, Step::Erase)] {
+            let thread = document(&pool, owner).await;
+            let mut holder = pool.begin().await.expect("begin");
+            sqlx::query("SELECT id FROM channels WHERE id = $1 FOR UPDATE")
+                .bind(id_to_uuid(id))
+                .execute(&mut *holder)
+                .await
+                .expect("lock");
+            let won = spawn_step(&pool, id, thread, first);
+            until_waiting(&pool, 1).await;
+            let lost = spawn_step(&pool, id, thread, second);
+            until_waiting(&pool, 2).await;
+            holder.commit().await.expect("release");
+
+            let won = won.await.expect("join");
+            assert!(won.is_ok(), "{first:?} goes first: {won:?}");
+            let lost = lost.await.expect("join");
+            assert!(
+                matches!(lost, Err(AppError::Conflict { .. })),
+                "{second:?} after {first:?}: {lost:?}"
+            );
+            let expected = match first {
+                Step::Erase => (false, true),
+                Step::Register => (true, false),
+            };
+            assert_eq!(
+                linked_and_erased(&pool, &id, thread).await,
+                expected,
+                "(linked, erased) after {first:?} won"
+            );
+        }
     }
 
     /// `SRV-196`: a close while another segment of the channel is closing is
