@@ -293,11 +293,11 @@ class EmbedSites(unittest.TestCase):
             self.assertEqual(self.frame_src(tmp, None), ["'none'"])
 
     def test_each_named_site_is_admitted_as_an_https_origin_and_nothing_else(self) -> None:
-        sites = hook.embed_sites("www.youtube.com, https://*.Vimeo.com/\n example.org:8443 www.youtube.com")
+        sites = hook.embed_sites("www.youtube.com, https://Player.Vimeo.com/\n example.org:8443 www.youtube.com")
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(
                 self.frame_src(tmp, sites),
-                ["https://www.youtube.com", "https://*.vimeo.com", "https://example.org:8443"],
+                ["https://www.youtube.com", "https://player.vimeo.com", "https://example.org:8443"],
             )
 
     def test_a_value_that_is_not_a_site_fails_the_build(self) -> None:
@@ -313,6 +313,20 @@ class EmbedSites(unittest.TestCase):
             "example.org;script-src",
             "*.",
             "-bad.example.org",
+        ):
+            with self.subTest(value=value), self.assertRaises(hook.HookError):
+                hook.embed_sites(value)
+
+    def test_a_wildcard_site_fails_the_build(self) -> None:
+        # `*.github.io` would admit the page of any user of that host (`SRV-312`).
+        for value in (
+            "*.github.io",
+            "https://*.github.io",
+            "https://*.github.io/",
+            "www.youtube.com *.vimeo.com",
+            "*.example.org:8443",
+            "a.*.example.org",
+            "example.*",
         ):
             with self.subTest(value=value), self.assertRaises(hook.HookError):
                 hook.embed_sites(value)
@@ -343,6 +357,20 @@ class EmbedSites(unittest.TestCase):
                 redirect_stderr(io.StringIO()),
             ):
                 self.assertEqual(hook.main(), 1)
+
+    def test_the_self_hosted_image_hands_the_sites_to_the_build(self) -> None:
+        # A build argument reaches a `RUN` only when its own stage declares it,
+        # before that `RUN`: an argument of another stage is empty there.
+        root = Path(__file__).resolve().parent.parent
+        dockerfile = (root / "deploy" / "Dockerfile").read_text(encoding="utf-8")
+        stage = dockerfile.split("FROM toolchain AS web-build", 1)[1].split("\nFROM ", 1)[0]
+        declared = stage.find(f"\nARG {hook.EMBED_SITES_VAR}=")
+        built = stage.find("trunk build")
+        self.assertNotEqual(declared, -1, "the web-build stage declares no embed sites")
+        self.assertLess(declared, built, "the embed sites are declared after the client build")
+        compose = (root / "deploy" / "compose" / "compose.yml").read_text(encoding="utf-8")
+        web = compose.split("\n  web:\n", 1)[1].split("\n    image:", 1)[0]
+        self.assertIn(f"{hook.EMBED_SITES_VAR}: ${{{hook.EMBED_SITES_VAR}:-}}", web)
 
 
 class Headers(unittest.TestCase):

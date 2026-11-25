@@ -43,6 +43,7 @@ pub fn resolve(id: StaticKey<Icons>) -> Option<icondata::Icon> {
         "search" => icondata::AiSearchOutlined,
         "import" => icondata::BiImportRegular,
         "export" => icondata::BiExportRegular,
+        "function-variant" => icondata::MdiFunctionVariant,
         _ => return None,
     };
     Some(icon)

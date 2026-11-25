@@ -15,6 +15,7 @@ use leptos::prelude::*;
 pub(crate) fn ProseFigures(
     figures: RwSignal<Option<StatusFigures>>,
     zoom: RwSignal<Scale<Doc, View>>,
+    signals: crate::host::ProseSignals,
 ) -> impl IntoView {
     view! {
         <ambre_chrome::StatusLabel label="Prose" />
@@ -29,6 +30,9 @@ pub(crate) fn ProseFigures(
                 })
             }}
         </span>
+        // Suggestion mode stays in view while the panel is folded
+        // (`PROSE-UI-275`).
+        <ambre_prose::chrome::ProseModeChip signals=signals />
         <span class="spacer"></span>
         <ambre_chrome::ZoomChip
             zoom=zoom

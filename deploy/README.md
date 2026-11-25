@@ -13,6 +13,7 @@ deployment runs on any host".
 | `compose/Caddyfile` | the web server: the certificate, the client, and the routes to the relay, the object store and the SFU |
 | `compose/garage.toml` | the object store |
 | `compose/caddy_headers.py` | writes the headers file of a client build as Caddy directives |
+| `chart/` | the Helm chart of a Kubernetes cluster (`SRV-309`), and `chart/README.md` says how to install it |
 
 ## Run Ambre on one server
 
@@ -70,10 +71,38 @@ flowchart LR
 
 ## Sign-in
 
-The relay signs a user in through an identity provider, and Google is the one it knows today. Set
-`OIDC_GOOGLE_CLIENT_ID` and `OIDC_GOOGLE_CLIENT_SECRET` in `.env`, with
-`https://<domain>/signin/google` as the redirect address of the client. Without them, no user can
-sign in.
+The relay signs a user in through an identity provider: Google, or the OpenID Connect issuer of the
+organization. Without one, no user can sign in.
+
+| Provider | Variables in `.env` | Redirect address of the client |
+| :--- | :--- | :--- |
+| Google | `OIDC_GOOGLE_CLIENT_ID`, `OIDC_GOOGLE_CLIENT_SECRET` | `https://<domain>/signin/google` |
+| an OpenID Connect issuer | `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | `https://<domain>/signin/oidc` |
+
+`OIDC_ISSUER` is the exact `issuer` that the discovery document of the provider names, over
+`https`. A Keycloak realm reads `https://id.example.org/realms/<realm>`, and an Authentik
+application reads `https://id.example.org/application/o/<slug>/`. In the provider, register a
+confidential client with the authorization code flow and the redirect address above, and grant it
+the scopes `openid`, `email` and `profile`. The client must sign its identity tokens under an
+asymmetric algorithm, such as RS256. The provider must verify the address of each user: the relay
+refuses an address the provider has not verified.
+
+The client build names the same issuer, offers it in place of Google, and follows a sign-in to its
+host alone. So run `docker compose up -d --build` after a change of `OIDC_ISSUER`.
+
+The stack runs no identity provider of its own. A provider served under the origin of the suite
+would read what the client keeps on the device, and a second origin needs its own name and
+certificate. An organization that leaves a provider outside the European Union already runs its
+directory: name it here.
+
+## Web embeds
+
+A Toile web embed loads a page of another site only when the deployment names that site. Set
+`AMBRE_EMBED_SITES` in `.env` to the hosts or `https` origins it admits, split by spaces or commas,
+for example `AMBRE_EMBED_SITES=www.youtube.com player.vimeo.com`. Then run
+`docker compose up -d --build`: the build writes the sites into the policy of the page. Without the
+variable, no embed loads (`SRV-312`). Each entry names one host: a wildcard such as `*.github.io`
+fails the build, since it admits the page of any user of that host.
 
 ## The stack under test
 

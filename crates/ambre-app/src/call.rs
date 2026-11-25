@@ -147,6 +147,9 @@ struct Session {
 thread_local! {
     /// The Sync worker, which the join and the session descriptions reach.
     static SYNC: RefCell<Option<web_sys::Worker>> = const { RefCell::new(None) };
+    /// The launcher's writer to the Logic thread, which a leave of a channel reaches: only
+    /// that thread reads the documents the sealed `meta` names (`SYNC-320`).
+    static LOGIC: RefCell<Option<crate::outbox::ShellOutbox>> = const { RefCell::new(None) };
     /// The call of the page, one at a time.
     static SESSION: RefCell<Option<Session>> = const { RefCell::new(None) };
     /// The phase of the call of the page, which the call controls of the header read.
@@ -182,10 +185,11 @@ pub(crate) fn phase() -> ArcRwSignal<CallPhase> {
     PHASE.with(ArcRwSignal::clone)
 }
 
-/// Gives the call client the Sync worker the page spawned, and listens for a change of the
-/// device list of the browser.
-pub(crate) fn install(sync: &web_sys::Worker) {
+/// Gives the call client the Sync worker the page spawned, and the launcher's writer to the
+/// Logic thread. Then listens for a change of the device list of the browser.
+pub(crate) fn install(sync: &web_sys::Worker, logic: &crate::outbox::ShellOutbox) {
     SYNC.with(|slot| *slot.borrow_mut() = Some(sync.clone()));
+    LOGIC.with(|slot| *slot.borrow_mut() = Some(logic.clone()));
     if let Some(devices) = web_sys::window().and_then(|w| w.navigator().media_devices().ok()) {
         let on_change = Closure::<dyn FnMut()>::new(recheck);
         let _ = devices
@@ -756,15 +760,30 @@ pub fn leave_call() {
     to_sync(&SyncCommand::LeaveCall, None);
 }
 
-/// Leaves the channel `channel`, when the id parses. The members who stay
-/// read their log again, and a call of the channel switches its keys away from this member
-/// (`CALL-060`). The Logic thread hears the answer of the relay. The control of a channel
-/// that leaves it lands with the members of a channel; a belt calls this from the page.
+/// Leaves the channel `channel` of the space `space`, when both ids parse. The members who
+/// stay read their log again, and a call of the channel switches its keys away from this
+/// member (`CALL-060`). The leave goes through the Logic thread, which names the documents
+/// the sealed `meta` holds (`SYNC-320`), and hears the answer of the relay. The control of a
+/// channel that leaves it lands with the members of a channel; a belt calls this from the
+/// page.
 #[wasm_bindgen]
-pub fn leave_channel(channel: &str) {
-    if let Ok(channel_id) = Id::<Channel>::parse_str(channel) {
-        to_sync(&SyncCommand::LeaveChannel { channel_id }, None);
-    }
+pub fn leave_channel(space: &str, channel: &str) {
+    let (Ok(space_id), Ok(channel_id)) = (
+        Id::<ambre_core::id::Space>::parse_str(space),
+        Id::<Channel>::parse_str(channel),
+    ) else {
+        tracing::warn!("[Call] a leave names no space or no channel");
+        return;
+    };
+    let command = ambre_logic::app::LogicCommand::Space {
+        space_id,
+        command: ambre_murmure::message::SpaceCommand::LeaveChannel { channel_id },
+    };
+    LOGIC.with(|slot| {
+        if let Some(logic) = slot.borrow().as_ref() {
+            let _ = logic.send(command);
+        }
+    });
 }
 
 /// Gives the two ends of one message channel to the call worker and the Sync worker, with

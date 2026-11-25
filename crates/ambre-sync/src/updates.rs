@@ -417,10 +417,17 @@ impl SyncState {
                 None
             }
             SnapshotPurpose::Confirm if passes => {
+                // A state that holds a write the walk refuses is read again,
+                // and vouches for nothing at the head it signs (`AUTHOR-038`).
+                if doc_state.applied_past_cap(&doc_state.writers) {
+                    return None;
+                }
                 let signing_key = self.signing_key.as_ref()?;
                 // The confirmation names the blob this client checked, so
                 // it holds for no other blob under the same identifier
-                // (audit `W101`).
+                // (audit `W101`). A walk that readmits a writer signs its
+                // head, under which each fold past a lifted cap stands
+                // (`AUTHOR-038`, `SYNC-317`).
                 Some(Vouch::Confirm(pipeline::sign_confirmation(
                     signing_key,
                     ambre_protocol::snapshot_confirm::Confirmed {
@@ -429,6 +436,7 @@ impl SyncState {
                         covered_seq: check.covered_seq,
                         author: &check.author,
                         blob: &check.blob,
+                        head: doc_state.writers.proof_head(),
                     },
                 )))
             }
@@ -600,12 +608,7 @@ impl SyncState {
                 seq,
                 update,
             }));
-        let overflow = doc_state
-            .unvouched
-            .len()
-            .saturating_sub(usize::try_from(QUARANTINE_LIMIT.get()).unwrap_or(usize::MAX));
-        doc_state.unvouched.drain(..overflow);
-        if overflow > 0 {
+        if !crate::trim_held(&mut doc_state.unvouched).is_zero() {
             self.send_to_logic(LogicEvent::SyncWarning {
                 document_id,
                 code: SyncWarningCode::WriterRefused,
@@ -662,11 +665,7 @@ impl SyncState {
             }
             results.push(opened);
         }
-        let overflow = doc_state
-            .refused
-            .len()
-            .saturating_sub(usize::try_from(QUARANTINE_LIMIT.get()).unwrap_or(usize::MAX));
-        doc_state.refused.drain(..overflow);
+        crate::trim_held(&mut doc_state.refused);
         for opened in results {
             self.deliver_remote(document_id, Some(opened), |delta| {
                 LogicEvent::RemoteUpdate { document_id, delta }
@@ -706,6 +705,12 @@ impl SyncState {
                 self.documents.remove(&document_id);
             }
         }
+        self.open_session(document_id, doc_type);
+    }
+
+    /// The open of `document_id` once its type claimed it, or with no claim
+    /// at all for a census (`SYNC-312`, `SYNC-314`).
+    pub(crate) fn open_session(&mut self, document_id: Id<Document>, doc_type: DocType) {
         // Without session keys we cannot authenticate the members fetch or unwrap
         // the document key. Opening now would insert a local-only doc with a
         // throwaway key and never hydrate. Queue it until the session is ready.
@@ -817,7 +822,7 @@ impl SyncState {
             MembersAnswer::Exists(resp) => match &exchange_key {
                 Some(ek) => match Self::opened_from_members(
                     &resp,
-                    log_document,
+                    (log_document, doc_id),
                     ek,
                     my_user_id,
                     &rule,
@@ -1020,6 +1025,7 @@ impl SyncState {
                             Some(blob) if start.holds(doc_id, &blob) => Some(StartBlob {
                                 blob,
                                 author: start.named.author,
+                                proof: start.proof(),
                             }),
                             // A confirmation over another blob trusts
                             // nothing. The open replays from the first
@@ -1053,7 +1059,7 @@ impl SyncState {
                             snapshot_id: start_named.named.snapshot_id,
                             covered_seq: start_named.named.covered_seq,
                         };
-                        if start_past_cap(&start.blob, doc_id, served, &writers) {
+                        if start_past_cap(start, doc_id, served, &writers) {
                             fallback = http::download_snapshot(
                                 url_scheme,
                                 &api_base,
@@ -1067,6 +1073,7 @@ impl SyncState {
                                 start: StartBlob {
                                     blob,
                                     author: reference.named.author,
+                                    proof: reference.proof(),
                                 },
                                 served: pipeline::ServedSnapshot {
                                     snapshot_id: reference.named.snapshot_id,
@@ -1211,7 +1218,7 @@ impl SyncState {
     /// [`OpenFailure::KeyUnsigned`], a fault of the relay.
     pub(crate) fn opened_from_members(
         resp: &http::MembersResponse,
-        document_id: Id<Document>,
+        (document_id, checked): (Id<Document>, Id<Document>),
         exchange_key: &x25519_dalek::StaticSecret,
         my_user_id: Option<Id<User>>,
         rule: &membership_log::LogRule,
@@ -1236,7 +1243,8 @@ impl SyncState {
             signing_keys,
             role,
             rotation_owed: resp.rotation_owed,
-            writers: membership_log::Writers::of(&log),
+            // The caps of a revoke bind the document they name (`SYNC-311`).
+            writers: membership_log::Writers::of_in(&log, checked),
             confirmers: membership_log::Confirmers::of(&log),
             departed: log.departed_at(),
             link_signers: log.link_signers(),
@@ -2196,17 +2204,21 @@ pub(crate) enum Vouch {
 /// Posts `vouch` on `snapshot_id` to the relay at `base`, under the
 /// session's token. A confirmation that settled a fold names the amendments
 /// the relay erased (`SRV-211`).
-/// Whether the start blob `blob`, served as `served`, folds a delta past a
-/// cap `writers` sets (`SYNC-304`). A blob that does not decode is no start
-/// past a cap: the Sync worker refuses it on its own.
+/// Whether the start `start`, served as `served`, folds a delta past a cap
+/// `writers` sets (`SYNC-304`), under the head its confirmation signed
+/// (`SYNC-317`). A blob that does not decode is no start past a cap: the
+/// Sync worker refuses it on its own.
 fn start_past_cap(
-    blob: &Payload<pipeline::FetchedBlob>,
+    start: &StartBlob,
     document_id: Id<Document>,
     served: pipeline::ServedSnapshot,
     writers: &membership_log::Writers,
 ) -> bool {
-    pipeline::decode_snapshot_blob(blob, document_id, served).is_ok_and(|snapshot| {
-        writers.folds_past_cap(&snapshot.public_data.parent_snapshot_update_clocks)
+    pipeline::decode_snapshot_blob(&start.blob, document_id, served).is_ok_and(|snapshot| {
+        writers.folds_past_cap_under(
+            &snapshot.public_data.parent_snapshot_update_clocks,
+            start.proof,
+        )
     })
 }
 
@@ -2225,6 +2237,7 @@ pub(crate) async fn send_vouch(
             let body = http::ConfirmSnapshotRequest {
                 signature: confirmation.signature,
                 blob: confirmation.blob,
+                head: confirmation.head,
             };
             let confirmed: http::ConfirmSnapshotResponse =
                 http::post_json_auth_via(transport, &url.join("/confirm"), &body, auth).await?;
@@ -2269,7 +2282,7 @@ pub(crate) async fn upload_snapshot(
     let minted: http::SnapshotUploadIdResponse = http::post_json_auth_via(
         transport,
         &base.route(format!("/documents/{document_id}/snapshot/upload-id")),
-        &serde_json::json!({ "size_bytes": draft.size() }),
+        &http::SnapshotUploadIdRequest { size: draft.size() },
         auth,
     )
     .await?;
@@ -2379,7 +2392,7 @@ async fn checked_members_key_via(
     let refused = |step: &str| crate::error::SyncError::KeyOutOfReach.at(step);
     let opened = SyncState::opened_from_members(
         resp,
-        check.log_document,
+        (check.log_document, check.document_id),
         &check.exchange_key,
         check.my_user_id,
         &check.rule,
@@ -2687,7 +2700,7 @@ mod tests {
         };
         let opened = SyncState::opened_from_members(
             &resp,
-            ROWS_DOC,
+            (ROWS_DOC, ROWS_DOC),
             &my_xk,
             Some(me),
             &membership_log::LogRule::document(),
@@ -2727,7 +2740,7 @@ mod tests {
         };
         let refused = SyncState::opened_from_members(
             &resp,
-            ROWS_DOC,
+            (ROWS_DOC, ROWS_DOC),
             &my_xk,
             Some(me),
             &membership_log::LogRule::document(),
@@ -2980,7 +2993,7 @@ mod tests {
         let opens = |resp: &http::MembersResponse| {
             let opened = SyncState::opened_from_members(
                 resp,
-                document_id,
+                (document_id, document_id),
                 &bob_xk,
                 Some(bob.id),
                 &membership_log::LogRule::document(),
@@ -3127,7 +3140,7 @@ mod tests {
             };
             let opened = SyncState::opened_from_members(
                 &resp,
-                document_id,
+                (document_id, document_id),
                 bob_xk,
                 Some(bob.id),
                 &membership_log::LogRule::document(),
@@ -3256,7 +3269,7 @@ mod tests {
         let opens = |resp: &http::MembersResponse, log_document: Id<Document>| {
             let opened = SyncState::opened_from_members(
                 resp,
-                log_document,
+                (log_document, log_document),
                 &bob_xk,
                 Some(bob.id),
                 &membership_log::LogRule::document(),
@@ -3506,7 +3519,7 @@ mod tests {
                      pin: Option<&FixedBytes<ambre_core::InviterPin>>| {
             let opened = SyncState::opened_from_members(
                 resp,
-                document_id,
+                (document_id, document_id),
                 &bob_xk,
                 Some(bob.id),
                 &membership_log::LogRule::document(),
@@ -3734,6 +3747,7 @@ mod tests {
         StartBlob {
             blob,
             author: FixedBytes::from_array(author.verifying_key().to_bytes()),
+            proof: None,
         }
     }
 
@@ -4124,6 +4138,52 @@ mod tests {
             .map(|(_, u)| u.public_data.clock.get())
             .collect();
         assert_eq!(held, std::collections::BTreeSet::from([2, 3]));
+    }
+
+    /// `SYNC-310`: the deltas held for a listing, and those a listing
+    /// refused, keep the byte cap of the quarantine. Three of 12 MiB pass
+    /// 32 MiB under the count cap: the oldest leaves, and one warning is
+    /// raised.
+    #[test]
+    fn a_hold_past_its_bytes_drops_the_oldest() {
+        let (mut state, rx, doc, key, sk, snap) = setup();
+        let big = |clock: u64| {
+            let mut update =
+                make_update(doc, snap, Seq::<DeltaAuthor>::new(clock), b"x", &key, &sk);
+            update.ciphertext = Payload::new(vec![0; 12 * 1024 * 1024]);
+            (Seq::<Relay>::new(clock), update)
+        };
+        state.hold_unvouched(doc, (1..=3).map(big));
+        let held: Vec<u64> = state.documents[&doc]
+            .unvouched
+            .iter()
+            .map(|held| held.seq.get())
+            .collect();
+        assert_eq!(held, [2, 3]);
+        let warnings = drain(&rx)
+            .into_iter()
+            .filter(|e| matches!(e, LogicEvent::SyncWarning { code, .. } if *code == SyncWarningCode::WriterRefused))
+            .count();
+        assert_eq!(warnings, 1);
+
+        // The refused hold goes through the same trim.
+        let seen = ambre_core::Seq::nth(1);
+        let mut refused: Vec<crate::Unvouched> = (4..=6)
+            .map(big)
+            .map(|(seq, update)| crate::Unvouched { seen, seq, update })
+            .collect();
+        assert_eq!(crate::trim_held(&mut refused).get(), 1);
+        assert_eq!(
+            refused
+                .iter()
+                .map(|held| held.seq.get())
+                .collect::<Vec<_>>(),
+            [5, 6]
+        );
+        assert!(
+            crate::trim_held(&mut refused).is_zero(),
+            "a hold that fits loses nothing"
+        );
     }
 
     /// `SYNC-007`: the overflow drops the update with the lowest clock, across
@@ -5394,6 +5454,7 @@ mod tests {
                             author.verifying_key().to_bytes(),
                         ),
                         blob: &digest,
+                        head: None,
                     },
                 );
                 let reporter_key = FixedBytes::from_array(reporter.verifying_key().to_bytes());
@@ -7750,6 +7811,418 @@ mod tests {
         }
     }
 
+    /// Holds `SYNC-316` at the open. Alice revokes Bob at cap 1, and invites
+    /// him back. Alice's snapshot folds Bob's clocks with no head, so a clock
+    /// past the lifted cap may be a write of his exclusion. A start that
+    /// folds his clock 2 or 3 opens nothing and replays from the first
+    /// delta. A start that folds his clock 1 alone opens.
+    #[test]
+    fn a_start_past_a_lifted_cap_opens_nothing() {
+        use crate::membership_log::Writers;
+        use crate::membership_log::tests::{
+            Person, append, created, revoke_capped, walk as walk_log,
+        };
+        use ambre_protocol::MembershipAct;
+        let (alice, bob) = (Person::new(0x55), Person::new(0x56));
+        let mut log = created(&alice, &bob);
+        revoke_capped(&mut log, &alice, &bob, 1);
+        append(&mut log, &alice, &bob, MembershipAct::Invite, Role::Editor);
+        let readmitted = Writers::of(&walk_log(&log));
+        assert_eq!(
+            readmitted.cap(&bob.public()),
+            None,
+            "the invite lifts the cap"
+        );
+        for (folded, opens) in [(2, false), (3, false), (1, true)] {
+            let (mut state, rx, _doc, _key, _sk, _snap) = setup();
+            let doc = Id::<Document>::mint();
+            let key = DocumentKey::generate();
+            let snapshot_id = Id::<Snapshot>::mint();
+            let blob = snapshot_blob_folding(
+                doc,
+                served(snapshot_id, 3),
+                b"snap",
+                (&key, &alice.key),
+                vec![(bob.public(), Seq::<DeltaAuthor>::new(folded))],
+            );
+            state.handle_sync_event(SyncEvent::OpenDocumentReady {
+                document_id: doc,
+                doc_key: key.clone(),
+                snapshot_payload: Some(started(blob, &alice.key)),
+                snapshot_id,
+                covered_seq: Seq::<Relay>::new(3),
+                held_snapshot: None,
+                fallback: None,
+                doc_type: DocType::Trame,
+                existence: crate::Existence::OnRelay,
+                signing_keys: Vec::new(),
+                role: Role::Owner,
+                rotation_owed: ambre_core::RotationDebt::Settled,
+                links: Vec::new(),
+                writers: readmitted.clone(),
+                departed: None,
+            });
+            let events = drain(&rx);
+            let opened = events
+                .iter()
+                .any(|e| matches!(e, LogicEvent::RemoteSnapshot { .. }));
+            assert_eq!(opened, opens, "folded clock {folded}");
+            let doc_state = &state.documents[&doc];
+            if opens {
+                assert_eq!(doc_state.last_seq, Seq::<Relay>::new(3));
+                assert!(!doc_state.applied_past_cap(&readmitted));
+                continue;
+            }
+            assert_eq!(
+                doc_state.last_seq,
+                Seq::<Relay>::ZERO,
+                "the open replays from the first delta"
+            );
+            assert!(events.iter().any(|e| matches!(
+                e,
+                LogicEvent::SyncWarning {
+                    code: SyncWarningCode::WriterRefused,
+                    ..
+                }
+            )));
+            assert!(!doc_state.applied_past_cap(&readmitted));
+        }
+
+        // A copy that folded a clock past the lifted cap is read again.
+        let (mut state, _rx, doc, _key, _sk, _snap) = setup();
+        state.documents.get_mut(&doc).unwrap().writers = readmitted.clone();
+        state.documents[&doc].note_applied(&bob.public(), Seq::<DeltaAuthor>::new(1));
+        assert!(!state.documents[&doc].applied_past_cap(&readmitted));
+        state.documents[&doc].note_applied(&bob.public(), Seq::<DeltaAuthor>::new(2));
+        assert!(state.documents[&doc].applied_past_cap(&readmitted));
+    }
+
+    /// Holds `SYNC-317`. A revoke caps Bob at clock 1 and an invite lets
+    /// him back. He then writes clocks 2 and 3. The relay trims every delta
+    /// under the reference that folds them. Another member confirmed that
+    /// reference at the head after the invite. The open starts from it and
+    /// replays past its horizon alone.
+    ///
+    /// A confirmation at the head of the exclusion, or with no head, opens
+    /// nothing.
+    #[test]
+    fn a_start_past_a_lifted_cap_opens_under_a_head_past_the_grant() {
+        use crate::membership_log::Writers;
+        use crate::membership_log::tests::{
+            Person, append, created, revoke_capped, walk as walk_log,
+        };
+        use ambre_protocol::MembershipAct;
+        let (alice, bob) = (Person::new(0x57), Person::new(0x58));
+        let mut log = created(&alice, &bob);
+        revoke_capped(&mut log, &alice, &bob, 1);
+        let excluded = walk_log(&log).walked_head();
+        append(&mut log, &alice, &bob, MembershipAct::Invite, Role::Editor);
+        let walked = walk_log(&log);
+        let readmitted = Writers::of(&walked);
+        let granted = walked.walked_head();
+        for (proof, opens) in [
+            (Some(granted), true),
+            (Some(excluded), false),
+            (None, false),
+        ] {
+            let (mut state, rx, _doc, _key, _sk, _snap) = setup();
+            let doc = Id::<Document>::mint();
+            let key = DocumentKey::generate();
+            let snapshot_id = Id::<Snapshot>::mint();
+            let blob = snapshot_blob_folding(
+                doc,
+                served(snapshot_id, 9),
+                b"snap",
+                (&key, &alice.key),
+                vec![(bob.public(), Seq::<DeltaAuthor>::new(3))],
+            );
+            let mut start = started(blob, &alice.key);
+            start.proof = proof;
+            state.handle_sync_event(SyncEvent::OpenDocumentReady {
+                document_id: doc,
+                doc_key: key.clone(),
+                snapshot_payload: Some(start),
+                snapshot_id,
+                covered_seq: Seq::<Relay>::new(9),
+                held_snapshot: None,
+                fallback: None,
+                doc_type: DocType::Trame,
+                existence: crate::Existence::OnRelay,
+                signing_keys: Vec::new(),
+                role: Role::Owner,
+                rotation_owed: ambre_core::RotationDebt::Settled,
+                links: Vec::new(),
+                writers: readmitted.clone(),
+                departed: None,
+            });
+            let events = drain(&rx);
+            let opened = events
+                .iter()
+                .any(|e| matches!(e, LogicEvent::RemoteSnapshot { .. }));
+            assert_eq!(opened, opens, "proof {proof:?}");
+            let doc_state = &state.documents[&doc];
+            let horizon = if opens { 9 } else { 0 };
+            assert_eq!(doc_state.last_seq, Seq::<Relay>::new(horizon), "{proof:?}");
+            // The fold stands under the head, so the open is never read again.
+            assert!(!doc_state.applied_past_cap(&readmitted), "{proof:?}");
+            assert_eq!(
+                doc_state.applied_clock(&bob.public()),
+                Seq::<DeltaAuthor>::new(if opens { 3 } else { 0 })
+            );
+        }
+    }
+
+    /// Holds `SYNC-317` under the floor of `SYNC-315`. A revoke on the log
+    /// of a channel's `meta` names no cap for a thread, so the floor caps Bob
+    /// there at zero. An invite lifts the floor. A start that folds Bob's
+    /// clock 1 in the thread opens under the head after the invite. Under the
+    /// head of the exclusion, or with no head, it opens nothing.
+    #[test]
+    fn a_start_past_a_lifted_floor_opens_under_a_head_past_the_grant() {
+        use crate::membership_log::tests::{DOC, Person, append, created, walk as walk_log};
+        use crate::membership_log::{Draft, LogHead, Writers, digest, sign_channel_capped};
+        use ambre_protocol::MembershipAct;
+        let (alice, bob) = (Person::new(0x5c), Person::new(0x5d));
+        let mut log = created(&alice, &bob);
+        let head = LogHead {
+            position: ambre_protocol::membership::place_after(log.len()),
+            previous: log.last().and_then(digest),
+        };
+        let revoke = Draft {
+            document: DOC,
+            member: bob.id,
+            member_key: bob.public(),
+            member_exchange_key: bob.exchange(),
+            act: MembershipAct::Revoke,
+            role: Role::Editor,
+            key: Some(FixedBytes::from_array([9; 16])),
+        };
+        log.extend(
+            sign_channel_capped(
+                revoke,
+                (
+                    Some(Seq::<DeltaAuthor>::new(1)),
+                    ambre_protocol::Elsewhere::Zero,
+                ),
+                Vec::new(),
+                head,
+                alice.id,
+                &alice.key,
+            )
+            .unwrap(),
+        );
+        let excluded = walk_log(&log).walked_head();
+        append(&mut log, &alice, &bob, MembershipAct::Invite, Role::Editor);
+        let walked = walk_log(&log);
+        let thread = Id::<Document>::from_bytes([0x5e; 16]);
+        let readmitted = Writers::of_in(&walked, thread);
+        let granted = walked.walked_head();
+        for (proof, opens) in [
+            (Some(granted), true),
+            (Some(excluded), false),
+            (None, false),
+        ] {
+            let (mut state, rx, _doc, _key, _sk, _snap) = setup();
+            let key = DocumentKey::generate();
+            let snapshot_id = Id::<Snapshot>::mint();
+            let blob = snapshot_blob_folding(
+                thread,
+                served(snapshot_id, 9),
+                b"snap",
+                (&key, &alice.key),
+                vec![(bob.public(), Seq::<DeltaAuthor>::new(1))],
+            );
+            let mut start = started(blob, &alice.key);
+            start.proof = proof;
+            state.handle_sync_event(SyncEvent::OpenDocumentReady {
+                document_id: thread,
+                doc_key: key.clone(),
+                snapshot_payload: Some(start),
+                snapshot_id,
+                covered_seq: Seq::<Relay>::new(9),
+                held_snapshot: None,
+                fallback: None,
+                doc_type: DocType::Murmure,
+                existence: crate::Existence::OnRelay,
+                signing_keys: Vec::new(),
+                role: Role::Owner,
+                rotation_owed: ambre_core::RotationDebt::Settled,
+                links: Vec::new(),
+                writers: readmitted.clone(),
+                departed: None,
+            });
+            let opened = drain(&rx)
+                .iter()
+                .any(|e| matches!(e, LogicEvent::RemoteSnapshot { .. }));
+            assert_eq!(opened, opens, "proof {proof:?}");
+        }
+    }
+
+    /// Holds `AUTHOR-038`. A member whose walk readmits Bob confirms Alice's
+    /// snapshot under the head of that walk, and the signature covers it. A
+    /// state that holds a write of Bob past his lifted cap under the head of
+    /// his exclusion confirms nothing.
+    #[test]
+    fn a_confirmation_signs_the_head_of_a_walk_that_readmits() {
+        use crate::membership_log::Writers;
+        use crate::membership_log::tests::{
+            Person, append, created, revoke_capped, walk as walk_log,
+        };
+        use ambre_protocol::MembershipAct;
+        let (alice, bob) = (Person::new(0x59), Person::new(0x5a));
+        let mut log = created(&alice, &bob);
+        revoke_capped(&mut log, &alice, &bob, 1);
+        let excluded = walk_log(&log).walked_head();
+        append(&mut log, &alice, &bob, MembershipAct::Invite, Role::Editor);
+        let walked = walk_log(&log);
+        let readmitted = Writers::of(&walked);
+        let snapshot_id = Id::<Snapshot>::mint();
+        let blob = FixedBytes::from_array([4; 32]);
+        let check = |past_cap: bool| {
+            let (mut state, _rx, doc, _key, _sk, _snap) = setup();
+            let doc_state = state.documents.get_mut(&doc).unwrap();
+            doc_state.writers = readmitted.clone();
+            if past_cap {
+                doc_state.applied.borrow_mut().note_signed(
+                    &bob.public(),
+                    excluded,
+                    Seq::<DeltaAuthor>::new(2),
+                );
+            }
+            doc_state.checks.insert(
+                snapshot_id,
+                PendingCheck {
+                    author: alice.public(),
+                    covered_seq: Seq::<Relay>::new(5),
+                    blob,
+                    payload: None,
+                },
+            );
+            let confirmer = SigningKey::from_bytes(&[0x5b; 32]);
+            state.signing_key = Some(confirmer.clone());
+            let vouch = state.handle_snapshot_verdict(
+                doc,
+                snapshot_id,
+                SnapshotPurpose::Confirm,
+                SnapshotVerdict::Match { extras: Vec::new() },
+            );
+            (doc, confirmer, vouch)
+        };
+        let (doc, confirmer, vouch) = check(false);
+        let Some(Vouch::Confirm(confirmation)) = vouch else {
+            panic!("a match is confirmed: {vouch:?}");
+        };
+        assert_eq!(confirmation.head, Some(walked.walked_head()));
+        let transcript = ambre_protocol::snapshot_confirm::confirm_transcript(
+            ambre_protocol::snapshot_confirm::Confirmed {
+                document_id: doc,
+                snapshot_id,
+                covered_seq: Seq::<Relay>::new(5),
+                author: &alice.public(),
+                blob: &blob,
+                head: confirmation.head,
+            },
+        );
+        assert!(
+            ambre_crypto::signature::verify_message(
+                &FixedBytes::from_array(confirmer.verifying_key().to_bytes()),
+                &transcript,
+                &confirmation.signature,
+            )
+            .is_ok()
+        );
+        assert_eq!(check(true).2, None, "a state past a cap confirms nothing");
+    }
+
+    /// Holds `SYNC-309`. A fresh open with no snapshot replays the whole log
+    /// in one batch. A revoke caps Bob at clock 1, and the relay replays his
+    /// clocks 1 to 3 beside Alice's clock 1. The batch hands Logic his clock
+    /// 1 and Alice's alone, and warns once per refused delta. The open is
+    /// then ready with no write past the cap applied.
+    #[test]
+    fn an_open_replay_refuses_a_delta_past_the_cap_of_its_writer() {
+        use crate::membership_log::Writers;
+        use crate::membership_log::tests::Person;
+        use ambre_protocol::SeqUpdate;
+        let (alice, bob) = (Person::new(0x71), Person::new(0x72));
+        let at = Seq::<DeltaAuthor>::new;
+        let capped = Writers::capped(
+            HashSet::from([alice.public(), bob.public()]),
+            HashMap::from([(bob.public(), at(1))]),
+        );
+        let (mut state, rx, _doc, _key, _sk, _snap) = setup();
+        let (ws_tx, _ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        let doc = Id::<Document>::mint();
+        let key = DocumentKey::generate();
+        let genesis = Id::<Snapshot>::genesis(doc);
+        state.handle_sync_event(SyncEvent::OpenDocumentReady {
+            document_id: doc,
+            doc_key: key.clone(),
+            snapshot_payload: None,
+            snapshot_id: genesis,
+            covered_seq: Seq::<Relay>::ZERO,
+            held_snapshot: None,
+            fallback: None,
+            doc_type: DocType::Trame,
+            existence: crate::Existence::OnRelay,
+            signing_keys: Vec::new(),
+            role: Role::Owner,
+            rotation_owed: ambre_core::RotationDebt::Settled,
+            links: Vec::new(),
+            writers: capped.clone(),
+            departed: None,
+        });
+        assert_eq!(
+            ready_count(&drain(&rx), doc),
+            0,
+            "the open waits on the replay"
+        );
+
+        let log: [(u64, &[u8], &Person, u64); 4] = [
+            (1, b"one", &bob, 1),
+            (2, b"two", &bob, 2),
+            (3, b"three", &bob, 3),
+            (4, b"a", &alice, 1),
+        ];
+        let updates = log
+            .iter()
+            .map(|(seq, body, by, clock)| SeqUpdate {
+                seq: Seq::<Relay>::new(*seq),
+                update: make_update(doc, genesis, at(*clock), body, &key, &by.key),
+            })
+            .collect();
+        state.handle_ws_message(WsServerMsg::MissingUpdates {
+            document_id: doc,
+            updates,
+        });
+        let events = drain(&rx);
+        let batched: Vec<Vec<u8>> = events
+            .iter()
+            .filter_map(|e| match e {
+                LogicEvent::RemoteUpdateBatch { deltas, .. } => Some(deltas),
+                _ => None,
+            })
+            .flatten()
+            .map(|delta| delta.payload.as_bytes().to_vec())
+            .collect();
+        assert_eq!(batched, [b"one".to_vec(), b"a".to_vec()]);
+        let (single, warned) = applied_and_warned(&events);
+        assert!(single.is_empty(), "the replay lands as one batch");
+        assert_eq!(
+            warned,
+            [
+                SyncWarningCode::WriterRefused,
+                SyncWarningCode::WriterRefused
+            ],
+            "each delta past the cap is refused aloud"
+        );
+        assert_eq!(ready_count(&events, doc), 1, "the open is ready once");
+        let doc_state = &state.documents[&doc];
+        assert_eq!(doc_state.applied_clock(&bob.public()), at(1));
+        assert!(!doc_state.applied_past_cap(&capped));
+    }
+
     /// Holds `SYNC-307`. Bob is capped at clock 2. The latest snapshot
     /// folds his clock 3, so it opens nothing. The trusted reference folds
     /// his clocks up to 2, at horizon 2. The open starts from it and asks
@@ -7920,7 +8393,9 @@ mod tests {
         state.exchange_key = Some(x25519_dalek::StaticSecret::from([7; 32]));
         state.set_event_tx(ambre_bus::conduit::unbounded().0);
         let id = Seq::<Request>::new(1);
-        state.handle_leave_document(id, other);
+        // The census opens a document not open first (`SYNC-314`). The
+        // departure itself still refuses to read a cap from nothing.
+        state.leave_now(id, other);
         assert!(drain(&rx).iter().any(|e| matches!(
             e,
             LogicEvent::ApiError {

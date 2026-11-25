@@ -1095,6 +1095,8 @@ mod tests {
             ),
             author: who,
             cap: None,
+            document_caps: Vec::new(),
+            elsewhere: ambre_protocol::Elsewhere::Uncapped,
             signature: ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array([0; 64]),
         };
         entry.signature = ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array(
@@ -2198,7 +2200,7 @@ mod tests {
             &state.db,
             &channel.meta.document_id(),
             &who,
-            None,
+            &db::RemovalEntries::default(),
             crate::deletion::sweep_due(state),
         )
         .await
@@ -2754,6 +2756,8 @@ mod tests {
             ),
             author,
             cap: None,
+            document_caps: Vec::new(),
+            elsewhere: ambre_protocol::Elsewhere::Uncapped,
             signature: ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array([0; 64]),
         };
         entry.signature = ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array(
@@ -2941,6 +2945,51 @@ mod tests {
             alices[0].doc_key_enc,
             ambre_core::Encoded::new([1u8; 48].to_vec())
         );
+    }
+
+    /// `SRV-346`: a viewer of a channel's `meta` cannot seal a name beside
+    /// it, nor can a user outside the channel. The refusal leaves the
+    /// sealed name as it was, and an owner of the same `meta` still renames.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_rename_of_a_channel_from_a_reader_is_refused(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let vera = user(&state, "vera@test.dev").await;
+        let mallory = user(&state, "mallory@test.dev").await;
+        let req = direct_request(alice, &[bob]);
+        let meta = req.meta_id.document_id();
+        open_direct(&state, alice, req).await.expect("create");
+        grant(&state, meta, vera, Role::Viewer).await;
+        let rename = |who: Id<User>, sealed: u8| {
+            crate::routes::rename_document(
+                State(state.clone()),
+                session(who),
+                PathId::new(meta),
+                Json::new(crate::routes::RenameDocumentRequest {
+                    name_enc: ambre_core::Encoded::new([sealed; 40].to_vec()),
+                }),
+            )
+        };
+        let sealed_name = || async {
+            list_member_channels(State(state.clone()), session(alice))
+                .await
+                .expect("listed")
+                .0
+                .channels[0]
+                .name_enc
+                .as_ref()
+                .map(|name| name.as_bytes().to_vec())
+        };
+
+        assert_eq!(status(rename(vera, 7).await), StatusCode::FORBIDDEN);
+        assert_eq!(status(rename(mallory, 7).await), StatusCode::FORBIDDEN);
+        assert_eq!(sealed_name().await, None, "no reader names the channel");
+
+        assert_eq!(status(rename(alice, 9).await), StatusCode::OK);
+        assert_eq!(status(rename(vera, 7).await), StatusCode::FORBIDDEN);
+        assert_eq!(sealed_name().await, Some([9u8; 40].to_vec()), "kept");
     }
 
     /// `SRV-220`: a direct message lists the display names of its other
@@ -3421,6 +3470,7 @@ mod tests {
                 members: vec![alice],
                 link: link.encode().expect("encode"),
                 entry: None,
+                continued: Vec::new(),
             }),
         )
         .await;
@@ -3470,6 +3520,7 @@ mod tests {
                 members: vec![alice],
                 link: link.encode().expect("encode"),
                 entry: None,
+                continued: Vec::new(),
             }),
         )
         .await;
@@ -4598,6 +4649,7 @@ mod tests {
                 covered_seq: snapshot.covered_seq,
                 author: &snapshot.author_pubkey,
                 blob: &blob,
+                head: None,
             },
         );
         let signature = ed25519_dalek::Signer::sign(&signing_key_of(who), transcript.as_bytes());
@@ -4608,6 +4660,7 @@ mod tests {
             Json::new(crate::routes::ConfirmSnapshotRequest {
                 signature: ambre_core::FixedBytes::from_array(signature.to_bytes()),
                 blob,
+                head: None,
             }),
         )
         .await

@@ -432,6 +432,8 @@ fn sample_update(fill: u8) -> Update {
                 previous: None,
                 author: Id::<User>::from_bytes([fill + 9; 16]),
                 cap: None,
+                document_caps: Vec::new(),
+                elsewhere: crate::membership::Elsewhere::Uncapped,
                 signature: FixedBytes::from_array([fill + 13; 64]),
             })),
         },
@@ -835,6 +837,8 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
         previous: Some(FixedBytes::from_array([5; 32])),
         author: Id::<User>::from_bytes([6; 16]),
         cap: None,
+        document_caps: Vec::new(),
+        elsewhere: crate::membership::Elsewhere::Uncapped,
         signature: FixedBytes::from_array([7; ENTRY_SIGNATURE_LEN]),
     };
     let transcript = report_transcript(
@@ -1054,6 +1058,8 @@ fn a_log_entry_costs_an_update_at_most_250_bytes() {
             previous: Some(FixedBytes::from_array([8; 32])),
             author: Id::<User>::from_bytes([9; 16]),
             cap: cap.map(Seq::new),
+            document_caps: Vec::new(),
+            elsewhere: crate::membership::Elsewhere::Uncapped,
             signature: FixedBytes::from_array([10; 64]),
         }
     };
@@ -1068,6 +1074,21 @@ fn a_log_entry_costs_an_update_at_most_250_bytes() {
         size(Some(entry(u64::MAX, key, Some(u64::MAX)))) - without,
         250
     );
+    // A channel revoke caps each other document it names: 418 B more at the
+    // bound of 16 documents and clocks of `u64::MAX` (`SYNC-311`).
+    let mut channel = entry(u64::MAX, key, Some(u64::MAX));
+    channel.document_caps = channel_caps();
+    assert_eq!(size(Some(channel)) - without, 250 + 418);
+}
+
+/// The most document caps one revoke names, each at a clock of `u64::MAX`.
+fn channel_caps() -> Vec<crate::DocumentCap> {
+    (0..crate::DOCUMENT_CAPS_MAX.get())
+        .map(|i| crate::DocumentCap {
+            document: Id::<Document>::from_bytes([i as u8 + 2; 16]),
+            cap: Seq::new(u64::MAX),
+        })
+        .collect()
 }
 
 /// `SYNC-262`: the log head and the entry it names on one presence sample,
@@ -1115,6 +1136,8 @@ fn a_log_head_and_entry_cost_an_ephemeral_at_most_293_bytes() {
         previous: Some(FixedBytes::from_array([8; 32])),
         author: Id::<User>::from_bytes([9; 16]),
         cap: Some(Seq::new(cap)),
+        document_caps: Vec::new(),
+        elsewhere: crate::membership::Elsewhere::Uncapped,
         signature: FixedBytes::from_array([10; 64]),
     };
     assert_eq!(size(crate::LogHead::EMPTY, None) - without, 3);
@@ -1123,4 +1146,7 @@ fn a_log_head_and_entry_cost_an_ephemeral_at_most_293_bytes() {
         size(head(u64::MAX), Some(entry(u64::MAX, u64::MAX))) - without,
         293
     );
+    let mut channel = entry(u64::MAX, u64::MAX);
+    channel.document_caps = channel_caps();
+    assert_eq!(size(head(u64::MAX), Some(channel)) - without, 293 + 418);
 }

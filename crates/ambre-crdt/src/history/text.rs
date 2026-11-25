@@ -15,10 +15,11 @@ use ambre_core::FixedBytes;
 use ambre_core::crdt::TextDigest;
 use ambre_core::hash::HashMap;
 
-use ambre_core::index::{Len, Pos};
+use ambre_core::index::{Len, Pos, Span};
 use loro::cursor::{Cursor, Side};
 use loro::{ContainerID, InternalString, LoroDoc, LoroText, LoroValue, VersionVector};
 
+use super::ident::{self, IdRun, Idents};
 use super::rich::{Edit, Rich};
 use super::{Chars, Renames};
 
@@ -54,16 +55,52 @@ impl Mark {
     }
 
     /// Read where the cursor points now. A character a peer took out reads
-    /// as `None`: Loro answers it with a new cursor.
-    fn read(&mut self, doc: &LoroDoc) {
-        self.found = self.cursor.as_ref().and_then(|cursor| {
-            let answer = doc.get_cursor_pos(cursor).ok()?;
-            answer
-                .update
-                .is_none()
-                .then(|| Pos::from_usize(answer.current.pos))
-        });
+    /// as `None`: Loro answers it with a new cursor. A character a replay of
+    /// this peer put back is read under its new identity, and the cursor
+    /// follows it from then on (`UNDO-024`).
+    fn read(&mut self, doc: &LoroDoc, idents: &Idents) {
+        self.found = None;
+        let Some(cursor) = &self.cursor else {
+            return;
+        };
+        let Ok(answer) = doc.get_cursor_pos(cursor) else {
+            return;
+        };
+        if answer.update.is_none() {
+            self.found = Some(Pos::from_usize(answer.current.pos));
+            return;
+        }
+        let Some(id) = cursor.id.and_then(|id| idents.resolve(id)) else {
+            return;
+        };
+        let moved = Cursor::new(Some(id), cursor.container.clone(), cursor.side, 0);
+        if let Ok(answer) = doc.get_cursor_pos(&moved)
+            && answer.update.is_none()
+        {
+            self.found = Some(Pos::from_usize(answer.current.pos));
+            self.cursor = Some(moved);
+        }
     }
+
+    /// Where the character stands now, in the replay under way. A dead
+    /// character may be one that an earlier op of this replay put back. The
+    /// replay knows where it wrote it (`UNDO-024`).
+    /// Loro is not asked again, so the replay is never half committed.
+    fn place(&self, idents: &Idents, shift: &Shifts) -> Option<Pos<Chars>> {
+        if let Some(found) = self.found {
+            return Some(shift.follow(found));
+        }
+        let id = self.cursor.as_ref()?.id?;
+        shift.placed(idents.resolve(id)?)
+    }
+}
+
+/// The index space of the edits one replay made in one text.
+#[derive(Debug, PartialEq, Eq)]
+enum Edits {}
+
+impl ambre_core::index::Axis for Edits {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Edits");
 }
 
 /// One edit of a text, in the state the history last left it.
@@ -85,12 +122,16 @@ pub(super) enum TextOp {
     /// `anchor` name the characters that stood right before and right after
     /// it. A later step may take a neighbour out and put it back under a new
     /// identity. The cursor on it then names a dead character, and the other
-    /// neighbour, or the recorded place, stands in.
+    /// neighbour, or the recorded place, stands in. `ids` holds the old
+    /// identity of each character of `content`, or nothing when the commit
+    /// could not read them. A replay that puts them back notes the new
+    /// identities against these (`UNDO-024`).
     Gone {
         before: Mark,
         anchor: Mark,
         content: Rich,
         hint: Pos<Chars>,
+        ids: Vec<IdRun>,
     },
     /// This peer set the mark `key` to `after` over `len` characters,
     /// which held `before` run by run. `seen` is the version the commit left.
@@ -117,8 +158,15 @@ pub(super) struct TextWrite {
 
 impl TextWrite {
     /// The ops of the edits one event made, their cursors read from `doc`,
-    /// which already holds the commit.
-    pub(super) fn record(doc: &LoroDoc, id: &ContainerID, edits: Vec<Edit>) -> Self {
+    /// which already holds the commit. `deleted` names the characters the
+    /// commit took out of the text, in order, when the commit could read
+    /// them.
+    pub(super) fn record(
+        doc: &LoroDoc,
+        id: &ContainerID,
+        edits: Vec<Edit>,
+        deleted: Option<Vec<IdRun>>,
+    ) -> Self {
         let text = doc.get_text(id.clone());
         // Read once per event, and only when the event marked: a version
         // vector holds one entry per peer.
@@ -128,6 +176,19 @@ impl TextWrite {
         } else {
             VersionVector::default()
         };
+        // The identities of the characters each deletion took out, in the
+        // order of the deletions: the event lists them from left to right.
+        let lens: Vec<Len<Chars>> = edits
+            .iter()
+            .filter_map(|edit| match edit {
+                Edit::Took { content, .. } => Some(content.len()),
+                _ => None,
+            })
+            .collect();
+        let mut gone = deleted
+            .and_then(|runs| ident::split(&runs, &lens))
+            .unwrap_or_default()
+            .into_iter();
         let ops = edits
             .into_iter()
             .map(|edit| match edit {
@@ -137,6 +198,7 @@ impl TextWrite {
                     anchor: Mark::at(&text, at, Side::Left),
                     content,
                     hint: at,
+                    ids: gone.next().unwrap_or_default(),
                 },
                 Edit::Marked {
                     at,
@@ -173,15 +235,16 @@ impl TextWrite {
         if renames.resolve(&self.text) != self.text {
             return;
         }
+        let idents = &renames.chars;
         for op in &mut self.ops {
             match op {
                 TextOp::Standing { first, last, .. } | TextOp::Marked { first, last, .. } => {
-                    first.read(doc);
-                    last.read(doc);
+                    first.read(doc, idents);
+                    last.read(doc, idents);
                 }
                 TextOp::Gone { before, anchor, .. } => {
-                    before.read(doc);
-                    anchor.read(doc);
+                    before.read(doc, idents);
+                    anchor.read(doc, idents);
                 }
             }
         }
@@ -195,7 +258,7 @@ impl TextWrite {
         &mut self,
         doc: &LoroDoc,
         undo: Direction,
-        renames: &Renames,
+        renames: &mut Renames,
         shifts: &mut HashMap<ContainerID, Shifts>,
     ) {
         let id = renames.resolve(&self.text);
@@ -214,7 +277,7 @@ impl TextWrite {
             Direction::Forward => self.ops.iter_mut().collect(),
         };
         for op in ops {
-            let next = op.write(doc, &text, undo, cells, shift);
+            let next = op.write(doc, &text, undo, cells, shift, &mut renames.chars);
             if let Some(next) = next {
                 *op = next;
             }
@@ -237,6 +300,9 @@ ambre_core::define_flag! {
 #[derive(Debug, Default)]
 pub(super) struct Shifts {
     edits: Vec<(Pos<Chars>, Len<Chars>, Len<Chars>)>,
+    /// Each run of characters the replay put back, where it wrote them, and
+    /// how many edits it had made then.
+    put: Vec<(IdRun, Pos<Chars>, Pos<Edits>)>,
 }
 
 impl Shifts {
@@ -245,9 +311,33 @@ impl Shifts {
         self.edits.push((at, taken, put));
     }
 
+    /// Note that the replay just wrote the characters `runs` names from `at`.
+    fn put(&mut self, runs: &[IdRun], at: Pos<Chars>) {
+        let done = Pos::from_usize(self.edits.len());
+        let mut place = at;
+        for run in runs {
+            self.put.push((*run, place, done));
+            place += run.len();
+        }
+    }
+
+    /// Where the character `id` stands now, when this replay put it back.
+    fn placed(&self, id: loro::ID) -> Option<Pos<Chars>> {
+        self.put.iter().find_map(|(run, at, done)| {
+            let offset = run.offset_of(id)?;
+            let later = self.edits.get(done.to_usize()..)?;
+            Some(Self::through(later, *at + offset))
+        })
+    }
+
     /// Where `place`, read before the replay, stands now.
     fn follow(&self, place: Pos<Chars>) -> Pos<Chars> {
-        self.edits.iter().fold(place, |place, (at, taken, put)| {
+        Self::through(&self.edits, place)
+    }
+
+    /// Where `place` stands once `edits` moved it.
+    fn through(edits: &[(Pos<Chars>, Len<Chars>, Len<Chars>)], place: Pos<Chars>) -> Pos<Chars> {
+        edits.iter().fold(place, |place, (at, taken, put)| {
             if place >= *at + *taken {
                 Pos::from_usize(place.to_usize() - taken.to_usize() + put.to_usize())
             } else if place > *at {
@@ -280,12 +370,13 @@ fn span(
     hint: Pos<Chars>,
     cells: Cells,
     shift: &Shifts,
+    idents: &Idents,
 ) -> Option<Pos<Chars>> {
     if cells == Cells::Recreated {
         return Some(hint);
     }
-    let (a, b) = (first.found?, last.found?);
-    (b >= a && b.len_from(a) + Len::ONE == len).then(|| shift.follow(a))
+    let (a, b) = (first.place(idents, shift)?, last.place(idents, shift)?);
+    (b >= a && b.len_from(a) + Len::ONE == len).then_some(a)
 }
 
 /// The characters `text` holds over the `len` characters from `at`, with
@@ -391,28 +482,24 @@ fn agreed(
 }
 
 /// The stretches of `text` that hold the `len` characters a format step
-/// marked, in order, each one a place and a length. `first` and `last` name
-/// the ends. Between them, a character `seen` does not hold was typed by a
+/// marked, in order, each one a place and a length. `ends` spans from the
+/// first of them to past the last, where they stand now. Between them, a character `seen` does not hold was typed by a
 /// peer since, and splits the range (`UNDO-016`). This peer's own characters
 /// count as the step's: an undo of its own deletion puts them back under new
-/// identities. `None` when the ends are gone, or when the count differs from
+/// identities. `None` when the count differs from
 /// `len`: a peer took a character out, and no offset can be trusted.
 fn stretches(
     doc: &LoroDoc,
     text: &LoroText,
-    first: &Mark,
-    last: &Mark,
+    ends: Span<Chars>,
     len: Len<Chars>,
     seen: &VersionVector,
-    shift: &Shifts,
 ) -> Option<Vec<(Pos<Chars>, Len<Chars>)>> {
-    let (a, b) = (first.found?, last.found?);
-    if b < a {
+    let (start, end) = (ends.start, ends.end);
+    if end <= start {
         return None;
     }
     let own = doc.peer_id();
-    let start = shift.follow(a);
-    let end = shift.follow(b.next());
     let mut out: Vec<(Pos<Chars>, Len<Chars>)> = Vec::new();
     let mut total = Len::<Chars>::ZERO;
     for at in start.to_usize()..end.to_usize() {
@@ -475,6 +562,7 @@ impl TextOp {
         undo: Direction,
         cells: Cells,
         shift: &mut Shifts,
+        idents: &mut Idents,
     ) -> Option<Self> {
         match self {
             Self::Standing {
@@ -485,13 +573,14 @@ impl TextOp {
                 hint,
             } => {
                 let len = *len;
-                let at = span(first, last, len, *hint, cells, shift)?;
+                let at = span(first, last, len, *hint, cells, shift, idents)?;
                 // The characters come back with the marks they carry now, so
                 // a redo keeps a mark a peer set on them meanwhile.
                 let content = read_rich(text, at, len)?;
                 if content.digest() != *digest {
                     return None;
                 }
+                let ids = ident::read(text, at, len).unwrap_or_default();
                 text.delete(at.to_usize(), len.to_usize()).ok()?;
                 shift.note(at, len, Len::ZERO);
                 Some(Self::Gone {
@@ -499,6 +588,7 @@ impl TextOp {
                     anchor: Mark::at(text, at, Side::Left),
                     content,
                     hint: at,
+                    ids,
                 })
             }
             Self::Gone {
@@ -506,16 +596,26 @@ impl TextOp {
                 anchor,
                 content,
                 hint,
+                ids,
             } => {
                 let size = Len::<Chars>::of(text.len_unicode());
-                let found = anchor.found.or(before.found);
+                // The characters go back before the one that stood after
+                // them, or right after the one that stood before them
+                // (`UNDO-025`).
+                let found = anchor
+                    .place(idents, shift)
+                    .or_else(|| before.place(idents, shift).map(Pos::next));
                 let at = match found.filter(|_| cells == Cells::Recorded) {
-                    Some(at) => shift.follow(at),
+                    Some(at) => at.min(size.as_end()),
                     None => (*hint).min(size.as_end()),
                 };
                 let len = content.len();
                 content.write_into(text, at);
                 shift.note(at, Len::ZERO, len);
+                if let Some(new) = ident::written(text, at, content.run_lens()) {
+                    idents.note(ids, &new);
+                    shift.put(&new, at);
+                }
                 Some(Self::standing(text, at, content))
             }
             Self::Marked {
@@ -531,7 +631,11 @@ impl TextOp {
                 let stretches = if cells == Cells::Recreated {
                     vec![(*hint, *len)]
                 } else {
-                    stretches(doc, text, first, last, *len, seen, shift)?
+                    let ends = Span::new(
+                        first.place(idents, shift)?,
+                        last.place(idents, shift)?.next(),
+                    );
+                    stretches(doc, text, ends, *len, seen)?
                 };
                 let set = vec![(*len, after.clone())];
                 let (from, to) = match undo {

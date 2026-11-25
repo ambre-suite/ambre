@@ -43,6 +43,7 @@ impl TrameView {
             filter_active,
             find_result,
             view_cmd,
+            cover,
         } = signals;
         let (canvas_width, canvas_height) = (canvas.width, canvas.height);
         let theme = theme_ctl.get();
@@ -91,6 +92,8 @@ impl TrameView {
             zoom_sig,
             #[cfg(target_arch = "wasm32")]
             view_cmd,
+            #[cfg(target_arch = "wasm32")]
+            cover,
             #[cfg(target_arch = "wasm32")]
             active_sheet,
             #[cfg(target_arch = "wasm32")]

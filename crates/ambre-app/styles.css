@@ -322,7 +322,7 @@ body {
     min-height: var(--commandbar-h);
 }
 
-.ambre-commandbar button {
+.ambre-commandbar button:where(:not(.ambre-icon-button)) {
     appearance: none;
     border: 1px solid transparent;
     background: transparent;
@@ -335,24 +335,24 @@ body {
     cursor: pointer;
 }
 
-.ambre-commandbar button svg {
+.ambre-commandbar button:where(:not(.ambre-icon-button)) svg {
     width: var(--icon-lg);
     height: var(--icon-lg);
     display: block;
 }
 
-.ambre-commandbar button:hover:not(:disabled) {
+.ambre-commandbar button:where(:not(.ambre-icon-button)):hover:not(:disabled) {
     background: var(--surface-hover);
 }
 
 /* Inactionable controls (e.g. Undo/Redo with an empty history stack, or the
    decimals steppers on a non-decimal format) are greyed out and inert. */
-.ambre-commandbar button:disabled {
+.ambre-commandbar button:where(:not(.ambre-icon-button)):disabled {
     opacity: 0.4;
     cursor: default;
 }
 
-.ambre-commandbar button[aria-pressed="true"] {
+.ambre-commandbar button:where(:not(.ambre-icon-button))[aria-pressed="true"] {
     background: var(--accent);
     border-color: var(--accent);
     color: var(--on-accent);
@@ -370,12 +370,13 @@ body {
    `aria-label` so the accessible name and the visual hint share one source. The
    bubble fades in after a short delay so it stays out of the way. A control
    alone carries the bubble: a floating menu the bar opens keeps its own fixed
-   position (`CHROME-200`). */
-.ambre-commandbar :is(button, select)[aria-label]:not(.ambre-ctx-menu *) {
+   position (`CHROME-200`). An icon button draws its own tooltip, with the
+   chord, so this bubble leaves it alone (`CHROME-185`). */
+.ambre-commandbar :is(button, select)[aria-label]:not(.ambre-ctx-menu *, .ambre-icon-button) {
     position: relative;
 }
 
-.ambre-commandbar :is(button, select)[aria-label]:not(.ambre-ctx-menu *)::after {
+.ambre-commandbar :is(button, select)[aria-label]:not(.ambre-ctx-menu *, .ambre-icon-button)::after {
     content: attr(aria-label);
     position: absolute;
     top: calc(100% + 6px);
@@ -397,43 +398,42 @@ body {
     transition: opacity 0.1s ease 0.45s;
 }
 
-.ambre-commandbar :is(button, select)[aria-label]:not(.ambre-ctx-menu *):hover::after {
+.ambre-commandbar :is(button, select)[aria-label]:not(.ambre-ctx-menu *, .ambre-icon-button):hover::after {
     opacity: 1;
 }
 
-/* Toile tool palette / primary toolbar (toile-ui SS5quinquies.A). It carries the
-   `.ambre-commandbar` class too, so every button / hover / active-fill / `.sep` /
-   tooltip rule above applies unchanged -- visually identical to the Trame bar. This
-   modifier only re-docks it as a floating vertical palette. It floats inside the
-   content cell, so a context panel docked to the left covers none of it. */
-.ambre-tool-palette {
+/* The creation bar (`CHROME-152`, `CHROME-153`): one bar of what a page can
+   add, the same in Prose, Trame and Toile. It floats centred at the bottom of
+   the content cell, so a context panel on either side covers none of it. */
+.ambre-creation-bar {
     position: absolute;
-    top: 50%;
-    left: 8px;
-    transform: translateY(-50%);
+    left: 50%;
+    bottom: var(--space-6);
+    transform: translateX(-50%);
     z-index: 60;
-    flex-direction: column;
-    min-height: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-2);
+    background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-low);
 }
 
-/* The shared `.sep` is a vertical rule in the horizontal bar; here it must run
-   horizontally across the vertical stack. */
-.ambre-tool-palette .sep {
-    width: auto;
-    height: 1px;
+/* A rule between two groups of the bar, as the board's tools and its embeds. */
+.ambre-creation-bar .sep {
+    width: 1px;
     align-self: stretch;
-    margin: var(--space-2) var(--space-2);
+    margin: var(--space-1) var(--space-2);
+    background: var(--border);
 }
 
-/* The shared tooltip sits below the button in the docked bar; on a left-docked
-   vertical palette it reads better to its right. */
-.ambre-tool-palette :is(button, select)[aria-label]:not(.ambre-ctx-menu *)::after {
-    top: 50%;
-    left: calc(100% + 6px);
-    transform: translateY(-50%);
+/* The bar sits on the bottom edge, so a tooltip rises above its button
+   rather than hanging under it. */
+.ambre-creation-bar .ambre-tip {
+    margin-top: 0;
+    transform: translate(-50%, calc(-100% - var(--control-lg) - var(--space-3)));
 }
 
 /* The format bar over a selection (`CHROME-105`), which Prose and Murmure hand
@@ -535,24 +535,6 @@ body {
 .ambre-prose-ruler-handle[data-dragging="true"]::before {
     width: 12px;
     height: 9px;
-}
-
-/* Toile top menu bar (toile-ui SS5quinquies.E): a group inside the command
-   bar row, under the header (`CHROME-200`). It reuses `.ambre-commandbar` for
-   its buttons, so the nested group drops the frame of a bar. The zoom is not
-   here: it closes the status bar (`CHROME-206`). */
-.ambre-commandbar > .ambre-toile-menubar {
-    padding: 0;
-    min-height: 0;
-    background: none;
-    border: 0;
-}
-
-/* Menu titles are text, not icons: give them horizontal padding and normal
-   text sizing (the shared bar is sized for square icon buttons). */
-.ambre-menu-title {
-    padding: 0 var(--space-4);
-    font-size: var(--font-body);
 }
 
 /* Toile style / property inspector (toile-ui SS5quinquies.B): a floating side
@@ -1087,7 +1069,8 @@ body {
     margin: 0;
 }
 
-.murmure-ring-decline {
+.ambre-icon-button.murmure-ring-decline,
+.ambre-icon-button.murmure-ring-decline:hover {
     color: var(--error);
 }
 
@@ -1719,6 +1702,11 @@ body {
     color: var(--text);
     font: inherit;
     cursor: pointer;
+    /* A long press shows the tooltip (`CHROME-188`): no platform callout,
+       no text selection, and no double-tap zoom on the icon. */
+    -webkit-touch-callout: none;
+    user-select: none;
+    touch-action: manipulation;
 }
 
 .ambre-icon-button[data-look="ghost"] {
@@ -1774,8 +1762,9 @@ body {
     position: fixed;
     z-index: 1000;
     display: flex;
-    align-items: center;
-    gap: var(--space-6);
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
     max-width: 280px;
     margin-top: var(--space-3);
     padding: var(--space-3) var(--space-5);
@@ -1796,6 +1785,19 @@ body {
     opacity: 1;
     visibility: visible;
     transition: opacity 0.09s ease-out 0.5s, visibility 0s linear 0.5s;
+}
+
+/* The name and the chord on the first line, the description under them. */
+.ambre-tip-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+}
+
+.ambre-tip-description {
+    font-weight: 400;
+    white-space: normal;
+    opacity: 0.85;
 }
 
 .ambre-tip .ambre-kbd {
@@ -1949,6 +1951,15 @@ body {
     box-shadow: var(--shadow-low);
 }
 
+/* An icon segment is an icon button: the track draws its box, not the button. */
+.ambre-segments > .ambre-icon-button {
+    width: auto;
+}
+
+.ambre-segments > .ambre-icon-button:hover:not([aria-checked="true"]) {
+    background: transparent;
+}
+
 /* A stepper: one field, the number and its unit between two steps. */
 .ambre-stepper {
     box-sizing: border-box;
@@ -1973,6 +1984,27 @@ body {
     font-variant-numeric: tabular-nums;
     text-align: right;
     outline: none;
+}
+
+/* The link field of the Prose text section: one line of text, in the box of
+   a stepper. */
+.ambre-prose-link-field {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    height: var(--control);
+    padding: 0 var(--space-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface-2);
+    color: var(--text);
+    font: inherit;
+    font-size: var(--font-small);
+}
+
+.ambre-prose-link-field:focus-visible {
+    outline: var(--focus-width) solid var(--accent);
+    outline-offset: 0;
 }
 
 .ambre-stepper-unit {
@@ -2322,6 +2354,19 @@ body {
     display: flex;
     align-items: center;
     gap: var(--space-7);
+}
+
+/* The suggestion-mode chip of Prose (PROSE-UI-275): the kit command at the
+   height of the band's small controls, 24 px, so a finger still reaches it. */
+.ambre-statusbar .statusbar-mode {
+    display: flex;
+    align-items: center;
+}
+
+.ambre-statusbar .statusbar-mode .ambre-kit-command {
+    flex: none;
+    min-height: var(--control-sm);
+    padding: 0 var(--space-3);
 }
 
 /* The app-agnostic <Tabs> slot, below the canvas and above the status bar.
@@ -3409,6 +3454,13 @@ body {
 .ambre-doc-item:hover .ambre-doc-actions,
 .ambre-doc-item:focus-within .ambre-doc-actions {
     opacity: 1;
+}
+
+/* A touch screen has no hover: its actions always show (`CHROME-183`). */
+@media (hover: none) {
+    .ambre-doc-item .ambre-doc-actions {
+        opacity: 1;
+    }
 }
 
 .ambre-doc-action {

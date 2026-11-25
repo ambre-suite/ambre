@@ -757,3 +757,75 @@ fn the_next_amendments_after_a_settle_ask_the_fold_lease_at_once() {
         .expect("link");
     assert_eq!(amended.alice.fold_lease_to_ask(NOW), Some(segment));
 }
+
+// --- SYNC-321 ---
+
+/// `SYNC-321`: a member holding the live segment alone reads the final
+/// segment, then its amendments, for the thread they record. Each opens for
+/// the read alone. Amendments that name another segment end the read, and
+/// the next one starts anew.
+#[test]
+fn a_removal_reads_the_thread_the_amendments_of_a_segment_record() {
+    let mut a = amended();
+    let root = a.ids[2];
+    let crate::ThreadTarget::Create(thread) = a.alice.reply_target(root, NOW).expect("target")
+    else {
+        panic!("a root with no thread creates one");
+    };
+    let peer = next_peer();
+    a.alice
+        .adopt_session(
+            thread,
+            peer,
+            Payload::<PeerEntryBytes>::new(peer.get().to_le_bytes().to_vec()),
+        )
+        .expect("adopt");
+    let linked = a
+        .alice
+        .thread_linked(a.segment, root, thread)
+        .expect("link");
+    assert_eq!(
+        linked.root.map(|sent| sent.document),
+        Some(a.amendments),
+        "the amendments record it"
+    );
+    let segment = a.segment.document_id();
+    let amendments = a.alice.snapshot(a.amendments).expect("amendments");
+
+    let mut bob = peer_of(&a.alice);
+    assert!(!bob.holds(segment));
+    assert_eq!(bob.sweep_step(), crate::SweepStep::Open(segment));
+    assert_eq!(bob.sweep_step(), crate::SweepStep::Wait, "one at a time");
+    let _ = bob.apply_remote(segment, (&a.sealed).into()).expect("kept");
+    assert_eq!(bob.sweep_ready(segment), Ok(Some(a.amendments)));
+    assert!(!bob.holds(segment), "read, then dropped");
+    let _ = bob
+        .apply_remote(a.amendments, (&amendments).into())
+        .expect("kept");
+    assert_eq!(bob.sweep_ready(a.amendments), Ok(None));
+    let crate::SweepStep::Done(named) = bob.sweep_step() else {
+        panic!("every document is read");
+    };
+    for document_id in [segment, a.amendments, thread] {
+        assert!(named.contains(&document_id), "{named:?}");
+    }
+    assert!(!bob.holds(a.amendments));
+
+    let mut bob = peer_of(&a.alice);
+    let _ = bob.sweep_step();
+    let _ = bob.apply_remote(segment, (&a.sealed).into()).expect("kept");
+    assert_eq!(bob.sweep_ready(segment), Ok(Some(a.amendments)));
+    let other = amended();
+    let foreign = other.alice.snapshot(other.amendments).expect("foreign");
+    let _ = bob
+        .apply_remote(a.amendments, (&foreign).into())
+        .expect("kept");
+    assert!(bob.sweep_ready(a.amendments).is_err(), "another segment's");
+    assert_eq!(bob.end_sweep(), None, "the read ended");
+    assert_eq!(
+        bob.sweep_step(),
+        crate::SweepStep::Open(segment),
+        "a new read starts anew"
+    );
+    assert_eq!(bob.end_sweep(), Some(segment));
+}

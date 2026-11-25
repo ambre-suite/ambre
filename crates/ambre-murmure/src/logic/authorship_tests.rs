@@ -756,6 +756,64 @@ fn a_meta_delta_under_a_peer_id_another_session_registered_is_refused() {
     );
 }
 
+// --- AUTHOR-037 ---
+
+/// A `meta` delta under Alice's PeerID reaches Bob while the channel opens,
+/// signed for another session. The open leaves it out, and the name stays the
+/// one her session wrote. The same delta under her own session lands.
+#[test]
+fn a_meta_delta_before_the_open_under_a_peer_id_another_session_registered_is_refused() {
+    let mut alice = founder(ChannelType::Direct);
+    let meta = alice.state.meta_id();
+    let meta_snapshot = alice.state.snapshot(meta.document_id()).expect("meta");
+    let segment = alice.state.snapshot(alice.segment()).expect("segment");
+    let named = alice
+        .state
+        .name_direct(Some(&crate::logic::fit_name("us")))
+        .expect("name");
+    let renamed = alice
+        .state
+        .name_direct(Some(&crate::logic::fit_name("them")))
+        .expect("name");
+    let by = Signer {
+        nonce: crate::logic::delta::TEST_NONCE,
+        peer: alice.state.peer(meta.document_id()).expect("a session"),
+        user: Some(alice.user),
+    };
+    // Bob opens the channel, and both deltas arrive before `meta` is ready.
+    let open_with = |second: Signer| {
+        let mut opening = OpeningChannel::new(alice.state.channel_id(), meta);
+        let meta_id = meta.document_id();
+        assert_eq!(
+            opening.receive(meta_id, (&meta_snapshot).into()),
+            Receipt::Kept
+        );
+        opening
+            .receive_signed(meta_id, Seq::<Relay>::new(1), &named.delta, by)
+            .expect("kept");
+        opening
+            .receive_signed(meta_id, Seq::<Relay>::new(2), &renamed.delta, second)
+            .expect("kept until the open");
+        assert!(matches!(
+            opening.ready(meta_id),
+            Ok(Opening::OpenSegments(_))
+        ));
+        let active = alice.segment();
+        assert_eq!(opening.receive(active, (&segment).into()), Receipt::Kept);
+        match opening.ready(active) {
+            Ok(Opening::Open(state)) => state,
+            other => panic!("the channel opens: {other:?}"),
+        }
+    };
+    let name = |state: &ChannelState| state.name().map(|n| n.as_str().to_owned());
+    let claimed = Signer {
+        nonce: OTHER_NONCE,
+        ..by
+    };
+    assert_eq!(name(&open_with(claimed)).as_deref(), Some("us"));
+    assert_eq!(name(&open_with(by)).as_deref(), Some("them"));
+}
+
 // --- MURMURE-678 ---
 
 /// The `id` of the first message map of `update`, rewritten to `id`.

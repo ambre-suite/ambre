@@ -28,6 +28,7 @@ mod calls;
 mod channels;
 mod direct;
 mod erasing;
+mod removals;
 mod segments;
 mod spaces;
 mod threads;
@@ -123,6 +124,11 @@ pub struct Runtime<D> {
     /// The channels of the user this session may watch unopened (the
     /// Murmure notifications spec). Cleared on logout.
     listed_channels: unopened::ListedChannels,
+    /// The role this client holds on the `meta` of each open or opening
+    /// channel, from the ready of that `meta` (`MURMURE-729`). A channel
+    /// whose `meta` it cannot write keeps its listed hint. Dropped with the
+    /// channel, and cleared on logout.
+    meta_roles: HashMap<Id<Document>, Role>,
     /// The close each open channel asked of the Sync worker, with the time
     /// of the send that filled its segment (the Murmure segments spec).
     /// Removed on the answer, and with the channel.
@@ -170,6 +176,13 @@ pub struct Runtime<D> {
     deleting: HashMap<Id<Channel>, Id<Space>>,
     /// Channel leaves the relay has not answered yet, with their space.
     leaving: HashMap<Id<Channel>, Id<Space>>,
+    /// The removals from a channel that wait for it to open, so each leaves
+    /// with the documents its sealed `meta` names (`SYNC-320`). Removed once
+    /// the open ends, and on logout.
+    removals: HashMap<Id<Channel>, Vec<removals::Removal>>,
+    /// The channels opened for a removal alone, which close again once it
+    /// leaves. An open the view asks for takes the channel off.
+    opened_for_removal: HashSet<Id<Channel>>,
     /// Leaves of a space held while its owner role passes on (the Murmure
     /// spaces spec). Each is keyed by the role change this runtime asked
     /// for, and holds the leave the view asked for.
@@ -221,6 +234,7 @@ impl<D> Runtime<D> {
             watched_threads: HashMap::new(),
             unplaced_threads: HashSet::new(),
             listed_channels: unopened::ListedChannels::default(),
+            meta_roles: HashMap::new(),
             closing_segments: HashMap::new(),
             close_successors: HashMap::new(),
             owed_replays: HashMap::new(),
@@ -236,6 +250,8 @@ impl<D> Runtime<D> {
             joining: HashMap::new(),
             deleting: HashMap::new(),
             leaving: HashMap::new(),
+            removals: HashMap::new(),
+            opened_for_removal: HashSet::new(),
             handing_off: HashMap::new(),
             erasing: HashMap::new(),
             erase_owed: Vec::new(),
@@ -268,6 +284,7 @@ impl<D> Runtime<D> {
         self.channels.clear();
         self.channel_ledgers.clear();
         self.opening.clear();
+        self.meta_roles.clear();
         self.read_cursors.clear();
         self.closed_channels.clear();
         self.document_channels.clear();
@@ -288,6 +305,8 @@ impl<D> Runtime<D> {
         // engine spec).
         self.deleting.clear();
         self.leaving.clear();
+        self.removals.clear();
+        self.opened_for_removal.clear();
         self.erasing.clear();
         self.erase_owed.clear();
         self.call_asks.clear();

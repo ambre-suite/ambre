@@ -22,14 +22,22 @@ use leptos::prelude::*;
 use crate::commands::{
     COPY, CUT, EXPORT_HTML, EXPORT_HTML_REVIEWED, EXPORT_MARKDOWN, EXPORT_ODT, EXPORT_ODT_REVIEWED,
     EXPORT_PDF, EXPORT_WORD, EXPORT_WORD_REVIEWED, IMPORT_HTML, IMPORT_MARKDOWN, IMPORT_ODT,
-    IMPORT_WORD, INSERT_PICTURE, PALETTE, PASTE, PASTE_PLAIN, REDO, SAVE_FILE, UNDO, mark_key,
+    IMPORT_WORD, INSERT_PICTURE, PALETTE, PASTE, PASTE_PLAIN, REDO, SAVE_FILE, UNDO,
+    formats_selection, mark_key,
 };
+use crate::view::annotate::{AnnotationIntent, HoveredSuggestion, review_intent};
 
 /// The signal Prose's chords act through. `Copy`, so the handler is too.
 #[derive(Clone, Copy)]
 pub struct ProseHandler {
-    /// The formatting id the view drains, shared with the format bar.
+    /// The formatting or insert id the view drains, shared with the format
+    /// bar and the creation bar.
     pub format: RwSignal<Option<StaticKey<Commands>>>,
+    /// The suggestion at the caret, as the view last published it.
+    pub at_caret: RwSignal<Option<HoveredSuggestion>>,
+    /// Where the palette leaves an accept or a reject, which the view
+    /// drains as the popover's own (`PROSE-UI-273`).
+    pub intent: RwSignal<Option<AnnotationIntent>>,
     /// The page's clock: an import dates a reply the file leaves undated at
     /// the moment the user chose the file.
     pub now: fn() -> ambre_core::Instant<ambre_core::Authored>,
@@ -72,6 +80,20 @@ impl CommandHandler for ProseHandler {
                 }),
             })
         };
+        // A menu entry that formats lands where a control or a chord
+        // leaves its id; the view drains it (`CHROME-214`).
+        // A command of the creation bar that inserts a block lands there
+        // too, and the view resolves it at the caret (`CHROME-180`).
+        if formats_selection(id) || crate::view::slash::inserted(id).is_some() {
+            self.format.set(Some(id));
+            return Vec::new();
+        }
+        // The palette rules on the suggestion at the caret, through the path
+        // the popover and the panel take. With none, it does nothing.
+        if let Some(intent) = review_intent(id, self.at_caret.get_untracked()) {
+            self.intent.set(Some(intent));
+            return Vec::new();
+        }
         let action = match id {
             PALETTE => ShellAction::OpenPalette,
             SAVE_FILE => ShellAction::Send(export(ExportFormat::Ambre)),
@@ -142,6 +164,12 @@ impl CommandHandler for ProseHandler {
     ) -> KeyRoute<ProseCommand> {
         if id == PALETTE {
             return KeyRoute::Run(vec![ShellAction::OpenPalette]);
+        }
+        // The suggestion-mode chord takes the path of its control and of
+        // the palette (`PROSE-UI-276`).
+        if let Some(intent) = review_intent(id, self.at_caret.get_untracked()) {
+            self.intent.set(Some(intent));
+            return KeyRoute::Run(Vec::new());
         }
         // A chrome text field keeps its own formatting chords.
         if mark_key(id).is_some() {

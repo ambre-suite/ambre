@@ -203,6 +203,7 @@ fn sync_variant(cmd: &SyncCommand) -> &'static str {
         SyncCommand::JoinChannel { .. } => "JoinChannel",
         SyncCommand::DeleteChannel { .. } => "DeleteChannel",
         SyncCommand::LeaveChannel { .. } => "LeaveChannel",
+        SyncCommand::RevokeFromChannel { .. } => "RevokeFromChannel",
         SyncCommand::CreateDirectMessage { .. } => "CreateDirectMessage",
         SyncCommand::ListSpaceChannels { .. } => "ListSpaceChannels",
         SyncCommand::ListMemberChannels => "ListMemberChannels",
@@ -301,7 +302,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 }
 
 /// The number of arms of `sync_variant` and of `event_variant`.
-const SYNC_VARIANTS: usize = 52;
+const SYNC_VARIANTS: usize = 53;
 const EVENT_VARIANTS: usize = 67;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
@@ -481,7 +482,16 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             documents: vec![(doc, Some(Seq::<Relay>::new(3))), (doc, None)],
         },
         SyncCommand::DeleteChannel { channel_id: chan },
-        SyncCommand::LeaveChannel { channel_id: chan },
+        SyncCommand::LeaveChannel {
+            channel_id: chan,
+            named: vec![doc, doc],
+        },
+        SyncCommand::RevokeFromChannel {
+            id: Seq::<ambre_bus::Request>::new(9),
+            document_id: doc,
+            user_id: user,
+            named: vec![doc],
+        },
         SyncCommand::ListSpaceChannels { space_id: space },
         SyncCommand::ListMemberChannels,
         SyncCommand::CreateSpace { space_id: space },

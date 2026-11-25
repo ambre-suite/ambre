@@ -1181,6 +1181,13 @@ impl LogicState {
             );
             return;
         }
+        // A space still opening checks the PeerID once it opens
+        // (`AUTHOR-037`).
+        if !self.docs.contains_key(&document_id)
+            && self.murmure_space_signed(document_id, std::slice::from_ref(delta))
+        {
+            return;
+        }
         self.apply_remote(
             document_id,
             delta.seq,
@@ -1279,7 +1286,7 @@ impl LogicState {
         // later delta of the batch reads it before the registry holds it.
         let mut batch_nonces: HashMap<ambre_core::PeerId, FixedBytes<SessionNonce>> =
             HashMap::new();
-        let accepted: Vec<(Seq<Relay>, ambre_core::Payload<ambre_core::DeltaBytes>)> = deltas
+        let accepted: Vec<SignedDelta> = deltas
             .into_iter()
             .filter_map(|delta| {
                 let own = authored_by(&delta.payload, delta.peer);
@@ -1290,7 +1297,7 @@ impl LogicState {
                     batch_nonces
                         .entry(delta.peer)
                         .or_insert_with(|| delta.nonce);
-                    Some((delta.seq, delta.payload))
+                    Some(delta)
                 } else {
                     tracing::warn!(
                         "Logic: refused a replayed delta on doc {document_id}: an operation is \
@@ -1307,9 +1314,14 @@ impl LogicState {
         // A replay queues on an open document only. A space document takes
         // the whole batch now. A channel's never reaches here.
         if !self.docs.contains_key(&document_id) {
+            // A space still opening keeps each signer, and checks the PeerID
+            // once it opens (`AUTHOR-037`).
+            if self.murmure_space_signed(document_id, &accepted) {
+                return;
+            }
             let borrowed: Vec<LoroPayloadRef<'_>> = accepted
                 .iter()
-                .map(|(_, p)| LoroPayloadRef::Delta(p))
+                .map(|delta| LoroPayloadRef::Delta(&delta.payload))
                 .collect();
             if !self.murmure_replay(document_id, &borrowed) {
                 tracing::warn!(
@@ -1320,7 +1332,13 @@ impl LogicState {
             return;
         }
         // One slice now, the rest one a pass (`SYNC-131`).
-        self.replay(document_id, accepted);
+        self.replay(
+            document_id,
+            accepted
+                .into_iter()
+                .map(|delta| (delta.seq, delta.payload))
+                .collect(),
+        );
     }
 
     /// Apply a remote CRDT delta, or a snapshot whose contents are trusted,

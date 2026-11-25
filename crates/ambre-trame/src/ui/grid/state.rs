@@ -2,7 +2,9 @@
 // TrameUiState: construction, zoom, selection, cursor movement, scroll and viewport-data ingestion.
 
 use super::*;
+use ambre_client_core::cover::Clearance;
 use ambre_commands::SelectionMode;
+use ambre_core::Css;
 use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Delta, Len, Pos, Span};
 
@@ -134,9 +136,10 @@ impl TrameUiState {
     /// of the cells, through the one engine (`ZOOM-007`). A band of whole
     /// columns or rows frames its own axis alone. The factor is clamped to
     /// the grid's range, so a range too large to show stops at the floor.
-    /// The selection stays as it was (`ZOOM-010`). Returns `true` when the
-    /// view moved.
-    pub fn zoom_to_selection(&mut self) -> bool {
+    /// The selection stays as it was (`ZOOM-010`). The selection lands clear
+    /// of the strips `clear` takes of the canvas (`ZOOM-011`). Returns `true`
+    /// when the view moved.
+    pub fn zoom_to_selection(&mut self, clear: Clearance) -> bool {
         let rect = self.selection.bounds();
         let kind = self.selection.kind;
         let zoom = self.zoom.get();
@@ -171,23 +174,93 @@ impl TrameUiState {
             SelKind::Cols => (cols + chrome_w, f64::from(f32::MIN_POSITIVE)),
             SelKind::Rows => (f64::from(f32::MIN_POSITIVE), rows + chrome_h),
         };
-        let content =
-            ambre_core::Vector::new(Px::<Doc>::new(across as f32), Px::<Doc>::new(down as f32));
+        // The room ends short of the strips at the far edges (`ZOOM-011`). A
+        // pair of strips that leaves an axis no room is dropped, as the board
+        // drops it. A band keeps its other axis, so no strip moves that one.
+        let strip = |v: Px<Css>| f64::from(v.get()).max(0.0);
+        let pair = |near: Px<Css>, far: Px<Css>, room: Px<Surface>| {
+            let (near, far) = (strip(near), strip(far));
+            if near + far < room.get() {
+                (near, far)
+            } else {
+                (0.0, 0.0)
+            }
+        };
+        let (near_x, far_x) = pair(clear.left, clear.right, self.canvas_width);
+        let (near_y, far_y) = pair(clear.top, clear.bottom, self.grid_bottom());
+        let near_x = if kind == SelKind::Rows { 0.0 } else { near_x };
+        let near_y = if kind == SelKind::Cols { 0.0 } else { near_y };
         let view = ambre_core::Vector::new(
-            self.canvas_width.view_length(),
-            self.grid_bottom().view_length(),
+            (self.canvas_width - Px::<Surface>::new(far_x)).view_length(),
+            (self.grid_bottom() - Px::<Surface>::new(far_y)).view_length(),
         );
-        let Some(framed) = self.zoom_engine().framing(content, view) else {
+        // The grid scrolls by whole cells, so a strip at the near edge moves
+        // the first cell shown back until the selection starts past it. The
+        // cells walked join the content the room must hold.
+        let (first_col, first_row) = (rect.top_left.col, rect.top_left.row);
+        let lead_cols = |need: f64| {
+            let (mut col, mut lead) = (first_col, 0.0);
+            while lead < need
+                && let Some(prev) = col.prev()
+                && prev >= self.frozen.cols.as_end()
+            {
+                col = prev;
+                lead += at_one(self.col_widths.get(&col).copied().unwrap_or(COL_WIDTH));
+            }
+            (col, lead)
+        };
+        let lead_rows = |need: f64| {
+            let (mut row, mut top, mut lead) = (first_row, first_row, 0.0);
+            while lead < need
+                && let Some(prev) = row.prev()
+                && prev >= self.frozen.rows.as_end()
+            {
+                row = prev;
+                if !self.is_row_hidden(row) {
+                    top = row;
+                    lead += at_one(self.row_heights.get(&row).copied().unwrap_or(ROW_HEIGHT));
+                }
+            }
+            (top, lead)
+        };
+        let leads = |z: f64| {
+            (
+                lead_cols(near_x / z - chrome_w),
+                lead_rows(near_y / z - chrome_h),
+            )
+        };
+        let frame = |lead_w: f64, lead_h: f64| {
+            let content = ambre_core::Vector::new(
+                Px::<Doc>::new((across + lead_w) as f32),
+                Px::<Doc>::new((down + lead_h) as f32),
+            );
+            self.zoom_engine().framing(content, view)
+        };
+        let Some(mut framed) = frame(0.0, 0.0) else {
             return false;
         };
+        let mut at = leads(framed.factor().get());
+        // A longer walk lowers the zoom, which may ask a longer walk. The
+        // zoom only falls and the walk only grows, so a few rounds settle.
+        for _ in 0..8 {
+            let Some(next) = frame(at.0.1, at.1.1) else {
+                break;
+            };
+            if next.factor().get() >= framed.factor().get() {
+                break;
+            }
+            framed = next;
+            at = leads(framed.factor().get());
+        }
+        let ((lead_col, _), (lead_row, _)) = at;
         let zoomed = self.set_zoom(framed.factor());
         let top = match kind {
             SelKind::Cols => self.top_row,
-            SelKind::Cells | SelKind::Rows => rect.top_left.row,
+            SelKind::Cells | SelKind::Rows => lead_row,
         };
         let left = match kind {
             SelKind::Rows => self.left_col,
-            SelKind::Cells | SelKind::Cols => rect.top_left.col,
+            SelKind::Cells | SelKind::Cols => lead_col,
         };
         let scrolled = self.show_from(top, left);
         zoomed || scrolled

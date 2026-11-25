@@ -8,11 +8,12 @@
 // ============================================================================
 
 use super::*;
+use crate::logic::delta::{Kept, Signer};
 use crate::message::{PrivateChannelDraft, PublicChannelDraft, SpaceCommand, SpaceEvent};
 use crate::{
     ChannelState, ChannelType, Listing, Roster, SpaceState, is_presence_sample, presence_sample,
 };
-use ambre_bus::{ApiFailure, Authored, Instant, MemberInfo, SealedChannelKey};
+use ambre_bus::{ApiFailure, Authored, Instant, MemberInfo, SealedChannelKey, SignedDelta};
 use ambre_core::{Name, Validated};
 
 /// An open space, the role the relay gave this user on its document, and
@@ -34,7 +35,9 @@ pub(crate) struct OpenSpace {
 /// ready.
 #[derive(Default)]
 pub(crate) struct Opening {
-    payloads: Vec<ambre_core::LoroPayload>,
+    /// The payloads, in arrival order. A signed delta keeps its signer, so
+    /// the open checks its PeerID (`AUTHOR-037`).
+    payloads: Vec<Kept>,
     /// The last member rows Sync handed on, applied once the space is open.
     members: Option<Vec<MemberInfo>>,
 }
@@ -163,12 +166,7 @@ impl<D> Runtime<D> {
         let Some(opening) = self.space_opening.remove(&space_id) else {
             return false;
         };
-        let borrowed: Vec<ambre_core::LoroPayloadRef<'_>> = opening
-            .payloads
-            .iter()
-            .map(ambre_core::LoroPayload::borrowed)
-            .collect();
-        match SpaceState::open(space_id, &borrowed) {
+        match SpaceState::open_kept(space_id, &opening.payloads) {
             Ok(state) => {
                 let roster = Roster::new(self.my_user_id);
                 self.spaces.insert(
@@ -226,7 +224,7 @@ impl<D> Runtime<D> {
     /// Whether the open space that holds `document_id` leaves `peer` free for
     /// the session that opened with `nonce` (`AUTHOR-033`). A document no open
     /// space holds claims nothing here. A channel runs its own check. A space
-    /// still opening keeps its payloads unchecked against the registry.
+    /// still opening checks its payloads once it opens (`AUTHOR-037`).
     #[must_use]
     pub fn space_peer_unclaimed(
         &self,
@@ -237,6 +235,30 @@ impl<D> Runtime<D> {
         self.spaces
             .get(&Id::<Space>::from_document(document_id))
             .is_none_or(|space| space.state.peer_unclaimed(peer, nonce))
+    }
+
+    /// Keep signed deltas, each with its signer, for the opening space that
+    /// holds `document_id`. The open checks each PeerID against the registry
+    /// it holds then (`AUTHOR-037`). Returns `false` when no opening space
+    /// holds it.
+    pub fn keep_space_signed(&mut self, document_id: Id<Document>, deltas: &[SignedDelta]) -> bool {
+        let Some(opening) = self
+            .space_opening
+            .get_mut(&Id::<Space>::from_document(document_id))
+        else {
+            return false;
+        };
+        opening
+            .payloads
+            .extend(deltas.iter().map(|delta| Kept::Signed {
+                payload: delta.payload.clone(),
+                signer: Signer {
+                    nonce: delta.nonce,
+                    peer: delta.peer,
+                    user: delta.user,
+                },
+            }));
+        true
     }
 
     /// Apply remote payloads to the space that holds `document_id`. Returns
@@ -250,7 +272,7 @@ impl<D> Runtime<D> {
         if let Some(opening) = self.space_opening.get_mut(&space_id) {
             opening
                 .payloads
-                .extend(payloads.iter().map(|p| p.to_payload()));
+                .extend(payloads.iter().map(|p| Kept::Bytes(p.to_payload())));
             return true;
         }
         let Some(space) = self.spaces.get_mut(&space_id) else {
@@ -498,8 +520,10 @@ impl<D> Runtime<D> {
             }
             SpaceCommand::LeaveChannel { channel_id } => {
                 // As with a delete, nothing changes before the relay answers.
+                // The leave names the documents of the sealed `meta`, so a
+                // closed channel opens first (`SYNC-320`).
                 self.leaving.insert(channel_id, space_id);
-                self.ask(SyncCommand::LeaveChannel { channel_id });
+                self.remove_from_channel(channel_id, super::removals::Removal::Leave);
             }
             SpaceCommand::RefreshPresence { now } => {
                 let expired = space.roster.tick(now);

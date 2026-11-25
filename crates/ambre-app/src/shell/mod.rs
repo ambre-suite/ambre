@@ -15,6 +15,7 @@ use ambre_core::id::Id;
 mod app_root;
 mod call_bar;
 mod commands;
+mod header;
 #[cfg(test)]
 mod murmure_regions;
 #[cfg(test)]
@@ -154,6 +155,7 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
         filter_active,
         find_result,
         view_cmd: trame_view_cmd,
+        cover: _,
     } = trame;
     let ambre_toile::ui::ToileSignals {
         ctx_scope: toile_ctx_scope,
@@ -175,7 +177,7 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
         followed_link: toile_followed_link,
         present_mode: present_toile,
         find_result: find_result_toile,
-        cover: toile_cover,
+        cover: shell_cover,
     } = toile;
     leptos::mount::mount_to_body(move || {
         // The store stays here (in the mount owner, NOT in the view): it is `Rc`
@@ -262,6 +264,8 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
         } else if booted == ambre_bus::DocType::Prose {
             AppHandler::Prose(ambre_prose::chrome::ProseHandler {
                 format: prose_signals.format,
+                at_caret: prose_signals.at_caret,
+                intent: prose_signals.intent,
                 now: || ambre_core::Instant::<ambre_core::Authored>::new(js_sys::Date::now() as u64),
                 // The session's zone, by its IANA name, as the browser
                 // resolves it. A name the browser does not give reads as UTC.
@@ -375,7 +379,7 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
             toile_place,
             toile_float_bar,
             toile_quick_style,
-            toile_cover,
+            shell_cover,
             toile_comments,
             toile_deck,
             toile_dropped_file,

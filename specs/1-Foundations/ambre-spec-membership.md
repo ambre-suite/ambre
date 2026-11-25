@@ -68,6 +68,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-291` | `FAIL` | Given a listing of documents or of channels, a name MUST open only under the key the walked or kept log of its document accepted last, or a key the chain of `SYNC-302` reaches from it, with no request of its own; a document never walked MUST show no name. | this spec section 3; `SYNC-284`, `SYNC-290` | `ambre_sync::channels::tests::a_listed_name_opens_under_the_users_key_of_its_meta` -- a name opens under the kept key, and a meta never walked or whose log accepted another key shows none | none | verified |
 | `SYNC-302` | `FAIL` | Given a listed name sealed under a key older than the one the kept log of its document accepted last, the client MUST open it through the links the latest open or rotation of that log held in the session, with no request of its own. | this spec section 3; `SYNC-291`, `SYNC-119`, `SYNC-204` | `ambre_sync::documents::tests::a_listed_name_sealed_before_the_last_rotation_opens_through_the_kept_chain` -- a name sealed one rotation back opens through the kept chain, and shows none with no chain, under another kept key or with no kept log, and an open keeps the links it accepted; `ambre_sync::channels::tests::a_listed_name_opens_under_the_users_key_of_its_meta` -- a listing of channels takes the kept chains beside the kept keys | none | verified |
 | `SYNC-308` | `FAIL` | Given a kept log, the local store MUST keep the chain of links its latest open or rotation held beside it, under the same account, and a reload MUST rebuild that chain; a stored chain the kept log no longer extends MUST be refused whole. | this spec section 3; `SYNC-290`, `SYNC-302`, `SYNC-121` | `ambre_sync::members::tests::a_kept_chain_outlives_the_session_and_one_its_log_no_longer_extends_is_refused` -- the chain rides beside the kept log, the next session rebuilds it and opens a key two rotations back, and a link past the kept head, a link the kept key never reaches and a log walked from another anchor are refused; `ambre_bus::host::a_kept_chain_reads_back_and_an_older_row_reads_as_none` -- the row reads the chain back, and a row of the older form or with bytes past it reads as none | none | verified |
+| `SYNC-313` | `FAIL` | Given a kept log, its row MUST hold only the links the walk back from its kept key reaches, nearest first, and no more than the bound of `ambre-spec-budgets.md` section 6; a reload MUST accept that row under the checks of `SYNC-308` alone. | this spec section 3; `SYNC-308`, `SYNC-119`; `ambre-spec-budgets.md` | `ambre_sync::members::tests::the_row_of_a_kept_log_keeps_the_nearest_links_its_key_walks` -- a document rotated forty times, with a link past a history boundary, keeps the 32 nearest links of the walk under the ceiling in bytes, and the next session accepts the row, reaches the key 32 rotations back and none older | none | verified |
 | `SYNC-202` | `FAIL` | Given a key that a link a writer signed replaced, the client MUST refuse the key. | this spec section 3; `SYNC-116`; audit `N13` | `ambre_sync::key_vouch::tests::a_key_a_writer_replaced_is_refused` -- a copy the relay kept from before a rotation is refused once the link of that rotation is served | none | verified |
 | `SYNC-221` | `FAIL` | Given a key that only links vouch for, and a writer who named another key in an entry at or past the head of each such link, the client MUST refuse the key. | audit `N14`; this spec section 3; `ambre-spec-key-rotation.md`, `SYNC-204` | `ambre_sync::key_vouch::tests::a_key_a_revoked_writer_links_is_refused` -- a revoked editor's link at a head before its revoke is kept by the signer check, and refused as backdated since the revoke named another key, while the owner's own link at the head she read passes | none | verified |
 | `SYNC-222` | `FAIL` | Given a member who left on their own, a key a writer named before the departure or a link before it vouches for, and a members answer that owes no rotation, the client MUST refuse the key. A departure MUST name no key. | this spec section 3; `SYNC-221`; `ambre-spec-key-rotation.md`, `SYNC-127`, `SYNC-130` | `ambre_sync::key_vouch::tests::a_key_held_before_a_departure_is_refused_unless_the_debt_is_owed` -- a leaver's link at a head before its departure, the key before it and the creation's key are each refused under a settled answer and stand while the debt is owed, and the key that pays the debt stands; `ambre_sync::key_vouch::tests::a_departure_names_no_key` -- a departure that names a key of the leaver's leaves it unvouched | none | verified |
@@ -150,13 +151,24 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SYNC-211` | `FAIL` | Given a delta or a snapshot whose signer no valid entry of the log ever granted a writing role, the client MUST refuse it before it reaches the document, whatever key opens it. A delta MUST first wait for a listing of the members asked after it arrived, and that listing MUST decide it. | this spec section 3; `SYNC-103`, `SYNC-121`, `SYNC-150` | `ambre_sync::updates::tests::a_relay_forwarding_a_readers_delta_reaches_no_document` -- a reader's delta under the current key and under a retired one, forwarded by the relay, reaches no document and raises a warning each, while the owner's and a removed writer's land, and a listing in flight is waited for; `ambre_sync::updates::tests::a_snapshot_no_writer_signed_opens_nothing` -- a reader's snapshot opens nothing and the open replays from the start, the owner's opens; `ambre_sync::updates::tests::a_newcomers_delta_waits_for_the_listing_asked_after_it` -- a newcomer's delta waits, an answer to a listing asked before it leaves it waiting, and the listing that names the newcomer lands it; `ambre_sync::membership_log::tests::a_writer_once_granted_stays_a_writer_and_a_viewer_never_is` -- a viewer and a stranger are no writers, a writer demoted then removed stays one, and a log with no anchor checks nobody | none | verified |
+| `SYNC-310` | `FAIL` | Given the deltas held for a listing, or those a listing refused, past a cap of the quarantine in count or in bytes, the client MUST drop their oldest entry until they fit. | this spec section 3; `SYNC-211`, `SYNC-230`; `ambre-spec-delta-order.md`, `SYNC-276`; `ambre-spec-budgets.md` section 1 | `ambre_sync::updates::tests::a_hold_past_its_bytes_drops_the_oldest` -- three held deltas of 12 MiB pass the 32 MiB ceiling under the count cap, the oldest leaves with one warning, and the refused deltas lose their oldest the same way | none | verified |
 | `SYNC-214` | `FAIL` | Given a members answer whose walked log drops a writer the held log granted, the client MUST keep the writers and the space word it held. | audit `N18`; this spec section 3; `SYNC-211` | `ambre_sync::updates::tests::a_listing_that_drops_a_writer_leaves_the_writers_of_the_open` -- a listing that leaves the log unanchored, and one the relay rooted at a log of its own, each leave the writers of the open, and the reader's delta that waited reaches no document | none | verified |
 | `SYNC-300` | `FAIL` | Given a revoke another member signed, its entry MUST cap the revoked member at the highest clock of their deltas its author applied, and a delta of that member past the cap MUST reach no document. A document that applied such a delta MUST drop its state and its local copy and read the document again. | this spec section 3; `SYNC-211`, `SYNC-214` | `ambre_sync::membership_log::tests::a_revoke_caps_the_clock_of_the_writer_it_ends` -- a delta at the cap counts, one past it and a snapshot do not, and a later invite lifts the cap, which readmits under `SYNC-301`; `ambre_sync::sharing::tests::a_revoke_posts_the_entry_that_removes_the_member` -- the posted revoke caps the member at their latest applied clock; `ambre_sync::updates::tests::a_revoked_writer_writes_nothing_past_the_cap_of_its_revoke` -- a document past the cap is read again, and read again it takes the delta at the cap alone; `ambre_logic::dispatch::tests::a_document_read_again_drops_its_copy_and_opens_anew`; `ambre_sync::membership_log::tests::the_signed_bytes_and_the_signature_of_an_entry_stay_pinned` -- the cap is under the signature | none | verified |
 | `SYNC-301` | `FAIL` | Given a writer capped by a revoke and granted a writing role again by a later entry, a delta of that writer past the cap MUST reach a document only when it signs a head the valid walk passes through at or past that entry. A snapshot that writer signs MUST stand nowhere. | this spec section 3; `SYNC-300`, `SYNC-206` | `ambre_sync::membership_log::tests::a_re_invite_admits_only_the_writes_past_its_own_entry` -- under the cap any head counts, and past it a head of the exclusion, a head the walk never passed and a forged digest are refused, the head after the invite counts, a second exclusion stacks on the first, and the readmitted writer's snapshot stands nowhere; `ambre_sync::updates::tests::a_re_invite_admits_no_write_of_the_exclusion` -- a peer that applied a write of the exclusion reads the document again, and read again it lands the history and the write after the invite alone | none | verified |
-| `SYNC-306` | `FAIL` | Given a departure of a document, its entry MUST cap the leaver at the last clock this client wrote in it, under the leaver's signature, and a delta of the leaver past the cap MUST reach no document. A later grant readmits the leaver as `SYNC-301` states. | this spec section 3; `SYNC-300`, `SYNC-301`, `SYNC-127` | `ambre_sync::membership_log::tests::a_departure_caps_the_clock_of_its_leaver` -- a delta at the cap counts, one past it and a snapshot do not, a raised cap breaks the signature, and a later invite readmits only the writes past it; `ambre_sync::sharing::tests::leaving_posts_the_removal_alone_and_chooses_no_key` -- the posted departure signs its cap; `ambre_sync::updates::tests::a_departure_caps_the_leaver_at_the_last_clock_it_wrote` -- the cap is the clock sealed last or a higher one applied, and a document not open fails the leave closed; `ambre_sync::sharing::tests::leaving_a_channel_posts_this_users_removal_on_its_meta` -- a channel departure names no cap | none | verified |
+| `SYNC-306` | `FAIL` | Given a departure of a document, its entry MUST cap the leaver at the last clock this client wrote in it, under the leaver's signature, and a delta of the leaver past the cap MUST reach no document. A later grant readmits the leaver as `SYNC-301` states. | this spec section 3; `SYNC-300`, `SYNC-301`, `SYNC-127` | `ambre_sync::membership_log::tests::a_departure_caps_the_clock_of_its_leaver` -- a delta at the cap counts, one past it and a snapshot do not, a raised cap breaks the signature, and a later invite readmits only the writes past it; `ambre_sync::sharing::tests::leaving_posts_the_removal_alone_and_chooses_no_key` -- the posted departure signs its cap; `ambre_sync::updates::tests::a_departure_caps_the_leaver_at_the_last_clock_it_wrote` -- the cap is the clock sealed last or a higher one applied, and the departure of a document not open reads no cap from nothing (`SYNC-314` opens it first); `ambre_sync::sharing::tests::leaving_a_channel_posts_this_users_removal_on_its_meta` -- a channel departure caps the leaver in each open document of the channel (`SYNC-311`) | none | verified |
+| `SYNC-311` | `FAIL` | Given a revoke or a departure on the log of a channel's `meta`, its entry MUST cap the member in each document of the channel open on its author's client, each at the member's own clock there. A delta of that member past the cap of its document MUST reach no document. | this spec section 3; `SYNC-300`, `SYNC-306`, `SYNC-229` | `ambre_sync::sharing::tests::a_channel_revoke_caps_the_member_in_each_open_document` -- the posted revoke caps Carol in the `meta`, in a segment at her clock there and in a thread at zero, and the walk binds each cap to its own document; `ambre_sync::sharing::tests::leaving_a_channel_posts_this_users_removal_on_its_meta` -- the departure caps the leaver in the `meta` and in each open document of the channel, and in no document of another log; `ambre_sync::membership_log::tests::a_channel_revoke_caps_each_document_at_its_own_clock` -- each document admits up to its own cap, a later invite readmits each past its own cap alone, and a raised cap or a cap on another act stops the walk; `ambre_protocol::membership::tests::the_caps_of_a_channel_travel_in_the_slot_of_the_cap` -- the caps travel under the signature, an entry with none keeps its bytes, and an unsorted or oversized list is refused | none | verified |
+| `SYNC-312` | `FAIL` | Given a revoke or a departure on the log of a channel's `meta`, the client MUST open each document of the channel the relay lists and the Logic thread does not hold, and its entry MUST cap the member in each one. A listing with no `meta` of that log, or an open that fails, MUST fail the removal before it posts. | this spec section 3; `SYNC-311`, `SYNC-229`, `SYNC-300` | `ambre_sync::census::tests::a_channel_revoke_opens_each_closed_document_and_caps_the_member_there` -- a revoke opens the closed thread and segment under the `meta`, reads Carol's clock in each, runs once both replays are done, then closes both, and the Logic thread hears none of the census opens; `ambre_sync::census::tests::a_census_open_that_fails_fails_the_removal` -- a failed open, or a document read again past a cap, fails the departure and closes every census document; `ambre_sync::census::tests::a_listing_with_no_meta_or_another_fails`; `ambre_sync::census::tests::a_census_document_the_logic_thread_opens_stays_open`; `ambre_sync::census::tests::an_evicted_document_keeps_its_light_subscription_through_a_census`; `ambre_sync::sharing::tests::a_channel_revoke_caps_the_member_in_each_open_document` -- the revoke caps each document its params hold | none | verified |
+| `SYNC-314` | `FAIL` | Given a departure of a document the Logic thread does not hold, the client MUST open it first, and the departure MUST name the last clock this user wrote in it (`SYNC-306`). An open that fails MUST fail the departure before it posts. | this spec section 3; `SYNC-306`, `SYNC-312` | `ambre_sync::census::tests::a_departure_of_a_closed_document_opens_it_to_name_the_cap` -- the leave opens the document under the type the relay holds, claims no type for the session, names the clock this user wrote there, then closes it; `ambre_sync::updates::tests::a_departure_caps_the_leaver_at_the_last_clock_it_wrote` -- the departure itself still reads no cap from a document not open | none | verified |
+| `SYNC-315` | `FAIL` | Given a removal on the log of a channel's `meta`, its entry MUST cap the member at zero in each document of the channel it names no cap for, under its author's signature. A document the relay hid from the census MUST then take no write of the member. | this spec section 3; `SYNC-312`, `SYNC-311` | `ambre_sync::membership_log::tests::a_floored_revoke_caps_every_unnamed_document_at_zero` -- a document the revoke names no cap for refuses Bob's first write, a named one keeps its own cap, a revoke with no floor caps nothing there, and a later invite readmits past the floor alone; `ambre_protocol::membership::tests::the_floor_of_a_channel_travels_in_the_slot_of_the_cap_under_the_signature` -- the floor travels with a list or none, under the signature, and on a revoke alone; `ambre_sync::sharing::tests::a_channel_revoke_caps_the_member_in_each_open_document` -- the posted revoke caps a document it never opened at zero; `ambre_sync::sharing::tests::leaving_a_channel_posts_this_users_removal_on_its_meta` -- the departure floors the channel; `ambre_sync::census::tests::a_channel_departure_opens_its_closed_meta_for_its_own_cap` -- a closed `meta` opens for the census, so the floor never refuses the leaver's own history there; `ambre_sync::updates::tests::a_start_past_a_lifted_floor_opens_under_a_head_past_the_grant` -- the floor binds a start at the open too, and a grant lifts it under a confirmed head (`SYNC-317`) | none | verified |
+| `SYNC-319` | `FAIL` | Given a removal on the log of a channel's `meta` that caps more documents than one entry holds, the client MUST post the caps past the first `DOCUMENT_CAPS_MAX` in continuations after its entry, in the same request. A continuation MUST be a revoke of the same member by the same author, with no key and no cap of its own, and the walk MUST refuse any other entry as one. | this spec section 3; `SYNC-311`, `SYNC-312`; `ambre-spec-budgets.md` section 1 | `ambre_sync::membership_log::tests::a_run_of_continuations_caps_every_document_and_nothing_else_continues` -- 40 caps take three entries and cap Bob in each document, and a continuation by another author, for another member, with a key, with a cap, with no document cap, or after a revoke with no document cap stops the walk; `ambre_sync::sharing::tests::a_revoke_from_a_large_channel_caps_every_document_over_a_run_of_entries` -- the revoke posts two continuations in one request, each within the caps of one entry, and the walk caps Carol in all 40 documents; `ambre_sync::census::tests::a_channel_past_the_caps_of_one_entry_opens_every_document` -- seventeen documents open for the census, and no refusal comes | none | verified |
+| `SYNC-320` | `FAIL` | Given a removal on the log of a channel's `meta`, the census MUST refuse a listing that leaves out a document the sealed state of that `meta` names, and the removal MUST fail before it posts. A removal that names no such document MUST fail too. | this spec section 3; `SYNC-312`, `SYNC-315` | `ambre_sync::census::tests::a_listing_that_hides_a_named_document_fails_the_removal` -- a listing short of a named segment fails a revoke and a departure, and one that holds every named document passes; `ambre_sync::census::tests::a_channel_removal_with_no_named_documents_fails_before_it_lists` -- a departure or a revoke with no named documents, or none at all, fails and asks the relay nothing; `ambre_murmure::logic::amending_tests::the_meta_names_each_segment_and_the_amendments_no_fold_erased` -- the `meta` names each segment and the amendments a fold kept; `ambre_logic::channels::tests::a_revoke_on_a_channel_meta_names_what_the_meta_names` -- a revoke waits for the `meta` of a channel still opening, then names its segment; `ambre_logic::channels::tests::a_revoke_on_a_closed_channel_opens_it_then_closes_it_again`; `ambre_logic::channels::tests::a_revoke_whose_channel_fails_to_open_sends_nothing`; `ambre_logic::spaces::tests::a_left_channel_leaves_the_client_once_the_relay_answers` -- the departure names the segment of the `meta` | none | verified |
+| `SYNC-321` | `FAIL` | Given a removal on the log of a channel's `meta`, the census MUST refuse a listing that leaves out a thread a segment or a live amendments document of that channel names, and the removal MUST fail before it posts. A document the read of those threads cannot open or admit MUST fail the removal too. | this spec section 3; `SYNC-320`, `SYNC-315`, `MURMURE-107`, `MURMURE-484` | `ambre_murmure::logic::thread_tests::a_removal_reads_the_thread_each_segment_names` -- a segment the view loads makes the read wait, a segment not held opens for the read alone and drops, the thread its root names joins the named documents once, and a segment of another channel ends the read; `ambre_murmure::logic::folding_tests::a_removal_reads_the_thread_the_amendments_of_a_segment_record` -- a final segment not held, then its amendments, open one at a time, the thread they record joins the named documents, and amendments of another segment end the read; `ambre_logic::channels::tests::a_revoke_names_the_thread_a_segment_not_held_names` -- the revoke waits for the read, the segment closes once read, and the revoke names its thread; `ambre_logic::channels::tests::a_revoke_whose_segment_fails_to_open_sends_nothing`; `ambre_sync::census::tests::a_listing_that_hides_a_named_document_fails_the_removal` -- the census refuses a listing short of any named document | none | verified |
 | `SYNC-303` | `FAIL` | Given a document of a Murmure channel that applied a delta past the cap of a revoke, the client MUST end the whole channel, erase the local copy of each of its documents and open the channel again. | this spec section 3; `SYNC-300`, `SYNC-233` | `ambre_logic::channels::tests::a_channel_read_again_drops_each_copy_and_opens_anew` -- each document closes in Sync and leaves the store, the channel then asks the relay again, and a document no channel holds reads nothing | none | verified |
 | `SYNC-304` | `FAIL` | Given an open, a snapshot that folds a delta past the cap of its writer MUST open nothing, and the open MUST replay from a start under every cap (`SYNC-307`). A reopen whose local copy applied such a delta MUST read the document again. | this spec section 3; `SYNC-300`, `RESID-010` | `ambre_sync::updates::tests::an_open_refuses_a_delta_past_the_cap_of_its_writer` -- the owner's snapshot that folds a clock past the cap opens nothing, the replay starts at the first delta and lands the clock at the cap alone, and a snapshot under the cap opens; `ambre_sync::light::tests::a_reopen_past_a_revoke_cap_reads_the_document_again` -- the clocks of an evicted session travel to its reopen, which reads the document again past a cap and not under one | none | verified |
 | `SYNC-307` | `FAIL` | Given an open whose start folds a delta past a cap, the open MUST start from the trusted reference when the reference folds none, and replay the deltas past its horizon alone; with no such reference, it MUST replay from the first delta. Either start MUST reach the clocks a full replay of the same log reaches. | this spec section 3; `SYNC-304`, `AUTHOR-030`, `SRV-127` | `ambre_sync::updates::tests::a_snapshot_past_a_cap_starts_from_the_reference_as_a_full_replay_does` -- the open starts from the reference and asks past its horizon, applies the deltas a full replay applies past it and reaches its clocks, and a reference past the cap replays from the first delta; `ambre_sync::snapshot_trust::tests::a_trusted_latest_keeps_the_trusted_reference_to_fall_back_on` -- only a trusted reference older than the start is a fallback | none | verified |
+| `SYNC-309` | `FAIL` | Given an open, the replay the relay serves MUST hand the document no delta past the cap of its writer, and MUST land every delta under the caps. | this spec section 3; `SYNC-300`, `SYNC-304` | `ambre_sync::updates::tests::an_open_replay_refuses_a_delta_past_the_cap_of_its_writer` -- a fresh open replays the whole log in one batch, which carries the capped writer's clock at the cap and the other writer's delta alone, warns once per refused delta and leaves no write past the cap applied | none | verified |
+| `SYNC-316` | `FAIL` | Given an open, a start that folds a clock of a writer past any cap a later grant lifted MUST open nothing, as `SYNC-304` states, unless `SYNC-317` admits it; every lifted cap of that writer counts, the latest one alone does not. | this spec section 3; `SYNC-301`, `SYNC-304`, `SYNC-307` | `ambre_sync::updates::tests::a_start_past_a_lifted_cap_opens_nothing` -- after a revoke at cap 1 and an invite, a start that folds Bob's clock 2 or 3 opens nothing and replays from the first delta, one that folds his clock 1 opens, and a copy that folded his clock 2 is read again; `ambre_sync::membership_log::tests::a_fold_past_any_lifted_cap_of_its_author_is_past_a_cap` -- after two exclusions each lifted, a fold past the first cap counts as past a cap, and Alice is bound by none | none | verified |
+| `SYNC-317` | `FAIL` | Given an open, a start that folds a clock of a writer past a cap a later grant lifted MUST open when a member other than its author confirmed it under a log head the valid walk passes through at or past that grant. A standing cap MUST still refuse it. | this spec section 3; `SYNC-301`, `SYNC-316`; `ambre-spec-op-authorship.md`, `AUTHOR-030`, `AUTHOR-038` | `ambre_sync::updates::tests::a_start_past_a_lifted_cap_opens_under_a_head_past_the_grant` -- after a revoke at cap 1 and an invite, a start folding Bob's clock 3 at horizon 9 opens under the head after the invite and replays past its horizon alone, as after a trim, and is never read again, while the head of the exclusion or no head opens nothing; `ambre_sync::membership_log::tests::a_confirmed_head_past_the_grant_proves_a_fold_past_its_lifted_cap` -- the head after the invite proves the fold, the head of the exclusion, a forged head and no head do not, and a standing cap refuses it under any head; `ambre_sync::snapshot_trust::tests::a_confirmation_holds_under_the_head_it_signs_alone` -- the start carries the signed head as its proof, and a head the relay rewrote or stripped trusts nothing; `ambre_sync::updates::tests::a_start_past_a_lifted_floor_opens_under_a_head_past_the_grant` -- a thread the revoke named no cap for takes the floor of zero (`SYNC-315`), and a start folding Bob's clock 1 there opens under the head after the invite alone | none | verified |
 
 * **Budget.** the key exchange costs one elliptic-curve operation per member at open, charged to
   the crypto rows of `ambre-spec-budgets.md section 1`. The directory and the role are read off an
@@ -164,7 +176,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 105 `verified`. Every pure transform holds, out of the browser: the wrap, the
+* **Verification.** 117 `verified`. Every pure transform holds, out of the browser: the wrap, the
   weak key, the pin, the invitee, the role and the log walk. What is loose is the branches that only
   run against a live relay.
 ---
@@ -465,6 +477,15 @@ held, in the row of the kept log, under the same account (`SYNC-308`). Each link
 writer of the log when the open kept it (`SYNC-121`). A reload rebuilds the chain from the row, so a
 listed name sealed before the last rotation opens with no request.
 
+**The row stays bounded.** Each rotation adds a link, and the store reads every row at each
+session. So the row keeps only the links the walk back from the kept key reaches, nearest first.
+It keeps no more than the bound of `ambre-spec-budgets.md` section 6 (`SYNC-313`). A link the walk
+never reaches opens no key, as a link before a history boundary.
+
+After a reload, a listing reaches no key past the bound. Its name shows none until an open fetches
+the links again. The kept part is a prefix of the walk, so the reload checks it as a whole chain
+and trusts nothing more.
+
 The worker refuses a stored chain the kept log no longer extends. One such link names another
 document. Another was signed at a head past the kept head. A third is one the kept key does not
 walk back to. It refuses the chain of a log this session walked from another anchor too. A refused chain
@@ -586,7 +607,8 @@ diverge.
 A newcomer's first delta can arrive before this client lists the members again, after a reconnect
 above all. A delta from a signer the log does not name waits, sealed, for a listing asked after it
 arrived (`SYNC-211`). One listing is in flight at a time, and its answer asks again for what it
-left. The held deltas share the bound of the quarantine.
+left. The held deltas share the two caps of the quarantine, its count and its bytes, and so do
+the deltas a listing refused (`SYNC-310`).
 
 **A document older than the log.** Its log is empty, so the relay takes a change with no entry.
 It has no first entry, so none of its rows verifies, and the list shows each as unverified. A
@@ -604,11 +626,93 @@ asks for the deltas past its horizon alone (`SYNC-307`). The relay keeps every d
 reference (`SRV-127`), so the replay costs those deltas and no more. A replay from the first delta
 remains the last resort, and the relay may have trimmed the deltas under the reference.
 
+**A snapshot proves no head.** A snapshot names the highest clock of each author it folds, and no
+head. A later grant lifts the cap of a readmitted writer, but a clock past that cap may be a write
+of the exclusion. A start that folds such a clock thus opens nothing, and the deltas replay under
+their heads (`SYNC-316`). Each cap a grant lifted counts, not the latest one alone. A signed list of
+heads would prove nothing: only the signature of each delta binds its head.
+
+**A confirmation proves the head.** Once a readmitted writer writes past the lifted cap, every later
+snapshot folds past it, the reference included. The relay trims the deltas under the reference, so a
+replay from the first delta can lose them.
+
+A member other than the author who confirms a snapshot
+checked it against its own state (`AUTHOR-016`). That state took each delta of the writer under its
+head. The confirmer thus signs the head of its walk (`AUTHOR-038`). A start whose confirmation names
+a head at or past the grant opens, as a delta signed under that head would (`SYNC-317`).
+
+A confirmation with no head, or a head short of the grant, leaves `SYNC-316` in force.
+
+The open notes each folded clock under that head. A later walk reads them as signed deltas, so the
+document is not read again. A standing cap still refuses the start, whatever the head. The price is
+the one `AUTHOR-030` states: an owner and a guest of that owner can make such a fold read as checked.
+
+**A replay checks each delta.** The open checks each replayed delta against the cap of its writer,
+as it checks a live delta. A batch thus hands the document no write past a cap (`SYNC-309`).
+
 **A departure names its cap.** A leaver signs the last clock it wrote, the clock it sealed last or
 a higher one an echo or a snapshot held (`SYNC-306`). Only an open document knows that clock, so a
-leave of a document not open fails closed. A cap read from nothing would refuse the leaver's own
-history at every peer. The walk caps the leaver as it caps a revoked member, and a later grant
+leave of a document not open opens it first, as a census (`SYNC-314`). A cap read from nothing would
+refuse the leaver's own history at every peer.
+The walk caps the leaver as it caps a revoked member, and a later grant
 readmits it the same way (`SYNC-301`).
+
+**A channel caps each document on its own.** Each document of a channel numbers the clocks of an
+author on its own, and the `meta` log vouches for all of them. A revoke or a departure on that log
+thus names one cap per document of the channel open on its author's client (`SYNC-311`). The `meta`
+takes the cap of the entry, and each other document takes its own. The open of a document of the
+channel reads the caps the walk set on that document alone. A document the entry names no cap for
+takes zero (`SYNC-315`).
+
+**A census opens what a removal caps.** A removal on the log of a channel's `meta` lists the
+documents of the channel first. Each document the Logic thread does not hold opens for a census
+(`SYNC-312`). A census open runs the same walk, keys, caps and replay as any open. What the open
+would tell the Logic thread reaches the census alone, and no type claims the document
+(`SYNC-260`). Once each replay is done, the removal reads the clocks of every open document, and the
+census closes the documents it opened.
+
+A departure of a document not open takes the same path, one document long (`SYNC-314`). An evicted
+document opens from the relay, and gets its light subscription back at the end.
+
+An open that fails fails the removal. A removal that left one document uncapped would let the member
+write there with the relay, so it posts nothing.
+
+**A removal names what the `meta` names.** Only the Logic thread reads the sealed `meta`. Before a
+departure or a revoke on the log of a channel's `meta`, it opens the channel when it is closed. It
+then sends the documents the `meta` names with the removal: each segment, and each amendments
+document no fold erased. The census refuses a listing that leaves one out, and a removal that names
+none (`SYNC-320`).
+
+A channel the Logic thread opened for the removal alone closes again. An open that
+fails fails the removal, and nothing reaches the Sync worker.
+
+**A removal names the threads too.** The `meta` names no thread. A root names its thread in its
+`thread` field (`MURMURE-107`). The amendments of a locked segment record the thread of a late
+first reply (`MURMURE-484`).
+
+Before the removal leaves, the Logic thread reads every segment the
+`meta` lists and every amendments document no fold erased. A document it does not hold opens for
+that read alone, one at a time, and closes once read. The removal then names each thread with the
+documents of the `meta`, and the census refuses a listing that leaves one out (`SYNC-321`).
+
+A document the read cannot open or admit fails the removal. A thread it never read would take the
+floor of zero, so the removal posts nothing.
+
+**A removal floors the channel at zero.** The census reads the documents of the channel from the
+relay's listing. A relay that hides a document leaves no clock to name for it. The entry thus caps
+the member at zero in each document of its log it names no cap for (`SYNC-315`). A hidden document
+loses the member's history, and takes no write of theirs.
+
+A log no other document walks loses nothing by the floor, so every removal carries it. A closed
+`meta` opens for the census too, so the floor never refuses the leaver's own history there.
+
+**A large channel spreads its caps.** One entry carries at most `DOCUMENT_CAPS_MAX` caps, since every
+update carries the last entry. The caps past that bound go into continuations after the entry, in
+the same request (`SYNC-319`). A continuation revokes the same member again, by the same author, with
+no key and no cap of its own. The walk takes it only right after a revoke with document caps.
+
+The caps ride in the slot of the cap of a revoke. An entry with no document cap keeps the bytes it
+had before them, so no stored entry, digest or signature changes.
 
 **An entry of an older version.** Version 2 of the entry signs the exchange key, and version 3
 the cap of a revoke (`SYNC-300`), each under a new signing domain. No migration rewrites a stored
@@ -679,6 +783,17 @@ authority: the role here hides what the relay would refuse anyway.
 | Every update carries the entry | the entry on the first update after the head moves alone | the relay would drop those few updates and forward the rest. The member would then read heads that prove nothing, and detect nothing |
 | A presence sample carries the head and its entry | no head on a sample | a relay that drops every update of the up-to-date members towards one member would hide the gap, and presence flows while nobody writes (`SYNC-263`) |
 | A presence sample carries the entry beside the head | the head alone on a sample | a head counts only when its entry proves it (`SYNC-219`), so a sample with the head alone would never ask for the log. A weaker proof for a sample would let any member blame the relay |
+| A census opens each document a removal caps | the clock of each author the relay's index of deltas holds | the relay's word on a clock: with the removed member, it raises the cap and the member keeps writing. An open reads only clocks under a signature the walk admits |
+| A census opens each document a removal caps | asking the Logic thread to open them | the Logic thread would load each document for nothing, and the census needs no content. The Sync worker already runs the open whole, the snapshot check aside |
+| The Logic thread sends the documents of the `meta` with the removal | the Logic thread pushes them to the Sync worker whenever the `meta` changes | a channel never opened here pushes nothing, so its departure or its revoke would fail |
+| The Logic thread sends the documents of the `meta` with the removal | the Sync worker asks the Logic thread for them during the census | a second round trip on the bus, and the Logic thread still opens a closed channel to answer it |
+| The Logic thread reads every segment and live amendments document for the threads a removal names | the `meta` names each thread | each first reply then writes the `meta` too. A thread whose replier wrote no entry stays unchecked, so the census would still read the segments |
+| The Logic thread reads every segment and live amendments document for the threads a removal names | the read holds every document it opens until the removal leaves | a channel with a long history would hold it all at once, against the memory budget of `README.md`. One document at a time holds one copy |
+| The Logic thread sends the documents of the `meta` with the removal | the Sync worker reads the `meta` itself | the Sync worker would link the CRDT engine and the Murmure schema, for one list, past its size budget |
+| A channel past 16 documents fails the removal | capping the 16 first and leaving the rest | the member keeps writing with the relay in each document left, and nobody sees it |
+| A start past a lifted cap stands on a confirmation that signs its confirmer's head | the relay keeps every delta of a readmitted writer past the lifted cap, and the open checks each one | the deltas kept grow with the history of that writer, and each open downloads all of them, against the memory budget of `README.md`. The open would also have to match each fold against the ops of those deltas in the Logic thread. The relay could still trim them, and the open would fail |
+| A start past a lifted cap stands on a confirmation that signs its confirmer's head | the snapshot carries the signed deltas it folds past the lifted cap | each snapshot grows with the history of the writer, and no fold is bound to those deltas without the same check in the Logic thread |
+| A start past a lifted cap stands on a confirmation that signs its confirmer's head | the confirmation as it stood, with no head | a member who confirmed before it learned the revoke vouches for writes of the exclusion. The relay can delay the revoke to choose that member |
 | An invite names the key it wraps | trusting the wrap the relay serves | the relay could hand the invitee another document's key, or an old one, and nothing would tell the two apart |
 
 ---
@@ -720,14 +835,29 @@ authority: the role here hides what the relay would refuse anyway.
 * **A departure cap is the leaver's own word.** A leaver who names a clock past its writes keeps
   writing up to it. An honest leaver names its last clock, so a key stolen later writes nothing.
   A departure with no cap caps nothing.
-* **A channel departure names no cap.** Each document of a channel numbers the clocks of an author
-  on its own, and the `meta` log vouches for all of them. One cap read from one document would
-  refuse history another holds. A revoke on a channel caps at the clocks of the `meta` alone, with
-  the same flaw.
+* **A member can block every removal from a channel.** Any member sets the absent `thread` field
+  of a root (`MURMURE-255`), and no client can check that the relay linked that document. A field
+  naming no document of the relay fails each removal from the channel (`SYNC-321`).
+* **A removal opens each segment of the channel twice.** The Logic thread reads it for its threads,
+  then the census opens it again for its clocks (`SYNC-312`). The read opens one document at a
+  time, so its wait grows with the history of the channel.
+* **A document created after the census takes zero.** A segment a close opens, or a thread a reply
+  creates, between the listing and the post is not in the census. The member's writes there are
+  refused.
+* **The floor reaches the snapshots of every document of the channel.** A grant lifts the floor of
+  zero with the named caps (`SYNC-315`). A fold past it opens only under a confirmation at or past
+  the grant (`SYNC-316`, `SYNC-317`), in every document of the channel, named or not.
+* **A census opens every document of the channel.** The floor caps a thread the member never wrote
+  in. The census cannot tell such a thread without opening it.
+* **A removal posts its run of entries in one request.** The relay appends the run whole or not at
+  all (`SRV-339`). A relay that drops part of the run hides entries from every peer, and the head an
+  update carries shows it (`SYNC-207`).
+* **A census waits on the socket.** Its replay arrives on the socket, and no timer ends a census
+  whose replay never comes. The removal then never posts.
+* **A census reads the first page of a replay.** The open says it is ready on the first page
+  (`SRV-086`), and a replay past one page caps the member below their last clock there.
 * **A held delta waits for a listing that may fail.** A listing that fails asks nothing again, so
   its held deltas wait for the next change of the members (`SYNC-211`).
-* **An evicted document reads a summary from any signer.** Its light subscription counts each
-  delta and reads its summary with no check of the signer (`RESID-014`).
 * **A Murmure invitee needs the link on each new device.** The kept roots live in the local store
   of one browser (`SYNC-241`). A second device, or a cleared browser, refuses the spaces of an
   invitee who signed no entry until it opens the link again.

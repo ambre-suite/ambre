@@ -821,7 +821,8 @@ pub(crate) mod web {
     /// of the origin asks for the same lock, so one renewal runs at a time
     /// across them (`SRV-330`). A scope with no lock manager runs `critical`
     /// alone, with a warning: an older browser loses the order across tabs,
-    /// and still renews.
+    /// and still renews. A `critical` dropped mid-way releases the lock too
+    /// (`SRV-338`).
     pub(crate) async fn exclusive<R>(critical: impl std::future::Future<Output = R>) -> R {
         let held = match acquire().await {
             Ok(held) => Some(held),
@@ -838,8 +839,8 @@ pub(crate) mod web {
     }
 
     /// Runs `critical` under the Web Lock of the record, or fails when the
-    /// scope has no lock manager. The wasm-tier test of `SRV-330` reads it,
-    /// since the fallback of [`exclusive`] would hide a missing lock.
+    /// scope has no lock manager. The wasm-tier tests of `SRV-330` and
+    /// `SRV-338` read it, since the fallback of [`exclusive`] would hide a missing lock.
     #[doc(hidden)]
     pub async fn strictly_exclusive<R>(
         critical: impl std::future::Future<Output = R>,
@@ -850,18 +851,25 @@ pub(crate) mod web {
         Ok(out)
     }
 
-    /// A Web Lock granted. [`HeldLock::release`] settles the promise the
-    /// lock waits on, which releases it. The Sync worker runs no destructor
-    /// (`ARCH-015`). A critical future dropped before its end keeps the lock
-    /// until the worker ends, and the browser releases it then.
+    /// A Web Lock asked for, or granted. The guard holds the sender of a
+    /// one-shot channel. A task that [`acquire`] spawns waits on its receiver,
+    /// then settles the promise the lock waits on, which releases the lock.
+    ///
+    /// The Sync worker writes no destructor (`ARCH-015`), so no destructor of
+    /// ours can release the lock. The receiver wakes on both paths instead:
+    /// [`HeldLock::release`] sends, and a critical future dropped mid-way
+    /// drops the sender, which cancels the channel (`SRV-338`). Without that
+    /// task, a dropped renewal kept the lock until the worker ended, and every
+    /// other tab of the origin waited.
     struct HeldLock {
-        release: js_sys::Function,
+        done: futures_channel::oneshot::Sender<()>,
     }
 
     impl HeldLock {
         /// Releases the lock, so the next tab that asks for it is granted.
         fn release(self) {
-            let _ = self.release.call0(&JsValue::NULL);
+            // An error means the task already ended, so nothing holds the lock.
+            let _ = self.done.send(());
         }
     }
 
@@ -891,7 +899,15 @@ pub(crate) mod web {
         });
         let options = js_sys::Object::new();
         js_sys::Reflect::set(&options, &"mode".into(), &"exclusive".into())?;
-        let guard = HeldLock { release };
+        // The task settles `held` once the guard sends or drops. A guard
+        // dropped before the grant settles it early, so the manager releases
+        // the lock as soon as it grants it.
+        let (done, ended) = futures_channel::oneshot::channel::<()>();
+        crate::spawn(async move {
+            let _ = ended.await;
+            let _ = release.call0(&JsValue::NULL);
+        });
+        let guard = HeldLock { done };
         request.call3(&locks, &LOCK.as_str().into(), &options, &on_grant)?;
         JsFuture::from(granted).await?;
         Ok(guard)
