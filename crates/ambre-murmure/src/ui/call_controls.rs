@@ -142,11 +142,12 @@ impl Camera {
         }
     }
 
-    /// The accessible name of the button: what a press does.
-    pub fn label(self) -> &'static str {
+    /// The verb a press of the button performs, whose command names the button
+    /// (`CHROME-254`).
+    pub fn verb(self) -> ambre_commands::CallVerb {
         match self.press() {
-            CameraPress::Stop => "Turn the camera off",
-            CameraPress::Open | CameraPress::Wait => "Turn the camera on",
+            CameraPress::Stop => ambre_commands::CallVerb::CameraOff,
+            CameraPress::Open | CameraPress::Wait => ambre_commands::CallVerb::CameraOn,
         }
     }
 }
@@ -249,11 +250,12 @@ impl Share {
         }
     }
 
-    /// The accessible name of the button: what a press does.
-    pub fn label(self) -> &'static str {
+    /// The verb a press of the button performs, whose command names the button
+    /// (`CHROME-254`).
+    pub fn verb(self) -> ambre_commands::CallVerb {
         match self.press() {
-            SharePress::Stop => "Stop sharing the screen",
-            SharePress::Open | SharePress::Wait => "Share the screen",
+            SharePress::Stop => ambre_commands::CallVerb::StopSharing,
+            SharePress::Open | SharePress::Wait => ambre_commands::CallVerb::ShareScreen,
         }
     }
 }
@@ -385,9 +387,9 @@ mod tests {
             Camera::Refused(CameraRefusal::Blocked),
         ] {
             assert!(!camera.sends(), "{camera:?}");
-            assert_eq!(camera.label(), "Turn the camera on");
+            assert_eq!(camera.verb(), ambre_commands::CallVerb::CameraOn);
         }
-        assert_eq!(Camera::On.label(), "Turn the camera off");
+        assert_eq!(Camera::On.verb(), ambre_commands::CallVerb::CameraOff);
     }
 
     /// `MURMURE-623`: a refused camera says why and that the call goes on, and a press may try
@@ -470,9 +472,9 @@ mod tests {
             Share::Refused(ShareRefusal::Refused),
         ] {
             assert!(!share.sends(), "{share:?}");
-            assert_eq!(share.label(), "Share the screen");
+            assert_eq!(share.verb(), ambre_commands::CallVerb::ShareScreen);
         }
-        assert_eq!(Share::On.label(), "Stop sharing the screen");
+        assert_eq!(Share::On.verb(), ambre_commands::CallVerb::StopSharing);
         assert_eq!(Share::On.notice(), None);
     }
 

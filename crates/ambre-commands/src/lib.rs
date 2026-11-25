@@ -116,6 +116,47 @@ impl Home {
     }
 }
 
+/// One verb on the call of the page (the Murmure calls spec, section 3, the call controls).
+/// Each icon of the call controls names one, and its command names the same one. A verb that
+/// sets a state names the state it sets, so a palette entry on a state already set does nothing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CallVerb {
+    /// Start a call in this channel, or join the one that runs there.
+    Start(ambre_core::id::Id<ambre_core::id::Channel>),
+    /// Mute the microphone.
+    Mute,
+    /// Unmute the microphone.
+    Unmute,
+    /// Turn the camera on.
+    CameraOn,
+    /// Turn the camera off.
+    CameraOff,
+    /// Share the screen.
+    ShareScreen,
+    /// Stop the share of the screen.
+    StopSharing,
+    /// Widen the call to the whole channel region.
+    Fill,
+    /// Shrink the call back to a band.
+    Shrink,
+    /// Open or close the list of the participants.
+    Participants,
+    /// Open or close the panel of the devices.
+    Devices,
+    /// Show the page of the grid before.
+    PreviousPage,
+    /// Show the page of the grid after.
+    NextPage,
+    /// Show the channel of the call again.
+    BackToCall,
+    /// Leave the call.
+    HangUp,
+    /// Accept the call that rings.
+    Accept,
+    /// Decline the call that rings.
+    Decline,
+}
+
 /// Static description of a command. Apps build `const` tables of these and
 /// expose them through [`CommandSource`].
 pub struct Command {

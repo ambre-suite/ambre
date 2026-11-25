@@ -14,7 +14,7 @@
 // maps the answer into the Logic runtime's sum (`BUS-032`).
 // ============================================================================
 
-use ambre_commands::{ClipboardWrite, PasteForm};
+use ambre_commands::{CallVerb, ClipboardWrite, PasteForm};
 use ambre_core::{Commands, StaticKey};
 
 /// One thing a command asks of the shell, once its application has decided.
@@ -47,6 +47,9 @@ pub enum ShellAction<C> {
         call: ambre_core::id::Id<ambre_core::id::Call>,
         channel: ambre_core::id::Id<ambre_core::id::Channel>,
     },
+    /// Perform this verb on the call of the page. The palette reaches it as the icons of the
+    /// call controls do, and the page holds the call (`MURMURE-731`).
+    Call(CallVerb),
 }
 
 impl<C: 'static> ShellAction<C> {
@@ -64,6 +67,7 @@ impl<C: 'static> ShellAction<C> {
             Self::RefreshDocuments => ShellAction::RefreshDocuments,
             Self::PickFile(pick) => ShellAction::PickFile(pick.map(f)),
             Self::JoinCall { call, channel } => ShellAction::JoinCall { call, channel },
+            Self::Call(verb) => ShellAction::Call(verb),
         }
     }
 }

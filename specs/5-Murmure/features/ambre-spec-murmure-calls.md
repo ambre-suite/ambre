@@ -89,6 +89,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-603` | `POST` | While the page is in a call and shows the channel of the call, the header MUST offer mute and hang up in place of the call button. | this spec section 3, the call controls | `ambre_murmure::ui::call_controls::tests::a_channel_offers_the_call_button_and_a_call_offers_mute_and_hang_up_in_its_place`; `ambre_app::shell::murmure_regions::the_call_controls_name_themselves_and_take_the_focus` -- wasm tier; `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` -- browser tier, under Chrome and under Firefox: a page in a call shows no call button | none | verified |
 | `MURMURE-604` | `POST` | Hang up MUST leave the call, so that each other member reads the member who hung up out of it. | this spec section 3, the call controls; `MURMURE-409`; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-069`) | `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` -- browser tier, under Chrome and under Firefox: Ada hangs up, her call worker erases its keys, and Bob reads himself alone in the call | none | verified |
 | `MURMURE-606` | `FRAME` | A mute MUST NOT write into the channel. | this spec section 3, the call controls; `ZK-025` | structural -- the mute control runs `toggle_mute` of the page, which disables the track and posts nothing to a worker; `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` -- browser tier, under Chrome and under Firefox: the channel reads the same call message through the mute | none | verified |
+| `MURMURE-730` | `INV` | Each icon of the call controls, of the call bubble and of the ring MUST reach a command of the Murmure table. | this spec section 3, the call controls; `1-Foundations/ambre-spec-shell.md section 2` (`CHROME-185`) | `ambre_app::shell::murmure_regions::each_icon_of_the_call_names_its_command_in_a_tooltip` -- wasm tier, the reach of each icon is a command of `ambre_murmure::ui::commands::COMMANDS`, and the probe of untipped icons reads none | none | verified |
+| `MURMURE-731` | `POST` | A call command run from the palette MUST perform the verb its icon performs. | this spec section 3, the call controls; `1-Foundations/ambre-spec-commands.md section 2` (`UI-THREAD-019`) | `ambre_murmure::ui::commands::tests::each_call_command_names_one_verb_and_back`; `ambre_murmure::tests::chrome_relay::the_palette_hands_the_shell_the_verb_of_a_call_command` -- wasm tier, the handler answers the verb of the command, and the icons run the same `run` of the page | none | verified |
 
 
 ### 1.7 Choose a device
@@ -301,6 +303,9 @@ relay never learns which calls of a channel ended, and holds no history and no d
 
 **The call controls.** The header of a shown channel holds them, a direct message included. Each
 control is a button with an icon of its own and an accessible name (`MURMURE-605`).
+Each icon reaches a command of the Murmure table, so its tooltip names that command
+(`MURMURE-730`). The palette reaches the same commands, and the page performs the same verb for
+each (`MURMURE-731`). A pin acts on one participant, so the palette runs no pin.
 
 | The page | The header offers |
 |---|---|

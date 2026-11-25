@@ -861,6 +861,30 @@ fn the_mark_all_read_chord_runs_the_command_of_the_unread_feature() {
     ));
 }
 
+/// A call command from the palette hands the shell the verb its icon performs, which the page
+/// performs (`MURMURE-731`). A start calls in the channel shown, and a pin runs nothing: it
+/// needs a participant.
+#[wasm_bindgen_test]
+fn the_palette_hands_the_shell_the_verb_of_a_call_command() {
+    use ambre_chrome::CallVerb;
+    use ambre_murmure::ui::commands::{HANG_UP, MUTE, PIN, START_CALL, UNMUTE};
+    let (_owner, relay, channel) = shown_direct();
+    let (handler, sent) = handler(relay);
+    let verb = |id| match &handler.on_command(id)[..] {
+        [ShellAction::Call(verb)] => Some(*verb),
+        _ => None,
+    };
+    assert_eq!(verb(START_CALL), Some(CallVerb::Start(channel)));
+    assert_eq!(verb(MUTE), Some(CallVerb::Mute));
+    assert_eq!(verb(UNMUTE), Some(CallVerb::Unmute));
+    assert_eq!(verb(HANG_UP), Some(CallVerb::HangUp));
+    assert!(handler.on_command(PIN).is_empty());
+    assert!(
+        sent.get_untracked().is_empty(),
+        "no verb of a call reaches the Logic thread"
+    );
+}
+
 /// The labels of the menu of the target, in order.
 fn menu_labels(relay: MurmureRelay) -> Vec<String> {
     relay

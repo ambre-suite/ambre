@@ -88,11 +88,8 @@ pub fn CommandButton(
             view! {
                 <crate::IconButton
                     icon=icon
-                    label=tip.title().as_str().to_owned()
-                    chord=tip.chord()
-                    description=tip.description().cloned()
+                    tip=Signal::stored(tip)
                     pressed=pressed
-                    reach=Some(tip.reach())
                     size=size
                     look=look
                     on_press=Callback::new(move |()| on_command.run(id))

@@ -12,7 +12,7 @@ use crate::message::LogicCommand;
 use crate::message::{HeldReply, HeldSend, Mention, MessageAt, MurmureCommand, StyleMark};
 use ambre_bus::{Authored, Emoji, Instant};
 use ambre_commands::{
-    Command, FunctionKey, Home, Key, KeyBinding, KeyChar, Keymap, Locale, ModifierKeys,
+    CallVerb, Command, FunctionKey, Home, Key, KeyBinding, KeyChar, Keymap, Locale, ModifierKeys,
 };
 use ambre_core::Byte;
 use ambre_core::id::{Channel, Document, Id, Message, User};
@@ -173,6 +173,356 @@ fn join_call_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandT
 fn keys_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
     ambre_core::Validated::new("Keyboard shortcuts")
 }
+
+/// The verbs on the call of the page. The icons of the call reach them, and the palette too
+/// (`MURMURE-730`, `MURMURE-731`).
+const CALL: StaticKey<Categories> = StaticKey::<Categories>::new("call");
+
+/// The command of the call icon titled "Start a call" (`MURMURE-730`).
+pub const START_CALL: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.call.start");
+
+/// The command of the call icon titled "Mute" (`MURMURE-730`).
+pub const MUTE: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.call.mute");
+
+/// The command of the call icon titled "Unmute" (`MURMURE-730`).
+pub const UNMUTE: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.call.unmute");
+
+/// The command of the call icon titled "Turn the camera on" (`MURMURE-730`).
+pub const CAMERA_ON: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.call.camera_on");
+
+/// The command of the call icon titled "Turn the camera off" (`MURMURE-730`).
+pub const CAMERA_OFF: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.call.camera_off");
+
+/// The command of the call icon titled "Share the screen" (`MURMURE-730`).
+pub const SHARE_SCREEN: StaticKey<Commands> =
+    StaticKey::<Commands>::new("murmure.call.share_screen");
+
+/// The command of the call icon titled "Stop sharing the screen" (`MURMURE-730`).
+pub const STOP_SHARING: StaticKey<Commands> =
+    StaticKey::<Commands>::new("murmure.call.stop_sharing");
+
+/// The command of the call icon titled "Fill the channel region with the call" (`MURMURE-730`).
+pub const FILL: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.call.fill");
+
+/// The command of the call icon titled "Shrink the call to a band" (`MURMURE-730`).
+pub const SHRINK: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.call.shrink");
+
+/// The command of the call icon titled "Participants" (`MURMURE-730`).
+pub const PARTICIPANTS: StaticKey<Commands> =
+    StaticKey::<Commands>::new("murmure.call.participants");
+
+/// The command of the call icon titled "Call devices" (`MURMURE-730`).
+pub const DEVICES: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.call.devices");
+
+/// The command of the call icon titled "Previous page of the call" (`MURMURE-730`).
+pub const PREVIOUS_PAGE: StaticKey<Commands> =
+    StaticKey::<Commands>::new("murmure.call.previous_page");
+
+/// The command of the call icon titled "Next page of the call" (`MURMURE-730`).
+pub const NEXT_PAGE: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.call.next_page");
+
+/// The command of the call icon titled "Back to the channel of the call" (`MURMURE-730`).
+pub const BACK_TO_CALL: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.call.back");
+
+/// The command of the call icon titled "Hang up" (`MURMURE-730`).
+pub const HANG_UP: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.call.hang_up");
+
+/// The command of the call icon titled "Accept the call" (`MURMURE-730`).
+pub const ACCEPT: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.call.accept");
+
+/// The command of the call icon titled "Decline the call" (`MURMURE-730`).
+pub const DECLINE: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.call.decline");
+
+/// The command of the call icon titled "Pin" (`MURMURE-730`).
+pub const PIN: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.call.pin");
+
+/// The command of the call icon titled "Unpin" (`MURMURE-730`).
+pub const UNPIN: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.call.unpin");
+
+fn call_start_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Start a call")
+}
+
+fn call_mute_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Mute")
+}
+
+fn call_unmute_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Unmute")
+}
+
+fn call_camera_on_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Turn the camera on")
+}
+
+fn call_camera_off_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Turn the camera off")
+}
+
+fn call_share_screen_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Share the screen")
+}
+
+fn call_stop_sharing_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Stop sharing the screen")
+}
+
+fn call_fill_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Fill the channel region with the call")
+}
+
+fn call_shrink_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Shrink the call to a band")
+}
+
+fn call_participants_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Participants")
+}
+
+fn call_devices_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Call devices")
+}
+
+fn call_previous_page_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Previous page of the call")
+}
+
+fn call_next_page_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Next page of the call")
+}
+
+fn call_back_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Back to the channel of the call")
+}
+
+fn call_hang_up_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Hang up")
+}
+
+fn call_accept_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Accept the call")
+}
+
+fn call_decline_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Decline the call")
+}
+
+fn call_pin_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Pin")
+}
+
+fn call_unpin_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Unpin")
+}
+
+/// The description of [`START_CALL`], which its icon reads for its tooltip.
+pub const START_CALL_COMMAND: Command = Command {
+    id: START_CALL,
+    title: call_start_title,
+    icon: None,
+    keybindings: &[],
+    category: CALL,
+    home: Home::ContextPanel,
+    description: None,
+};
+
+/// The description of [`MUTE`], which its icon reads for its tooltip.
+pub const MUTE_COMMAND: Command = Command {
+    id: MUTE,
+    title: call_mute_title,
+    icon: None,
+    keybindings: &[],
+    category: CALL,
+    home: Home::ContextPanel,
+    description: None,
+};
+
+/// The description of [`UNMUTE`], which its icon reads for its tooltip.
+pub const UNMUTE_COMMAND: Command = Command {
+    id: UNMUTE,
+    title: call_unmute_title,
+    icon: None,
+    keybindings: &[],
+    category: CALL,
+    home: Home::ContextPanel,
+    description: None,
+};
+
+/// The description of [`CAMERA_ON`], which its icon reads for its tooltip.
+pub const CAMERA_ON_COMMAND: Command = Command {
+    id: CAMERA_ON,
+    title: call_camera_on_title,
+    icon: None,
+    keybindings: &[],
+    category: CALL,
+    home: Home::ContextPanel,
+    description: None,
+};
+
+/// The description of [`CAMERA_OFF`], which its icon reads for its tooltip.
+pub const CAMERA_OFF_COMMAND: Command = Command {
+    id: CAMERA_OFF,
+    title: call_camera_off_title,
+    icon: None,
+    keybindings: &[],
+    category: CALL,
+    home: Home::ContextPanel,
+    description: None,
+};
+
+/// The description of [`SHARE_SCREEN`], which its icon reads for its tooltip.
+pub const SHARE_SCREEN_COMMAND: Command = Command {
+    id: SHARE_SCREEN,
+    title: call_share_screen_title,
+    icon: None,
+    keybindings: &[],
+    category: CALL,
+    home: Home::ContextPanel,
+    description: None,
+};
+
+/// The description of [`STOP_SHARING`], which its icon reads for its tooltip.
+pub const STOP_SHARING_COMMAND: Command = Command {
+    id: STOP_SHARING,
+    title: call_stop_sharing_title,
+    icon: None,
+    keybindings: &[],
+    category: CALL,
+    home: Home::ContextPanel,
+    description: None,
+};
+
+/// The description of [`FILL`], which its icon reads for its tooltip.
+pub const FILL_COMMAND: Command = Command {
+    id: FILL,
+    title: call_fill_title,
+    icon: None,
+    keybindings: &[],
+    category: CALL,
+    home: Home::ContextPanel,
+    description: None,
+};
+
+/// The description of [`SHRINK`], which its icon reads for its tooltip.
+pub const SHRINK_COMMAND: Command = Command {
+    id: SHRINK,
+    title: call_shrink_title,
+    icon: None,
+    keybindings: &[],
+    category: CALL,
+    home: Home::ContextPanel,
+    description: None,
+};
+
+/// The description of [`PARTICIPANTS`], which its icon reads for its tooltip.
+pub const PARTICIPANTS_COMMAND: Command = Command {
+    id: PARTICIPANTS,
+    title: call_participants_title,
+    icon: None,
+    keybindings: &[],
+    category: CALL,
+    home: Home::ContextPanel,
+    description: None,
+};
+
+/// The description of [`DEVICES`], which its icon reads for its tooltip.
+pub const DEVICES_COMMAND: Command = Command {
+    id: DEVICES,
+    title: call_devices_title,
+    icon: None,
+    keybindings: &[],
+    category: CALL,
+    home: Home::ContextPanel,
+    description: None,
+};
+
+/// The description of [`PREVIOUS_PAGE`], which its icon reads for its tooltip.
+pub const PREVIOUS_PAGE_COMMAND: Command = Command {
+    id: PREVIOUS_PAGE,
+    title: call_previous_page_title,
+    icon: None,
+    keybindings: &[],
+    category: CALL,
+    home: Home::ContextPanel,
+    description: None,
+};
+
+/// The description of [`NEXT_PAGE`], which its icon reads for its tooltip.
+pub const NEXT_PAGE_COMMAND: Command = Command {
+    id: NEXT_PAGE,
+    title: call_next_page_title,
+    icon: None,
+    keybindings: &[],
+    category: CALL,
+    home: Home::ContextPanel,
+    description: None,
+};
+
+/// The description of [`BACK_TO_CALL`], which its icon reads for its tooltip.
+pub const BACK_TO_CALL_COMMAND: Command = Command {
+    id: BACK_TO_CALL,
+    title: call_back_title,
+    icon: None,
+    keybindings: &[],
+    category: CALL,
+    home: Home::ContextPanel,
+    description: None,
+};
+
+/// The description of [`HANG_UP`], which its icon reads for its tooltip.
+pub const HANG_UP_COMMAND: Command = Command {
+    id: HANG_UP,
+    title: call_hang_up_title,
+    icon: None,
+    keybindings: &[],
+    category: CALL,
+    home: Home::ContextPanel,
+    description: None,
+};
+
+/// The description of [`ACCEPT`], which its icon reads for its tooltip.
+pub const ACCEPT_COMMAND: Command = Command {
+    id: ACCEPT,
+    title: call_accept_title,
+    icon: None,
+    keybindings: &[],
+    category: CALL,
+    home: Home::ContextPanel,
+    description: None,
+};
+
+/// The description of [`DECLINE`], which its icon reads for its tooltip.
+pub const DECLINE_COMMAND: Command = Command {
+    id: DECLINE,
+    title: call_decline_title,
+    icon: None,
+    keybindings: &[],
+    category: CALL,
+    home: Home::ContextPanel,
+    description: None,
+};
+
+/// The description of [`PIN`], which its icon reads for its tooltip.
+pub const PIN_COMMAND: Command = Command {
+    id: PIN,
+    title: call_pin_title,
+    icon: None,
+    keybindings: &[],
+    category: CALL,
+    home: Home::ContextPanel,
+    description: None,
+};
+
+/// The description of [`UNPIN`], which its icon reads for its tooltip.
+pub const UNPIN_COMMAND: Command = Command {
+    id: UNPIN,
+    title: call_unpin_title,
+    icon: None,
+    keybindings: &[],
+    category: CALL,
+    home: Home::ContextPanel,
+    description: None,
+};
 
 /// Every command Murmure contributes, described once.
 pub const COMMANDS: &[Command] = &[
@@ -413,7 +763,80 @@ pub const COMMANDS: &[Command] = &[
         home: Home::ContextPanel,
         description: None,
     },
+    // The verbs on the call take no chord: a chord would act on a call the page may not hold.
+    START_CALL_COMMAND,
+    MUTE_COMMAND,
+    UNMUTE_COMMAND,
+    CAMERA_ON_COMMAND,
+    CAMERA_OFF_COMMAND,
+    SHARE_SCREEN_COMMAND,
+    STOP_SHARING_COMMAND,
+    FILL_COMMAND,
+    SHRINK_COMMAND,
+    PARTICIPANTS_COMMAND,
+    DEVICES_COMMAND,
+    PREVIOUS_PAGE_COMMAND,
+    NEXT_PAGE_COMMAND,
+    BACK_TO_CALL_COMMAND,
+    HANG_UP_COMMAND,
+    ACCEPT_COMMAND,
+    DECLINE_COMMAND,
+    PIN_COMMAND,
+    UNPIN_COMMAND,
 ];
+
+/// The command of `verb`, whose description the icon of the verb reads for its tooltip
+/// (`MURMURE-730`).
+#[must_use]
+pub const fn call_command(verb: CallVerb) -> &'static Command {
+    match verb {
+        CallVerb::Start(_) => &START_CALL_COMMAND,
+        CallVerb::Mute => &MUTE_COMMAND,
+        CallVerb::Unmute => &UNMUTE_COMMAND,
+        CallVerb::CameraOn => &CAMERA_ON_COMMAND,
+        CallVerb::CameraOff => &CAMERA_OFF_COMMAND,
+        CallVerb::ShareScreen => &SHARE_SCREEN_COMMAND,
+        CallVerb::StopSharing => &STOP_SHARING_COMMAND,
+        CallVerb::Fill => &FILL_COMMAND,
+        CallVerb::Shrink => &SHRINK_COMMAND,
+        CallVerb::Participants => &PARTICIPANTS_COMMAND,
+        CallVerb::Devices => &DEVICES_COMMAND,
+        CallVerb::PreviousPage => &PREVIOUS_PAGE_COMMAND,
+        CallVerb::NextPage => &NEXT_PAGE_COMMAND,
+        CallVerb::BackToCall => &BACK_TO_CALL_COMMAND,
+        CallVerb::HangUp => &HANG_UP_COMMAND,
+        CallVerb::Accept => &ACCEPT_COMMAND,
+        CallVerb::Decline => &DECLINE_COMMAND,
+    }
+}
+
+/// The verb the command `id` names, for the palette (`MURMURE-731`). `shown` is the channel
+/// the pane shows, which a start calls in. `None` for an id that names no verb of the call: a
+/// pin acts on one participant, so the palette runs none.
+#[must_use]
+pub fn call_verb(id: StaticKey<Commands>, shown: Option<Id<Channel>>) -> Option<CallVerb> {
+    let verb = match id {
+        START_CALL => CallVerb::Start(shown?),
+        MUTE => CallVerb::Mute,
+        UNMUTE => CallVerb::Unmute,
+        CAMERA_ON => CallVerb::CameraOn,
+        CAMERA_OFF => CallVerb::CameraOff,
+        SHARE_SCREEN => CallVerb::ShareScreen,
+        STOP_SHARING => CallVerb::StopSharing,
+        FILL => CallVerb::Fill,
+        SHRINK => CallVerb::Shrink,
+        PARTICIPANTS => CallVerb::Participants,
+        DEVICES => CallVerb::Devices,
+        PREVIOUS_PAGE => CallVerb::PreviousPage,
+        NEXT_PAGE => CallVerb::NextPage,
+        BACK_TO_CALL => CallVerb::BackToCall,
+        HANG_UP => CallVerb::HangUp,
+        ACCEPT => CallVerb::Accept,
+        DECLINE => CallVerb::Decline,
+        _ => return None,
+    };
+    Some(verb)
+}
 
 ambre_core::define_flag! {
     /// Who wrote a message the actions are open on.
@@ -1342,6 +1765,53 @@ mod tests {
                 Instant::<Authored>::new(9)
             )
         );
+    }
+
+    /// Each verb of the call has one command, and that command names the verb back. The
+    /// palette then runs what the icon runs (`MURMURE-730`, `MURMURE-731`).
+    #[test]
+    fn each_call_command_names_one_verb_and_back() {
+        let channel = Id::<Channel>::mint();
+        let verbs = [
+            CallVerb::Start(channel),
+            CallVerb::Mute,
+            CallVerb::Unmute,
+            CallVerb::CameraOn,
+            CallVerb::CameraOff,
+            CallVerb::ShareScreen,
+            CallVerb::StopSharing,
+            CallVerb::Fill,
+            CallVerb::Shrink,
+            CallVerb::Participants,
+            CallVerb::Devices,
+            CallVerb::PreviousPage,
+            CallVerb::NextPage,
+            CallVerb::BackToCall,
+            CallVerb::HangUp,
+            CallVerb::Accept,
+            CallVerb::Decline,
+        ];
+        for verb in verbs {
+            let command = call_command(verb);
+            assert!(
+                ambre_commands::find(COMMANDS, command.id).is_some(),
+                "{verb:?}"
+            );
+            assert_eq!(call_verb(command.id, Some(channel)), Some(verb));
+        }
+        assert_eq!(
+            call_verb(START_CALL, None),
+            None,
+            "no channel shown, no start"
+        );
+        assert_eq!(
+            call_verb(PIN, Some(channel)),
+            None,
+            "a pin needs a participant"
+        );
+        assert_eq!(call_verb(UNPIN, Some(channel)), None);
+        assert!(ambre_commands::find(COMMANDS, PIN).is_some());
+        assert!(ambre_commands::find(COMMANDS, UNPIN).is_some());
     }
 
     /// Each command is described once, with a title in every locale, a
